@@ -36,9 +36,8 @@
 
 - [x] Создать utils/formatter.ts (форматирование дат, чисел, валют)
 - [x] Создать utils/time.ts (работа с датами, временем)
-- [ ] Создать utils/validation.ts
-- [ ] Добавить общие типы (types/common.ts)
-- [ ] Создать константы (constants/index.ts)
+- [x] Добавить общие типы (types/common.ts)
+- [x] Создать константы (constants/index.ts)
 
 ### 1.5 Стилизация
 
