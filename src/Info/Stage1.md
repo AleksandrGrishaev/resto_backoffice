@@ -4,19 +4,19 @@
 
 ### 1.1 Инициализация проекта
 
-- [ ] Создать новый Vue 3 проект с помощью Vite
+- [x] Создать новый Vue 3 проект с помощью Vite
   ```bash
   pnpm create vite backoffice --template vue-ts
   cd backoffice
   pnpm install
   ```
-- [ ] Настроить TypeScript (tsconfig.json с строгими правилами)
-- [ ] Установить необходимые зависимости (Vue Router, Pinia)
-- [ ] Настроить Vuetify 3
+- [x] Настроить TypeScript (tsconfig.json с строгими правилами)
+- [x] Установить необходимые зависимости (Vue Router, Pinia)
+- [x] Настроить Vuetify 3
 
 ### 1.2 Git и процесс разработки
 
-- [x ] Инициализация Git
+- [x] Инициализация Git
 - [x ] Настроить .gitignore
 - [x ] Настроить commitlint и husky
 - [x ] Создать release.sh скрипт
