@@ -1,0 +1,58 @@
+{
+  "name": "backoffice",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --project tsconfig.app.json --noEmit && vite build",
+    "preview": "vite preview",
+    "prepare": "husky install",
+    "format": "prettier --write \"src/**/*.{vue,js,ts,scss}\"",
+    "lint": "eslint --ext .vue,.js,.ts,.cjs,.mjs --ignore-path .gitignore .",
+    "lint:fix": "eslint --ext .vue,.js,.ts,.cjs,.mjs --ignore-path .gitignore . --fix",
+    "lint-staged": "lint-staged",
+    "release": "sh release.sh"
+  },
+  "lint-staged": {
+    "*.{vue,js,ts,cjs,mjs}": [
+      "eslint --fix"
+    ],
+    "*.{json,css,scss,md}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "pinia": "^2.2.6",
+    "vue": "^3.5.12",
+    "vue-router": "4",
+    "vuetify": "^3.7.4"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.0",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@commitlint/types": "^19.5.0",
+    "@eslint/eslintrc": "^3.2.0",
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^22.9.3",
+    "@typescript-eslint/eslint-plugin": "6.21.0",
+    "@typescript-eslint/parser": "6.21.0",
+    "@vitejs/plugin-vue": "^5.1.4",
+    "@vue/eslint-config-prettier": "9.0.0",
+    "@vue/eslint-config-typescript": "12.0.0",
+    "eslint": "8.56.0",
+    "eslint-plugin-prettier": "5.2.1",
+    "eslint-plugin-vue": "^9.31.0",
+    "espree": "^10.3.0",
+    "husky": "^8.0.0",
+    "lint-staged": "^15.2.10",
+    "prettier": "3.3.3",
+    "sass": "^1.81.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.10",
+    "vue-eslint-parser": "^9.4.3",
+    "vue-tsc": "^2.1.8"
+  }
+}
