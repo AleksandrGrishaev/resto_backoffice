@@ -16,21 +16,21 @@
 
 ### 1.2 Git и процесс разработки
 
-- [ ] Инициализация Git
-- [ ] Настроить .gitignore
-- [ ] Настроить commitlint и husky
-- [ ] Создать release.sh скрипт
-- [ ] Настроить conventional commits
-- [ ] Добавить GitHub Actions для CI
-- [ ] Настроить ветки (main, develop, release)
+- [x ] Инициализация Git
+- [x ] Настроить .gitignore
+- [x ] Настроить commitlint и husky
+- [x ] Создать release.sh скрипт
+- [x ] Настроить conventional commits
+- [x ] Добавить GitHub Actions для CI
+- [x ] Настроить ветки (main, develop, release)
 
 ### 1.3 Линтинг и форматирование
 
-- [ ] Настроить ESLint с правилами для Vue 3 + TS
-- [ ] Настроить Prettier
-- [ ] Добавить EditorConfig
-- [ ] Настроить lint-staged
-- [ ] Добавить VSCode расширения в рекомендации
+- [x] Настроить ESLint с правилами для Vue 3 + TS
+- [x ] Настроить Prettier
+- [x ] Добавить EditorConfig
+- [x ] Настроить lint-staged
+- [x ] Добавить VSCode расширения в рекомендации
 
 ### 1.4 Утилиты и помощники
 
