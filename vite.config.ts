@@ -1,3 +1,4 @@
+// vite.config.ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
@@ -19,6 +20,9 @@ export default defineConfig({
       }
     }
   },
+  optimizeDeps: {
+    include: ['@mdi/font/css/materialdesignicons.css']
+  },
   build: {
     target: 'es2015',
     minify: 'terser',
@@ -26,8 +30,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['vue', 'vue-router', 'pinia', 'vuetify'],
-          styles: ['@mdi/font']
+          vuetify: ['vuetify'],
+          vendor: ['vue', 'vue-router', 'pinia'],
+          icons: ['@mdi/font/css/materialdesignicons.css']
         }
       }
     },
