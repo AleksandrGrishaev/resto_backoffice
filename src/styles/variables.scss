@@ -1,0 +1,30 @@
+// src/styles/variables.scss
+@use 'sass:map';
+
+// Theme colors
+$color: (
+  'primary': #a395e9,
+  'secondary': #bfb5f2,
+  'background': #141416,
+  'surface': #1a1a1e,
+  'error': #ff9676,
+  'success': #92c9af,
+  'warning': #ffb076
+) !default;
+
+$black: (
+  'primary': #141416,
+  'surface': #1a1a1e
+) !default;
+
+:export {
+  colorPrimary: map.get($color, 'primary');
+  colorSecondary: map.get($color, 'secondary');
+  colorBackground: map.get($color, 'background');
+  colorSurface: map.get($color, 'surface');
+  colorError: map.get($color, 'error');
+  colorSuccess: map.get($color, 'success');
+  colorWarning: map.get($color, 'warning');
+  blackPrimary: map.get($black, 'primary');
+  blackSurface: map.get($black, 'surface');
+}

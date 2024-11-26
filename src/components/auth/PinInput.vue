@@ -1,30 +1,32 @@
 <!-- src/components/auth/PinInput.vue -->
 <template>
-  <div class="pin-input">
+  <v-form @submit.prevent="handleSubmit">
     <v-text-field
       v-model="pin"
-      type="password"
       label="Enter PIN"
+      type="password"
       maxlength="4"
       :rules="[rules.required, rules.length, rules.numeric]"
       :loading="loading"
       :disabled="loading"
       :error-messages="errorMessage"
-      @keyup.enter="handleSubmit"
+      hide-details="auto"
+      class="mb-4"
       @update:model-value="handleInput"
     />
+
     <v-btn
       block
       color="primary"
       size="large"
       :loading="loading"
       :disabled="!isValid || loading"
-      @click="handleSubmit"
+      type="submit"
     >
       <v-icon start icon="mdi-login" />
       Login
     </v-btn>
-  </div>
+  </v-form>
 </template>
 
 <script setup lang="ts">

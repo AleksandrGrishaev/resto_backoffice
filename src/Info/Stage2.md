@@ -11,48 +11,48 @@
 
 ### 2.1 Роутинг и Guards
 
-- [ ] Базовая настройка Vue Router
+- [X ] Базовая настройка Vue Router
   - Layouts: AuthLayout, MainLayout, EmptyLayout
   - Routes: login, test-connection, dashboard, 404
-- [ ] Auth Guard
+- [X ] Auth Guard
   - Проверка авторизации
   - Редирект на логин
   - Проверка прав доступа
 
 ### 2.2 Layouts
 
-- [ ] AuthLayout
+- [X ] AuthLayout
   - Простой layout для страницы входа
-- [ ] MainLayout
+- [ X] MainLayout
   - Базовый layout для авторизованных страниц
-- [ ] EmptyLayout
+- [X ] EmptyLayout
   - Для технических страниц
 
 ### 2.3 Тестовая страница Firebase
 
-- [ ] TestConnectionView
+- [X ] TestConnectionView
   - Проверка подключения к Firebase
   - Тест работы с коллекцией users
   - Отображение статуса подключения
 
 ### 2.4 Auth Store и сервисы
 
-- [ ] AuthService
+- [ X] AuthService
   - Вход по PIN
   - Проверка прав
   - Управление сессией
-- [ ] AuthStore
+- [ X] AuthStore
   - Состояние авторизации
   - Действия входа/выхода
   - Persistence состояния
 
 ### 2.5 Компоненты авторизации
 
-- [ ] PinCodeInput
+- [X ] PinCodeInput
   - Ввод PIN-кода
   - Валидация
   - Обработка ошибок
-- [ ] LoginForm
+- [X ] LoginForm
   - Форма входа
   - Интеграция с AuthService
   - Обработка состояний

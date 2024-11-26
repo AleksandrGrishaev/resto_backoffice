@@ -1,67 +1,28 @@
-// src/main.ts
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth.store'
 import router from '@/router'
 
-// Vuetify
+// Styles
+import '@/styles/main.scss'
 import 'vuetify/styles'
-import { createVuetify } from 'vuetify'
-import * as components from 'vuetify/components'
-import * as directives from 'vuetify/directives'
-import { aliases, mdi } from 'vuetify/iconsets/mdi'
 import '@mdi/font/css/materialdesignicons.css'
+// Plugins
+import { vuetify } from '@/plugins/vuetify'
 
+// App
 import App from './App.vue'
 import { DebugUtils } from './utils'
 
 const MODULE_NAME = 'Main'
 
-const vuetify = createVuetify({
-  components,
-  directives,
-  icons: {
-    defaultSet: 'mdi',
-    aliases,
-    sets: {
-      mdi
-    }
-  },
-  theme: {
-    defaultTheme: 'dark',
-    themes: {
-      dark: {
-        dark: true,
-        colors: {
-          primary: '#A395E9',
-          secondary: '#BFB5F2',
-          background: '#141416',
-          surface: '#1A1A1E',
-          error: '#FF9676',
-          success: '#92C9AF',
-          warning: '#FFB076'
-        }
-      }
-    }
-  },
-  defaults: {
-    VBtn: {
-      variant: 'elevated',
-      ripple: true
-    },
-    VTextField: {
-      variant: 'outlined',
-      density: 'comfortable',
-      color: 'primary'
-    }
-  }
-})
-
+// Services initialization
 const initServices = async () => {
   const authStore = useAuthStore()
   await authStore.initializeDefaultUsers?.()
 }
 
+// App initialization
 async function initializeApp() {
   try {
     DebugUtils.info(MODULE_NAME, 'Starting application initialization')
@@ -69,18 +30,23 @@ async function initializeApp() {
     const app = createApp(App)
     const pinia = createPinia()
 
+    // Register plugins
     app.use(pinia)
     app.use(router)
     app.use(vuetify)
 
+    // Initialize services
     await initServices()
 
+    // Mount application
     app.mount('#app')
 
     DebugUtils.info(MODULE_NAME, 'Application initialized successfully')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize application', { error })
-    // Здесь можно добавить глобальную обработку ошибок
+
+    // Here we can add global error handling
+    // For example, show error notification or redirect to error page
   }
 }
 

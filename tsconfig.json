@@ -12,7 +12,7 @@
     "lib": ["ESNext", "DOM"],
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "vue"],
+    "types": ["vite/client", "vue", "vuetify"],
     "allowJs": true,
     "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,
@@ -32,6 +32,7 @@
     "vite.config.ts",
     "commitlint.config.cjs"
   ],
+
   "references": [
     {
       "path": "./tsconfig.node.json"

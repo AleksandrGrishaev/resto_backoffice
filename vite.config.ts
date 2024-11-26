@@ -1,4 +1,3 @@
-// vite.config.ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
@@ -8,16 +7,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
-  },
-  css: {
-    preprocessorOptions: {
-      scss: {
-        additionalData: `
-          @import "@/styles/variables.scss";
-          @import "@/styles/mixins.scss";
-        `
-      }
     }
   },
   optimizeDeps: {
@@ -41,6 +30,13 @@ export default defineConfig({
         drop_console: true,
         drop_debugger: true
       }
+    }
+  },
+  server: {
+    port: 5173,
+    host: true,
+    fs: {
+      strict: true
     }
   }
 })
