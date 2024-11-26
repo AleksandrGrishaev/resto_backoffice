@@ -5,17 +5,15 @@ import {
   DocumentData,
   FirestoreDataConverter
 } from 'firebase/firestore'
-import { TimeUtils } from '../utils/time'
-import type { BaseEntity } from '../types'
+import { TimeUtils } from '@/utils'
+import type { BaseEntity } from '@/types/common'
 
-type BaseDocumentData = {
+interface BaseDocumentData extends Record<string, unknown> {
   createdAt: string
   updatedAt: string
   closedAt?: string
-  [key: string]: unknown
 }
 
-// Base converter for all entities with timestamps
 export const baseConverter = {
   toFirestore: (data: BaseDocumentData): DocumentData => {
     const { createdAt, updatedAt, closedAt, ...rest } = data
@@ -40,14 +38,12 @@ export const baseConverter = {
   }
 }
 
-// Generic createConverter function for future use
-export function createConverter<T extends BaseEntity>(): FirestoreDataConverter<T> {
+export function createConverter<
+  T extends BaseEntity & Record<string, unknown>
+>(): FirestoreDataConverter<T> {
   return {
-    toFirestore: (data: T): DocumentData => {
-      return baseConverter.toFirestore(data)
-    },
-    fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions): T => {
-      return baseConverter.fromFirestore(snapshot, options) as T
-    }
+    toFirestore: (data: T) => baseConverter.toFirestore(data as BaseDocumentData),
+    fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions) =>
+      baseConverter.fromFirestore(snapshot, options) as T
   }
 }

@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app'
 import { getFirestore } from 'firebase/firestore'
 import { DebugUtils } from '../utils/debugger'
+import { Firestore } from 'firebase/firestore'
 
 const MODULE_NAME = 'FirebaseConfig'
 
@@ -26,7 +27,7 @@ const firebaseConfig = {
 }
 
 let app
-let db
+export let db: Firestore
 
 try {
   DebugUtils.info(MODULE_NAME, 'Initializing Firebase with config:', firebaseConfig)
@@ -40,4 +41,4 @@ try {
   throw error
 }
 
-export { app, db }
+export { app }

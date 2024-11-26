@@ -7,6 +7,4 @@
   </v-app>
 </template>
 
-<script setup lang="ts">
-const MODULE_NAME = 'EmptyLayout'
-</script>
+<script setup lang="ts"></script>

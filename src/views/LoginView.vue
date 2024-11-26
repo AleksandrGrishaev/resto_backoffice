@@ -40,9 +40,8 @@ const handleLogin = async (pin: string) => {
     loading.value = true
     error.value = ''
 
-    await authStore.login(pin, 'backoffice')
+    await authStore.login(pin)
 
-    // Redirect to saved path or default
     const redirectPath = route.query.redirect?.toString() || '/test-connection'
     router.push(redirectPath)
 

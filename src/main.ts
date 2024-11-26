@@ -1,7 +1,8 @@
 // src/main.ts
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import router from './router'
+import { useAuthStore } from '@/stores/auth.store'
+import router from '@/router'
 
 // Vuetify
 import 'vuetify/styles'
@@ -42,11 +43,29 @@ const vuetify = createVuetify({
         }
       }
     }
+  },
+  defaults: {
+    VBtn: {
+      variant: 'elevated',
+      ripple: true
+    },
+    VTextField: {
+      variant: 'outlined',
+      density: 'comfortable',
+      color: 'primary'
+    }
   }
 })
 
+const initServices = async () => {
+  const authStore = useAuthStore()
+  await authStore.initializeDefaultUsers?.()
+}
+
 async function initializeApp() {
   try {
+    DebugUtils.info(MODULE_NAME, 'Starting application initialization')
+
     const app = createApp(App)
     const pinia = createPinia()
 
@@ -54,17 +73,14 @@ async function initializeApp() {
     app.use(router)
     app.use(vuetify)
 
-    DebugUtils.info(MODULE_NAME, 'Starting application initialization')
-
-    // Initialize stores if needed
-    const authStore = useAuthStore()
-    await authStore.initializeDefaultUsers()
+    await initServices()
 
     app.mount('#app')
 
     DebugUtils.info(MODULE_NAME, 'Application initialized successfully')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize application', { error })
+    // Здесь можно добавить глобальную обработку ошибок
   }
 }
 

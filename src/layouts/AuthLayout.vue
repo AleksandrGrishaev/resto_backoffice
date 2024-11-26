@@ -13,6 +13,4 @@
   </v-app>
 </template>
 
-<script setup lang="ts">
-const MODULE_NAME = 'AuthLayout'
-</script>
+<script setup lang="ts"></script>

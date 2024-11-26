@@ -44,7 +44,7 @@ export class AuthService extends BaseService<User> {
     }
   }
 
-  async login(pin: string, appType: AppType): Promise<User> {
+  async login(pin: string, appType: AppType = 'backoffice'): Promise<User> {
     try {
       DebugUtils.info(MODULE_NAME, 'Login attempt', { appType })
 
@@ -65,7 +65,6 @@ export class AuthService extends BaseService<User> {
         throw new Error(`Access denied for ${appType}`)
       }
 
-      // Log login attempt
       await this.logLoginAttempt({
         userId: user.id,
         success: true,
@@ -73,7 +72,6 @@ export class AuthService extends BaseService<User> {
         timestamp: TimeUtils.getCurrentLocalISO()
       })
 
-      // Update last login
       await this.update(user.id, {
         lastLoginAt: TimeUtils.getCurrentLocalISO()
       })

@@ -8,7 +8,6 @@ import { DebugUtils } from '@/utils'
 const MODULE_NAME = 'AuthStore'
 
 export const useAuthStore = defineStore('auth', () => {
-  // State
   const state = ref({
     currentUser: null as User | null,
     isAuthenticated: false,
@@ -27,31 +26,27 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function login(pin: string) {
+  async function login(pin: string): Promise<boolean> {
     try {
       state.value.isLoading = true
       state.value.error = null
 
-      const user = await authService.login(pin, 'backoffice')
+      const user = await authService.login(pin) // appType по умолчанию 'backoffice'
 
       state.value.currentUser = user
       state.value.isAuthenticated = true
       state.value.lastLoginAt = user.lastLoginAt || new Date().toISOString()
 
       saveSession()
-
-      DebugUtils.info(MODULE_NAME, 'Login successful')
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Login failed'
       state.value.error = message
-      DebugUtils.error(MODULE_NAME, 'Login failed', { error })
       throw error
     } finally {
       state.value.isLoading = false
     }
   }
-
   async function logout() {
     try {
       DebugUtils.info(MODULE_NAME, 'Logging out')
