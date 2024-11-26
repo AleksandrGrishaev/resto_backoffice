@@ -1,8 +1,9 @@
+<!-- LoginView.vue -->
 <template>
-  <v-container fluid class="fill-height">
+  <v-container fluid class="fill-height login-container">
     <v-row justify="center" align="center">
       <v-col cols="12" sm="8" md="6" lg="4">
-        <v-card class="pa-4">
+        <v-card class="pa-4 login-card">
           <v-card-title class="text-h5 text-center mb-4">BackOffice Login</v-card-title>
 
           <v-card-text>
@@ -13,7 +14,7 @@
               type="error"
               variant="tonal"
               closable
-              class="mt-4"
+              class="mt-4 error-alert"
               @click:close="error = ''"
             >
               {{ error }}
@@ -24,6 +25,7 @@
     </v-row>
   </v-container>
 </template>
+
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -58,3 +60,19 @@ const handleLogin = async (pin: string) => {
   }
 }
 </script>
+
+<style lang="scss" scoped>
+.login-container {
+  background-color: var(--black-primary);
+}
+
+.login-card {
+  background-color: var(--black-surface);
+  border: 1px solid var(--color-primary);
+
+  .error-alert {
+    background-color: var(--color-error);
+    color: var(--black-primary);
+  }
+}
+</style>

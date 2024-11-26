@@ -1,56 +1,67 @@
+<!-- src/components/navigation/NavigationMenu.vue -->
 <template>
-  <div class="navigation-menu">
+  <div class="d-flex flex-column fill-height">
     <!-- Header -->
-    <v-toolbar density="comfortable" class="navigation-menu__header px-4">
+    <v-toolbar flat density="compact" class="navigation-header px-4">
       <v-toolbar-title :class="{ 'text-center': rail }">
         {{ rail ? 'BO' : 'BackOffice' }}
       </v-toolbar-title>
     </v-toolbar>
 
     <!-- Navigation -->
-    <v-list nav class="navigation-menu__nav pa-2">
+    <v-list nav class="px-2 flex-grow-0">
       <v-list-item
         to="/menu"
         prepend-icon="mdi-silverware-fork-knife"
-        rounded="lg"
-        class="navigation-menu__item mb-2"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
       >
         <template #title>
-          <span class="font-weight-medium">Меню</span>
+          <span>Menu</span>
         </template>
       </v-list-item>
     </v-list>
 
-    <!-- Footer -->
-    <v-footer app class="navigation-menu__footer pa-2 v-col align-self-end">
-      <v-divider class="mb-4" />
-      <v-list>
-        <v-list-item rounded="lg" prepend-icon="mdi-account" class="navigation-menu__item">
-          <template #title>
-            <div class="d-flex align-center justify-space-between">
-              <span class="font-weight-medium">{{ authStore.state.currentUser?.name }}</span>
-              <v-btn icon="mdi-logout" size="small" variant="text" @click="handleLogout" />
-            </div>
-          </template>
-        </v-list-item>
+    <!-- Flex spacer -->
+    <v-spacer />
+
+    <!-- User Info & Actions -->
+    <div class="navigation-footer pa-4">
+      <!-- User Info -->
+      <v-list density="compact" class="pa-0 mb-4">
+        <v-list-item
+          prepend-icon="mdi-account"
+          :title="authStore.state.currentUser?.name"
+          :subtitle="getUserRole"
+        />
       </v-list>
-      <v-btn
-        block
-        variant="tonal"
-        class="navigation-menu__toggle mt-4"
-        :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
-        @click="$emit('update:rail', !rail)"
-      >
-        <span v-if="!rail">Свернуть</span>
-      </v-btn>
-    </v-footer>
+
+      <!-- Action Buttons -->
+      <div class="d-flex flex-column gap-2">
+        <v-btn block color="error" variant="text" prepend-icon="mdi-logout" @click="handleLogout">
+          {{ rail ? '' : 'LOGOUT' }}
+        </v-btn>
+
+        <v-btn
+          block
+          variant="text"
+          :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+          @click="$emit('update:rail', !rail)"
+        >
+          {{ rail ? '' : 'COLLAPSE' }}
+        </v-btn>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { DebugUtils } from '@/utils'
+import * as variables from '@/styles/variables.scss'
 
 const MODULE_NAME = 'NavigationMenu'
 
@@ -65,6 +76,11 @@ defineEmits<{
 const router = useRouter()
 const authStore = useAuthStore()
 
+const getUserRole = computed(() => {
+  const roles = authStore.state.currentUser?.roles || []
+  return roles.join(', ').toUpperCase()
+})
+
 async function handleLogout() {
   try {
     await authStore.logout()
@@ -75,40 +91,13 @@ async function handleLogout() {
 }
 </script>
 
-<style lang="scss">
-.navigation-menu {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+<style lang="scss" scoped>
+.navigation-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
 
-  &__header {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  }
-
-  &__nav {
-    flex: 1;
-  }
-
-  &__item {
-    min-height: 44px !important;
-
-    &.v-list-item--active {
-      color: var(--color-primary) !important;
-      background: rgba(163, 149, 233, 0.1) !important;
-    }
-
-    &:hover {
-      background: var(--black-hover) !important;
-    }
-  }
-
-  &__footer {
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    padding-top: 1rem;
-  }
-
-  &__toggle {
-    margin-top: auto;
-  }
+.navigation-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: auto;
 }
 </style>

@@ -14,9 +14,31 @@ export const vuetify = createVuetify({
     sets: { mdi }
   },
   defaults: {
-    VBtn: { variant: 'elevated' },
-    VTextField: { variant: 'outlined' },
-    VCard: { elevation: 0 }
+    // Ключи должны точно соответствовать названиям компонентов
+    VBtn: {
+      variant: 'elevated',
+      height: 44
+    },
+    VTextField: {
+      variant: 'outlined'
+    },
+    VCard: {
+      elevation: 0
+    },
+    VToolbar: {
+      height: 44
+    },
+    VFooter: {
+      height: 44
+    },
+    VList: {
+      // Для списка лучше задавать настройки через пропсы в компоненте
+      // так как они могут варьироваться
+    },
+    VListItem: {
+      minHeight: 44,
+      rounded: 'lg'
+    }
   },
   theme: {
     defaultTheme: 'dark',
@@ -29,7 +51,6 @@ export const vuetify = createVuetify({
           primary: variables.colorPrimary || '#A395E9',
           secondary: variables.colorSecondary || '#BFB5F2',
           error: variables.colorError || '#FF9676',
-          info: '#2196F3',
           success: variables.colorSuccess || '#92C9AF',
           warning: variables.colorWarning || '#FFB076'
         }

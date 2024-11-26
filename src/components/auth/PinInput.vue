@@ -1,31 +1,36 @@
-<!-- src/components/auth/PinInput.vue -->
 <template>
-  <v-form @submit.prevent="handleSubmit">
-    <v-text-field
-      v-model="pin"
-      label="Enter PIN"
-      type="password"
-      maxlength="4"
-      :rules="[rules.required, rules.length, rules.numeric]"
-      :loading="loading"
-      :disabled="loading"
-      :error-messages="errorMessage"
-      hide-details="auto"
-      class="mb-4"
-      @update:model-value="handleInput"
-    />
+  <v-form class="pin-input-form" @submit.prevent="handleSubmit">
+    <div class="d-flex flex-column align-center">
+      <v-text-field
+        v-model="pin"
+        label="Enter PIN"
+        type="password"
+        maxlength="4"
+        :rules="[rules.required, rules.length, rules.numeric]"
+        :loading="loading"
+        :disabled="loading"
+        :error-messages="errorMessage"
+        hide-details="auto"
+        class="mb-4 pin-input"
+        color="primary"
+        bg-color="surface"
+        variant="outlined"
+        @update:model-value="handleInput"
+      />
 
-    <v-btn
-      block
-      color="primary"
-      size="large"
-      :loading="loading"
-      :disabled="!isValid || loading"
-      type="submit"
-    >
-      <v-icon start icon="mdi-login" />
-      Login
-    </v-btn>
+      <v-btn
+        color="primary"
+        size="large"
+        :loading="loading"
+        :disabled="!isValid || loading"
+        type="submit"
+        class="login-button"
+        min-width="200"
+      >
+        <v-icon start icon="mdi-login" />
+        LOGIN
+      </v-btn>
+    </div>
   </v-form>
 </template>
 
@@ -35,7 +40,6 @@ import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'PinInput'
 
-// Используем деструктуризацию, чтобы явно показать использование props
 const { loading = false } = defineProps<{
   loading?: boolean
 }>()
@@ -58,9 +62,7 @@ const isValid = computed(() => {
 })
 
 const handleInput = (value: string) => {
-  // Очищаем сообщение об ошибке при вводе
   errorMessage.value = ''
-  // Разрешаем только цифры
   pin.value = value.replace(/\D/g, '').slice(0, 4)
 }
 
@@ -80,10 +82,25 @@ const handleSubmit = () => {
 }
 </script>
 
-<style scoped>
-.pin-input {
+<style lang="scss" scoped>
+.pin-input-form {
   width: 100%;
-  max-width: 400px;
-  margin: 0 auto;
+
+  .pin-input {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+
+    :deep(.v-field__input) {
+      font-size: 1.2rem;
+      text-align: center;
+    }
+  }
+
+  .login-button {
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+    height: 48px;
+  }
 }
 </style>

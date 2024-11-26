@@ -13,10 +13,8 @@
       <navigation-menu v-model:rail="rail" />
     </v-navigation-drawer>
 
-    <v-main class="bg-background">
-      <v-container fluid class="pa-6">
-        <router-view />
-      </v-container>
+    <v-main>
+      <router-view />
     </v-main>
   </v-app>
 </template>
@@ -33,3 +31,9 @@ const rail = ref(false)
 
 DebugUtils.debug(MODULE_NAME, 'Layout mounted', { drawer: drawer.value, rail: rail.value })
 </script>
+
+<style lang="scss">
+.v-main {
+  background-color: var(--black-primary);
+}
+</style>
