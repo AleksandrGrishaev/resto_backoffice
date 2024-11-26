@@ -46,9 +46,9 @@ const handleLogin = async (pin: string) => {
     loading.value = true
     error.value = ''
 
-    await authStore.login(pin)
+    await authStore.login(pin, 'backoffice')
 
-    const redirectPath = route.query.redirect?.toString() || '/test-connection'
+    const redirectPath = route.query.redirect?.toString() || '/'
     router.push(redirectPath)
 
     DebugUtils.info(MODULE_NAME, 'Login successful')

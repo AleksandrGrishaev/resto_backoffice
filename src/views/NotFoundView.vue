@@ -26,7 +26,7 @@ const MODULE_NAME = 'NotFoundView'
 const authStore = useAuthStore()
 
 const isAuthenticated = computed(() => authStore.state.isAuthenticated)
-const redirectPath = computed(() => (isAuthenticated.value ? '/test-connection' : '/auth/login'))
+const redirectPath = computed(() => (isAuthenticated.value ? '/' : '/auth/login'))
 
 DebugUtils.debug(MODULE_NAME, 'Component mounted')
 </script>
