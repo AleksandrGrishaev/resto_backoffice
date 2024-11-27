@@ -5,7 +5,6 @@ import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import MenuView from '@/views/MenuView.vue'
 import PaymentSettingsView from '@/views/PaymentSettingsView.vue'
-import AccountView from '@/views/AccountView.vue'
 import { useAuthStore } from '@/stores/auth.store'
 
 const router = createRouter({
@@ -49,11 +48,32 @@ const router = createRouter({
         },
         {
           path: 'accounts',
-          name: 'accounts',
-          component: AccountView,
-          meta: {
-            title: 'Аккаунты'
-          }
+          children: [
+            {
+              path: 'dashboard',
+              name: 'accounts-dashboard',
+              component: () => import('@/views/accounts/DashboardView.vue'),
+              meta: {
+                title: 'Дашборд счетов'
+              }
+            },
+            {
+              path: '',
+              name: 'accounts-list',
+              component: () => import('@/views/accounts/AccountListView.vue'),
+              meta: {
+                title: 'Список счетов'
+              }
+            },
+            {
+              path: ':id',
+              name: 'account-detail',
+              component: () => import('@/views/accounts/AccountDetailView.vue'),
+              meta: {
+                title: 'Детали счета'
+              }
+            }
+          ]
         }
       ]
     },

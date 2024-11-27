@@ -22,6 +22,43 @@
         </template>
       </v-list-item>
 
+      <!-- Accounts Section -->
+      <v-list-group value="accounts">
+        <template #activator="{ props }">
+          <v-list-item
+            v-bind="props"
+            prepend-icon="mdi-wallet"
+            title="Счета"
+            color="primary"
+            :active-color="variables.colorPrimary"
+          />
+        </template>
+
+        <v-list-item
+          to="/accounts/dashboard"
+          prepend-icon="mdi-view-dashboard"
+          color="primary"
+          class="mb-2"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Дашборд</span>
+          </template>
+        </v-list-item>
+
+        <v-list-item
+          to="/accounts"
+          prepend-icon="mdi-format-list-bulleted"
+          color="primary"
+          class="mb-2"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Список счетов</span>
+          </template>
+        </v-list-item>
+      </v-list-group>
+
       <v-list-item
         to="/payment-settings"
         prepend-icon="mdi-cash-register"
@@ -31,18 +68,6 @@
       >
         <template #title>
           <span>Оплата</span>
-        </template>
-      </v-list-item>
-
-      <v-list-item
-        to="/accounts"
-        prepend-icon="mdi-wallet"
-        color="primary"
-        class="mb-2"
-        :active-color="variables.colorPrimary"
-      >
-        <template #title>
-          <span>Аккаунты</span>
         </template>
       </v-list-item>
     </v-list>
