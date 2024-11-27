@@ -63,10 +63,10 @@
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account.store'
-import { useUserStore } from '@/stores/user.store'
+import { useAuthStore } from '@/stores/auth.store'
 import { useDialogForm } from '@/composables/useDialogForm'
-import { EXPENSE_CATEGORIES } from '@/types/transaction'
-import type { Account } from '@/types/account'
+import { EXPENSE_CATEGORIES } from '@/types'
+import type { Account } from '@/types'
 import type { OperationType, ExpenseCategory } from '@/types/transaction'
 
 const props = defineProps<{
@@ -82,7 +82,7 @@ const emit = defineEmits<{
 
 // Stores
 const accountStore = useAccountStore()
-const userStore = useUserStore()
+const authStore = useAuthStore()
 
 // Computed
 const title = computed(() => {
@@ -146,8 +146,8 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
         ...data,
         performedBy: {
           type: 'user',
-          id: userStore.userId,
-          name: userStore.userName
+          id: authStore.userId,
+          name: authStore.userName
         }
       })
       emit('success')

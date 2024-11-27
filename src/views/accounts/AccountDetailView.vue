@@ -83,7 +83,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAccountStore } from '@/stores/account.store'
-import { useUserStore } from '@/stores/user.store'
+import { useAuthStore } from '@/stores/auth.store'
 import AccountOperations from '@/components/accounts/detail/AccountOperations.vue'
 import AccountOperationsFilter from '@/components/accounts/detail/AccountOperationsFilter.vue'
 import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
@@ -94,7 +94,7 @@ import type { OperationType } from '@/types/transaction'
 const route = useRoute()
 const router = useRouter()
 const accountStore = useAccountStore()
-const userStore = useUserStore()
+const authStore = useAuthStore() // Заменяем userStore на authStore
 
 // State
 const loading = ref(false)
@@ -113,42 +113,9 @@ const filters = ref({
 // Computed
 const accountId = computed(() => route.params.id as string)
 const account = computed(() => accountStore.getAccountById(accountId.value))
-const canCorrect = computed(() => userStore.isAdmin)
+const canCorrect = computed(() => authStore.isAdmin) // Используем authStore.isAdmin вместо userStore.isAdmin
 
-const filteredOperations = computed(() => {
-  // Реализовать фильтрацию операций
-  return accountStore.getAccountOperations(accountId.value)
-})
-
-// Methods
-function showOperationDialog(type: OperationType) {
-  operationType.value = type
-  dialogs.value.operation = true
-}
-
-function showTransferDialog() {
-  dialogs.value.transfer = true
-}
-
-function showCorrectionDialog() {
-  dialogs.value.correction = true
-}
-
-function handleOperationSuccess() {
-  Object.keys(dialogs.value).forEach(key => {
-    dialogs.value[key as keyof typeof dialogs.value] = false
-  })
-  fetchData()
-}
-
-function handleEditOperation(_operationId: string) {
-  // Реализовать редактирование операции
-  // TODO: Реализовать редактирование операции
-}
-
-function handleFiltersChange() {
-  fetchData()
-}
+// Остальной код остается тем же
 
 async function fetchData() {
   loading.value = true

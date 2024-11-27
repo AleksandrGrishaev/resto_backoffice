@@ -68,18 +68,23 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useUserStore } from '@/stores/user.store'
+import { useAuthStore } from '@/stores/auth.store'
 import { formatDate } from '@/utils/formatter'
 import type { Account } from '@/types/account'
+
+const props = defineProps<{
+  accounts: Account[]
+  loading: boolean
+}>()
 
 const emit = defineEmits<{
   edit: [account: Account]
   'view-details': [id: string]
 }>()
 
-// Права доступа
-const userStore = useUserStore()
-const canEdit = computed(() => userStore.isAdmin)
+// Меняем store
+const authStore = useAuthStore()
+const canEdit = computed(() => authStore.isAdmin)
 
 // Вспомогательные функции
 function getAccountTypeIcon(type: Account['type']): string {

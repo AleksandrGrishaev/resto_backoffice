@@ -76,7 +76,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useUserStore } from '@/stores/user.store'
+import { useAuthStore } from '@/stores/auth.store' // Заменяем useUserStore на useAuthStore
 import { formatDateTime, formatAmount } from '@/utils/formatter'
 import type { Transaction, ExpenseCategory } from '@/types/transaction'
 import { EXPENSE_CATEGORIES } from '@/types/transaction'
@@ -86,8 +86,8 @@ const emit = defineEmits<{
 }>()
 
 // Store
-const userStore = useUserStore()
-const canEdit = computed(() => userStore.isAdmin)
+const authStore = useAuthStore() // Заменяем userStore на authStore
+const canEdit = computed(() => authStore.isAdmin) // Используем authStore.isAdmin
 
 // Helpers
 function getOperationTypeIcon(type: Transaction['type']): string {

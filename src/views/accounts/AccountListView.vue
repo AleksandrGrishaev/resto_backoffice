@@ -1,10 +1,9 @@
-// src/views/accounts/AccountListView.vue
 <template>
   <div class="account-list-view">
     <account-list-toolbar @create-operation="showOperationDialog" />
     <account-list
       :accounts="store.accounts"
-      :loading="store.isLoading"
+      :loading="loading"
       @edit="handleEdit"
       @view-details="navigateToAccount"
     />
@@ -20,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccountStore } from '@/stores/account.store'
 import AccountList from '@/components/accounts/list/AccountList.vue'
@@ -32,14 +31,15 @@ import type { OperationType } from '@/types/transaction'
 const router = useRouter()
 const store = useAccountStore()
 
-// Состояние
+// State
+const loading = ref(true) // Изначально true
 const dialogs = ref({
   operation: false
 })
 const selectedAccount = ref<Account | null>(null)
 const operationType = ref<OperationType>('income')
 
-// Методы
+// Methods
 function showOperationDialog(type: OperationType, account?: Account) {
   operationType.value = type
   selectedAccount.value = account || null
@@ -47,7 +47,6 @@ function showOperationDialog(type: OperationType, account?: Account) {
 }
 
 function handleEdit(_account: Account) {
-  // Добавляем префикс underscore к неиспользуемому параметру
   // TODO: Реализовать редактирование счета
 }
 
@@ -57,12 +56,24 @@ function navigateToAccount(accountId: string) {
 
 function handleOperationSuccess() {
   dialogs.value.operation = false
-  store.fetchAccounts() // Обновляем список счетов
+  fetchAccounts()
 }
 
-// Инициализация
-onMounted(async () => {
-  await store.fetchAccounts()
+// Data fetching
+async function fetchAccounts() {
+  loading.value = true
+  try {
+    await store.fetchAccounts()
+  } catch (error) {
+    console.error('Failed to fetch accounts:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+// Initialize
+onMounted(() => {
+  fetchAccounts()
 })
 </script>
 

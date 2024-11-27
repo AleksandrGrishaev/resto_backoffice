@@ -5,7 +5,7 @@ import type {
   CreateTransferDto,
   CreateCorrectionDto,
   TransactionFilters
-} from '@/types/transactions'
+} from '../types/transaction'
 import { accountService } from './account.service'
 import { BaseService } from '@/firebase/services/base.service'
 import { DebugUtils } from '@/utils'

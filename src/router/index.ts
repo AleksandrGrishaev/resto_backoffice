@@ -1,3 +1,4 @@
+// src/router/index.ts
 import { createRouter, createWebHistory } from 'vue-router'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import MainLayout from '@/layouts/MainLayout.vue'
@@ -6,6 +7,11 @@ import NotFoundView from '@/views/NotFoundView.vue'
 import MenuView from '@/views/MenuView.vue'
 import PaymentSettingsView from '@/views/PaymentSettingsView.vue'
 import { useAuthStore } from '@/stores/auth.store'
+
+// Явный импорт компонентов счетов
+import AccountListView from '@/views/accounts/AccountListView.vue'
+import AccountDetailView from '@/views/accounts/AccountDetailView.vue'
+import DashboardView from '@/views/accounts/DashboardView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -52,7 +58,7 @@ const router = createRouter({
             {
               path: 'dashboard',
               name: 'accounts-dashboard',
-              component: () => import('@/views/accounts/DashboardView.vue'),
+              component: DashboardView,
               meta: {
                 title: 'Дашборд счетов'
               }
@@ -60,7 +66,7 @@ const router = createRouter({
             {
               path: '',
               name: 'accounts-list',
-              component: () => import('@/views/accounts/AccountListView.vue'),
+              component: AccountListView,
               meta: {
                 title: 'Список счетов'
               }
@@ -68,7 +74,7 @@ const router = createRouter({
             {
               path: ':id',
               name: 'account-detail',
-              component: () => import('@/views/accounts/AccountDetailView.vue'),
+              component: AccountDetailView,
               meta: {
                 title: 'Детали счета'
               }
@@ -93,7 +99,7 @@ router.beforeEach((to, from, next) => {
   if (requiresAuth && !authStore.state.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (to.name === 'login' && authStore.state.isAuthenticated) {
-    next({ name: 'menu' }) // Меняем редирект на menu
+    next({ name: 'menu' })
   } else {
     next()
   }

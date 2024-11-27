@@ -1,4 +1,3 @@
-// src/components/accounts/dialogs/TransferDialog.vue
 <template>
   <base-dialog
     v-model="dialogModel"
@@ -20,7 +19,6 @@
         ]"
         required
       />
-
       <v-select
         v-model="formData.toAccountId"
         label="Счет получатель"
@@ -33,7 +31,6 @@
         ]"
         required
       />
-
       <v-text-field
         v-model.number="formData.amount"
         label="Сумма"
@@ -45,7 +42,6 @@
         ]"
         required
       />
-
       <v-textarea
         v-model="formData.description"
         label="Описание"
@@ -61,7 +57,7 @@
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account.store'
-import { useUserStore } from '@/stores/user.store'
+import { useAuthStore } from '@/stores/auth.store' // Заменяем useUserStore на useAuthStore
 import { useDialogForm } from '@/composables/useDialogForm'
 
 const props = defineProps<{
@@ -75,7 +71,7 @@ const emit = defineEmits<{
 
 // Stores
 const accountStore = useAccountStore()
-const userStore = useUserStore()
+const authStore = useAuthStore() // Заменяем userStore на authStore
 
 // Computed
 const dialogModel = computed({
@@ -105,8 +101,8 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
         ...data,
         performedBy: {
           type: 'user',
-          id: userStore.userId,
-          name: userStore.userName
+          id: authStore.userId, // Используем authStore вместо userStore
+          name: authStore.userName // Используем authStore вместо userStore
         }
       })
       emit('success')
@@ -121,7 +117,6 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
 function validateTransferAmount(value: number) {
   const fromAccount = accountStore.getAccountById(formData.value.fromAccountId)
   if (!fromAccount) return true
-
   return value <= fromAccount.balance || 'Недостаточно средств для перевода'
 }
 </script>

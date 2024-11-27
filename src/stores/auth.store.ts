@@ -1,6 +1,5 @@
-// src/stores/auth.store.ts
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { User } from '@/types/auth'
 import { authService } from '@/services'
 import { sessionService } from '@/services/session.service'
@@ -16,6 +15,12 @@ export const useAuthStore = defineStore('auth', () => {
     error: null as string | null,
     lastLoginAt: null as string | null
   })
+
+  // Геттеры для работы с правами и данными пользователя
+  const isAdmin = computed(() => state.value.currentUser?.roles?.includes('admin') ?? false)
+  const userId = computed(() => state.value.currentUser?.id ?? '')
+  const userName = computed(() => state.value.currentUser?.name ?? '')
+  const userRoles = computed(() => state.value.currentUser?.roles ?? [])
 
   // При инициализации проверяем сессию
   function initialize() {
@@ -40,13 +45,10 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       state.value.isLoading = true
       state.value.error = null
-
       const user = await authService.login(pin, appType)
 
-      // Сохраняем сессию
       sessionService.saveSession(user, appType)
 
-      // Логируем попытку входа
       await sessionService.logLoginAttempt({
         userId: user.id,
         success: true,
@@ -58,13 +60,11 @@ export const useAuthStore = defineStore('auth', () => {
       state.value.currentUser = user
       state.value.isAuthenticated = true
       state.value.lastLoginAt = user.lastLoginAt || new Date().toISOString()
-
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Login failed'
       state.value.error = message
 
-      // Логируем неудачную попытку
       if (error instanceof Error && error.message === 'Invalid PIN') {
         await sessionService.logLoginAttempt({
           userId: 'unknown',
@@ -74,7 +74,6 @@ export const useAuthStore = defineStore('auth', () => {
           ip: window.location.hostname
         })
       }
-
       throw error
     } finally {
       state.value.isLoading = false
@@ -114,6 +113,11 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     checkSession,
-    initializeDefaultUsers
+    initializeDefaultUsers,
+    // Экспортируем геттеры
+    isAdmin,
+    userId,
+    userName,
+    userRoles
   }
 })

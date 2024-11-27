@@ -1,4 +1,3 @@
-// src/components/accounts/dialogs/CorrectionDialog.vue
 <template>
   <base-dialog
     v-model="dialogModel"
@@ -9,7 +8,6 @@
   >
     <v-form ref="form" v-model="formState.isValid" @submit.prevent>
       <v-text-field disabled :model-value="currentBalance" label="Текущий баланс" />
-
       <v-text-field
         v-model.number="formData.newBalance"
         label="Новый баланс"
@@ -17,14 +15,12 @@
         :rules="[v => v !== undefined || 'Обязательное поле']"
         required
       />
-
       <div class="correction-amount">
         <span class="text-subtitle-1">Сумма корректировки:</span>
         <span :class="correctionAmountClass">
           {{ formatAmount(correctionAmount) }}
         </span>
       </div>
-
       <v-textarea
         v-model="formData.description"
         label="Причина корректировки"
@@ -40,7 +36,7 @@
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account.store'
-import { useUserStore } from '@/stores/user.store'
+import { useAuthStore } from '@/stores/auth.store' // Заменяем useUserStore на useAuthStore
 import { useDialogForm } from '@/composables/useDialogForm'
 import type { Account } from '@/types/account'
 
@@ -56,7 +52,7 @@ const emit = defineEmits<{
 
 // Stores
 const accountStore = useAccountStore()
-const userStore = useUserStore()
+const authStore = useAuthStore() // Заменяем userStore на authStore
 
 // Computed
 const dialogModel = computed({
@@ -93,8 +89,8 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
         description: data.description,
         performedBy: {
           type: 'user',
-          id: userStore.userId,
-          name: userStore.userName
+          id: authStore.userId, // Используем authStore вместо userStore
+          name: authStore.userName // Используем authStore вместо userStore
         }
       })
       emit('success')
