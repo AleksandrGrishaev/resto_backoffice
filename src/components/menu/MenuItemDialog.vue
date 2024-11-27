@@ -183,6 +183,7 @@ const formData = ref({
   name: '',
   type: 'food' as 'food' | 'beverage',
   isActive: true,
+  sortOrder: 0,
   variants: [createDefaultVariant()]
 })
 
@@ -230,6 +231,7 @@ function resetForm() {
     name: '',
     type: 'food',
     isActive: true,
+    sortOrder: 0,
     variants: [createDefaultVariant()]
   }
 }
@@ -244,14 +246,30 @@ async function handleSubmit() {
 
   try {
     loading.value = true
+
+    const categoryItems = menuStore.state.menuItems.filter(
+      item => item.categoryId === formData.value.categoryId
+    )
+
+    const nextSortOrder =
+      categoryItems.length > 0 ? Math.max(...categoryItems.map(item => item.sortOrder || 0)) + 1 : 0
+
+    // Обработка вариантов перед сохранением
+    const processedVariants = formData.value.variants.map((variant, index) => ({
+      id: variant.id,
+      name: variant.name || '', // Здесь можно добавить дополнительную обработку если нужно
+      price: variant.price,
+      isActive: true,
+      sortOrder: index
+    }))
+
     const itemData = {
       ...formData.value,
-      variants: formData.value.variants.map((variant, index) => ({
-        ...variant,
-        sortOrder: index,
-        isActive: true
-      }))
+      sortOrder: isEdit.value ? formData.value.sortOrder : nextSortOrder,
+      variants: processedVariants
     }
+
+    DebugUtils.debug(MODULE_NAME, 'Saving menu item', itemData) // Добавим для отладки
 
     if (isEdit.value && props.item) {
       await menuStore.updateMenuItem(props.item.id, itemData)
@@ -281,6 +299,7 @@ watch(
         name: newItem.name,
         type: newItem.type,
         isActive: newItem.isActive,
+        sortOrder: newItem.sortOrder,
         variants: [...newItem.variants]
       }
     } else {
