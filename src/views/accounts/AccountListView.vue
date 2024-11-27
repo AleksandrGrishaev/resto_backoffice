@@ -1,6 +1,9 @@
 <template>
   <div class="account-list-view">
-    <account-list-toolbar @create-operation="showOperationDialog" />
+    <account-list-toolbar
+      @create-account="showAccountDialog"
+      @create-operation="showOperationDialog"
+    />
     <account-list
       :accounts="store.accounts"
       :loading="loading"
@@ -8,46 +11,60 @@
       @view-details="navigateToAccount"
     />
 
-    <!-- Диалоги операций -->
-    <operation-dialog
-      v-model="dialogs.operation"
-      :type="operationType"
+    <!-- Диалоги -->
+    <account-dialog
+      v-if="dialogs.account"
+      v-model="dialogs.account"
       :account="selectedAccount"
-      @success="handleOperationSuccess"
+      @success="handleAccountSuccess"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccountStore } from '@/stores/account.store'
+import { useAuthStore } from '@/stores/auth.store'
 import AccountList from '@/components/accounts/list/AccountList.vue'
 import AccountListToolbar from '@/components/accounts/list/AccountListToolbar.vue'
+import AccountDialog from '@/components/accounts/dialogs/AccountDialog.vue'
 import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
 import type { Account } from '@/types/account'
 import type { OperationType } from '@/types/transaction'
 
 const router = useRouter()
 const store = useAccountStore()
+const authStore = useAuthStore()
 
 // State
-const loading = ref(true) // Изначально true
+const loading = ref(true)
 const dialogs = ref({
+  account: false,
   operation: false
 })
 const selectedAccount = ref<Account | null>(null)
 const operationType = ref<OperationType>('income')
 
+const isAdmin = computed(() => authStore.isAdmin)
+
 // Methods
+function showAccountDialog() {
+  if (!isAdmin.value) return
+  selectedAccount.value = null
+  dialogs.value.account = true
+}
+
 function showOperationDialog(type: OperationType, account?: Account) {
   operationType.value = type
   selectedAccount.value = account || null
   dialogs.value.operation = true
 }
 
-function handleEdit(_account: Account) {
-  // TODO: Реализовать редактирование счета
+function handleEdit(account: Account) {
+  if (!isAdmin.value) return
+  selectedAccount.value = account
+  dialogs.value.account = true
 }
 
 function navigateToAccount(accountId: string) {
@@ -56,6 +73,11 @@ function navigateToAccount(accountId: string) {
 
 function handleOperationSuccess() {
   dialogs.value.operation = false
+  fetchAccounts()
+}
+
+function handleAccountSuccess() {
+  dialogs.value.account = false
   fetchAccounts()
 }
 
@@ -76,13 +98,3 @@ onMounted(() => {
   fetchAccounts()
 })
 </script>
-
-<style lang="scss" scoped>
-.account-list-view {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-}
-</style>

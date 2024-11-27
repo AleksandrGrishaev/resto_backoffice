@@ -57,7 +57,7 @@
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account.store'
-import { useAuthStore } from '@/stores/auth.store' // Заменяем useUserStore на useAuthStore
+import { useAuthStore } from '@/stores/auth.store'
 import { useDialogForm } from '@/composables/useDialogForm'
 
 const props = defineProps<{
@@ -71,8 +71,7 @@ const emit = defineEmits<{
 
 // Stores
 const accountStore = useAccountStore()
-const authStore = useAuthStore() // Заменяем userStore на authStore
-
+const authStore = useAuthStore()
 // Computed
 const dialogModel = computed({
   get: () => props.modelValue,

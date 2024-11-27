@@ -1,4 +1,3 @@
-<!-- src/components/navigation/NavigationMenu.vue -->
 <template>
   <div class="d-flex flex-column fill-height">
     <!-- Header -->
@@ -9,7 +8,7 @@
     </v-toolbar>
 
     <!-- Navigation -->
-    <v-list nav class="px-2 flex-grow-0">
+    <v-list nav class="px-2 flex-grow-1 overflow-y-auto">
       <v-list-item
         to="/menu"
         prepend-icon="mdi-silverware-fork-knife"
@@ -22,42 +21,8 @@
         </template>
       </v-list-item>
 
-      <!-- Accounts Section -->
-      <v-list-group value="accounts">
-        <template #activator="{ props }">
-          <v-list-item
-            v-bind="props"
-            prepend-icon="mdi-wallet"
-            title="Счета"
-            color="primary"
-            :active-color="variables.colorPrimary"
-          />
-        </template>
-
-        <v-list-item
-          to="/accounts/dashboard"
-          prepend-icon="mdi-view-dashboard"
-          color="primary"
-          class="mb-2"
-          :active-color="variables.colorPrimary"
-        >
-          <template #title>
-            <span>Дашборд</span>
-          </template>
-        </v-list-item>
-
-        <v-list-item
-          to="/accounts"
-          prepend-icon="mdi-format-list-bulleted"
-          color="primary"
-          class="mb-2"
-          :active-color="variables.colorPrimary"
-        >
-          <template #title>
-            <span>Список счетов</span>
-          </template>
-        </v-list-item>
-      </v-list-group>
+      <!-- Счета с активными счетами -->
+      <navigation-accounts />
 
       <v-list-item
         to="/payment-settings"
@@ -72,12 +37,8 @@
       </v-list-item>
     </v-list>
 
-    <!-- Flex spacer -->
-    <v-spacer />
-
     <!-- User Info & Actions -->
     <div class="navigation-footer pa-4">
-      <!-- User Info -->
       <v-list density="compact" class="pa-0 mb-4">
         <v-list-item
           prepend-icon="mdi-account"
@@ -86,7 +47,6 @@
         />
       </v-list>
 
-      <!-- Action Buttons -->
       <div class="d-flex flex-column gap-2">
         <v-btn block color="error" variant="text" prepend-icon="mdi-logout" @click="handleLogout">
           {{ rail ? '' : 'LOGOUT' }}
@@ -110,6 +70,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { DebugUtils } from '@/utils'
+import NavigationAccounts from './NavigationAccounts.vue'
 import * as variables from '@/styles/variables.scss'
 
 const MODULE_NAME = 'NavigationMenu'
@@ -147,6 +108,20 @@ async function handleLogout() {
 
 .navigation-footer {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  margin-top: auto;
+}
+
+:deep(.v-list) {
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+  }
 }
 </style>

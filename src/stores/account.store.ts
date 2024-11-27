@@ -224,6 +224,58 @@ export const useAccountStore = defineStore('account', {
       }
     },
 
+    async createAccount(
+      data: Omit<Account, 'id' | 'lastTransactionDate' | 'createdAt' | 'updatedAt'>
+    ) {
+      try {
+        this.clearError()
+        this.loading.accounts = true
+        DebugUtils.info(MODULE_NAME, 'Creating account', { data })
+
+        const account = await accountService.create(data)
+
+        // Оптимистическое обновление
+        this.accounts.push(account)
+
+        DebugUtils.info(MODULE_NAME, 'Account created successfully', { accountId: account.id })
+        return account
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to create account', { error })
+        this.setError(error)
+        throw error
+      } finally {
+        this.loading.accounts = false
+      }
+    },
+
+    async updateAccount(id: string, data: Partial<Account>) {
+      try {
+        this.clearError()
+        this.loading.accounts = true
+        DebugUtils.info(MODULE_NAME, 'Updating account', { id, data })
+
+        await accountService.update(id, data)
+
+        // Оптимистическое обновление
+        const index = this.accounts.findIndex(acc => acc.id === id)
+        if (index !== -1) {
+          this.accounts[index] = {
+            ...this.accounts[index],
+            ...data,
+            updatedAt: new Date().toISOString()
+          }
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Account updated successfully')
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update account', { error })
+        this.setError(error)
+        throw error
+      } finally {
+        this.loading.accounts = false
+      }
+    },
+
     setFilters(filters: TransactionFilters) {
       this.filters = filters
       if (this.selectedAccountId) {

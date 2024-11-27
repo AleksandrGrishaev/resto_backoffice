@@ -56,14 +56,6 @@ const router = createRouter({
           path: 'accounts',
           children: [
             {
-              path: 'dashboard',
-              name: 'accounts-dashboard',
-              component: DashboardView,
-              meta: {
-                title: 'Дашборд счетов'
-              }
-            },
-            {
               path: '',
               name: 'accounts-list',
               component: AccountListView,

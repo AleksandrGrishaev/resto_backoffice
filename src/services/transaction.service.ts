@@ -9,6 +9,7 @@ import type {
 import { accountService } from './account.service'
 import { BaseService } from '@/firebase/services/base.service'
 import { DebugUtils } from '@/utils'
+import { where, QueryConstraint } from 'firebase/firestore'
 
 const MODULE_NAME = 'TransactionService'
 
@@ -33,12 +34,22 @@ export class TransactionService extends BaseService<Transaction> {
         throw new Error('Insufficient funds')
       }
 
+      // Создаем базовую транзакцию
       const transaction: Omit<Transaction, 'id'> = {
-        ...data,
+        accountId: data.accountId,
+        type: data.type,
+        amount: data.amount,
         balanceAfter: newBalance,
+        description: data.description,
+        performedBy: data.performedBy,
         status: 'completed',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      }
+
+      // Добавляем expenseCategory только если он определен
+      if (data.type === 'expense' && data.expenseCategory) {
+        transaction.expenseCategory = data.expenseCategory
       }
 
       const createdTransaction = await this.create(transaction)
@@ -164,21 +175,21 @@ export class TransactionService extends BaseService<Transaction> {
     try {
       DebugUtils.info(MODULE_NAME, 'Fetching account transactions', { accountId, filters })
 
-      let query = this.collection.where('accountId', '==', accountId)
+      const constraints: QueryConstraint[] = [where('accountId', '==', accountId)]
 
       if (filters?.type) {
-        query = query.where('type', '==', filters.type)
+        constraints.push(where('type', '==', filters.type))
       }
 
       if (filters?.dateFrom) {
-        query = query.where('createdAt', '>=', filters.dateFrom)
+        constraints.push(where('createdAt', '>=', filters.dateFrom))
       }
 
       if (filters?.dateTo) {
-        query = query.where('createdAt', '<=', filters.dateTo)
+        constraints.push(where('createdAt', '<=', filters.dateTo))
       }
 
-      const transactions = await this.getByQuery(query)
+      const transactions = await this.getAll(constraints)
 
       DebugUtils.info(MODULE_NAME, 'Transactions fetched successfully', {
         count: transactions.length

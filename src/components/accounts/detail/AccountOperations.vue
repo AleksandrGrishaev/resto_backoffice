@@ -1,4 +1,3 @@
-// src/components/accounts/detail/AccountOperations.vue
 <template>
   <v-table hover>
     <thead>
@@ -15,58 +14,67 @@
     </thead>
 
     <tbody>
-      <tr
-        v-for="operation in operations"
-        :key="operation.id"
-        :class="{ 'correction-row': operation.isCorrection }"
-      >
-        <td>{{ formatDateTime(operation.createdAt) }}</td>
-        <td>
-          <v-icon
-            :icon="getOperationTypeIcon(operation.type)"
-            :color="getOperationTypeColor(operation.type)"
-            size="small"
-            class="mr-2"
-          />
-          {{ getOperationTypeLabel(operation.type) }}
-        </td>
-        <td>
-          <template v-if="operation.expenseCategory">
-            {{ getExpenseCategoryLabel(operation.expenseCategory) }}
-          </template>
-        </td>
-        <td class="text-right" :class="getAmountClass(operation)">
-          {{ formatAmount(operation.amount) }}
-        </td>
-        <td class="text-right">
-          {{ formatAmount(operation.balanceAfter) }}
-        </td>
-        <td>{{ operation.description }}</td>
-        <td>
-          <div class="performer">
+      <template v-if="!loading">
+        <tr
+          v-for="operation in operations"
+          :key="operation.id"
+          :class="{ 'correction-row': operation.isCorrection }"
+        >
+          <td>{{ formatDateTime(operation.createdAt) }}</td>
+          <td>
             <v-icon
-              :icon="operation.performedBy.type === 'user' ? 'mdi-account' : 'mdi-api'"
+              :icon="getOperationTypeIcon(operation.type)"
+              :color="getOperationTypeColor(operation.type)"
               size="small"
               class="mr-2"
             />
-            {{ operation.performedBy.name }}
-          </div>
-        </td>
-        <td v-if="canEdit" class="text-center">
-          <v-btn
-            icon
-            size="small"
-            variant="text"
-            :disabled="!canEditOperation(operation)"
-            @click="emit('edit', operation)"
-          >
-            <v-icon size="small">mdi-pencil</v-icon>
-          </v-btn>
-        </td>
-      </tr>
+            {{ getOperationTypeLabel(operation.type) }}
+          </td>
+          <td>
+            <template v-if="operation.expenseCategory">
+              {{ getExpenseCategoryLabel(operation.expenseCategory) }}
+            </template>
+          </td>
+          <td class="text-right" :class="getAmountClass(operation)">
+            {{ formatAmount(operation.amount) }}
+          </td>
+          <td class="text-right">
+            {{ formatAmount(operation.balanceAfter) }}
+          </td>
+          <td>{{ operation.description }}</td>
+          <td>
+            <div class="performer">
+              <v-icon
+                :icon="operation.performedBy.type === 'user' ? 'mdi-account' : 'mdi-api'"
+                size="small"
+                class="mr-2"
+              />
+              {{ operation.performedBy.name }}
+            </div>
+          </td>
+          <td v-if="canEdit" class="text-center">
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              :disabled="!canEditOperation(operation)"
+              @click="emit('edit', operation)"
+            >
+              <v-icon size="small">mdi-pencil</v-icon>
+            </v-btn>
+          </td>
+        </tr>
+      </template>
 
-      <tr v-if="operations.length === 0">
+      <tr v-if="loading || (!loading && operations.length === 0)">
         <td :colspan="canEdit ? 8 : 7" class="text-center py-4">
+          <v-progress-circular
+            v-if="loading"
+            indeterminate
+            color="primary"
+            size="24"
+            class="mr-2"
+          />
           {{ loading ? 'Загрузка...' : 'Нет операций' }}
         </td>
       </tr>
@@ -76,18 +84,29 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useAuthStore } from '@/stores/auth.store' // Заменяем useUserStore на useAuthStore
+import { useAuthStore } from '@/stores/auth.store'
 import { formatDateTime, formatAmount } from '@/utils/formatter'
 import type { Transaction, ExpenseCategory } from '@/types/transaction'
 import { EXPENSE_CATEGORIES } from '@/types/transaction'
+
+// Props
+interface Props {
+  operations: Transaction[]
+  loading: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  operations: () => [],
+  loading: false
+})
 
 const emit = defineEmits<{
   edit: [operation: Transaction]
 }>()
 
 // Store
-const authStore = useAuthStore() // Заменяем userStore на authStore
-const canEdit = computed(() => authStore.isAdmin) // Используем authStore.isAdmin
+const authStore = useAuthStore()
+const canEdit = computed(() => authStore.isAdmin)
 
 // Helpers
 function getOperationTypeIcon(type: Transaction['type']): string {
