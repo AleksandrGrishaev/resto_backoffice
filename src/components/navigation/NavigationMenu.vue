@@ -18,7 +18,31 @@
         :active-color="variables.colorPrimary"
       >
         <template #title>
-          <span>Menu</span>
+          <span>Меню</span>
+        </template>
+      </v-list-item>
+
+      <v-list-item
+        to="/payment-settings"
+        prepend-icon="mdi-cash-register"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
+      >
+        <template #title>
+          <span>Оплата</span>
+        </template>
+      </v-list-item>
+
+      <v-list-item
+        to="/accounts"
+        prepend-icon="mdi-wallet"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
+      >
+        <template #title>
+          <span>Аккаунты</span>
         </template>
       </v-list-item>
     </v-list>

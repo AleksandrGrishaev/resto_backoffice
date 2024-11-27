@@ -4,6 +4,8 @@ import MainLayout from '@/layouts/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import MenuView from '@/views/MenuView.vue'
+import PaymentSettingsView from '@/views/PaymentSettingsView.vue'
+import AccountView from '@/views/AccountView.vue'
 import { useAuthStore } from '@/stores/auth.store'
 
 const router = createRouter({
@@ -36,6 +38,22 @@ const router = createRouter({
           path: 'menu',
           name: 'menu',
           component: MenuView
+        },
+        {
+          path: 'payment-settings',
+          name: 'payment-settings',
+          component: PaymentSettingsView,
+          meta: {
+            title: 'Методы оплаты и налоги'
+          }
+        },
+        {
+          path: 'accounts',
+          name: 'accounts',
+          component: AccountView,
+          meta: {
+            title: 'Аккаунты'
+          }
         }
       ]
     },

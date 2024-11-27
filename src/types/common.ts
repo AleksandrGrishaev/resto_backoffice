@@ -4,7 +4,6 @@ export interface BaseEntity {
   createdAt: string
   updatedAt: string
   closedAt?: string
-  shiftId?: string
   createdBy?: string
   updatedBy?: string
 }
