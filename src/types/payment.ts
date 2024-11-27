@@ -1,15 +1,18 @@
 // src/types/payment.ts
 import { BaseEntity } from './common'
+import { AccountType } from './account'
 
 export interface PaymentMethod extends BaseEntity {
   name: string
   isActive: boolean
   requiresDetails: boolean
-  type: 'cash' | 'card' | 'other'
+  type: AccountType // Изменяем на AccountType
+  accountId?: string // Ссылка на аккаунт
 }
 
 export interface Payment extends BaseEntity {
   billId: string
+  accountId: string // Добавляем связь с аккаунтом
   amount: number
   method: string
   status: PaymentStatus
@@ -21,28 +24,3 @@ export interface Payment extends BaseEntity {
 }
 
 export type PaymentStatus = 'completed' | 'cancelled' | 'pending' | 'failed'
-
-export interface Shift extends BaseEntity {
-  openedAt: string
-  closedAt?: string
-  initialBalance: number
-  currentBalance: number
-  status: ShiftStatus
-  cashierId: string
-  summary?: ShiftSummary
-}
-
-export interface ShiftSummary {
-  totalSales: number
-  totalCash: number
-  totalCard: number
-  billCount: number
-  orderCount: number
-  cancelledBills: number
-  totalTaxes: {
-    serviceTax: number
-    governmentTax: number
-  }
-}
-
-export type ShiftStatus = 'active' | 'closed' | 'pending_close'

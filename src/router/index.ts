@@ -1,102 +1,100 @@
 // src/router/index.ts
-import {
-  createRouter,
-  createWebHistory,
-  type RouteRecordRaw,
-  type NavigationGuardNext as RouterNavigationGuard,
-  type RouteLocationNormalized
-} from 'vue-router'
-import { authGuard } from './guards/auth.guard'
-import { DebugUtils } from '@/utils'
-
-// Layouts
+import { createRouter, createWebHistory } from 'vue-router'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import MainLayout from '@/layouts/MainLayout.vue'
-import EmptyLayout from '@/layouts/EmptyLayout.vue'
+import LoginView from '@/views/LoginView.vue'
+import NotFoundView from '@/views/NotFoundView.vue'
+import MenuView from '@/views/MenuView.vue'
+import PaymentSettingsView from '@/views/PaymentSettingsView.vue'
+import { useAuthStore } from '@/stores/auth.store'
 
-const MODULE_NAME = 'Router'
-
-const routes: RouteRecordRaw[] = [
-  {
-    path: '/auth',
-    component: AuthLayout,
-    children: [
-      {
-        path: '',
-        redirect: { name: 'login' }
-      },
-      {
-        path: 'login',
-        name: 'login',
-        component: () => import('@/views/LoginView.vue'),
-        meta: {
-          requiresAuth: false,
-          title: 'Login'
-        }
-      }
-    ]
-  },
-  {
-    path: '/',
-    component: MainLayout,
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: 'test-connection',
-        name: 'test-connection',
-        component: () => import('@/views/TestConnectionView.vue'),
-        meta: {
-          title: 'Test Firebase Connection'
-        }
-      }
-    ]
-  },
-  {
-    path: '/:pathMatch(.*)*',
-    component: EmptyLayout,
-    children: [
-      {
-        path: '',
-        name: 'not-found',
-        component: () => import('@/views/NotFoundView.vue'),
-        meta: {
-          title: 'Page Not Found'
-        }
-      }
-    ]
-  }
-]
+// Явный импорт компонентов счетов
+import AccountListView from '@/views/accounts/AccountListView.vue'
+import AccountDetailView from '@/views/accounts/AccountDetailView.vue'
+import DashboardView from '@/views/accounts/DashboardView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
-  routes
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: '/auth',
+      component: AuthLayout,
+      children: [
+        {
+          path: 'login',
+          name: 'login',
+          component: LoginView,
+          meta: {
+            requiresAuth: false
+          }
+        }
+      ]
+    },
+    {
+      path: '/',
+      component: MainLayout,
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          redirect: '/menu'
+        },
+        {
+          path: 'menu',
+          name: 'menu',
+          component: MenuView
+        },
+        {
+          path: 'payment-settings',
+          name: 'payment-settings',
+          component: PaymentSettingsView,
+          meta: {
+            title: 'Методы оплаты и налоги'
+          }
+        },
+        {
+          path: 'accounts',
+          children: [
+            {
+              path: '',
+              name: 'accounts-list',
+              component: AccountListView,
+              meta: {
+                title: 'Список счетов'
+              }
+            },
+            {
+              path: ':id',
+              name: 'account-detail',
+              component: AccountDetailView,
+              meta: {
+                title: 'Детали счета'
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: NotFoundView
+    }
+  ]
 })
 
-// Debug logging middleware (development only)
-if (import.meta.env.DEV) {
-  router.beforeEach(
-    async (
-      to: RouteLocationNormalized,
-      from: RouteLocationNormalized,
-      next: RouterNavigationGuard
-    ) => {
-      DebugUtils.debug(MODULE_NAME, 'Route Change:', {
-        to: to.fullPath,
-        from: from.fullPath,
-        component: to.matched[0]?.components?.default?.name
-      })
-      next()
-    }
-  )
-}
+// Navigation guard
+router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
 
-// Authentication guard
-router.beforeEach(authGuard)
-
-// Title handling
-router.afterEach((to: RouteLocationNormalized) => {
-  const title = to.meta.title ? `${to.meta.title} - BackOffice` : 'BackOffice'
-  document.title = title
+  if (requiresAuth && !authStore.state.isAuthenticated) {
+    next({ name: 'login', query: { redirect: to.fullPath } })
+  } else if (to.name === 'login' && authStore.state.isAuthenticated) {
+    next({ name: 'menu' })
+  } else {
+    next()
+  }
 })
 
 export default router

@@ -1,0 +1,21 @@
+// src/styles/main.scss
+@use 'sass:map';
+@use './variables' as *;
+
+// CSS переменные
+:root {
+  @each $name, $value in $color {
+    --color-#{$name}: #{$value};
+  }
+
+  @each $name, $value in $black {
+    --black-#{$name}: #{$value};
+  }
+}
+
+// Базовые стили
+body {
+  margin: 0;
+  background: var(--black-primary);
+  color: rgba(255, 255, 255, 0.87);
+}

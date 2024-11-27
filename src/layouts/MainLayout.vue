@@ -1,35 +1,39 @@
 <!-- src/layouts/MainLayout.vue -->
 <template>
   <v-app>
-    <v-app-bar>
-      <v-app-bar-title>BackOffice</v-app-bar-title>
-      <v-spacer />
-      <v-btn @click="handleLogout">Logout</v-btn>
-    </v-app-bar>
+    <v-navigation-drawer
+      v-model="drawer"
+      :rail="rail"
+      :width="280"
+      :rail-width="80"
+      permanent
+      location="left"
+      color="surface"
+    >
+      <navigation-menu v-model:rail="rail" />
+    </v-navigation-drawer>
 
     <v-main>
-      <v-container fluid>
-        <router-view />
-      </v-container>
+      <router-view />
     </v-main>
   </v-app>
 </template>
 
 <script setup lang="ts">
-import { useAuthStore } from '@/stores/auth.store'
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import NavigationMenu from '@/components/navigation/NavigationMenu.vue'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'MainLayout'
-const router = useRouter()
-const authStore = useAuthStore()
 
-const handleLogout = async () => {
-  try {
-    await authStore.logout()
-    router.push({ name: 'login' })
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Logout error', { error })
-  }
-}
+const drawer = ref(true)
+const rail = ref(false)
+
+DebugUtils.debug(MODULE_NAME, 'Layout mounted', { drawer: drawer.value, rail: rail.value })
 </script>
+
+<style lang="scss">
+.v-main {
+  background-color: var(--black-primary);
+}
+</style>

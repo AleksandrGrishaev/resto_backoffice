@@ -1,23 +1,29 @@
-// src/views/LoginView.vue
+<!-- LoginView.vue -->
 <template>
-  <v-card class="pa-4">
-    <v-card-title class="text-center text-h5 mb-4">BackOffice Login</v-card-title>
+  <v-container fluid class="fill-height login-container">
+    <v-row justify="center" align="center">
+      <v-col cols="12" sm="8" md="6" lg="4">
+        <v-card class="pa-4 login-card">
+          <v-card-title class="text-h5 text-center mb-4">BackOffice Login</v-card-title>
 
-    <v-card-text>
-      <pin-input :loading="loading" @submit="handleLogin" />
+          <v-card-text>
+            <pin-input :loading="loading" @submit="handleLogin" />
 
-      <v-alert
-        v-if="error"
-        type="error"
-        class="mt-4"
-        variant="tonal"
-        closable
-        @click:close="error = ''"
-      >
-        {{ error }}
-      </v-alert>
-    </v-card-text>
-  </v-card>
+            <v-alert
+              v-if="error"
+              type="error"
+              variant="tonal"
+              closable
+              class="mt-4 error-alert"
+              @click:close="error = ''"
+            >
+              {{ error }}
+            </v-alert>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-container>
 </template>
 
 <script setup lang="ts">
@@ -40,9 +46,9 @@ const handleLogin = async (pin: string) => {
     loading.value = true
     error.value = ''
 
-    await authStore.login(pin)
+    await authStore.login(pin, 'backoffice')
 
-    const redirectPath = route.query.redirect?.toString() || '/test-connection'
+    const redirectPath = route.query.redirect?.toString() || '/'
     router.push(redirectPath)
 
     DebugUtils.info(MODULE_NAME, 'Login successful')
@@ -54,3 +60,19 @@ const handleLogin = async (pin: string) => {
   }
 }
 </script>
+
+<style lang="scss" scoped>
+.login-container {
+  background-color: var(--black-primary);
+}
+
+.login-card {
+  background-color: var(--black-surface);
+  border: 1px solid var(--color-primary);
+
+  .error-alert {
+    background-color: var(--color-error);
+    color: var(--black-primary);
+  }
+}
+</style>
