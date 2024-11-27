@@ -130,6 +130,61 @@ export const useMenuStore = defineStore('menu', () => {
     }
   }
 
+  async function addMenuItem(data: Omit<MenuItem, keyof BaseEntity>) {
+    try {
+      state.value.loading = true
+      const menuItem = await menuItemService.create(data)
+      state.value.menuItems.push(menuItem)
+      DebugUtils.info(MODULE_NAME, 'Menu item added', { menuItem })
+      return menuItem
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add menu item'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, error)
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  async function updateMenuItem(id: string, data: Partial<MenuItem>) {
+    try {
+      state.value.loading = true
+      await menuItemService.update(id, data)
+      const index = state.value.menuItems.findIndex(i => i.id === id)
+      if (index !== -1) {
+        state.value.menuItems[index] = {
+          ...state.value.menuItems[index],
+          ...data
+        }
+      }
+      DebugUtils.info(MODULE_NAME, 'Menu item updated', { id, data })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update menu item'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, error)
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  async function deleteMenuItem(id: string) {
+    try {
+      state.value.loading = true
+      await menuItemService.delete(id)
+      state.value.menuItems = state.value.menuItems.filter(i => i.id !== id)
+      DebugUtils.info(MODULE_NAME, 'Menu item deleted', { id })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete menu item'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, error)
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
   return {
     state,
     activeCategories,
@@ -139,6 +194,9 @@ export const useMenuStore = defineStore('menu', () => {
     fetchMenuItems,
     addCategory,
     updateCategory,
-    deleteCategory
+    deleteCategory,
+    addMenuItem,
+    updateMenuItem,
+    deleteMenuItem
   }
 })

@@ -14,33 +14,41 @@
         />
 
         <v-chip-group v-model="filterTypes" multiple class="menu-toolbar__filters">
-          <v-chip
-            filter
-            value="food"
-            variant="flat"
-            :color="isFilterActive('food') ? 'primary' : undefined"
-          >
-            <v-icon start icon="mdi-silverware-fork-knife" size="16" />
-            Кухня
-          </v-chip>
-          <v-chip
-            filter
-            value="beverage"
-            variant="flat"
-            :color="isFilterActive('beverage') ? 'primary' : undefined"
-          >
-            <v-icon start icon="mdi-coffee" size="16" />
-            Бар
-          </v-chip>
-          <v-chip
-            filter
-            value="archive"
-            variant="flat"
-            :color="isFilterActive('archive') ? 'primary' : undefined"
-          >
-            <v-icon start icon="mdi-archive" size="16" />
-            Архив
-          </v-chip>
+          <template #default>
+            <v-chip
+              filter
+              value="food"
+              variant="flat"
+              :color="isFilterActive('food') ? 'primary' : undefined"
+            >
+              <template #default>
+                <v-icon start icon="mdi-silverware-fork-knife" size="16" />
+                Кухня
+              </template>
+            </v-chip>
+            <v-chip
+              filter
+              value="beverage"
+              variant="flat"
+              :color="isFilterActive('beverage') ? 'primary' : undefined"
+            >
+              <template #default>
+                <v-icon start icon="mdi-coffee" size="16" />
+                Бар
+              </template>
+            </v-chip>
+            <v-chip
+              filter
+              value="archive"
+              variant="flat"
+              :color="isFilterActive('archive') ? 'primary' : undefined"
+            >
+              <template #default>
+                <v-icon start icon="mdi-archive" size="16" />
+                Архив
+              </template>
+            </v-chip>
+          </template>
         </v-chip-group>
       </div>
 

@@ -1,161 +1,139 @@
 <template>
-  <v-dialog v-model="dialogModel" max-width="600px">
-    <v-card>
-      <v-card-title class="text-h5 pa-4">
-        {{ isEdit ? 'Редактировать блюдо' : 'Добавить блюдо' }}
-      </v-card-title>
+  <base-dialog
+    v-model="dialogModel"
+    :title="isEdit ? 'Редактировать блюдо' : 'Добавить блюдо'"
+    :loading="loading"
+    :disabled="!isFormValid"
+    max-width="700"
+    cancel-text="Отмена"
+    confirm-text="Сохранить"
+    @cancel="handleCancel"
+    @confirm="handleSubmit"
+  >
+    <v-form ref="form" v-model="isValid">
+      <!-- Категория -->
+      <v-select
+        v-model="formData.categoryId"
+        :items="categories"
+        item-title="name"
+        item-value="id"
+        label="Категория"
+        :rules="[v => !!v || 'Обязательное поле']"
+        hide-details="auto"
+        class="mb-4"
+      />
 
-      <v-card-text class="pa-4">
-        <v-form ref="form" v-model="isValid">
-          <!-- Категория -->
-          <v-select
-            v-model="formData.categoryId"
-            :items="categories"
-            item-title="name"
-            item-value="id"
-            label="Категория"
-            :rules="[v => !!v || 'Обязательное поле']"
-            hide-details="auto"
-            class="mb-4"
-          />
+      <!-- Зона приготовления -->
+      <div class="mb-4">
+        <v-btn-toggle v-model="formData.type" mandatory rounded="lg" color="primary" class="w-100">
+          <v-btn value="food" class="flex-grow-1">
+            <v-icon icon="mdi-silverware-fork-knife" size="20" class="mr-2" />
+            Кухня
+          </v-btn>
+          <v-btn value="beverage" class="flex-grow-1">
+            <v-icon icon="mdi-coffee" size="20" class="mr-2" />
+            Бар
+          </v-btn>
+        </v-btn-toggle>
+      </div>
 
-          <!-- Зона приготовления -->
-          <div class="mb-4">
-            <v-btn-toggle
-              v-model="formData.type"
-              mandatory
-              rounded="lg"
-              color="primary"
-              class="w-100"
-            >
-              <v-btn value="food" class="flex-grow-1">
-                <v-icon icon="mdi-silverware-fork-knife" size="20" class="mr-2" />
-                Кухня
-              </v-btn>
-              <v-btn value="beverage" class="flex-grow-1">
-                <v-icon icon="mdi-coffee" size="20" class="mr-2" />
-                Бар
-              </v-btn>
-            </v-btn-toggle>
-          </div>
+      <!-- Название -->
+      <v-text-field
+        v-model="formData.name"
+        label="Название позиции"
+        :rules="[v => !!v || 'Обязательное поле']"
+        hide-details="auto"
+        class="mb-4"
+      />
 
-          <!-- Название -->
-          <v-text-field
-            v-model="formData.name"
-            label="Название позиции"
-            :rules="[v => !!v || 'Обязательное поле']"
-            hide-details="auto"
-            class="mb-4"
-          />
+      <!-- Статус -->
+      <div class="mb-4">
+        <v-btn-toggle
+          v-model="formData.isActive"
+          mandatory
+          rounded="lg"
+          color="primary"
+          class="w-100"
+        >
+          <v-btn :value="true" class="flex-grow-1">Активно</v-btn>
+          <v-btn :value="false" class="flex-grow-1">Не активно</v-btn>
+        </v-btn-toggle>
+      </div>
 
-          <!-- Статус -->
-          <div class="mb-4">
-            <v-btn-toggle
-              v-model="formData.isActive"
-              mandatory
-              rounded="lg"
-              color="primary"
-              class="w-100"
-            >
-              <v-btn :value="true" class="flex-grow-1">Активно</v-btn>
-              <v-btn :value="false" class="flex-grow-1">Не активно</v-btn>
-            </v-btn-toggle>
-          </div>
+      <!-- Варианты -->
+      <div class="variants mb-4">
+        <div class="variants-header d-flex align-center mb-2">
+          <div class="text-subtitle-1">Варианты</div>
+          <v-spacer />
+          <v-btn density="comfortable" variant="text" @click="addVariant">
+            <v-icon icon="mdi-plus" size="20" class="mr-2" />
+            Добавить вариант
+          </v-btn>
+        </div>
 
-          <!-- Варианты -->
-          <div class="variants mb-4">
-            <div class="variants-header d-flex align-center mb-2">
-              <div class="text-subtitle-1">Варианты</div>
+        <div class="variants-list">
+          <div
+            v-for="(variant, index) in formData.variants"
+            :key="variant.id"
+            class="variant-item mb-3"
+          >
+            <!-- Заголовок варианта -->
+            <div class="variant-item__header d-flex align-center mb-2">
+              <div class="text-subtitle-2">Вариант {{ index + 1 }}</div>
               <v-spacer />
-              <v-btn density="comfortable" variant="text" @click="addVariant">
-                <v-icon icon="mdi-plus" size="20" class="mr-2" />
-                Добавить вариант
+              <v-btn
+                size="small"
+                color="error"
+                variant="text"
+                :disabled="formData.variants.length === 1"
+                @click="removeVariant(index)"
+              >
+                <v-icon icon="mdi-delete" size="20" />
               </v-btn>
             </div>
 
-            <div class="variants-list">
-              <div
-                v-for="(variant, index) in formData.variants"
-                :key="variant.id"
-                class="variant-item mb-3"
-              >
-                <!-- Заголовок варианта -->
-                <div class="variant-item__header d-flex align-center mb-2">
-                  <div class="text-subtitle-2">Вариант {{ index + 1 }}</div>
-                  <v-spacer />
-                  <v-btn
-                    size="small"
-                    color="error"
-                    variant="text"
-                    :disabled="formData.variants.length === 1"
-                    @click="removeVariant(index)"
-                  >
-                    <v-icon icon="mdi-delete" size="20" />
-                  </v-btn>
+            <!-- Поля варианта -->
+            <div class="variant-item__fields">
+              <div class="d-flex gap-2">
+                <v-text-field
+                  v-model="variant.name"
+                  label="Название варианта"
+                  hide-details="auto"
+                  placeholder="Оставьте пустым если не требуется"
+                  class="flex-grow-1"
+                  bg-color="surface"
+                />
+                <v-text-field
+                  v-model.number="variant.price"
+                  type="number"
+                  label="Цена"
+                  hide-details="auto"
+                  suffix="₽"
+                  :rules="[v => v > 0 || 'Цена должна быть больше 0']"
+                  required
+                  style="width: 150px"
+                  bg-color="surface"
+                />
+              </div>
+
+              <!-- Предпросмотр -->
+              <div class="variant-preview mt-2">
+                <div class="variant-preview__label text-caption text-medium-emphasis mb-1">
+                  Предпросмотр:
                 </div>
-
-                <!-- Поля варианта -->
-                <div class="variant-item__fields">
-                  <div class="d-flex gap-2">
-                    <v-text-field
-                      v-model="variant.name"
-                      label="Название варианта"
-                      hide-details="auto"
-                      placeholder="Оставьте пустым если не требуется"
-                      class="flex-grow-1"
-                      bg-color="surface"
-                    />
-                    <v-text-field
-                      v-model.number="variant.price"
-                      type="number"
-                      label="Цена"
-                      hide-details="auto"
-                      suffix="₽"
-                      :rules="[v => v > 0 || 'Цена должна быть больше 0']"
-                      required
-                      style="width: 150px"
-                      bg-color="surface"
-                    />
+                <div class="variant-preview__content d-flex justify-space-between align-center">
+                  <div class="text-body-2">
+                    {{ getFullItemName(formData.name, variant.name) }}
                   </div>
-
-                  <!-- Предпросмотр -->
-                  <div class="variant-preview mt-2">
-                    <div class="variant-preview__label text-caption text-medium-emphasis mb-1">
-                      Предпросмотр:
-                    </div>
-                    <div class="variant-preview__content d-flex justify-space-between align-center">
-                      <div class="text-body-2">
-                        {{ getFullItemName(formData.name, variant.name) }}
-                      </div>
-                      <div class="variant-preview__price">{{ variant.price }}₽</div>
-                    </div>
-                  </div>
+                  <div class="variant-preview__price">{{ variant.price }}₽</div>
                 </div>
               </div>
             </div>
           </div>
-        </v-form>
-      </v-card-text>
-
-      <v-card-actions class="pa-4">
-        <div class="d-flex w-100 gap-2">
-          <v-btn variant="outlined" width="100%" :disabled="loading" @click="dialogModel = false">
-            Отмена
-          </v-btn>
-
-          <v-btn
-            color="primary"
-            width="100%"
-            :loading="loading"
-            :disabled="!isFormValid"
-            @click="handleSubmit"
-          >
-            Сохранить
-          </v-btn>
         </div>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+      </div>
+    </v-form>
+  </base-dialog>
 </template>
 
 <script setup lang="ts">
@@ -163,6 +141,7 @@ import { ref, computed, watch } from 'vue'
 import { useMenuStore } from '@/stores/menu.store'
 import type { MenuItem, MenuItemVariant } from '@/types/menu'
 import { DebugUtils } from '@/utils'
+import BaseDialog from '@/components/base/BaseDialog.vue'
 
 const MODULE_NAME = 'MenuItemDialog'
 
@@ -253,6 +232,11 @@ function resetForm() {
     isActive: true,
     variants: [createDefaultVariant()]
   }
+}
+
+function handleCancel() {
+  resetForm()
+  dialogModel.value = false
 }
 
 async function handleSubmit() {
