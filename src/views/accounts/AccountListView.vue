@@ -29,7 +29,6 @@ import { useAuthStore } from '@/stores/auth.store'
 import AccountList from '@/components/accounts/list/AccountList.vue'
 import AccountListToolbar from '@/components/accounts/list/AccountListToolbar.vue'
 import AccountDialog from '@/components/accounts/dialogs/AccountDialog.vue'
-import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
 import type { Account } from '@/types/account'
 import type { OperationType } from '@/types/transaction'
 
@@ -69,11 +68,6 @@ function handleEdit(account: Account) {
 
 function navigateToAccount(accountId: string) {
   router.push(`/accounts/${accountId}`)
-}
-
-function handleOperationSuccess() {
-  dialogs.value.operation = false
-  fetchAccounts()
 }
 
 function handleAccountSuccess() {

@@ -15,6 +15,16 @@
       </v-card-title>
 
       <v-card-text class="pa-4">
+        <v-alert
+          v-if="error"
+          type="error"
+          variant="tonal"
+          class="mb-4"
+          closable
+          @click:close="error = ''"
+        >
+          {{ error }}
+        </v-alert>
         <slot />
       </v-card-text>
 
@@ -25,23 +35,20 @@
           <div class="actions-wrapper w-100">
             <v-btn
               variant="text"
-              width="50%"
+              class="text-uppercase action-button"
               height="44"
               :disabled="loading"
-              class="text-uppercase"
               @click="handleCancel"
             >
               {{ cancelText }}
             </v-btn>
-
             <v-btn
               color="primary"
               variant="flat"
-              width="50%"
+              class="text-uppercase action-button"
               height="44"
               :loading="loading"
               :disabled="disabled"
-              class="text-uppercase"
               @click="handleConfirm"
             >
               {{ confirmText }}
@@ -54,7 +61,12 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(
+import { ref } from 'vue'
+import { DebugUtils } from '@/utils/debugger'
+
+const MODULE_NAME = 'BaseDialog'
+
+const props = withDefaults(
   defineProps<{
     modelValue: boolean
     title: string
@@ -76,18 +88,32 @@ withDefaults(
 )
 
 const emit = defineEmits<{
-  'update:modelValue': [boolean]
+  'update:model-value': [boolean]
   cancel: []
   confirm: []
 }>()
 
-function handleCancel() {
-  emit('cancel')
-  emit('update:modelValue', false)
+const error = ref('')
+
+// Methods
+async function handleConfirm() {
+  error.value = ''
+  try {
+    emit('confirm')
+  } catch (err) {
+    if (err instanceof Error) {
+      error.value = err.message
+    } else {
+      error.value = 'Произошла ошибка. Попробуйте снова.'
+    }
+    DebugUtils.error(MODULE_NAME, 'Error during confirmation', { error: err })
+  }
 }
 
-function handleConfirm() {
-  emit('confirm')
+function handleCancel() {
+  error.value = ''
+  emit('cancel')
+  emit('update:model-value', false)
 }
 </script>
 
@@ -97,7 +123,15 @@ function handleConfirm() {
   border: 1px solid var(--color-border);
 }
 
-.gap-4 {
+.actions-wrapper {
+  display: flex;
   gap: 16px;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.action-button {
+  min-width: 120px;
+  padding: 0 24px;
 }
 </style>

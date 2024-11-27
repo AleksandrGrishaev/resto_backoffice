@@ -1,6 +1,7 @@
 // src/components/accounts/dialogs/OperationDialog.vue
 <template>
   <base-dialog
+    ref="dialogRef"
     v-model="dialogModel"
     :title="title"
     :loading="loading"
@@ -24,7 +25,11 @@
         v-model.number="formData.amount"
         label="Сумма"
         type="number"
-        :rules="[v => !!v || 'Обязательное поле', v => v > 0 || 'Сумма должна быть больше 0']"
+        :rules="[
+          v => !!v || 'Обязательное поле',
+          v => v > 0 || 'Сумма должна быть больше 0',
+          validateAmount
+        ]"
         required
       />
 
@@ -60,12 +65,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account.store'
 import { useAuthStore } from '@/stores/auth.store'
 import { useDialogForm } from '@/composables/useDialogForm'
 import { EXPENSE_CATEGORIES } from '@/types'
+import { Formatter } from '@/utils' // Добавляем импорт
 import type { Account } from '@/types'
 import type { OperationType, ExpenseCategory } from '@/types/transaction'
 
@@ -152,7 +158,18 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
       })
       emit('success')
     } catch (error) {
-      console.error('Failed to create operation:', error)
+      // Преобразуем ошибку в понятное пользователю сообщение
+      if (error instanceof Error) {
+        if (error.message === 'Insufficient funds') {
+          form.value?.setErrors({
+            amount: `Недостаточно средств. Доступно: ${Formatter.formatAmount(props.account?.balance || 0)}`
+          })
+        } else {
+          form.value?.setErrors({
+            amount: 'Произошла ошибка при создании операции'
+          })
+        }
+      }
       throw error
     }
   }
@@ -162,4 +179,23 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
 function handleExpenseTypeChange() {
   formData.value.expenseCategory!.category = ''
 }
+
+function validateAmount(value: number) {
+  if (props.type === 'expense' && props.account) {
+    const maxAmount = props.account.balance
+    if (value > maxAmount) {
+      return `Недостаточно средств. Доступно: ${Formatter.formatAmount(maxAmount)}`
+    }
+  }
+  return true
+}
+
+watch(
+  () => props.account?.balance,
+  () => {
+    if (form.value) {
+      form.value.validate()
+    }
+  }
+)
 </script>

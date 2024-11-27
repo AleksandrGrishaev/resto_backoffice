@@ -40,13 +40,17 @@ export function useDialogForm<T extends Record<string, unknown>>(options: UseDia
 
   async function handleSubmit() {
     if (!isFormValid.value) return
-
     try {
       loading.value = true
       DebugUtils.debug(moduleName, 'Submitting form', formData.value)
       await onSubmit(formData.value)
     } catch (error) {
       DebugUtils.error(moduleName, 'Form submission failed', error)
+      // Добавим отображение ошибки пользователю
+      if (error instanceof Error) {
+        // Можно использовать глобальный store для уведомлений или пробросить ошибку выше
+        throw new Error(error.message)
+      }
       throw error
     } finally {
       loading.value = false
