@@ -30,7 +30,8 @@
     "src/**/*.vue",
     ".eslintrc.cjs",
     "vite.config.ts",
-    "commitlint.config.cjs"
+    "commitlint.config.cjs",
+    "src/services/transaction.service.ts.backup"
   ],
 
   "references": [

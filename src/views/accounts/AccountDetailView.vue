@@ -240,11 +240,15 @@ function applyFilters() {
 }
 
 async function fetchData() {
-  if (!account.value) return
-
   try {
     loading.value = true
-    await Promise.all([store.fetchAccounts(), store.fetchTransactions(accountId.value)])
+    // Сначала загружаем аккаунты, чтобы получить информацию о текущем аккаунте
+    await store.fetchAccounts()
+
+    // Затем загружаем транзакции для текущего аккаунта
+    if (accountId.value) {
+      await store.fetchTransactions(accountId.value)
+    }
   } catch (error) {
     console.error('Failed to fetch data:', error)
   } finally {
@@ -301,6 +305,17 @@ function formatTransactionAmount(transaction: Transaction): string {
 onMounted(() => {
   fetchData()
 })
+
+// Watch for route parameter changes
+watch(
+  accountId,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      fetchData()
+    }
+  },
+  { immediate: false }
+)
 </script>
 
 <style lang="scss" scoped>

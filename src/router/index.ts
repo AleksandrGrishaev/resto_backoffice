@@ -13,6 +13,9 @@ import AccountListView from '@/views/accounts/AccountListView.vue'
 import AccountDetailView from '@/views/accounts/AccountDetailView.vue'
 import DashboardView from '@/views/accounts/DashboardView.vue'
 
+// Импорт компонентов продуктов
+import ProductsView from '@/views/products/ProductsView.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -42,7 +45,18 @@ const router = createRouter({
         {
           path: 'menu',
           name: 'menu',
-          component: MenuView
+          component: MenuView,
+          meta: {
+            title: 'Управление меню'
+          }
+        },
+        {
+          path: 'products',
+          name: 'products',
+          component: ProductsView,
+          meta: {
+            title: 'Продукты'
+          }
         },
         {
           path: 'payment-settings',

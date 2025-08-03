@@ -1,3 +1,4 @@
+<!-- src/components/navigation/NavigationMenu.vue -->
 <template>
   <div class="d-flex flex-column fill-height">
     <!-- Header -->
@@ -9,6 +10,7 @@
 
     <!-- Navigation -->
     <v-list nav class="px-2 flex-grow-1 overflow-y-auto">
+      <!-- Меню -->
       <v-list-item
         to="/menu"
         prepend-icon="mdi-silverware-fork-knife"
@@ -21,9 +23,23 @@
         </template>
       </v-list-item>
 
+      <!-- Продукты -->
+      <v-list-item
+        to="/products"
+        prepend-icon="mdi-package-variant"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
+      >
+        <template #title>
+          <span>Продукты</span>
+        </template>
+      </v-list-item>
+
       <!-- Счета с активными счетами -->
       <navigation-accounts />
 
+      <!-- Оплата -->
       <v-list-item
         to="/payment-settings"
         prepend-icon="mdi-cash-register"

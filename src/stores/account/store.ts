@@ -250,6 +250,9 @@ export const useAccountStore = defineStore('account', () => {
       state.value.loading.transactions = true
       state.value.selectedAccountId = accountId
 
+      // Очищаем предыдущие транзакции при переходе на новый аккаунт
+      state.value.transactions = []
+
       state.value.transactions = await transactionService.getAccountTransactions(
         accountId,
         state.value.filters
