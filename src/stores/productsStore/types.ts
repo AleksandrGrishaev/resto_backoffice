@@ -32,6 +32,7 @@ export interface ProductsState {
   loading: boolean
   error: string | null
   selectedProduct: Product | null
+  useMockMode: boolean // флаг для режима работы с моками
   filters: {
     category: ProductCategory | 'all'
     isActive: boolean | 'all'

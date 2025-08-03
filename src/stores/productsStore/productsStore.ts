@@ -19,6 +19,7 @@ export const useProductsStore = defineStore('products', {
     loading: false,
     error: null,
     selectedProduct: null,
+    useMockMode: false, // флаг для режима моков
     filters: {
       category: 'all',
       isActive: true,
@@ -127,6 +128,7 @@ export const useProductsStore = defineStore('products', {
       try {
         this.loading = true
         this.error = null
+        this.useMockMode = useMock
 
         DebugUtils.info(MODULE_NAME, 'Loading products', { useMock })
 
@@ -177,8 +179,23 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        DebugUtils.info(MODULE_NAME, 'Creating product', { data })
-        const newProduct = await productsService.createProduct(data)
+        DebugUtils.info(MODULE_NAME, 'Creating product', { data, mockMode: this.useMockMode })
+
+        let newProduct: Product
+
+        if (this.useMockMode) {
+          // В режиме моков создаем продукт локально
+          const now = new Date().toISOString()
+          newProduct = {
+            id: `prod-${Date.now()}`, // Генерируем уникальный ID
+            ...data,
+            isActive: data.isActive ?? true,
+            createdAt: now,
+            updatedAt: now
+          }
+        } else {
+          newProduct = await productsService.createProduct(data)
+        }
 
         // Добавляем в локальный массив
         this.products.push(newProduct)
@@ -202,13 +219,20 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        DebugUtils.info(MODULE_NAME, 'Updating product', { data })
-        await productsService.updateProduct(data)
+        DebugUtils.info(MODULE_NAME, 'Updating product', { data, mockMode: this.useMockMode })
+
+        if (!this.useMockMode) {
+          await productsService.updateProduct(data)
+        }
 
         // Обновляем в локальном массиве
         const index = this.products.findIndex(p => p.id === data.id)
         if (index !== -1) {
-          this.products[index] = { ...this.products[index], ...data }
+          this.products[index] = {
+            ...this.products[index],
+            ...data,
+            updatedAt: new Date().toISOString()
+          }
         }
 
         DebugUtils.info(MODULE_NAME, 'Product updated', { id: data.id })
@@ -229,13 +253,17 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        DebugUtils.info(MODULE_NAME, 'Deactivating product', { id })
-        await productsService.deactivateProduct(id)
+        DebugUtils.info(MODULE_NAME, 'Deactivating product', { id, mockMode: this.useMockMode })
+
+        if (!this.useMockMode) {
+          await productsService.deactivateProduct(id)
+        }
 
         // Обновляем в локальном массиве
         const product = this.products.find(p => p.id === id)
         if (product) {
           product.isActive = false
+          product.updatedAt = new Date().toISOString()
         }
 
         DebugUtils.info(MODULE_NAME, 'Product deactivated', { id })
@@ -256,13 +284,17 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        DebugUtils.info(MODULE_NAME, 'Activating product', { id })
-        await productsService.activateProduct(id)
+        DebugUtils.info(MODULE_NAME, 'Activating product', { id, mockMode: this.useMockMode })
+
+        if (!this.useMockMode) {
+          await productsService.activateProduct(id)
+        }
 
         // Обновляем в локальном массиве
         const product = this.products.find(p => p.id === id)
         if (product) {
           product.isActive = true
+          product.updatedAt = new Date().toISOString()
         }
 
         DebugUtils.info(MODULE_NAME, 'Product activated', { id })

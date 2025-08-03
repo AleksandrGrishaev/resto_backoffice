@@ -197,9 +197,9 @@ const handleProductSave = async (data: CreateProductData | UpdateProductData): P
 // Загрузка данных при монтировании
 onMounted(async () => {
   try {
-    DebugUtils.info(MODULE_NAME, 'Component mounted, loading products')
-    // Используем моковые данные для разработки
-    await store.loadProducts(true)
+    DebugUtils.info(MODULE_NAME, 'Component mounted, loading mock products')
+    // Используем только моковые данные для разработки
+    await store.loadProducts(true) // true = использовать моки
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Error loading products on mount', { error })
   }
