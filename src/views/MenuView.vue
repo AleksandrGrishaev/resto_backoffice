@@ -74,7 +74,7 @@
       </div>
 
       <!-- Loading state -->
-      <v-progress-linear v-if="menuStore.state.loading" indeterminate color="primary" />
+      <v-progress-linear v-if="menuStore.isLoading" indeterminate color="primary" />
 
       <!-- Menu panels -->
       <v-expansion-panels v-model="expandedPanels" multiple>
@@ -179,8 +179,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useMenuStore } from '@/stores/menu.store'
-import type { Category, MenuItem } from '@/types/menu'
+import { useMenuStore, type Category, type MenuItem } from '@/stores/menu'
 import { DebugUtils } from '@/utils'
 import MenuCategoryDialog from '@/components/menu/MenuCategoryDialog.vue'
 import MenuItemDialog from '@/components/menu/MenuItemDialog.vue'
@@ -209,7 +208,7 @@ const confirmDialog = ref({
 
 // Computed
 const filteredCategories = computed(() => {
-  const categories = menuStore.state.categories.filter(category => {
+  const categories = menuStore.categories.filter(category => {
     // Фильтр по поиску
     if (search.value && !category.name.toLowerCase().includes(search.value.toLowerCase())) {
       return false
@@ -233,7 +232,7 @@ const filteredCategories = computed(() => {
 
 // Methods
 function isFilterActive(value: string) {
-  return filterTypes.value.includes(value)
+  return filterTypes.value.includes(value as any)
 }
 
 function toggleAllPanels() {
@@ -245,9 +244,7 @@ function toggleAllPanels() {
 }
 
 function getCategoryItems(categoryId: string) {
-  return menuStore.state.menuItems.filter(item => {
-    if (item.categoryId !== categoryId) return false
-
+  return menuStore.getItemsByCategory(categoryId).filter(item => {
     if (search.value && !item.name.toLowerCase().includes(search.value.toLowerCase())) {
       return false
     }
@@ -302,22 +299,21 @@ async function handleDeleteCategory() {
 }
 
 async function handleCategorySaved() {
-  await menuStore.fetchCategories()
+  // Данные уже обновлены в store благодаря реактивности
   dialogs.value.category = false
   editingCategory.value = null
 }
 
 async function handleItemSaved() {
-  await menuStore.fetchMenuItems()
+  // Данные уже обновлены в store благодаря реактивности
   dialogs.value.item = false
   editingItem.value = null
 }
 
 // Initial load
 onMounted(async () => {
-  DebugUtils.debug(MODULE_NAME, 'Component mounted')
-  await menuStore.fetchCategories()
-  await menuStore.fetchMenuItems()
+  DebugUtils.info(MODULE_NAME, 'Component mounted, initializing menu store')
+  await menuStore.initialize()
   expandedPanels.value = filteredCategories.value.map(c => c.id)
 })
 </script>

@@ -10,7 +10,7 @@
     @confirm="handleSubmit"
   >
     <template #default>
-      <v-form ref="form" v-model="formState.isValid" @submit.prevent="handleSubmit">
+      <v-form ref="form" v-model="isValid" @submit.prevent="handleSubmit">
         <v-text-field
           v-model="formData.name"
           label="Название"
@@ -18,6 +18,13 @@
           required
           class="mb-4"
           hide-details="auto"
+        />
+
+        <v-text-field
+          v-model="formData.description"
+          label="Описание"
+          hide-details="auto"
+          class="mb-4"
         />
 
         <div v-if="isEdit" class="mb-4">
@@ -38,10 +45,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { useMenuStore } from '@/stores/menu.store'
-import type { Category } from '@/types/menu'
-import { useDialogForm } from '@/composables/useDialogForm'
+import { ref, computed, watch } from 'vue'
+import { useMenuStore, type Category, type CreateCategoryDto } from '@/stores/menu'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 
 const MODULE_NAME = 'MenuCategoryDialog'
@@ -62,41 +67,84 @@ const emit = defineEmits<{
   saved: []
 }>()
 
-// Store
+// Store & State
 const menuStore = useMenuStore()
+const form = ref()
+const loading = ref(false)
+const isValid = ref(false)
+
+const formData = ref({
+  name: '',
+  description: '',
+  isActive: true,
+  sortOrder: 0
+})
+
+// Computed
 const isEdit = computed(() => !!props.category)
 
-// Dialog model
 const dialogModel = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value)
 })
 
-// Form handling
-const { form, loading, formState, formData, isFormValid, handleSubmit, handleCancel, resetForm } =
-  useDialogForm({
-    moduleName: MODULE_NAME,
-    initialData: {
-      name: props.category?.name || '',
-      isActive: props.category?.isActive ?? true,
-      sortOrder: props.category?.sortOrder || getNextSortOrder()
-    },
-    async onSubmit(data) {
-      if (isEdit.value && props.category) {
-        await menuStore.updateCategory(props.category.id, data)
-      } else {
-        await menuStore.addCategory(data)
-      }
-      emit('saved')
-      dialogModel.value = false
-    }
-  })
+const isFormValid = computed(() => {
+  return isValid.value && formData.value.name.trim().length > 0
+})
 
-// Helpers
+// Methods
 function getNextSortOrder(): number {
-  if (!menuStore.state.categories.length) return 0
-  const maxOrder = Math.max(...menuStore.state.categories.map(c => c.sortOrder))
+  if (!menuStore.categories.length) return 0
+  const maxOrder = Math.max(...menuStore.categories.map(c => c.sortOrder))
   return maxOrder + 1
+}
+
+function resetForm() {
+  if (form.value) {
+    form.value.reset()
+  }
+  formData.value = {
+    name: '',
+    description: '',
+    isActive: true,
+    sortOrder: getNextSortOrder()
+  }
+}
+
+function handleCancel() {
+  resetForm()
+  dialogModel.value = false
+}
+
+async function handleSubmit() {
+  if (!isFormValid.value) return
+
+  try {
+    loading.value = true
+
+    const categoryData: CreateCategoryDto = {
+      name: formData.value.name.trim(),
+      description: formData.value.description?.trim(),
+      isActive: formData.value.isActive,
+      sortOrder: formData.value.sortOrder
+    }
+
+    if (isEdit.value && props.category) {
+      await menuStore.updateCategory(props.category.id, categoryData)
+    } else {
+      await menuStore.addCategory(categoryData)
+    }
+
+    emit('saved')
+    dialogModel.value = false
+    if (!isEdit.value) {
+      resetForm()
+    }
+  } catch (error) {
+    console.error('Failed to save category:', error)
+  } finally {
+    loading.value = false
+  }
 }
 
 // Watch for category changes
@@ -106,6 +154,7 @@ watch(
     if (newCategory) {
       formData.value = {
         name: newCategory.name,
+        description: newCategory.description || '',
         isActive: newCategory.isActive,
         sortOrder: newCategory.sortOrder
       }
@@ -114,6 +163,16 @@ watch(
     }
   },
   { immediate: true }
+)
+
+// Watch dialog state
+watch(
+  () => props.modelValue,
+  isOpen => {
+    if (isOpen && !props.category) {
+      resetForm()
+    }
+  }
 )
 </script>
 

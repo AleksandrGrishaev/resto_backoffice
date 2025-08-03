@@ -1,6 +1,6 @@
 import { BaseService } from '@/firebase/services/base.service'
 import { where, orderBy, QueryConstraint } from 'firebase/firestore'
-import type { Category, MenuItem } from '@/types/menu'
+import type { Category, MenuItem } from '../types/1menu'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'MenuService'

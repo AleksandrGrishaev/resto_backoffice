@@ -1,7 +1,7 @@
 // src/types/bill.ts
 import { BaseEntity } from './common'
 import { CustomerInfo } from './customer'
-import { BaseItem } from './menu'
+import { BaseItem } from './1menu'
 
 export interface Bill extends BaseEntity {
   billNumber: string

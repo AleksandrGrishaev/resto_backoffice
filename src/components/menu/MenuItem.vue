@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { MenuItem } from '@/types/menu'
+import type { MenuItem } from '@/stores/menu'
 
 interface Props {
   item: MenuItem

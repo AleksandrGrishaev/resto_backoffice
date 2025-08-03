@@ -46,8 +46,16 @@
         class="mb-4"
       />
 
+      <!-- Описание -->
+      <v-text-field
+        v-model="formData.description"
+        label="Описание"
+        hide-details="auto"
+        class="mb-4"
+      />
+
       <!-- Статус -->
-      <div class="mb-4">
+      <div v-if="isEdit" class="mb-4">
         <v-btn-toggle
           v-model="formData.isActive"
           mandatory
@@ -138,9 +146,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMenuStore } from '@/stores/menu.store'
-import type { MenuItem, MenuItemVariant } from '@/types/menu'
-import { DebugUtils } from '@/utils'
+import {
+  useMenuStore,
+  type MenuItem,
+  type CreateMenuItemDto,
+  type MenuItemVariant,
+  createDefaultVariant
+} from '@/stores/menu'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 
 const MODULE_NAME = 'MenuItemDialog'
@@ -167,20 +179,10 @@ const form = ref()
 const loading = ref(false)
 const isValid = ref(false)
 
-// Создаем дефолтный вариант
-function createDefaultVariant(): MenuItemVariant {
-  return {
-    id: crypto.randomUUID(),
-    name: '',
-    price: 0,
-    isActive: true,
-    sortOrder: 0
-  }
-}
-
 const formData = ref({
   categoryId: '',
   name: '',
+  description: '',
   type: 'food' as 'food' | 'beverage',
   isActive: true,
   sortOrder: 0,
@@ -189,7 +191,7 @@ const formData = ref({
 
 // Computed
 const isEdit = computed(() => !!props.item)
-const categories = computed(() => menuStore.state.categories.filter(c => c.isActive))
+const categories = computed(() => menuStore.activeCategories)
 
 const dialogModel = computed({
   get: () => props.modelValue,
@@ -199,6 +201,8 @@ const dialogModel = computed({
 const isFormValid = computed(() => {
   return (
     isValid.value &&
+    formData.value.name.trim().length > 0 &&
+    formData.value.categoryId &&
     formData.value.variants.length > 0 &&
     formData.value.variants.every(v => v.price > 0)
   )
@@ -222,6 +226,12 @@ function removeVariant(index: number) {
   }
 }
 
+function getNextSortOrder(categoryId: string): number {
+  const categoryItems = menuStore.getItemsByCategory(categoryId)
+  if (categoryItems.length === 0) return 0
+  return Math.max(...categoryItems.map(item => item.sortOrder || 0)) + 1
+}
+
 function resetForm() {
   if (form.value) {
     form.value.reset()
@@ -229,6 +239,7 @@ function resetForm() {
   formData.value = {
     categoryId: '',
     name: '',
+    description: '',
     type: 'food',
     isActive: true,
     sortOrder: 0,
@@ -247,34 +258,40 @@ async function handleSubmit() {
   try {
     loading.value = true
 
-    const categoryItems = menuStore.state.menuItems.filter(
-      item => item.categoryId === formData.value.categoryId
-    )
-
-    const nextSortOrder =
-      categoryItems.length > 0 ? Math.max(...categoryItems.map(item => item.sortOrder || 0)) + 1 : 0
-
     // Обработка вариантов перед сохранением
     const processedVariants = formData.value.variants.map((variant, index) => ({
       id: variant.id,
-      name: variant.name || '', // Здесь можно добавить дополнительную обработку если нужно
+      name: variant.name?.trim() || '',
       price: variant.price,
       isActive: true,
       sortOrder: index
     }))
 
-    const itemData = {
-      ...formData.value,
-      sortOrder: isEdit.value ? formData.value.sortOrder : nextSortOrder,
-      variants: processedVariants
+    const itemData: CreateMenuItemDto = {
+      categoryId: formData.value.categoryId,
+      name: formData.value.name.trim(),
+      description: formData.value.description?.trim(),
+      type: formData.value.type,
+      variants: processedVariants.map(v => ({
+        name: v.name,
+        price: v.price,
+        isActive: v.isActive,
+        sortOrder: v.sortOrder
+      }))
     }
 
-    DebugUtils.debug(MODULE_NAME, 'Saving menu item', itemData) // Добавим для отладки
-
     if (isEdit.value && props.item) {
-      await menuStore.updateMenuItem(props.item.id, itemData)
+      await menuStore.updateMenuItem(props.item.id, {
+        ...itemData,
+        isActive: formData.value.isActive,
+        sortOrder: formData.value.sortOrder,
+        variants: processedVariants
+      })
     } else {
-      await menuStore.addMenuItem(itemData)
+      await menuStore.addMenuItem({
+        ...itemData,
+        sortOrder: getNextSortOrder(formData.value.categoryId)
+      })
     }
 
     emit('saved')
@@ -283,13 +300,13 @@ async function handleSubmit() {
       resetForm()
     }
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to save item', error)
+    console.error('Failed to save menu item:', error)
   } finally {
     loading.value = false
   }
 }
 
-// Watch
+// Watch for item changes
 watch(
   () => props.item,
   newItem => {
@@ -297,6 +314,7 @@ watch(
       formData.value = {
         categoryId: newItem.categoryId,
         name: newItem.name,
+        description: newItem.description || '',
         type: newItem.type,
         isActive: newItem.isActive,
         sortOrder: newItem.sortOrder,
@@ -307,6 +325,16 @@ watch(
     }
   },
   { immediate: true }
+)
+
+// Watch dialog state
+watch(
+  () => props.modelValue,
+  isOpen => {
+    if (isOpen && !props.item) {
+      resetForm()
+    }
+  }
 )
 </script>
 

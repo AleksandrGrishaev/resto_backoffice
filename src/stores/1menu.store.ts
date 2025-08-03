@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { categoryService, menuItemService } from '@/services/menu.service'
+import { categoryService, menuItemService } from '../services/1menu.service'
 import { DebugUtils } from '@/utils'
-import type { Category, MenuItem } from '@/types/menu'
+import type { Category, MenuItem } from '../types/1menu'
 import type { BaseEntity } from '@/types/common'
 
 const MODULE_NAME = 'MenuStore'
