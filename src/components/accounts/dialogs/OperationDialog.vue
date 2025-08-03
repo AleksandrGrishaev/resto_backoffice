@@ -67,13 +67,12 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
-import { useAccountStore } from '@/stores/account.store'
+import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
 import { useDialogForm } from '@/composables/useDialogForm'
-import { EXPENSE_CATEGORIES } from '@/types'
-import { Formatter } from '@/utils' // Добавляем импорт
-import type { Account } from '@/types'
-import type { OperationType, ExpenseCategory } from '@/types/transaction'
+import { EXPENSE_CATEGORIES } from '@/stores/account'
+import { formatAmount } from '@/utils/formatter'
+import type { Account, OperationType, ExpenseCategory } from '@/stores/account'
 
 const props = defineProps<{
   modelValue: boolean
@@ -162,7 +161,7 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
       if (error instanceof Error) {
         if (error.message === 'Insufficient funds') {
           form.value?.setErrors({
-            amount: `Недостаточно средств. Доступно: ${Formatter.formatAmount(props.account?.balance || 0)}`
+            amount: `Недостаточно средств. Доступно: ${formatAmount(props.account?.balance || 0)}`
           })
         } else {
           form.value?.setErrors({
@@ -184,7 +183,7 @@ function validateAmount(value: number) {
   if (props.type === 'expense' && props.account) {
     const maxAmount = props.account.balance
     if (value > maxAmount) {
-      return `Недостаточно средств. Доступно: ${Formatter.formatAmount(maxAmount)}`
+      return `Недостаточно средств. Доступно: ${formatAmount(maxAmount)}`
     }
   }
   return true

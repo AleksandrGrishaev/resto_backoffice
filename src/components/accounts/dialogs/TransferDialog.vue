@@ -56,7 +56,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
-import { useAccountStore } from '@/stores/account.store'
+import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
 import { useDialogForm } from '@/composables/useDialogForm'
 
@@ -72,6 +72,7 @@ const emit = defineEmits<{
 // Stores
 const accountStore = useAccountStore()
 const authStore = useAuthStore()
+
 // Computed
 const dialogModel = computed({
   get: () => props.modelValue,
@@ -100,8 +101,8 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
         ...data,
         performedBy: {
           type: 'user',
-          id: authStore.userId, // Используем authStore вместо userStore
-          name: authStore.userName // Используем authStore вместо userStore
+          id: authStore.userId,
+          name: authStore.userName
         }
       })
       emit('success')

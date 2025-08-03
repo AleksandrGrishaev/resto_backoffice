@@ -7,7 +7,7 @@
         prepend-icon="mdi-plus-circle"
         @click="emit('create-account')"
       >
-        CREAT BILL
+        Создать счет
       </v-btn>
     </div>
 
@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
-import type { OperationType } from '@/types/transaction'
+import type { OperationType } from '@/stores/account'
 
 const search = ref('')
 const authStore = useAuthStore()

@@ -86,8 +86,8 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatDateTime, formatAmount } from '@/utils/formatter'
-import type { Transaction, ExpenseCategory } from '@/types/transaction'
-import { EXPENSE_CATEGORIES } from '@/types/transaction'
+import type { Transaction, ExpenseCategory } from '@/stores/account'
+import { EXPENSE_CATEGORIES } from '@/stores/account'
 
 // Props
 interface Props {

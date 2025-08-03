@@ -1,4 +1,28 @@
-import { BaseEntity } from './common'
+// src/stores/account/types.ts
+import { BaseEntity } from '@/types/common'
+
+// ============ ACCOUNT TYPES ============
+
+// Основные типы аккаунтов
+export type AccountType = 'cash' | 'bank' | 'card' | 'gojeck' | 'grab'
+
+export interface Account extends BaseEntity {
+  name: string
+  type: AccountType
+  isActive: boolean
+  balance: number
+  description?: string
+  lastTransactionDate?: string
+}
+
+export interface AccountWithOperations extends Account {
+  lastTransactionDate?: string
+  transactionsCount?: number
+  totalIncome?: number
+  totalExpense?: number
+}
+
+// ============ TRANSACTION TYPES ============
 
 export type OperationType = 'income' | 'expense' | 'transfer' | 'correction'
 
@@ -80,6 +104,8 @@ export interface TransactionFilters {
   category?: ExpenseCategory['type'] | null
 }
 
+// ============ CONSTANTS ============
+
 export const EXPENSE_CATEGORIES = {
   daily: {
     product: 'Products',
@@ -107,3 +133,26 @@ export const OPERATION_TYPES = {
   transfer: 'Transfer',
   correction: 'Correction'
 } as const
+
+// ============ STORE TYPES ============
+
+export interface LoadingState {
+  accounts: boolean
+  transactions: boolean
+  operation: boolean
+  transfer: boolean
+  correction: boolean
+}
+
+export interface AccountStoreState {
+  accounts: Account[]
+  transactions: Transaction[]
+  filters: TransactionFilters
+  selectedAccountId: string | null
+  loading: LoadingState
+  error: Error | null
+  lastFetch: {
+    accounts: string | null
+    transactions: Record<string, string> // accountId -> timestamp
+  }
+}

@@ -9,7 +9,6 @@
         :active-color="variables.colorPrimary"
       />
     </template>
-
     <v-list-item
       to="/accounts"
       prepend-icon="mdi-format-list-bulleted"
@@ -21,10 +20,8 @@
         <span>Список счетов</span>
       </template>
     </v-list-item>
-
     <!-- Активные счета -->
     <v-divider class="my-2" />
-
     <template v-if="loading">
       <v-list-item>
         <template #prepend>
@@ -33,7 +30,6 @@
         <v-list-item-title>Загрузка счетов...</v-list-item-title>
       </v-list-item>
     </template>
-
     <template v-else>
       <v-list-item
         v-for="account in activeAccounts"
@@ -56,19 +52,23 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useAccountStore } from '@/stores/account.store'
+import { useAccountStore } from '@/stores/account'
 import { formatAmount } from '@/utils/formatter'
 import * as variables from '@/styles/variables.scss'
 
 const accountStore = useAccountStore()
 const loading = ref(true)
 
-const activeAccounts = computed(() => accountStore.accounts.filter(account => account.isActive))
+// Используем computed свойство из store
+const activeAccounts = computed(() => accountStore.activeAccounts)
 
 function getAccountIcon(type: string) {
   const icons = {
     bank: 'mdi-bank',
     cash: 'mdi-cash',
+    card: 'mdi-credit-card',
+    gojeck: 'mdi-wallet',
+    grab: 'mdi-wallet',
     default: 'mdi-wallet'
   }
   return icons[type] || icons.default

@@ -4,41 +4,71 @@
     title="Корректировка баланса"
     :loading="loading"
     :disabled="!isFormValid"
+    cancel-text="Отмена"
+    confirm-text="Применить"
+    @cancel="handleCancel"
     @confirm="handleSubmit"
   >
-    <v-form ref="form" v-model="formState.isValid" @submit.prevent>
-      <v-text-field disabled :model-value="currentBalance" label="Текущий баланс" />
-      <v-text-field
-        v-model.number="formData.newBalance"
-        label="Новый баланс"
-        type="number"
-        :rules="[v => v !== undefined || 'Обязательное поле']"
-        required
-      />
-      <div class="correction-amount">
-        <span class="text-subtitle-1">Сумма корректировки:</span>
-        <span :class="correctionAmountClass">
-          {{ formatAmount(correctionAmount) }}
-        </span>
-      </div>
-      <v-textarea
-        v-model="formData.description"
-        label="Причина корректировки"
-        rows="3"
-        :rules="[v => !!v || 'Обязательное поле']"
-        required
-      />
-    </v-form>
+    <template #default>
+      <v-form ref="form" v-model="formState.isValid" @submit.prevent="handleSubmit">
+        <!-- Account info -->
+        <v-card variant="outlined" class="mb-4">
+          <v-card-text>
+            <div class="account-info">
+              <h4>{{ account.name }}</h4>
+              <div class="current-balance">
+                Текущий баланс:
+                <strong>{{ formatAmount(currentBalance) }}</strong>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <!-- New balance input -->
+        <v-text-field
+          v-model.number="formData.newBalance"
+          label="Новый баланс"
+          type="number"
+          :rules="[v => (v !== null && v !== undefined && !isNaN(v)) || 'Обязательное поле']"
+          required
+          class="mb-4"
+          hide-details="auto"
+        />
+
+        <!-- Correction amount display -->
+        <v-card variant="outlined" class="correction-amount mb-4">
+          <v-card-text>
+            <div class="correction-info">
+              <span>Сумма корректировки:</span>
+              <span :class="correctionAmountClass">
+                {{ formatAmount(correctionAmount) }}
+              </span>
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <!-- Description -->
+        <v-textarea
+          v-model="formData.description"
+          label="Причина корректировки"
+          :rules="[v => !!v || 'Обязательное поле']"
+          required
+          rows="3"
+          class="mb-4"
+          hide-details="auto"
+        />
+      </v-form>
+    </template>
   </base-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
-import { useAccountStore } from '@/stores/account.store'
-import { useAuthStore } from '@/stores/auth.store' // Заменяем useUserStore на useAuthStore
+import { useAccountStore } from '@/stores/account'
+import { useAuthStore } from '@/stores/auth.store'
 import { useDialogForm } from '@/composables/useDialogForm'
-import type { Account } from '@/types/account'
+import type { Account } from '@/stores/account'
 
 const props = defineProps<{
   modelValue: boolean
@@ -52,7 +82,7 @@ const emit = defineEmits<{
 
 // Stores
 const accountStore = useAccountStore()
-const authStore = useAuthStore() // Заменяем userStore на authStore
+const authStore = useAuthStore()
 
 // Computed
 const dialogModel = computed({
@@ -69,37 +99,39 @@ const correctionAmount = computed(() => {
 const correctionAmountClass = computed(() => {
   return {
     'text-success': correctionAmount.value > 0,
-    'text-error': correctionAmount.value < 0
+    'text-error': correctionAmount.value < 0,
+    'text-medium-emphasis': correctionAmount.value === 0
   }
 })
 
 // Form
-const { form, loading, formState, formData, isFormValid, handleSubmit } = useDialogForm({
-  moduleName: 'CorrectionDialog',
-  initialData: {
-    accountId: props.account.id,
-    newBalance: props.account.balance,
-    description: ''
-  },
-  onSubmit: async data => {
-    try {
-      await accountStore.correctBalance({
-        accountId: data.accountId,
-        amount: correctionAmount.value,
-        description: data.description,
-        performedBy: {
-          type: 'user',
-          id: authStore.userId, // Используем authStore вместо userStore
-          name: authStore.userName // Используем authStore вместо userStore
-        }
-      })
-      emit('success')
-    } catch (error) {
-      console.error('Failed to correct balance:', error)
-      throw error
+const { form, loading, formState, formData, isFormValid, handleSubmit, handleCancel } =
+  useDialogForm({
+    moduleName: 'CorrectionDialog',
+    initialData: {
+      accountId: props.account.id,
+      newBalance: props.account.balance,
+      description: ''
+    },
+    onSubmit: async data => {
+      try {
+        await accountStore.correctBalance({
+          accountId: data.accountId,
+          amount: data.newBalance, // передаем новый баланс
+          description: data.description,
+          performedBy: {
+            type: 'user',
+            id: authStore.userId,
+            name: authStore.userName
+          }
+        })
+        emit('success')
+      } catch (error) {
+        console.error('Failed to correct balance:', error)
+        throw error
+      }
     }
-  }
-})
+  })
 
 function formatAmount(amount: number): string {
   return new Intl.NumberFormat('ru-RU', {
@@ -111,11 +143,23 @@ function formatAmount(amount: number): string {
 </script>
 
 <style lang="scss" scoped>
+.account-info {
+  h4 {
+    margin: 0 0 8px 0;
+  }
+
+  .current-balance {
+    color: rgb(var(--v-theme-on-surface-variant));
+  }
+}
+
 .correction-amount {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
+  .correction-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 500;
+  }
 }
 
 .text-success {
@@ -124,5 +168,9 @@ function formatAmount(amount: number): string {
 
 .text-error {
   color: rgb(var(--v-theme-error));
+}
+
+.text-medium-emphasis {
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 </style>

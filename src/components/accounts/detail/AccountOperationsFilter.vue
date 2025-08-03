@@ -47,7 +47,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { startOfToday, startOfWeek, startOfMonth, format } from 'date-fns'
-import type { OperationType } from '@/types'
+import type { OperationType } from '@/stores/account'
 
 const props = defineProps<{
   modelValue: {

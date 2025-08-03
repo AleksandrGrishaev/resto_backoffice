@@ -1,103 +1,103 @@
 <template>
   <div class="account-detail-view">
+    <!-- Header with back button and account info -->
     <div class="account-header">
       <v-btn icon="mdi-arrow-left" variant="text" @click="handleBack" />
-
-      <div class="account-info">
-        <div class="d-flex align-center gap-4">
-          <h2 class="text-h5">{{ account?.name }}</h2>
-          <v-chip :color="account?.isActive ? 'success' : 'warning'" size="small">
-            {{ account?.isActive ? 'Активен' : 'Неактивен' }}
-          </v-chip>
-        </div>
-        <div class="account-balance">
-          <span class="text-h4">{{ formatAmount(account?.balance || 0) }}</span>
-          <v-btn
-            v-if="canCorrect"
-            color="primary"
-            variant="outlined"
-            size="small"
-            prepend-icon="mdi-cash-sync"
-            @click="showCorrectionDialog"
-          >
-            Корректировать
-          </v-btn>
-        </div>
-      </div>
-
-      <div class="account-actions">
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="showOperationDialog('income')">
-          Приход
-        </v-btn>
-        <v-btn color="primary" prepend-icon="mdi-minus" @click="showOperationDialog('expense')">
-          Расход
-        </v-btn>
-        <v-btn color="primary" prepend-icon="mdi-bank-transfer" @click="showTransferDialog">
-          Перевод
-        </v-btn>
+      <div v-if="account" class="account-info">
+        <h2>{{ account.name }}</h2>
+        <div class="balance">{{ formatAmount(account.balance) }}</div>
       </div>
     </div>
 
-    <div class="operations-section">
-      <v-card>
-        <v-card-title class="d-flex align-center py-3 px-4">
-          <span class="text-h6">История операций</span>
-          <v-spacer />
-          <v-menu v-model="menu.date" :close-on-content-click="false">
-            <template #activator="{ props }">
-              <v-btn v-bind="props" variant="outlined" class="mr-2">
-                {{ getDateRangeLabel }}
-                <v-icon right>mdi-calendar</v-icon>
-              </v-btn>
-            </template>
-
-            <v-card min-width="300" class="pa-4">
-              <v-btn-toggle v-model="dateRange" mandatory class="mb-4">
-                <v-btn value="today">Сегодня</v-btn>
-                <v-btn value="week">Неделя</v-btn>
-                <v-btn value="month">Месяц</v-btn>
-                <v-btn value="custom">Период</v-btn>
-              </v-btn-toggle>
-
-              <template v-if="dateRange === 'custom'">
-                <v-text-field
-                  v-model="filters.dateFrom"
-                  label="От"
-                  type="date"
-                  density="compact"
-                  class="mb-2"
-                />
-                <v-text-field v-model="filters.dateTo" label="До" type="date" density="compact" />
-              </template>
-
-              <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" @click="applyDateFilter">Применить</v-btn>
-              </div>
-            </v-card>
-          </v-menu>
-
+    <!-- Filters and controls -->
+    <div class="filters-section">
+      <v-row>
+        <v-col cols="12" md="6">
           <v-select
             v-model="filters.type"
             :items="operationTypes"
             label="Тип операции"
             clearable
-            density="compact"
-            hide-details
-            style="max-width: 200px"
-            @update:model-value="handleFiltersChange"
+            @update:model-value="applyFilters"
           />
-        </v-card-title>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-menu v-model="menu.date" :close-on-content-click="false">
+            <template #activator="{ props }">
+              <v-text-field
+                v-bind="props"
+                :model-value="getDateRangeLabel"
+                label="Период"
+                readonly
+                append-inner-icon="mdi-calendar"
+              />
+            </template>
+            <v-date-picker v-model="filters.dateFrom" @update:model-value="applyFilters" />
+          </v-menu>
+        </v-col>
+      </v-row>
 
-        <v-card-text class="pa-0">
-          <account-operations
-            :operations="filteredOperations"
-            :loading="loading"
-            @edit="handleEditOperation"
-          />
-        </v-card-text>
-      </v-card>
+      <!-- Action buttons -->
+      <div class="action-buttons">
+        <v-btn color="success" @click="showOperationDialog('income')">
+          <v-icon>mdi-plus</v-icon>
+          Приход
+        </v-btn>
+        <v-btn color="error" @click="showOperationDialog('expense')">
+          <v-icon>mdi-minus</v-icon>
+          Расход
+        </v-btn>
+        <v-btn color="primary" @click="showTransferDialog">
+          <v-icon>mdi-swap-horizontal</v-icon>
+          Перевод
+        </v-btn>
+        <v-btn v-if="canCorrect" color="warning" @click="showCorrectionDialog">
+          <v-icon>mdi-pencil</v-icon>
+          Корректировка
+        </v-btn>
+      </div>
     </div>
 
+    <!-- Transactions list -->
+    <div class="transactions-section">
+      <h3>Операции</h3>
+      <div v-if="store.state.loading.transactions" class="loading">
+        <v-progress-circular indeterminate />
+        Загрузка операций...
+      </div>
+      <div v-else-if="filteredOperations.length === 0" class="no-data">Операции не найдены</div>
+      <div v-else class="transactions-list">
+        <div
+          v-for="transaction in filteredOperations"
+          :key="transaction.id"
+          class="transaction-item"
+          @click="handleEditOperation(transaction)"
+        >
+          <div class="transaction-info">
+            <div class="transaction-type">
+              <v-icon :color="getTransactionColor(transaction.type)">
+                {{ getTransactionIcon(transaction.type) }}
+              </v-icon>
+              {{ getTransactionTypeLabel(transaction.type) }}
+            </div>
+            <div class="transaction-description">
+              {{ transaction.description }}
+            </div>
+            <div class="transaction-date">
+              {{ formatDate(transaction.createdAt) }}
+            </div>
+          </div>
+          <div class="transaction-amount">
+            <div :class="getAmountClass(transaction)">
+              {{ formatTransactionAmount(transaction) }}
+            </div>
+            <div class="balance-after">Баланс: {{ formatAmount(transaction.balanceAfter) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dialogs -->
     <operation-dialog
       v-if="dialogs.operation"
       v-model="dialogs.operation"
@@ -109,15 +109,14 @@
     <transfer-dialog
       v-if="dialogs.transfer"
       v-model="dialogs.transfer"
-      :account="account"
-      @success="handleOperationSuccess"
+      @success="handleTransferSuccess"
     />
 
     <correction-dialog
       v-if="dialogs.correction"
       v-model="dialogs.correction"
       :account="account"
-      @success="handleOperationSuccess"
+      @success="handleCorrectionSuccess"
     />
   </div>
 </template>
@@ -125,19 +124,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAccountStore } from '@/stores/account.store'
+import { format, startOfToday } from 'date-fns'
+import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
-import { startOfToday, startOfWeek, startOfMonth, format } from 'date-fns'
-import AccountOperations from '@/components/accounts/detail/AccountOperations.vue'
+import type { Account, Transaction, OperationType } from '@/stores/account'
+import { formatAmount, formatDate } from '@/utils/formatter'
+
+// Импорты диалогов
 import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
 import TransferDialog from '@/components/accounts/dialogs/TransferDialog.vue'
 import CorrectionDialog from '@/components/accounts/dialogs/CorrectionDialog.vue'
-import type { OperationType } from '@/types/transaction'
-import { formatAmount } from '@/utils/formatter'
 
 const route = useRoute()
 const router = useRouter()
-const accountStore = useAccountStore()
+const store = useAccountStore() // используем переименованный store
 const authStore = useAuthStore()
 
 // State
@@ -160,10 +160,10 @@ const filters = ref({
 
 // Computed
 const accountId = computed(() => route.params.id as string)
-const account = computed(() => accountStore.getAccountById(accountId.value))
+const account = computed(() => store.getAccountById(accountId.value))
 const canCorrect = computed(() => authStore.isAdmin)
 const filteredOperations = computed(() => {
-  return accountStore.getAccountOperations(accountId.value)
+  return store.getAccountOperations(accountId.value)
 })
 
 const operationTypes = [
@@ -217,118 +217,202 @@ function handleEditOperation(operation: Transaction) {
 
 function handleOperationSuccess() {
   dialogs.value.operation = false
+  fetchData()
+}
+
+function handleTransferSuccess() {
   dialogs.value.transfer = false
+  fetchData()
+}
+
+function handleCorrectionSuccess() {
   dialogs.value.correction = false
   fetchData()
 }
 
-function handleFiltersChange() {
-  accountStore.setFilters(filters.value)
+function applyFilters() {
+  store.setFilters({
+    dateFrom: filters.value.dateFrom,
+    dateTo: filters.value.dateTo,
+    type: filters.value.type,
+    category: null
+  })
 }
 
-function applyDateFilter() {
-  const today = startOfToday()
-
-  switch (dateRange.value) {
-    case 'today':
-      filters.value.dateFrom = format(today, 'yyyy-MM-dd')
-      filters.value.dateTo = format(today, 'yyyy-MM-dd')
-      break
-    case 'week':
-      filters.value.dateFrom = format(startOfWeek(today), 'yyyy-MM-dd')
-      filters.value.dateTo = format(today, 'yyyy-MM-dd')
-      break
-    case 'month':
-      filters.value.dateFrom = format(startOfMonth(today), 'yyyy-MM-dd')
-      filters.value.dateTo = format(today, 'yyyy-MM-dd')
-      break
-  }
-
-  menu.value.date = false
-  handleFiltersChange()
-}
-
-// Data fetching
 async function fetchData() {
-  loading.value = true
+  if (!account.value) return
+
   try {
-    await accountStore.fetchAccounts()
-    if (accountId.value) {
-      await accountStore.fetchTransactions(accountId.value)
-    }
+    loading.value = true
+    await Promise.all([store.fetchAccounts(), store.fetchTransactions(accountId.value)])
   } catch (error) {
-    console.error('Failed to fetch account data:', error)
+    console.error('Failed to fetch data:', error)
   } finally {
     loading.value = false
   }
 }
 
-// Watch for route changes
-watch(
-  () => route.params.id,
-  newId => {
-    if (newId) {
-      fetchData()
-    }
+// Utility functions
+function getTransactionColor(type: OperationType): string {
+  const colors = {
+    income: 'success',
+    expense: 'error',
+    transfer: 'primary',
+    correction: 'warning'
   }
-)
+  return colors[type] || 'grey'
+}
+
+function getTransactionIcon(type: OperationType): string {
+  const icons = {
+    income: 'mdi-plus',
+    expense: 'mdi-minus',
+    transfer: 'mdi-swap-horizontal',
+    correction: 'mdi-pencil'
+  }
+  return icons[type] || 'mdi-help-circle'
+}
+
+function getTransactionTypeLabel(type: OperationType): string {
+  const labels = {
+    income: 'Приход',
+    expense: 'Расход',
+    transfer: 'Перевод',
+    correction: 'Корректировка'
+  }
+  return labels[type] || type
+}
+
+function getAmountClass(transaction: Transaction): string {
+  if (transaction.type === 'income') return 'text-success'
+  if (transaction.type === 'expense') return 'text-error'
+  if (transaction.type === 'transfer') {
+    return transaction.amount > 0 ? 'text-success' : 'text-error'
+  }
+  return 'text-warning'
+}
+
+function formatTransactionAmount(transaction: Transaction): string {
+  const sign = transaction.amount > 0 ? '+' : ''
+  return `${sign}${formatAmount(Math.abs(transaction.amount))}`
+}
 
 // Initialize
 onMounted(() => {
   fetchData()
 })
-
-// Cleanup
-onUnmounted(() => {
-  accountStore.setFilters({
-    dateFrom: null,
-    dateTo: null,
-    type: null
-  })
-})
 </script>
 
 <style lang="scss" scoped>
 .account-detail-view {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
   padding: 16px;
 }
 
 .account-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 16px;
-  background: var(--color-surface);
-  padding: 16px;
-  border-radius: 8px;
+  margin-bottom: 24px;
 }
 
 .account-info {
+  h2 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+
+  .balance {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: rgb(var(--v-theme-primary));
+  }
+}
+
+.filters-section {
+  margin-bottom: 24px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.transactions-section {
+  h3 {
+    margin-bottom: 16px;
+  }
+}
+
+.loading,
+.no-data {
+  text-align: center;
+  padding: 32px;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.transactions-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.account-balance {
+.transaction-item {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  padding: 16px;
+  border: 1px solid rgb(var(--v-theme-outline));
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: rgb(var(--v-theme-surface-variant));
+  }
 }
 
-.account-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.operations-section {
+.transaction-info {
   flex: 1;
-  min-height: 0;
+
+  .transaction-type {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .transaction-description {
+    margin-bottom: 4px;
+  }
+
+  .transaction-date {
+    font-size: 0.875rem;
+    color: rgb(var(--v-theme-on-surface-variant));
+  }
 }
 
-.gap-4 {
-  gap: 16px;
+.transaction-amount {
+  text-align: right;
+
+  .balance-after {
+    font-size: 0.875rem;
+    color: rgb(var(--v-theme-on-surface-variant));
+    margin-top: 4px;
+  }
+}
+
+.text-success {
+  color: rgb(var(--v-theme-success));
+}
+
+.text-error {
+  color: rgb(var(--v-theme-error));
+}
+
+.text-warning {
+  color: rgb(var(--v-theme-warning));
 }
 </style>

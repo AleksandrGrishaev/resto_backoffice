@@ -1,11 +1,8 @@
 // src/types/index.ts
-export * from './account'
 export * from './auth'
 export * from './bill'
 export * from './common'
 export * from './customer'
-export * from './1menu'
 export * from './payment'
 export * from './settings'
 export * from './tax'
-export * from './transaction'

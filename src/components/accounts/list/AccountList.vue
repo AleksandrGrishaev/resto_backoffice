@@ -1,62 +1,73 @@
-// src/components/accounts/list/AccountList.vue
 <template>
   <v-card>
-    <v-card-title class="d-flex align-center py-3 px-4">
+    <v-card-title>
       <span class="text-h6">Счета</span>
-      <v-spacer />
-      <slot name="actions" />
     </v-card-title>
-
-    <v-card-text class="pa-0">
-      <v-table hover>
+    <v-card-text>
+      <v-table>
         <thead>
           <tr>
-            <th class="text-left">Название</th>
-            <th class="text-left">Тип</th>
-            <th class="text-right">Баланс</th>
-            <th class="text-left">Последняя операция</th>
-            <th class="text-center">Статус</th>
-            <th class="text-center">Действия</th>
+            <th>Тип</th>
+            <th>Название</th>
+            <th>Описание</th>
+            <th>Баланс</th>
+            <th>Последняя операция</th>
+            <th>Статус</th>
+            <th v-if="canEdit">Действия</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="account in accounts" :key="account.id">
-            <td>{{ account.name }}</td>
+          <tr
+            v-for="account in accounts"
+            :key="account.id"
+            :class="{ 'account-inactive': !account.isActive }"
+            @click="$emit('view-details', account.id)"
+          >
             <td>
-              <v-icon :icon="getAccountTypeIcon(account.type)" class="mr-2" />
-              {{ getAccountTypeLabel(account.type) }}
+              <v-tooltip :text="getAccountTypeLabel(account.type)">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" :icon="getAccountTypeIcon(account.type)" size="small" />
+                </template>
+              </v-tooltip>
             </td>
-            <td class="text-right">{{ formatAmount(account.balance) }}</td>
-            <td>{{ formatDate(account.lastTransactionDate) }}</td>
-            <td class="text-center">
-              <v-chip :color="account.isActive ? 'success' : 'warning'" size="small" variant="flat">
+            <td>
+              <div class="account-name">
+                {{ account.name }}
+              </div>
+            </td>
+            <td>
+              <div class="account-description">
+                {{ account.description || '—' }}
+              </div>
+            </td>
+            <td>
+              <div class="account-balance" :class="getBalanceClass(account.balance)">
+                {{ formatAmount(account.balance) }}
+              </div>
+            </td>
+            <td>
+              <div class="last-transaction">
+                {{ account.lastTransactionDate ? formatDate(account.lastTransactionDate) : '—' }}
+              </div>
+            </td>
+            <td>
+              <v-chip :color="account.isActive ? 'success' : 'error'" size="small" variant="tonal">
                 {{ account.isActive ? 'Активен' : 'Неактивен' }}
               </v-chip>
             </td>
-            <td class="text-center">
-              <v-btn
-                icon
-                size="small"
-                variant="text"
-                color="primary"
-                @click="emit('view-details', account.id)"
-              >
-                <v-icon icon="mdi-eye" size="20" />
-              </v-btn>
-              <v-btn
-                v-if="canEdit"
-                icon
-                size="small"
-                variant="text"
-                color="primary"
-                @click="emit('edit', account)"
-              >
-                <v-icon icon="mdi-pencil" size="20" />
-              </v-btn>
+            <td v-if="canEdit">
+              <div class="account-actions">
+                <v-btn
+                  icon="mdi-pencil"
+                  size="small"
+                  variant="text"
+                  @click.stop="$emit('edit', account)"
+                />
+              </div>
             </td>
           </tr>
-          <tr v-if="accounts.length === 0">
-            <td colspan="6" class="text-center text-medium-emphasis py-4">
+          <tr v-if="loading || accounts.length === 0">
+            <td :colspan="canEdit ? 7 : 6" class="text-center py-4">
               {{ loading ? 'Загрузка...' : 'Нет счетов' }}
             </td>
           </tr>
@@ -70,7 +81,7 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatDate } from '@/utils/formatter'
-import type { Account } from '@/types/account'
+import type { Account } from '@/stores/account'
 
 const props = defineProps<{
   accounts: Account[]
@@ -82,11 +93,11 @@ const emit = defineEmits<{
   'view-details': [id: string]
 }>()
 
-// Меняем store
+// Stores
 const authStore = useAuthStore()
 const canEdit = computed(() => authStore.isAdmin)
 
-// Вспомогательные функции
+// Utility functions
 function getAccountTypeIcon(type: Account['type']): string {
   const icons = {
     cash: 'mdi-cash',
@@ -115,4 +126,60 @@ function formatAmount(amount: number): string {
     currency: 'IDR'
   }).format(amount)
 }
+
+function getBalanceClass(balance: number): string {
+  if (balance > 0) return 'text-success'
+  if (balance < 0) return 'text-error'
+  return 'text-medium-emphasis'
+}
 </script>
+
+<style lang="scss" scoped>
+.account-inactive {
+  opacity: 0.6;
+}
+
+.account-name {
+  font-weight: 500;
+}
+
+.account-description {
+  color: rgb(var(--v-theme-on-surface-variant));
+  font-size: 0.875rem;
+}
+
+.account-balance {
+  font-weight: 600;
+}
+
+.last-transaction {
+  font-size: 0.875rem;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.account-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.text-success {
+  color: rgb(var(--v-theme-success));
+}
+
+.text-error {
+  color: rgb(var(--v-theme-error));
+}
+
+.text-medium-emphasis {
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+tbody tr {
+  cursor: pointer;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: rgb(var(--v-theme-surface-variant));
+  }
+}
+</style>
