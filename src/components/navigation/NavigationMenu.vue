@@ -10,7 +10,7 @@
 
     <!-- Navigation -->
     <v-list nav class="px-2 flex-grow-1 overflow-y-auto">
-      <!-- Меню -->
+      <!-- Menu -->
       <v-list-item
         to="/menu"
         prepend-icon="mdi-silverware-fork-knife"
@@ -19,11 +19,24 @@
         :active-color="variables.colorPrimary"
       >
         <template #title>
-          <span>Меню</span>
+          <span>Menu</span>
         </template>
       </v-list-item>
 
-      <!-- Продукты -->
+      <!-- Recipes -->
+      <v-list-item
+        to="/recipes"
+        prepend-icon="mdi-book-open-page-variant"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
+      >
+        <template #title>
+          <span>Recipes</span>
+        </template>
+      </v-list-item>
+
+      <!-- Products -->
       <v-list-item
         to="/products"
         prepend-icon="mdi-package-variant"
@@ -32,14 +45,14 @@
         :active-color="variables.colorPrimary"
       >
         <template #title>
-          <span>Продукты</span>
+          <span>Products</span>
         </template>
       </v-list-item>
 
-      <!-- Счета с активными счетами -->
+      <!-- Accounts with active accounts -->
       <navigation-accounts />
 
-      <!-- Оплата -->
+      <!-- Payment -->
       <v-list-item
         to="/payment-settings"
         prepend-icon="mdi-cash-register"
@@ -48,7 +61,7 @@
         :active-color="variables.colorPrimary"
       >
         <template #title>
-          <span>Оплата</span>
+          <span>Payment</span>
         </template>
       </v-list-item>
     </v-list>
@@ -67,7 +80,6 @@
         <v-btn block color="error" variant="text" prepend-icon="mdi-logout" @click="handleLogout">
           {{ rail ? '' : 'LOGOUT' }}
         </v-btn>
-
         <v-btn
           block
           variant="text"

@@ -7,12 +7,10 @@ import NotFoundView from '@/views/NotFoundView.vue'
 import MenuView from '@/views/MenuView.vue'
 import PaymentSettingsView from '@/views/PaymentSettingsView.vue'
 import { useAuthStore } from '@/stores/auth.store'
-
 // Явный импорт компонентов счетов
 import AccountListView from '@/views/accounts/AccountListView.vue'
 import AccountDetailView from '@/views/accounts/AccountDetailView.vue'
 import DashboardView from '@/views/accounts/DashboardView.vue'
-
 // Импорт компонентов продуктов
 import ProductsView from '@/views/products/ProductsView.vue'
 
@@ -56,6 +54,14 @@ const router = createRouter({
           component: ProductsView,
           meta: {
             title: 'Продукты'
+          }
+        },
+        {
+          path: 'recipes',
+          name: 'recipes',
+          component: () => import('@/views/recipes/RecipesView.vue'),
+          meta: {
+            title: 'Рецепты'
           }
         },
         {

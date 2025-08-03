@@ -2,3 +2,4 @@
 export * from './debugger'
 export * from './formatter'
 export * from './time'
+export * from './id'
