@@ -65,6 +65,7 @@
       <!-- Products Tab -->
       <v-tabs-window-item value="products">
         <storage-stock-table
+          v-if="selectedTab === 'products'"
           :balances="productBalances"
           :loading="storageStore.state.loading.balances"
           item-type="product"
@@ -77,6 +78,7 @@
       <!-- Preparations Tab -->
       <v-tabs-window-item value="preparations">
         <storage-stock-table
+          v-if="selectedTab === 'preparations'"
           :balances="preparationBalances"
           :loading="storageStore.state.loading.balances"
           item-type="preparation"
@@ -89,6 +91,7 @@
       <!-- Operations Tab -->
       <v-tabs-window-item value="operations">
         <storage-operations-table
+          v-if="selectedTab === 'operations'"
           :operations="recentOperations"
           :loading="storageStore.state.loading.operations"
           :department="selectedDepartment"
@@ -125,7 +128,7 @@ import { useStorageStore } from '@/stores/storage'
 import type { StorageDepartment, StorageItemType, ConsumptionItem } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 
-// Components
+// Components (using direct imports to avoid undefined components)
 import StorageAlerts from './components/StorageAlerts.vue'
 import StorageStockTable from './components/StorageStockTable.vue'
 import StorageOperationsTable from './components/StorageOperationsTable.vue'
@@ -148,52 +151,96 @@ const inventoryItemType = ref<StorageItemType>('product')
 const consumptionItems = ref<ConsumptionItem[]>([])
 
 // Computed
-const productBalances = computed(() =>
-  storageStore.filteredBalances.filter(
-    b => b.itemType === 'product' && b.department === selectedDepartment.value
-  )
-)
+const productBalances = computed(() => {
+  try {
+    return (
+      storageStore.filteredBalances.filter(
+        b => b && b.itemType === 'product' && b.department === selectedDepartment.value
+      ) || []
+    )
+  } catch (error) {
+    console.warn('Error filtering product balances:', error)
+    return []
+  }
+})
 
-const preparationBalances = computed(() =>
-  storageStore.filteredBalances.filter(
-    b => b.itemType === 'preparation' && b.department === selectedDepartment.value
-  )
-)
+const preparationBalances = computed(() => {
+  try {
+    return (
+      storageStore.filteredBalances.filter(
+        b => b && b.itemType === 'preparation' && b.department === selectedDepartment.value
+      ) || []
+    )
+  } catch (error) {
+    console.warn('Error filtering preparation balances:', error)
+    return []
+  }
+})
 
-const recentOperations = computed(() =>
-  storageStore.state.operations
-    .filter(op => op.department === selectedDepartment.value)
-    .slice(0, 20)
-)
+const recentOperations = computed(() => {
+  try {
+    return (
+      storageStore.state.operations
+        .filter(op => op && op.department === selectedDepartment.value)
+        .slice(0, 20) || []
+    )
+  } catch (error) {
+    console.warn('Error filtering recent operations:', error)
+    return []
+  }
+})
 
-const alertCounts = computed(() => storageStore.alertCounts)
+const alertCounts = computed(() => {
+  try {
+    return storageStore.alertCounts || { expiring: 0, expired: 0, lowStock: 0 }
+  } catch (error) {
+    console.warn('Error getting alert counts:', error)
+    return { expiring: 0, expired: 0, lowStock: 0 }
+  }
+})
 
 // Methods
 function openConsumptionForItem(itemId: string, itemType: StorageItemType) {
-  consumptionItems.value = [
-    {
-      itemId,
-      itemType,
-      quantity: 1,
-      notes: ''
-    }
-  ]
-  showConsumptionDialog.value = true
+  try {
+    consumptionItems.value = [
+      {
+        itemId,
+        itemType,
+        quantity: 1,
+        notes: ''
+      }
+    ]
+    showConsumptionDialog.value = true
+  } catch (error) {
+    console.warn('Error opening consumption dialog:', error)
+  }
 }
 
 function openInventoryDialog(itemType: StorageItemType) {
-  inventoryItemType.value = itemType
-  showInventoryDialog.value = true
+  try {
+    inventoryItemType.value = itemType
+    showInventoryDialog.value = true
+  } catch (error) {
+    console.warn('Error opening inventory dialog:', error)
+  }
 }
 
 function showExpiringItems() {
-  storageStore.toggleNearExpiryFilter()
-  selectedTab.value = 'products'
+  try {
+    storageStore.toggleNearExpiryFilter()
+    selectedTab.value = 'products'
+  } catch (error) {
+    console.warn('Error showing expiring items:', error)
+  }
 }
 
 function showLowStockItems() {
-  storageStore.toggleLowStockFilter()
-  selectedTab.value = 'products'
+  try {
+    storageStore.toggleLowStockFilter()
+    selectedTab.value = 'products'
+  } catch (error) {
+    console.warn('Error showing low stock items:', error)
+  }
 }
 
 async function handleOperationSuccess() {
