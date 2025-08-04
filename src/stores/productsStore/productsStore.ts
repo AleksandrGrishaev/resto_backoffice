@@ -87,6 +87,20 @@ export const useProductsStore = defineStore('products', {
     },
 
     /**
+     * ✅ НОВОЕ: Продукты для прямой продажи
+     */
+    sellableProducts: (state): Product[] => {
+      return state.products.filter(product => product.isActive && product.canBeSold)
+    },
+
+    /**
+     * ✅ НОВОЕ: Сырье для приготовления (не продается напрямую)
+     */
+    rawProducts: (state): Product[] => {
+      return state.products.filter(product => product.isActive && !product.canBeSold)
+    },
+
+    /**
      * Продукты с низким остатком (заглушка для будущей функциональности)
      */
     lowStockProducts: (state): Product[] => {
@@ -102,6 +116,8 @@ export const useProductsStore = defineStore('products', {
       const total = state.products.length
       const active = state.products.filter(p => p.isActive).length
       const inactive = total - active
+      const sellable = state.products.filter(p => p.isActive && p.canBeSold).length
+      const rawMaterials = state.products.filter(p => p.isActive && !p.canBeSold).length
 
       const byCategory = state.products.reduce(
         (acc, product) => {
@@ -115,6 +131,8 @@ export const useProductsStore = defineStore('products', {
         total,
         active,
         inactive,
+        sellable,
+        rawMaterials,
         byCategory
       }
     }
@@ -190,6 +208,7 @@ export const useProductsStore = defineStore('products', {
             id: `prod-${Date.now()}`, // Генерируем уникальный ID
             ...data,
             isActive: data.isActive ?? true,
+            canBeSold: data.canBeSold ?? false, // ✅ по умолчанию не продается
             createdAt: now,
             updatedAt: now
           }

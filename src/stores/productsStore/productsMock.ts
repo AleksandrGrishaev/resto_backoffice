@@ -5,7 +5,7 @@ const now = new Date().toISOString()
 
 export const mockProducts: Product[] = [
   // =============================================
-  // МЯСО И ПТИЦА
+  // МЯСО И ПТИЦА (сырье - НЕ продается напрямую)
   // =============================================
   {
     id: 'prod-beef-steak',
@@ -14,6 +14,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 180000, // 180,000 IDR за кг
     yieldPercentage: 95,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Премиальная говяжья вырезка для стейков',
     isActive: true,
     storageConditions: 'Холодильник +2°C до +4°C',
@@ -24,7 +25,7 @@ export const mockProducts: Product[] = [
   },
 
   // =============================================
-  // ОВОЩИ
+  // ОВОЩИ (сырье - НЕ продается напрямую)
   // =============================================
   {
     id: 'prod-potato',
@@ -33,6 +34,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 8000, // 8,000 IDR за кг
     yieldPercentage: 85, // учитываем очистку
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Картофель для гарниров и блюд',
     isActive: true,
     storageConditions: 'Прохладное сухое место',
@@ -49,6 +51,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 12000, // 12,000 IDR за кг
     yieldPercentage: 95,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Свежие помидоры для соуса и салатов',
     isActive: true,
     storageConditions: 'Комнатная температура',
@@ -65,6 +68,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 6000, // 6,000 IDR за кг
     yieldPercentage: 90, // учитываем очистку
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Лук для соуса и приготовления',
     isActive: true,
     storageConditions: 'Сухое прохладное место',
@@ -81,6 +85,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 25000, // 25,000 IDR за кг
     yieldPercentage: 85, // учитываем очистку
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Свежий чеснок для приготовления',
     isActive: true,
     storageConditions: 'Сухое прохладное место',
@@ -91,7 +96,7 @@ export const mockProducts: Product[] = [
   },
 
   // =============================================
-  // МОЛОЧНЫЕ ПРОДУКТЫ
+  // МОЛОЧНЫЕ ПРОДУКТЫ (сырье - НЕ продается напрямую)
   // =============================================
   {
     id: 'prod-butter',
@@ -100,6 +105,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 45000, // 45,000 IDR за кг
     yieldPercentage: 100,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Сливочное масло для приготовления',
     isActive: true,
     storageConditions: 'Холодильник +2°C до +6°C',
@@ -116,6 +122,7 @@ export const mockProducts: Product[] = [
     unit: 'liter',
     costPerUnit: 15000, // 15,000 IDR за литр
     yieldPercentage: 100,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Цельное молоко для приготовления',
     isActive: true,
     storageConditions: 'Холодильник +2°C до +6°C',
@@ -126,7 +133,7 @@ export const mockProducts: Product[] = [
   },
 
   // =============================================
-  // СПЕЦИИ И ПРИПРАВЫ
+  // СПЕЦИИ И ПРИПРАВЫ (сырье - НЕ продается напрямую)
   // =============================================
   {
     id: 'prod-salt',
@@ -135,6 +142,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 3000, // 3,000 IDR за кг
     yieldPercentage: 100,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Соль для приготовления',
     isActive: true,
     storageConditions: 'Сухое место',
@@ -151,6 +159,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 120000, // 120,000 IDR за кг
     yieldPercentage: 100,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Молотый черный перец',
     isActive: true,
     storageConditions: 'Сухое место',
@@ -167,6 +176,7 @@ export const mockProducts: Product[] = [
     unit: 'kg',
     costPerUnit: 180000, // 180,000 IDR за кг
     yieldPercentage: 100,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Сушеный орегано для соуса',
     isActive: true,
     storageConditions: 'Сухое место',
@@ -183,6 +193,7 @@ export const mockProducts: Product[] = [
     unit: 'pack',
     costPerUnit: 8000, // 8,000 IDR за упаковку (100г)
     yieldPercentage: 90,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Свежий базилик для соуса (упаковка 100г)',
     isActive: true,
     storageConditions: 'Холодильник +4°C до +8°C',
@@ -193,7 +204,7 @@ export const mockProducts: Product[] = [
   },
 
   // =============================================
-  // МАСЛА И ЖИРЫ
+  // МАСЛА И ЖИРЫ (сырье - НЕ продается напрямую)
   // =============================================
   {
     id: 'prod-olive-oil',
@@ -202,6 +213,7 @@ export const mockProducts: Product[] = [
     unit: 'liter',
     costPerUnit: 85000, // 85,000 IDR за литр
     yieldPercentage: 100,
+    canBeSold: false, // ❌ сырье не продается напрямую
     description: 'Оливковое масло для приготовления',
     isActive: true,
     storageConditions: 'Темное прохладное место',
@@ -212,7 +224,7 @@ export const mockProducts: Product[] = [
   },
 
   // =============================================
-  // НАПИТКИ (для перепродажи)
+  // НАПИТКИ (✅ ПРОДАЮТСЯ НАПРЯМУЮ)
   // =============================================
   {
     id: 'prod-beer-bintang-330',
@@ -221,6 +233,7 @@ export const mockProducts: Product[] = [
     unit: 'piece',
     costPerUnit: 12000, // 12,000 IDR за бутылку
     yieldPercentage: 100,
+    canBeSold: true, // ✅ можно продавать напрямую
     description: 'Пиво Bintang в бутылке 330мл',
     isActive: true,
     storageConditions: 'Холодильник +2°C до +6°C',
@@ -237,11 +250,86 @@ export const mockProducts: Product[] = [
     unit: 'piece',
     costPerUnit: 18000, // 18,000 IDR за бутылку
     yieldPercentage: 100,
+    canBeSold: true, // ✅ можно продавать напрямую
     description: 'Пиво Bintang в бутылке 500мл',
     isActive: true,
     storageConditions: 'Холодильник +2°C до +6°C',
     shelfLife: 180,
     minStock: 12,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // =============================================
+  // ДОПОЛНИТЕЛЬНЫЕ НАПИТКИ (✅ ПРОДАЮТСЯ НАПРЯМУЮ)
+  // =============================================
+  {
+    id: 'prod-cola-330',
+    name: 'Кока-Кола 330мл',
+    category: 'beverages',
+    unit: 'piece',
+    costPerUnit: 8000, // 8,000 IDR за банку
+    yieldPercentage: 100,
+    canBeSold: true, // ✅ можно продавать напрямую
+    description: 'Кока-Кола в банке 330мл',
+    isActive: true,
+    storageConditions: 'Холодильник +2°C до +6°C',
+    shelfLife: 365,
+    minStock: 48,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'prod-water-500',
+    name: 'Вода минеральная 500мл',
+    category: 'beverages',
+    unit: 'piece',
+    costPerUnit: 3000, // 3,000 IDR за бутылку
+    yieldPercentage: 100,
+    canBeSold: true, // ✅ можно продавать напрямую
+    description: 'Минеральная вода в бутылке 500мл',
+    isActive: true,
+    storageConditions: 'Комнатная температура',
+    shelfLife: 730,
+    minStock: 24,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // =============================================
+  // ГОТОВЫЕ ПРОДУКТЫ (✅ ПРОДАЮТСЯ НАПРЯМУЮ)
+  // =============================================
+  {
+    id: 'prod-cake-chocolate',
+    name: 'Торт шоколадный (готовый)',
+    category: 'other',
+    unit: 'piece',
+    costPerUnit: 150000, // 150,000 IDR за торт
+    yieldPercentage: 100,
+    canBeSold: true, // ✅ можно продавать напрямую
+    description: 'Готовый шоколадный торт от поставщика',
+    isActive: true,
+    storageConditions: 'Холодильник +2°C до +6°C',
+    shelfLife: 3,
+    minStock: 2,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'prod-bread-baguette',
+    name: 'Багет французский',
+    category: 'other',
+    unit: 'piece',
+    costPerUnit: 25000, // 25,000 IDR за багет
+    yieldPercentage: 100,
+    canBeSold: true, // ✅ можно продавать напрямую
+    description: 'Свежий французский багет от пекарни',
+    isActive: true,
+    storageConditions: 'Комнатная температура',
+    shelfLife: 1,
+    minStock: 5,
     createdAt: now,
     updatedAt: now
   }
@@ -255,6 +343,14 @@ export function getRandomProduct(): Product {
 export function getMockProductsByCategory(category: string): Product[] {
   if (category === 'all') return mockProducts
   return mockProducts.filter(product => product.category === category)
+}
+
+export function getMockProductsForSale(): Product[] {
+  return mockProducts.filter(product => product.canBeSold && product.isActive)
+}
+
+export function getMockRawProducts(): Product[] {
+  return mockProducts.filter(product => !product.canBeSold && product.isActive)
 }
 
 export function findProductById(id: string): Product | undefined {

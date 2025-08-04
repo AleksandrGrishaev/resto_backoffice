@@ -1,186 +1,174 @@
-// src/types/menu.ts
-import { BaseEntity } from './common'
-import type { MeasurementUnit } from './recipes'
+// src/stores/menu/types.ts
+import type { BaseEntity } from '@/types/common'
+import type { MeasurementUnit } from '@/types/measurementUnits'
+
+// =============================================
+// Основные типы меню
+// =============================================
 
 export interface Category extends BaseEntity {
   name: string
   description?: string
+  isActive: boolean
   sortOrder: number
-  isActive: boolean
-}
-
-// ПРОСТАЯ СВЯЗКА (для одиночных позиций)
-export interface MenuItemSource {
-  type: 'product' | 'recipe' // что продаем
-  id: string // ID продукта или рецепта
-}
-
-// КОМПОЗИЦИЯ для сложных блюд
-export interface MenuComposition {
-  type: 'product' | 'recipe' | 'preparation' // что добавляем
-  id: string // ID компонента
-  quantity: number // количество в ГРАММАХ/МЛ (не порциях!)
-  unit: MeasurementUnit // 'gram', 'ml' - конкретные единицы
-  role?: 'main' | 'garnish' | 'sauce' // роль в блюде (для UI)
-  notes?: string // дополнительные заметки
-}
-
-export interface MenuItemVariant {
-  id: string
-  name: string // "с картошкой фри", "с пюре", "Большая порция"
-  price: number
-  portionMultiplier?: number // множитель порции (для простых рецептов)
-  isActive: boolean
-  sortOrder?: number
-  source?: MenuItemSource // для простых вариантов
-  composition?: MenuComposition[] // НОВОЕ: для композитных вариантов
 }
 
 export interface MenuItem extends BaseEntity {
   categoryId: string
   name: string // "Стейк с гарниром", "Пиво Bintang"
   description?: string
-  isActive: boolean
   type: 'food' | 'beverage'
+  isActive: boolean
   variants: MenuItemVariant[]
-  source?: MenuItemSource // для простых позиций (одиночный продукт/рецепт)
   sortOrder: number
-  preparationTime?: number
   allergens?: string[]
   tags?: string[]
+}
+
+export interface MenuItemVariant {
+  id: string
+  name: string // "с картошкой фри", "с пюре", "330мл", "500мл"
+  price: number // ЦЕНА ПРОДАЖИ (единственное место где есть цена!)
+  isActive: boolean
+  sortOrder?: number
+
+  // ✅ ЕДИНСТВЕННЫЙ источник - композиция (всегда массив)
+  composition: MenuComposition[]
+
+  // Дополнительные поля
+  portionMultiplier?: number // для изменения размера порции рецептов
   notes?: string
 }
 
-// Вспомогательные типы для создания
+// =============================================
+// Композиция блюда
+// =============================================
+
+export interface MenuComposition {
+  type: 'product' | 'recipe' | 'preparation' // что добавляем
+  id: string // ID компонента
+  quantity: number // количество в конкретных единицах (не порциях!)
+  unit: MeasurementUnit // 'gram', 'ml', 'piece' - конкретные единицы
+  role?: ComponentRole // роль в блюде (для UI группировки)
+  notes?: string
+}
+
+export type ComponentRole = 'main' | 'garnish' | 'sauce' | 'addon'
+
+// =============================================
+// Вспомогательные типы для UI
+// =============================================
+
+export interface SourceOption {
+  type: 'product' | 'recipe' | 'preparation'
+  id: string
+  name: string
+  displayName: string
+  category: string
+  unit: MeasurementUnit
+  // Дополнительные поля в зависимости от типа
+  costPerUnit?: number // для продуктов
+  outputQuantity?: number // для рецептов/полуфабрикатов
+  canBeSold?: boolean // для продуктов
+}
+
+// =============================================
+// DTOs для создания/обновления
+// =============================================
+
 export interface CreateCategoryDto {
   name: string
   description?: string
-  isActive?: boolean
-  sortOrder?: number
+  isActive: boolean
+  sortOrder: number
 }
 
-export interface UpdateCategoryDto extends Partial<CreateCategoryDto> {}
+export interface UpdateCategoryDto extends Partial<CreateCategoryDto> {
+  id: string
+}
 
 export interface CreateMenuItemDto {
   categoryId: string
   name: string
   description?: string
   type: 'food' | 'beverage'
-  source?: MenuItemSource
-  variants: Array<{
-    name: string
-    price: number
-    isActive?: boolean
-    sortOrder?: number
-    portionMultiplier?: number
-    source?: MenuItemSource
-    composition?: MenuComposition[]
-  }>
-  preparationTime?: number
+  variants: CreateMenuItemVariantDto[]
+  sortOrder?: number
   allergens?: string[]
   tags?: string[]
-  notes?: string
+}
+
+export interface CreateMenuItemVariantDto {
+  name: string
+  price: number
+  composition: MenuComposition[]
+  portionMultiplier?: number
+  isActive?: boolean
   sortOrder?: number
+  notes?: string
 }
 
 export interface UpdateMenuItemDto extends Partial<CreateMenuItemDto> {
-  isActive?: boolean
-}
-
-// Вспомогательные типы для расчетов
-export interface MenuItemCostCalculation {
-  menuItemId: string
-  variantId: string
-  totalCost: number // себестоимость
-  profit: number // прибыль
-  profitMargin: number // маржа в %
-  componentCosts: {
-    componentId: string
-    componentType: 'product' | 'recipe' | 'preparation'
-    componentName: string
-    quantity: number
-    unit: MeasurementUnit
-    unitCost: number
-    totalCost: number
-  }[]
-  calculatedAt: Date
-}
-
-// Типы для компонентов выбора источников
-export interface SourceOption {
   id: string
-  name: string
-  type: 'product' | 'recipe' | 'preparation'
-  category?: string
-  unit?: MeasurementUnit
-  costPerUnit?: number
-  outputQuantity?: number
+  isActive?: boolean
+  variants?: MenuItemVariant[] // полная замена вариантов при обновлении
 }
 
-// Состояние store
+// =============================================
+// State типы
+// =============================================
+
 export interface MenuState {
   categories: Category[]
-  menuItems: MenuItem[]
+  items: MenuItem[]
   loading: boolean
-  selectedCategoryId: string | null
   error: string | null
+  initialized: boolean
 }
 
+// =============================================
 // Константы
+// =============================================
+
+export const COMPONENT_ROLES: Record<ComponentRole, string> = {
+  main: 'Основное',
+  garnish: 'Гарнир',
+  sauce: 'Соус',
+  addon: 'Дополнение'
+}
+
 export const MENU_ITEM_TYPES = {
-  FOOD: 'food' as const,
-  BEVERAGE: 'beverage' as const
+  food: 'Кухня',
+  beverage: 'Бар'
+} as const
+
+// =============================================
+// Утилиты для расчетов
+// =============================================
+
+/**
+ * Расчет примерной себестоимости варианта меню
+ * (требует загруженные данные products/recipes/preparations)
+ */
+export interface MenuCostCalculation {
+  totalCost: number
+  margin: number
+  marginPercent: number
+  components: {
+    type: string
+    name: string
+    cost: number
+    quantity: number
+    unit: string
+  }[]
 }
 
-export const SOURCE_TYPES = {
-  PRODUCT: 'product' as const,
-  RECIPE: 'recipe' as const,
-  PREPARATION: 'preparation' as const
+/**
+ * Группировка компонентов по ролям для отображения
+ */
+export interface GroupedComposition {
+  main: MenuComposition[]
+  garnish: MenuComposition[]
+  sauce: MenuComposition[]
+  addon: MenuComposition[]
 }
-
-export const COMPOSITION_ROLES = {
-  MAIN: 'main' as const,
-  GARNISH: 'garnish' as const,
-  SAUCE: 'sauce' as const
-}
-
-/*
-ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ:
-
-1. Простая перепродажа (пиво):
-{
-  name: "Пиво Bintang",
-  source: { type: 'product', id: 'prod-beer-bintang-330' },
-  variants: [
-    { name: "330мл", price: 25000 },
-    { name: "500мл", price: 35000, source: { type: 'product', id: 'prod-beer-bintang-500' } }
-  ]
-}
-
-2. Готовое блюдо (стейк):
-{
-  name: "Стейк говяжий",
-  source: { type: 'recipe', id: 'recipe-beef-steak' },
-  variants: [
-    { name: "200г", price: 85000, portionMultiplier: 0.8 },
-    { name: "250г", price: 95000, portionMultiplier: 1.0 }
-  ]
-}
-
-3. Композитное блюдо (стейк с гарниром):
-{
-  name: "Стейк с гарниром",
-  source: null, // композитное блюдо
-  variants: [
-    {
-      name: "с картошкой фри",
-      price: 120000,
-      composition: [
-        { type: 'recipe', id: 'recipe-beef-steak', quantity: 250, unit: 'gram', role: 'main' },
-        { type: 'preparation', id: 'prep-french-fries', quantity: 150, unit: 'gram', role: 'garnish' },
-        { type: 'preparation', id: 'prep-tomato-sauce', quantity: 30, unit: 'gram', role: 'sauce' }
-      ]
-    }
-  ]
-}
-*/

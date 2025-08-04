@@ -1,4 +1,3 @@
-// src/views/menu/components/MenuItem.vue
 <template>
   <div class="menu-item" :class="{ 'menu-item--inactive': !item.isActive }">
     <!-- Основное блюдо -->
@@ -16,22 +15,16 @@
               {{ item.type === 'food' ? 'Кухня' : 'Бар' }}
             </v-chip>
 
-            <!-- Отображаем источник если есть -->
-            <v-chip v-if="item.source" size="small" color="primary" variant="outlined" class="ml-2">
-              <v-icon :icon="getSourceIcon(item.source.type)" size="14" class="mr-1" />
-              {{ getSourceLabel(item.source.type) }}
-            </v-chip>
-
-            <!-- Индикатор композитного блюда -->
+            <!-- Индикатор типа блюда -->
             <v-chip
-              v-else-if="hasCompositionVariants"
+              v-if="itemTypeIndicator"
               size="small"
-              color="orange"
+              :color="itemTypeIndicator.color"
               variant="outlined"
               class="ml-2"
             >
-              <v-icon icon="mdi-layers-plus" size="14" class="mr-1" />
-              Композиция
+              <v-icon :icon="itemTypeIndicator.icon" size="14" class="mr-1" />
+              {{ itemTypeIndicator.label }}
             </v-chip>
           </div>
         </div>
@@ -59,33 +52,22 @@
               {{ variant.name ? variant.name : 'Стандартный' }}
             </div>
 
-            <!-- Источник варианта -->
-            <div
-              v-if="variant.source && variant.source.id !== item.source?.id"
-              class="variant-item__source"
-            >
-              <v-chip size="x-small" color="secondary" variant="outlined">
-                <v-icon :icon="getSourceIcon(variant.source.type)" size="12" class="mr-1" />
-                {{ getSourceLabel(variant.source.type) }}
-              </v-chip>
-            </div>
-
             <!-- Композиция варианта -->
             <div
-              v-else-if="variant.composition && variant.composition.length > 0"
+              v-if="variant.composition && variant.composition.length > 0"
               class="variant-item__composition"
             >
               <div class="composition-summary">
                 <v-chip
                   v-for="component in variant.composition"
-                  :key="component.id"
+                  :key="`${component.type}-${component.id}`"
                   size="x-small"
                   :color="getComponentColor(component.role)"
                   variant="outlined"
                   class="mr-1 mb-1"
                 >
                   <v-icon :icon="getSourceIcon(component.type)" size="10" class="mr-1" />
-                  {{ component.role || component.type }}
+                  {{ getComponentDisplayName(component) }}
                 </v-chip>
               </div>
             </div>
@@ -126,8 +108,33 @@ const sortedVariants = computed(() => {
   return [...props.item.variants].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
 })
 
-const hasCompositionVariants = computed(() => {
-  return props.item.variants.some(variant => variant.composition && variant.composition.length > 0)
+// Определяем тип блюда для индикатора
+const itemTypeIndicator = computed(() => {
+  const variants = props.item.variants
+
+  // Проверяем есть ли композитные варианты
+  const hasComposition = variants.some(v => v.composition && v.composition.length > 0)
+
+  if (hasComposition) {
+    // Проверяем сложность композиции
+    const maxComponents = Math.max(...variants.map(v => v.composition?.length || 0))
+
+    if (maxComponents > 1) {
+      return {
+        icon: 'mdi-layers-plus',
+        label: 'Композиция',
+        color: 'orange'
+      }
+    } else {
+      return {
+        icon: 'mdi-chef-hat',
+        label: 'Простое',
+        color: 'primary'
+      }
+    }
+  }
+
+  return null
 })
 
 // Форматирование цены
@@ -153,20 +160,6 @@ function getSourceIcon(type: string): string {
   }
 }
 
-// Получение подписи для типа источника
-function getSourceLabel(type: string): string {
-  switch (type) {
-    case 'product':
-      return 'Продукт'
-    case 'recipe':
-      return 'Рецепт'
-    case 'preparation':
-      return 'Полуфабрикат'
-    default:
-      return 'Неизвестно'
-  }
-}
-
 // Получение цвета для роли компонента
 function getComponentColor(role?: string): string {
   switch (role) {
@@ -176,9 +169,33 @@ function getComponentColor(role?: string): string {
       return 'success'
     case 'sauce':
       return 'warning'
+    case 'addon':
+      return 'info'
     default:
       return 'default'
   }
+}
+
+// Получение отображаемого имени компонента
+function getComponentDisplayName(component: MenuComposition): string {
+  // В реальном приложении здесь будет lookup по stores
+  // Пока возвращаем роль или тип
+  if (component.role) {
+    const roleNames = {
+      main: 'Основное',
+      garnish: 'Гарнир',
+      sauce: 'Соус',
+      addon: 'Добавка'
+    }
+    return roleNames[component.role as keyof typeof roleNames] || component.role
+  }
+
+  const typeNames = {
+    product: 'Продукт',
+    recipe: 'Блюдо',
+    preparation: 'Полуфабрикат'
+  }
+  return typeNames[component.type as keyof typeof typeNames] || component.type
 }
 </script>
 
@@ -257,12 +274,6 @@ function getComponentColor(role?: string): string {
     font-weight: 500;
   }
 
-  &__source,
-  &__portion {
-    display: flex;
-    align-items: center;
-  }
-
   &__composition {
     .composition-summary {
       display: flex;
@@ -270,6 +281,11 @@ function getComponentColor(role?: string): string {
       align-items: center;
       gap: 2px;
     }
+  }
+
+  &__portion {
+    display: flex;
+    align-items: center;
   }
 
   &__price {
