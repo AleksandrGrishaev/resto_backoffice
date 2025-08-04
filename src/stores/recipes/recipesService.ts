@@ -2,39 +2,43 @@
 import { generateId } from '@/utils'
 import type {
   Recipe,
-  Ingredient,
+  Preparation,
   MenuRecipeLink,
   CostCalculation,
   CreateRecipeData,
-  CreateIngredientData,
+  CreatePreparationData,
   Unit
 } from './types'
 
-export class IngredientService {
-  private ingredients: Ingredient[] = []
+// =============================================
+// PREPARATIONS SERVICE
+// =============================================
 
-  constructor(initialData: Ingredient[] = []) {
-    this.ingredients = initialData
+export class PreparationService {
+  private preparations: Preparation[] = []
+
+  constructor(initialData: Preparation[] = []) {
+    this.preparations = initialData
   }
 
-  async getAll(): Promise<Ingredient[]> {
-    return [...this.ingredients]
+  async getAll(): Promise<Preparation[]> {
+    return [...this.preparations]
   }
 
-  async getById(id: string): Promise<Ingredient | null> {
-    return this.ingredients.find(item => item.id === id) || null
+  async getById(id: string): Promise<Preparation | null> {
+    return this.preparations.find(item => item.id === id) || null
   }
 
-  async getByCategory(category: string): Promise<Ingredient[]> {
-    return this.ingredients.filter(item => item.category === category && item.isActive)
+  async getByType(type: string): Promise<Preparation[]> {
+    return this.preparations.filter(item => item.type === type && item.isActive)
   }
 
-  async getActiveIngredients(): Promise<Ingredient[]> {
-    return this.ingredients.filter(item => item.isActive)
+  async getActivePreparations(): Promise<Preparation[]> {
+    return this.preparations.filter(item => item.isActive)
   }
 
-  async getByCode(code: string): Promise<Ingredient | null> {
-    return this.ingredients.find(item => item.code === code) || null
+  async getByCode(code: string): Promise<Preparation | null> {
+    return this.preparations.find(item => item.code === code) || null
   }
 
   async checkCodeExists(code: string, excludeId?: string): Promise<boolean> {
@@ -42,58 +46,71 @@ export class IngredientService {
     return existing !== null && existing.id !== excludeId
   }
 
-  async create(data: CreateIngredientData): Promise<Ingredient> {
+  async create(data: CreatePreparationData): Promise<Preparation> {
     // Check code uniqueness
     const codeExists = await this.checkCodeExists(data.code)
     if (codeExists) {
-      throw new Error(`Ingredient with code ${data.code} already exists`)
+      throw new Error(`Preparation with code ${data.code} already exists`)
     }
 
-    const ingredient: Ingredient = {
+    const preparation: Preparation = {
       ...data,
       id: generateId(),
       isActive: true,
-      isComposite: data.isComposite || false,
-      allergens: data.allergens || [],
-      createdAt: new Date(),
-      updatedAt: new Date()
+      costPerPortion: 0, // будет рассчитано позже
+      recipe: data.recipe || [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
 
-    this.ingredients.push(ingredient)
-    return ingredient
+    this.preparations.push(preparation)
+    return preparation
   }
 
-  async update(id: string, data: Partial<Ingredient>): Promise<Ingredient> {
-    const index = this.ingredients.findIndex(item => item.id === id)
+  async update(id: string, data: Partial<Preparation>): Promise<Preparation> {
+    const index = this.preparations.findIndex(item => item.id === id)
     if (index === -1) {
-      throw new Error('Ingredient not found')
+      throw new Error('Preparation not found')
     }
 
     // Check code uniqueness if code is being updated
-    if (data.code && data.code !== this.ingredients[index].code) {
+    if (data.code && data.code !== this.preparations[index].code) {
       const codeExists = await this.checkCodeExists(data.code, id)
       if (codeExists) {
-        throw new Error(`Ingredient with code ${data.code} already exists`)
+        throw new Error(`Preparation with code ${data.code} already exists`)
       }
     }
 
-    this.ingredients[index] = {
-      ...this.ingredients[index],
+    this.preparations[index] = {
+      ...this.preparations[index],
       ...data,
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     }
 
-    return this.ingredients[index]
+    return this.preparations[index]
   }
 
   async delete(id: string): Promise<void> {
-    const index = this.ingredients.findIndex(item => item.id === id)
+    const index = this.preparations.findIndex(item => item.id === id)
     if (index === -1) {
-      throw new Error('Ingredient not found')
+      throw new Error('Preparation not found')
     }
-    this.ingredients.splice(index, 1)
+    this.preparations.splice(index, 1)
+  }
+
+  async toggleStatus(id: string): Promise<Preparation> {
+    const preparation = await this.getById(id)
+    if (!preparation) {
+      throw new Error('Preparation not found')
+    }
+
+    return this.update(id, { isActive: !preparation.isActive })
   }
 }
+
+// =============================================
+// RECIPES SERVICE
+// =============================================
 
 export class RecipeService {
   private recipes: Recipe[] = []
@@ -114,11 +131,12 @@ export class RecipeService {
     const recipe: Recipe = {
       ...data,
       id: generateId(),
-      ingredients: [],
+      components: [],
       instructions: [],
       isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      cost: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
 
     this.recipes.push(recipe)
@@ -134,7 +152,7 @@ export class RecipeService {
     this.recipes[index] = {
       ...this.recipes[index],
       ...data,
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     }
 
     return this.recipes[index]
@@ -156,42 +174,13 @@ export class RecipeService {
     return this.recipes.filter(item => item.isActive)
   }
 
-  async calculateCost(
-    recipeId: string,
-    ingredientService: IngredientService
-  ): Promise<CostCalculation | null> {
-    const recipe = await this.getById(recipeId)
-    if (!recipe) return null
-
-    let totalCost = 0
-    const ingredientCosts: CostCalculation['ingredientCosts'] = []
-
-    for (const recipeIngredient of recipe.ingredients) {
-      const ingredient = await ingredientService.getById(recipeIngredient.ingredientId)
-      if (!ingredient || !ingredient.costPerUnit) continue
-
-      const cost = ingredient.costPerUnit * recipeIngredient.quantity
-      totalCost += cost
-
-      ingredientCosts.push({
-        ingredientId: ingredient.id,
-        cost,
-        percentage: 0 // will be calculated after
-      })
+  async toggleStatus(id: string): Promise<Recipe> {
+    const recipe = await this.getById(id)
+    if (!recipe) {
+      throw new Error('Recipe not found')
     }
 
-    // Calculate percentages
-    ingredientCosts.forEach(item => {
-      item.percentage = totalCost > 0 ? (item.cost / totalCost) * 100 : 0
-    })
-
-    return {
-      recipeId,
-      totalCost,
-      costPerPortion: totalCost / recipe.portionSize,
-      ingredientCosts,
-      calculatedAt: new Date()
-    }
+    return this.update(id, { isActive: !recipe.isActive })
   }
 
   async duplicateRecipe(recipeId: string, newName: string): Promise<Recipe> {
@@ -205,14 +194,75 @@ export class RecipeService {
       id: generateId(),
       name: newName,
       code: undefined, // code should be unique
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
 
     this.recipes.push(duplicate)
     return duplicate
   }
+
+  // НОВОЕ: расчет себестоимости для композитных рецептов
+  async calculateCost(
+    recipeId: string,
+    productsService: any, // ProductsService
+    preparationsService: PreparationService
+  ): Promise<CostCalculation | null> {
+    const recipe = await this.getById(recipeId)
+    if (!recipe) return null
+
+    let totalCost = 0
+    const componentCosts: CostCalculation['componentCosts'] = []
+
+    for (const component of recipe.components) {
+      let cost = 0
+
+      if (component.componentType === 'product') {
+        // Получаем стоимость продукта
+        const product = await productsService.getById(component.componentId)
+        if (product && product.costPerUnit) {
+          cost = (product.costPerUnit * component.quantity) / 1000 // если единицы в граммах
+        }
+      } else if (component.componentType === 'preparation') {
+        // Получаем стоимость полуфабриката
+        const preparation = await preparationsService.getById(component.componentId)
+        if (preparation && preparation.costPerPortion) {
+          // Пропорциональная стоимость от общего выхода полуфабриката
+          const portionRatio = component.quantity / preparation.outputQuantity
+          cost = preparation.costPerPortion * portionRatio
+        }
+      }
+
+      totalCost += cost
+
+      if (cost > 0) {
+        componentCosts.push({
+          componentId: component.componentId,
+          componentType: component.componentType,
+          cost,
+          percentage: 0 // will be calculated after
+        })
+      }
+    }
+
+    // Calculate percentages
+    componentCosts.forEach(item => {
+      item.percentage = totalCost > 0 ? (item.cost / totalCost) * 100 : 0
+    })
+
+    return {
+      recipeId,
+      totalCost,
+      costPerPortion: totalCost / recipe.portionSize,
+      componentCosts,
+      calculatedAt: new Date()
+    }
+  }
 }
+
+// =============================================
+// MENU RECIPE LINKS SERVICE (без изменений)
+// =============================================
 
 export class MenuRecipeLinkService {
   private links: MenuRecipeLink[] = []
@@ -254,8 +304,8 @@ export class MenuRecipeLinkService {
       recipeId,
       portionMultiplier,
       modifications: [],
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
 
     this.links.push(link)
@@ -271,7 +321,7 @@ export class MenuRecipeLinkService {
     this.links[index] = {
       ...this.links[index],
       ...data,
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     }
 
     return this.links[index]
@@ -285,6 +335,10 @@ export class MenuRecipeLinkService {
     this.links.splice(index, 1)
   }
 }
+
+// =============================================
+// UNITS SERVICE (упрощенный)
+// =============================================
 
 export class UnitService {
   private units: Unit[] = []
@@ -324,37 +378,5 @@ export class UnitService {
     const toBase = to.conversionRate || 1
 
     return (value * fromBase) / toBase
-  }
-
-  async create(data: Omit<Unit, 'id'>): Promise<Unit> {
-    const unit: Unit = {
-      ...data,
-      id: generateId()
-    }
-
-    this.units.push(unit)
-    return unit
-  }
-
-  async update(id: string, data: Partial<Unit>): Promise<Unit> {
-    const index = this.units.findIndex(item => item.id === id)
-    if (index === -1) {
-      throw new Error('Unit not found')
-    }
-
-    this.units[index] = {
-      ...this.units[index],
-      ...data
-    }
-
-    return this.units[index]
-  }
-
-  async delete(id: string): Promise<void> {
-    const index = this.units.findIndex(item => item.id === id)
-    if (index === -1) {
-      throw new Error('Unit not found')
-    }
-    this.units.splice(index, 1)
   }
 }
