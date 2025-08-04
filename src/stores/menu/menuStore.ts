@@ -1,4 +1,4 @@
-// stores/menu/menuStore.ts
+// src/stores/menu/menuStore.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { categoryService, menuItemService } from './menuService'
@@ -11,7 +11,7 @@ import type {
   CreateMenuItemDto,
   UpdateCategoryDto,
   UpdateMenuItemDto
-} from './types'
+} from '@/types/menu'
 
 const MODULE_NAME = 'MenuStore'
 

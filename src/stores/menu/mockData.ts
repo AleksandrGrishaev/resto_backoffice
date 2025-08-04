@@ -1,356 +1,415 @@
-// stores/menu/mockData.ts
+// src/stores/menu/mockData.ts
 import type { Category, MenuItem } from './types'
 
-// Mock категории
+const now = new Date().toISOString()
+
+// =============================================
+// КАТЕГОРИИ МЕНЮ
+// =============================================
+
 export const MOCK_CATEGORIES: Category[] = [
   {
-    id: 'cat-1',
-    name: 'Салаты',
-    description: 'Свежие салаты из сезонных овощей',
+    id: 'cat-main-dishes',
+    name: 'Основные блюда',
+    description: 'Горячие основные блюда и стейки',
     sortOrder: 0,
     isActive: true,
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
+    createdAt: now,
+    updatedAt: now
   },
   {
-    id: 'cat-2',
-    name: 'Горячие блюда',
-    description: 'Основные блюда кухни',
+    id: 'cat-garnishes',
+    name: 'Гарниры',
+    description: 'Гарниры к основным блюдам',
     sortOrder: 1,
     isActive: true,
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
+    createdAt: now,
+    updatedAt: now
   },
   {
-    id: 'cat-3',
-    name: 'Супы',
-    description: 'Первые блюда',
+    id: 'cat-beverages',
+    name: 'Напитки',
+    description: 'Алкогольные и безалкогольные напитки',
     sortOrder: 2,
     isActive: true,
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
+    createdAt: now,
+    updatedAt: now
   },
   {
-    id: 'cat-4',
-    name: 'Напитки',
-    description: 'Горячие и холодные напитки',
+    id: 'cat-combo',
+    name: 'Комбо блюда',
+    description: 'Комплексные блюда с гарниром и соусом',
     sortOrder: 3,
     isActive: true,
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-  {
-    id: 'cat-5',
-    name: 'Десерты',
-    description: 'Сладкие блюда',
-    sortOrder: 4,
-    isActive: true,
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-  {
-    id: 'cat-6',
-    name: 'Архивные блюда',
-    description: 'Временно не доступные позиции',
-    sortOrder: 5,
-    isActive: false,
-    createdAt: '2024-01-10T10:00:00.000Z',
-    updatedAt: '2024-01-20T15:30:00.000Z'
+    createdAt: now,
+    updatedAt: now
   }
 ]
 
-// Mock позиции меню
+// =============================================
+// ПОЗИЦИИ МЕНЮ
+// =============================================
+
 export const MOCK_MENU_ITEMS: MenuItem[] = [
-  // Салаты
+  // =============================================
+  // 1. ПРОСТАЯ ПЕРЕПРОДАЖА (пиво)
+  // =============================================
   {
-    id: 'item-1',
-    categoryId: 'cat-1',
-    name: 'Цезарь',
-    description: 'Классический салат с курицей и сыром пармезан',
+    id: 'menu-beer-bintang',
+    categoryId: 'cat-beverages',
+    name: 'Пиво Bintang',
+    description: 'Популярное индонезийское пиво',
     isActive: true,
-    type: 'food',
+    type: 'beverage',
+    source: null, // композитная позиция (разные варианты = разные продукты)
     variants: [
       {
-        id: 'var-1-1',
-        name: 'Стандартный',
-        price: 350,
+        id: 'var-beer-330',
+        name: '330мл',
+        price: 25000, // цена продажи 25,000 IDR (себестоимость 12,000)
         isActive: true,
-        sortOrder: 0
+        sortOrder: 0,
+        source: {
+          type: 'product',
+          id: 'prod-beer-bintang-330'
+        }
       },
       {
-        id: 'var-1-2',
-        name: 'Большая порция',
-        price: 450,
+        id: 'var-beer-500',
+        name: '500мл',
+        price: 35000, // цена продажи 35,000 IDR (себестоимость 18,000)
         isActive: true,
-        sortOrder: 1
+        sortOrder: 1,
+        source: {
+          type: 'product',
+          id: 'prod-beer-bintang-500'
+        }
       }
     ],
-    notes: 'Можно без сухариков',
     sortOrder: 0,
-    preparationTime: 15,
-    allergens: ['глютен', 'яйца'],
-    tags: ['популярное', 'с курицей'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-  {
-    id: 'item-2',
-    categoryId: 'cat-1',
-    name: 'Греческий салат',
-    description: 'Свежие овощи с сыром фета и оливками',
-    isActive: true,
-    type: 'food',
-    variants: [
-      {
-        id: 'var-2-1',
-        name: '',
-        price: 320,
-        isActive: true,
-        sortOrder: 0
-      }
-    ],
-    sortOrder: 1,
-    preparationTime: 10,
-    allergens: ['лактоза'],
-    tags: ['вегетарианское'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
+    preparationTime: 1, // просто открыть бутылку
+    allergens: [],
+    tags: ['пиво', 'алкоголь', 'bintang'],
+    createdAt: now,
+    updatedAt: now
   },
 
-  // Горячие блюда
+  // =============================================
+  // 2. ПРОСТОЕ ГОТОВОЕ БЛЮДО (стейк)
+  // =============================================
   {
-    id: 'item-3',
-    categoryId: 'cat-2',
-    name: 'Стейк из говядины',
-    description: 'Сочный стейк с гарниром',
+    id: 'menu-beef-steak',
+    categoryId: 'cat-main-dishes',
+    name: 'Стейк говяжий',
+    description: 'Сочный говяжий стейк на гриле',
     isActive: true,
     type: 'food',
+    source: {
+      type: 'recipe',
+      id: 'recipe-beef-steak'
+    },
     variants: [
       {
-        id: 'var-3-1',
-        name: 'Слабой прожарки',
-        price: 850,
+        id: 'var-steak-200',
+        name: '200г',
+        price: 85000, // цена продажи
         isActive: true,
-        sortOrder: 0
+        sortOrder: 0,
+        portionMultiplier: 0.8 // 200г вместо 250г
       },
       {
-        id: 'var-3-2',
-        name: 'Средней прожарки',
-        price: 850,
+        id: 'var-steak-250',
+        name: '250г (стандарт)',
+        price: 95000,
         isActive: true,
-        sortOrder: 1
+        sortOrder: 1,
+        portionMultiplier: 1 // стандартная порция
       },
       {
-        id: 'var-3-3',
-        name: 'Полной прожарки',
-        price: 850,
+        id: 'var-steak-300',
+        name: '300г',
+        price: 110000,
         isActive: true,
-        sortOrder: 2
+        sortOrder: 2,
+        portionMultiplier: 1.2 // увеличенная порция
+      }
+    ],
+    sortOrder: 0,
+    preparationTime: 20,
+    allergens: [],
+    tags: ['стейк', 'говядина', 'гриль', 'премиум'],
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // =============================================
+  // 3. КОМПОЗИТНОЕ БЛЮДО (стейк с гарниром)
+  // =============================================
+  {
+    id: 'menu-steak-with-garnish',
+    categoryId: 'cat-combo',
+    name: 'Стейк с гарниром',
+    description: 'Сочный стейк с выбором гарнира и соуса',
+    isActive: true,
+    type: 'food',
+    source: null, // композитное блюдо
+    variants: [
+      {
+        id: 'var-steak-fries',
+        name: 'с картофелем фри',
+        price: 120000,
+        isActive: true,
+        sortOrder: 0,
+        composition: [
+          {
+            type: 'recipe',
+            id: 'recipe-beef-steak',
+            quantity: 250,
+            unit: 'gram',
+            role: 'main',
+            notes: 'стейк 250г'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-french-fries',
+            quantity: 150,
+            unit: 'gram',
+            role: 'garnish',
+            notes: 'порция картофеля фри'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-tomato-sauce',
+            quantity: 30,
+            unit: 'gram',
+            role: 'sauce',
+            notes: 'томатный соус'
+          }
+        ]
+      },
+      {
+        id: 'var-steak-mashed',
+        name: 'с картофельным пюре',
+        price: 115000,
+        isActive: true,
+        sortOrder: 1,
+        composition: [
+          {
+            type: 'recipe',
+            id: 'recipe-beef-steak',
+            quantity: 250,
+            unit: 'gram',
+            role: 'main',
+            notes: 'стейк 250г'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-mashed-potato',
+            quantity: 180,
+            unit: 'gram',
+            role: 'garnish',
+            notes: 'порция пюре'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-garlic-sauce',
+            quantity: 25,
+            unit: 'gram',
+            role: 'sauce',
+            notes: 'чесночный соус'
+          }
+        ]
+      },
+      {
+        id: 'var-steak-double-garnish',
+        name: 'с двойным гарниром',
+        price: 135000,
+        isActive: true,
+        sortOrder: 2,
+        composition: [
+          {
+            type: 'recipe',
+            id: 'recipe-beef-steak',
+            quantity: 250,
+            unit: 'gram',
+            role: 'main',
+            notes: 'стейк 250г'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-french-fries',
+            quantity: 100,
+            unit: 'gram',
+            role: 'garnish',
+            notes: 'картофель фри'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-mashed-potato',
+            quantity: 120,
+            unit: 'gram',
+            role: 'garnish',
+            notes: 'картофельное пюре'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-tomato-sauce',
+            quantity: 20,
+            unit: 'gram',
+            role: 'sauce',
+            notes: 'томатный соус'
+          },
+          {
+            type: 'preparation',
+            id: 'prep-garlic-sauce',
+            quantity: 15,
+            unit: 'gram',
+            role: 'sauce',
+            notes: 'чесночный соус'
+          }
+        ]
       }
     ],
     sortOrder: 0,
     preparationTime: 25,
     allergens: [],
-    tags: ['мясное', 'премиум'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-  {
-    id: 'item-4',
-    categoryId: 'cat-2',
-    name: 'Паста Карбонара',
-    description: 'Классическая итальянская паста',
-    isActive: true,
-    type: 'food',
-    variants: [
-      {
-        id: 'var-4-1',
-        name: '',
-        price: 450,
-        isActive: true,
-        sortOrder: 0
-      }
-    ],
-    sortOrder: 1,
-    preparationTime: 20,
-    allergens: ['глютен', 'яйца', 'лактоза'],
-    tags: ['итальянская кухня'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
+    tags: ['комбо', 'стейк', 'гарнир', 'комплексное блюдо'],
+    createdAt: now,
+    updatedAt: now
   },
 
-  // Супы
+  // =============================================
+  // 4. ОТДЕЛЬНЫЕ ГАРНИРЫ
+  // =============================================
   {
-    id: 'item-5',
-    categoryId: 'cat-3',
-    name: 'Борщ украинский',
-    description: 'Традиционный борщ со сметаной',
+    id: 'menu-fries-side',
+    categoryId: 'cat-garnishes',
+    name: 'Картофель фри',
+    description: 'Хрустящий картофель фри',
     isActive: true,
     type: 'food',
+    source: {
+      type: 'recipe',
+      id: 'recipe-fries-side'
+    },
     variants: [
       {
-        id: 'var-5-1',
-        name: 'С мясом',
-        price: 280,
+        id: 'var-fries-regular',
+        name: 'Стандартная порция',
+        price: 25000,
         isActive: true,
-        sortOrder: 0
+        sortOrder: 0,
+        portionMultiplier: 1
       },
       {
-        id: 'var-5-2',
-        name: 'Постный',
-        price: 230,
+        id: 'var-fries-large',
+        name: 'Большая порция',
+        price: 35000,
         isActive: true,
-        sortOrder: 1
-      }
-    ],
-    sortOrder: 0,
-    preparationTime: 5,
-    allergens: ['лактоза'],
-    tags: ['традиционное'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-
-  // Напитки
-  {
-    id: 'item-6',
-    categoryId: 'cat-4',
-    name: 'Кофе',
-    description: 'Свежезаваренный кофе',
-    isActive: true,
-    type: 'beverage',
-    variants: [
-      {
-        id: 'var-6-1',
-        name: 'Эспрессо',
-        price: 120,
-        isActive: true,
-        sortOrder: 0
-      },
-      {
-        id: 'var-6-2',
-        name: 'Американо',
-        price: 140,
-        isActive: true,
-        sortOrder: 1
-      },
-      {
-        id: 'var-6-3',
-        name: 'Капучино',
-        price: 180,
-        isActive: true,
-        sortOrder: 2
-      },
-      {
-        id: 'var-6-4',
-        name: 'Латте',
-        price: 200,
-        isActive: true,
-        sortOrder: 3
-      }
-    ],
-    sortOrder: 0,
-    preparationTime: 5,
-    allergens: ['лактоза'],
-    tags: ['кофе', 'популярное'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-  {
-    id: 'item-7',
-    categoryId: 'cat-4',
-    name: 'Свежевыжатые соки',
-    description: 'Натуральные соки из свежих фруктов',
-    isActive: true,
-    type: 'beverage',
-    variants: [
-      {
-        id: 'var-7-1',
-        name: 'Апельсиновый',
-        price: 150,
-        isActive: true,
-        sortOrder: 0
-      },
-      {
-        id: 'var-7-2',
-        name: 'Яблочный',
-        price: 140,
-        isActive: true,
-        sortOrder: 1
-      },
-      {
-        id: 'var-7-3',
-        name: 'Морковный',
-        price: 160,
-        isActive: true,
-        sortOrder: 2
-      }
-    ],
-    sortOrder: 1,
-    preparationTime: 3,
-    allergens: [],
-    tags: ['свежее', 'витамины'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-
-  // Десерты
-  {
-    id: 'item-8',
-    categoryId: 'cat-5',
-    name: 'Тирамису',
-    description: 'Классический итальянский десерт',
-    isActive: true,
-    type: 'food',
-    variants: [
-      {
-        id: 'var-8-1',
-        name: '',
-        price: 280,
-        isActive: true,
-        sortOrder: 0
-      }
-    ],
-    sortOrder: 0,
-    preparationTime: 5,
-    allergens: ['глютен', 'яйца', 'лактоза'],
-    tags: ['десерт', 'итальянская кухня'],
-    createdAt: '2024-01-15T10:00:00.000Z',
-    updatedAt: '2024-01-15T10:00:00.000Z'
-  },
-
-  // Архивное блюдо
-  {
-    id: 'item-9',
-    categoryId: 'cat-6',
-    name: 'Старое блюдо',
-    description: 'Блюдо которое временно убрали из меню',
-    isActive: false,
-    type: 'food',
-    variants: [
-      {
-        id: 'var-9-1',
-        name: '',
-        price: 300,
-        isActive: false,
-        sortOrder: 0
+        sortOrder: 1,
+        portionMultiplier: 1.5
       }
     ],
     sortOrder: 0,
     preparationTime: 15,
     allergens: [],
-    tags: ['архив'],
-    createdAt: '2024-01-10T10:00:00.000Z',
-    updatedAt: '2024-01-20T15:30:00.000Z'
+    tags: ['гарнир', 'картофель', 'фри'],
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'menu-mashed-potato-side',
+    categoryId: 'cat-garnishes',
+    name: 'Картофельное пюре',
+    description: 'Нежное картофельное пюре с маслом',
+    isActive: true,
+    type: 'food',
+    source: {
+      type: 'recipe',
+      id: 'recipe-mashed-potato-side'
+    },
+    variants: [
+      {
+        id: 'var-mashed-regular',
+        name: 'Стандартная порция',
+        price: 22000,
+        isActive: true,
+        sortOrder: 0,
+        portionMultiplier: 1
+      },
+      {
+        id: 'var-mashed-large',
+        name: 'Большая порция',
+        price: 30000,
+        isActive: true,
+        sortOrder: 1,
+        portionMultiplier: 1.4
+      }
+    ],
+    sortOrder: 1,
+    preparationTime: 20,
+    allergens: ['лактоза'],
+    tags: ['гарнир', 'картофель', 'пюре'],
+    createdAt: now,
+    updatedAt: now
   }
 ]
 
-// Утилита для генерации ID
+// =============================================
+// УТИЛИТЫ
+// =============================================
+
 export function generateId(prefix: string = 'id'): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
-// Утилита для создания timestamp
 export function createTimestamp(): string {
   return new Date().toISOString()
 }
+
+export function findMenuItemById(id: string): MenuItem | undefined {
+  return MOCK_MENU_ITEMS.find(item => item.id === id)
+}
+
+export function getMenuItemsByCategory(categoryId: string): MenuItem[] {
+  if (categoryId === 'all') return MOCK_MENU_ITEMS
+  return MOCK_MENU_ITEMS.filter(item => item.categoryId === categoryId)
+}
+
+export function findCategoryById(id: string): Category | undefined {
+  return MOCK_CATEGORIES.find(category => category.id === id)
+}
+
+// =============================================
+// ПРИМЕРЫ РАСЧЕТА СЕБЕСТОИМОСТИ (для демонстрации)
+// =============================================
+
+/**
+ * Пример расчета себестоимости для разных типов позиций:
+ *
+ * 1. Пиво 330мл:
+ *    - Себестоимость: 12,000 IDR (costPerUnit продукта)
+ *    - Цена продажи: 25,000 IDR
+ *    - Прибыль: 13,000 IDR (108%)
+ *
+ * 2. Стейк 250г:
+ *    - Говядина 250г: (180,000 / 1000) * 250 = 45,000 IDR
+ *    - Масло 10мл: (85,000 / 1000) * 10 = 850 IDR
+ *    - Соль 3г: (3,000 / 1000) * 3 = 9 IDR
+ *    - Перец 2г: (120,000 / 1000) * 2 = 240 IDR
+ *    - Себестоимость: 46,099 IDR
+ *    - Цена продажи: 95,000 IDR
+ *    - Прибыль: 48,901 IDR (106%)
+ *
+ * 3. Стейк с картофелем фри:
+ *    - Стейк (рецепт): 46,099 IDR
+ *    - Картофель фри 150г из полуфабриката:
+ *      - Картофель: (8,000 / 1000) * (1000 * 150/850) = 1,412 IDR
+ *      - Масло: (85,000 / 1000) * (200 * 150/850) = 3,000 IDR
+ *      - Соль: (3,000 / 1000) * (10 * 150/850) = 5 IDR
+ *    - Томатный соус 30г из полуфабриката: ~800 IDR
+ *    - Себестоимость: ~51,316 IDR
+ *    - Цена продажи: 120,000 IDR
+ *    - Прибыль: 68,684 IDR (134%)
+ */
