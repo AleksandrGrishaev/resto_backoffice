@@ -12,6 +12,8 @@ import AccountListView from '@/views/accounts/AccountListView.vue'
 import AccountDetailView from '@/views/accounts/AccountDetailView.vue'
 // Импорт компонентов продуктов
 import ProductsView from '@/views/products/ProductsView.vue'
+// Импорт компонентов склада
+import StorageView from '@/views/storage/StorageView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -44,7 +46,7 @@ const router = createRouter({
           name: 'menu',
           component: MenuView,
           meta: {
-            title: 'Управление меню'
+            title: 'Menu Management'
           }
         },
         {
@@ -52,7 +54,7 @@ const router = createRouter({
           name: 'products',
           component: ProductsView,
           meta: {
-            title: 'Продукты'
+            title: 'Products'
           }
         },
         {
@@ -60,7 +62,15 @@ const router = createRouter({
           name: 'recipes',
           component: () => import('@/views/recipes/RecipesView.vue'),
           meta: {
-            title: 'Рецепты'
+            title: 'Recipes'
+          }
+        },
+        {
+          path: 'storage',
+          name: 'storage',
+          component: StorageView,
+          meta: {
+            title: 'Storage Management'
           }
         },
         {
@@ -68,7 +78,7 @@ const router = createRouter({
           name: 'payment-settings',
           component: PaymentSettingsView,
           meta: {
-            title: 'Методы оплаты и налоги'
+            title: 'Payment Methods & Taxes'
           }
         },
         {
@@ -79,7 +89,7 @@ const router = createRouter({
               name: 'accounts-list',
               component: AccountListView,
               meta: {
-                title: 'Список счетов'
+                title: 'Accounts List'
               }
             },
             {
@@ -87,7 +97,7 @@ const router = createRouter({
               name: 'account-detail',
               component: AccountDetailView,
               meta: {
-                title: 'Детали счета'
+                title: 'Account Details'
               }
             }
           ]

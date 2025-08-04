@@ -49,6 +49,22 @@
         </template>
       </v-list-item>
 
+      <!-- Storage -->
+      <v-list-item
+        to="/storage"
+        prepend-icon="mdi-warehouse"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
+      >
+        <template #title>
+          <span>Storage</span>
+        </template>
+        <template #append>
+          <storage-alerts-badge />
+        </template>
+      </v-list-item>
+
       <!-- Accounts with active accounts -->
       <navigation-accounts />
 
@@ -99,6 +115,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { DebugUtils } from '@/utils'
 import NavigationAccounts from './NavigationAccounts.vue'
+import StorageAlertsBadge from './StorageAlertsBadge.vue'
 import * as variables from '@/styles/variables.scss'
 
 const MODULE_NAME = 'NavigationMenu'
