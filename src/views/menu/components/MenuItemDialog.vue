@@ -87,9 +87,8 @@
             :index="index"
             :can-delete="formData.variants.length > 1"
             :item-name="formData.name"
-            :has-common-source="false"
-            :source-options="sourceOptions"
-            :composition-source-options="compositionSourceOptions"
+            :dish-options="dishOptions"
+            :product-options="productOptions"
             :unit-options="unitOptions"
             :role-options="roleOptions"
             class="mb-3"
@@ -107,7 +106,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
-import type { MenuItem, CreateMenuItemDto, MenuItemVariant, SourceOption } from '@/types/menu'
+import type { MenuItem, CreateMenuItemDto, MenuItemVariant } from '@/types/menu'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import MenuItemVariantComponent from './MenuItemVariant.vue'
 
@@ -139,12 +138,8 @@ const form = ref()
 const loading = ref(false)
 const isValid = ref(false)
 
-interface ExtendedMenuItemVariant extends MenuItemVariant {
-  source?: SourceOption | null
-}
-
 // Создаем дефолтный вариант
-function createDefaultVariant(): ExtendedMenuItemVariant {
+function createDefaultVariant(): MenuItemVariant {
   return {
     id: crypto.randomUUID(),
     name: '',
@@ -174,90 +169,75 @@ const dialogModel = computed({
   set: value => emit('update:modelValue', value)
 })
 
-// ✅ Опции источников: продукты с canBeSold=true + рецепты + полуфабрикаты
-const sourceOptions = computed((): SourceOption[] => {
-  const options: SourceOption[] = []
+// Опции для блюд (рецепты + полуфабрикаты)
+const dishOptions = computed(() => {
+  const options: Array<{
+    id: string
+    name: string
+    type: 'recipe' | 'preparation'
+    unit: string
+    outputQuantity: number
+  }> = []
 
-  // ✅ Только продукты которые можно продавать напрямую
-  productsStore.sellableProducts.forEach(product => {
-    options.push({
-      type: 'product',
-      id: product.id,
-      name: product.name,
-      displayName: `${product.name}`,
-      category: `Продукт: ${product.category}`,
-      unit: product.unit,
-      costPerUnit: product.costPerUnit,
-      canBeSold: product.canBeSold,
-      source: { type: 'product', id: product.id }
+  try {
+    // Рецепты
+    const activeRecipes = recipesStore.activeRecipes || []
+    activeRecipes.forEach(recipe => {
+      options.push({
+        id: recipe.id,
+        name: recipe.name,
+        type: 'recipe',
+        unit: recipe.outputUnit,
+        outputQuantity: recipe.outputQuantity
+      })
     })
-  })
 
-  // Рецепты
-  recipesStore.activeRecipes.forEach(recipe => {
-    options.push({
-      type: 'recipe',
-      id: recipe.id,
-      name: recipe.name,
-      displayName: `${recipe.name}`,
-      category: `Блюдо: ${recipe.type}`,
-      unit: recipe.outputUnit,
-      outputQuantity: recipe.outputQuantity,
-      source: { type: 'recipe', id: recipe.id }
-    })
-  })
+    // Полуфабрикаты
+    const activePreparations = recipesStore.activePreparations || []
+    if (Array.isArray(activePreparations)) {
+      activePreparations.forEach(prep => {
+        options.push({
+          id: prep.id,
+          name: prep.name,
+          type: 'preparation',
+          unit: prep.outputUnit || 'gram',
+          outputQuantity: prep.outputQuantity || 1
+        })
+      })
+    }
+  } catch (error) {
+    console.warn('Error building dish options:', error)
+  }
 
-  return options.sort((a, b) => a.displayName.localeCompare(b.displayName))
+  return options.sort((a, b) => a.name.localeCompare(b.name))
 })
 
-// Опции для композиции (все продукты + рецепты + полуфабрикаты)
-const compositionSourceOptions = computed((): SourceOption[] => {
-  const options: SourceOption[] = []
+// Опции для продуктов
+const productOptions = computed(() => {
+  const options: Array<{
+    id: string
+    name: string
+    category: string
+    unit: string
+    costPerUnit: number
+  }> = []
 
-  // ВСЕ продукты (включая сырье)
-  productsStore.activeProducts.forEach(product => {
-    options.push({
-      type: 'product',
-      id: product.id,
-      name: product.name,
-      displayName: `${product.name}`,
-      category: `Продукт: ${product.category}`,
-      unit: product.unit,
-      costPerUnit: product.costPerUnit,
-      canBeSold: product.canBeSold,
-      source: { type: 'product', id: product.id }
+  try {
+    const activeProducts = productsStore.activeProducts || []
+    activeProducts.forEach(product => {
+      options.push({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        unit: product.unit,
+        costPerUnit: product.costPerUnit
+      })
     })
-  })
+  } catch (error) {
+    console.warn('Error building product options:', error)
+  }
 
-  // Рецепты
-  recipesStore.activeRecipes.forEach(recipe => {
-    options.push({
-      type: 'recipe',
-      id: recipe.id,
-      name: recipe.name,
-      displayName: `${recipe.name}`,
-      category: `Блюдо: ${recipe.type}`,
-      unit: recipe.outputUnit,
-      outputQuantity: recipe.outputQuantity,
-      source: { type: 'recipe', id: recipe.id }
-    })
-  })
-
-  // Полуфабрикаты
-  recipesStore.activePreparations.forEach(prep => {
-    options.push({
-      type: 'preparation',
-      id: prep.id,
-      name: prep.name,
-      displayName: `${prep.name}`,
-      category: `Полуфабрикат: ${prep.type}`,
-      unit: prep.outputUnit,
-      outputQuantity: prep.outputQuantity,
-      source: { type: 'preparation', id: prep.id }
-    })
-  })
-
-  return options.sort((a, b) => a.displayName.localeCompare(b.displayName))
+  return options.sort((a, b) => a.name.localeCompare(b.name))
 })
 
 // Опции для единиц измерения
@@ -301,7 +281,7 @@ function removeVariant(index: number) {
   }
 }
 
-function updateVariant(index: number, updatedVariant: ExtendedMenuItemVariant) {
+function updateVariant(index: number, updatedVariant: MenuItemVariant) {
   formData.value.variants[index] = updatedVariant
 }
 
@@ -409,24 +389,10 @@ watch(
         type: newItem.type,
         isActive: newItem.isActive,
         sortOrder: newItem.sortOrder,
-        variants: newItem.variants.map(variant => {
-          const processedVariant: MenuItemVariant = {
-            ...variant,
-            composition:
-              variant.composition?.map(comp => {
-                const compSourceOption = compositionSourceOptions.value.find(
-                  opt => opt.source.type === comp.type && opt.source.id === comp.id
-                )
-
-                return {
-                  ...comp,
-                  sourceRef: compSourceOption
-                }
-              }) || []
-          }
-
-          return processedVariant
-        })
+        variants: newItem.variants.map(variant => ({
+          ...variant,
+          composition: variant.composition || []
+        }))
       }
     } else {
       resetForm()
@@ -447,10 +413,27 @@ watch(
 
 // Initialize stores
 onMounted(async () => {
-  await Promise.all([
-    productsStore.loadProducts(true), // ✅ используем mock режим с canBeSold
-    recipesStore.initialize()
-  ])
+  try {
+    console.log('MenuItemDialog: Initializing stores...')
+
+    // Загружаем продукты в mock режиме
+    await productsStore.loadProducts(true)
+    console.log('MenuItemDialog: Products loaded:', productsStore.products?.length)
+
+    // Инициализируем recipes store
+    if (recipesStore && typeof recipesStore.initialize === 'function') {
+      await recipesStore.initialize()
+      console.log('MenuItemDialog: Recipes initialized:', recipesStore.activeRecipes?.length)
+      console.log(
+        'MenuItemDialog: Preparations initialized:',
+        recipesStore.activePreparations?.length
+      )
+    } else {
+      console.warn('MenuItemDialog: RecipesStore not available or no initialize method')
+    }
+  } catch (error) {
+    console.error('MenuItemDialog: Failed to initialize stores:', error)
+  }
 })
 </script>
 

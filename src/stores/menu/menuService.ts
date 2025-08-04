@@ -1,13 +1,20 @@
 // stores/menu/menuService.ts
-import type { Category, MenuItem, CreateCategoryDto, CreateMenuItemDto } from './types'
-import { MOCK_CATEGORIES, MOCK_MENU_ITEMS, generateId, createTimestamp } from './mockData'
+import type {
+  Category,
+  MenuItem,
+  CreateCategoryDto,
+  CreateMenuItemDto,
+  generateId,
+  createTimestamp
+} from './types'
+import { mockCategories, mockMenuItems } from './menuMock'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'MenuService'
 
 // In-memory хранилище для разработки
-let categoriesStore: Category[] = [...MOCK_CATEGORIES]
-let menuItemsStore: MenuItem[] = [...MOCK_MENU_ITEMS]
+let categoriesStore: Category[] = [...mockCategories]
+let menuItemsStore: MenuItem[] = [...mockMenuItems]
 
 // Имитация задержки сети
 const delay = (ms: number = 300) => new Promise(resolve => setTimeout(resolve, ms))
@@ -260,9 +267,8 @@ export class MenuItemService {
 
       // Обрабатываем варианты - добавляем ID если отсутствует
       const processedVariants = data.variants.map((variant, index) => ({
+        ...variant,
         id: generateId('var'),
-        name: variant.name || '',
-        price: variant.price,
         isActive: variant.isActive ?? true,
         sortOrder: variant.sortOrder ?? index
       }))
@@ -275,7 +281,6 @@ export class MenuItemService {
         isActive: true,
         type: data.type,
         variants: processedVariants,
-        notes: data.notes,
         sortOrder,
         preparationTime: data.preparationTime,
         allergens: data.allergens || [],
@@ -399,14 +404,12 @@ export class MenuItemService {
 export const categoryService = new CategoryService()
 export const menuItemService = new MenuItemService()
 
-// Классы уже экспортированы выше через export class
-
 // Утилиты для тестирования и сброса данных
 export const mockUtils = {
   // Сброс данных к начальному состоянию
   resetData() {
-    categoriesStore = [...MOCK_CATEGORIES]
-    menuItemsStore = [...MOCK_MENU_ITEMS]
+    categoriesStore = [...mockCategories]
+    menuItemsStore = [...mockMenuItems]
     DebugUtils.info(MODULE_NAME, 'Mock data reset to initial state')
   },
 
