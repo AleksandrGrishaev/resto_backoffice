@@ -58,7 +58,14 @@
                     <div class="detail-item">
                       <span class="detail-label">Единица измерения:</span>
                       <v-chip size="small" variant="outlined">
-                        {{ getUnitLabel(product.unit) }}
+                        {{ formatUnit(product.unit) }}
+                      </v-chip>
+                    </div>
+
+                    <div class="detail-item">
+                      <span class="detail-label">Себестоимость:</span>
+                      <v-chip color="success" size="small" variant="tonal">
+                        {{ formatCurrency(product.costPerUnit) }}
                       </v-chip>
                     </div>
 
@@ -110,7 +117,7 @@
                     <div v-if="product.minStock" class="detail-item">
                       <span class="detail-label">Минимальный остаток:</span>
                       <span class="detail-value">
-                        {{ product.minStock }} {{ getUnitLabel(product.unit) }}
+                        {{ product.minStock }} {{ formatUnit(product.unit) }}
                       </span>
                     </div>
 
@@ -121,6 +128,48 @@
                       <v-icon>mdi-information-outline</v-icon>
                       <div class="text-caption mt-2">Дополнительная информация не указана</div>
                     </div>
+                  </div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+
+          <!-- Расчетная информация -->
+          <v-row class="mt-4">
+            <v-col cols="12">
+              <v-card variant="outlined">
+                <v-card-title class="text-subtitle-1">
+                  <v-icon start color="info">mdi-calculator</v-icon>
+                  Расчетная информация
+                </v-card-title>
+                <v-card-text>
+                  <v-row>
+                    <v-col cols="12" md="4">
+                      <div class="text-center">
+                        <div class="text-h6 success--text">
+                          {{ formatCurrency(product.costPerUnit) }}
+                        </div>
+                        <div class="text-caption">Цена за {{ formatUnit(product.unit) }}</div>
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="4">
+                      <div class="text-center">
+                        <div class="text-h6 info--text">
+                          {{ formatCurrency(calculateEffectiveCost()) }}
+                        </div>
+                        <div class="text-caption">Эффективная стоимость*</div>
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="4">
+                      <div class="text-center">
+                        <div class="text-h6 warning--text">{{ product.yieldPercentage }}%</div>
+                        <div class="text-caption">Выход продукта</div>
+                      </div>
+                    </v-col>
+                  </v-row>
+                  <v-divider class="my-3" />
+                  <div class="text-caption text-medium-emphasis">
+                    * Эффективная стоимость учитывает процент выхода продукта после обработки
                   </div>
                 </v-card-text>
               </v-card>
@@ -175,9 +224,10 @@
               В следующих версиях здесь будет отображаться:
               <ul class="mt-2">
                 <li>Текущие остатки продукта</li>
-                <li>История поставок и цены</li>
-                <li>Использование в блюдах</li>
-                <li>Аналитика потребления</li>
+                <li>История поставок и изменения цены</li>
+                <li>Использование в блюдах и полуфабрикатах</li>
+                <li>Аналитика потребления и прогнозы</li>
+                <li>Связанные рецепты и позиции меню</li>
               </ul>
             </div>
           </v-alert>
@@ -223,7 +273,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Product } from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES, MEASUREMENT_UNITS } from '@/stores/productsStore'
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 import { Formatter } from '@/utils'
 
 // Props
@@ -243,6 +294,9 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 
+// Composables
+const { getUnitName } = useMeasurementUnits()
+
 // Computed
 const localModelValue = computed({
   get: () => props.modelValue,
@@ -258,8 +312,16 @@ const getCategoryLabel = (category: string): string => {
   return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
 }
 
-const getUnitLabel = (unit: string): string => {
-  return MEASUREMENT_UNITS[unit as keyof typeof MEASUREMENT_UNITS] || unit
+const formatUnit = (unit: string): string => {
+  return getUnitName(unit as any)
+}
+
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount)
 }
 
 const getCategoryColor = (category: string): string => {
@@ -285,6 +347,12 @@ const getYieldColor = (percentage: number): string => {
 
 const formatDateTime = (dateString: string): string => {
   return Formatter.formatFullDateTime(dateString)
+}
+
+const calculateEffectiveCost = (): number => {
+  if (!props.product) return 0
+  // Эффективная стоимость с учетом процента выхода
+  return props.product.costPerUnit / (props.product.yieldPercentage / 100)
 }
 </script>
 

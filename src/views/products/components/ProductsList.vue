@@ -45,7 +45,7 @@
               <div>
                 <div class="font-weight-medium">{{ item.name }}</div>
                 <div v-if="item.description" class="text-caption text-medium-emphasis">
-                  {{ item.description }}
+                  {{ truncateText(item.description, 60) }}
                 </div>
               </div>
             </div>
@@ -61,8 +61,16 @@
           <!-- Единица измерения -->
           <template #[`item.unit`]="{ item }">
             <v-chip size="small" variant="outlined">
-              {{ getUnitLabel(item.unit) }}
+              {{ formatUnit(item.unit) }}
             </v-chip>
+          </template>
+
+          <!-- Себестоимость -->
+          <template #[`item.costPerUnit`]="{ item }">
+            <div class="text-end">
+              <div class="font-weight-medium">{{ formatCurrency(item.costPerUnit) }}</div>
+              <div class="text-caption text-medium-emphasis">за {{ formatUnit(item.unit) }}</div>
+            </div>
           </template>
 
           <!-- Процент выхода -->
@@ -71,6 +79,16 @@
               <v-chip :color="getYieldColor(item.yieldPercentage)" size="small" variant="tonal">
                 {{ item.yieldPercentage }}%
               </v-chip>
+            </div>
+          </template>
+
+          <!-- Эффективная стоимость -->
+          <template #[`item.effectiveCost`]="{ item }">
+            <div class="text-end">
+              <div class="font-weight-medium text-info">
+                {{ formatCurrency(calculateEffectiveCost(item)) }}
+              </div>
+              <div class="text-caption text-medium-emphasis">с учетом выхода</div>
             </div>
           </template>
 
@@ -140,7 +158,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Product } from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES, MEASUREMENT_UNITS } from '@/stores/productsStore'
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 import { Formatter } from '@/utils'
 import ProductCard from './ProductCard.vue'
 
@@ -150,7 +169,6 @@ interface Props {
   loading?: boolean
 }
 
-// Remove unused props assignment
 defineProps<Props>()
 
 // Emits
@@ -162,6 +180,9 @@ interface Emits {
 
 defineEmits<Emits>()
 
+// Composables
+const { getUnitName } = useMeasurementUnits()
+
 // Заголовки таблицы
 const tableHeaders = computed(() => [
   {
@@ -169,49 +190,63 @@ const tableHeaders = computed(() => [
     key: 'name',
     align: 'start' as const,
     sortable: true,
-    width: '25%'
+    width: '20%'
   },
   {
     title: 'Категория',
     key: 'category',
     align: 'center' as const,
     sortable: true,
-    width: '15%'
+    width: '12%'
   },
   {
     title: 'Ед. изм.',
     key: 'unit',
     align: 'center' as const,
     sortable: true,
-    width: '10%'
+    width: '8%'
+  },
+  {
+    title: 'Себестоимость',
+    key: 'costPerUnit',
+    align: 'end' as const,
+    sortable: true,
+    width: '12%'
   },
   {
     title: 'Выход',
     key: 'yieldPercentage',
     align: 'center' as const,
     sortable: true,
-    width: '10%'
+    width: '8%'
+  },
+  {
+    title: 'Эффект. стоимость',
+    key: 'effectiveCost',
+    align: 'end' as const,
+    sortable: true,
+    width: '12%'
   },
   {
     title: 'Статус',
     key: 'isActive',
     align: 'center' as const,
     sortable: true,
-    width: '10%'
+    width: '8%'
   },
   {
     title: 'Создан',
     key: 'createdAt',
     align: 'center' as const,
     sortable: true,
-    width: '15%'
+    width: '10%'
   },
   {
     title: 'Действия',
     key: 'actions',
     align: 'center' as const,
     sortable: false,
-    width: '15%'
+    width: '10%'
   }
 ])
 
@@ -220,8 +255,17 @@ const getCategoryLabel = (category: string): string => {
   return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
 }
 
-const getUnitLabel = (unit: string): string => {
-  return MEASUREMENT_UNITS[unit as keyof typeof MEASUREMENT_UNITS] || unit
+const formatUnit = (unit: string): string => {
+  return getUnitName(unit as any)
+}
+
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(amount)
 }
 
 const getCategoryColor = (category: string): string => {
@@ -245,8 +289,18 @@ const getYieldColor = (percentage: number): string => {
   return 'error'
 }
 
+const calculateEffectiveCost = (product: Product): number => {
+  // Эффективная стоимость с учетом процента выхода
+  return product.costPerUnit / (product.yieldPercentage / 100)
+}
+
 const formatDate = (dateString: string): string => {
   return Formatter.formatDate(dateString)
+}
+
+const truncateText = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
 }
 </script>
 

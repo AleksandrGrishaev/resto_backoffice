@@ -1,125 +1,131 @@
 // src/stores/recipes/types.ts
 import { BaseEntity } from '@/types/common'
+import type { MeasurementUnit } from '@/types/measurementUnits'
 
-// Base ingredient
-export interface Ingredient extends BaseEntity {
-  name: string
-  code: string // e.g. H-2, V-22, M-1
-  category: IngredientCategory
-  unitId: string // ID of the unit
-  costPerUnit?: number // cost per unit
-  supplier?: string
+// =============================================
+// 1. PREPARATIONS (полуфабрикаты) - было Ingredient
+// =============================================
+
+export interface Preparation extends BaseEntity {
+  name: string // "Картофельное пюре", "Томатный соус"
+  code: string // "P-1", "P-2", "P-3"
   description?: string
+  type: PreparationType // "sauce", "garnish", "marinade", "semifinished"
+  recipe: PreparationIngredient[] // состав ТОЛЬКО из продуктов
+  outputQuantity: number // сколько получается на выходе (1500г пюре)
+  outputUnit: MeasurementUnit // единица измерения выхода
+  preparationTime: number // время приготовления в минутах
+  instructions: string // инструкции по приготовлению
   isActive: boolean
-  isComposite: boolean // true if this is a composite ingredient (sauce, mix)
-  allergens?: string[]
+  costPerPortion?: number // расчетная себестоимость за единицу выхода
 }
 
-// Ingredient categories (from tech cards)
-export type IngredientCategory =
-  | 'herbs' // H - herbs, spices
-  | 'vegetables' // V - vegetables
-  | 'meat' // M - meat
-  | 'dairy' // D - dairy products
-  | 'grains' // O - grains, pasta
-  | 'condiments' // C - condiments, oils
-  | 'prepared' // P - prepared mixes/sauces
-
-// Units of measurement
-export interface Unit {
-  id: string
-  name: string
-  shortName: string
-  type: 'weight' | 'volume' | 'piece'
-  baseUnit?: string // for conversion
-  conversionRate?: number
+// Ингредиент для полуфабриката (ТОЛЬКО продукты)
+export interface PreparationIngredient {
+  type: 'product' // ТОЛЬКО продукты (не другие preparations)
+  id: string // ID продукта
+  quantity: number // количество
+  unit: MeasurementUnit // единица измерения
+  notes?: string // примечания: "diced", "minced"
 }
 
-// Recipe ingredient item
-export interface RecipeIngredient {
-  id: string
-  ingredientId: string
-  quantity: number
-  unit: string
-  preparation?: string // e.g. "sliced", "crashed"
-  isOptional?: boolean
-  notes?: string
-}
+// Типы полуфабрикатов
+export type PreparationType =
+  | 'sauce' // соусы
+  | 'garnish' // гарниры
+  | 'marinade' // маринады
+  | 'semifinished' // полуфабрикаты
+  | 'seasoning' // приправы
 
-// Recipe (tech card)
+// =============================================
+// 2. RECIPES (рецепты готовых блюд)
+// =============================================
+
 export interface Recipe extends BaseEntity {
-  name: string
-  code?: string
+  name: string // "Стейк", "Картошка фри"
+  code?: string // "R-1", "R-2"
   description?: string
-  category: RecipeCategory
-  portionSize: number // number of portions
-  portionUnit: string
-  ingredients: RecipeIngredient[]
-  instructions?: RecipeStep[]
-  prepTime?: number // preparation time in minutes
-  cookTime?: number
+  category: RecipeCategory // "main_dish", "side_dish", "dessert", "appetizer"
+  portionSize: number // количество порций на выходе
+  portionUnit: string // единица порции
+  components: RecipeComponent[] // состав из products + preparations
+  instructions?: RecipeStep[] // пошаговые инструкции
+  prepTime?: number // время подготовки в минутах
+  cookTime?: number // время готовки в минутах
   difficulty: 'easy' | 'medium' | 'hard'
   tags?: string[]
   isActive: boolean
-  cost?: number // calculated cost
+  cost?: number // расчетная себестоимость
   yield?: {
+    // выход рецепта
     quantity: number
     unit: string
   }
 }
 
-export type RecipeCategory =
-  | 'sauce' // sauces
-  | 'main' // main dishes
-  | 'side' // sides
-  | 'dessert' // desserts
-  | 'beverage' // beverages
-  | 'appetizer' // appetizers
-  | 'preparation' // preparations
+// Компонент рецепта (продукт или полуфабрикат)
+export interface RecipeComponent {
+  id: string // уникальный ID компонента в рецепте
+  componentId: string // ID продукта или полуфабриката
+  componentType: 'product' | 'preparation' // тип компонента
+  quantity: number // количество
+  unit: MeasurementUnit // единица измерения
+  preparation?: string // способ подготовки: "sliced", "diced"
+  isOptional?: boolean // опциональный ингредиент
+  notes?: string // примечания
+}
 
-// Cooking step
+// Типы рецептов
+export type RecipeCategory =
+  | 'main_dish' // основные блюда
+  | 'side_dish' // гарниры
+  | 'dessert' // десерты
+  | 'appetizer' // закуски
+  | 'beverage' // напитки
+  | 'sauce' // соусы
+
+// =============================================
+// 3. ВСПОМОГАТЕЛЬНЫЕ ТИПЫ
+// =============================================
+
+// Шаг приготовления
 export interface RecipeStep {
   id: string
   stepNumber: number
   instruction: string
-  duration?: number
-  temperature?: number
-  equipment?: string[]
+  duration?: number // длительность в минутах
+  temperature?: number // температура
+  equipment?: string[] // необходимое оборудование
 }
 
-// Link between menu item and recipe
-export interface MenuRecipeLink extends BaseEntity {
-  menuItemId: string
-  variantId?: string
-  recipeId: string
-  portionMultiplier: number // multiplier to adapt recipe to portion size
-  modifications?: RecipeModification[]
-}
-
-// Recipe modification for specific menu dish
-export interface RecipeModification {
-  id: string
-  type: 'add' | 'remove' | 'replace' | 'adjust'
-  ingredientId?: string
-  newIngredientId?: string // for replacement
-  quantityMultiplier?: number
-  notes?: string
-}
-
-// Cost calculation
+// Расчет себестоимости
 export interface CostCalculation {
   recipeId: string
   totalCost: number
   costPerPortion: number
-  ingredientCosts: {
-    ingredientId: string
+  componentCosts: {
+    componentId: string
+    componentType: 'product' | 'preparation'
     cost: number
     percentage: number
   }[]
   calculatedAt: Date
 }
 
-// Form data types
+// Единицы измерения (для совместимости)
+export interface Unit {
+  id: string
+  name: string
+  shortName: string
+  type: 'weight' | 'volume' | 'piece'
+  baseUnit?: string
+  conversionRate?: number
+}
+
+// =============================================
+// 4. FORM DATA TYPES
+// =============================================
+
 export interface CreateRecipeData {
   name: string
   code?: string
@@ -133,41 +139,90 @@ export interface CreateRecipeData {
   tags?: string[]
 }
 
-export interface CreateIngredientData {
+export interface CreatePreparationData {
   name: string
   code: string
-  category: IngredientCategory
-  unitId: string
-  costPerUnit?: number
-  supplier?: string
+  type: PreparationType
   description?: string
-  isComposite?: boolean
-  allergens?: string[]
+  outputQuantity: number
+  outputUnit: MeasurementUnit
+  preparationTime: number
+  instructions: string
 }
 
-// Constants for categories
-export const INGREDIENT_CATEGORIES = [
-  { value: 'herbs', text: 'Herbs & Spices', prefix: 'H' },
-  { value: 'vegetables', text: 'Vegetables', prefix: 'V' },
-  { value: 'meat', text: 'Meat', prefix: 'M' },
-  { value: 'dairy', text: 'Dairy Products', prefix: 'D' },
-  { value: 'grains', text: 'Grains & Pasta', prefix: 'O' },
-  { value: 'condiments', text: 'Condiments & Oils', prefix: 'C' },
-  { value: 'prepared', text: 'Prepared Mixes', prefix: 'P' }
+// =============================================
+// 5. КОНСТАНТЫ
+// =============================================
+
+import { RECIPE_UNITS, getUnitName } from '@/types/measurementUnits'
+
+export const PREPARATION_TYPES = [
+  { value: 'sauce', text: 'Соусы', prefix: 'P' },
+  { value: 'garnish', text: 'Гарниры', prefix: 'P' },
+  { value: 'marinade', text: 'Маринады', prefix: 'P' },
+  { value: 'semifinished', text: 'Полуфабрикаты', prefix: 'P' },
+  { value: 'seasoning', text: 'Приправы', prefix: 'P' }
 ] as const
 
 export const RECIPE_CATEGORIES = [
-  { value: 'sauce', text: 'Sauces' },
-  { value: 'main', text: 'Main Dishes' },
-  { value: 'side', text: 'Sides' },
-  { value: 'dessert', text: 'Desserts' },
-  { value: 'beverage', text: 'Beverages' },
-  { value: 'appetizer', text: 'Appetizers' },
-  { value: 'preparation', text: 'Preparations' }
+  { value: 'main_dish', text: 'Основные блюда' },
+  { value: 'side_dish', text: 'Гарниры' },
+  { value: 'dessert', text: 'Десерты' },
+  { value: 'beverage', text: 'Напитки' },
+  { value: 'appetizer', text: 'Закуски' },
+  { value: 'sauce', text: 'Соусы' }
 ] as const
 
 export const DIFFICULTY_LEVELS = [
-  { value: 'easy', text: 'Easy', color: 'success' },
-  { value: 'medium', text: 'Medium', color: 'warning' },
-  { value: 'hard', text: 'Hard', color: 'error' }
+  { value: 'easy', text: 'Легко', color: 'success' },
+  { value: 'medium', text: 'Средне', color: 'warning' },
+  { value: 'hard', text: 'Сложно', color: 'error' }
 ] as const
+
+export const MEASUREMENT_UNITS_FOR_RECIPES = RECIPE_UNITS.reduce(
+  (acc, unit) => {
+    acc[unit] = getUnitName(unit)
+    return acc
+  },
+  {} as Record<MeasurementUnit, string>
+)
+
+// =============================================
+// 6. ОБРАТНАЯ СОВМЕСТИМОСТЬ (удалить после миграции)
+// =============================================
+
+/** @deprecated Use Preparation instead */
+export type Ingredient = Preparation
+
+/** @deprecated Use PreparationType instead */
+export type IngredientCategory = PreparationType
+
+/** @deprecated Use PREPARATION_TYPES instead */
+export const INGREDIENT_CATEGORIES = PREPARATION_TYPES
+
+/** @deprecated Use RecipeComponent instead */
+export type RecipeIngredient = RecipeComponent
+
+/** @deprecated Use CreatePreparationData instead */
+export type CreateIngredientData = CreatePreparationData
+
+// =============================================
+// 7. СВЯЗКИ С МЕНЮ (будет использоваться в menu store)
+// =============================================
+
+export interface MenuRecipeLink extends BaseEntity {
+  menuItemId: string
+  variantId?: string
+  recipeId: string
+  portionMultiplier: number // множитель для адаптации рецепта к размеру порции
+  modifications?: RecipeModification[]
+}
+
+export interface RecipeModification {
+  id: string
+  type: 'add' | 'remove' | 'replace' | 'adjust'
+  componentId?: string
+  newComponentId?: string
+  quantityMultiplier?: number
+  notes?: string
+}

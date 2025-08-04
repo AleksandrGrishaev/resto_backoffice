@@ -61,6 +61,38 @@
               />
             </v-col>
 
+            <!-- Себестоимость за единицу -->
+            <v-col cols="12" md="6">
+              <v-text-field
+                v-model.number="formData.costPerUnit"
+                label="Себестоимость за единицу *"
+                variant="outlined"
+                type="number"
+                :rules="costRules"
+                :error-messages="fieldErrors.costPerUnit"
+                prepend-inner-icon="mdi-currency-usd"
+                suffix="IDR"
+                min="0"
+                step="1"
+                @input="clearFieldError('costPerUnit')"
+              >
+                <template #append-inner>
+                  <v-tooltip location="top">
+                    <template #activator="{ props: tooltipProps }">
+                      <v-icon v-bind="tooltipProps" color="info" size="small">
+                        mdi-help-circle
+                      </v-icon>
+                    </template>
+                    <div>
+                      Закупочная цена за {{ getSelectedUnitName() }}
+                      <br />
+                      (только себестоимость, цена продажи устанавливается в меню)
+                    </div>
+                  </v-tooltip>
+                </template>
+              </v-text-field>
+            </v-col>
+
             <!-- Процент выхода -->
             <v-col cols="12" md="6">
               <v-text-field
@@ -95,7 +127,7 @@
             </v-col>
 
             <!-- Активность -->
-            <v-col cols="12" md="6" class="d-flex align-center">
+            <v-col cols="12" class="d-flex align-center">
               <v-switch
                 v-model="formData.isActive"
                 label="Активен"
@@ -164,7 +196,7 @@
                           variant="outlined"
                           type="number"
                           prepend-inner-icon="mdi-package-down"
-                          :suffix="getUnitLabel(formData.unit)"
+                          :suffix="getSelectedUnitName()"
                           min="0"
                           step="0.1"
                           placeholder="Для уведомлений"
@@ -204,10 +236,11 @@ import type {
   Product,
   CreateProductData,
   UpdateProductData,
-  ProductCategory,
-  MeasurementUnit
+  ProductCategory
 } from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES, MEASUREMENT_UNITS } from '@/stores/productsStore'
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import type { MeasurementUnit } from '@/types/measurementUnits'
+import { useProductUnits } from '@/composables/useMeasurementUnits'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'ProductDialog'
@@ -232,6 +265,9 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 
+// Composables
+const { unitOptions: productUnitOptions, validateUnit } = useProductUnits()
+
 // Refs
 const formRef = ref()
 const formValid = ref(false)
@@ -249,6 +285,7 @@ const formData = ref<CreateProductData & { id?: string }>({
   name: '',
   category: 'other' as ProductCategory,
   unit: 'kg' as MeasurementUnit,
+  costPerUnit: 0,
   yieldPercentage: 100,
   isActive: true,
   description: '',
@@ -262,6 +299,7 @@ const fieldErrors = ref<Record<string, string[]>>({
   name: [],
   category: [],
   unit: [],
+  costPerUnit: [],
   yieldPercentage: []
 })
 
@@ -273,12 +311,7 @@ const categoryOptions = computed(() =>
   }))
 )
 
-const unitOptions = computed(() =>
-  Object.entries(MEASUREMENT_UNITS).map(([value, title]) => ({
-    title,
-    value
-  }))
-)
+const unitOptions = computed(() => productUnitOptions.value)
 
 // Правила валидации
 const nameRules = [
@@ -289,7 +322,19 @@ const nameRules = [
 
 const categoryRules = [(v: string) => !!v || 'Категория обязательна для выбора']
 
-const unitRules = [(v: string) => !!v || 'Единица измерения обязательна для выбора']
+const unitRules = [
+  (v: string) => !!v || 'Единица измерения обязательна для выбора',
+  (v: string) => {
+    const validation = validateUnit(v as MeasurementUnit)
+    return validation.valid || validation.error || 'Недопустимая единица измерения'
+  }
+]
+
+const costRules = [
+  (v: number) => (v !== null && v !== undefined) || 'Себестоимость обязательна',
+  (v: number) => v >= 0 || 'Себестоимость не может быть отрицательной',
+  (v: number) => v <= 999999999 || 'Слишком большое значение'
+]
 
 const yieldRules = [
   (v: number) => (v !== null && v !== undefined) || 'Процент выхода обязателен',
@@ -303,6 +348,7 @@ const resetForm = (): void => {
     name: '',
     category: 'other',
     unit: 'kg',
+    costPerUnit: 0,
     yieldPercentage: 100,
     isActive: true,
     description: '',
@@ -310,6 +356,11 @@ const resetForm = (): void => {
     shelfLife: undefined,
     minStock: undefined
   }
+}
+
+const getSelectedUnitName = (): string => {
+  const selectedOption = unitOptions.value.find(option => option.value === formData.value.unit)
+  return selectedOption?.title || formData.value.unit
 }
 
 // Отслеживание изменений props.product
@@ -323,6 +374,7 @@ watch(
         name: newProduct.name,
         category: newProduct.category,
         unit: newProduct.unit,
+        costPerUnit: newProduct.costPerUnit,
         yieldPercentage: newProduct.yieldPercentage,
         isActive: newProduct.isActive,
         description: newProduct.description || '',
@@ -404,10 +456,6 @@ const saveProduct = async (): Promise<void> => {
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Error saving product', { error })
   }
-}
-
-const getUnitLabel = (unit: string): string => {
-  return MEASUREMENT_UNITS[unit as keyof typeof MEASUREMENT_UNITS] || unit
 }
 </script>
 

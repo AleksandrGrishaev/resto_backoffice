@@ -254,3 +254,382 @@
 - Поэтапная миграция с возможностью отката
 - Регулярные демонстрации промежуточных результатов
 - Создание подробной документации и проведение тренингов
+
+# План рефакторинга: Простые связки Menu → Products/Recipes
+
+Я бы хотел сделать рефакторинг своего приложения по работе ресторана, чтобы реализовать данный функционал:
+
+Product Store - отвечает за изначальные продукты, поступающие в ресторан.
+Имеется список продуктов для приготовления блюд
+
+Recipe Store
+Отвечает за технологические карты производства блюд и субродуктов. Субродукты теже блюда, только используются в приготовлении основных блюд,такие как соусы, котлеты и т.д.
+
+Menu Store
+Это меню ресторана, то есть позиции, которые возможны продавать. Меню может включать в себя как простые блюда, блюда с модификациями выбора(например стейк с возможностью выбора гарнира) так и просто товары (например пиво), в сущности меню возникает продажная цена. По меню мы будет продавать блюда и продукты, соответствена, дальше мы должны расчитывать себестоимость блюда исходя из рецептов или входящей стоимости товара.
+
+Я бы хотел создать Mock данные на примере следующих блюд:
+
+1. У нас есть проодукты в ProductStore
+2. Из этих продуктов мы создаем блюда и субродукты
+3. Дальше мы создаем позиции в меню и привязываем рецепты и продукты (в случае например с пивом) к позициям в меню.
+
+На мой взгляд такая система, будет взаимозависима и позволит нам четко производить расчет себестомости и выручки.
+
+Вот mock данные, которые мы должны создать, чтобы все было взаимосвязано:
+
+1. Создаем продукты
+2. Из этих продуктов создать два субпродукта: соус 1, соус 2, пюре.
+3. Дальше создать рецепт блюда: стейк, картошка фри, пюре.
+4. Создать позции в меню: стейк с выбором варианта гарнира с пюре или картошкой фри, а также соус.
+5. Создать позицию в меню: пиво
+6. Создать позицию в меню: Гарнир пюре, гарнир картошка фри.
+
+## Текущая задача (упрощенная)
+
+1. **Связать позиции меню с источниками** (products/recipes)
+2. **Переименовать ingredients → preparations** (полуфабрикаты)
+3. **Обновить recipes**: состав из products + preparations (не из других recipes)
+
+## Новая простая структура
+
+### 1. **Products** ✅ УЖЕ ЕСТЬ
+
+```typescript
+interface Product extends BaseEntity {
+  name: string // "Мука", "Пиво Bintang", "Готовый торт"
+  description?: string
+  category: ProductCategory
+  unit: MeasurementUnit
+  costPerUnit: number // ТОЛЬКО себестоимость закупки
+  isActive: boolean
+  // НЕТ sellPrice - цена только в меню!
+  // НЕТ canBeSold - продается только через меню!
+}
+```
+
+### 2. **Preparations** (было ingredients)
+
+```typescript
+// stores/recipes/types.ts - ПЕРЕИМЕНОВЫВАЕМ ingredients → preparations
+interface Preparation extends BaseEntity {
+  name: string // "Картофельное пюре", "Томатный соус"
+  description?: string
+  type: PreparationType // "sauce", "garnish", "marinade", "semifinished"
+  recipe: PreparationIngredient[] // состав ТОЛЬКО из продуктов
+  outputQuantity: number
+  outputUnit: MeasurementUnit
+  preparationTime: number
+  instructions: string
+  isActive: boolean
+  costPerPortion?: number // расчетная себестоимость
+}
+
+type PreparationType = 'sauce' | 'garnish' | 'marinade' | 'semifinished' | 'seasoning'
+
+interface PreparationIngredient {
+  type: 'product' // ТОЛЬКО продукты (не другие preparations)
+  id: string // ID продукта
+  quantity: number
+  unit: MeasurementUnit
+  notes?: string
+}
+```
+
+### 3. **Recipes** (рецепты готовых блюд)
+
+```typescript
+// stores/recipes/types.ts - ОБНОВЛЯЕМ
+interface Recipe extends BaseEntity {
+  name: string // "Стейк", "Картошка фри"
+  description?: string
+  type: RecipeType // "main_dish", "side_dish", "dessert", "appetizer"
+  composition: RecipeComponent[] // состав из products + preparations
+  outputQuantity: number // сколько порций получается
+  outputUnit: MeasurementUnit
+  preparationTime: number
+  instructions: string
+  isActive: boolean
+  costPerPortion?: number
+}
+
+type RecipeType = 'main_dish' | 'side_dish' | 'dessert' | 'appetizer' | 'beverage'
+
+interface RecipeComponent {
+  type: 'product' | 'preparation' // продукт или полуфабрикат
+  id: string
+  quantity: number
+  unit: MeasurementUnit
+  notes?: string
+}
+```
+
+### 4. **Menu** (обновляем для правильной композиции)
+
+```typescript
+// stores/menu/types.ts - ПРАВИЛЬНАЯ архитектура
+interface MenuItem extends BaseEntity {
+  categoryId: string
+  name: string // "Стейк с гарниром", "Пиво Bintang"
+  description?: string
+  isActive: boolean
+  type: 'food' | 'beverage'
+  variants: MenuItemVariant[]
+  source?: MenuItemSource // для простых позиций (одиночный продукт/рецепт)
+  sortOrder: number
+  allergens?: string[]
+  tags?: string[]
+}
+
+// ПРОСТАЯ СВЯЗКА (для одиночных позиций)
+interface MenuItemSource {
+  type: 'product' | 'recipe' // что продаем
+  id: string // ID продукта или рецепта
+}
+
+interface MenuItemVariant {
+  id: string
+  name: string // "с картошкой фри", "с пюре", "Большая порция"
+  price: number
+  portionMultiplier?: number // множитель порции (для простых рецептов)
+  isActive: boolean
+  sortOrder?: number
+  source?: MenuItemSource // для простых вариантов
+  composition?: MenuComposition[] // НОВОЕ: для композитных вариантов
+}
+
+// КОМПОЗИЦИЯ для сложных блюд
+interface MenuComposition {
+  type: 'product' | 'recipe' | 'preparation' // что добавляем
+  id: string // ID компонента
+  quantity: number // количество в ГРАММАХ/МЛ (не порциях!)
+  unit: MeasurementUnit // 'gram', 'ml' - конкретные единицы
+  role?: 'main' | 'garnish' | 'sauce' // роль в блюде (для UI)
+}
+```
+
+## Примеры использования
+
+### Простая перепродажа
+
+```typescript
+// Пиво в меню - цена только здесь!
+{
+  name: "Bintang Beer",
+  source: {
+    type: 'product',
+    id: 'bintang-beer-product-id'
+  },
+  variants: [
+    { name: "330ml", price: 25000 },  // ЦЕНА ПРОДАЖИ ТОЛЬКО В МЕНЮ
+    { name: "500ml", price: 35000, source: { type: 'product', id: 'bintang-500ml-id' } }
+  ]
+}
+
+// При продаже:
+// Себестоимость = Product.costPerUnit * количество
+// Прибыль = MenuVariant.price - себестоимость
+```
+
+### Готовое блюдо
+
+```typescript
+// Стейк (один рецепт)
+{
+  name: "Beef Steak",
+  source: {
+    type: 'recipe',
+    id: 'beef-steak-recipe-id'
+  },
+  variants: [
+    { name: "200g", price: 85000, portionMultiplier: 1 },
+    { name: "300g", price: 120000, portionMultiplier: 1.5 }
+  ]
+}
+```
+
+### Стейк с гарниром (правильная архитектура)
+
+```typescript
+// НЕПРАВИЛЬНО: создавать отдельные рецепты для каждой комбинации
+// ❌ 'steak-with-fries-recipe', 'steak-with-mash-recipe', 'steak-with-vegetables-recipe'
+
+// ПРАВИЛЬНО: композиция в меню из существующих рецептов/полуфабрикатов
+{
+  name: "Стейк с гарниром",
+  source: null, // композитное блюдо
+  variants: [
+    {
+      name: "с картошкой фри",
+      price: 95000,
+      composition: [
+        { type: 'recipe', id: 'beef-steak-recipe', quantity: 200, unit: 'gram' },
+        { type: 'preparation', id: 'french-fries-prep', quantity: 150, unit: 'gram' }
+      ]
+    },
+    {
+      name: "с пюре",
+      price: 90000,
+      composition: [
+        { type: 'recipe', id: 'beef-steak-recipe', quantity: 200, unit: 'gram' },
+        { type: 'preparation', id: 'mashed-potato-prep', quantity: 180, unit: 'gram' }
+      ]
+    },
+    {
+      name: "с овощами",
+      price: 100000,
+      composition: [
+        { type: 'recipe', id: 'beef-steak-recipe', quantity: 200, unit: 'gram' },
+        { type: 'preparation', id: 'grilled-vegetables-prep', quantity: 120, unit: 'gram' }
+      ]
+    }
+  ]
+}
+```
+
+## Структура рецептов
+
+### Полуфабрикат (preparation) - готовится заранее
+
+```typescript
+// Картофельное пюре - готовим 1.5кг заранее
+{
+  name: "Картофельное пюре",
+  type: "garnish",
+  recipe: [
+    { type: 'product', id: 'potato-id', quantity: 1000, unit: 'gram' },
+    { type: 'product', id: 'butter-id', quantity: 100, unit: 'gram' },
+    { type: 'product', id: 'milk-id', quantity: 200, unit: 'ml' }
+  ],
+  outputQuantity: 1500,  // получается 1500 грамм готового пюре
+  outputUnit: 'gram'
+}
+
+// Картошка фри - готовим 2кг заранее
+{
+  name: "Картошка фри",
+  type: "garnish",
+  recipe: [
+    { type: 'product', id: 'potato-id', quantity: 1500, unit: 'gram' },
+    { type: 'product', id: 'oil-id', quantity: 200, unit: 'ml' },
+    { type: 'product', id: 'salt-id', quantity: 10, unit: 'gram' }
+  ],
+  outputQuantity: 2000,  // получается 2000 грамм готовой картошки фри
+  outputUnit: 'gram'
+}
+```
+
+### Рецепт блюда (простой)
+
+```typescript
+// Стейк (отдельное блюдо)
+{
+  name: "Beef Steak",
+  type: "main_dish",
+  composition: [
+    { type: 'product', id: 'beef-steak-id', quantity: 200, unit: 'gram' },
+    { type: 'product', id: 'black-pepper-id', quantity: 2, unit: 'gram' },
+    { type: 'product', id: 'salt-id', quantity: 3, unit: 'gram' },
+    { type: 'product', id: 'oil-id', quantity: 10, unit: 'ml' }
+  ],
+  outputQuantity: 200,  // получается стейк 200 грамм
+  outputUnit: 'gram'
+}
+```
+
+### Позиция в меню (композитная)
+
+```typescript
+// В меню НЕ создаем отдельный рецепт, а собираем из существующих
+{
+  name: "Стейк с гарниром",
+  source: null, // композитное блюдо
+  variants: [
+    {
+      name: "с картошкой фри",
+      price: 95000,
+      composition: [
+        { type: 'recipe', id: 'beef-steak-recipe', quantity: 200, unit: 'gram', role: 'main' },
+        { type: 'preparation', id: 'french-fries-prep', quantity: 150, unit: 'gram', role: 'garnish' }
+      ]
+    }
+  ]
+}
+
+// При заказе списываем:
+// - Из рецепта стейка: говядина 200г, перец 2г, соль 3г, масло 10мл
+// - Из полуфабриката картошки фри: пропорционально 150г из 2000г заготовленных
+//   (картошка 112.5г, масло 15мл, соль 0.75г)
+```
+
+## Этапы миграции
+
+### Этап 1: Переименование ingredients → preparations
+
+- [ ] Обновить `stores/recipes/types.ts`:
+  - `Ingredient` → `Preparation`
+  - Изменить поля, убрать возможность использовать другие рецепты
+- [ ] Обновить `stores/recipes/recipeStore.ts`
+- [ ] Обновить UI компоненты: переименовать кнопки, заголовки
+
+### Этап 2: Добавление связок в menu
+
+- [ ] Обновить `stores/menu/types.ts`:
+  - Добавить `MenuItemSource` в `MenuItem` и `MenuItemVariant`
+- [ ] Обновить `MenuItemDialog.vue`:
+  - Добавить выбор источника для позиции
+  - Добавить выбор источника для вариантов
+
+### Этап 3: Обновление recipes для работы с preparations
+
+- [ ] Обновить типы: `RecipeComponent` с `type: 'product' | 'preparation'`
+- [ ] Обновить UI для выбора продуктов и полуфабрикатов в рецептах
+
+### Этап 4: Миграция данных
+
+- [ ] Скрипт миграции Firebase:
+  - `ingredients` → `preparations`
+  - Обновить существующие recipes
+  - Добавить source в menuItems
+
+## Структура файлов (минимальные изменения)
+
+```
+src/stores/
+├── products/              # ✅ УЖЕ ЕСТЬ (БЕЗ ИЗМЕНЕНИЙ - только costPerUnit)
+├── recipes/              # ОБНОВИТЬ
+│   ├── types.ts         # Preparation + Recipe с composition
+│   ├── recipeStore.ts   # работа с preparations и recipes
+│   └── recipeService.ts
+└── menu/                # ОБНОВИТЬ
+    ├── types.ts        # MenuItemSource
+    └── menuStore.ts    # связки с products/recipes
+
+src/views/recipes/       # ПЕРЕИМЕНОВАТЬ ingredients → preparations в UI
+src/views/menu/          # ДОБАВИТЬ выбор источников
+```
+
+## Преимущества упрощенной структуры
+
+1. **Правильная бизнес-логика**:
+
+   - Products = только себестоимость закупки
+   - Menu = цены продажи и прибыль
+   - Четкое разделение закупки и продаж
+
+2. **Простота реализации**: минимальные изменения в существующей системе
+
+3. **Четкое разделение**:
+
+   - Products = сырье + готовая продукция (только costPerUnit)
+   - Preparations = полуфабрикаты (только из продуктов)
+   - Recipes = готовые блюда (из продуктов + полуфабрикатов)
+   - Menu = что продаем (связки с products/recipes + цены продажи)
+
+4. **Гибкость вариантов**: разные варианты могут ссылаться на разные рецепты
+
+5. **Готовность к расчетам**:
+   - Себестоимость = сумма всех costPerUnit использованных продуктов
+   - Прибыль = цена в меню - себестоимость
+
+**Такой упрощенный подход подходит?** Начинаем с переименования ingredients → preparations?

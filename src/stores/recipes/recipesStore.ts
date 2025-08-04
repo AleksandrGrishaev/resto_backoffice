@@ -12,12 +12,15 @@ import { DebugUtils } from '@/utils'
 import type {
   Recipe,
   Ingredient,
+  Preparation, // НОВОЕ
   MenuRecipeLink,
   CostCalculation,
   CreateRecipeData,
   CreateIngredientData,
+  CreatePreparationData, // НОВОЕ
   Unit,
   IngredientCategory,
+  PreparationType, // НОВОЕ
   RecipeCategory
 } from './types'
 
@@ -28,6 +31,7 @@ interface RecipesState {
   error: string | null
   selectedRecipe: Recipe | null
   selectedIngredient: Ingredient | null
+  selectedPreparation: Preparation | null // НОВОЕ
   costCalculations: Map<string, CostCalculation>
 }
 
@@ -44,19 +48,21 @@ export const useRecipesStore = defineStore('recipes', () => {
     error: null,
     selectedRecipe: null,
     selectedIngredient: null,
+    selectedPreparation: null, // НОВОЕ
     costCalculations: new Map()
   })
 
   // Data refs
   const recipes = ref<Recipe[]>([])
   const ingredients = ref<Ingredient[]>([])
+  const preparations = ref<Preparation[]>([]) // НОВОЕ
   const units = ref<Unit[]>([])
   const menuRecipeLinks = ref<MenuRecipeLink[]>([])
 
   // Getters
   const activeRecipes = computed(() => recipes.value.filter(r => r.isActive))
-
   const activeIngredients = computed(() => ingredients.value.filter(i => i.isActive))
+  const activePreparations = computed(() => preparations.value.filter(p => p.isActive)) // НОВОЕ
 
   const recipesByCategory = computed(() => {
     const categories: Record<RecipeCategory, Recipe[]> = {
@@ -94,8 +100,24 @@ export const useRecipesStore = defineStore('recipes', () => {
     return categories
   })
 
-  const compositeIngredients = computed(() => activeIngredients.value.filter(i => i.isComposite))
+  // НОВОЕ: Preparations by category
+  const preparationsByCategory = computed(() => {
+    const categories: Record<PreparationType, Preparation[]> = {
+      sauce: [],
+      garnish: [],
+      marinade: [],
+      semifinished: [],
+      seasoning: []
+    }
 
+    activePreparations.value.forEach(preparation => {
+      categories[preparation.category].push(preparation)
+    })
+
+    return categories
+  })
+
+  const compositeIngredients = computed(() => activeIngredients.value.filter(i => i.isComposite))
   const baseIngredients = computed(() => activeIngredients.value.filter(i => !i.isComposite))
 
   // Actions
@@ -104,7 +126,13 @@ export const useRecipesStore = defineStore('recipes', () => {
   async function initialize(): Promise<void> {
     try {
       state.value.loading = true
-      await Promise.all([fetchRecipes(), fetchIngredients(), fetchUnits(), fetchMenuRecipeLinks()])
+      await Promise.all([
+        fetchRecipes(),
+        fetchIngredients(),
+        fetchPreparations(), // НОВОЕ
+        fetchUnits(),
+        fetchMenuRecipeLinks()
+      ])
       DebugUtils.info(MODULE_NAME, 'Store initialized')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to initialize'
@@ -116,7 +144,7 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
-  // Recipes
+  // Recipes (БЕЗ ИЗМЕНЕНИЙ)
   async function fetchRecipes(): Promise<void> {
     try {
       recipes.value = await recipeService.getAll()
@@ -199,7 +227,7 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
-  // Ingredients
+  // Ingredients (БЕЗ ИЗМЕНЕНИЙ)
   async function fetchIngredients(): Promise<void> {
     try {
       ingredients.value = await ingredientService.getAll()
@@ -265,7 +293,88 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
-  // Units
+  // НОВОЕ: Preparations
+  async function fetchPreparations(): Promise<void> {
+    try {
+      // Загружаем mock данные
+      const { mockPreparations } = await import('./recipesMock')
+      preparations.value = mockPreparations
+      DebugUtils.info(MODULE_NAME, 'Preparations loaded', { count: preparations.value.length })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch preparations'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message)
+      throw error
+    }
+  }
+
+  async function createPreparation(data: CreatePreparationData): Promise<Preparation> {
+    try {
+      state.value.loading = true
+      // Временная реализация - создаем preparation как ingredient
+      const preparation: Preparation = {
+        ...data,
+        id: `prep-${Date.now()}`,
+        isActive: true,
+        isComposite: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+      preparations.value.push(preparation)
+      DebugUtils.info(MODULE_NAME, 'Preparation created', { preparation })
+      return preparation
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create preparation'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message)
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  async function updatePreparation(id: string, data: Partial<Preparation>): Promise<Preparation> {
+    try {
+      state.value.loading = true
+      const index = preparations.value.findIndex(p => p.id === id)
+      if (index === -1) {
+        throw new Error('Preparation not found')
+      }
+
+      preparations.value[index] = {
+        ...preparations.value[index],
+        ...data,
+        updatedAt: new Date()
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Preparation updated', { id, data })
+      return preparations.value[index]
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update preparation'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message)
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  async function deletePreparation(id: string): Promise<void> {
+    try {
+      state.value.loading = true
+      preparations.value = preparations.value.filter(p => p.id !== id)
+      DebugUtils.info(MODULE_NAME, 'Preparation deleted', { id })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete preparation'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message)
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  // Units (БЕЗ ИЗМЕНЕНИЙ)
   async function fetchUnits(): Promise<void> {
     try {
       units.value = await unitService.getAll()
@@ -278,7 +387,7 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
-  // Menu Recipe Links
+  // Menu Recipe Links (БЕЗ ИЗМЕНЕНИЙ)
   async function fetchMenuRecipeLinks(): Promise<void> {
     try {
       menuRecipeLinks.value = await menuRecipeLinkService.getAll()
@@ -320,7 +429,7 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
-  // Cost calculation
+  // Cost calculation (БЕЗ ИЗМЕНЕНИЙ)
   async function calculateRecipeCost(recipeId: string): Promise<CostCalculation | null> {
     try {
       const calculation = await recipeService.calculateCost(recipeId, ingredientService)
@@ -346,6 +455,11 @@ export const useRecipesStore = defineStore('recipes', () => {
     return ingredients.value.find(i => i.id === id)
   }
 
+  function getPreparationById(id: string): Preparation | undefined {
+    // НОВОЕ
+    return preparations.value.find(p => p.id === id)
+  }
+
   function getUnitById(id: string): Unit | undefined {
     return units.value.find(u => u.id === id)
   }
@@ -358,6 +472,11 @@ export const useRecipesStore = defineStore('recipes', () => {
     return activeIngredients.value.filter(i => i.category === category)
   }
 
+  function getPreparationsByCategory(category: PreparationType): Preparation[] {
+    // НОВОЕ
+    return activePreparations.value.filter(p => p.category === category)
+  }
+
   // Selection
   function selectRecipe(recipe: Recipe | null): void {
     state.value.selectedRecipe = recipe
@@ -365,6 +484,11 @@ export const useRecipesStore = defineStore('recipes', () => {
 
   function selectIngredient(ingredient: Ingredient | null): void {
     state.value.selectedIngredient = ingredient
+  }
+
+  function selectPreparation(preparation: Preparation | null): void {
+    // НОВОЕ
+    state.value.selectedPreparation = preparation
   }
 
   // Clear error
@@ -377,14 +501,17 @@ export const useRecipesStore = defineStore('recipes', () => {
     state,
     recipes,
     ingredients,
+    preparations, // НОВОЕ
     units,
     menuRecipeLinks,
 
     // Getters
     activeRecipes,
     activeIngredients,
+    activePreparations, // НОВОЕ
     recipesByCategory,
     ingredientsByCategory,
+    preparationsByCategory, // НОВОЕ
     compositeIngredients,
     baseIngredients,
 
@@ -404,6 +531,12 @@ export const useRecipesStore = defineStore('recipes', () => {
     updateIngredient,
     deleteIngredient,
 
+    // Preparations (НОВОЕ)
+    fetchPreparations,
+    createPreparation,
+    updatePreparation,
+    deletePreparation,
+
     // Units
     fetchUnits,
 
@@ -417,13 +550,16 @@ export const useRecipesStore = defineStore('recipes', () => {
     // Getters
     getRecipeById,
     getIngredientById,
+    getPreparationById, // НОВОЕ
     getUnitById,
     getRecipesByCategory,
     getIngredientsByCategory,
+    getPreparationsByCategory, // НОВОЕ
 
     // Selection
     selectRecipe,
     selectIngredient,
+    selectPreparation, // НОВОЕ
 
     // Utils
     clearError

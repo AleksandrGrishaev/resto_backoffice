@@ -13,6 +13,8 @@ export type {
   UpdateProductData
 } from './types'
 
+export * from './productsMock'
+
 // Экспорт констант
 export { PRODUCT_CATEGORIES, MEASUREMENT_UNITS } from './types'
 

@@ -1,16 +1,19 @@
 // src/stores/productsStore/productsMock.ts
 import type { Product } from './types'
-import { TimeUtils } from '@/utils'
 
-const now = TimeUtils.getCurrentLocalISO()
+const now = new Date().toISOString()
 
 export const mockProducts: Product[] = [
+  // =============================================
+  // МЯСО И ПТИЦА
+  // =============================================
   {
-    id: 'prod-1',
-    name: 'Говядина (вырезка)',
+    id: 'prod-beef-steak',
+    name: 'Говядина (стейк)',
     category: 'meat',
     unit: 'kg',
-    yieldPercentage: 95, // 95% выход после обработки
+    costPerUnit: 180000, // 180,000 IDR за кг
+    yieldPercentage: 95,
     description: 'Премиальная говяжья вырезка для стейков',
     isActive: true,
     storageConditions: 'Холодильник +2°C до +4°C',
@@ -19,13 +22,18 @@ export const mockProducts: Product[] = [
     createdAt: now,
     updatedAt: now
   },
+
+  // =============================================
+  // ОВОЩИ
+  // =============================================
   {
-    id: 'prod-2',
-    name: 'Картофель молодой',
+    id: 'prod-potato',
+    name: 'Картофель',
     category: 'vegetables',
     unit: 'kg',
-    yieldPercentage: 85, // 85% после очистки
-    description: 'Молодой картофель для гарниров',
+    costPerUnit: 8000, // 8,000 IDR за кг
+    yieldPercentage: 85, // учитываем очистку
+    description: 'Картофель для гарниров и блюд',
     isActive: true,
     storageConditions: 'Прохладное сухое место',
     shelfLife: 14,
@@ -33,13 +41,82 @@ export const mockProducts: Product[] = [
     createdAt: now,
     updatedAt: now
   },
+
   {
-    id: 'prod-3',
+    id: 'prod-tomato',
+    name: 'Помидоры свежие',
+    category: 'vegetables',
+    unit: 'kg',
+    costPerUnit: 12000, // 12,000 IDR за кг
+    yieldPercentage: 95,
+    description: 'Свежие помидоры для соуса и салатов',
+    isActive: true,
+    storageConditions: 'Комнатная температура',
+    shelfLife: 5,
+    minStock: 2,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'prod-onion',
+    name: 'Лук репчатый',
+    category: 'vegetables',
+    unit: 'kg',
+    costPerUnit: 6000, // 6,000 IDR за кг
+    yieldPercentage: 90, // учитываем очистку
+    description: 'Лук для соуса и приготовления',
+    isActive: true,
+    storageConditions: 'Сухое прохладное место',
+    shelfLife: 30,
+    minStock: 2,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'prod-garlic',
+    name: 'Чеснок',
+    category: 'vegetables',
+    unit: 'kg',
+    costPerUnit: 25000, // 25,000 IDR за кг
+    yieldPercentage: 85, // учитываем очистку
+    description: 'Свежий чеснок для приготовления',
+    isActive: true,
+    storageConditions: 'Сухое прохладное место',
+    shelfLife: 60,
+    minStock: 0.5,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // =============================================
+  // МОЛОЧНЫЕ ПРОДУКТЫ
+  // =============================================
+  {
+    id: 'prod-butter',
+    name: 'Масло сливочное',
+    category: 'dairy',
+    unit: 'kg',
+    costPerUnit: 45000, // 45,000 IDR за кг
+    yieldPercentage: 100,
+    description: 'Сливочное масло для приготовления',
+    isActive: true,
+    storageConditions: 'Холодильник +2°C до +6°C',
+    shelfLife: 30,
+    minStock: 1,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'prod-milk',
     name: 'Молоко 3.2%',
     category: 'dairy',
-    unit: 'l',
-    yieldPercentage: 100, // без отходов
-    description: 'Цельное молоко для соусов и напитков',
+    unit: 'liter',
+    costPerUnit: 15000, // 15,000 IDR за литр
+    yieldPercentage: 100,
+    description: 'Цельное молоко для приготовления',
     isActive: true,
     storageConditions: 'Холодильник +2°C до +6°C',
     shelfLife: 7,
@@ -47,55 +124,66 @@ export const mockProducts: Product[] = [
     createdAt: now,
     updatedAt: now
   },
+
+  // =============================================
+  // СПЕЦИИ И ПРИПРАВЫ
+  // =============================================
   {
-    id: 'prod-4',
-    name: 'Помидоры черри',
-    category: 'vegetables',
+    id: 'prod-salt',
+    name: 'Соль поваренная',
+    category: 'spices',
     unit: 'kg',
-    yieldPercentage: 95, // минимальная обработка
-    description: 'Свежие помидоры черри для салатов',
+    costPerUnit: 3000, // 3,000 IDR за кг
+    yieldPercentage: 100,
+    description: 'Соль для приготовления',
     isActive: true,
-    storageConditions: 'Комнатная температура',
-    shelfLife: 5,
-    minStock: 1,
-    createdAt: now,
-    updatedAt: now
-  },
-  {
-    id: 'prod-5',
-    name: 'Лосось атлантический',
-    category: 'seafood',
-    unit: 'kg',
-    yieldPercentage: 80, // филе без костей и кожи
-    description: 'Свежий атлантический лосось',
-    isActive: true,
-    storageConditions: 'Холодильник 0°C до +2°C',
-    shelfLife: 3,
-    minStock: 1,
-    createdAt: now,
-    updatedAt: now
-  },
-  {
-    id: 'prod-6',
-    name: 'Рис жасмин',
-    category: 'cereals',
-    unit: 'kg',
-    yieldPercentage: 100, // без отходов
-    description: 'Ароматный тайский рис жасмин',
-    isActive: true,
-    storageConditions: 'Сухое место при комнатной температуре',
+    storageConditions: 'Сухое место',
     shelfLife: 365,
-    minStock: 2,
+    minStock: 1,
     createdAt: now,
     updatedAt: now
   },
+
   {
-    id: 'prod-7',
+    id: 'prod-black-pepper',
+    name: 'Перец черный молотый',
+    category: 'spices',
+    unit: 'kg',
+    costPerUnit: 120000, // 120,000 IDR за кг
+    yieldPercentage: 100,
+    description: 'Молотый черный перец',
+    isActive: true,
+    storageConditions: 'Сухое место',
+    shelfLife: 720,
+    minStock: 0.1,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'prod-oregano',
+    name: 'Орегано сушеный',
+    category: 'spices',
+    unit: 'kg',
+    costPerUnit: 180000, // 180,000 IDR за кг
+    yieldPercentage: 100,
+    description: 'Сушеный орегано для соуса',
+    isActive: true,
+    storageConditions: 'Сухое место',
+    shelfLife: 365,
+    minStock: 0.1,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  {
+    id: 'prod-basil',
     name: 'Базилик свежий',
     category: 'spices',
     unit: 'pack',
-    yieldPercentage: 90, // минимальная очистка
-    description: 'Свежий базилик для соусов и гарниров',
+    costPerUnit: 8000, // 8,000 IDR за упаковку (100г)
+    yieldPercentage: 90,
+    description: 'Свежий базилик для соуса (упаковка 100г)',
     isActive: true,
     storageConditions: 'Холодильник +4°C до +8°C',
     shelfLife: 7,
@@ -103,13 +191,18 @@ export const mockProducts: Product[] = [
     createdAt: now,
     updatedAt: now
   },
+
+  // =============================================
+  // МАСЛА И ЖИРЫ
+  // =============================================
   {
-    id: 'prod-8',
-    name: 'Масло оливковое Extra Virgin',
+    id: 'prod-olive-oil',
+    name: 'Масло оливковое',
     category: 'other',
-    unit: 'l',
-    yieldPercentage: 100, // без отходов
-    description: 'Оливковое масло холодного отжима',
+    unit: 'liter',
+    costPerUnit: 85000, // 85,000 IDR за литр
+    yieldPercentage: 100,
+    description: 'Оливковое масло для приготовления',
     isActive: true,
     storageConditions: 'Темное прохладное место',
     shelfLife: 720,
@@ -117,43 +210,53 @@ export const mockProducts: Product[] = [
     createdAt: now,
     updatedAt: now
   },
+
+  // =============================================
+  // НАПИТКИ (для перепродажи)
+  // =============================================
   {
-    id: 'prod-9',
-    name: 'Креветки королевские',
-    category: 'seafood',
-    unit: 'kg',
-    yieldPercentage: 70, // очищенные от панциря
-    description: 'Свежие королевские креветки',
+    id: 'prod-beer-bintang-330',
+    name: 'Пиво Bintang 330мл',
+    category: 'beverages',
+    unit: 'piece',
+    costPerUnit: 12000, // 12,000 IDR за бутылку
+    yieldPercentage: 100,
+    description: 'Пиво Bintang в бутылке 330мл',
     isActive: true,
-    storageConditions: 'Холодильник 0°C до +2°C',
-    shelfLife: 2,
-    minStock: 0.5,
+    storageConditions: 'Холодильник +2°C до +6°C',
+    shelfLife: 180,
+    minStock: 24,
     createdAt: now,
     updatedAt: now
   },
+
   {
-    id: 'prod-10',
-    name: 'Сыр пармезан',
-    category: 'dairy',
-    unit: 'kg',
-    yieldPercentage: 95, // небольшие отходы при нарезке
-    description: 'Выдержанный пармезан 24 месяца',
+    id: 'prod-beer-bintang-500',
+    name: 'Пиво Bintang 500мл',
+    category: 'beverages',
+    unit: 'piece',
+    costPerUnit: 18000, // 18,000 IDR за бутылку
+    yieldPercentage: 100,
+    description: 'Пиво Bintang в бутылке 500мл',
     isActive: true,
-    storageConditions: 'Холодильник +4°C до +8°C',
+    storageConditions: 'Холодильник +2°C до +6°C',
     shelfLife: 180,
-    minStock: 0.3,
+    minStock: 12,
     createdAt: now,
     updatedAt: now
   }
 ]
 
-// Функция для получения случайного продукта (для тестирования)
+// Утилиты для работы с mock данными
 export function getRandomProduct(): Product {
   return mockProducts[Math.floor(Math.random() * mockProducts.length)]
 }
 
-// Функция для получения продуктов по категории
 export function getMockProductsByCategory(category: string): Product[] {
   if (category === 'all') return mockProducts
   return mockProducts.filter(product => product.category === category)
+}
+
+export function findProductById(id: string): Product | undefined {
+  return mockProducts.find(product => product.id === id)
 }

@@ -37,10 +37,22 @@
               <v-icon size="small" color="primary" class="me-2">mdi-scale</v-icon>
               <span class="text-caption">Единица:</span>
               <span class="font-weight-medium ms-1">
-                {{ getUnitLabel(product.unit) }}
+                {{ formatUnit(product.unit) }}
               </span>
             </div>
           </v-col>
+          <v-col cols="6">
+            <div class="info-item">
+              <v-icon size="small" color="success" class="me-2">mdi-currency-usd</v-icon>
+              <span class="text-caption">Цена:</span>
+              <span class="font-weight-medium ms-1">
+                {{ formatCurrency(product.costPerUnit) }}
+              </span>
+            </div>
+          </v-col>
+        </v-row>
+
+        <v-row dense class="mt-1">
           <v-col cols="6">
             <div class="info-item">
               <v-icon size="small" color="primary" class="me-2">mdi-percent</v-icon>
@@ -53,6 +65,15 @@
               >
                 {{ product.yieldPercentage }}%
               </v-chip>
+            </div>
+          </v-col>
+          <v-col cols="6">
+            <div class="info-item">
+              <v-icon size="small" color="info" class="me-2">mdi-information</v-icon>
+              <span class="text-caption">ID:</span>
+              <span class="font-weight-medium ms-1 text-caption">
+                {{ product.id.split('-')[0] }}...
+              </span>
             </div>
           </v-col>
         </v-row>
@@ -71,7 +92,7 @@
               <v-icon size="small" color="info" class="me-2">mdi-package-down</v-icon>
               <span class="text-caption">Мин.:</span>
               <span class="font-weight-medium ms-1">
-                {{ product.minStock }} {{ getUnitLabel(product.unit) }}
+                {{ product.minStock }} {{ formatUnit(product.unit) }}
               </span>
             </div>
           </v-col>
@@ -140,7 +161,8 @@
 
 <script setup lang="ts">
 import type { Product } from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES, MEASUREMENT_UNITS } from '@/stores/productsStore'
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 import { Formatter } from '@/utils'
 
 // Props
@@ -162,13 +184,24 @@ interface Emits {
 
 defineEmits<Emits>()
 
+// Composables
+const { getUnitName } = useMeasurementUnits()
+
 // Методы
 const getCategoryLabel = (category: string): string => {
   return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
 }
 
-const getUnitLabel = (unit: string): string => {
-  return MEASUREMENT_UNITS[unit as keyof typeof MEASUREMENT_UNITS] || unit
+const formatUnit = (unit: string): string => {
+  return getUnitName(unit as any)
+}
+
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount)
 }
 
 const getCategoryColor = (category: string): string => {
