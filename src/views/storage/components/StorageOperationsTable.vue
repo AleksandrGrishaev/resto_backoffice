@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/StorageOperationsTable.vue -->
+<!-- src/views/storage/components/StorageOperationsTable.vue - ИСПРАВЛЕННАЯ ВЕРСИЯ -->
 <template>
   <div class="storage-operations-table">
     <!-- Filters Section -->
@@ -192,6 +192,118 @@
         </template>
       </v-data-table>
     </v-card>
+
+    <!-- Operation Details Dialog -->
+    <v-dialog v-model="showDetailsDialog" max-width="600px">
+      <v-card v-if="selectedOperation">
+        <v-card-title class="d-flex align-center justify-space-between">
+          <div>
+            <h3>Operation Details</h3>
+            <div class="text-caption text-medium-emphasis">
+              {{ selectedOperation.documentNumber }}
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="showDetailsDialog = false" />
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text class="pa-6">
+          <!-- Operation Info -->
+          <v-row class="mb-4">
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 mb-1">Operation Type</div>
+              <v-chip :color="getOperationColor(selectedOperation.operationType)" size="small">
+                <v-icon
+                  :icon="getOperationIcon(selectedOperation.operationType)"
+                  size="14"
+                  class="mr-1"
+                />
+                {{ formatOperationType(selectedOperation.operationType) }}
+              </v-chip>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 mb-1">Date & Time</div>
+              <div>{{ formatDateTime(selectedOperation.operationDate) }}</div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 mb-1">Responsible Person</div>
+              <div>{{ selectedOperation.responsiblePerson }}</div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 mb-1">Status</div>
+              <v-chip
+                :color="selectedOperation.status === 'confirmed' ? 'success' : 'warning'"
+                size="small"
+              >
+                {{ selectedOperation.status === 'confirmed' ? 'Confirmed' : 'Draft' }}
+              </v-chip>
+            </v-col>
+          </v-row>
+
+          <!-- Items List -->
+          <div class="mb-4">
+            <div class="text-subtitle-2 mb-2">Items ({{ selectedOperation.items.length }})</div>
+            <v-card variant="outlined">
+              <v-list density="compact">
+                <v-list-item
+                  v-for="(item, index) in selectedOperation.items"
+                  :key="index"
+                  class="px-4"
+                >
+                  <template #prepend>
+                    <div class="item-icon mr-3">
+                      {{ item.itemType === 'product' ? '🥩' : '🍲' }}
+                    </div>
+                  </template>
+
+                  <v-list-item-title>
+                    <div class="d-flex align-center justify-space-between">
+                      <div>
+                        <div class="font-weight-medium">{{ item.itemName }}</div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ item.quantity }} {{ item.unit }}
+                        </div>
+                      </div>
+                      <div v-if="item.totalCost" class="text-right">
+                        <div class="font-weight-medium">{{ formatCurrency(item.totalCost) }}</div>
+                      </div>
+                    </div>
+                  </v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-card>
+          </div>
+
+          <!-- Total Value -->
+          <div v-if="selectedOperation.totalValue" class="mb-4">
+            <v-card variant="tonal" color="primary">
+              <v-card-text class="d-flex align-center justify-space-between">
+                <div class="text-subtitle-1 font-weight-medium">Total Value</div>
+                <div class="text-h6 font-weight-bold">
+                  {{ formatCurrency(selectedOperation.totalValue) }}
+                </div>
+              </v-card-text>
+            </v-card>
+          </div>
+
+          <!-- Notes -->
+          <div v-if="selectedOperation.notes">
+            <div class="text-subtitle-2 mb-1">Notes</div>
+            <v-card variant="outlined">
+              <v-card-text>{{ selectedOperation.notes }}</v-card-text>
+            </v-card>
+          </div>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="outlined" @click="showDetailsDialog = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -211,7 +323,7 @@ interface Props {
   department: StorageDepartment
 }
 
-defineProps<Props>()
+const props = defineProps<Props>() // ✅ ИСПРАВЛЕНО: Правильное определение props
 
 // State
 const filters = ref({
@@ -222,6 +334,8 @@ const filters = ref({
 })
 
 const sortOrder = ref<'asc' | 'desc'>('desc')
+const showDetailsDialog = ref(false)
+const selectedOperation = ref<StorageOperation | null>(null)
 
 // Computed
 const headers = computed(() => [
@@ -259,8 +373,10 @@ const hasActiveFilters = computed(
     filters.value.itemSearch
 )
 
+// ✅ ИСПРАВЛЕНО: Правильное использование props внутри computed
 const filteredOperations = computed(() => {
   try {
+    // ✅ ИСПРАВЛЕНО: Используем props.operations вместо просто props.operations
     let result = [...(props.operations || [])]
 
     // Date range filter
@@ -372,9 +488,10 @@ function formatCurrency(amount: number): string {
 }
 
 function getItemsSummary(items: StorageOperationItem[]): string {
-  if (items.length === 0) return 'No items'
-  if (items.length === 1) return items[0].itemName
-  return `${items[0].itemName} +${items.length - 1} more`
+  if (!items || items.length === 0) return 'No items'
+  if (items.length === 1) return items[0]?.itemName || 'Unknown item'
+  const firstName = items[0]?.itemName || 'Unknown item'
+  return `${firstName} +${items.length - 1} more`
 }
 
 function toggleQuickFilter(operationType: OperationType) {
@@ -395,8 +512,8 @@ function clearFilters() {
 }
 
 function viewOperation(operation: StorageOperation) {
-  // TODO: Implement operation details view
-  console.log('View operation:', operation)
+  selectedOperation.value = operation
+  showDetailsDialog.value = true
 }
 </script>
 
@@ -408,6 +525,17 @@ function viewOperation(operation: StorageOperation) {
 
   .v-card-title {
     background: rgba(var(--v-theme-surface), 0.8);
+  }
+
+  .item-icon {
+    font-size: 20px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--v-theme-primary), 0.1);
+    border-radius: 6px;
   }
 }
 </style>

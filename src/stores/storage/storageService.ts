@@ -1,5 +1,7 @@
-// src/stores/storage/storageService.ts
+// src/stores/storage/storageService.ts - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import { DebugUtils, TimeUtils } from '@/utils'
+import { useProductsStore } from '@/stores/productsStore'
+import { useRecipesStore } from '@/stores/recipes'
 import {
   mockStorageBatches,
   mockStorageOperations,
@@ -25,13 +27,130 @@ const MODULE_NAME = 'StorageService'
 export class StorageService {
   private batches: StorageBatch[] = [...mockStorageBatches]
   private operations: StorageOperation[] = [...mockStorageOperations]
-  private balances: StorageBalance[] = [...mockStorageBalances]
+  private balances: StorageBalance[] = []
   private inventories: InventoryDocument[] = []
+
+  // ✅ НОВОЕ: Helper для получения данных продукта
+  private getProductInfo(productId: string) {
+    try {
+      const productsStore = useProductsStore()
+      const product = productsStore.products.find(p => p.id === productId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, 'Product not found', { productId })
+        return {
+          name: productId,
+          unit: 'kg',
+          costPerUnit: 0,
+          minStock: 0,
+          shelfLife: 7,
+          canBeSold: false
+        }
+      }
+
+      return {
+        name: product.name,
+        unit: product.unit,
+        costPerUnit: product.costPerUnit,
+        minStock: product.minStock || 0,
+        shelfLife: product.shelfLife || 7,
+        canBeSold: product.canBeSold
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting product info', { error, productId })
+      return {
+        name: productId,
+        unit: 'kg',
+        costPerUnit: 0,
+        minStock: 0,
+        shelfLife: 7,
+        canBeSold: false
+      }
+    }
+  }
+
+  // ✅ НОВОЕ: Helper для получения данных полуфабриката
+  private getPreparationInfo(preparationId: string) {
+    try {
+      const recipesStore = useRecipesStore()
+      const preparation = recipesStore.preparations.find(p => p.id === preparationId)
+
+      if (!preparation) {
+        DebugUtils.warn(MODULE_NAME, 'Preparation not found', { preparationId })
+        return {
+          name: preparationId,
+          unit: 'gram',
+          outputQuantity: 1000,
+          outputUnit: 'gram',
+          costPerPortion: 0
+        }
+      }
+
+      return {
+        name: preparation.name,
+        unit: preparation.outputUnit,
+        outputQuantity: preparation.outputQuantity,
+        outputUnit: preparation.outputUnit,
+        costPerPortion: preparation.costPerPortion || 0
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting preparation info', { error, preparationId })
+      return {
+        name: preparationId,
+        unit: 'gram',
+        outputQuantity: 1000,
+        outputUnit: 'gram',
+        costPerPortion: 0
+      }
+    }
+  }
+
+  // ✅ НОВОЕ: Helper для получения информации о любом item
+  private getItemInfo(itemId: string, itemType: StorageItemType) {
+    if (itemType === 'product') {
+      return this.getProductInfo(itemId)
+    } else {
+      return this.getPreparationInfo(itemId)
+    }
+  }
+
+  // ✅ ИСПРАВЛЕНО: Инициализация с правильными данными
+  async initialize(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Initializing storage service')
+
+      // Загружаем данные из существующих stores
+      const productsStore = useProductsStore()
+      const recipesStore = useRecipesStore()
+
+      // Если данные не загружены, загружаем их
+      if (productsStore.products.length === 0) {
+        await productsStore.loadProducts(true) // используем mock данные
+      }
+
+      if (recipesStore.preparations.length === 0) {
+        await recipesStore.fetchPreparations()
+      }
+
+      // Пересчитываем балансы с правильными данными
+      await this.recalculateAllBalances()
+
+      DebugUtils.info(MODULE_NAME, 'Storage service initialized')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to initialize storage service', { error })
+      throw error
+    }
+  }
 
   // Get all storage balances
   async getBalances(department?: StorageDepartment): Promise<StorageBalance[]> {
     try {
       DebugUtils.info(MODULE_NAME, 'Fetching storage balances', { department })
+
+      // Если балансы пустые, пересчитываем
+      if (this.balances.length === 0) {
+        await this.recalculateAllBalances()
+      }
 
       let balances = [...this.balances]
 
@@ -135,7 +254,226 @@ export class StorageService {
     }
   }
 
-  // Create consumption operation
+  // Добавить этот метод в класс StorageService в storageService.ts
+
+  // ✅ НОВОЕ: Update inventory method
+  async updateInventory(inventoryId: string, items: InventoryItem[]): Promise<InventoryDocument> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating inventory', { inventoryId, itemCount: items.length })
+
+      const inventoryIndex = this.inventories.findIndex(inv => inv.id === inventoryId)
+      if (inventoryIndex === -1) {
+        throw new Error('Inventory not found')
+      }
+
+      const inventory = this.inventories[inventoryIndex]
+
+      // Обновляем товары в инвентаризации
+      inventory.items = items.map(item => ({
+        ...item,
+        // Пересчитываем разность и стоимостную разность
+        difference: item.actualQuantity - item.systemQuantity,
+        valueDifference: (item.actualQuantity - item.systemQuantity) * item.averageCost
+      }))
+
+      // Пересчитываем общие показатели
+      inventory.totalDiscrepancies = inventory.items.filter(
+        item => Math.abs(item.difference) > 0.01
+      ).length
+
+      inventory.totalValueDifference = inventory.items.reduce(
+        (sum, item) => sum + item.valueDifference,
+        0
+      )
+
+      inventory.updatedAt = TimeUtils.getCurrentLocalISO()
+
+      // Обновляем в массиве
+      this.inventories[inventoryIndex] = inventory
+
+      DebugUtils.info(MODULE_NAME, 'Inventory updated successfully', {
+        inventoryId,
+        totalDiscrepancies: inventory.totalDiscrepancies,
+        totalValueDifference: inventory.totalValueDifference
+      })
+
+      return inventory
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update inventory', { error, inventoryId })
+      throw error
+    }
+  }
+
+  // ✅ НОВОЕ: Finalize inventory method
+  async finalizeInventory(inventoryId: string): Promise<StorageOperation[]> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Finalizing inventory', { inventoryId })
+
+      const inventoryIndex = this.inventories.findIndex(inv => inv.id === inventoryId)
+      if (inventoryIndex === -1) {
+        throw new Error('Inventory not found')
+      }
+
+      const inventory = this.inventories[inventoryIndex]
+
+      // Изменяем статус на подтвержденный
+      inventory.status = 'confirmed'
+      inventory.updatedAt = TimeUtils.getCurrentLocalISO()
+
+      const correctionOperations: StorageOperation[] = []
+
+      // Создаем корректирующие операции для расхождений
+      const itemsWithDiscrepancies = inventory.items.filter(
+        item => Math.abs(item.difference) > 0.01
+      )
+
+      if (itemsWithDiscrepancies.length > 0) {
+        // Группируем по типу операции (положительные и отрицательные корректировки)
+        const positiveAdjustments = itemsWithDiscrepancies.filter(item => item.difference > 0)
+        const negativeAdjustments = itemsWithDiscrepancies.filter(item => item.difference < 0)
+
+        // Создаем операцию прихода для излишков
+        if (positiveAdjustments.length > 0) {
+          const receiptOperation = await this.createInventoryAdjustment(
+            inventory,
+            positiveAdjustments,
+            'receipt'
+          )
+          correctionOperations.push(receiptOperation)
+        }
+
+        // Создаем операцию расхода для недостач
+        if (negativeAdjustments.length > 0) {
+          const consumptionOperation = await this.createInventoryAdjustment(
+            inventory,
+            negativeAdjustments,
+            'consumption'
+          )
+          correctionOperations.push(consumptionOperation)
+        }
+      }
+
+      // Обновляем инвентаризацию
+      this.inventories[inventoryIndex] = inventory
+
+      DebugUtils.info(MODULE_NAME, 'Inventory finalized successfully', {
+        inventoryId,
+        correctionOperations: correctionOperations.length,
+        discrepancies: itemsWithDiscrepancies.length
+      })
+
+      return correctionOperations
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to finalize inventory', { error, inventoryId })
+      throw error
+    }
+  }
+
+  // ✅ НОВОЕ: Helper для создания корректирующих операций
+  private async createInventoryAdjustment(
+    inventory: InventoryDocument,
+    items: InventoryItem[],
+    operationType: 'receipt' | 'consumption'
+  ): Promise<StorageOperation> {
+    try {
+      const operationItems = []
+      let totalValue = 0
+
+      for (const item of items) {
+        const adjustmentQuantity = Math.abs(item.difference)
+        const itemCost = adjustmentQuantity * item.averageCost
+
+        if (operationType === 'receipt') {
+          // Для излишков создаем новый батч
+          const batch: StorageBatch = {
+            id: `batch-adj-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            batchNumber: generateBatchNumber(item.itemName, TimeUtils.getCurrentLocalISO()),
+            itemId: item.itemId,
+            itemType: item.itemType,
+            department: inventory.department,
+            initialQuantity: adjustmentQuantity,
+            currentQuantity: adjustmentQuantity,
+            unit: item.unit,
+            costPerUnit: item.averageCost,
+            totalValue: itemCost,
+            receiptDate: TimeUtils.getCurrentLocalISO(),
+            sourceType: 'inventory_adjustment',
+            notes: `Inventory surplus from ${inventory.documentNumber}`,
+            status: 'active',
+            isActive: true,
+            createdAt: TimeUtils.getCurrentLocalISO(),
+            updatedAt: TimeUtils.getCurrentLocalISO()
+          }
+
+          this.batches.push(batch)
+        } else {
+          // Для недостач списываем с существующих батчей
+          const { allocations } = this.calculateFifoAllocation(
+            item.itemId,
+            item.itemType,
+            inventory.department,
+            adjustmentQuantity
+          )
+
+          // Обновляем батчи
+          for (const allocation of allocations) {
+            const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
+            if (batchIndex !== -1) {
+              this.batches[batchIndex].currentQuantity -= allocation.quantity
+              this.batches[batchIndex].totalValue =
+                this.batches[batchIndex].currentQuantity * this.batches[batchIndex].costPerUnit
+              this.batches[batchIndex].updatedAt = TimeUtils.getCurrentLocalISO()
+
+              if (this.batches[batchIndex].currentQuantity <= 0) {
+                this.batches[batchIndex].status = 'consumed'
+                this.batches[batchIndex].isActive = false
+              }
+            }
+          }
+        }
+
+        operationItems.push({
+          id: `item-adj-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          itemId: item.itemId,
+          itemType: item.itemType,
+          itemName: item.itemName,
+          quantity: adjustmentQuantity,
+          unit: item.unit,
+          totalCost: itemCost,
+          averageCostPerUnit: item.averageCost,
+          notes: `Inventory ${operationType === 'receipt' ? 'surplus' : 'shortage'}: ${item.difference} ${item.unit}`
+        })
+
+        totalValue += itemCost
+      }
+
+      // Создаем операцию
+      const operation: StorageOperation = {
+        id: `op-adj-${Date.now()}`,
+        operationType,
+        documentNumber: `${operationType === 'receipt' ? 'ADJ-IN' : 'ADJ-OUT'}-${String(this.operations.length + 1).padStart(3, '0')}`,
+        operationDate: TimeUtils.getCurrentLocalISO(),
+        department: inventory.department,
+        responsiblePerson: inventory.responsiblePerson,
+        items: operationItems,
+        totalValue,
+        status: 'confirmed',
+        notes: `Inventory adjustment from ${inventory.documentNumber}`,
+        relatedInventoryId: inventory.id,
+        createdAt: TimeUtils.getCurrentLocalISO(),
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      this.operations.push(operation)
+
+      return operation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create inventory adjustment', { error })
+      throw error
+    }
+  }
+
+  // ✅ ИСПРАВЛЕНО: Create consumption operation с правильными данными
   async createConsumption(data: CreateConsumptionData): Promise<StorageOperation> {
     try {
       DebugUtils.info(MODULE_NAME, 'Creating consumption operation', { data })
@@ -144,6 +482,9 @@ export class StorageService {
       let totalValue = 0
 
       for (const item of data.items) {
+        // ✅ ИСПРАВЛЕНО: Получаем правильную информацию о товаре
+        const itemInfo = this.getItemInfo(item.itemId, item.itemType)
+
         // Calculate FIFO allocation
         const { allocations, remainingQuantity } = this.calculateFifoAllocation(
           item.itemId,
@@ -153,7 +494,9 @@ export class StorageService {
         )
 
         if (remainingQuantity > 0) {
-          throw new Error(`Insufficient stock for ${item.itemId}. Missing: ${remainingQuantity}`)
+          throw new Error(
+            `Insufficient stock for ${itemInfo.name}. Missing: ${remainingQuantity} ${itemInfo.unit}`
+          )
         }
 
         // Calculate cost
@@ -166,9 +509,9 @@ export class StorageService {
           id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           itemId: item.itemId,
           itemType: item.itemType,
-          itemName: item.itemId, // TODO: Get actual name from Product/Recipe store
+          itemName: itemInfo.name, // ✅ ИСПРАВЛЕНО: правильное название
           quantity: item.quantity,
-          unit: 'kg', // TODO: Get actual unit from Product/Recipe store
+          unit: itemInfo.unit, // ✅ ИСПРАВЛЕНО: правильная единица измерения
           batchAllocations: allocations,
           totalCost,
           notes: item.notes
@@ -227,7 +570,7 @@ export class StorageService {
     }
   }
 
-  // Create receipt operation
+  // ✅ ИСПРАВЛЕНО: Create receipt operation с правильными данными
   async createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
     try {
       DebugUtils.info(MODULE_NAME, 'Creating receipt operation', { data })
@@ -236,16 +579,19 @@ export class StorageService {
       let totalValue = 0
 
       for (const item of data.items) {
+        // ✅ ИСПРАВЛЕНО: Получаем правильную информацию о товаре
+        const itemInfo = this.getItemInfo(item.itemId, item.itemType)
+
         // Create new batch
         const batch: StorageBatch = {
           id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          batchNumber: generateBatchNumber(item.itemId, TimeUtils.getCurrentLocalISO()),
+          batchNumber: generateBatchNumber(itemInfo.name, TimeUtils.getCurrentLocalISO()),
           itemId: item.itemId,
           itemType: item.itemType,
           department: data.department,
           initialQuantity: item.quantity,
           currentQuantity: item.quantity,
-          unit: 'kg', // TODO: Get from Product/Recipe store
+          unit: itemInfo.unit, // ✅ ИСПРАВЛЕНО: правильная единица измерения
           costPerUnit: item.costPerUnit,
           totalValue: item.quantity * item.costPerUnit,
           receiptDate: TimeUtils.getCurrentLocalISO(),
@@ -264,7 +610,7 @@ export class StorageService {
           id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           itemId: item.itemId,
           itemType: item.itemType,
-          itemName: item.itemId, // TODO: Get actual name
+          itemName: itemInfo.name, // ✅ ИСПРАВЛЕНО: правильное название
           quantity: item.quantity,
           unit: batch.unit,
           totalCost: batch.totalValue,
@@ -309,7 +655,7 @@ export class StorageService {
     }
   }
 
-  // Start inventory process
+  // ✅ ИСПРАВЛЕНО: Start inventory process с правильными данными
   async startInventory(data: CreateInventoryData): Promise<InventoryDocument> {
     try {
       DebugUtils.info(MODULE_NAME, 'Starting inventory', { data })
@@ -323,7 +669,7 @@ export class StorageService {
         id: `inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         itemId: balance.itemId,
         itemType: balance.itemType,
-        itemName: balance.itemName,
+        itemName: balance.itemName, // ✅ Уже правильное название из balance
         systemQuantity: balance.totalQuantity,
         actualQuantity: balance.totalQuantity, // Default to system quantity
         difference: 0,
@@ -361,6 +707,45 @@ export class StorageService {
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to start inventory', { error })
       throw error
+    }
+  }
+
+  // ✅ НОВОЕ: Получить популярные товары для быстрого выбора
+  getQuickProducts(department: StorageDepartment): any[] {
+    try {
+      const productsStore = useProductsStore()
+
+      // Фильтруем продукты по департаменту (упрощенная логика)
+      const allProducts = productsStore.rawProducts // товары для приготовления
+
+      // Берем первые 10 продуктов как "популярные"
+      return allProducts.slice(0, 10).map(product => ({
+        id: product.id,
+        name: product.name,
+        unit: product.unit,
+        category: product.category
+      }))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get quick products', { error })
+      return []
+    }
+  }
+
+  // ✅ НОВОЕ: Получить популярные полуфабрикаты
+  getQuickPreparations(department: StorageDepartment): any[] {
+    try {
+      const recipesStore = useRecipesStore()
+
+      // Берем первые 10 полуфабрикатов как "популярные"
+      return recipesStore.activePreparations.slice(0, 10).map(prep => ({
+        id: prep.id,
+        name: prep.name,
+        unit: prep.outputUnit,
+        type: prep.type
+      }))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get quick preparations', { error })
+      return []
     }
   }
 
@@ -424,7 +809,28 @@ export class StorageService {
     }
   }
 
-  // Recalculate balances for department
+  // ✅ НОВОЕ: Пересчет всех балансов
+  private async recalculateAllBalances(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Recalculating all balances')
+
+      // Очищаем старые балансы
+      this.balances = []
+
+      // Пересчитываем для каждого департамента
+      await this.recalculateBalances('kitchen')
+      await this.recalculateBalances('bar')
+
+      DebugUtils.info(MODULE_NAME, 'All balances recalculated', {
+        count: this.balances.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to recalculate all balances', { error })
+      throw error
+    }
+  }
+
+  // ✅ ИСПРАВЛЕНО: Recalculate balances с правильными названиями
   private async recalculateBalances(department: StorageDepartment): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Recalculating balances', { department })
@@ -450,6 +856,9 @@ export class StorageService {
         const itemId = firstBatch.itemId
         const itemType = firstBatch.itemType
 
+        // ✅ ИСПРАВЛЕНО: Получаем правильную информацию о товаре
+        const itemInfo = this.getItemInfo(itemId, itemType)
+
         // Calculate totals
         const totalQuantity = batches.reduce((sum, b) => sum + b.currentQuantity, 0)
         const totalValue = batches.reduce((sum, b) => sum + b.totalValue, 0)
@@ -470,18 +879,18 @@ export class StorageService {
           else if (latestCost < oldestCost * 0.95) costTrend = 'down'
         }
 
-        // Update or create balance
-        const existingBalanceIndex = this.balances.findIndex(
-          b => b.itemId === itemId && b.itemType === itemType && b.department === department
-        )
+        // ✅ ИСПРАВЛЕНО: Проверка на низкий остаток с правильным minStock
+        const minStock = itemType === 'product' ? (itemInfo as any).minStock || 1 : 0.5
+        const belowMinStock = totalQuantity < minStock
 
+        // Update or create balance
         const balance: StorageBalance = {
           itemId,
           itemType,
-          itemName: itemId, // TODO: Get actual name
+          itemName: itemInfo.name, // ✅ ИСПРАВЛЕНО: правильное название
           department,
           totalQuantity,
-          unit: firstBatch.unit,
+          unit: itemInfo.unit, // ✅ ИСПРАВЛЕНО: правильная единица измерения
           totalValue,
           averageCost,
           latestCost,
@@ -491,15 +900,17 @@ export class StorageService {
           newestBatchDate: sortedBatches[sortedBatches.length - 1].receiptDate,
           hasExpired: false, // TODO: Check expiry logic
           hasNearExpiry: false, // TODO: Check expiry logic
-          belowMinStock: totalQuantity < 2, // Simplified logic
+          belowMinStock, // ✅ ИСПРАВЛЕНО: правильная проверка
           lastCalculated: TimeUtils.getCurrentLocalISO()
         }
 
-        if (existingBalanceIndex !== -1) {
-          this.balances[existingBalanceIndex] = balance
-        } else {
-          this.balances.push(balance)
-        }
+        // Remove old balance for this item if exists
+        this.balances = this.balances.filter(
+          b => !(b.itemId === itemId && b.itemType === itemType && b.department === department)
+        )
+
+        // Add new balance
+        this.balances.push(balance)
       }
 
       DebugUtils.info(MODULE_NAME, 'Balances recalculated', { department })

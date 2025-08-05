@@ -1,24 +1,29 @@
-// src/stores/storage/storageMock.ts
+// src/stores/storage/storageMock.ts - УЛУЧШЕННАЯ ВЕРСИЯ
+
 import { TimeUtils } from '@/utils'
 import type { StorageBatch, StorageOperation, StorageBalance } from './types'
 
-// Mock storage batches for testing FIFO
+// ✅ УЛУЧШЕНО: Более реалистичные mock данные с правильной интеграцией
 export const mockStorageBatches: StorageBatch[] = [
-  // Kitchen Products
+  // =============================================
+  // KITCHEN PRODUCTS - RAW MATERIALS
+  // =============================================
+
+  // Мясо - говядина для стейков (2 разные поставки с разными ценами)
   {
     id: 'batch-001',
     batchNumber: 'B-BEEF-001-20250201',
-    itemId: 'beef-steak',
+    itemId: 'prod-beef-steak',
     itemType: 'product',
     department: 'kitchen',
     initialQuantity: 5,
-    currentQuantity: 2.5,
+    currentQuantity: 2.5, // частично использовано
     unit: 'kg',
-    costPerUnit: 180000,
-    totalValue: 450000,
+    costPerUnit: 180000, // первая поставка по 180k
+    totalValue: 450000, // 2.5 * 180000
     receiptDate: '2025-02-01T08:00:00Z',
-    expiryDate: '2025-02-08T23:59:59Z',
-    sourceType: 'opening_balance',
+    expiryDate: '2025-02-08T23:59:59Z', // 7 дней с даты поступления
+    sourceType: 'purchase',
     status: 'active',
     isActive: true,
     createdAt: TimeUtils.getCurrentLocalISO(),
@@ -27,112 +32,318 @@ export const mockStorageBatches: StorageBatch[] = [
   {
     id: 'batch-002',
     batchNumber: 'B-BEEF-002-20250203',
-    itemId: 'beef-steak',
+    itemId: 'prod-beef-steak',
     itemType: 'product',
     department: 'kitchen',
     initialQuantity: 3,
-    currentQuantity: 3,
+    currentQuantity: 3, // новая поставка, не тронута
     unit: 'kg',
-    costPerUnit: 185000, // Price increase
-    totalValue: 555000,
+    costPerUnit: 185000, // цена выросла на 5k
+    totalValue: 555000, // 3 * 185000
     receiptDate: '2025-02-03T10:00:00Z',
     expiryDate: '2025-02-10T23:59:59Z',
-    sourceType: 'opening_balance',
+    sourceType: 'purchase',
     status: 'active',
     isActive: true,
     createdAt: TimeUtils.getCurrentLocalISO(),
     updatedAt: TimeUtils.getCurrentLocalISO()
   },
+
+  // Картофель - большая поставка
   {
     id: 'batch-003',
     batchNumber: 'B-POTATO-001-20250201',
-    itemId: 'potato',
+    itemId: 'prod-potato',
     itemType: 'product',
     department: 'kitchen',
     initialQuantity: 20,
-    currentQuantity: 15,
+    currentQuantity: 15, // часть использована на полуфабрикаты
     unit: 'kg',
     costPerUnit: 8000,
-    totalValue: 120000,
+    totalValue: 120000, // 15 * 8000
     receiptDate: '2025-02-01T08:00:00Z',
-    expiryDate: '2025-02-15T23:59:59Z',
-    sourceType: 'opening_balance',
+    expiryDate: '2025-02-15T23:59:59Z', // 14 дней срок годности
+    sourceType: 'purchase',
     status: 'active',
     isActive: true,
     createdAt: TimeUtils.getCurrentLocalISO(),
     updatedAt: TimeUtils.getCurrentLocalISO()
   },
+
+  // Помидоры - скоропортящийся товар
   {
     id: 'batch-004',
+    batchNumber: 'B-TOMATO-001-20250202',
+    itemId: 'prod-tomato',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 3,
+    currentQuantity: 2, // часть использована на соус
+    unit: 'kg',
+    costPerUnit: 12000,
+    totalValue: 24000, // 2 * 12000
+    receiptDate: '2025-02-02T08:00:00Z',
+    expiryDate: '2025-02-07T23:59:59Z', // скоро истечет
+    sourceType: 'purchase',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // Лук - долгохранящийся
+  {
+    id: 'batch-005',
+    batchNumber: 'B-ONION-001-20250201',
+    itemId: 'prod-onion',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 5,
+    currentQuantity: 3, // частично использован
+    unit: 'kg',
+    costPerUnit: 6000,
+    totalValue: 18000, // 3 * 6000
+    receiptDate: '2025-02-01T08:00:00Z',
+    expiryDate: '2025-03-01T23:59:59Z', // 30 дней
+    sourceType: 'purchase',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // Чеснок - малое количество, дорогой
+  {
+    id: 'batch-006',
     batchNumber: 'B-GARLIC-001-20250202',
-    itemId: 'garlic',
+    itemId: 'prod-garlic',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 2,
+    currentQuantity: 0.3, // остатки критично мало!
+    unit: 'kg',
+    costPerUnit: 25000,
+    totalValue: 7500, // 0.3 * 25000
+    receiptDate: '2025-02-02T09:00:00Z',
+    expiryDate: '2025-04-02T23:59:59Z', // долго хранится
+    sourceType: 'purchase',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // Масло оливковое
+  {
+    id: 'batch-007',
+    batchNumber: 'B-OLIVE-001-20250201',
+    itemId: 'prod-olive-oil',
     itemType: 'product',
     department: 'kitchen',
     initialQuantity: 2,
     currentQuantity: 1.5,
-    unit: 'kg',
-    costPerUnit: 25000,
-    totalValue: 37500,
-    receiptDate: '2025-02-02T09:00:00Z',
-    expiryDate: '2025-02-20T23:59:59Z',
-    sourceType: 'opening_balance',
+    unit: 'liter',
+    costPerUnit: 85000,
+    totalValue: 127500, // 1.5 * 85000
+    receiptDate: '2025-02-01T08:00:00Z',
+    expiryDate: '2027-02-01T23:59:59Z', // очень долго хранится
+    sourceType: 'purchase',
     status: 'active',
     isActive: true,
     createdAt: TimeUtils.getCurrentLocalISO(),
     updatedAt: TimeUtils.getCurrentLocalISO()
   },
-  // Bar Products
+
+  // Сливочное масло - холодильное хранение
   {
-    id: 'batch-005',
-    batchNumber: 'B-VODKA-001-20250201',
-    itemId: 'vodka',
+    id: 'batch-008',
+    batchNumber: 'B-BUTTER-001-20250203',
+    itemId: 'prod-butter',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 2,
+    currentQuantity: 1.2,
+    unit: 'kg',
+    costPerUnit: 45000,
+    totalValue: 54000, // 1.2 * 45000
+    receiptDate: '2025-02-03T10:00:00Z',
+    expiryDate: '2025-03-05T23:59:59Z', // 30 дней
+    sourceType: 'purchase',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // =============================================
+  // BAR PRODUCTS - BEVERAGES
+  // =============================================
+
+  // Пиво Bintang 330мл - 2 ящика
+  {
+    id: 'batch-009',
+    batchNumber: 'B-BEER330-001-20250201',
+    itemId: 'prod-beer-bintang-330',
     itemType: 'product',
     department: 'bar',
-    initialQuantity: 6,
-    currentQuantity: 4,
-    unit: 'bottle',
-    costPerUnit: 150000,
-    totalValue: 600000,
+    initialQuantity: 48, // 2 ящика по 24
+    currentQuantity: 24, // половина продана
+    unit: 'piece',
+    costPerUnit: 12000,
+    totalValue: 288000, // 24 * 12000
     receiptDate: '2025-02-01T08:00:00Z',
-    sourceType: 'opening_balance',
+    expiryDate: '2025-08-01T23:59:59Z', // 6 месяцев
+    sourceType: 'purchase',
     status: 'active',
     isActive: true,
     createdAt: TimeUtils.getCurrentLocalISO(),
     updatedAt: TimeUtils.getCurrentLocalISO()
   },
+
+  // Пиво Bintang 500мл - ящик
   {
-    id: 'batch-006',
-    batchNumber: 'B-BEER-001-20250202',
-    itemId: 'beer',
+    id: 'batch-010',
+    batchNumber: 'B-BEER500-001-20250202',
+    itemId: 'prod-beer-bintang-500',
     itemType: 'product',
     department: 'bar',
     initialQuantity: 24,
-    currentQuantity: 18,
-    unit: 'bottle',
-    costPerUnit: 15000,
-    totalValue: 270000,
+    currentQuantity: 12, // половина продана
+    unit: 'piece',
+    costPerUnit: 18000,
+    totalValue: 216000, // 12 * 18000
     receiptDate: '2025-02-02T10:00:00Z',
-    expiryDate: '2025-03-15T23:59:59Z',
-    sourceType: 'opening_balance',
+    expiryDate: '2025-08-02T23:59:59Z',
+    sourceType: 'purchase',
     status: 'active',
     isActive: true,
     createdAt: TimeUtils.getCurrentLocalISO(),
     updatedAt: TimeUtils.getCurrentLocalISO()
   },
-  // Preparations
+
+  // Кола - популярный безалкогольный напиток
   {
-    id: 'batch-007',
-    batchNumber: 'B-RENDANG-001-20250204',
-    itemId: 'beef-rendang-prep',
+    id: 'batch-011',
+    batchNumber: 'B-COLA-001-20250202',
+    itemId: 'prod-cola-330',
+    itemType: 'product',
+    department: 'bar',
+    initialQuantity: 48, // 2 ящика
+    currentQuantity: 36, // треть продана
+    unit: 'piece',
+    costPerUnit: 8000,
+    totalValue: 288000, // 36 * 8000
+    receiptDate: '2025-02-02T10:00:00Z',
+    expiryDate: '2026-02-02T23:59:59Z', // год срок годности
+    sourceType: 'purchase',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // Вода минеральная
+  {
+    id: 'batch-012',
+    batchNumber: 'B-WATER-001-20250201',
+    itemId: 'prod-water-500',
+    itemType: 'product',
+    department: 'bar',
+    initialQuantity: 48,
+    currentQuantity: 40,
+    unit: 'piece',
+    costPerUnit: 3000,
+    totalValue: 120000, // 40 * 3000
+    receiptDate: '2025-02-01T08:00:00Z',
+    expiryDate: '2027-02-01T23:59:59Z', // 2 года
+    sourceType: 'purchase',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // =============================================
+  // PREPARATIONS - ПОЛУФАБРИКАТЫ
+  // =============================================
+
+  // Томатный соус - свежеприготовленный
+  {
+    id: 'batch-013',
+    batchNumber: 'B-PREP-TOMATO-001-20250204',
+    itemId: 'prep-tomato-sauce',
     itemType: 'preparation',
     department: 'kitchen',
-    initialQuantity: 10,
-    currentQuantity: 6,
-    unit: 'portion',
-    costPerUnit: 45000,
-    totalValue: 270000,
+    initialQuantity: 800,
+    currentQuantity: 500, // часть использована
+    unit: 'gram',
+    costPerUnit: 125, // стоимость за грамм (100,000 за 800г = 125/г)
+    totalValue: 62500, // 500 * 125
+    receiptDate: '2025-02-04T14:00:00Z',
+    expiryDate: '2025-02-06T23:59:59Z', // 2 дня для полуфабрикатов
+    sourceType: 'production',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // Чесночный соус
+  {
+    id: 'batch-014',
+    batchNumber: 'B-PREP-GARLIC-001-20250204',
+    itemId: 'prep-garlic-sauce',
+    itemType: 'preparation',
+    department: 'kitchen',
+    initialQuantity: 250,
+    currentQuantity: 150,
+    unit: 'gram',
+    costPerUnit: 200, // дорогой из-за оливкового масла
+    totalValue: 30000, // 150 * 200
     receiptDate: '2025-02-04T14:00:00Z',
     expiryDate: '2025-02-06T23:59:59Z',
+    sourceType: 'production',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // Картофельное пюре - большая порция
+  {
+    id: 'batch-015',
+    batchNumber: 'B-PREP-PUREE-001-20250203',
+    itemId: 'prep-mashed-potato',
+    itemType: 'preparation',
+    department: 'kitchen',
+    initialQuantity: 1200,
+    currentQuantity: 800, // часть использована в качестве гарнира
+    unit: 'gram',
+    costPerUnit: 42, // относительно дешевый (50,000 за 1200г = 42/г)
+    totalValue: 33600, // 800 * 42
+    receiptDate: '2025-02-03T16:00:00Z',
+    expiryDate: '2025-02-05T23:59:59Z', // 2 дня для пюре
+    sourceType: 'production',
+    status: 'active',
+    isActive: true,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO()
+  },
+
+  // Картофель фри - заготовка
+  {
+    id: 'batch-016',
+    batchNumber: 'B-PREP-FRIES-001-20250204',
+    itemId: 'prep-french-fries',
+    itemType: 'preparation',
+    department: 'kitchen',
+    initialQuantity: 850,
+    currentQuantity: 600, // активно используется
+    unit: 'gram',
+    costPerUnit: 71, // включает масло для жарки (60,000 за 850г = 71/г)
+    totalValue: 42600, // 600 * 71
+    receiptDate: '2025-02-04T12:00:00Z',
+    expiryDate: '2025-02-05T23:59:59Z', // день хранения
     sourceType: 'production',
     status: 'active',
     isActive: true,
@@ -141,24 +352,24 @@ export const mockStorageBatches: StorageBatch[] = [
   }
 ]
 
-// Mock storage operations
+// ✅ УЛУЧШЕНО: Mock storage operations с реалистичными операциями
 export const mockStorageOperations: StorageOperation[] = [
   {
     id: 'op-001',
     operationType: 'consumption',
     documentNumber: 'CON-001',
-    operationDate: TimeUtils.getCurrentLocalISO(),
+    operationDate: '2025-02-04T18:30:00Z',
     department: 'kitchen',
     responsiblePerson: 'Chef Maria',
     items: [
       {
         id: 'item-001',
-        itemId: 'beef-steak',
+        itemId: 'prod-beef-steak',
         itemType: 'product',
-        itemName: 'Beef Steak',
+        itemName: 'Говядина (стейк)',
         quantity: 1.5,
         unit: 'kg',
-        totalCost: 270000,
+        totalCost: 270000, // 1.5 * 180000 (FIFO - берем из первого батча)
         batchAllocations: [
           {
             batchId: 'batch-001',
@@ -168,146 +379,304 @@ export const mockStorageOperations: StorageOperation[] = [
             batchDate: '2025-02-01T08:00:00Z'
           }
         ]
+      },
+      {
+        id: 'item-002',
+        itemId: 'prod-potato',
+        itemType: 'product',
+        itemName: 'Картофель',
+        quantity: 3,
+        unit: 'kg',
+        totalCost: 24000, // 3 * 8000
+        batchAllocations: [
+          {
+            batchId: 'batch-003',
+            batchNumber: 'B-POTATO-001-20250201',
+            quantity: 3,
+            costPerUnit: 8000,
+            batchDate: '2025-02-01T08:00:00Z'
+          }
+        ]
       }
     ],
-    totalValue: 270000,
+    totalValue: 294000,
     consumptionDetails: {
       reason: 'recipe',
-      relatedId: 'beef-steak-recipe',
-      relatedName: 'Beef Steak',
-      portionCount: 3
+      relatedId: 'recipe-beef-steak',
+      relatedName: 'Стейк говяжий',
+      portionCount: 6 // 6 стейков приготовлено
     },
     status: 'confirmed',
-    createdAt: TimeUtils.getCurrentLocalISO(),
-    updatedAt: TimeUtils.getCurrentLocalISO()
-  }
-]
+    notes: 'Списание для вечернего меню',
+    createdAt: '2025-02-04T18:30:00Z',
+    updatedAt: '2025-02-04T18:30:00Z'
+  },
 
-// Mock storage balances
-export const mockStorageBalances: StorageBalance[] = [
   {
-    itemId: 'beef-steak',
-    itemType: 'product',
-    itemName: 'Beef Steak',
+    id: 'op-002',
+    operationType: 'consumption',
+    documentNumber: 'CON-002',
+    operationDate: '2025-02-04T16:00:00Z',
     department: 'kitchen',
-    totalQuantity: 5.5,
-    unit: 'kg',
-    totalValue: 1005000,
-    averageCost: 182727, // Weighted average
-    latestCost: 185000,
-    costTrend: 'up',
-    batches: [
-      mockStorageBatches[0], // Oldest first (FIFO)
-      mockStorageBatches[1]
+    responsiblePerson: 'Chef Maria',
+    items: [
+      {
+        id: 'item-003',
+        itemId: 'prod-tomato',
+        itemType: 'product',
+        itemName: 'Помидоры свежие',
+        quantity: 1,
+        unit: 'kg',
+        totalCost: 12000,
+        batchAllocations: [
+          {
+            batchId: 'batch-004',
+            batchNumber: 'B-TOMATO-001-20250202',
+            quantity: 1,
+            costPerUnit: 12000,
+            batchDate: '2025-02-02T08:00:00Z'
+          }
+        ]
+      },
+      {
+        id: 'item-004',
+        itemId: 'prod-onion',
+        itemType: 'product',
+        itemName: 'Лук репчатый',
+        quantity: 0.2,
+        unit: 'kg',
+        totalCost: 1200,
+        batchAllocations: [
+          {
+            batchId: 'batch-005',
+            batchNumber: 'B-ONION-001-20250201',
+            quantity: 0.2,
+            costPerUnit: 6000,
+            batchDate: '2025-02-01T08:00:00Z'
+          }
+        ]
+      }
     ],
-    oldestBatchDate: '2025-02-01T08:00:00Z',
-    newestBatchDate: '2025-02-03T10:00:00Z',
-    hasExpired: false,
-    hasNearExpiry: true, // Expires in 3 days
-    belowMinStock: false,
-    lastConsumptionDate: TimeUtils.getCurrentLocalISO(),
-    lastCalculated: TimeUtils.getCurrentLocalISO()
+    totalValue: 13200,
+    consumptionDetails: {
+      reason: 'recipe',
+      relatedId: 'prep-tomato-sauce',
+      relatedName: 'Приготовление томатного соуса',
+      portionCount: 1
+    },
+    status: 'confirmed',
+    notes: 'Производство полуфабриката',
+    createdAt: '2025-02-04T16:00:00Z',
+    updatedAt: '2025-02-04T16:00:00Z'
   },
+
   {
-    itemId: 'potato',
-    itemType: 'product',
-    itemName: 'Potato',
+    id: 'op-003',
+    operationType: 'receipt',
+    documentNumber: 'REC-001',
+    operationDate: '2025-02-03T10:00:00Z',
     department: 'kitchen',
-    totalQuantity: 15,
-    unit: 'kg',
-    totalValue: 120000,
-    averageCost: 8000,
-    latestCost: 8000,
-    costTrend: 'stable',
-    batches: [mockStorageBatches[2]],
-    oldestBatchDate: '2025-02-01T08:00:00Z',
-    newestBatchDate: '2025-02-01T08:00:00Z',
-    hasExpired: false,
-    hasNearExpiry: false,
-    belowMinStock: false,
-    lastCalculated: TimeUtils.getCurrentLocalISO()
+    responsiblePerson: 'Warehouse Manager',
+    items: [
+      {
+        id: 'item-005',
+        itemId: 'prod-beef-steak',
+        itemType: 'product',
+        itemName: 'Говядина (стейк)',
+        quantity: 3,
+        unit: 'kg',
+        totalCost: 555000,
+        averageCostPerUnit: 185000
+      }
+    ],
+    totalValue: 555000,
+    status: 'confirmed',
+    notes: 'Поставка от поставщика мяса, цена выросла на 5000',
+    createdAt: '2025-02-03T10:00:00Z',
+    updatedAt: '2025-02-03T10:00:00Z'
   },
+
   {
-    itemId: 'garlic',
-    itemType: 'product',
-    itemName: 'Garlic',
-    department: 'kitchen',
-    totalQuantity: 1.5,
-    unit: 'kg',
-    totalValue: 37500,
-    averageCost: 25000,
-    latestCost: 25000,
-    costTrend: 'stable',
-    batches: [mockStorageBatches[3]],
-    oldestBatchDate: '2025-02-02T09:00:00Z',
-    newestBatchDate: '2025-02-02T09:00:00Z',
-    hasExpired: false,
-    hasNearExpiry: false,
-    belowMinStock: true, // Low stock warning
-    lastCalculated: TimeUtils.getCurrentLocalISO()
-  },
-  {
-    itemId: 'vodka',
-    itemType: 'product',
-    itemName: 'Vodka',
+    id: 'op-004',
+    operationType: 'receipt',
+    documentNumber: 'REC-002',
+    operationDate: '2025-02-02T10:00:00Z',
     department: 'bar',
-    totalQuantity: 4,
-    unit: 'bottle',
-    totalValue: 600000,
-    averageCost: 150000,
-    latestCost: 150000,
-    costTrend: 'stable',
-    batches: [mockStorageBatches[4]],
-    oldestBatchDate: '2025-02-01T08:00:00Z',
-    newestBatchDate: '2025-02-01T08:00:00Z',
-    hasExpired: false,
-    hasNearExpiry: false,
-    belowMinStock: false,
-    lastCalculated: TimeUtils.getCurrentLocalISO()
+    responsiblePerson: 'Bartender John',
+    items: [
+      {
+        id: 'item-006',
+        itemId: 'prod-beer-bintang-330',
+        itemType: 'product',
+        itemName: 'Пиво Bintang 330мл',
+        quantity: 48,
+        unit: 'piece',
+        totalCost: 576000,
+        averageCostPerUnit: 12000
+      },
+      {
+        id: 'item-007',
+        itemId: 'prod-cola-330',
+        itemType: 'product',
+        itemName: 'Кока-Кола 330мл',
+        quantity: 48,
+        unit: 'piece',
+        totalCost: 384000,
+        averageCostPerUnit: 8000
+      }
+    ],
+    totalValue: 960000,
+    status: 'confirmed',
+    notes: 'Еженедельная поставка напитков',
+    createdAt: '2025-02-02T10:00:00Z',
+    updatedAt: '2025-02-02T10:00:00Z'
   },
+
   {
-    itemId: 'beer',
-    itemType: 'product',
-    itemName: 'Beer',
+    id: 'op-005',
+    operationType: 'consumption',
+    documentNumber: 'CON-003',
+    operationDate: '2025-02-04T20:15:00Z',
     department: 'bar',
-    totalQuantity: 18,
-    unit: 'bottle',
-    totalValue: 270000,
-    averageCost: 15000,
-    latestCost: 15000,
-    costTrend: 'stable',
-    batches: [mockStorageBatches[5]],
-    oldestBatchDate: '2025-02-02T10:00:00Z',
-    newestBatchDate: '2025-02-02T10:00:00Z',
-    hasExpired: false,
-    hasNearExpiry: false,
-    belowMinStock: false,
-    lastCalculated: TimeUtils.getCurrentLocalISO()
-  },
-  {
-    itemId: 'beef-rendang-prep',
-    itemType: 'preparation',
-    itemName: 'Beef Rendang (Prepared)',
-    department: 'kitchen',
-    totalQuantity: 6,
-    unit: 'portion',
-    totalValue: 270000,
-    averageCost: 45000,
-    latestCost: 45000,
-    costTrend: 'stable',
-    batches: [mockStorageBatches[6]],
-    oldestBatchDate: '2025-02-04T14:00:00Z',
-    newestBatchDate: '2025-02-04T14:00:00Z',
-    hasExpired: false,
-    hasNearExpiry: true, // Expires tomorrow
-    belowMinStock: false,
-    lastCalculated: TimeUtils.getCurrentLocalISO()
+    responsiblePerson: 'Bartender John',
+    items: [
+      {
+        id: 'item-008',
+        itemId: 'prod-beer-bintang-330',
+        itemType: 'product',
+        itemName: 'Пиво Bintang 330мл',
+        quantity: 12,
+        unit: 'piece',
+        totalCost: 144000,
+        batchAllocations: [
+          {
+            batchId: 'batch-009',
+            batchNumber: 'B-BEER330-001-20250201',
+            quantity: 12,
+            costPerUnit: 12000,
+            batchDate: '2025-02-01T08:00:00Z'
+          }
+        ]
+      }
+    ],
+    totalValue: 144000,
+    consumptionDetails: {
+      reason: 'menu_item',
+      relatedId: 'menu-beer-330',
+      relatedName: 'Продажа пива посетителям',
+      portionCount: 12
+    },
+    status: 'confirmed',
+    notes: 'Продажи за вечер',
+    createdAt: '2025-02-04T20:15:00Z',
+    updatedAt: '2025-02-04T20:15:00Z'
   }
 ]
 
-// Helper functions for mock data
+// ✅ НОВОЕ: Функция для динамического создания балансов
+export function createInitialBalances(): StorageBalance[] {
+  const balances: StorageBalance[] = []
+
+  // Группируем батчи по товарам
+  const batchGroups = new Map<string, StorageBatch[]>()
+
+  mockStorageBatches.forEach(batch => {
+    if (batch.status === 'active' && batch.currentQuantity > 0) {
+      const key = `${batch.itemId}-${batch.itemType}-${batch.department}`
+      if (!batchGroups.has(key)) {
+        batchGroups.set(key, [])
+      }
+      batchGroups.get(key)!.push(batch)
+    }
+  })
+
+  // Создаем балансы для каждой группы
+  batchGroups.forEach((batches, key) => {
+    const [itemId, itemType, department] = key.split('-')
+    const firstBatch = batches[0]
+
+    // Расчеты
+    const totalQuantity = batches.reduce((sum, b) => sum + b.currentQuantity, 0)
+    const totalValue = batches.reduce((sum, b) => sum + b.totalValue, 0)
+    const averageCost = totalValue / totalQuantity
+
+    const sortedBatches = [...batches].sort(
+      (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
+    )
+
+    const latestCost = sortedBatches[sortedBatches.length - 1].costPerUnit
+
+    // Определение тренда цен
+    let costTrend: 'up' | 'down' | 'stable' = 'stable'
+    if (sortedBatches.length > 1) {
+      const oldestCost = sortedBatches[0].costPerUnit
+      if (latestCost > oldestCost * 1.05) costTrend = 'up'
+      else if (latestCost < oldestCost * 0.95) costTrend = 'down'
+    }
+
+    // Определение алертов (упрощенная логика)
+    const hasNearExpiry = batches.some(b => {
+      if (!b.expiryDate) return false
+      const expiry = new Date(b.expiryDate)
+      const now = new Date()
+      const diffDays = (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      return diffDays <= 3 && diffDays > 0
+    })
+
+    const hasExpired = batches.some(b => {
+      if (!b.expiryDate) return false
+      return new Date(b.expiryDate) < new Date()
+    })
+
+    // Определение низкого остатка (упрощенная логика)
+    const belowMinStock = (() => {
+      if (itemType === 'product') {
+        // Для продуктов используем простые пороги
+        if (itemId.includes('garlic')) return totalQuantity < 0.5
+        if (itemId.includes('beef')) return totalQuantity < 2
+        if (itemId.includes('beer')) return totalQuantity < 12
+        return totalQuantity < 1
+      }
+      // Для полуфабрикатов
+      return totalQuantity < 200 // менее 200г
+    })()
+
+    const balance: StorageBalance = {
+      itemId,
+      itemType: itemType as any,
+      itemName: firstBatch.itemId, // Будет заменено в сервисе
+      department: department as any,
+      totalQuantity,
+      unit: firstBatch.unit,
+      totalValue,
+      averageCost,
+      latestCost,
+      costTrend,
+      batches: sortedBatches,
+      oldestBatchDate: sortedBatches[0].receiptDate,
+      newestBatchDate: sortedBatches[sortedBatches.length - 1].receiptDate,
+      hasExpired,
+      hasNearExpiry,
+      belowMinStock,
+      lastCalculated: TimeUtils.getCurrentLocalISO()
+    }
+
+    balances.push(balance)
+  })
+
+  return balances
+}
+
+// ✅ Экспортируем начальные балансы
+export const mockStorageBalances: StorageBalance[] = createInitialBalances()
+
+// Helper functions
 export function generateBatchNumber(itemName: string, date: string): string {
-  const shortName = itemName.toUpperCase().substring(0, 4)
+  const shortName =
+    itemName
+      .toUpperCase()
+      .replace(/[^A-Z]/g, '')
+      .substring(0, 4) || 'ITEM'
   const counter = String(Date.now()).slice(-3)
   const dateStr = date.substring(0, 10).replace(/-/g, '')
   return `B-${shortName}-${counter}-${dateStr}`
@@ -341,4 +710,25 @@ export function calculateFifoAllocation(batches: StorageBatch[], quantity: numbe
   }
 
   return { allocations, remainingQuantity }
+}
+
+// ✅ НОВОЕ: Функции для получения статистики
+export function getStorageStatistics() {
+  const balances = mockStorageBalances
+
+  return {
+    totalItems: balances.length,
+    totalValue: balances.reduce((sum, b) => sum + b.totalValue, 0),
+    kitchenItems: balances.filter(b => b.department === 'kitchen').length,
+    barItems: balances.filter(b => b.department === 'bar').length,
+    lowStockItems: balances.filter(b => b.belowMinStock).length,
+    expiringItems: balances.filter(b => b.hasNearExpiry).length,
+    expiredItems: balances.filter(b => b.hasExpired).length,
+    departmentValues: {
+      kitchen: balances
+        .filter(b => b.department === 'kitchen')
+        .reduce((sum, b) => sum + b.totalValue, 0),
+      bar: balances.filter(b => b.department === 'bar').reduce((sum, b) => sum + b.totalValue, 0)
+    }
+  }
 }

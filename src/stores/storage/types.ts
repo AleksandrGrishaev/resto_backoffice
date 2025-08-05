@@ -4,8 +4,14 @@ import { BaseEntity } from '@/types/common'
 export type StorageDepartment = 'kitchen' | 'bar'
 export type StorageItemType = 'product' | 'preparation'
 export type OperationType = 'receipt' | 'consumption' | 'inventory' | 'correction'
-export type BatchSourceType = 'purchase' | 'production' | 'correction' | 'opening_balance'
+export type BatchSourceType =
+  | 'purchase'
+  | 'production'
+  | 'correction'
+  | 'opening_balance'
+  | 'inventory_adjustment'
 export type BatchStatus = 'active' | 'expired' | 'consumed'
+export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
 // Core storage batch entity
 export interface StorageBatch extends BaseEntity {
@@ -97,6 +103,8 @@ export interface StorageOperation extends BaseEntity {
   // Consumption tracking
   consumptionDetails?: ConsumptionDetails
 
+  relatedInventoryId?: string
+
   // Status and workflow
   status: 'draft' | 'confirmed'
   notes?: string
@@ -183,6 +191,7 @@ export interface InventoryItem {
   // Details
   notes?: string // Reasons for discrepancy
   countedBy?: string // Who counted this item
+  confirmed?: boolean
 }
 
 // DTOs for creating operations
