@@ -1,11 +1,13 @@
-<!-- src/views/storage/components/StorageInventoriesTable.vue -->
+<!-- src/views/storage/components/StorageInventoriesTable.vue - ПОЛНАЯ ВЕРСИЯ -->
 <template>
   <div class="storage-inventories-table">
     <!-- Filters Section -->
     <v-card class="mb-4">
       <v-card-title class="d-flex align-center justify-space-between">
         <span>Inventory Records</span>
-        <v-chip size="small" variant="outlined">{{ inventories.length }} inventories</v-chip>
+        <v-chip size="small" variant="outlined">
+          {{ filteredInventories.length }} inventories
+        </v-chip>
       </v-card-title>
 
       <v-card-text class="pb-2">
@@ -81,7 +83,7 @@
             @click="toggleStatusFilter('draft')"
           >
             <v-icon icon="mdi-pencil" size="14" class="mr-1" />
-            Draft
+            Draft ({{ getDraftCount() }})
           </v-chip>
 
           <v-chip
@@ -91,7 +93,7 @@
             @click="toggleStatusFilter('confirmed')"
           >
             <v-icon icon="mdi-check-circle" size="14" class="mr-1" />
-            Confirmed
+            Confirmed ({{ getConfirmedCount() }})
           </v-chip>
 
           <v-divider vertical class="mx-2" />
@@ -111,6 +113,7 @@
         class="elevation-0"
         :items-per-page="15"
         :sort-by="[{ key: 'inventoryDate', order: 'desc' }]"
+        loading-text="Loading inventories..."
       >
         <!-- Document Number -->
         <template #[`item.documentNumber`]="{ item }">
@@ -133,7 +136,7 @@
         <!-- Items Count -->
         <template #[`item.totalItems`]="{ item }">
           <div class="text-center">
-            <div class="font-weight-medium">{{ item.totalItems }}</div>
+            <div class="font-weight-medium">{{ item.totalItems || 0 }}</div>
             <div class="text-caption text-medium-emphasis">items</div>
           </div>
         </template>
@@ -143,12 +146,12 @@
           <div class="text-center">
             <div
               class="font-weight-medium"
-              :class="item.totalDiscrepancies > 0 ? 'text-warning' : 'text-success'"
+              :class="(item.totalDiscrepancies || 0) > 0 ? 'text-warning' : 'text-success'"
             >
-              {{ item.totalDiscrepancies }}
+              {{ item.totalDiscrepancies || 0 }}
             </div>
             <div class="text-caption text-medium-emphasis">
-              {{ item.totalDiscrepancies === 1 ? 'discrepancy' : 'discrepancies' }}
+              {{ (item.totalDiscrepancies || 0) === 1 ? 'discrepancy' : 'discrepancies' }}
             </div>
           </div>
         </template>
@@ -158,12 +161,12 @@
           <div class="text-right">
             <div
               class="font-weight-medium"
-              :class="getValueDifferenceColor(item.totalValueDifference)"
+              :class="getValueDifferenceColor(item.totalValueDifference || 0)"
             >
-              {{ formatCurrency(item.totalValueDifference) }}
+              {{ formatCurrency(item.totalValueDifference || 0) }}
             </div>
             <div class="text-caption text-medium-emphasis">
-              {{ item.totalValueDifference >= 0 ? 'surplus' : 'shortage' }}
+              {{ (item.totalValueDifference || 0) >= 0 ? 'surplus' : 'shortage' }}
             </div>
           </div>
         </template>
@@ -174,23 +177,15 @@
             <v-avatar size="24" class="mr-2">
               <v-icon icon="mdi-account" size="16" />
             </v-avatar>
-            {{ item.responsiblePerson }}
+            {{ item.responsiblePerson || 'Unknown' }}
           </div>
         </template>
 
         <!-- Status -->
         <template #[`item.status`]="{ item }">
-          <v-chip
-            :color="item.status === 'confirmed' ? 'success' : 'warning'"
-            size="small"
-            variant="flat"
-          >
-            <v-icon
-              :icon="item.status === 'confirmed' ? 'mdi-check-circle' : 'mdi-pencil'"
-              size="14"
-              class="mr-1"
-            />
-            {{ item.status === 'confirmed' ? 'Confirmed' : 'Draft' }}
+          <v-chip :color="getStatusColor(item.status)" size="small" variant="flat">
+            <v-icon :icon="getStatusIcon(item.status)" size="14" class="mr-1" />
+            {{ formatStatus(item.status) }}
           </v-chip>
         </template>
 
@@ -219,6 +214,27 @@
               <v-icon />
               <v-tooltip activator="parent" location="top">Continue Counting</v-tooltip>
             </v-btn>
+
+            <!-- Additional Actions -->
+            <v-menu v-if="item.status === 'confirmed'">
+              <template #activator="{ props: menuProps }">
+                <v-btn size="small" variant="text" icon="mdi-dots-vertical" v-bind="menuProps" />
+              </template>
+              <v-list density="compact">
+                <v-list-item @click="downloadReport(item)">
+                  <v-list-item-title>Download Report</v-list-item-title>
+                  <template #prepend>
+                    <v-icon icon="mdi-download" />
+                  </template>
+                </v-list-item>
+                <v-list-item @click="viewCorrectionOperations(item)">
+                  <v-list-item-title>View Corrections</v-list-item-title>
+                  <template #prepend>
+                    <v-icon icon="mdi-file-document-edit" />
+                  </template>
+                </v-list-item>
+              </v-list>
+            </v-menu>
           </div>
         </template>
 
@@ -228,144 +244,29 @@
             <v-icon icon="mdi-clipboard-list" size="64" class="text-medium-emphasis mb-4" />
             <div class="text-h6 text-medium-emphasis mb-2">No inventories found</div>
             <div class="text-body-2 text-medium-emphasis">
-              Start an inventory to track stock levels for {{ department }}
+              {{
+                hasFilters
+                  ? 'Try adjusting your filters'
+                  : `Start an inventory to track stock levels for ${formatDepartment(department)}`
+              }}
             </div>
+            <!-- Start Inventory Button -->
+            <v-btn
+              v-if="!hasFilters"
+              color="primary"
+              variant="flat"
+              class="mt-4"
+              @click="startNewInventory"
+            >
+              Start Inventory
+            </v-btn>
           </div>
         </template>
       </v-data-table>
     </v-card>
 
     <!-- Inventory Details Dialog -->
-    <v-dialog v-model="showDetailsDialog" max-width="800px">
-      <v-card v-if="selectedInventory">
-        <v-card-title class="d-flex align-center justify-space-between">
-          <div>
-            <h3>Inventory Details</h3>
-            <div class="text-caption text-medium-emphasis">
-              {{ selectedInventory.documentNumber }}
-            </div>
-          </div>
-          <v-btn icon="mdi-close" variant="text" @click="showDetailsDialog = false" />
-        </v-card-title>
-
-        <v-divider />
-
-        <v-card-text class="pa-6">
-          <!-- Summary -->
-          <v-row class="mb-4">
-            <v-col cols="12" md="6">
-              <v-card variant="tonal" color="info">
-                <v-card-text class="text-center">
-                  <div class="text-h4 font-weight-bold">{{ selectedInventory.totalItems }}</div>
-                  <div class="text-body-2">Total Items Counted</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-card
-                variant="tonal"
-                :color="selectedInventory.totalDiscrepancies > 0 ? 'warning' : 'success'"
-              >
-                <v-card-text class="text-center">
-                  <div class="text-h4 font-weight-bold">
-                    {{ selectedInventory.totalDiscrepancies }}
-                  </div>
-                  <div class="text-body-2">Discrepancies Found</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-          </v-row>
-
-          <!-- Items with Discrepancies -->
-          <div v-if="selectedInventory.totalDiscrepancies > 0" class="mb-4">
-            <h4 class="mb-3">Items with Discrepancies</h4>
-            <v-card variant="outlined">
-              <v-list density="compact">
-                <v-list-item
-                  v-for="item in getDiscrepancyItems(selectedInventory)"
-                  :key="item.id"
-                  class="px-4"
-                >
-                  <template #prepend>
-                    <div class="item-icon mr-3">
-                      {{ item.itemType === 'product' ? '🥩' : '🍲' }}
-                    </div>
-                  </template>
-
-                  <v-list-item-title>
-                    <div class="d-flex align-center justify-space-between">
-                      <div>
-                        <div class="font-weight-medium">{{ item.itemName }}</div>
-                        <div class="text-caption text-medium-emphasis">
-                          System: {{ item.systemQuantity }} {{ item.unit }} | Actual:
-                          {{ item.actualQuantity }} {{ item.unit }}
-                        </div>
-                      </div>
-                      <div class="text-right">
-                        <div
-                          class="font-weight-medium"
-                          :class="item.difference > 0 ? 'text-success' : 'text-error'"
-                        >
-                          {{ item.difference > 0 ? '+' : '' }}{{ item.difference }} {{ item.unit }}
-                        </div>
-                        <div class="text-caption text-medium-emphasis">
-                          {{ formatCurrency(item.valueDifference) }}
-                        </div>
-                      </div>
-                    </div>
-                  </v-list-item-title>
-                </v-list-item>
-              </v-list>
-            </v-card>
-          </div>
-
-          <!-- Inventory Info -->
-          <v-row>
-            <v-col cols="12" md="6">
-              <div class="text-subtitle-2 mb-1">Date & Time</div>
-              <div>{{ formatDateTime(selectedInventory.inventoryDate) }}</div>
-            </v-col>
-            <v-col cols="12" md="6">
-              <div class="text-subtitle-2 mb-1">Responsible Person</div>
-              <div>{{ selectedInventory.responsiblePerson }}</div>
-            </v-col>
-            <v-col cols="12" md="6">
-              <div class="text-subtitle-2 mb-1">Department</div>
-              <div>{{ formatDepartment(selectedInventory.department) }}</div>
-            </v-col>
-            <v-col cols="12" md="6">
-              <div class="text-subtitle-2 mb-1">Item Type</div>
-              <div>{{ formatItemType(selectedInventory.itemType) }}</div>
-            </v-col>
-          </v-row>
-
-          <!-- Total Value Difference -->
-          <v-card
-            v-if="selectedInventory.totalValueDifference !== 0"
-            variant="tonal"
-            :color="selectedInventory.totalValueDifference > 0 ? 'success' : 'error'"
-            class="mt-4"
-          >
-            <v-card-text class="d-flex align-center justify-space-between">
-              <div class="text-subtitle-1 font-weight-medium">
-                Total Value
-                {{ selectedInventory.totalValueDifference > 0 ? 'Surplus' : 'Shortage' }}
-              </div>
-              <div class="text-h6 font-weight-bold">
-                {{ formatCurrency(Math.abs(selectedInventory.totalValueDifference)) }}
-              </div>
-            </v-card-text>
-          </v-card>
-        </v-card-text>
-
-        <v-divider />
-
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="outlined" @click="showDetailsDialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <inventory-details-dialog v-model="showDetailsDialog" :inventory="selectedInventory" />
   </div>
 </template>
 
@@ -373,23 +274,32 @@
 import { ref, computed } from 'vue'
 import type {
   InventoryDocument,
-  InventoryItem,
   StorageDepartment,
-  StorageItemType
+  StorageItemType,
+  InventoryStatus
 } from '@/stores/storage'
+import { DebugUtils } from '@/utils'
+
+// Components
+import InventoryDetailsDialog from './InventoryDetailsDialog.vue'
+
+const MODULE_NAME = 'StorageInventoriesTable'
 
 // Props
 interface Props {
   inventories: InventoryDocument[]
-  loading: boolean
+  loading?: boolean
   department: StorageDepartment
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  loading: false
+})
 
 // Emits
 const emit = defineEmits<{
   'edit-inventory': [inventory: InventoryDocument]
+  'start-inventory': []
 }>()
 
 // State
@@ -397,12 +307,26 @@ const filters = ref({
   dateFrom: '',
   dateTo: '',
   itemType: null as StorageItemType | null,
-  status: null as 'draft' | 'confirmed' | null,
+  status: null as InventoryStatus | null,
   search: ''
 })
 
 const showDetailsDialog = ref(false)
 const selectedInventory = ref<InventoryDocument | null>(null)
+
+// Options
+const itemTypeOptions = [
+  { title: 'All Types', value: null },
+  { title: 'Products', value: 'product' },
+  { title: 'Preparations', value: 'preparation' }
+]
+
+const statusOptions = [
+  { title: 'All Status', value: null },
+  { title: 'Draft', value: 'draft' },
+  { title: 'Confirmed', value: 'confirmed' },
+  { title: 'Cancelled', value: 'cancelled' }
+]
 
 // Computed
 const headers = computed(() => [
@@ -413,19 +337,7 @@ const headers = computed(() => [
   { title: 'Value Diff', key: 'totalValueDifference', sortable: true },
   { title: 'Responsible', key: 'responsiblePerson', sortable: true },
   { title: 'Status', key: 'status', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: '100px' }
-])
-
-const itemTypeOptions = computed(() => [
-  { title: 'All Types', value: null },
-  { title: 'Products', value: 'product' },
-  { title: 'Preparations', value: 'preparation' }
-])
-
-const statusOptions = computed(() => [
-  { title: 'All Status', value: null },
-  { title: 'Draft', value: 'draft' },
-  { title: 'Confirmed', value: 'confirmed' }
+  { title: 'Actions', key: 'actions', sortable: false, width: '120px' }
 ])
 
 const filteredInventories = computed(() => {
@@ -472,7 +384,25 @@ const filteredInventories = computed(() => {
   }
 })
 
+const hasFilters = computed(() => {
+  return !!(
+    filters.value.dateFrom ||
+    filters.value.dateTo ||
+    filters.value.itemType ||
+    filters.value.status ||
+    filters.value.search
+  )
+})
+
 // Methods
+function getDraftCount(): number {
+  return props.inventories.filter(inv => inv.status === 'draft').length
+}
+
+function getConfirmedCount(): number {
+  return props.inventories.filter(inv => inv.status === 'confirmed').length
+}
+
 function getItemTypeIcon(type: StorageItemType): string {
   return type === 'product' ? 'mdi-package-variant' : 'mdi-chef-hat'
 }
@@ -481,12 +411,51 @@ function getItemTypeColor(type: StorageItemType): string {
   return type === 'product' ? 'primary' : 'secondary'
 }
 
+function getStatusIcon(status: InventoryStatus): string {
+  switch (status) {
+    case 'draft':
+      return 'mdi-pencil'
+    case 'confirmed':
+      return 'mdi-check-circle'
+    case 'cancelled':
+      return 'mdi-cancel'
+    default:
+      return 'mdi-help-circle'
+  }
+}
+
+function getStatusColor(status: InventoryStatus): string {
+  switch (status) {
+    case 'draft':
+      return 'warning'
+    case 'confirmed':
+      return 'success'
+    case 'cancelled':
+      return 'error'
+    default:
+      return 'default'
+  }
+}
+
 function formatItemType(type: StorageItemType): string {
   return type === 'product' ? 'Products' : 'Preparations'
 }
 
 function formatDepartment(dept: StorageDepartment): string {
   return dept === 'kitchen' ? 'Kitchen' : 'Bar'
+}
+
+function formatStatus(status: InventoryStatus): string {
+  switch (status) {
+    case 'draft':
+      return 'Draft'
+    case 'confirmed':
+      return 'Confirmed'
+    case 'cancelled':
+      return 'Cancelled'
+    default:
+      return status
+  }
 }
 
 function formatDateTime(dateString: string): string {
@@ -513,11 +482,7 @@ function getValueDifferenceColor(value: number): string {
   return 'text-medium-emphasis'
 }
 
-function getDiscrepancyItems(inventory: InventoryDocument): InventoryItem[] {
-  return inventory.items.filter(item => Math.abs(item.difference) > 0.01)
-}
-
-function toggleStatusFilter(status: 'draft' | 'confirmed') {
+function toggleStatusFilter(status: InventoryStatus) {
   if (filters.value.status === status) {
     filters.value.status = null
   } else {
@@ -538,10 +503,44 @@ function clearFilters() {
 function viewInventory(inventory: InventoryDocument) {
   selectedInventory.value = inventory
   showDetailsDialog.value = true
+
+  DebugUtils.info(MODULE_NAME, 'Viewing inventory details', {
+    inventoryId: inventory.id,
+    documentNumber: inventory.documentNumber
+  })
 }
 
 function editInventory(inventory: InventoryDocument) {
   emit('edit-inventory', inventory)
+
+  DebugUtils.info(MODULE_NAME, 'Editing inventory', {
+    inventoryId: inventory.id,
+    documentNumber: inventory.documentNumber
+  })
+}
+
+function startNewInventory() {
+  emit('start-inventory')
+}
+
+function downloadReport(inventory: InventoryDocument) {
+  DebugUtils.info(MODULE_NAME, 'Downloading inventory report', {
+    inventoryId: inventory.id,
+    documentNumber: inventory.documentNumber
+  })
+
+  // TODO: Implement actual report download
+  console.log('Download report for inventory:', inventory.documentNumber)
+}
+
+function viewCorrectionOperations(inventory: InventoryDocument) {
+  DebugUtils.info(MODULE_NAME, 'Viewing correction operations', {
+    inventoryId: inventory.id,
+    documentNumber: inventory.documentNumber
+  })
+
+  // TODO: Implement showing related correction operations
+  console.log('View corrections for inventory:', inventory.documentNumber)
 }
 </script>
 
