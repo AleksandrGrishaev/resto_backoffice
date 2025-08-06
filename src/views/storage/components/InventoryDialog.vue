@@ -44,6 +44,9 @@
               <div>
                 <div class="text-subtitle-1">
                   Progress: {{ countedItems }}/{{ totalItems }} items counted
+                  <span v-if="categoryFilter !== 'all'" class="text-caption text-medium-emphasis">
+                    (filtered)
+                  </span>
                 </div>
                 <v-progress-linear
                   :model-value="progressPercentage"
@@ -55,21 +58,6 @@
               </div>
 
               <div class="d-flex gap-2">
-                <!-- ✅ ДОБАВЛЕНО: Фильтр по категориям -->
-                <v-select
-                  v-if="availableCategories.length > 0"
-                  v-model="categoryFilter"
-                  :items="[
-                    { title: 'All Categories', value: 'all' },
-                    ...availableCategories.map(cat => ({ title: cat, value: cat }))
-                  ]"
-                  label="Category"
-                  variant="outlined"
-                  density="compact"
-                  style="min-width: 150px"
-                  hide-details
-                />
-
                 <v-btn-toggle v-model="filterType" density="compact">
                   <v-btn value="all" size="small">All</v-btn>
                   <v-btn value="discrepancy" size="small">Discrepancies</v-btn>
@@ -77,17 +65,81 @@
                 </v-btn-toggle>
               </div>
             </div>
+
+            <!-- ✅ ИСПРАВЛЕНО: Фильтр по категориям с количествами -->
+            <div v-if="categoriesWithCount.length > 1" class="mb-2">
+              <v-select
+                v-model="categoryFilter"
+                :items="categoriesWithCount"
+                label="Filter by category"
+                variant="outlined"
+                density="compact"
+                hide-details
+                prepend-inner-icon="mdi-filter-variant"
+              >
+                <template #selection="{ item }">
+                  <span class="text-body-2">{{ item.title }}</span>
+                </template>
+                <template #item="{ props: itemProps, item }">
+                  <v-list-item v-bind="itemProps" :title="item.title">
+                    <template #append>
+                      <v-icon
+                        v-if="item.value === categoryFilter"
+                        icon="mdi-check"
+                        color="primary"
+                        size="16"
+                      />
+                    </template>
+                  </v-list-item>
+                </template>
+              </v-select>
+            </div>
           </div>
 
           <!-- Items List -->
           <div class="inventory-items">
             <div v-if="filteredItems.length === 0" class="text-center py-8 text-medium-emphasis">
               <v-icon icon="mdi-clipboard-list" size="48" class="mb-2" />
-              <div>No items to count</div>
-              <div class="text-caption">All {{ formatItemType(itemType) }} have been counted</div>
+              <div v-if="categoryFilter !== 'all'">
+                <div>No items in this category</div>
+                <div class="text-caption">
+                  Try selecting a different category or "All" to see all items
+                </div>
+                <v-btn size="small" variant="outlined" class="mt-2" @click="categoryFilter = 'all'">
+                  Show All Items
+                </v-btn>
+              </div>
+              <div v-else-if="filterType !== 'all'">
+                <div>No items match current filter</div>
+                <div class="text-caption">
+                  Try selecting "All" to see all {{ formatItemType(itemType) }}
+                </div>
+                <v-btn size="small" variant="outlined" class="mt-2" @click="filterType = 'all'">
+                  Show All Items
+                </v-btn>
+              </div>
+              <div v-else>
+                <div>No items to count</div>
+                <div class="text-caption">All {{ formatItemType(itemType) }} have been counted</div>
+              </div>
             </div>
 
             <div v-else>
+              <!-- ✅ ДОБАВЛЕНО: Показываем информацию о фильтрации -->
+              <div v-if="categoryFilter !== 'all' || filterType !== 'all'" class="text-center mb-3">
+                <v-chip size="small" color="primary" variant="tonal">
+                  <v-icon icon="mdi-filter" size="14" class="mr-1" />
+                  Showing {{ filteredItems.length }} of {{ totalItems }} items
+                  <v-btn
+                    icon="mdi-close"
+                    size="x-small"
+                    variant="text"
+                    class="ml-1"
+                    @click="clearAllFilters"
+                  />
+                </v-chip>
+              </div>
+
               <inventory-item-row
                 v-for="item in filteredItems"
                 :key="item.id"
@@ -141,13 +193,15 @@
               <div class="text-subtitle-2 mb-2">Debug Info:</div>
               <div class="text-caption">
                 <div>Existing inventory: {{ !!props.existingInventory }}</div>
-                <div>Current inventory: {{ !!currentInventory.value }}</div>
-                <div>Inventory status: {{ currentInventory.value?.status || 'none' }}</div>
+                <div>Current inventory: {{ !!currentInventory }}</div>
+                <div>Inventory status: {{ currentInventory?.status || 'none' }}</div>
                 <div>Has changes: {{ hasChanges }}</div>
                 <div>Items with changes: {{ itemsWithChanges }}</div>
                 <div>All items touched: {{ allItemsTouched }}</div>
                 <div>Can save draft: {{ canSaveDraft }}</div>
                 <div>Can finalize: {{ canFinalize }}</div>
+                <div>Available categories: {{ availableCategories.join(', ') }}</div>
+                <div>Categories with count: {{ categoriesWithCount.length }}</div>
               </div>
             </v-card-text>
           </v-card>
@@ -206,6 +260,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
+import { useProductsStore } from '@/stores/productsStore' // ✅ ДОБАВЛЕНО: Импорт products store
+import { useRecipesStore } from '@/stores/recipes' // ✅ ДОБАВЛЕНО: Импорт recipes store
 import type {
   StorageDepartment,
   StorageItemType,
@@ -214,6 +270,8 @@ import type {
   InventoryDocument
 } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore' // ✅ ДОБАВЛЕНО: Импорт констант категорий
+import { PREPARATION_TYPES } from '@/stores/recipes' // ✅ ДОБАВЛЕНО: Импорт констант типов
 
 // Components
 import InventoryItemRow from './InventoryItemRow.vue'
@@ -225,11 +283,11 @@ interface Props {
   modelValue: boolean
   department: StorageDepartment
   itemType: StorageItemType
-  existingInventory?: InventoryDocument | null // ✅ ДОБАВЛЕНО
+  existingInventory?: InventoryDocument | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  existingInventory: null // ✅ ДОБАВЛЕНО
+  existingInventory: null
 })
 
 // Emits
@@ -239,8 +297,10 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
-// Store
+// Stores
 const storageStore = useStorageStore()
+const productsStore = useProductsStore() // ✅ ДОБАВЛЕНО
+const recipesStore = useRecipesStore() // ✅ ДОБАВЛЕНО
 
 // State
 const form = ref()
@@ -248,7 +308,7 @@ const isFormValid = ref(false)
 const loading = ref(false)
 const responsiblePerson = ref('')
 const filterType = ref('all')
-const categoryFilter = ref('all') // ✅ ДОБАВЛЕНО: Фильтр по категориям
+const categoryFilter = ref('all')
 const inventoryItems = ref<InventoryItem[]>([])
 const currentInventory = ref<InventoryDocument | null>(null)
 const showDebugInfo = ref(false)
@@ -265,25 +325,25 @@ const availableBalances = computed(() =>
   )
 )
 
-// ✅ ДОБАВЛЕНО: Computed для доступных категорий
+// ✅ ИСПРАВЛЕНО: Правильное получение доступных категорий
 const availableCategories = computed(() => {
   try {
     const categories = new Set<string>()
 
     if (props.itemType === 'product') {
-      const productsStore = useProductsStore()
-      const products = productsStore.products.filter(p => p.isActive)
-      products.forEach(product => {
-        if (product.category) {
+      // Получаем категории только из товаров, которые есть в инвентаризации
+      inventoryItems.value.forEach(item => {
+        const product = productsStore.products.find(p => p.id === item.itemId)
+        if (product && product.category) {
           categories.add(product.category)
         }
       })
     } else {
-      const recipesStore = useRecipesStore()
-      const preparations = recipesStore.preparations.filter(p => p.isActive)
-      preparations.forEach(prep => {
-        if (prep.type) {
-          categories.add(prep.type)
+      // Получаем типы только из полуфабрикатов, которые есть в инвентаризации
+      inventoryItems.value.forEach(item => {
+        const preparation = recipesStore.preparations.find(p => p.id === item.itemId)
+        if (preparation && preparation.type) {
+          categories.add(preparation.type)
         }
       })
     }
@@ -295,8 +355,80 @@ const availableCategories = computed(() => {
   }
 })
 
+// ✅ ИСПРАВЛЕНО: Получение категорий с человеко-читаемыми названиями
+const categoriesWithCount = computed(() => {
+  const categoryMap = new Map<string, { count: number; name: string }>()
+
+  try {
+    if (props.itemType === 'product') {
+      inventoryItems.value.forEach(item => {
+        const product = productsStore.products.find(p => p.id === item.itemId)
+        const category = product?.category || 'other'
+        const categoryName = PRODUCT_CATEGORIES[category] || 'Прочее'
+
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, { count: 0, name: categoryName })
+        }
+        categoryMap.get(category)!.count++
+      })
+    } else {
+      inventoryItems.value.forEach(item => {
+        const preparation = recipesStore.preparations.find(p => p.id === item.itemId)
+        const type = preparation?.type || 'other'
+        const typeName = PREPARATION_TYPES.find(t => t.value === type)?.text || 'Прочее'
+
+        if (!categoryMap.has(type)) {
+          categoryMap.set(type, { count: 0, name: typeName })
+        }
+        categoryMap.get(type)!.count++
+      })
+    }
+
+    // Формируем список с количествами
+    const result = [
+      {
+        title: `All ${formatItemType(props.itemType)} (${inventoryItems.value.length})`,
+        value: 'all'
+      }
+    ]
+
+    // Сортируем категории по названию и добавляем в результат
+    Array.from(categoryMap.entries())
+      .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+      .forEach(([categoryKey, categoryData]) => {
+        result.push({
+          title: `${categoryData.name} (${categoryData.count})`,
+          value: categoryKey
+        })
+      })
+
+    return result
+  } catch (error) {
+    console.warn('Error creating categories with count:', error)
+    return [{ title: `All ${formatItemType(props.itemType)}`, value: 'all' }]
+  }
+})
+
 const filteredItems = computed(() => {
   let items = [...inventoryItems.value]
+
+  // ✅ ИСПРАВЛЕНО: Фильтр по категориям
+  if (categoryFilter.value !== 'all') {
+    items = items.filter(item => {
+      try {
+        if (props.itemType === 'product') {
+          const product = productsStore.products.find(p => p.id === item.itemId)
+          return (product?.category || 'other') === categoryFilter.value
+        } else {
+          const preparation = recipesStore.preparations.find(p => p.id === item.itemId)
+          return (preparation?.type || 'other') === categoryFilter.value
+        }
+      } catch (error) {
+        console.warn('Error filtering by category:', error)
+        return true
+      }
+    })
+  }
 
   // Фильтр по статусу (все/расхождения/непосчитанные)
   switch (filterType.value) {
@@ -311,26 +443,6 @@ const filteredItems = computed(() => {
       break
   }
 
-  // ✅ ДОБАВЛЕНО: Фильтр по категориям
-  if (categoryFilter.value !== 'all') {
-    items = items.filter(item => {
-      try {
-        if (props.itemType === 'product') {
-          const productsStore = useProductsStore()
-          const product = productsStore.products.find(p => p.id === item.itemId)
-          return product?.category === categoryFilter.value
-        } else {
-          const recipesStore = useRecipesStore()
-          const preparation = recipesStore.preparations.find(p => p.id === item.itemId)
-          return preparation?.type === categoryFilter.value
-        }
-      } catch (error) {
-        console.warn('Error filtering by category:', error)
-        return true
-      }
-    })
-  }
-
   return items
 })
 
@@ -343,15 +455,11 @@ const countedItems = computed(
 
 // ✅ НОВОЕ: Helper для определения, был ли товар пересчитан
 function hasItemBeenCounted(item: InventoryItem): boolean {
-  // ✅ ИСПРАВЛЕНО: Товар считается пересчитанным если:
-  // 1. Есть отметка о том, кто считал ИЛИ
-  // 2. Актуальное количество отличается от системного (пользователь изменил значение) ИЛИ
-  // 3. Пользователь специально подтвердил, что количество правильное (например, через UI)
   return (
     !!item.countedBy ||
     Math.abs(item.actualQuantity - item.systemQuantity) > 0.001 ||
     item.confirmed === true
-  ) // ✅ ДОБАВЛЕНО: явное подтверждение
+  )
 }
 
 const progressPercentage = computed(() =>
@@ -366,7 +474,7 @@ const valueDifference = computed(() =>
   inventoryItems.value.reduce((sum, item) => sum + item.valueDifference, 0)
 )
 
-// ✅ ИСПРАВЛЕНО: Проверяем, что хотя бы один товар был изменен ИЛИ все товары подтверждены
+// ✅ ИСПРАВЛЕНО: Проверяем, что хотя бы один товар был изменен
 const hasChanges = computed(
   () =>
     inventoryItems.value.some(item => hasItemBeenCounted(item)) ||
@@ -380,35 +488,21 @@ const itemsWithChanges = computed(
 
 const allItemsTouched = computed(() => inventoryItems.value.every(item => hasItemBeenCounted(item)))
 
-// ✅ ИСПРАВЛЕНО: Условие завершенности - можно завершить если есть хоть какой-то прогресс
+// ✅ ИСПРАВЛЕНО: Условие завершенности
 const isComplete = computed(() => {
   if (totalItems.value === 0) return false
-
-  // Считаем завершенным если:
-  // 1. Все товары пересчитаны ИЛИ
-  // 2. Есть хотя бы некоторый прогресс в подсчете (например, 80% товаров)
   const countedPercentage = (countedItems.value / totalItems.value) * 100
-
-  return (
-    countedItems.value === totalItems.value || // все пересчитаны
-    (countedItems.value > 0 && hasChanges.value)
-  ) // есть прогресс и изменения
+  return countedItems.value === totalItems.value || (countedItems.value > 0 && hasChanges.value)
 })
 
 const hasSummary = computed(() => inventoryItems.value.length > 0)
 
-// ✅ ИСПРАВЛЕНО: Можно сохранить черновик если есть хотя бы одно изменение
 const canSaveDraft = computed(
   () => isFormValid.value && responsiblePerson.value && !loading.value && hasChanges.value
 )
 
-// ✅ ИСПРАВЛЕНО: Можно финализировать если есть прогресс (не обязательно все товары)
 const canFinalize = computed(() => {
   if (!isFormValid.value || !responsiblePerson.value || loading.value) return false
-
-  // ✅ НОВАЯ ЛОГИКА: Можно финализировать если:
-  // 1. Есть хотя бы один пересчитанный товар ИЛИ
-  // 2. Пользователь подтвердил, что все остатки правильные
   return hasChanges.value && totalItems.value > 0
 })
 
@@ -433,11 +527,14 @@ function getItemIndex(itemId: string): number {
   return inventoryItems.value.findIndex(item => item.id === itemId)
 }
 
-// ✅ ИСПРАВЛЕНО: Правильное обновление товара
+function clearAllFilters() {
+  categoryFilter.value = 'all'
+  filterType.value = 'all'
+}
+
 function updateInventoryItem(updatedItem: InventoryItem) {
   const index = inventoryItems.value.findIndex(item => item.id === updatedItem.id)
   if (index !== -1) {
-    // Автоматически отмечаем, кто считал, если это еще не сделано
     if (!updatedItem.countedBy && hasItemBeenCounted(updatedItem)) {
       updatedItem.countedBy = responsiblePerson.value || 'User'
     }
@@ -462,7 +559,7 @@ function initializeInventoryItems() {
     itemType: balance.itemType,
     itemName: balance.itemName,
     systemQuantity: balance.totalQuantity,
-    actualQuantity: balance.totalQuantity, // Default to system quantity
+    actualQuantity: balance.totalQuantity,
     difference: 0,
     unit: balance.unit,
     averageCost: balance.averageCost,
@@ -478,7 +575,6 @@ function initializeInventoryItems() {
   })
 }
 
-// ✅ ДОБАВЛЕНО: Загрузка существующей инвентаризации
 function loadExistingInventory() {
   if (!props.existingInventory) return
 
@@ -488,16 +584,12 @@ function loadExistingInventory() {
       status: props.existingInventory.status
     })
 
-    // Устанавливаем данные из существующей инвентаризации
     currentInventory.value = props.existingInventory
     responsiblePerson.value = props.existingInventory.responsiblePerson
 
-    // Загружаем товары
     if (props.existingInventory.items && props.existingInventory.items.length > 0) {
-      // Используем существующие товары
       inventoryItems.value = [...props.existingInventory.items]
     } else {
-      // Если товары не загружены, создаем новые на основе текущих остатков
       initializeInventoryItems()
     }
 
@@ -507,7 +599,6 @@ function loadExistingInventory() {
     })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to load existing inventory', { error })
-    // Fallback: создаем новую инвентаризацию
     initializeInventoryItems()
   }
 }
@@ -526,7 +617,6 @@ async function handleSaveDraft() {
     })
 
     if (!currentInventory.value) {
-      // Create new inventory
       const inventoryData: CreateInventoryData = {
         department: props.department,
         itemType: props.itemType,
@@ -539,7 +629,6 @@ async function handleSaveDraft() {
       })
     }
 
-    // ✅ ИСПРАВЛЕНО: Обновляем инвентаризацию с текущими данными
     if (storageStore.updateInventory) {
       const updatedInventory = await storageStore.updateInventory(
         currentInventory.value.id,
@@ -584,7 +673,6 @@ async function handleFinalize() {
     })
 
     if (!currentInventory.value) {
-      // Create new inventory first
       const inventoryData: CreateInventoryData = {
         department: props.department,
         itemType: props.itemType,
@@ -594,12 +682,10 @@ async function handleFinalize() {
       currentInventory.value = await storageStore.startInventory(inventoryData)
     }
 
-    // Update inventory with final counts
     if (storageStore.updateInventory) {
       await storageStore.updateInventory(currentInventory.value.id, inventoryItems.value)
     }
 
-    // Finalize inventory and create corrections
     if (storageStore.finalizeInventory) {
       await storageStore.finalizeInventory(currentInventory.value.id)
     }
@@ -633,7 +719,7 @@ function handleClose() {
 function resetForm() {
   responsiblePerson.value = ''
   filterType.value = 'all'
-  categoryFilter.value = 'all' // ✅ ДОБАВЛЕНО: Сброс фильтра категорий
+  categoryFilter.value = 'all'
   inventoryItems.value = []
   currentInventory.value = null
   showDebugInfo.value = false
@@ -643,23 +729,45 @@ function resetForm() {
   }
 }
 
+// ✅ ДОБАВЛЕНО: Инициализация stores при монтировании компонента
+async function initializeStores() {
+  try {
+    // Загружаем данные stores если они еще не загружены
+    if (productsStore.products.length === 0) {
+      await productsStore.loadProducts(true) // используем mock данные
+    }
+
+    if (recipesStore.preparations.length === 0) {
+      await recipesStore.fetchPreparations()
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Stores initialized', {
+      productsCount: productsStore.products.length,
+      preparationsCount: recipesStore.preparations.length
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to initialize stores', { error })
+  }
+}
+
 // Watch for dialog open
 watch(
   () => props.modelValue,
-  isOpen => {
+  async isOpen => {
     if (isOpen) {
+      // ✅ ДОБАВЛЕНО: Инициализируем stores перед загрузкой данных
+      await initializeStores()
+
       if (props.existingInventory) {
-        // ✅ ДОБАВЛЕНО: Загружаем существующую инвентаризацию
         loadExistingInventory()
       } else {
-        // Создаем новую инвентаризацию
         initializeInventoryItems()
       }
     }
   }
 )
 
-// ✅ ДОБАВЛЕНО: Следим за изменениями existingInventory
+// Watch for existing inventory changes
 watch(
   () => props.existingInventory,
   newInventory => {
