@@ -1,24 +1,23 @@
-// src/stores/storage/index.ts
+// src/stores/storage/index.ts - ФИНАЛЬНАЯ ВЕРСИЯ БЕЗ CONSUMPTION
 
-// Export all types
+// Export all types (только receipt, correction, inventory)
 export type {
   StorageDepartment,
   StorageItemType,
-  OperationType,
+  OperationType, // только 'receipt' | 'correction' | 'inventory'
   BatchSourceType,
   BatchStatus,
   StorageBatch,
   BatchAllocation,
   StorageOperationItem,
-  ConsumptionDetails,
   StorageOperation,
   StorageBalance,
   InventoryDocument,
   InventoryItem,
-  CreateConsumptionData,
-  ConsumptionItem,
   CreateReceiptData,
   ReceiptItem,
+  CreateCorrectionData, // ✅ НОВОЕ
+  CorrectionItem, // ✅ НОВОЕ
   CreateInventoryData,
   StorageState
 } from './types'

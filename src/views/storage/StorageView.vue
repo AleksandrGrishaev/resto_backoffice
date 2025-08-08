@@ -1,4 +1,4 @@
-<!-- src/views/storage/StorageView.vue - ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ -->
+<!-- src/views/storage/StorageView.vue - ФИНАЛЬНАЯ ВЕРСИЯ БЕЗ CONSUMPTION -->
 <template>
   <div class="storage-view">
     <!-- Header -->
@@ -13,23 +13,23 @@
       <!-- Quick Actions -->
       <div class="d-flex gap-2">
         <v-btn
-          color="primary"
-          variant="flat"
-          prepend-icon="mdi-minus-circle"
-          :disabled="storageStore.state.loading.balances"
-          @click="showConsumptionDialog = true"
-        >
-          Multi Consumption
-        </v-btn>
-
-        <v-btn
           color="success"
           variant="flat"
           prepend-icon="mdi-plus-circle"
           :disabled="storageStore.state.loading.balances"
           @click="showReceiptDialog = true"
         >
-          Receipt/Correction
+          Add Stock
+        </v-btn>
+
+        <v-btn
+          color="primary"
+          variant="outlined"
+          prepend-icon="mdi-clipboard-list"
+          :disabled="storageStore.state.loading.balances"
+          @click="openInventoryDialog('product')"
+        >
+          Start Inventory
         </v-btn>
       </div>
     </div>
@@ -71,6 +71,7 @@
       :department="selectedDepartment"
       class="mb-4"
       @show-expiring="showExpiringItems"
+      @show-expired="showExpiredItems"
       @show-low-stock="showLowStockItems"
     />
 
@@ -110,10 +111,11 @@
           <v-empty-state
             headline="No Products Found"
             title="No products available for this department"
-            text="Add products through the Receipt/Correction dialog or check if products are loaded."
+            text="Add products through receipt or check if products are loaded."
           >
             <template #actions>
-              <v-btn color="primary" variant="flat" @click="showReceiptDialog = true">
+              <v-btn color="success" variant="flat" @click="showReceiptDialog = true">
+                <v-icon icon="mdi-plus-circle" class="mr-2" />
                 Add Products
               </v-btn>
             </template>
@@ -126,8 +128,8 @@
           :loading="storageStore.state.loading.balances"
           item-type="product"
           :department="selectedDepartment"
-          @consumption="openConsumptionForItem"
           @inventory="openInventoryDialog"
+          @receipt="showReceiptDialog = true"
         />
       </v-tabs-window-item>
 
@@ -140,7 +142,8 @@
             text="Preparations are created through recipe production or manual addition."
           >
             <template #actions>
-              <v-btn color="primary" variant="outlined" @click="showReceiptDialog = true">
+              <v-btn color="success" variant="outlined" @click="showReceiptDialog = true">
+                <v-icon icon="mdi-plus-circle" class="mr-2" />
                 Add Preparation
               </v-btn>
             </template>
@@ -153,8 +156,8 @@
           :loading="storageStore.state.loading.balances"
           item-type="preparation"
           :department="selectedDepartment"
-          @consumption="openConsumptionForItem"
           @inventory="openInventoryDialog"
+          @receipt="showReceiptDialog = true"
         />
       </v-tabs-window-item>
 
@@ -164,7 +167,7 @@
           <v-empty-state
             headline="No Operations Found"
             title="No recent operations for this department"
-            text="Operations will appear here after consumption, receipt, or inventory activities."
+            text="Operations will appear here after receipt or inventory activities."
           />
         </div>
 
@@ -186,9 +189,11 @@
           >
             <template #actions>
               <v-btn color="primary" variant="flat" @click="openInventoryDialog('product')">
+                <v-icon icon="mdi-clipboard-list" class="mr-2" />
                 Start Product Inventory
               </v-btn>
               <v-btn color="primary" variant="outlined" @click="openInventoryDialog('preparation')">
+                <v-icon icon="mdi-chef-hat" class="mr-2" />
                 Start Preparation Inventory
               </v-btn>
             </template>
@@ -207,14 +212,6 @@
     </v-tabs-window>
 
     <!-- Dialogs -->
-    <multi-consumption-dialog
-      v-model="showConsumptionDialog"
-      :department="selectedDepartment"
-      :initial-items="consumptionItems"
-      @success="handleOperationSuccess"
-      @error="handleOperationError"
-    />
-
     <receipt-dialog
       v-model="showReceiptDialog"
       :department="selectedDepartment"
@@ -222,7 +219,6 @@
       @error="handleOperationError"
     />
 
-    <!-- ✅ ИСПРАВЛЕНО: Передаем existingInventory -->
     <inventory-dialog
       v-model="showInventoryDialog"
       :department="selectedDepartment"
@@ -237,18 +233,22 @@
       <v-icon icon="mdi-check-circle" class="mr-2" />
       {{ successMessage }}
     </v-snackbar>
+
+    <!-- Error Snackbar -->
+    <v-snackbar v-model="showErrorSnackbar" color="error" timeout="5000" location="top">
+      <v-icon icon="mdi-alert-circle" class="mr-2" />
+      {{ errorMessage }}
+      <template #actions>
+        <v-btn variant="text" @click="showErrorSnackbar = false">Close</v-btn>
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
-import type {
-  StorageDepartment,
-  StorageItemType,
-  ConsumptionItem,
-  InventoryDocument
-} from '@/stores/storage'
+import type { StorageDepartment, StorageItemType, InventoryDocument } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 
 // Components
@@ -256,7 +256,6 @@ import StorageAlerts from './components/StorageAlerts.vue'
 import StorageStockTable from './components/StorageStockTable.vue'
 import StorageOperationsTable from './components/StorageOperationsTable.vue'
 import StorageInventoriesTable from './components/StorageInventoriesTable.vue'
-import MultiConsumptionDialog from './components/MultiConsumptionDialog.vue'
 import ReceiptDialog from './components/ReceiptDialog.vue'
 import InventoryDialog from './components/InventoryDialog.vue'
 
@@ -268,14 +267,14 @@ const storageStore = useStorageStore()
 // State
 const selectedDepartment = ref<StorageDepartment>('kitchen')
 const selectedTab = ref('products')
-const showConsumptionDialog = ref(false)
 const showReceiptDialog = ref(false)
 const showInventoryDialog = ref(false)
 const inventoryItemType = ref<StorageItemType>('product')
-const consumptionItems = ref<ConsumptionItem[]>([])
 const showSuccessSnackbar = ref(false)
+const showErrorSnackbar = ref(false)
 const successMessage = ref('')
-const editingInventory = ref<InventoryDocument | null>(null) // ✅ ДОБАВЛЕНО
+const errorMessage = ref('')
+const editingInventory = ref<InventoryDocument | null>(null)
 
 // Computed
 const productBalances = computed(() => {
@@ -355,36 +354,10 @@ const barItemCount = computed(() => {
 })
 
 // Methods
-function openConsumptionForItem(itemId: string, itemType: StorageItemType) {
-  try {
-    const itemName = storageStore.getItemName ? storageStore.getItemName(itemId, itemType) : itemId
-
-    consumptionItems.value = [
-      {
-        itemId,
-        itemType,
-        quantity: 1,
-        notes: `Quick consumption of ${itemName}`
-      }
-    ]
-    showConsumptionDialog.value = true
-
-    DebugUtils.info(MODULE_NAME, 'Opening consumption dialog for item', {
-      itemId,
-      itemType,
-      itemName
-    })
-  } catch (error) {
-    console.warn('Error opening consumption dialog:', error)
-    handleOperationError('Failed to open consumption dialog')
-  }
-}
-
-// ✅ ИСПРАВЛЕНО: Сброс editingInventory при создании новой инвентаризации
 function openInventoryDialog(itemType: StorageItemType) {
   try {
     inventoryItemType.value = itemType
-    editingInventory.value = null // ✅ ДОБАВЛЕНО: сбрасываем при создании новой
+    editingInventory.value = null // Reset when creating new inventory
     showInventoryDialog.value = true
 
     DebugUtils.info(MODULE_NAME, 'Opening inventory dialog', {
@@ -399,16 +372,31 @@ function openInventoryDialog(itemType: StorageItemType) {
 
 function showExpiringItems() {
   try {
-    storageStore.toggleNearExpiryFilter()
+    if (storageStore.toggleNearExpiryFilter) {
+      storageStore.toggleNearExpiryFilter()
+    }
     selectedTab.value = 'products'
   } catch (error) {
     console.warn('Error showing expiring items:', error)
   }
 }
 
+function showExpiredItems() {
+  try {
+    if (storageStore.toggleExpiredFilter) {
+      storageStore.toggleExpiredFilter()
+    }
+    selectedTab.value = 'products'
+  } catch (error) {
+    console.warn('Error showing expired items:', error)
+  }
+}
+
 function showLowStockItems() {
   try {
-    storageStore.toggleLowStockFilter()
+    if (storageStore.toggleLowStockFilter) {
+      storageStore.toggleLowStockFilter()
+    }
     selectedTab.value = 'products'
   } catch (error) {
     console.warn('Error showing low stock items:', error)
@@ -427,8 +415,7 @@ async function handleOperationSuccess(message: string = 'Operation completed suc
       storageStore.fetchOperations(selectedDepartment.value)
     ])
 
-    // Закрываем диалоги
-    showConsumptionDialog.value = false
+    // Close dialogs
     showReceiptDialog.value = false
 
     DebugUtils.info(MODULE_NAME, 'Data refreshed successfully')
@@ -438,7 +425,6 @@ async function handleOperationSuccess(message: string = 'Operation completed suc
   }
 }
 
-// ✅ ИСПРАВЛЕНО: Очистка editingInventory при успехе
 async function handleInventorySuccess(message: string = 'Inventory completed successfully') {
   try {
     DebugUtils.info(MODULE_NAME, 'Inventory completed, refreshing data')
@@ -453,7 +439,7 @@ async function handleInventorySuccess(message: string = 'Inventory completed suc
     ])
 
     showInventoryDialog.value = false
-    editingInventory.value = null // ✅ ДОБАВЛЕНО: очищаем после успешного завершения
+    editingInventory.value = null
 
     DebugUtils.info(MODULE_NAME, 'Inventory data refreshed successfully')
   } catch (error) {
@@ -465,24 +451,20 @@ async function handleInventorySuccess(message: string = 'Inventory completed suc
 function handleOperationError(message: string) {
   DebugUtils.error(MODULE_NAME, 'Operation error', { message })
 
-  // Устанавливаем ошибку в store для отображения
-  if (storageStore.state) {
-    storageStore.state.error = message
-  }
+  errorMessage.value = message
+  showErrorSnackbar.value = true
 
-  // Закрываем все диалоги
-  showConsumptionDialog.value = false
+  // Close all dialogs
   showReceiptDialog.value = false
   showInventoryDialog.value = false
-  editingInventory.value = null // ✅ ДОБАВЛЕНО: очищаем при ошибке
+  editingInventory.value = null
 }
 
-// ✅ ИСПРАВЛЕНО: Правильная передача существующей инвентаризации
 function handleEditInventory(inventory: InventoryDocument) {
   try {
     selectedDepartment.value = inventory.department
     inventoryItemType.value = inventory.itemType
-    editingInventory.value = inventory // ✅ ИСПРАВЛЕНО: устанавливаем редактируемую инвентаризацию
+    editingInventory.value = inventory
 
     showInventoryDialog.value = true
 
@@ -498,10 +480,9 @@ function handleEditInventory(inventory: InventoryDocument) {
   }
 }
 
-// ✅ ДОБАВЛЕНО: Обработчик для начала новой инвентаризации из таблицы
 function handleStartInventory() {
   try {
-    // Открываем диалог инвентаризации с товарами по умолчанию
+    // Open inventory dialog with products by default
     inventoryItemType.value = 'product'
     editingInventory.value = null
     showInventoryDialog.value = true
@@ -516,7 +497,7 @@ function handleStartInventory() {
   }
 }
 
-// Watch для обновления данных при смене департамента
+// Watch for department changes
 watch(selectedDepartment, async (newDepartment, oldDepartment) => {
   if (newDepartment === oldDepartment) return
 
@@ -526,7 +507,7 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
       to: newDepartment
     })
 
-    // Очищаем фильтры при смене департамента
+    // Clear filters when changing department
     if (storageStore.clearFilters) {
       storageStore.clearFilters()
     }

@@ -1,9 +1,10 @@
-// src/stores/storage/types.ts
+// src/stores/storage/types.ts - ТОЛЬКО RECEIPT, CORRECTION И INVENTORY
 import { BaseEntity } from '@/types/common'
 
 export type StorageDepartment = 'kitchen' | 'bar'
 export type StorageItemType = 'product' | 'preparation'
-export type OperationType = 'receipt' | 'consumption' | 'inventory' | 'correction'
+// ✅ УПРОЩЕНО: Убрали consumption, оставили только основные операции
+export type OperationType = 'receipt' | 'correction' | 'inventory'
 export type BatchSourceType =
   | 'purchase'
   | 'production'
@@ -43,13 +44,13 @@ export interface StorageBatch extends BaseEntity {
   isActive: boolean
 }
 
-// Batch allocation for FIFO consumption
+// Batch allocation for FIFO operations
 export interface BatchAllocation {
-  batchId: string // Which batch to consume from
+  batchId: string // Which batch to use
   batchNumber: string // Human readable batch number
   quantity: number // How much from this batch
   costPerUnit: number // Cost per unit from this batch
-  batchDate: string // Receipt date of batch (for FIFO verification)
+  batchDate: string // Receipt date of batch
 }
 
 // Storage operation item
@@ -63,7 +64,7 @@ export interface StorageOperationItem {
   quantity: number
   unit: string
 
-  // FIFO allocation (for consumption)
+  // FIFO allocation (for corrections)
   batchAllocations?: BatchAllocation[]
 
   // Cost tracking
@@ -75,19 +76,11 @@ export interface StorageOperationItem {
   expiryDate?: string // For receipts
 }
 
-// Consumption details for tracking usage
-export interface ConsumptionDetails {
-  reason: 'recipe' | 'menu_item' | 'waste' | 'expired' | 'other'
-  relatedId?: string // Recipe ID, Menu Item ID, etc.
-  relatedName?: string // Human readable name
-  portionCount?: number // How many portions made
-}
-
 // Main storage operation document
 export interface StorageOperation extends BaseEntity {
   // Operation details
   operationType: OperationType
-  documentNumber: string // "REC-001", "CON-001", "INV-001"
+  documentNumber: string // "REC-001", "COR-001", "INV-001"
   operationDate: string
   department: StorageDepartment
 
@@ -100,8 +93,13 @@ export interface StorageOperation extends BaseEntity {
   // Financial impact
   totalValue?: number // Total cost impact of operation
 
-  // Consumption tracking
-  consumptionDetails?: ConsumptionDetails
+  // ✅ НОВОЕ: Причина коррекции (заменяет ConsumptionDetails)
+  correctionDetails?: {
+    reason: 'recipe_usage' | 'menu_item' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
+    relatedId?: string // Recipe ID, Menu Item ID, etc.
+    relatedName?: string // Human readable name
+    portionCount?: number // How many portions made (for recipe usage)
+  }
 
   relatedInventoryId?: string
 
@@ -139,8 +137,8 @@ export interface StorageBalance {
   belowMinStock: boolean // Below minimum stock level
 
   // Usage analytics
-  lastConsumptionDate?: string // When last consumed
-  averageDailyConsumption?: number // Moving average consumption
+  lastCorrectionDate?: string // When last corrected/used
+  averageDailyUsage?: number // Moving average usage
   daysOfStockRemaining?: number // Estimated days until stockout
 
   // Cache timestamps
@@ -194,21 +192,7 @@ export interface InventoryItem {
   confirmed?: boolean
 }
 
-// DTOs for creating operations
-export interface CreateConsumptionData {
-  department: StorageDepartment
-  responsiblePerson: string
-  items: ConsumptionItem[]
-  consumptionDetails?: ConsumptionDetails
-  notes?: string
-}
-
-export interface ConsumptionItem {
-  itemId: string
-  itemType: StorageItemType
-  quantity: number
-  notes?: string
-}
+// ✅ УПРОЩЕННЫЕ DTOs - только Receipt, Correction, Inventory
 
 export interface CreateReceiptData {
   department: StorageDepartment
@@ -227,13 +211,34 @@ export interface ReceiptItem {
   notes?: string
 }
 
+// ✅ НОВОЕ: Correction вместо Consumption
+export interface CreateCorrectionData {
+  department: StorageDepartment
+  responsiblePerson: string
+  items: CorrectionItem[]
+  correctionDetails: {
+    reason: 'recipe_usage' | 'menu_item' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
+    relatedId?: string
+    relatedName?: string
+    portionCount?: number
+  }
+  notes?: string
+}
+
+export interface CorrectionItem {
+  itemId: string
+  itemType: StorageItemType
+  quantity: number // положительное число для списания
+  notes?: string
+}
+
 export interface CreateInventoryData {
   department: StorageDepartment
   itemType: StorageItemType
   responsiblePerson: string
 }
 
-// Store state interface
+// Store state interface (минимальная)
 export interface StorageState {
   // Core data
   batches: StorageBatch[]
@@ -246,7 +251,7 @@ export interface StorageState {
     balances: boolean
     operations: boolean
     inventory: boolean
-    consumption: boolean
+    correction: boolean // ✅ ИЗМЕНЕНО: correction вместо consumption
   }
   error: string | null
 

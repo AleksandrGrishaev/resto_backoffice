@@ -1,4 +1,4 @@
-// src/stores/storage/storageStore.ts - ПОЛНАЯ ВЕРСИЯ
+// src/stores/storage/storageStore.ts - ТОЛЬКО RECEIPT, CORRECTION И INVENTORY
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -13,8 +13,8 @@ import type {
   InventoryItem,
   StorageDepartment,
   StorageItemType,
-  CreateConsumptionData,
   CreateReceiptData,
+  CreateCorrectionData, // ✅ НОВОЕ
   CreateInventoryData
 } from './types'
 
@@ -31,7 +31,7 @@ export const useStorageStore = defineStore('storage', () => {
       balances: false,
       operations: false,
       inventory: false,
-      consumption: false
+      correction: false // ✅ ИЗМЕНЕНО
     },
     error: null,
     filters: {
@@ -217,17 +217,17 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // CONSUMPTION OPERATIONS
+  // CORRECTION OPERATIONS (замена consumption)
   // ===========================
 
-  async function createConsumption(data: CreateConsumptionData): Promise<StorageOperation> {
+  async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
     try {
-      state.value.loading.consumption = true
+      state.value.loading.correction = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Creating consumption operation', { data })
+      DebugUtils.info(MODULE_NAME, 'Creating correction operation', { data })
 
-      const operation = await storageService.createConsumption(data)
+      const operation = await storageService.createCorrection(data)
 
       // Update local state
       state.value.operations.unshift(operation)
@@ -235,18 +235,18 @@ export const useStorageStore = defineStore('storage', () => {
       // Refresh balances
       await fetchBalances(data.department)
 
-      DebugUtils.info(MODULE_NAME, 'Consumption operation created', {
+      DebugUtils.info(MODULE_NAME, 'Correction operation created', {
         operationId: operation.id
       })
 
       return operation
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create consumption'
+      const message = error instanceof Error ? error.message : 'Failed to create correction'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
     } finally {
-      state.value.loading.consumption = false
+      state.value.loading.correction = false
     }
   }
 
@@ -256,7 +256,7 @@ export const useStorageStore = defineStore('storage', () => {
 
   async function createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
     try {
-      state.value.loading.consumption = true
+      state.value.loading.correction = true
       state.value.error = null
 
       DebugUtils.info(MODULE_NAME, 'Creating receipt operation', { data })
@@ -280,7 +280,7 @@ export const useStorageStore = defineStore('storage', () => {
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
     } finally {
-      state.value.loading.consumption = false
+      state.value.loading.correction = false
     }
   }
 
@@ -398,16 +398,16 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  function calculateConsumptionCost(
+  function calculateCorrectionCost(
     itemId: string,
     itemType: StorageItemType,
     department: StorageDepartment,
     quantity: number
   ): number {
     try {
-      return storageService.calculateConsumptionCost(itemId, itemType, department, quantity)
+      return storageService.calculateCorrectionCost(itemId, itemType, department, quantity)
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to calculate consumption cost', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to calculate correction cost', { error })
       throw error
     }
   }
@@ -670,8 +670,8 @@ export const useStorageStore = defineStore('storage', () => {
     fetchOperations,
     fetchInventories,
 
-    // Operations
-    createConsumption,
+    // Operations (только receipt и correction)
+    createCorrection, // ✅ НОВОЕ: заменяет consumption
     createReceipt,
 
     // Inventory
@@ -681,7 +681,7 @@ export const useStorageStore = defineStore('storage', () => {
 
     // FIFO calculations
     calculateFifoAllocation,
-    calculateConsumptionCost,
+    calculateCorrectionCost, // ✅ НОВОЕ: заменяет calculateConsumptionCost
 
     // Alerts
     getExpiringItems,
