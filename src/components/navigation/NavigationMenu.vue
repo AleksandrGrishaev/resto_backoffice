@@ -49,6 +49,22 @@
         </template>
       </v-list-item>
 
+      <!-- Preparations -->
+      <v-list-item
+        to="/preparations"
+        prepend-icon="mdi-chef-hat"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
+      >
+        <template #title>
+          <span>Preparations</span>
+        </template>
+        <template #append>
+          <alerts-badge type="preparation" />
+        </template>
+      </v-list-item>
+
       <!-- Storage -->
       <v-list-item
         to="/storage"
@@ -61,7 +77,7 @@
           <span>Storage</span>
         </template>
         <template #append>
-          <storage-alerts-badge />
+          <alerts-badge type="storage" />
         </template>
       </v-list-item>
 
@@ -115,7 +131,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
 import { DebugUtils } from '@/utils'
 import NavigationAccounts from './NavigationAccounts.vue'
-import StorageAlertsBadge from './StorageAlertsBadge.vue'
+import AlertsBadge from './AlertsBadge.vue'
 import * as variables from '@/styles/variables.scss'
 
 const MODULE_NAME = 'NavigationMenu'

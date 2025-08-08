@@ -14,6 +14,8 @@ import AccountDetailView from '@/views/accounts/AccountDetailView.vue'
 import ProductsView from '@/views/products/ProductsView.vue'
 // Импорт компонентов склада
 import StorageView from '@/views/storage/StorageView.vue'
+// Импорт компонентов полуфабрикатов
+import PreparationView from '@/views/preparation/PreparationView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -63,6 +65,14 @@ const router = createRouter({
           component: () => import('@/views/recipes/RecipesView.vue'),
           meta: {
             title: 'Recipes'
+          }
+        },
+        {
+          path: 'preparations',
+          name: 'preparations',
+          component: PreparationView,
+          meta: {
+            title: 'Preparations Management'
           }
         },
         {
