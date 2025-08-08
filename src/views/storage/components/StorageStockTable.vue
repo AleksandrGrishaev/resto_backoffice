@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/StorageStockTable.vue -->
+<!-- src/views/storage/components/StorageStockTable.vue - ОБНОВЛЕННАЯ ВЕРСИЯ -->
 <template>
   <div class="storage-stock-table">
     <!-- Filters and Search -->
@@ -26,21 +26,33 @@
         </v-btn>
       </div>
 
-      <v-btn
-        color="primary"
-        variant="outlined"
-        prepend-icon="mdi-clipboard-list"
-        @click="$emit('inventory', itemType)"
-      >
-        Start Inventory
-      </v-btn>
+      <div class="d-flex gap-2">
+        <!-- ✅ НОВАЯ КНОПКА ПРОИЗВОДСТВА -->
+        <v-btn
+          color="success"
+          variant="flat"
+          prepend-icon="mdi-chef-hat"
+          @click="$emit('production')"
+        >
+          Production
+        </v-btn>
+
+        <v-btn
+          color="primary"
+          variant="outlined"
+          prepend-icon="mdi-clipboard-list"
+          @click="$emit('inventory', itemType)"
+        >
+          Start Inventory
+        </v-btn>
+      </div>
     </div>
 
     <!-- Stock Table -->
     <v-card>
       <v-data-table
         :headers="headers"
-        :items="balances"
+        :items="balancesWithExpiry"
         :loading="loading"
         :search="searchQuery"
         item-key="itemId"
@@ -70,6 +82,42 @@
                 {{ item.batches.length }} batch{{ item.batches.length !== 1 ? 'es' : '' }}
               </div>
             </div>
+          </div>
+        </template>
+
+        <!-- ✅ НОВАЯ КОЛОНКА СРОКА ГОДНОСТИ -->
+        <template #[`item.expiry`]="{ item }">
+          <div v-if="item.expiryInfo" class="d-flex align-center">
+            <v-icon
+              :icon="storageOps.getExpiryStatusIcon(item.expiryInfo)"
+              :color="storageOps.getExpiryStatusColor(item.expiryInfo)"
+              size="16"
+              class="mr-2"
+            />
+            <div>
+              <div
+                class="font-weight-medium"
+                :class="`text-${storageOps.getExpiryStatusColor(item.expiryInfo)}`"
+              >
+                {{ storageOps.formatExpiryDate(item.expiryInfo) }}
+              </div>
+              <div
+                v-if="item.expiryInfo.expiryDaysRemaining !== null"
+                class="text-caption text-medium-emphasis"
+              >
+                {{
+                  item.expiryInfo.expiryStatus === 'fresh'
+                    ? 'Fresh'
+                    : item.expiryInfo.expiryStatus === 'expiring'
+                      ? 'Expiring'
+                      : 'Expired'
+                }}
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-medium-emphasis">
+            <v-icon icon="mdi-infinity" size="16" class="mr-1" />
+            No expiry
           </div>
         </template>
 
@@ -129,17 +177,6 @@
             <v-btn
               size="small"
               variant="text"
-              color="primary"
-              icon="mdi-minus-circle"
-              @click="$emit('consumption', item.itemId, item.itemType)"
-            >
-              <v-icon />
-              <v-tooltip activator="parent" location="top">Consumption</v-tooltip>
-            </v-btn>
-
-            <v-btn
-              size="small"
-              variant="text"
               color="info"
               icon="mdi-information"
               @click="showItemDetails(item)"
@@ -171,6 +208,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { StorageBalance, StorageItemType, StorageDepartment } from '@/stores/storage'
+import { useStorageOperations } from '@/stores/storage/composables/useStorageOperations'
 
 // Components
 import ItemDetailsDialog from './ItemDetailsDialog.vue'
@@ -187,9 +225,12 @@ const props = defineProps<Props>()
 
 // Emits
 defineEmits<{
-  consumption: [itemId: string, itemType: StorageItemType]
   inventory: [itemType: StorageItemType]
+  production: []
 }>()
+
+// Composables
+const storageOps = useStorageOperations()
 
 // State
 const searchQuery = ref('')
@@ -200,15 +241,29 @@ const selectedItem = ref<StorageBalance | null>(null)
 const headers = computed(() => [
   { title: 'Item', key: 'itemName', sortable: true },
   { title: 'Stock', key: 'stock', sortable: false },
+  { title: 'Expires', key: 'expiry', sortable: true, value: 'expiryInfo.expiryDaysRemaining' }, // ✅ НОВАЯ КОЛОНКА
   { title: 'Avg Cost', key: 'cost', sortable: true, value: 'averageCost' },
   { title: 'Total Value', key: 'totalValue', sortable: true },
   { title: 'Status', key: 'status', sortable: false },
   { title: 'Actions', key: 'actions', sortable: false, width: '120px' }
 ])
 
-const expiringCount = computed(() => props.balances.filter(b => b.hasNearExpiry).length)
+// ✅ НОВЫЙ COMPUTED - обогащаем балансы информацией о сроке годности
+const balancesWithExpiry = computed(() => {
+  return props.balances.map(balance => {
+    const expiryInfo = storageOps.calculateExpiryInfo(balance.batches)
+    return {
+      ...balance,
+      expiryInfo,
+      hasExpired: expiryInfo.hasExpired,
+      hasNearExpiry: expiryInfo.hasNearExpiry
+    }
+  })
+})
 
-const lowStockCount = computed(() => props.balances.filter(b => b.belowMinStock).length)
+const expiringCount = computed(() => balancesWithExpiry.value.filter(b => b.hasNearExpiry).length)
+
+const lowStockCount = computed(() => balancesWithExpiry.value.filter(b => b.belowMinStock).length)
 
 // Methods
 function formatItemType(type: StorageItemType): string {

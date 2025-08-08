@@ -1,4 +1,4 @@
-<!-- src/views/storage/StorageView.vue - ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ -->
+<!-- src/views/storage/StorageView.vue - УПРОЩЕННАЯ ВЕРСИЯ -->
 <template>
   <div class="storage-view">
     <!-- Header -->
@@ -6,35 +6,35 @@
       <div>
         <h1 class="text-h4 font-weight-bold">📦 Storage Management</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">
-          Inventory tracking with FIFO cost calculation
+          Simplified storage with Production and Inventory only
         </p>
       </div>
 
-      <!-- Quick Actions -->
+      <!-- ✅ УПРОЩЕННЫЕ Quick Actions - только 2 кнопки -->
       <div class="d-flex gap-2">
-        <v-btn
-          color="primary"
-          variant="flat"
-          prepend-icon="mdi-minus-circle"
-          :disabled="storageStore.state.loading.balances"
-          @click="showConsumptionDialog = true"
-        >
-          Multi Consumption
-        </v-btn>
-
         <v-btn
           color="success"
           variant="flat"
-          prepend-icon="mdi-plus-circle"
+          prepend-icon="mdi-chef-hat"
           :disabled="storageStore.state.loading.balances"
-          @click="showReceiptDialog = true"
+          @click="showProductionDialog = true"
         >
-          Receipt/Correction
+          Production
+        </v-btn>
+
+        <v-btn
+          color="primary"
+          variant="outlined"
+          prepend-icon="mdi-clipboard-list"
+          :disabled="storageStore.state.loading.balances"
+          @click="openInventoryDialog('product')"
+        >
+          Inventory
         </v-btn>
       </div>
     </div>
 
-    <!-- ✅ Error Alert -->
+    <!-- Error Alert -->
     <v-alert
       v-if="storageStore.state.error"
       type="error"
@@ -74,7 +74,7 @@
       @show-low-stock="showLowStockItems"
     />
 
-    <!-- Main Content Tabs -->
+    <!-- ✅ УПРОЩЕННЫЕ Content Tabs - убрали отдельную вкладку Production -->
     <v-tabs v-model="selectedTab" class="mb-4">
       <v-tab value="products">
         Products
@@ -89,7 +89,7 @@
         </v-chip>
       </v-tab>
       <v-tab value="operations">
-        Recent Operations
+        All Operations
         <v-chip v-if="recentOperations.length > 0" size="small" class="ml-2" variant="tonal">
           {{ recentOperations.length }}
         </v-chip>
@@ -110,11 +110,11 @@
           <v-empty-state
             headline="No Products Found"
             title="No products available for this department"
-            text="Add products through the Receipt/Correction dialog or check if products are loaded."
+            text="Products will appear here after production operations or inventory adjustments."
           >
             <template #actions>
-              <v-btn color="primary" variant="flat" @click="showReceiptDialog = true">
-                Add Products
+              <v-btn color="success" variant="flat" @click="showProductionDialog = true">
+                Start Production
               </v-btn>
             </template>
           </v-empty-state>
@@ -126,8 +126,8 @@
           :loading="storageStore.state.loading.balances"
           item-type="product"
           :department="selectedDepartment"
-          @consumption="openConsumptionForItem"
           @inventory="openInventoryDialog"
+          @production="showProductionDialog = true"
         />
       </v-tabs-window-item>
 
@@ -137,11 +137,11 @@
           <v-empty-state
             headline="No Preparations Found"
             title="No preparations available for this department"
-            text="Preparations are created through recipe production or manual addition."
+            text="Create preparations through the Production dialog using available recipes."
           >
             <template #actions>
-              <v-btn color="primary" variant="outlined" @click="showReceiptDialog = true">
-                Add Preparation
+              <v-btn color="success" variant="flat" @click="showProductionDialog = true">
+                Create Preparations
               </v-btn>
             </template>
           </v-empty-state>
@@ -153,21 +153,22 @@
           :loading="storageStore.state.loading.balances"
           item-type="preparation"
           :department="selectedDepartment"
-          @consumption="openConsumptionForItem"
           @inventory="openInventoryDialog"
+          @production="showProductionDialog = true"
         />
       </v-tabs-window-item>
 
-      <!-- Operations Tab -->
+      <!-- ✅ Operations Tab - показывает ВСЕ операции, включая production -->
       <v-tabs-window-item value="operations">
         <div v-if="recentOperations.length === 0 && !storageStore.state.loading.operations">
           <v-empty-state
             headline="No Operations Found"
-            title="No recent operations for this department"
-            text="Operations will appear here after consumption, receipt, or inventory activities."
+            title="No operations for this department"
+            text="All storage operations (production, inventory) will appear here."
           />
         </div>
 
+        <!-- ✅ ИСПОЛЬЗУЕМ СУЩЕСТВУЮЩУЮ ТАБЛИЦУ с фильтром на production -->
         <storage-operations-table
           v-else
           :operations="recentOperations"
@@ -206,23 +207,18 @@
       </v-tabs-window-item>
     </v-tabs-window>
 
-    <!-- Dialogs -->
-    <multi-consumption-dialog
-      v-model="showConsumptionDialog"
+    <!-- ✅ ТОЛЬКО 2 ДИАЛОГА -->
+    <!-- Production Dialog -->
+    <production-dialog
+      v-model="showProductionDialog"
       :department="selectedDepartment"
-      :initial-items="consumptionItems"
-      @success="handleOperationSuccess"
+      :available-batches="availableBatches"
+      @create-production="handleCreateProduction"
+      @success="handleProductionSuccess"
       @error="handleOperationError"
     />
 
-    <receipt-dialog
-      v-model="showReceiptDialog"
-      :department="selectedDepartment"
-      @success="handleOperationSuccess"
-      @error="handleOperationError"
-    />
-
-    <!-- ✅ ИСПРАВЛЕНО: Передаем existingInventory -->
+    <!-- Inventory Dialog -->
     <inventory-dialog
       v-model="showInventoryDialog"
       :department="selectedDepartment"
@@ -246,18 +242,17 @@ import { useStorageStore } from '@/stores/storage'
 import type {
   StorageDepartment,
   StorageItemType,
-  ConsumptionItem,
-  InventoryDocument
+  InventoryDocument,
+  CreateProductionData
 } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 
 // Components
 import StorageAlerts from './components/StorageAlerts.vue'
 import StorageStockTable from './components/StorageStockTable.vue'
-import StorageOperationsTable from './components/StorageOperationsTable.vue'
+import StorageOperationsTable from './components/StorageOperationsTable.vue' // ✅ ИСПОЛЬЗУЕМ СУЩЕСТВУЮЩУЮ
 import StorageInventoriesTable from './components/StorageInventoriesTable.vue'
-import MultiConsumptionDialog from './components/MultiConsumptionDialog.vue'
-import ReceiptDialog from './components/ReceiptDialog.vue'
+import ProductionDialog from './components/ProductionDialog.vue'
 import InventoryDialog from './components/InventoryDialog.vue'
 
 const MODULE_NAME = 'StorageView'
@@ -268,16 +263,20 @@ const storageStore = useStorageStore()
 // State
 const selectedDepartment = ref<StorageDepartment>('kitchen')
 const selectedTab = ref('products')
-const showConsumptionDialog = ref(false)
-const showReceiptDialog = ref(false)
+const showProductionDialog = ref(false)
 const showInventoryDialog = ref(false)
 const inventoryItemType = ref<StorageItemType>('product')
-const consumptionItems = ref<ConsumptionItem[]>([])
 const showSuccessSnackbar = ref(false)
 const successMessage = ref('')
-const editingInventory = ref<InventoryDocument | null>(null) // ✅ ДОБАВЛЕНО
+const editingInventory = ref<InventoryDocument | null>(null)
 
 // Computed
+const availableBatches = computed(() => {
+  return storageStore.state.batches.filter(
+    b => b.department === selectedDepartment.value && b.status === 'active' && b.currentQuantity > 0
+  )
+})
+
 const productBalances = computed(() => {
   try {
     return (
@@ -304,6 +303,7 @@ const preparationBalances = computed(() => {
   }
 })
 
+// ✅ ПОКАЗЫВАЕМ ВСЕ ОПЕРАЦИИ - существующая таблица умеет фильтровать по типам
 const recentOperations = computed(() => {
   try {
     return (
@@ -355,36 +355,42 @@ const barItemCount = computed(() => {
 })
 
 // Methods
-function openConsumptionForItem(itemId: string, itemType: StorageItemType) {
+async function handleCreateProduction(data: CreateProductionData) {
   try {
-    const itemName = storageStore.getItemName ? storageStore.getItemName(itemId, itemType) : itemId
-
-    consumptionItems.value = [
-      {
-        itemId,
-        itemType,
-        quantity: 1,
-        notes: `Quick consumption of ${itemName}`
-      }
-    ]
-    showConsumptionDialog.value = true
-
-    DebugUtils.info(MODULE_NAME, 'Opening consumption dialog for item', {
-      itemId,
-      itemType,
-      itemName
-    })
+    DebugUtils.info(MODULE_NAME, 'Creating production operation', { data })
+    await storageStore.createProduction(data)
+    handleProductionSuccess('Production completed successfully!')
   } catch (error) {
-    console.warn('Error opening consumption dialog:', error)
-    handleOperationError('Failed to open consumption dialog')
+    DebugUtils.error(MODULE_NAME, 'Production failed', { error })
+    handleOperationError('Failed to complete production operation')
   }
 }
 
-// ✅ ИСПРАВЛЕНО: Сброс editingInventory при создании новой инвентаризации
+async function handleProductionSuccess(message: string = 'Production completed successfully') {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Production completed, refreshing data')
+
+    successMessage.value = message
+    showSuccessSnackbar.value = true
+
+    await Promise.all([
+      storageStore.fetchBalances(selectedDepartment.value),
+      storageStore.fetchOperations(selectedDepartment.value)
+    ])
+
+    showProductionDialog.value = false
+
+    DebugUtils.info(MODULE_NAME, 'Production data refreshed successfully')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to refresh data after production', { error })
+    handleOperationError('Production completed but failed to refresh data')
+  }
+}
+
 function openInventoryDialog(itemType: StorageItemType) {
   try {
     inventoryItemType.value = itemType
-    editingInventory.value = null // ✅ ДОБАВЛЕНО: сбрасываем при создании новой
+    editingInventory.value = null
     showInventoryDialog.value = true
 
     DebugUtils.info(MODULE_NAME, 'Opening inventory dialog', {
@@ -415,30 +421,6 @@ function showLowStockItems() {
   }
 }
 
-async function handleOperationSuccess(message: string = 'Operation completed successfully') {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Operation completed, refreshing data')
-
-    successMessage.value = message
-    showSuccessSnackbar.value = true
-
-    await Promise.all([
-      storageStore.fetchBalances(selectedDepartment.value),
-      storageStore.fetchOperations(selectedDepartment.value)
-    ])
-
-    // Закрываем диалоги
-    showConsumptionDialog.value = false
-    showReceiptDialog.value = false
-
-    DebugUtils.info(MODULE_NAME, 'Data refreshed successfully')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to refresh data', { error })
-    handleOperationError('Operation completed but failed to refresh data')
-  }
-}
-
-// ✅ ИСПРАВЛЕНО: Очистка editingInventory при успехе
 async function handleInventorySuccess(message: string = 'Inventory completed successfully') {
   try {
     DebugUtils.info(MODULE_NAME, 'Inventory completed, refreshing data')
@@ -453,7 +435,7 @@ async function handleInventorySuccess(message: string = 'Inventory completed suc
     ])
 
     showInventoryDialog.value = false
-    editingInventory.value = null // ✅ ДОБАВЛЕНО: очищаем после успешного завершения
+    editingInventory.value = null
 
     DebugUtils.info(MODULE_NAME, 'Inventory data refreshed successfully')
   } catch (error) {
@@ -465,24 +447,20 @@ async function handleInventorySuccess(message: string = 'Inventory completed suc
 function handleOperationError(message: string) {
   DebugUtils.error(MODULE_NAME, 'Operation error', { message })
 
-  // Устанавливаем ошибку в store для отображения
   if (storageStore.state) {
     storageStore.state.error = message
   }
 
-  // Закрываем все диалоги
-  showConsumptionDialog.value = false
-  showReceiptDialog.value = false
+  showProductionDialog.value = false
   showInventoryDialog.value = false
-  editingInventory.value = null // ✅ ДОБАВЛЕНО: очищаем при ошибке
+  editingInventory.value = null
 }
 
-// ✅ ИСПРАВЛЕНО: Правильная передача существующей инвентаризации
 function handleEditInventory(inventory: InventoryDocument) {
   try {
     selectedDepartment.value = inventory.department
     inventoryItemType.value = inventory.itemType
-    editingInventory.value = inventory // ✅ ИСПРАВЛЕНО: устанавливаем редактируемую инвентаризацию
+    editingInventory.value = inventory
 
     showInventoryDialog.value = true
 
@@ -498,10 +476,8 @@ function handleEditInventory(inventory: InventoryDocument) {
   }
 }
 
-// ✅ ДОБАВЛЕНО: Обработчик для начала новой инвентаризации из таблицы
 function handleStartInventory() {
   try {
-    // Открываем диалог инвентаризации с товарами по умолчанию
     inventoryItemType.value = 'product'
     editingInventory.value = null
     showInventoryDialog.value = true
@@ -516,7 +492,7 @@ function handleStartInventory() {
   }
 }
 
-// Watch для обновления данных при смене департамента
+// Watch for department changes
 watch(selectedDepartment, async (newDepartment, oldDepartment) => {
   if (newDepartment === oldDepartment) return
 
@@ -526,7 +502,6 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
       to: newDepartment
     })
 
-    // Очищаем фильтры при смене департамента
     if (storageStore.clearFilters) {
       storageStore.clearFilters()
     }
