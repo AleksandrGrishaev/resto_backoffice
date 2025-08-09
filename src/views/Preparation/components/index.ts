@@ -29,37 +29,11 @@ export { default as PreparationStockTable } from './PreparationStockTable.vue'
 
 /**
  * PreparationOperationsTable - Operations history table
- * Displays recent preparation operations (production, consumption, inventory, corrections).
+ * Displays recent preparation operations (production, inventory, corrections).
  * Shows operation details, responsible persons, and financial impact.
  * Used in the "Recent Operations" tab of PreparationView.
  */
 export { default as PreparationOperationsTable } from './PreparationOperationsTable.vue'
-
-// ========================
-// CONSUMPTION WORKFLOW
-// ========================
-
-/**
- * PreparationConsumptionDialog - Main consumption dialog
- * Allows users to consume multiple preparations in a single operation.
- * Features quick-add buttons for popular preparations, FIFO cost calculation,
- * usage tracking (menu item/catering/waste), and batch allocation preview.
- */
-export { default as PreparationConsumptionDialog } from './PreparationConsumptionDialog.vue'
-
-/**
- * PreparationConsumptionItemCard - Individual item card in consumption dialog
- * Shows preparation details, available stock, quantity input, FIFO allocation preview,
- * and real-time cost calculation. Includes stock availability warnings.
- */
-export { default as PreparationConsumptionItemCard } from './PreparationConsumptionItemCard.vue'
-
-/**
- * AddPreparationConsumptionItemDialog - Item selection dialog for consumption
- * Allows users to search and select preparations to add to consumption.
- * Shows preparation types and stock level indicators.
- */
-export { default as AddPreparationConsumptionItemDialog } from './AddPreparationConsumptionItemDialog.vue'
 
 // ========================
 // PRODUCTION WORKFLOW
@@ -125,6 +99,12 @@ export { default as PreparationInventoriesTable } from './PreparationInventories
  */
 export { default as PreparationItemDetailsDialog } from './PreparationItemDetailsDialog.vue'
 
+/**
+ * InventoryDetailsDialog - Detailed inventory information modal
+ * Shows inventory results with preparation-specific shelf life analysis
+ */
+export { default as InventoryDetailsDialog } from './InventoryDetailsDialog.vue'
+
 // ========================
 // COMPONENT ARCHITECTURE NOTES
 // ========================
@@ -132,7 +112,7 @@ export { default as PreparationItemDetailsDialog } from './PreparationItemDetail
 /**
  * DESIGN PRINCIPLES:
  *
- * 1. **Modularity**: Each component handles a specific workflow (consumption, production, inventory)
+ * 1. **Modularity**: Each component handles a specific workflow (production, inventory)
  * 2. **FIFO Integration**: All components properly implement FIFO cost calculation
  * 3. **Shelf Life Focus**: Components emphasize short expiry dates (1-2 days typical)
  * 4. **Real-time Updates**: Components automatically refresh data after operations
@@ -146,15 +126,13 @@ export { default as PreparationItemDetailsDialog } from './PreparationItemDetail
  * ├── PreparationStockTable (Stock overview)
  * │   └── PreparationItemDetailsDialog (Item details modal)
  * ├── PreparationOperationsTable (Operations history)
- * ├── PreparationConsumptionDialog (Consumption workflow)
- * │   ├── PreparationConsumptionItemCard (Item cards)
- * │   └── AddPreparationConsumptionItemDialog (Add items)
  * ├── PreparationProductionDialog (Production workflow)
  * │   ├── PreparationProductionItemCard (Item cards)
  * │   └── AddPreparationProductionItemDialog (Add items)
  * ├── PreparationInventoryDialog (Inventory workflow)
  * │   └── PreparationInventoryItemRow (Item rows)
- * └── PreparationInventoriesTable (Inventory history)
+ * ├── PreparationInventoriesTable (Inventory history)
+ * └── InventoryDetailsDialog (Inventory details)
  *
  * DATA FLOW:
  *
@@ -171,5 +149,5 @@ export { default as PreparationItemDetailsDialog } from './PreparationItemDetail
  * 2. **Production Focus**: "Production" instead of "Receipt"
  * 3. **Recipe Integration**: Tight coupling with recipe system
  * 4. **Quality Emphasis**: More focus on freshness and quality
- * 5. **Usage Tracking**: Detailed tracking of preparation usage in menu items
+ * 5. **No Consumption**: Consumption tracking removed from main workflow
  */

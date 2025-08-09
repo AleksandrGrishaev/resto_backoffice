@@ -1,8 +1,8 @@
-// src/stores/preparation/types.ts - Адаптация Storage types для полуфабрикатов
+// src/stores/preparation/types.ts - Remove consumption types
 import { BaseEntity } from '@/types/common'
 
 export type PreparationDepartment = 'kitchen' | 'bar'
-export type PreparationOperationType = 'receipt' | 'consumption' | 'correction' | 'inventory'
+export type PreparationOperationType = 'receipt' | 'correction' | 'inventory'
 export type BatchSourceType =
   | 'production'
   | 'correction'
@@ -59,7 +59,7 @@ export interface PreparationOperationItem {
   quantity: number
   unit: string
 
-  // FIFO allocation (for consumption/corrections)
+  // FIFO allocation (for corrections)
   batchAllocations?: BatchAllocation[]
 
   // Cost tracking
@@ -75,7 +75,7 @@ export interface PreparationOperationItem {
 export interface PreparationOperation extends BaseEntity {
   // Operation details
   operationType: PreparationOperationType
-  documentNumber: string // "PREP-REC-001", "PREP-CON-001", etc.
+  documentNumber: string // "PREP-REC-001", "PREP-COR-001", etc.
   operationDate: string
   department: PreparationDepartment
 
@@ -87,14 +87,6 @@ export interface PreparationOperation extends BaseEntity {
 
   // Financial impact
   totalValue?: number
-
-  // Consumption details (адаптация consumptionDetails из Storage)
-  consumptionDetails?: {
-    reason: 'menu_item' | 'catering' | 'waste' | 'expired' | 'damage' | 'other'
-    relatedId?: string // Menu Item ID, Order ID, etc.
-    relatedName?: string
-    portionCount?: number
-  }
 
   // Correction details (адаптация correctionDetails из Storage)
   correctionDetails?: {
@@ -206,25 +198,6 @@ export interface PreparationReceiptItem {
   quantity: number
   costPerUnit: number
   expiryDate?: string
-  notes?: string
-}
-
-export interface CreatePreparationConsumptionData {
-  department: PreparationDepartment
-  responsiblePerson: string
-  items: PreparationConsumptionItem[]
-  consumptionDetails: {
-    reason: 'menu_item' | 'catering' | 'waste' | 'expired' | 'damage' | 'other'
-    relatedId?: string
-    relatedName?: string
-    portionCount?: number
-  }
-  notes?: string
-}
-
-export interface PreparationConsumptionItem {
-  preparationId: string // вместо itemId
-  quantity: number
   notes?: string
 }
 

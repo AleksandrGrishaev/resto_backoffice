@@ -1,4 +1,4 @@
-// src/stores/preparation/preparationStore.ts - Адаптация StorageStore для полуфабрикатов
+// src/stores/preparation/preparationStore.ts - Remove consumption operations
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -12,7 +12,6 @@ import type {
   PreparationInventoryItem,
   PreparationDepartment,
   CreatePreparationReceiptData,
-  CreatePreparationConsumptionData,
   CreatePreparationCorrectionData,
   CreatePreparationInventoryData
 } from './types'
@@ -199,42 +198,6 @@ export const usePreparationStore = defineStore('preparation', () => {
   }
 
   // ===========================
-  // CONSUMPTION OPERATIONS
-  // ===========================
-
-  async function createConsumption(
-    data: CreatePreparationConsumptionData
-  ): Promise<PreparationOperation> {
-    try {
-      state.value.loading.consumption = true
-      state.value.error = null
-
-      DebugUtils.info(MODULE_NAME, 'Creating preparation consumption operation', { data })
-
-      const operation = await preparationService.createConsumption(data)
-
-      // Update local state
-      state.value.operations.unshift(operation)
-
-      // Refresh balances
-      await fetchBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Preparation consumption operation created', {
-        operationId: operation.id
-      })
-
-      return operation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create consumption'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.consumption = false
-    }
-  }
-
-  // ===========================
   // CORRECTION OPERATIONS
   // ===========================
 
@@ -403,7 +366,7 @@ export const usePreparationStore = defineStore('preparation', () => {
   }
 
   // ===========================
-  // FIFO CALCULATIONS
+  // FIFO CALCULATIONS (kept for display purposes)
   // ===========================
 
   function calculateFifoAllocation(
@@ -646,7 +609,6 @@ export const usePreparationStore = defineStore('preparation', () => {
     fetchInventories,
 
     // Operations
-    createConsumption,
     createCorrection,
     createReceipt,
 
@@ -655,7 +617,7 @@ export const usePreparationStore = defineStore('preparation', () => {
     updateInventory,
     finalizeInventory,
 
-    // FIFO calculations
+    // FIFO calculations (kept for display purposes)
     calculateFifoAllocation,
     calculateConsumptionCost,
 

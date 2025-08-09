@@ -1,4 +1,4 @@
-// src/stores/preparation/preparationService.ts - Адаптация StorageService для полуфабрикатов
+// src/stores/preparation/preparationService.ts - Remove consumption operations
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useRecipesStore } from '@/stores/recipes'
 import {
@@ -14,7 +14,6 @@ import type {
   PreparationBalance,
   PreparationDepartment,
   CreatePreparationReceiptData,
-  CreatePreparationConsumptionData,
   CreatePreparationCorrectionData,
   CreatePreparationInventoryData,
   PreparationInventoryDocument,
@@ -182,7 +181,7 @@ export class PreparationService {
     }
   }
 
-  // Calculate consumption cost based on FIFO
+  // Calculate consumption cost based on FIFO (for display purposes only)
   calculateConsumptionCost(
     preparationId: string,
     department: PreparationDepartment,
@@ -285,103 +284,6 @@ export class PreparationService {
       return operation
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create preparation receipt', { error })
-      throw error
-    }
-  }
-
-  // ===========================
-  // CONSUMPTION OPERATIONS
-  // ===========================
-
-  async createConsumption(data: CreatePreparationConsumptionData): Promise<PreparationOperation> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Creating preparation consumption operation', { data })
-
-      const operationItems = []
-      let totalValue = 0
-
-      for (const item of data.items) {
-        const preparationInfo = this.getPreparationInfo(item.preparationId)
-
-        // Calculate FIFO allocation
-        const { allocations, remainingQuantity } = this.calculateFifoAllocation(
-          item.preparationId,
-          data.department,
-          item.quantity
-        )
-
-        if (remainingQuantity > 0) {
-          throw new Error(
-            `Insufficient stock for ${preparationInfo.name}. Missing: ${remainingQuantity} ${preparationInfo.unit}`
-          )
-        }
-
-        // Calculate cost
-        const totalCost = allocations.reduce(
-          (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
-          0
-        )
-
-        operationItems.push({
-          id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          preparationId: item.preparationId,
-          preparationName: preparationInfo.name,
-          quantity: item.quantity,
-          unit: preparationInfo.unit,
-          batchAllocations: allocations,
-          totalCost,
-          notes: item.notes
-        })
-
-        totalValue += totalCost
-
-        // Update batches (reduce stock)
-        for (const allocation of allocations) {
-          const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
-          if (batchIndex !== -1) {
-            this.batches[batchIndex].currentQuantity -= allocation.quantity
-            this.batches[batchIndex].totalValue =
-              this.batches[batchIndex].currentQuantity * this.batches[batchIndex].costPerUnit
-            this.batches[batchIndex].updatedAt = TimeUtils.getCurrentLocalISO()
-
-            if (this.batches[batchIndex].currentQuantity <= 0) {
-              this.batches[batchIndex].status = 'consumed'
-              this.batches[batchIndex].isActive = false
-            }
-          }
-        }
-      }
-
-      // Create operation
-      const operation: PreparationOperation = {
-        id: `prep-op-${Date.now()}`,
-        operationType: 'consumption',
-        documentNumber: `PREP-CON-${String(this.operations.length + 1).padStart(3, '0')}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department,
-        responsiblePerson: data.responsiblePerson,
-        items: operationItems,
-        totalValue,
-        consumptionDetails: data.consumptionDetails,
-        status: 'confirmed',
-        notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-
-      this.operations.push(operation)
-
-      // Recalculate balances
-      await this.recalculateBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Preparation consumption operation created', {
-        operationId: operation.id,
-        totalValue
-      })
-
-      return operation
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create preparation consumption', { error })
       throw error
     }
   }

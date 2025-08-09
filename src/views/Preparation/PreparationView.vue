@@ -1,4 +1,4 @@
-<!-- src/views/preparation/PreparationView.vue - Адаптация StorageView для полуфабрикатов -->
+<!-- src/views/preparation/PreparationView.vue - Remove Use Preparations button and dialog -->
 <template>
   <div class="preparation-view">
     <!-- Header -->
@@ -20,16 +20,6 @@
           @click="showProductionDialog = true"
         >
           Add Production
-        </v-btn>
-
-        <v-btn
-          color="warning"
-          variant="outlined"
-          prepend-icon="mdi-minus-circle"
-          :disabled="preparationStore.state.loading.balances"
-          @click="showConsumptionDialog = true"
-        >
-          Use Preparations
         </v-btn>
 
         <v-btn
@@ -188,13 +178,6 @@
       @error="handleOperationError"
     />
 
-    <preparation-consumption-dialog
-      v-model="showConsumptionDialog"
-      :department="selectedDepartment"
-      @success="handleOperationSuccess"
-      @error="handleOperationError"
-    />
-
     <preparation-inventory-dialog
       v-model="showInventoryDialog"
       :department="selectedDepartment"
@@ -232,7 +215,6 @@ import PreparationStockTable from './components/PreparationStockTable.vue'
 import PreparationOperationsTable from './components/PreparationOperationsTable.vue'
 import PreparationInventoriesTable from './components/PreparationInventoriesTable.vue'
 import PreparationProductionDialog from './components/PreparationProductionDialog.vue'
-import PreparationConsumptionDialog from './components/PreparationConsumptionDialog.vue'
 import PreparationInventoryDialog from './components/PreparationInventoryDialog.vue'
 
 const MODULE_NAME = 'PreparationView'
@@ -244,7 +226,6 @@ const preparationStore = usePreparationStore()
 const selectedDepartment = ref<PreparationDepartment>('kitchen')
 const selectedTab = ref('preparations')
 const showProductionDialog = ref(false)
-const showConsumptionDialog = ref(false)
 const showInventoryDialog = ref(false)
 const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
@@ -378,7 +359,6 @@ async function handleOperationSuccess(message: string = 'Operation completed suc
 
     // Close dialogs
     showProductionDialog.value = false
-    showConsumptionDialog.value = false
 
     DebugUtils.info(MODULE_NAME, 'Data refreshed successfully')
   } catch (error) {
@@ -418,7 +398,6 @@ function handleOperationError(message: string) {
 
   // Close all dialogs
   showProductionDialog.value = false
-  showConsumptionDialog.value = false
   showInventoryDialog.value = false
   editingInventory.value = null
 }
