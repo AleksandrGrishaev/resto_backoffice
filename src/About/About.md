@@ -3,6 +3,11 @@
 /stores
 /name
 /composables (если необходимо)
+usebaseName
+use...
+/service(если необходимо)
+servicebaseName
+service...
 index
 types
 nameStore
@@ -14,4 +19,6 @@ nameMock
 /views
 /name
 /components
+/name
+base...
 nameView

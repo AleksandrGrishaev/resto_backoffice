@@ -81,6 +81,22 @@
         </template>
       </v-list-item>
 
+      <!-- Suppliers & Procurement -->
+      <v-list-item
+        to="/suppliers"
+        prepend-icon="mdi-truck"
+        color="primary"
+        class="mb-2"
+        :active-color="variables.colorPrimary"
+      >
+        <template #title>
+          <span>Suppliers</span>
+        </template>
+        <template #append>
+          <alerts-badge type="supplier" />
+        </template>
+      </v-list-item>
+
       <!-- Accounts with active accounts -->
       <navigation-accounts />
 

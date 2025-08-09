@@ -20,10 +20,9 @@ Phase 1: StorageStore (Week 1)
 Mock данные на основе существующих products/preparations
 Базовый StorageService и StorageStore
 
-Phase 2: StorageStore UI (Week 2)
+Phase 2: StorageStore and PreparationStore UI (Week 2)
 
 StorageView с табами Kitchen/Bar
-MultiConsumptionDialog для быстрого списания
 Базовый функционал поступлений/коррекций
 Интеграция с Product/Recipe stores
 

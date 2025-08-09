@@ -16,6 +16,8 @@ import ProductsView from '@/views/products/ProductsView.vue'
 import StorageView from '@/views/storage/StorageView.vue'
 // Импорт компонентов полуфабрикатов
 import PreparationView from '@/views/preparation/PreparationView.vue'
+// Импорт компонентов поставщиков и закупок
+import SupplierView from '@/views/supplier/SupplierView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -81,6 +83,14 @@ const router = createRouter({
           component: StorageView,
           meta: {
             title: 'Storage Management'
+          }
+        },
+        {
+          path: 'suppliers',
+          name: 'suppliers',
+          component: SupplierView,
+          meta: {
+            title: 'Suppliers & Procurement'
           }
         },
         {
