@@ -192,10 +192,7 @@
                         density="compact"
                         placeholder="Special instructions, quality requirements..."
                         append-inner-icon="mdi-close"
-                        @click:append-inner="
-                          item.notes = ''
-                          showNotesForItem = null
-                        "
+                        @click:append-inner="clearItemNotes(index)"
                       />
                     </v-col>
                   </v-row>
@@ -549,6 +546,12 @@ const selectedItemData = computed(() => {
 const selectedItemUnit = computed(() => selectedItemData.value?.unit || '')
 
 // Methods
+
+function clearItemNotes(index: number) {
+  formData.value.items[index].notes = ''
+  showNotesForItem.value = null
+}
+
 function getItemIcon(itemName: string): string {
   const icons: Record<string, string> = {
     beef: '🥩',

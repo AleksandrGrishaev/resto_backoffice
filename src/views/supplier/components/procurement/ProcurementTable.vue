@@ -522,10 +522,7 @@
             v-if="canEdit(selectedRequest)"
             color="warning"
             variant="flat"
-            @click="
-              $emit('edit-request', selectedRequest)
-              showDetailsDialog = false
-            "
+            @click="handleEditRequest"
           >
             Edit Request
           </v-btn>
@@ -646,6 +643,13 @@ const canBulkCancel = computed(() =>
 )
 
 // Methods
+function handleEditRequest() {
+  if (selectedRequest.value) {
+    emit('edit-request', selectedRequest.value)
+    showDetailsDialog.value = false
+  }
+}
+
 function getDepartmentIcon(department: string): string {
   const icons = {
     kitchen: '👨‍🍳',

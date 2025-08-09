@@ -672,10 +672,7 @@
             v-if="canEdit(selectedOrder)"
             color="warning"
             variant="flat"
-            @click="
-              $emit('edit-order', selectedOrder)
-              showDetailsDialog = false
-            "
+            @click="handleEditOrder"
           >
             Edit Order
           </v-btn>
@@ -826,6 +823,13 @@ const canBulkCancel = computed(() =>
 )
 
 // Methods
+function handleEditOrder() {
+  if (selectedOrder.value) {
+    emit('edit-order', selectedOrder.value)
+    showDetailsDialog.value = false
+  }
+}
+
 function getSupplierIcon(supplierName: string): string {
   const icons: Record<string, string> = {
     meat: '🥩',

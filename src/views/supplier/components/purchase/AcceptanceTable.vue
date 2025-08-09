@@ -765,10 +765,7 @@
             v-if="canEdit(selectedAcceptance)"
             color="warning"
             variant="flat"
-            @click="
-              $emit('edit-acceptance', selectedAcceptance)
-              showDetailsDialog = false
-            "
+            @click="handleEditAcceptance"
           >
             Edit Acceptance
           </v-btn>
@@ -920,6 +917,13 @@ const canBulkCreateCorrections = computed(() =>
 const canBulkReject = computed(() => selectedAcceptances.value.some(a => a.status === 'draft'))
 
 // Methods
+function handleEditAcceptance() {
+  if (selectedAcceptance.value) {
+    emit('edit-acceptance', selectedAcceptance.value)
+    showDetailsDialog.value = false
+  }
+}
+
 function getAcceptanceIcon(status: string): string {
   const icons = {
     draft: '📝',

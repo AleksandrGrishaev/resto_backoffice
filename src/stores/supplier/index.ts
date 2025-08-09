@@ -1,4 +1,4 @@
-// src/stores/supplier/index.ts
+// src/stores/supplier/index.ts - ИСПРАВЛЕННАЯ ВЕРСИЯ
 
 // ============================================================================
 // MAIN EXPORTS
@@ -187,6 +187,20 @@ export function getPurchaseOrderStatusName(status: keyof typeof PURCHASE_ORDER_S
 }
 
 /**
+ * Get display name for payment status - ДОБАВЛЕНО
+ */
+export function getPaymentStatusName(status: keyof typeof PAYMENT_STATUSES): string {
+  return PAYMENT_STATUSES[status] || status
+}
+
+/**
+ * Get display name for acceptance status - ДОБАВЛЕНО
+ */
+export function getAcceptanceStatusName(status: keyof typeof ACCEPTANCE_STATUSES): string {
+  return ACCEPTANCE_STATUSES[status] || status
+}
+
+/**
  * Get color for reliability level
  */
 export function getReliabilityColor(level: keyof typeof RELIABILITY_LEVELS): string {
@@ -227,7 +241,7 @@ export function getPurchaseOrderStatusColor(status: keyof typeof PURCHASE_ORDER_
 }
 
 /**
- * Get color for payment status
+ * Get color for payment status - ДОБАВЛЕНО
  */
 export function getPaymentStatusColor(status: keyof typeof PAYMENT_STATUSES): string {
   const colors = {
@@ -236,6 +250,46 @@ export function getPaymentStatusColor(status: keyof typeof PAYMENT_STATUSES): st
     paid: 'success'
   }
   return colors[status] || 'default'
+}
+
+/**
+ * Get color for acceptance status - ДОБАВЛЕНО
+ */
+export function getAcceptanceStatusColor(status: keyof typeof ACCEPTANCE_STATUSES): string {
+  const colors = {
+    draft: 'warning',
+    accepted: 'success',
+    rejected: 'error'
+  }
+  return colors[status] || 'default'
+}
+
+/**
+ * Get color for quality rating - ДОБАВЛЕНО
+ */
+export function getQualityRatingColor(quality: keyof typeof QUALITY_RATINGS): string {
+  const colors = {
+    excellent: 'success',
+    good: 'info',
+    acceptable: 'warning',
+    poor: 'error',
+    rejected: 'error'
+  }
+  return colors[quality] || 'default'
+}
+
+/**
+ * Get display name for delivery method - ДОБАВЛЕНО
+ */
+export function getDeliveryMethodName(method: keyof typeof DELIVERY_METHODS): string {
+  return DELIVERY_METHODS[method] || method
+}
+
+/**
+ * Get display name for product category - ДОБАВЛЕНО
+ */
+export function getProductCategoryName(category: keyof typeof PRODUCT_CATEGORIES): string {
+  return PRODUCT_CATEGORIES[category] || category
 }
 
 /**
@@ -385,16 +439,8 @@ function isValidEmail(email: string): boolean {
 }
 
 // ============================================================================
-// DEFAULT EXPORTS
+// DEFAULT EXPORTS - УБИРАЕМ ПРОБЛЕМНЫЙ DEFAULT EXPORT
 // ============================================================================
 
-export default {
-  useSupplierStore,
-  supplierService,
-  SUPPLIER_TYPES,
-  PAYMENT_TERMS,
-  RELIABILITY_LEVELS,
-  formatCurrency,
-  formatDate,
-  getSupplierIcon
-}
+// Используем только named exports для избежания проблем с модульной системой
+// Все необходимые экспорты уже доступны как named exports выше
