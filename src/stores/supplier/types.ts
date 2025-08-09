@@ -1,4 +1,5 @@
-// src/stores/supplier/types.ts
+// src/stores/supplier/types.ts - ENHANCED VERSION
+
 import { BaseEntity } from '@/types/common'
 
 // Базовые типы
@@ -19,66 +20,178 @@ export type DeliveryMethod = 'pickup' | 'delivery'
 export type AcceptanceStatus = 'draft' | 'accepted' | 'rejected'
 export type QualityRating = 'excellent' | 'good' | 'acceptable' | 'poor' | 'rejected'
 
-// Поставщик
+// NEW: Bill/Invoice Types
+export type BillStatus = 'draft' | 'issued' | 'paid' | 'overdue' | 'cancelled'
+export type ConsolidationStatus = 'draft' | 'processed' | 'cancelled'
+
+// Поставщик (existing)
 export interface Supplier extends BaseEntity {
-  // Основная информация
   name: string
   type: SupplierType
-
-  // Контакты
   contactPerson?: string
   phone?: string
   email?: string
   address?: string
-
-  // Продукты
-  products: string[] // Product IDs
-  categories: string[] // Категории продуктов
-
-  // Условия работы
+  products: string[]
+  categories: string[]
   paymentTerms: PaymentTerms
-
-  // Статистика и финансы
   totalOrders?: number
   totalOrderValue?: number
   averageOrderValue?: number
   lastOrderDate?: string
   reliability: SupplierReliability
-
-  // Финансовые показатели
-  currentBalance: number // дебет/кредит с поставщиком
+  currentBalance: number
   totalPaid?: number
   totalDebt?: number
-
-  // Статус
   isActive: boolean
   notes?: string
 }
 
-// Заявка на заказ
+// NEW: Bill Entity
+export interface Bill extends BaseEntity {
+  // Identification
+  billNumber: string // "BILL-MEAT-001"
+  purchaseOrderId: string
+  supplierId: string
+  supplierName: string // cached
+
+  // Financial details
+  totalAmount: number
+  taxAmount?: number
+  discountAmount?: number
+  finalAmount: number // calculated final amount
+
+  // Payment terms
+  paymentTerms: PaymentTerms
+  issueDate: string
+  dueDate: string
+
+  // Status and tracking
+  status: BillStatus
+  paymentStatus: PaymentStatus
+
+  // Integration
+  accountTransactionId?: string // link to payment transaction
+
+  // Metadata
+  notes?: string
+  issuedBy: string
+  paidAt?: string
+}
+
+// NEW: Request Consolidation
+export interface RequestConsolidation extends BaseEntity {
+  // Basic info
+  consolidationNumber: string // "CONS-001"
+  consolidationDate: string
+  consolidatedBy: string
+
+  // Source requests
+  sourceRequestIds: string[]
+  departments: ('kitchen' | 'bar')[]
+
+  // Consolidated items grouped by supplier
+  supplierGroups: SupplierGroup[]
+
+  // Status
+  status: ConsolidationStatus
+
+  // Results
+  generatedOrderIds: string[]
+  totalEstimatedValue: number
+}
+
+export interface SupplierGroup {
+  supplierId: string
+  supplierName: string
+  items: ConsolidatedItem[]
+  estimatedTotal: number
+}
+
+export interface ConsolidatedItem {
+  itemId: string
+  itemName: string
+  unit: string
+
+  // Quantities by department
+  kitchenQuantity: number
+  barQuantity: number
+  totalQuantity: number
+
+  // Source requests
+  sourceRequests: {
+    requestId: string
+    requestNumber: string
+    department: 'kitchen' | 'bar'
+    quantity: number
+    reason: string
+  }[]
+
+  // Pricing
+  estimatedPrice?: number
+  totalEstimatedCost?: number
+}
+
+// Enhanced Procurement Request
 export interface ProcurementRequest extends BaseEntity {
-  // Заявка
-  requestNumber: string // "REQ-KITCHEN-001"
+  requestNumber: string
   department: 'kitchen' | 'bar'
   requestedBy: string
   requestDate: string
-
-  // Товары
   items: ProcurementRequestItem[]
-
-  // Помощник заказов
   suggestions?: OrderSuggestion[]
-
-  // Статус
   status: ProcurementStatus
   priority: ProcurementPriority
-
-  // Связи
   purchaseOrderIds: string[]
+
+  // NEW: Enhanced tracking
+  consolidationId?: string // If part of consolidation
+  lastStatusChange?: string
+  statusHistory?: StatusChange[]
 
   notes?: string
 }
 
+// NEW: Status tracking
+export interface StatusChange {
+  from: ProcurementStatus
+  to: ProcurementStatus
+  changedAt: string
+  changedBy: string
+  reason?: string
+}
+
+// Enhanced Purchase Order
+export interface PurchaseOrder extends BaseEntity {
+  orderNumber: string
+  supplierId: string
+  supplierName: string
+  orderDate: string
+  expectedDeliveryDate?: string
+  actualDeliveryDate?: string
+  items: PurchaseOrderItem[]
+  totalAmount: number
+  taxAmount?: number
+  discountAmount?: number
+  paymentTerms: PaymentTerms
+  paymentStatus: PaymentStatus
+  deliveryMethod: DeliveryMethod
+  status: PurchaseOrderStatus
+  requestIds: string[]
+
+  // NEW: Enhanced tracking
+  billId?: string // Link to bill
+  consolidationId?: string // If created from consolidation
+  statusHistory?: StatusChange[]
+
+  receiptOperationId?: string
+  accountTransactionId?: string
+  hasExportedPdf?: boolean
+  exportedAt?: string
+  notes?: string
+}
+
+// Existing interfaces (unchanged)
 export interface ProcurementRequestItem {
   id: string
   itemId: string
@@ -100,46 +213,6 @@ export interface OrderSuggestion {
   urgency: 'low' | 'medium' | 'high'
 }
 
-// Заказ поставщику
-export interface PurchaseOrder extends BaseEntity {
-  // Заказ
-  orderNumber: string // "PO-SUPPLIER-001"
-  supplierId: string
-  supplierName: string
-
-  // Даты
-  orderDate: string
-  expectedDeliveryDate?: string
-  actualDeliveryDate?: string
-
-  // Товары
-  items: PurchaseOrderItem[]
-
-  // Финансы
-  totalAmount: number
-  taxAmount?: number
-  discountAmount?: number
-
-  // Платежи и доставка
-  paymentTerms: PaymentTerms
-  paymentStatus: PaymentStatus
-  deliveryMethod: DeliveryMethod
-
-  // Статус
-  status: PurchaseOrderStatus
-
-  // Связи
-  requestIds: string[]
-  receiptOperationId?: string
-  accountTransactionId?: string
-
-  // Документы
-  hasExportedPdf?: boolean
-  exportedAt?: string
-
-  notes?: string
-}
-
 export interface PurchaseOrderItem {
   id: string
   itemId: string
@@ -149,38 +222,23 @@ export interface PurchaseOrderItem {
   unit: string
   pricePerUnit: number
   totalPrice: number
-
-  // Статус по товару
   status: 'ordered' | 'partially_received' | 'received' | 'cancelled'
   notes?: string
 }
 
-// Акцепт прихода товара
 export interface ReceiptAcceptance extends BaseEntity {
-  // Основная информация
-  acceptanceNumber: string // "ACC-PO-001"
+  acceptanceNumber: string
   purchaseOrderId: string
   supplierId: string
-
-  // Даты
   deliveryDate: string
   acceptedBy: string
-
-  // Товары
   items: AcceptanceItem[]
-
-  // Расхождения
   hasDiscrepancies: boolean
   totalDiscrepancies: number
   totalValueDifference: number
-
-  // Статус
   status: AcceptanceStatus
-
-  // Результат
   storageOperationId?: string
   correctionOperationIds: string[]
-
   notes?: string
 }
 
@@ -189,27 +247,35 @@ export interface AcceptanceItem {
   purchaseOrderItemId: string
   itemId: string
   itemName: string
-
-  // Количества
   orderedQuantity: number
   deliveredQuantity: number
   acceptedQuantity: number
-
-  // Качество
   quality: QualityRating
-
-  // Расхождения
   quantityDiscrepancy: number
   qualityIssues?: string
-
-  // Финансы
   orderedPrice: number
   acceptedPrice?: number
-
   notes?: string
 }
 
-// DTO для создания
+// NEW: Create DTOs
+export interface CreateBillData {
+  purchaseOrderId: string
+  supplierId: string
+  totalAmount: number
+  paymentTerms: PaymentTerms
+  dueDate: string
+  notes?: string
+  issuedBy: string
+}
+
+export interface CreateConsolidationData {
+  requestIds: string[]
+  consolidatedBy: string
+  notes?: string
+}
+
+// Existing DTOs (unchanged)
 export interface CreateSupplierData {
   name: string
   type: SupplierType
@@ -240,10 +306,11 @@ export interface CreatePurchaseOrderData {
   expectedDeliveryDate?: string
   paymentTerms?: PaymentTerms
   deliveryMethod?: DeliveryMethod
+  consolidationId?: string // NEW
   notes?: string
 }
 
-// Store State
+// Enhanced Store State
 export interface SupplierState {
   // Core data
   suppliers: Supplier[]
@@ -251,19 +318,28 @@ export interface SupplierState {
   purchaseOrders: PurchaseOrder[]
   receiptAcceptances: ReceiptAcceptance[]
 
+  // NEW: Enhanced data
+  bills: Bill[]
+  consolidations: RequestConsolidation[]
+
   // UI state
   loading: {
     suppliers: boolean
     requests: boolean
     orders: boolean
     acceptance: boolean
+    bills: boolean // NEW
+    consolidation: boolean // NEW
+    payment: boolean // NEW
   }
   error: string | null
 
-  // Current workflow
+  // Enhanced workflow state
   currentRequest?: ProcurementRequest
   currentOrder?: PurchaseOrder
   currentAcceptance?: ReceiptAcceptance
+  currentConsolidation?: RequestConsolidation // NEW
+  selectedRequestIds: string[] // NEW
 
   // Filters
   filters: {

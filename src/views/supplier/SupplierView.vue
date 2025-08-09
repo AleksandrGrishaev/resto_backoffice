@@ -6,11 +6,11 @@
       <div>
         <h1 class="text-h4 font-weight-bold">🏪 Suppliers & Procurement</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">
-          Manage suppliers, procurement requests, and purchase orders
+          Manage suppliers, procurement requests, and purchase orders with smart consolidation
         </p>
         <v-chip size="small" color="primary" variant="tonal" class="mt-1">
           <v-icon icon="mdi-truck-delivery" size="14" class="mr-1" />
-          Phase 3: Procurement Management
+          Phase 3: Procurement Management + Consolidation
         </v-chip>
       </div>
 
@@ -34,6 +34,16 @@
           @click="showOrderAssistantDialog = true"
         >
           Order Assistant
+        </v-btn>
+
+        <v-btn
+          color="warning"
+          variant="outlined"
+          prepend-icon="mdi-merge"
+          :disabled="supplierStore.approvedRequests.length === 0"
+          @click="goToConsolidation"
+        >
+          Quick Consolidate
         </v-btn>
 
         <!-- Info Button -->
@@ -66,25 +76,39 @@
     <v-card variant="tonal" color="info" class="mb-4">
       <v-card-text class="pa-4">
         <v-row align="center">
-          <v-col cols="6" md="3">
+          <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold">{{ supplierStore.activeSuppliers.length }}</div>
               <div class="text-caption text-medium-emphasis">Active Suppliers</div>
             </div>
           </v-col>
-          <v-col cols="6" md="3">
+          <v-col cols="6" md="2">
+            <div class="text-center">
+              <div class="text-h6 font-weight-bold">
+                {{ supplierStore.approvedRequests.length }}
+              </div>
+              <div class="text-caption text-medium-emphasis">Ready to Consolidate</div>
+            </div>
+          </v-col>
+          <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold">{{ supplierStore.pendingRequests.length }}</div>
               <div class="text-caption text-medium-emphasis">Pending Requests</div>
             </div>
           </v-col>
-          <v-col cols="6" md="3">
+          <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold">{{ supplierStore.activeOrders.length }}</div>
               <div class="text-caption text-medium-emphasis">Active Orders</div>
             </div>
           </v-col>
-          <v-col cols="6" md="3">
+          <v-col cols="6" md="2">
+            <div class="text-center">
+              <div class="text-h6 font-weight-bold">{{ todayConsolidations }}</div>
+              <div class="text-caption text-medium-emphasis">Today's Consolidations</div>
+            </div>
+          </v-col>
+          <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold">
                 {{ formatCurrency(supplierStore.totalOutstanding) }}
@@ -98,6 +122,28 @@
 
     <!-- Main Content Tabs -->
     <v-tabs v-model="selectedTab" class="mb-4" color="primary">
+      <v-tab value="consolidation">
+        <v-icon icon="mdi-merge" class="mr-2" />
+        Consolidation
+        <v-chip
+          v-if="supplierStore.approvedRequests.length > 0"
+          size="small"
+          class="ml-2"
+          variant="tonal"
+          color="success"
+        >
+          {{ supplierStore.approvedRequests.length }} ready
+        </v-chip>
+        <v-chip
+          v-if="supplierStore.draftConsolidations.length > 0"
+          size="small"
+          class="ml-1"
+          variant="flat"
+          color="warning"
+        >
+          {{ supplierStore.draftConsolidations.length }} draft
+        </v-chip>
+      </v-tab>
       <v-tab value="requests">
         <v-icon icon="mdi-clipboard-list" class="mr-2" />
         Requests
@@ -150,6 +196,16 @@
 
     <!-- Content -->
     <v-tabs-window v-model="selectedTab">
+      <!-- Consolidation Tab -->
+      <v-tabs-window-item value="consolidation">
+        <new-orders-tab
+          @create-request="handleCreateRequest"
+          @view-orders="handleViewOrders"
+          @success="handleSuccess"
+          @error="handleError"
+        />
+      </v-tabs-window-item>
+
       <!-- Procurement Requests Tab -->
       <v-tabs-window-item value="requests">
         <div
@@ -178,6 +234,7 @@
           :loading="supplierStore.state.loading.requests"
           @edit-request="handleEditRequest"
           @create-order="handleCreateOrderFromRequest"
+          @create-request="handleCreateRequest"
         />
       </v-tabs-window-item>
 
@@ -191,10 +248,14 @@
           <v-empty-state
             headline="No Purchase Orders"
             title="No purchase orders found"
-            text="Create purchase orders from procurement requests."
+            text="Create purchase orders from procurement requests using consolidation workflow."
           >
             <template #actions>
-              <v-btn color="primary" variant="flat" @click="selectedTab = 'requests'">
+              <v-btn color="success" variant="flat" @click="goToConsolidation">
+                <v-icon icon="mdi-merge" class="mr-2" />
+                Start Consolidation
+              </v-btn>
+              <v-btn color="primary" variant="outlined" @click="selectedTab = 'requests'">
                 <v-icon icon="mdi-clipboard-list" class="mr-2" />
                 View Requests
               </v-btn>
@@ -208,6 +269,7 @@
           :loading="supplierStore.state.loading.orders"
           @edit-order="handleEditOrder"
           @start-acceptance="handleStartAcceptance"
+          @create-order="handleCreateNewOrder"
         />
       </v-tabs-window-item>
 
@@ -324,11 +386,11 @@
     </v-snackbar>
 
     <!-- Info Dialog -->
-    <v-dialog v-model="showInfoDialog" max-width="600px">
+    <v-dialog v-model="showInfoDialog" max-width="700px">
       <v-card>
         <v-card-title class="d-flex align-center">
           <v-icon icon="mdi-information" color="info" class="mr-2" />
-          About Procurement Management
+          About Procurement Management & Consolidation
         </v-card-title>
 
         <v-card-text class="pa-6">
@@ -336,12 +398,12 @@
             <h4 class="mb-2">What is Procurement Management?</h4>
             <p class="text-body-2">
               Procurement Management handles the complete workflow from identifying needs to
-              receiving goods from suppliers.
+              receiving goods from suppliers, with smart consolidation to optimize orders.
             </p>
           </div>
 
           <div class="mb-4">
-            <h4 class="mb-2">Workflow:</h4>
+            <h4 class="mb-2">Enhanced Workflow with Consolidation:</h4>
             <ol class="text-body-2">
               <li>
                 <strong>Order Assistant:</strong>
@@ -352,8 +414,12 @@
                 Creates formal request for supplies
               </li>
               <li>
+                <strong>Smart Consolidation:</strong>
+                Groups requests by supplier for efficient ordering
+              </li>
+              <li>
                 <strong>Purchase Order:</strong>
-                Converts requests into orders to suppliers
+                Creates optimized orders to suppliers
               </li>
               <li>
                 <strong>Receipt Acceptance:</strong>
@@ -370,32 +436,42 @@
             <h4 class="mb-2">Key Features:</h4>
             <ul class="text-body-2">
               <li>
+                <strong>Smart Consolidation:</strong>
+                Automatically groups items by supplier to minimize orders
+              </li>
+              <li>
                 <strong>Supplier Management:</strong>
                 Track contacts, terms, and performance
               </li>
               <li>
-                <strong>Smart Suggestions:</strong>
-                Auto-suggest orders based on stock levels
+                <strong>Intelligent Suggestions:</strong>
+                Auto-suggest orders based on stock levels and consumption patterns
               </li>
               <li>
                 <strong>Financial Tracking:</strong>
-                Monitor debts and payment terms
+                Monitor debts, payment terms, and cost optimization
               </li>
               <li>
                 <strong>Quality Control:</strong>
-                Accept/reject deliveries with notes
+                Accept/reject deliveries with detailed notes
               </li>
               <li>
-                <strong>Integration:</strong>
-                Works with Storage and Account modules
+                <strong>Full Integration:</strong>
+                Works seamlessly with Storage and Account modules
               </li>
             </ul>
           </div>
 
+          <v-alert type="success" variant="tonal" class="mb-4">
+            <v-alert-title>New: Consolidation Workflow</v-alert-title>
+            The consolidation feature automatically groups approved requests by supplier, reducing
+            the number of orders and improving cost efficiency.
+          </v-alert>
+
           <v-alert type="info" variant="tonal">
             <v-alert-title>Integration Note</v-alert-title>
-            This module integrates with Storage for inventory updates and Account for payment
-            tracking.
+            This module integrates with Storage for inventory updates, Account for payment tracking,
+            and provides detailed consolidation reports.
           </v-alert>
         </v-card-text>
 
@@ -409,7 +485,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useSupplierStore, formatCurrency } from '@/stores/supplier'
 import type {
   Supplier,
@@ -419,7 +495,7 @@ import type {
 } from '@/stores/supplier'
 import { DebugUtils } from '@/utils'
 
-// Components (будут созданы позже)
+// Components
 import SupplierTable from './components/supplier/SupplierTable.vue'
 import SupplierDialog from './components/supplier/SupplierDialog.vue'
 import ProcurementTable from './components/procurement/ProcurementTable.vue'
@@ -429,6 +505,7 @@ import PurchaseOrderTable from './components/purchase/PurchaseOrderTable.vue'
 import PurchaseOrderDialog from './components/purchase/PurchaseOrderDialog.vue'
 import AcceptanceTable from './components/purchase/AcceptanceTable.vue'
 import ReceiptAcceptanceDialog from './components/purchase/ReceiptAcceptanceDialog.vue'
+import NewOrdersTab from './components/consolidation/NewOrdersTab.vue'
 
 const MODULE_NAME = 'SupplierView'
 
@@ -436,7 +513,7 @@ const MODULE_NAME = 'SupplierView'
 const supplierStore = useSupplierStore()
 
 // State
-const selectedTab = ref('requests')
+const selectedTab = ref('consolidation') // Start with consolidation tab
 const showSupplierDialog = ref(false)
 const showOrderAssistantDialog = ref(false)
 const showRequestDialog = ref(false)
@@ -455,7 +532,36 @@ const editingOrder = ref<PurchaseOrder | null>(null)
 const acceptanceOrder = ref<PurchaseOrder | null>(null)
 const selectedRequestIds = ref<string[]>([])
 
+// Computed properties
+const todayConsolidations = computed(() => {
+  const today = new Date().toISOString().split('T')[0]
+  return supplierStore.state.consolidations.filter(c => c.consolidationDate.startsWith(today))
+    .length
+})
+
 // Event Handlers
+function handleCreateRequest() {
+  showOrderAssistantDialog.value = true
+  DebugUtils.info(MODULE_NAME, 'Create request from consolidation tab')
+}
+
+function handleViewOrders(orderIds: string[]) {
+  selectedTab.value = 'orders'
+  // TODO: Highlight or filter to show specific orders
+  DebugUtils.info(MODULE_NAME, 'View orders from consolidation', { orderIds })
+}
+
+function handleSuccess(message: string) {
+  successMessage.value = message
+  showSuccessSnackbar.value = true
+  DebugUtils.info(MODULE_NAME, 'Success from consolidation', { message })
+}
+
+function goToConsolidation() {
+  selectedTab.value = 'consolidation'
+  DebugUtils.info(MODULE_NAME, 'Navigate to consolidation tab')
+}
+
 function handleEditSupplier(supplier: Supplier) {
   editingSupplier.value = supplier
   showSupplierDialog.value = true
@@ -496,6 +602,14 @@ function handleCreateOrderFromRequest(request: ProcurementRequest) {
     requestId: request.id,
     requestNumber: request.requestNumber
   })
+}
+
+function handleCreateNewOrder() {
+  selectedRequestIds.value = []
+  editingOrder.value = null
+  showOrderDialog.value = true
+
+  DebugUtils.info(MODULE_NAME, 'Creating new purchase order')
 }
 
 function handleEditOrder(order: PurchaseOrder) {
@@ -551,7 +665,13 @@ async function handleOrderAssistantSuccess(message: string = 'Procurement reques
     showOrderAssistantDialog.value = false
 
     await supplierStore.fetchProcurementRequests()
-    selectedTab.value = 'requests'
+
+    // If we have approved requests, show consolidation tab
+    if (supplierStore.approvedRequests.length > 0) {
+      selectedTab.value = 'consolidation'
+    } else {
+      selectedTab.value = 'requests'
+    }
 
     DebugUtils.info(MODULE_NAME, 'Order assistant completed successfully')
   } catch (error) {
@@ -586,7 +706,8 @@ async function handleOrderSuccess(message: string = 'Purchase order saved') {
 
     await Promise.all([
       supplierStore.fetchPurchaseOrders(),
-      supplierStore.fetchProcurementRequests()
+      supplierStore.fetchProcurementRequests(),
+      supplierStore.fetchConsolidations() // Also refresh consolidations
     ])
     selectedTab.value = 'orders'
 
@@ -646,6 +767,13 @@ onMounted(async () => {
     await supplierStore.initialize()
 
     DebugUtils.info(MODULE_NAME, 'SupplierView initialized successfully')
+
+    // If there are approved requests ready for consolidation, highlight them
+    if (supplierStore.approvedRequests.length > 0) {
+      setTimeout(() => {
+        handleSuccess(`${supplierStore.approvedRequests.length} requests ready for consolidation`)
+      }, 1000)
+    }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize supplier data', { error })
     handleError('Failed to initialize procurement management system')
@@ -685,5 +813,56 @@ onMounted(async () => {
 .v-empty-state {
   padding: 48px 24px;
   text-align: center;
+}
+
+// Consolidation tab highlighting
+.v-tab[aria-selected='true'] {
+  &[value='consolidation'] {
+    .v-chip {
+      animation: pulse 2s infinite;
+    }
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+// Enhanced stats bar styling
+.text-h6 {
+  line-height: 1.2;
+}
+
+// Success highlighting for ready consolidation items
+.text-success.animate-ready {
+  animation: readyBounce 0.6s ease-out;
+}
+
+@keyframes readyBounce {
+  0%,
+  20%,
+  53%,
+  80%,
+  100% {
+    transform: scale(1);
+  }
+  40%,
+  43% {
+    transform: scale(1.1);
+  }
+  70% {
+    transform: scale(1.05);
+  }
+  90% {
+    transform: scale(1.02);
+  }
 }
 </style>
