@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/InventoryDialog.vue - ИСПРАВЛЕННАЯ ВЕРСИЯ -->
+<!-- src/views/storage/components/InventoryDialog.vue - ТОЛЬКО ПРОДУКТЫ -->
 <template>
   <v-dialog
     :model-value="modelValue"
@@ -10,14 +10,14 @@
       <v-card-title class="d-flex align-center justify-space-between">
         <div>
           <h3>
-            {{ currentInventory ? 'Edit' : 'Start' }} Inventory -
-            {{ formatDepartment(department) }} {{ formatItemType(itemType) }}
+            {{ currentInventory ? 'Edit' : 'Start' }} Product Inventory -
+            {{ formatDepartment(department) }}
           </h3>
           <div class="text-caption text-medium-emphasis">
             {{
               currentInventory
                 ? `Editing ${currentInventory.documentNumber}`
-                : 'Count all items and enter actual quantities'
+                : 'Count all products and enter actual quantities'
             }}
           </div>
         </div>
@@ -43,7 +43,7 @@
             <div class="d-flex align-center justify-space-between mb-2">
               <div>
                 <div class="text-subtitle-1">
-                  Progress: {{ countedItems }}/{{ totalItems }} items counted
+                  Progress: {{ countedItems }}/{{ totalItems }} products counted
                   <span v-if="categoryFilter !== 'all'" class="text-caption text-medium-emphasis">
                     (filtered)
                   </span>
@@ -66,7 +66,7 @@
               </div>
             </div>
 
-            <!-- ✅ ИСПРАВЛЕНО: Фильтр по категориям с количествами -->
+            <!-- Category Filter -->
             <div v-if="categoriesWithCount.length > 1" class="mb-2">
               <v-select
                 v-model="categoryFilter"
@@ -101,35 +101,33 @@
             <div v-if="filteredItems.length === 0" class="text-center py-8 text-medium-emphasis">
               <v-icon icon="mdi-clipboard-list" size="48" class="mb-2" />
               <div v-if="categoryFilter !== 'all'">
-                <div>No items in this category</div>
+                <div>No products in this category</div>
                 <div class="text-caption">
-                  Try selecting a different category or "All" to see all items
+                  Try selecting a different category or "All" to see all products
                 </div>
                 <v-btn size="small" variant="outlined" class="mt-2" @click="categoryFilter = 'all'">
-                  Show All Items
+                  Show All Products
                 </v-btn>
               </div>
               <div v-else-if="filterType !== 'all'">
-                <div>No items match current filter</div>
-                <div class="text-caption">
-                  Try selecting "All" to see all {{ formatItemType(itemType) }}
-                </div>
+                <div>No products match current filter</div>
+                <div class="text-caption">Try selecting "All" to see all products</div>
                 <v-btn size="small" variant="outlined" class="mt-2" @click="filterType = 'all'">
-                  Show All Items
+                  Show All Products
                 </v-btn>
               </div>
               <div v-else>
-                <div>No items to count</div>
-                <div class="text-caption">All {{ formatItemType(itemType) }} have been counted</div>
+                <div>No products to count</div>
+                <div class="text-caption">All products have been counted</div>
               </div>
             </div>
 
             <div v-else>
-              <!-- ✅ ДОБАВЛЕНО: Показываем информацию о фильтрации -->
+              <!-- Filtering Info -->
               <div v-if="categoryFilter !== 'all' || filterType !== 'all'" class="text-center mb-3">
                 <v-chip size="small" color="primary" variant="tonal">
                   <v-icon icon="mdi-filter" size="14" class="mr-1" />
-                  Showing {{ filteredItems.length }} of {{ totalItems }} items
+                  Showing {{ filteredItems.length }} of {{ totalItems }} products
                   <v-btn
                     icon="mdi-close"
                     size="x-small"
@@ -156,7 +154,7 @@
               <div class="text-subtitle-1 font-weight-medium mb-2">Inventory Summary</div>
               <v-row>
                 <v-col cols="12" md="3">
-                  <div class="text-caption text-medium-emphasis">Total Items</div>
+                  <div class="text-caption text-medium-emphasis">Total Products</div>
                   <div class="text-h6">{{ totalItems }}</div>
                 </v-col>
                 <v-col cols="12" md="3">
@@ -260,18 +258,15 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
-import { useProductsStore } from '@/stores/productsStore' // ✅ ДОБАВЛЕНО: Импорт products store
-import { useRecipesStore } from '@/stores/recipes' // ✅ ДОБАВЛЕНО: Импорт recipes store
+import { useProductsStore } from '@/stores/productsStore'
 import type {
   StorageDepartment,
-  StorageItemType,
   CreateInventoryData,
   InventoryItem,
   InventoryDocument
 } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore' // ✅ ДОБАВЛЕНО: Импорт констант категорий
-import { PREPARATION_TYPES } from '@/stores/recipes' // ✅ ДОБАВЛЕНО: Импорт констант типов
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 
 // Components
 import InventoryItemRow from './InventoryItemRow.vue'
@@ -282,7 +277,6 @@ const MODULE_NAME = 'InventoryDialog'
 interface Props {
   modelValue: boolean
   department: StorageDepartment
-  itemType: StorageItemType
   existingInventory?: InventoryDocument | null
 }
 
@@ -299,8 +293,7 @@ const emit = defineEmits<{
 
 // Stores
 const storageStore = useStorageStore()
-const productsStore = useProductsStore() // ✅ ДОБАВЛЕНО
-const recipesStore = useRecipesStore() // ✅ ДОБАВЛЕНО
+const productsStore = useProductsStore()
 
 // State
 const form = ref()
@@ -313,7 +306,7 @@ const inventoryItems = ref<InventoryItem[]>([])
 const currentInventory = ref<InventoryDocument | null>(null)
 const showDebugInfo = ref(false)
 
-// ✅ ИСПРАВЛЕНО: Правильное определение dev режима
+// Dev mode check
 const isDev = computed(() => {
   return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
 })
@@ -321,32 +314,21 @@ const isDev = computed(() => {
 // Computed
 const availableBalances = computed(() =>
   storageStore.state.balances.filter(
-    b => b.department === props.department && b.itemType === props.itemType && b.totalQuantity > 0
+    b => b.department === props.department && b.itemType === 'product' && b.totalQuantity > 0
   )
 )
 
-// ✅ ИСПРАВЛЕНО: Правильное получение доступных категорий
+// Get available categories from products in inventory
 const availableCategories = computed(() => {
   try {
     const categories = new Set<string>()
 
-    if (props.itemType === 'product') {
-      // Получаем категории только из товаров, которые есть в инвентаризации
-      inventoryItems.value.forEach(item => {
-        const product = productsStore.products.find(p => p.id === item.itemId)
-        if (product && product.category) {
-          categories.add(product.category)
-        }
-      })
-    } else {
-      // Получаем типы только из полуфабрикатов, которые есть в инвентаризации
-      inventoryItems.value.forEach(item => {
-        const preparation = recipesStore.preparations.find(p => p.id === item.itemId)
-        if (preparation && preparation.type) {
-          categories.add(preparation.type)
-        }
-      })
-    }
+    inventoryItems.value.forEach(item => {
+      const product = productsStore.products.find(p => p.id === item.itemId)
+      if (product && product.category) {
+        categories.add(product.category)
+      }
+    })
 
     return Array.from(categories).sort()
   } catch (error) {
@@ -355,44 +337,31 @@ const availableCategories = computed(() => {
   }
 })
 
-// ✅ ИСПРАВЛЕНО: Получение категорий с человеко-читаемыми названиями
+// Categories with counts for filter dropdown
 const categoriesWithCount = computed(() => {
   const categoryMap = new Map<string, { count: number; name: string }>()
 
   try {
-    if (props.itemType === 'product') {
-      inventoryItems.value.forEach(item => {
-        const product = productsStore.products.find(p => p.id === item.itemId)
-        const category = product?.category || 'other'
-        const categoryName = PRODUCT_CATEGORIES[category] || 'Прочее'
+    inventoryItems.value.forEach(item => {
+      const product = productsStore.products.find(p => p.id === item.itemId)
+      const category = product?.category || 'other'
+      const categoryName = PRODUCT_CATEGORIES[category] || 'Other'
 
-        if (!categoryMap.has(category)) {
-          categoryMap.set(category, { count: 0, name: categoryName })
-        }
-        categoryMap.get(category)!.count++
-      })
-    } else {
-      inventoryItems.value.forEach(item => {
-        const preparation = recipesStore.preparations.find(p => p.id === item.itemId)
-        const type = preparation?.type || 'other'
-        const typeName = PREPARATION_TYPES.find(t => t.value === type)?.text || 'Прочее'
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, { count: 0, name: categoryName })
+      }
+      categoryMap.get(category)!.count++
+    })
 
-        if (!categoryMap.has(type)) {
-          categoryMap.set(type, { count: 0, name: typeName })
-        }
-        categoryMap.get(type)!.count++
-      })
-    }
-
-    // Формируем список с количествами
+    // Build dropdown items
     const result = [
       {
-        title: `All ${formatItemType(props.itemType)} (${inventoryItems.value.length})`,
+        title: `All Products (${inventoryItems.value.length})`,
         value: 'all'
       }
     ]
 
-    // Сортируем категории по названию и добавляем в результат
+    // Add categories sorted by name
     Array.from(categoryMap.entries())
       .sort(([, a], [, b]) => a.name.localeCompare(b.name))
       .forEach(([categoryKey, categoryData]) => {
@@ -405,24 +374,19 @@ const categoriesWithCount = computed(() => {
     return result
   } catch (error) {
     console.warn('Error creating categories with count:', error)
-    return [{ title: `All ${formatItemType(props.itemType)}`, value: 'all' }]
+    return [{ title: 'All Products', value: 'all' }]
   }
 })
 
 const filteredItems = computed(() => {
   let items = [...inventoryItems.value]
 
-  // ✅ ИСПРАВЛЕНО: Фильтр по категориям
+  // Filter by category
   if (categoryFilter.value !== 'all') {
     items = items.filter(item => {
       try {
-        if (props.itemType === 'product') {
-          const product = productsStore.products.find(p => p.id === item.itemId)
-          return (product?.category || 'other') === categoryFilter.value
-        } else {
-          const preparation = recipesStore.preparations.find(p => p.id === item.itemId)
-          return (preparation?.type || 'other') === categoryFilter.value
-        }
+        const product = productsStore.products.find(p => p.id === item.itemId)
+        return (product?.category || 'other') === categoryFilter.value
       } catch (error) {
         console.warn('Error filtering by category:', error)
         return true
@@ -430,7 +394,7 @@ const filteredItems = computed(() => {
     })
   }
 
-  // Фильтр по статусу (все/расхождения/непосчитанные)
+  // Filter by status
   switch (filterType.value) {
     case 'discrepancy':
       items = items.filter(item => Math.abs(item.difference) > 0.01)
@@ -439,7 +403,7 @@ const filteredItems = computed(() => {
       items = items.filter(item => !hasItemBeenCounted(item))
       break
     default:
-      // показываем все
+      // show all
       break
   }
 
@@ -448,12 +412,11 @@ const filteredItems = computed(() => {
 
 const totalItems = computed(() => inventoryItems.value.length)
 
-// ✅ ИСПРАВЛЕНО: Правильный подсчет пересчитанных товаров
 const countedItems = computed(
   () => inventoryItems.value.filter(item => hasItemBeenCounted(item)).length
 )
 
-// ✅ НОВОЕ: Helper для определения, был ли товар пересчитан
+// Helper for determining if item has been counted
 function hasItemBeenCounted(item: InventoryItem): boolean {
   return (
     !!item.countedBy ||
@@ -474,24 +437,20 @@ const valueDifference = computed(() =>
   inventoryItems.value.reduce((sum, item) => sum + item.valueDifference, 0)
 )
 
-// ✅ ИСПРАВЛЕНО: Проверяем, что хотя бы один товар был изменен
 const hasChanges = computed(
   () =>
     inventoryItems.value.some(item => hasItemBeenCounted(item)) ||
     inventoryItems.value.every(item => item.confirmed === true)
 )
 
-// ✅ НОВОЕ: Дополнительные computed для отладки
 const itemsWithChanges = computed(
   () => inventoryItems.value.filter(item => hasItemBeenCounted(item)).length
 )
 
 const allItemsTouched = computed(() => inventoryItems.value.every(item => hasItemBeenCounted(item)))
 
-// ✅ ИСПРАВЛЕНО: Условие завершенности
 const isComplete = computed(() => {
   if (totalItems.value === 0) return false
-  const countedPercentage = (countedItems.value / totalItems.value) * 100
   return countedItems.value === totalItems.value || (countedItems.value > 0 && hasChanges.value)
 })
 
@@ -509,10 +468,6 @@ const canFinalize = computed(() => {
 // Methods
 function formatDepartment(dept: StorageDepartment): string {
   return dept === 'kitchen' ? 'Kitchen' : 'Bar'
-}
-
-function formatItemType(type: StorageItemType): string {
-  return type === 'product' ? 'Products' : 'Preparations'
 }
 
 function formatCurrency(amount: number): string {
@@ -570,8 +525,7 @@ function initializeInventoryItems() {
 
   DebugUtils.info(MODULE_NAME, 'Inventory items initialized', {
     count: inventoryItems.value.length,
-    department: props.department,
-    itemType: props.itemType
+    department: props.department
   })
 }
 
@@ -610,7 +564,6 @@ async function handleSaveDraft() {
     loading.value = true
     DebugUtils.info(MODULE_NAME, 'Saving inventory draft', {
       department: props.department,
-      itemType: props.itemType,
       responsiblePerson: responsiblePerson.value,
       itemsChanged: itemsWithChanges.value,
       totalItems: totalItems.value
@@ -619,7 +572,6 @@ async function handleSaveDraft() {
     if (!currentInventory.value) {
       const inventoryData: CreateInventoryData = {
         department: props.department,
-        itemType: props.itemType,
         responsiblePerson: responsiblePerson.value
       }
 
@@ -648,7 +600,7 @@ async function handleSaveDraft() {
 
     emit(
       'success',
-      `Inventory draft saved successfully. ${itemsWithChanges.value}/${totalItems.value} items counted.`
+      `Inventory draft saved successfully. ${itemsWithChanges.value}/${totalItems.value} products counted.`
     )
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to save inventory draft', { error })
@@ -665,7 +617,6 @@ async function handleFinalize() {
     loading.value = true
     DebugUtils.info(MODULE_NAME, 'Finalizing inventory', {
       department: props.department,
-      itemType: props.itemType,
       responsiblePerson: responsiblePerson.value,
       discrepancies: discrepancyCount.value,
       valueDifference: valueDifference.value,
@@ -675,7 +626,6 @@ async function handleFinalize() {
     if (!currentInventory.value) {
       const inventoryData: CreateInventoryData = {
         department: props.department,
-        itemType: props.itemType,
         responsiblePerson: responsiblePerson.value
       }
 
@@ -701,7 +651,7 @@ async function handleFinalize() {
         ? `${discrepancyCount.value} discrepancies found with ${formatCurrency(Math.abs(valueDifference.value))} value difference.`
         : 'No discrepancies found.'
 
-    emit('success', `Inventory completed successfully. ${discrepancyMessage}`)
+    emit('success', `Product inventory completed successfully. ${discrepancyMessage}`)
     handleClose()
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to finalize inventory', { error })
@@ -729,21 +679,16 @@ function resetForm() {
   }
 }
 
-// ✅ ДОБАВЛЕНО: Инициализация stores при монтировании компонента
+// Initialize stores when component mounts
 async function initializeStores() {
   try {
-    // Загружаем данные stores если они еще не загружены
+    // Load products store if not loaded
     if (productsStore.products.length === 0) {
-      await productsStore.loadProducts(true) // используем mock данные
-    }
-
-    if (recipesStore.preparations.length === 0) {
-      await recipesStore.fetchPreparations()
+      await productsStore.loadProducts(true) // use mock data
     }
 
     DebugUtils.info(MODULE_NAME, 'Stores initialized', {
-      productsCount: productsStore.products.length,
-      preparationsCount: recipesStore.preparations.length
+      productsCount: productsStore.products.length
     })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize stores', { error })
@@ -755,7 +700,7 @@ watch(
   () => props.modelValue,
   async isOpen => {
     if (isOpen) {
-      // ✅ ДОБАВЛЕНО: Инициализируем stores перед загрузкой данных
+      // Initialize stores before loading data
       await initializeStores()
 
       if (props.existingInventory) {

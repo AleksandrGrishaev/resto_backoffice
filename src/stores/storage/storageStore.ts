@@ -1,10 +1,9 @@
-// src/stores/storage/storageStore.ts - ТОЛЬКО RECEIPT, CORRECTION И INVENTORY
+// src/stores/storage/storageStore.ts - ТОЛЬКО ПРОДУКТЫ
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
 import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
-import { useRecipesStore } from '@/stores/recipes'
 import type {
   StorageState,
   StorageOperation,
@@ -12,9 +11,8 @@ import type {
   InventoryDocument,
   InventoryItem,
   StorageDepartment,
-  StorageItemType,
   CreateReceiptData,
-  CreateCorrectionData, // ✅ НОВОЕ
+  CreateCorrectionData,
   CreateInventoryData
 } from './types'
 
@@ -31,12 +29,11 @@ export const useStorageStore = defineStore('storage', () => {
       balances: false,
       operations: false,
       inventory: false,
-      correction: false // ✅ ИЗМЕНЕНО
+      correction: false
     },
     error: null,
     filters: {
       department: 'all',
-      itemType: 'all',
       showExpired: false,
       showBelowMinStock: false,
       showNearExpiry: false,
@@ -51,9 +48,8 @@ export const useStorageStore = defineStore('storage', () => {
     }
   })
 
-  // ✅ Получение связанных stores
+  // ✅ Получение связанного products store
   const productsStore = useProductsStore()
-  const recipesStore = useRecipesStore()
 
   // ===========================
   // COMPUTED PROPERTIES (GETTERS)
@@ -67,11 +63,6 @@ export const useStorageStore = defineStore('storage', () => {
       // Department filter
       if (filters.department !== 'all') {
         balances = balances.filter(b => b.department === filters.department)
-      }
-
-      // Item type filter
-      if (filters.itemType !== 'all') {
-        balances = balances.filter(b => b.itemType === filters.itemType)
       }
 
       // Search filter
@@ -93,7 +84,7 @@ export const useStorageStore = defineStore('storage', () => {
 
       return balances
     } catch (error) {
-      console.warn('Error filtering balances:', error)
+      console.warn('Error filtering product balances:', error)
       return []
     }
   })
@@ -132,17 +123,6 @@ export const useStorageStore = defineStore('storage', () => {
     }
   })
 
-  const quickPreparations = computed(() => {
-    return (department: StorageDepartment) => {
-      try {
-        return storageService.getQuickPreparations(department)
-      } catch (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to get quick preparations', { error })
-        return []
-      }
-    }
-  })
-
   // ===========================
   // CORE STORAGE ACTIONS
   // ===========================
@@ -152,16 +132,16 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.balances = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Fetching storage balances', { department })
+      DebugUtils.info(MODULE_NAME, 'Fetching product balances', { department })
 
       const balances = await storageService.getBalances(department)
       state.value.balances = balances
 
-      DebugUtils.info(MODULE_NAME, 'Storage balances loaded', {
+      DebugUtils.info(MODULE_NAME, 'Product balances loaded', {
         count: balances.length
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch balances'
+      const message = error instanceof Error ? error.message : 'Failed to fetch product balances'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -198,12 +178,12 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Fetching inventories', { department })
+      DebugUtils.info(MODULE_NAME, 'Fetching product inventories', { department })
 
       const inventories = await storageService.getInventories(department)
       state.value.inventories = inventories
 
-      DebugUtils.info(MODULE_NAME, 'Inventories loaded', {
+      DebugUtils.info(MODULE_NAME, 'Product inventories loaded', {
         count: inventories.length
       })
     } catch (error) {
@@ -217,7 +197,7 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // CORRECTION OPERATIONS (замена consumption)
+  // CORRECTION OPERATIONS (заменяет consumption)
   // ===========================
 
   async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
@@ -225,7 +205,7 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.correction = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Creating correction operation', { data })
+      DebugUtils.info(MODULE_NAME, 'Creating product correction operation', { data })
 
       const operation = await storageService.createCorrection(data)
 
@@ -235,13 +215,13 @@ export const useStorageStore = defineStore('storage', () => {
       // Refresh balances
       await fetchBalances(data.department)
 
-      DebugUtils.info(MODULE_NAME, 'Correction operation created', {
+      DebugUtils.info(MODULE_NAME, 'Product correction operation created', {
         operationId: operation.id
       })
 
       return operation
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create correction'
+      const message = error instanceof Error ? error.message : 'Failed to create product correction'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -259,7 +239,7 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.correction = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Creating receipt operation', { data })
+      DebugUtils.info(MODULE_NAME, 'Creating product receipt operation', { data })
 
       const operation = await storageService.createReceipt(data)
 
@@ -269,13 +249,13 @@ export const useStorageStore = defineStore('storage', () => {
       // Refresh balances
       await fetchBalances(data.department)
 
-      DebugUtils.info(MODULE_NAME, 'Receipt operation created', {
+      DebugUtils.info(MODULE_NAME, 'Product receipt operation created', {
         operationId: operation.id
       })
 
       return operation
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create receipt'
+      const message = error instanceof Error ? error.message : 'Failed to create product receipt'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -293,20 +273,20 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Starting inventory', { data })
+      DebugUtils.info(MODULE_NAME, 'Starting product inventory', { data })
 
       const inventory = await storageService.startInventory(data)
 
       // Update local state
       state.value.inventories.unshift(inventory)
 
-      DebugUtils.info(MODULE_NAME, 'Inventory started', {
+      DebugUtils.info(MODULE_NAME, 'Product inventory started', {
         inventoryId: inventory.id
       })
 
       return inventory
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to start inventory'
+      const message = error instanceof Error ? error.message : 'Failed to start product inventory'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -323,7 +303,7 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Updating inventory', { inventoryId })
+      DebugUtils.info(MODULE_NAME, 'Updating product inventory', { inventoryId })
 
       const inventory = await storageService.updateInventory(inventoryId, items)
 
@@ -333,11 +313,11 @@ export const useStorageStore = defineStore('storage', () => {
         state.value.inventories[index] = inventory
       }
 
-      DebugUtils.info(MODULE_NAME, 'Inventory updated', { inventoryId })
+      DebugUtils.info(MODULE_NAME, 'Product inventory updated', { inventoryId })
 
       return inventory
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update inventory'
+      const message = error instanceof Error ? error.message : 'Failed to update product inventory'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -351,7 +331,7 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Finalizing inventory', { inventoryId })
+      DebugUtils.info(MODULE_NAME, 'Finalizing product inventory', { inventoryId })
 
       const correctionOperations = await storageService.finalizeInventory(inventoryId)
 
@@ -366,12 +346,13 @@ export const useStorageStore = defineStore('storage', () => {
         state.value.operations.unshift(op)
       })
 
-      DebugUtils.info(MODULE_NAME, 'Inventory finalized', {
+      DebugUtils.info(MODULE_NAME, 'Product inventory finalized', {
         inventoryId,
         correctionOperations: correctionOperations.length
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to finalize inventory'
+      const message =
+        error instanceof Error ? error.message : 'Failed to finalize product inventory'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -386,12 +367,11 @@ export const useStorageStore = defineStore('storage', () => {
 
   function calculateFifoAllocation(
     itemId: string,
-    itemType: StorageItemType,
     department: StorageDepartment,
     quantity: number
   ) {
     try {
-      return storageService.calculateFifoAllocation(itemId, itemType, department, quantity)
+      return storageService.calculateFifoAllocation(itemId, department, quantity)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate FIFO allocation', { error })
       throw error
@@ -400,12 +380,11 @@ export const useStorageStore = defineStore('storage', () => {
 
   function calculateCorrectionCost(
     itemId: string,
-    itemType: StorageItemType,
     department: StorageDepartment,
     quantity: number
   ): number {
     try {
-      return storageService.calculateCorrectionCost(itemId, itemType, department, quantity)
+      return storageService.calculateCorrectionCost(itemId, department, quantity)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate correction cost', { error })
       throw error
@@ -420,7 +399,7 @@ export const useStorageStore = defineStore('storage', () => {
     try {
       return storageService.getExpiringItems(days)
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get expiring items', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to get expiring products', { error })
       return []
     }
   }
@@ -429,7 +408,7 @@ export const useStorageStore = defineStore('storage', () => {
     try {
       return storageService.getLowStockItems()
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get low stock items', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to get low stock products', { error })
       return []
     }
   }
@@ -454,56 +433,32 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  function getAvailablePreparations(): any[] {
+  function getItemName(itemId: string): string {
     try {
-      return recipesStore.activePreparations
+      const product = productsStore.products.find(p => p.id === itemId)
+      return product?.name || itemId
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get available preparations', { error })
-      return []
-    }
-  }
-
-  function getItemName(itemId: string, itemType: StorageItemType): string {
-    try {
-      if (itemType === 'product') {
-        const product = productsStore.products.find(p => p.id === itemId)
-        return product?.name || itemId
-      } else {
-        const preparation = recipesStore.preparations.find(p => p.id === itemId)
-        return preparation?.name || itemId
-      }
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get item name', { error, itemId })
+      DebugUtils.error(MODULE_NAME, 'Failed to get product name', { error, itemId })
       return itemId
     }
   }
 
-  function getItemUnit(itemId: string, itemType: StorageItemType): string {
+  function getItemUnit(itemId: string): string {
     try {
-      if (itemType === 'product') {
-        const product = productsStore.products.find(p => p.id === itemId)
-        return product?.unit || 'kg'
-      } else {
-        const preparation = recipesStore.preparations.find(p => p.id === itemId)
-        return preparation?.outputUnit || 'gram'
-      }
+      const product = productsStore.products.find(p => p.id === itemId)
+      return product?.unit || 'kg'
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get item unit', { error, itemId })
+      DebugUtils.error(MODULE_NAME, 'Failed to get product unit', { error, itemId })
       return 'kg'
     }
   }
 
-  function getItemCostPerUnit(itemId: string, itemType: StorageItemType): number {
+  function getItemCostPerUnit(itemId: string): number {
     try {
-      if (itemType === 'product') {
-        const product = productsStore.products.find(p => p.id === itemId)
-        return product?.costPerUnit || 0
-      } else {
-        const preparation = recipesStore.preparations.find(p => p.id === itemId)
-        return preparation?.costPerPortion || 0
-      }
+      const product = productsStore.products.find(p => p.id === itemId)
+      return product?.costPerUnit || 0
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get item cost', { error, itemId })
+      DebugUtils.error(MODULE_NAME, 'Failed to get product cost', { error, itemId })
       return 0
     }
   }
@@ -514,10 +469,6 @@ export const useStorageStore = defineStore('storage', () => {
 
   function setDepartmentFilter(department: StorageDepartment | 'all') {
     state.value.filters.department = department
-  }
-
-  function setItemTypeFilter(itemType: StorageItemType | 'all') {
-    state.value.filters.itemType = itemType
   }
 
   function setSearchFilter(search: string) {
@@ -539,7 +490,6 @@ export const useStorageStore = defineStore('storage', () => {
   function clearFilters() {
     state.value.filters = {
       department: 'all',
-      itemType: 'all',
       showExpired: false,
       showBelowMinStock: false,
       showNearExpiry: false,
@@ -555,31 +505,27 @@ export const useStorageStore = defineStore('storage', () => {
 
   async function initialize() {
     try {
-      DebugUtils.info(MODULE_NAME, 'Initializing storage store')
+      DebugUtils.info(MODULE_NAME, 'Initializing product storage store')
 
       state.value.loading.balances = true
       state.value.error = null
 
-      // Загружаем зависимые stores если они не загружены
+      // Load products store if not loaded
       if (productsStore.products.length === 0) {
         DebugUtils.info(MODULE_NAME, 'Loading products store')
         await productsStore.loadProducts(true) // mock mode
       }
 
-      if (recipesStore.preparations.length === 0) {
-        DebugUtils.info(MODULE_NAME, 'Loading recipes store')
-        await recipesStore.fetchPreparations()
-      }
-
-      // Инициализируем storage service
+      // Initialize storage service
       await storageService.initialize()
 
-      // Загружаем данные склада
+      // Load storage data
       await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
 
-      DebugUtils.info(MODULE_NAME, 'Storage store initialized successfully')
+      DebugUtils.info(MODULE_NAME, 'Product storage store initialized successfully')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to initialize storage store'
+      const message =
+        error instanceof Error ? error.message : 'Failed to initialize product storage store'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -596,9 +542,9 @@ export const useStorageStore = defineStore('storage', () => {
     state.value.error = null
   }
 
-  function getBalance(itemId: string, itemType: StorageItemType, department: StorageDepartment) {
+  function getBalance(itemId: string, department: StorageDepartment) {
     return state.value.balances.find(
-      b => b.itemId === itemId && b.itemType === itemType && b.department === department
+      b => b.itemId === itemId && b.itemType === 'product' && b.department === department
     )
   }
 
@@ -620,21 +566,17 @@ export const useStorageStore = defineStore('storage', () => {
     const barBalances = allBalances.filter(b => b.department === 'bar')
 
     return {
-      totalItems: allBalances.length,
+      totalProducts: allBalances.length,
       totalValue: allBalances.reduce((sum, b) => sum + b.totalValue, 0),
 
       kitchen: {
-        items: kitchenBalances.length,
-        value: kitchenBalances.reduce((sum, b) => sum + b.totalValue, 0),
-        products: kitchenBalances.filter(b => b.itemType === 'product').length,
-        preparations: kitchenBalances.filter(b => b.itemType === 'preparation').length
+        products: kitchenBalances.length,
+        value: kitchenBalances.reduce((sum, b) => sum + b.totalValue, 0)
       },
 
       bar: {
-        items: barBalances.length,
-        value: barBalances.reduce((sum, b) => sum + b.totalValue, 0),
-        products: barBalances.filter(b => b.itemType === 'product').length,
-        preparations: barBalances.filter(b => b.itemType === 'preparation').length
+        products: barBalances.length,
+        value: barBalances.reduce((sum, b) => sum + b.totalValue, 0)
       },
 
       alerts: {
@@ -662,7 +604,6 @@ export const useStorageStore = defineStore('storage', () => {
     totalInventoryValue,
     alertCounts,
     quickProducts,
-    quickPreparations,
     statistics,
 
     // Core Actions
@@ -670,8 +611,8 @@ export const useStorageStore = defineStore('storage', () => {
     fetchOperations,
     fetchInventories,
 
-    // Operations (только receipt и correction)
-    createCorrection, // ✅ НОВОЕ: заменяет consumption
+    // Operations (только receipt и correction для продуктов)
+    createCorrection,
     createReceipt,
 
     // Inventory
@@ -681,7 +622,7 @@ export const useStorageStore = defineStore('storage', () => {
 
     // FIFO calculations
     calculateFifoAllocation,
-    calculateCorrectionCost, // ✅ НОВОЕ: заменяет calculateConsumptionCost
+    calculateCorrectionCost,
 
     // Alerts
     getExpiringItems,
@@ -689,14 +630,12 @@ export const useStorageStore = defineStore('storage', () => {
 
     // Data helpers
     getAvailableProducts,
-    getAvailablePreparations,
     getItemName,
     getItemUnit,
     getItemCostPerUnit,
 
     // Filters
     setDepartmentFilter,
-    setItemTypeFilter,
     setSearchFilter,
     toggleExpiredFilter,
     toggleLowStockFilter,

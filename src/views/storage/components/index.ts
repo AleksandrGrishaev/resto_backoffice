@@ -1,11 +1,13 @@
-// src/views/storage/components/index.ts
+// src/views/storage/components/index.ts - ТОЛЬКО ПРОДУКТЫ
 
 /**
  * Storage Management Components
  *
  * This module contains all UI components for the Storage Management system,
- * implementing FIFO inventory tracking, multi-item consumption, and real-time
- * stock management across Kitchen and Bar departments.
+ * implementing FIFO inventory tracking for raw products across Kitchen and Bar departments.
+ *
+ * Storage now handles ONLY PRODUCTS (raw materials for cooking).
+ * Preparations are managed in a separate Preparations module.
  */
 
 // ========================
@@ -14,75 +16,61 @@
 
 /**
  * StorageAlerts - Alert banner component
- * Displays warnings for expired items, expiring items, and low stock alerts.
+ * Displays warnings for expired products, expiring products, and low stock alerts.
  * Used at the top of StorageView to show critical inventory issues.
  */
 export { default as StorageAlerts } from './StorageAlerts.vue'
 
 /**
- * StorageStockTable - Main inventory table
+ * StorageStockTable - Main product inventory table
  * Shows current stock levels, FIFO batch information, price trends, and alerts.
  * Supports filtering by expiry status, stock levels, and search functionality.
- * Displays both Products and Preparations with cost analytics.
+ * Displays only raw products with cost analytics and category grouping.
  */
 export { default as StorageStockTable } from './StorageStockTable.vue'
 
 /**
  * StorageOperationsTable - Operations history table
- * Displays recent storage operations (receipts, consumption, inventory, corrections).
+ * Displays recent storage operations (receipts, corrections, inventory).
  * Shows operation details, responsible persons, and financial impact.
  * Used in the "Recent Operations" tab of StorageView.
  */
 export { default as StorageOperationsTable } from './StorageOperationsTable.vue'
 
 // ========================
-// CONSUMPTION WORKFLOW
+// CORRECTION WORKFLOW (replaces consumption)
 // ========================
 
 /**
- * MultiConsumptionDialog - Main consumption dialog
- * Allows users to consume multiple items in a single operation.
- * Features quick-add buttons for popular items, FIFO cost calculation,
- * usage tracking (recipe/menu item/waste), and batch allocation preview.
+ * NOTE: Consumption operations have been replaced with Correction operations.
+ * Products are now corrected/written off instead of consumed, since actual
+ * consumption happens during recipe production in the Preparations module.
  */
-export { default as MultiConsumptionDialog } from './MultiConsumptionDialog.vue'
-
-/**
- * ConsumptionItemCard - Individual item card in consumption dialog
- * Shows item details, available stock, quantity input, FIFO allocation preview,
- * and real-time cost calculation. Includes stock availability warnings.
- */
-export { default as ConsumptionItemCard } from './ConsumptionItemCard.vue'
-
-/**
- * AddConsumptionItemDialog - Item selection dialog for consumption
- * Allows users to search and select items to add to consumption.
- * Separate tabs for Products and Preparations with stock level indicators.
- */
-export { default as AddConsumptionItemDialog } from './AddConsumptionItemDialog.vue'
 
 // ========================
 // RECEIPT/CORRECTION WORKFLOW
 // ========================
 
 /**
- * ReceiptDialog - Goods receipt and correction dialog
- * Handles incoming stock from purchases, production, corrections, or opening balances.
+ * ReceiptDialog - Product receipt dialog
+ * Handles incoming stock from purchases, corrections, or opening balances.
  * Creates new FIFO batches with cost tracking and expiry date management.
+ * Only works with raw products now.
  */
 export { default as ReceiptDialog } from './ReceiptDialog.vue'
 
 /**
- * ReceiptItemCard - Individual item card in receipt dialog
+ * ReceiptItemCard - Individual product card in receipt dialog
  * Input form for quantity, cost per unit, expiry date, and notes.
  * Shows total cost calculation and validation rules.
+ * Simplified to work only with products.
  */
 export { default as ReceiptItemCard } from './ReceiptItemCard.vue'
 
 /**
- * AddReceiptItemDialog - Item selection dialog for receipts
- * Simple dialog to select products/preparations and set initial quantity
- * and cost before adding to receipt. Separate tabs for item types.
+ * AddReceiptItemDialog - Product selection dialog for receipts
+ * Simple dialog to select products and set initial quantity
+ * and cost before adding to receipt. Only shows raw products.
  */
 export { default as AddReceiptItemDialog } from './AddReceiptItemDialog.vue'
 
@@ -91,30 +79,45 @@ export { default as AddReceiptItemDialog } from './AddReceiptItemDialog.vue'
 // ========================
 
 /**
- * InventoryDialog - Full inventory counting dialog
+ * InventoryDialog - Product inventory counting dialog
  * Comprehensive inventory management with progress tracking, discrepancy detection,
- * and value impact calculation. Separate workflows for Products and Preparations.
+ * and value impact calculation. Works only with raw products.
+ * Removed item type selection since we only handle products.
  */
 export { default as InventoryDialog } from './InventoryDialog.vue'
 
 /**
- * InventoryItemRow - Individual item row in inventory count
+ * InventoryItemRow - Individual product row in inventory count
  * Compact row showing system vs actual quantities, difference calculation,
  * value impact, and notes field. Real-time validation and status indicators.
+ * Simplified for products only.
  */
 export { default as InventoryItemRow } from './InventoryItemRow.vue'
+
+/**
+ * StorageInventoriesTable - Inventory records table
+ * Shows historical inventory documents with filtering and details.
+ * Product inventories only now.
+ */
+export { default as StorageInventoriesTable } from './StorageInventoriesTable.vue'
+
+/**
+ * InventoryDetailsDialog - Detailed inventory information modal
+ * Shows completed inventory details, discrepancies, and corrections.
+ */
+export { default as InventoryDetailsDialog } from './InventoryDetailsDialog.vue'
 
 // ========================
 // DETAILED VIEWS
 // ========================
 
 /**
- * ItemDetailsDialog - Detailed item information modal
- * Comprehensive view of item details including:
+ * ItemDetailsDialog - Detailed product information modal
+ * Comprehensive view of product details including:
  * - All FIFO batches with receipt dates and costs
  * - Price trend analysis and cost history
- * - Usage analytics and consumption patterns
  * - Stock aging and expiry information
+ * Only for products now.
  */
 export { default as ItemDetailsDialog } from './ItemDetailsDialog.vue'
 
@@ -125,7 +128,7 @@ export { default as ItemDetailsDialog } from './ItemDetailsDialog.vue'
 /**
  * DESIGN PRINCIPLES:
  *
- * 1. **Modularity**: Each component handles a specific workflow (consumption, receipt, inventory)
+ * 1. **Products Only**: Storage now manages only raw products (ingredients)
  * 2. **FIFO Integration**: All components properly implement FIFO cost calculation
  * 3. **Real-time Updates**: Components automatically refresh data after operations
  * 4. **Department Separation**: All components respect Kitchen/Bar department boundaries
@@ -133,19 +136,18 @@ export { default as ItemDetailsDialog } from './ItemDetailsDialog.vue'
  *
  * COMPONENT HIERARCHY:
  *
- * StorageView (Main)
+ * StorageView (Main - Products Only)
  * ├── StorageAlerts (Alerts banner)
- * ├── StorageStockTable (Stock overview)
- * │   └── ItemDetailsDialog (Item details modal)
+ * ├── StorageStockTable (Product stock overview)
+ * │   └── ItemDetailsDialog (Product details modal)
  * ├── StorageOperationsTable (Operations history)
- * ├── MultiConsumptionDialog (Consumption workflow)
- * │   ├── ConsumptionItemCard (Item cards)
- * │   └── AddConsumptionItemDialog (Add items)
- * ├── ReceiptDialog (Receipt workflow)
- * │   ├── ReceiptItemCard (Item cards)
- * │   └── AddReceiptItemDialog (Add items)
- * └── InventoryDialog (Inventory workflow)
-     └── InventoryItemRow (Item rows)
+ * ├── StorageInventoriesTable (Inventory records)
+ * │   └── InventoryDetailsDialog (Inventory details)
+ * ├── ReceiptDialog (Product receipt workflow)
+ * │   ├── ReceiptItemCard (Product cards)
+ * │   └── AddReceiptItemDialog (Add products)
+ * └── InventoryDialog (Product inventory workflow)
+     └── InventoryItemRow (Product rows)
  *
  * DATA FLOW:
  *
@@ -154,4 +156,11 @@ export { default as ItemDetailsDialog } from './ItemDetailsDialog.vue'
  * 3. Components reactively update from store state
  * 4. FIFO calculations happen in real-time
  * 5. Parent components handle success events and refresh data
+ *
+ * SEPARATION OF CONCERNS:
+ *
+ * - **Storage**: Raw products inventory management
+ * - **Preparations**: Semi-finished goods from recipes
+ * - **Recipes**: Production processes that consume products
+ * - **Menu**: Final dishes that use preparations
  */

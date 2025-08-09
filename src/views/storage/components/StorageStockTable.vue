@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/StorageStockTable.vue - ФИНАЛЬНАЯ ВЕРСИЯ -->
+<!-- src/views/storage/components/StorageStockTable.vue - ТОЛЬКО ПРОДУКТЫ -->
 <template>
   <div class="storage-stock-table">
     <!-- Filters and Search -->
@@ -7,7 +7,7 @@
         <v-text-field
           v-model="searchQuery"
           prepend-inner-icon="mdi-magnify"
-          label="Search items..."
+          label="Search products..."
           variant="outlined"
           density="compact"
           hide-details
@@ -48,8 +48,6 @@
           Expired ({{ expiredCount }})
         </v-btn>
       </div>
-
-      <!-- ✅ УДАЛЕНЫ дублирующие кнопки - они есть в главном view -->
     </div>
 
     <!-- Active Filters Display -->
@@ -64,7 +62,7 @@
           color="error"
           @click:close="toggleExpiredFilter"
         >
-          Expired Items
+          Expired Products
         </v-chip>
 
         <v-chip
@@ -103,17 +101,17 @@
         :items-per-page="25"
         :sort-by="[{ key: 'itemName', order: 'asc' }]"
       >
-        <!-- Item Name -->
+        <!-- Product Name -->
         <template #[`item.itemName`]="{ item }">
           <div class="d-flex align-center">
-            <div class="item-icon mr-3">
-              {{ getItemIcon(item.itemType) }}
-            </div>
+            <div class="item-icon mr-3">🥩</div>
             <div class="item-info">
               <div class="font-weight-medium">{{ item.itemName }}</div>
               <div class="text-caption text-medium-emphasis">
-                {{ formatItemType(item.itemType) }}
-                <span v-if="item.itemType === 'product'" class="ml-1">• ID: {{ item.itemId }}</span>
+                Product • ID: {{ item.itemId }}
+                <span v-if="getProductCategory(item.itemId)" class="ml-1">
+                  • {{ getProductCategory(item.itemId) }}
+                </span>
               </div>
             </div>
           </div>
@@ -207,7 +205,6 @@
         <!-- Actions -->
         <template #[`item.actions`]="{ item }">
           <div class="d-flex justify-center">
-            <!-- ✅ УПРОЩЕНО: Только одна кнопка -->
             <v-btn
               size="small"
               variant="text"
@@ -226,13 +223,13 @@
           <div class="text-center py-8">
             <v-icon icon="mdi-package-variant-closed" size="64" class="text-medium-emphasis mb-4" />
             <div class="text-h6 text-medium-emphasis mb-2">
-              {{ hasActiveFilters ? 'No items match filters' : 'No items found' }}
+              {{ hasActiveFilters ? 'No products match filters' : 'No products found' }}
             </div>
             <div class="text-body-2 text-medium-emphasis mb-4">
               {{
                 hasActiveFilters
                   ? 'Try adjusting or clearing your filters'
-                  : `No ${formatItemType(itemType)} in ${formatDepartment(department)} inventory`
+                  : `No products in ${formatDepartment(department)} inventory`
               }}
             </div>
             <div v-if="hasActiveFilters" class="d-flex justify-center gap-2">
@@ -240,7 +237,7 @@
             </div>
             <div v-else class="d-flex justify-center gap-2">
               <div class="text-caption text-medium-emphasis">
-                Use "Add Stock" button in the header to add your first items
+                Use "Add Stock" button in the header to add your first products
               </div>
             </div>
           </div>
@@ -250,7 +247,7 @@
         <template #loading>
           <div class="text-center py-8">
             <v-progress-circular indeterminate color="primary" class="mb-2" />
-            <div>Loading stock data...</div>
+            <div>Loading product stock data...</div>
           </div>
         </template>
       </v-data-table>
@@ -263,7 +260,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { StorageBalance, StorageItemType, StorageDepartment } from '@/stores/storage'
+import { useProductsStore } from '@/stores/productsStore'
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import type { StorageBalance, StorageDepartment } from '@/stores/storage'
 
 // Components
 import ItemDetailsDialog from './ItemDetailsDialog.vue'
@@ -272,16 +271,13 @@ import ItemDetailsDialog from './ItemDetailsDialog.vue'
 interface Props {
   balances: StorageBalance[]
   loading: boolean
-  itemType: StorageItemType
   department: StorageDepartment
 }
 
 const props = defineProps<Props>()
 
-// Emits
-const emit = defineEmits<{
-  // ✅ УДАЛЕНЫ дублирующие emits
-}>()
+// Store
+const productsStore = useProductsStore()
 
 // State
 const searchQuery = ref('')
@@ -296,12 +292,12 @@ const filters = ref({
 
 // Computed
 const headers = computed(() => [
-  { title: 'Item', key: 'itemName', sortable: true, width: '250px' },
+  { title: 'Product', key: 'itemName', sortable: true, width: '250px' },
   { title: 'Stock', key: 'stock', sortable: false, width: '200px' },
   { title: 'Cost', key: 'cost', sortable: true, value: 'averageCost', width: '180px' },
   { title: 'Total Value', key: 'totalValue', sortable: true, width: '150px' },
   { title: 'Status', key: 'status', sortable: false, width: '120px' },
-  { title: 'Actions', key: 'actions', sortable: false, width: '60px' } // ✅ УМЕНЬШЕНО с 100px до 60px
+  { title: 'Actions', key: 'actions', sortable: false, width: '60px' }
 ])
 
 const filteredBalances = computed(() => {
@@ -334,12 +330,16 @@ function formatDepartment(dept: StorageDepartment): string {
   return dept === 'kitchen' ? 'Kitchen' : 'Bar'
 }
 
-function formatItemType(type: StorageItemType): string {
-  return type === 'product' ? 'Products' : 'Preparations'
-}
+function getProductCategory(productId: string): string {
+  try {
+    const product = productsStore.products.find(p => p.id === productId)
+    if (!product || !product.category) return ''
 
-function getItemIcon(type: StorageItemType): string {
-  return type === 'product' ? '🥩' : '🍲'
+    return PRODUCT_CATEGORIES[product.category] || product.category
+  } catch (error) {
+    console.warn('Error getting product category:', error)
+    return ''
+  }
 }
 
 function formatQuantity(quantity: number, unit: string): string {

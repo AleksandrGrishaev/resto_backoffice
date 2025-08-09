@@ -1,13 +1,17 @@
-<!-- src/views/storage/StorageView.vue - ФИНАЛЬНАЯ ВЕРСИЯ БЕЗ CONSUMPTION -->
+<!-- src/views/storage/StorageView.vue - ТОЛЬКО ПРОДУКТЫ -->
 <template>
   <div class="storage-view">
     <!-- Header -->
     <div class="d-flex align-center justify-space-between mb-4">
       <div>
-        <h1 class="text-h4 font-weight-bold">📦 Storage Management</h1>
+        <h1 class="text-h4 font-weight-bold">📦 Product Storage</h1>
         <p class="text-body-2 text-medium-emphasis mt-1">
-          Inventory tracking with FIFO cost calculation
+          Raw ingredients inventory with FIFO cost tracking
         </p>
+        <v-chip size="small" color="primary" variant="tonal" class="mt-1">
+          <v-icon icon="mdi-package-variant" size="14" class="mr-1" />
+          Products Only
+        </v-chip>
       </div>
 
       <!-- Quick Actions -->
@@ -19,7 +23,7 @@
           :disabled="storageStore.state.loading.balances"
           @click="showReceiptDialog = true"
         >
-          Add Stock
+          Add Products
         </v-btn>
 
         <v-btn
@@ -27,9 +31,20 @@
           variant="outlined"
           prepend-icon="mdi-clipboard-list"
           :disabled="storageStore.state.loading.balances"
-          @click="openInventoryDialog('product')"
+          @click="openInventoryDialog"
         >
-          Start Inventory
+          Count Inventory
+        </v-btn>
+
+        <!-- Info Button -->
+        <v-btn
+          color="info"
+          variant="text"
+          icon="mdi-information-outline"
+          @click="showInfoDialog = true"
+        >
+          <v-icon />
+          <v-tooltip activator="parent" location="bottom">About Product Storage</v-tooltip>
         </v-btn>
       </div>
     </div>
@@ -75,27 +90,24 @@
       @show-low-stock="showLowStockItems"
     />
 
-    <!-- Main Content Tabs -->
+    <!-- Main Content Tabs - ТОЛЬКО ПРОДУКТЫ И ОПЕРАЦИИ -->
     <v-tabs v-model="selectedTab" class="mb-4">
       <v-tab value="products">
-        Products
+        <v-icon icon="mdi-package-variant" class="mr-2" />
+        Raw Products
         <v-chip v-if="productBalances.length > 0" size="small" class="ml-2" variant="tonal">
           {{ productBalances.length }}
         </v-chip>
       </v-tab>
-      <v-tab value="preparations">
-        Preparations
-        <v-chip v-if="preparationBalances.length > 0" size="small" class="ml-2" variant="tonal">
-          {{ preparationBalances.length }}
-        </v-chip>
-      </v-tab>
       <v-tab value="operations">
-        Recent Operations
+        <v-icon icon="mdi-history" class="mr-2" />
+        Operations
         <v-chip v-if="recentOperations.length > 0" size="small" class="ml-2" variant="tonal">
           {{ recentOperations.length }}
         </v-chip>
       </v-tab>
       <v-tab value="inventories">
+        <v-icon icon="mdi-clipboard-list" class="mr-2" />
         Inventories
         <v-chip v-if="recentInventories.length > 0" size="small" class="ml-2" variant="tonal">
           {{ recentInventories.length }}
@@ -128,36 +140,6 @@
           :loading="storageStore.state.loading.balances"
           item-type="product"
           :department="selectedDepartment"
-          @inventory="openInventoryDialog"
-          @receipt="showReceiptDialog = true"
-        />
-      </v-tabs-window-item>
-
-      <!-- Preparations Tab -->
-      <v-tabs-window-item value="preparations">
-        <div v-if="preparationBalances.length === 0 && !storageStore.state.loading.balances">
-          <v-empty-state
-            headline="No Preparations Found"
-            title="No preparations available for this department"
-            text="Preparations are created through recipe production or manual addition."
-          >
-            <template #actions>
-              <v-btn color="success" variant="outlined" @click="showReceiptDialog = true">
-                <v-icon icon="mdi-plus-circle" class="mr-2" />
-                Add Preparation
-              </v-btn>
-            </template>
-          </v-empty-state>
-        </div>
-
-        <storage-stock-table
-          v-else
-          :balances="preparationBalances"
-          :loading="storageStore.state.loading.balances"
-          item-type="preparation"
-          :department="selectedDepartment"
-          @inventory="openInventoryDialog"
-          @receipt="showReceiptDialog = true"
         />
       </v-tabs-window-item>
 
@@ -188,13 +170,9 @@
             text="Start an inventory to track and correct stock levels."
           >
             <template #actions>
-              <v-btn color="primary" variant="flat" @click="openInventoryDialog('product')">
+              <v-btn color="primary" variant="flat" @click="openInventoryDialog">
                 <v-icon icon="mdi-clipboard-list" class="mr-2" />
                 Start Product Inventory
-              </v-btn>
-              <v-btn color="primary" variant="outlined" @click="openInventoryDialog('preparation')">
-                <v-icon icon="mdi-chef-hat" class="mr-2" />
-                Start Preparation Inventory
               </v-btn>
             </template>
           </v-empty-state>
@@ -222,7 +200,7 @@
     <inventory-dialog
       v-model="showInventoryDialog"
       :department="selectedDepartment"
-      :item-type="inventoryItemType"
+      item-type="product"
       :existing-inventory="editingInventory"
       @success="handleInventorySuccess"
       @error="handleOperationError"
@@ -242,13 +220,80 @@
         <v-btn variant="text" @click="showErrorSnackbar = false">Close</v-btn>
       </template>
     </v-snackbar>
+
+    <!-- Info Dialog -->
+    <v-dialog v-model="showInfoDialog" max-width="500px">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon icon="mdi-information" color="info" class="mr-2" />
+          About Product Storage
+        </v-card-title>
+
+        <v-card-text class="pa-6">
+          <div class="mb-4">
+            <h4 class="mb-2">What is Product Storage?</h4>
+            <p class="text-body-2">
+              Product Storage manages raw ingredients and materials used in cooking. This includes
+              meat, vegetables, oils, spices, and other raw materials.
+            </p>
+          </div>
+
+          <div class="mb-4">
+            <h4 class="mb-2">Key Features:</h4>
+            <ul class="text-body-2">
+              <li>
+                <strong>FIFO Tracking:</strong>
+                First In, First Out cost calculation
+              </li>
+              <li>
+                <strong>Expiry Management:</strong>
+                Track expiration dates and alerts
+              </li>
+              <li>
+                <strong>Department Separation:</strong>
+                Kitchen and Bar inventories
+              </li>
+              <li>
+                <strong>Batch Tracking:</strong>
+                Monitor different deliveries
+              </li>
+              <li>
+                <strong>Cost Analytics:</strong>
+                Price trends and value tracking
+              </li>
+            </ul>
+          </div>
+
+          <v-alert type="info" variant="tonal" class="mb-4">
+            <v-alert-title>Note about Preparations</v-alert-title>
+            Semi-finished goods (like sauces, prepped ingredients) are now managed in a separate
+            Preparations module for better organization.
+          </v-alert>
+
+          <div>
+            <h4 class="mb-2">Quick Start:</h4>
+            <ol class="text-body-2">
+              <li>Click "Add Products" to receive new stock</li>
+              <li>Use "Count Inventory" to verify stock levels</li>
+              <li>Monitor alerts for expiring or low stock items</li>
+              <li>View operations history for audit trail</li>
+            </ol>
+          </div>
+        </v-card-text>
+
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn color="primary" variant="flat" @click="showInfoDialog = false">Got it</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
-import type { StorageDepartment, StorageItemType, InventoryDocument } from '@/stores/storage'
+import type { StorageDepartment, InventoryDocument } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 
 // Components
@@ -269,14 +314,14 @@ const selectedDepartment = ref<StorageDepartment>('kitchen')
 const selectedTab = ref('products')
 const showReceiptDialog = ref(false)
 const showInventoryDialog = ref(false)
-const inventoryItemType = ref<StorageItemType>('product')
+const showInfoDialog = ref(false)
 const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
 const successMessage = ref('')
 const errorMessage = ref('')
 const editingInventory = ref<InventoryDocument | null>(null)
 
-// Computed
+// Computed - ТОЛЬКО ПРОДУКТЫ
 const productBalances = computed(() => {
   try {
     return (
@@ -286,19 +331,6 @@ const productBalances = computed(() => {
     )
   } catch (error) {
     console.warn('Error filtering product balances:', error)
-    return []
-  }
-})
-
-const preparationBalances = computed(() => {
-  try {
-    return (
-      storageStore.filteredBalances.filter(
-        b => b && b.itemType === 'preparation' && b.department === selectedDepartment.value
-      ) || []
-    )
-  } catch (error) {
-    console.warn('Error filtering preparation balances:', error)
     return []
   }
 })
@@ -354,14 +386,12 @@ const barItemCount = computed(() => {
 })
 
 // Methods
-function openInventoryDialog(itemType: StorageItemType) {
+function openInventoryDialog() {
   try {
-    inventoryItemType.value = itemType
     editingInventory.value = null // Reset when creating new inventory
     showInventoryDialog.value = true
 
     DebugUtils.info(MODULE_NAME, 'Opening inventory dialog', {
-      itemType,
       department: selectedDepartment.value
     })
   } catch (error) {
@@ -463,7 +493,6 @@ function handleOperationError(message: string) {
 function handleEditInventory(inventory: InventoryDocument) {
   try {
     selectedDepartment.value = inventory.department
-    inventoryItemType.value = inventory.itemType
     editingInventory.value = inventory
 
     showInventoryDialog.value = true
@@ -471,7 +500,6 @@ function handleEditInventory(inventory: InventoryDocument) {
     DebugUtils.info(MODULE_NAME, 'Editing inventory from table', {
       inventoryId: inventory.id,
       department: inventory.department,
-      itemType: inventory.itemType,
       status: inventory.status
     })
   } catch (error) {
@@ -482,14 +510,11 @@ function handleEditInventory(inventory: InventoryDocument) {
 
 function handleStartInventory() {
   try {
-    // Open inventory dialog with products by default
-    inventoryItemType.value = 'product'
     editingInventory.value = null
     showInventoryDialog.value = true
 
     DebugUtils.info(MODULE_NAME, 'Starting new inventory from table', {
-      department: selectedDepartment.value,
-      itemType: inventoryItemType.value
+      department: selectedDepartment.value
     })
   } catch (error) {
     console.warn('Error starting new inventory:', error)

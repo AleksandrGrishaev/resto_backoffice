@@ -1,25 +1,21 @@
-// src/stores/storage/types.ts - ТОЛЬКО RECEIPT, CORRECTION И INVENTORY
+// src/stores/storage/types.ts - ТОЛЬКО ПРОДУКТЫ
 import { BaseEntity } from '@/types/common'
 
 export type StorageDepartment = 'kitchen' | 'bar'
-export type StorageItemType = 'product' | 'preparation'
+// ✅ УПРОЩЕНО: Убрали preparation, оставили только product
+export type StorageItemType = 'product'
 // ✅ УПРОЩЕНО: Убрали consumption, оставили только основные операции
 export type OperationType = 'receipt' | 'correction' | 'inventory'
-export type BatchSourceType =
-  | 'purchase'
-  | 'production'
-  | 'correction'
-  | 'opening_balance'
-  | 'inventory_adjustment'
+export type BatchSourceType = 'purchase' | 'correction' | 'opening_balance' | 'inventory_adjustment'
 export type BatchStatus = 'active' | 'expired' | 'consumed'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
-// Core storage batch entity
+// Core storage batch entity - ТОЛЬКО ДЛЯ ПРОДУКТОВ
 export interface StorageBatch extends BaseEntity {
   // Identification
   batchNumber: string // "B-BEEF-001-20250205"
-  itemId: string // Product or Preparation ID
-  itemType: StorageItemType
+  itemId: string // Product ID only
+  itemType: 'product' // Always product
   department: StorageDepartment
 
   // Quantity tracking
@@ -53,11 +49,11 @@ export interface BatchAllocation {
   batchDate: string // Receipt date of batch
 }
 
-// Storage operation item
+// Storage operation item - ТОЛЬКО ПРОДУКТЫ
 export interface StorageOperationItem {
   id: string
-  itemId: string // Product or Preparation ID
-  itemType: StorageItemType
+  itemId: string // Product ID only
+  itemType: 'product' // Always product
   itemName: string // Cached name for display
 
   // Quantity
@@ -87,16 +83,16 @@ export interface StorageOperation extends BaseEntity {
   // Responsible person
   responsiblePerson: string // Who performed the operation
 
-  // Items involved
+  // Items involved - ТОЛЬКО ПРОДУКТЫ
   items: StorageOperationItem[]
 
   // Financial impact
   totalValue?: number // Total cost impact of operation
 
-  // ✅ НОВОЕ: Причина коррекции (заменяет ConsumptionDetails)
+  // ✅ Причина коррекции (для списания продуктов)
   correctionDetails?: {
-    reason: 'recipe_usage' | 'menu_item' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
-    relatedId?: string // Recipe ID, Menu Item ID, etc.
+    reason: 'recipe_usage' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
+    relatedId?: string // Recipe ID, etc.
     relatedName?: string // Human readable name
     portionCount?: number // How many portions made (for recipe usage)
   }
@@ -108,11 +104,11 @@ export interface StorageOperation extends BaseEntity {
   notes?: string
 }
 
-// Current stock summary with analytics
+// Current stock summary with analytics - ТОЛЬКО ПРОДУКТЫ
 export interface StorageBalance {
   // Item identification
   itemId: string
-  itemType: StorageItemType
+  itemType: 'product' // Always product
   itemName: string // Cached name
   department: StorageDepartment
 
@@ -145,13 +141,13 @@ export interface StorageBalance {
   lastCalculated: string // When this balance was calculated
 }
 
-// Inventory document for stock takes
+// Inventory document for stock takes - ТОЛЬКО ПРОДУКТЫ
 export interface InventoryDocument extends BaseEntity {
   // Document details
   documentNumber: string // "INV-KITCHEN-PROD-001"
   inventoryDate: string
   department: StorageDepartment
-  itemType: StorageItemType // Separate inventories for products/preparations
+  itemType: 'product' // Always product now
 
   // Responsible person
   responsiblePerson: string
@@ -160,8 +156,8 @@ export interface InventoryDocument extends BaseEntity {
   items: InventoryItem[]
 
   // Summary
-  totalItems: number // Number of items counted
-  totalDiscrepancies: number // Number of items with differences
+  totalItems: number // Number of products counted
+  totalDiscrepancies: number // Number of products with differences
   totalValueDifference: number // Total financial impact
 
   // Status
@@ -169,11 +165,11 @@ export interface InventoryDocument extends BaseEntity {
   notes?: string
 }
 
-// Individual inventory item
+// Individual inventory item - ТОЛЬКО ПРОДУКТЫ
 export interface InventoryItem {
   id: string
   itemId: string
-  itemType: StorageItemType
+  itemType: 'product' // Always product
   itemName: string // Cached name
 
   // Quantities
@@ -192,7 +188,7 @@ export interface InventoryItem {
   confirmed?: boolean
 }
 
-// ✅ УПРОЩЕННЫЕ DTOs - только Receipt, Correction, Inventory
+// ✅ УПРОЩЕННЫЕ DTOs - только Receipt, Correction, Inventory для ПРОДУКТОВ
 
 export interface CreateReceiptData {
   department: StorageDepartment
@@ -204,20 +200,20 @@ export interface CreateReceiptData {
 
 export interface ReceiptItem {
   itemId: string
-  itemType: StorageItemType
+  itemType: 'product' // Always product
   quantity: number
   costPerUnit: number
   expiryDate?: string
   notes?: string
 }
 
-// ✅ НОВОЕ: Correction вместо Consumption
+// ✅ Correction для списания продуктов
 export interface CreateCorrectionData {
   department: StorageDepartment
   responsiblePerson: string
   items: CorrectionItem[]
   correctionDetails: {
-    reason: 'recipe_usage' | 'menu_item' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
+    reason: 'recipe_usage' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
     relatedId?: string
     relatedName?: string
     portionCount?: number
@@ -227,18 +223,18 @@ export interface CreateCorrectionData {
 
 export interface CorrectionItem {
   itemId: string
-  itemType: StorageItemType
+  itemType: 'product' // Always product
   quantity: number // положительное число для списания
   notes?: string
 }
 
 export interface CreateInventoryData {
   department: StorageDepartment
-  itemType: StorageItemType
   responsiblePerson: string
+  // ✅ УБРАНО: itemType - всегда product
 }
 
-// Store state interface (минимальная)
+// Store state interface - ТОЛЬКО ПРОДУКТЫ
 export interface StorageState {
   // Core data
   batches: StorageBatch[]
@@ -251,14 +247,14 @@ export interface StorageState {
     balances: boolean
     operations: boolean
     inventory: boolean
-    correction: boolean // ✅ ИЗМЕНЕНО: correction вместо consumption
+    correction: boolean
   }
   error: string | null
 
   // Filters and search
   filters: {
     department: StorageDepartment | 'all'
-    itemType: StorageItemType | 'all'
+    // ✅ УБРАНО: itemType - всегда product
     showExpired: boolean
     showBelowMinStock: boolean
     showNearExpiry: boolean
