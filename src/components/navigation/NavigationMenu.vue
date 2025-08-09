@@ -23,32 +23,6 @@
         </template>
       </v-list-item>
 
-      <!-- Recipes -->
-      <v-list-item
-        to="/recipes"
-        prepend-icon="mdi-book-open-page-variant"
-        color="primary"
-        class="mb-2"
-        :active-color="variables.colorPrimary"
-      >
-        <template #title>
-          <span>Recipes</span>
-        </template>
-      </v-list-item>
-
-      <!-- Products -->
-      <v-list-item
-        to="/products"
-        prepend-icon="mdi-package-variant"
-        color="primary"
-        class="mb-2"
-        :active-color="variables.colorPrimary"
-      >
-        <template #title>
-          <span>Products</span>
-        </template>
-      </v-list-item>
-
       <!-- Preparations -->
       <v-list-item
         to="/preparations"
@@ -100,18 +74,73 @@
       <!-- Accounts with active accounts -->
       <navigation-accounts />
 
-      <!-- Payment -->
-      <v-list-item
-        to="/payment-settings"
-        prepend-icon="mdi-cash-register"
-        color="primary"
-        class="mb-2"
-        :active-color="variables.colorPrimary"
-      >
-        <template #title>
-          <span>Payment</span>
+      <!-- Catalogs Section -->
+      <v-list-group value="catalogs" class="mb-2">
+        <template #activator="{ props }">
+          <v-list-item
+            v-bind="props"
+            prepend-icon="mdi-folder-open"
+            color="primary"
+            :active-color="variables.colorPrimary"
+          >
+            <template #title>
+              <span>Catalogs</span>
+            </template>
+          </v-list-item>
         </template>
-      </v-list-item>
+
+        <!-- Recipes -->
+        <v-list-item
+          to="/recipes"
+          prepend-icon="mdi-book-open-page-variant"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Recipes</span>
+          </template>
+        </v-list-item>
+
+        <!-- Products -->
+        <v-list-item
+          to="/products"
+          prepend-icon="mdi-package-variant"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Products</span>
+          </template>
+        </v-list-item>
+
+        <!-- Counteragents -->
+        <v-list-item
+          to="/counteragents"
+          prepend-icon="mdi-store"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Counteragents</span>
+          </template>
+        </v-list-item>
+
+        <!-- Payment Settings -->
+        <v-list-item
+          to="/payment-settings"
+          prepend-icon="mdi-cash-register"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Payment</span>
+          </template>
+        </v-list-item>
+      </v-list-group>
     </v-list>
 
     <!-- User Info & Actions -->
@@ -199,6 +228,32 @@ async function handleLogout() {
   &::-webkit-scrollbar-thumb {
     background-color: rgba(255, 255, 255, 0.1);
     border-radius: 2px;
+  }
+}
+
+// Styling for grouped items
+:deep(.v-list-group) {
+  .v-list-item {
+    border-radius: 8px;
+    margin-bottom: 4px;
+  }
+
+  .v-list-group__items {
+    .v-list-item {
+      margin-bottom: 2px;
+      border-radius: 6px;
+    }
+  }
+}
+
+// Active state styling for nested items
+:deep(.v-list-item--active) {
+  background-color: rgba(25, 118, 210, 0.12);
+
+  &.ps-8 {
+    border-left: 3px solid var(--v-theme-primary);
+    margin-left: 8px;
+    padding-left: calc(2rem - 3px) !important;
   }
 }
 </style>

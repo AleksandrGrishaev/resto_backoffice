@@ -18,6 +18,8 @@ import StorageView from '@/views/storage/StorageView.vue'
 import PreparationView from '@/views/preparation/PreparationView.vue'
 // Импорт компонентов поставщиков и закупок
 import SupplierView from '@/views/supplier/SupplierView.vue'
+// Импорт компонентов контрагентов
+import CounteragentsView from '@/views/counteragents/CounteragentsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -67,6 +69,14 @@ const router = createRouter({
           component: () => import('@/views/recipes/RecipesView.vue'),
           meta: {
             title: 'Recipes'
+          }
+        },
+        {
+          path: 'counteragents',
+          name: 'counteragents',
+          component: CounteragentsView,
+          meta: {
+            title: 'Counteragents Management'
           }
         },
         {

@@ -1,32 +1,19 @@
-// src/views/supplier/components/consolidation/NewOrdersTab.vue
 <!-- src/views/supplier/components/consolidation/NewOrdersTab.vue -->
 <template>
   <div class="new-orders-tab">
-    <!-- Workflow Progress Indicator -->
-    <v-card variant="tonal" color="info" class="mb-6">
-      <v-card-text class="pa-4">
-        <div class="d-flex align-center mb-3">
-          <v-icon icon="mdi-progress-check" color="info" class="mr-2" />
-          <h4>Consolidation Workflow</h4>
-          <v-spacer />
-          <v-chip :color="getWorkflowStatusColor()" size="small" variant="flat">
-            {{ getWorkflowStatusText() }}
-          </v-chip>
-        </div>
+    <!-- Simple Header -->
+    <div class="d-flex align-center justify-space-between mb-6">
+      <div>
+        <h3 class="text-h5 font-weight-bold">Consolidation Orders</h3>
+        <p class="text-body-2 text-medium-emphasis ma-0">
+          Create purchase orders from approved requests
+        </p>
+      </div>
 
-        <v-stepper
-          v-model="currentStep"
-          :items="workflowSteps"
-          hide-actions
-          class="workflow-stepper"
-          flat
-        >
-          <template #icon="{ item }">
-            <v-icon :color="getStepColor(item)" :icon="getStepIcon(item)" size="20" />
-          </template>
-        </v-stepper>
-      </v-card-text>
-    </v-card>
+      <v-chip :color="currentStep === 3 ? 'success' : 'primary'" size="default" variant="tonal">
+        {{ getStatusText() }}
+      </v-chip>
+    </div>
 
     <!-- Step Content -->
     <div class="workflow-content">
@@ -43,9 +30,9 @@
           <v-card-text class="pa-4">
             <div class="d-flex align-center justify-space-between">
               <div>
-                <div class="font-weight-medium">Need More Requests?</div>
+                <div class="font-weight-medium">Need more requests?</div>
                 <div class="text-caption text-medium-emphasis">
-                  Create new procurement requests or approve existing ones
+                  Create or approve procurement requests
                 </div>
               </div>
               <div class="d-flex gap-2">
@@ -53,14 +40,14 @@
                   color="success"
                   variant="outlined"
                   size="small"
-                  prepend-icon="mdi-clipboard-plus"
+                  prepend-icon="mdi-plus"
                   @click="$emit('create-request')"
                 >
                   Create Request
                 </v-btn>
                 <v-btn
-                  color="info"
-                  variant="outlined"
+                  color="primary"
+                  variant="text"
                   size="small"
                   prepend-icon="mdi-refresh"
                   @click="refreshRequests"
@@ -73,194 +60,228 @@
         </v-card>
       </div>
 
-      <!-- Step 2: Consolidation Preview -->
+      <!-- Step 2: Product-Focused Preview -->
       <div v-if="currentStep === 2">
-        <consolidation-preview-card
-          v-if="currentConsolidation"
-          :consolidation="currentConsolidation"
-          :creating-orders="supplierStore.state.loading.consolidation"
-          @create-orders="handleCreateOrders"
-          @edit="handleEditConsolidation"
-        />
-
-        <!-- Navigation -->
-        <v-card variant="outlined" class="mt-4">
-          <v-card-actions class="pa-4">
-            <v-btn variant="outlined" prepend-icon="mdi-arrow-left" @click="goBackToSelection">
-              Back to Selection
-            </v-btn>
-            <v-spacer />
-            <v-btn
-              v-if="currentConsolidation && currentConsolidation.status === 'processed'"
-              color="success"
-              variant="flat"
-              prepend-icon="mdi-package-variant"
-              @click="viewGeneratedOrders"
-            >
-              View Created Orders
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </div>
-
-      <!-- Step 3: Orders Created -->
-      <div v-if="currentStep === 3">
         <v-card>
-          <v-card-text class="pa-6 text-center">
-            <v-icon icon="mdi-check-circle" color="success" size="64" class="mb-4" />
-            <div class="text-h5 font-weight-bold text-success mb-2">
-              Orders Created Successfully!
-            </div>
-            <div class="text-body-1 text-medium-emphasis mb-4">
-              {{ generatedOrdersCount }} purchase order{{
-                generatedOrdersCount !== 1 ? 's' : ''
-              }}
-              created from consolidation {{ currentConsolidation?.consolidationNumber }}
+          <v-card-title class="d-flex align-center justify-space-between">
+            <div>
+              <div class="text-h6">Order Preview</div>
+              <div class="text-caption text-medium-emphasis">
+                {{ currentConsolidation?.supplierGroups.length }} orders will be created
+              </div>
             </div>
 
-            <!-- Created Orders Summary -->
-            <v-card v-if="generatedOrders.length > 0" variant="tonal" color="success" class="mb-4">
-              <v-card-text class="pa-4">
-                <div class="text-h6 mb-3">Created Purchase Orders</div>
+            <div class="d-flex gap-2">
+              <v-btn variant="outlined" size="small" @click="goBackToSelection">
+                Edit Selection
+              </v-btn>
+              <v-btn
+                color="success"
+                variant="flat"
+                size="small"
+                prepend-icon="mdi-check"
+                :loading="supplierStore.state.loading.consolidation"
+                @click="handleCreateOrders"
+              >
+                Create Orders
+              </v-btn>
+            </div>
+          </v-card-title>
+
+          <v-divider />
+
+          <!-- Product-Focused Order Preview -->
+          <div v-if="currentConsolidation">
+            <div
+              v-for="(group, index) in currentConsolidation.supplierGroups"
+              :key="group.supplierId"
+              class="supplier-group"
+            >
+              <!-- Supplier Header -->
+              <div class="supplier-header pa-4">
+                <div class="d-flex align-center justify-space-between">
+                  <div class="d-flex align-center">
+                    <v-avatar size="32" color="primary" class="mr-3">
+                      <span class="text-caption font-weight-bold">
+                        {{ group.supplierName.charAt(0) }}
+                      </span>
+                    </v-avatar>
+                    <div>
+                      <div class="font-weight-medium">{{ group.supplierName }}</div>
+                      <div class="text-caption text-medium-emphasis">
+                        Order #{{ index + 1 }} • {{ group.items.length }} products
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="text-right">
+                    <div class="text-h6 font-weight-bold text-success">
+                      {{ formatCurrency(group.totalAmount) }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">Total Amount</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Products Grid -->
+              <div class="products-grid pa-4 pt-0">
                 <v-row>
-                  <v-col v-for="order in generatedOrders" :key="order.id" cols="12" md="6">
-                    <v-card variant="outlined">
+                  <v-col v-for="item in group.items" :key="item.id" cols="12" sm="6" md="4">
+                    <v-card variant="outlined" class="product-card h-100" hover>
                       <v-card-text class="pa-3">
-                        <div class="d-flex align-center justify-space-between">
-                          <div>
-                            <div class="font-weight-medium">{{ order.orderNumber }}</div>
-                            <div class="text-caption text-medium-emphasis">
-                              {{ order.supplierName }}
-                            </div>
+                        <!-- Product Header -->
+                        <div class="d-flex align-center mb-2">
+                          <v-avatar size="24" color="surface-variant" class="mr-2">
+                            <v-icon :icon="getProductIcon(item.category)" size="14" />
+                          </v-avatar>
+                          <div class="font-weight-medium text-body-2">
+                            {{ item.productName }}
                           </div>
-                          <div class="text-right">
-                            <div class="font-weight-bold text-success">
-                              {{ formatCurrency(order.totalAmount) }}
-                            </div>
-                            <div class="text-caption text-medium-emphasis">
-                              {{ order.items.length }} items
-                            </div>
+                        </div>
+
+                        <!-- Product Details -->
+                        <div class="product-details mb-3">
+                          <div class="d-flex justify-space-between align-center mb-1">
+                            <span class="text-caption text-medium-emphasis">Quantity:</span>
+                            <span class="text-caption font-weight-medium">
+                              {{ item.quantity }} {{ item.unit }}
+                            </span>
                           </div>
+
+                          <div class="d-flex justify-space-between align-center mb-1">
+                            <span class="text-caption text-medium-emphasis">Unit Price:</span>
+                            <span class="text-caption font-weight-medium">
+                              {{ formatCurrency(item.unitPrice) }}
+                            </span>
+                          </div>
+
+                          <div v-if="item.specifications" class="text-caption text-medium-emphasis">
+                            {{ item.specifications }}
+                          </div>
+                        </div>
+
+                        <!-- Product Total -->
+                        <v-divider class="mb-2" />
+                        <div class="d-flex justify-space-between align-center">
+                          <span class="text-body-2 font-weight-medium">Total:</span>
+                          <span class="text-body-2 font-weight-bold text-primary">
+                            {{ formatCurrency(item.totalPrice) }}
+                          </span>
+                        </div>
+
+                        <!-- Request Source -->
+                        <div class="mt-2">
+                          <v-chip size="x-small" variant="tonal" color="info">
+                            Request #{{ item.requestId.slice(-4) }}
+                          </v-chip>
                         </div>
                       </v-card-text>
                     </v-card>
                   </v-col>
                 </v-row>
-              </v-card-text>
-            </v-card>
+              </div>
 
-            <!-- Actions -->
-            <div class="d-flex justify-center gap-3">
-              <v-btn
-                color="primary"
-                variant="flat"
-                prepend-icon="mdi-package-variant"
-                @click="viewGeneratedOrders"
-              >
-                View All Orders
-              </v-btn>
-              <v-btn
-                color="success"
-                variant="outlined"
-                prepend-icon="mdi-plus-circle"
-                @click="startNewConsolidation"
-              >
-                Start New Consolidation
-              </v-btn>
-              <v-btn
-                variant="outlined"
-                prepend-icon="mdi-file-pdf-box"
-                @click="exportConsolidationReport"
-              >
-                Export Report
-              </v-btn>
+              <v-divider v-if="index < currentConsolidation.supplierGroups.length - 1" />
             </div>
-          </v-card-text>
+          </div>
         </v-card>
       </div>
 
-      <!-- Step 4: Bills Management (Optional) -->
-      <div v-if="currentStep === 4">
-        <bills-management-card
-          :bills="supplierStore.unpaidBills"
-          :loading="supplierStore.state.loading.bills"
-          @create-bill="handleCreateBill"
-          @pay-bill="handlePayBill"
-        />
+      <!-- Step 3: Success State -->
+      <div v-if="currentStep === 3">
+        <v-card class="text-center pa-8">
+          <v-icon icon="mdi-check-circle" color="success" size="64" class="mb-4" />
+
+          <div class="text-h5 font-weight-bold text-success mb-2">Orders Created Successfully!</div>
+
+          <div class="text-body-1 text-medium-emphasis mb-6">
+            {{ generatedOrdersCount }} purchase order{{ generatedOrdersCount !== 1 ? 's' : '' }}
+            created from your consolidation
+          </div>
+
+          <!-- Created Orders Summary -->
+          <v-row v-if="generatedOrders.length > 0" class="mb-6">
+            <v-col
+              v-for="order in generatedOrders.slice(0, 4)"
+              :key="order.id"
+              cols="12"
+              sm="6"
+              md="3"
+            >
+              <v-card variant="tonal" color="success">
+                <v-card-text class="pa-4">
+                  <div class="font-weight-medium mb-1">
+                    {{ order.orderNumber }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis mb-2">
+                    {{ order.supplierName }}
+                  </div>
+                  <div class="text-h6 font-weight-bold text-success">
+                    {{ formatCurrency(order.totalAmount) }}
+                  </div>
+                  <div class="text-caption">{{ order.items.length }} products</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+
+            <v-col v-if="generatedOrders.length > 4" cols="12" sm="6" md="3">
+              <v-card variant="outlined" class="d-flex align-center justify-center h-100">
+                <v-card-text class="text-center">
+                  <div class="text-h6 font-weight-bold">+{{ generatedOrders.length - 4 }}</div>
+                  <div class="text-caption text-medium-emphasis">more orders</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+
+          <!-- Actions -->
+          <div class="d-flex justify-center gap-3">
+            <v-btn
+              color="primary"
+              variant="flat"
+              prepend-icon="mdi-package-variant"
+              @click="viewGeneratedOrders"
+            >
+              View All Orders
+            </v-btn>
+            <v-btn
+              color="success"
+              variant="outlined"
+              prepend-icon="mdi-plus"
+              @click="startNewConsolidation"
+            >
+              New Consolidation
+            </v-btn>
+          </div>
+        </v-card>
       </div>
     </div>
 
-    <!-- Quick Stats Bar -->
-    <v-card variant="tonal" color="surface" class="mt-6">
+    <!-- Compact Stats -->
+    <v-card variant="flat" color="surface" class="mt-6">
       <v-card-text class="pa-4">
         <div class="d-flex align-center justify-space-between">
-          <div class="d-flex align-center">
-            <v-icon icon="mdi-chart-line" color="primary" class="mr-2" />
-            <div class="font-weight-medium">Today's Progress</div>
-          </div>
+          <div class="text-body-2 font-weight-medium text-medium-emphasis">Today's Activity</div>
           <div class="d-flex gap-6">
             <div class="text-center">
-              <div class="text-h6 font-weight-bold">{{ todayStats.consolidations }}</div>
+              <div class="text-subtitle-2 font-weight-bold">
+                {{ todayStats.consolidations }}
+              </div>
               <div class="text-caption text-medium-emphasis">Consolidations</div>
             </div>
             <div class="text-center">
-              <div class="text-h6 font-weight-bold">{{ todayStats.orders }}</div>
-              <div class="text-caption text-medium-emphasis">Orders Created</div>
+              <div class="text-subtitle-2 font-weight-bold">
+                {{ todayStats.orders }}
+              </div>
+              <div class="text-caption text-medium-emphasis">Orders</div>
             </div>
             <div class="text-center">
-              <div class="text-h6 font-weight-bold">
+              <div class="text-subtitle-2 font-weight-bold">
                 {{ formatCurrency(todayStats.totalValue) }}
               </div>
               <div class="text-caption text-medium-emphasis">Total Value</div>
             </div>
-            <div class="text-center">
-              <div class="text-h6 font-weight-bold">{{ todayStats.suppliers }}</div>
-              <div class="text-caption text-medium-emphasis">Suppliers</div>
-            </div>
           </div>
-        </div>
-      </v-card-text>
-    </v-card>
-
-    <!-- Recent Activity -->
-    <v-card class="mt-4">
-      <v-card-title class="d-flex align-center">
-        <v-icon icon="mdi-history" color="info" class="mr-2" />
-        Recent Consolidation Activity
-        <v-spacer />
-        <v-btn size="small" variant="text" prepend-icon="mdi-refresh" @click="refreshActivity">
-          Refresh
-        </v-btn>
-      </v-card-title>
-
-      <v-card-text class="pa-0">
-        <v-timeline v-if="recentActivity.length > 0" density="compact" class="pa-4">
-          <v-timeline-item
-            v-for="activity in recentActivity"
-            :key="activity.id"
-            :icon="getActivityIcon(activity.type)"
-            :dot-color="getActivityColor(activity.type)"
-            size="small"
-          >
-            <template #opposite>
-              <div class="text-caption text-medium-emphasis">
-                {{ formatTimeAgo(activity.timestamp) }}
-              </div>
-            </template>
-
-            <div>
-              <div class="font-weight-medium">{{ activity.title }}</div>
-              <div class="text-caption text-medium-emphasis">{{ activity.description }}</div>
-              <div v-if="activity.details" class="text-caption text-primary mt-1">
-                {{ activity.details }}
-              </div>
-            </div>
-          </v-timeline-item>
-        </v-timeline>
-
-        <div v-else class="text-center pa-8 text-medium-emphasis">
-          <v-icon icon="mdi-history" size="48" class="mb-2" />
-          <div>No recent activity</div>
         </div>
       </v-card-text>
     </v-card>
@@ -272,12 +293,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useSupplierStore } from '@/stores/supplier'
 import { formatCurrency } from '@/stores/supplier'
 import type { RequestConsolidation, PurchaseOrder } from '@/stores/supplier'
-import { DebugUtils, TimeUtils } from '@/utils'
+import { DebugUtils } from '@/utils'
 
 // Import consolidation components
 import RequestSelectionCard from './RequestSelectionCard.vue'
-import ConsolidationPreviewCard from './ConsolidationPreviewCard.vue'
-// Note: BillsManagementCard would be implemented later when bills move to Account Store
 
 const MODULE_NAME = 'NewOrdersTab'
 
@@ -297,35 +316,12 @@ const currentStep = ref(1)
 const currentConsolidation = ref<RequestConsolidation | null>(null)
 const generatedOrders = ref<PurchaseOrder[]>([])
 
-// Workflow Steps
-const workflowSteps = [
-  {
-    title: 'Select Requests',
-    value: 1,
-    status: 'active',
-    description: 'Choose approved requests to consolidate'
-  },
-  {
-    title: 'Review Consolidation',
-    value: 2,
-    status: 'pending',
-    description: 'Preview grouped items and suppliers'
-  },
-  {
-    title: 'Orders Created',
-    value: 3,
-    status: 'pending',
-    description: 'Purchase orders generated and ready'
-  }
-]
-
 // Computed
 const generatedOrdersCount = computed(() => generatedOrders.value.length)
 
 const todayStats = computed(() => {
   const today = new Date().toISOString().split('T')[0]
 
-  // Filter today's data
   const todayConsolidations = supplierStore.state.consolidations.filter(c =>
     c.consolidationDate.startsWith(today)
   )
@@ -335,70 +331,17 @@ const todayStats = computed(() => {
   return {
     consolidations: todayConsolidations.length,
     orders: todayOrders.length,
-    totalValue: todayOrders.reduce((sum, o) => sum + o.totalAmount, 0),
-    suppliers: new Set(todayOrders.map(o => o.supplierId)).size
+    totalValue: todayOrders.reduce((sum, o) => sum + o.totalAmount, 0)
   }
-})
-
-const recentActivity = computed(() => {
-  const activities = []
-
-  // Add consolidation activities
-  supplierStore.state.consolidations
-    .filter(c => c.status === 'processed')
-    .slice(0, 3)
-    .forEach(consolidation => {
-      activities.push({
-        id: `consolidation-${consolidation.id}`,
-        type: 'consolidation',
-        title: `Consolidation ${consolidation.consolidationNumber} completed`,
-        description: `${consolidation.supplierGroups.length} purchase orders created`,
-        details: `${consolidation.sourceRequestIds.length} requests → ${consolidation.supplierGroups.length} orders`,
-        timestamp: consolidation.updatedAt
-      })
-    })
-
-  // Add recent order activities
-  supplierStore.state.purchaseOrders
-    .filter(o => o.status === 'sent' || o.status === 'confirmed')
-    .slice(0, 2)
-    .forEach(order => {
-      activities.push({
-        id: `order-${order.id}`,
-        type: 'order',
-        title: `Order ${order.orderNumber} ${order.status}`,
-        description: `${order.supplierName} • ${formatCurrency(order.totalAmount)}`,
-        details: `${order.items.length} items`,
-        timestamp: order.updatedAt
-      })
-    })
-
-  // Sort by timestamp
-  return activities
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 5)
 })
 
 // Methods
-function getWorkflowStatusColor(): string {
-  switch (currentStep.value) {
-    case 1:
-      return 'warning'
-    case 2:
-      return 'info'
-    case 3:
-      return 'success'
-    default:
-      return 'default'
-  }
-}
-
-function getWorkflowStatusText(): string {
+function getStatusText(): string {
   switch (currentStep.value) {
     case 1:
       return 'Select Requests'
     case 2:
-      return 'Review Consolidation'
+      return 'Review Order'
     case 3:
       return 'Orders Created'
     default:
@@ -406,61 +349,18 @@ function getWorkflowStatusText(): string {
   }
 }
 
-function getStepColor(item: any): string {
-  if (item.value < currentStep.value) return 'success'
-  if (item.value === currentStep.value) return 'primary'
-  return 'default'
-}
-
-function getStepIcon(item: any): string {
-  if (item.value < currentStep.value) return 'mdi-check'
-
-  switch (item.value) {
-    case 1:
-      return 'mdi-clipboard-list'
-    case 2:
-      return 'mdi-merge'
-    case 3:
-      return 'mdi-package-variant'
-    default:
-      return 'mdi-circle'
+function getProductIcon(category: string): string {
+  const icons: Record<string, string> = {
+    office: 'mdi-office-building',
+    technology: 'mdi-laptop',
+    supplies: 'mdi-package-variant',
+    furniture: 'mdi-chair-rolling',
+    maintenance: 'mdi-tools',
+    food: 'mdi-food',
+    medical: 'mdi-medical-bag',
+    default: 'mdi-package'
   }
-}
-
-function getActivityIcon(type: string): string {
-  const icons = {
-    consolidation: 'mdi-merge',
-    order: 'mdi-package-variant',
-    bill: 'mdi-file-document',
-    payment: 'mdi-credit-card'
-  }
-  return icons[type as keyof typeof icons] || 'mdi-circle'
-}
-
-function getActivityColor(type: string): string {
-  const colors = {
-    consolidation: 'success',
-    order: 'primary',
-    bill: 'warning',
-    payment: 'info'
-  }
-  return colors[type as keyof typeof colors] || 'default'
-}
-
-function formatTimeAgo(timestamp: string): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffHours / 24)
-
-  if (diffDays > 0) {
-    return `${diffDays}d ago`
-  } else if (diffHours > 0) {
-    return `${diffHours}h ago`
-  } else {
-    return 'Just now'
-  }
+  return icons[category.toLowerCase()] || icons.default
 }
 
 // Event Handlers
@@ -471,21 +371,12 @@ async function handleConsolidation(requestIds: string[]) {
       count: requestIds.length
     })
 
-    const consolidation = await supplierStore.createConsolidation(
-      requestIds,
-      'Current User' // TODO: Get from auth store
-    )
+    const consolidation = await supplierStore.createConsolidation(requestIds, 'Current User')
 
     currentConsolidation.value = consolidation
     currentStep.value = 2
 
     emit('success', `Consolidation created with ${requestIds.length} requests`)
-
-    DebugUtils.info(MODULE_NAME, 'Consolidation created successfully', {
-      consolidationId: consolidation.id,
-      consolidationNumber: consolidation.consolidationNumber,
-      supplierGroups: consolidation.supplierGroups.length
-    })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to create consolidation', { error })
     emit('error', error instanceof Error ? error.message : 'Failed to create consolidation')
@@ -493,59 +384,30 @@ async function handleConsolidation(requestIds: string[]) {
 }
 
 async function handleCreateOrders() {
-  if (!currentConsolidation.value) {
-    DebugUtils.warn(MODULE_NAME, 'No consolidation to create orders from')
-    return
-  }
+  if (!currentConsolidation.value) return
 
   try {
-    DebugUtils.info(MODULE_NAME, 'Creating orders from consolidation', {
-      consolidationId: currentConsolidation.value.id,
-      expectedOrderCount: currentConsolidation.value.supplierGroups.length
-    })
-
     const orders = await supplierStore.createOrdersFromConsolidation(currentConsolidation.value.id)
 
     generatedOrders.value = orders
     currentStep.value = 3
 
     emit('success', `${orders.length} purchase orders created successfully`)
-
-    DebugUtils.info(MODULE_NAME, 'Orders created successfully', {
-      orderCount: orders.length,
-      orderIds: orders.map(o => o.id),
-      totalValue: orders.reduce((sum, o) => sum + o.totalAmount, 0)
-    })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to create orders', { error })
-    emit('error', error instanceof Error ? error.message : 'Failed to create purchase orders')
+    emit('error', error instanceof Error ? error.message : 'Failed to create orders')
   }
-}
-
-function handleEditConsolidation() {
-  // Go back to step 1 to modify the consolidation
-  currentStep.value = 1
-  currentConsolidation.value = null
-
-  DebugUtils.info(MODULE_NAME, 'Editing consolidation - returned to selection')
 }
 
 function goBackToSelection() {
   currentStep.value = 1
   currentConsolidation.value = null
-
-  DebugUtils.info(MODULE_NAME, 'User went back to request selection')
 }
 
 function viewGeneratedOrders() {
   if (generatedOrders.value.length > 0) {
     const orderIds = generatedOrders.value.map(o => o.id)
     emit('view-orders', orderIds)
-
-    DebugUtils.info(MODULE_NAME, 'View generated orders', {
-      orderIds,
-      count: orderIds.length
-    })
   }
 }
 
@@ -553,62 +415,24 @@ function startNewConsolidation() {
   currentStep.value = 1
   currentConsolidation.value = null
   generatedOrders.value = []
-
-  DebugUtils.info(MODULE_NAME, 'Starting new consolidation workflow')
-}
-
-function exportConsolidationReport() {
-  if (!currentConsolidation.value) return
-
-  DebugUtils.info(MODULE_NAME, 'Export consolidation report', {
-    consolidationId: currentConsolidation.value.id,
-    consolidationNumber: currentConsolidation.value.consolidationNumber
-  })
-
-  // TODO: Implement PDF export functionality
 }
 
 async function refreshRequests() {
   try {
     await supplierStore.fetchProcurementRequests()
-    DebugUtils.info(MODULE_NAME, 'Requests refreshed')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to refresh requests', { error })
   }
 }
 
-async function refreshActivity() {
-  try {
-    await Promise.all([supplierStore.fetchConsolidations(), supplierStore.fetchPurchaseOrders()])
-    DebugUtils.info(MODULE_NAME, 'Activity refreshed')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to refresh activity', { error })
-  }
-}
-
-// Bills management (placeholder for future Account Store integration)
-function handleCreateBill(orderId: string) {
-  DebugUtils.info(MODULE_NAME, 'Create bill from order', { orderId })
-  // TODO: Will be implemented when bills move to Account Store
-}
-
-function handlePayBill(billId: string) {
-  DebugUtils.info(MODULE_NAME, 'Pay bill', { billId })
-  // TODO: Will be implemented when bills move to Account Store
-}
-
 // Lifecycle
 onMounted(async () => {
   try {
-    DebugUtils.info(MODULE_NAME, 'NewOrdersTab mounted, loading data')
-
     await Promise.all([
       supplierStore.fetchProcurementRequests(),
       supplierStore.fetchConsolidations(),
       supplierStore.fetchPurchaseOrders()
     ])
-
-    DebugUtils.info(MODULE_NAME, 'NewOrdersTab data loaded successfully')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to load data', { error })
     emit('error', 'Failed to load consolidation data')
@@ -618,46 +442,40 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 .new-orders-tab {
-  .workflow-stepper {
-    background: transparent;
-    box-shadow: none;
-  }
-
   .workflow-content {
-    min-height: 400px;
+    transition: all 0.3s ease;
   }
 }
 
-:deep(.v-stepper) {
-  box-shadow: none;
+.supplier-group {
+  &:not(:last-child) {
+    border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  }
+}
+
+.supplier-header {
+  background: rgba(var(--v-theme-surface), 0.5);
+}
+
+.products-grid {
   background: transparent;
+}
 
-  .v-stepper-header {
-    box-shadow: none;
-    background: transparent;
-  }
+.product-card {
+  transition: all 0.2s ease;
 
-  .v-stepper-item {
-    .v-stepper-item__avatar {
-      margin-right: 16px;
-    }
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
 }
 
-:deep(.v-timeline) {
-  .v-timeline-item {
-    .v-timeline-item__body {
-      padding-bottom: 16px;
-    }
-  }
+.product-details {
+  border-left: 2px solid rgba(var(--v-theme-primary), 0.2);
+  padding-left: 8px;
 }
 
-// Animation for step transitions
-.workflow-content {
-  transition: all 0.3s ease;
-}
-
-// Success state animations
+// Success animation
 @keyframes successPulse {
   0% {
     transform: scale(1);
@@ -673,6 +491,23 @@ onMounted(async () => {
 .text-success {
   &.animate-success {
     animation: successPulse 0.6s ease-out;
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .supplier-header {
+    .d-flex.justify-space-between {
+      flex-direction: column;
+      gap: 12px;
+      text-align: left;
+    }
+  }
+
+  .products-grid {
+    .v-col {
+      padding: 4px;
+    }
   }
 }
 </style>
