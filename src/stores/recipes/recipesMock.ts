@@ -8,6 +8,174 @@ const now = new Date().toISOString()
 // =============================================
 
 export const mockPreparations: Preparation[] = [
+  // Соус 3 - Маринад для мяса
+  {
+    id: 'prep-meat-marinade',
+    name: 'Маринад для мяса универсальный',
+    code: 'P-005',
+    type: 'marinade',
+    description: 'Универсальный маринад для говядины и свинины',
+    recipe: [
+      {
+        type: 'product',
+        id: 'prod-olive-oil',
+        quantity: 100,
+        unit: 'ml',
+        notes: 'основа маринада'
+      },
+      { type: 'product', id: 'prod-garlic', quantity: 30, unit: 'gram', notes: 'измельченный' },
+      { type: 'product', id: 'prod-onion', quantity: 100, unit: 'gram', notes: 'мелко нарезанный' },
+      { type: 'product', id: 'prod-black-pepper', quantity: 3, unit: 'gram', notes: 'молотый' },
+      { type: 'product', id: 'prod-salt', quantity: 5, unit: 'gram', notes: 'крупная соль' }
+    ],
+    outputQuantity: 200, // получается 200мл маринада
+    outputUnit: 'ml',
+    preparationTime: 10,
+    instructions:
+      '1. Измельчить чеснок и лук\n' +
+      '2. Смешать с оливковым маслом\n' +
+      '3. Добавить соль и перец\n' +
+      '4. Перемешать до однородности\n' +
+      '5. Дать настояться 30 минут',
+    isActive: true,
+    costPerPortion: 0,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // Соус 4 - Салатная заправка
+  {
+    id: 'prep-salad-dressing',
+    name: 'Заправка для салата классическая',
+    code: 'P-006',
+    type: 'sauce',
+    description: 'Классическая заправка на основе оливкового масла',
+    recipe: [
+      { type: 'product', id: 'prod-olive-oil', quantity: 120, unit: 'ml', notes: 'extra virgin' },
+      { type: 'product', id: 'prod-garlic', quantity: 10, unit: 'gram', notes: 'мелко рубленный' },
+      { type: 'product', id: 'prod-salt', quantity: 3, unit: 'gram', notes: 'морская соль' },
+      { type: 'product', id: 'prod-black-pepper', quantity: 1, unit: 'gram', notes: 'свежемолотый' }
+    ],
+    outputQuantity: 130, // получается 130мл заправки
+    outputUnit: 'ml',
+    preparationTime: 5,
+    instructions:
+      '1. Смешать оливковое масло с измельченным чесноком\n' +
+      '2. Добавить соль и перец\n' +
+      '3. Взбить до эмульсии\n' +
+      '4. Дать настояться 15 минут',
+    isActive: true,
+    costPerPortion: 0,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // Гарнир 2 - Овощное рагу
+  {
+    id: 'prep-vegetable-stew',
+    name: 'Овощное рагу',
+    code: 'P-007',
+    type: 'garnish',
+    description: 'Тушеные овощи как гарнир к мясным блюдам',
+    recipe: [
+      {
+        type: 'product',
+        id: 'prod-tomato',
+        quantity: 300,
+        unit: 'gram',
+        notes: 'нарезанные кубиками'
+      },
+      { type: 'product', id: 'prod-onion', quantity: 150, unit: 'gram', notes: 'полукольцами' },
+      { type: 'product', id: 'prod-garlic', quantity: 20, unit: 'gram', notes: 'измельченный' },
+      { type: 'product', id: 'prod-olive-oil', quantity: 30, unit: 'ml', notes: 'для тушения' },
+      { type: 'product', id: 'prod-salt', quantity: 5, unit: 'gram', notes: 'по вкусу' },
+      { type: 'product', id: 'prod-black-pepper', quantity: 2, unit: 'gram', notes: 'молотый' }
+    ],
+    outputQuantity: 400, // получается 400г готового рагу
+    outputUnit: 'gram',
+    preparationTime: 25,
+    instructions:
+      '1. Нарезать все овощи\n' +
+      '2. Обжарить лук на оливковом масле\n' +
+      '3. Добавить чеснок, жарить 1 минуту\n' +
+      '4. Добавить томаты\n' +
+      '5. Тушить 15 минут под крышкой\n' +
+      '6. Приправить солью и перцем',
+    isActive: true,
+    costPerPortion: 0,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // Приправа - Смесь специй для мяса
+  {
+    id: 'prep-meat-spice-mix',
+    name: 'Смесь специй для мяса',
+    code: 'P-008',
+    type: 'seasoning',
+    description: 'Универсальная смесь специй для стейков и жареного мяса',
+    recipe: [
+      {
+        type: 'product',
+        id: 'prod-black-pepper',
+        quantity: 15,
+        unit: 'gram',
+        notes: 'крупного помола'
+      },
+      { type: 'product', id: 'prod-salt', quantity: 20, unit: 'gram', notes: 'морская крупная' },
+      {
+        type: 'product',
+        id: 'prod-garlic',
+        quantity: 10,
+        unit: 'gram',
+        notes: 'сушеный гранулированный'
+      }
+    ],
+    outputQuantity: 40, // получается 40г смеси специй
+    outputUnit: 'gram',
+    preparationTime: 5,
+    instructions:
+      '1. Смешать все сухие ингредиенты\n' +
+      '2. Перемешать до однородности\n' +
+      '3. Пересыпать в герметичную емкость\n' +
+      '4. Хранить в сухом месте',
+    isActive: true,
+    costPerPortion: 0,
+    createdAt: now,
+    updatedAt: now
+  },
+
+  // Соус 5 - Сливочно-чесночный соус
+  {
+    id: 'prep-creamy-garlic-sauce',
+    name: 'Сливочно-чесночный соус',
+    code: 'P-009',
+    type: 'sauce',
+    description: 'Нежный сливочный соус с чесноком для пасты и мяса',
+    recipe: [
+      { type: 'product', id: 'prod-butter', quantity: 80, unit: 'gram', notes: 'сливочное' },
+      { type: 'product', id: 'prod-milk', quantity: 150, unit: 'ml', notes: 'молоко как сливки' },
+      { type: 'product', id: 'prod-garlic', quantity: 25, unit: 'gram', notes: 'измельченный' },
+      { type: 'product', id: 'prod-salt', quantity: 3, unit: 'gram', notes: 'по вкусу' },
+      { type: 'product', id: 'prod-black-pepper', quantity: 1, unit: 'gram', notes: 'белый перец' }
+    ],
+    outputQuantity: 200, // получается 200мл соуса
+    outputUnit: 'ml',
+    preparationTime: 15,
+    instructions:
+      '1. Растопить сливочное масло на слабом огне\n' +
+      '2. Добавить измельченный чеснок\n' +
+      '3. Обжарить чеснок 2 минуты\n' +
+      '4. Влить молоко постепенно\n' +
+      '5. Варить на слабом огне 5 минут\n' +
+      '6. Приправить солью и перцем\n' +
+      '7. Процедить если нужна гладкая текстура',
+    isActive: true,
+    costPerPortion: 0,
+    createdAt: now,
+    updatedAt: now
+  },
+
   // Соус 1 - Томатный соус
   {
     id: 'prep-tomato-sauce',
@@ -363,3 +531,42 @@ export function getRecipesByCategory(category: string): Recipe[] {
 // Для обратной совместимости (удалить после миграции)
 export const mockIngredients: any[] = []
 export const mockUnits: any[] = []
+
+// Новые утилиты для тестирования
+export function getPreparationsUsingProduct(productId: string): Preparation[] {
+  return mockPreparations.filter(prep =>
+    prep.recipe.some(ingredient => ingredient.id === productId)
+  )
+}
+
+export function getPreparationCostEstimate(preparationId: string): number {
+  // Простая оценка стоимости для тестирования
+  const prep = findPreparationById(preparationId)
+  if (!prep) return 0
+
+  // Примерная стоимость на основе количества ингредиентов
+  return prep.recipe.length * 1000 + Math.random() * 500
+}
+
+export function validateMockPreparations(): { isValid: boolean; errors: string[] } {
+  const errors: string[] = []
+
+  mockPreparations.forEach((prep, index) => {
+    if (!prep.code) {
+      errors.push(`Preparation ${index + 1}: Missing code`)
+    }
+
+    if (!prep.recipe || prep.recipe.length === 0) {
+      errors.push(`Preparation ${prep.name}: No recipe ingredients`)
+    }
+
+    if (prep.outputQuantity <= 0) {
+      errors.push(`Preparation ${prep.name}: Invalid output quantity`)
+    }
+  })
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  }
+}

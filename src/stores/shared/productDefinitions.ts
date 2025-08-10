@@ -256,6 +256,41 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     shelfLifeDays: 730, // 2 years
     leadTimeDays: 3,
     primarySupplierId: 'sup-beverage-distribution'
+  },
+  // Специи - Орегано
+  {
+    id: 'prod-oregano',
+    name: 'Oregano',
+    nameEn: 'Oregano',
+    category: 'spices',
+    unit: 'gram',
+    basePrice: 150000, // 150 руб за кг сушеного орегано
+    priceVolatility: 0.08, // ±8% (импортная специя)
+    dailyConsumption: 0.02, // Очень мало используется
+    consumptionVolatility: 0.4, // Высокая вариация
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 720, // 2 года
+    leadTimeDays: 7,
+    primarySupplierId: 'sup-spice-world'
+  },
+
+  // Специи - Базилик
+  {
+    id: 'prod-basil',
+    name: 'Fresh Basil',
+    nameEn: 'Fresh Basil',
+    category: 'spices',
+    unit: 'pack',
+    basePrice: 5000, // 50 руб за пачку свежего базилика
+    priceVolatility: 0.12, // ±12% (свежая зелень)
+    dailyConsumption: 0.5, // Пол пачки в день
+    consumptionVolatility: 0.5, // Высокая вариация
+    canBeSold: false,
+    yieldPercentage: 90, // Немного обрезки
+    shelfLifeDays: 7, // Неделя
+    leadTimeDays: 2,
+    primarySupplierId: 'sup-fresh-veg-market'
   }
 ]
 

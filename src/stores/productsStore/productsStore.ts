@@ -20,6 +20,7 @@ import {
   useProductUsage
 } from './composables'
 import { DebugUtils } from '@/utils'
+import type { ProductForRecipe } from '@/stores/recipes/types'
 
 const MODULE_NAME = 'ProductsStore'
 
@@ -250,6 +251,94 @@ export const useProductsStore = defineStore('products', {
       } catch (error) {
         DebugUtils.error(MODULE_NAME, '❌ Error calculating recommendations', { error })
         throw error
+      }
+    },
+
+    /**
+     * Получает продукт в формате для Recipe Store
+     */
+    async getProductForRecipe(productId: string): Promise<ProductForRecipe | null> {
+      const product = this.products.find(p => p.id === productId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, `Product not found: ${productId}`)
+        return null
+      }
+
+      return {
+        id: product.id,
+        name: product.name,
+        nameEn: (product as any).nameEn || product.name,
+        costPerUnit: (product as any).currentCostPerUnit || product.costPerUnit,
+        unit: product.unit,
+        category: product.category,
+        isActive: product.isActive
+      }
+    },
+
+    /**
+     * Получает все активные продукты для Recipe Store
+     */
+    getProductsForRecipes(): ProductForRecipe[] {
+      return this.products
+        .filter(product => product.isActive)
+        .map(product => ({
+          id: product.id,
+          name: product.name,
+          nameEn: (product as any).nameEn || product.name,
+          costPerUnit: (product as any).currentCostPerUnit || product.costPerUnit,
+          unit: product.unit,
+          category: product.category,
+          isActive: product.isActive
+        }))
+    },
+
+    /**
+     * Уведомляет об изменении цены продукта
+     */
+    async notifyPriceChange(productId: string, newPrice: number): Promise<void> {
+      DebugUtils.info(MODULE_NAME, `💰 Price changed for product ${productId}: ${newPrice}`)
+
+      // Обновляем продукт
+      await this.updateProduct({
+        id: productId,
+        costPerUnit: newPrice,
+        currentCostPerUnit: newPrice
+      })
+
+      // Уведомляем Recipe Store о необходимости пересчета
+      // Это будет вызываться из Recipe Store
+      if (window.__RECIPE_STORE_PRICE_CHANGE_CALLBACK__) {
+        await window.__RECIPE_STORE_PRICE_CHANGE_CALLBACK__(productId)
+      }
+    },
+
+    /**
+     * Обновляет информацию об использовании продукта
+     */
+    updateProductUsage(
+      productId: string,
+      usageData: {
+        usedInPreparations: Array<{
+          preparationId: string
+          preparationName: string
+          quantity: number
+          unit: string
+        }>
+      }
+    ): void {
+      DebugUtils.debug(MODULE_NAME, `📊 Updating usage for product ${productId}`, {
+        preparations: usageData.usedInPreparations.length
+      })
+
+      // Сохраняем usage данные для будущей аналитики
+      // Пока просто логируем, позже будем сохранять в usageData
+      const product = this.products.find(p => p.id === productId)
+      if (product) {
+        DebugUtils.info(
+          MODULE_NAME,
+          `Product ${product.name} used in ${usageData.usedInPreparations.length} preparations`
+        )
       }
     },
 

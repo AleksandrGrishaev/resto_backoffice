@@ -1,392 +1,507 @@
-// src/stores/recipes/recipesStore.ts
+// src/stores/recipes/recipesStore.ts - Updated with Composables Integration
+
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, readonly } from 'vue'
+import { DebugUtils } from '@/utils'
+
+// Import composables
+import { usePreparations } from './composables/usePreparations'
+import { useRecipes } from './composables/useRecipes'
+import { useCostCalculation } from './composables/useCostCalculation'
+import { useRecipeIntegration } from './composables/useRecipeIntegration'
+import { useMenuRecipeLinks } from './composables/useMenuRecipeLinks'
+import { useUnits } from './composables/useUnits'
+
+// Import mock data
+import { mockPreparations, mockRecipes } from './recipesMock'
+import { mockUnits } from './unitsMock'
+
+// Import legacy services for backward compatibility
 import {
   PreparationService,
   RecipeService,
   MenuRecipeLinkService,
   UnitService
 } from './recipesService'
-import { mockPreparations, mockRecipes } from './recipesMock'
-import { mockUnits } from './unitsMock'
-import { DebugUtils } from '@/utils'
+
 import type {
   Recipe,
   Preparation,
-  MenuRecipeLink,
-  CostCalculation,
   CreateRecipeData,
   CreatePreparationData,
-  Unit,
-  PreparationType,
-  RecipeCategory
+  PreparationPlanCost,
+  RecipePlanCost
 } from './types'
 
 const MODULE_NAME = 'RecipesStore'
 
-interface RecipesState {
-  loading: boolean
-  error: string | null
-  selectedRecipe: Recipe | null
-  selectedPreparation: Preparation | null
-  costCalculations: Map<string, CostCalculation>
-}
+// =============================================
+// STORE DEFINITION
+// =============================================
 
 export const useRecipesStore = defineStore('recipes', () => {
-  // Services
+  // =============================================
+  // COMPOSABLES SETUP
+  // =============================================
+
+  // Initialize all composables
+  const preparationsComposable = usePreparations()
+  const recipesComposable = useRecipes()
+  const costCalculationComposable = useCostCalculation()
+  const integrationComposable = useRecipeIntegration()
+  const menuLinksComposable = useMenuRecipeLinks()
+  const unitsComposable = useUnits()
+
+  // =============================================
+  // LEGACY SERVICES (for backward compatibility)
+  // =============================================
+
   const preparationService = new PreparationService(mockPreparations)
   const recipeService = new RecipeService(mockRecipes)
   const menuRecipeLinkService = new MenuRecipeLinkService([])
   const unitService = new UnitService(mockUnits)
 
-  // State
-  const state = ref<RecipesState>({
-    loading: false,
-    error: null,
-    selectedRecipe: null,
-    selectedPreparation: null,
-    costCalculations: new Map()
-  })
+  // =============================================
+  // STORE STATE
+  // =============================================
 
-  // Data refs
-  const recipes = ref<Recipe[]>([])
-  const preparations = ref<Preparation[]>([])
-  const units = ref<Unit[]>([])
-  const menuRecipeLinks = ref<MenuRecipeLink[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+  const selectedRecipe = ref<Recipe | null>(null)
+  const selectedPreparation = ref<Preparation | null>(null)
 
-  // Getters
-  const activeRecipes = computed(() => recipes.value.filter(r => r.isActive))
-  const activePreparations = computed(() => preparations.value.filter(p => p.isActive))
+  // =============================================
+  // COMPUTED PROPERTIES
+  // =============================================
 
-  const recipesByCategory = computed(() => {
-    const categories: Record<RecipeCategory, Recipe[]> = {
-      main_dish: [],
-      side_dish: [],
-      dessert: [],
-      appetizer: [],
-      beverage: [],
-      sauce: []
-    }
+  // Re-export composable computed properties
+  const activeRecipes = computed(() => recipesComposable.activeRecipes.value)
+  const activePreparations = computed(() => preparationsComposable.activePreparations.value)
+  const recipesByCategory = computed(() => recipesComposable.recipesByCategory.value)
+  const preparationsByType = computed(() => preparationsComposable.preparationsByType.value)
 
-    activeRecipes.value.forEach(recipe => {
-      categories[recipe.category].push(recipe)
-    })
+  // Store-level computed properties
+  const state = computed(() => ({
+    loading: loading.value,
+    error: error.value,
+    selectedRecipe: selectedRecipe.value,
+    selectedPreparation: selectedPreparation.value
+  }))
 
-    return categories
-  })
+  const statistics = computed(() => ({
+    recipes: recipesComposable.recipesStats.value,
+    preparations: preparationsComposable.preparationsStats.value,
+    costs: costCalculationComposable.costCalculationsStats.value
+  }))
 
-  const preparationsByType = computed(() => {
-    const types: Record<PreparationType, Preparation[]> = {
-      sauce: [],
-      garnish: [],
-      marinade: [],
-      semifinished: [],
-      seasoning: []
-    }
+  // =============================================
+  // MAIN ACTIONS
+  // =============================================
 
-    activePreparations.value.forEach(preparation => {
-      types[preparation.type].push(preparation)
-    })
-
-    return types
-  })
-
-  // Actions
-
-  // Initialize data
+  /**
+   * Инициализирует Recipe Store с интеграцией
+   */
   async function initialize(): Promise<void> {
     try {
-      state.value.loading = true
-      await Promise.all([fetchRecipes(), fetchPreparations(), fetchUnits(), fetchMenuRecipeLinks()])
-      DebugUtils.info(MODULE_NAME, 'Store initialized')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to initialize'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+      loading.value = true
+      error.value = null
+
+      DebugUtils.info(MODULE_NAME, '🚀 Initializing Recipe Store with composables')
+
+      // 1. Инициализируем базовые данные
+      await Promise.all([
+        preparationsComposable.initializePreparations(mockPreparations),
+        recipesComposable.initializeRecipes(mockRecipes),
+        menuLinksComposable.initializeMenuRecipeLinks([]),
+        unitsComposable.initializeUnits(mockUnits),
+        costCalculationComposable.initializeCostCalculations()
+      ])
+
+      // 2. Настраиваем интеграцию с Product Store
+      await integrationComposable.setupProductStoreIntegration()
+
+      // 3. Устанавливаем integration callbacks
+      const callbacks = setupIntegrationCallbacks()
+      costCalculationComposable.setIntegrationCallbacks(
+        callbacks.getProduct,
+        callbacks.getPreparationCost
+      )
+      recipesComposable.setIntegrationCallbacks(callbacks.getProduct, callbacks.getPreparationCost)
+
+      // 4. Пересчитываем стоимости
+      await recalculateAllCosts()
+
+      DebugUtils.info(MODULE_NAME, '✅ Recipe Store initialized successfully', {
+        preparations: activePreparations.value.length,
+        recipes: activeRecipes.value.length,
+        units: unitsComposable.units.value.length
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to initialize Recipe Store'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
+  /**
+   * Настраивает integration callbacks
+   */
+  function setupIntegrationCallbacks() {
+    const getProduct = async (productId: string) => {
+      return integrationComposable.getProductForRecipe(productId)
+    }
+
+    const getPreparationCost = async (preparationId: string) => {
+      return costCalculationComposable.getPreparationCost(preparationId)
+    }
+
+    return { getProduct, getPreparationCost }
+  }
+
   // =============================================
-  // PREPARATIONS
+  // PREPARATION ACTIONS
   // =============================================
 
   async function fetchPreparations(): Promise<void> {
-    try {
-      preparations.value = await preparationService.getAll()
-      DebugUtils.info(MODULE_NAME, 'Preparations loaded', { count: preparations.value.length })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch preparations'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
-    }
+    // Already handled by composable initialization
+    DebugUtils.debug(MODULE_NAME, 'Preparations already loaded via composables')
   }
 
   async function createPreparation(data: CreatePreparationData): Promise<Preparation> {
     try {
-      state.value.loading = true
-      const preparation = await preparationService.create(data)
-      preparations.value.push(preparation)
-      DebugUtils.info(MODULE_NAME, 'Preparation created', { preparation })
+      loading.value = true
+      const preparation = await preparationsComposable.createPreparation(data)
+
+      // Рассчитываем стоимость
+      await costCalculationComposable.calculatePreparationCost(preparation)
+
+      // Обновляем usage в Product Store
+      await integrationComposable.updateUsageForAllProducts()
+
+      DebugUtils.info(MODULE_NAME, 'Preparation created with cost calculation', {
+        id: preparation.id,
+        name: preparation.name
+      })
+
       return preparation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create preparation'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create preparation'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   async function updatePreparation(id: string, data: Partial<Preparation>): Promise<Preparation> {
     try {
-      state.value.loading = true
-      const preparation = await preparationService.update(id, data)
-      const index = preparations.value.findIndex(p => p.id === id)
-      if (index !== -1) {
-        preparations.value[index] = preparation
+      loading.value = true
+      const preparation = await preparationsComposable.updatePreparation(id, data)
+
+      // Пересчитываем стоимость если изменился рецепт
+      if (data.recipe || data.outputQuantity !== undefined) {
+        await costCalculationComposable.calculatePreparationCost(preparation)
+
+        // Пересчитываем рецепты, использующие этот полуфабрикат
+        await recalculateRecipesUsingPreparation(id)
       }
-      DebugUtils.info(MODULE_NAME, 'Preparation updated', { id, data })
+
+      // Обновляем usage в Product Store
+      await integrationComposable.updateUsageForAllProducts()
+
       return preparation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update preparation'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update preparation'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   async function deletePreparation(id: string): Promise<void> {
     try {
-      state.value.loading = true
-      await preparationService.delete(id)
-      preparations.value = preparations.value.filter(p => p.id !== id)
+      loading.value = true
+      await preparationsComposable.deletePreparation(id)
+
+      // Удаляем из cost calculations
+      costCalculationComposable.preparationCosts.value.delete(id)
+
       DebugUtils.info(MODULE_NAME, 'Preparation deleted', { id })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete preparation'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete preparation'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   async function togglePreparationStatus(id: string): Promise<Preparation> {
     try {
-      state.value.loading = true
-      const preparation = await preparationService.toggleStatus(id)
-      const index = preparations.value.findIndex(p => p.id === id)
-      if (index !== -1) {
-        preparations.value[index] = preparation
-      }
+      loading.value = true
+      const preparation = await preparationsComposable.togglePreparationStatus(id)
+
       DebugUtils.info(MODULE_NAME, 'Preparation status toggled', {
         id,
         isActive: preparation.isActive
       })
+
       return preparation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to toggle preparation status'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to toggle preparation status'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   // =============================================
-  // RECIPES
+  // RECIPE ACTIONS
   // =============================================
 
   async function fetchRecipes(): Promise<void> {
-    try {
-      recipes.value = await recipeService.getAll()
-      DebugUtils.info(MODULE_NAME, 'Recipes loaded', { count: recipes.value.length })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch recipes'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
-    }
+    // Already handled by composable initialization
+    DebugUtils.debug(MODULE_NAME, 'Recipes already loaded via composables')
   }
 
   async function createRecipe(data: CreateRecipeData): Promise<Recipe> {
     try {
-      state.value.loading = true
-      const recipe = await recipeService.create(data)
-      recipes.value.push(recipe)
-      DebugUtils.info(MODULE_NAME, 'Recipe created', { recipe })
+      loading.value = true
+      const recipe = await recipesComposable.createRecipe(data)
+
+      DebugUtils.info(MODULE_NAME, 'Recipe created', {
+        id: recipe.id,
+        name: recipe.name
+      })
+
       return recipe
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create recipe'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create recipe'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   async function updateRecipe(id: string, data: Partial<Recipe>): Promise<Recipe> {
     try {
-      state.value.loading = true
-      const recipe = await recipeService.update(id, data)
-      const index = recipes.value.findIndex(r => r.id === id)
-      if (index !== -1) {
-        recipes.value[index] = recipe
+      loading.value = true
+      const recipe = await recipesComposable.updateRecipe(id, data)
+
+      // Пересчитываем стоимость если изменились компоненты
+      if (data.components || data.portionSize !== undefined) {
+        await costCalculationComposable.calculateRecipeCost(recipe)
       }
-      DebugUtils.info(MODULE_NAME, 'Recipe updated', { id, data })
+
+      // Обновляем usage в Product Store
+      await integrationComposable.updateUsageForAllProducts()
+
       return recipe
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update recipe'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update recipe'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   async function deleteRecipe(id: string): Promise<void> {
     try {
-      state.value.loading = true
-      await recipeService.delete(id)
-      recipes.value = recipes.value.filter(r => r.id !== id)
+      loading.value = true
+      await recipesComposable.deleteRecipe(id)
+
+      // Удаляем из cost calculations
+      costCalculationComposable.recipeCosts.value.delete(id)
+
       DebugUtils.info(MODULE_NAME, 'Recipe deleted', { id })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete recipe'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete recipe'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   async function toggleRecipeStatus(id: string): Promise<Recipe> {
     try {
-      state.value.loading = true
-      const recipe = await recipeService.toggleStatus(id)
-      const index = recipes.value.findIndex(r => r.id === id)
-      if (index !== -1) {
-        recipes.value[index] = recipe
-      }
-      DebugUtils.info(MODULE_NAME, 'Recipe status toggled', { id, isActive: recipe.isActive })
+      loading.value = true
+      const recipe = await recipesComposable.toggleRecipeStatus(id)
+
+      DebugUtils.info(MODULE_NAME, 'Recipe status toggled', {
+        id,
+        isActive: recipe.isActive
+      })
+
       return recipe
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to toggle recipe status'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to toggle recipe status'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   async function duplicateRecipe(recipeId: string, newName: string): Promise<Recipe> {
     try {
-      state.value.loading = true
-      const recipe = await recipeService.duplicateRecipe(recipeId, newName)
-      recipes.value.push(recipe)
-      DebugUtils.info(MODULE_NAME, 'Recipe duplicated', { original: recipeId, new: recipe.id })
-      return recipe
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to duplicate recipe'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
-    } finally {
-      state.value.loading = false
-    }
-  }
+      loading.value = true
+      const recipe = await recipesComposable.duplicateRecipe(recipeId, newName)
 
-  // =============================================
-  // UNITS
-  // =============================================
-
-  async function fetchUnits(): Promise<void> {
-    try {
-      units.value = await unitService.getAll()
-      DebugUtils.info(MODULE_NAME, 'Units loaded', { count: units.value.length })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch units'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
-    }
-  }
-
-  // =============================================
-  // MENU RECIPE LINKS
-  // =============================================
-
-  async function fetchMenuRecipeLinks(): Promise<void> {
-    try {
-      menuRecipeLinks.value = await menuRecipeLinkService.getAll()
-      DebugUtils.info(MODULE_NAME, 'Menu recipe links loaded', {
-        count: menuRecipeLinks.value.length
+      DebugUtils.info(MODULE_NAME, 'Recipe duplicated', {
+        original: recipeId,
+        new: recipe.id
       })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch menu recipe links'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
-    }
-  }
 
-  async function linkRecipeToMenuItem(
-    menuItemId: string,
-    recipeId: string,
-    variantId?: string,
-    portionMultiplier: number = 1
-  ): Promise<MenuRecipeLink> {
-    try {
-      state.value.loading = true
-      const link = await menuRecipeLinkService.create(
-        menuItemId,
-        recipeId,
-        variantId,
-        portionMultiplier
-      )
-      menuRecipeLinks.value.push(link)
-      DebugUtils.info(MODULE_NAME, 'Recipe linked to menu item', { link })
-      return link
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to link recipe to menu item'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+      return recipe
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to duplicate recipe'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     } finally {
-      state.value.loading = false
+      loading.value = false
     }
   }
 
   // =============================================
-  // COST CALCULATION
+  // COST CALCULATION ACTIONS
   // =============================================
 
-  async function calculateRecipeCost(recipeId: string): Promise<CostCalculation | null> {
+  async function calculatePreparationCost(preparationId: string): Promise<PreparationPlanCost> {
     try {
-      // TODO: интегрировать с ProductsService
-      const calculation = await recipeService.calculateCost(recipeId, null, preparationService)
-      if (calculation) {
-        state.value.costCalculations.set(recipeId, calculation)
-        DebugUtils.info(MODULE_NAME, 'Recipe cost calculated', { recipeId, calculation })
+      const preparation = preparationsComposable.getPreparationById(preparationId)
+      if (!preparation) {
+        throw new Error('Preparation not found')
       }
-      return calculation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to calculate recipe cost'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message)
-      throw error
+
+      const result = await costCalculationComposable.calculatePreparationCost(preparation)
+      if (!result.success || !result.cost) {
+        throw new Error(result.error || 'Cost calculation failed')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Preparation cost calculated', {
+        preparationId,
+        totalCost: result.cost.totalCost,
+        costPerUnit: result.cost.costPerOutputUnit
+      })
+
+      return result.cost as PreparationPlanCost
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to calculate preparation cost'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
     }
+  }
+
+  async function calculateRecipeCost(recipeId: string): Promise<RecipePlanCost> {
+    try {
+      const recipe = recipesComposable.getRecipeById(recipeId)
+      if (!recipe) {
+        throw new Error('Recipe not found')
+      }
+
+      const result = await costCalculationComposable.calculateRecipeCost(recipe)
+      if (!result.success || !result.cost) {
+        throw new Error(result.error || 'Cost calculation failed')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Recipe cost calculated', {
+        recipeId,
+        totalCost: result.cost.totalCost,
+        costPerPortion: result.cost.costPerPortion
+      })
+
+      return result.cost as RecipePlanCost
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to calculate recipe cost'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    }
+  }
+
+  async function recalculateAllCosts(): Promise<void> {
+    try {
+      loading.value = true
+
+      DebugUtils.info(MODULE_NAME, '🔄 Recalculating all costs...')
+
+      // Сначала пересчитываем полуфабрикаты
+      await costCalculationComposable.recalculateAllPreparationCosts(() =>
+        preparationsComposable.getAllPreparations()
+      )
+
+      // Затем пересчитываем рецепты
+      await costCalculationComposable.recalculateAllRecipeCosts(() =>
+        recipesComposable.getAllRecipes()
+      )
+
+      DebugUtils.info(MODULE_NAME, '✅ All costs recalculated successfully')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to recalculate all costs'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function recalculateRecipesUsingPreparation(preparationId: string): Promise<void> {
+    try {
+      const affectedRecipes = recipesComposable.getRecipesUsingPreparation(preparationId)
+
+      for (const recipe of affectedRecipes) {
+        await costCalculationComposable.calculateRecipeCost(recipe)
+      }
+
+      DebugUtils.info(
+        MODULE_NAME,
+        `♻️ Recalculated ${affectedRecipes.length} recipes using preparation ${preparationId}`
+      )
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Error recalculating recipes using preparation', {
+        err,
+        preparationId
+      })
+    }
+  }
+
+  // =============================================
+  // INTEGRATION METHODS
+  // =============================================
+
+  async function handleProductPriceChange(productId: string): Promise<void> {
+    return integrationComposable.handleProductPriceChange(productId)
+  }
+
+  function getPreparationsForRecipes() {
+    return preparationsComposable.getPreparationsForRecipes()
+  }
+
+  function getPreparationCostCalculation(preparationId: string): PreparationPlanCost | null {
+    return costCalculationComposable.getPreparationCost(preparationId)
+  }
+
+  function getRecipeCostCalculation(recipeId: string): RecipePlanCost | null {
+    return costCalculationComposable.getRecipeCost(recipeId)
   }
 
   // =============================================
@@ -394,70 +509,67 @@ export const useRecipesStore = defineStore('recipes', () => {
   // =============================================
 
   function getRecipeById(id: string): Recipe | undefined {
-    return recipes.value.find(r => r.id === id)
+    return recipesComposable.getRecipeById(id) || undefined
   }
 
   function getPreparationById(id: string): Preparation | undefined {
-    return preparations.value.find(p => p.id === id)
-  }
-
-  function getUnitById(id: string): Unit | undefined {
-    return units.value.find(u => u.id === id)
-  }
-
-  function getRecipesByCategory(category: RecipeCategory): Recipe[] {
-    return activeRecipes.value.filter(r => r.category === category)
-  }
-
-  function getPreparationsByType(type: PreparationType): Preparation[] {
-    return activePreparations.value.filter(p => p.type === type)
+    return preparationsComposable.getPreparationById(id) || undefined
   }
 
   // =============================================
-  // SELECTION
+  // SELECTION METHODS
   // =============================================
 
   function selectRecipe(recipe: Recipe | null): void {
-    state.value.selectedRecipe = recipe
+    selectedRecipe.value = recipe
   }
 
   function selectPreparation(preparation: Preparation | null): void {
-    state.value.selectedPreparation = preparation
+    selectedPreparation.value = preparation
   }
 
   // =============================================
-  // UTILS
+  // UTILITY METHODS
   // =============================================
 
   function clearError(): void {
-    state.value.error = null
+    error.value = null
   }
+
+  // =============================================
+  // RETURN STORE
+  // =============================================
 
   return {
     // State
-    state,
-    recipes,
-    preparations,
-    units,
-    menuRecipeLinks,
+    state: readonly(state),
+    loading: readonly(loading),
+    error: readonly(error),
 
-    // Getters
+    // Data (from composables)
+    recipes: readonly(recipesComposable.recipes),
+    preparations: readonly(preparationsComposable.preparations),
+    units: readonly(unitsComposable.units),
+    menuRecipeLinks: readonly(menuLinksComposable.menuRecipeLinks),
+
+    // Computed
     activeRecipes,
     activePreparations,
     recipesByCategory,
     preparationsByType,
+    statistics,
 
-    // Actions
+    // Main actions
     initialize,
 
-    // Preparations
+    // Preparation actions
     fetchPreparations,
     createPreparation,
     updatePreparation,
     deletePreparation,
     togglePreparationStatus,
 
-    // Recipes
+    // Recipe actions
     fetchRecipes,
     createRecipe,
     updateRecipe,
@@ -465,28 +577,38 @@ export const useRecipesStore = defineStore('recipes', () => {
     toggleRecipeStatus,
     duplicateRecipe,
 
-    // Units
-    fetchUnits,
-
-    // Menu Recipe Links
-    fetchMenuRecipeLinks,
-    linkRecipeToMenuItem,
-
     // Cost calculation
+    calculatePreparationCost,
     calculateRecipeCost,
+    recalculateAllCosts,
+    getPreparationCostCalculation,
+    getRecipeCostCalculation,
+
+    // Integration methods
+    handleProductPriceChange,
+    getPreparationsForRecipes,
 
     // Getters
     getRecipeById,
     getPreparationById,
-    getUnitById,
-    getRecipesByCategory,
-    getPreparationsByType,
 
     // Selection
     selectRecipe,
     selectPreparation,
 
-    // Utils
-    clearError
+    // Utilities
+    clearError,
+
+    // Legacy services (for backward compatibility)
+    preparationService,
+    recipeService,
+    menuRecipeLinkService,
+    unitService,
+
+    // Direct composable access (for advanced usage)
+    preparationsComposable,
+    recipesComposable,
+    costCalculationComposable,
+    integrationComposable
   }
 })

@@ -1,9 +1,9 @@
-// src/stores/recipes/types.ts
+// src/stores/recipes/types.ts - Updated with Recipe Integration Types
 import { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 
 // =============================================
-// 1. PREPARATIONS (полуфабрикаты) - было Ingredient
+// 1. PREPARATIONS (полуфабрикаты)
 // =============================================
 
 export interface Preparation extends BaseEntity {
@@ -85,45 +85,114 @@ export type RecipeCategory =
   | 'sauce' // соусы
 
 // =============================================
-// 3. ВСПОМОГАТЕЛЬНЫЕ ТИПЫ
+// 3. COST CALCULATION TYPES (NEW)
 // =============================================
 
-// Шаг приготовления
-export interface RecipeStep {
-  id: string
-  stepNumber: number
-  instruction: string
-  duration?: number // длительность в минутах
-  temperature?: number // температура
-  equipment?: string[] // необходимое оборудование
+export interface PreparationPlanCost {
+  preparationId: string
+  type: 'plan' // планируемая стоимость
+  totalCost: number
+  costPerOutputUnit: number
+  componentCosts: ComponentPlanCost[]
+  calculatedAt: Date
+  note: string // "Based on current supplier prices"
 }
 
-// Расчет себестоимости
-export interface CostCalculation {
+export interface RecipePlanCost {
   recipeId: string
+  type: 'plan' // планируемая стоимость
   totalCost: number
   costPerPortion: number
-  componentCosts: {
-    componentId: string
-    componentType: 'product' | 'preparation'
-    cost: number
-    percentage: number
-  }[]
+  componentCosts: ComponentPlanCost[]
   calculatedAt: Date
+  note: string // "Based on current supplier prices + plan preparation costs"
 }
 
-// Единицы измерения (для совместимости)
-export interface Unit {
-  id: string
-  name: string
-  shortName: string
-  type: 'weight' | 'volume' | 'piece'
-  baseUnit?: string
-  conversionRate?: number
+export interface ComponentPlanCost {
+  componentId: string
+  componentType: 'product' | 'preparation'
+  componentName: string
+  quantity: number
+  unit: MeasurementUnit
+  planUnitCost: number // планируемая цена за единицу
+  totalPlanCost: number // планируемая общая стоимость
+  percentage: number
+}
+
+// Результат расчета стоимости
+export interface CostCalculationResult {
+  success: boolean
+  cost?: PreparationPlanCost | RecipePlanCost
+  error?: string
+  affectedItems?: string[] // какие еще items нужно пересчитать
 }
 
 // =============================================
-// 4. FORM DATA TYPES
+// 4. INTEGRATION TYPES (NEW)
+// =============================================
+
+export interface ProductForRecipe {
+  id: string
+  name: string
+  nameEn?: string
+  costPerUnit: number
+  unit: MeasurementUnit
+  category: string
+  isActive: boolean
+}
+
+export interface PreparationForRecipe {
+  id: string
+  name: string
+  code: string
+  type: PreparationType
+  outputQuantity: number
+  outputUnit: MeasurementUnit
+  costPerOutputUnit: number
+  isActive: boolean
+}
+
+// Callbacks для интеграции
+export type GetProductCallback = (id: string) => Promise<ProductForRecipe | null>
+export type GetPreparationCostCallback = (id: string) => Promise<PreparationPlanCost | null>
+export type NotifyUsageChangeCallback = (itemId: string, usageData: any) => Promise<void>
+
+// =============================================
+// 5. USAGE TRACKING TYPES (NEW)
+// =============================================
+
+export interface ProductUsageInPreparation {
+  preparationId: string
+  preparationName: string
+  preparationCode: string
+  quantity: number
+  unit: MeasurementUnit
+  notes?: string
+  isActive: boolean
+}
+
+export interface ProductUsageInRecipe {
+  recipeId: string
+  recipeName: string
+  recipeCode?: string
+  quantity: number
+  unit: MeasurementUnit
+  notes?: string
+  isActive: boolean
+}
+
+export interface PreparationUsageInRecipe {
+  recipeId: string
+  recipeName: string
+  recipeCode?: string
+  quantity: number
+  unit: MeasurementUnit
+  notes?: string
+  isActive: boolean
+}
+
+// =============================================
+// 6. FORM DATA TYPES
 // =============================================
 
 export interface CreateRecipeData {
@@ -148,10 +217,70 @@ export interface CreatePreparationData {
   outputUnit: MeasurementUnit
   preparationTime: number
   instructions: string
+  recipe?: PreparationIngredient[]
 }
 
 // =============================================
-// 5. КОНСТАНТЫ
+// 7. LEGACY TYPES (для обратной совместимости)
+// =============================================
+
+// Шаг приготовления
+export interface RecipeStep {
+  id: string
+  stepNumber: number
+  instruction: string
+  duration?: number // длительность в минутах
+  temperature?: number // температура
+  equipment?: string[] // необходимое оборудование
+}
+
+// Старый интерфейс расчета себестоимости
+export interface CostCalculation {
+  recipeId: string
+  totalCost: number
+  costPerPortion: number
+  componentCosts: {
+    componentId: string
+    componentType: 'product' | 'preparation'
+    cost: number
+    percentage: number
+  }[]
+  calculatedAt: Date
+}
+
+// Единицы измерения (для совместимости)
+export interface Unit {
+  id: string
+  name: string
+  shortName: string
+  type: 'weight' | 'volume' | 'piece'
+  baseUnit?: string
+  conversionRate?: number
+}
+
+// =============================================
+// 8. MENU INTEGRATION TYPES
+// =============================================
+
+export interface MenuRecipeLink extends BaseEntity {
+  menuItemId: string
+  variantId?: string
+  recipeId: string
+  portionMultiplier: number // множитель для адаптации рецепта к размеру порции
+  modifications?: RecipeModification[]
+}
+
+export interface RecipeModification {
+  id: string
+  type: 'add' | 'remove' | 'replace' | 'adjust'
+  componentId?: string
+  newComponentId?: string
+  quantityMultiplier?: number
+  notes?: string
+}
+
+// =============================================
+// 9. CONSTANTS
 // =============================================
 
 import { RECIPE_UNITS, getUnitName } from '@/types/measurementUnits'
@@ -188,7 +317,7 @@ export const MEASUREMENT_UNITS_FOR_RECIPES = RECIPE_UNITS.reduce(
 )
 
 // =============================================
-// 6. ОБРАТНАЯ СОВМЕСТИМОСТЬ (удалить после миграции)
+// 10. BACKWARD COMPATIBILITY (удалить после миграции)
 // =============================================
 
 /** @deprecated Use Preparation instead */
@@ -206,23 +335,9 @@ export type RecipeIngredient = RecipeComponent
 /** @deprecated Use CreatePreparationData instead */
 export type CreateIngredientData = CreatePreparationData
 
-// =============================================
-// 7. СВЯЗКИ С МЕНЮ (будет использоваться в menu store)
-// =============================================
-
-export interface MenuRecipeLink extends BaseEntity {
-  menuItemId: string
-  variantId?: string
-  recipeId: string
-  portionMultiplier: number // множитель для адаптации рецепта к размеру порции
-  modifications?: RecipeModification[]
-}
-
-export interface RecipeModification {
-  id: string
-  type: 'add' | 'remove' | 'replace' | 'adjust'
-  componentId?: string
-  newComponentId?: string
-  quantityMultiplier?: number
-  notes?: string
+// Расширяем ComponentCost для совместимости
+export interface ComponentCost extends ComponentPlanCost {
+  // Для обратной совместимости
+  unitCost: number // alias для planUnitCost
+  totalCost: number // alias для totalPlanCost
 }
