@@ -316,28 +316,21 @@ export const useProductsStore = defineStore('products', {
     /**
      * Обновляет информацию об использовании продукта
      */
-    updateProductUsage(
-      productId: string,
-      usageData: {
-        usedInPreparations: Array<{
-          preparationId: string
-          preparationName: string
-          quantity: number
-          unit: string
-        }>
-      }
-    ): void {
+    updateProductUsage(productId: string, usageData: any): void {
       DebugUtils.debug(MODULE_NAME, `📊 Updating usage for product ${productId}`, {
-        preparations: usageData.usedInPreparations.length
+        preparations: usageData.usedInPreparations?.length || 0,
+        recipes: usageData.usedInRecipes?.length || 0
       })
 
       // Сохраняем usage данные для будущей аналитики
       // Пока просто логируем, позже будем сохранять в usageData
-      const product = this.products.find(p => p.id === productId)
+      const product = this.getProductById(productId)
       if (product) {
+        const prepCount = usageData.usedInPreparations?.length || 0
+        const recipeCount = usageData.usedInRecipes?.length || 0
         DebugUtils.info(
           MODULE_NAME,
-          `Product ${product.name} used in ${usageData.usedInPreparations.length} preparations`
+          `Product ${product.name} used in ${prepCount} preparations and ${recipeCount} recipes`
         )
       }
     },
@@ -429,6 +422,30 @@ export const useProductsStore = defineStore('products', {
           const urgencyOrder = { critical: 3, high: 2, medium: 1, low: 0 }
           return urgencyOrder[b.urgencyLevel] - urgencyOrder[a.urgencyLevel]
         })
+    },
+    getProductById(id: string): Product | null {
+      return this.products.find(product => product.id === id) || null
+    },
+
+    /**
+     * ✅ ИСПРАВЛЕНИЕ: Получает продукт в формате для Recipe Store
+     */
+    getProductForRecipe(id: string): ProductForRecipe | null {
+      const product = this.getProductById(id)
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, `Product not found: ${id}`)
+        return null
+      }
+
+      return {
+        id: product.id,
+        name: product.name,
+        nameEn: (product as any).nameEn || product.name,
+        costPerUnit: (product as any).currentCostPerUnit || product.costPerUnit,
+        unit: product.unit,
+        category: product.category,
+        isActive: product.isActive
+      }
     },
 
     getProductsForMenu(): Array<{

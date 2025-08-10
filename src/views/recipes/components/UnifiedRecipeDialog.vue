@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/UnifiedRecipeDialog.vue - FIXED -->
+<!-- src/views/recipes/components/UnifiedRecipeDialog.vue - УПРОЩЕННАЯ ВЕРСИЯ -->
 <template>
   <v-dialog v-model="dialogModel" max-width="900px" persistent scrollable>
     <v-card>
@@ -10,333 +10,26 @@
 
       <v-card-text class="pa-4">
         <v-form ref="form" v-model="formValid" @submit.prevent="handleSubmit">
-          <v-row>
-            <!-- Basic Information -->
-            <v-col cols="12" md="8">
-              <v-text-field
-                v-model="formData.name"
-                label="Name"
-                :rules="[rules.required]"
-                required
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
+          <!-- ✅ Базовая информация -->
+          <recipe-basic-info-widget
+            :form-data="formData"
+            :type="type"
+            @update-field="updateFormField"
+            @category-changed="handleCategoryChange"
+          />
 
-            <v-col cols="12" md="4">
-              <v-text-field
-                v-model="formData.code"
-                :label="type === 'preparation' ? 'Code (Required)' : 'Code (Optional)'"
-                :placeholder="type === 'preparation' ? 'P-001' : 'R-001'"
-                :rules="type === 'preparation' ? [rules.required, rules.codeFormat] : []"
-                :required="type === 'preparation'"
-                variant="outlined"
-                density="comfortable"
-                @input="handleCodeInput"
-              />
-            </v-col>
+          <!-- ✅ Предпросмотр стоимости -->
+          <recipe-cost-preview-widget :form-data="formData" :type="type" />
 
-            <v-col cols="12">
-              <v-textarea
-                v-model="formData.description"
-                label="Description"
-                rows="2"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <!-- Category/Type and Output/Portion -->
-            <v-col cols="12" md="4">
-              <v-select
-                v-model="formData.category"
-                :items="categoryItems"
-                item-title="text"
-                item-value="value"
-                :label="type === 'preparation' ? 'Type' : 'Category'"
-                :rules="[rules.required]"
-                required
-                variant="outlined"
-                density="comfortable"
-                @update:model-value="handleCategoryChange"
-              />
-            </v-col>
-
-            <!-- Output for preparations / Portion for recipes -->
-            <v-col v-if="type === 'preparation'" cols="12" md="4">
-              <v-text-field
-                v-model.number="formData.outputQuantity"
-                label="Output Quantity"
-                type="number"
-                step="0.1"
-                :rules="[rules.required, rules.positiveNumber]"
-                required
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <v-col v-if="type === 'preparation'" cols="12" md="4">
-              <v-select
-                v-model="formData.outputUnit"
-                :items="unitItems"
-                item-title="label"
-                item-value="value"
-                label="Output Unit"
-                :rules="[rules.required]"
-                required
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <!-- Portion for recipes -->
-            <v-col v-if="type === 'recipe'" cols="12" md="4">
-              <v-text-field
-                v-model.number="formData.portionSize"
-                label="Portion Size"
-                type="number"
-                :rules="[rules.required, rules.positiveNumber]"
-                required
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <v-col v-if="type === 'recipe'" cols="12" md="4">
-              <v-text-field
-                v-model="formData.portionUnit"
-                label="Portion Unit"
-                placeholder="portions, servings"
-                :rules="[rules.required]"
-                required
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <!-- Time fields -->
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model.number="formData.preparationTime"
-                :label="type === 'preparation' ? 'Preparation Time (min)' : 'Prep Time (min)'"
-                type="number"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <v-col v-if="type === 'recipe'" cols="12" md="6">
-              <v-text-field
-                v-model.number="formData.cookTime"
-                label="Cook Time (min)"
-                type="number"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <!-- Difficulty for recipes only -->
-            <v-col v-if="type === 'recipe'" cols="12" md="6">
-              <v-select
-                v-model="formData.difficulty"
-                :items="difficultyLevels"
-                item-title="text"
-                item-value="value"
-                label="Difficulty"
-                :rules="[rules.required]"
-                required
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-
-            <!-- Tags for recipes -->
-            <v-col v-if="type === 'recipe'" cols="12">
-              <v-combobox
-                v-model="formData.tags"
-                label="Tags"
-                multiple
-                chips
-                clearable
-                variant="outlined"
-                density="comfortable"
-                hint="Press Enter to add a tag"
-              />
-            </v-col>
-
-            <!-- Instructions -->
-            <v-col cols="12">
-              <v-textarea
-                v-model="formData.instructions"
-                label="Instructions"
-                rows="4"
-                variant="outlined"
-                density="comfortable"
-                :hint="
-                  type === 'preparation'
-                    ? 'Step-by-step preparation instructions'
-                    : 'Cooking instructions'
-                "
-              />
-            </v-col>
-
-            <!-- ✅ НОВОЕ: Real-time Cost Calculation Display -->
-            <v-col v-if="estimatedCost.totalCost > 0" cols="12">
-              <v-card variant="outlined" class="cost-preview">
-                <v-card-title class="text-h6 py-2">
-                  <v-icon icon="mdi-calculator" class="mr-2" />
-                  Estimated Cost (Live Preview)
-                </v-card-title>
-                <v-card-text class="py-2">
-                  <div class="d-flex justify-space-between align-center">
-                    <span class="text-body-1">Total Cost:</span>
-                    <span class="text-h6 text-success">
-                      ${{ estimatedCost.totalCost.toFixed(2) }}
-                    </span>
-                  </div>
-                  <div class="d-flex justify-space-between align-center">
-                    <span class="text-body-1">{{ getCostPerLabel() }}:</span>
-                    <span class="text-h6 text-primary">
-                      ${{ estimatedCost.costPerUnit.toFixed(2) }}
-                    </span>
-                  </div>
-                  <v-divider class="my-2" />
-                  <div class="text-caption text-medium-emphasis">
-                    Based on current supplier prices • Updates automatically
-                  </div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-
-            <!-- Components Section -->
-            <v-col cols="12">
-              <div class="components-section">
-                <div class="d-flex justify-space-between align-center mb-4">
-                  <h3 class="text-h6">
-                    {{ type === 'preparation' ? 'Recipe (Products only)' : 'Components' }}
-                  </h3>
-                  <v-btn
-                    color="primary"
-                    variant="outlined"
-                    size="small"
-                    prepend-icon="mdi-plus"
-                    @click="addComponent"
-                  >
-                    Add {{ type === 'preparation' ? 'Product' : 'Component' }}
-                  </v-btn>
-                </div>
-
-                <div
-                  v-if="formData.components.length === 0"
-                  class="text-center text-medium-emphasis py-4"
-                >
-                  No {{ type === 'preparation' ? 'products' : 'components' }} added yet
-                </div>
-
-                <div v-else class="components-list">
-                  <v-card
-                    v-for="(component, index) in formData.components"
-                    :key="component.id"
-                    variant="outlined"
-                    class="mb-2"
-                  >
-                    <v-card-text class="pa-3">
-                      <v-row align="center">
-                        <!-- Component Type (recipes only) -->
-                        <v-col v-if="type === 'recipe'" cols="12" md="2">
-                          <v-select
-                            v-model="component.componentType"
-                            :items="componentTypes"
-                            item-title="text"
-                            item-value="value"
-                            label="Type"
-                            variant="outlined"
-                            density="compact"
-                            :rules="[rules.required]"
-                            required
-                            @update:model-value="onComponentTypeChange(index, $event)"
-                          />
-                        </v-col>
-
-                        <!-- Component Selection -->
-                        <v-col cols="12" :md="type === 'recipe' ? 3 : 4">
-                          <v-select
-                            v-model="component.componentId"
-                            :items="getComponentItems(component.componentType || 'product')"
-                            item-title="label"
-                            item-value="id"
-                            :label="getComponentLabel(component.componentType || 'product')"
-                            variant="outlined"
-                            density="compact"
-                            :rules="[rules.required]"
-                            required
-                            @update:model-value="onComponentChange(index, $event)"
-                          />
-                          <!-- ✅ НОВОЕ: Показ текущей цены под полем выбора -->
-                          <div v-if="component.componentId" class="text-caption text-success mt-1">
-                            {{ getComponentPrice(component) }}
-                          </div>
-                        </v-col>
-
-                        <!-- Quantity -->
-                        <v-col cols="6" :md="type === 'recipe' ? 2 : 2">
-                          <v-text-field
-                            v-model.number="component.quantity"
-                            label="Quantity"
-                            type="number"
-                            step="0.1"
-                            variant="outlined"
-                            density="compact"
-                            :rules="[rules.required, rules.positiveNumber]"
-                            required
-                            @update:model-value="onComponentQuantityChange"
-                          />
-                        </v-col>
-
-                        <!-- Unit -->
-                        <v-col cols="6" :md="type === 'recipe' ? 2 : 2">
-                          <v-select
-                            v-model="component.unit"
-                            :items="unitItems"
-                            item-title="label"
-                            item-value="value"
-                            label="Unit"
-                            variant="outlined"
-                            density="compact"
-                            :rules="[rules.required]"
-                            required
-                          />
-                        </v-col>
-
-                        <!-- Notes -->
-                        <v-col cols="12" :md="type === 'recipe' ? 2 : 3">
-                          <v-text-field
-                            v-model="component.notes"
-                            label="Notes"
-                            placeholder="diced, minced"
-                            variant="outlined"
-                            density="compact"
-                          />
-                        </v-col>
-
-                        <!-- Delete button -->
-                        <v-col cols="12" md="1">
-                          <v-btn
-                            icon="mdi-delete"
-                            color="error"
-                            variant="text"
-                            size="small"
-                            @click="removeComponent(index)"
-                          />
-                        </v-col>
-                      </v-row>
-                    </v-card-text>
-                  </v-card>
-                </div>
-              </div>
-            </v-col>
-          </v-row>
+          <!-- ✅ Редактор компонентов -->
+          <recipe-components-editor-widget
+            :components="formData.components"
+            :type="type"
+            @component-quantity-changed="onComponentQuantityChange"
+            @add-component="addComponent"
+            @remove-component="removeComponent"
+            @update-component="updateComponent"
+          />
         </v-form>
       </v-card-text>
 
@@ -356,9 +49,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
-import { useProductsStore } from '@/stores/productsStore'
-import { PREPARATION_TYPES, RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
-import { useRecipeUnits } from '@/composables/useMeasurementUnits'
 import { generateId, DebugUtils } from '@/utils'
 import type {
   Recipe,
@@ -369,6 +59,11 @@ import type {
   PreparationIngredient,
   MeasurementUnit
 } from '@/stores/recipes/types'
+
+// Импорт виджетов
+import RecipeBasicInfoWidget from './widgets/RecipeBasicInfoWidget.vue'
+import RecipeCostPreviewWidget from './widgets/RecipeCostPreviewWidget.vue'
+import RecipeComponentsEditorWidget from './widgets/RecipeComponentsEditorWidget.vue'
 
 interface Props {
   modelValue: boolean
@@ -385,8 +80,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const recipesStore = useRecipesStore()
-const productsStore = useProductsStore()
-const { unitOptions } = useRecipeUnits()
 const form = ref()
 const formValid = ref(false)
 const loading = ref(false)
@@ -418,133 +111,42 @@ const formData = ref<any>({
 // Computed
 const isEditing = computed(() => !!props.item)
 
-const categoryItems = computed(() => {
-  return props.type === 'preparation' ? PREPARATION_TYPES : RECIPE_CATEGORIES
-})
-
-const difficultyLevels = DIFFICULTY_LEVELS
-
-const componentTypes = [
-  { value: 'product', text: 'Product' },
-  { value: 'preparation', text: 'Preparation' }
-]
-
-const unitItems = computed(() => {
-  return unitOptions.value.map(option => ({
-    value: option.value,
-    label: option.title
-  }))
-})
-
-// Component items based on type
-const productItems = computed(() => {
-  return productsStore.products
-    .filter(product => product.isActive)
-    .map(product => ({
-      id: product.id,
-      label: `${product.name} (${product.unit})`
-    }))
-})
-
-const preparationItems = computed(() => {
-  return recipesStore.activePreparations.map(prep => ({
-    id: prep.id,
-    label: `${prep.code} - ${prep.name} (${prep.outputUnit})`
-  }))
-})
-
-// ✅ НОВОЕ: Real-time cost calculation
-const estimatedCost = computed(() => {
-  let totalCost = 0
-  let costPerUnit = 0
-
-  for (const component of formData.value.components) {
-    if (!component.componentId || !component.quantity || component.quantity <= 0) continue
-
-    if (component.componentType === 'product') {
-      const product = productsStore.getProductById(component.componentId)
-      if (product && product.isActive) {
-        // Простая конвертация: предполагаем, что все в граммах/мл
-        const componentCost = (product.costPerUnit * component.quantity) / 1000
-        totalCost += componentCost
-      }
-    } else if (component.componentType === 'preparation') {
-      const prepCost = recipesStore.getPreparationCostCalculation(component.componentId)
-      if (prepCost) {
-        const componentCost = prepCost.costPerOutputUnit * component.quantity
-        totalCost += componentCost
-      }
-    }
-  }
-
-  // Рассчитываем стоимость за единицу
-  if (props.type === 'preparation' && formData.value.outputQuantity > 0) {
-    costPerUnit = totalCost / formData.value.outputQuantity
-  } else if (props.type === 'recipe' && formData.value.portionSize > 0) {
-    costPerUnit = totalCost / formData.value.portionSize
-  }
-
-  return {
-    totalCost,
-    costPerUnit
-  }
-})
-
-// Validation rules
-const rules = {
-  required: (value: any) => !!value || 'Required field',
-  positiveNumber: (value: number) => value > 0 || 'Must be greater than 0',
-  codeFormat: (value: string) => {
-    if (!value) return 'Required field'
-    const pattern = props.type === 'preparation' ? /^P-\d+$/ : /^R-\d+$/
-    const prefix = props.type === 'preparation' ? 'P' : 'R'
-    return pattern.test(value) || `Code must be in format: ${prefix}-NUMBER (e.g. ${prefix}-1)`
-  }
-}
-
 // Methods
 function getDialogTitle(): string {
   const itemType = props.type === 'preparation' ? 'Preparation' : 'Recipe'
   return isEditing.value ? `Edit ${itemType}` : `New ${itemType}`
 }
 
-function getCostPerLabel(): string {
-  return props.type === 'preparation' ? 'Cost per Unit' : 'Cost per Portion'
+// ✅ ИСПРАВЛЕНО: Добавляем методы для обработки событий от виджетов
+function updateFormField(field: string, value: unknown) {
+  formData.value[field] = value
 }
 
-function getComponentItems(componentType: string) {
-  return componentType === 'product' ? productItems.value : preparationItems.value
-}
-
-function getComponentLabel(componentType: string): string {
-  return componentType === 'product' ? 'Product' : 'Preparation'
-}
-
-// ✅ НОВОЕ: Получение цены компонента
-function getComponentPrice(component: any): string {
-  if (!component.componentId) return ''
-
-  if (component.componentType === 'product') {
-    const product = productsStore.getProductById(component.componentId)
-    if (product) {
-      return `Current price: $${product.costPerUnit.toFixed(2)}/${product.unit}`
-    }
-  } else if (component.componentType === 'preparation') {
-    const prepCost = recipesStore.getPreparationCostCalculation(component.componentId)
-    if (prepCost) {
-      return `Current cost: $${prepCost.costPerOutputUnit.toFixed(2)}/unit`
-    }
+function addComponent() {
+  const newComponent = {
+    id: generateId(),
+    componentId: '',
+    componentType: props.type === 'preparation' ? 'product' : 'product',
+    quantity: 0,
+    unit: 'gram' as MeasurementUnit,
+    notes: ''
   }
-
-  return 'Price not available'
+  formData.value.components.push(newComponent)
 }
 
-function handleCodeInput(event: Event) {
-  const input = event.target as HTMLInputElement
-  formData.value.code = input.value.toUpperCase()
+function removeComponent(index: number) {
+  formData.value.components.splice(index, 1)
+}
+
+function updateComponent(index: number, field: string, value: unknown) {
+  if (formData.value.components[index]) {
+    formData.value.components[index][field] = value
+  }
 }
 
 function handleCategoryChange(category: string) {
+  formData.value.category = category
+
   // Auto-suggest code prefix for preparations
   if (props.type === 'preparation' && !formData.value.code) {
     const existingCodes = recipesStore.activePreparations
@@ -558,35 +160,8 @@ function handleCategoryChange(category: string) {
   }
 }
 
-function addComponent() {
-  const newComponent = {
-    id: generateId(),
-    componentId: '',
-    componentType: props.type === 'preparation' ? 'product' : 'product',
-    quantity: 0,
-    unit: 'gram' as MeasurementUnit,
-    notes: ''
-  }
-
-  formData.value.components.push(newComponent)
-}
-
-function removeComponent(index: number) {
-  formData.value.components.splice(index, 1)
-}
-
-function onComponentTypeChange(index: number, newType: string) {
-  // Clear component selection when type changes
-  formData.value.components[index].componentId = ''
-}
-
-// ✅ НОВОЕ: Триггеры для пересчета стоимости
-function onComponentChange(index: number, componentId: string) {
-  // Стоимость автоматически пересчитается через computed estimatedCost
-}
-
 function onComponentQuantityChange() {
-  // Стоимость автоматически пересчитается через computed estimatedCost
+  // Стоимость автоматически пересчитается через computed в CostPreviewWidget
 }
 
 async function handleSubmit() {
@@ -752,29 +327,6 @@ watch(dialogModel, async newVal => {
 </script>
 
 <style lang="scss" scoped>
-.components-section {
-  border: 1px solid var(--color-outline-variant);
-  border-radius: 8px;
-  padding: 16px;
-  background: var(--color-surface-variant);
-}
-
-.components-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.cost-preview {
-  background: linear-gradient(135deg, #e8f5e8 0%, #f0f8ff 100%);
-  border: 2px solid var(--color-success);
-
-  .v-card-title {
-    background: var(--color-success);
-    color: white;
-    border-radius: 8px 8px 0 0;
-  }
-}
-
 :deep(.v-card-text) {
   max-height: 70vh;
   overflow-y: auto;
