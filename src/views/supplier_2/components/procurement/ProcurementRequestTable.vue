@@ -70,7 +70,7 @@
     <!-- Data Table -->
     <v-data-table
       :headers="headers"
-      :items="filteredRequests"
+      :items="filteredRequestsComputed"
       :loading="loading"
       class="elevation-1"
       :items-per-page="25"
@@ -321,9 +321,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcurementRequests'
-import type { ProcurementRequest, RequestFilters } from '@/stores/supplier_2/types'
+import { ref, computed } from 'vue'
+import type { ProcurementRequest } from '@/stores/supplier_2/types'
 
 // =============================================
 // PROPS & EMITS
@@ -345,26 +344,18 @@ const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
 
 // =============================================
-// COMPOSABLES
-// =============================================
-
-const {
-  filters,
-  updateFilters,
-  clearFilters,
-  formatCurrency,
-  getStatusColor,
-  getPriorityColor,
-  canEditRequest,
-  canDeleteRequest
-} = useProcurementRequests()
-
-// =============================================
 // LOCAL STATE
 // =============================================
 
 const showDetailsDialog = ref(false)
 const selectedRequest = ref<ProcurementRequest | null>(null)
+
+// Filters state
+const filters = ref({
+  status: undefined as string | undefined,
+  department: undefined as string | undefined,
+  priority: undefined as string | undefined
+})
 
 // =============================================
 // TABLE CONFIGURATION
@@ -396,7 +387,7 @@ const itemHeaders = [
 // =============================================
 
 const statusOptions = [
-  { title: 'All Statuses', value: 'all' },
+  { title: 'All Statuses', value: undefined },
   { title: 'Draft', value: 'draft' },
   { title: 'Submitted', value: 'submitted' },
   { title: 'Converted', value: 'converted' },
@@ -404,13 +395,13 @@ const statusOptions = [
 ]
 
 const departmentOptions = [
-  { title: 'All Departments', value: 'all' },
+  { title: 'All Departments', value: undefined },
   { title: 'Kitchen', value: 'kitchen' },
   { title: 'Bar', value: 'bar' }
 ]
 
 const priorityOptions = [
-  { title: 'All Priorities', value: 'all' },
+  { title: 'All Priorities', value: undefined },
   { title: 'Normal', value: 'normal' },
   { title: 'Urgent', value: 'urgent' }
 ]
@@ -419,29 +410,20 @@ const priorityOptions = [
 // COMPUTED
 // =============================================
 
-const filteredRequests = computed(() => {
-  if (!props.requests) return []
+const filteredRequestsComputed = computed(() => {
+  // ИСПРАВЛЕНИЕ: Безопасная проверка на массив
+  if (!props.requests || !Array.isArray(props.requests)) {
+    return []
+  }
 
   return props.requests.filter(request => {
-    if (
-      filters.value.status &&
-      filters.value.status !== 'all' &&
-      request.status !== filters.value.status
-    ) {
+    if (filters.value.status && request.status !== filters.value.status) {
       return false
     }
-    if (
-      filters.value.department &&
-      filters.value.department !== 'all' &&
-      request.department !== filters.value.department
-    ) {
+    if (filters.value.department && request.department !== filters.value.department) {
       return false
     }
-    if (
-      filters.value.priority &&
-      filters.value.priority !== 'all' &&
-      request.priority !== filters.value.priority
-    ) {
+    if (filters.value.priority && request.priority !== filters.value.priority) {
       return false
     }
     return true
@@ -492,6 +474,18 @@ function duplicateRequest(request: ProcurementRequest) {
   // TODO: Implement duplicate logic
 }
 
+function updateFilters() {
+  console.log('Filters updated:', filters.value)
+}
+
+function clearFilters() {
+  filters.value = {
+    status: undefined,
+    department: undefined,
+    priority: undefined
+  }
+}
+
 // =============================================
 // HELPER FUNCTIONS
 // =============================================
@@ -524,11 +518,37 @@ function getStatusIcon(status: string): string {
   return iconMap[status] || 'mdi-help-circle'
 }
 
+function getStatusColor(status: string): string {
+  const colorMap: Record<string, string> = {
+    draft: 'grey',
+    submitted: 'blue',
+    converted: 'green',
+    cancelled: 'red'
+  }
+  return colorMap[status] || 'grey'
+}
+
 function getPriorityIcon(priority: string): string {
   return priority === 'urgent' ? 'mdi-alert' : 'mdi-information'
 }
 
+function getPriorityColor(priority: string): string {
+  return priority === 'urgent' ? 'red' : 'green'
+}
+
+function canEditRequest(request: ProcurementRequest): boolean {
+  return ['draft', 'submitted'].includes(request.status)
+}
+
+function canDeleteRequest(request: ProcurementRequest): boolean {
+  return request.status === 'draft'
+}
+
 function calculateEstimatedTotal(request: ProcurementRequest): number {
+  if (!request.items || !Array.isArray(request.items)) {
+    return 0
+  }
+
   return request.items.reduce((total, item) => {
     return total + item.requestedQuantity * getEstimatedPrice(item.itemId)
   }, 0)
@@ -548,13 +568,34 @@ function getEstimatedPrice(itemId: string): number {
   return prices[itemId] || 0
 }
 
+function formatCurrency(amount: number): string {
+  if (isNaN(amount) || !isFinite(amount)) {
+    return 'Rp 0'
+  }
+
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount)
+}
+
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('id-ID', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  if (!dateString) {
+    return 'Invalid date'
+  }
+
+  try {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch (error) {
+    console.error('Error formatting date:', error)
+    return 'Invalid date'
+  }
 }
 </script>
 

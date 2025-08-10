@@ -29,12 +29,12 @@
           color="primary"
           variant="outlined"
           prepend-icon="mdi-cart-variant"
-          :disabled="submittedRequests.length === 0"
+          :disabled="submittedRequestsArray.length === 0"
           @click="openSupplierBaskets"
         >
           Create Orders
-          <v-chip v-if="submittedRequests.length > 0" size="small" color="white" class="ml-2">
-            {{ submittedRequests.length }}
+          <v-chip v-if="submittedRequestsArray.length > 0" size="small" color="white" class="ml-2">
+            {{ submittedRequestsArray.length }}
           </v-chip>
         </v-btn>
 
@@ -57,7 +57,7 @@
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-primary">
-                {{ statistics.totalRequests }}
+                {{ statisticsComputed.totalRequests }}
               </div>
               <div class="text-caption text-medium-emphasis">Total Requests</div>
             </div>
@@ -65,7 +65,7 @@
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-warning">
-                {{ statistics.pendingRequests }}
+                {{ statisticsComputed.pendingRequests }}
               </div>
               <div class="text-caption text-medium-emphasis">Pending Requests</div>
             </div>
@@ -73,7 +73,7 @@
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-success">
-                {{ statistics.totalOrders }}
+                {{ statisticsComputed.totalOrders }}
               </div>
               <div class="text-caption text-medium-emphasis">Purchase Orders</div>
             </div>
@@ -81,7 +81,7 @@
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-error">
-                {{ statistics.ordersAwaitingPayment }}
+                {{ statisticsComputed.ordersAwaitingPayment }}
               </div>
               <div class="text-caption text-medium-emphasis">Awaiting Payment</div>
             </div>
@@ -89,7 +89,7 @@
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-info">
-                {{ statistics.ordersAwaitingDelivery }}
+                {{ statisticsComputed.ordersAwaitingDelivery }}
               </div>
               <div class="text-caption text-medium-emphasis">Awaiting Delivery</div>
             </div>
@@ -97,7 +97,7 @@
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-purple">
-                {{ statistics.urgentSuggestions }}
+                {{ statisticsComputed.urgentSuggestions }}
               </div>
               <div class="text-caption text-medium-emphasis">Urgent Suggestions</div>
             </div>
@@ -112,13 +112,13 @@
         <v-icon icon="mdi-clipboard-list" class="mr-2" />
         Requests
         <v-chip
-          v-if="statistics.pendingRequests > 0"
+          v-if="statisticsComputed.pendingRequests > 0"
           size="small"
           class="ml-2"
           variant="tonal"
           color="warning"
         >
-          {{ statistics.pendingRequests }}
+          {{ statisticsComputed.pendingRequests }}
         </v-chip>
       </v-tab>
 
@@ -126,13 +126,13 @@
         <v-icon icon="mdi-package-variant" class="mr-2" />
         Orders
         <v-chip
-          v-if="statistics.ordersAwaitingPayment > 0"
+          v-if="statisticsComputed.ordersAwaitingPayment > 0"
           size="small"
           class="ml-2"
           variant="tonal"
           color="error"
         >
-          {{ statistics.ordersAwaitingPayment }} unpaid
+          {{ statisticsComputed.ordersAwaitingPayment }} unpaid
         </v-chip>
       </v-tab>
 
@@ -140,13 +140,13 @@
         <v-icon icon="mdi-truck-check" class="mr-2" />
         Receipts
         <v-chip
-          v-if="ordersForReceipt.length > 0"
+          v-if="ordersForReceiptArray.length > 0"
           size="small"
           class="ml-2"
           variant="tonal"
           color="success"
         >
-          {{ ordersForReceipt.length }} ready
+          {{ ordersForReceiptArray.length }} ready
         </v-chip>
       </v-tab>
     </v-tabs>
@@ -155,7 +155,7 @@
     <v-tabs-window v-model="selectedTab">
       <!-- Requests Tab -->
       <v-tabs-window-item value="requests">
-        <div v-if="requests.length === 0 && !isLoading" class="text-center pa-8">
+        <div v-if="requestsArray.length === 0 && !isLoadingValue" class="text-center pa-8">
           <v-icon icon="mdi-clipboard-list-outline" size="64" color="grey" class="mb-4" />
           <div class="text-h6 mb-2">No Procurement Requests</div>
           <div class="text-body-2 text-medium-emphasis mb-4">
@@ -173,8 +173,8 @@
 
         <procurement-request-table
           v-else
-          :requests="requests"
-          :loading="isLoading"
+          :requests="requestsArray"
+          :loading="isLoadingValue"
           @edit-request="handleEditRequest"
           @submit-request="handleSubmitRequest"
           @delete-request="handleDeleteRequest"
@@ -184,7 +184,7 @@
 
       <!-- Orders Tab -->
       <v-tabs-window-item value="orders">
-        <div v-if="orders.length === 0 && !isLoading" class="text-center pa-8">
+        <div v-if="ordersArray.length === 0 && !isLoadingValue" class="text-center pa-8">
           <v-icon icon="mdi-package-variant-closed" size="64" color="grey" class="mb-4" />
           <div class="text-h6 mb-2">No Purchase Orders</div>
           <div class="text-body-2 text-medium-emphasis mb-4">
@@ -195,7 +195,7 @@
               color="success"
               variant="flat"
               prepend-icon="mdi-cart-variant"
-              :disabled="submittedRequests.length === 0"
+              :disabled="submittedRequestsArray.length === 0"
               @click="openSupplierBaskets"
             >
               Create Orders
@@ -213,8 +213,8 @@
 
         <purchase-order-table
           v-else
-          :orders="orders"
-          :loading="isLoading"
+          :orders="ordersArray"
+          :loading="isLoadingValue"
           @edit-order="handleEditOrder"
           @send-order="handleSendOrder"
           @confirm-order="handleConfirmOrder"
@@ -224,7 +224,7 @@
 
       <!-- Receipts Tab -->
       <v-tabs-window-item value="receipts">
-        <div v-if="receipts.length === 0 && !isLoading" class="text-center pa-8">
+        <div v-if="receiptsArray.length === 0 && !isLoadingValue" class="text-center pa-8">
           <v-icon icon="mdi-truck-check-outline" size="64" color="grey" class="mb-4" />
           <div class="text-h6 mb-2">No Receipts</div>
           <div class="text-body-2 text-medium-emphasis mb-4">
@@ -242,8 +242,8 @@
 
         <receipt-table
           v-else
-          :receipts="receipts"
-          :loading="isLoading"
+          :receipts="receiptsArray"
+          :loading="isLoadingValue"
           @edit-receipt="handleEditReceipt"
           @complete-receipt="handleCompleteReceipt"
         />
@@ -377,7 +377,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useSupplierWorkflow } from '@/stores/supplier_2'
+import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
 import type { ProcurementRequest, PurchaseOrder, Receipt } from '@/stores/supplier_2/types'
 
 // Components
@@ -391,17 +391,10 @@ import ReceiptTable from './components/receipts/ReceiptTable.vue'
 const MODULE_NAME = 'SupplierView'
 
 // =============================================
-// COMPOSABLES
+// STORE
 // =============================================
 
-const {
-  store,
-  statistics,
-  isLoading,
-  procurementRequests,
-  purchaseOrders,
-  receipts: receiptsComposable
-} = useSupplierWorkflow()
+const supplierStore = useSupplierStore()
 
 // =============================================
 // STATE
@@ -422,15 +415,58 @@ const selectedRequestIds = ref<string[]>([])
 const selectedOrder = ref<PurchaseOrder | null>(null)
 
 // =============================================
-// COMPUTED
+// COMPUTED - Безопасные computed свойства
 // =============================================
 
-const requests = computed(() => procurementRequests.requests)
-const orders = computed(() => purchaseOrders.orders)
-const receipts = computed(() => receiptsComposable.receipts)
+const requestsArray = computed(() => {
+  return Array.isArray(supplierStore.state.requests) ? supplierStore.state.requests : []
+})
 
-const submittedRequests = computed(() => procurementRequests.submittedRequests)
-const ordersForReceipt = computed(() => purchaseOrders.ordersForReceipt)
+const ordersArray = computed(() => {
+  return Array.isArray(supplierStore.state.orders) ? supplierStore.state.orders : []
+})
+
+const receiptsArray = computed(() => {
+  return Array.isArray(supplierStore.state.receipts) ? supplierStore.state.receipts : []
+})
+
+const submittedRequestsArray = computed(() => {
+  return requestsArray.value.filter(req => req.status === 'submitted')
+})
+
+const ordersForReceiptArray = computed(() => {
+  return ordersArray.value.filter(
+    order =>
+      ['sent', 'confirmed'].includes(order.status) &&
+      !receiptsArray.value.some(
+        receipt => receipt.purchaseOrderId === order.id && receipt.status === 'completed'
+      )
+  )
+})
+
+const statisticsComputed = computed(() => ({
+  totalRequests: requestsArray.value.length,
+  pendingRequests: submittedRequestsArray.value.length,
+  totalOrders: ordersArray.value.length,
+  ordersAwaitingPayment: ordersArray.value.filter(order => order.paymentStatus === 'pending')
+    .length,
+  ordersAwaitingDelivery: ordersArray.value.filter(
+    order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
+  ).length,
+  totalReceipts: receiptsArray.value.length,
+  pendingReceipts: receiptsArray.value.filter(receipt => receipt.status === 'draft').length,
+  urgentSuggestions: Array.isArray(supplierStore.state.orderSuggestions)
+    ? supplierStore.state.orderSuggestions.filter(s => s.urgency === 'high').length
+    : 0
+}))
+
+const isLoadingValue = computed(() => {
+  return (
+    supplierStore.state.loading.requests ||
+    supplierStore.state.loading.orders ||
+    supplierStore.state.loading.receipts
+  )
+})
 
 // =============================================
 // METHODS - Request Handlers
@@ -438,13 +474,12 @@ const ordersForReceipt = computed(() => purchaseOrders.ordersForReceipt)
 
 function handleEditRequest(request: ProcurementRequest) {
   console.log(`${MODULE_NAME}: Edit request`, request.id)
-  // TODO: Implement request editing
   showSuccess('Request editing not implemented yet')
 }
 
 async function handleSubmitRequest(request: ProcurementRequest) {
   try {
-    await procurementRequests.submitRequest(request.id)
+    await supplierStore.updateRequest(request.id, { status: 'submitted' })
     showSuccess(`Request ${request.requestNumber} submitted successfully`)
   } catch (error: any) {
     handleError(error.message || 'Failed to submit request')
@@ -453,7 +488,7 @@ async function handleSubmitRequest(request: ProcurementRequest) {
 
 async function handleDeleteRequest(request: ProcurementRequest) {
   try {
-    await procurementRequests.deleteRequest(request.id)
+    await supplierStore.deleteRequest(request.id)
     showSuccess(`Request ${request.requestNumber} deleted successfully`)
   } catch (error: any) {
     handleError(error.message || 'Failed to delete request')
@@ -471,13 +506,12 @@ function handleCreateOrderFromRequest(request: ProcurementRequest) {
 
 function handleEditOrder(order: PurchaseOrder) {
   console.log(`${MODULE_NAME}: Edit order`, order.id)
-  // TODO: Implement order editing
   showSuccess('Order editing not implemented yet')
 }
 
 async function handleSendOrder(order: PurchaseOrder) {
   try {
-    await purchaseOrders.sendOrder(order.id)
+    await supplierStore.updateOrder(order.id, { status: 'sent' })
     showSuccess(`Order ${order.orderNumber} sent to supplier`)
   } catch (error: any) {
     handleError(error.message || 'Failed to send order')
@@ -486,7 +520,7 @@ async function handleSendOrder(order: PurchaseOrder) {
 
 async function handleConfirmOrder(order: PurchaseOrder) {
   try {
-    await purchaseOrders.confirmOrder(order.id)
+    await supplierStore.updateOrder(order.id, { status: 'confirmed' })
     showSuccess(`Order ${order.orderNumber} confirmed by supplier`)
   } catch (error: any) {
     handleError(error.message || 'Failed to confirm order')
@@ -504,13 +538,12 @@ function handleStartReceipt(order: PurchaseOrder) {
 
 function handleEditReceipt(receipt: Receipt) {
   console.log(`${MODULE_NAME}: Edit receipt`, receipt.id)
-  // TODO: Implement receipt editing
   showSuccess('Receipt editing not implemented yet')
 }
 
 async function handleCompleteReceipt(receipt: Receipt) {
   try {
-    await receipts.value.completeReceipt(receipt.id)
+    await supplierStore.completeReceipt(receipt.id)
     showSuccess(`Receipt ${receipt.receiptNumber} completed successfully`)
   } catch (error: any) {
     handleError(error.message || 'Failed to complete receipt')
@@ -526,9 +559,9 @@ async function handleOrderAssistantSuccess(message: string) {
   showOrderAssistant.value = false
 
   // If we have submitted requests, show option to create orders
-  if (submittedRequests.value.length > 0) {
+  if (submittedRequestsArray.value.length > 0) {
     setTimeout(() => {
-      showSuccess(`${submittedRequests.value.length} requests ready for order creation`)
+      showSuccess(`${submittedRequestsArray.value.length} requests ready for order creation`)
     }, 1000)
   }
 }
@@ -557,12 +590,12 @@ function handleReceiptSuccess(message: string) {
 // =============================================
 
 function openSupplierBaskets() {
-  if (submittedRequests.value.length === 0) {
+  if (submittedRequestsArray.value.length === 0) {
     handleError('No submitted requests available for order creation')
     return
   }
 
-  selectedRequestIds.value = submittedRequests.value.map(req => req.id)
+  selectedRequestIds.value = submittedRequestsArray.value.map(req => req.id)
   showSupplierBaskets.value = true
 }
 
@@ -585,13 +618,15 @@ function handleError(message: string) {
 onMounted(async () => {
   try {
     console.log(`${MODULE_NAME}: Initializing supplier view`)
-    await store.initialize()
+    await supplierStore.initialize()
     console.log(`${MODULE_NAME}: Supplier view initialized successfully`)
 
     // Show urgent suggestions if any
-    if (statistics.value.urgentSuggestions > 0) {
+    if (statisticsComputed.value.urgentSuggestions > 0) {
       setTimeout(() => {
-        showSuccess(`${statistics.value.urgentSuggestions} urgent stock suggestions available`)
+        showSuccess(
+          `${statisticsComputed.value.urgentSuggestions} urgent stock suggestions available`
+        )
       }, 1500)
     }
   } catch (error: any) {
