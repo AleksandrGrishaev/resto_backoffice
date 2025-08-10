@@ -1,4 +1,4 @@
-// src/stores/productsStore/productsStore.ts - Шаг 3: Используем координатор
+// src/stores/productsStore/productsStore.ts - Шаг 3: Используем координатор + Stock Recommendations
 
 import { defineStore } from 'pinia'
 import type { ProductsState, Product, CreateProductData, UpdateProductData } from './types'
@@ -136,7 +136,7 @@ export const useProductsStore = defineStore('products', {
             }))
           })
 
-          // 🆕 DEV MODE: Expose debug function to window
+          // 🆕 DEV MODE: Expose debug functions to window
           if (import.meta.env.DEV) {
             window.__PRODUCT_STORE_DEBUG__ = () => {
               console.log('=== PRODUCT STORE DEBUG ===')
@@ -175,10 +175,115 @@ export const useProductsStore = defineStore('products', {
               return this
             }
 
+            // 🆕 NEW: Stock Recommendations Test
+            window.__TEST_STOCK_RECOMMENDATIONS__ = async () => {
+              console.log('🧪 Testing Stock Recommendations...')
+
+              try {
+                // Import composable
+                const { useStockRecommendations } = await import(
+                  '@/stores/productsStore/composables/useStockRecommendations'
+                )
+                const {
+                  calculateRecommendation,
+                  generateEstimatedConsumption,
+                  calculateBulkRecommendations
+                } = useStockRecommendations()
+
+                const testProduct = this.products[0] // First product
+
+                console.log('Testing with product:', testProduct.name)
+
+                // 🔧 ИСПРАВЛЕНО: ждем completion генерации consumption data
+                const consumption = await generateEstimatedConsumption(testProduct)
+                console.log('Generated consumption:', consumption)
+                console.log('Daily usage:', consumption.dailyAverageUsage)
+
+                // Test single recommendation
+                const recommendation = await calculateRecommendation({
+                  product: testProduct,
+                  currentStock: 5.0, // 5 units in stock
+                  consumption,
+                  usage: { usedInRecipes: [], usedInPreparations: [] },
+                  calculationParams: { safetyDays: 3, maxOrderDays: 14, volatilityThreshold: 0.3 }
+                })
+
+                console.log('🎯 Stock Recommendation Result:')
+                console.table({
+                  Product: testProduct.name,
+                  'Current Stock': recommendation.currentStock,
+                  'Min Stock': recommendation.recommendedMinStock,
+                  'Max Stock': recommendation.recommendedMaxStock,
+                  'Order Quantity': recommendation.recommendedOrderQuantity,
+                  'Days Until Reorder': recommendation.daysUntilReorder,
+                  Urgency: recommendation.urgencyLevel,
+                  'Daily Usage': recommendation.factors.averageDailyUsage
+                })
+
+                // Test bulk recommendations for first 3 products
+                const testProducts = this.products.slice(0, 3)
+                const stockData = {
+                  [testProducts[0].id]: 5.0,
+                  [testProducts[1].id]: 2.0,
+                  [testProducts[2].id]: 10.0
+                }
+
+                // 🔧 ИСПРАВЛЕНО: генерируем consumption data асинхронно
+                const consumptionData = {}
+                for (const product of testProducts) {
+                  consumptionData[product.id] = await generateEstimatedConsumption(product)
+                }
+
+                console.log('Consumption data prepared:', consumptionData)
+
+                const bulkRecommendations = await calculateBulkRecommendations(
+                  testProducts,
+                  stockData,
+                  consumptionData
+                )
+
+                console.log('📊 Bulk Recommendations:')
+                console.table(
+                  bulkRecommendations.map(r => ({
+                    Product: this.products.find(p => p.id === r.productId)?.name,
+                    'Current Stock': r.currentStock,
+                    Urgency: r.urgencyLevel,
+                    'Days Until Reorder': r.daysUntilReorder,
+                    'Order Quantity': r.recommendedOrderQuantity,
+                    'Min Stock': r.recommendedMinStock,
+                    'Max Stock': r.recommendedMaxStock,
+                    'Daily Usage': r.factors.averageDailyUsage
+                  }))
+                )
+
+                // 🆕 Дополнительная проверка urgent products
+                const { getProductsNeedingReorder } = useStockRecommendations()
+                const urgentProducts = getProductsNeedingReorder(bulkRecommendations, 'medium')
+
+                console.log('📋 Products needing reorder (medium+ urgency):', urgentProducts.length)
+                if (urgentProducts.length > 0) {
+                  console.table(
+                    urgentProducts.map(r => ({
+                      Product: this.products.find(p => p.id === r.productId)?.name,
+                      Urgency: r.urgencyLevel,
+                      'Days Until Reorder': r.daysUntilReorder
+                    }))
+                  )
+                }
+
+                console.log('✅ Stock Recommendations test completed successfully!')
+                return bulkRecommendations
+              } catch (error) {
+                console.error('❌ Stock Recommendations test failed:', error)
+              }
+            }
+
             // Auto-call debug function for immediate visibility
             setTimeout(() => {
+              console.log('🔍 Product Store loaded! Available debug functions:')
+              console.log('  • window.__PRODUCT_STORE_DEBUG__() - Product store details')
               console.log(
-                '🔍 Product Store loaded! Run window.__PRODUCT_STORE_DEBUG__() to see details'
+                '  • window.__TEST_STOCK_RECOMMENDATIONS__() - Test stock recommendations'
               )
             }, 100)
           }

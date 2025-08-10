@@ -1,7 +1,7 @@
-// src/stores/shared/mockDataCoordinator.ts - Шаг 3: Базовый координатор
+// src/stores/shared/mockDataCoordinator.ts - Исправлено
 
-import { CORE_PRODUCTS } from './productDefinitions'
-import type { Product } from '@/stores/productsStore/types'
+import { CORE_PRODUCTS, type CoreProductDefinition } from './productDefinitions'
+import type { Product, ProductPriceHistory } from '@/stores/productsStore/types'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'MockDataCoordinator'
@@ -9,7 +9,7 @@ const MODULE_NAME = 'MockDataCoordinator'
 export class MockDataCoordinator {
   private productsData: {
     products: Product[]
-    priceHistory: any[] // Пока пустой массив
+    priceHistory: ProductPriceHistory[]
   } | null = null
 
   constructor() {
@@ -24,41 +24,99 @@ export class MockDataCoordinator {
     return this.productsData
   }
 
+  // 🔧 ИСПРАВЛЕНО: добавляем метод для получения определений
+  getProductDefinition(productId: string): CoreProductDefinition | undefined {
+    return CORE_PRODUCTS.find(p => p.id === productId)
+  }
+
+  // 🆕 Generate Products Store data from definitions
   private generateProductsData() {
-    DebugUtils.debug(MODULE_NAME, '🛍️ Generating products data from definitions')
+    DebugUtils.info(MODULE_NAME, '🛍️ Generating products data from definitions')
 
-    const now = new Date().toISOString()
-    const products: Product[] = CORE_PRODUCTS.map(productDef => ({
-      id: productDef.id,
-      name: productDef.name,
-      nameEn: productDef.nameEn, // 🆕 English support
-      category: productDef.category,
-      unit: productDef.unit,
-      currentCostPerUnit: productDef.basePrice, // 🆕 Real current price
-      yieldPercentage: productDef.yieldPercentage,
-      canBeSold: productDef.canBeSold, // 🆕 Enhanced flag
-      storageConditions: this.getStorageConditions(productDef.category),
-      shelfLifeDays: productDef.shelfLifeDays,
-      minStock: this.calculateMinStock(productDef), // 🆕 Will be calculated properly later
-      maxStock: this.calculateMaxStock(productDef), // 🆕 Will be calculated properly later
-      primarySupplierId: productDef.primarySupplierId,
-      leadTimeDays: productDef.leadTimeDays,
-      isActive: true,
-      tags: this.generateTags(productDef),
-      createdAt: now,
-      updatedAt: now
-    }))
+    const products = this.generateEnhancedProducts()
+    const priceHistory = this.generateBasicPriceHistory()
 
-    const priceHistory: any[] = [] // Пока пустой, заполним в следующих шагах
+    const result = {
+      products,
+      priceHistory
+    }
 
     DebugUtils.info(MODULE_NAME, '✅ Products data generated', {
       total: products.length,
       sellable: products.filter(p => p.canBeSold).length,
       rawMaterials: products.filter(p => !p.canBeSold).length,
-      priceHistoryRecords: priceHistory.length
+      priceRecords: priceHistory.length
     })
 
-    return { products, priceHistory }
+    return result
+  }
+
+  // 🔧 ИСПРАВЛЕНО: Generate enhanced products from definitions
+  private generateEnhancedProducts(): Product[] {
+    const now = new Date().toISOString()
+
+    return CORE_PRODUCTS.map(productDef => {
+      // 🔧 ИСПРАВЛЕНО: создаем правильную структуру Product с дополнительными полями
+      const product: Product & {
+        nameEn?: string
+        leadTimeDays?: number
+        primarySupplierId?: string
+        tags?: string[]
+        currentCostPerUnit?: number
+      } = {
+        id: productDef.id,
+        name: productDef.name,
+        nameEn: productDef.nameEn, // 🆕 English support
+        description: this.generateDescription(productDef),
+        category: productDef.category,
+        unit: productDef.unit,
+        costPerUnit: productDef.basePrice, // Основное поле для Product
+        currentCostPerUnit: productDef.basePrice, // 🆕 Дополнительное поле
+        yieldPercentage: productDef.yieldPercentage,
+        canBeSold: productDef.canBeSold, // 🆕 Enhanced flag
+        storageConditions: this.getStorageConditions(productDef.category),
+        shelfLife: productDef.shelfLifeDays,
+        minStock: this.calculateMinStock(productDef), // 🆕 Will be calculated properly later
+        maxStock: this.calculateMaxStock(productDef), // 🆕 Will be calculated properly later
+        leadTimeDays: productDef.leadTimeDays, // 🔧 ИСПРАВЛЕНО: добавляем leadTimeDays
+        primarySupplierId: productDef.primarySupplierId, // 🔧 ИСПРАВЛЕНО: добавляем supplierId
+        isActive: true,
+        tags: this.generateTags(productDef), // 🆕 Auto-generated tags
+        createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(), // 3 months ago
+        updatedAt: now
+      }
+
+      return product as Product
+    })
+  }
+
+  // Generate basic price history (single record for now)
+  private generateBasicPriceHistory(): ProductPriceHistory[] {
+    const now = new Date().toISOString()
+
+    return CORE_PRODUCTS.map(productDef => ({
+      id: `price-${productDef.id}-current`,
+      productId: productDef.id,
+      pricePerUnit: productDef.basePrice,
+      effectiveDate: now,
+      sourceType: 'manual_update' as const,
+      createdAt: now,
+      updatedAt: now
+    }))
+  }
+
+  // Helper methods
+  private generateDescription(productDef: CoreProductDefinition): string {
+    const baseDescriptions: Record<string, string> = {
+      meat: 'Premium quality meat for restaurant preparation',
+      vegetables: 'Fresh vegetables sourced from local suppliers',
+      dairy: 'Fresh dairy products with proper storage requirements',
+      spices: 'High-quality spices and seasonings',
+      beverages: 'Ready-to-serve beverages for direct sale',
+      other: 'Quality ingredient for food preparation'
+    }
+
+    return baseDescriptions[productDef.category] || 'Quality product for restaurant use'
   }
 
   private getStorageConditions(category: string): string {
@@ -73,17 +131,17 @@ export class MockDataCoordinator {
     return conditions[category] || 'Room temperature'
   }
 
-  private calculateMinStock(productDef: any): number {
+  private calculateMinStock(productDef: CoreProductDefinition): number {
     // Простая формула: daily consumption * lead time * safety factor
     return Math.round(productDef.dailyConsumption * productDef.leadTimeDays * 1.5 * 100) / 100
   }
 
-  private calculateMaxStock(productDef: any): number {
+  private calculateMaxStock(productDef: CoreProductDefinition): number {
     // Простая формула: min stock * 3
     return Math.round(this.calculateMinStock(productDef) * 3 * 100) / 100
   }
 
-  private generateTags(productDef: any): string[] {
+  private generateTags(productDef: CoreProductDefinition): string[] {
     const tags: string[] = []
 
     if (productDef.canBeSold) {
