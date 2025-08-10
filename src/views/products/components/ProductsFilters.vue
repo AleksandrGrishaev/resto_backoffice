@@ -1,19 +1,10 @@
-<!-- src/views/products/components/ProductsFilters.vue -->
+<!-- src/views/products/components/ProductsFilters.vue - Упрощенная версия -->
 <template>
   <v-card class="mb-4">
-    <v-card-title class="pb-2">
-      <v-icon start>mdi-filter</v-icon>
-      Фильтры и поиск
-      <v-spacer />
-      <v-chip v-if="hasActiveFilters" color="primary" size="small" variant="tonal">
-        {{ activeFiltersCount }} активных
-      </v-chip>
-    </v-card-title>
-
-    <v-card-text>
-      <v-row>
+    <v-card-text class="py-4">
+      <v-row align="center">
         <!-- Поиск -->
-        <v-col cols="12" md="4">
+        <v-col cols="12" md="5">
           <v-text-field
             v-model="localFilters.search"
             label="Поиск продуктов"
@@ -23,7 +14,8 @@
             clearable
             :loading="loading"
             placeholder="Введите название продукта..."
-            @input="updateFilters"
+            hide-details
+            @input="debouncedUpdate"
           />
         </v-col>
 
@@ -36,6 +28,7 @@
             variant="outlined"
             density="compact"
             :loading="loading"
+            hide-details
             @update:model-value="updateFilters"
           >
             <template #prepend-inner>
@@ -45,7 +38,7 @@
         </v-col>
 
         <!-- Статус активности -->
-        <v-col cols="12" md="3">
+        <v-col cols="12" md="2">
           <v-select
             v-model="localFilters.isActive"
             :items="statusOptions"
@@ -53,6 +46,7 @@
             variant="outlined"
             density="compact"
             :loading="loading"
+            hide-details
             @update:model-value="updateFilters"
           >
             <template #prepend-inner>
@@ -62,7 +56,7 @@
         </v-col>
 
         <!-- Кнопка сброса -->
-        <v-col cols="12" md="2" class="d-flex align-center">
+        <v-col cols="12" md="2">
           <v-btn
             variant="outlined"
             color="primary"
@@ -72,78 +66,6 @@
           >
             <v-icon start>mdi-refresh</v-icon>
             Сбросить
-          </v-btn>
-        </v-col>
-      </v-row>
-
-      <!-- Расширенные фильтры -->
-      <v-row v-if="showAdvancedFilters" class="mt-2">
-        <v-col cols="12" md="3">
-          <v-select
-            v-model="localFilters.unit"
-            :items="unitOptions"
-            label="Единица измерения"
-            variant="outlined"
-            density="compact"
-            clearable
-            :loading="loading"
-            @update:model-value="updateFilters"
-          >
-            <template #prepend-inner>
-              <v-icon>mdi-scale</v-icon>
-            </template>
-          </v-select>
-        </v-col>
-
-        <v-col cols="12" md="3">
-          <v-range-slider
-            v-model="yieldRange"
-            label="Выход продукта (%)"
-            min="0"
-            max="100"
-            step="5"
-            thumb-label="always"
-            class="mt-4"
-            @update:model-value="updateYieldFilter"
-          />
-        </v-col>
-
-        <v-col cols="12" md="3">
-          <v-switch
-            v-model="localFilters.lowStock"
-            label="Заканчивающиеся"
-            color="warning"
-            density="compact"
-            hide-details
-            @update:model-value="updateFilters"
-          />
-        </v-col>
-
-        <v-col cols="12" md="3">
-          <v-switch
-            v-model="localFilters.expiringSoon"
-            label="Истекает срок"
-            color="error"
-            density="compact"
-            hide-details
-            @update:model-value="updateFilters"
-          />
-        </v-col>
-      </v-row>
-
-      <!-- Переключатель расширенных фильтров -->
-      <v-row class="mt-2">
-        <v-col>
-          <v-btn
-            variant="text"
-            size="small"
-            color="primary"
-            @click="showAdvancedFilters = !showAdvancedFilters"
-          >
-            <v-icon start>
-              {{ showAdvancedFilters ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
-            </v-icon>
-            {{ showAdvancedFilters ? 'Скрыть' : 'Показать' }} расширенные фильтры
           </v-btn>
         </v-col>
       </v-row>
@@ -186,50 +108,6 @@
             >
               {{ getStatusLabel(localFilters.isActive) }}
             </v-chip>
-
-            <v-chip
-              v-if="localFilters.unit"
-              size="small"
-              color="primary"
-              variant="outlined"
-              closable
-              @click:close="clearUnitFilter"
-            >
-              Единица: {{ getUnitLabel(localFilters.unit) }}
-            </v-chip>
-
-            <v-chip
-              v-if="hasYieldFilter"
-              size="small"
-              color="primary"
-              variant="outlined"
-              closable
-              @click:close="clearYieldFilter"
-            >
-              Выход: {{ yieldRange[0] }}-{{ yieldRange[1] }}%
-            </v-chip>
-
-            <v-chip
-              v-if="localFilters.lowStock"
-              size="small"
-              color="warning"
-              variant="outlined"
-              closable
-              @click:close="clearLowStockFilter"
-            >
-              Заканчивающиеся
-            </v-chip>
-
-            <v-chip
-              v-if="localFilters.expiringSoon"
-              size="small"
-              color="error"
-              variant="outlined"
-              closable
-              @click:close="clearExpiringSoonFilter"
-            >
-              Истекает срок
-            </v-chip>
           </div>
         </v-col>
       </v-row>
@@ -239,32 +117,22 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { ProductsState, ProductCategory } from '@/stores/productsStore'
+import type { ProductCategory } from '@/stores/productsStore'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
-import { useProductUnits } from '@/composables/useProductUnits'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'ProductsFilters'
 
-// Базовый тип фильтров
-type BaseFilters = {
+// Simplified filters type
+type SimpleFilters = {
   category: ProductCategory | 'all'
   isActive: boolean | 'all'
   search: string
 }
 
-// Расширенные фильтры
-interface ExtendedFilters extends BaseFilters {
-  unit?: string
-  yieldMin?: number
-  yieldMax?: number
-  lowStock?: boolean
-  expiringSoon?: boolean
-}
-
 // Props
 interface Props {
-  filters: BaseFilters
+  filters: SimpleFilters
   loading?: boolean
 }
 
@@ -274,29 +142,27 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 interface Emits {
-  (e: 'update:filters', filters: ExtendedFilters): void
+  (e: 'update:filters', filters: SimpleFilters): void
   (e: 'reset'): void
 }
 
 const emit = defineEmits<Emits>()
 
-// Composables
-const { unitOptions: productUnitOptions } = useProductUnits()
-
 // Локальное состояние
-const showAdvancedFilters = ref(false)
-const yieldRange = ref([0, 100])
-
-const localFilters = ref<ExtendedFilters>({
+const localFilters = ref<SimpleFilters>({
   category: 'all',
   isActive: 'all',
-  search: '',
-  unit: undefined,
-  yieldMin: 0,
-  yieldMax: 100,
-  lowStock: false,
-  expiringSoon: false
+  search: ''
 })
+
+// Debounced update for search
+let searchTimeout: ReturnType<typeof setTimeout>
+const debouncedUpdate = () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    updateFilters()
+  }, 300)
+}
 
 // Опции для селектов
 const categoryOptions = computed(() => [
@@ -313,38 +179,13 @@ const statusOptions = computed(() => [
   { title: 'Неактивные', value: false }
 ])
 
-const unitOptions = computed(() => [
-  { title: 'Все единицы', value: '' },
-  ...productUnitOptions.value
-])
-
 // Проверка наличия активных фильтров
 const hasActiveFilters = computed(() => {
   return (
     localFilters.value.search !== '' ||
     localFilters.value.category !== 'all' ||
-    localFilters.value.isActive !== 'all' ||
-    !!localFilters.value.unit ||
-    hasYieldFilter.value ||
-    localFilters.value.lowStock ||
-    localFilters.value.expiringSoon
+    localFilters.value.isActive !== 'all'
   )
-})
-
-const hasYieldFilter = computed(() => {
-  return yieldRange.value[0] > 0 || yieldRange.value[1] < 100
-})
-
-const activeFiltersCount = computed(() => {
-  let count = 0
-  if (localFilters.value.search) count++
-  if (localFilters.value.category !== 'all') count++
-  if (localFilters.value.isActive !== 'all') count++
-  if (localFilters.value.unit) count++
-  if (hasYieldFilter.value) count++
-  if (localFilters.value.lowStock) count++
-  if (localFilters.value.expiringSoon) count++
-  return count
 })
 
 // Отслеживание изменений в props
@@ -352,7 +193,6 @@ watch(
   () => props.filters,
   newFilters => {
     localFilters.value = {
-      ...localFilters.value,
       category: newFilters.category,
       isActive: newFilters.isActive,
       search: newFilters.search
@@ -367,24 +207,12 @@ const updateFilters = (): void => {
   DebugUtils.debug(MODULE_NAME, 'Filters updated', { filters: localFilters.value })
 }
 
-const updateYieldFilter = (): void => {
-  localFilters.value.yieldMin = yieldRange.value[0]
-  localFilters.value.yieldMax = yieldRange.value[1]
-  updateFilters()
-}
-
 const resetFilters = (): void => {
   localFilters.value = {
     category: 'all',
     isActive: 'all',
-    search: '',
-    unit: undefined,
-    yieldMin: 0,
-    yieldMax: 100,
-    lowStock: false,
-    expiringSoon: false
+    search: ''
   }
-  yieldRange.value = [0, 100]
   emit('reset')
   DebugUtils.debug(MODULE_NAME, 'Filters reset')
 }
@@ -405,26 +233,6 @@ const clearStatusFilter = (): void => {
   updateFilters()
 }
 
-const clearUnitFilter = (): void => {
-  localFilters.value.unit = undefined
-  updateFilters()
-}
-
-const clearYieldFilter = (): void => {
-  yieldRange.value = [0, 100]
-  updateYieldFilter()
-}
-
-const clearLowStockFilter = (): void => {
-  localFilters.value.lowStock = false
-  updateFilters()
-}
-
-const clearExpiringSoonFilter = (): void => {
-  localFilters.value.expiringSoon = false
-  updateFilters()
-}
-
 // Вспомогательные методы для отображения
 const getCategoryLabel = (category: ProductCategory | 'all'): string => {
   if (category === 'all') return 'Все категории'
@@ -435,13 +243,8 @@ const getStatusLabel = (status: boolean | 'all'): string => {
   if (status === 'all') return 'Все'
   return status ? 'Активные' : 'Неактивные'
 }
-
-const getUnitLabel = (unit: string): string => {
-  const option = productUnitOptions.value.find(opt => opt.value === unit)
-  return option?.title || unit
-}
 </script>
 
 <style scoped>
-/* Дополнительные стили при необходимости */
+/* Минимальные стили */
 </style>

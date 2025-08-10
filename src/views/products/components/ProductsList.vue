@@ -1,4 +1,4 @@
-<!-- src/views/products/components/ProductsList.vue -->
+<!-- src/views/products/components/ProductsList.vue - Упрощенная таблица -->
 <template>
   <div class="products-list">
     <!-- Пустое состояние -->
@@ -10,147 +10,108 @@
       </p>
     </div>
 
-    <!-- Список продуктов -->
+    <!-- Таблица продуктов -->
     <div v-else>
-      <!-- Мобильная версия (карточки) -->
-      <div class="d-block d-md-none">
-        <v-row>
-          <v-col v-for="product in products" :key="product.id" cols="12" sm="6">
-            <product-card
-              :product="product"
+      <v-data-table
+        :headers="tableHeaders"
+        :items="products"
+        :loading="loading"
+        item-key="id"
+        class="elevation-0"
+        :items-per-page="25"
+        :search="undefined"
+        show-current-page
+        hover
+      >
+        <!-- Название продукта -->
+        <template #[`item.name`]="{ item }">
+          <div class="product-name-cell">
+            <div class="font-weight-medium">{{ item.name }}</div>
+            <!-- Убрали описание -->
+          </div>
+        </template>
+
+        <!-- Категория -->
+        <template #[`item.category`]="{ item }">
+          <v-chip :color="getCategoryColor(item.category)" size="small" variant="tonal">
+            {{ getCategoryLabel(item.category) }}
+          </v-chip>
+        </template>
+
+        <!-- Единица измерения -->
+        <template #[`item.unit`]="{ item }">
+          <v-chip size="small" variant="outlined">
+            {{ formatUnit(item.unit) }}
+          </v-chip>
+        </template>
+
+        <!-- Стоимость -->
+        <template #[`item.costPerUnit`]="{ item }">
+          <div class="text-end">
+            <div class="font-weight-medium">{{ formatCurrency(item.costPerUnit) }}</div>
+          </div>
+        </template>
+
+        <!-- Процент выхода -->
+        <template #[`item.yieldPercentage`]="{ item }">
+          <div class="text-center">
+            <v-chip :color="getYieldColor(item.yieldPercentage)" size="small" variant="tonal">
+              {{ item.yieldPercentage }}%
+            </v-chip>
+          </div>
+        </template>
+
+        <!-- Статус -->
+        <template #[`item.isActive`]="{ item }">
+          <v-chip :color="item.isActive ? 'success' : 'error'" size="small" variant="tonal">
+            {{ item.isActive ? 'Активен' : 'Неактивен' }}
+          </v-chip>
+        </template>
+
+        <!-- Действия -->
+        <template #[`item.actions`]="{ item }">
+          <div class="d-flex align-center ga-1">
+            <v-btn
+              icon="mdi-eye"
+              size="small"
+              variant="text"
+              color="info"
+              density="comfortable"
+              @click="$emit('view-details', item)"
+            >
+              <v-icon>mdi-eye</v-icon>
+              <v-tooltip activator="parent">Подробности</v-tooltip>
+            </v-btn>
+
+            <v-btn
+              icon="mdi-pencil"
+              size="small"
+              variant="text"
+              color="primary"
+              density="comfortable"
+              @click="$emit('edit', item)"
+            >
+              <v-icon>mdi-pencil</v-icon>
+              <v-tooltip activator="parent">Редактировать</v-tooltip>
+            </v-btn>
+
+            <v-btn
+              :icon="item.isActive ? 'mdi-pause' : 'mdi-play'"
+              size="small"
+              variant="text"
+              :color="item.isActive ? 'warning' : 'success'"
+              density="comfortable"
               :loading="loading"
-              @edit="$emit('edit', product)"
-              @toggle-active="$emit('toggle-active', product)"
-              @view-details="$emit('view-details', product)"
-            />
-          </v-col>
-        </v-row>
-      </div>
-
-      <!-- Десктопная версия (таблица) -->
-      <div class="d-none d-md-block">
-        <v-data-table
-          :headers="tableHeaders"
-          :items="products"
-          :loading="loading"
-          item-key="id"
-          class="elevation-0"
-          :items-per-page="25"
-          :search="undefined"
-          show-current-page
-        >
-          <!-- Название продукта -->
-          <template #[`item.name`]="{ item }">
-            <div class="d-flex align-center">
-              <div>
-                <div class="font-weight-medium">{{ item.name }}</div>
-                <div v-if="item.description" class="text-caption text-medium-emphasis">
-                  {{ truncateText(item.description, 60) }}
-                </div>
-              </div>
-            </div>
-          </template>
-
-          <!-- Категория -->
-          <template #[`item.category`]="{ item }">
-            <v-chip :color="getCategoryColor(item.category)" size="small" variant="tonal">
-              {{ getCategoryLabel(item.category) }}
-            </v-chip>
-          </template>
-
-          <!-- Единица измерения -->
-          <template #[`item.unit`]="{ item }">
-            <v-chip size="small" variant="outlined">
-              {{ formatUnit(item.unit) }}
-            </v-chip>
-          </template>
-
-          <!-- Себестоимость -->
-          <template #[`item.costPerUnit`]="{ item }">
-            <div class="text-end">
-              <div class="font-weight-medium">{{ formatCurrency(item.costPerUnit) }}</div>
-              <div class="text-caption text-medium-emphasis">за {{ formatUnit(item.unit) }}</div>
-            </div>
-          </template>
-
-          <!-- Процент выхода -->
-          <template #[`item.yieldPercentage`]="{ item }">
-            <div class="text-center">
-              <v-chip :color="getYieldColor(item.yieldPercentage)" size="small" variant="tonal">
-                {{ item.yieldPercentage }}%
-              </v-chip>
-            </div>
-          </template>
-
-          <!-- Эффективная стоимость -->
-          <template #[`item.effectiveCost`]="{ item }">
-            <div class="text-end">
-              <div class="font-weight-medium text-info">
-                {{ formatCurrency(calculateEffectiveCost(item)) }}
-              </div>
-              <div class="text-caption text-medium-emphasis">с учетом выхода</div>
-            </div>
-          </template>
-
-          <!-- Статус -->
-          <template #[`item.isActive`]="{ item }">
-            <v-chip :color="item.isActive ? 'success' : 'error'" size="small" variant="tonal">
-              {{ item.isActive ? 'Активен' : 'Неактивен' }}
-            </v-chip>
-          </template>
-
-          <!-- Дата создания -->
-          <template #[`item.createdAt`]="{ item }">
-            <div class="text-caption">
-              {{ formatDate(item.createdAt) }}
-            </div>
-          </template>
-
-          <!-- Действия -->
-          <template #[`item.actions`]="{ item }">
-            <div class="d-flex align-center ga-1">
-              <v-btn
-                icon="mdi-eye"
-                size="small"
-                variant="text"
-                color="info"
-                density="comfortable"
-                @click="$emit('view-details', item)"
-              >
-                <v-icon>mdi-eye</v-icon>
-                <v-tooltip activator="parent">Подробности</v-tooltip>
-              </v-btn>
-
-              <v-btn
-                icon="mdi-pencil"
-                size="small"
-                variant="text"
-                color="primary"
-                density="comfortable"
-                @click="$emit('edit', item)"
-              >
-                <v-icon>mdi-pencil</v-icon>
-                <v-tooltip activator="parent">Редактировать</v-tooltip>
-              </v-btn>
-
-              <v-btn
-                :icon="item.isActive ? 'mdi-pause' : 'mdi-play'"
-                size="small"
-                variant="text"
-                :color="item.isActive ? 'warning' : 'success'"
-                density="comfortable"
-                :loading="loading"
-                @click="$emit('toggle-active', item)"
-              >
-                <v-icon>{{ item.isActive ? 'mdi-pause' : 'mdi-play' }}</v-icon>
-                <v-tooltip activator="parent">
-                  {{ item.isActive ? 'Деактивировать' : 'Активировать' }}
-                </v-tooltip>
-              </v-btn>
-            </div>
-          </template>
-        </v-data-table>
-      </div>
+              @click="$emit('toggle-active', item)"
+            >
+              <v-icon>{{ item.isActive ? 'mdi-pause' : 'mdi-play' }}</v-icon>
+              <v-tooltip activator="parent">
+                {{ item.isActive ? 'Деактивировать' : 'Активировать' }}
+              </v-tooltip>
+            </v-btn>
+          </div>
+        </template>
+      </v-data-table>
     </div>
   </div>
 </template>
@@ -160,8 +121,6 @@ import { computed } from 'vue'
 import type { Product } from '@/stores/productsStore'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
-import { Formatter } from '@/utils'
-import ProductCard from './ProductCard.vue'
 
 // Props
 interface Props {
@@ -183,63 +142,49 @@ defineEmits<Emits>()
 // Composables
 const { getUnitName } = useMeasurementUnits()
 
-// Заголовки таблицы
+// Упрощенные заголовки таблицы
 const tableHeaders = computed(() => [
   {
     title: 'Название',
     key: 'name',
     align: 'start' as const,
     sortable: true,
-    width: '20%'
+    width: '25%'
   },
   {
     title: 'Категория',
     key: 'category',
     align: 'center' as const,
     sortable: true,
-    width: '12%'
+    width: '15%'
   },
   {
-    title: 'Ед. изм.',
+    title: 'Измерение',
     key: 'unit',
     align: 'center' as const,
     sortable: true,
-    width: '8%'
+    width: '12%'
   },
   {
-    title: 'Себестоимость',
+    title: 'Стоимость',
     key: 'costPerUnit',
     align: 'end' as const,
     sortable: true,
-    width: '12%'
+    width: '15%'
   },
   {
-    title: 'Выход',
+    title: '%',
     key: 'yieldPercentage',
     align: 'center' as const,
     sortable: true,
-    width: '8%'
-  },
-  {
-    title: 'Эффект. стоимость',
-    key: 'effectiveCost',
-    align: 'end' as const,
-    sortable: true,
-    width: '12%'
+    width: '10%'
   },
   {
     title: 'Статус',
     key: 'isActive',
     align: 'center' as const,
     sortable: true,
-    width: '8%'
-  },
-  {
-    title: 'Создан',
-    key: 'createdAt',
-    align: 'center' as const,
-    sortable: true,
-    width: '10%'
+    width: '13%'
   },
   {
     title: 'Действия',
@@ -288,24 +233,14 @@ const getYieldColor = (percentage: number): string => {
   if (percentage >= 75) return 'warning'
   return 'error'
 }
-
-const calculateEffectiveCost = (product: Product): number => {
-  // Эффективная стоимость с учетом процента выхода
-  return product.costPerUnit / (product.yieldPercentage / 100)
-}
-
-const formatDate = (dateString: string): string => {
-  return Formatter.formatDate(dateString)
-}
-
-const truncateText = (text: string, maxLength: number): string => {
-  if (text.length <= maxLength) return text
-  return text.substring(0, maxLength) + '...'
-}
 </script>
 
 <style scoped>
 .products-list {
   min-height: 200px;
+}
+
+.product-name-cell {
+  min-width: 150px;
 }
 </style>

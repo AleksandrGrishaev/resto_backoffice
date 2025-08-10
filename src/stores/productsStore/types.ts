@@ -1,4 +1,4 @@
-// src/stores/productsStore/types.ts
+// src/stores/productsStore/types.ts - Enhanced с поддержкой расширенных фильтров
 import type { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 
@@ -14,33 +14,48 @@ export type ProductCategory =
   | 'other'
 
 export interface Product extends BaseEntity {
-  name: string // "Мука", "Пиво Bintang", "Готовый торт"
+  name: string
   description?: string
   category: ProductCategory
   unit: MeasurementUnit
-  costPerUnit: number // ТОЛЬКО себестоимость закупки
-  yieldPercentage: number // процент выхода готового продукта (учет отходов при обработке)
+  costPerUnit: number
+  yieldPercentage: number
   isActive: boolean
 
-  // ✅ ВОЗВРАЩАЕМ флаг для простой продажи
-  canBeSold: boolean // может ли продаваться напрямую (пиво, напитки, готовые продукты)
+  // ✅ Флаг для простой продажи
+  canBeSold: boolean
 
   // Дополнительные поля для управления складом
   storageConditions?: string
-  shelfLife?: number // срок годности в днях
-  minStock?: number // минимальный остаток
+  shelfLife?: number
+  minStock?: number
+
+  // 🆕 NEW: Enhanced fields from coordinator
+  nameEn?: string
+  leadTimeDays?: number
+  primarySupplierId?: string
+  tags?: string[]
+  currentCostPerUnit?: number
+  maxStock?: number
 }
 
+// 🆕 ENHANCED: ProductsState with extended filters
 export interface ProductsState {
   products: Product[]
   loading: boolean
   error: string | null
   selectedProduct: Product | null
-  useMockMode: boolean // флаг для режима работы с моками
+  useMockMode: boolean
+
+  // 🆕 ENHANCED: Extended filters
   filters: {
     category: ProductCategory | 'all'
     isActive: boolean | 'all'
+    canBeSold: boolean | 'all' // 🆕 NEW
     search: string
+    // Future stock-related filters
+    needsReorder: boolean // 🆕 NEW
+    urgencyLevel: 'low' | 'medium' | 'high' | 'critical' | 'all' // 🆕 NEW
   }
 }
 
@@ -48,14 +63,20 @@ export interface CreateProductData {
   name: string
   category: ProductCategory
   unit: MeasurementUnit
-  costPerUnit: number // ТОЛЬКО себестоимость закупки
+  costPerUnit: number
   yieldPercentage: number
   description?: string
   isActive?: boolean
-  canBeSold?: boolean // ✅ добавляем в создание
+  canBeSold?: boolean
   storageConditions?: string
   shelfLife?: number
   minStock?: number
+
+  // 🆕 NEW: Enhanced fields
+  nameEn?: string
+  leadTimeDays?: number
+  primarySupplierId?: string
+  tags?: string[]
 }
 
 export interface UpdateProductData extends Partial<CreateProductData> {
@@ -75,7 +96,7 @@ export const PRODUCT_CATEGORIES: Record<ProductCategory, string> = {
   other: 'Прочее'
 }
 
-// Константы для единиц измерения (используем из общего файла)
+// Константы для единиц измерения
 import { PRODUCT_UNITS, getUnitName } from '@/types/measurementUnits'
 
 export const MEASUREMENT_UNITS_FOR_PRODUCTS = PRODUCT_UNITS.reduce(
@@ -86,24 +107,17 @@ export const MEASUREMENT_UNITS_FOR_PRODUCTS = PRODUCT_UNITS.reduce(
   {} as Record<MeasurementUnit, string>
 )
 
-// Для обратной совместимости с UI компонентами
 export const MEASUREMENT_UNITS = MEASUREMENT_UNITS_FOR_PRODUCTS
 
-// src/stores/productsStore/types.ts - Дополнения для Stock Recommendations
+// ===== STOCK RECOMMENDATIONS TYPES =====
 
-// ===== EXISTING TYPES (не изменяем) =====
-// Product, ProductCategory, ProductsState, etc.
-
-// ===== NEW TYPES FOR STOCK RECOMMENDATIONS =====
-
-// 🆕 MAIN FEATURE: Stock recommendations
 export interface StockRecommendation extends BaseEntity {
   productId: string
-  currentStock: number // From Storage Store
-  recommendedMinStock: number // Calculated minimum
-  recommendedMaxStock: number // Calculated maximum
-  recommendedOrderQuantity: number // Optimal order amount
-  daysUntilReorder: number // When to reorder
+  currentStock: number
+  recommendedMinStock: number
+  recommendedMaxStock: number
+  recommendedOrderQuantity: number
+  daysUntilReorder: number
   urgencyLevel: 'low' | 'medium' | 'high' | 'critical'
   factors: {
     averageDailyUsage: number
@@ -115,7 +129,6 @@ export interface StockRecommendation extends BaseEntity {
   isActive: boolean
 }
 
-// Usage tracking - where product is used
 export interface ProductUsage extends BaseEntity {
   productId: string
   usedInRecipes: Array<{
@@ -141,7 +154,6 @@ export interface ProductUsage extends BaseEntity {
   lastUpdated: string
 }
 
-// Consumption analytics
 export interface ProductConsumption extends BaseEntity {
   productId: string
   dailyAverageUsage: number
@@ -152,7 +164,6 @@ export interface ProductConsumption extends BaseEntity {
   basedOnDays: number
 }
 
-// Price history tracking
 export interface ProductPriceHistory extends BaseEntity {
   productId: string
   pricePerUnit: number
@@ -165,34 +176,24 @@ export interface ProductPriceHistory extends BaseEntity {
 
 // ===== ENHANCED PRODUCT INTERFACE =====
 
-// 🆕 Enhanced Product Interface (extends existing)
 export interface EnhancedProduct extends Product {
-  // English support
   nameEn: string
   descriptionEn?: string
-
-  // 🆕 ENHANCED: Smart stock management
-  currentCostPerUnit: number // Latest price from supplier receipts
-  recommendedOrderQuantity?: number // Calculated optimal order amount
-
-  // Supplier basics
+  currentCostPerUnit: number
+  recommendedOrderQuantity?: number
   primarySupplierId?: string
   leadTimeDays?: number
-
-  // Metadata
   tags?: string[]
 }
 
-// ===== ENHANCED STATE =====
+// ===== FUTURE: ENHANCED STATE =====
 
 export interface EnhancedProductsState extends ProductsState {
-  // 🆕 New data collections
   stockRecommendations: StockRecommendation[]
   usageData: ProductUsage[]
   consumptionData: ProductConsumption[]
   priceHistory: ProductPriceHistory[]
 
-  // 🆕 Enhanced loading states
   loading: {
     products: boolean
     recommendations: boolean
@@ -201,59 +202,33 @@ export interface EnhancedProductsState extends ProductsState {
     priceHistory: boolean
   }
 
-  // 🆕 Enhanced filters
   filters: {
     category: ProductCategory | 'all'
     isActive: boolean | 'all'
-    canBeSold: boolean | 'all' // Filter by direct sale capability
+    canBeSold: boolean | 'all'
     search: string
-    needsReorder: boolean // Show products needing reorder
+    needsReorder: boolean
     urgencyLevel: StockRecommendation['urgencyLevel'] | 'all'
+    // Advanced filters
+    unit?: string
+    yieldMin?: number
+    yieldMax?: number
+    priceMin?: number
+    priceMax?: number
+    hasStock?: boolean
+    hasLowStock?: boolean
+    hasSupplier?: boolean
   }
-}
-
-// ===== CROSS-STORE INTEGRATION TYPES =====
-
-// For Supplier Store integration
-export interface ProductForSupplier {
-  id: string
-  name: string
-  nameEn: string
-  currentCostPerUnit: number
-  recommendedOrderQuantity: number
-  urgencyLevel: StockRecommendation['urgencyLevel']
-  primarySupplierId?: string
-  leadTimeDays?: number
-}
-
-// For Menu Store integration
-export interface ProductForMenu {
-  id: string
-  name: string
-  nameEn: string
-  canBeSold: boolean
-  currentCostPerUnit: number
-  unit: MeasurementUnit
-}
-
-// For Storage Store integration
-export interface ProductStockInfo {
-  productId: string
-  currentStock: number
-  unit: MeasurementUnit
-  lastUpdated: string
 }
 
 // ===== CALCULATION PARAMETERS =====
 
 export interface StockCalculationParams {
-  safetyDays: number // Default: 3
-  maxOrderDays: number // Default: 14
+  safetyDays: number
+  maxOrderDays: number
   seasonalFactors?: Record<string, number>
-  volatilityThreshold: number // Default: 0.3
+  volatilityThreshold: number
 }
-
-// ===== API INTERFACES =====
 
 export interface CreateStockRecommendationData {
   productId: string
@@ -267,11 +242,39 @@ export interface UpdateStockRecommendationData extends Partial<CreateStockRecomm
   id: string
 }
 
-// Helper type for recommendation calculations
 export interface RecommendationCalculationInput {
   product: Product
   currentStock: number
   consumption: ProductConsumption
   usage: ProductUsage
   calculationParams: StockCalculationParams
+}
+
+// ===== CROSS-STORE INTEGRATION TYPES =====
+
+export interface ProductForSupplier {
+  id: string
+  name: string
+  nameEn: string
+  currentCostPerUnit: number
+  recommendedOrderQuantity: number
+  urgencyLevel: StockRecommendation['urgencyLevel']
+  primarySupplierId?: string
+  leadTimeDays?: number
+}
+
+export interface ProductForMenu {
+  id: string
+  name: string
+  nameEn: string
+  canBeSold: boolean
+  currentCostPerUnit: number
+  unit: MeasurementUnit
+}
+
+export interface ProductStockInfo {
+  productId: string
+  currentStock: number
+  unit: MeasurementUnit
+  lastUpdated: string
 }

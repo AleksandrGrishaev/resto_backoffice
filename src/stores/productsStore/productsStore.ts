@@ -1,14 +1,40 @@
-// src/stores/productsStore/productsStore.ts - Шаг 3: Используем координатор + Stock Recommendations
+// src/stores/productsStore/productsStore.ts - Simple Enhanced Version
 
 import { defineStore } from 'pinia'
-import type { ProductsState, Product, CreateProductData, UpdateProductData } from './types'
+import type {
+  ProductsState,
+  Product,
+  CreateProductData,
+  UpdateProductData,
+  ProductPriceHistory,
+  ProductUsage,
+  ProductConsumption,
+  StockRecommendation,
+  ProductCategory
+} from './types'
 import { productsService } from './productsService'
+import {
+  useStockRecommendations,
+  useProductConsumption,
+  useProductPriceHistory,
+  useProductUsage
+} from './composables'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'ProductsStore'
 
+// 🎯 SIMPLE: Extend existing state minimally
+interface EnhancedProductsState extends ProductsState {
+  // Just add the new analytics arrays
+  priceHistory: ProductPriceHistory[]
+  usageData: ProductUsage[]
+  consumptionData: ProductConsumption[]
+  stockRecommendations: StockRecommendation[]
+}
+
 export const useProductsStore = defineStore('products', {
-  state: (): ProductsState => ({
+  state: (): EnhancedProductsState => ({
+    // Existing state
     products: [],
     loading: false,
     error: null,
@@ -16,13 +42,22 @@ export const useProductsStore = defineStore('products', {
     useMockMode: false,
     filters: {
       category: 'all',
-      isActive: true,
-      search: ''
-    }
+      isActive: 'all',
+      canBeSold: 'all',
+      search: '',
+      needsReorder: false,
+      urgencyLevel: 'all'
+    },
+
+    // 🆕 NEW: Just add analytics arrays
+    priceHistory: [],
+    usageData: [],
+    consumptionData: [],
+    stockRecommendations: []
   }),
 
   getters: {
-    // Existing getters
+    // Existing getters stay the same
     filteredProducts: (state): Product[] => {
       let filtered = [...state.products]
 
@@ -39,254 +74,97 @@ export const useProductsStore = defineStore('products', {
         filtered = filtered.filter(
           product =>
             product.name.toLowerCase().includes(searchTerm) ||
-            product.nameEn?.toLowerCase().includes(searchTerm) || // 🆕 Search in English name
+            (product as any).nameEn?.toLowerCase().includes(searchTerm) ||
             product.description?.toLowerCase().includes(searchTerm)
         )
+      }
+
+      // 🆕 NEW: Add stock-based filters
+      if (state.filters.needsReorder) {
+        const urgentIds = new Set(
+          state.stockRecommendations
+            .filter(r => r.urgencyLevel === 'high' || r.urgencyLevel === 'critical')
+            .map(r => r.productId)
+        )
+        filtered = filtered.filter(p => urgentIds.has(p.id))
       }
 
       return filtered.sort((a, b) => a.name.localeCompare(b.name))
     },
 
-    // 🆕 Products that can be sold directly (for Menu store)
     sellableProducts: (state): Product[] => {
-      return state.products.filter(product => product.isActive && product.canBeSold)
+      return state.products.filter(product => product.isActive && (product as any).canBeSold)
     },
 
-    // 🆕 Raw materials (for recipes/preparations)
     rawMaterials: (state): Product[] => {
-      return state.products.filter(product => product.isActive && !product.canBeSold)
+      return state.products.filter(product => product.isActive && !(product as any).canBeSold)
     },
 
-    // Enhanced statistics
+    // 🆕 NEW: Simple statistics
     statistics: state => {
       const total = state.products.length
       const active = state.products.filter(p => p.isActive).length
-      const sellable = state.products.filter(p => p.isActive && p.canBeSold).length
-      const rawMaterials = state.products.filter(p => p.isActive && !p.canBeSold).length
+      const sellable = state.products.filter(p => p.isActive && (p as any).canBeSold).length
 
       const byCategory = state.products.reduce(
         (acc, product) => {
-          acc[product.category] = (acc[product.category] || 0) + 1
+          if (product.isActive) {
+            acc[product.category] = (acc[product.category] || 0) + 1
+          }
           return acc
         },
         {} as Record<string, number>
       )
 
+      return { total, active, sellable, byCategory }
+    },
+
+    // 🆕 NEW: Simple stock summary
+    stockSummary: state => {
+      const recs = state.stockRecommendations
       return {
-        total,
-        active,
-        inactive: total - active,
-        sellable,
-        rawMaterials,
-        byCategory
+        total: recs.length,
+        critical: recs.filter(r => r.urgencyLevel === 'critical').length,
+        high: recs.filter(r => r.urgencyLevel === 'high').length,
+        medium: recs.filter(r => r.urgencyLevel === 'medium').length,
+        low: recs.filter(r => r.urgencyLevel === 'low').length
       }
     }
   },
 
   actions: {
-    // 🆕 UPDATED: Load products using coordinator
+    // 🎯 KEEP: Existing loadProducts method, just enhance it
     async loadProducts(useMock = false): Promise<void> {
       try {
         this.loading = true
         this.error = null
         this.useMockMode = useMock
 
-        DebugUtils.info(MODULE_NAME, '🛍️ Loading products', {
-          useMock,
-          fromWhere: useMock ? 'coordinated mock data' : 'Firebase'
-        })
+        DebugUtils.info(MODULE_NAME, '🛍️ Loading products', { useMock })
 
         if (useMock) {
-          // 🆕 Use coordinated mock data
           const { mockDataCoordinator } = await import('@/stores/shared')
           const data = mockDataCoordinator.getProductsStoreData()
 
           this.products = data.products
-          // this.priceHistory = data.priceHistory // Когда добавим в state
+          this.priceHistory = data.priceHistory
 
-          DebugUtils.info(MODULE_NAME, '✅ Loaded products from coordinated mock data', {
-            count: this.products.length,
-            sellable: this.sellableProducts.length,
-            rawMaterials: this.rawMaterials.length,
-            categories: Object.keys(this.statistics.byCategory),
-            hasEnglishNames: this.products.filter(p => p.nameEn).length
+          DebugUtils.info(MODULE_NAME, '✅ Products loaded from coordinator', {
+            products: this.products.length,
+            priceRecords: this.priceHistory.length
           })
-        } else {
-          // Load from Firebase (existing implementation)
-          this.products = await productsService.getAll()
 
-          DebugUtils.info(MODULE_NAME, '✅ Loaded products from Firebase', {
+          // 🆕 NEW: Load analytics in background
+          this.loadAnalyticsBackground()
+        } else {
+          this.products = await productsService.getAll()
+          DebugUtils.info(MODULE_NAME, '✅ Products loaded from Firebase', {
             count: this.products.length
           })
         }
 
-        // 🆕 Enhanced debug logging
-        if (this.products.length > 0) {
-          DebugUtils.debug(MODULE_NAME, '📋 Sample products loaded', {
-            firstFew: this.products.slice(0, 3).map(p => ({
-              id: p.id,
-              name: p.name,
-              nameEn: p.nameEn, // 🆕 Include English name
-              canBeSold: p.canBeSold,
-              category: p.category,
-              tags: p.tags, // 🆕 Include tags
-              minStock: p.minStock, // 🆕 Include calculated stock
-              maxStock: p.maxStock, // 🆕 Include calculated stock
-              costPerUnit: p.costPerUnit || p.currentCostPerUnit // Handle both field names
-            }))
-          })
-
-          // 🆕 DEV MODE: Expose debug functions to window
-          if (import.meta.env.DEV) {
-            window.__PRODUCT_STORE_DEBUG__ = () => {
-              console.log('=== PRODUCT STORE DEBUG ===')
-              console.log('Total products:', this.products.length)
-              console.log('Sample product (full structure):', this.products[0])
-              console.log('')
-
-              console.log('Products summary:')
-              console.table(
-                this.products.map(p => ({
-                  name: p.name,
-                  nameEn: p.nameEn || 'Not set',
-                  canBeSold: p.canBeSold ? 'Yes' : 'No',
-                  category: p.category,
-                  tags: p.tags?.join(', ') || 'none',
-                  minStock: p.minStock || 'not set',
-                  maxStock: p.maxStock || 'not set'
-                }))
-              )
-              console.log('')
-
-              console.log(
-                'Sellable products:',
-                this.sellableProducts.map(p => p.name)
-              )
-              console.log(
-                'Raw materials:',
-                this.rawMaterials.map(p => p.name)
-              )
-              console.log('')
-
-              console.log('Statistics:', this.statistics)
-              console.log('========================')
-              console.log('💡 You can access this store as: window.__PRODUCT_STORE_DEBUG__()')
-
-              return this
-            }
-
-            // 🆕 NEW: Stock Recommendations Test
-            window.__TEST_STOCK_RECOMMENDATIONS__ = async () => {
-              console.log('🧪 Testing Stock Recommendations...')
-
-              try {
-                // Import composable
-                const { useStockRecommendations } = await import(
-                  '@/stores/productsStore/composables/useStockRecommendations'
-                )
-                const {
-                  calculateRecommendation,
-                  generateEstimatedConsumption,
-                  calculateBulkRecommendations
-                } = useStockRecommendations()
-
-                const testProduct = this.products[0] // First product
-
-                console.log('Testing with product:', testProduct.name)
-
-                // 🔧 ИСПРАВЛЕНО: ждем completion генерации consumption data
-                const consumption = await generateEstimatedConsumption(testProduct)
-                console.log('Generated consumption:', consumption)
-                console.log('Daily usage:', consumption.dailyAverageUsage)
-
-                // Test single recommendation
-                const recommendation = await calculateRecommendation({
-                  product: testProduct,
-                  currentStock: 5.0, // 5 units in stock
-                  consumption,
-                  usage: { usedInRecipes: [], usedInPreparations: [] },
-                  calculationParams: { safetyDays: 3, maxOrderDays: 14, volatilityThreshold: 0.3 }
-                })
-
-                console.log('🎯 Stock Recommendation Result:')
-                console.table({
-                  Product: testProduct.name,
-                  'Current Stock': recommendation.currentStock,
-                  'Min Stock': recommendation.recommendedMinStock,
-                  'Max Stock': recommendation.recommendedMaxStock,
-                  'Order Quantity': recommendation.recommendedOrderQuantity,
-                  'Days Until Reorder': recommendation.daysUntilReorder,
-                  Urgency: recommendation.urgencyLevel,
-                  'Daily Usage': recommendation.factors.averageDailyUsage
-                })
-
-                // Test bulk recommendations for first 3 products
-                const testProducts = this.products.slice(0, 3)
-                const stockData = {
-                  [testProducts[0].id]: 5.0,
-                  [testProducts[1].id]: 2.0,
-                  [testProducts[2].id]: 10.0
-                }
-
-                // 🔧 ИСПРАВЛЕНО: генерируем consumption data асинхронно
-                const consumptionData = {}
-                for (const product of testProducts) {
-                  consumptionData[product.id] = await generateEstimatedConsumption(product)
-                }
-
-                console.log('Consumption data prepared:', consumptionData)
-
-                const bulkRecommendations = await calculateBulkRecommendations(
-                  testProducts,
-                  stockData,
-                  consumptionData
-                )
-
-                console.log('📊 Bulk Recommendations:')
-                console.table(
-                  bulkRecommendations.map(r => ({
-                    Product: this.products.find(p => p.id === r.productId)?.name,
-                    'Current Stock': r.currentStock,
-                    Urgency: r.urgencyLevel,
-                    'Days Until Reorder': r.daysUntilReorder,
-                    'Order Quantity': r.recommendedOrderQuantity,
-                    'Min Stock': r.recommendedMinStock,
-                    'Max Stock': r.recommendedMaxStock,
-                    'Daily Usage': r.factors.averageDailyUsage
-                  }))
-                )
-
-                // 🆕 Дополнительная проверка urgent products
-                const { getProductsNeedingReorder } = useStockRecommendations()
-                const urgentProducts = getProductsNeedingReorder(bulkRecommendations, 'medium')
-
-                console.log('📋 Products needing reorder (medium+ urgency):', urgentProducts.length)
-                if (urgentProducts.length > 0) {
-                  console.table(
-                    urgentProducts.map(r => ({
-                      Product: this.products.find(p => p.id === r.productId)?.name,
-                      Urgency: r.urgencyLevel,
-                      'Days Until Reorder': r.daysUntilReorder
-                    }))
-                  )
-                }
-
-                console.log('✅ Stock Recommendations test completed successfully!')
-                return bulkRecommendations
-              } catch (error) {
-                console.error('❌ Stock Recommendations test failed:', error)
-              }
-            }
-
-            // Auto-call debug function for immediate visibility
-            setTimeout(() => {
-              console.log('🔍 Product Store loaded! Available debug functions:')
-              console.log('  • window.__PRODUCT_STORE_DEBUG__() - Product store details')
-              console.log(
-                '  • window.__TEST_STOCK_RECOMMENDATIONS__() - Test stock recommendations'
-              )
-            }, 100)
-          }
+        if (import.meta.env.DEV) {
+          this.setupDevDebugFunctions()
         }
       } catch (error) {
         DebugUtils.error(MODULE_NAME, '❌ Error loading products', { error })
@@ -297,7 +175,85 @@ export const useProductsStore = defineStore('products', {
       }
     },
 
-    // Existing methods remain the same
+    // 🆕 NEW: Simple analytics loading
+    async loadAnalyticsBackground(): Promise<void> {
+      try {
+        DebugUtils.info(MODULE_NAME, '📊 Loading analytics in background')
+
+        const activeProducts = this.products.filter(p => p.isActive)
+        if (activeProducts.length === 0) return
+
+        // Load usage and consumption for all products
+        const { calculateBulkConsumption } = useProductConsumption()
+        const { getProductUsage } = useProductUsage()
+
+        const consumptionPromise = calculateBulkConsumption(activeProducts.map(p => p.id))
+        const usagePromises = activeProducts.map(p => getProductUsage(p.id))
+
+        const [bulkConsumption, usageResults] = await Promise.all([
+          consumptionPromise,
+          Promise.all(usagePromises)
+        ])
+
+        this.consumptionData = Object.values(bulkConsumption)
+        this.usageData = usageResults
+
+        // Calculate recommendations
+        await this.calculateRecommendations()
+
+        DebugUtils.info(MODULE_NAME, '✅ Analytics loaded', {
+          consumption: this.consumptionData.length,
+          usage: this.usageData.length,
+          recommendations: this.stockRecommendations.length
+        })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Error loading analytics', { error })
+      }
+    },
+
+    // 🆕 NEW: Simple recommendations calculation
+    async calculateRecommendations(): Promise<void> {
+      try {
+        DebugUtils.info(MODULE_NAME, '🧮 Calculating recommendations')
+
+        const { calculateBulkRecommendations } = useStockRecommendations()
+
+        // Simple mock stock data
+        const stockData: Record<string, number> = {}
+        this.products.forEach(product => {
+          const days = Math.random() * 10 + 2 // 2-12 days worth
+          stockData[product.id] = Math.random() * 20 + 5
+        })
+
+        // Use existing consumption data
+        const consumptionMap = this.consumptionData.reduce(
+          (acc, c) => {
+            acc[c.productId] = c
+            return acc
+          },
+          {} as Record<string, ProductConsumption>
+        )
+
+        const activeProducts = this.products.filter(p => p.isActive)
+        const recommendations = await calculateBulkRecommendations(
+          activeProducts,
+          stockData,
+          consumptionMap
+        )
+
+        this.stockRecommendations = recommendations
+
+        DebugUtils.info(MODULE_NAME, '✅ Recommendations calculated', {
+          total: recommendations.length,
+          critical: recommendations.filter(r => r.urgencyLevel === 'critical').length
+        })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Error calculating recommendations', { error })
+        throw error
+      }
+    },
+
+    // 🎯 KEEP: Existing product CRUD, just enhance minimally
     async createProduct(data: CreateProductData): Promise<Product> {
       try {
         this.loading = true
@@ -363,13 +319,45 @@ export const useProductsStore = defineStore('products', {
       }
     },
 
-    // Existing helper methods
-    setSelectedProduct(product: Product | null): void {
-      this.selectedProduct = product
-      DebugUtils.debug(MODULE_NAME, 'Selected product changed', { id: product?.id })
+    // 🆕 NEW: Simple integration methods
+    getProductsForSupplier(): Array<{
+      id: string
+      name: string
+      urgencyLevel: string
+      recommendedOrderQuantity: number
+    }> {
+      return this.rawMaterials
+        .map(product => {
+          const rec = this.stockRecommendations.find(r => r.productId === product.id)
+          return {
+            id: product.id,
+            name: product.name,
+            urgencyLevel: rec?.urgencyLevel || 'low',
+            recommendedOrderQuantity: rec?.recommendedOrderQuantity || 0
+          }
+        })
+        .sort((a, b) => {
+          const urgencyOrder = { critical: 3, high: 2, medium: 1, low: 0 }
+          return urgencyOrder[b.urgencyLevel] - urgencyOrder[a.urgencyLevel]
+        })
     },
 
-    updateFilters(filters: Partial<ProductsState['filters']>): void {
+    getProductsForMenu(): Array<{
+      id: string
+      name: string
+      currentCostPerUnit: number
+      unit: string
+    }> {
+      return this.sellableProducts.map(product => ({
+        id: product.id,
+        name: product.name,
+        currentCostPerUnit: (product as any).currentCostPerUnit || product.costPerUnit,
+        unit: product.unit
+      }))
+    },
+
+    // 🎯 KEEP: Existing helper methods
+    updateFilters(filters: Partial<typeof this.filters>): void {
       this.filters = { ...this.filters, ...filters }
       DebugUtils.debug(MODULE_NAME, 'Filters updated', { filters: this.filters })
     },
@@ -377,14 +365,61 @@ export const useProductsStore = defineStore('products', {
     resetFilters(): void {
       this.filters = {
         category: 'all',
-        isActive: true,
-        search: ''
+        isActive: 'all',
+        canBeSold: 'all',
+        search: '',
+        needsReorder: false,
+        urgencyLevel: 'all'
       }
       DebugUtils.debug(MODULE_NAME, 'Filters reset')
     },
 
+    setSelectedProduct(product: Product | null): void {
+      this.selectedProduct = product
+      DebugUtils.debug(MODULE_NAME, 'Selected product changed', { id: product?.id })
+    },
+
     clearError(): void {
       this.error = null
+    },
+
+    // 🎯 SIMPLE: Dev debug functions
+    setupDevDebugFunctions(): void {
+      if (!import.meta.env.DEV) return
+
+      window.__PRODUCT_STORE_DEBUG__ = () => {
+        console.log('=== ENHANCED PRODUCT STORE DEBUG ===')
+        console.log('Products:', this.products.length)
+        console.log('Statistics:', this.statistics)
+        console.log('Stock Summary:', this.stockSummary)
+        console.log('Analytics:', {
+          priceHistory: this.priceHistory.length,
+          usage: this.usageData.length,
+          consumption: this.consumptionData.length,
+          recommendations: this.stockRecommendations.length
+        })
+        return this
+      }
+
+      window.__TEST_STOCK_RECOMMENDATIONS__ = async () => {
+        console.log('🧪 Testing Stock Recommendations...')
+        await this.calculateRecommendations()
+        console.table(
+          this.stockRecommendations.slice(0, 5).map(r => ({
+            Product: this.products.find(p => p.id === r.productId)?.name,
+            Urgency: r.urgencyLevel,
+            'Days Until Reorder': r.daysUntilReorder,
+            'Order Qty': r.recommendedOrderQuantity
+          }))
+        )
+        return this.stockRecommendations
+      }
+
+      setTimeout(() => {
+        console.log('🔍 Enhanced Product Store loaded! Try:')
+        console.log('  • window.__PRODUCT_STORE_DEBUG__()')
+        console.log('  • window.__TEST_STOCK_RECOMMENDATIONS__()')
+      }, 100)
     }
   }
 })
