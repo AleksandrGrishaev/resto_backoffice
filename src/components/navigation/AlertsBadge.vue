@@ -28,7 +28,7 @@
 import { computed, onMounted } from 'vue'
 import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
-import { useSupplierStore } from '@/stores/supplier'
+import { useSupplierStore } from '@/stores/supplier_2'
 
 // Types
 interface AlertCounts {
