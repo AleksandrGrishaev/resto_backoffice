@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/UnifiedRecipeItem.vue -->
+<!-- src/views/recipes/components/UnifiedRecipeItem.vue - FIXED -->
 <template>
   <div class="recipe-item" :class="{ 'recipe-item--inactive': !item.isActive }">
     <div class="recipe-item__main">
@@ -43,10 +43,28 @@
             {{ getTimeText() }}
           </div>
 
-          <!-- Cost info -->
-          <div v-if="getCostValue() > 0" class="recipe-item__cost">
+          <!-- ✅ УЛУЧШЕНО: Enhanced Cost Display -->
+          <div v-if="hasCostData" class="recipe-item__cost">
             <v-icon icon="mdi-currency-usd" size="14" class="mr-1" />
-            ${{ getCostValue().toFixed(2) }} {{ getCostUnit() }}
+            <div class="cost-display">
+              <div class="cost-main">
+                <span class="cost-value">${{ getTotalCost.toFixed(2) }}</span>
+                <span class="cost-unit">{{ getCostUnit() }}</span>
+              </div>
+              <div v-if="getCostPerUnit > 0" class="cost-per-unit">
+                ${{ getCostPerUnit.toFixed(2) }} {{ getPerUnitLabel() }}
+              </div>
+            </div>
+            <!-- Cost Status Indicator -->
+            <v-chip size="x-small" :color="getCostStatusColor()" variant="tonal" class="ml-2">
+              {{ getCostStatusText() }}
+            </v-chip>
+          </div>
+
+          <!-- ✅ НОВОЕ: Cost Analysis for expensive items -->
+          <div v-if="isExpensive" class="recipe-item__cost-warning">
+            <v-icon icon="mdi-alert-circle" size="14" class="mr-1 text-warning" />
+            <span class="text-warning text-caption">High cost item</span>
           </div>
 
           <!-- Components count -->
@@ -54,6 +72,16 @@
             <v-icon icon="mdi-format-list-bulleted" size="14" class="mr-1" />
             <span class="components-label">Components:</span>
             <span class="components-count">{{ getComponentsCount() }}</span>
+            <!-- ✅ НОВОЕ: Show missing cost calculations -->
+            <v-chip
+              v-if="hasMissingCosts()"
+              size="x-small"
+              color="warning"
+              variant="tonal"
+              class="ml-1"
+            >
+              {{ getMissingCostsCount() }} uncalculated
+            </v-chip>
           </div>
         </div>
 
@@ -73,17 +101,68 @@
           </span>
         </div>
 
+        <!-- ✅ НОВОЕ: Cost Breakdown Preview (for items with cost) -->
+        <div v-if="showCostBreakdown" class="recipe-item__cost-breakdown">
+          <div class="cost-breakdown-header">
+            <v-icon icon="mdi-chart-pie" size="12" class="mr-1" />
+            <span class="text-caption">Top components:</span>
+          </div>
+          <div class="cost-breakdown-items">
+            <div
+              v-for="component in getTopCostComponents.slice(0, 2)"
+              :key="component.id"
+              class="cost-breakdown-item"
+            >
+              <span class="component-name">{{ component.name }}</span>
+              <span class="component-cost">${{ component.cost.toFixed(2) }}</span>
+            </div>
+            <div v-if="getTopCostComponents.length > 2" class="cost-breakdown-more">
+              <span class="text-caption text-medium-emphasis">
+                +{{ getTopCostComponents.length - 2 }} more
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- Instructions preview -->
         <div v-if="getInstructionsPreview()" class="recipe-item__instructions">
           <v-icon icon="mdi-text" size="14" class="mr-1" />
           <span class="instructions-preview">{{ getInstructionsPreview() }}</span>
         </div>
+
+        <!-- ✅ НОВОЕ: Last Updated Info -->
+        <div v-if="getLastUpdated()" class="recipe-item__updated">
+          <v-icon icon="mdi-update" size="12" class="mr-1" />
+          <span class="text-caption text-medium-emphasis">Updated {{ getLastUpdated() }}</span>
+        </div>
       </div>
 
       <div class="recipe-item__actions">
+        <!-- ✅ НОВОЕ: Quick Cost Action -->
+        <v-btn
+          v-if="!hasCostData"
+          icon="mdi-calculator"
+          variant="text"
+          size="small"
+          color="primary"
+          :title="`Calculate ${type} cost`"
+          @click.stop="$emit('calculate-cost', item)"
+        />
+
+        <!-- Quick View Button -->
+        <v-btn
+          icon="mdi-eye"
+          variant="text"
+          size="small"
+          color="info"
+          title="Quick view"
+          @click.stop="$emit('view', item)"
+        />
+
+        <!-- Main Actions Menu -->
         <v-menu>
-          <template #activator="{ props }">
-            <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="props" />
+          <template #activator="{ props: menuProps }">
+            <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="menuProps" />
           </template>
           <v-list>
             <v-list-item @click="$emit('view', item)">
@@ -104,11 +183,17 @@
               </template>
               <v-list-item-title>Duplicate</v-list-item-title>
             </v-list-item>
-            <v-list-item @click="$emit('calculate-cost', item)">
+            <v-divider />
+            <v-list-item
+              :class="{ 'text-success': hasCostData, 'text-primary': !hasCostData }"
+              @click="$emit('calculate-cost', item)"
+            >
               <template #prepend>
-                <v-icon icon="mdi-calculator" />
+                <v-icon :icon="hasCostData ? 'mdi-refresh' : 'mdi-calculator'" />
               </template>
-              <v-list-item-title>Calculate Cost</v-list-item-title>
+              <v-list-item-title>
+                {{ hasCostData ? 'Recalculate Cost' : 'Calculate Cost' }}
+              </v-list-item-title>
             </v-list-item>
             <v-divider />
             <v-list-item
@@ -132,12 +217,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { PREPARATION_TYPES, RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
-import type { Recipe, Preparation } from '@/stores/recipes/types'
+import type {
+  Recipe,
+  Preparation,
+  PreparationPlanCost,
+  RecipePlanCost
+} from '@/stores/recipes/types'
 
 interface Props {
   item: Recipe | Preparation
   type: 'recipe' | 'preparation'
-  costCalculation?: any // CostCalculation from store
+  costCalculation?: PreparationPlanCost | RecipePlanCost | null
 }
 
 interface Emits {
@@ -150,6 +240,52 @@ interface Emits {
 
 const props = defineProps<Props>()
 defineEmits<Emits>()
+
+// ✅ ИСПРАВЛЕНО: Computed properties (не функции!)
+const hasCostData = computed(() => {
+  return !!props.costCalculation && props.costCalculation.totalCost > 0
+})
+
+const getTotalCost = computed(() => {
+  return props.costCalculation?.totalCost || 0
+})
+
+const getCostPerUnit = computed(() => {
+  if (!props.costCalculation) return 0
+
+  if (props.type === 'preparation') {
+    return (props.costCalculation as PreparationPlanCost).costPerOutputUnit
+  } else {
+    return (props.costCalculation as RecipePlanCost).costPerPortion
+  }
+})
+
+const isExpensive = computed(() => {
+  if (!hasCostData.value) return false
+
+  // Определяем "дорогой" item по относительной стоимости
+  if (props.type === 'preparation') {
+    return getCostPerUnit.value > 5.0 // $5+ за единицу
+  } else {
+    return getCostPerUnit.value > 10.0 // $10+ за порцию
+  }
+})
+
+const showCostBreakdown = computed(() => {
+  return hasCostData.value && !!props.costCalculation?.componentCosts?.length
+})
+
+const getTopCostComponents = computed(() => {
+  if (!props.costCalculation?.componentCosts) return []
+
+  return [...props.costCalculation.componentCosts] // ✅ ИСПРАВЛЕНО: создаем копию массива
+    .sort((a, b) => b.totalPlanCost - a.totalPlanCost)
+    .map(comp => ({
+      id: comp.componentId,
+      name: comp.componentName,
+      cost: comp.totalPlanCost
+    }))
+})
 
 // Methods
 function getCategoryColor(): string {
@@ -248,24 +384,39 @@ function getTimeText(): string {
   }
 }
 
-function getCostValue(): number {
-  if (props.costCalculation) {
-    return props.costCalculation.totalCost || 0
-  }
-
-  if (props.type === 'preparation') {
-    return (props.item as Preparation).costPerPortion || 0
-  } else {
-    return (props.item as Recipe).cost || 0
-  }
+// ✅ НОВОЕ: Enhanced cost methods
+function getCostUnit(): string {
+  return 'total'
 }
 
-function getCostUnit(): string {
-  if (props.type === 'preparation') {
-    return 'per batch'
-  } else {
-    return 'per portion'
-  }
+function getPerUnitLabel(): string {
+  return props.type === 'preparation' ? 'per unit' : 'per portion'
+}
+
+function getCostStatusColor(): string {
+  if (!hasCostData.value) return 'grey'
+
+  const age = getCostAge()
+  if (age < 60) return 'success' // Fresh calculation
+  if (age < 1440) return 'warning' // Less than 1 day
+  return 'error' // Stale calculation
+}
+
+function getCostStatusText(): string {
+  if (!hasCostData.value) return 'No cost'
+
+  const age = getCostAge()
+  if (age < 60) return 'Fresh'
+  if (age < 1440) return 'Recent'
+  return 'Stale'
+}
+
+function getCostAge(): number {
+  if (!props.costCalculation) return 0
+
+  const now = new Date()
+  const calculated = new Date(props.costCalculation.calculatedAt)
+  return Math.floor((now.getTime() - calculated.getTime()) / 60000) // minutes
 }
 
 function getComponentsCount(): number {
@@ -274,6 +425,24 @@ function getComponentsCount(): number {
   } else {
     return (props.item as Recipe).components?.length || 0
   }
+}
+
+function hasMissingCosts(): boolean {
+  if (!props.costCalculation || !props.costCalculation.componentCosts) return false
+
+  const totalComponents = getComponentsCount()
+  const calculatedComponents = props.costCalculation.componentCosts.length
+
+  return calculatedComponents < totalComponents
+}
+
+function getMissingCostsCount(): number {
+  if (!props.costCalculation || !props.costCalculation.componentCosts) return getComponentsCount()
+
+  const totalComponents = getComponentsCount()
+  const calculatedComponents = props.costCalculation.componentCosts.length
+
+  return Math.max(0, totalComponents - calculatedComponents)
 }
 
 function getInstructionsPreview(): string {
@@ -293,6 +462,20 @@ function getInstructionsPreview(): string {
   const preview = instructions.slice(0, 80)
   return preview.length < instructions.length ? `${preview}...` : preview
 }
+
+function getLastUpdated(): string {
+  const updatedAt = new Date(props.item.updatedAt)
+  const now = new Date()
+  const diff = now.getTime() - updatedAt.getTime()
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+
+  if (days === 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days} days ago`
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`
+
+  return updatedAt.toLocaleDateString()
+}
 </script>
 
 <style lang="scss" scoped>
@@ -305,6 +488,7 @@ function getInstructionsPreview(): string {
   &:hover {
     border-color: var(--color-primary);
     transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 
   &--inactive {
@@ -368,7 +552,6 @@ function getInstructionsPreview(): string {
 
   &__output,
   &__time,
-  &__cost,
   &__components {
     display: flex;
     align-items: center;
@@ -379,9 +562,46 @@ function getInstructionsPreview(): string {
     font-weight: 500;
   }
 
+  // ✅ УЛУЧШЕНО: Enhanced cost styling
   &__cost {
-    color: var(--color-success);
-    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .cost-display {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cost-main {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .cost-value {
+      color: var(--color-success);
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .cost-unit {
+      color: var(--color-text-secondary);
+      font-size: 0.75rem;
+    }
+
+    .cost-per-unit {
+      color: var(--color-primary);
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+  }
+
+  &__cost-warning {
+    display: flex;
+    align-items: center;
+    color: var(--color-warning);
   }
 
   &__components {
@@ -393,6 +613,49 @@ function getInstructionsPreview(): string {
     .components-count {
       color: var(--text-primary);
       font-weight: 500;
+    }
+  }
+
+  // ✅ НОВОЕ: Cost breakdown preview
+  &__cost-breakdown {
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 6px;
+    padding: 8px;
+    background: var(--color-surface-variant);
+
+    .cost-breakdown-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 4px;
+      color: var(--color-text-secondary);
+    }
+
+    .cost-breakdown-items {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cost-breakdown-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+
+      .component-name {
+        flex: 1;
+        color: var(--color-text-primary);
+      }
+
+      .component-cost {
+        color: var(--color-success);
+        font-weight: 600;
+      }
+    }
+
+    .cost-breakdown-more {
+      text-align: center;
+      margin-top: 2px;
     }
   }
 
@@ -414,8 +677,17 @@ function getInstructionsPreview(): string {
     }
   }
 
+  &__updated {
+    display: flex;
+    align-items: center;
+    font-size: 0.75rem;
+  }
+
   &__actions {
     margin-left: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
   }
 }
 
@@ -441,6 +713,14 @@ function getInstructionsPreview(): string {
       flex-direction: column;
       align-items: flex-start;
       gap: 8px;
+    }
+
+    &__cost {
+      .cost-display {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+      }
     }
   }
 }

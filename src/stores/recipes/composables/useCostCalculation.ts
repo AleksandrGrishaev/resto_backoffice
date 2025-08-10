@@ -1,4 +1,4 @@
-// src/stores/recipes/composables/useCostCalculation.ts - Cost Calculation Logic
+// src/stores/recipes/composables/useCostCalculation.ts - FIXED Cost Calculation Logic
 
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -104,11 +104,78 @@ export function useCostCalculation() {
   }
 
   // =============================================
-  // PREPARATION COST CALCULATION
+  // UTILITIES - FIXED UNIT CONVERSION
   // =============================================
 
   /**
-   * Рассчитывает планируемую стоимость полуфабриката
+   * ✅ ИСПРАВЛЕНО: Конвертирует единицы измерения (только количество, НЕ цены!)
+   */
+  function convertToBaseUnit(value: number, unit: string): number {
+    switch (unit.toLowerCase()) {
+      case 'kg':
+      case 'kilogram':
+        return value * 1000 // кг в граммы
+      case 'gram':
+      case 'g':
+        return value // граммы как базовая единица
+      case 'liter':
+      case 'l':
+        return value * 1000 // литры в мл
+      case 'ml':
+      case 'milliliter':
+        return value // мл как базовая единица
+      case 'piece':
+      case 'pack':
+      case 'item':
+        return value // штуки как есть
+      default:
+        DebugUtils.warn(MODULE_NAME, `Unknown unit: ${unit}, using as-is`)
+        return value
+    }
+  }
+
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Конвертирует количество из одной единицы в другую
+   */
+  function convertQuantityBetweenUnits(quantity: number, fromUnit: string, toUnit: string): number {
+    // Если единицы одинаковые - возвращаем как есть
+    if (fromUnit.toLowerCase() === toUnit.toLowerCase()) {
+      return quantity
+    }
+
+    // Конвертируем через базовые единицы
+    const fromBaseUnit = convertToBaseUnit(quantity, fromUnit)
+
+    // Обратная конвертация из базовой единицы в целевую
+    switch (toUnit.toLowerCase()) {
+      case 'kg':
+      case 'kilogram':
+        return fromBaseUnit / 1000 // граммы в кг
+      case 'gram':
+      case 'g':
+        return fromBaseUnit // уже в граммах
+      case 'liter':
+      case 'l':
+        return fromBaseUnit / 1000 // мл в литры
+      case 'ml':
+      case 'milliliter':
+        return fromBaseUnit // уже в мл
+      case 'piece':
+      case 'pack':
+      case 'item':
+        return fromBaseUnit // штуки как есть
+      default:
+        DebugUtils.warn(MODULE_NAME, `Unknown target unit: ${toUnit}, using as-is`)
+        return fromBaseUnit
+    }
+  }
+
+  // =============================================
+  // PREPARATION COST CALCULATION - FIXED
+  // =============================================
+
+  /**
+   * ✅ ИСПРАВЛЕНО: Рассчитывает планируемую стоимость полуфабриката
    */
   async function calculatePreparationCost(
     preparation: Preparation
@@ -148,12 +215,32 @@ export function useCostCalculation() {
           continue
         }
 
-        // Конвертируем в базовые единицы
-        const quantity = convertToBaseUnit(ingredient.quantity, ingredient.unit)
-        const productCostPerBaseUnit = convertToBaseUnit(product.costPerUnit, product.unit)
+        // ✅ ИСПРАВЛЕНО: Конвертируем ТОЛЬКО количество ингредиента в единицы продукта
+        let ingredientQuantityInProductUnits = ingredient.quantity
 
-        const ingredientTotalCost = productCostPerBaseUnit * quantity
+        // Если единицы разные - конвертируем количество
+        if (ingredient.unit !== product.unit) {
+          ingredientQuantityInProductUnits = convertQuantityBetweenUnits(
+            ingredient.quantity,
+            ingredient.unit,
+            product.unit
+          )
+        }
+
+        // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: НЕ конвертируем costPerUnit!
+        // product.costPerUnit уже в правильных единицах ($/kg, $/liter)
+        const ingredientTotalCost = ingredientQuantityInProductUnits * product.costPerUnit
         totalCost += ingredientTotalCost
+
+        DebugUtils.debug(MODULE_NAME, `Ingredient cost calculation:`, {
+          productName: product.name,
+          ingredientQuantity: ingredient.quantity,
+          ingredientUnit: ingredient.unit,
+          productUnit: product.unit,
+          convertedQuantity: ingredientQuantityInProductUnits,
+          costPerUnit: product.costPerUnit,
+          totalCost: ingredientTotalCost
+        })
 
         componentCosts.push({
           componentId: ingredient.id,
@@ -241,11 +328,11 @@ export function useCostCalculation() {
   }
 
   // =============================================
-  // RECIPE COST CALCULATION
+  // RECIPE COST CALCULATION - FIXED
   // =============================================
 
   /**
-   * Рассчитывает планируемую стоимость рецепта
+   * ✅ ИСПРАВЛЕНО: Рассчитывает планируемую стоимость рецепта
    */
   async function calculateRecipeCost(recipe: Recipe): Promise<CostCalculationResult> {
     if (!getProductCallback || !getPreparationCostCallback) {
@@ -291,12 +378,30 @@ export function useCostCalculation() {
 
           componentName = product.name
 
-          // Конвертируем в базовые единицы для расчета
-          const quantity = convertToBaseUnit(component.quantity, component.unit)
-          const productCostPerBaseUnit = convertToBaseUnit(product.costPerUnit, product.unit)
+          // ✅ ИСПРАВЛЕНО: Конвертируем ТОЛЬКО количество компонента в единицы продукта
+          let componentQuantityInProductUnits = component.quantity
 
-          componentCost = productCostPerBaseUnit * quantity
+          if (component.unit !== product.unit) {
+            componentQuantityInProductUnits = convertQuantityBetweenUnits(
+              component.quantity,
+              component.unit,
+              product.unit
+            )
+          }
+
+          // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: НЕ конвертируем costPerUnit!
+          componentCost = componentQuantityInProductUnits * product.costPerUnit
           unitCost = product.costPerUnit
+
+          DebugUtils.debug(MODULE_NAME, `Recipe component cost:`, {
+            productName: product.name,
+            componentQuantity: component.quantity,
+            componentUnit: component.unit,
+            productUnit: product.unit,
+            convertedQuantity: componentQuantityInProductUnits,
+            costPerUnit: product.costPerUnit,
+            totalCost: componentCost
+          })
         } else if (component.componentType === 'preparation') {
           // Получаем стоимость полуфабриката
           const preparationCost = await getPreparationCostCallback(component.componentId)
@@ -308,9 +413,17 @@ export function useCostCalculation() {
 
           componentName = `Preparation (${component.componentId})`
 
-          // Пропорциональная стоимость от общего выхода полуфабриката
+          // ✅ ИСПРАВЛЕНО: Простая пропорциональная стоимость
+          // Количество компонента * стоимость за единицу полуфабриката
           componentCost = preparationCost.costPerOutputUnit * component.quantity
           unitCost = preparationCost.costPerOutputUnit
+
+          DebugUtils.debug(MODULE_NAME, `Recipe preparation cost:`, {
+            preparationId: component.componentId,
+            componentQuantity: component.quantity,
+            costPerUnit: preparationCost.costPerOutputUnit,
+            totalCost: componentCost
+          })
         }
 
         totalCost += componentCost
@@ -670,32 +783,8 @@ export function useCostCalculation() {
   }
 
   // =============================================
-  // UTILITIES
+  // UTILITY METHODS
   // =============================================
-
-  /**
-   * Конвертирует единицы измерения в базовые
-   */
-  function convertToBaseUnit(value: number, unit: string): number {
-    switch (unit.toLowerCase()) {
-      case 'kg':
-        return value * 1000 // в граммы
-      case 'gram':
-      case 'g':
-        return value
-      case 'liter':
-      case 'l':
-        return value * 1000 // в мл
-      case 'ml':
-        return value
-      case 'piece':
-      case 'pack':
-        return value // штуки как есть
-      default:
-        DebugUtils.warn(MODULE_NAME, `Unknown unit: ${unit}, using as-is`)
-        return value
-    }
-  }
 
   /**
    * Очищает ошибки

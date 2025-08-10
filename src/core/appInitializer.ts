@@ -1,6 +1,7 @@
-// src/core/appInitializer.ts - Шаг 2: Добавляем Products Store
+// src/core/appInitializer.ts - Updated with Recipe Store Integration
 
 import { useProductsStore } from '@/stores/productsStore'
+import { useRecipesStore } from '@/stores/recipes'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'AppInitializer'
@@ -22,7 +23,7 @@ export class AppInitializer {
         useMockData: this.config.useMockData
       })
 
-      // Phase 1: Core catalogs
+      // Phase 1: Core catalogs (sequential - recipes depend on products)
       await this.loadCoreCatalogs()
 
       // Phase 2: Calculated data (пока заглушка)
@@ -38,11 +39,9 @@ export class AppInitializer {
   private async loadCoreCatalogs(): Promise<void> {
     DebugUtils.info(MODULE_NAME, '📋 Loading core catalogs...')
 
-    // Load catalogs in parallel - they don't depend on each other
-    await Promise.all([
-      this.loadProducts(),
-      this.loadRecipes() // Пока заглушка
-    ])
+    // ВАЖНО: Последовательная загрузка - рецепты зависят от продуктов
+    await this.loadProducts()
+    await this.loadRecipes()
 
     DebugUtils.info(MODULE_NAME, '✅ Core catalogs loaded successfully')
   }
@@ -50,9 +49,10 @@ export class AppInitializer {
   private async loadCalculatedData(): Promise<void> {
     DebugUtils.info(MODULE_NAME, '📊 Loading calculated data...')
 
-    // TODO: Load calculated data sequentially
+    // TODO Phase 2: Load calculated data sequentially
     // await this.loadStorage()
     // await this.loadSupplierData()
+    // await this.loadMenuData()
 
     // Пока просто задержка
     await this.delay(300)
@@ -73,7 +73,8 @@ export class AppInitializer {
       DebugUtils.info(MODULE_NAME, '✅ Products loaded successfully', {
         count: productStore.products.length,
         sellable: productStore.sellableProducts.length,
-        rawMaterials: productStore.rawMaterials.length
+        rawMaterials: productStore.rawMaterials.length,
+        stats: productStore.statistics
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ Failed to load products', { error })
@@ -82,16 +83,68 @@ export class AppInitializer {
   }
 
   private async loadRecipes(): Promise<void> {
-    DebugUtils.debug(MODULE_NAME, '👨‍🍳 Loading recipes and preparations...')
+    const recipesStore = useRecipesStore()
 
-    // TODO: Implement when recipes store is ready
-    // const recipesStore = useRecipesStore()
-    // await recipesStore.loadRecipes(this.config.useMockData)
+    DebugUtils.debug(MODULE_NAME, '👨‍🍳 Loading recipes and preparations...', {
+      useMock: this.config.useMockData
+    })
 
-    // Пока просто задержка
-    await this.delay(200)
+    try {
+      // Инициализируем Recipe Store с полной интеграцией
+      await recipesStore.initialize()
 
-    DebugUtils.info(MODULE_NAME, '✅ Recipes and preparations loaded successfully')
+      DebugUtils.info(MODULE_NAME, '✅ Recipes and preparations loaded successfully', {
+        preparations: recipesStore.activePreparations.length,
+        recipes: recipesStore.activeRecipes.length,
+        units: recipesStore.units.length,
+        statistics: recipesStore.statistics,
+        integration: 'Product Store integration active'
+      })
+
+      // Проверяем что интеграция работает
+      await this.validateIntegration(recipesStore)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '❌ Failed to load recipes', { error })
+      throw new Error(`Recipes loading failed: ${error}`)
+    }
+  }
+
+  /**
+   * Проверяет что интеграция Product ↔ Recipe работает
+   */
+  private async validateIntegration(recipesStore: any): Promise<void> {
+    try {
+      DebugUtils.debug(MODULE_NAME, '🔍 Validating Product ↔ Recipe integration...')
+
+      // Проверяем что есть preparations для расчета
+      const preparations = recipesStore.activePreparations
+      if (preparations.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No active preparations found for integration test')
+        return
+      }
+
+      // Пробуем рассчитать стоимость первого полуфабриката
+      const testPreparation = preparations[0]
+      try {
+        const cost = await recipesStore.calculatePreparationCost(testPreparation.id)
+
+        DebugUtils.info(MODULE_NAME, '✅ Integration validation successful', {
+          testPreparation: testPreparation.name,
+          calculatedCost: cost.totalCost.toFixed(2),
+          costPerUnit: cost.costPerOutputUnit.toFixed(2),
+          components: cost.componentCosts.length
+        })
+      } catch (costError) {
+        DebugUtils.warn(MODULE_NAME, 'Integration test failed - cost calculation error', {
+          preparation: testPreparation.name,
+          error: costError
+        })
+        // Не прерываем инициализацию, просто предупреждаем
+      }
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Integration validation failed', { error })
+      // Не прерываем инициализацию
+    }
   }
 
   private delay(ms: number): Promise<void> {
@@ -129,4 +182,42 @@ export function useAppInitializer(): AppInitializer {
     appInitializer = createAppInitializer()
   }
   return appInitializer
+}
+
+// =============================================
+// DEV HELPERS
+// =============================================
+
+if (import.meta.env.DEV) {
+  // Добавляем глобальные функции для отладки
+  window.__APP_INITIALIZER_DEBUG__ = () => {
+    console.log('=== APP INITIALIZER DEBUG ===')
+    console.log('Current config:', appInitializer?.['config'])
+
+    // Проверяем stores
+    const productStore = useProductsStore()
+    const recipesStore = useRecipesStore()
+
+    console.log('Products Store:', {
+      loaded: productStore.products.length > 0,
+      count: productStore.products.length,
+      stats: productStore.statistics
+    })
+
+    console.log('Recipes Store:', {
+      loaded: recipesStore.activePreparations.length > 0 || recipesStore.activeRecipes.length > 0,
+      preparations: recipesStore.activePreparations.length,
+      recipes: recipesStore.activeRecipes.length,
+      stats: recipesStore.statistics
+    })
+
+    return { productStore, recipesStore }
+  }
+
+  // Инструкции через несколько секунд
+  setTimeout(() => {
+    console.log('\n💡 App Initializer loaded! Try:')
+    console.log('  • window.__APP_INITIALIZER_DEBUG__()')
+    console.log('  • Check integration with console logs')
+  }, 2000)
 }

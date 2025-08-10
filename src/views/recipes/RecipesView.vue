@@ -1,4 +1,4 @@
-<!-- src/views/recipes/RecipesView.vue -->
+<!-- src/views/recipes/RecipesView.vue - FIXED -->
 <template>
   <div class="recipes-view">
     <!-- Toolbar -->
@@ -136,6 +136,7 @@
                   :key="preparation.id"
                   :item="preparation"
                   type="preparation"
+                  :cost-calculation="getCostCalculation(preparation.id)"
                   @view="viewItem"
                   @edit="editItem"
                   @calculate-cost="calculateCost"
@@ -156,7 +157,6 @@
       @saved="handleItemSaved"
     />
 
-    <!-- TODO: Unified view dialog for both types -->
     <unified-view-dialog
       v-model="dialogs.view"
       :type="viewingItemType"
@@ -166,7 +166,7 @@
     />
 
     <!-- Loading overlay -->
-    <v-overlay v-model="store.state.loading" class="align-center justify-center">
+    <v-overlay v-model="store.loading" class="align-center justify-center">
       <v-progress-circular color="primary" indeterminate size="64" />
     </v-overlay>
 
@@ -288,8 +288,14 @@ function getTypePreparations(type: PreparationType): Preparation[] {
   return filteredPreparations.value.filter(preparation => preparation.type === type)
 }
 
+// ✅ ИСПРАВЛЕНИЕ: Главная функция, которая вызывала ошибку
 function getCostCalculation(itemId: string) {
-  return store.state.costCalculations.get(itemId)
+  // Определяем тип по активной вкладке и используем правильные методы store
+  if (activeTab.value === 'recipes') {
+    return store.getRecipeCostCalculation(itemId)
+  } else {
+    return store.getPreparationCostCalculation(itemId)
+  }
 }
 
 function showCreateDialog() {
@@ -341,8 +347,14 @@ async function calculateCost(item: Recipe | Preparation) {
         )
       }
     } else {
-      // Preparation - TODO: implement preparation cost calculation
-      showSnackbar('Preparation cost calculation not implemented yet', 'info')
+      // Preparation
+      const calculation = await store.calculatePreparationCost(item.id)
+      if (calculation) {
+        showSnackbar(
+          `Cost calculated: $${calculation.totalCost.toFixed(2)} total, $${calculation.costPerOutputUnit.toFixed(2)} per unit`,
+          'success'
+        )
+      }
     }
   } catch (error) {
     showSnackbar('Failed to calculate cost', 'error')
@@ -377,12 +389,9 @@ async function handleItemSaved(item: Recipe | Preparation) {
 
   showSnackbar(`${item.name} ${action} successfully`, 'success')
 
-  // Refresh data
-  if (itemType === 'recipe') {
-    await store.fetchRecipes()
-  } else {
-    await store.fetchPreparations()
-  }
+  // ✅ ИСПРАВЛЕНИЕ: Не нужно fetchRecipes/fetchPreparations
+  // Данные уже обновлены через composables
+  DebugUtils.info(MODULE_NAME, `${itemType} ${action}`, { id: item.id, name: item.name })
 }
 
 function showSnackbar(message: string, color: 'success' | 'error' | 'info' = 'success') {

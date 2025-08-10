@@ -74,7 +74,3 @@ async function initializeApp() {
 
 // Start the app
 initializeApp()
-
-if (import.meta.env.DEV) {
-  import('./tests/testIntegration')
-}

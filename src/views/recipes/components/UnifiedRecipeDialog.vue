@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/UnifiedRecipeDialog.vue -->
+<!-- src/views/recipes/components/UnifiedRecipeDialog.vue - FIXED -->
 <template>
   <v-dialog v-model="dialogModel" max-width="900px" persistent scrollable>
     <v-card>
@@ -181,6 +181,34 @@
               />
             </v-col>
 
+            <!-- ✅ НОВОЕ: Real-time Cost Calculation Display -->
+            <v-col v-if="estimatedCost.totalCost > 0" cols="12">
+              <v-card variant="outlined" class="cost-preview">
+                <v-card-title class="text-h6 py-2">
+                  <v-icon icon="mdi-calculator" class="mr-2" />
+                  Estimated Cost (Live Preview)
+                </v-card-title>
+                <v-card-text class="py-2">
+                  <div class="d-flex justify-space-between align-center">
+                    <span class="text-body-1">Total Cost:</span>
+                    <span class="text-h6 text-success">
+                      ${{ estimatedCost.totalCost.toFixed(2) }}
+                    </span>
+                  </div>
+                  <div class="d-flex justify-space-between align-center">
+                    <span class="text-body-1">{{ getCostPerLabel() }}:</span>
+                    <span class="text-h6 text-primary">
+                      ${{ estimatedCost.costPerUnit.toFixed(2) }}
+                    </span>
+                  </div>
+                  <v-divider class="my-2" />
+                  <div class="text-caption text-medium-emphasis">
+                    Based on current supplier prices • Updates automatically
+                  </div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+
             <!-- Components Section -->
             <v-col cols="12">
               <div class="components-section">
@@ -243,7 +271,12 @@
                             density="compact"
                             :rules="[rules.required]"
                             required
+                            @update:model-value="onComponentChange(index, $event)"
                           />
+                          <!-- ✅ НОВОЕ: Показ текущей цены под полем выбора -->
+                          <div v-if="component.componentId" class="text-caption text-success mt-1">
+                            {{ getComponentPrice(component) }}
+                          </div>
                         </v-col>
 
                         <!-- Quantity -->
@@ -257,6 +290,7 @@
                             density="compact"
                             :rules="[rules.required, rules.positiveNumber]"
                             required
+                            @update:model-value="onComponentQuantityChange"
                           />
                         </v-col>
 
@@ -419,6 +453,43 @@ const preparationItems = computed(() => {
   }))
 })
 
+// ✅ НОВОЕ: Real-time cost calculation
+const estimatedCost = computed(() => {
+  let totalCost = 0
+  let costPerUnit = 0
+
+  for (const component of formData.value.components) {
+    if (!component.componentId || !component.quantity || component.quantity <= 0) continue
+
+    if (component.componentType === 'product') {
+      const product = productsStore.getProductById(component.componentId)
+      if (product && product.isActive) {
+        // Простая конвертация: предполагаем, что все в граммах/мл
+        const componentCost = (product.costPerUnit * component.quantity) / 1000
+        totalCost += componentCost
+      }
+    } else if (component.componentType === 'preparation') {
+      const prepCost = recipesStore.getPreparationCostCalculation(component.componentId)
+      if (prepCost) {
+        const componentCost = prepCost.costPerOutputUnit * component.quantity
+        totalCost += componentCost
+      }
+    }
+  }
+
+  // Рассчитываем стоимость за единицу
+  if (props.type === 'preparation' && formData.value.outputQuantity > 0) {
+    costPerUnit = totalCost / formData.value.outputQuantity
+  } else if (props.type === 'recipe' && formData.value.portionSize > 0) {
+    costPerUnit = totalCost / formData.value.portionSize
+  }
+
+  return {
+    totalCost,
+    costPerUnit
+  }
+})
+
 // Validation rules
 const rules = {
   required: (value: any) => !!value || 'Required field',
@@ -437,12 +508,35 @@ function getDialogTitle(): string {
   return isEditing.value ? `Edit ${itemType}` : `New ${itemType}`
 }
 
+function getCostPerLabel(): string {
+  return props.type === 'preparation' ? 'Cost per Unit' : 'Cost per Portion'
+}
+
 function getComponentItems(componentType: string) {
   return componentType === 'product' ? productItems.value : preparationItems.value
 }
 
 function getComponentLabel(componentType: string): string {
   return componentType === 'product' ? 'Product' : 'Preparation'
+}
+
+// ✅ НОВОЕ: Получение цены компонента
+function getComponentPrice(component: any): string {
+  if (!component.componentId) return ''
+
+  if (component.componentType === 'product') {
+    const product = productsStore.getProductById(component.componentId)
+    if (product) {
+      return `Current price: $${product.costPerUnit.toFixed(2)}/${product.unit}`
+    }
+  } else if (component.componentType === 'preparation') {
+    const prepCost = recipesStore.getPreparationCostCalculation(component.componentId)
+    if (prepCost) {
+      return `Current cost: $${prepCost.costPerOutputUnit.toFixed(2)}/unit`
+    }
+  }
+
+  return 'Price not available'
 }
 
 function handleCodeInput(event: Event) {
@@ -484,6 +578,15 @@ function removeComponent(index: number) {
 function onComponentTypeChange(index: number, newType: string) {
   // Clear component selection when type changes
   formData.value.components[index].componentId = ''
+}
+
+// ✅ НОВОЕ: Триггеры для пересчета стоимости
+function onComponentChange(index: number, componentId: string) {
+  // Стоимость автоматически пересчитается через computed estimatedCost
+}
+
+function onComponentQuantityChange() {
+  // Стоимость автоматически пересчитается через computed estimatedCost
 }
 
 async function handleSubmit() {
@@ -659,6 +762,17 @@ watch(dialogModel, async newVal => {
 .components-list {
   max-height: 300px;
   overflow-y: auto;
+}
+
+.cost-preview {
+  background: linear-gradient(135deg, #e8f5e8 0%, #f0f8ff 100%);
+  border: 2px solid var(--color-success);
+
+  .v-card-title {
+    background: var(--color-success);
+    color: white;
+    border-radius: 8px 8px 0 0;
+  }
 }
 
 :deep(.v-card-text) {
