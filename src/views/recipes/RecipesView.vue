@@ -305,7 +305,39 @@ function showCreateDialog() {
 
 function viewItem(item: Recipe | Preparation) {
   viewingItem.value = item
-  viewingItemType.value = 'code' in item ? 'preparation' : 'recipe'
+
+  // ✅ ИСПРАВЛЕНО: Правильное определение типа
+  if ('components' in item && Array.isArray(item.components)) {
+    viewingItemType.value = 'recipe'
+  } else if ('recipe' in item && Array.isArray(item.recipe)) {
+    viewingItemType.value = 'preparation'
+  } else {
+    // Fallback: если не можем определить по полям, используем другие признаки
+    if ((item as any).category && (item as any).portionSize) {
+      viewingItemType.value = 'recipe'
+    } else if ((item as any).type && (item as any).outputQuantity) {
+      viewingItemType.value = 'preparation'
+    } else {
+      // Последний fallback - по коду
+      if (item.code?.startsWith('R-')) {
+        viewingItemType.value = 'recipe'
+      } else if (item.code?.startsWith('P-')) {
+        viewingItemType.value = 'preparation'
+      } else {
+        // Совсем последний fallback
+        viewingItemType.value = 'recipe'
+      }
+    }
+  }
+
+  DebugUtils.info('RecipesView', `🔍 Opening view dialog`, {
+    itemName: item.name,
+    detectedType: viewingItemType.value,
+    hasComponents: 'components' in item,
+    hasRecipe: 'recipe' in item,
+    itemKeys: Object.keys(item)
+  })
+
   dialogs.value.view = true
 }
 
