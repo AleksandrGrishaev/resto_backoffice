@@ -7,6 +7,7 @@ export * from './types'
 export {
   accountService,
   transactionService,
+  paymentService,
   resetMockData,
   getMockDataStats,
   addTestData
@@ -17,6 +18,7 @@ export { useAccountStore } from './store'
 
 // ============ MOCK DATA ============
 export * from './mock'
+export * from './paymentMock'
 
 // ============ TYPE ALIASES FOR BACKWARD COMPATIBILITY ============
 // Эти экспорты обеспечивают обратную совместимость с существующими импортами
@@ -34,7 +36,21 @@ export type {
   TransactionPerformer,
   TransferDetails,
   DailyExpenseCategory,
-  InvestmentCategory
+  InvestmentCategory,
+  // Новые типы для платежей
+  PendingPayment,
+  PaymentStatus,
+  PaymentPriority,
+  CreatePaymentDto,
+  ProcessPaymentDto,
+  PaymentFilters,
+  PaymentStatistics
 } from './types'
 
-export { EXPENSE_CATEGORIES, OPERATION_TYPES } from './types'
+export {
+  EXPENSE_CATEGORIES,
+  OPERATION_TYPES,
+  PAYMENT_PRIORITIES,
+  PAYMENT_STATUSES,
+  PAYMENT_CATEGORIES
+} from './types'

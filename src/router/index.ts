@@ -17,7 +17,7 @@ import StorageView from '@/views/storage/StorageView.vue'
 // Импорт компонентов полуфабрикатов
 import PreparationView from '@/views/preparation/PreparationView.vue'
 // Импорт компонентов поставщиков и закупок
-import SupplierView from '@/views/supplier/SupplierView.vue'
+import SupplierView from '@/views/supplier_2/SupplierView.vue'
 // Импорт компонентов контрагентов
 import CounteragentsView from '@/views/counteragents/CounteragentsView.vue'
 

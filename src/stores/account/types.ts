@@ -104,6 +104,59 @@ export interface TransactionFilters {
   category?: ExpenseCategory['type'] | null
 }
 
+// ============ PAYMENT TYPES ============
+
+export type PaymentStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
+export type PaymentPriority = 'low' | 'medium' | 'high' | 'urgent'
+
+export interface PendingPayment extends BaseEntity {
+  counteragentId: string
+  counteragentName: string
+  amount: number
+  description: string
+  dueDate?: string
+  priority: PaymentPriority
+  status: PaymentStatus
+  category: 'supplier' | 'service' | 'utilities' | 'salary' | 'other'
+  invoiceNumber?: string
+  notes?: string
+  assignedToAccount?: string // ID счета для списания
+  createdBy: TransactionPerformer
+}
+
+export interface CreatePaymentDto {
+  counteragentId: string
+  counteragentName: string
+  amount: number
+  description: string
+  dueDate?: string
+  priority: PaymentPriority
+  category: PendingPayment['category']
+  invoiceNumber?: string
+  notes?: string
+  createdBy: TransactionPerformer
+}
+
+export interface ProcessPaymentDto {
+  paymentId: string
+  accountId: string
+  actualAmount?: number // если отличается от запланированной
+  notes?: string
+  performedBy: TransactionPerformer
+}
+
+export interface PaymentFilters {
+  status?: PaymentStatus | null
+  priority?: PaymentPriority | null
+}
+
+export interface PaymentStatistics {
+  totalPending: number
+  totalAmount: number
+  urgentCount: number
+  overdueCount: number
+}
+
 // ============ CONSTANTS ============
 
 export const EXPENSE_CATEGORIES = {
@@ -134,6 +187,29 @@ export const OPERATION_TYPES = {
   correction: 'Correction'
 } as const
 
+export const PAYMENT_PRIORITIES = {
+  low: 'Низкий',
+  medium: 'Средний',
+  high: 'Высокий',
+  urgent: 'Срочный'
+} as const
+
+export const PAYMENT_STATUSES = {
+  pending: 'Ожидает оплаты',
+  processing: 'В обработке',
+  completed: 'Оплачен',
+  failed: 'Ошибка',
+  cancelled: 'Отменен'
+} as const
+
+export const PAYMENT_CATEGORIES = {
+  supplier: 'Поставщики',
+  service: 'Услуги',
+  utilities: 'Коммунальные',
+  salary: 'Зарплата',
+  other: 'Прочее'
+} as const
+
 // ============ STORE TYPES ============
 
 export interface LoadingState {
@@ -142,17 +218,21 @@ export interface LoadingState {
   operation: boolean
   transfer: boolean
   correction: boolean
+  payments: boolean
 }
 
 export interface AccountStoreState {
   accounts: Account[]
   transactions: Transaction[]
+  pendingPayments: PendingPayment[]
   filters: TransactionFilters
+  paymentFilters: PaymentFilters
   selectedAccountId: string | null
   loading: LoadingState
   error: Error | null
   lastFetch: {
     accounts: string | null
     transactions: Record<string, string> // accountId -> timestamp
+    payments: string | null
   }
 }

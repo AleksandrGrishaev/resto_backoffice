@@ -2,12 +2,24 @@
 import type {
   Account,
   Transaction,
+  PendingPayment,
   CreateOperationDto,
   CreateTransferDto,
   CreateCorrectionDto,
-  TransactionFilters
+  CreatePaymentDto,
+  ProcessPaymentDto,
+  TransactionFilters,
+  PaymentFilters,
+  PaymentStatistics
 } from './types'
 import { mockAccounts, mockTransactions } from './mock'
+import {
+  mockPendingPayments,
+  calculatePaymentStatistics,
+  getPendingPayments,
+  getOverduePayments,
+  getUrgentPayments
+} from './paymentMock'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'AccountService'
@@ -388,9 +400,211 @@ export class TransactionService extends MockBaseService<Transaction> {
   }
 }
 
+// ============ PAYMENT SERVICE ============
+export class PaymentService extends MockBaseService<PendingPayment> {
+  constructor() {
+    super(mockPendingPayments)
+  }
+
+  async createPayment(data: CreatePaymentDto): Promise<PendingPayment> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating payment', { data })
+
+      const payment: Omit<PendingPayment, 'id'> = {
+        ...data,
+        status: 'pending'
+      }
+
+      const createdPayment = await this.create(payment)
+
+      DebugUtils.info(MODULE_NAME, 'Payment created successfully', {
+        id: createdPayment.id
+      })
+      return createdPayment
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create payment', { error })
+      throw error
+    }
+  }
+
+  async processPayment(data: ProcessPaymentDto): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Processing payment', { data })
+
+      const payment = await this.getById(data.paymentId)
+      if (!payment) {
+        throw new Error('Payment not found')
+      }
+
+      const account = await accountService.getById(data.accountId)
+      if (!account) {
+        throw new Error('Account not found')
+      }
+
+      const actualAmount = data.actualAmount || payment.amount
+
+      if (account.balance < actualAmount) {
+        throw new Error('Insufficient funds')
+      }
+
+      // Обновляем статус платежа
+      await this.update(data.paymentId, {
+        status: 'processing',
+        assignedToAccount: data.accountId,
+        notes: data.notes || payment.notes
+      })
+
+      // Создаем транзакцию расхода
+      await transactionService.createTransaction({
+        accountId: data.accountId,
+        type: 'expense',
+        amount: actualAmount,
+        description: `Платеж: ${payment.description} (${payment.counteragentName})`,
+        expenseCategory: {
+          type: 'daily',
+          category: payment.category === 'supplier' ? 'product' : 'other'
+        },
+        performedBy: data.performedBy
+      })
+
+      // Помечаем платеж как выполненный
+      await this.update(data.paymentId, {
+        status: 'completed'
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
+    } catch (error) {
+      // В случае ошибки возвращаем статус обратно
+      await this.update(data.paymentId, { status: 'failed' })
+      DebugUtils.error(MODULE_NAME, 'Failed to process payment', { error })
+      throw error
+    }
+  }
+
+  async getPaymentsByFilters(filters?: PaymentFilters): Promise<PendingPayment[]> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Fetching payments with filters', { filters })
+
+      let payments = [...this.data]
+
+      // Применяем фильтры
+      if (filters?.status) {
+        payments = payments.filter(p => p.status === filters.status)
+      }
+
+      if (filters?.priority) {
+        payments = payments.filter(p => p.priority === filters.priority)
+      }
+
+      // Сортируем по приоритету и дате
+      payments.sort((a, b) => {
+        // Сначала по приоритету (urgent > high > medium > low)
+        const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 }
+        const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]
+        if (priorityDiff !== 0) return priorityDiff
+
+        // Потом по дате (ближайшие сначала)
+        if (!a.dueDate && !b.dueDate) return 0
+        if (!a.dueDate) return 1
+        if (!b.dueDate) return -1
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payments fetched successfully', {
+        count: payments.length
+      })
+
+      return Promise.resolve(payments)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch payments', { error })
+      throw error
+    }
+  }
+
+  async getPaymentStatistics(): Promise<PaymentStatistics> {
+    try {
+      const stats = calculatePaymentStatistics()
+      return Promise.resolve(stats)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get payment statistics', { error })
+      throw error
+    }
+  }
+
+  async assignToAccount(paymentId: string, accountId: string): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Assigning payment to account', { paymentId, accountId })
+
+      const payment = await this.getById(paymentId)
+      if (!payment) {
+        throw new Error('Payment not found')
+      }
+
+      const account = await accountService.getById(accountId)
+      if (!account) {
+        throw new Error('Account not found')
+      }
+
+      await this.update(paymentId, {
+        assignedToAccount: accountId
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment assigned to account successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to assign payment to account', { error })
+      throw error
+    }
+  }
+
+  async updatePaymentPriority(
+    paymentId: string,
+    priority: PendingPayment['priority']
+  ): Promise<void> {
+    try {
+      await this.update(paymentId, { priority })
+      DebugUtils.info(MODULE_NAME, 'Payment priority updated', { paymentId, priority })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment priority', { error })
+      throw error
+    }
+  }
+
+  async cancelPayment(paymentId: string): Promise<void> {
+    try {
+      await this.update(paymentId, { status: 'cancelled' })
+      DebugUtils.info(MODULE_NAME, 'Payment cancelled', { paymentId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to cancel payment', { error })
+      throw error
+    }
+  }
+
+  // Методы для быстрого доступа
+  async getPendingPayments(): Promise<PendingPayment[]> {
+    return getPendingPayments()
+  }
+
+  async getOverduePayments(): Promise<PendingPayment[]> {
+    return getOverduePayments()
+  }
+
+  async getUrgentPayments(): Promise<PendingPayment[]> {
+    return getUrgentPayments()
+  }
+
+  async getPaymentsByCounteragent(counteragentId: string): Promise<PendingPayment[]> {
+    return this.data.filter(payment => payment.counteragentId === counteragentId)
+  }
+
+  async getPaymentsByAccount(accountId: string): Promise<PendingPayment[]> {
+    return this.data.filter(payment => payment.assignedToAccount === accountId)
+  }
+}
+
 // ============ SERVICE INSTANCES ============
 export const accountService = new AccountService()
 export const transactionService = new TransactionService()
+export const paymentService = new PaymentService()
 
 // ============ UTILITY FUNCTIONS ============
 
@@ -398,6 +612,7 @@ export const transactionService = new TransactionService()
 export function resetMockData(): void {
   accountService.data = [...mockAccounts]
   transactionService.data = [...mockTransactions]
+  paymentService.data = [...mockPendingPayments]
   DebugUtils.info(MODULE_NAME, 'Mock data reset to initial state')
 }
 
@@ -405,6 +620,8 @@ export function resetMockData(): void {
 export async function getMockDataStats() {
   const accounts = await accountService.getAll()
   const transactions = await transactionService.getAllTransactions()
+  const payments = await paymentService.getAll()
+  const paymentStats = await paymentService.getPaymentStatistics()
 
   const activeAccounts = accounts.filter(a => a.isActive)
   const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0)
@@ -426,6 +643,13 @@ export async function getMockDataStats() {
       expenses: expenses.length,
       transfers: transfers.length,
       corrections: corrections.length
+    },
+    payments: {
+      total: payments.length,
+      pending: paymentStats.totalPending,
+      totalAmount: paymentStats.totalAmount,
+      urgent: paymentStats.urgentCount,
+      overdue: paymentStats.overdueCount
     }
   }
 }
@@ -464,6 +688,21 @@ export async function addTestData(): Promise<void> {
       category: 'other'
     },
     performedBy: {
+      type: 'user',
+      id: 'test_user',
+      name: 'Test User'
+    }
+  })
+
+  // Добавляем тестовый платеж
+  await paymentService.createPayment({
+    counteragentId: 'test-counteragent',
+    counteragentName: 'Test Supplier',
+    amount: 300000,
+    description: 'Test payment',
+    priority: 'medium',
+    category: 'supplier',
+    createdBy: {
       type: 'user',
       id: 'test_user',
       name: 'Test User'

@@ -1,15 +1,20 @@
 // src/stores/account/store.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { accountService, transactionService } from './service'
+import { accountService, transactionService, paymentService } from './service'
 import { DebugUtils } from '@/utils'
 import type {
   Account,
   Transaction,
+  PendingPayment,
   CreateOperationDto,
   CreateTransferDto,
   CreateCorrectionDto,
+  CreatePaymentDto,
+  ProcessPaymentDto,
   TransactionFilters,
+  PaymentFilters,
+  PaymentStatistics,
   AccountStoreState
 } from './types'
 
@@ -20,11 +25,16 @@ export const useAccountStore = defineStore('account', () => {
   const state = ref<AccountStoreState>({
     accounts: [],
     transactions: [],
+    pendingPayments: [],
     filters: {
       dateFrom: null,
       dateTo: null,
       type: null,
       category: null
+    },
+    paymentFilters: {
+      status: null,
+      priority: null
     },
     selectedAccountId: null,
     loading: {
@@ -32,16 +42,18 @@ export const useAccountStore = defineStore('account', () => {
       transactions: false,
       operation: false,
       transfer: false,
-      correction: false
+      correction: false,
+      payments: false
     },
     error: null,
     lastFetch: {
       accounts: null,
-      transactions: {}
+      transactions: {},
+      payments: null
     }
   })
 
-  // ============ GETTERS ============
+  // ============ EXISTING GETTERS ============
   const activeAccounts = computed(() => state.value.accounts.filter(account => account.isActive))
 
   const getAccountById = computed(
@@ -70,6 +82,66 @@ export const useAccountStore = defineStore('account', () => {
 
   const isLoading = computed(() => Object.values(state.value.loading).some(loading => loading))
 
+  // ============ NEW PAYMENT GETTERS ============
+  const pendingPayments = computed(() =>
+    state.value.pendingPayments.filter(payment => payment.status === 'pending')
+  )
+
+  const filteredPayments = computed(() => {
+    let payments = [...state.value.pendingPayments]
+
+    // Применяем фильтры
+    if (state.value.paymentFilters.status) {
+      payments = payments.filter(p => p.status === state.value.paymentFilters.status)
+    }
+
+    if (state.value.paymentFilters.priority) {
+      payments = payments.filter(p => p.priority === state.value.paymentFilters.priority)
+    }
+
+    // Сортируем по приоритету и дате
+    payments.sort((a, b) => {
+      const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 }
+      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority]
+      if (priorityDiff !== 0) return priorityDiff
+
+      if (!a.dueDate && !b.dueDate) return 0
+      if (!a.dueDate) return 1
+      if (!b.dueDate) return -1
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+    })
+
+    return payments
+  })
+
+  const urgentPayments = computed(() =>
+    state.value.pendingPayments.filter(p => p.priority === 'urgent' && p.status === 'pending')
+  )
+
+  const overduePayments = computed(() => {
+    const now = new Date()
+    return state.value.pendingPayments.filter(payment => {
+      if (!payment.dueDate || payment.status !== 'pending') return false
+      return new Date(payment.dueDate) < now
+    })
+  })
+
+  const totalPendingAmount = computed(() =>
+    pendingPayments.value.reduce((sum, payment) => sum + payment.amount, 0)
+  )
+
+  const paymentStatistics = computed(() => ({
+    totalPending: pendingPayments.value.length,
+    totalAmount: totalPendingAmount.value,
+    urgentCount: urgentPayments.value.length,
+    overdueCount: overduePayments.value.length
+  }))
+
+  const getPaymentsByAccount = computed(
+    () => (accountId: string) =>
+      state.value.pendingPayments.filter(payment => payment.assignedToAccount === accountId)
+  )
+
   // ============ HELPER METHODS ============
   function clearError() {
     state.value.error = null
@@ -83,6 +155,12 @@ export const useAccountStore = defineStore('account', () => {
     if (!state.value.lastFetch.accounts) return true
     const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
     return Date.now() - new Date(state.value.lastFetch.accounts).getTime() > CACHE_DURATION
+  }
+
+  function shouldRefetchPayments(): boolean {
+    if (!state.value.lastFetch.payments) return true
+    const CACHE_DURATION = 2 * 60 * 1000 // 2 minutes для платежей
+    return Date.now() - new Date(state.value.lastFetch.payments).getTime() > CACHE_DURATION
   }
 
   // ============ ACCOUNT ACTIONS ============
@@ -274,17 +352,175 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  // ============ PAYMENT ACTIONS ============
+  async function fetchPayments(force = false) {
+    if (!force && !shouldRefetchPayments()) {
+      DebugUtils.info(MODULE_NAME, 'Using cached payments data')
+      return
+    }
+
+    try {
+      clearError()
+      state.value.loading.payments = true
+      DebugUtils.info(MODULE_NAME, 'Fetching payments')
+
+      state.value.pendingPayments = await paymentService.getPaymentsByFilters(
+        state.value.paymentFilters
+      )
+      state.value.lastFetch.payments = new Date().toISOString()
+
+      DebugUtils.info(MODULE_NAME, 'Payments fetched successfully', {
+        count: state.value.pendingPayments.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch payments', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.payments = false
+    }
+  }
+
+  async function createPayment(data: CreatePaymentDto) {
+    try {
+      clearError()
+      state.value.loading.payments = true
+      DebugUtils.info(MODULE_NAME, 'Creating payment', { data })
+
+      const payment = await paymentService.createPayment(data)
+
+      // Оптимистическое обновление
+      state.value.pendingPayments.unshift(payment)
+
+      DebugUtils.info(MODULE_NAME, 'Payment created successfully', { paymentId: payment.id })
+      return payment
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create payment', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.payments = false
+    }
+  }
+
+  async function processPayment(data: ProcessPaymentDto) {
+    try {
+      clearError()
+      state.value.loading.payments = true
+      DebugUtils.info(MODULE_NAME, 'Processing payment', { data })
+
+      await paymentService.processPayment(data)
+
+      // Обновляем данные
+      await Promise.all([
+        fetchPayments(true),
+        fetchAccounts(true),
+        state.value.selectedAccountId
+          ? fetchTransactions(state.value.selectedAccountId)
+          : Promise.resolve()
+      ])
+
+      DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to process payment', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.payments = false
+    }
+  }
+
+  async function assignPaymentToAccount(paymentId: string, accountId: string) {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Assigning payment to account', { paymentId, accountId })
+
+      await paymentService.assignToAccount(paymentId, accountId)
+
+      // Оптимистическое обновление
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (payment) {
+        payment.assignedToAccount = accountId
+        payment.updatedAt = new Date().toISOString()
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Payment assigned successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to assign payment', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  async function updatePaymentPriority(paymentId: string, priority: PendingPayment['priority']) {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Updating payment priority', { paymentId, priority })
+
+      await paymentService.updatePaymentPriority(paymentId, priority)
+
+      // Оптимистическое обновление
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (payment) {
+        payment.priority = priority
+        payment.updatedAt = new Date().toISOString()
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Payment priority updated successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment priority', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  async function cancelPayment(paymentId: string) {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Cancelling payment', { paymentId })
+
+      await paymentService.cancelPayment(paymentId)
+
+      // Оптимистическое обновление
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (payment) {
+        payment.status = 'cancelled'
+        payment.updatedAt = new Date().toISOString()
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Payment cancelled successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to cancel payment', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  function setPaymentFilters(filters: PaymentFilters) {
+    state.value.paymentFilters = filters
+    fetchPayments(true)
+  }
+
   // ============ RETURN ============
   return {
     // State
     state,
 
-    // Getters
+    // Existing getters
     activeAccounts,
     getAccountById,
     getAccountOperations,
     totalBalance,
     isLoading,
+
+    // New payment getters
+    pendingPayments,
+    filteredPayments,
+    urgentPayments,
+    overduePayments,
+    totalPendingAmount,
+    paymentStatistics,
+    getPaymentsByAccount,
 
     // Helper methods
     clearError,
@@ -300,6 +536,15 @@ export const useAccountStore = defineStore('account', () => {
     transferBetweenAccounts,
     correctBalance,
     fetchTransactions,
-    setFilters
+    setFilters,
+
+    // Payment actions
+    fetchPayments,
+    createPayment,
+    processPayment,
+    assignPaymentToAccount,
+    updatePaymentPriority,
+    cancelPayment,
+    setPaymentFilters
   }
 })
