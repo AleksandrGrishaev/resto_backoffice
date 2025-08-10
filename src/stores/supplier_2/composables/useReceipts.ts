@@ -27,17 +27,15 @@ export function useReceipts() {
   // COMPUTED
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Добавляем защиту от undefined
-  const receipts = computed(() => supplierStore.state.receipts || [])
+  // ИСПРАВЛЕНИЕ: Безопасный доступ к данным store
+  const receipts = computed(() => {
+    return Array.isArray(supplierStore.state.receipts) ? supplierStore.state.receipts : []
+  })
+
   const currentReceipt = computed(() => supplierStore.state.currentReceipt)
   const isLoading = computed(() => supplierStore.state.loading.receipts)
 
   const filteredReceipts = computed(() => {
-    // ИСПРАВЛЕНИЕ: Проверяем, что receipts.value существует
-    if (!receipts.value || !Array.isArray(receipts.value)) {
-      return []
-    }
-
     return receipts.value.filter(receipt => {
       if (
         filters.value.status &&
@@ -56,16 +54,27 @@ export function useReceipts() {
     })
   })
 
-  // ИСПРАВЛЕНИЕ: Проверяем существование computed свойств store
-  const draftReceipts = computed(() => supplierStore.draftReceipts || [])
+  const draftReceipts = computed(() => receipts.value.filter(receipt => receipt.status === 'draft'))
+
   const completedReceipts = computed(() =>
     receipts.value.filter(receipt => receipt.status === 'completed')
   )
+
   const receiptsWithDiscrepancies = computed(() =>
     receipts.value.filter(receipt => receipt.hasDiscrepancies)
   )
 
-  const ordersForReceipt = computed(() => supplierStore.ordersForReceipt || [])
+  const ordersForReceipt = computed(() => {
+    const orders = Array.isArray(supplierStore.state.orders) ? supplierStore.state.orders : []
+
+    return orders.filter(
+      order =>
+        ['sent', 'confirmed'].includes(order.status) &&
+        !receipts.value.some(
+          receipt => receipt.purchaseOrderId === order.id && receipt.status === 'completed'
+        )
+    )
+  })
 
   const receiptStatistics = computed(() => ({
     total: receipts.value.length,
@@ -85,14 +94,8 @@ export function useReceipts() {
   async function fetchReceipts() {
     try {
       console.log('Receipts: Fetching receipts')
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.fetchReceipts === 'function') {
-        await supplierStore.fetchReceipts()
-        console.log(`Receipts: Fetched ${receipts.value.length} receipts`)
-      } else {
-        console.error('Receipts: fetchReceipts method not available in store')
-      }
+      await supplierStore.fetchReceipts()
+      console.log(`Receipts: Fetched ${receipts.value.length} receipts`)
     } catch (error) {
       console.error('Receipts: Error fetching receipts:', error)
       throw error
@@ -103,11 +106,7 @@ export function useReceipts() {
    * Start receipt process for an order
    */
   async function startReceipt(purchaseOrderId: string, receivedBy: string): Promise<Receipt> {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    const order =
-      typeof supplierStore.getOrderById === 'function'
-        ? supplierStore.getOrderById(purchaseOrderId)
-        : undefined
+    const order = supplierStore.getOrderById(purchaseOrderId)
 
     if (!order) {
       throw new Error(`Order with id ${purchaseOrderId} not found`)
@@ -132,14 +131,9 @@ export function useReceipts() {
         notes: `Receipt started for order ${order.orderNumber}`
       }
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.createReceipt === 'function') {
-        const newReceipt = await supplierStore.createReceipt(receiptData)
-        console.log(`Receipts: Started receipt ${newReceipt.receiptNumber}`)
-        return newReceipt
-      } else {
-        throw new Error('createReceipt method not available in store')
-      }
+      const newReceipt = await supplierStore.createReceipt(receiptData)
+      console.log(`Receipts: Started receipt ${newReceipt.receiptNumber}`)
+      return newReceipt
     } catch (error) {
       console.error('Receipts: Error starting receipt:', error)
       throw error
@@ -152,15 +146,9 @@ export function useReceipts() {
   async function updateReceipt(id: string, data: UpdateReceiptData): Promise<Receipt> {
     try {
       console.log(`Receipts: Updating receipt ${id}`, data)
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.updateReceipt === 'function') {
-        const updatedReceipt = await supplierStore.updateReceipt(id, data)
-        console.log(`Receipts: Updated receipt ${id}`)
-        return updatedReceipt
-      } else {
-        throw new Error('updateReceipt method not available in store')
-      }
+      const updatedReceipt = await supplierStore.updateReceipt(id, data)
+      console.log(`Receipts: Updated receipt ${id}`)
+      return updatedReceipt
     } catch (error) {
       console.error('Receipts: Error updating receipt:', error)
       throw error
@@ -171,11 +159,7 @@ export function useReceipts() {
    * Complete receipt and create storage operation
    */
   async function completeReceipt(id: string): Promise<Receipt> {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    const receipt =
-      typeof supplierStore.getReceiptById === 'function'
-        ? supplierStore.getReceiptById(id)
-        : undefined
+    const receipt = supplierStore.getReceiptById(id)
 
     if (!receipt) {
       throw new Error(`Receipt with id ${id} not found`)
@@ -188,18 +172,13 @@ export function useReceipts() {
     try {
       console.log(`Receipts: Completing receipt ${receipt.receiptNumber}`)
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.completeReceipt === 'function') {
-        const completedReceipt = await supplierStore.completeReceipt(id)
+      const completedReceipt = await supplierStore.completeReceipt(id)
 
-        // Auto-create storage operation (this would integrate with StorageStore)
-        await createStorageOperation(completedReceipt)
+      // Auto-create storage operation (this would integrate with StorageStore)
+      await createStorageOperation(completedReceipt)
 
-        console.log(`Receipts: Completed receipt ${receipt.receiptNumber}`)
-        return completedReceipt
-      } else {
-        throw new Error('completeReceipt method not available in store')
-      }
+      console.log(`Receipts: Completed receipt ${receipt.receiptNumber}`)
+      return completedReceipt
     } catch (error) {
       console.error('Receipts: Error completing receipt:', error)
       throw error
@@ -216,11 +195,7 @@ export function useReceipts() {
     actualPrice?: number,
     notes?: string
   ) {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    const receipt =
-      typeof supplierStore.getReceiptById === 'function'
-        ? supplierStore.getReceiptById(receiptId)
-        : undefined
+    const receipt = supplierStore.getReceiptById(receiptId)
 
     if (!receipt) {
       throw new Error(`Receipt with id ${receiptId} not found`)
@@ -267,11 +242,7 @@ export function useReceipts() {
     try {
       console.log(`Receipts: Creating storage operation for receipt ${receipt.receiptNumber}`)
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      const order =
-        typeof supplierStore.getOrderById === 'function'
-          ? supplierStore.getOrderById(receipt.purchaseOrderId)
-          : undefined
+      const order = supplierStore.getOrderById(receipt.purchaseOrderId)
 
       if (!order) {
         throw new Error('Related order not found')
@@ -371,11 +342,7 @@ export function useReceipts() {
    * Calculate financial impact of receipt
    */
   function calculateFinancialImpact(receipt: Receipt) {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    const order =
-      typeof supplierStore.getOrderById === 'function'
-        ? supplierStore.getOrderById(receipt.purchaseOrderId)
-        : undefined
+    const order = supplierStore.getOrderById(receipt.purchaseOrderId)
 
     if (!order) return null
 
@@ -405,10 +372,7 @@ export function useReceipts() {
    * Set current receipt
    */
   function setCurrentReceipt(receipt: Receipt | undefined) {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.setCurrentReceipt === 'function') {
-      supplierStore.setCurrentReceipt(receipt)
-    }
+    supplierStore.setCurrentReceipt(receipt)
   }
 
   /**
@@ -438,10 +402,6 @@ export function useReceipts() {
    * Get receipt by ID
    */
   function getReceiptById(id: string): Receipt | undefined {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.getReceiptById === 'function') {
-      return supplierStore.getReceiptById(id)
-    }
     return receipts.value.find(receipt => receipt.id === id)
   }
 
@@ -449,10 +409,6 @@ export function useReceipts() {
    * Get receipts by status
    */
   function getReceiptsByStatus(status: Receipt['status']): Receipt[] {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.getReceiptsByStatus === 'function') {
-      return supplierStore.getReceiptsByStatus(status)
-    }
     return receipts.value.filter(receipt => receipt.status === status)
   }
 
@@ -577,22 +533,10 @@ export function useReceipts() {
   }
 
   // =============================================
-  // INITIALIZATION
+  // INITIALIZATION - УБИРАЕМ АВТОЗАГРУЗКУ
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Безопасная проверка перед автозагрузкой
-  const shouldAutoLoad = !receipts.value || receipts.value.length === 0
-
-  if (shouldAutoLoad && typeof supplierStore.fetchReceipts === 'function') {
-    // Делаем автозагрузку асинхронно, чтобы не блокировать инициализацию
-    setTimeout(() => {
-      fetchReceipts().catch(error => {
-        console.error('Receipts: Failed to auto-fetch receipts:', error)
-      })
-    }, 100)
-  } else if (shouldAutoLoad) {
-    console.warn('Receipts: fetchReceipts method not available, skipping auto-fetch')
-  }
+  // ИСПРАВЛЕНИЕ: Убираем автозагрузку из синхронного кода
 
   // =============================================
   // RETURN PUBLIC API

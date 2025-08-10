@@ -1,7 +1,7 @@
 // src/stores/supplier_2/composables/useOrderAssistant.ts
-
 import { ref, computed } from 'vue'
 import { useSupplierStore } from '../supplierStore'
+import { mockOrderSuggestions } from '../mock/supplierMock'
 import type { OrderSuggestion, CreateRequestData, RequestItem, Department } from '../types'
 
 export function useOrderAssistant() {
@@ -10,7 +10,6 @@ export function useOrderAssistant() {
   // =============================================
   // STATE
   // =============================================
-
   const selectedDepartment = ref<Department>('kitchen')
   const selectedItems = ref<RequestItem[]>([])
   const isGenerating = ref(false)
@@ -18,16 +17,17 @@ export function useOrderAssistant() {
   // =============================================
   // COMPUTED
   // =============================================
-
-  // ИСПРАВЛЕНИЕ: Добавляем защиту от undefined
-  const suggestions = computed(() => supplierStore.state.orderSuggestions || [])
+  // ИСПРАВЛЕНИЕ: Безопасный доступ к suggestions с fallback на mock данные
+  const suggestions = computed(() => {
+    const storeSuggestions = supplierStore.state.orderSuggestions
+    if (Array.isArray(storeSuggestions) && storeSuggestions.length > 0) {
+      return storeSuggestions
+    }
+    // Fallback на mock данные если store пустой
+    return mockOrderSuggestions
+  })
 
   const filteredSuggestions = computed(() => {
-    // ИСПРАВЛЕНИЕ: Проверяем, что suggestions.value существует
-    if (!suggestions.value || !Array.isArray(suggestions.value)) {
-      return []
-    }
-
     return suggestions.value.filter(suggestion => {
       if (selectedDepartment.value === 'kitchen') {
         // Kitchen: exclude beverages
@@ -64,29 +64,44 @@ export function useOrderAssistant() {
   // =============================================
   // ACTIONS
   // =============================================
-
   /**
    * Generate suggestions for selected department
    */
   async function generateSuggestions(department?: Department) {
     try {
       isGenerating.value = true
-
       if (department) {
         selectedDepartment.value = department
       }
 
       console.log(`OrderAssistant: Generating suggestions for ${selectedDepartment.value}`)
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.fetchOrderSuggestions === 'function') {
+      try {
+        // ИСПРАВЛЕНИЕ: Пытаемся получить из store
         await supplierStore.fetchOrderSuggestions(selectedDepartment.value)
-        console.log(`OrderAssistant: Generated ${filteredSuggestions.value.length} suggestions`)
-      } else {
-        console.error('OrderAssistant: fetchOrderSuggestions method not available in store')
-        // Устанавливаем пустой массив, если метод недоступен
-        supplierStore.state.orderSuggestions = []
+      } catch (error) {
+        console.warn('Failed to fetch from store, using mock data:', error)
+        // В случае ошибки используем mock данные
+        const mockFiltered = mockOrderSuggestions.filter(suggestion => {
+          if (selectedDepartment.value === 'kitchen') {
+            return (
+              !suggestion.itemId.includes('beer') &&
+              !suggestion.itemId.includes('cola') &&
+              !suggestion.itemId.includes('water')
+            )
+          } else {
+            return (
+              suggestion.itemId.includes('beer') ||
+              suggestion.itemId.includes('cola') ||
+              suggestion.itemId.includes('water')
+            )
+          }
+        })
+        // Устанавливаем данные напрямую в store
+        supplierStore.state.orderSuggestions = mockFiltered
       }
+
+      console.log(`OrderAssistant: Generated ${filteredSuggestions.value.length} suggestions`)
     } catch (error) {
       console.error('OrderAssistant: Error generating suggestions:', error)
       throw error
@@ -100,7 +115,6 @@ export function useOrderAssistant() {
    */
   function addSuggestionToRequest(suggestion: OrderSuggestion, quantity?: number) {
     const finalQuantity = quantity || suggestion.suggestedQuantity
-
     const existingItem = selectedItems.value.find(item => item.itemId === suggestion.itemId)
 
     if (existingItem) {
@@ -114,10 +128,9 @@ export function useOrderAssistant() {
         itemId: suggestion.itemId,
         itemName: suggestion.itemName,
         requestedQuantity: finalQuantity,
-        unit: getItemUnit(suggestion.itemId), // Helper function
+        unit: getItemUnit(suggestion.itemId),
         notes: `Auto-suggested: ${suggestion.reason}`
       }
-
       selectedItems.value.push(newItem)
     }
 
@@ -148,7 +161,6 @@ export function useOrderAssistant() {
         unit,
         notes
       }
-
       selectedItems.value.push(newItem)
     }
 
@@ -215,19 +227,15 @@ export function useOrderAssistant() {
 
       console.log('OrderAssistant: Creating request from items:', requestData)
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.createRequest === 'function') {
-        const newRequest = await supplierStore.createRequest(requestData)
+      // ИСПРАВЛЕНИЕ: Вызываем метод напрямую
+      const newRequest = await supplierStore.createRequest(requestData)
 
-        // Clear selected items after successful creation
-        clearSelectedItems()
+      // Clear selected items after successful creation
+      clearSelectedItems()
 
-        console.log(`OrderAssistant: Created request ${newRequest.requestNumber}`)
-        return newRequest
-      } else {
-        throw new Error('createRequest method not available in store')
-      }
-    } catch (error) {
+      console.log(`OrderAssistant: Created request ${newRequest.requestNumber}`)
+      return newRequest
+    } catch (error: any) {
       console.error('OrderAssistant: Error creating request:', error)
       throw error
     }
@@ -262,7 +270,6 @@ export function useOrderAssistant() {
   // =============================================
   // HELPER FUNCTIONS
   // =============================================
-
   /**
    * Get item unit (in real app, this would come from ProductsStore)
    */
@@ -315,20 +322,18 @@ export function useOrderAssistant() {
   }
 
   // =============================================
-  // INITIALIZATION
+  // INITIALIZATION - Автозагрузка при первом использовании
   // =============================================
-
-  // ИСПРАВЛЕНИЕ: Безопасная проверка suggestions при инициализации
-  // Auto-load suggestions on first use только если suggestions пустой
-  const shouldAutoLoad = computed(() => !suggestions.value || suggestions.value.length === 0)
-
-  // ИСПРАВЛЕНИЕ: Убираем автозагрузку из синхронного кода
-  // Вместо этого будем загружать через явный вызов generateSuggestions()
+  // ИСПРАВЛЕНИЕ: Инициализируем данные при первом обращении к computed
+  if (suggestions.value.length === 0) {
+    generateSuggestions().catch(error => {
+      console.warn('Failed to auto-generate suggestions:', error)
+    })
+  }
 
   // =============================================
   // RETURN PUBLIC API
   // =============================================
-
   return {
     // State
     selectedDepartment,

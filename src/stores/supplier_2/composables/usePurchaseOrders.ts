@@ -27,17 +27,15 @@ export function usePurchaseOrders() {
   // COMPUTED
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Добавляем защиту от undefined
-  const orders = computed(() => supplierStore.state.orders || [])
+  // ИСПРАВЛЕНИЕ: Безопасный доступ к данным store
+  const orders = computed(() => {
+    return Array.isArray(supplierStore.state.orders) ? supplierStore.state.orders : []
+  })
+
   const currentOrder = computed(() => supplierStore.state.currentOrder)
   const isLoading = computed(() => supplierStore.state.loading.orders)
 
   const filteredOrders = computed(() => {
-    // ИСПРАВЛЕНИЕ: Проверяем, что orders.value существует
-    if (!orders.value || !Array.isArray(orders.value)) {
-      return []
-    }
-
     return orders.value.filter(order => {
       if (
         filters.value.status &&
@@ -65,12 +63,28 @@ export function usePurchaseOrders() {
   })
 
   const draftOrders = computed(() => orders.value.filter(order => order.status === 'draft'))
+  const pendingOrders = computed(() =>
+    orders.value.filter(order => order.paymentStatus === 'pending')
+  )
+  const unpaidOrders = computed(() =>
+    orders.value.filter(order => order.paymentStatus === 'pending')
+  )
 
-  // ИСПРАВЛЕНИЕ: Проверяем существование computed свойств store
-  const pendingOrders = computed(() => supplierStore.pendingOrders || [])
-  const unpaidOrders = computed(() => supplierStore.unpaidOrders || [])
-  const ordersAwaitingDelivery = computed(() => supplierStore.ordersAwaitingDelivery || [])
-  const ordersForReceipt = computed(() => supplierStore.ordersForReceipt || [])
+  const ordersAwaitingDelivery = computed(() =>
+    orders.value.filter(
+      order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
+    )
+  )
+
+  const ordersForReceipt = computed(() =>
+    orders.value.filter(
+      order =>
+        ['sent', 'confirmed'].includes(order.status) &&
+        !supplierStore.state.receipts.some(
+          receipt => receipt.purchaseOrderId === order.id && receipt.status === 'completed'
+        )
+    )
+  )
 
   const orderStatistics = computed(() => ({
     total: orders.value.length,
@@ -101,14 +115,8 @@ export function usePurchaseOrders() {
   async function fetchOrders() {
     try {
       console.log('PurchaseOrders: Fetching orders')
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.fetchOrders === 'function') {
-        await supplierStore.fetchOrders()
-        console.log(`PurchaseOrders: Fetched ${orders.value.length} orders`)
-      } else {
-        console.error('PurchaseOrders: fetchOrders method not available in store')
-      }
+      await supplierStore.fetchOrders()
+      console.log(`PurchaseOrders: Fetched ${orders.value.length} orders`)
     } catch (error) {
       console.error('PurchaseOrders: Error fetching orders:', error)
       throw error
@@ -145,18 +153,13 @@ export function usePurchaseOrders() {
         notes: `Order created from ${requestIds.length} procurement request(s)`
       }
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.createOrder === 'function') {
-        const newOrder = await supplierStore.createOrder(orderData)
+      const newOrder = await supplierStore.createOrder(orderData)
 
-        // Auto-create bill in AccountStore
-        await createBillInAccountStore(newOrder)
+      // Auto-create bill in AccountStore
+      await createBillInAccountStore(newOrder)
 
-        console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
-        return newOrder
-      } else {
-        throw new Error('createOrder method not available in store')
-      }
+      console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
+      return newOrder
     } catch (error) {
       console.error('PurchaseOrders: Error creating order from basket:', error)
       throw error
@@ -169,19 +172,13 @@ export function usePurchaseOrders() {
   async function createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
     try {
       console.log('PurchaseOrders: Creating order', data)
+      const newOrder = await supplierStore.createOrder(data)
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.createOrder === 'function') {
-        const newOrder = await supplierStore.createOrder(data)
+      // Auto-create bill in AccountStore
+      await createBillInAccountStore(newOrder)
 
-        // Auto-create bill in AccountStore
-        await createBillInAccountStore(newOrder)
-
-        console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
-        return newOrder
-      } else {
-        throw new Error('createOrder method not available in store')
-      }
+      console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
+      return newOrder
     } catch (error) {
       console.error('PurchaseOrders: Error creating order:', error)
       throw error
@@ -194,15 +191,9 @@ export function usePurchaseOrders() {
   async function updateOrder(id: string, data: UpdateOrderData): Promise<PurchaseOrder> {
     try {
       console.log(`PurchaseOrders: Updating order ${id}`, data)
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.updateOrder === 'function') {
-        const updatedOrder = await supplierStore.updateOrder(id, data)
-        console.log(`PurchaseOrders: Updated order ${id}`)
-        return updatedOrder
-      } else {
-        throw new Error('updateOrder method not available in store')
-      }
+      const updatedOrder = await supplierStore.updateOrder(id, data)
+      console.log(`PurchaseOrders: Updated order ${id}`)
+      return updatedOrder
     } catch (error) {
       console.error('PurchaseOrders: Error updating order:', error)
       throw error
@@ -215,14 +206,8 @@ export function usePurchaseOrders() {
   async function deleteOrder(id: string): Promise<void> {
     try {
       console.log(`PurchaseOrders: Deleting order ${id}`)
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.deleteOrder === 'function') {
-        await supplierStore.deleteOrder(id)
-        console.log(`PurchaseOrders: Deleted order ${id}`)
-      } else {
-        throw new Error('deleteOrder method not available in store')
-      }
+      await supplierStore.deleteOrder(id)
+      console.log(`PurchaseOrders: Deleted order ${id}`)
     } catch (error) {
       console.error('PurchaseOrders: Error deleting order:', error)
       throw error
@@ -335,10 +320,7 @@ export function usePurchaseOrders() {
    * Set current order
    */
   function setCurrentOrder(order: PurchaseOrder | undefined) {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.setCurrentOrder === 'function') {
-      supplierStore.setCurrentOrder(order)
-    }
+    supplierStore.setCurrentOrder(order)
   }
 
   /**
@@ -369,10 +351,6 @@ export function usePurchaseOrders() {
    * Get order by ID
    */
   function getOrderById(id: string): PurchaseOrder | undefined {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.getOrderById === 'function') {
-      return supplierStore.getOrderById(id)
-    }
     return orders.value.find(order => order.id === id)
   }
 
@@ -380,10 +358,6 @@ export function usePurchaseOrders() {
    * Get orders by status
    */
   function getOrdersByStatus(status: PurchaseOrder['status']): PurchaseOrder[] {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.getOrdersByStatus === 'function') {
-      return supplierStore.getOrdersByStatus(status)
-    }
     return orders.value.filter(order => order.status === status)
   }
 
@@ -393,10 +367,6 @@ export function usePurchaseOrders() {
   function getOrdersByPaymentStatus(
     paymentStatus: PurchaseOrder['paymentStatus']
   ): PurchaseOrder[] {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.getOrdersByPaymentStatus === 'function') {
-      return supplierStore.getOrdersByPaymentStatus(paymentStatus)
-    }
     return orders.value.filter(order => order.paymentStatus === paymentStatus)
   }
 
@@ -459,7 +429,6 @@ export function usePurchaseOrders() {
    * Check if order has active receipt
    */
   function hasActiveReceipt(orderId: string): boolean {
-    // This would check in receipts store
     const receipts = supplierStore.state.receipts || []
     return receipts.some(
       receipt => receipt.purchaseOrderId === orderId && receipt.status !== 'completed'
@@ -568,22 +537,10 @@ export function usePurchaseOrders() {
   }
 
   // =============================================
-  // INITIALIZATION
+  // INITIALIZATION - УБИРАЕМ АВТОЗАГРУЗКУ
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Безопасная проверка перед автозагрузкой
-  const shouldAutoLoad = !orders.value || orders.value.length === 0
-
-  if (shouldAutoLoad && typeof supplierStore.fetchOrders === 'function') {
-    // Делаем автозагрузку асинхронно, чтобы не блокировать инициализацию
-    setTimeout(() => {
-      fetchOrders().catch(error => {
-        console.error('PurchaseOrders: Failed to auto-fetch orders:', error)
-      })
-    }, 100)
-  } else if (shouldAutoLoad) {
-    console.warn('PurchaseOrders: fetchOrders method not available, skipping auto-fetch')
-  }
+  // ИСПРАВЛЕНИЕ: Убираем автозагрузку из синхронного кода
 
   // =============================================
   // RETURN PUBLIC API

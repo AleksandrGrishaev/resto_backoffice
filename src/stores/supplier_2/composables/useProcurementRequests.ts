@@ -31,17 +31,15 @@ export function useProcurementRequests() {
   // COMPUTED
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Добавляем защиту от undefined
-  const requests = computed(() => supplierStore.state.requests || [])
+  // ИСПРАВЛЕНИЕ: Безопасный доступ к данным store
+  const requests = computed(() => {
+    return Array.isArray(supplierStore.state.requests) ? supplierStore.state.requests : []
+  })
+
   const currentRequest = computed(() => supplierStore.state.currentRequest)
   const isLoading = computed(() => supplierStore.state.loading.requests)
 
   const filteredRequests = computed(() => {
-    // ИСПРАВЛЕНИЕ: Проверяем, что requests.value существует
-    if (!requests.value || !Array.isArray(requests.value)) {
-      return []
-    }
-
     return requests.value.filter(request => {
       if (
         filters.value.status &&
@@ -68,9 +66,8 @@ export function useProcurementRequests() {
     })
   })
 
-  // ИСПРАВЛЕНИЕ: Проверяем существование computed свойств store
-  const draftRequests = computed(() => supplierStore.draftRequests || [])
-  const submittedRequests = computed(() => supplierStore.submittedRequests || [])
+  const draftRequests = computed(() => requests.value.filter(req => req.status === 'draft'))
+  const submittedRequests = computed(() => requests.value.filter(req => req.status === 'submitted'))
 
   const requestsForOrders = computed(() => requests.value.filter(req => req.status === 'submitted'))
 
@@ -92,14 +89,8 @@ export function useProcurementRequests() {
   async function fetchRequests() {
     try {
       console.log('ProcurementRequests: Fetching requests')
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.fetchRequests === 'function') {
-        await supplierStore.fetchRequests()
-        console.log(`ProcurementRequests: Fetched ${requests.value.length} requests`)
-      } else {
-        console.error('ProcurementRequests: fetchRequests method not available in store')
-      }
+      await supplierStore.fetchRequests()
+      console.log(`ProcurementRequests: Fetched ${requests.value.length} requests`)
     } catch (error) {
       console.error('ProcurementRequests: Error fetching requests:', error)
       throw error
@@ -112,15 +103,9 @@ export function useProcurementRequests() {
   async function createRequest(data: CreateRequestData): Promise<ProcurementRequest> {
     try {
       console.log('ProcurementRequests: Creating request', data)
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.createRequest === 'function') {
-        const newRequest = await supplierStore.createRequest(data)
-        console.log(`ProcurementRequests: Created request ${newRequest.requestNumber}`)
-        return newRequest
-      } else {
-        throw new Error('createRequest method not available in store')
-      }
+      const newRequest = await supplierStore.createRequest(data)
+      console.log(`ProcurementRequests: Created request ${newRequest.requestNumber}`)
+      return newRequest
     } catch (error) {
       console.error('ProcurementRequests: Error creating request:', error)
       throw error
@@ -133,15 +118,9 @@ export function useProcurementRequests() {
   async function updateRequest(id: string, data: UpdateRequestData): Promise<ProcurementRequest> {
     try {
       console.log(`ProcurementRequests: Updating request ${id}`, data)
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.updateRequest === 'function') {
-        const updatedRequest = await supplierStore.updateRequest(id, data)
-        console.log(`ProcurementRequests: Updated request ${id}`)
-        return updatedRequest
-      } else {
-        throw new Error('updateRequest method not available in store')
-      }
+      const updatedRequest = await supplierStore.updateRequest(id, data)
+      console.log(`ProcurementRequests: Updated request ${id}`)
+      return updatedRequest
     } catch (error) {
       console.error('ProcurementRequests: Error updating request:', error)
       throw error
@@ -154,14 +133,8 @@ export function useProcurementRequests() {
   async function deleteRequest(id: string): Promise<void> {
     try {
       console.log(`ProcurementRequests: Deleting request ${id}`)
-
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.deleteRequest === 'function') {
-        await supplierStore.deleteRequest(id)
-        console.log(`ProcurementRequests: Deleted request ${id}`)
-      } else {
-        throw new Error('deleteRequest method not available in store')
-      }
+      await supplierStore.deleteRequest(id)
+      console.log(`ProcurementRequests: Deleted request ${id}`)
     } catch (error) {
       console.error('ProcurementRequests: Error deleting request:', error)
       throw error
@@ -193,18 +166,15 @@ export function useProcurementRequests() {
     try {
       console.log('ProcurementRequests: Grouping requests for orders', requestIds)
 
-      // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-      if (typeof supplierStore.createSupplierBaskets === 'function') {
-        await supplierStore.createSupplierBaskets(requestIds)
-        selectedRequestIds.value = [...requestIds]
+      await supplierStore.createSupplierBaskets(requestIds)
+      selectedRequestIds.value = [...requestIds]
 
-        console.log(
-          `ProcurementRequests: Created ${(supplierStore.state.supplierBaskets || []).length} supplier baskets`
-        )
-        return supplierStore.state.supplierBaskets || []
-      } else {
-        throw new Error('createSupplierBaskets method not available in store')
-      }
+      const baskets = Array.isArray(supplierStore.state.supplierBaskets)
+        ? supplierStore.state.supplierBaskets
+        : []
+
+      console.log(`ProcurementRequests: Created ${baskets.length} supplier baskets`)
+      return baskets
     } catch (error) {
       console.error('ProcurementRequests: Error grouping requests:', error)
       throw error
@@ -215,7 +185,9 @@ export function useProcurementRequests() {
    * Assign items to supplier basket
    */
   function assignItemsToSupplier(itemIds: string[], supplierId: string, supplierName: string) {
-    const baskets = supplierStore.state.supplierBaskets || []
+    const baskets = Array.isArray(supplierStore.state.supplierBaskets)
+      ? supplierStore.state.supplierBaskets
+      : []
     const unassignedBasket = baskets.find(b => b.supplierId === null)
 
     if (!unassignedBasket) {
@@ -265,7 +237,9 @@ export function useProcurementRequests() {
    * Move items back to unassigned
    */
   function moveItemsToUnassigned(itemIds: string[], fromSupplierId: string) {
-    const baskets = supplierStore.state.supplierBaskets || []
+    const baskets = Array.isArray(supplierStore.state.supplierBaskets)
+      ? supplierStore.state.supplierBaskets
+      : []
     const unassignedBasket = baskets.find(b => b.supplierId === null)
     const supplierBasket = baskets.find(b => b.supplierId === fromSupplierId)
 
@@ -303,10 +277,7 @@ export function useProcurementRequests() {
    * Clear all supplier baskets
    */
   function clearSupplierBaskets() {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.clearSupplierBaskets === 'function') {
-      supplierStore.clearSupplierBaskets()
-    }
+    supplierStore.clearSupplierBaskets()
     selectedRequestIds.value = []
     console.log('ProcurementRequests: Cleared all supplier baskets')
   }
@@ -319,10 +290,7 @@ export function useProcurementRequests() {
    * Set current request
    */
   function setCurrentRequest(request: ProcurementRequest | undefined) {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.setCurrentRequest === 'function') {
-      supplierStore.setCurrentRequest(request)
-    }
+    supplierStore.setCurrentRequest(request)
   }
 
   /**
@@ -384,10 +352,6 @@ export function useProcurementRequests() {
    * Get request by ID
    */
   function getRequestById(id: string): ProcurementRequest | undefined {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.getRequestById === 'function') {
-      return supplierStore.getRequestById(id)
-    }
     return requests.value.find(req => req.id === id)
   }
 
@@ -395,10 +359,6 @@ export function useProcurementRequests() {
    * Get requests by status
    */
   function getRequestsByStatus(status: ProcurementRequest['status']): ProcurementRequest[] {
-    // ИСПРАВЛЕНИЕ: Проверяем, что метод существует
-    if (typeof supplierStore.getRequestsByStatus === 'function') {
-      return supplierStore.getRequestsByStatus(status)
-    }
     return requests.value.filter(req => req.status === status)
   }
 
@@ -474,22 +434,10 @@ export function useProcurementRequests() {
   }
 
   // =============================================
-  // INITIALIZATION
+  // INITIALIZATION - УБИРАЕМ АВТОЗАГРУЗКУ
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Безопасная проверка перед автозагрузкой
-  const shouldAutoLoad = !requests.value || requests.value.length === 0
-
-  if (shouldAutoLoad && typeof supplierStore.fetchRequests === 'function') {
-    // Делаем автозагрузку асинхронно, чтобы не блокировать инициализацию
-    setTimeout(() => {
-      fetchRequests().catch(error => {
-        console.error('ProcurementRequests: Failed to auto-fetch requests:', error)
-      })
-    }, 100)
-  } else if (shouldAutoLoad) {
-    console.warn('ProcurementRequests: fetchRequests method not available, skipping auto-fetch')
-  }
+  // ИСПРАВЛЕНИЕ: Убираем автозагрузку из синхронного кода
 
   // =============================================
   // RETURN PUBLIC API

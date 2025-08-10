@@ -190,7 +190,7 @@
               <div>
                 <div class="text-subtitle-2 font-weight-bold">{{ item.itemName }}</div>
                 <div class="text-caption text-medium-emphasis">
-                  Order: {{ item.orderedQuantity }} {{ item.unit }} @
+                  Order: {{ item.orderedQuantity }} {{ getItemUnit(item) }} @
                   {{ formatCurrency(item.orderedPrice) }}
                 </div>
               </div>
@@ -501,12 +501,17 @@ const isSaving = ref(false)
 const isCompleting = ref(false)
 const showConfirmDialog = ref(false)
 
+// ИСПРАВЛЕНИЕ: Правильная структура ReceiptItem
+interface ReceiptFormItem extends ReceiptItem {
+  unit?: string // Добавляем unit для совместимости
+}
+
 // Form state
 const receiptForm = ref({
   receivedBy: 'Warehouse Manager',
   deliveryDate: new Date().toISOString().slice(0, 16),
   notes: '',
-  items: [] as ReceiptItem[]
+  items: [] as ReceiptFormItem[]
 })
 
 // Current receipt state
@@ -605,13 +610,25 @@ async function initializeReceipt() {
         receivedBy: props.receipt.receivedBy,
         deliveryDate: props.receipt.deliveryDate.slice(0, 16),
         notes: props.receipt.notes || '',
-        items: [...props.receipt.items]
+        items: props.receipt.items.map(item => ({
+          ...item,
+          unit: getItemUnit(item.itemId) // Добавляем unit
+        }))
       }
     } else {
-      // Start new receipt
-      const newReceipt = await startReceipt(props.order.id, receiptForm.value.receivedBy)
-      currentReceipt.value = newReceipt
-      receiptForm.value.items = [...newReceipt.items]
+      // Start new receipt - ИСПРАВЛЕНИЕ: создаем items из order
+      receiptForm.value.items = props.order.items.map(orderItem => ({
+        id: `receipt-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        orderItemId: orderItem.id,
+        itemId: orderItem.itemId,
+        itemName: orderItem.itemName,
+        orderedQuantity: orderItem.orderedQuantity,
+        receivedQuantity: orderItem.orderedQuantity, // Start with ordered quantity
+        orderedPrice: orderItem.pricePerUnit,
+        actualPrice: orderItem.pricePerUnit, // Start with ordered price
+        notes: '',
+        unit: orderItem.unit
+      }))
     }
   } catch (error: any) {
     console.error('Error initializing receipt:', error)
@@ -642,7 +659,7 @@ function resetToOriginal() {
   }))
 }
 
-function updateItemCalculations(item: ReceiptItem) {
+function updateItemCalculations(item: ReceiptFormItem) {
   // Ensure actualPrice is set
   if (item.actualPrice === undefined || item.actualPrice === null) {
     item.actualPrice = item.orderedPrice
@@ -655,10 +672,27 @@ function updateItemCalculations(item: ReceiptItem) {
 }
 
 async function saveDraft() {
-  if (!canSave.value || !currentReceipt.value) return
+  if (!canSave.value) return
 
   try {
     isSaving.value = true
+
+    // ИСПРАВЛЕНИЕ: Сначала создаем receipt если не в edit mode
+    if (!currentReceipt.value) {
+      const receiptData: CreateReceiptData = {
+        purchaseOrderId: props.order!.id,
+        receivedBy: receiptForm.value.receivedBy,
+        items: receiptForm.value.items.map(item => ({
+          orderItemId: item.orderItemId,
+          receivedQuantity: item.receivedQuantity,
+          actualPrice: item.actualPrice !== item.orderedPrice ? item.actualPrice : undefined,
+          notes: item.notes || undefined
+        })),
+        notes: receiptForm.value.notes || undefined
+      }
+
+      currentReceipt.value = await startReceipt(props.order!.id, receiptForm.value.receivedBy)
+    }
 
     // Update receipt items individually
     for (const item of receiptForm.value.items) {
@@ -685,28 +719,24 @@ function completeReceipt() {
 }
 
 async function confirmComplete() {
-  if (!canComplete.value || !currentReceipt.value) return
+  if (!canComplete.value) return
 
   try {
     isCompleting.value = true
 
-    // First save all item updates
-    for (const item of receiptForm.value.items) {
-      await updateReceiptItem(
-        currentReceipt.value.id,
-        item.id,
-        item.receivedQuantity,
-        item.actualPrice,
-        item.notes
-      )
+    // Сначала сохраняем draft если нужно
+    if (!currentReceipt.value) {
+      await saveDraft()
     }
 
-    // Then complete the receipt
-    await completeReceiptAction(currentReceipt.value.id)
+    if (currentReceipt.value) {
+      // Then complete the receipt
+      await completeReceiptAction(currentReceipt.value.id)
 
-    showConfirmDialog.value = false
-    emits('success', `Receipt ${currentReceipt.value.receiptNumber} completed successfully`)
-    closeDialog()
+      showConfirmDialog.value = false
+      emits('success', `Receipt ${currentReceipt.value.receiptNumber} completed successfully`)
+      closeDialog()
+    }
   } catch (error: any) {
     console.error('Error completing receipt:', error)
     emits('error', error.message || 'Failed to complete receipt')
@@ -734,24 +764,24 @@ function closeDialog() {
 // HELPER FUNCTIONS
 // =============================================
 
-function calculateLineTotal(item: ReceiptItem): number {
+function calculateLineTotal(item: ReceiptFormItem): number {
   const price = item.actualPrice !== undefined ? item.actualPrice : item.orderedPrice
   return item.receivedQuantity * price
 }
 
-function hasItemDiscrepancy(item: ReceiptItem): boolean {
+function hasItemDiscrepancy(item: ReceiptFormItem): boolean {
   return hasItemQuantityDiscrepancy(item) || hasItemPriceDiscrepancy(item)
 }
 
-function hasItemQuantityDiscrepancy(item: ReceiptItem): boolean {
+function hasItemQuantityDiscrepancy(item: ReceiptFormItem): boolean {
   return Math.abs(item.receivedQuantity - item.orderedQuantity) > 0.01
 }
 
-function hasItemPriceDiscrepancy(item: ReceiptItem): boolean {
+function hasItemPriceDiscrepancy(item: ReceiptFormItem): boolean {
   return item.actualPrice !== undefined && Math.abs(item.actualPrice - item.orderedPrice) > 0.01
 }
 
-function getItemStatusText(item: ReceiptItem): string {
+function getItemStatusText(item: ReceiptFormItem): string {
   if (!hasItemDiscrepancy(item)) return 'OK'
 
   const hasQty = hasItemQuantityDiscrepancy(item)
@@ -763,65 +793,65 @@ function getItemStatusText(item: ReceiptItem): string {
   return 'OK'
 }
 
-function getItemStatusColor(item: ReceiptItem): string {
+function getItemStatusColor(item: ReceiptFormItem): string {
   const status = getItemStatusText(item)
   if (status === 'OK') return 'success'
   if (status === 'Both Issues') return 'error'
   return 'warning'
 }
 
-function getItemStatusIcon(item: ReceiptItem): string {
+function getItemStatusIcon(item: ReceiptFormItem): string {
   const status = getItemStatusText(item)
   if (status === 'OK') return 'mdi-check-circle'
   if (status === 'Both Issues') return 'mdi-alert-circle'
   return 'mdi-alert-triangle'
 }
 
-function getQuantityDifferenceText(item: ReceiptItem): string {
+function getQuantityDifferenceText(item: ReceiptFormItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
   if (Math.abs(diff) < 0.01) return 'Exact'
   return diff > 0 ? `+${diff.toFixed(2)}` : `${diff.toFixed(2)}`
 }
 
-function getQuantityDifferencePercent(item: ReceiptItem): string {
+function getQuantityDifferencePercent(item: ReceiptFormItem): string {
   if (item.orderedQuantity === 0) return '0%'
   const percent = ((item.receivedQuantity - item.orderedQuantity) / item.orderedQuantity) * 100
   return `${percent > 0 ? '+' : ''}${percent.toFixed(1)}%`
 }
 
-function getQuantityDifferenceIcon(item: ReceiptItem): string {
+function getQuantityDifferenceIcon(item: ReceiptFormItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
   if (diff > 0) return 'mdi-arrow-up'
   if (diff < 0) return 'mdi-arrow-down'
   return 'mdi-equal'
 }
 
-function getQuantityComparisonClass(item: ReceiptItem): string {
+function getQuantityComparisonClass(item: ReceiptFormItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
   if (Math.abs(diff) < 0.01) return 'text-success'
   return diff > 0 ? 'text-info' : 'text-warning'
 }
 
-function getQuantityComparisonColor(item: ReceiptItem): string {
+function getQuantityComparisonColor(item: ReceiptFormItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
   if (Math.abs(diff) < 0.01) return 'success'
   return diff > 0 ? 'info' : 'warning'
 }
 
-function getPriceDifferenceText(item: ReceiptItem): string {
+function getPriceDifferenceText(item: ReceiptFormItem): string {
   if (!item.actualPrice) return 'No change'
   const diff = item.actualPrice - item.orderedPrice
   return diff > 0 ? `+${formatCurrency(diff)}` : formatCurrency(diff)
 }
 
-function getPriceComparisonClass(item: ReceiptItem): string {
+function getPriceComparisonClass(item: ReceiptFormItem): string {
   if (!item.actualPrice) return 'text-success'
   const diff = item.actualPrice - item.orderedPrice
   if (Math.abs(diff) < 0.01) return 'text-success'
   return diff > 0 ? 'text-error' : 'text-success'
 }
 
-function formatLineTotalImpact(item: ReceiptItem): string {
+function formatLineTotalImpact(item: ReceiptFormItem): string {
   const originalTotal = item.orderedQuantity * item.orderedPrice
   const actualTotal = calculateLineTotal(item)
   const diff = actualTotal - originalTotal
@@ -830,7 +860,7 @@ function formatLineTotalImpact(item: ReceiptItem): string {
   return diff > 0 ? `+${formatCurrency(diff)}` : formatCurrency(diff)
 }
 
-function getLineTotalImpactClass(item: ReceiptItem): string {
+function getLineTotalImpactClass(item: ReceiptFormItem): string {
   const originalTotal = item.orderedQuantity * item.orderedPrice
   const actualTotal = calculateLineTotal(item)
   const diff = actualTotal - originalTotal
@@ -873,6 +903,12 @@ function getPaymentStatusColor(paymentStatus?: string): string {
     paid: 'green'
   }
   return colorMap[paymentStatus || ''] || 'grey'
+}
+
+function getItemUnit(itemId: string): string {
+  // In real app, would get from ProductsStore
+  if (itemId.includes('beer') || itemId.includes('cola')) return 'piece'
+  return 'kg'
 }
 
 function formatDate(dateString?: string): string {
