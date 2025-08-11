@@ -36,10 +36,10 @@
             </template>
           </td>
           <td class="text-right" :class="getAmountClass(operation)">
-            {{ formatAmount(operation.amount) }}
+            {{ formatIDR(operation.amount) }}
           </td>
           <td class="text-right">
-            {{ formatAmount(operation.balanceAfter) }}
+            {{ formatIDR(operation.balanceAfter) }}
           </td>
           <td>{{ operation.description }}</td>
           <td>
@@ -85,7 +85,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
-import { formatDateTime, formatAmount } from '@/utils/formatter'
+import { formatIDR } from '@/utils/currency'
 import type { Transaction, ExpenseCategory } from '@/stores/account'
 import { EXPENSE_CATEGORIES } from '@/stores/account'
 

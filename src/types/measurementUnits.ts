@@ -1,120 +1,120 @@
-// src/types/measurementUnits.ts
+// src/types/measurementUnits.ts - ENGLISH VERSION
 
 // =============================================
-// ЕДИНАЯ СИСТЕМА ЕДИНИЦ ИЗМЕРЕНИЯ
+// UNIFIED MEASUREMENT SYSTEM
 // =============================================
 
 export type MeasurementUnit =
-  // Вес
+  // Weight
   | 'gram'
   | 'kg'
-  // Объем
+  // Volume
   | 'ml'
   | 'liter'
-  // Штучные
+  // Pieces
   | 'piece'
   | 'pack'
-  // Кулинарные меры
-  | 'tsp' // чайная ложка
-  | 'tbsp' // столовая ложка
+  // Culinary measures
+  | 'tsp' // teaspoon
+  | 'tbsp' // tablespoon
 
-// Типы единиц измерения
+// Unit types
 export type UnitType = 'weight' | 'volume' | 'piece' | 'culinary'
 
-// Детальная информация о единице измерения
+// Detailed unit information
 export interface UnitInfo {
   id: MeasurementUnit
   name: string
   shortName: string
   type: UnitType
-  baseUnit?: MeasurementUnit // базовая единица для конвертации
-  conversionRate?: number // коэффициент перевода в базовую единицу
+  baseUnit?: MeasurementUnit // base unit for conversion
+  conversionRate?: number // conversion factor to base unit
   description?: string
 }
 
 // =============================================
-// КОНСТАНТЫ И СПРАВОЧНИКИ
+// CONSTANTS AND REFERENCES
 // =============================================
 
 export const MEASUREMENT_UNITS: Record<MeasurementUnit, UnitInfo> = {
-  // Вес
+  // Weight
   gram: {
     id: 'gram',
-    name: 'Грамм',
-    shortName: 'г',
+    name: 'Gram',
+    shortName: 'g',
     type: 'weight',
     conversionRate: 1,
-    description: 'Базовая единица веса'
+    description: 'Base weight unit'
   },
   kg: {
     id: 'kg',
-    name: 'Килограмм',
-    shortName: 'кг',
+    name: 'Kilogram',
+    shortName: 'kg',
     type: 'weight',
     baseUnit: 'gram',
     conversionRate: 1000,
-    description: '1 кг = 1000 г'
+    description: '1 kg = 1000 g'
   },
 
-  // Объем
+  // Volume
   ml: {
     id: 'ml',
-    name: 'Миллилитр',
-    shortName: 'мл',
+    name: 'Milliliter',
+    shortName: 'ml',
     type: 'volume',
     conversionRate: 1,
-    description: 'Базовая единица объема'
+    description: 'Base volume unit'
   },
   liter: {
     id: 'liter',
-    name: 'Литр',
-    shortName: 'л',
+    name: 'Liter',
+    shortName: 'L',
     type: 'volume',
     baseUnit: 'ml',
     conversionRate: 1000,
-    description: '1 л = 1000 мл'
+    description: '1 L = 1000 ml'
   },
 
-  // Штучные
+  // Pieces
   piece: {
     id: 'piece',
-    name: 'Штука',
-    shortName: 'шт',
+    name: 'Piece',
+    shortName: 'pcs',
     type: 'piece',
     conversionRate: 1,
-    description: 'Штучный товар'
+    description: 'Individual item'
   },
   pack: {
     id: 'pack',
-    name: 'Упаковка',
-    shortName: 'уп',
+    name: 'Package',
+    shortName: 'pack',
     type: 'piece',
     conversionRate: 1,
-    description: 'Упаковка товара'
+    description: 'Package of items'
   },
 
-  // Кулинарные меры
+  // Culinary measures
   tsp: {
     id: 'tsp',
-    name: 'Чайная ложка',
-    shortName: 'ч.л.',
+    name: 'Teaspoon',
+    shortName: 'tsp',
     type: 'culinary',
     baseUnit: 'ml',
     conversionRate: 5,
-    description: '1 ч.л. ≈ 5 мл ≈ 3-5 г (зависит от продукта)'
+    description: '1 tsp ≈ 5 ml ≈ 3-5 g (depends on product)'
   },
   tbsp: {
     id: 'tbsp',
-    name: 'Столовая ложка',
-    shortName: 'ст.л.',
+    name: 'Tablespoon',
+    shortName: 'tbsp',
     type: 'culinary',
     baseUnit: 'ml',
     conversionRate: 15,
-    description: '1 ст.л. ≈ 15 мл ≈ 10-15 г (зависит от продукта)'
+    description: '1 tbsp ≈ 15 ml ≈ 10-15 g (depends on product)'
   }
 }
 
-// Группировка единиц по типам
+// Group units by type
 export const UNITS_BY_TYPE: Record<UnitType, MeasurementUnit[]> = {
   weight: ['gram', 'kg'],
   volume: ['ml', 'liter'],
@@ -122,7 +122,7 @@ export const UNITS_BY_TYPE: Record<UnitType, MeasurementUnit[]> = {
   culinary: ['tsp', 'tbsp']
 }
 
-// Единицы для разных контекстов
+// Units for different contexts
 export const PRODUCT_UNITS: MeasurementUnit[] = ['kg', 'gram', 'liter', 'ml', 'piece', 'pack']
 export const RECIPE_UNITS: MeasurementUnit[] = [
   'gram',
@@ -134,35 +134,35 @@ export const RECIPE_UNITS: MeasurementUnit[] = [
   'tbsp',
   'pack'
 ]
-export const MENU_COMPOSITION_UNITS: MeasurementUnit[] = ['gram', 'ml', 'piece'] // только точные единицы
+export const MENU_COMPOSITION_UNITS: MeasurementUnit[] = ['gram', 'ml', 'piece'] // only precise units
 
 // =============================================
-// УТИЛИТЫ ДЛЯ РАБОТЫ С ЕДИНИЦАМИ
+// UTILITIES FOR WORKING WITH UNITS
 // =============================================
 
 /**
- * Получить информацию о единице измерения
+ * Get unit information
  */
 export function getUnitInfo(unit: MeasurementUnit): UnitInfo {
   return MEASUREMENT_UNITS[unit]
 }
 
 /**
- * Получить короткое название единицы
+ * Get short unit name
  */
 export function getUnitShortName(unit: MeasurementUnit): string {
   return MEASUREMENT_UNITS[unit].shortName
 }
 
 /**
- * Получить полное название единицы
+ * Get full unit name
  */
 export function getUnitName(unit: MeasurementUnit): string {
   return MEASUREMENT_UNITS[unit].name
 }
 
 /**
- * Проверить совместимость единиц измерения (один тип)
+ * Check unit compatibility (same type)
  */
 export function areUnitsCompatible(unit1: MeasurementUnit, unit2: MeasurementUnit): boolean {
   const info1 = MEASUREMENT_UNITS[unit1]
@@ -171,7 +171,7 @@ export function areUnitsCompatible(unit1: MeasurementUnit, unit2: MeasurementUni
 }
 
 /**
- * Конвертировать значение между единицами измерения
+ * Convert value between units
  */
 export function convertUnits(
   value: number,
@@ -181,17 +181,17 @@ export function convertUnits(
   const fromInfo = MEASUREMENT_UNITS[fromUnit]
   const toInfo = MEASUREMENT_UNITS[toUnit]
 
-  // Проверяем совместимость
+  // Check compatibility
   if (!areUnitsCompatible(fromUnit, toUnit)) {
     throw new Error(`Cannot convert between ${fromUnit} and ${toUnit} - different types`)
   }
 
-  // Если единицы одинаковые
+  // If units are the same
   if (fromUnit === toUnit) {
     return value
   }
 
-  // Конвертируем через базовые единицы
+  // Convert through base units
   const fromRate = fromInfo.conversionRate || 1
   const toRate = toInfo.conversionRate || 1
 
@@ -199,7 +199,7 @@ export function convertUnits(
 }
 
 /**
- * Форматировать значение с единицей измерения
+ * Format value with unit
  */
 export function formatWithUnit(
   value: number,
@@ -217,7 +217,7 @@ export function formatWithUnit(
 }
 
 /**
- * Получить единицы измерения для определенного контекста
+ * Get units for specific context
  */
 export function getUnitsForContext(context: 'products' | 'recipes' | 'menu'): MeasurementUnit[] {
   switch (context) {
@@ -233,25 +233,25 @@ export function getUnitsForContext(context: 'products' | 'recipes' | 'menu'): Me
 }
 
 /**
- * Получить единицы измерения по типу
+ * Get units by type
  */
 export function getUnitsByType(type: UnitType): MeasurementUnit[] {
   return UNITS_BY_TYPE[type]
 }
 
 // =============================================
-// ВАЛИДАЦИЯ
+// VALIDATION
 // =============================================
 
 /**
- * Проверить, является ли строка валидной единицей измерения
+ * Check if string is valid unit
  */
 export function isValidUnit(unit: string): unit is MeasurementUnit {
   return Object.keys(MEASUREMENT_UNITS).includes(unit)
 }
 
 /**
- * Проверить, подходит ли единица для определенного контекста
+ * Check if unit is suitable for context
  */
 export function isUnitValidForContext(
   unit: MeasurementUnit,

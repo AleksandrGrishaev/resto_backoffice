@@ -18,7 +18,7 @@
               <h4>{{ account.name }}</h4>
               <div class="current-balance">
                 Текущий баланс:
-                <strong>{{ formatAmount(currentBalance) }}</strong>
+                <strong>{{ formatIDR(currentBalance) }}</strong>
               </div>
             </div>
           </v-card-text>
@@ -41,7 +41,7 @@
             <div class="correction-info">
               <span>Сумма корректировки:</span>
               <span :class="correctionAmountClass">
-                {{ formatAmount(correctionAmount) }}
+                {{ formatIDR(correctionAmount) }}
               </span>
             </div>
           </v-card-text>
@@ -133,7 +133,7 @@ const { form, loading, formState, formData, isFormValid, handleSubmit, handleCan
     }
   })
 
-function formatAmount(amount: number): string {
+function formatIDR(amount: number): string {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
     currency: 'IDR',

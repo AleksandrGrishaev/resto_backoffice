@@ -32,7 +32,7 @@
                 </div>
                 <div class="text-right">
                   <div class="text-h4 font-weight-bold mb-1">
-                    {{ formatAmount(payment.amount) }}
+                    {{ formatIDR(payment.amount) }}
                   </div>
                   <v-chip :color="getPriorityColor(payment.priority)" size="small" variant="flat">
                     {{ getPriorityLabel(payment.priority) }}
@@ -79,7 +79,7 @@
                 </template>
                 <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  Баланс: {{ formatAmount(item.raw.balance) }}
+                  Баланс: {{ formatIDR(item.raw.balance) }}
                   <span v-if="item.raw.balance < payment.amount" class="text-error ml-2">
                     (Недостаточно средств)
                   </span>
@@ -101,11 +101,11 @@
             <div>
               <strong>Недостаточно средств на счете</strong>
               <div class="text-body-2 mt-1">
-                Доступно: {{ formatAmount(selectedAccount.balance) }}
+                Доступно: {{ formatIDR(selectedAccount.balance) }}
                 <br />
-                Требуется: {{ formatAmount(payment.amount) }}
+                Требуется: {{ formatIDR(payment.amount) }}
                 <br />
-                Не хватает: {{ formatAmount(payment.amount - selectedAccount.balance) }}
+                Не хватает: {{ formatIDR(payment.amount - selectedAccount.balance) }}
               </div>
             </div>
           </v-alert>
@@ -120,9 +120,9 @@
                     <div class="font-weight-bold">{{ selectedAccount.name }}</div>
                   </div>
                   <div class="text-right">
-                    <div class="text-h6 font-weight-bold">{{ formatAmount(payment.amount) }}</div>
+                    <div class="text-h6 font-weight-bold">{{ formatIDR(payment.amount) }}</div>
                     <div class="text-caption text-medium-emphasis">
-                      Остаток: {{ formatAmount(selectedAccount.balance - payment.amount) }}
+                      Остаток: {{ formatIDR(selectedAccount.balance - payment.amount) }}
                     </div>
                   </div>
                 </div>
@@ -158,7 +158,7 @@
 import { ref, computed, watch } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
-import { formatAmount, formatDate } from '@/utils/formatter'
+import { formatIDR } from '@/utils/currency'
 import type { PendingPayment, Account } from '@/stores/account'
 import { PAYMENT_PRIORITIES } from '@/stores/account'
 

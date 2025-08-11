@@ -53,7 +53,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useAccountStore } from '@/stores/account'
-import { formatAmount } from '@/utils/formatter'
+import { formatIDR } from '@/utils/currency'
 import * as variables from '@/styles/variables.scss'
 
 const accountStore = useAccountStore()

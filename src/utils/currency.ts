@@ -1,57 +1,4 @@
-// src/utils/currency.ts - Централизованная работа с валютой IDR
-
-/**
- * Конвертирует количество в базовые единицы
- */
-export function convertToBaseUnits(
-  quantity: number,
-  fromUnit: string,
-  baseUnit: 'gram' | 'ml' | 'piece'
-): number {
-  const conversions: Record<string, { gram?: number; ml?: number; piece?: number }> = {
-    // Weight conversions
-    gram: { gram: 1 },
-    g: { gram: 1 },
-    kg: { gram: 1000 },
-    kilogram: { gram: 1000 },
-
-    // Volume conversions
-    ml: { ml: 1 },
-    milliliter: { ml: 1 },
-    liter: { ml: 1000 },
-    l: { ml: 1000 },
-
-    // Piece conversions
-    piece: { piece: 1 },
-    pcs: { piece: 1 },
-    pack: { piece: 1 },
-    item: { piece: 1 }
-  }
-
-  const conversion = conversions[fromUnit.toLowerCase()]
-  if (!conversion) {
-    throw new Error(`Unknown unit: ${fromUnit}`)
-  }
-
-  const factor = conversion[baseUnit]
-  if (factor === undefined) {
-    throw new Error(`Cannot convert ${fromUnit} to ${baseUnit}`)
-  }
-
-  return quantity * factor
-}
-
-/**
- * Конвертирует техническое название базовой единицы в краткое английское отображение
- */
-export function getBaseUnitDisplay(baseUnit: string): string {
-  const displayNames: Record<string, string> = {
-    gram: 'g',
-    ml: 'ml',
-    piece: 'pcs'
-  }
-  return displayNames[baseUnit] || baseUnit
-}
+// src/utils/currency.ts - CLEANED: Удалено дублирование единиц измерения
 
 /**
  * Форматирует сумму в IDR согласно правилам:
@@ -207,7 +154,13 @@ export function getPriceRangeDescription(amount: number, type: 'preparation' | '
   return 'Luxury cost'
 }
 
-// Экспорт констант для консистентности
+// =============================================
+// КОНСТАНТЫ И КОНФИГУРАЦИЯ
+// =============================================
+
+/**
+ * Экспорт констант для консистентности
+ */
 export const IDR_CURRENCY = {
   symbol: 'IDR',
   name: 'Indonesian Rupiah',
@@ -227,8 +180,33 @@ export const IDR_CURRENCY = {
   }
 } as const
 
+// =============================================
+// УДАЛЕННЫЕ ФУНКЦИИ (перенесены в useMeasurementUnits)
+// =============================================
+
 /**
- * Примеры использования:
+ * ❌ УДАЛЕНО: convertToBaseUnits()
+ * ✅ ИСПОЛЬЗУЙТЕ: convertToBaseUnits() из @/composables/useMeasurementUnits
+ *
+ * @deprecated Функция перенесена в unified measurement system
+ * import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
+ */
+
+/**
+ * ❌ УДАЛЕНО: getBaseUnitDisplay()
+ * ✅ ИСПОЛЬЗУЙТЕ: getUnitShortName() из @/composables/useMeasurementUnits
+ *
+ * @deprecated Функция перенесена в unified measurement system
+ * import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
+ * const { getUnitShortName } = useMeasurementUnits()
+ */
+
+// =============================================
+// ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ
+// =============================================
+
+/**
+ * Примеры использования (только currency функции):
  *
  * formatIDR(7500) -> "7 500 IDR"
  * formatIDR(150000) -> "150K IDR"
@@ -241,4 +219,7 @@ export const IDR_CURRENCY = {
  *
  * parseIDR("2.5M IDR") -> 2500000
  * parseIDR("150 000 IDR") -> 150000
+ *
+ * getAmountColorClass(75000, 'preparation') -> 'text-error'
+ * getPriceRangeDescription(25000, 'recipe') -> 'Budget-friendly'
  */

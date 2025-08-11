@@ -5,7 +5,7 @@
       <v-btn icon="mdi-arrow-left" variant="text" @click="handleBack" />
       <div v-if="account" class="account-info">
         <h2>{{ account.name }}</h2>
-        <div class="balance">{{ formatAmount(account.balance) }}</div>
+        <div class="balance">{{ formatIDR(account.balance) }}</div>
       </div>
     </div>
 
@@ -91,7 +91,7 @@
             <div :class="getAmountClass(transaction)">
               {{ formatTransactionAmount(transaction) }}
             </div>
-            <div class="balance-after">Баланс: {{ formatAmount(transaction.balanceAfter) }}</div>
+            <div class="balance-after">Баланс: {{ formatIDR(transaction.balanceAfter) }}</div>
           </div>
         </div>
       </div>
@@ -128,7 +128,7 @@ import { format, startOfToday } from 'date-fns'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
 import type { Account, Transaction, OperationType } from '@/stores/account'
-import { formatAmount, formatDate } from '@/utils/formatter'
+import { formatIDR } from '@/utils/currency'
 
 // Импорты диалогов
 import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
@@ -298,7 +298,7 @@ function getAmountClass(transaction: Transaction): string {
 
 function formatTransactionAmount(transaction: Transaction): string {
   const sign = transaction.amount > 0 ? '+' : ''
-  return `${sign}${formatAmount(Math.abs(transaction.amount))}`
+  return `${sign}${formatIDR(Math.abs(transaction.amount))}`
 }
 
 // Initialize

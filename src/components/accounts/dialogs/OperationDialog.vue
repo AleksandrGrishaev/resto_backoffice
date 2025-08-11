@@ -71,7 +71,7 @@ import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
 import { useDialogForm } from '@/composables/useDialogForm'
 import { EXPENSE_CATEGORIES } from '@/stores/account'
-import { formatAmount } from '@/utils/formatter'
+import { formatIDR } from '@/utils/currency'
 import type { Account, OperationType, ExpenseCategory } from '@/stores/account'
 
 const props = defineProps<{
@@ -161,7 +161,7 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
       if (error instanceof Error) {
         if (error.message === 'Insufficient funds') {
           form.value?.setErrors({
-            amount: `Недостаточно средств. Доступно: ${formatAmount(props.account?.balance || 0)}`
+            amount: `Недостаточно средств. Доступно: ${formatIDR(props.account?.balance || 0)}`
           })
         } else {
           form.value?.setErrors({
@@ -183,7 +183,7 @@ function validateAmount(value: number) {
   if (props.type === 'expense' && props.account) {
     const maxAmount = props.account.balance
     if (value > maxAmount) {
-      return `Недостаточно средств. Доступно: ${formatAmount(maxAmount)}`
+      return `Недостаточно средств. Доступно: ${formatIDR(maxAmount)}`
     }
   }
   return true

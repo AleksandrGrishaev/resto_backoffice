@@ -27,7 +27,7 @@
         <div class="stat-item">
           <span class="stat-label">Общая сумма:</span>
           <span class="stat-value text-h6 font-weight-bold">
-            {{ formatAmount(paymentStatistics.totalAmount) }}
+            {{ formatIDR(paymentStatistics.totalAmount) }}
           </span>
         </div>
 
@@ -78,7 +78,7 @@
             </td>
             <td class="text-right">
               <div class="payment-amount text-h6 font-weight-bold">
-                {{ formatAmount(payment.amount) }}
+                {{ formatIDR(payment.amount) }}
               </div>
             </td>
             <td class="text-center">
@@ -115,7 +115,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useAccountStore } from '@/stores/account'
-import { formatAmount } from '@/utils/formatter'
+import { formatIDR } from '@/utils/currency'
 import type { PendingPayment } from '@/stores/account'
 
 const emit = defineEmits<{

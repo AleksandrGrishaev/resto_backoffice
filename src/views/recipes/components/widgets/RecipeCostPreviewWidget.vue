@@ -1,28 +1,45 @@
-<!-- src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue - ИСПРАВЛЕНО -->
+<!-- src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue - СТИЛЬНЫЙ ДИЗАЙН -->
 <template>
-  <div v-if="estimatedCost.totalCost > 0" class="cost-preview-widget">
-    <v-card variant="outlined" class="cost-preview">
-      <v-card-title class="text-h6 py-2">
-        <v-icon icon="mdi-calculator" class="mr-2" />
-        Estimated Cost (Live Preview)
-      </v-card-title>
-      <v-card-text class="py-2">
-        <div class="d-flex justify-space-between align-center">
-          <span class="text-body-1">Total Cost:</span>
-          <span class="text-h6 text-success">{{ formatIDR(estimatedCost.totalCost) }}</span>
+  <div v-if="estimatedCost.totalCost > 0" class="cost-preview-section">
+    <v-card variant="outlined" class="cost-preview-card">
+      <v-card-text class="pa-4">
+        <!-- Header -->
+        <div class="d-flex align-center mb-3">
+          <v-icon icon="mdi-calculator" color="success" class="mr-2" />
+          <span class="text-subtitle-1 font-weight-medium">Live Cost Preview</span>
+          <v-spacer />
+          <v-chip size="small" color="success" variant="tonal">
+            <v-icon start size="12">mdi-check-circle</v-icon>
+            Accurate
+          </v-chip>
         </div>
-        <div class="d-flex justify-space-between align-center">
-          <span class="text-body-1">{{ getCostPerLabel() }}:</span>
-          <span class="text-h6 text-primary">{{ formatIDR(estimatedCost.costPerUnit) }}</span>
-        </div>
-        <v-divider class="my-2" />
-        <div class="text-caption text-medium-emphasis">
-          Based on current supplier prices (IDR) • Updates automatically using base units
-        </div>
-        <!-- ✅ НОВОЕ: Индикатор точности расчетов -->
-        <div class="calculation-accuracy mt-1">
-          <v-icon icon="mdi-check-circle" size="12" class="mr-1 text-success" />
-          <span class="text-caption text-success">Accurate base unit calculation</span>
+
+        <!-- Cost Display -->
+        <v-row class="cost-display">
+          <v-col cols="6">
+            <div class="cost-item">
+              <div class="cost-label">Total Cost</div>
+              <div class="cost-value cost-value--success">
+                {{ formatIDR(estimatedCost.totalCost) }}
+              </div>
+            </div>
+          </v-col>
+          <v-col cols="6">
+            <div class="cost-item">
+              <div class="cost-label">{{ getCostPerLabel() }}</div>
+              <div class="cost-value cost-value--primary">
+                {{ formatIDR(estimatedCost.costPerUnit) }}
+              </div>
+            </div>
+          </v-col>
+        </v-row>
+
+        <!-- Info -->
+        <div class="cost-info mt-3">
+          <v-icon icon="mdi-information-outline" size="14" class="mr-1" />
+          <span class="text-caption text-medium-emphasis">
+            Updates automatically using base unit prices
+          </span>
         </div>
       </v-card-text>
     </v-card>
@@ -33,7 +50,7 @@
 import { computed, onMounted } from 'vue'
 import { DebugUtils } from '@/utils'
 // ✅ НОВОЕ: Импорт централизованных утилит валюты
-import { formatIDR, convertToBaseUnits } from '@/utils/currency'
+import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
 
 interface Props {
   formData: any
@@ -128,53 +145,6 @@ function calculateProductCost(component: any, product: any): number {
   return componentCost
 }
 
-// ✅ НОВАЯ ФУНКЦИЯ: Конвертация в базовые единицы
-function convertToBaseUnits(quantity: number, fromUnit: string, baseUnit: string): number {
-  const unit = fromUnit.toLowerCase()
-
-  // Конвертация в граммы
-  if (baseUnit === 'gram') {
-    if (unit === 'kg' || unit === 'kilogram') {
-      return quantity * 1000
-    }
-    if (unit === 'gram' || unit === 'g') {
-      return quantity
-    }
-  }
-
-  // Конвертация в миллилитры
-  if (baseUnit === 'ml') {
-    if (unit === 'liter' || unit === 'l') {
-      return quantity * 1000
-    }
-    if (unit === 'ml' || unit === 'milliliter') {
-      return quantity
-    }
-  }
-
-  // Конвертация в штуки
-  if (baseUnit === 'piece') {
-    if (unit === 'piece' || unit === 'pack' || unit === 'item') {
-      return quantity
-    }
-  }
-
-  // Если не можем конвертировать, возвращаем как есть
-  DebugUtils.warn('RecipeCostPreviewWidget', `Cannot convert ${fromUnit} to ${baseUnit}`)
-  return quantity
-}
-
-// ✅ НОВАЯ ФУНКЦИЯ: Форматирование валюты в IDR
-function formatCurrency(amount: number): string {
-  if (amount >= 1000000) {
-    return `${(amount / 1000000).toFixed(1)}M IDR`
-  }
-  if (amount >= 1000) {
-    return `${(amount / 1000).toFixed(1)}K IDR`
-  }
-  return `${Math.round(amount)} IDR`
-}
-
 function getCostPerLabel(): string {
   return props.type === 'preparation' ? 'Cost per Unit' : 'Cost per Portion'
 }
@@ -185,19 +155,62 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-.cost-preview {
-  background: linear-gradient(135deg, #e8f5e8 0%, #f0f8ff 100%);
-  border: 2px solid var(--color-success);
+.cost-preview-section {
+  margin: 16px 0;
+}
 
-  .v-card-title {
-    background: var(--color-success);
-    color: white;
-    border-radius: 8px 8px 0 0;
+.cost-preview-card {
+  border-left: 4px solid var(--v-theme-success);
+  background: var(--v-theme-surface-variant);
+  transition: all 0.2s ease;
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 }
 
-.calculation-accuracy {
+.cost-display {
+  .cost-item {
+    text-align: center;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--v-theme-surface);
+    border: 1px solid var(--v-theme-outline-variant);
+
+    .cost-label {
+      font-size: 0.875rem;
+      color: var(--v-theme-on-surface-variant);
+      margin-bottom: 4px;
+    }
+
+    .cost-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      line-height: 1;
+
+      &.cost-value--success {
+        color: #4caf50; // Material Green 500
+      }
+
+      &.cost-value--primary {
+        color: #1976d2; // Material Blue 700
+      }
+    }
+  }
+}
+
+.cost-info {
   display: flex;
   align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(var(--v-theme-success), 0.1);
+  border-radius: 6px;
+  color: var(--v-theme-on-surface);
+}
+
+// Override any conflicting styles
+:deep(.v-card-text) {
+  background: transparent !important;
 }
 </style>

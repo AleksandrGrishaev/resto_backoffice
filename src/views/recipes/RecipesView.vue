@@ -1,153 +1,193 @@
-<!-- src/views/recipes/RecipesView.vue - FIXED -->
+<!-- src/views/recipes/RecipesView.vue - В СТИЛЕ КОНТРАГЕНТОВ -->
 <template>
   <div class="recipes-view">
-    <!-- Toolbar -->
+    <!-- Заголовок и кнопка добавления -->
     <div class="recipes-toolbar">
-      <div class="recipes-toolbar__left">
-        <v-text-field
-          v-model="search"
-          prepend-inner-icon="mdi-magnify"
-          label="Search recipes and preparations..."
-          clearable
-          density="compact"
-          hide-details
-          class="search-field"
-        />
-
-        <v-chip-group
-          v-model="activeTab"
-          selected-class="text-primary"
-          mandatory
-          class="recipes-toolbar__tabs"
-        >
-          <v-chip value="recipes" variant="outlined">
-            <v-icon icon="mdi-book-open-page-variant" start />
-            Recipes ({{ filteredRecipes.length }})
-          </v-chip>
-          <v-chip value="preparations" variant="outlined">
-            <v-icon icon="mdi-chef-hat" start />
-            Preparations ({{ filteredPreparations.length }})
-          </v-chip>
-        </v-chip-group>
-      </div>
-
-      <div class="recipes-toolbar__right">
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="showCreateDialog">
-          New {{ activeTab === 'recipes' ? 'Recipe' : 'Preparation' }}
-        </v-btn>
-      </div>
+      <v-row align="center" class="mb-4">
+        <v-col>
+          <div class="d-flex align-center ga-3">
+            <v-icon size="40" color="primary">mdi-chef-hat</v-icon>
+            <div>
+              <h1 class="text-h4">Recipes & Preparations</h1>
+              <p class="text-subtitle-1 text-medium-emphasis mt-1">
+                Manage recipes and preparations for your restaurant menu
+              </p>
+            </div>
+          </div>
+        </v-col>
+        <v-col cols="auto">
+          <v-btn color="primary" prepend-icon="mdi-plus" size="large" @click="showCreateDialog">
+            New {{ activeTab === 'recipes' ? 'Recipe' : 'Preparation' }}
+          </v-btn>
+        </v-col>
+      </v-row>
     </div>
 
-    <!-- Content -->
-    <div class="recipes-content">
-      <!-- Recipes Tab -->
-      <div v-if="activeTab === 'recipes'" class="recipes-section">
-        <v-expansion-panels v-model="expandedPanels" multiple>
-          <v-expansion-panel
-            v-for="category in recipeCategories"
-            :key="category.value"
-            :value="category.value"
+    <!-- Фильтры и поиск -->
+    <RecipeFilters v-model:active-tab="activeTab" @toggle-all-panels="handleToggleAllPanels" />
+
+    <!-- Список рецептов и полуфабрикатов -->
+    <v-card>
+      <v-card-title class="d-flex align-center pa-4">
+        <v-icon start>
+          {{ activeTab === 'recipes' ? 'mdi-book-open-page-variant' : 'mdi-chef-hat' }}
+        </v-icon>
+        {{ activeTab === 'recipes' ? 'Recipes' : 'Preparations' }} List
+        <v-spacer />
+        <div class="d-flex align-center ga-2">
+          <v-chip
+            :color="getFilteredCount() > 0 ? 'primary' : 'default'"
+            variant="outlined"
+            size="small"
           >
-            <v-expansion-panel-title>
-              <div class="category-header">
-                <span class="category-header__name">{{ category.text }}</span>
-                <v-chip
-                  size="small"
-                  variant="tonal"
-                  :color="getCategoryRecipes(category.value).length > 0 ? 'primary' : 'grey'"
-                >
-                  {{ getCategoryRecipes(category.value).length }}
-                </v-chip>
-              </div>
-            </v-expansion-panel-title>
+            {{ getFilteredCount() }} of {{ getTotalCount() }}
+          </v-chip>
 
-            <v-expansion-panel-text>
-              <div v-if="getCategoryRecipes(category.value).length === 0" class="empty-state">
-                <v-icon icon="mdi-chef-hat" size="48" class="text-medium-emphasis mb-2" />
-                <div class="text-medium-emphasis">No recipes in this category</div>
-                <v-btn
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  class="mt-2"
-                  @click="showCreateDialog"
-                >
-                  Create First Recipe
-                </v-btn>
-              </div>
-              <div v-else class="items-grid">
-                <unified-recipe-item
-                  v-for="recipe in getCategoryRecipes(category.value)"
-                  :key="recipe.id"
-                  :item="recipe"
-                  type="recipe"
-                  :cost-calculation="getCostCalculation(recipe.id)"
-                  @view="viewItem"
-                  @edit="editItem"
-                  @duplicate="duplicateRecipe"
-                  @calculate-cost="calculateCost"
-                  @toggle-status="toggleStatus"
-                />
-              </div>
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-        </v-expansion-panels>
-      </div>
+          <!-- Индикатор загрузки -->
+          <v-progress-circular
+            v-if="store.loading"
+            size="20"
+            width="2"
+            color="primary"
+            indeterminate
+          />
+        </div>
+      </v-card-title>
 
-      <!-- Preparations Tab -->
-      <div v-if="activeTab === 'preparations'" class="preparations-section">
-        <v-expansion-panels v-model="expandedPanels" multiple>
-          <v-expansion-panel v-for="type in preparationTypes" :key="type.value" :value="type.value">
-            <v-expansion-panel-title>
-              <div class="category-header">
-                <span class="category-header__name">
-                  <v-chip size="small" variant="tonal" color="primary" class="mr-2">
-                    {{ type.prefix }}
+      <v-divider />
+
+      <!-- Прогресс-бар загрузки -->
+      <v-progress-linear v-if="store.loading" indeterminate color="primary" />
+
+      <!-- Алерт с ошибкой -->
+      <v-alert
+        v-if="store.error"
+        type="error"
+        variant="tonal"
+        class="ma-4"
+        closable
+        @click:close="store.clearError"
+      >
+        <template #title>Error loading data</template>
+        {{ store.error }}
+      </v-alert>
+
+      <!-- Content -->
+      <div class="recipes-content">
+        <!-- Recipes Tab -->
+        <div v-if="activeTab === 'recipes'" class="recipes-section">
+          <v-expansion-panels v-model="expandedPanels" multiple>
+            <v-expansion-panel
+              v-for="category in recipeCategories"
+              :key="category.value"
+              :value="category.value"
+            >
+              <v-expansion-panel-title>
+                <div class="category-header">
+                  <span class="category-header__name">{{ category.text }}</span>
+                  <v-chip
+                    size="small"
+                    variant="tonal"
+                    :color="getCategoryRecipes(category.value).length > 0 ? 'primary' : 'grey'"
+                  >
+                    {{ getCategoryRecipes(category.value).length }}
                   </v-chip>
-                  {{ type.text }}
-                </span>
-                <v-chip
-                  size="small"
-                  variant="tonal"
-                  :color="getTypePreparations(type.value).length > 0 ? 'primary' : 'grey'"
-                >
-                  {{ getTypePreparations(type.value).length }}
-                </v-chip>
-              </div>
-            </v-expansion-panel-title>
+                </div>
+              </v-expansion-panel-title>
 
-            <v-expansion-panel-text>
-              <div v-if="getTypePreparations(type.value).length === 0" class="empty-state">
-                <v-icon icon="mdi-chef-hat" size="48" class="text-medium-emphasis mb-2" />
-                <div class="text-medium-emphasis">No preparations in this category</div>
-                <v-btn
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  class="mt-2"
-                  @click="showCreateDialog"
-                >
-                  Create First Preparation
-                </v-btn>
-              </div>
-              <div v-else class="items-list">
-                <unified-recipe-item
-                  v-for="preparation in getTypePreparations(type.value)"
-                  :key="preparation.id"
-                  :item="preparation"
-                  type="preparation"
-                  :cost-calculation="getCostCalculation(preparation.id)"
-                  @view="viewItem"
-                  @edit="editItem"
-                  @calculate-cost="calculateCost"
-                  @toggle-status="toggleStatus"
-                />
-              </div>
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-        </v-expansion-panels>
+              <v-expansion-panel-text>
+                <div v-if="getCategoryRecipes(category.value).length === 0" class="empty-state">
+                  <v-icon icon="mdi-chef-hat" size="48" class="text-medium-emphasis mb-2" />
+                  <div class="text-medium-emphasis">No recipes in this category</div>
+                  <v-btn
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    class="mt-2"
+                    @click="showCreateDialog"
+                  >
+                    Create First Recipe
+                  </v-btn>
+                </div>
+                <div v-else class="items-grid">
+                  <unified-recipe-item
+                    v-for="recipe in getCategoryRecipes(category.value)"
+                    :key="recipe.id"
+                    :item="recipe"
+                    type="recipe"
+                    :cost-calculation="getCostCalculation(recipe.id)"
+                    @view="viewItem"
+                    @edit="editItem"
+                    @duplicate="duplicateRecipe"
+                    @calculate-cost="calculateCost"
+                    @toggle-status="toggleStatus"
+                  />
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </div>
+
+        <!-- Preparations Tab -->
+        <div v-if="activeTab === 'preparations'" class="preparations-section">
+          <v-expansion-panels v-model="expandedPanels" multiple>
+            <v-expansion-panel
+              v-for="type in preparationTypes"
+              :key="type.value"
+              :value="type.value"
+            >
+              <v-expansion-panel-title>
+                <div class="category-header">
+                  <span class="category-header__name">
+                    <v-chip size="small" variant="tonal" color="primary" class="mr-2">
+                      {{ type.prefix }}
+                    </v-chip>
+                    {{ type.text }}
+                  </span>
+                  <v-chip
+                    size="small"
+                    variant="tonal"
+                    :color="getTypePreparations(type.value).length > 0 ? 'primary' : 'grey'"
+                  >
+                    {{ getTypePreparations(type.value).length }}
+                  </v-chip>
+                </div>
+              </v-expansion-panel-title>
+
+              <v-expansion-panel-text>
+                <div v-if="getTypePreparations(type.value).length === 0" class="empty-state">
+                  <v-icon icon="mdi-chef-hat" size="48" class="text-medium-emphasis mb-2" />
+                  <div class="text-medium-emphasis">No preparations in this category</div>
+                  <v-btn
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    class="mt-2"
+                    @click="showCreateDialog"
+                  >
+                    Create First Preparation
+                  </v-btn>
+                </div>
+                <!-- ✅ ИСПРАВЛЕНО: Полуфабрикаты теперь тоже в два столбца -->
+                <div v-else class="items-grid">
+                  <unified-recipe-item
+                    v-for="preparation in getTypePreparations(type.value)"
+                    :key="preparation.id"
+                    :item="preparation"
+                    type="preparation"
+                    :cost-calculation="getCostCalculation(preparation.id)"
+                    @view="viewItem"
+                    @edit="editItem"
+                    @calculate-cost="calculateCost"
+                    @toggle-status="toggleStatus"
+                  />
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </div>
       </div>
-    </div>
+    </v-card>
 
     <!-- Dialogs -->
     <unified-recipe-dialog
@@ -175,11 +215,11 @@
       v-model="snackbar.show"
       :color="snackbar.color"
       :timeout="3000"
-      location="bottom right"
+      location="top right"
     >
       {{ snackbar.message }}
       <template #actions>
-        <v-btn variant="text" @click="snackbar.show = false">Close</v-btn>
+        <v-btn variant="text" icon="mdi-close" @click="snackbar.show = false" />
       </template>
     </v-snackbar>
 
@@ -219,13 +259,13 @@ import { DebugUtils } from '@/utils'
 import UnifiedRecipeItem from './components/UnifiedRecipeItem.vue'
 import UnifiedRecipeDialog from './components/UnifiedRecipeDialog.vue'
 import UnifiedViewDialog from './components/UnifiedViewDialog.vue'
+import RecipeFilters from './components/RecipeFilters.vue'
 
 const MODULE_NAME = 'RecipesView'
 const store = useRecipesStore()
 const productsStore = useProductsStore()
 
 // State
-const search = ref('')
 const activeTab = ref<'recipes' | 'preparations'>('recipes')
 const expandedPanels = ref<string[]>([])
 
@@ -258,26 +298,34 @@ const rules = {
 const recipeCategories = RECIPE_CATEGORIES
 const preparationTypes = PREPARATION_TYPES
 
-// Computed
-const filteredRecipes = computed(() => {
-  if (!search.value) return store.activeRecipes
-  return store.activeRecipes.filter(
-    recipe =>
-      recipe.name.toLowerCase().includes(search.value.toLowerCase()) ||
-      recipe.description?.toLowerCase().includes(search.value.toLowerCase()) ||
-      recipe.tags?.some(tag => tag.toLowerCase().includes(search.value.toLowerCase()))
-  )
-})
+// ✅ ОБНОВЛЕННЫЕ COMPUTED - будут управляться из RecipeFilters
+const filteredRecipes = computed(() => store.activeRecipes)
+const filteredPreparations = computed(() => store.activePreparations)
 
-const filteredPreparations = computed(() => {
-  if (!search.value) return store.activePreparations
-  return store.activePreparations.filter(
-    preparation =>
-      preparation.name.toLowerCase().includes(search.value.toLowerCase()) ||
-      preparation.code.toLowerCase().includes(search.value.toLowerCase()) ||
-      preparation.description?.toLowerCase().includes(search.value.toLowerCase())
-  )
-})
+// Methods для подсчета
+function getFilteredCount(): number {
+  return activeTab.value === 'recipes'
+    ? filteredRecipes.value.length
+    : filteredPreparations.value.length
+}
+
+function getTotalCount(): number {
+  return activeTab.value === 'recipes' ? store.recipes.length : store.preparations.length
+}
+
+// ✅ НОВЫЙ МЕТОД: Обработка переключения панелей из фильтров
+function handleToggleAllPanels() {
+  if (expandedPanels.value.length > 0) {
+    // Сворачиваем все
+    expandedPanels.value = []
+  } else {
+    // Разворачиваем все
+    expandedPanels.value = [
+      ...recipeCategories.map(c => c.value),
+      ...preparationTypes.map(c => c.value)
+    ]
+  }
+}
 
 // Methods
 function getCategoryRecipes(category: RecipeCategory): Recipe[] {
@@ -440,7 +488,7 @@ onMounted(async () => {
       productsStore.loadProducts(true) // Use mock data
     ])
 
-    // Expand all categories by default
+    // ✅ ИСПРАВЛЕНО: Expand all categories by default (следим за состоянием)
     expandedPanels.value = [
       ...recipeCategories.map(c => c.value),
       ...preparationTypes.map(c => c.value)
@@ -460,41 +508,15 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 .recipes-view {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  padding: 0;
 }
 
 .recipes-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 24px;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-outline-variant);
-
-  &__left {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex: 1;
-  }
-
-  &__tabs {
-    flex-shrink: 0;
-  }
-
-  .search-field {
-    min-width: 300px;
-    max-width: 400px;
-  }
+  margin-bottom: 1rem;
 }
 
 .recipes-content {
-  flex: 1;
   padding: 24px;
-  overflow-y: auto;
 }
 
 .category-header {
@@ -526,31 +548,8 @@ onMounted(async () => {
   padding: 16px 0;
 }
 
-.items-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 0;
-}
-
 // Responsive design
 @media (max-width: 768px) {
-  .recipes-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-
-    &__left {
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .search-field {
-      min-width: auto;
-      max-width: none;
-    }
-  }
-
   .items-grid {
     grid-template-columns: 1fr;
   }

@@ -54,7 +54,7 @@
               </td>
               <td>
                 <div class="account-balance" :class="getBalanceClass(account.balance)">
-                  {{ formatAmount(account.balance) }}
+                  {{ formatIDR(account.balance) }}
                 </div>
               </td>
               <td>
@@ -98,7 +98,7 @@
 import { ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { useAccountStore } from '@/stores/account'
-import { formatDate, formatAmount } from '@/utils/formatter'
+import { formatIDR } from '@/utils/currency'
 import type { Account, PendingPayment } from '@/stores/account'
 import PendingPaymentsWidget from './PendingPaymentsWidget.vue'
 import PaymentConfirmationDialog from './PaymentConfirmationDialog.vue'

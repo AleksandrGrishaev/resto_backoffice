@@ -1,4 +1,4 @@
-// src/composables/useMeasurementUnits.ts
+// src/composables/useMeasurementUnits.ts - UNIFIED: Единая система единиц измерения
 import { computed } from 'vue'
 import type { MeasurementUnit, UnitType } from '@/types/measurementUnits'
 import {
@@ -11,13 +11,13 @@ import {
   convertUnits,
   formatWithUnit,
   getUnitsForContext,
-  getUnitsByType,
   isValidUnit,
   isUnitValidForContext
 } from '@/types/measurementUnits'
 
 /**
- * Composable для работы с единицами измерения
+ * ГЛАВНЫЙ composable для работы с единицами измерения
+ * Заменяет все остальные системы единиц
  */
 export function useMeasurementUnits() {
   // =============================================
@@ -225,11 +225,12 @@ export function useMeasurementUnits() {
 }
 
 // =============================================
-// ТИПИЗИРОВАННЫЕ ХЕЛПЕРЫ
+// СПЕЦИАЛИЗИРОВАННЫЕ ЭКСПОРТЫ (заменяют отдельные файлы)
 // =============================================
 
 /**
- * Типизированный хелпер для работы с единицами продуктов
+ * Специализированный composable для единиц продуктов
+ * ЗАМЕНЯЕТ: src/composables/useProductUnits.ts
  */
 export function useProductUnits() {
   const { getContextUnits, getUnitOptions, validateUnitForContext } = useMeasurementUnits()
@@ -242,7 +243,7 @@ export function useProductUnits() {
 }
 
 /**
- * Типизированный хелпер для работы с единицами рецептов
+ * Специализированный composable для единиц рецептов
  */
 export function useRecipeUnits() {
   const { getContextUnits, getUnitOptions, validateUnitForContext } = useMeasurementUnits()
@@ -255,7 +256,7 @@ export function useRecipeUnits() {
 }
 
 /**
- * Типизированный хелпер для работы с единицами меню
+ * Специализированный composable для единиц меню
  */
 export function useMenuUnits() {
   const { getContextUnits, getUnitOptions, validateUnitForContext } = useMeasurementUnits()
@@ -265,4 +266,76 @@ export function useMenuUnits() {
     unitOptions: getUnitOptions('menu'),
     validateUnit: (unit: MeasurementUnit) => validateUnitForContext(unit, 'menu')
   }
+}
+
+// =============================================
+// КОНВЕРТАЦИЯ ЕДИНИЦ (заменяет currency.convertToBaseUnits)
+// =============================================
+
+/**
+ * Улучшенная конвертация в базовые единицы
+ * ЗАМЕНЯЕТ: currency.convertToBaseUnits()
+ */
+export function convertToBaseUnits(
+  quantity: number,
+  fromUnit: string,
+  targetType: 'weight' | 'volume' | 'piece'
+): { success: boolean; value?: number; baseUnit?: string; error?: string } {
+  try {
+    // Мапинг базовых единиц
+    const baseUnits = {
+      weight: 'gram' as MeasurementUnit,
+      volume: 'ml' as MeasurementUnit,
+      piece: 'piece' as MeasurementUnit
+    }
+
+    const baseUnit = baseUnits[targetType]
+
+    // Проверяем что fromUnit валидный
+    if (!isValidUnit(fromUnit as MeasurementUnit)) {
+      return {
+        success: false,
+        error: `Unknown unit: ${fromUnit}`
+      }
+    }
+
+    // Конвертируем
+    const convertedValue = convertUnits(quantity, fromUnit as MeasurementUnit, baseUnit)
+
+    return {
+      success: true,
+      value: convertedValue,
+      baseUnit: baseUnit
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Conversion failed'
+    }
+  }
+}
+
+// =============================================
+// MIGRATION HELPERS
+// =============================================
+
+/**
+ * Помощник для миграции с старых систем единиц
+ */
+export function migrationHelper() {
+  console.warn(`
+🔄 MIGRATION GUIDE - Unified Measurement Units
+
+Old imports to replace:
+❌ import { useProductUnits } from '@/composables/useProductUnits'
+❌ import { convertToBaseUnits } from '@/utils/currency'
+
+New imports to use:
+✅ import { useProductUnits, convertToBaseUnits } from '@/composables/useMeasurementUnits'
+✅ import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
+
+Files to DELETE after migration:
+📁 src/composables/useProductUnits.ts
+🔧 convertToBaseUnits() from src/utils/currency.ts
+  `)
 }

@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/UnifiedRecipeItem.vue - ИСПРАВЛЕНО -->
+<!-- src/views/recipes/components/UnifiedRecipeItem.vue - УБРАНО Top components и Instructions -->
 <template>
   <div class="recipe-item" :class="{ 'recipe-item--inactive': !item.isActive }">
     <div class="recipe-item__main">
@@ -102,34 +102,8 @@
           </span>
         </div>
 
-        <!-- ✅ ИСПРАВЛЕНО: Cost Breakdown Preview с IDR -->
-        <div v-if="showCostBreakdown" class="recipe-item__cost-breakdown">
-          <div class="cost-breakdown-header">
-            <v-icon icon="mdi-chart-pie" size="12" class="mr-1" />
-            <span class="text-caption">Top components:</span>
-          </div>
-          <div class="cost-breakdown-items">
-            <div
-              v-for="component in getTopCostComponents.slice(0, 2)"
-              :key="component.id"
-              class="cost-breakdown-item"
-            >
-              <span class="component-name">{{ component.name }}</span>
-              <span class="component-cost">{{ formatIDR(component.cost) }}</span>
-            </div>
-            <div v-if="getTopCostComponents.length > 2" class="cost-breakdown-more">
-              <span class="text-caption text-medium-emphasis">
-                +{{ getTopCostComponents.length - 2 }} more
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Instructions preview -->
-        <div v-if="getInstructionsPreview()" class="recipe-item__instructions">
-          <v-icon icon="mdi-text" size="14" class="mr-1" />
-          <span class="instructions-preview">{{ getInstructionsPreview() }}</span>
-        </div>
+        <!-- ✅ УБРАНО: Cost Breakdown Preview (Top components) -->
+        <!-- ✅ УБРАНО: Instructions preview -->
 
         <!-- Last Updated Info -->
         <div v-if="getLastUpdated()" class="recipe-item__updated">
@@ -268,21 +242,7 @@ const isExpensive = computed(() => {
   return isExpensiveAmount(getCostPerUnit.value, props.type)
 })
 
-const showCostBreakdown = computed(() => {
-  return hasCostData.value && !!props.costCalculation?.componentCosts?.length
-})
-
-const getTopCostComponents = computed(() => {
-  if (!props.costCalculation?.componentCosts) return []
-
-  return [...props.costCalculation.componentCosts]
-    .sort((a, b) => b.totalPlanCost - a.totalPlanCost)
-    .map(comp => ({
-      id: comp.componentId,
-      name: comp.componentName,
-      cost: comp.totalPlanCost
-    }))
-})
+// ✅ УБРАНО: showCostBreakdown и getTopCostComponents - больше не нужны
 
 // Existing methods
 function getCategoryColor(): string {
@@ -441,23 +401,7 @@ function getMissingCostsCount(): number {
   return Math.max(0, totalComponents - calculatedComponents)
 }
 
-function getInstructionsPreview(): string {
-  let instructions = ''
-
-  if (props.type === 'preparation') {
-    instructions = (props.item as Preparation).instructions || ''
-  } else {
-    const recipe = props.item as Recipe
-    if (recipe.instructions && recipe.instructions.length > 0) {
-      instructions = recipe.instructions[0].instruction
-    }
-  }
-
-  if (!instructions) return ''
-
-  const preview = instructions.slice(0, 80)
-  return preview.length < instructions.length ? `${preview}...` : preview
-}
+// ✅ УБРАНО: getInstructionsPreview - больше не показываем инструкции
 
 function getLastUpdated(): string {
   const updatedAt = new Date(props.item.updatedAt)
@@ -612,64 +556,11 @@ function getLastUpdated(): string {
     }
   }
 
-  &__cost-breakdown {
-    border: 1px solid var(--color-outline-variant);
-    border-radius: 6px;
-    padding: 8px;
-    background: var(--color-surface-variant);
-
-    .cost-breakdown-header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 4px;
-      color: var(--color-text-secondary);
-    }
-
-    .cost-breakdown-items {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .cost-breakdown-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 0.75rem;
-
-      .component-name {
-        flex: 1;
-        color: var(--color-text-primary);
-      }
-
-      .component-cost {
-        color: var(--color-success);
-        font-weight: 600;
-      }
-    }
-
-    .cost-breakdown-more {
-      text-align: center;
-      margin-top: 2px;
-    }
-  }
-
   &__tags {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
     align-items: center;
-  }
-
-  &__instructions {
-    display: flex;
-    align-items: flex-start;
-    font-size: 0.85rem;
-
-    .instructions-preview {
-      color: var(--text-secondary);
-      line-height: 1.3;
-    }
   }
 
   &__updated {
