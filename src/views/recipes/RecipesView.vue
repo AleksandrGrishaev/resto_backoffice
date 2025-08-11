@@ -1,4 +1,4 @@
-<!-- src/views/recipes/RecipesView.vue - В СТИЛЕ КОНТРАГЕНТОВ -->
+<!-- src/views/recipes/RecipesView.vue - С РАБОЧИМИ ФИЛЬТРАМИ -->
 <template>
   <div class="recipes-view">
     <!-- Заголовок и кнопка добавления -->
@@ -23,8 +23,12 @@
       </v-row>
     </div>
 
-    <!-- Фильтры и поиск -->
-    <RecipeFilters v-model:active-tab="activeTab" @toggle-all-panels="handleToggleAllPanels" />
+    <!-- ✅ ИСПРАВЛЕНО: Фильтры с правильными event handlers -->
+    <RecipeFilters
+      v-model:active-tab="activeTab"
+      @toggle-all-panels="handleToggleAllPanels"
+      @update:filters="handleFiltersUpdate"
+    />
 
     <!-- Список рецептов и полуфабрикатов -->
     <v-card>
@@ -35,12 +39,24 @@
         {{ activeTab === 'recipes' ? 'Recipes' : 'Preparations' }} List
         <v-spacer />
         <div class="d-flex align-center ga-2">
+          <!-- ✅ ИСПРАВЛЕНО: Правильный подсчет отфильтрованных элементов -->
           <v-chip
             :color="getFilteredCount() > 0 ? 'primary' : 'default'"
             variant="outlined"
             size="small"
           >
             {{ getFilteredCount() }} of {{ getTotalCount() }}
+          </v-chip>
+
+          <!-- ✅ НОВОЕ: Индикатор активных фильтров -->
+          <v-chip
+            v-if="hasActiveFilters"
+            color="warning"
+            variant="tonal"
+            size="small"
+            prepend-icon="mdi-filter"
+          >
+            Filtered
           </v-chip>
 
           <!-- Индикатор загрузки -->
@@ -72,8 +88,29 @@
         {{ store.error }}
       </v-alert>
 
+      <!-- ✅ НОВОЕ: Empty state when no results after filtering -->
+      <div
+        v-if="getFilteredCount() === 0 && !store.loading"
+        class="empty-filtered-state pa-8 text-center"
+      >
+        <v-icon icon="mdi-filter-remove" size="64" class="text-medium-emphasis mb-4" />
+        <h3 class="text-h6 mb-2">No {{ activeTab }} found</h3>
+        <p class="text-body-2 text-medium-emphasis mb-4">
+          <span v-if="hasActiveFilters">Try adjusting your filters or search criteria</span>
+          <span v-else>No {{ activeTab }} available in this category</span>
+        </p>
+        <div class="d-flex gap-2 justify-center">
+          <v-btn v-if="hasActiveFilters" variant="outlined" @click="clearAllFilters">
+            Clear Filters
+          </v-btn>
+          <v-btn color="primary" @click="showCreateDialog">
+            Create First {{ activeTab.slice(0, -1) }}
+          </v-btn>
+        </div>
+      </div>
+
       <!-- Content -->
-      <div class="recipes-content">
+      <div v-else class="recipes-content">
         <!-- Recipes Tab -->
         <div v-if="activeTab === 'recipes'" class="recipes-section">
           <v-expansion-panels v-model="expandedPanels" multiple>
@@ -98,8 +135,15 @@
               <v-expansion-panel-text>
                 <div v-if="getCategoryRecipes(category.value).length === 0" class="empty-state">
                   <v-icon icon="mdi-chef-hat" size="48" class="text-medium-emphasis mb-2" />
-                  <div class="text-medium-emphasis">No recipes in this category</div>
+                  <div class="text-medium-emphasis">
+                    {{
+                      hasActiveFilters
+                        ? 'No recipes match current filters'
+                        : 'No recipes in this category'
+                    }}
+                  </div>
                   <v-btn
+                    v-if="!hasActiveFilters"
                     size="small"
                     variant="outlined"
                     color="primary"
@@ -157,8 +201,15 @@
               <v-expansion-panel-text>
                 <div v-if="getTypePreparations(type.value).length === 0" class="empty-state">
                   <v-icon icon="mdi-chef-hat" size="48" class="text-medium-emphasis mb-2" />
-                  <div class="text-medium-emphasis">No preparations in this category</div>
+                  <div class="text-medium-emphasis">
+                    {{
+                      hasActiveFilters
+                        ? 'No preparations match current filters'
+                        : 'No preparations in this category'
+                    }}
+                  </div>
                   <v-btn
+                    v-if="!hasActiveFilters"
                     size="small"
                     variant="outlined"
                     color="primary"
@@ -168,7 +219,6 @@
                     Create First Preparation
                   </v-btn>
                 </div>
-                <!-- ✅ ИСПРАВЛЕНО: Полуфабрикаты теперь тоже в два столбца -->
                 <div v-else class="items-grid">
                   <unified-recipe-item
                     v-for="preparation in getTypePreparations(type.value)"
@@ -265,9 +315,18 @@ const MODULE_NAME = 'RecipesView'
 const store = useRecipesStore()
 const productsStore = useProductsStore()
 
-// State
+// =============================================
+// STATE
+// =============================================
+
 const activeTab = ref<'recipes' | 'preparations'>('recipes')
 const expandedPanels = ref<string[]>([])
+
+// ✅ НОВОЕ: Filter state
+const currentFilters = ref({
+  search: '',
+  status: 'active' as 'active' | 'archived' | 'all'
+})
 
 // Dialogs
 const dialogs = ref({
@@ -286,7 +345,7 @@ const duplicateName = ref('')
 const snackbar = ref({
   show: false,
   message: '',
-  color: 'success'
+  color: 'success' as 'success' | 'error' | 'info'
 })
 
 // Validation rules
@@ -298,11 +357,71 @@ const rules = {
 const recipeCategories = RECIPE_CATEGORIES
 const preparationTypes = PREPARATION_TYPES
 
-// ✅ ОБНОВЛЕННЫЕ COMPUTED - будут управляться из RecipeFilters
-const filteredRecipes = computed(() => store.activeRecipes)
-const filteredPreparations = computed(() => store.activePreparations)
+// =============================================
+// COMPUTED PROPERTIES
+// =============================================
 
-// Methods для подсчета
+// ✅ ИСПРАВЛЕНО: Filtered data based on current filters
+const filteredRecipes = computed(() => {
+  let recipes = store.recipes
+
+  // Filter by status
+  if (currentFilters.value.status === 'active') {
+    recipes = recipes.filter(r => r.isActive)
+  } else if (currentFilters.value.status === 'archived') {
+    recipes = recipes.filter(r => !r.isActive)
+  }
+  // 'all' shows everything
+
+  // Filter by search
+  if (currentFilters.value.search.trim()) {
+    const searchText = currentFilters.value.search.toLowerCase()
+    recipes = recipes.filter(
+      recipe =>
+        recipe.name.toLowerCase().includes(searchText) ||
+        recipe.code?.toLowerCase().includes(searchText) ||
+        recipe.description?.toLowerCase().includes(searchText) ||
+        recipe.tags?.some(tag => tag.toLowerCase().includes(searchText))
+    )
+  }
+
+  return recipes
+})
+
+const filteredPreparations = computed(() => {
+  let preparations = store.preparations
+
+  // Filter by status
+  if (currentFilters.value.status === 'active') {
+    preparations = preparations.filter(p => p.isActive)
+  } else if (currentFilters.value.status === 'archived') {
+    preparations = preparations.filter(p => !p.isActive)
+  }
+  // 'all' shows everything
+
+  // Filter by search
+  if (currentFilters.value.search.trim()) {
+    const searchText = currentFilters.value.search.toLowerCase()
+    preparations = preparations.filter(
+      prep =>
+        prep.name.toLowerCase().includes(searchText) ||
+        prep.code.toLowerCase().includes(searchText) ||
+        prep.description?.toLowerCase().includes(searchText)
+    )
+  }
+
+  return preparations
+})
+
+// ✅ НОВОЕ: Check if filters are active
+const hasActiveFilters = computed(() => {
+  return currentFilters.value.search.trim() !== '' || currentFilters.value.status !== 'active'
+})
+
+// =============================================
+// METHODS FOR COUNTS
+// =============================================
+
 function getFilteredCount(): number {
   return activeTab.value === 'recipes'
     ? filteredRecipes.value.length
@@ -313,7 +432,41 @@ function getTotalCount(): number {
   return activeTab.value === 'recipes' ? store.recipes.length : store.preparations.length
 }
 
-// ✅ НОВЫЙ МЕТОД: Обработка переключения панелей из фильтров
+// =============================================
+// METHODS FOR CATEGORIZED DATA
+// =============================================
+
+function getCategoryRecipes(category: RecipeCategory): Recipe[] {
+  return filteredRecipes.value.filter(recipe => recipe.category === category)
+}
+
+function getTypePreparations(type: PreparationType): Preparation[] {
+  return filteredPreparations.value.filter(preparation => preparation.type === type)
+}
+
+// =============================================
+// FILTER METHODS
+// =============================================
+
+function handleFiltersUpdate(filters: { search: string; status: 'active' | 'archived' | 'all' }) {
+  currentFilters.value = { ...filters }
+
+  DebugUtils.debug(MODULE_NAME, 'Filters updated', {
+    filters,
+    filteredCount: getFilteredCount(),
+    totalCount: getTotalCount()
+  })
+}
+
+function clearAllFilters() {
+  currentFilters.value = {
+    search: '',
+    status: 'active'
+  }
+
+  showSnackbar('Filters cleared', 'info')
+}
+
 function handleToggleAllPanels() {
   if (expandedPanels.value.length > 0) {
     // Сворачиваем все
@@ -327,18 +480,11 @@ function handleToggleAllPanels() {
   }
 }
 
-// Methods
-function getCategoryRecipes(category: RecipeCategory): Recipe[] {
-  return filteredRecipes.value.filter(recipe => recipe.category === category)
-}
+// =============================================
+// EXISTING METHODS
+// =============================================
 
-function getTypePreparations(type: PreparationType): Preparation[] {
-  return filteredPreparations.value.filter(preparation => preparation.type === type)
-}
-
-// ✅ ИСПРАВЛЕНИЕ: Главная функция, которая вызывала ошибку
 function getCostCalculation(itemId: string) {
-  // Определяем тип по активной вкладке и используем правильные методы store
   if (activeTab.value === 'recipes') {
     return store.getRecipeCostCalculation(itemId)
   } else {
@@ -354,7 +500,7 @@ function showCreateDialog() {
 function viewItem(item: Recipe | Preparation) {
   viewingItem.value = item
 
-  // ✅ ИСПРАВЛЕНО: Правильное определение типа
+  // Determine type
   if ('components' in item && Array.isArray(item.components)) {
     viewingItemType.value = 'recipe'
   } else if ('recipe' in item && Array.isArray(item.recipe)) {
@@ -422,7 +568,7 @@ async function calculateCost(item: Recipe | Preparation) {
       const calculation = await store.calculateRecipeCost(item.id)
       if (calculation) {
         showSnackbar(
-          `Cost calculated: $${calculation.totalCost.toFixed(2)} total, $${calculation.costPerPortion.toFixed(2)} per portion`,
+          `Cost calculated: ${calculation.totalCost.toFixed(2)} IDR total, ${calculation.costPerPortion.toFixed(2)} IDR per portion`,
           'success'
         )
       }
@@ -431,7 +577,7 @@ async function calculateCost(item: Recipe | Preparation) {
       const calculation = await store.calculatePreparationCost(item.id)
       if (calculation) {
         showSnackbar(
-          `Cost calculated: $${calculation.totalCost.toFixed(2)} total, $${calculation.costPerOutputUnit.toFixed(2)} per unit`,
+          `Cost calculated: ${calculation.totalCost.toFixed(2)} IDR total, ${calculation.costPerOutputUnit.toFixed(2)} IDR per unit`,
           'success'
         )
       }
@@ -469,8 +615,6 @@ async function handleItemSaved(item: Recipe | Preparation) {
 
   showSnackbar(`${item.name} ${action} successfully`, 'success')
 
-  // ✅ ИСПРАВЛЕНИЕ: Не нужно fetchRecipes/fetchPreparations
-  // Данные уже обновлены через composables
   DebugUtils.info(MODULE_NAME, `${itemType} ${action}`, { id: item.id, name: item.name })
 }
 
@@ -478,7 +622,10 @@ function showSnackbar(message: string, color: 'success' | 'error' | 'info' = 'su
   snackbar.value = { show: true, message, color }
 }
 
-// Initialize
+// =============================================
+// LIFECYCLE
+// =============================================
+
 onMounted(async () => {
   DebugUtils.debug(MODULE_NAME, 'Component mounted')
   try {
@@ -488,7 +635,7 @@ onMounted(async () => {
       productsStore.loadProducts(true) // Use mock data
     ])
 
-    // ✅ ИСПРАВЛЕНО: Expand all categories by default (следим за состоянием)
+    // Expand all categories by default
     expandedPanels.value = [
       ...recipeCategories.map(c => c.value),
       ...preparationTypes.map(c => c.value)
@@ -541,6 +688,18 @@ onMounted(async () => {
   text-align: center;
 }
 
+.empty-filtered-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+
+  .v-btn {
+    margin: 0 8px;
+  }
+}
+
 .items-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -553,6 +712,21 @@ onMounted(async () => {
   .items-grid {
     grid-template-columns: 1fr;
   }
+
+  .empty-filtered-state {
+    padding: 32px 16px;
+    min-height: 250px;
+
+    .v-btn {
+      width: 100%;
+      margin: 4px 0;
+    }
+
+    .d-flex {
+      flex-direction: column;
+      width: 100%;
+    }
+  }
 }
 
 :deep(.v-expansion-panel-text__wrapper) {
@@ -561,5 +735,21 @@ onMounted(async () => {
 
 :deep(.v-expansion-panel-title) {
   padding: 16px 24px;
+}
+
+// Улучшенная анимация для filtered state
+.empty-filtered-state {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

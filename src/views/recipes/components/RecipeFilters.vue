@@ -30,7 +30,8 @@
             density="compact"
             clearable
             placeholder="Enter name, code, description..."
-            @input="debouncedSearch"
+            @input="handleSearchInput"
+            @keyup.enter="applySearch"
           />
         </v-col>
 
@@ -45,6 +46,10 @@
             <v-chip value="active" variant="outlined">
               <v-icon start size="14">mdi-check-circle</v-icon>
               Active
+            </v-chip>
+            <v-chip value="archived" variant="outlined">
+              <v-icon start size="14">mdi-archive</v-icon>
+              Archive
             </v-chip>
             <v-chip value="all" variant="outlined">
               <v-icon start size="14">mdi-format-list-bulleted</v-icon>
@@ -66,12 +71,38 @@
           </v-btn>
         </v-col>
       </v-row>
+
+      <!-- Debug Info (только для разработки) -->
+      <v-row v-if="$DEBUG" class="mt-2">
+        <v-col>
+          <v-chip size="small" variant="outlined" class="mr-2">
+            Total R: {{ store.statistics.recipes.total }}
+          </v-chip>
+          <v-chip size="small" variant="outlined" class="mr-2">
+            Active R: {{ store.statistics.recipes.active }}
+          </v-chip>
+          <v-chip size="small" variant="outlined" class="mr-2">
+            Total P: {{ store.statistics.preparations.total }}
+          </v-chip>
+          <v-chip size="small" variant="outlined" class="mr-2">
+            Active P: {{ store.statistics.preparations.active }}
+          </v-chip>
+          <v-chip size="small" variant="outlined" class="mr-2">
+            Filtered: {{ filteredCount }}
+          </v-chip>
+          <v-chip size="small" variant="outlined">Status: {{ localFilters.status }}</v-chip>
+        </v-col>
+      </v-row>
     </v-card-text>
   </v-card>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRecipesStore } from '@/stores/recipes'
+import { DebugUtils } from '@/utils'
+
+const MODULE_NAME = 'RecipeFilters'
 
 interface Props {
   activeTab: 'recipes' | 'preparations'
@@ -80,55 +111,219 @@ interface Props {
 interface Emits {
   (e: 'update:activeTab', value: 'recipes' | 'preparations'): void
   (e: 'toggleAllPanels'): void
+  (e: 'update:filters', filters: FilterState): void
+}
+
+interface FilterState {
+  search: string
+  status: 'active' | 'archived' | 'all'
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-// Mock counts - TODO: get from store
-const recipesCount = ref(12)
-const preparationsCount = ref(8)
+// Store
+const store = useRecipesStore()
 
-// Local state - только основные фильтры
-const localFilters = ref({
+// =============================================
+// STATE
+// =============================================
+
+// Local filters state
+const localFilters = ref<FilterState>({
   search: '',
-  status: 'active' as 'active' | 'all'
+  status: 'active'
 })
+
+// Panel state
+const allExpanded = ref(true)
+
+// =============================================
+// COMPUTED
+// =============================================
 
 const localActiveTab = computed({
   get: () => props.activeTab,
   set: value => emit('update:activeTab', value)
 })
 
-const allExpanded = ref(true)
-
-// Methods
-const debounce = (func: (...args: any[]) => void, wait: number) => {
-  let timeout: NodeJS.Timeout
-  return function executedFunction(...args: any[]) {
-    const later = () => {
-      clearTimeout(timeout)
-      func(...args)
-    }
-    clearTimeout(timeout)
-    timeout = setTimeout(later, wait)
+// ✅ ИСПРАВЛЕНО: Правильный подсчет количества
+const recipesCount = computed(() => {
+  const stats = store.statistics.recipes
+  switch (localFilters.value.status) {
+    case 'active':
+      return stats.active
+    case 'archived':
+      return stats.inactive
+    case 'all':
+      return stats.total
+    default:
+      return stats.active
   }
+})
+
+const preparationsCount = computed(() => {
+  const stats = store.statistics.preparations
+  switch (localFilters.value.status) {
+    case 'active':
+      return stats.active
+    case 'archived':
+      return stats.inactive
+    case 'all':
+      return stats.total
+    default:
+      return stats.active
+  }
+})
+
+// ✅ НОВОЕ: Filtered data based on current filters
+const filteredRecipes = computed(() => {
+  let recipes = store.recipes
+
+  // Filter by status
+  if (localFilters.value.status === 'active') {
+    recipes = recipes.filter(r => r.isActive)
+  } else if (localFilters.value.status === 'archived') {
+    recipes = recipes.filter(r => !r.isActive)
+  }
+  // 'all' shows everything
+
+  // Filter by search
+  if (localFilters.value.search.trim()) {
+    const searchText = localFilters.value.search.toLowerCase()
+    recipes = recipes.filter(
+      recipe =>
+        recipe.name.toLowerCase().includes(searchText) ||
+        recipe.code?.toLowerCase().includes(searchText) ||
+        recipe.description?.toLowerCase().includes(searchText) ||
+        recipe.tags?.some(tag => tag.toLowerCase().includes(searchText))
+    )
+  }
+
+  return recipes
+})
+
+const filteredPreparations = computed(() => {
+  let preparations = store.preparations
+
+  // Filter by status
+  if (localFilters.value.status === 'active') {
+    preparations = preparations.filter(p => p.isActive)
+  } else if (localFilters.value.status === 'archived') {
+    preparations = preparations.filter(p => !p.isActive)
+  }
+  // 'all' shows everything
+
+  // Filter by search
+  if (localFilters.value.search.trim()) {
+    const searchText = localFilters.value.search.toLowerCase()
+    preparations = preparations.filter(
+      prep =>
+        prep.name.toLowerCase().includes(searchText) ||
+        prep.code.toLowerCase().includes(searchText) ||
+        prep.description?.toLowerCase().includes(searchText)
+    )
+  }
+
+  return preparations
+})
+
+const filteredCount = computed(() => {
+  return props.activeTab === 'recipes'
+    ? filteredRecipes.value.length
+    : filteredPreparations.value.length
+})
+
+// =============================================
+// METHODS
+// =============================================
+
+// Debounced search function
+let searchTimeout: NodeJS.Timeout | null = null
+
+function handleSearchInput() {
+  // Clear previous timeout
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
+
+  // Set new timeout for debounced search
+  searchTimeout = setTimeout(() => {
+    applySearch()
+  }, 300)
 }
 
-const debouncedSearch = debounce((event: Event) => {
-  const target = event.target as HTMLInputElement
-  const value = target.value || ''
-  // TODO: Implement search filter in store
-  console.log('Search:', value)
-}, 300)
+function applySearch() {
+  DebugUtils.debug(MODULE_NAME, 'Applying search', {
+    search: localFilters.value.search,
+    status: localFilters.value.status,
+    tab: props.activeTab
+  })
+
+  // Emit filters to parent
+  emit('update:filters', { ...localFilters.value })
+}
 
 function toggleAllPanels() {
   allExpanded.value = !allExpanded.value
   emit('toggleAllPanels')
+
+  DebugUtils.debug(MODULE_NAME, 'Toggle all panels', {
+    expanded: allExpanded.value
+  })
 }
+
+// =============================================
+// WATCHERS
+// =============================================
+
+// Watch for filter changes and emit to parent
+watch(
+  () => localFilters.value.status,
+  newStatus => {
+    DebugUtils.debug(MODULE_NAME, 'Status filter changed', {
+      newStatus,
+      tab: props.activeTab
+    })
+
+    // Apply immediately for status changes
+    emit('update:filters', { ...localFilters.value })
+  }
+)
+
+// Watch for tab changes and update counts
+watch(
+  () => props.activeTab,
+  newTab => {
+    DebugUtils.debug(MODULE_NAME, 'Active tab changed', {
+      newTab,
+      recipesCount: recipesCount.value,
+      preparationsCount: preparationsCount.value
+    })
+  }
+)
+
+// =============================================
+// DEBUG HELPERS
+// =============================================
+
+// Global debug flag
+const $DEBUG = import.meta.env.DEV
+
+// =============================================
+// LIFECYCLE
+// =============================================
+
+// Initialize filters on mount
+emit('update:filters', { ...localFilters.value })
+
+// Expand all panels by default
+setTimeout(() => {
+  emit('toggleAllPanels')
+}, 100)
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .tab-toggle {
   width: 100%;
   display: flex;
@@ -137,23 +332,52 @@ function toggleAllPanels() {
 
 .tab-toggle :deep(.v-btn) {
   flex: 1;
-  max-width: 200px;
+  max-width: 250px;
+  min-width: 180px;
 }
 
 .status-filter {
   min-width: auto;
   justify-content: flex-start;
+
+  :deep(.v-chip-group__slider) {
+    display: none; // Hide the slider for cleaner look
+  }
 }
 
+// Responsive design
 @media (max-width: 768px) {
   .tab-toggle :deep(.v-btn) {
     font-size: 0.875rem;
     padding: 8px 12px;
     max-width: none;
+    min-width: 140px;
   }
 
   .status-filter {
     justify-content: center;
+
+    :deep(.v-chip) {
+      font-size: 0.75rem;
+      height: 28px;
+    }
   }
+}
+
+@media (max-width: 960px) {
+  .tab-toggle {
+    justify-content: stretch;
+  }
+
+  .tab-toggle :deep(.v-btn) {
+    flex: 1;
+    min-width: auto;
+  }
+}
+
+// Debug info styling
+:deep(.v-chip.debug-chip) {
+  font-family: monospace;
+  font-size: 0.7rem;
 }
 </style>
