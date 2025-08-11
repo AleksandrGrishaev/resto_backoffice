@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/UnifiedRecipeItem.vue - FIXED -->
+<!-- src/views/recipes/components/UnifiedRecipeItem.vue - ИСПРАВЛЕНО -->
 <template>
   <div class="recipe-item" :class="{ 'recipe-item--inactive': !item.isActive }">
     <div class="recipe-item__main">
@@ -43,16 +43,16 @@
             {{ getTimeText() }}
           </div>
 
-          <!-- ✅ УЛУЧШЕНО: Enhanced Cost Display -->
+          <!-- ✅ ИСПРАВЛЕНО: Enhanced Cost Display с IDR -->
           <div v-if="hasCostData" class="recipe-item__cost">
-            <v-icon icon="mdi-currency-usd" size="14" class="mr-1" />
+            <v-icon icon="mdi-currency-try" size="14" class="mr-1" />
             <div class="cost-display">
               <div class="cost-main">
-                <span class="cost-value">${{ getTotalCost.toFixed(2) }}</span>
+                <span class="cost-value">{{ formatIDR(getTotalCost) }}</span>
                 <span class="cost-unit">{{ getCostUnit() }}</span>
               </div>
               <div v-if="getCostPerUnit > 0" class="cost-per-unit">
-                ${{ getCostPerUnit.toFixed(2) }} {{ getPerUnitLabel() }}
+                {{ formatIDR(getCostPerUnit) }} {{ getPerUnitLabel() }}
               </div>
             </div>
             <!-- Cost Status Indicator -->
@@ -61,10 +61,12 @@
             </v-chip>
           </div>
 
-          <!-- ✅ НОВОЕ: Cost Analysis for expensive items -->
+          <!-- ✅ ИСПРАВЛЕНО: Cost Analysis для дорогих блюд -->
           <div v-if="isExpensive" class="recipe-item__cost-warning">
             <v-icon icon="mdi-alert-circle" size="14" class="mr-1 text-warning" />
-            <span class="text-warning text-caption">High cost item</span>
+            <span class="text-warning text-caption">
+              High cost item ({{ formatIDR(getCostPerUnit) }} {{ getPerUnitLabel() }})
+            </span>
           </div>
 
           <!-- Components count -->
@@ -72,7 +74,6 @@
             <v-icon icon="mdi-format-list-bulleted" size="14" class="mr-1" />
             <span class="components-label">Components:</span>
             <span class="components-count">{{ getComponentsCount() }}</span>
-            <!-- ✅ НОВОЕ: Show missing cost calculations -->
             <v-chip
               v-if="hasMissingCosts()"
               size="x-small"
@@ -101,7 +102,7 @@
           </span>
         </div>
 
-        <!-- ✅ НОВОЕ: Cost Breakdown Preview (for items with cost) -->
+        <!-- ✅ ИСПРАВЛЕНО: Cost Breakdown Preview с IDR -->
         <div v-if="showCostBreakdown" class="recipe-item__cost-breakdown">
           <div class="cost-breakdown-header">
             <v-icon icon="mdi-chart-pie" size="12" class="mr-1" />
@@ -114,7 +115,7 @@
               class="cost-breakdown-item"
             >
               <span class="component-name">{{ component.name }}</span>
-              <span class="component-cost">${{ component.cost.toFixed(2) }}</span>
+              <span class="component-cost">{{ formatIDR(component.cost) }}</span>
             </div>
             <div v-if="getTopCostComponents.length > 2" class="cost-breakdown-more">
               <span class="text-caption text-medium-emphasis">
@@ -130,7 +131,7 @@
           <span class="instructions-preview">{{ getInstructionsPreview() }}</span>
         </div>
 
-        <!-- ✅ НОВОЕ: Last Updated Info -->
+        <!-- Last Updated Info -->
         <div v-if="getLastUpdated()" class="recipe-item__updated">
           <v-icon icon="mdi-update" size="12" class="mr-1" />
           <span class="text-caption text-medium-emphasis">Updated {{ getLastUpdated() }}</span>
@@ -138,7 +139,7 @@
       </div>
 
       <div class="recipe-item__actions">
-        <!-- ✅ НОВОЕ: Quick Cost Action -->
+        <!-- Quick Cost Action -->
         <v-btn
           v-if="!hasCostData"
           icon="mdi-calculator"
@@ -223,6 +224,8 @@ import type {
   PreparationPlanCost,
   RecipePlanCost
 } from '@/stores/recipes/types'
+// ✅ НОВОЕ: Импорт централизованных утилит валюты
+import { formatIDR, isExpensiveAmount } from '@/utils/currency'
 
 interface Props {
   item: Recipe | Preparation
@@ -241,7 +244,6 @@ interface Emits {
 const props = defineProps<Props>()
 defineEmits<Emits>()
 
-// ✅ ИСПРАВЛЕНО: Computed properties (не функции!)
 const hasCostData = computed(() => {
   return !!props.costCalculation && props.costCalculation.totalCost > 0
 })
@@ -260,15 +262,10 @@ const getCostPerUnit = computed(() => {
   }
 })
 
+// ✅ ИСПРАВЛЕНО: Используем централизованную функцию для определения дорогих блюд
 const isExpensive = computed(() => {
   if (!hasCostData.value) return false
-
-  // Определяем "дорогой" item по относительной стоимости
-  if (props.type === 'preparation') {
-    return getCostPerUnit.value > 5.0 // $5+ за единицу
-  } else {
-    return getCostPerUnit.value > 10.0 // $10+ за порцию
-  }
+  return isExpensiveAmount(getCostPerUnit.value, props.type)
 })
 
 const showCostBreakdown = computed(() => {
@@ -278,7 +275,7 @@ const showCostBreakdown = computed(() => {
 const getTopCostComponents = computed(() => {
   if (!props.costCalculation?.componentCosts) return []
 
-  return [...props.costCalculation.componentCosts] // ✅ ИСПРАВЛЕНО: создаем копию массива
+  return [...props.costCalculation.componentCosts]
     .sort((a, b) => b.totalPlanCost - a.totalPlanCost)
     .map(comp => ({
       id: comp.componentId,
@@ -287,7 +284,7 @@ const getTopCostComponents = computed(() => {
     }))
 })
 
-// Methods
+// Existing methods
 function getCategoryColor(): string {
   if (props.type === 'preparation') {
     const prep = props.item as Preparation
@@ -384,7 +381,6 @@ function getTimeText(): string {
   }
 }
 
-// ✅ НОВОЕ: Enhanced cost methods
 function getCostUnit(): string {
   return 'total'
 }
@@ -397,9 +393,9 @@ function getCostStatusColor(): string {
   if (!hasCostData.value) return 'grey'
 
   const age = getCostAge()
-  if (age < 60) return 'success' // Fresh calculation
-  if (age < 1440) return 'warning' // Less than 1 day
-  return 'error' // Stale calculation
+  if (age < 60) return 'success'
+  if (age < 1440) return 'warning'
+  return 'error'
 }
 
 function getCostStatusText(): string {
@@ -416,7 +412,7 @@ function getCostAge(): number {
 
   const now = new Date()
   const calculated = new Date(props.costCalculation.calculatedAt)
-  return Math.floor((now.getTime() - calculated.getTime()) / 60000) // minutes
+  return Math.floor((now.getTime() - calculated.getTime()) / 60000)
 }
 
 function getComponentsCount(): number {
@@ -562,7 +558,7 @@ function getLastUpdated(): string {
     font-weight: 500;
   }
 
-  // ✅ УЛУЧШЕНО: Enhanced cost styling
+  // ✅ ИСПРАВЛЕНО: Enhanced cost styling
   &__cost {
     display: flex;
     align-items: center;
@@ -616,7 +612,6 @@ function getLastUpdated(): string {
     }
   }
 
-  // ✅ НОВОЕ: Cost breakdown preview
   &__cost-breakdown {
     border: 1px solid var(--color-outline-variant);
     border-radius: 6px;
@@ -691,7 +686,6 @@ function getLastUpdated(): string {
   }
 }
 
-// Responsive design
 @media (max-width: 768px) {
   .recipe-item {
     &__main {

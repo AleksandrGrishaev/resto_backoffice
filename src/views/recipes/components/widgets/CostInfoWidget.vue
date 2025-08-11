@@ -19,11 +19,16 @@
       <div class="cost-summary">
         <div class="cost-item primary">
           <span class="cost-label">Total Cost:</span>
-          <span class="cost-value">${{ safeTotalCost.toFixed(2) }}</span>
+          <span class="cost-value">{{ formatIDR(safeTotalCost) }}</span>
         </div>
         <div class="cost-item secondary">
           <span class="cost-label">{{ getCostPerLabel() }}:</span>
-          <span class="cost-value">${{ safeCostPerValue.toFixed(2) }}</span>
+          <span class="cost-value">{{ formatIDR(safeCostPerValue) }}</span>
+        </div>
+        <!-- ✅ НОВОЕ: Индикатор валюты -->
+        <div class="cost-currency">
+          <v-icon icon="mdi-currency-try" size="12" class="mr-1" />
+          <span class="text-caption">IDR (Indonesian Rupiah)</span>
         </div>
         <div class="cost-meta">
           <v-icon icon="mdi-clock" size="12" class="mr-1" />
@@ -53,6 +58,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PreparationPlanCost, RecipePlanCost } from '@/stores/recipes/types'
+// ✅ НОВОЕ: Импорт централизованных утилит валюты
+import { formatIDR } from '@/utils/currency'
 
 interface Props {
   type: 'recipe' | 'preparation'
@@ -68,12 +75,10 @@ interface Emits {
 const props = defineProps<Props>()
 defineEmits<Emits>()
 
-// ✅ ИСПРАВЛЕНО: Безопасное получение totalCost
 const safeTotalCost = computed(() => {
   return props.costCalculation?.totalCost ?? 0
 })
 
-// ✅ ИСПРАВЛЕНО: Безопасное получение cost per value
 const safeCostPerValue = computed(() => {
   if (!props.costCalculation) return 0
 
@@ -145,6 +150,14 @@ function formatCalculationTime(date: Date | string): string {
   }
 }
 
+.cost-currency {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-info);
+  font-weight: 500;
+}
+
 .cost-meta {
   display: flex;
   align-items: center;
@@ -163,7 +176,6 @@ function formatCalculationTime(date: Date | string): string {
   border-radius: 8px;
 }
 
-// Responsive design
 @media (max-width: 768px) {
   .cost-item {
     flex-direction: column;

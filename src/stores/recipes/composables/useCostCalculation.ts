@@ -1,4 +1,4 @@
-// src/stores/recipes/composables/useCostCalculation.ts - FIXED Cost Calculation Logic
+// src/stores/recipes/composables/useCostCalculation.ts - ИСПРАВЛЕННАЯ версия
 
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -20,54 +20,19 @@ const MODULE_NAME = 'useCostCalculation'
 // STATE
 // =============================================
 
-// Global state for cost calculations
 const preparationCosts = ref<Map<string, PreparationPlanCost>>(new Map())
 const recipeCosts = ref<Map<string, RecipePlanCost>>(new Map())
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// Integration callbacks
 let getProductCallback: GetProductCallback | null = null
 let getPreparationCostCallback: GetPreparationCostCallback | null = null
-
-// =============================================
-// COMPUTED
-// =============================================
-
-export const costCalculationsStats = computed(() => ({
-  preparationCosts: preparationCosts.value.size,
-  recipeCosts: recipeCosts.value.size,
-  totalCalculations: preparationCosts.value.size + recipeCosts.value.size,
-  lastCalculatedAt: getLastCalculationDate()
-}))
-
-function getLastCalculationDate(): Date | null {
-  let lastDate: Date | null = null
-
-  preparationCosts.value.forEach(cost => {
-    if (!lastDate || cost.calculatedAt > lastDate) {
-      lastDate = cost.calculatedAt
-    }
-  })
-
-  recipeCosts.value.forEach(cost => {
-    if (!lastDate || cost.calculatedAt > lastDate) {
-      lastDate = cost.calculatedAt
-    }
-  })
-
-  return lastDate
-}
 
 // =============================================
 // MAIN COMPOSABLE
 // =============================================
 
 export function useCostCalculation() {
-  // =============================================
-  // SETUP METHODS
-  // =============================================
-
   /**
    * Устанавливает callbacks для интеграции
    */
@@ -88,7 +53,6 @@ export function useCostCalculation() {
       loading.value = true
       error.value = null
 
-      // Очищаем старые расчеты
       preparationCosts.value.clear()
       recipeCosts.value.clear()
 
@@ -104,74 +68,62 @@ export function useCostCalculation() {
   }
 
   // =============================================
-  // UTILITIES - FIXED UNIT CONVERSION
+  // ИСПРАВЛЕННЫЕ УТИЛИТЫ КОНВЕРТАЦИИ
   // =============================================
 
   /**
-   * ✅ ИСПРАВЛЕНО: Конвертирует единицы измерения (только количество, НЕ цены!)
+   * ✅ ИСПРАВЛЕНО: Конвертирует количество в граммы или мл (базовые единицы)
    */
-  function convertToBaseUnit(value: number, unit: string): number {
-    switch (unit.toLowerCase()) {
-      case 'kg':
-      case 'kilogram':
-        return value * 1000 // кг в граммы
-      case 'gram':
-      case 'g':
-        return value // граммы как базовая единица
-      case 'liter':
-      case 'l':
-        return value * 1000 // литры в мл
-      case 'ml':
-      case 'milliliter':
-        return value // мл как базовая единица
-      case 'piece':
-      case 'pack':
-      case 'item':
-        return value // штуки как есть
-      default:
-        DebugUtils.warn(MODULE_NAME, `Unknown unit: ${unit}, using as-is`)
-        return value
+  function convertToBaseUnits(value: number, unit: string): number {
+    const conversions: Record<string, number> = {
+      // Вес -> граммы
+      gram: 1,
+      g: 1,
+      kg: 1000,
+      kilogram: 1000,
+
+      // Объем -> миллилитры
+      ml: 1,
+      milliliter: 1,
+      liter: 1000,
+      l: 1000,
+
+      // Штучные -> штуки
+      piece: 1,
+      pack: 1,
+      item: 1
     }
+
+    const factor = conversions[unit.toLowerCase()]
+    if (factor === undefined) {
+      DebugUtils.warn(MODULE_NAME, `Unknown unit: ${unit}, using as-is`)
+      return value
+    }
+
+    return value * factor
   }
 
   /**
-   * ✅ НОВАЯ ФУНКЦИЯ: Конвертирует количество из одной единицы в другую
+   * ✅ ИСПРАВЛЕНО: Проверяет совместимость единиц измерения
    */
-  function convertQuantityBetweenUnits(quantity: number, fromUnit: string, toUnit: string): number {
-    // Если единицы одинаковые - возвращаем как есть
-    if (fromUnit.toLowerCase() === toUnit.toLowerCase()) {
-      return quantity
+  function areUnitsCompatible(unit1: string, unit2: string): boolean {
+    const weightUnits = ['gram', 'g', 'kg', 'kilogram']
+    const volumeUnits = ['ml', 'milliliter', 'liter', 'l']
+    const pieceUnits = ['piece', 'pack', 'item']
+
+    const getUnitType = (unit: string) => {
+      const u = unit.toLowerCase()
+      if (weightUnits.includes(u)) return 'weight'
+      if (volumeUnits.includes(u)) return 'volume'
+      if (pieceUnits.includes(u)) return 'piece'
+      return 'unknown'
     }
 
-    // Конвертируем через базовые единицы
-    const fromBaseUnit = convertToBaseUnit(quantity, fromUnit)
-
-    // Обратная конвертация из базовой единицы в целевую
-    switch (toUnit.toLowerCase()) {
-      case 'kg':
-      case 'kilogram':
-        return fromBaseUnit / 1000 // граммы в кг
-      case 'gram':
-      case 'g':
-        return fromBaseUnit // уже в граммах
-      case 'liter':
-      case 'l':
-        return fromBaseUnit / 1000 // мл в литры
-      case 'ml':
-      case 'milliliter':
-        return fromBaseUnit // уже в мл
-      case 'piece':
-      case 'pack':
-      case 'item':
-        return fromBaseUnit // штуки как есть
-      default:
-        DebugUtils.warn(MODULE_NAME, `Unknown target unit: ${toUnit}, using as-is`)
-        return fromBaseUnit
-    }
+    return getUnitType(unit1) === getUnitType(unit2)
   }
 
   // =============================================
-  // PREPARATION COST CALCULATION - FIXED
+  // ИСПРАВЛЕННЫЙ РАСЧЕТ СТОИМОСТИ ПОЛУФАБРИКАТОВ
   // =============================================
 
   /**
@@ -215,30 +167,31 @@ export function useCostCalculation() {
           continue
         }
 
-        // ✅ ИСПРАВЛЕНО: Конвертируем ТОЛЬКО количество ингредиента в единицы продукта
-        let ingredientQuantityInProductUnits = ingredient.quantity
-
-        // Если единицы разные - конвертируем количество
-        if (ingredient.unit !== product.unit) {
-          ingredientQuantityInProductUnits = convertQuantityBetweenUnits(
-            ingredient.quantity,
-            ingredient.unit,
-            product.unit
+        // ✅ ИСПРАВЛЕНО: Простая проверка совместимости единиц
+        if (!areUnitsCompatible(ingredient.unit, getBaseUnitForProduct(product))) {
+          DebugUtils.error(
+            MODULE_NAME,
+            `Unit mismatch: ingredient ${ingredient.unit} vs product base unit`
           )
+          continue
         }
 
-        // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: НЕ конвертируем costPerUnit!
-        // product.costPerUnit уже в правильных единицах ($/kg, $/liter)
-        const ingredientTotalCost = ingredientQuantityInProductUnits * product.costPerUnit
+        // ✅ ИСПРАВЛЕНО: Конвертируем количество ингредиента в базовые единицы
+        const ingredientQuantityInBaseUnits = convertToBaseUnits(
+          ingredient.quantity,
+          ingredient.unit
+        )
+
+        // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем baseCostPerUnit (цена за грамм/мл/штуку)
+        const ingredientTotalCost = ingredientQuantityInBaseUnits * product.baseCostPerUnit
         totalCost += ingredientTotalCost
 
-        DebugUtils.debug(MODULE_NAME, `Ingredient cost calculation:`, {
+        DebugUtils.debug(MODULE_NAME, `✅ Fixed ingredient cost calculation:`, {
           productName: product.name,
           ingredientQuantity: ingredient.quantity,
           ingredientUnit: ingredient.unit,
-          productUnit: product.unit,
-          convertedQuantity: ingredientQuantityInProductUnits,
-          costPerUnit: product.costPerUnit,
+          baseQuantity: ingredientQuantityInBaseUnits,
+          baseCostPerUnit: product.baseCostPerUnit,
           totalCost: ingredientTotalCost
         })
 
@@ -248,7 +201,7 @@ export function useCostCalculation() {
           componentName: product.name,
           quantity: ingredient.quantity,
           unit: ingredient.unit,
-          planUnitCost: product.costPerUnit,
+          planUnitCost: product.baseCostPerUnit,
           totalPlanCost: ingredientTotalCost,
           percentage: 0 // будет рассчитано позже
         })
@@ -282,13 +235,13 @@ export function useCostCalculation() {
         costPerOutputUnit,
         componentCosts,
         calculatedAt: new Date(),
-        note: 'Based on current supplier prices'
+        note: 'Based on current supplier prices (fixed calculation)'
       }
 
       // Сохраняем в кэш
       preparationCosts.value.set(preparation.id, result)
 
-      DebugUtils.info(MODULE_NAME, `✅ Preparation cost calculated: ${preparation.name}`, {
+      DebugUtils.info(MODULE_NAME, `✅ Fixed preparation cost calculated: ${preparation.name}`, {
         totalCost: totalCost.toFixed(2),
         costPerUnit: costPerOutputUnit.toFixed(2),
         components: componentCosts.length
@@ -309,26 +262,8 @@ export function useCostCalculation() {
     }
   }
 
-  /**
-   * Рассчитывает стоимость полуфабриката по ID
-   */
-  async function calculatePreparationCostById(
-    preparationId: string,
-    getPreparation: (id: string) => Preparation | null
-  ): Promise<CostCalculationResult> {
-    const preparation = getPreparation(preparationId)
-    if (!preparation) {
-      return {
-        success: false,
-        error: 'Preparation not found'
-      }
-    }
-
-    return calculatePreparationCost(preparation)
-  }
-
   // =============================================
-  // RECIPE COST CALCULATION - FIXED
+  // ИСПРАВЛЕННЫЙ РАСЧЕТ СТОИМОСТИ РЕЦЕПТОВ
   // =============================================
 
   /**
@@ -378,28 +313,31 @@ export function useCostCalculation() {
 
           componentName = product.name
 
-          // ✅ ИСПРАВЛЕНО: Конвертируем ТОЛЬКО количество компонента в единицы продукта
-          let componentQuantityInProductUnits = component.quantity
-
-          if (component.unit !== product.unit) {
-            componentQuantityInProductUnits = convertQuantityBetweenUnits(
-              component.quantity,
-              component.unit,
-              product.unit
+          // ✅ ИСПРАВЛЕНО: Проверяем совместимость единиц
+          if (!areUnitsCompatible(component.unit, getBaseUnitForProduct(product))) {
+            DebugUtils.error(
+              MODULE_NAME,
+              `Unit mismatch: component ${component.unit} vs product base unit`
             )
+            continue
           }
 
-          // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: НЕ конвертируем costPerUnit!
-          componentCost = componentQuantityInProductUnits * product.costPerUnit
-          unitCost = product.costPerUnit
+          // ✅ ИСПРАВЛЕНО: Конвертируем количество компонента в базовые единицы
+          const componentQuantityInBaseUnits = convertToBaseUnits(
+            component.quantity,
+            component.unit
+          )
 
-          DebugUtils.debug(MODULE_NAME, `Recipe component cost:`, {
+          // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем baseCostPerUnit
+          componentCost = componentQuantityInBaseUnits * product.baseCostPerUnit
+          unitCost = product.baseCostPerUnit
+
+          DebugUtils.debug(MODULE_NAME, `✅ Fixed recipe component cost:`, {
             productName: product.name,
             componentQuantity: component.quantity,
             componentUnit: component.unit,
-            productUnit: product.unit,
-            convertedQuantity: componentQuantityInProductUnits,
-            costPerUnit: product.costPerUnit,
+            baseQuantity: componentQuantityInBaseUnits,
+            baseCostPerUnit: product.baseCostPerUnit,
             totalCost: componentCost
           })
         } else if (component.componentType === 'preparation') {
@@ -418,7 +356,7 @@ export function useCostCalculation() {
           componentCost = preparationCost.costPerOutputUnit * component.quantity
           unitCost = preparationCost.costPerOutputUnit
 
-          DebugUtils.debug(MODULE_NAME, `Recipe preparation cost:`, {
+          DebugUtils.debug(MODULE_NAME, `✅ Fixed recipe preparation cost:`, {
             preparationId: component.componentId,
             componentQuantity: component.quantity,
             costPerUnit: preparationCost.costPerOutputUnit,
@@ -468,13 +406,13 @@ export function useCostCalculation() {
         costPerPortion,
         componentCosts,
         calculatedAt: new Date(),
-        note: 'Based on current supplier prices + plan preparation costs'
+        note: 'Based on current supplier prices + plan preparation costs (fixed calculation)'
       }
 
       // Сохраняем в кэш
       recipeCosts.value.set(recipe.id, result)
 
-      DebugUtils.info(MODULE_NAME, `✅ Recipe cost calculated: ${recipe.name}`, {
+      DebugUtils.info(MODULE_NAME, `✅ Fixed recipe cost calculated: ${recipe.name}`, {
         totalCost: totalCost.toFixed(2),
         costPerPortion: costPerPortion.toFixed(2),
         components: componentCosts.length
@@ -491,6 +429,60 @@ export function useCostCalculation() {
         error: err instanceof Error ? err.message : 'Unknown error'
       }
     }
+  }
+
+  // =============================================
+  // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+  // =============================================
+
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Получает базовую единицу для продукта
+   */
+  function getBaseUnitForProduct(product: ProductForRecipe): string {
+    // Если у продукта есть baseUnit, используем его
+    if ((product as any).baseUnit) {
+      return (product as any).baseUnit
+    }
+
+    // Иначе определяем по категории (для обратной совместимости)
+    const category = product.category.toLowerCase()
+
+    if (['meat', 'vegetables', 'spices', 'cereals'].includes(category)) {
+      return 'gram'
+    }
+
+    if (['dairy'].includes(category) && product.name.toLowerCase().includes('milk')) {
+      return 'ml'
+    }
+
+    if (['beverages'].includes(category)) {
+      return 'piece'
+    }
+
+    if (product.name.toLowerCase().includes('oil')) {
+      return 'ml'
+    }
+
+    // По умолчанию граммы для сыпучих продуктов
+    return 'gram'
+  }
+
+  /**
+   * Рассчитывает стоимость полуфабриката по ID
+   */
+  async function calculatePreparationCostById(
+    preparationId: string,
+    getPreparation: (id: string) => Preparation | null
+  ): Promise<CostCalculationResult> {
+    const preparation = getPreparation(preparationId)
+    if (!preparation) {
+      return {
+        success: false,
+        error: 'Preparation not found'
+      }
+    }
+
+    return calculatePreparationCost(preparation)
   }
 
   /**
@@ -651,142 +643,6 @@ export function useCostCalculation() {
   }
 
   /**
-   * Получает топ самых дорогих полуфабрикатов
-   */
-  function getTopExpensivePreparations(limit: number = 10): Array<{
-    id: string
-    name: string
-    totalCost: number
-    costPerUnit: number
-  }> {
-    const costs = Array.from(preparationCosts.value.values())
-      .sort((a, b) => b.totalCost - a.totalCost)
-      .slice(0, limit)
-
-    return costs.map(cost => ({
-      id: cost.preparationId,
-      name: cost.componentCosts[0]?.componentName || 'Unknown',
-      totalCost: cost.totalCost,
-      costPerUnit: cost.costPerOutputUnit
-    }))
-  }
-
-  /**
-   * Получает топ самых дорогих рецептов
-   */
-  function getTopExpensiveRecipes(limit: number = 10): Array<{
-    id: string
-    name: string
-    totalCost: number
-    costPerPortion: number
-  }> {
-    const costs = Array.from(recipeCosts.value.values())
-      .sort((a, b) => b.totalCost - a.totalCost)
-      .slice(0, limit)
-
-    return costs.map(cost => ({
-      id: cost.recipeId,
-      name: cost.componentCosts[0]?.componentName || 'Unknown',
-      totalCost: cost.totalCost,
-      costPerPortion: cost.costPerPortion
-    }))
-  }
-
-  // =============================================
-  // PRICE CHANGE IMPACT
-  // =============================================
-
-  /**
-   * Рассчитывает влияние изменения цены продукта
-   */
-  function calculatePriceChangeImpact(
-    productId: string,
-    oldPrice: number,
-    newPrice: number,
-    getPreparations: () => Preparation[],
-    getRecipes: () => Recipe[]
-  ): {
-    affectedPreparations: Array<{ id: string; name: string; oldCost: number; newCost: number }>
-    affectedRecipes: Array<{ id: string; name: string; oldCost: number; newCost: number }>
-    totalImpact: number
-  } {
-    const priceChange = newPrice - oldPrice
-    const priceChangeRatio = newPrice / oldPrice
-
-    const affectedPreparations: Array<{
-      id: string
-      name: string
-      oldCost: number
-      newCost: number
-    }> = []
-    const affectedRecipes: Array<{ id: string; name: string; oldCost: number; newCost: number }> =
-      []
-
-    // Анализируем влияние на полуфабрикаты
-    getPreparations().forEach(preparation => {
-      const usesProduct = preparation.recipe.some(ingredient => ingredient.id === productId)
-      if (!usesProduct) return
-
-      const currentCost = getPreparationCost(preparation.id)
-      if (!currentCost) return
-
-      // Находим компонент с этим продуктом
-      const productComponent = currentCost.componentCosts.find(c => c.componentId === productId)
-      if (!productComponent) return
-
-      const componentCostChange = productComponent.totalPlanCost * (priceChangeRatio - 1)
-      const newTotalCost = currentCost.totalCost + componentCostChange
-
-      affectedPreparations.push({
-        id: preparation.id,
-        name: preparation.name,
-        oldCost: currentCost.totalCost,
-        newCost: newTotalCost
-      })
-    })
-
-    // Анализируем влияние на рецепты
-    getRecipes().forEach(recipe => {
-      const usesProduct = recipe.components.some(
-        component => component.componentId === productId && component.componentType === 'product'
-      )
-      if (!usesProduct) return
-
-      const currentCost = getRecipeCost(recipe.id)
-      if (!currentCost) return
-
-      const productComponent = currentCost.componentCosts.find(
-        c => c.componentId === productId && c.componentType === 'product'
-      )
-      if (!productComponent) return
-
-      const componentCostChange = productComponent.totalPlanCost * (priceChangeRatio - 1)
-      const newTotalCost = currentCost.totalCost + componentCostChange
-
-      affectedRecipes.push({
-        id: recipe.id,
-        name: recipe.name,
-        oldCost: currentCost.totalCost,
-        newCost: newTotalCost
-      })
-    })
-
-    const totalImpact =
-      affectedPreparations.reduce((sum, item) => sum + (item.newCost - item.oldCost), 0) +
-      affectedRecipes.reduce((sum, item) => sum + (item.newCost - item.oldCost), 0)
-
-    return {
-      affectedPreparations,
-      affectedRecipes,
-      totalImpact
-    }
-  }
-
-  // =============================================
-  // UTILITY METHODS
-  // =============================================
-
-  /**
    * Очищает ошибки
    */
   function clearError(): void {
@@ -802,21 +658,33 @@ export function useCostCalculation() {
     DebugUtils.info(MODULE_NAME, 'All cost calculations cleared')
   }
 
-  /**
-   * Экспортирует расчеты стоимости
-   */
-  function exportCostCalculations(): {
-    preparationCosts: Record<string, PreparationPlanCost>
-    recipeCosts: Record<string, RecipePlanCost>
-    exportedAt: string
-    version: string
-  } {
-    return {
-      preparationCosts: Object.fromEntries(preparationCosts.value),
-      recipeCosts: Object.fromEntries(recipeCosts.value),
-      exportedAt: new Date().toISOString(),
-      version: '1.0'
-    }
+  // =============================================
+  // COMPUTED
+  // =============================================
+
+  const costCalculationsStats = computed(() => ({
+    preparationCosts: preparationCosts.value.size,
+    recipeCosts: recipeCosts.value.size,
+    totalCalculations: preparationCosts.value.size + recipeCosts.value.size,
+    lastCalculatedAt: getLastCalculationDate()
+  }))
+
+  function getLastCalculationDate(): Date | null {
+    let lastDate: Date | null = null
+
+    preparationCosts.value.forEach(cost => {
+      if (!lastDate || cost.calculatedAt > lastDate) {
+        lastDate = cost.calculatedAt
+      }
+    })
+
+    recipeCosts.value.forEach(cost => {
+      if (!lastDate || cost.calculatedAt > lastDate) {
+        lastDate = cost.calculatedAt
+      }
+    })
+
+    return lastDate
   }
 
   // =============================================
@@ -855,16 +723,11 @@ export function useCostCalculation() {
     getRecipeCost,
     getAllPreparationCosts,
     getAllRecipeCosts,
-    getTopExpensivePreparations,
-    getTopExpensiveRecipes,
-
-    // Price change impact
-    calculatePriceChangeImpact,
 
     // Utilities
-    convertToBaseUnit,
+    convertToBaseUnits,
+    areUnitsCompatible,
     clearError,
-    clearAllCalculations,
-    exportCostCalculations
+    clearAllCalculations
   }
 }

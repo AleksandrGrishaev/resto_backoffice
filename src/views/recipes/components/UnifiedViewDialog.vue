@@ -22,6 +22,11 @@
           <v-chip v-if="!item.isActive" color="warning" variant="tonal" size="small">
             Archived
           </v-chip>
+          <!-- ✅ НОВОЕ: Индикатор базовых единиц -->
+          <v-chip v-if="hasBaseUnitsCalculation" color="success" variant="tonal" size="small">
+            <v-icon icon="mdi-check-circle" size="12" class="mr-1" />
+            Base Units
+          </v-chip>
         </div>
       </v-card-title>
 
@@ -60,12 +65,25 @@
             :type="itemType"
           />
 
-          <!-- ✅ НОВОЕ: Debug информация в dev режиме -->
+          <!-- ✅ УЛУЧШЕНО: Debug информация в dev режиме -->
           <div v-if="showDebugInfo" class="debug-info pa-4">
             <v-divider class="mb-4" />
             <h4 class="text-subtitle-1 mb-2">🔧 Debug Info</h4>
             <v-card variant="outlined" class="pa-3">
-              <pre class="text-caption">{{ debugInfo }}</pre>
+              <div class="debug-section">
+                <h5 class="text-subtitle-2 mb-2">Item Detection</h5>
+                <pre class="text-caption">{{ debugInfo.itemDetection }}</pre>
+              </div>
+              <v-divider class="my-2" />
+              <div class="debug-section">
+                <h5 class="text-subtitle-2 mb-2">Cost Calculation</h5>
+                <pre class="text-caption">{{ debugInfo.costInfo }}</pre>
+              </div>
+              <v-divider class="my-2" />
+              <div class="debug-section">
+                <h5 class="text-subtitle-2 mb-2">Base Units Status</h5>
+                <pre class="text-caption">{{ debugInfo.baseUnitsInfo }}</pre>
+              </div>
             </v-card>
           </div>
         </div>
@@ -147,7 +165,7 @@ const store = useRecipesStore()
 const costCalculation = ref<PreparationPlanCost | RecipePlanCost | null>(null)
 const calculating = ref(false)
 
-// ✅ НОВОЕ: Debug состояние
+// ✅ УЛУЧШЕНО: Debug состояние
 const showDebugInfo = ref(false)
 const isDev = computed(() => import.meta.env.DEV)
 
@@ -157,7 +175,7 @@ const dialogModel = computed({
   set: (value: boolean) => emit('update:modelValue', value)
 })
 
-// ✅ ИСПРАВЛЕНО: Определяем тип элемента более надежно
+// ✅ УЛУЧШЕНО: Более надежное определение типа элемента
 const itemType = computed(() => {
   if (!props.item) return props.type
 
@@ -170,42 +188,67 @@ const itemType = computed(() => {
     return 'preparation'
   }
 
+  // Проверяем по типу полей
+  if ('portionSize' in props.item && 'category' in props.item) {
+    return 'recipe'
+  }
+
+  if ('outputQuantity' in props.item && 'type' in props.item) {
+    return 'preparation'
+  }
+
   // Fallback на props.type
   return props.type
 })
 
-// ✅ НОВОЕ: Debug информация
-const debugInfo = computed(() => {
-  if (!props.item) return 'No item'
+// ✅ НОВОЕ: Проверка использования базовых единиц
+const hasBaseUnitsCalculation = computed(() => {
+  if (!costCalculation.value) return false
 
-  return {
-    type: itemType.value,
-    itemKeys: Object.keys(props.item),
+  const note = costCalculation.value.note || ''
+  return note.includes('base units') || note.includes('fixed calculation')
+})
+
+// ✅ УЛУЧШЕНО: Расширенная debug информация
+const debugInfo = computed(() => {
+  if (!props.item) return { itemDetection: 'No item', costInfo: 'N/A', baseUnitsInfo: 'N/A' }
+
+  const itemDetection = {
+    detectedType: itemType.value,
+    propsType: props.type,
     hasComponents: 'components' in props.item,
     hasRecipe: 'recipe' in props.item,
-    costCalculation: costCalculation.value
-      ? {
-          type: costCalculation.value.type,
-          totalCost: costCalculation.value.totalCost,
-          componentCosts: costCalculation.value.componentCosts?.length || 0
-        }
-      : null,
-    itemStructure: {
-      name: props.item.name,
-      id: props.item.id,
-      // Для preparation
-      ...(itemType.value === 'preparation' && {
-        outputQuantity: (props.item as Preparation).outputQuantity,
-        outputUnit: (props.item as Preparation).outputUnit,
-        recipeLength: (props.item as Preparation).recipe?.length || 0
-      }),
-      // Для recipe
-      ...(itemType.value === 'recipe' && {
-        portionSize: (props.item as Recipe).portionSize,
-        portionUnit: (props.item as Recipe).portionUnit,
-        componentsLength: (props.item as Recipe).components?.length || 0
-      })
-    }
+    hasPortionSize: 'portionSize' in props.item,
+    hasOutputQuantity: 'outputQuantity' in props.item,
+    itemKeys: Object.keys(props.item).sort()
+  }
+
+  const costInfo = costCalculation.value
+    ? {
+        type: costCalculation.value.type,
+        totalCost: `${costCalculation.value.totalCost} IDR`,
+        componentCosts: costCalculation.value.componentCosts?.length || 0,
+        calculatedAt: costCalculation.value.calculatedAt,
+        note: costCalculation.value.note,
+        hasBaseUnits: hasBaseUnitsCalculation.value
+      }
+    : {
+        status: 'No cost calculation available'
+      }
+
+  const baseUnitsInfo =
+    costCalculation.value?.componentCosts?.map(comp => ({
+      component: comp.componentName,
+      type: comp.componentType,
+      unitCost: `${comp.planUnitCost} IDR`,
+      totalCost: `${comp.totalPlanCost} IDR`,
+      percentage: `${comp.percentage.toFixed(1)}%`
+    })) || []
+
+  return {
+    itemDetection: JSON.stringify(itemDetection, null, 2),
+    costInfo: JSON.stringify(costInfo, null, 2),
+    baseUnitsInfo: JSON.stringify(baseUnitsInfo, null, 2)
   }
 })
 
@@ -254,14 +297,16 @@ async function calculateCost() {
       costCalculation.value = result
       DebugUtils.info('UnifiedViewDialog', '✅ Preparation cost calculated', {
         totalCost: result.totalCost,
-        costPerUnit: result.costPerOutputUnit
+        costPerUnit: result.costPerOutputUnit,
+        hasBaseUnits: hasBaseUnitsCalculation.value
       })
     } else {
       const result = await store.calculateRecipeCost(props.item.id)
       costCalculation.value = result
       DebugUtils.info('UnifiedViewDialog', '✅ Recipe cost calculated', {
         totalCost: result.totalCost,
-        costPerPortion: result.costPerPortion
+        costPerPortion: result.costPerPortion,
+        hasBaseUnits: hasBaseUnitsCalculation.value
       })
     }
 
@@ -304,7 +349,8 @@ watch(
 
       DebugUtils.debug('UnifiedViewDialog', '💰 Cost calculation loaded', {
         hasCostCalculation: !!costCalculation.value,
-        totalCost: costCalculation.value?.totalCost || 0
+        totalCost: costCalculation.value?.totalCost || 0,
+        hasBaseUnits: hasBaseUnitsCalculation.value
       })
     } else {
       costCalculation.value = null
@@ -332,14 +378,26 @@ watch(
   background: #f5f5f5;
   border-top: 2px dashed #ddd;
 
-  pre {
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 300px;
-    overflow-y: auto;
-    font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 11px;
-    line-height: 1.4;
+  .debug-section {
+    margin-bottom: 8px;
+
+    h5 {
+      color: var(--color-primary);
+      margin-bottom: 4px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 10px;
+      line-height: 1.3;
+      background: rgba(0, 0, 0, 0.05);
+      padding: 8px;
+      border-radius: 4px;
+    }
   }
 }
 
@@ -347,6 +405,10 @@ watch(
   .debug-info {
     background: #2a2a2a;
     border-top-color: #555;
+
+    .debug-section pre {
+      background: rgba(255, 255, 255, 0.05);
+    }
   }
 }
 </style>

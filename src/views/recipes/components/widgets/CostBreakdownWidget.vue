@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/widgets/CostBreakdownWidget.vue - УБРАЛИ ВЫДЕЛЕНИЕ -->
+<!-- src/views/recipes/components/widgets/CostBreakdownWidget.vue - ОБНОВЛЕНО с новой валютой -->
 <template>
   <div class="cost-breakdown-section pa-4">
     <v-divider class="mb-4" />
@@ -7,10 +7,32 @@
         <v-icon icon="mdi-calculator" class="mr-2" />
         Detailed Cost Breakdown
       </h3>
-      <v-chip size="small" variant="tonal" color="info">
-        {{ costCalculation.componentCosts.length }} components
-      </v-chip>
+      <div class="d-flex align-center gap-2">
+        <v-chip size="small" variant="tonal" color="info">
+          {{ costCalculation.componentCosts.length }} components
+        </v-chip>
+        <v-chip size="small" variant="tonal" color="success">
+          <v-icon icon="mdi-check-circle" size="12" class="mr-1" />
+          Base Units (IDR)
+        </v-chip>
+      </div>
     </div>
+
+    <v-alert
+      type="info"
+      variant="tonal"
+      density="compact"
+      class="mb-4"
+      title="Cost Calculation Method"
+    >
+      <template #text>
+        All costs calculated using
+        <strong>base units</strong>
+        (grams/ml/pieces) for accurate pricing. Currency:
+        <strong>IDR (Indonesian Rupiah)</strong>
+        - prices automatically converted from purchase units.
+      </template>
+    </v-alert>
 
     <!-- Cost Summary Chart -->
     <div class="cost-breakdown-summary mb-4">
@@ -45,7 +67,7 @@
       </v-card>
     </div>
 
-    <!-- ✅ ИСПРАВЛЕНО: Убрали выделение самого дорогого компонента -->
+    <!-- ✅ ОБНОВЛЕНО: Компоненты с новым форматированием валюты -->
     <div class="cost-breakdown-list">
       <v-card
         v-for="componentCost in sortedComponentCosts"
@@ -69,49 +91,43 @@
                   {{ componentCost.componentType }}
                 </v-chip>
               </div>
+
+              <!-- ✅ ОБНОВЛЕНО: Правильный расчет с новым форматированием -->
               <div class="component-cost-details">
-                <span class="text-caption text-medium-emphasis">
-                  {{ componentCost.quantity }} {{ componentCost.unit }} × ${{
-                    componentCost.planUnitCost.toFixed(2)
-                  }}/{{ componentCost.unit }}
-                </span>
+                <div class="cost-calculation-line">
+                  <span class="text-caption">
+                    <strong>{{ componentCost.quantity }} {{ componentCost.unit }}</strong>
+                    ×
+                    <strong>
+                      {{
+                        formatIDRWithUnit(
+                          componentCost.planUnitCost,
+                          getActualBaseUnit(componentCost)
+                        )
+                      }}
+                    </strong>
+                    =
+                    <strong>{{ formatIDR(componentCost.totalPlanCost) }}</strong>
+                  </span>
+                </div>
+
+                <div v-if="needsUnitConversion(componentCost)" class="unit-conversion-info">
+                  <v-icon icon="mdi-swap-horizontal" size="12" class="mr-1" />
+                  <span class="text-caption text-success">
+                    ≈ {{ getConvertedQuantity(componentCost) }}
+                    {{ getActualBaseUnit(componentCost) }}
+                    (converted from {{ componentCost.unit }})
+                  </span>
+                </div>
               </div>
             </div>
+
             <div class="cost-info">
-              <div class="cost-value">${{ componentCost.totalPlanCost.toFixed(2) }}</div>
+              <div class="cost-value">{{ formatIDR(componentCost.totalPlanCost) }}</div>
               <div class="cost-percentage">{{ componentCost.percentage.toFixed(1) }}%</div>
             </div>
           </div>
         </v-card-text>
-      </v-card>
-    </div>
-
-    <!-- Cost Analysis -->
-    <div class="cost-analysis mt-4">
-      <v-card variant="outlined" class="pa-3">
-        <h4 class="text-subtitle-2 mb-2">Cost Analysis</h4>
-        <div class="analysis-grid">
-          <div class="analysis-item">
-            <span class="analysis-label">Most expensive component:</span>
-            <span class="analysis-value">
-              {{ getMostExpensiveComponent() }}
-            </span>
-          </div>
-          <div class="analysis-item">
-            <span class="analysis-label">Average cost per component:</span>
-            <span class="analysis-value">${{ getAverageCostPerComponent().toFixed(2) }}</span>
-          </div>
-          <div class="analysis-item">
-            <span class="analysis-label">Products vs Preparations:</span>
-            <span class="analysis-value">
-              {{ getProductVsPreparationRatio() }}
-            </span>
-          </div>
-          <div class="analysis-item">
-            <span class="analysis-label">Cost calculation method:</span>
-            <span class="analysis-value">{{ costCalculation.note }}</span>
-          </div>
-        </div>
       </v-card>
     </div>
   </div>
@@ -121,7 +137,9 @@
 import { computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
-import type { PreparationPlanCost, RecipePlanCost } from '@/stores/recipes/types'
+import type { PreparationPlanCost, RecipePlanCost, ComponentPlanCost } from '@/stores/recipes/types'
+// ✅ НОВОЕ: Импорт централизованных утилит валюты
+import { formatIDR, formatIDRWithUnit, getBaseUnitDisplay } from '@/utils/currency'
 
 interface Props {
   costCalculation: PreparationPlanCost | RecipePlanCost
@@ -133,10 +151,66 @@ const props = defineProps<Props>()
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
 
-// Sorted component costs для анализа
 const sortedComponentCosts = computed(() => {
   return [...props.costCalculation.componentCosts].sort((a, b) => b.totalPlanCost - a.totalPlanCost)
 })
+
+function getActualBaseUnit(component: ComponentPlanCost): string {
+  if (component.componentType === 'product') {
+    const product = productsStore.getProductForRecipe(component.componentId)
+    if (product?.baseUnit) {
+      return getBaseUnitDisplay(product.baseUnit)
+    }
+  }
+  return 'unit'
+}
+
+// Удаляем дублирующую функцию getBaseUnitDisplayName
+
+function needsUnitConversion(component: ComponentPlanCost): boolean {
+  const recipeUnit = component.unit.toLowerCase()
+  const baseUnit = getActualBaseUnit(component).toLowerCase()
+
+  const conversions = [
+    { from: 'kg', to: 'g' },
+    { from: 'liter', to: 'ml' },
+    { from: 'pack', to: 'pcs' }
+  ]
+
+  return conversions.some(conv => recipeUnit === conv.from && baseUnit === conv.to)
+}
+
+function getConvertedQuantity(component: ComponentPlanCost): string {
+  const unit = component.unit.toLowerCase()
+
+  if (unit === 'kg') {
+    return (component.quantity * 1000).toFixed(0)
+  }
+
+  if (unit === 'liter') {
+    return (component.quantity * 1000).toFixed(0)
+  }
+
+  return component.quantity.toString()
+}
+
+function getBaseUnitsUsed(): string {
+  const units = new Set<string>()
+
+  props.costCalculation.componentCosts.forEach(component => {
+    units.add(getActualBaseUnit(component))
+  })
+
+  return Array.from(units).join(', ')
+}
+
+function getCalculationMethodInfo(): string {
+  const note = props.costCalculation.note || ''
+  if (note.includes('base units') || note.includes('fixed calculation')) {
+    return 'Base units (accurate)'
+  }
+  return 'Standard calculation'
+}
 
 function getComponentName(componentId: string, componentType: string): string {
   if (componentType === 'product') {
@@ -149,43 +223,12 @@ function getComponentName(componentId: string, componentType: string): string {
 }
 
 function getComponentColor(componentType: string): string {
-  return componentType === 'product' ? '#2196F3' : '#4CAF50' // Blue for products, Green for preparations
-}
-
-function getMostExpensiveComponent(): string {
-  if (!sortedComponentCosts.value.length) return 'N/A'
-  const most = sortedComponentCosts.value[0]
-  return `${getComponentName(most.componentId, most.componentType)} ($${most.totalPlanCost.toFixed(2)})`
-}
-
-function getAverageCostPerComponent(): number {
-  const total = props.costCalculation.componentCosts.reduce(
-    (sum, comp) => sum + comp.totalPlanCost,
-    0
-  )
-  return total / props.costCalculation.componentCosts.length
-}
-
-function getProductVsPreparationRatio(): string {
-  const products = props.costCalculation.componentCosts.filter(c => c.componentType === 'product')
-  const preparations = props.costCalculation.componentCosts.filter(
-    c => c.componentType === 'preparation'
-  )
-
-  const productCost = products.reduce((sum, p) => sum + p.totalPlanCost, 0)
-  const preparationCost = preparations.reduce((sum, p) => sum + p.totalPlanCost, 0)
-
-  const productPercentage = ((productCost / props.costCalculation.totalCost) * 100).toFixed(1)
-  const preparationPercentage = ((preparationCost / props.costCalculation.totalCost) * 100).toFixed(
-    1
-  )
-
-  return `${productPercentage}% products, ${preparationPercentage}% preparations`
+  return componentType === 'product' ? '#2196F3' : '#4CAF50'
 }
 </script>
 
 <style lang="scss" scoped>
-// Cost Summary Chart
+// Styles remain the same...
 .cost-breakdown-summary {
   .cost-chart {
     display: flex;
@@ -194,36 +237,30 @@ function getProductVsPreparationRatio(): string {
     overflow: hidden;
     background: var(--color-surface-variant);
   }
-
   .cost-bar {
     height: 100%;
     transition: opacity 0.2s;
-
     &:hover {
       opacity: 0.8;
       cursor: pointer;
     }
   }
-
   .cost-legend {
     .legend-items {
       display: flex;
       gap: 16px;
       margin-bottom: 8px;
     }
-
     .legend-item {
       display: flex;
       align-items: center;
       gap: 6px;
     }
-
     .legend-color {
       width: 12px;
       height: 12px;
       border-radius: 2px;
     }
-
     .legend-text {
       font-size: 0.8rem;
       color: var(--color-text-secondary);
@@ -231,10 +268,8 @@ function getProductVsPreparationRatio(): string {
   }
 }
 
-// ✅ ИСПРАВЛЕНО: Убрали специальные стили для "самого дорогого"
 .cost-item-card {
   transition: all 0.2s ease;
-
   &:hover {
     transform: translateX(4px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -259,11 +294,27 @@ function getProductVsPreparationRatio(): string {
 
 .component-cost-details {
   color: var(--color-text-secondary);
+
+  .cost-calculation-line {
+    margin-bottom: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+  }
+
+  .unit-conversion-info {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
+    padding: 2px 6px;
+    background: rgba(76, 175, 80, 0.1);
+    border-radius: 4px;
+    border-left: 2px solid #4caf50;
+  }
 }
 
 .cost-info {
   text-align: right;
-  min-width: 100px;
+  min-width: 120px;
 }
 
 .cost-value {
@@ -278,60 +329,20 @@ function getProductVsPreparationRatio(): string {
   font-weight: 500;
 }
 
-.cost-analysis {
-  .analysis-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .analysis-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 4px 0;
-    border-bottom: 1px solid var(--color-outline-variant);
-
-    &:last-child {
-      border-bottom: none;
-    }
-  }
-
-  .analysis-label {
-    font-weight: 500;
-    color: var(--color-text-secondary);
-  }
-
-  .analysis-value {
-    font-weight: 600;
-    color: var(--color-primary);
-    text-align: right;
-    max-width: 60%;
-  }
-}
-
-// Responsive design
 @media (max-width: 768px) {
   .component-cost-name {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
   }
-
   .analysis-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
   }
-
   .cost-info {
     text-align: left;
     min-width: auto;
-  }
-
-  .analysis-value {
-    max-width: 100%;
-    text-align: left;
   }
 }
 </style>
