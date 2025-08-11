@@ -1,4 +1,4 @@
-<!-- src/views/storage/StorageView.vue - INTEGRATED WITH ANALYTICS -->
+<!-- src/views/storage/StorageView.vue - ТОЛЬКО ПРОДУКТЫ -->
 <template>
   <div class="storage-view">
     <!-- Header -->
@@ -36,16 +36,6 @@
           Count Inventory
         </v-btn>
 
-        <!-- NEW: Waste Button -->
-        <v-btn
-          color="error"
-          variant="outlined"
-          prepend-icon="mdi-delete-sweep"
-          @click="showWasteDialog = true"
-        >
-          Waste
-        </v-btn>
-
         <!-- Info Button -->
         <v-btn
           color="info"
@@ -71,47 +61,6 @@
       <v-alert-title>Storage Error</v-alert-title>
       {{ storageStore.state.error }}
     </v-alert>
-
-    <!-- NEW: Enhanced Alert Banners -->
-    <div v-if="hasAlerts" class="mb-4">
-      <!-- Expired Products Alert -->
-      <v-alert v-if="alertCounts.expired > 0" type="error" variant="tonal" class="mb-2" closable>
-        <template #prepend>
-          <v-icon icon="mdi-clock-alert" />
-        </template>
-        <strong>
-          {{ alertCounts.expired }} expired product{{ alertCounts.expired !== 1 ? 's' : '' }}
-        </strong>
-        found. Consider immediate write-off.
-        <template #append>
-          <v-btn size="small" variant="outlined" @click="handleExpiredWriteOff">
-            Write-off All
-          </v-btn>
-        </template>
-      </v-alert>
-
-      <!-- Near Expiry Alert -->
-      <v-alert v-if="alertCounts.expiring > 0" type="warning" variant="tonal" class="mb-2" closable>
-        <template #prepend>
-          <v-icon icon="mdi-clock-outline" />
-        </template>
-        <strong>
-          {{ alertCounts.expiring }} product{{ alertCounts.expiring !== 1 ? 's' : '' }}
-        </strong>
-        expiring within 3 days.
-      </v-alert>
-
-      <!-- Low Stock Alert -->
-      <v-alert v-if="alertCounts.lowStock > 0" type="info" variant="tonal" class="mb-2" closable>
-        <template #prepend>
-          <v-icon icon="mdi-package-down" />
-        </template>
-        <strong>
-          {{ alertCounts.lowStock }} product{{ alertCounts.lowStock !== 1 ? 's' : '' }}
-        </strong>
-        below minimum stock level.
-      </v-alert>
-    </div>
 
     <!-- Department Tabs -->
     <v-tabs v-model="selectedDepartment" class="mb-4" color="primary">
@@ -141,7 +90,7 @@
       @show-low-stock="showLowStockItems"
     />
 
-    <!-- Main Content Tabs - UPDATED WITH ANALYTICS -->
+    <!-- Main Content Tabs - ТОЛЬКО ПРОДУКТЫ И ОПЕРАЦИИ -->
     <v-tabs v-model="selectedTab" class="mb-4">
       <v-tab value="products">
         <v-icon icon="mdi-package-variant" class="mr-2" />
@@ -163,11 +112,6 @@
         <v-chip v-if="recentInventories.length > 0" size="small" class="ml-2" variant="tonal">
           {{ recentInventories.length }}
         </v-chip>
-      </v-tab>
-      <!-- NEW: Analytics Tab -->
-      <v-tab value="analytics">
-        <v-icon icon="mdi-chart-line" class="mr-2" />
-        Analytics
       </v-tab>
     </v-tabs>
 
@@ -196,7 +140,6 @@
           :loading="storageStore.state.loading.balances"
           item-type="product"
           :department="selectedDepartment"
-          @write-off="handleWriteOffFromBalance"
         />
       </v-tabs-window-item>
 
@@ -244,11 +187,6 @@
           @start-inventory="handleStartInventory"
         />
       </v-tabs-window-item>
-
-      <!-- NEW: Analytics Tab -->
-      <v-tabs-window-item value="analytics">
-        <storage-analytics-tab :department="selectedDepartment" />
-      </v-tabs-window-item>
     </v-tabs-window>
 
     <!-- Dialogs -->
@@ -265,14 +203,6 @@
       item-type="product"
       :existing-inventory="editingInventory"
       @success="handleInventorySuccess"
-      @error="handleOperationError"
-    />
-
-    <!-- NEW: Waste Dialog -->
-    <write-off-dialog
-      v-model="showWasteDialog"
-      :department="selectedDepartment"
-      @success="handleWasteSuccess"
       @error="handleOperationError"
     />
 
@@ -331,10 +261,6 @@
                 <strong>Cost Analytics:</strong>
                 Price trends and value tracking
               </li>
-              <li>
-                <strong>Waste Analytics:</strong>
-                Track write-offs and waste patterns
-              </li>
             </ul>
           </div>
 
@@ -350,8 +276,6 @@
               <li>Click "Add Products" to receive new stock</li>
               <li>Use "Count Inventory" to verify stock levels</li>
               <li>Monitor alerts for expiring or low stock items</li>
-              <li>Use "Waste" button for write-offs</li>
-              <li>View Analytics for waste patterns and trends</li>
               <li>View operations history for audit trail</li>
             </ol>
           </div>
@@ -369,7 +293,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
-import { useWriteOff } from '@/stores/storage' // NEW: Import write-off composable
 import type { StorageDepartment, InventoryDocument } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 
@@ -378,23 +301,19 @@ import StorageAlerts from './components/StorageAlerts.vue'
 import StorageStockTable from './components/StorageStockTable.vue'
 import StorageOperationsTable from './components/StorageOperationsTable.vue'
 import StorageInventoriesTable from './components/StorageInventoriesTable.vue'
-import StorageAnalyticsTab from './components/tabs/StorageAnalyticsTab.vue' // NEW: Analytics component
 import ReceiptDialog from './components/ReceiptDialog.vue'
 import InventoryDialog from './components/InventoryDialog.vue'
-import WriteOffDialog from './components/dialogs/WriteOffDialog.vue' // NEW: Write-off dialog
 
 const MODULE_NAME = 'StorageView'
 
-// Store & Composables
+// Store
 const storageStore = useStorageStore()
-const writeOff = useWriteOff() // NEW: Write-off composable
 
 // State
 const selectedDepartment = ref<StorageDepartment>('kitchen')
 const selectedTab = ref('products')
 const showReceiptDialog = ref(false)
 const showInventoryDialog = ref(false)
-const showWasteDialog = ref(false) // NEW: Waste dialog state
 const showInfoDialog = ref(false)
 const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
@@ -449,14 +368,6 @@ const alertCounts = computed(() => {
     return { expiring: 0, expired: 0, lowStock: 0 }
   }
 })
-
-// NEW: Computed for enhanced alerts
-const hasAlerts = computed(
-  () =>
-    alertCounts.value.expired > 0 ||
-    alertCounts.value.expiring > 0 ||
-    alertCounts.value.lowStock > 0
-)
 
 const kitchenItemCount = computed(() => {
   try {
@@ -522,61 +433,6 @@ function showLowStockItems() {
   }
 }
 
-// NEW: Write-off methods
-async function handleExpiredWriteOff() {
-  try {
-    const operation = await writeOff.writeOffExpiredProducts(
-      selectedDepartment.value,
-      'System Auto Write-off',
-      'Bulk write-off of all expired products'
-    )
-
-    if (operation) {
-      successMessage.value = 'All expired products written off successfully!'
-      showSuccessSnackbar.value = true
-
-      // Refresh data
-      await storageStore.fetchBalances(selectedDepartment.value)
-    }
-  } catch (error) {
-    console.error('Failed to write-off expired products:', error)
-    handleOperationError('Failed to write-off expired products')
-  }
-}
-
-function handleWriteOffFromBalance(productData: any) {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Write-off initiated from balance table', { productData })
-    // This could open a specific write-off dialog for the selected product
-    // For now, we'll just open the general waste dialog
-    showWasteDialog.value = true
-  } catch (error) {
-    console.warn('Error handling write-off from balance:', error)
-    handleOperationError('Failed to initiate write-off')
-  }
-}
-
-async function handleWasteSuccess(message: string = 'Products written off successfully') {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Waste operation completed, refreshing data')
-
-    successMessage.value = message
-    showSuccessSnackbar.value = true
-
-    await Promise.all([
-      storageStore.fetchBalances(selectedDepartment.value),
-      storageStore.fetchOperations(selectedDepartment.value)
-    ])
-
-    showWasteDialog.value = false
-
-    DebugUtils.info(MODULE_NAME, 'Waste operation data refreshed successfully')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to refresh data after waste operation', { error })
-    handleOperationError('Waste operation completed but failed to refresh data')
-  }
-}
-
 async function handleOperationSuccess(message: string = 'Operation completed successfully') {
   try {
     DebugUtils.info(MODULE_NAME, 'Operation completed, refreshing data')
@@ -631,7 +487,6 @@ function handleOperationError(message: string) {
   // Close all dialogs
   showReceiptDialog.value = false
   showInventoryDialog.value = false
-  showWasteDialog.value = false // NEW: Close waste dialog
   editingInventory.value = null
 }
 
@@ -744,34 +599,5 @@ onMounted(async () => {
 .v-empty-state {
   padding: 48px 24px;
   text-align: center;
-}
-
-/* Responsive adjustments */
-@media (max-width: 960px) {
-  .storage-view {
-    padding: 16px;
-  }
-
-  .d-flex.justify-space-between {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .d-flex.justify-space-between > div:last-child {
-    align-self: stretch;
-    justify-content: space-between;
-  }
-}
-
-@media (max-width: 600px) {
-  .v-tabs {
-    overflow-x: auto;
-  }
-
-  .d-flex.gap-2 {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
 }
 </style>

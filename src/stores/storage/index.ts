@@ -1,10 +1,11 @@
-// src/stores/storage/index.ts - ФИНАЛЬНАЯ ВЕРСИЯ БЕЗ CONSUMPTION
+// src/stores/storage/index.ts - UPDATED WITH WRITE-OFF COMPOSABLE
 
-// Export all types (только receipt, correction, inventory)
+// Export all types
 export type {
   StorageDepartment,
   StorageItemType,
-  OperationType, // только 'receipt' | 'correction' | 'inventory'
+  OperationType,
+  WriteOffReason,
   BatchSourceType,
   BatchStatus,
   StorageBatch,
@@ -16,10 +17,16 @@ export type {
   InventoryItem,
   CreateReceiptData,
   ReceiptItem,
-  CreateCorrectionData, // ✅ НОВОЕ
-  CorrectionItem, // ✅ НОВОЕ
+  CreateWriteOffData,
+  WriteOffItem,
+  CreateCorrectionData,
+  CorrectionItem,
   CreateInventoryData,
-  StorageState
+  StorageState,
+  QuickWriteOffItem,
+  WriteOffStatistics,
+  WRITE_OFF_CLASSIFICATION,
+  doesWriteOffAffectKPI
 } from './types'
 
 // Export service
@@ -27,6 +34,9 @@ export { storageService } from './storageService'
 
 // Export store
 export { useStorageStore } from './storageStore'
+
+// ✅ Export specialized composables
+export { useWriteOff } from './composables/useWriteOff'
 
 // Export mock data for testing
 export {

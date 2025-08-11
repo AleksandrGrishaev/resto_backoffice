@@ -1,4 +1,4 @@
-// src/stores/storage/storageStore.ts - ТОЛЬКО ПРОДУКТЫ
+// src/stores/storage/storageStore.ts - SIMPLIFIED (without write-offs)
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -19,7 +19,7 @@ import type {
 const MODULE_NAME = 'StorageStore'
 
 export const useStorageStore = defineStore('storage', () => {
-  // State
+  // State (simplified - removed write-off loading and filters)
   const state = ref<StorageState>({
     batches: [],
     operations: [],
@@ -29,11 +29,13 @@ export const useStorageStore = defineStore('storage', () => {
       balances: false,
       operations: false,
       inventory: false,
+      writeOff: false, // Keep for compatibility but won't be used here
       correction: false
     },
     error: null,
     filters: {
       department: 'all',
+      operationType: undefined,
       showExpired: false,
       showBelowMinStock: false,
       showNearExpiry: false,
@@ -44,11 +46,12 @@ export const useStorageStore = defineStore('storage', () => {
     settings: {
       expiryWarningDays: 3,
       lowStockMultiplier: 1.2,
-      autoCalculateBalance: true
+      autoCalculateBalance: true,
+      enableQuickWriteOff: true
     }
   })
 
-  // ✅ Получение связанного products store
+  // ✅ Dependencies
   const productsStore = useProductsStore()
 
   // ===========================
@@ -60,18 +63,15 @@ export const useStorageStore = defineStore('storage', () => {
       let balances = [...state.value.balances]
       const filters = state.value.filters
 
-      // Department filter
       if (filters.department !== 'all') {
         balances = balances.filter(b => b.department === filters.department)
       }
 
-      // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase()
         balances = balances.filter(b => b.itemName.toLowerCase().includes(searchLower))
       }
 
-      // Status filters
       if (filters.showExpired) {
         balances = balances.filter(b => b.hasExpired)
       }
@@ -85,6 +85,26 @@ export const useStorageStore = defineStore('storage', () => {
       return balances
     } catch (error) {
       console.warn('Error filtering product balances:', error)
+      return []
+    }
+  })
+
+  const filteredOperations = computed(() => {
+    try {
+      let operations = [...state.value.operations]
+      const filters = state.value.filters
+
+      if (filters.department !== 'all') {
+        operations = operations.filter(op => op.department === filters.department)
+      }
+
+      if (filters.operationType) {
+        operations = operations.filter(op => op.operationType === filters.operationType)
+      }
+
+      return operations
+    } catch (error) {
+      console.warn('Error filtering operations:', error)
       return []
     }
   })
@@ -109,17 +129,6 @@ export const useStorageStore = defineStore('storage', () => {
       expiring: state.value.balances.filter(b => b.hasNearExpiry).length,
       expired: state.value.balances.filter(b => b.hasExpired).length,
       lowStock: state.value.balances.filter(b => b.belowMinStock).length
-    }
-  })
-
-  const quickProducts = computed(() => {
-    return (department: StorageDepartment) => {
-      try {
-        return storageService.getQuickProducts(department)
-      } catch (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to get quick products', { error })
-        return []
-      }
     }
   })
 
@@ -197,7 +206,7 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // CORRECTION OPERATIONS (заменяет consumption)
+  // ✅ CORE OPERATIONS (without write-offs)
   // ===========================
 
   async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
@@ -229,10 +238,6 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.correction = false
     }
   }
-
-  // ===========================
-  // RECEIPT OPERATIONS
-  // ===========================
 
   async function createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
     try {
@@ -362,6 +367,35 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
+  // ✅ WRITE-OFF SUPPORT (delegated to useWriteOff)
+  // ===========================
+
+  /**
+   * Create write-off operation - delegated to useWriteOff composable
+   * This method is here for compatibility and to update the store state
+   */
+  async function createWriteOff(data: any): Promise<StorageOperation> {
+    try {
+      // This is called by useWriteOff composable
+      const operation = await storageService.createWriteOff(data)
+
+      // Update local state
+      state.value.operations.unshift(operation)
+
+      // Refresh balances
+      await fetchBalances(data.department)
+
+      return operation
+    } catch (error) {
+      throw error
+    }
+  }
+
+  function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
+    return storageService.getWriteOffStatistics(department, dateFrom, dateTo)
+  }
+
+  // ===========================
   // FIFO CALCULATIONS
   // ===========================
 
@@ -471,6 +505,10 @@ export const useStorageStore = defineStore('storage', () => {
     state.value.filters.department = department
   }
 
+  function setOperationTypeFilter(operationType?: typeof state.value.filters.operationType) {
+    state.value.filters.operationType = operationType
+  }
+
   function setSearchFilter(search: string) {
     state.value.filters.search = search
   }
@@ -490,6 +528,7 @@ export const useStorageStore = defineStore('storage', () => {
   function clearFilters() {
     state.value.filters = {
       department: 'all',
+      operationType: undefined,
       showExpired: false,
       showBelowMinStock: false,
       showNearExpiry: false,
@@ -600,10 +639,10 @@ export const useStorageStore = defineStore('storage', () => {
 
     // Getters
     filteredBalances,
+    filteredOperations,
     departmentBalances,
     totalInventoryValue,
     alertCounts,
-    quickProducts,
     statistics,
 
     // Core Actions
@@ -611,9 +650,13 @@ export const useStorageStore = defineStore('storage', () => {
     fetchOperations,
     fetchInventories,
 
-    // Operations (только receipt и correction для продуктов)
+    // Operations (simplified - write-offs delegated to useWriteOff)
     createCorrection,
     createReceipt,
+
+    // ✅ Write-off support (for useWriteOff composable)
+    createWriteOff,
+    getWriteOffStatistics,
 
     // Inventory
     startInventory,
@@ -636,6 +679,7 @@ export const useStorageStore = defineStore('storage', () => {
 
     // Filters
     setDepartmentFilter,
+    setOperationTypeFilter,
     setSearchFilter,
     toggleExpiredFilter,
     toggleLowStockFilter,
