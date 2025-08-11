@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue - СТИЛЬНЫЙ ДИЗАЙН -->
+<!-- src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue - ИСПРАВЛЕННАЯ ВЕРСИЯ -->
 <template>
   <div v-if="estimatedCost.totalCost > 0" class="cost-preview-section">
     <v-card variant="outlined" class="cost-preview-card">
@@ -49,8 +49,9 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { DebugUtils } from '@/utils'
-// ✅ НОВОЕ: Импорт централизованных утилит валюты
-import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
+// ✅ ИСПРАВЛЕНО: Используем правильные импорты
+import { formatIDR } from '@/utils/currency'
+import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 
 interface Props {
   formData: any
@@ -62,6 +63,8 @@ const props = defineProps<Props>()
 // ✅ ИСПРАВЛЕНО: Избегаем циклических импортов - ленивая загрузка stores
 let productsStore: any = null
 let recipesStore: any = null
+
+const { convertUnits, areUnitsCompatible } = useMeasurementUnits()
 
 async function getStores() {
   if (!productsStore) {
@@ -126,8 +129,23 @@ function calculateProductCost(component: any, product: any): number {
     return ((product.costPerUnit || 0) * component.quantity) / 1000
   }
 
+  // ✅ ПРАВИЛЬНЫЙ РАСЧЕТ: Проверяем совместимость единиц
+  if (!areUnitsCompatible(component.unit, product.baseUnit)) {
+    DebugUtils.warn(
+      'RecipeCostPreviewWidget',
+      `Unit mismatch: ${component.unit} vs ${product.baseUnit}`
+    )
+    return 0
+  }
+
   // ✅ ПРАВИЛЬНЫЙ РАСЧЕТ: Конвертируем количество в базовые единицы
-  const baseQuantity = convertToBaseUnits(component.quantity, component.unit, product.baseUnit)
+  let baseQuantity: number
+  try {
+    baseQuantity = convertUnits(component.quantity, component.unit, product.baseUnit)
+  } catch (error) {
+    DebugUtils.warn('RecipeCostPreviewWidget', 'Unit conversion failed', { error })
+    return 0
+  }
 
   // ✅ ПРАВИЛЬНЫЙ РАСЧЕТ: Умножаем на цену за базовую единицу
   const componentCost = baseQuantity * product.baseCostPerUnit

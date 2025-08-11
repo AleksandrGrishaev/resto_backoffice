@@ -1,4 +1,4 @@
-// src/types/measurementUnits.ts - ENGLISH VERSION
+// src/types/measurementUnits.ts - SAFE VERSION with undefined protection
 
 // =============================================
 // UNIFIED MEASUREMENT SYSTEM
@@ -137,53 +137,85 @@ export const RECIPE_UNITS: MeasurementUnit[] = [
 export const MENU_COMPOSITION_UNITS: MeasurementUnit[] = ['gram', 'ml', 'piece'] // only precise units
 
 // =============================================
-// UTILITIES FOR WORKING WITH UNITS
+// ✅ SAFE UTILITIES FOR WORKING WITH UNITS
 // =============================================
 
 /**
- * Get unit information
+ * Get unit information - SAFE VERSION
  */
-export function getUnitInfo(unit: MeasurementUnit): UnitInfo {
-  return MEASUREMENT_UNITS[unit]
+export function getUnitInfo(unit: MeasurementUnit | string | undefined | null): UnitInfo | null {
+  if (!unit || typeof unit !== 'string' || !MEASUREMENT_UNITS[unit as MeasurementUnit]) {
+    return null
+  }
+  return MEASUREMENT_UNITS[unit as MeasurementUnit]
 }
 
 /**
- * Get short unit name
+ * Get short unit name - SAFE VERSION
  */
-export function getUnitShortName(unit: MeasurementUnit): string {
-  return MEASUREMENT_UNITS[unit].shortName
+export function getUnitShortName(unit: MeasurementUnit | string | undefined | null): string {
+  if (!unit || typeof unit !== 'string' || !MEASUREMENT_UNITS[unit as MeasurementUnit]) {
+    return '?'
+  }
+  return MEASUREMENT_UNITS[unit as MeasurementUnit].shortName
 }
 
 /**
- * Get full unit name
+ * Get full unit name - SAFE VERSION
  */
-export function getUnitName(unit: MeasurementUnit): string {
-  return MEASUREMENT_UNITS[unit].name
+export function getUnitName(unit: MeasurementUnit | string | undefined | null): string {
+  if (!unit || typeof unit !== 'string' || !MEASUREMENT_UNITS[unit as MeasurementUnit]) {
+    return 'Unknown'
+  }
+  return MEASUREMENT_UNITS[unit as MeasurementUnit].name
 }
 
 /**
- * Check unit compatibility (same type)
+ * Check unit compatibility (same type) - SAFE VERSION
  */
-export function areUnitsCompatible(unit1: MeasurementUnit, unit2: MeasurementUnit): boolean {
-  const info1 = MEASUREMENT_UNITS[unit1]
-  const info2 = MEASUREMENT_UNITS[unit2]
+export function areUnitsCompatible(
+  unit1: MeasurementUnit | string | undefined | null,
+  unit2: MeasurementUnit | string | undefined | null
+): boolean {
+  if (!unit1 || !unit2 || typeof unit1 !== 'string' || typeof unit2 !== 'string') {
+    return false
+  }
+
+  const info1 = MEASUREMENT_UNITS[unit1 as MeasurementUnit]
+  const info2 = MEASUREMENT_UNITS[unit2 as MeasurementUnit]
+
+  if (!info1 || !info2) {
+    return false
+  }
+
   return info1.type === info2.type
 }
 
 /**
- * Convert value between units
+ * Convert value between units - SAFE VERSION
  */
 export function convertUnits(
   value: number,
-  fromUnit: MeasurementUnit,
-  toUnit: MeasurementUnit
+  fromUnit: MeasurementUnit | string | undefined | null,
+  toUnit: MeasurementUnit | string | undefined | null
 ): number {
-  const fromInfo = MEASUREMENT_UNITS[fromUnit]
-  const toInfo = MEASUREMENT_UNITS[toUnit]
+  if (!fromUnit || !toUnit || typeof fromUnit !== 'string' || typeof toUnit !== 'string') {
+    console.warn(`Invalid units for conversion: ${fromUnit} -> ${toUnit}`)
+    return value // Return original value if conversion impossible
+  }
+
+  const fromInfo = MEASUREMENT_UNITS[fromUnit as MeasurementUnit]
+  const toInfo = MEASUREMENT_UNITS[toUnit as MeasurementUnit]
+
+  if (!fromInfo || !toInfo) {
+    console.warn(`Unknown units for conversion: ${fromUnit} -> ${toUnit}`)
+    return value
+  }
 
   // Check compatibility
   if (!areUnitsCompatible(fromUnit, toUnit)) {
-    throw new Error(`Cannot convert between ${fromUnit} and ${toUnit} - different types`)
+    console.warn(`Cannot convert between ${fromUnit} and ${toUnit} - different types`)
+    return value // Return original value
   }
 
   // If units are the same
@@ -199,11 +231,11 @@ export function convertUnits(
 }
 
 /**
- * Format value with unit
+ * Format value with unit - SAFE VERSION
  */
 export function formatWithUnit(
   value: number,
-  unit: MeasurementUnit,
+  unit: MeasurementUnit | string | undefined | null,
   options?: {
     showFullName?: boolean
     precision?: number
@@ -211,8 +243,12 @@ export function formatWithUnit(
 ): string {
   const precision = options?.precision ?? 1
   const formattedValue = Number(value.toFixed(precision))
-  const unitName = options?.showFullName ? getUnitName(unit) : getUnitShortName(unit)
 
+  if (!unit || typeof unit !== 'string' || !MEASUREMENT_UNITS[unit as MeasurementUnit]) {
+    return `${formattedValue} ?`
+  }
+
+  const unitName = options?.showFullName ? getUnitName(unit) : getUnitShortName(unit)
   return `${formattedValue} ${unitName}`
 }
 
@@ -240,22 +276,28 @@ export function getUnitsByType(type: UnitType): MeasurementUnit[] {
 }
 
 // =============================================
-// VALIDATION
+// ✅ SAFE VALIDATION
 // =============================================
 
 /**
- * Check if string is valid unit
+ * Check if string is valid unit - SAFE VERSION
  */
-export function isValidUnit(unit: string): unit is MeasurementUnit {
+export function isValidUnit(unit: string | undefined | null): unit is MeasurementUnit {
+  if (!unit || typeof unit !== 'string') {
+    return false
+  }
   return Object.keys(MEASUREMENT_UNITS).includes(unit)
 }
 
 /**
- * Check if unit is suitable for context
+ * Check if unit is suitable for context - SAFE VERSION
  */
 export function isUnitValidForContext(
-  unit: MeasurementUnit,
+  unit: MeasurementUnit | string | undefined | null,
   context: 'products' | 'recipes' | 'menu'
 ): boolean {
-  return getUnitsForContext(context).includes(unit)
+  if (!unit || typeof unit !== 'string' || !isValidUnit(unit)) {
+    return false
+  }
+  return getUnitsForContext(context).includes(unit as MeasurementUnit)
 }

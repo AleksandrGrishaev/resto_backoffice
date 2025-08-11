@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue - УПРОЩЕННАЯ ВЕРСИЯ -->
+<!-- src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue - ИСПРАВЛЕННАЯ ВЕРСИЯ -->
 <template>
   <div class="components-section">
     <div class="d-flex justify-space-between align-center mb-4">
@@ -6,7 +6,7 @@
         {{ type === 'preparation' ? 'Recipe (Products only)' : 'Components' }}
       </h3>
       <div class="d-flex align-center gap-3">
-        <!-- ✅ НОВЫЙ: Фильтр категорий (показывается только при добавлении продукта) -->
+        <!-- Фильтр категорий (показывается только при добавлении продукта) -->
         <v-select
           v-if="showCategoryFilter"
           v-model="selectedCategory"
@@ -161,7 +161,7 @@
               />
             </v-col>
 
-            <!-- ✅ УПРОЩЕНО: Показываем только базовую единицу, без выбора -->
+            <!-- Показываем только базовую единицу, без выбора -->
             <v-col cols="3">
               <v-text-field
                 :model-value="getFixedUnit(component)"
@@ -212,7 +212,9 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import type { MeasurementUnit } from '@/stores/recipes/types'
-import { formatIDR, getBaseUnitDisplay } from '@/utils/currency'
+import { formatIDR } from '@/utils/currency'
+// ✅ ИСПРАВЛЕНО: Используем правильный импорт для единиц измерения
+import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 
 // ===== TYPES =====
 interface Component {
@@ -259,16 +261,19 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+// ✅ ИСПРАВЛЕНО: Используем composable для единиц измерения
+const { getUnitShortName } = useMeasurementUnits()
+
 // ===== STATE =====
 const products = ref<ProductItem[]>([])
 const preparations = ref<PreparationItem[]>([])
 const storesLoaded = ref(false)
 
-// ✅ НОВОЕ: Состояние для фильтра категорий
+// Состояние для фильтра категорий
 const selectedCategory = ref<string>('all')
 const showCategoryFilter = ref(false)
 
-// ✅ НОВОЕ: Опции для фильтра категорий
+// Опции для фильтра категорий
 const categoryFilterOptions = computed(() => [
   { value: 'all', text: 'All Categories' },
   { value: 'meat', text: 'Meat & Poultry' },
@@ -302,7 +307,7 @@ const validatePositiveNumber = (value: number) => value > 0 || 'Must be greater 
 // ===== METHODS =====
 
 /**
- * ✅ НОВАЯ ФУНКЦИЯ: Фильтрованные элементы (без дублирования)
+ * Фильтрованные элементы (без дублирования)
  */
 function getFilteredItems(componentType: string) {
   if (componentType === 'product') {
@@ -320,7 +325,7 @@ function getFilteredItems(componentType: string) {
         id: product.id,
         name: product.nameEn || product.name,
         category: product.category,
-        subtitle: `${formatIDR(product.baseCostPerUnit || product.costPerUnit)}/${getBaseUnitDisplay(product.baseUnit || product.unit)} • ${getCategoryName(product.category)}`
+        subtitle: `${formatIDR(product.baseCostPerUnit || product.costPerUnit)}/${getBaseUnitDisplayForProduct(product)} • ${getCategoryName(product.category)}`
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
   } else {
@@ -337,7 +342,23 @@ function getFilteredItems(componentType: string) {
 }
 
 /**
- * ✅ НОВАЯ ФУНКЦИЯ: Фильтрация продуктов по категории
+ * ✅ ИСПРАВЛЕНО: Получение отображения базовой единицы для продукта
+ */
+function getBaseUnitDisplayForProduct(product: ProductItem): string {
+  if (product.baseUnit) {
+    return getUnitShortName(product.baseUnit as MeasurementUnit)
+  }
+
+  // Fallback на старое поле unit
+  if (product.unit) {
+    return getUnitShortName(product.unit as MeasurementUnit)
+  }
+
+  return 'g' // По умолчанию граммы
+}
+
+/**
+ * Фильтрация продуктов по категории
  */
 function filterProductsByCategory(category: string) {
   selectedCategory.value = category
@@ -367,7 +388,7 @@ function getItemLabel(componentType: string): string {
 }
 
 /**
- * ✅ УПРОЩЕНО: Фиксированная единица - только базовая единица продукта
+ * Фиксированная единица - только базовая единица продукта
  */
 function getFixedUnit(component: Component): string {
   if (!component.componentId) return 'Select item first'
@@ -375,9 +396,9 @@ function getFixedUnit(component: Component): string {
   if (component.componentType === 'product') {
     const product = products.value.find(p => p.id === component.componentId)
     if (product?.baseUnit) {
-      return getBaseUnitDisplay(product.baseUnit)
+      return getUnitShortName(product.baseUnit as MeasurementUnit)
     }
-    return product?.unit || 'g'
+    return getUnitShortName((product?.unit || 'gram') as MeasurementUnit)
   }
 
   const prep = preparations.value.find(p => p.id === component.componentId)
@@ -385,7 +406,7 @@ function getFixedUnit(component: Component): string {
 }
 
 /**
- * ✅ ИСПРАВЛЕНО: Отображение цены
+ * Отображение цены
  */
 function getEnhancedPriceDisplay(component: Component): string {
   if (!storesLoaded.value || !component.componentId) return 'Loading...'
@@ -394,9 +415,9 @@ function getEnhancedPriceDisplay(component: Component): string {
     const product = products.value.find(p => p.id === component.componentId)
     if (product) {
       if (product.baseCostPerUnit && product.baseUnit) {
-        return `${formatIDR(product.baseCostPerUnit)}/${getBaseUnitDisplay(product.baseUnit)}`
+        return `${formatIDR(product.baseCostPerUnit)}/${getBaseUnitDisplayForProduct(product)}`
       } else {
-        return `${formatIDR(product.costPerUnit)}/${product.unit}`
+        return `${formatIDR(product.costPerUnit)}/${getUnitShortName((product.unit || 'gram') as MeasurementUnit)}`
       }
     }
   } else {
@@ -407,14 +428,14 @@ function getEnhancedPriceDisplay(component: Component): string {
 }
 
 /**
- * ✅ НОВАЯ ФУНКЦИЯ: Информация о базовой единице
+ * Информация о базовой единице
  */
 function getBaseUnitInfo(component: Component): string {
   if (!component.componentId) return 'Not selected'
 
   if (component.componentType === 'product') {
     const product = products.value.find(p => p.id === component.componentId)
-    return getBaseUnitDisplay(product?.baseUnit || product?.unit || 'g')
+    return getBaseUnitDisplayForProduct(product!)
   }
 
   const prep = preparations.value.find(p => p.id === component.componentId)
@@ -423,7 +444,6 @@ function getBaseUnitInfo(component: Component): string {
 
 // ===== EVENT HANDLERS =====
 function handleAddComponent() {
-  // ✅ НОВОЕ: Показываем фильтр категорий при добавлении продукта
   showCategoryFilter.value = true
   selectedCategory.value = 'all'
   emit('add-component')
@@ -432,7 +452,6 @@ function handleAddComponent() {
 function handleRemoveComponent(index: number) {
   emit('remove-component', index)
 
-  // ✅ НОВОЕ: Скрываем фильтр если компонентов нет
   if (props.components.length <= 1) {
     showCategoryFilter.value = false
   }
@@ -441,14 +460,12 @@ function handleRemoveComponent(index: number) {
 function handleComponentTypeChange(index: number, newType: string) {
   emit('update-component', index, 'componentType', newType)
   emit('update-component', index, 'componentId', '')
-  // ✅ АВТОМАТИЧЕСКИ устанавливаем единицу при смене типа
-  emit('update-component', index, 'unit', 'gram') // По умолчанию граммы
+  emit('update-component', index, 'unit', 'gram')
 }
 
 function handleComponentIdChange(index: number, componentId: string) {
   emit('update-component', index, 'componentId', componentId)
 
-  // ✅ АВТОМАТИЧЕСКИ устанавливаем правильную единицу при выборе продукта
   const fixedUnit = getFixedUnitForComponent(componentId, props.components[index].componentType)
   emit('update-component', index, 'unit', fixedUnit)
 
@@ -456,7 +473,7 @@ function handleComponentIdChange(index: number, componentId: string) {
 }
 
 /**
- * ✅ НОВАЯ ФУНКЦИЯ: Получение фиксированной единицы для компонента
+ * Получение фиксированной единицы для компонента
  */
 function getFixedUnitForComponent(componentId: string, componentType: string): string {
   if (componentType === 'product') {

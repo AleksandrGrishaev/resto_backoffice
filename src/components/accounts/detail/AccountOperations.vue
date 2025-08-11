@@ -2,14 +2,14 @@
   <v-table hover>
     <thead>
       <tr>
-        <th class="text-left">Дата</th>
-        <th class="text-left">Тип</th>
-        <th class="text-left">Категория</th>
-        <th class="text-right">Сумма</th>
-        <th class="text-right">Баланс</th>
-        <th class="text-left">Описание</th>
-        <th class="text-left">Кем создано</th>
-        <th v-if="canEdit" class="text-center">Действия</th>
+        <th class="text-left">Date</th>
+        <th class="text-left">Type</th>
+        <th class="text-left">Category</th>
+        <th class="text-right">Amount</th>
+        <th class="text-right">Balance</th>
+        <th class="text-left">Description</th>
+        <th class="text-left">Created By</th>
+        <th v-if="canEdit" class="text-center">Actions</th>
       </tr>
     </thead>
 
@@ -20,7 +20,7 @@
           :key="operation.id"
           :class="{ 'correction-row': operation.isCorrection }"
         >
-          <td>{{ formatDateTime(operation.createdAt) }}</td>
+          <td>{{ formatTransactionDateTime(operation.createdAt) }}</td>
           <td>
             <v-icon
               :icon="getOperationTypeIcon(operation.type)"
@@ -75,7 +75,7 @@
             size="24"
             class="mr-2"
           />
-          {{ loading ? 'Загрузка...' : 'Нет операций' }}
+          {{ loading ? 'Loading...' : 'No operations' }}
         </td>
       </tr>
     </tbody>
@@ -86,6 +86,8 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatIDR } from '@/utils/currency'
+// ✅ ИСПРАВЛЕНО: Добавлен импорт formatDateTime
+import { formatDateTime } from '@/utils/formatter'
 import type { Transaction, ExpenseCategory } from '@/stores/account'
 import { EXPENSE_CATEGORIES } from '@/stores/account'
 
@@ -107,6 +109,16 @@ const emit = defineEmits<{
 // Store
 const authStore = useAuthStore()
 const canEdit = computed(() => authStore.isAdmin)
+
+// ✅ ИСПРАВЛЕНО: Добавлена функция форматирования даты транзакции
+function formatTransactionDateTime(date: string | Date): string {
+  try {
+    return formatDateTime(date)
+  } catch (error) {
+    console.warn('Error formatting transaction datetime:', error)
+    return String(date)
+  }
+}
 
 // Helpers
 function getOperationTypeIcon(type: Transaction['type']): string {
@@ -131,10 +143,10 @@ function getOperationTypeColor(type: Transaction['type']): string {
 
 function getOperationTypeLabel(type: Transaction['type']): string {
   const labels = {
-    income: 'Приход',
-    expense: 'Расход',
-    transfer: 'Перевод',
-    correction: 'Корректировка'
+    income: 'Income',
+    expense: 'Expense',
+    transfer: 'Transfer',
+    correction: 'Correction'
   }
   return labels[type]
 }

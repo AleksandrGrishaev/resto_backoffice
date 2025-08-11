@@ -1,4 +1,4 @@
-<!-- src/views/recipes/components/widgets/CostBreakdownWidget.vue - ОБНОВЛЕНО с новой валютой -->
+<!-- src/views/recipes/components/widgets/CostBreakdownWidget.vue - ИСПРАВЛЕННАЯ ВЕРСИЯ -->
 <template>
   <div class="cost-breakdown-section pa-4">
     <v-divider class="mb-4" />
@@ -67,7 +67,7 @@
       </v-card>
     </div>
 
-    <!-- ✅ ОБНОВЛЕНО: Компоненты с новым форматированием валюты -->
+    <!-- Компоненты с правильным форматированием валюты -->
     <div class="cost-breakdown-list">
       <v-card
         v-for="componentCost in sortedComponentCosts"
@@ -92,7 +92,7 @@
                 </v-chip>
               </div>
 
-              <!-- ✅ ОБНОВЛЕНО: Правильный расчет с новым форматированием -->
+              <!-- Правильный расчет с новым форматированием -->
               <div class="component-cost-details">
                 <div class="cost-calculation-line">
                   <span class="text-caption">
@@ -138,8 +138,9 @@ import { computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import type { PreparationPlanCost, RecipePlanCost, ComponentPlanCost } from '@/stores/recipes/types'
-// ✅ НОВОЕ: Импорт централизованных утилит валюты
-import { formatIDR, formatIDRWithUnit, getBaseUnitDisplay } from '@/utils/currency'
+// ✅ ИСПРАВЛЕНО: Используем правильные импорты
+import { formatIDR, formatIDRWithUnit } from '@/utils/currency'
+import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 
 interface Props {
   costCalculation: PreparationPlanCost | RecipePlanCost
@@ -150,22 +151,27 @@ const props = defineProps<Props>()
 
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
+const { getUnitShortName } = useMeasurementUnits()
 
 const sortedComponentCosts = computed(() => {
   return [...props.costCalculation.componentCosts].sort((a, b) => b.totalPlanCost - a.totalPlanCost)
 })
 
+/**
+ * ✅ ИСПРАВЛЕНО: Получение базовой единицы с правильным импортом
+ */
 function getActualBaseUnit(component: ComponentPlanCost): string {
   if (component.componentType === 'product') {
     const product = productsStore.getProductForRecipe(component.componentId)
     if (product?.baseUnit) {
-      return getBaseUnitDisplay(product.baseUnit)
+      return getUnitShortName(product.baseUnit as any)
+    }
+    if ((product as any)?.unit) {
+      return getUnitShortName((product as any).unit as any)
     }
   }
   return 'unit'
 }
-
-// Удаляем дублирующую функцию getBaseUnitDisplayName
 
 function needsUnitConversion(component: ComponentPlanCost): boolean {
   const recipeUnit = component.unit.toLowerCase()
@@ -194,24 +200,6 @@ function getConvertedQuantity(component: ComponentPlanCost): string {
   return component.quantity.toString()
 }
 
-function getBaseUnitsUsed(): string {
-  const units = new Set<string>()
-
-  props.costCalculation.componentCosts.forEach(component => {
-    units.add(getActualBaseUnit(component))
-  })
-
-  return Array.from(units).join(', ')
-}
-
-function getCalculationMethodInfo(): string {
-  const note = props.costCalculation.note || ''
-  if (note.includes('base units') || note.includes('fixed calculation')) {
-    return 'Base units (accurate)'
-  }
-  return 'Standard calculation'
-}
-
 function getComponentName(componentId: string, componentType: string): string {
   if (componentType === 'product') {
     const product = productsStore.products.find(p => p.id === componentId)
@@ -228,7 +216,6 @@ function getComponentColor(componentType: string): string {
 </script>
 
 <style lang="scss" scoped>
-// Styles remain the same...
 .cost-breakdown-summary {
   .cost-chart {
     display: flex;

@@ -1,6 +1,6 @@
-// src/utils/formatter.ts - REFACTORED: Устранение дублирования
+// src/utils/formatter.ts - FIXED: Убрано дублирование экспортов
 import { TimeUtils } from './time'
-import { formatIDR, formatIDRWithUnit, formatIDRShort } from './currency'
+import { formatIDR as formatIDRFromCurrency, formatIDRWithUnit, formatIDRShort } from './currency'
 
 // =============================================
 // ВРЕМЯ И ДАТЫ - используем TimeUtils
@@ -65,16 +65,19 @@ export function formatDayMonth(date: string | Date): string {
 // =============================================
 
 /**
- * @deprecated Используйте formatIDR из @/utils/currency
+ * @deprecated Используйте formatIDR из @/utils/currency напрямую
  * Оставлено для обратной совместимости, будет удалено в следующей версии
  */
-export function formatIDR(amount: number): string {
+export function formatAmount(amount: number): string {
   console.warn('formatAmount is deprecated, use formatIDR from @/utils/currency instead')
-  return formatIDR(amount)
+  return formatIDRFromCurrency(amount)
 }
 
-// Re-export currency functions для удобства
-export { formatIDR, formatIDRWithUnit, formatIDRShort } from './currency'
+// Re-export currency functions для удобства (без дублирования)
+export { formatIDRWithUnit, formatIDRShort } from './currency'
+
+// Основной экспорт formatIDR (чтобы избежать дублирования)
+export const formatIDR = formatIDRFromCurrency
 
 // =============================================
 // СПЕЦИАЛИЗИРОВАННЫЕ ФОРМАТТЕРЫ

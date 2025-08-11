@@ -1,4 +1,4 @@
-<!-- src/views/products/components/ProductsList.vue - Упрощенная таблица -->
+<!-- src/views/products/components/ProductsList.vue - SAFE VERSION -->
 <template>
   <div class="products-list">
     <!-- Пустое состояние -->
@@ -27,7 +27,6 @@
         <template #[`item.name`]="{ item }">
           <div class="product-name-cell">
             <div class="font-weight-medium">{{ item.name }}</div>
-            <!-- Убрали описание -->
           </div>
         </template>
 
@@ -41,7 +40,7 @@
         <!-- Единица измерения -->
         <template #[`item.unit`]="{ item }">
           <v-chip size="small" variant="outlined">
-            {{ formatUnit(item.unit) }}
+            {{ formatUnit(item) }}
           </v-chip>
         </template>
 
@@ -120,7 +119,7 @@
 import { computed } from 'vue'
 import type { Product } from '@/stores/productsStore'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
-import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 // Props
 interface Props {
@@ -138,9 +137,6 @@ interface Emits {
 }
 
 defineEmits<Emits>()
-
-// Composables
-const { getUnitName } = useMeasurementUnits()
 
 // Упрощенные заголовки таблицы
 const tableHeaders = computed(() => [
@@ -195,16 +191,32 @@ const tableHeaders = computed(() => [
   }
 ])
 
-// Методы
+// ✅ ИСПРАВЛЕННЫЕ МЕТОДЫ с защитой от undefined
 const getCategoryLabel = (category: string): string => {
   return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
 }
 
-const formatUnit = (unit: string): string => {
-  return getUnitName(unit as any)
+/**
+ * ✅ ИСПРАВЛЕНО: Безопасное форматирование единиц измерения
+ */
+const formatUnit = (product: Product): string => {
+  // Проверяем разные возможные поля для единицы измерения
+  const unit = product.unit || (product as any).baseUnit || (product as any).measurementUnit
+
+  if (!unit) {
+    // Если нет единицы измерения, возвращаем placeholder
+    return 'н/д'
+  }
+
+  // Используем безопасную функцию getUnitShortName
+  return getUnitShortName(unit)
 }
 
-const formatCurrency = (amount: number): string => {
+const formatCurrency = (amount: number | undefined | null): string => {
+  if (typeof amount !== 'number' || isNaN(amount)) {
+    return '0 IDR'
+  }
+
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -228,7 +240,11 @@ const getCategoryColor = (category: string): string => {
   return colors[category] || 'grey'
 }
 
-const getYieldColor = (percentage: number): string => {
+const getYieldColor = (percentage: number | undefined | null): string => {
+  if (typeof percentage !== 'number' || isNaN(percentage)) {
+    return 'grey'
+  }
+
   if (percentage >= 90) return 'success'
   if (percentage >= 75) return 'warning'
   return 'error'

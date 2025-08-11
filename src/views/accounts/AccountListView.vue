@@ -35,11 +35,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
+import type { Account, OperationType } from '@/stores/account'
+
+// ✅ ИСПРАВЛЕНО: Импорты реальных компонентов
 import AccountList from '@/components/accounts/list/AccountList.vue'
 import AccountListToolbar from '@/components/accounts/list/AccountListToolbar.vue'
 import AccountDialog from '@/components/accounts/dialogs/AccountDialog.vue'
 import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
-import type { Account, OperationType } from '@/stores/account'
 
 const router = useRouter()
 const store = useAccountStore()
@@ -106,3 +108,43 @@ onMounted(() => {
   fetchAccounts()
 })
 </script>
+
+<style lang="scss" scoped>
+.account-list-view {
+  .account-toolbar {
+    border-bottom: 1px solid rgb(var(--v-theme-outline-variant));
+  }
+
+  .account-list {
+    padding: 16px;
+
+    .loading,
+    .no-accounts {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      text-align: center;
+    }
+
+    .account-card {
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+    }
+  }
+}
+
+.text-success {
+  color: rgb(var(--v-theme-success));
+}
+
+.text-error {
+  color: rgb(var(--v-theme-error));
+}
+</style>

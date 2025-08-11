@@ -1,56 +1,126 @@
-// src/utils/currency.ts - CLEANED: Удалено дублирование единиц измерения
+// src/utils/currency.ts - ОБНОВЛЕННАЯ версия с новым форматом рупий
 
 /**
- * Форматирует сумму в IDR согласно правилам:
- * - До 100,000: целые числа с пробелами (7 500 IDR)
- * - От 100,000: округление до целых с префиксами (150K IDR, 2.5M IDR)
- * - Всегда с пробелами для разделения тысяч
+ * Форматирует сумму в IDR с префиксом "Rp" и точками как разделителями тысяч
+ * Примеры:
+ * - 7500 -> "Rp 7.500"
+ * - 1250000 -> "Rp 1.250.000"
+ * - 2500000000 -> "Rp 2.5M" (сокращенный формат)
  */
-export function formatIDR(amount: number): string {
+export function formatIDR(amount: number, options: FormatOptions = {}): string {
   if (isNaN(amount) || amount < 0) {
-    return '0 IDR'
+    return 'Rp 0'
   }
 
   // Округляем до целого числа
   const roundedAmount = Math.round(amount)
+  const { compact = false, maxWidth } = options
 
-  if (roundedAmount < 100000) {
-    // До 100,000 - показываем с пробелами
-    return `${formatWithSpaces(roundedAmount)} IDR`
+  // Определяем нужно ли сокращение
+  const shouldUseCompact = compact || shouldUseCompactFormat(roundedAmount, maxWidth)
+
+  if (shouldUseCompact && roundedAmount >= 1000000) {
+    return formatCompactIDR(roundedAmount)
   }
 
-  // От 100,000 - используем префиксы
-  if (roundedAmount >= 1000000000) {
+  // Обычный формат с точками
+  return `Rp ${formatWithDots(roundedAmount)}`
+}
+
+/**
+ * Краткое форматирование IDR с сокращениями (K/M/B)
+ */
+export function formatIDRCompact(amount: number): string {
+  if (isNaN(amount) || amount < 0) {
+    return 'Rp 0'
+  }
+
+  const roundedAmount = Math.round(amount)
+  return formatCompactIDR(roundedAmount)
+}
+
+/**
+ * Форматирование с единицей измерения
+ * Пример: "Rp 2.500/kg"
+ */
+export function formatIDRWithUnit(
+  amount: number,
+  unit: string,
+  options: FormatOptions = {}
+): string {
+  const formattedAmount = formatIDR(amount, options)
+  return `${formattedAmount}/${unit}`
+}
+
+/**
+ * Краткое форматирование (только число с префиксом, без "Rp")
+ * Для использования в ограниченном пространстве
+ */
+export function formatIDRShort(amount: number, options: FormatOptions = {}): string {
+  const formatted = formatIDR(amount, options)
+  return formatted.replace('Rp ', '')
+}
+
+/**
+ * Форматирование для отображения в таблицах с автоматическим сокращением
+ */
+export function formatIDRTable(amount: number, maxWidth: number = 100): string {
+  return formatIDR(amount, { maxWidth, compact: true })
+}
+
+// =============================================
+// ТИПЫ И ИНТЕРФЕЙСЫ
+// =============================================
+
+interface FormatOptions {
+  compact?: boolean // Принудительное использование сокращений
+  maxWidth?: number // Максимальная ширина в пикселях для автоматического сокращения
+  showSign?: boolean // Показывать знак + для положительных чисел
+  decimals?: number // Количество десятичных знаков для сокращений
+}
+
+// =============================================
+// ВНУТРЕННИЕ ФУНКЦИИ
+// =============================================
+
+/**
+ * Форматирует число с точками как разделителями тысяч
+ * 1250000 -> "1.250.000"
+ */
+function formatWithDots(num: number): string {
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
+/**
+ * Создает сокращенный формат
+ */
+function formatCompactIDR(amount: number): string {
+  if (amount >= 1000000000) {
     // Миллиарды
-    const billions = roundedAmount / 1000000000
-    return `${formatDecimal(billions)}B IDR`
+    const billions = amount / 1000000000
+    return `Rp ${formatDecimal(billions)}B`
   }
 
-  if (roundedAmount >= 1000000) {
+  if (amount >= 1000000) {
     // Миллионы
-    const millions = roundedAmount / 1000000
-    return `${formatDecimal(millions)}M IDR`
+    const millions = amount / 1000000
+    return `Rp ${formatDecimal(millions)}M`
   }
 
-  // Тысячи (от 100K)
-  const thousands = roundedAmount / 1000
-  return `${formatDecimal(thousands)}K IDR`
+  if (amount >= 100000) {
+    // Тысячи (только от 100K)
+    const thousands = amount / 1000
+    return `Rp ${formatDecimal(thousands)}K`
+  }
+
+  // Обычный формат для сумм менее 100K
+  return `Rp ${formatWithDots(amount)}`
 }
 
 /**
- * Форматирует число с пробелами для разделения тысяч
- * 7500 -> "7 500"
- * 150000 -> "150 000"
+ * Форматирует десятичное число для сокращений
  */
-function formatWithSpaces(num: number): string {
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-}
-
-/**
- * Форматирует десятичное число для префиксов
- * Убирает лишние нули после запятой
- */
-function formatDecimal(num: number): string {
+function formatDecimal(num: number, decimals: number = 1): string {
   if (num >= 100) {
     // Для больших чисел показываем целые
     return Math.round(num).toString()
@@ -58,44 +128,66 @@ function formatDecimal(num: number): string {
 
   if (num >= 10) {
     // Для чисел 10-99 показываем 1 знак после запятой если нужно
-    const rounded = Math.round(num * 10) / 10
-    return rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1)
+    const rounded = Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals)
+    return rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(decimals)
   }
 
-  // Для чисел меньше 10 показываем 1-2 знака после запятой
-  const rounded = Math.round(num * 100) / 100
-  return rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(rounded < 1 ? 2 : 1)
+  // Для чисел меньше 10 показываем до 2 знаков после запятой
+  const maxDecimals = Math.max(decimals, 2)
+  const rounded = Math.round(num * Math.pow(10, maxDecimals)) / Math.pow(10, maxDecimals)
+
+  if (rounded % 1 === 0) {
+    return rounded.toString()
+  }
+
+  // Определяем нужное количество знаков
+  const actualDecimals = rounded < 1 ? maxDecimals : decimals
+  return rounded.toFixed(actualDecimals)
 }
 
 /**
- * Краткое форматирование IDR (только число с префиксом, без "IDR")
- * Для использования в таблицах и компактных местах
+ * Определяет нужно ли использовать сокращенный формат на основе ширины
  */
-export function formatIDRShort(amount: number): string {
-  const formatted = formatIDR(amount)
-  return formatted.replace(' IDR', '')
+function shouldUseCompactFormat(amount: number, maxWidth?: number): boolean {
+  if (!maxWidth) return false
+
+  // Примерная ширина символа: 8px
+  const estimatedWidth = estimateTextWidth(formatWithDots(amount))
+
+  return estimatedWidth > maxWidth
 }
 
 /**
- * Форматирует IDR с единицей измерения
- * Например: "2 500 IDR/kg" или "85 IDR/ml"
+ * Оценивает ширину текста (приблизительно)
  */
-export function formatIDRWithUnit(amount: number, unit: string): string {
-  return `${formatIDR(amount)}/${unit}`
+function estimateTextWidth(text: string): number {
+  // Примерная ширина: цифра = 8px, точка = 4px, "Rp " = 24px
+  const digitWidth = 8
+  const dotWidth = 4
+  const prefixWidth = 24
+
+  const digits = text.replace(/[^0-9]/g, '').length
+  const dots = (text.match(/\./g) || []).length
+
+  return prefixWidth + digits * digitWidth + dots * dotWidth
 }
+
+// =============================================
+// ПАРСИНГ И УТИЛИТЫ
+// =============================================
 
 /**
  * Парсит строку IDR обратно в число
- * "2.5M IDR" -> 2500000
- * "150 000 IDR" -> 150000
+ * "Rp 2.500.000" -> 2500000
+ * "Rp 2.5M" -> 2500000
  */
 export function parseIDR(idrString: string): number {
   if (!idrString) return 0
 
-  // Убираем "IDR" и пробелы
-  const cleaned = idrString.replace(/IDR/gi, '').replace(/\s/g, '')
+  // Убираем "Rp" и пробелы
+  const cleaned = idrString.replace(/Rp\s*/gi, '').replace(/\s/g, '')
 
-  // Обрабатываем префиксы
+  // Обрабатываем сокращения
   if (cleaned.includes('B')) {
     return parseFloat(cleaned.replace('B', '')) * 1000000000
   }
@@ -106,8 +198,9 @@ export function parseIDR(idrString: string): number {
     return parseFloat(cleaned.replace('K', '')) * 1000
   }
 
-  // Обычное число
-  return parseFloat(cleaned) || 0
+  // Убираем точки и парсим как обычное число
+  const withoutDots = cleaned.replace(/\./g, '')
+  return parseFloat(withoutDots) || 0
 }
 
 /**
@@ -162,11 +255,16 @@ export function getPriceRangeDescription(amount: number, type: 'preparation' | '
  * Экспорт констант для консистентности
  */
 export const IDR_CURRENCY = {
-  symbol: 'IDR',
+  symbol: 'Rp',
   name: 'Indonesian Rupiah',
   locale: 'id-ID',
+  format: {
+    prefix: 'Rp ',
+    thousandsSeparator: '.',
+    decimalSeparator: ',',
+    compactThreshold: 100000
+  },
   thresholds: {
-    compact: 100000, // С какой суммы начинаем использовать K/M
     preparation: {
       budget: 10000,
       moderate: 30000,
@@ -181,45 +279,68 @@ export const IDR_CURRENCY = {
 } as const
 
 // =============================================
-// УДАЛЕННЫЕ ФУНКЦИИ (перенесены в useMeasurementUnits)
+// АДАПТИВНОЕ ФОРМАТИРОВАНИЕ
 // =============================================
 
 /**
- * ❌ УДАЛЕНО: convertToBaseUnits()
- * ✅ ИСПОЛЬЗУЙТЕ: convertToBaseUnits() из @/composables/useMeasurementUnits
- *
- * @deprecated Функция перенесена в unified measurement system
- * import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
+ * Форматирует сумму с учетом доступного места
  */
+export function formatIDRAdaptive(
+  amount: number,
+  containerWidth: number,
+  priority: 'full' | 'compact' | 'minimal' = 'full'
+): string {
+  const fullFormat = formatIDR(amount)
+  const estimatedWidth = estimateTextWidth(fullFormat.replace('Rp ', '')) + 24 // +24 для "Rp "
 
-/**
- * ❌ УДАЛЕНО: getBaseUnitDisplay()
- * ✅ ИСПОЛЬЗУЙТЕ: getUnitShortName() из @/composables/useMeasurementUnits
- *
- * @deprecated Функция перенесена в unified measurement system
- * import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
- * const { getUnitShortName } = useMeasurementUnits()
- */
+  // Если помещается полный формат
+  if (estimatedWidth <= containerWidth || priority === 'full') {
+    return fullFormat
+  }
+
+  // Пробуем сокращенный формат
+  const compactFormat = formatIDRCompact(amount)
+  const compactWidth = estimateTextWidth(compactFormat.replace('Rp ', '')) + 24
+
+  if (compactWidth <= containerWidth || priority === 'compact') {
+    return compactFormat
+  }
+
+  // Минимальный формат (только число без "Rp")
+  if (priority === 'minimal') {
+    return formatIDRShort(amount, { compact: true })
+  }
+
+  return compactFormat
+}
 
 // =============================================
 // ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ
 // =============================================
 
 /**
- * Примеры использования (только currency функции):
+ * Примеры использования новой системы:
  *
- * formatIDR(7500) -> "7 500 IDR"
- * formatIDR(150000) -> "150K IDR"
- * formatIDR(2500000) -> "2.5M IDR"
+ * // Обычное форматирование
+ * formatIDR(7500) -> "Rp 7.500"
+ * formatIDR(1250000) -> "Rp 1.250.000"
+ * formatIDR(2500000) -> "Rp 2.500.000"
  *
- * formatIDRWithUnit(85, 'ml') -> "85 IDR/ml"
- * formatIDRWithUnit(180000, 'kg') -> "180K IDR/kg"
+ * // Сокращенное форматирование
+ * formatIDRCompact(1250000) -> "Rp 1.25M"
+ * formatIDRCompact(2500000000) -> "Rp 2.5B"
  *
- * formatIDRShort(2500000) -> "2.5M"
+ * // С единицами измерения
+ * formatIDRWithUnit(850, 'ml') -> "Rp 850/ml"
+ * formatIDRWithUnit(180000, 'kg') -> "Rp 180K/kg" (если compact)
  *
- * parseIDR("2.5M IDR") -> 2500000
- * parseIDR("150 000 IDR") -> 150000
+ * // Для таблиц (автоматическое сокращение)
+ * formatIDRTable(1250000, 80) -> "Rp 1.25M"
  *
- * getAmountColorClass(75000, 'preparation') -> 'text-error'
- * getPriceRangeDescription(25000, 'recipe') -> 'Budget-friendly'
+ * // Адаптивное форматирование
+ * formatIDRAdaptive(1250000, 100, 'compact') -> "Rp 1.25M"
+ *
+ * // Парсинг обратно
+ * parseIDR("Rp 1.250.000") -> 1250000
+ * parseIDR("Rp 2.5M") -> 2500000
  */

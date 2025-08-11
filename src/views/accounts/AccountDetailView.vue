@@ -16,7 +16,7 @@
           <v-select
             v-model="filters.type"
             :items="operationTypes"
-            label="Тип операции"
+            label="Operation Type"
             clearable
             @update:model-value="applyFilters"
           />
@@ -27,7 +27,7 @@
               <v-text-field
                 v-bind="props"
                 :model-value="getDateRangeLabel"
-                label="Период"
+                label="Period"
                 readonly
                 append-inner-icon="mdi-calendar"
               />
@@ -41,31 +41,31 @@
       <div class="action-buttons">
         <v-btn color="success" @click="showOperationDialog('income')">
           <v-icon>mdi-plus</v-icon>
-          Приход
+          Income
         </v-btn>
         <v-btn color="error" @click="showOperationDialog('expense')">
           <v-icon>mdi-minus</v-icon>
-          Расход
+          Expense
         </v-btn>
         <v-btn color="primary" @click="showTransferDialog">
           <v-icon>mdi-swap-horizontal</v-icon>
-          Перевод
+          Transfer
         </v-btn>
         <v-btn v-if="canCorrect" color="warning" @click="showCorrectionDialog">
           <v-icon>mdi-pencil</v-icon>
-          Корректировка
+          Correction
         </v-btn>
       </div>
     </div>
 
     <!-- Transactions list -->
     <div class="transactions-section">
-      <h3>Операции</h3>
+      <h3>Transactions</h3>
       <div v-if="store.state.loading.transactions" class="loading">
         <v-progress-circular indeterminate />
-        Загрузка операций...
+        Loading transactions...
       </div>
-      <div v-else-if="filteredOperations.length === 0" class="no-data">Операции не найдены</div>
+      <div v-else-if="filteredOperations.length === 0" class="no-data">No transactions found</div>
       <div v-else class="transactions-list">
         <div
           v-for="transaction in filteredOperations"
@@ -84,14 +84,14 @@
               {{ transaction.description }}
             </div>
             <div class="transaction-date">
-              {{ formatDate(transaction.createdAt) }}
+              {{ formatTransactionDate(transaction.createdAt) }}
             </div>
           </div>
           <div class="transaction-amount">
             <div :class="getAmountClass(transaction)">
               {{ formatTransactionAmount(transaction) }}
             </div>
-            <div class="balance-after">Баланс: {{ formatIDR(transaction.balanceAfter) }}</div>
+            <div class="balance-after">Balance: {{ formatIDR(transaction.balanceAfter) }}</div>
           </div>
         </div>
       </div>
@@ -128,7 +128,9 @@ import { format, startOfToday } from 'date-fns'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
 import type { Account, Transaction, OperationType } from '@/stores/account'
+// ✅ ИСПРАВЛЕНО: Импортируем все необходимые утилиты
 import { formatIDR } from '@/utils/currency'
+import { formatDate } from '@/utils/formatter'
 
 // Импорты диалогов
 import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
@@ -137,7 +139,7 @@ import CorrectionDialog from '@/components/accounts/dialogs/CorrectionDialog.vue
 
 const route = useRoute()
 const router = useRouter()
-const store = useAccountStore() // используем переименованный store
+const store = useAccountStore()
 const authStore = useAuthStore()
 
 // State
@@ -167,15 +169,15 @@ const filteredOperations = computed(() => {
 })
 
 const operationTypes = [
-  { title: 'Все операции', value: null },
-  { title: 'Приход', value: 'income' },
-  { title: 'Расход', value: 'expense' },
-  { title: 'Переводы', value: 'transfer' },
-  { title: 'Корректировки', value: 'correction' }
+  { title: 'All Operations', value: null },
+  { title: 'Income', value: 'income' },
+  { title: 'Expense', value: 'expense' },
+  { title: 'Transfers', value: 'transfer' },
+  { title: 'Corrections', value: 'correction' }
 ]
 
 const getDateRangeLabel = computed(() => {
-  if (!filters.value.dateFrom) return 'Выберите период'
+  if (!filters.value.dateFrom) return 'Select period'
 
   if (filters.value.dateFrom === filters.value.dateTo) {
     return format(new Date(filters.value.dateFrom), 'dd.MM.yyyy')
@@ -256,6 +258,16 @@ async function fetchData() {
   }
 }
 
+// ✅ ИСПРАВЛЕНО: Добавлена функция форматирования даты транзакции
+function formatTransactionDate(date: string | Date): string {
+  try {
+    return formatDate(date)
+  } catch (error) {
+    console.warn('Error formatting transaction date:', error)
+    return String(date)
+  }
+}
+
 // Utility functions
 function getTransactionColor(type: OperationType): string {
   const colors = {
@@ -279,10 +291,10 @@ function getTransactionIcon(type: OperationType): string {
 
 function getTransactionTypeLabel(type: OperationType): string {
   const labels = {
-    income: 'Приход',
-    expense: 'Расход',
-    transfer: 'Перевод',
-    correction: 'Корректировка'
+    income: 'Income',
+    expense: 'Expense',
+    transfer: 'Transfer',
+    correction: 'Correction'
   }
   return labels[type] || type
 }
