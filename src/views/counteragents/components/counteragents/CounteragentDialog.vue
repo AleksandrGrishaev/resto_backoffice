@@ -1,8 +1,8 @@
-<!-- src/views/counteragents/components/counteragents/CounteragentDialog.vue -->
+<!-- src/views/counteragents/components/counteragents/CounteragentDialog.vue - UPDATED -->
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="800"
+    max-width="900"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
@@ -146,6 +146,88 @@
                 density="compact"
               />
             </v-col>
+
+            <!-- ✅ NEW: Supply Chain Information (только для поставщиков) -->
+            <template v-if="formData.type === 'supplier'">
+              <v-col cols="12">
+                <v-divider class="my-4" />
+                <h3 class="section-title">
+                  <v-icon icon="mdi-truck-delivery" class="me-2" />
+                  Supply Chain Information
+                </h3>
+              </v-col>
+
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model.number="formData.leadTimeDays"
+                  label="Lead Time (Days) *"
+                  :rules="[rules.required, rules.positiveNumber]"
+                  variant="outlined"
+                  prepend-inner-icon="mdi-clock-outline"
+                  type="number"
+                  min="1"
+                  max="365"
+                  density="compact"
+                  hint="Time to deliver after order"
+                  persistent-hint
+                />
+              </v-col>
+
+              <v-col cols="12" md="4">
+                <v-select
+                  v-model="formData.deliverySchedule"
+                  :items="deliveryScheduleOptions"
+                  label="Delivery Schedule"
+                  variant="outlined"
+                  prepend-inner-icon="mdi-calendar-clock"
+                  density="compact"
+                  hint="Regular delivery frequency"
+                  persistent-hint
+                >
+                  <template #item="{ props, item }">
+                    <v-list-item
+                      v-bind="props"
+                      :prepend-icon="getDeliveryScheduleIcon(item.raw.value)"
+                    >
+                      <v-list-item-title>{{ item.title }}</v-list-item-title>
+                      <v-list-item-subtitle>
+                        {{ getDeliveryScheduleDescription(item.raw.value) }}
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                  </template>
+                </v-select>
+              </v-col>
+
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model.number="formData.minOrderAmount"
+                  label="Minimum Order (IDR)"
+                  :rules="[rules.positiveNumber]"
+                  variant="outlined"
+                  prepend-inner-icon="mdi-cash-multiple"
+                  type="number"
+                  min="0"
+                  density="compact"
+                  hint="Minimum order value required"
+                  persistent-hint
+                />
+              </v-col>
+
+              <!-- Lead Time Helper -->
+              <v-col cols="12">
+                <v-alert
+                  v-if="formData.leadTimeDays"
+                  :color="getLeadTimeAlertColor(formData.leadTimeDays)"
+                  variant="tonal"
+                  density="compact"
+                  :icon="getLeadTimeAlertIcon(formData.leadTimeDays)"
+                  class="mb-0"
+                >
+                  <strong>{{ getLeadTimeLabel(formData.leadTimeDays) }} Lead Time:</strong>
+                  {{ getLeadTimeDescription(formData.leadTimeDays) }}
+                </v-alert>
+              </v-col>
+            </template>
 
             <!-- Business Terms -->
             <v-col cols="12">
@@ -320,7 +402,11 @@ const formData = reactive<CreateCounteragentData>({
   isPreferred: false,
   tags: [],
   notes: '',
-  creditLimit: 0
+  creditLimit: 0,
+  // ✅ NEW: Supply chain fields
+  leadTimeDays: 3,
+  deliverySchedule: 'weekly',
+  minOrderAmount: 500000
 })
 
 // Form options
@@ -339,6 +425,15 @@ const paymentOptions = Object.entries(PAYMENT_TERMS_LABELS).map(([value, title])
   value
 }))
 
+// ✅ NEW: Supply chain options
+const deliveryScheduleOptions = [
+  { title: 'Daily Delivery', value: 'daily' },
+  { title: 'Weekly Delivery', value: 'weekly' },
+  { title: 'Bi-weekly Delivery', value: 'biweekly' },
+  { title: 'Monthly Delivery', value: 'monthly' },
+  { title: 'On Demand', value: 'on_demand' }
+]
+
 // Validation rules
 const rules = {
   required: (value: any) => !!value || 'This field is required',
@@ -354,7 +449,76 @@ const rules = {
     }
   },
   maxLength: (max: number) => (value: string) =>
-    !value || value.length <= max || `Maximum ${max} characters allowed`
+    !value || value.length <= max || `Maximum ${max} characters allowed`,
+  positiveNumber: (value: number) => !value || value > 0 || 'Must be a positive number'
+}
+
+// =============================================
+// ✅ NEW: Supply Chain Helper Functions
+// =============================================
+
+const getLeadTimeAlertColor = (days: number): string => {
+  if (days <= 1) return 'success'
+  if (days <= 3) return 'info'
+  if (days <= 7) return 'warning'
+  return 'error'
+}
+
+const getLeadTimeAlertIcon = (days: number): string => {
+  if (days <= 1) return 'mdi-check-circle'
+  if (days <= 3) return 'mdi-information'
+  if (days <= 7) return 'mdi-alert'
+  return 'mdi-alert-circle'
+}
+
+const getLeadTimeLabel = (days: number): string => {
+  if (days <= 1) return 'Fast'
+  if (days <= 3) return 'Normal'
+  if (days <= 7) return 'Slow'
+  return 'Very Slow'
+}
+
+const getLeadTimeDescription = (days: number): string => {
+  if (days <= 1) return 'Quick delivery, ideal for urgent orders'
+  if (days <= 3) return 'Standard delivery time for most suppliers'
+  if (days <= 7) return 'Longer delivery time, plan orders in advance'
+  return 'Very long delivery time, requires careful planning'
+}
+
+const getDeliveryScheduleIcon = (schedule: string): string => {
+  const icons: Record<string, string> = {
+    daily: 'mdi-calendar-today',
+    weekly: 'mdi-calendar-week',
+    biweekly: 'mdi-calendar-range',
+    monthly: 'mdi-calendar-month',
+    on_demand: 'mdi-calendar-question'
+  }
+  return icons[schedule] || 'mdi-calendar'
+}
+
+const getDeliveryScheduleDescription = (schedule: string): string => {
+  const descriptions: Record<string, string> = {
+    daily: 'Delivery every day',
+    weekly: 'Delivery once per week',
+    biweekly: 'Delivery every two weeks',
+    monthly: 'Delivery once per month',
+    on_demand: 'Delivery when requested'
+  }
+  return descriptions[schedule] || ''
+}
+
+const getCategoryIcon = (category: string): string => {
+  const icons: Record<string, string> = {
+    meat: 'mdi-food-steak',
+    vegetables: 'mdi-carrot',
+    dairy: 'mdi-cow',
+    beverages: 'mdi-bottle-soda',
+    spices: 'mdi-shaker',
+    equipment: 'mdi-tools',
+    cleaning: 'mdi-spray-bottle',
+    other: 'mdi-package-variant'
+  }
+  return icons[category] || 'mdi-circle'
 }
 
 // Methods
@@ -371,7 +535,11 @@ const resetForm = () => {
     description: '',
     tags: [],
     notes: '',
-    creditLimit: 0
+    creditLimit: 0,
+    // ✅ NEW: Reset supply chain fields
+    leadTimeDays: 3,
+    deliverySchedule: 'weekly',
+    minOrderAmount: 500000
   })
 }
 
@@ -392,7 +560,11 @@ const loadCounteragent = (counteragent: Counteragent) => {
     isPreferred: counteragent.isPreferred,
     tags: [...(counteragent.tags || [])],
     notes: counteragent.notes || '',
-    creditLimit: counteragent.creditLimit || 0
+    creditLimit: counteragent.creditLimit || 0,
+    // ✅ NEW: Load supply chain fields
+    leadTimeDays: counteragent.leadTimeDays || 3,
+    deliverySchedule: counteragent.deliverySchedule || 'weekly',
+    minOrderAmount: counteragent.minOrderAmount || 500000
   })
 }
 
@@ -431,20 +603,6 @@ const closeDialog = () => {
   }, 300)
 }
 
-const getCategoryIcon = (category: string): string => {
-  const icons: Record<string, string> = {
-    meat: 'mdi-food-steak',
-    vegetables: 'mdi-carrot',
-    dairy: 'mdi-cow',
-    beverages: 'mdi-bottle-soda',
-    spices: 'mdi-shaker',
-    equipment: 'mdi-tools',
-    cleaning: 'mdi-spray-bottle',
-    other: 'mdi-package-variant'
-  }
-  return icons[category] || 'mdi-circle'
-}
-
 // Watch props
 watch(
   () => props.modelValue,
@@ -459,12 +617,18 @@ watch(
   }
 )
 
-// Watch type changes to clear categories for services
+// Watch type changes to clear categories for services and reset supply chain fields
 watch(
   () => formData.type,
-  newType => {
+  (newType, oldType) => {
     if (newType === 'service') {
       formData.productCategories = []
+      // Don't reset supply chain fields for services since they're disabled
+    } else if (oldType === 'service' && newType === 'supplier') {
+      // Reset to default values when switching from service to supplier
+      formData.leadTimeDays = 3
+      formData.deliverySchedule = 'weekly'
+      formData.minOrderAmount = 500000
     }
   }
 )
@@ -544,5 +708,10 @@ watch(
 
 :deep(.v-switch .v-selection-control__wrapper) {
   height: 32px;
+}
+
+/* ✅ NEW: Alert styling */
+:deep(.v-alert) {
+  border-radius: 8px;
 }
 </style>

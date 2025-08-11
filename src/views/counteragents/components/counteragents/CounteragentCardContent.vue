@@ -1,4 +1,4 @@
-<!-- src/views/counteragents/components/counteragents/CounteragentCardContent.vue -->
+<!-- src/views/counteragents/components/counteragents/CounteragentCardContent.vue - UPDATED -->
 <template>
   <div class="counteragent-content">
     <!-- Header Section -->
@@ -46,6 +46,64 @@
 
     <!-- Contact Information -->
     <ContactInfo :counteragent="counteragent" class="mb-4" />
+
+    <!-- ✅ NEW: Supply Chain Information -->
+    <div v-if="counteragent.type === 'supplier'" class="section mb-4">
+      <h4 class="section-title">
+        <v-icon icon="mdi-truck-delivery" class="me-2" />
+        Supply Chain Details
+      </h4>
+      <div class="supply-chain-grid">
+        <!-- Lead Time -->
+        <div class="supply-item">
+          <v-icon icon="mdi-clock-outline" class="supply-icon" color="info" />
+          <div class="supply-details">
+            <div class="supply-label">Lead Time</div>
+            <div class="supply-value">
+              {{ counteragent.leadTimeDays }} {{ counteragent.leadTimeDays === 1 ? 'day' : 'days' }}
+            </div>
+          </div>
+          <v-chip :color="getLeadTimeColor(counteragent.leadTimeDays)" size="small" variant="tonal">
+            {{ getLeadTimeLabel(counteragent.leadTimeDays) }}
+          </v-chip>
+        </div>
+
+        <!-- Delivery Schedule -->
+        <div v-if="counteragent.deliverySchedule" class="supply-item">
+          <v-icon icon="mdi-calendar-clock" class="supply-icon" color="primary" />
+          <div class="supply-details">
+            <div class="supply-label">Delivery Schedule</div>
+            <div class="supply-value">
+              {{ getDeliveryScheduleLabel(counteragent.deliverySchedule) }}
+            </div>
+          </div>
+          <v-chip
+            :color="getDeliveryScheduleColor(counteragent.deliverySchedule)"
+            :prepend-icon="getDeliveryScheduleIcon(counteragent.deliverySchedule)"
+            size="small"
+            variant="tonal"
+          >
+            {{ getDeliveryScheduleShort(counteragent.deliverySchedule) }}
+          </v-chip>
+        </div>
+
+        <!-- Minimum Order Amount -->
+        <div v-if="counteragent.minOrderAmount" class="supply-item">
+          <v-icon icon="mdi-cash-multiple" class="supply-icon" color="success" />
+          <div class="supply-details">
+            <div class="supply-label">Minimum Order</div>
+            <div class="supply-value">{{ formatCurrency(counteragent.minOrderAmount) }}</div>
+          </div>
+          <v-chip
+            :color="getMinOrderColor(counteragent.minOrderAmount)"
+            size="small"
+            variant="tonal"
+          >
+            {{ getMinOrderLabel(counteragent.minOrderAmount) }}
+          </v-chip>
+        </div>
+      </div>
+    </div>
 
     <!-- Product Categories -->
     <div v-if="counteragent.productCategories.length > 0" class="section mb-4">
@@ -197,9 +255,9 @@ import { computed } from 'vue'
 import {
   getCounteragentTypeLabel,
   getProductCategoryLabel,
-  getPaymentTermsLabel,
-  formatCurrency
+  getPaymentTermsLabel
 } from '@/stores/counteragents'
+import { formatIDR } from '@/utils/currency'
 import type { Counteragent } from '@/stores/counteragents'
 import ContactInfo from '../shared/ContactInfo.vue'
 
@@ -227,7 +285,86 @@ const hasStatistics = computed(() => {
   )
 })
 
-// Helper functions
+// =============================================
+// ✅ NEW: Supply Chain Helper Functions
+// =============================================
+
+const getLeadTimeColor = (days: number): string => {
+  if (days <= 1) return 'success'
+  if (days <= 3) return 'info'
+  if (days <= 7) return 'warning'
+  return 'error'
+}
+
+const getLeadTimeLabel = (days: number): string => {
+  if (days <= 1) return 'Fast'
+  if (days <= 3) return 'Normal'
+  if (days <= 7) return 'Slow'
+  return 'Very Slow'
+}
+
+const getDeliveryScheduleLabel = (schedule: string): string => {
+  const labels: Record<string, string> = {
+    daily: 'Daily Delivery',
+    weekly: 'Weekly Delivery',
+    biweekly: 'Bi-weekly Delivery',
+    monthly: 'Monthly Delivery',
+    on_demand: 'On Demand'
+  }
+  return labels[schedule] || schedule
+}
+
+const getDeliveryScheduleShort = (schedule: string): string => {
+  const labels: Record<string, string> = {
+    daily: 'Daily',
+    weekly: 'Weekly',
+    biweekly: 'Bi-weekly',
+    monthly: 'Monthly',
+    on_demand: 'On Demand'
+  }
+  return labels[schedule] || schedule
+}
+
+const getDeliveryScheduleColor = (schedule: string): string => {
+  const colors: Record<string, string> = {
+    daily: 'success',
+    weekly: 'primary',
+    biweekly: 'info',
+    monthly: 'warning',
+    on_demand: 'secondary'
+  }
+  return colors[schedule] || 'default'
+}
+
+const getDeliveryScheduleIcon = (schedule: string): string => {
+  const icons: Record<string, string> = {
+    daily: 'mdi-calendar-today',
+    weekly: 'mdi-calendar-week',
+    biweekly: 'mdi-calendar-range',
+    monthly: 'mdi-calendar-month',
+    on_demand: 'mdi-calendar-question'
+  }
+  return icons[schedule] || 'mdi-calendar'
+}
+
+const getMinOrderColor = (amount: number): string => {
+  if (amount <= 500000) return 'success' // <= 500K IDR
+  if (amount <= 1000000) return 'info' // <= 1M IDR
+  if (amount <= 2000000) return 'warning' // <= 2M IDR
+  return 'error' // > 2M IDR
+}
+
+const getMinOrderLabel = (amount: number): string => {
+  if (amount <= 500000) return 'Low'
+  if (amount <= 1000000) return 'Medium'
+  if (amount <= 2000000) return 'High'
+  return 'Very High'
+}
+
+// =============================================
+// EXISTING HELPER FUNCTIONS
+// =============================================
+
 const getTypeColor = (type: string): string => {
   const colors: Record<string, string> = {
     supplier: 'primary',
@@ -305,6 +442,10 @@ const formatDate = (dateString: string): string => {
     day: 'numeric'
   })
 }
+
+const formatCurrency = (amount: number): string => {
+  return formatIDR(amount)
+}
 </script>
 
 <style scoped>
@@ -360,6 +501,47 @@ const formatDate = (dateString: string): string => {
   align-items: center;
 }
 
+/* ✅ NEW: Supply Chain Styles */
+.supply-chain-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.supply-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
+
+.supply-icon {
+  flex-shrink: 0;
+}
+
+.supply-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.supply-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #ccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.supply-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  margin-top: 2px;
+}
+
 .categories-grid,
 .tags-grid {
   display: flex;
@@ -407,6 +589,7 @@ const formatDate = (dateString: string): string => {
   padding: 12px;
   background: #222;
   border: 1px solid #333;
+  border-radius: 8px;
 }
 
 .stat-value {
@@ -439,6 +622,12 @@ const formatDate = (dateString: string): string => {
   .status-badges {
     flex-direction: row;
     align-items: flex-start;
+  }
+
+  .supply-item {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
   }
 
   .stats-grid {

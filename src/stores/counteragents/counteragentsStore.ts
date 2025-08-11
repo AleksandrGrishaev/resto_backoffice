@@ -1,4 +1,4 @@
-// src/stores/counteragents/counteragentsStore.ts
+// src/stores/counteragents/counteragentsStore.ts - REFACTORED with Integration
 
 import { defineStore } from 'pinia'
 import type {
@@ -7,10 +7,13 @@ import type {
   CounteragentsState,
   CounteragentsStatistics,
   CounteragentType,
-  ProductCategory,
   PaymentTerms
 } from './types'
+import type { ProductCategory } from '@/stores/productsStore/types'
 import { CounteragentsService } from './counteragentsService'
+import { DebugUtils } from '@/utils'
+
+const MODULE_NAME = 'CounteragentsStore'
 
 export const useCounteragentsStore = defineStore('counteragents', {
   state: (): CounteragentsState => ({
@@ -48,7 +51,10 @@ export const useCounteragentsStore = defineStore('counteragents', {
   }),
 
   getters: {
-    // Filtered counteragents based on current filters
+    // =============================================
+    // BASIC GETTERS
+    // =============================================
+
     filteredCounterAgents(): Counteragent[] {
       let filtered = [...this.counteragents]
 
@@ -110,17 +116,14 @@ export const useCounteragentsStore = defineStore('counteragents', {
       return filtered
     },
 
-    // Active counteragents only
     activeCounterAgents(): Counteragent[] {
       return this.counteragents.filter(ca => ca.isActive)
     },
 
-    // Preferred counteragents only
     preferredCounterAgents(): Counteragent[] {
       return this.counteragents.filter(ca => ca.isPreferred && ca.isActive)
     },
 
-    // Counteragents by type
     supplierCounterAgents(): Counteragent[] {
       return this.counteragents.filter(ca => ca.type === 'supplier' && ca.isActive)
     },
@@ -129,7 +132,43 @@ export const useCounteragentsStore = defineStore('counteragents', {
       return this.counteragents.filter(ca => ca.type === 'service' && ca.isActive)
     },
 
-    // Statistics
+    // =============================================
+    // ✅ INTEGRATION GETTERS
+    // =============================================
+
+    /**
+     * Получить поставщиков по категории продуктов
+     */
+    getSuppliersByCategory() {
+      return (category: ProductCategory): Counteragent[] => {
+        return this.counteragents.filter(
+          ca => ca.type === 'supplier' && ca.isActive && ca.productCategories.includes(category)
+        )
+      }
+    },
+
+    /**
+     * Получить основного поставщика для категории
+     */
+    getPrimarySupplierForCategory() {
+      return (category: ProductCategory): Counteragent | undefined => {
+        const suppliers = this.getSuppliersByCategory(category)
+        return suppliers.find(s => s.isPreferred) || suppliers[0]
+      }
+    },
+
+    /**
+     * Получить поставщика по ID (для интеграции с Product Store)
+     */
+    getSupplierById() {
+      return (supplierId: string): Counteragent | undefined => {
+        return this.counteragents.find(ca => ca.id === supplierId && ca.type === 'supplier')
+      }
+    },
+
+    /**
+     * Статистика для интеграции
+     */
     statistics(): CounteragentsStatistics {
       const active = this.counteragents.filter(ca => ca.isActive)
       const preferred = this.counteragents.filter(ca => ca.isPreferred && ca.isActive)
@@ -188,6 +227,39 @@ export const useCounteragentsStore = defineStore('counteragents', {
 
   actions: {
     // =============================================
+    // ✅ INITIALIZATION (для AppInitializer)
+    // =============================================
+
+    /**
+     * Инициализация store (вызывается из AppInitializer)
+     */
+    async initialize(useMockData: boolean = true): Promise<void> {
+      try {
+        this.loading.counteragents = true
+        this.error = null
+
+        DebugUtils.info(MODULE_NAME, '🚀 Initializing Counteragents Store', { useMockData })
+
+        await this.fetchCounterAgents()
+
+        DebugUtils.info(MODULE_NAME, '✅ Counteragents Store initialized successfully', {
+          totalCounterAgents: this.counteragents.length,
+          activeCounterAgents: this.activeCounterAgents.length,
+          preferredCounterAgents: this.preferredCounterAgents.length,
+          supplierCounterAgents: this.supplierCounterAgents.length
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to initialize counteragents'
+        this.error = message
+        DebugUtils.error(MODULE_NAME, '❌ Failed to initialize Counteragents Store', { error })
+        throw error
+      } finally {
+        this.loading.counteragents = false
+      }
+    },
+
+    // =============================================
     // CRUD OPERATIONS
     // =============================================
 
@@ -196,6 +268,10 @@ export const useCounteragentsStore = defineStore('counteragents', {
       this.error = null
 
       try {
+        DebugUtils.debug(MODULE_NAME, 'Fetching counteragents with filters', {
+          filters: this.filters
+        })
+
         const response = await CounteragentsService.getInstance().fetchCounterAgents({
           search: this.filters.search || undefined,
           type: this.filters.type === 'all' ? undefined : this.filters.type,
@@ -210,9 +286,15 @@ export const useCounteragentsStore = defineStore('counteragents', {
         })
 
         this.counteragents = response.data
+
+        DebugUtils.info(MODULE_NAME, 'Counteragents fetched successfully', {
+          total: response.total,
+          loaded: response.data.length,
+          active: this.activeCounterAgents.length
+        })
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Unknown error occurred'
-        console.error('Failed to fetch counteragents:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to fetch counteragents', { error })
       } finally {
         this.loading.counteragents = false
       }
@@ -223,12 +305,25 @@ export const useCounteragentsStore = defineStore('counteragents', {
       this.error = null
 
       try {
+        DebugUtils.debug(MODULE_NAME, 'Creating counteragent', {
+          name: data.name,
+          type: data.type,
+          categories: data.productCategories
+        })
+
         const response = await CounteragentsService.getInstance().createCounteragent(data)
         this.counteragents.push(response.data)
+
+        DebugUtils.info(MODULE_NAME, 'Counteragent created successfully', {
+          id: response.data.id,
+          name: response.data.name,
+          type: response.data.type
+        })
+
         return response.data
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to create counteragent'
-        console.error('Failed to create counteragent:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to create counteragent', { error, data })
         return null
       } finally {
         this.loading.counteragents = false
@@ -240,6 +335,8 @@ export const useCounteragentsStore = defineStore('counteragents', {
       this.error = null
 
       try {
+        DebugUtils.debug(MODULE_NAME, 'Updating counteragent', { id, updates: Object.keys(data) })
+
         const response = await CounteragentsService.getInstance().updateCounteragent(id, data)
         const index = this.counteragents.findIndex(ca => ca.id === id)
         if (index !== -1) {
@@ -251,10 +348,16 @@ export const useCounteragentsStore = defineStore('counteragents', {
           this.currentCounteragent = response.data
         }
 
+        DebugUtils.info(MODULE_NAME, 'Counteragent updated successfully', {
+          id,
+          name: response.data.name,
+          updatedFields: Object.keys(data)
+        })
+
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to update counteragent'
-        console.error('Failed to update counteragent:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to update counteragent', { error, id, data })
         return false
       } finally {
         this.loading.counteragents = false
@@ -266,6 +369,8 @@ export const useCounteragentsStore = defineStore('counteragents', {
       this.error = null
 
       try {
+        DebugUtils.debug(MODULE_NAME, 'Deleting counteragent', { id })
+
         await CounteragentsService.getInstance().deleteCounteragent(id)
         this.counteragents = this.counteragents.filter(ca => ca.id !== id)
 
@@ -277,10 +382,12 @@ export const useCounteragentsStore = defineStore('counteragents', {
           this.currentCounteragent = undefined
         }
 
+        DebugUtils.info(MODULE_NAME, 'Counteragent deleted successfully', { id })
+
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to delete counteragent'
-        console.error('Failed to delete counteragent:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to delete counteragent', { error, id })
         return false
       } finally {
         this.loading.counteragents = false
@@ -293,20 +400,31 @@ export const useCounteragentsStore = defineStore('counteragents', {
 
     async toggleCounteragentStatus(id: string): Promise<boolean> {
       try {
+        DebugUtils.debug(MODULE_NAME, 'Toggling counteragent status', { id })
+
         const response = await CounteragentsService.getInstance().toggleCounteragentStatus(id)
         const index = this.counteragents.findIndex(ca => ca.id === id)
         if (index !== -1) {
           this.counteragents[index] = response.data
         }
+
+        DebugUtils.info(MODULE_NAME, 'Counteragent status toggled', {
+          id,
+          newStatus: response.data.isActive
+        })
+
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to toggle status'
+        DebugUtils.error(MODULE_NAME, 'Failed to toggle status', { error, id })
         return false
       }
     },
 
     async setPreferredStatus(id: string, isPreferred: boolean): Promise<boolean> {
       try {
+        DebugUtils.debug(MODULE_NAME, 'Setting preferred status', { id, isPreferred })
+
         const response = await CounteragentsService.getInstance().setPreferredStatus(
           id,
           isPreferred
@@ -315,11 +433,105 @@ export const useCounteragentsStore = defineStore('counteragents', {
         if (index !== -1) {
           this.counteragents[index] = response.data
         }
+
+        DebugUtils.info(MODULE_NAME, 'Preferred status updated', { id, isPreferred })
+
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to update preferred status'
+        DebugUtils.error(MODULE_NAME, 'Failed to update preferred status', {
+          error,
+          id,
+          isPreferred
+        })
         return false
       }
+    },
+
+    // =============================================
+    // ✅ INTEGRATION METHODS
+    // =============================================
+
+    /**
+     * Получить информацию о поставщике для Product Store
+     */
+    async getSupplierInfo(supplierId: string): Promise<Counteragent | null> {
+      try {
+        DebugUtils.debug(MODULE_NAME, 'Getting supplier info', { supplierId })
+
+        const supplier = await CounteragentsService.getInstance().getSupplierForProduct(supplierId)
+
+        if (supplier) {
+          DebugUtils.debug(MODULE_NAME, 'Supplier info retrieved', {
+            supplierId,
+            name: supplier.name,
+            leadTime: supplier.leadTimeDays,
+            categories: supplier.productCategories
+          })
+        }
+
+        return supplier
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to get supplier info', { error, supplierId })
+        return null
+      }
+    },
+
+    /**
+     * Обновить статистику заказов поставщика
+     */
+    async updateSupplierOrderStats(
+      supplierId: string,
+      orderData: {
+        orderValue: number
+        deliveryTime?: number
+      }
+    ): Promise<void> {
+      try {
+        DebugUtils.debug(MODULE_NAME, 'Updating supplier order stats', { supplierId, orderData })
+
+        await CounteragentsService.getInstance().updateSupplierOrderStats(supplierId, orderData)
+
+        // Обновляем локальные данные
+        await this.fetchCounterAgents()
+
+        DebugUtils.info(MODULE_NAME, 'Supplier order stats updated', { supplierId })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update supplier order stats', {
+          error,
+          supplierId,
+          orderData
+        })
+      }
+    },
+
+    /**
+     * Получить рекомендации поставщиков для категории
+     */
+    getSupplierRecommendations(category: ProductCategory): Counteragent[] {
+      DebugUtils.debug(MODULE_NAME, 'Getting supplier recommendations', { category })
+
+      const suppliers = this.getSuppliersByCategory(category)
+
+      // Сортируем по предпочтению и статистике
+      const recommendations = suppliers.sort((a, b) => {
+        // Сначала предпочтительные
+        if (a.isPreferred && !b.isPreferred) return -1
+        if (!a.isPreferred && b.isPreferred) return 1
+
+        // Затем по среднему времени доставки
+        const aDelivery = a.averageDeliveryTime || a.leadTimeDays
+        const bDelivery = b.averageDeliveryTime || b.leadTimeDays
+        return aDelivery - bDelivery
+      })
+
+      DebugUtils.debug(MODULE_NAME, 'Supplier recommendations generated', {
+        category,
+        count: recommendations.length,
+        preferred: recommendations.filter(s => s.isPreferred).length
+      })
+
+      return recommendations
     },
 
     // =============================================
@@ -331,6 +543,8 @@ export const useCounteragentsStore = defineStore('counteragents', {
       this.error = null
 
       try {
+        DebugUtils.debug(MODULE_NAME, 'Bulk updating status', { ids, isActive, count: ids.length })
+
         await CounteragentsService.getInstance().bulkUpdateStatus(ids, isActive)
 
         // Update local state
@@ -342,9 +556,15 @@ export const useCounteragentsStore = defineStore('counteragents', {
           }
         })
 
+        DebugUtils.info(MODULE_NAME, 'Bulk status update completed', {
+          count: ids.length,
+          isActive
+        })
+
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to bulk update status'
+        DebugUtils.error(MODULE_NAME, 'Bulk status update failed', { error, ids, isActive })
         return false
       } finally {
         this.loading.counteragents = false
@@ -356,15 +576,20 @@ export const useCounteragentsStore = defineStore('counteragents', {
       this.error = null
 
       try {
+        DebugUtils.debug(MODULE_NAME, 'Bulk deleting counteragents', { ids, count: ids.length })
+
         await CounteragentsService.getInstance().bulkDelete(ids)
 
         // Update local state
         this.counteragents = this.counteragents.filter(ca => !ids.includes(ca.id))
         this.selectedIds = this.selectedIds.filter(id => !ids.includes(id))
 
+        DebugUtils.info(MODULE_NAME, 'Bulk delete completed', { count: ids.length })
+
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to bulk delete'
+        DebugUtils.error(MODULE_NAME, 'Bulk delete failed', { error, ids })
         return false
       } finally {
         this.loading.counteragents = false
@@ -480,27 +705,30 @@ export const useCounteragentsStore = defineStore('counteragents', {
 
     async searchCounterAgents(query: string): Promise<Counteragent[]> {
       try {
+        DebugUtils.debug(MODULE_NAME, 'Searching counteragents', { query })
         return await CounteragentsService.getInstance().searchCounterAgents(query)
       } catch (error) {
-        console.error('Search failed:', error)
+        DebugUtils.error(MODULE_NAME, 'Search failed', { error, query })
         return []
       }
     },
 
     async getCounteragentsByCategory(category: ProductCategory | 'all'): Promise<Counteragent[]> {
       try {
+        DebugUtils.debug(MODULE_NAME, 'Getting counteragents by category', { category })
         return await CounteragentsService.getInstance().getCounteragentsByCategory(category)
       } catch (error) {
-        console.error('Filter by category failed:', error)
+        DebugUtils.error(MODULE_NAME, 'Filter by category failed', { error, category })
         return []
       }
     },
 
     async getCounteragentsByType(type: CounteragentType | 'all'): Promise<Counteragent[]> {
       try {
+        DebugUtils.debug(MODULE_NAME, 'Getting counteragents by type', { type })
         return await CounteragentsService.getInstance().getCounteragentsByType(type)
       } catch (error) {
-        console.error('Filter by type failed:', error)
+        DebugUtils.error(MODULE_NAME, 'Filter by type failed', { error, type })
         return []
       }
     }

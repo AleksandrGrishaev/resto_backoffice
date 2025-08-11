@@ -1,4 +1,4 @@
-// src/stores/shared/mockDataCoordinator.ts - ОБНОВЛЕННЫЙ с базовыми единицами
+// src/stores/shared/mockDataCoordinator.ts - UPDATED with Counteragents Integration
 
 import {
   CORE_PRODUCTS,
@@ -6,6 +6,8 @@ import {
   validateAllProducts
 } from './productDefinitions'
 import type { Product, ProductPriceHistory } from '@/stores/productsStore/types'
+import type { Counteragent } from '@/stores/counteragents/types'
+import { generateCounteragentsMockData } from '@/stores/counteragents/mock/counteragentsMock'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'MockDataCoordinator'
@@ -16,8 +18,12 @@ export class MockDataCoordinator {
     priceHistory: ProductPriceHistory[]
   } | null = null
 
+  private counteragentsData: {
+    counteragents: Counteragent[]
+  } | null = null
+
   constructor() {
-    DebugUtils.info(MODULE_NAME, '🏗️ Initializing mock data coordinator with base units support')
+    DebugUtils.info(MODULE_NAME, '🏗️ Initializing mock data coordinator with full integration')
 
     // Валидируем определения продуктов при инициализации
     if (import.meta.env.DEV) {
@@ -74,7 +80,133 @@ export class MockDataCoordinator {
   }
 
   // =============================================
-  // ✅ ГЕНЕРАЦИЯ ПРОДУКТОВ С БАЗОВЫМИ ЕДИНИЦАМИ
+  // ✅ COUNTERAGENTS STORE DATA
+  // =============================================
+
+  getCounteragentsStoreData() {
+    if (!this.counteragentsData) {
+      this.counteragentsData = this.generateCounteragentsData()
+    }
+    return this.counteragentsData
+  }
+
+  /**
+   * ✅ НОВЫЙ: Генерирует данные контрагентов с проверкой связей
+   */
+  private generateCounteragentsData() {
+    DebugUtils.info(MODULE_NAME, '🏪 Generating counteragents data with product integration')
+
+    const counteragents = generateCounteragentsMockData()
+
+    // Проверяем связи поставщиков с продуктами
+    this.validateSupplierProductLinks(counteragents)
+
+    const result = {
+      counteragents
+    }
+
+    DebugUtils.info(MODULE_NAME, '✅ Counteragents data generated', {
+      total: counteragents.length,
+      suppliers: counteragents.filter(ca => ca.type === 'supplier').length,
+      services: counteragents.filter(ca => ca.type === 'service').length,
+      active: counteragents.filter(ca => ca.isActive).length,
+      preferred: counteragents.filter(ca => ca.isPreferred).length
+    })
+
+    return result
+  }
+
+  /**
+   * ✅ НОВЫЙ: Проверяет связи между поставщиками и продуктами
+   */
+  private validateSupplierProductLinks(counteragents: Counteragent[]): void {
+    DebugUtils.debug(MODULE_NAME, '🔗 Validating supplier-product links')
+
+    const suppliers = counteragents.filter(ca => ca.type === 'supplier')
+    const supplierIds = new Set(suppliers.map(s => s.id))
+
+    // Проверяем, что у всех продуктов есть поставщики
+    const orphanedProducts: string[] = []
+    const linkedProducts: string[] = []
+
+    CORE_PRODUCTS.forEach(product => {
+      if (product.primarySupplierId && supplierIds.has(product.primarySupplierId)) {
+        linkedProducts.push(product.id)
+      } else {
+        orphanedProducts.push(product.id)
+        DebugUtils.warn(MODULE_NAME, 'Product has invalid supplier link', {
+          productId: product.id,
+          productName: product.name,
+          invalidSupplierId: product.primarySupplierId
+        })
+      }
+    })
+
+    // Проверяем, что у поставщиков есть продукты в соответствующих категориях
+    suppliers.forEach(supplier => {
+      const supplierProducts = CORE_PRODUCTS.filter(p => p.primarySupplierId === supplier.id)
+      const supplierCategories = new Set(supplier.productCategories)
+
+      supplierProducts.forEach(product => {
+        if (!supplierCategories.has(product.category)) {
+          DebugUtils.warn(MODULE_NAME, 'Supplier category mismatch', {
+            supplierId: supplier.id,
+            supplierName: supplier.name,
+            supplierCategories: Array.from(supplierCategories),
+            productId: product.id,
+            productCategory: product.category
+          })
+        }
+      })
+    })
+
+    DebugUtils.info(MODULE_NAME, '✅ Supplier-product links validated', {
+      totalProducts: CORE_PRODUCTS.length,
+      linkedProducts: linkedProducts.length,
+      orphanedProducts: orphanedProducts.length,
+      totalSuppliers: suppliers.length,
+      supplierIds: Array.from(supplierIds)
+    })
+
+    if (orphanedProducts.length > 0) {
+      DebugUtils.warn(MODULE_NAME, 'Found orphaned products without valid suppliers', {
+        orphanedProducts
+      })
+    }
+  }
+
+  /**
+   * ✅ НОВЫЙ: Получить поставщика для продукта
+   */
+  getSupplierForProduct(productId: string): Counteragent | undefined {
+    const product = this.getProductDefinition(productId)
+    if (!product?.primarySupplierId) {
+      return undefined
+    }
+
+    const counteragentsData = this.getCounteragentsStoreData()
+    return counteragentsData.counteragents.find(ca => ca.id === product.primarySupplierId)
+  }
+
+  /**
+   * ✅ НОВЫЙ: Получить все продукты поставщика
+   */
+  getProductsForSupplier(supplierId: string): CoreProductDefinition[] {
+    return CORE_PRODUCTS.filter(p => p.primarySupplierId === supplierId)
+  }
+
+  /**
+   * ✅ НОВЫЙ: Получить поставщиков для категории
+   */
+  getSuppliersForCategory(category: string): Counteragent[] {
+    const counteragentsData = this.getCounteragentsStoreData()
+    return counteragentsData.counteragents.filter(
+      ca => ca.type === 'supplier' && ca.isActive && ca.productCategories.includes(category as any)
+    )
+  }
+
+  // =============================================
+  // ГЕНЕРАЦИЯ ПРОДУКТОВ (существующий код)
   // =============================================
 
   private generateProductsData() {
@@ -138,13 +270,15 @@ export class MockDataCoordinator {
         canBeSold: productDef.canBeSold,
         isActive: true,
 
+        // ✅ ИНТЕГРАЦИЯ: Поставщик
+        primarySupplierId: productDef.primarySupplierId,
+
         // Дополнительные поля
         storageConditions: this.getStorageConditions(productDef.category),
         shelfLife: productDef.shelfLifeDays,
         minStock: this.calculateMinStock(productDef),
         maxStock: this.calculateMaxStock(productDef),
         leadTimeDays: productDef.leadTimeDays,
-        primarySupplierId: productDef.primarySupplierId,
         tags: this.generateTags(productDef),
 
         createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
@@ -156,6 +290,7 @@ export class MockDataCoordinator {
         purchaseToBaseRatio: number
         purchaseCost: number
         currentCostPerUnit: number
+        primarySupplierId?: string
       }
 
       // ✅ ВАЛИДАЦИЯ: Проверяем правильность расчета базовой стоимости
@@ -200,7 +335,94 @@ export class MockDataCoordinator {
   }
 
   // =============================================
-  // ДЕМОНСТРАЦИЯ ПРАВИЛЬНЫХ РАСЧЕТОВ
+  // ✅ ИНТЕГРАЦИОННЫЕ МЕТОДЫ
+  // =============================================
+
+  /**
+   * ✅ НОВЫЙ: Валидирует всю интеграцию между stores
+   */
+  validateStoreIntegration(): {
+    isValid: boolean
+    errors: string[]
+    warnings: string[]
+    summary: {
+      productsCount: number
+      counteragentsCount: number
+      linkedProductsCount: number
+      orphanedProductsCount: number
+      supplierCoverage: Record<string, number>
+    }
+  } {
+    DebugUtils.info(MODULE_NAME, '🔍 Validating complete store integration')
+
+    const errors: string[] = []
+    const warnings: string[] = []
+
+    const productsData = this.getProductsStoreData()
+    const counteragentsData = this.getCounteragentsStoreData()
+
+    const products = productsData.products
+    const counteragents = counteragentsData.counteragents
+    const suppliers = counteragents.filter(ca => ca.type === 'supplier')
+
+    // Проверяем связи продуктов с поставщиками
+    let linkedProductsCount = 0
+    let orphanedProductsCount = 0
+    const supplierCoverage: Record<string, number> = {}
+
+    products.forEach(product => {
+      const productDef = this.getProductDefinition(product.id)
+      if (productDef?.primarySupplierId) {
+        const supplier = suppliers.find(s => s.id === productDef.primarySupplierId)
+        if (supplier) {
+          linkedProductsCount++
+          supplierCoverage[supplier.id] = (supplierCoverage[supplier.id] || 0) + 1
+        } else {
+          orphanedProductsCount++
+          errors.push(
+            `Product ${product.name} has invalid supplier ID: ${productDef.primarySupplierId}`
+          )
+        }
+      } else {
+        orphanedProductsCount++
+        warnings.push(`Product ${product.name} has no primary supplier`)
+      }
+    })
+
+    // Проверяем неиспользуемых поставщиков
+    suppliers.forEach(supplier => {
+      if (!supplierCoverage[supplier.id]) {
+        warnings.push(`Supplier ${supplier.name} has no assigned products`)
+      }
+    })
+
+    const summary = {
+      productsCount: products.length,
+      counteragentsCount: counteragents.length,
+      linkedProductsCount,
+      orphanedProductsCount,
+      supplierCoverage
+    }
+
+    const isValid = errors.length === 0
+
+    DebugUtils.info(MODULE_NAME, '✅ Store integration validation completed', {
+      isValid,
+      errorsCount: errors.length,
+      warningsCount: warnings.length,
+      summary
+    })
+
+    return {
+      isValid,
+      errors,
+      warnings,
+      summary
+    }
+  }
+
+  // =============================================
+  // ДЕМОНСТРАЦИЯ ПРАВИЛЬНЫХ РАСЧЕТОВ (существующий код)
   // =============================================
 
   private demonstrateCorrectCalculations(products: Product[]): void {
@@ -253,7 +475,7 @@ export class MockDataCoordinator {
   }
 
   // =============================================
-  // СТАТИСТИКА И УТИЛИТЫ
+  // СТАТИСТИКА И УТИЛИТЫ (существующий код)
   // =============================================
 
   private getBaseUnitsStats(products: Product[]): Record<string, number> {
@@ -361,209 +583,6 @@ export class MockDataCoordinator {
       preparations: []
     }
   }
-
-  // =============================================
-  // ✅ НОВЫЕ МЕТОДЫ ДЛЯ ТЕСТИРОВАНИЯ
-  // =============================================
-
-  /**
-   * ✅ НОВЫЙ: Тестирует расчет себестоимости с реальными данными
-   */
-  testCostCalculation(): void {
-    const products = this.getProductsStoreData().products
-
-    console.log('\n🧪 ТЕСТИРОВАНИЕ РАСЧЕТА СЕБЕСТОИМОСТИ')
-    console.log('='.repeat(50))
-
-    // Тест 1: Салатная заправка
-    this.testSaladDressingCalculation(products)
-
-    // Тест 2: Стейк
-    this.testSteakCalculation(products)
-
-    console.log('\n✅ Все тесты пройдены!')
-  }
-
-  private testSaladDressingCalculation(products: Product[]): void {
-    console.log('\n📝 ТЕСТ 1: Заправка для салата классическая')
-    console.log('Рецепт: 120мл масла + 10г чеснока + 3г соли + 1г перца')
-    console.log('Выход: 130 мл')
-
-    const oliveOil = products.find(p => p.id === 'prod-olive-oil')!
-    const garlic = products.find(p => p.id === 'prod-garlic')!
-    const salt = products.find(p => p.id === 'prod-salt')!
-    const pepper = products.find(p => p.id === 'prod-black-pepper')!
-
-    const oilCost = 120 * (oliveOil as any).baseCostPerUnit
-    const garlicCost = 10 * (garlic as any).baseCostPerUnit
-    const saltCost = 3 * (salt as any).baseCostPerUnit
-    const pepperCost = 1 * (pepper as any).baseCostPerUnit
-
-    const totalCost = oilCost + garlicCost + saltCost + pepperCost
-    const costPerMl = totalCost / 130
-
-    console.log(`Olive Oil: 120мл × ${(oliveOil as any).baseCostPerUnit} = ${oilCost} IDR`)
-    console.log(`Garlic: 10г × ${(garlic as any).baseCostPerUnit} = ${garlicCost} IDR`)
-    console.log(`Salt: 3г × ${(salt as any).baseCostPerUnit} = ${saltCost} IDR`)
-    console.log(`Pepper: 1г × ${(pepper as any).baseCostPerUnit} = ${pepperCost} IDR`)
-    console.log(`ИТОГО: ${totalCost} IDR (${costPerMl.toFixed(2)} IDR/мл)`)
-
-    // Проверяем правильность
-    const expectedOilCost = 120 * 85 // 120мл × 85 IDR/мл
-    const expectedGarlicCost = 10 * 25 // 10г × 25 IDR/г
-    const expectedSaltCost = 3 * 3 // 3г × 3 IDR/г
-    const expectedPepperCost = 1 * 120 // 1г × 120 IDR/г
-    const expectedTotal =
-      expectedOilCost + expectedGarlicCost + expectedSaltCost + expectedPepperCost
-
-    if (Math.abs(totalCost - expectedTotal) < 0.01) {
-      console.log('✅ Расчет корректен!')
-    } else {
-      console.log(`❌ Ошибка: ожидали ${expectedTotal}, получили ${totalCost}`)
-    }
-  }
-
-  private testSteakCalculation(products: Product[]): void {
-    console.log('\n📝 ТЕСТ 2: Стейк говяжий')
-    console.log('Рецепт: 250г говядины + 10мл масла + 3г соли + 2г перца')
-    console.log('Выход: 1 порция')
-
-    const beef = products.find(p => p.id === 'prod-beef-steak')!
-    const oliveOil = products.find(p => p.id === 'prod-olive-oil')!
-    const salt = products.find(p => p.id === 'prod-salt')!
-    const pepper = products.find(p => p.id === 'prod-black-pepper')!
-
-    const beefCost = 250 * (beef as any).baseCostPerUnit
-    const oilCost = 10 * (oliveOil as any).baseCostPerUnit
-    const saltCost = 3 * (salt as any).baseCostPerUnit
-    const pepperCost = 2 * (pepper as any).baseCostPerUnit
-
-    const totalCost = beefCost + oilCost + saltCost + pepperCost
-
-    console.log(`Beef: 250г × ${(beef as any).baseCostPerUnit} = ${beefCost} IDR`)
-    console.log(`Olive Oil: 10мл × ${(oliveOil as any).baseCostPerUnit} = ${oilCost} IDR`)
-    console.log(`Salt: 3г × ${(salt as any).baseCostPerUnit} = ${saltCost} IDR`)
-    console.log(`Pepper: 2г × ${(pepper as any).baseCostPerUnit} = ${pepperCost} IDR`)
-    console.log(`ИТОГО: ${totalCost} IDR за порцию`)
-
-    // Проверяем правильность
-    const expectedBeefCost = 250 * 180 // 250г × 180 IDR/г
-    const expectedOilCost = 10 * 85 // 10мл × 85 IDR/мл
-    const expectedSaltCost = 3 * 3 // 3г × 3 IDR/г
-    const expectedPepperCost = 2 * 120 // 2г × 120 IDR/г
-    const expectedTotal = expectedBeefCost + expectedOilCost + expectedSaltCost + expectedPepperCost
-
-    if (Math.abs(totalCost - expectedTotal) < 0.01) {
-      console.log('✅ Расчет корректен!')
-    } else {
-      console.log(`❌ Ошибка: ожидали ${expectedTotal}, получили ${totalCost}`)
-    }
-  }
-
-  /**
-   * ✅ НОВЫЙ: Показывает сравнение старой и новой системы
-   */
-  compareOldVsNewCalculation(): void {
-    console.log('\n📊 СРАВНЕНИЕ СТАРОЙ И НОВОЙ СИСТЕМЫ РАСЧЕТА')
-    console.log('='.repeat(60))
-
-    const products = this.getProductsStoreData().products
-    const oliveOil = products.find(p => p.id === 'prod-olive-oil')!
-
-    console.log('\n🔴 СТАРАЯ СИСТЕМА (НЕПРАВИЛЬНАЯ):')
-    console.log('Olive Oil: 250 грамм × 85,000 IDR/литр = 21,250,000 IDR ❌')
-    console.log('(Ошибка: умножаем граммы на цену за литр)')
-
-    console.log('\n🟢 НОВАЯ СИСТЕМА (ПРАВИЛЬНАЯ):')
-    console.log(
-      `Olive Oil: 250 мл × ${(oliveOil as any).baseCostPerUnit} IDR/мл = ${250 * (oliveOil as any).baseCostPerUnit} IDR ✅`
-    )
-    console.log('(Правильно: умножаем мл на цену за мл)')
-
-    console.log('\n💡 ОБЪЯСНЕНИЕ:')
-    console.log(`• baseCostPerUnit = ${(oliveOil as any).baseCostPerUnit} IDR/мл`)
-    console.log(`• purchaseCost = ${(oliveOil as any).purchaseCost} IDR/литр`)
-    console.log(
-      `• purchaseToBaseRatio = ${(oliveOil as any).purchaseToBaseRatio} (1 литр = 1000 мл)`
-    )
-    console.log(
-      `• Проверка: ${(oliveOil as any).purchaseCost} ÷ ${(oliveOil as any).purchaseToBaseRatio} = ${(oliveOil as any).baseCostPerUnit} ✅`
-    )
-  }
-
-  /**
-   * ✅ НОВЫЙ: Валидирует все продукты для корректности расчетов
-   */
-  validateProductsForCalculation(): {
-    valid: CoreProductDefinition[]
-    invalid: Array<{ product: CoreProductDefinition; errors: string[] }>
-    summary: {
-      totalProducts: number
-      validProducts: number
-      invalidProducts: number
-      errorCount: number
-    }
-  } {
-    console.log('\n🔍 ВАЛИДАЦИЯ ПРОДУКТОВ ДЛЯ РАСЧЕТОВ')
-    console.log('='.repeat(40))
-
-    const valid: CoreProductDefinition[] = []
-    const invalid: Array<{ product: CoreProductDefinition; errors: string[] }> = []
-
-    CORE_PRODUCTS.forEach(product => {
-      const errors: string[] = []
-
-      // Проверка 1: Правильность расчета базовой стоимости
-      const expectedBaseCost = product.purchaseCost / product.purchaseToBaseRatio
-      if (Math.abs(expectedBaseCost - product.baseCostPerUnit) > 0.01) {
-        errors.push(
-          `Base cost mismatch: expected ${expectedBaseCost}, got ${product.baseCostPerUnit}`
-        )
-      }
-
-      // Проверка 2: Положительные значения
-      if (product.baseCostPerUnit <= 0) {
-        errors.push('baseCostPerUnit must be positive')
-      }
-
-      if (product.purchaseCost <= 0) {
-        errors.push('purchaseCost must be positive')
-      }
-
-      if (product.purchaseToBaseRatio <= 0) {
-        errors.push('purchaseToBaseRatio must be positive')
-      }
-
-      // Проверка 3: Валидные единицы
-      if (!['gram', 'ml', 'piece'].includes(product.baseUnit)) {
-        errors.push(`Invalid baseUnit: ${product.baseUnit}`)
-      }
-
-      if (errors.length === 0) {
-        valid.push(product)
-        console.log(`✅ ${product.name}`)
-      } else {
-        invalid.push({ product, errors })
-        console.log(`❌ ${product.name}:`)
-        errors.forEach(error => console.log(`   - ${error}`))
-      }
-    })
-
-    const summary = {
-      totalProducts: CORE_PRODUCTS.length,
-      validProducts: valid.length,
-      invalidProducts: invalid.length,
-      errorCount: invalid.reduce((sum, item) => sum + item.errors.length, 0)
-    }
-
-    console.log('\n📊 РЕЗУЛЬТАТ ВАЛИДАЦИИ:')
-    console.log(`Всего продуктов: ${summary.totalProducts}`)
-    console.log(`Валидных: ${summary.validProducts}`)
-    console.log(`Невалидных: ${summary.invalidProducts}`)
-    console.log(`Ошибок: ${summary.errorCount}`)
-
-    return { valid, invalid, summary }
-  }
 }
 
 // Singleton instance
@@ -577,26 +596,33 @@ if (import.meta.env.DEV) {
   // Глобальные функции для отладки
   window.__MOCK_DATA_COORDINATOR__ = mockDataCoordinator
 
-  window.__TEST_COST_CALCULATIONS__ = () => {
-    mockDataCoordinator.testCostCalculation()
-    return mockDataCoordinator
+  window.__VALIDATE_STORE_INTEGRATION__ = () => {
+    return mockDataCoordinator.validateStoreIntegration()
   }
 
-  window.__COMPARE_OLD_VS_NEW__ = () => {
-    mockDataCoordinator.compareOldVsNewCalculation()
-    return mockDataCoordinator
-  }
+  window.__TEST_SUPPLIER_INTEGRATION__ = () => {
+    const productsData = mockDataCoordinator.getProductsStoreData()
+    const counteragentsData = mockDataCoordinator.getCounteragentsStoreData()
 
-  window.__VALIDATE_PRODUCTS__ = () => {
-    return mockDataCoordinator.validateProductsForCalculation()
+    console.log('=== SUPPLIER INTEGRATION TEST ===')
+    console.log('Products:', productsData.products.length)
+    console.log('Counteragents:', counteragentsData.counteragents.length)
+
+    // Тестируем поиск поставщика для продукта
+    const testProduct = productsData.products[0]
+    const supplier = mockDataCoordinator.getSupplierForProduct(testProduct.id)
+
+    console.log('Test product:', testProduct.name)
+    console.log('Supplier found:', supplier?.name || 'None')
+
+    return { testProduct, supplier, productsData, counteragentsData }
   }
 
   // Автоматический тест при загрузке в dev режиме
   setTimeout(() => {
-    console.log('\n🎯 Mock Data Coordinator загружен!')
+    console.log('\n🎯 Mock Data Coordinator с интеграцией Counteragents загружен!')
     console.log('Доступные команды:')
-    console.log('• window.__TEST_COST_CALCULATIONS__() - тест расчетов')
-    console.log('• window.__COMPARE_OLD_VS_NEW__() - сравнение систем')
-    console.log('• window.__VALIDATE_PRODUCTS__() - валидация продуктов')
+    console.log('• window.__VALIDATE_STORE_INTEGRATION__() - проверка интеграции')
+    console.log('• window.__TEST_SUPPLIER_INTEGRATION__() - тест поставщиков')
   }, 100)
 }
