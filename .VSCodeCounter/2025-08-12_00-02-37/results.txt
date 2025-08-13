@@ -1,0 +1,354 @@
+Date : 2025-08-12 00:02:37
+Directory : /Users/peaker/dev/kitchen-app/backoffice/src
+Total : 233 files,  68426 codes, 4958 comments, 10958 blanks, all 84342 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| Vue        |        116 |     42,016 |      1,086 |      5,637 |     48,739 |
+| TypeScript |        104 |     21,778 |      3,867 |      4,178 |     29,823 |
+| Markdown   |         10 |      4,591 |          0 |      1,135 |      5,726 |
+| SCSS       |          2 |         40 |          5 |          8 |         53 |
+| XML        |          1 |          1 |          0 |          0 |          1 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                   | files      | code       | comment    | blank      | total      |
++------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                      |        233 |     68,426 |      4,958 |     10,958 |     84,342 |
+| . (Files)                                                                                                              |          3 |         63 |         15 |         23 |        101 |
+| About                                                                                                                  |         10 |      4,591 |          0 |      1,135 |      5,726 |
+| assets                                                                                                                 |          1 |          1 |          0 |          0 |          1 |
+| components                                                                                                             |         21 |      2,613 |         40 |        352 |      3,005 |
+| components (Files)                                                                                                     |          1 |          1 |          0 |          1 |          2 |
+| components/accounts                                                                                                    |         10 |      1,620 |         18 |        212 |      1,850 |
+| components/accounts/detail                                                                                             |          2 |        294 |          0 |         41 |        335 |
+| components/accounts/dialogs                                                                                            |          4 |        619 |          6 |         68 |        693 |
+| components/accounts/list                                                                                               |          4 |        707 |         12 |        103 |        822 |
+| components/auth                                                                                                        |          1 |         91 |          0 |         16 |        107 |
+| components/base                                                                                                        |          1 |        124 |          0 |         14 |        138 |
+| components/navigation                                                                                                  |          4 |        473 |         22 |         66 |        561 |
+| components/payment-settings                                                                                            |          4 |        304 |          0 |         43 |        347 |
+| composables                                                                                                            |          3 |        289 |         92 |         64 |        445 |
+| config                                                                                                                 |          1 |         66 |          4 |          8 |         78 |
+| core                                                                                                                   |          1 |        319 |         57 |         75 |        451 |
+| firebase                                                                                                               |          3 |        159 |          3 |         25 |        187 |
+| firebase (Files)                                                                                                       |          2 |         78 |          2 |         15 |         95 |
+| firebase/services                                                                                                      |          1 |         81 |          1 |         10 |         92 |
+| layouts                                                                                                                |          3 |         67 |          3 |         14 |         84 |
+| plugins                                                                                                                |          1 |         55 |          4 |          2 |         61 |
+| router                                                                                                                 |          3 |        197 |         10 |         15 |        222 |
+| router (Files)                                                                                                         |          2 |        162 |          9 |          9 |        180 |
+| router/guards                                                                                                          |          1 |         35 |          1 |          6 |         42 |
+| services                                                                                                               |          5 |        217 |          6 |         50 |        273 |
+| stores                                                                                                                 |         64 |     19,091 |      2,957 |      3,602 |     25,650 |
+| stores (Files)                                                                                                         |          3 |        252 |          8 |         44 |        304 |
+| stores/account                                                                                                         |          6 |      2,251 |         99 |        311 |      2,661 |
+| stores/counteragents                                                                                                   |          5 |      1,639 |        273 |        346 |      2,258 |
+| stores/counteragents (Files)                                                                                           |          4 |      1,292 |        199 |        313 |      1,804 |
+| stores/counteragents/mock                                                                                              |          1 |        347 |         74 |         33 |        454 |
+| stores/menu                                                                                                            |          5 |      1,463 |        163 |        182 |      1,808 |
+| stores/preparation                                                                                                     |          5 |      1,598 |        225 |        326 |      2,149 |
+| stores/productsStore                                                                                                   |         10 |      2,280 |        300 |        427 |      3,007 |
+| stores/productsStore (Files)                                                                                           |          5 |      1,085 |        165 |        194 |      1,444 |
+| stores/productsStore/composables                                                                                       |          5 |      1,195 |        135 |        233 |      1,563 |
+| stores/recipes                                                                                                         |         12 |      3,393 |        721 |        720 |      4,834 |
+| stores/recipes (Files)                                                                                                 |          6 |      1,546 |        231 |        274 |      2,051 |
+| stores/recipes/composables                                                                                             |          6 |      1,847 |        490 |        446 |      2,783 |
+| stores/shared                                                                                                          |          3 |        921 |        159 |        238 |      1,318 |
+| stores/storage                                                                                                         |          6 |      2,339 |        266 |        393 |      2,998 |
+| stores/storage (Files)                                                                                                 |          5 |      1,991 |        198 |        343 |      2,532 |
+| stores/storage/composables                                                                                             |          1 |        348 |         68 |         50 |        466 |
+| stores/supplier_2                                                                                                      |          9 |      2,955 |        743 |        615 |      4,313 |
+| stores/supplier_2 (Files)                                                                                              |          4 |      1,290 |        219 |        260 |      1,769 |
+| stores/supplier_2/composables                                                                                          |          4 |      1,305 |        492 |        272 |      2,069 |
+| stores/supplier_2/mock                                                                                                 |          1 |        360 |         32 |         83 |        475 |
+| styles                                                                                                                 |          2 |         40 |          5 |          8 |         53 |
+| types                                                                                                                  |         10 |        366 |         67 |         60 |        493 |
+| utils                                                                                                                  |          6 |        445 |        177 |        111 |        733 |
+| views                                                                                                                  |         96 |     39,847 |      1,518 |      5,414 |     46,779 |
+| views (Files)                                                                                                          |          3 |        201 |          5 |         38 |        244 |
+| views/Preparation                                                                                                      |         13 |      4,503 |        269 |        593 |      5,365 |
+| views/Preparation (Files)                                                                                              |          1 |        439 |         14 |         64 |        517 |
+| views/Preparation/components                                                                                           |         12 |      4,064 |        255 |        529 |      4,848 |
+| views/accounts                                                                                                         |          2 |        512 |          7 |         78 |        597 |
+| views/counteragents                                                                                                    |          7 |      2,504 |         73 |        333 |      2,910 |
+| views/counteragents (Files)                                                                                            |          1 |        293 |         13 |         48 |        354 |
+| views/counteragents/components                                                                                         |          6 |      2,211 |         60 |        285 |      2,556 |
+| views/counteragents/components/counteragents                                                                           |          5 |      2,046 |         54 |        259 |      2,359 |
+| views/counteragents/components/shared                                                                                  |          1 |        165 |          6 |         26 |        197 |
+| views/menu                                                                                                             |          5 |      1,663 |         31 |        214 |      1,908 |
+| views/menu (Files)                                                                                                     |          1 |        347 |          7 |         48 |        402 |
+| views/menu/components                                                                                                  |          4 |      1,316 |         24 |        166 |      1,506 |
+| views/products                                                                                                         |          8 |      3,303 |         94 |        458 |      3,855 |
+| views/products (Files)                                                                                                 |          1 |        257 |          9 |         41 |        307 |
+| views/products/components                                                                                              |          7 |      3,046 |         85 |        417 |      3,548 |
+| views/recipes                                                                                                          |         13 |      4,167 |         90 |        596 |      4,853 |
+| views/recipes (Files)                                                                                                  |          1 |        649 |         17 |         90 |        756 |
+| views/recipes/components                                                                                               |         12 |      3,518 |         73 |        506 |      4,097 |
+| views/recipes/components (Files)                                                                                       |          4 |      1,486 |         33 |        228 |      1,747 |
+| views/recipes/components/widgets                                                                                       |          8 |      2,032 |         40 |        278 |      2,350 |
+| views/storage                                                                                                          |         18 |      6,318 |        362 |        876 |      7,556 |
+| views/storage (Files)                                                                                                  |          2 |      1,179 |         40 |        163 |      1,382 |
+| views/storage/components                                                                                               |         16 |      5,139 |        322 |        713 |      6,174 |
+| views/storage/components (Files)                                                                                       |         12 |      3,556 |        253 |        505 |      4,314 |
+| views/storage/components/dialogs                                                                                       |          1 |        392 |         16 |         56 |        464 |
+| views/storage/components/tabs                                                                                          |          1 |        433 |         18 |         56 |        507 |
+| views/storage/components/widgets                                                                                       |          2 |        758 |         35 |         96 |        889 |
+| views/supplier_2                                                                                                       |          9 |      5,345 |        146 |        831 |      6,322 |
+| views/supplier_2 (Files)                                                                                               |          1 |        615 |         14 |         79 |        708 |
+| views/supplier_2/components                                                                                            |          8 |      4,730 |        132 |        752 |      5,614 |
+| views/supplier_2/components/orders                                                                                     |          2 |      1,463 |         40 |        215 |      1,718 |
+| views/supplier_2/components/procurement                                                                                |          1 |        538 |         21 |         87 |        646 |
+| views/supplier_2/components/receipts                                                                                   |          4 |      2,183 |         62 |        373 |      2,618 |
+| views/supplier_2/components/shared                                                                                     |          1 |        546 |          9 |         77 |        632 |
+| views/supplier_back                                                                                                    |         18 |     11,331 |        441 |      1,397 |     13,169 |
+| views/supplier_back (Files)                                                                                            |          2 |        988 |        137 |        141 |      1,266 |
+| views/supplier_back/components                                                                                         |         16 |     10,343 |        304 |      1,256 |     11,903 |
+| views/supplier_back/components/consolidation                                                                           |          7 |      2,859 |        168 |        367 |      3,394 |
+| views/supplier_back/components/procurement                                                                             |          3 |      2,251 |         40 |        286 |      2,577 |
+| views/supplier_back/components/purchase                                                                                |          4 |      4,141 |         74 |        476 |      4,691 |
+| views/supplier_back/components/supplier                                                                                |          2 |      1,092 |         22 |        127 |      1,241 |
++------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                                                                               | language   | code       | comment    | blank      | total      |
++------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/About.md                                                            | Markdown   |         22 |          0 |          6 |         28 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_1_road.md                                                     | Markdown   |        126 |          0 |         43 |        169 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_4.md                                                          | Markdown   |        474 |          0 |        162 |        636 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_5.md                                                          | Markdown   |        481 |          0 |        122 |        603 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_5_3.md                                                        | Markdown   |        552 |          0 |        136 |        688 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_5_31.md                                                       | Markdown   |      1,339 |          0 |        299 |      1,638 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_6.md                                                          | Markdown   |        518 |          0 |        110 |        628 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_6_1.md                                                        | Markdown   |        739 |          0 |        152 |        891 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Stage_7_1.md                                                        | Markdown   |        244 |          0 |         74 |        318 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/Style.md                                                            | Markdown   |         96 |          0 |         31 |        127 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/App.vue                                                                   | Vue        |         18 |          0 |          4 |         22 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/assets/vue.svg                                                            | XML        |          1 |          0 |          0 |          1 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/detail/AccountOperations.vue                          | Vue        |        173 |          0 |         20 |        193 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/detail/AccountOperationsFilter.vue                    | Vue        |        121 |          0 |         21 |        142 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/dialogs/AccountDialog.vue                             | Vue        |        173 |          0 |         19 |        192 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/dialogs/CorrectionDialog.vue                          | Vue        |        153 |          4 |         20 |        177 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/dialogs/OperationDialog.vue                           | Vue        |        179 |          2 |         20 |        201 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/dialogs/TransferDialog.vue                            | Vue        |        114 |          0 |          9 |        123 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/list/AccountList.vue                                  | Vue        |        195 |          3 |         25 |        223 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/list/AccountListToolbar.vue                           | Vue        |         46 |          0 |          8 |         54 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/list/PaymentConfirmationDialog.vue                    | Vue        |        270 |          4 |         37 |        311 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/accounts/list/PendingPaymentsWidget.vue                        | Vue        |        196 |          5 |         33 |        234 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/auth/PinInput.vue                                              | Vue        |         91 |          0 |         16 |        107 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/base/BaseDialog.vue                                            | Vue        |        124 |          0 |         14 |        138 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/index.ts                                                       | TypeScript |          1 |          0 |          1 |          2 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/AlertsBadge.vue                                     | Vue        |        132 |          4 |         22 |        158 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationAccounts.vue                              | Vue        |         78 |          1 |          6 |         85 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationMenu.vue                                  | Vue        |        217 |         14 |         29 |        260 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/StorageAlertsBadge.vue                              | Vue        |         46 |          3 |          9 |         58 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/PaymentMethodDialog.vue                       | Vue        |         85 |          0 |         11 |         96 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/PaymentMethodList.vue                         | Vue        |         76 |          0 |         12 |         88 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/TaxDialog.vue                                 | Vue        |         84 |          0 |          8 |         92 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/TaxList.vue                                   | Vue        |         59 |          0 |         12 |         71 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/composables/useDialogForm.ts                                              | TypeScript |         59 |          6 |         10 |         75 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/composables/useMeasurementUnits.ts                                        | TypeScript |        211 |         82 |         49 |        342 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/composables/useVuetifyBreakpoints.ts                                      | TypeScript |         19 |          4 |          5 |         28 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/config/users.ts                                                           | TypeScript |         66 |          4 |          8 |         78 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/appInitializer.ts                                                    | TypeScript |        319 |         57 |         75 |        451 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/firebase/config.ts                                                        | TypeScript |         33 |          1 |         11 |         45 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/firebase/converters.ts                                                    | TypeScript |         45 |          1 |          4 |         50 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/firebase/services/base.service.ts                                         | TypeScript |         81 |          1 |         10 |         92 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/layouts/AuthLayout.vue                                                    | Vue        |         23 |          1 |          4 |         28 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/layouts/EmptyLayout.vue                                                   | Vue        |         12 |          1 |          3 |         16 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/layouts/MainLayout.vue                                                    | Vue        |         32 |          1 |          7 |         40 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/main.ts                                                                   | TypeScript |         45 |         14 |         18 |         77 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/plugins/vuetify.ts                                                        | TypeScript |         55 |          4 |          2 |         61 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/router/guards/auth.guard.ts                                               | TypeScript |         35 |          1 |          6 |         42 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/router/index.ts                                                           | TypeScript |        147 |          8 |          5 |        160 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/router/types.ts                                                           | TypeScript |         15 |          1 |          4 |         20 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/services/auth.service.ts                                                  | TypeScript |         80 |          2 |         18 |        100 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/services/index.ts                                                         | TypeScript |          1 |          0 |          1 |          2 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/services/payment-method.service.ts                                        | TypeScript |         20 |          1 |          5 |         26 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/services/session.service.ts                                               | TypeScript |         96 |          2 |         21 |        119 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/services/tax.service.ts                                                   | TypeScript |         20 |          1 |          5 |         26 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/index.ts                                                   | TypeScript |         42 |          8 |          7 |         57 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/mock.ts                                                    | TypeScript |        736 |          6 |         40 |        782 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/paymentMock.ts                                             | TypeScript |        269 |         19 |         30 |        318 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/service.ts                                                 | TypeScript |        567 |         30 |        117 |        714 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/store.ts                                                   | TypeScript |        438 |         29 |         84 |        551 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/types.ts                                                   | TypeScript |        199 |          7 |         33 |        239 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/auth.store.ts                                                      | TypeScript |        104 |          4 |         16 |        124 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/counteragentsService.ts                              | TypeScript |        452 |         42 |        113 |        607 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/counteragentsStore.ts                                | TypeScript |        523 |         87 |        127 |        737 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/index.ts                                             | TypeScript |        167 |         20 |         34 |        221 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/mock/counteragentsMock.ts                            | TypeScript |        347 |         74 |         33 |        454 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/types.ts                                             | TypeScript |        150 |         50 |         39 |        239 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/index.ts                                                           | TypeScript |          1 |          0 |          1 |          2 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/index.ts                                                      | TypeScript |         42 |          8 |          7 |         57 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/menuMock.ts                                                   | TypeScript |        578 |         59 |         23 |        660 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/menuService.ts                                                | TypeScript |        345 |         34 |         55 |        434 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/menuStore.ts                                                  | TypeScript |        321 |         28 |         59 |        408 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/types.ts                                                      | TypeScript |        177 |         34 |         38 |        249 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/payment-settings.store.ts                                          | TypeScript |        147 |          4 |         27 |        178 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/index.ts                                               | TypeScript |         30 |         11 |          6 |         47 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/preparationMock.ts                                     | TypeScript |        253 |         18 |         32 |        303 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/preparationService.ts                                  | TypeScript |        670 |         84 |        130 |        884 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/preparationStore.ts                                    | TypeScript |        474 |         67 |        111 |        652 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/types.ts                                               | TypeScript |        171 |         45 |         47 |        263 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/index.ts                                 | TypeScript |          4 |          3 |          3 |         10 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductConsumption.ts                 | TypeScript |        251 |         30 |         54 |        335 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductPriceHistory.ts                | TypeScript |        298 |         43 |         60 |        401 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductUsage.ts                       | TypeScript |        389 |         33 |         69 |        491 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useStockRecommendations.ts               | TypeScript |        253 |         26 |         47 |        326 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/index.ts                                             | TypeScript |         13 |          6 |          7 |         26 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/productsMock.ts                                      | TypeScript |        308 |         26 |         25 |        359 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/productsService.ts                                   | TypeScript |        124 |         29 |         20 |        173 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/productsStore.ts                                     | TypeScript |        355 |         55 |         82 |        492 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/types.ts                                             | TypeScript |        285 |         49 |         60 |        394 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useCostCalculation.ts                          | TypeScript |        550 |         84 |        124 |        758 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useMenuRecipeLinks.ts                          | TypeScript |        145 |         51 |         37 |        233 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/usePreparations.ts                             | TypeScript |        360 |        105 |         81 |        546 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeIntegration.ts                        | TypeScript |        186 |         65 |         55 |        306 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipes.ts                                  | TypeScript |        523 |        132 |        115 |        770 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useUnits.ts                                    | TypeScript |         83 |         53 |         34 |        170 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/index.ts                                                   | TypeScript |          6 |          2 |          2 |         10 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesMock.ts                                             | TypeScript |        520 |         24 |         29 |        573 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesService.ts                                          | TypeScript |        257 |         22 |         59 |        338 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesStore.ts                                            | TypeScript |        421 |         85 |        109 |        615 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/types.ts                                                   | TypeScript |        318 |         95 |         69 |        482 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/unitsMock.ts                                               | TypeScript |         24 |          3 |          6 |         33 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/shared/index.ts                                                    | TypeScript |          8 |          4 |          4 |         16 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/shared/mockDataCoordinator.ts                                      | TypeScript |        429 |         84 |        116 |        629 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/shared/productDefinitions.ts                                       | TypeScript |        484 |         71 |        118 |        673 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/composables/useWriteOff.ts                                 | TypeScript |        348 |         68 |         50 |        466 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/index.ts                                                   | TypeScript |         37 |          6 |          6 |         49 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageMock.ts                                             | TypeScript |        561 |         32 |         46 |        639 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageService.ts                                          | TypeScript |        711 |         38 |        123 |        872 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageStore.ts                                            | TypeScript |        506 |         72 |        121 |        699 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/types.ts                                                   | TypeScript |        176 |         50 |         47 |        273 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useOrderAssistant.ts                        | TypeScript |        252 |         77 |         39 |        368 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useProcurementRequests.ts                   | TypeScript |        317 |        113 |         65 |        495 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/usePurchaseOrders.ts                        | TypeScript |        370 |        161 |         79 |        610 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useReceipts.ts                              | TypeScript |        366 |        141 |         89 |        596 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/index.ts                                                | TypeScript |        144 |         54 |         39 |        237 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/mock/supplierMock.ts                                    | TypeScript |        360 |         32 |         83 |        475 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supplierService.ts                                      | TypeScript |        381 |         45 |         82 |        508 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supplierStore.ts                                        | TypeScript |        464 |         65 |         65 |        594 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/types.ts                                                | TypeScript |        301 |         55 |         74 |        430 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/styles/main.scss                                                          | SCSS       |         15 |          3 |          4 |         22 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/styles/variables.scss                                                     | SCSS       |         25 |          2 |          4 |         31 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/auth.ts                                                             | TypeScript |         38 |          1 |          8 |         47 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/bill.ts                                                             | TypeScript |         29 |          1 |          4 |         34 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/common.ts                                                           | TypeScript |          8 |          1 |          1 |         10 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/customer.ts                                                         | TypeScript |          7 |          1 |          1 |          9 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/index.ts                                                            | TypeScript |          7 |          1 |          1 |          9 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/measurementUnits.ts                                                 | TypeScript |        211 |         58 |         35 |        304 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/payment.ts                                                          | TypeScript |         22 |          1 |          4 |         27 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/scss.d.ts                                                           | TypeScript |         15 |          1 |          1 |         17 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/settings.ts                                                         | TypeScript |         23 |          1 |          3 |         27 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/types/tax.ts                                                              | TypeScript |          6 |          1 |          2 |          9 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/utils/currency.ts                                                         | TypeScript |        173 |        121 |         53 |        347 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/utils/debugger.ts                                                         | TypeScript |         87 |          2 |         19 |        108 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/utils/formatter.ts                                                        | TypeScript |         96 |         40 |         25 |        161 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/utils/id.ts                                                               | TypeScript |         16 |         12 |          4 |         32 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/utils/index.ts                                                            | TypeScript |          4 |          1 |          1 |          6 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/utils/time.ts                                                             | TypeScript |         69 |          1 |          9 |         79 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/LoginView.vue                                                       | Vue        |         65 |          1 |         13 |         79 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/NotFoundView.vue                                                    | Vue        |         28 |          0 |          5 |         33 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/PaymentSettingsView.vue                                             | Vue        |        108 |          4 |         20 |        132 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/PreparationView.vue                                     | Vue        |        439 |         14 |         64 |        517 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/AddPreparationProductionItemDialog.vue       | Vue        |        124 |          5 |         21 |        150 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/InventoryDetailsDialog.vue                   | Vue        |        633 |         18 |         66 |        717 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationAlerts.vue                        | Vue        |         92 |          2 |         14 |        108 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoriesTable.vue              | Vue        |        478 |         19 |         61 |        558 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoryDialog.vue               | Vue        |        475 |          9 |         74 |        558 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoryItemRow.vue              | Vue        |        325 |         10 |         42 |        377 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationItemDetailsDialog.vue             | Vue        |        450 |          9 |         50 |        509 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationOperationsTable.vue               | Vue        |        669 |         27 |         69 |        765 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationProductionDialog.vue              | Vue        |        228 |          9 |         39 |        276 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationProductionItemCard.vue            | Vue        |        185 |          6 |         23 |        214 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationStockTable.vue                    | Vue        |        394 |         17 |         51 |        462 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/index.ts                                     | TypeScript |         11 |        124 |         19 |        154 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/AccountDetailView.vue                                      | Vue        |        386 |          5 |         55 |        446 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/AccountListView.vue                                        | Vue        |        126 |          2 |         23 |        151 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/CounteragentsView.vue                                 | Vue        |        293 |         13 |         48 |        354 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentCard.vue         | Vue        |        125 |          4 |         18 |        147 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentCardContent.vue  | Vue        |        554 |         15 |         73 |        642 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentDialog.vue       | Vue        |        636 |         12 |         70 |        718 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentFilters.vue      | Vue        |        417 |         11 |         50 |        478 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentsTable.vue       | Vue        |        314 |         12 |         48 |        374 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/shared/ContactInfo.vue                     | Vue        |        165 |          6 |         26 |        197 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/menu/MenuView.vue                                                   | Vue        |        347 |          7 |         48 |        402 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuCategoryDialog.vue                              | Vue        |        163 |          0 |         24 |        187 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItem.vue                                        | Vue        |        261 |          5 |         37 |        303 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItemDialog.vue                                  | Vue        |        399 |          6 |         47 |        452 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItemVariant.vue                                 | Vue        |        493 |         13 |         58 |        564 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/ProductsView.vue                                           | Vue        |        257 |          9 |         41 |        307 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/PriceHistoryWidget.vue                          | Vue        |        589 |         13 |        100 |        702 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductCard.vue                                 | Vue        |        405 |         13 |         50 |        468 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductDetailsDialog.vue                        | Vue        |        555 |         19 |         71 |        645 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductDialog.vue                               | Vue        |        405 |         14 |         46 |        465 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductsFilters.vue                             | Vue        |        216 |          6 |         29 |        251 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductsList.vue                                | Vue        |        226 |         10 |         27 |        263 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/UsageTrackingWidget.vue                         | Vue        |        650 |         10 |         94 |        754 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/RecipesView.vue                                             | Vue        |        649 |         17 |         90 |        756 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/RecipeFilters.vue                                | Vue        |        322 |          7 |         55 |        384 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedRecipeDialog.vue                          | Vue        |        293 |          4 |         38 |        335 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedRecipeItem.vue                            | Vue        |        521 |         14 |         78 |        613 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedViewDialog.vue                            | Vue        |        350 |          8 |         57 |        415 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ComponentsListWidget.vue                 | Vue        |        234 |          3 |         32 |        269 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/CostBreakdownWidget.vue                  | Vue        |        298 |          4 |         34 |        336 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/CostInfoWidget.vue                       | Vue        |        159 |          2 |         26 |        187 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/InstructionsWidget.vue                   | Vue        |        177 |          4 |         26 |        207 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ItemInfoWidget.vue                       | Vue        |        151 |          6 |         26 |        183 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue                | Vue        |        255 |          9 |         27 |        291 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue         | Vue        |        559 |          8 |         75 |        642 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue              | Vue        |        199 |          4 |         32 |        235 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/StorageView-copy.vue                                        | Vue        |        517 |         16 |         71 |        604 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/StorageView.vue                                             | Vue        |        662 |         24 |         92 |        778 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/AddReceiptItemDialog.vue                         | Vue        |         47 |          2 |          8 |         57 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryDetailsDialog.vue                       | Vue        |        385 |         14 |         48 |        447 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryDialog.vue                              | Vue        |        632 |         11 |         92 |        735 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryItemRow.vue                             | Vue        |        245 |         10 |         38 |        293 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ItemDetailsDialog.vue                            | Vue        |        319 |          7 |         39 |        365 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ReceiptDialog.vue                                | Vue        |        302 |          9 |         49 |        360 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ReceiptItemCard.vue                              | Vue        |        183 |          6 |         24 |        213 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageAlerts.vue                                | Vue        |         92 |          2 |         14 |        108 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageInventoriesTable.vue                      | Vue        |        480 |         20 |         65 |        565 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageOperationsTable.vue                       | Vue        |        467 |         21 |         54 |        542 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageStockTable.vue                            | Vue        |        393 |         16 |         53 |        462 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/dialogs/WriteOffDialog.vue                       | Vue        |        392 |         16 |         56 |        464 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/index.ts                                         | TypeScript |         11 |        135 |         21 |        167 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/tabs/StorageAnalyticsTab.vue                     | Vue        |        433 |         18 |         56 |        507 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/widgets/QuickWriteOffButton.vue                  | Vue        |        334 |         13 |         53 |        400 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/widgets/WriteOffStatsWidget.vue                  | Vue        |        424 |         22 |         43 |        489 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/SupplierView.vue                                         | Vue        |        615 |         14 |         79 |        708 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/BaseSupplierBaskets.vue                | Vue        |        763 |         13 |        109 |        885 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderTable.vue                 | Vue        |        700 |         27 |        106 |        833 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/ProcurementRequestTable.vue       | Vue        |        538 |         21 |         87 |        646 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/BaseReceiptDialog.vue                | Vue        |        968 |         17 |        157 |      1,142 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptDetailsDialog.vue             | Vue        |        427 |         14 |         79 |        520 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptDiscrepanciesDialog.vue       | Vue        |        386 |         13 |         70 |        469 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptTable.vue                     | Vue        |        402 |         18 |         67 |        487 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/BaseOrderAssistant.vue                 | Vue        |        546 |          9 |         77 |        632 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/SupplierView.vue                                      | Vue        |        760 |         17 |         92 |        869 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/consolidation/BillsManagementCard.vue      | Vue        |        701 |         13 |         72 |        786 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/consolidation/ConsolidationPreviewCard.vue | Vue        |        313 |         11 |         33 |        357 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/consolidation/NewOrdersTab.vue             | Vue        |        437 |         17 |         60 |        514 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/consolidation/RequestSelectionCard.vue     | Vue        |        448 |         13 |         55 |        516 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/consolidation/StatusIndicator.vue          | Vue        |        210 |          8 |         28 |        246 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/consolidation/WorkflowStatusIndicator.vue  | Vue        |        472 |         10 |         62 |        544 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/consolidation/index.ts                     | TypeScript |        278 |         96 |         57 |        431 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/procurement/OrderAssistantDialog.vue       | Vue        |        649 |         11 |         86 |        746 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/procurement/ProcurementRequestDialog.vue   | Vue        |        797 |          9 |         94 |        900 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/procurement/ProcurementTable.vue           | Vue        |        805 |         20 |        106 |        931 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/purchase/AcceptanceTable.vue               | Vue        |      1,151 |         26 |        141 |      1,318 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/purchase/PurchaseOrderDialog.vue           | Vue        |      1,021 |         11 |        103 |      1,135 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/purchase/PurchaseOrderTable.vue            | Vue        |      1,046 |         23 |        134 |      1,203 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/purchase/ReceiptAcceptanceDialog.vue       | Vue        |        923 |         14 |         98 |      1,035 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/supplier/SupplierDialog.vue                | Vue        |        535 |          7 |         62 |        604 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/components/supplier/SupplierTable.vue                 | Vue        |        557 |         15 |         65 |        637 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_back/index.ts                                              | TypeScript |        228 |        120 |         49 |        397 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/vite-env.d.ts                                                             | TypeScript |          0 |          1 |          1 |          2 |
+| Total                                                                                                                  |            |     68,426 |      4,958 |     10,958 |     84,342 |
++------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
