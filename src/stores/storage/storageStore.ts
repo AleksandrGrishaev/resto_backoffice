@@ -1,4 +1,4 @@
-// src/stores/storage/storageStore.ts - SIMPLIFIED (without write-offs)
+// src/stores/storage/storageStore.ts - SIMPLIFIED (WriteOff delegated to useWriteOff)
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -13,13 +13,14 @@ import type {
   StorageDepartment,
   CreateReceiptData,
   CreateCorrectionData,
-  CreateInventoryData
+  CreateInventoryData,
+  CreateWriteOffData
 } from './types'
 
 const MODULE_NAME = 'StorageStore'
 
 export const useStorageStore = defineStore('storage', () => {
-  // State (simplified - removed write-off loading and filters)
+  // State
   const state = ref<StorageState>({
     batches: [],
     operations: [],
@@ -29,7 +30,7 @@ export const useStorageStore = defineStore('storage', () => {
       balances: false,
       operations: false,
       inventory: false,
-      writeOff: false, // Keep for compatibility but won't be used here
+      writeOff: false,
       correction: false
     },
     error: null,
@@ -51,11 +52,10 @@ export const useStorageStore = defineStore('storage', () => {
     }
   })
 
-  // ✅ Dependencies
   const productsStore = useProductsStore()
 
   // ===========================
-  // COMPUTED PROPERTIES (GETTERS)
+  // COMPUTED PROPERTIES
   // ===========================
 
   const filteredBalances = computed(() => {
@@ -164,8 +164,6 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.operations = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Fetching storage operations', { department })
-
       const operations = await storageService.getOperations(department)
       state.value.operations = operations
 
@@ -187,8 +185,6 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Fetching product inventories', { department })
-
       const inventories = await storageService.getInventories(department)
       state.value.inventories = inventories
 
@@ -206,7 +202,7 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // ✅ CORE OPERATIONS (without write-offs)
+  // CORE OPERATIONS (without write-offs)
   // ===========================
 
   async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
@@ -214,19 +210,9 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.correction = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Creating product correction operation', { data })
-
       const operation = await storageService.createCorrection(data)
-
-      // Update local state
       state.value.operations.unshift(operation)
-
-      // Refresh balances
       await fetchBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Product correction operation created', {
-        operationId: operation.id
-      })
 
       return operation
     } catch (error) {
@@ -244,19 +230,9 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.correction = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Creating product receipt operation', { data })
-
       const operation = await storageService.createReceipt(data)
-
-      // Update local state
       state.value.operations.unshift(operation)
-
-      // Refresh balances
       await fetchBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Product receipt operation created', {
-        operationId: operation.id
-      })
 
       return operation
     } catch (error) {
@@ -270,6 +246,43 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
+  // ✅ WRITE-OFF SUPPORT (minimal - just for useWriteOff integration)
+  // ===========================
+
+  /**
+   * Simplified write-off support for useWriteOff composable
+   * Just delegates to storageService and updates local state
+   */
+  async function createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
+    try {
+      state.value.loading.writeOff = true
+      state.value.error = null
+
+      const operation = await storageService.createWriteOff(data)
+
+      // Update local state
+      state.value.operations.unshift(operation)
+      await fetchBalances(data.department)
+
+      return operation
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create write-off'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, { error })
+      throw error
+    } finally {
+      state.value.loading.writeOff = false
+    }
+  }
+
+  /**
+   * Get write-off statistics (delegated to storageService)
+   */
+  function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
+    return storageService.getWriteOffStatistics(department, dateFrom, dateTo)
+  }
+
+  // ===========================
   // INVENTORY OPERATIONS
   // ===========================
 
@@ -278,16 +291,8 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Starting product inventory', { data })
-
       const inventory = await storageService.startInventory(data)
-
-      // Update local state
       state.value.inventories.unshift(inventory)
-
-      DebugUtils.info(MODULE_NAME, 'Product inventory started', {
-        inventoryId: inventory.id
-      })
 
       return inventory
     } catch (error) {
@@ -308,17 +313,12 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Updating product inventory', { inventoryId })
-
       const inventory = await storageService.updateInventory(inventoryId, items)
 
-      // Update local state
       const index = state.value.inventories.findIndex(inv => inv.id === inventoryId)
       if (index !== -1) {
         state.value.inventories[index] = inventory
       }
-
-      DebugUtils.info(MODULE_NAME, 'Product inventory updated', { inventoryId })
 
       return inventory
     } catch (error) {
@@ -336,24 +336,15 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Finalizing product inventory', { inventoryId })
-
       const correctionOperations = await storageService.finalizeInventory(inventoryId)
 
-      // Update local state
       const inventoryIndex = state.value.inventories.findIndex(inv => inv.id === inventoryId)
       if (inventoryIndex !== -1) {
         state.value.inventories[inventoryIndex].status = 'confirmed'
       }
 
-      // Add correction operations to operations list
       correctionOperations.forEach(op => {
         state.value.operations.unshift(op)
-      })
-
-      DebugUtils.info(MODULE_NAME, 'Product inventory finalized', {
-        inventoryId,
-        correctionOperations: correctionOperations.length
       })
     } catch (error) {
       const message =
@@ -367,36 +358,7 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // ✅ WRITE-OFF SUPPORT (delegated to useWriteOff)
-  // ===========================
-
-  /**
-   * Create write-off operation - delegated to useWriteOff composable
-   * This method is here for compatibility and to update the store state
-   */
-  async function createWriteOff(data: any): Promise<StorageOperation> {
-    try {
-      // This is called by useWriteOff composable
-      const operation = await storageService.createWriteOff(data)
-
-      // Update local state
-      state.value.operations.unshift(operation)
-
-      // Refresh balances
-      await fetchBalances(data.department)
-
-      return operation
-    } catch (error) {
-      throw error
-    }
-  }
-
-  function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
-    return storageService.getWriteOffStatistics(department, dateFrom, dateTo)
-  }
-
-  // ===========================
-  // FIFO CALCULATIONS
+  // FIFO CALCULATIONS (delegated to storageService)
   // ===========================
 
   function calculateFifoAllocation(
@@ -422,28 +384,6 @@ export const useStorageStore = defineStore('storage', () => {
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate correction cost', { error })
       throw error
-    }
-  }
-
-  // ===========================
-  // ALERT HELPERS
-  // ===========================
-
-  function getExpiringItems(days: number = 3): StorageBalance[] {
-    try {
-      return storageService.getExpiringItems(days)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get expiring products', { error })
-      return []
-    }
-  }
-
-  function getLowStockItems(): StorageBalance[] {
-    try {
-      return storageService.getLowStockItems()
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get low stock products', { error })
-      return []
     }
   }
 
@@ -539,41 +479,6 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // INITIALIZATION
-  // ===========================
-
-  async function initialize() {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Initializing product storage store')
-
-      state.value.loading.balances = true
-      state.value.error = null
-
-      // Load products store if not loaded
-      if (productsStore.products.length === 0) {
-        DebugUtils.info(MODULE_NAME, 'Loading products store')
-        await productsStore.loadProducts(true) // mock mode
-      }
-
-      // Initialize storage service
-      await storageService.initialize()
-
-      // Load storage data
-      await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
-
-      DebugUtils.info(MODULE_NAME, 'Product storage store initialized successfully')
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to initialize product storage store'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.balances = false
-    }
-  }
-
-  // ===========================
   // UTILITIES
   // ===========================
 
@@ -593,6 +498,36 @@ export const useStorageStore = defineStore('storage', () => {
 
   function getInventory(inventoryId: string) {
     return state.value.inventories.find(inv => inv.id === inventoryId)
+  }
+
+  // ===========================
+  // INITIALIZATION
+  // ===========================
+
+  async function initialize() {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Initializing product storage store')
+
+      state.value.loading.balances = true
+      state.value.error = null
+
+      if (productsStore.products.length === 0) {
+        await productsStore.loadProducts(true)
+      }
+
+      await storageService.initialize()
+      await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
+
+      DebugUtils.info(MODULE_NAME, 'Product storage store initialized successfully')
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to initialize product storage store'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, { error })
+      throw error
+    } finally {
+      state.value.loading.balances = false
+    }
   }
 
   // ===========================
@@ -650,11 +585,11 @@ export const useStorageStore = defineStore('storage', () => {
     fetchOperations,
     fetchInventories,
 
-    // Operations (simplified - write-offs delegated to useWriteOff)
+    // Operations
     createCorrection,
     createReceipt,
 
-    // ✅ Write-off support (for useWriteOff composable)
+    // ✅ Write-off support (minimal - for useWriteOff integration)
     createWriteOff,
     getWriteOffStatistics,
 
@@ -666,10 +601,6 @@ export const useStorageStore = defineStore('storage', () => {
     // FIFO calculations
     calculateFifoAllocation,
     calculateCorrectionCost,
-
-    // Alerts
-    getExpiringItems,
-    getLowStockItems,
 
     // Data helpers
     getAvailableProducts,

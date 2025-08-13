@@ -1,4 +1,4 @@
-// src/stores/storage/composables/useWriteOff.ts - Specialized Write-off Composable
+// src/stores/storage/composables/useWriteOff.ts - COMPLETE WRITE-OFF COMPOSABLE
 import { ref, computed } from 'vue'
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useStorageStore } from '../storageStore'
@@ -9,8 +9,12 @@ import type {
   StorageOperation,
   WriteOffStatistics,
   QuickWriteOffItem,
-  doesWriteOffAffectKPI
+  CreateWriteOffData,
+  WriteOffItem,
+  StorageOperationItem,
+  BatchAllocation
 } from '../types'
+import { doesWriteOffAffectKPI, WRITE_OFF_REASON_OPTIONS, getWriteOffReasonInfo } from '../types'
 
 const MODULE_NAME = 'useWriteOff'
 
@@ -49,7 +53,17 @@ export function useWriteOff() {
         department
       })
 
-      const operation = await storageStore.createWriteOff({
+      // Pre-validate stock availability
+      const stockCheck = checkStockAvailability(itemId, quantity, department)
+      if (!stockCheck.available) {
+        const productName = storageStore.getItemName(itemId)
+        const unit = storageStore.getItemUnit(itemId)
+        throw new Error(
+          `Insufficient stock for ${productName}. Requested: ${quantity} ${unit}, Available: ${stockCheck.currentStock} ${unit}, Missing: ${stockCheck.shortage} ${unit}`
+        )
+      }
+
+      const writeOffData: CreateWriteOffData = {
         department,
         responsiblePerson,
         reason,
@@ -62,7 +76,9 @@ export function useWriteOff() {
           }
         ],
         notes
-      })
+      }
+
+      const operation = await createWriteOffOperation(writeOffData)
 
       DebugUtils.info(MODULE_NAME, 'Product write-off created successfully', {
         operationId: operation.id
@@ -99,7 +115,17 @@ export function useWriteOff() {
         department
       })
 
-      const operation = await storageStore.createWriteOff({
+      // Validate all items first
+      for (const item of items) {
+        const stockCheck = checkStockAvailability(item.itemId, item.writeOffQuantity, department)
+        if (!stockCheck.available) {
+          throw new Error(
+            `Insufficient stock for ${item.itemName}. Requested: ${item.writeOffQuantity} ${item.unit}, Available: ${stockCheck.currentStock} ${item.unit}, Missing: ${stockCheck.shortage} ${item.unit}`
+          )
+        }
+      }
+
+      const writeOffData: CreateWriteOffData = {
         department,
         responsiblePerson,
         reason,
@@ -110,7 +136,9 @@ export function useWriteOff() {
           notes: item.notes
         })),
         notes
-      })
+      }
+
+      const operation = await createWriteOffOperation(writeOffData)
 
       DebugUtils.info(MODULE_NAME, 'Bulk write-off created successfully', {
         operationId: operation.id,
@@ -153,24 +181,24 @@ export function useWriteOff() {
       }
 
       // Create write-off items for all expired stock
-      const items = expiredBalances.map(balance => ({
-        itemId: balance.itemId,
-        itemType: 'product' as const,
-        quantity: balance.totalQuantity, // Write off all expired stock
-        notes: `Auto write-off: expired on ${balance.batches.find(b => b.expiryDate)?.expiryDate || 'unknown date'}`
-      }))
-
-      const operation = await storageStore.createWriteOff({
+      const writeOffData: CreateWriteOffData = {
         department,
         responsiblePerson,
         reason: 'expired',
-        items,
+        items: expiredBalances.map(balance => ({
+          itemId: balance.itemId,
+          itemType: 'product' as const,
+          quantity: balance.totalQuantity, // Write off all expired stock
+          notes: `Auto write-off: expired on ${balance.batches.find(b => b.expiryDate)?.expiryDate || 'unknown date'}`
+        })),
         notes: notes || 'Automatic write-off of expired products'
-      })
+      }
+
+      const operation = await createWriteOffOperation(writeOffData)
 
       DebugUtils.info(MODULE_NAME, 'Expired products written off successfully', {
         operationId: operation.id,
-        itemCount: items.length
+        itemCount: writeOffData.items.length
       })
 
       return operation
@@ -181,6 +209,93 @@ export function useWriteOff() {
       throw err
     } finally {
       loading.value = false
+    }
+  }
+
+  // ===========================
+  // CORE WRITE-OFF OPERATION CREATION
+  // ===========================
+
+  /**
+   * Core function to create write-off operation (replaces storageService.createWriteOff)
+   */
+  async function createWriteOffOperation(data: CreateWriteOffData): Promise<StorageOperation> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating write-off operation', { data })
+
+      const operationItems: StorageOperationItem[] = []
+      let totalValue = 0
+
+      for (const item of data.items) {
+        const productInfo = getProductInfo(item.itemId)
+
+        // Calculate FIFO allocation
+        const { allocations, remainingQuantity } = storageStore.calculateFifoAllocation(
+          item.itemId,
+          data.department,
+          item.quantity
+        )
+
+        if (remainingQuantity > 0) {
+          throw new Error(
+            `Insufficient stock for ${productInfo.name}. Missing: ${remainingQuantity} ${productInfo.unit}`
+          )
+        }
+
+        const totalCost = allocations.reduce(
+          (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
+          0
+        )
+
+        operationItems.push({
+          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          itemId: item.itemId,
+          itemType: 'product',
+          itemName: productInfo.name,
+          quantity: item.quantity,
+          unit: productInfo.unit,
+          batchAllocations: allocations,
+          totalCost,
+          notes: item.notes
+        })
+
+        totalValue += totalCost
+      }
+
+      const operation: StorageOperation = {
+        id: `op-${Date.now()}`,
+        operationType: 'write_off',
+        documentNumber: `WR-${String(Date.now()).slice(-6)}`,
+        operationDate: TimeUtils.getCurrentLocalISO(),
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: operationItems,
+        totalValue,
+        writeOffDetails: {
+          reason: data.reason,
+          affectsKPI: doesWriteOffAffectKPI(data.reason),
+          notes: data.notes
+        },
+        status: 'confirmed',
+        notes: data.notes,
+        createdAt: TimeUtils.getCurrentLocalISO(),
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // Delegate to storage store for persistence and batch updates
+      const savedOperation = await storageStore.createWriteOff(data)
+
+      DebugUtils.info(MODULE_NAME, 'Write-off operation created', {
+        operationId: savedOperation.id,
+        reason: data.reason,
+        affectsKPI: doesWriteOffAffectKPI(data.reason),
+        totalValue
+      })
+
+      return savedOperation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create write-off operation', { error })
+      throw error
     }
   }
 
@@ -356,59 +471,15 @@ export function useWriteOff() {
   // ===========================
 
   /**
-   * Get write-off reason options for UI
+   * Get write-off reason options for UI (from types.ts)
    */
-  const writeOffReasonOptions = computed(() => [
-    {
-      value: 'expired' as WriteOffReason,
-      title: 'Expired',
-      description: 'Product has passed expiry date',
-      affectsKPI: true,
-      color: 'error'
-    },
-    {
-      value: 'spoiled' as WriteOffReason,
-      title: 'Spoiled',
-      description: 'Product is damaged or spoiled',
-      affectsKPI: true,
-      color: 'error'
-    },
-    {
-      value: 'other' as WriteOffReason,
-      title: 'Other Loss',
-      description: 'Other losses (spill, mistake, etc.)',
-      affectsKPI: true,
-      color: 'warning'
-    },
-    {
-      value: 'education' as WriteOffReason,
-      title: 'Education',
-      description: 'Staff training and education',
-      affectsKPI: false,
-      color: 'info'
-    },
-    {
-      value: 'test' as WriteOffReason,
-      title: 'Recipe Testing',
-      description: 'Recipe development and testing',
-      affectsKPI: false,
-      color: 'success'
-    }
-  ])
+  const writeOffReasonOptions = computed(() => WRITE_OFF_REASON_OPTIONS)
 
   /**
-   * Get display info for write-off reason
+   * Get display info for write-off reason (from types.ts)
    */
   function getReasonInfo(reason: WriteOffReason) {
-    return (
-      writeOffReasonOptions.value.find(option => option.value === reason) || {
-        value: reason,
-        title: reason,
-        description: '',
-        affectsKPI: doesWriteOffAffectKPI(reason),
-        color: 'default'
-      }
-    )
+    return getWriteOffReasonInfo(reason)
   }
 
   /**
@@ -416,6 +487,47 @@ export function useWriteOff() {
    */
   function clearError() {
     error.value = null
+  }
+
+  // ===========================
+  // HELPER FUNCTIONS
+  // ===========================
+
+  /**
+   * Get product information
+   */
+  function getProductInfo(productId: string) {
+    try {
+      const product = productsStore.products.find(p => p.id === productId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, 'Product not found', { productId })
+        return {
+          name: productId,
+          unit: 'kg',
+          costPerUnit: 0,
+          minStock: 0,
+          shelfLife: 7
+        }
+      }
+
+      return {
+        name: product.name,
+        unit: product.unit,
+        costPerUnit: product.costPerUnit,
+        minStock: product.minStock || 0,
+        shelfLife: product.shelfLife || 7
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting product info', { error, productId })
+      return {
+        name: productId,
+        unit: 'kg',
+        costPerUnit: 0,
+        minStock: 0,
+        shelfLife: 7
+      }
+    }
   }
 
   // ===========================

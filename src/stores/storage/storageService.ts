@@ -1,4 +1,4 @@
-// src/stores/storage/storageService.ts - SIMPLIFIED (core operations)
+// src/stores/storage/storageService.ts - COMPLETE IMPLEMENTATION
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useProductsStore } from '@/stores/productsStore'
 import {
@@ -8,6 +8,8 @@ import {
   generateBatchNumber,
   calculateFifoAllocation
 } from './storageMock'
+
+// ✅ FIXED: Separate type and function imports
 import type {
   StorageBatch,
   StorageOperation,
@@ -20,9 +22,11 @@ import type {
   InventoryDocument,
   InventoryItem,
   BatchAllocation,
-  WriteOffStatistics,
-  doesWriteOffAffectKPI
+  WriteOffStatistics
 } from './types'
+
+// ✅ FIXED: Import function separately (not as type)
+import { doesWriteOffAffectKPI } from './types'
 
 const MODULE_NAME = 'StorageService'
 
@@ -32,7 +36,10 @@ export class StorageService {
   private balances: StorageBalance[] = []
   private inventories: InventoryDocument[] = []
 
-  // ✅ Helper для получения данных продукта
+  // ===========================
+  // HELPER METHODS
+  // ===========================
+
   private getProductInfo(productId: string) {
     try {
       const productsStore = useProductsStore()
@@ -366,9 +373,7 @@ export class StorageService {
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
-        correctionDetails: {
-          notes: data.notes
-        },
+        correctionDetails: data.correctionDetails,
         status: 'confirmed',
         notes: data.notes,
         createdAt: TimeUtils.getCurrentLocalISO(),
@@ -463,7 +468,7 @@ export class StorageService {
         totalValue,
         writeOffDetails: {
           reason: data.reason,
-          affectsKPI: doesWriteOffAffectKPI(data.reason),
+          affectsKPI: doesWriteOffAffectKPI(data.reason), // ✅ FIXED: Now function is properly imported
           notes: data.notes
         },
         status: 'confirmed',
@@ -689,6 +694,11 @@ export class StorageService {
             quantity: item.difference,
             notes: `Inventory adjustment: ${item.notes || 'No specific reason'}`
           })),
+          correctionDetails: {
+            reason: 'other',
+            relatedId: inventory.id,
+            relatedName: `Inventory ${inventory.documentNumber}`
+          },
           notes: `Inventory corrections from ${inventory.documentNumber}`
         }
 

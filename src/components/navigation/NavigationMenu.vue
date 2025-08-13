@@ -1,10 +1,14 @@
-<!-- src/components/navigation/NavigationMenu.vue -->
+<!-- src/components/navigation/NavigationMenu.vue - UPDATED with Debug -->
 <template>
   <div class="d-flex flex-column fill-height">
     <!-- Header -->
     <v-toolbar flat density="compact" class="navigation-header px-4">
       <v-toolbar-title :class="{ 'text-center': rail }">
         {{ rail ? 'BO' : 'BackOffice' }}
+        <!-- ✅ НОВЫЙ: Dev indicator -->
+        <v-chip v-if="isDev && !rail" size="x-small" color="warning" variant="tonal" class="ms-2">
+          DEV
+        </v-chip>
       </v-toolbar-title>
     </v-toolbar>
 
@@ -141,6 +145,70 @@
           </template>
         </v-list-item>
       </v-list-group>
+
+      <!-- ✅ НОВЫЙ: Developer Tools Section (только в dev режиме) -->
+      <v-list-group v-if="isDev" value="developer" class="mb-2">
+        <template #activator="{ props }">
+          <v-list-item
+            v-bind="props"
+            prepend-icon="mdi-developer-board"
+            color="warning"
+            :active-color="variables.colorWarning"
+          >
+            <template #title>
+              <span>Developer</span>
+            </template>
+            <template #append>
+              <v-chip size="x-small" color="warning" variant="tonal">DEV</v-chip>
+            </template>
+          </v-list-item>
+        </template>
+
+        <!-- Debug Stores -->
+        <v-list-item
+          to="/debug/stores"
+          prepend-icon="mdi-bug"
+          color="warning"
+          class="ps-8"
+          :active-color="variables.colorWarning"
+        >
+          <template #title>
+            <span>Debug Stores</span>
+          </template>
+          <template #append>
+            <debug-stores-badge />
+          </template>
+        </v-list-item>
+
+        <!-- :TODO Future debug tools -->
+        <!--
+        <v-list-item
+          to="/debug/performance"
+          prepend-icon="mdi-speedometer"
+          color="warning"
+          class="ps-8"
+          :active-color="variables.colorWarning"
+          disabled
+        >
+          <template #title>
+            <span>Performance</span>
+          </template>
+        </v-list-item>
+
+        <v-list-item
+          to="/debug/network"
+          prepend-icon="mdi-lan"
+          color="warning"
+          class="ps-8"
+          :active-color="variables.colorWarning"
+          disabled
+        >
+          <template #title>
+            <span>Network</span>
+          </template>
+        </v-list-item>
+        -->
+      </v-list-group>
     </v-list>
 
     <!-- User Info & Actions -->
@@ -177,6 +245,8 @@ import { useAuthStore } from '@/stores/auth.store'
 import { DebugUtils } from '@/utils'
 import NavigationAccounts from './NavigationAccounts.vue'
 import AlertsBadge from './AlertsBadge.vue'
+// ✅ НОВЫЙ: Импорт Debug Stores Badge
+import DebugStoresBadge from './DebugStoresBadge.vue'
 import * as variables from '@/styles/variables.scss'
 
 const MODULE_NAME = 'NavigationMenu'
@@ -191,6 +261,9 @@ defineEmits<{
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+// ✅ НОВЫЙ: Dev mode detection
+const isDev = computed(() => import.meta.env.DEV)
 
 const getUserRole = computed(() => {
   const roles = authStore.state.currentUser?.roles || []
@@ -254,6 +327,17 @@ async function handleLogout() {
     border-left: 3px solid var(--v-theme-primary);
     margin-left: 8px;
     padding-left: calc(2rem - 3px) !important;
+  }
+}
+
+// ✅ НОВЫЙ: Developer section styling
+:deep(.v-list-group[value='developer']) {
+  .v-list-item--active {
+    background-color: rgba(255, 152, 0, 0.12);
+
+    &.ps-8 {
+      border-left: 3px solid var(--v-theme-warning);
+    }
   }
 }
 </style>

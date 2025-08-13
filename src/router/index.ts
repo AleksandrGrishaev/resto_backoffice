@@ -1,4 +1,4 @@
-// src/router/index.ts
+// src/router/index.ts - UPDATED with Debug Route
 import { createRouter, createWebHistory } from 'vue-router'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import MainLayout from '@/layouts/MainLayout.vue'
@@ -20,6 +20,9 @@ import PreparationView from '@/views/preparation/PreparationView.vue'
 import SupplierView from '@/views/supplier_2/SupplierView.vue'
 // Импорт компонентов контрагентов
 import CounteragentsView from '@/views/counteragents/CounteragentsView.vue'
+
+// ✅ НОВЫЙ: Импорт Debug компонента
+import DebugView from '@/views/debug/DebugView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -131,7 +134,26 @@ const router = createRouter({
               }
             }
           ]
-        }
+        },
+        // ✅ НОВЫЙ: Debug Routes (только в dev режиме)
+        ...(import.meta.env.DEV
+          ? [
+              {
+                path: 'debug',
+                children: [
+                  {
+                    path: 'stores',
+                    name: 'debug-stores',
+                    component: DebugView,
+                    meta: {
+                      title: 'Debug Stores',
+                      requiresDev: true // Кастомное мета поле
+                    }
+                  }
+                ]
+              }
+            ]
+          : [])
       ]
     },
     {
@@ -142,11 +164,20 @@ const router = createRouter({
   ]
 })
 
-// Navigation guard
+// ✅ ОБНОВЛЕННЫЙ: Navigation guard с проверкой dev режима
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const requiresDev = to.matched.some(record => record.meta.requiresDev)
 
+  // Проверка dev режима для debug роутов
+  if (requiresDev && !import.meta.env.DEV) {
+    console.warn('Debug routes are only available in development mode')
+    next({ name: 'menu' })
+    return
+  }
+
+  // Обычная проверка авторизации
   if (requiresAuth && !authStore.state.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (to.name === 'login' && authStore.state.isAuthenticated) {

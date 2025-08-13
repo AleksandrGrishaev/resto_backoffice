@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/writeoff/ProductSelectorWidget.vue - MAIN COMPONENT -->
+<!-- src/views/storage/components/writeoff/ProductSelectorWidget.vue - FIXED DIALOG CLOSING -->
 <template>
   <div class="product-selector-widget">
     <!-- Search and Filters Bar -->
@@ -191,7 +191,6 @@
         </v-card-title>
 
         <v-card-text class="pa-3 pt-0">
-          <!-- ✅ IMPROVED: Compact read-only list -->
           <div class="selected-products-compact">
             <v-list class="pa-0" density="compact">
               <v-list-item
@@ -200,7 +199,6 @@
                 class="selected-item px-0 py-1"
                 :class="{ 'mb-1': index < selectedProducts.length - 1 }"
               >
-                <!-- Product status icon -->
                 <template #prepend>
                   <v-icon
                     :icon="getProductStatusIcon(product.id)"
@@ -210,7 +208,6 @@
                   />
                 </template>
 
-                <!-- Product info (compact, read-only) -->
                 <v-list-item-title class="text-body-1 font-weight-medium">
                   {{ product.name }}
                 </v-list-item-title>
@@ -229,7 +226,6 @@
                   </v-chip>
                 </v-list-item-subtitle>
 
-                <!-- Only remove action -->
                 <template #append>
                   <v-btn
                     icon="mdi-close"
@@ -243,7 +239,6 @@
             </v-list>
           </div>
 
-          <!-- Total summary -->
           <v-divider class="my-2" />
           <div class="d-flex align-center justify-space-between">
             <span class="text-body-1 font-weight-medium">Total Value:</span>
@@ -265,7 +260,7 @@
       </v-card>
     </div>
 
-    <!-- Quantity Input Dialog -->
+    <!-- ✅ FIXED: Quantity Input Dialog with proper closing -->
     <write-off-quantity-dialog
       v-model="showQuantityDialog"
       :product="selectedProduct"
@@ -355,7 +350,6 @@ const availableProducts = computed(() => {
     let departmentProducts: any[] = []
 
     if (props.department === 'kitchen') {
-      // Kitchen: сырье для готовки (НЕ продаваемые напрямую)
       departmentProducts = productsStore.products.filter(
         product =>
           product.isActive &&
@@ -372,7 +366,6 @@ const availableProducts = computed(() => {
           ].includes(product.category)
       )
     } else if (props.department === 'bar') {
-      // Bar: напитки для продажи
       departmentProducts = productsStore.products.filter(
         product => product.isActive && product.canBeSold && ['beverages'].includes(product.category)
       )
@@ -409,18 +402,15 @@ const productBalances = computed(() => {
 const filteredProducts = computed(() => {
   let products = [...availableProducts.value]
 
-  // Search filter
   if (searchTerm.value) {
     const searchLower = searchTerm.value.toLowerCase()
     products = products.filter(product => product.name.toLowerCase().includes(searchLower))
   }
 
-  // Category filter
   if (categoryFilter.value) {
     products = products.filter(product => product.category === categoryFilter.value)
   }
 
-  // Status filter
   if (statusFilter.value) {
     products = products.filter(product => {
       const balance = productBalances.value.find(b => b.itemId === product.id)
@@ -447,7 +437,6 @@ const filteredProducts = computed(() => {
 const displayedProducts = computed(() => {
   let products = [...filteredProducts.value]
 
-  // Quick filter
   switch (quickFilter.value) {
     case 'expired':
       products = products.filter(product => {
@@ -474,17 +463,16 @@ const displayedProducts = computed(() => {
   return products
 })
 
-// Smart sorting: expired first, out of stock last
 const sortedDisplayedProducts = computed(() => {
   return [...displayedProducts.value].sort((a, b) => {
     const balanceA = productBalances.value.find(bal => bal.itemId === a.id)
     const balanceB = productBalances.value.find(bal => bal.itemId === b.id)
 
     const getPriority = (product: Product, balance: any) => {
-      if (!balance || balance.totalQuantity === 0) return 4 // out of stock last
-      if (balance.hasExpired) return 1 // expired first
-      if (balance.hasNearExpiry) return 2 // expiring second
-      return 3 // normal stock third
+      if (!balance || balance.totalQuantity === 0) return 4
+      if (balance.hasExpired) return 1
+      if (balance.hasNearExpiry) return 2
+      return 3
     }
 
     const priorityA = getPriority(a, balanceA)
@@ -549,6 +537,7 @@ function handleProductClick(product: Product) {
   showQuantityDialog.value = true
 }
 
+// ✅ FIXED: Properly close quantity dialog after confirm
 function handleQuantityConfirm(product: Product, quantity: number, notes: string) {
   DebugUtils.info(MODULE_NAME, 'Quantity confirmed', {
     productId: product.id,
@@ -563,9 +552,16 @@ function handleQuantityConfirm(product: Product, quantity: number, notes: string
     selectedProducts.value.push(product)
     emit('selection-changed', [...selectedProducts.value])
   }
+
+  // ✅ FIXED: Close the quantity dialog
+  showQuantityDialog.value = false
+  selectedProduct.value = null
 }
 
+// ✅ FIXED: Properly close quantity dialog after cancel
 function handleQuantityCancel() {
+  // ✅ FIXED: Close the quantity dialog
+  showQuantityDialog.value = false
   selectedProduct.value = null
 }
 
@@ -590,7 +586,7 @@ function writeOffAllExpired() {
   emit('selection-changed', [...selectedProducts.value])
 }
 
-// ✅ NEW: Helper methods for selection summary
+// Helper methods for selection summary
 function getProductStock(productId: string): number {
   const balance = productBalances.value.find(b => b.itemId === productId)
   return balance?.totalQuantity || 0
@@ -617,7 +613,6 @@ function removeFromSelection(index: number) {
   })
 }
 
-// ✅ NEW: Helper methods for selection summary display
 function getProductStatusIcon(productId: string): string {
   const balance = productBalances.value.find(b => b.itemId === productId)
 
@@ -773,7 +768,6 @@ onMounted(async () => {
     }
   }
 
-  // ✅ IMPROVED: Selected products compact styling
   .selected-products-compact {
     max-height: 180px;
     overflow-y: auto;
@@ -802,7 +796,6 @@ onMounted(async () => {
       }
     }
 
-    // Custom scrollbar
     &::-webkit-scrollbar {
       width: 4px;
     }
@@ -818,7 +811,6 @@ onMounted(async () => {
   }
 }
 
-// Responsive improvements
 @media (max-width: 960px) {
   .product-selector-widget {
     .selector-header .v-row {

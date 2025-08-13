@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/writeoff/WriteOffQuantityDialog.vue -->
+<!-- src/views/storage/components/writeoff/WriteOffQuantityDialog.vue - FIXED -->
 <template>
   <v-dialog
     :model-value="modelValue"
@@ -20,7 +20,7 @@
             <span class="text-h6 font-weight-bold">{{ productStock }} {{ productUnit }}</span>
           </div>
 
-          <!-- ✅ NEW: Detailed stock breakdown -->
+          <!-- ✅ FIXED: Detailed stock breakdown with better validation -->
           <div v-if="stockBreakdown" class="stock-breakdown mb-3">
             <v-card variant="outlined" class="pa-3">
               <div class="text-subtitle-2 font-weight-bold mb-2">Stock Breakdown:</div>
@@ -34,7 +34,7 @@
                   Expired:
                 </span>
                 <span class="text-body-2 font-weight-bold text-error">
-                  {{ stockBreakdown.expired }} {{ productUnit }}
+                  {{ formatQuantity(stockBreakdown.expired) }} {{ productUnit }}
                 </span>
               </div>
 
@@ -47,7 +47,7 @@
                   Expiring Soon:
                 </span>
                 <span class="text-body-2 font-weight-bold text-warning">
-                  {{ stockBreakdown.expiring }} {{ productUnit }}
+                  {{ formatQuantity(stockBreakdown.expiring) }} {{ productUnit }}
                 </span>
               </div>
 
@@ -60,7 +60,7 @@
                   Fresh:
                 </span>
                 <span class="text-body-2 font-weight-bold text-success">
-                  {{ stockBreakdown.fresh }} {{ productUnit }}
+                  {{ formatQuantity(stockBreakdown.fresh) }} {{ productUnit }}
                 </span>
               </div>
             </v-card>
@@ -73,7 +73,7 @@
           </div>
         </div>
 
-        <!-- Quantity input -->
+        <!-- ✅ FIXED: Quantity input with better validation -->
         <v-text-field
           v-model.number="quantityToWriteOff"
           type="number"
@@ -83,10 +83,13 @@
           :max="productStock"
           step="0.1"
           :rules="quantityRules"
+          :error-messages="quantityErrorMessages"
           class="mb-4"
+          @blur="validateQuantity"
+          @input="clearQuantityError"
         />
 
-        <!-- ✅ NEW: Notes input -->
+        <!-- Notes input -->
         <v-textarea
           v-model="notes"
           label="Notes (optional)"
@@ -97,16 +100,40 @@
           hide-details
         />
 
-        <!-- Quick buttons -->
+        <!-- ✅ FIXED: Quick buttons with proper stock validation -->
         <div class="quick-buttons">
           <v-btn-group variant="outlined" divided class="w-100 mb-2">
-            <v-btn :disabled="!hasExpiredStock" class="flex-1" @click="setQuantity('expired')">
+            <v-btn
+              :disabled="!hasExpiredStock"
+              class="flex-1"
+              :title="
+                hasExpiredStock
+                  ? `Write off ${formatQuantity(stockBreakdown?.expired || 0)} ${productUnit} expired stock`
+                  : 'No expired stock available'
+              "
+              @click="setQuantity('expired')"
+            >
               <v-icon icon="mdi-clock-alert" class="mr-1" />
               Expired Only
+              <v-chip v-if="hasExpiredStock" size="x-small" class="ml-1">
+                {{ formatQuantity(stockBreakdown?.expired || 0) }}
+              </v-chip>
             </v-btn>
-            <v-btn :disabled="!hasExpiringStock" class="flex-1" @click="setQuantity('expiring')">
+            <v-btn
+              :disabled="!hasExpiringStock"
+              class="flex-1"
+              :title="
+                hasExpiringStock
+                  ? `Write off ${formatQuantity(stockBreakdown?.expiring || 0)} ${productUnit} expiring stock`
+                  : 'No expiring stock available'
+              "
+              @click="setQuantity('expiring')"
+            >
               <v-icon icon="mdi-clock-outline" class="mr-1" />
               Expiring Soon
+              <v-chip v-if="hasExpiringStock" size="x-small" class="ml-1">
+                {{ formatQuantity(stockBreakdown?.expiring || 0) }}
+              </v-chip>
             </v-btn>
           </v-btn-group>
 
@@ -114,10 +141,16 @@
             <v-btn class="flex-1" @click="setQuantity('half')">
               <v-icon icon="mdi-circle-half-full" class="mr-1" />
               Half Stock
+              <v-chip size="x-small" class="ml-1">
+                {{ formatQuantity(productStock * 0.5) }}
+              </v-chip>
             </v-btn>
             <v-btn class="flex-1" @click="setQuantity('all')">
               <v-icon icon="mdi-select-all" class="mr-1" />
               All Stock
+              <v-chip size="x-small" class="ml-1">
+                {{ formatQuantity(productStock) }}
+              </v-chip>
             </v-btn>
           </v-btn-group>
         </div>
@@ -127,8 +160,27 @@
           <v-card variant="tonal" color="error" class="pa-3">
             <div class="text-subtitle-2 font-weight-bold">Write-off Cost Preview</div>
             <div class="text-h6">{{ formatIDR(writeOffCost) }}</div>
+            <div class="text-body-2 text-medium-emphasis mt-1">
+              Unit cost: {{ formatIDR(averageUnitCost) }}/{{ productUnit }}
+            </div>
           </v-card>
         </div>
+
+        <!-- ✅ NEW: Stock validation warning -->
+        <v-alert
+          v-if="quantityToWriteOff > productStock"
+          type="error"
+          variant="tonal"
+          class="mt-3"
+          density="compact"
+        >
+          <template #prepend>
+            <v-icon icon="mdi-alert-triangle" />
+          </template>
+          <strong>Insufficient Stock!</strong>
+          You're trying to write off {{ formatQuantity(quantityToWriteOff) }} {{ productUnit }}, but
+          only {{ formatQuantity(productStock) }} {{ productUnit }} is available.
+        </v-alert>
       </v-card-text>
 
       <v-card-actions class="pa-6 pt-0">
@@ -168,7 +220,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  'update:modelValue': [boolean]
+  'update:model-value': [boolean]
   confirm: [product: Product, quantity: number, notes: string]
   cancel: []
 }>()
@@ -179,8 +231,9 @@ const storageStore = useStorageStore()
 // State
 const quantityToWriteOff = ref(0)
 const notes = ref('')
+const quantityError = ref('')
 
-// Computed
+// ✅ FIXED: Better computed properties with null safety
 const productBalance = computed(() => {
   if (!props.product) return null
   return storageStore.getBalance(props.product.id, props.department)
@@ -194,7 +247,11 @@ const productUnit = computed(() => {
   return productBalance.value?.unit || props.product?.unit || 'kg'
 })
 
-// ✅ NEW: Stock breakdown by expiry status
+const averageUnitCost = computed(() => {
+  return productBalance.value?.averageCost || 0
+})
+
+// ✅ FIXED: More accurate stock breakdown calculation
 const stockBreakdown = computed(() => {
   const balance = productBalance.value
   if (!balance || !balance.batches || balance.batches.length === 0) {
@@ -259,13 +316,25 @@ const expiryDescription = computed(() => {
   return 'Product is fresh'
 })
 
+// ✅ FIXED: Better validation rules
 const quantityRules = computed(() => [
   (v: number) => v >= 0 || 'Quantity must be positive',
-  (v: number) => v <= productStock.value || 'Cannot exceed available stock'
+  (v: number) =>
+    v <= productStock.value ||
+    `Cannot exceed available stock (${formatQuantity(productStock.value)} ${productUnit.value})`
 ])
 
+const quantityErrorMessages = computed(() => {
+  if (quantityError.value) return [quantityError.value]
+  return []
+})
+
 const isQuantityValid = computed(() => {
-  return quantityToWriteOff.value > 0 && quantityToWriteOff.value <= productStock.value
+  return (
+    quantityToWriteOff.value > 0 &&
+    quantityToWriteOff.value <= productStock.value &&
+    !quantityError.value
+  )
 })
 
 const writeOffCost = computed(() => {
@@ -279,37 +348,59 @@ const writeOffCost = computed(() => {
     )
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off cost', { error })
-    return 0
+    return quantityToWriteOff.value * averageUnitCost.value
   }
 })
 
-// Methods
+// ✅ FIXED: Helper functions
+function formatQuantity(value: number): string {
+  return Number(value.toFixed(2)).toString()
+}
+
+function validateQuantity() {
+  if (quantityToWriteOff.value > productStock.value) {
+    quantityError.value = `Exceeds available stock by ${formatQuantity(quantityToWriteOff.value - productStock.value)} ${productUnit.value}`
+  } else {
+    quantityError.value = ''
+  }
+}
+
+function clearQuantityError() {
+  quantityError.value = ''
+}
+
+// ✅ FIXED: Better quantity setting with validation
 function setQuantity(type: 'expired' | 'expiring' | 'half' | 'all') {
   if (!props.product) return
 
   const stock = productStock.value
   const breakdown = stockBreakdown.value
 
+  let newQuantity = 0
+
   switch (type) {
     case 'expired':
-      // ✅ FIXED: Use actual expired quantity from breakdown
-      quantityToWriteOff.value = breakdown?.expired || 0
+      newQuantity = breakdown?.expired || 0
       break
     case 'expiring':
-      // ✅ FIXED: Use actual expiring quantity from breakdown
-      quantityToWriteOff.value = breakdown?.expiring || 0
+      newQuantity = breakdown?.expiring || 0
       break
     case 'half':
-      quantityToWriteOff.value = Math.round(stock * 0.5 * 100) / 100
+      newQuantity = Math.round(stock * 0.5 * 100) / 100
       break
     case 'all':
-      quantityToWriteOff.value = stock
+      newQuantity = stock
       break
   }
 
+  // Ensure we don't exceed available stock
+  quantityToWriteOff.value = Math.min(newQuantity, stock)
+  clearQuantityError()
+
   DebugUtils.debug(MODULE_NAME, 'Quantity set', {
     type,
-    quantity: quantityToWriteOff.value,
+    requestedQuantity: newQuantity,
+    actualQuantity: quantityToWriteOff.value,
     stock,
     breakdown
   })
@@ -318,16 +409,21 @@ function setQuantity(type: 'expired' | 'expiring' | 'half' | 'all') {
 function handleConfirm() {
   if (!props.product || !isQuantityValid.value) return
 
+  // Final validation before confirm
+  if (quantityToWriteOff.value > productStock.value) {
+    quantityError.value = 'Cannot write off more than available stock'
+    return
+  }
+
   DebugUtils.info(MODULE_NAME, 'Confirming write-off', {
     productId: props.product.id,
     quantity: quantityToWriteOff.value,
-    cost: writeOffCost.value
+    availableStock: productStock.value,
+    cost: writeOffCost.value,
+    notes: notes.value
   })
 
-  emit('confirm', props.product, quantityToWriteOff.value)
-
-  // ✅ FIXED: Close dialog after confirm
-  emit('update:modelValue', false)
+  emit('confirm', props.product, quantityToWriteOff.value, notes.value)
   resetDialog()
 }
 
@@ -338,18 +434,16 @@ function handleCancel() {
   })
 
   emit('cancel')
-
-  // ✅ FIXED: Close dialog after cancel
-  emit('update:modelValue', false)
   resetDialog()
 }
 
 function resetDialog() {
   quantityToWriteOff.value = 0
   notes.value = ''
+  quantityError.value = ''
 }
 
-// Watch for product changes
+// ✅ FIXED: Better watchers
 watch(
   () => props.product,
   newProduct => {
@@ -364,19 +458,20 @@ watch(
   }
 )
 
-// Watch for dialog opening
 watch(
   () => props.modelValue,
   isOpen => {
     if (isOpen && props.product) {
       resetDialog()
 
-      // ✅ IMPROVED: Auto-suggest quantity based on actual breakdown
+      // Auto-suggest quantity based on stock breakdown
       const breakdown = stockBreakdown.value
       if (breakdown?.expired > 0) {
         setQuantity('expired')
+        notes.value = 'Automatic write-off: expired product'
       } else if (breakdown?.expiring > 0) {
         setQuantity('expiring')
+        notes.value = 'Write-off: product expiring soon'
       }
 
       DebugUtils.debug(MODULE_NAME, 'Dialog opened', {
@@ -387,6 +482,11 @@ watch(
     }
   }
 )
+
+// Watch for quantity changes to clear errors
+watch(quantityToWriteOff, () => {
+  clearQuantityError()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -398,6 +498,15 @@ watch(
 
       &.flex-1 {
         flex: 1;
+      }
+
+      &:disabled {
+        opacity: 0.5;
+      }
+
+      .v-chip {
+        font-size: 0.7rem;
+        height: 18px;
       }
     }
   }
@@ -411,7 +520,6 @@ watch(
   }
 }
 
-// ✅ NEW: Stock breakdown styling
 .stock-breakdown {
   .v-card {
     border: 1px solid rgba(var(--v-theme-outline), 0.2);
@@ -422,7 +530,7 @@ watch(
   }
 }
 
-// Responsive improvements
+/* Responsive improvements */
 @media (max-width: 600px) {
   .quick-buttons {
     .v-btn-group {
@@ -432,6 +540,11 @@ watch(
 
         .v-icon {
           margin-right: 4px !important;
+        }
+
+        .v-chip {
+          font-size: 0.65rem;
+          height: 16px;
         }
       }
     }
