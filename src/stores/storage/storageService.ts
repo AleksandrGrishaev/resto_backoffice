@@ -1,10 +1,9 @@
-// src/stores/storage/storageService.ts - COMPLETE IMPLEMENTATION
+// src/stores/storage/storageService.ts - FIXED: Proper balance calculation and mock data loading
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useProductsStore } from '@/stores/productsStore'
 import {
   mockStorageBatches,
   mockStorageOperations,
-  mockStorageBalances,
   generateBatchNumber,
   calculateFifoAllocation
 } from './storageMock'
@@ -31,10 +30,11 @@ import { doesWriteOffAffectKPI } from './types'
 const MODULE_NAME = 'StorageService'
 
 export class StorageService {
-  private batches: StorageBatch[] = [...mockStorageBatches]
-  private operations: StorageOperation[] = [...mockStorageOperations]
+  private batches: StorageBatch[] = []
+  private operations: StorageOperation[] = []
   private balances: StorageBalance[] = []
   private inventories: InventoryDocument[] = []
+  private initialized: boolean = false
 
   // ===========================
   // HELPER METHODS
@@ -76,11 +76,16 @@ export class StorageService {
   }
 
   // ===========================
-  // INITIALIZATION
+  // ✅ FIXED: INITIALIZATION WITH MOCK DATA LOADING
   // ===========================
 
   async initialize(): Promise<void> {
     try {
+      if (this.initialized) {
+        DebugUtils.info(MODULE_NAME, 'Service already initialized')
+        return
+      }
+
       DebugUtils.info(MODULE_NAME, 'Initializing storage service for products')
 
       const productsStore = useProductsStore()
@@ -89,12 +94,40 @@ export class StorageService {
         await productsStore.loadProducts(true)
       }
 
+      // ✅ CRITICAL FIX: Load mock data during initialization
+      this.loadMockData()
       await this.recalculateAllBalances()
 
-      DebugUtils.info(MODULE_NAME, 'Storage service initialized for products')
+      this.initialized = true
+      DebugUtils.info(MODULE_NAME, 'Storage service initialized with mock data', {
+        batches: this.batches.length,
+        operations: this.operations.length,
+        balances: this.balances.length
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to initialize storage service', { error })
       throw error
+    }
+  }
+
+  // ✅ NEW: Load mock data method
+  private loadMockData(): void {
+    try {
+      // Deep clone to avoid reference issues
+      this.batches = JSON.parse(JSON.stringify(mockStorageBatches))
+      this.operations = JSON.parse(JSON.stringify(mockStorageOperations))
+      this.inventories = []
+
+      DebugUtils.info(MODULE_NAME, 'Mock data loaded successfully', {
+        batches: this.batches.length,
+        operations: this.operations.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load mock data', { error })
+      // Initialize with empty arrays as fallback
+      this.batches = []
+      this.operations = []
+      this.inventories = []
     }
   }
 
@@ -104,6 +137,10 @@ export class StorageService {
 
   async getBalances(department?: StorageDepartment): Promise<StorageBalance[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
       if (this.balances.length === 0) {
         await this.recalculateAllBalances()
       }
@@ -132,8 +169,13 @@ export class StorageService {
       throw error
     }
   }
+
   async getBatches(department?: StorageDepartment): Promise<StorageBatch[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
       let batches = [...this.batches]
 
       if (department && department !== 'all') {
@@ -152,6 +194,10 @@ export class StorageService {
 
   async getAllBatches(department?: StorageDepartment): Promise<StorageBatch[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
       let batches = [...this.batches]
 
       if (department && department !== 'all') {
@@ -167,6 +213,7 @@ export class StorageService {
       throw error
     }
   }
+
   async getItemBatches(itemId: string, department: StorageDepartment): Promise<StorageBatch[]> {
     try {
       const batches = this.batches.filter(
@@ -227,7 +274,130 @@ export class StorageService {
   }
 
   // ===========================
-  // RECEIPT OPERATIONS
+  // ✅ FIXED: WRITE-OFF OPERATIONS WITH PROPER BATCH UPDATES
+  // ===========================
+
+  async createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating product write-off operation', { data })
+
+      const operationItems = []
+      let totalValue = 0
+      let totalBatchesUpdated = 0 // ✅ FIXED: Track batches outside loop
+
+      for (const item of data.items) {
+        const productInfo = this.getProductInfo(item.itemId)
+
+        const { allocations, remainingQuantity } = this.calculateFifoAllocation(
+          item.itemId,
+          data.department,
+          item.quantity
+        )
+
+        if (remainingQuantity > 0) {
+          throw new Error(
+            `Insufficient stock for ${productInfo.name}. Missing: ${remainingQuantity} ${productInfo.unit}`
+          )
+        }
+
+        const totalCost = allocations.reduce(
+          (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
+          0
+        )
+
+        operationItems.push({
+          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          itemId: item.itemId,
+          itemType: 'product',
+          itemName: productInfo.name,
+          quantity: item.quantity,
+          unit: productInfo.unit,
+          batchAllocations: allocations,
+          totalCost,
+          notes: item.notes
+        })
+
+        totalValue += totalCost
+        totalBatchesUpdated += allocations.length // ✅ FIXED: Count batches
+
+        // ✅ CRITICAL FIX: Update batches with precision rounding
+        for (const allocation of allocations) {
+          const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
+          if (batchIndex !== -1) {
+            const batch = this.batches[batchIndex]
+
+            // ✅ FIXED: Use proper precision handling
+            const newQuantity = batch.currentQuantity - allocation.quantity
+
+            // Round to avoid floating point precision issues
+            batch.currentQuantity = Math.round(newQuantity * 10000) / 10000
+
+            // Recalculate total value based on new quantity
+            batch.totalValue = Math.round(batch.currentQuantity * batch.costPerUnit * 100) / 100
+
+            batch.updatedAt = TimeUtils.getCurrentLocalISO()
+
+            // ✅ CRITICAL: Mark batch as consumed only when quantity is truly zero or negative
+            if (batch.currentQuantity <= 0.0001) {
+              // Use small epsilon for floating point comparison
+              batch.currentQuantity = 0 // Set to exact zero
+              batch.totalValue = 0
+              batch.status = 'consumed'
+              batch.isActive = false
+
+              DebugUtils.info(MODULE_NAME, 'Batch marked as consumed', {
+                batchId: batch.id,
+                batchNumber: batch.batchNumber,
+                originalQuantity: batch.initialQuantity,
+                finalQuantity: batch.currentQuantity
+              })
+            }
+
+            this.batches[batchIndex] = batch
+          }
+        }
+      }
+
+      const operation: StorageOperation = {
+        id: `op-${Date.now()}`,
+        operationType: 'write_off',
+        documentNumber: `WR-${String(this.operations.length + 1).padStart(3, '0')}`,
+        operationDate: TimeUtils.getCurrentLocalISO(),
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: operationItems,
+        totalValue,
+        writeOffDetails: {
+          reason: data.reason,
+          affectsKPI: doesWriteOffAffectKPI(data.reason),
+          notes: data.notes
+        },
+        status: 'confirmed',
+        notes: data.notes,
+        createdAt: TimeUtils.getCurrentLocalISO(),
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      this.operations.push(operation)
+      await this.recalculateBalances(data.department)
+
+      DebugUtils.info(MODULE_NAME, 'Product write-off operation created', {
+        operationId: operation.id,
+        reason: data.reason,
+        affectsKPI: doesWriteOffAffectKPI(data.reason),
+        totalValue,
+        batchesUpdated: totalBatchesUpdated // ✅ FIXED: Use correct variable
+      })
+
+      return operation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create product write-off', { error })
+      throw error
+    }
+  }
+
+  // ===========================
+  // ✅ FIXED: RECEIPT OPERATIONS
   // ===========================
 
   async createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
@@ -250,7 +420,7 @@ export class StorageService {
           currentQuantity: item.quantity,
           unit: productInfo.unit,
           costPerUnit: item.costPerUnit,
-          totalValue: item.quantity * item.costPerUnit,
+          totalValue: Math.round(item.quantity * item.costPerUnit * 100) / 100, // ✅ FIXED: Proper rounding
           receiptDate: TimeUtils.getCurrentLocalISO(),
           expiryDate: item.expiryDate,
           sourceType: data.sourceType,
@@ -310,7 +480,7 @@ export class StorageService {
   }
 
   // ===========================
-  // CORRECTION OPERATIONS
+  // ✅ FIXED: CORRECTION OPERATIONS WITH PROPER ROUNDING
   // ===========================
 
   async createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
@@ -335,7 +505,7 @@ export class StorageService {
             currentQuantity: item.quantity,
             unit: productInfo.unit,
             costPerUnit: productInfo.costPerUnit,
-            totalValue: item.quantity * productInfo.costPerUnit,
+            totalValue: Math.round(item.quantity * productInfo.costPerUnit * 100) / 100,
             receiptDate: TimeUtils.getCurrentLocalISO(),
             sourceType: 'correction',
             notes: `Correction surplus: ${item.notes || ''}`,
@@ -367,19 +537,27 @@ export class StorageService {
             0
           )
 
-          // Update batches
+          // ✅ FIXED: Update batches with proper precision
           for (const allocation of allocations) {
             const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
             if (batchIndex !== -1) {
-              this.batches[batchIndex].currentQuantity -= allocation.quantity
-              this.batches[batchIndex].totalValue =
-                this.batches[batchIndex].currentQuantity * this.batches[batchIndex].costPerUnit
-              this.batches[batchIndex].updatedAt = TimeUtils.getCurrentLocalISO()
+              const batch = this.batches[batchIndex]
 
-              if (this.batches[batchIndex].currentQuantity <= 0) {
-                this.batches[batchIndex].status = 'consumed'
-                this.batches[batchIndex].isActive = false
+              // Use proper precision handling
+              const newQuantity = batch.currentQuantity - allocation.quantity
+              batch.currentQuantity = Math.round(newQuantity * 10000) / 10000
+              batch.totalValue = Math.round(batch.currentQuantity * batch.costPerUnit * 100) / 100
+              batch.updatedAt = TimeUtils.getCurrentLocalISO()
+
+              // Mark as consumed if quantity is zero or negative
+              if (batch.currentQuantity <= 0.0001) {
+                batch.currentQuantity = 0
+                batch.totalValue = 0
+                batch.status = 'consumed'
+                batch.isActive = false
               }
+
+              this.batches[batchIndex] = batch
             }
           }
 
@@ -430,103 +608,8 @@ export class StorageService {
   }
 
   // ===========================
-  // ✅ WRITE-OFF OPERATIONS (for useWriteOff composable)
+  // WRITE-OFF STATISTICS
   // ===========================
-
-  async createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Creating product write-off operation', { data })
-
-      const operationItems = []
-      let totalValue = 0
-
-      for (const item of data.items) {
-        const productInfo = this.getProductInfo(item.itemId)
-
-        const { allocations, remainingQuantity } = this.calculateFifoAllocation(
-          item.itemId,
-          data.department,
-          item.quantity
-        )
-
-        if (remainingQuantity > 0) {
-          throw new Error(
-            `Insufficient stock for ${productInfo.name}. Missing: ${remainingQuantity} ${productInfo.unit}`
-          )
-        }
-
-        const totalCost = allocations.reduce(
-          (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
-          0
-        )
-
-        operationItems.push({
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          itemId: item.itemId,
-          itemType: 'product',
-          itemName: productInfo.name,
-          quantity: item.quantity,
-          unit: productInfo.unit,
-          batchAllocations: allocations,
-          totalCost,
-          notes: item.notes
-        })
-
-        totalValue += totalCost
-
-        // Update batches (reduce stock)
-        for (const allocation of allocations) {
-          const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
-          if (batchIndex !== -1) {
-            this.batches[batchIndex].currentQuantity -= allocation.quantity
-            this.batches[batchIndex].totalValue =
-              this.batches[batchIndex].currentQuantity * this.batches[batchIndex].costPerUnit
-            this.batches[batchIndex].updatedAt = TimeUtils.getCurrentLocalISO()
-
-            if (this.batches[batchIndex].currentQuantity <= 0) {
-              this.batches[batchIndex].status = 'consumed'
-              this.batches[batchIndex].isActive = false
-            }
-          }
-        }
-      }
-
-      const operation: StorageOperation = {
-        id: `op-${Date.now()}`,
-        operationType: 'write_off',
-        documentNumber: `WR-${String(this.operations.length + 1).padStart(3, '0')}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department,
-        responsiblePerson: data.responsiblePerson,
-        items: operationItems,
-        totalValue,
-        writeOffDetails: {
-          reason: data.reason,
-          affectsKPI: doesWriteOffAffectKPI(data.reason), // ✅ FIXED: Now function is properly imported
-          notes: data.notes
-        },
-        status: 'confirmed',
-        notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-
-      this.operations.push(operation)
-      await this.recalculateBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Product write-off operation created', {
-        operationId: operation.id,
-        reason: data.reason,
-        affectsKPI: doesWriteOffAffectKPI(data.reason),
-        totalValue
-      })
-
-      return operation
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create product write-off', { error })
-      throw error
-    }
-  }
 
   getWriteOffStatistics(
     department?: StorageDepartment,
@@ -754,6 +837,10 @@ export class StorageService {
 
   async getOperations(department?: StorageDepartment): Promise<StorageOperation[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
       let operations = [...this.operations]
 
       if (department && department !== 'all') {
@@ -771,6 +858,10 @@ export class StorageService {
 
   async getInventories(department?: StorageDepartment): Promise<InventoryDocument[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
       let inventories = [...this.inventories]
 
       if (department && department !== 'all') {
@@ -809,7 +900,7 @@ export class StorageService {
   }
 
   // ===========================
-  // PRIVATE BALANCE CALCULATION
+  // ✅ FIXED: BALANCE CALCULATION WITH PROPER PRECISION
   // ===========================
 
   private async recalculateAllBalances(): Promise<void> {
@@ -823,9 +914,6 @@ export class StorageService {
     }
   }
 
-  // Updated recalculateBalances method for storageService.ts
-  // This method now properly includes zero and negative stock products
-
   private async recalculateBalances(department: StorageDepartment): Promise<void> {
     try {
       // Remove old balances for this department
@@ -833,14 +921,13 @@ export class StorageService {
         b => !(b.itemType === 'product' && b.department === department)
       )
 
-      // ✅ FIXED: Get ALL products that should be tracked in this department
+      // ✅ Get ALL products that should be tracked in this department
       let departmentProducts: any[] = []
 
       try {
         const productsStore = useProductsStore()
 
         if (department === 'kitchen') {
-          // Get raw materials and kitchen products
           departmentProducts = productsStore.products.filter(
             p =>
               p.isActive &&
@@ -852,7 +939,6 @@ export class StorageService {
                 p.category === 'grains')
           )
         } else if (department === 'bar') {
-          // Get beverages and bar products
           departmentProducts = productsStore.products.filter(
             p => p.isActive && (p.category === 'beverages' || p.category === 'alcohol')
           )
@@ -863,17 +949,14 @@ export class StorageService {
           `Found ${departmentProducts.length} products for ${department}`,
           {
             department,
-            productCount: departmentProducts.length,
-            productNames: departmentProducts.map(p => p.name)
+            productCount: departmentProducts.length
           }
         )
       } catch (error) {
         DebugUtils.warn(
           MODULE_NAME,
           'Products store not available, will only show products with existing batches',
-          {
-            error
-          }
+          { error }
         )
         departmentProducts = []
       }
@@ -893,48 +976,33 @@ export class StorageService {
         itemGroups.get(key)!.push(batch)
       }
 
-      // ✅ NEW: Check for write-offs/consumptions that may have created negative balances
-      const consumptionsByItem = new Map<string, number>()
-      const writeOffOps = this.operations.filter(
-        op =>
-          op.department === department &&
-          (op.operationType === 'write_off' || op.operationType === 'consumption')
-      )
+      // ✅ CRITICAL FIX: Calculate ACTUAL balances from ALL batches (not just operations)
+      const actualBalances = new Map<string, number>()
 
-      // Calculate total consumed per item
-      writeOffOps.forEach(op => {
-        op.items.forEach(item => {
-          if (item.itemType === 'product') {
-            const currentConsumed = consumptionsByItem.get(item.itemId) || 0
-            consumptionsByItem.set(item.itemId, currentConsumed + item.quantity)
-          }
-        })
+      // Start with ALL batches (including consumed ones to get full picture)
+      const allBatches = this.batches.filter(b => b.department === department)
+
+      // Calculate actual remaining quantities from active batches only
+      allBatches.forEach(batch => {
+        if (batch.status === 'active') {
+          const currentBalance = actualBalances.get(batch.itemId) || 0
+          actualBalances.set(batch.itemId, currentBalance + batch.currentQuantity)
+        }
       })
 
-      // ✅ NEW: Calculate receipts per item
-      const receiptsByItem = new Map<string, number>()
-      const receiptOps = this.operations.filter(
-        op => op.department === department && op.operationType === 'receipt'
-      )
-
-      receiptOps.forEach(op => {
-        op.items.forEach(item => {
-          if (item.itemType === 'product') {
-            const currentReceived = receiptsByItem.get(item.itemId) || 0
-            receiptsByItem.set(item.itemId, currentReceived + item.quantity)
-          }
-        })
-      })
-
-      // Create balances for products with positive stock (existing logic)
+      // ✅ Create balances for products with positive stock from batches
       for (const [, batches] of itemGroups) {
         const firstBatch = batches[0]
         const itemId = firstBatch.itemId
         const productInfo = this.getProductInfo(itemId)
 
-        const totalQuantity = batches.reduce((sum, b) => sum + b.currentQuantity, 0)
-        const totalValue = batches.reduce((sum, b) => sum + b.totalValue, 0)
-        const averageCost = totalValue / totalQuantity
+        // ✅ FIXED: Use proper precision for calculations
+        const totalQuantity =
+          Math.round(batches.reduce((sum, b) => sum + b.currentQuantity, 0) * 10000) / 10000
+
+        const totalValue = Math.round(batches.reduce((sum, b) => sum + b.totalValue, 0) * 100) / 100
+
+        const averageCost = totalQuantity > 0 ? totalValue / totalQuantity : 0
 
         const sortedBatches = batches.sort(
           (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
@@ -988,7 +1056,7 @@ export class StorageService {
         this.balances.push(balance)
       }
 
-      // ✅ CRITICAL FIX: Create balances for products without stock AND products with negative stock
+      // ✅ CRITICAL FIX: Add products without stock using ACTUAL batch balance (not operations calculation)
       if (departmentProducts.length > 0) {
         for (const product of departmentProducts) {
           const itemId = product.id
@@ -998,21 +1066,17 @@ export class StorageService {
             continue
           }
 
-          // ✅ NEW: Calculate theoretical balance (receipts - consumptions)
-          const totalReceived = receiptsByItem.get(itemId) || 0
-          const totalConsumed = consumptionsByItem.get(itemId) || 0
-          const theoreticalBalance = totalReceived - totalConsumed
+          // ✅ FIXED: Use actual batch balance instead of operations calculation
+          const actualBalance = Math.round((actualBalances.get(itemId) || 0) * 10000) / 10000
 
-          // ✅ IMPORTANT: Include products with zero OR negative stock
           const balance: StorageBalance = {
             itemId,
             itemType: 'product',
             itemName: product.name,
             department,
-            totalQuantity: theoreticalBalance, // ✅ This can be 0 or negative
+            totalQuantity: actualBalance, // ✅ This should be 0 for fully consumed items, not negative
             unit: product.unit || 'kg',
-            totalValue:
-              theoreticalBalance > 0 ? theoreticalBalance * (product.costPerUnit || 0) : 0,
+            totalValue: actualBalance > 0 ? actualBalance * (product.costPerUnit || 0) : 0,
             averageCost: product.costPerUnit || 0,
             latestCost: product.costPerUnit || 0,
             costTrend: 'stable',
@@ -1021,7 +1085,7 @@ export class StorageService {
             newestBatchDate: '',
             hasExpired: false,
             hasNearExpiry: false,
-            belowMinStock: true, // Zero or negative stock is always below minimum
+            belowMinStock: true,
             lastCalculated: TimeUtils.getCurrentLocalISO()
           }
 
@@ -1029,30 +1093,21 @@ export class StorageService {
         }
       }
 
-      // ✅ NEW: Also check for orphaned items (items with operations but not in product catalog)
-      const allOperatedItems = new Set<string>()
-      this.operations
-        .filter(op => op.department === department)
-        .forEach(op => {
-          op.items.forEach(item => {
-            if (item.itemType === 'product') {
-              allOperatedItems.add(item.itemId)
-            }
-          })
+      // ✅ FIXED: Also add products that have consumed batches but aren't in catalog
+      const allBatchItems = new Set<string>()
+      this.batches
+        .filter(b => b.department === department)
+        .forEach(batch => {
+          allBatchItems.add(batch.itemId)
         })
 
-      // Add balances for operated items not in catalog and not already added
-      for (const itemId of allOperatedItems) {
+      for (const itemId of allBatchItems) {
         const alreadyExists = this.balances.some(
           b => b.itemId === itemId && b.department === department
         )
 
         if (!alreadyExists) {
-          const totalReceived = receiptsByItem.get(itemId) || 0
-          const totalConsumed = consumptionsByItem.get(itemId) || 0
-          const theoreticalBalance = totalReceived - totalConsumed
-
-          // Get product info or use defaults
+          const actualBalance = Math.round((actualBalances.get(itemId) || 0) * 10000) / 10000
           const productInfo = this.getProductInfo(itemId)
 
           const balance: StorageBalance = {
@@ -1060,9 +1115,9 @@ export class StorageService {
             itemType: 'product',
             itemName: productInfo.name,
             department,
-            totalQuantity: theoreticalBalance,
+            totalQuantity: actualBalance, // ✅ Should be 0 for fully consumed batches
             unit: productInfo.unit,
-            totalValue: theoreticalBalance > 0 ? theoreticalBalance * productInfo.costPerUnit : 0,
+            totalValue: actualBalance > 0 ? actualBalance * productInfo.costPerUnit : 0,
             averageCost: productInfo.costPerUnit,
             latestCost: productInfo.costPerUnit,
             costTrend: 'stable',
@@ -1084,16 +1139,20 @@ export class StorageService {
       const zeroStock = departmentBalances.filter(b => b.totalQuantity === 0).length
       const negativeStock = departmentBalances.filter(b => b.totalQuantity < 0).length
 
-      DebugUtils.info(MODULE_NAME, `Balances recalculated for ${department}`, {
-        department,
-        totalProductsInCatalog: departmentProducts.length,
-        productsWithPositiveStock: positiveStock,
-        productsWithZeroStock: zeroStock,
-        productsWithNegativeStock: negativeStock,
-        totalBalances: departmentBalances.length,
-        batchesProcessed: activeBatches.length,
-        operationsProcessed: writeOffOps.length + receiptOps.length
-      })
+      DebugUtils.info(
+        MODULE_NAME,
+        `Balances recalculated for ${department} using batch-based approach`,
+        {
+          department,
+          totalProductsInCatalog: departmentProducts.length,
+          productsWithPositiveStock: positiveStock,
+          productsWithZeroStock: zeroStock,
+          productsWithNegativeStock: negativeStock,
+          totalBalances: departmentBalances.length,
+          activeBatchesProcessed: activeBatches.length,
+          totalBatchesConsidered: allBatches.length
+        }
+      )
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to recalculate product balances', { error })
       throw error
