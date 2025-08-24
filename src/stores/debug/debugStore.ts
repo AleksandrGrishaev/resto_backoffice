@@ -1,4 +1,4 @@
-// src/stores/debug/debugStore.ts
+// src/stores/debug/debugStore.ts - SIMPLIFIED: Удалена функциональность History
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -7,7 +7,6 @@ import type {
   DebugState,
   DebugStoreInfo,
   DebugStoreData,
-  DebugHistoryEntry,
   DebugTabId,
   StoreId,
   CopyOperation
@@ -17,8 +16,7 @@ import { STORE_CONFIGURATIONS } from './types'
 const MODULE_NAME = 'DebugStore'
 
 /**
- * Основной Debug Store - фокус на данных и состоянии
- * Логика форматирования и истории делегирована composables
+ * Упрощенный Debug Store - без истории, фокус на анализе данных stores
  */
 export const useDebugStore = defineStore('debug', () => {
   // =============================================
@@ -30,14 +28,11 @@ export const useDebugStore = defineStore('debug', () => {
     selectedStoreId: null,
     selectedTab: 'raw',
     storeData: {},
-    history: [],
     loading: false,
     error: null,
     settings: {
-      maxHistoryEntries: 200, // Увеличено для лучшего отслеживания
       autoRefresh: false,
-      refreshInterval: 10000, // 10 секунд
-      enableHistory: true
+      refreshInterval: 10000 // 10 секунд
     }
   })
 
@@ -57,14 +52,6 @@ export const useDebugStore = defineStore('debug', () => {
     return state.value.storeData[state.value.selectedStoreId] || null
   })
 
-  const selectedStoreHistory = computed(() => {
-    if (!state.value.selectedStoreId) return []
-    return state.value.history
-      .filter(entry => entry.storeId === state.value.selectedStoreId)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 50) // Показываем только последние 50 записей для производительности
-  })
-
   const storesSortedByPriority = computed(() => {
     return [...state.value.availableStores].sort((a, b) => {
       const aPriority = STORE_CONFIGURATIONS[a.id as StoreId]?.priority || 999
@@ -77,27 +64,24 @@ export const useDebugStore = defineStore('debug', () => {
     return state.value.availableStores.filter(store => store.isLoaded).length
   })
 
-  const historyStatistics = computed(() => {
-    const stats = {
-      totalEntries: state.value.history.length,
-      storesWithHistory: new Set(state.value.history.map(h => h.storeId)).size,
-      recentActivity: 0,
-      entriesByStore: {} as Record<string, number>
+  const globalStatistics = computed(() => {
+    const stores = state.value.availableStores
+
+    return {
+      totalStores: stores.length,
+      loadedStores: stores.filter(s => s.isLoaded).length,
+      totalRecords: stores.reduce((sum, s) => sum + s.recordCount, 0),
+      healthyStores: Object.values(state.value.storeData).filter(
+        data => data.analysis.health.status === 'healthy'
+      ).length,
+      storesWithIssues: Object.values(state.value.storeData).filter(
+        data => data.analysis.health.status === 'error'
+      ).length,
+      storesWithWarnings: Object.values(state.value.storeData).filter(
+        data => data.analysis.health.status === 'warning'
+      ).length,
+      lastUpdate: new Date().toISOString()
     }
-
-    // Подсчитываем активность за последний час
-    const oneHourAgo = Date.now() - 60 * 60 * 1000
-    stats.recentActivity = state.value.history.filter(h => {
-      const entryTime = new Date(h.timestamp).getTime()
-      return entryTime > oneHourAgo
-    }).length
-
-    // Подсчитываем записи по stores
-    state.value.history.forEach(entry => {
-      stats.entriesByStore[entry.storeId] = (stats.entriesByStore[entry.storeId] || 0) + 1
-    })
-
-    return stats
   })
 
   // =============================================
@@ -112,7 +96,7 @@ export const useDebugStore = defineStore('debug', () => {
       state.value.loading = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, '🔧 Initializing Debug Store')
+      DebugUtils.info(MODULE_NAME, '🔧 Initializing Debug Store (simplified)')
 
       // Обнаруживаем доступные stores
       await discoverStores()
@@ -120,7 +104,7 @@ export const useDebugStore = defineStore('debug', () => {
       // Выбираем первый store по умолчанию
       if (state.value.availableStores.length > 0) {
         const firstStore = storesSortedByPriority.value[0]
-        await selectStore(firstStore.id, false) // false = не записывать в историю при инициализации
+        await selectStore(firstStore.id)
       }
 
       // Настраиваем автообновление если включено
@@ -128,10 +112,9 @@ export const useDebugStore = defineStore('debug', () => {
         setupAutoRefresh()
       }
 
-      DebugUtils.info(MODULE_NAME, '✅ Debug Store initialized', {
+      DebugUtils.info(MODULE_NAME, '✅ Debug Store initialized (simplified)', {
         availableStores: state.value.availableStores.length,
-        selectedStore: state.value.selectedStoreId,
-        historyEnabled: state.value.settings.enableHistory
+        selectedStore: state.value.selectedStoreId
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to initialize debug store'
@@ -168,7 +151,7 @@ export const useDebugStore = defineStore('debug', () => {
   /**
    * Выбрать store для отладки
    */
-  async function selectStore(storeId: string, recordHistory: boolean = true): Promise<void> {
+  async function selectStore(storeId: string): Promise<void> {
     try {
       DebugUtils.debug(MODULE_NAME, `Selecting store: ${storeId}`)
 
@@ -177,7 +160,7 @@ export const useDebugStore = defineStore('debug', () => {
 
       // Загружаем данные store если они не закэшированы
       if (!state.value.storeData[storeId]) {
-        await refreshStoreData(storeId, recordHistory)
+        await refreshStoreData(storeId)
       }
 
       DebugUtils.debug(MODULE_NAME, `Store selected: ${storeId}`, {
@@ -193,7 +176,7 @@ export const useDebugStore = defineStore('debug', () => {
   /**
    * Обновить данные store
    */
-  async function refreshStoreData(storeId?: string, recordHistory: boolean = true): Promise<void> {
+  async function refreshStoreData(storeId?: string): Promise<void> {
     try {
       state.value.loading = true
       state.value.error = null
@@ -215,22 +198,6 @@ export const useDebugStore = defineStore('debug', () => {
         storeInfo.isLoaded = true
         storeInfo.recordCount = storeData.analysis.totalItems
         storeInfo.size = debugService.formatDataSize(JSON.stringify(storeData).length)
-      }
-
-      // Добавляем запись в историю (только если не инициализация)
-      if (recordHistory && state.value.settings.enableHistory) {
-        addHistoryEntry({
-          id: generateId(),
-          storeId: targetStoreId,
-          timestamp: new Date().toISOString(),
-          action: 'data_refreshed',
-          changeType: 'data',
-          changes: [],
-          snapshot: {
-            totalItems: storeData.analysis.totalItems,
-            healthStatus: storeData.analysis.health.status
-          }
-        })
       }
 
       DebugUtils.debug(MODULE_NAME, `Store data refreshed: ${targetStoreId}`, {
@@ -266,27 +233,11 @@ export const useDebugStore = defineStore('debug', () => {
 
       for (const storeId of loadedStoreIds) {
         try {
-          await refreshStoreData(storeId, false) // false = не записываем каждое обновление в историю
+          await refreshStoreData(storeId)
         } catch (error) {
           DebugUtils.warn(MODULE_NAME, `Failed to refresh store ${storeId}`, { error })
           // Продолжаем с другими stores даже если один failed
         }
-      }
-
-      // Записываем общее действие в историю
-      if (state.value.settings.enableHistory) {
-        addHistoryEntry({
-          id: generateId(),
-          storeId: 'debug',
-          timestamp: new Date().toISOString(),
-          action: 'refresh_all_stores',
-          changeType: 'data',
-          changes: [],
-          snapshot: {
-            refreshedStores: loadedStoreIds.length,
-            totalStores: state.value.availableStores.length
-          }
-        })
       }
 
       DebugUtils.info(MODULE_NAME, 'All stores refreshed', {
@@ -361,22 +312,6 @@ export const useDebugStore = defineStore('debug', () => {
         success: true
       }
 
-      // Записываем в историю
-      if (state.value.settings.enableHistory) {
-        addHistoryEntry({
-          id: generateId(),
-          storeId: state.value.selectedStoreId || 'debug',
-          timestamp: new Date().toISOString(),
-          action: `copy_${type}_data`,
-          changeType: 'data',
-          changes: [],
-          snapshot: {
-            contentSize: content.length,
-            copyType: type
-          }
-        })
-      }
-
       DebugUtils.info(MODULE_NAME, `Store data copied (${type})`, {
         storeId: state.value.selectedStoreId,
         size: content.length
@@ -393,53 +328,6 @@ export const useDebugStore = defineStore('debug', () => {
 
       DebugUtils.error(MODULE_NAME, 'Failed to copy store data', { error })
       throw error
-    }
-  }
-
-  // =============================================
-  // HISTORY MANAGEMENT
-  // =============================================
-
-  /**
-   * Добавить запись в историю
-   */
-  function addHistoryEntry(entry: DebugHistoryEntry): void {
-    if (!state.value.settings.enableHistory) return
-
-    state.value.history.unshift(entry)
-
-    // Поддерживаем максимальное количество записей
-    if (state.value.history.length > state.value.settings.maxHistoryEntries) {
-      state.value.history = state.value.history.slice(0, state.value.settings.maxHistoryEntries)
-    }
-
-    DebugUtils.debug(MODULE_NAME, 'History entry added', {
-      storeId: entry.storeId,
-      action: entry.action,
-      changeType: entry.changeType,
-      totalEntries: state.value.history.length
-    })
-  }
-
-  /**
-   * Очистить историю
-   */
-  function clearHistory(storeId?: string): void {
-    if (storeId) {
-      const beforeCount = state.value.history.length
-      state.value.history = state.value.history.filter(entry => entry.storeId !== storeId)
-      const afterCount = state.value.history.length
-
-      DebugUtils.debug(MODULE_NAME, `History cleared for store: ${storeId}`, {
-        removedEntries: beforeCount - afterCount
-      })
-    } else {
-      const clearedCount = state.value.history.length
-      state.value.history = []
-
-      DebugUtils.debug(MODULE_NAME, 'All history cleared', {
-        clearedEntries: clearedCount
-      })
     }
   }
 
@@ -484,7 +372,7 @@ export const useDebugStore = defineStore('debug', () => {
     autoRefreshInterval = setInterval(async () => {
       if (state.value.selectedStoreId && !state.value.loading) {
         try {
-          await refreshStoreData(state.value.selectedStoreId, false) // false = не спамим историю
+          await refreshStoreData(state.value.selectedStoreId)
         } catch (error) {
           DebugUtils.warn(MODULE_NAME, 'Auto refresh failed', { error })
         }
@@ -516,17 +404,36 @@ export const useDebugStore = defineStore('debug', () => {
   }
 
   /**
-   * Генерировать уникальный ID
+   * Получить сводку по выбранному store
    */
-  function generateId(): string {
-    return `debug-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  function getStoreSummary() {
+    if (!selectedStoreData.value) return null
+
+    try {
+      const data = selectedStoreData.value
+      const analysis = data.analysis
+
+      return {
+        name: data.name,
+        totalItems: analysis.totalItems,
+        activeItems: analysis.activeItems,
+        inactiveItems: analysis.inactiveItems,
+        healthStatus: analysis.health.status,
+        lastUpdated: data.timestamp,
+        dataBreakdown: analysis.breakdown,
+        issuesCount: analysis.health.issues.length,
+        warningsCount: analysis.health.warnings.length
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to generate store summary', { error })
+      return null
+    }
   }
 
   // =============================================
   // CLEANUP
   // =============================================
 
-  // Очистка при уничтожении store
   function cleanup(): void {
     clearAutoRefresh()
     DebugUtils.debug(MODULE_NAME, 'Debug store cleanup completed')
@@ -539,19 +446,19 @@ export const useDebugStore = defineStore('debug', () => {
   if (import.meta.env.DEV) {
     // Expose store internals for debugging
     setTimeout(() => {
-      window.__DEBUG_STORE_INTERNALS__ = () => {
-        console.log('=== DEBUG STORE INTERNALS ===')
+      window.__DEBUG_STORE_SIMPLIFIED__ = () => {
+        console.log('=== DEBUG STORE SIMPLIFIED ===')
         console.log('State:', state.value)
         console.log('Available stores:', state.value.availableStores)
         console.log('Store data cache:', Object.keys(state.value.storeData))
-        console.log('History entries:', state.value.history.length)
         console.log('Settings:', state.value.settings)
+        console.log('Global statistics:', globalStatistics.value)
         return {
           state: state.value,
           computedValues: {
             selectedStore: selectedStore.value,
             totalStoresLoaded: totalStoresLoaded.value,
-            historyStatistics: historyStatistics.value
+            globalStatistics: globalStatistics.value
           }
         }
       }
@@ -559,6 +466,20 @@ export const useDebugStore = defineStore('debug', () => {
       window.__DEBUG_STORE_CLEAR_CACHE__ = () => {
         state.value.storeData = {}
         console.log('Store data cache cleared')
+      }
+
+      window.__DEBUG_STORE_HEALTH_CHECK__ = () => {
+        const healthSummary = Object.entries(state.value.storeData).map(([id, data]) => ({
+          id,
+          status: data.analysis.health.status,
+          issues: data.analysis.health.issues.length,
+          warnings: data.analysis.health.warnings.length,
+          totalItems: data.analysis.totalItems
+        }))
+
+        console.log('=== STORES HEALTH SUMMARY ===')
+        console.table(healthSummary)
+        return healthSummary
       }
     }, 500)
   }
@@ -574,10 +495,9 @@ export const useDebugStore = defineStore('debug', () => {
     // Computed
     selectedStore,
     selectedStoreData,
-    selectedStoreHistory,
     storesSortedByPriority,
     totalStoresLoaded,
-    historyStatistics,
+    globalStatistics,
 
     // Initialization
     initialize,
@@ -594,15 +514,12 @@ export const useDebugStore = defineStore('debug', () => {
     // Copy Operations
     copyStoreData,
 
-    // History Management
-    addHistoryEntry,
-    clearHistory,
-
     // Settings
     updateSettings,
 
     // Utilities
     clearError,
+    getStoreSummary,
     cleanup
   }
 })

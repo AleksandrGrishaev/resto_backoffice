@@ -1,6 +1,5 @@
-// src/stores/debug/debugService.ts
+// src/stores/debug/debugService.ts - SIMPLIFIED: Убрана вся логика истории
 import { DebugUtils } from '@/utils'
-import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 import { formatIDR, formatIDRShort } from '@/utils/currency'
 import { TimeUtils } from '@/utils/time'
 import type {
@@ -32,12 +31,9 @@ import { useAuthStore } from '@/stores/auth.store'
 const MODULE_NAME = 'DebugService'
 
 /**
- * Сервис для работы с debug информацией stores
- * Полностью интегрирован с новой архитектурой проекта
+ * Упрощенный сервис для работы с debug информацией stores (без истории)
  */
 class DebugService {
-  private measurementUnits = useMeasurementUnits()
-
   // =============================================
   // STORE DISCOVERY
   // =============================================
@@ -1206,7 +1202,6 @@ class DebugService {
 
   private getLastUpdated(storeInstance: any, storeId: string): string {
     try {
-      // :TODO Implement proper last updated tracking
       // Для сейчас возвращаем текущее время если store загружен
       const recordCount = this.getStoreRecordCount(storeInstance, storeId)
       if (recordCount > 0) {
@@ -1309,8 +1304,8 @@ export const debugService = new DebugService()
 if (import.meta.env.DEV) {
   // Добавляем глобальные функции для отладки
   setTimeout(() => {
-    window.__DEBUG_SERVICE__ = () => {
-      console.log('=== DEBUG SERVICE STATUS ===')
+    window.__DEBUG_SERVICE_SIMPLIFIED__ = () => {
+      console.log('=== DEBUG SERVICE STATUS (SIMPLIFIED) ===')
       console.log('Service instance:', debugService)
 
       debugService.discoverAvailableStores().then(stores => {
@@ -1347,8 +1342,8 @@ if (import.meta.env.DEV) {
       }
     }
 
-    console.log('\n💡 Debug Service loaded! Try:')
-    console.log('  • window.__DEBUG_SERVICE__()')
+    console.log('\n💡 Debug Service (simplified) loaded! Try:')
+    console.log('  • window.__DEBUG_SERVICE_SIMPLIFIED__()')
     console.log('  • window.__DEBUG_SERVICE_TEST_STORE__("products")')
     console.log('  • window.__DEBUG_SERVICE_GLOBAL_STATS__()')
   }, 2000)

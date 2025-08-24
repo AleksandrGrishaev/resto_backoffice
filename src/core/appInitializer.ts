@@ -1,4 +1,4 @@
-// src/core/appInitializer.ts - Updated with Debug System Integration
+// src/core/appInitializer.ts - CLEANED: Убраны все импорты и инициализация истории
 
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
@@ -9,7 +9,6 @@ import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { useDebugStore } from '@/stores/debug'
-import { useDebugHistory } from '../stores/debug/composables/useDebugHistory_back'
 import { AppInitializerTests } from './appInitializerTests'
 import { DebugUtils } from '@/utils'
 
@@ -18,7 +17,6 @@ const MODULE_NAME = 'AppInitializer'
 export interface InitializationConfig {
   useMockData: boolean
   enableDebug: boolean
-  enableHistoryTracking: boolean
   runIntegrationTests: boolean
 }
 
@@ -36,7 +34,6 @@ export class AppInitializer {
       DebugUtils.info(MODULE_NAME, '🚀 Starting app initialization', {
         useMockData: this.config.useMockData,
         enableDebug: this.config.enableDebug,
-        enableHistoryTracking: this.config.enableHistoryTracking,
         runIntegrationTests: this.config.runIntegrationTests
       })
 
@@ -250,30 +247,19 @@ export class AppInitializer {
   }
 
   // =============================================
-  // PHASE 3: DEBUG SYSTEM
+  // PHASE 3: DEBUG SYSTEM (simplified - no history)
   // =============================================
 
   private async initializeDebugSystem(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, '🐛 Initializing debug system...')
+      DebugUtils.info(MODULE_NAME, '🐛 Initializing debug system (simplified)...')
 
       const debugStore = useDebugStore()
       await debugStore.initialize()
 
-      // Запускаем отслеживание истории если включено
-      if (this.config.enableHistoryTracking) {
-        const debugHistory = useDebugHistory()
-        debugHistory.startHistoryTracking()
-
-        DebugUtils.debug(MODULE_NAME, '📊 Debug history tracking started', {
-          trackingStatus: debugHistory.getTrackingStatus()
-        })
-      }
-
       DebugUtils.info(MODULE_NAME, '✅ Debug system initialized successfully', {
         availableStores: debugStore.storesSortedByPriority.length,
-        loadedStores: debugStore.totalStoresLoaded,
-        historyTracking: this.config.enableHistoryTracking
+        loadedStores: debugStore.totalStoresLoaded
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ Failed to initialize debug system', { error })
@@ -422,7 +408,7 @@ export class AppInitializer {
 }
 
 // =============================================
-// FACTORY FUNCTION
+// FACTORY FUNCTION (упрощенный)
 // =============================================
 
 export function createAppInitializer(): AppInitializer {
@@ -436,14 +422,11 @@ export function createAppInitializer(): AppInitializer {
     // Debug включен только в dev режиме
     enableDebug: import.meta.env.DEV,
 
-    // History tracking только в dev и если нет production данных
-    enableHistoryTracking: import.meta.env.DEV && import.meta.env.VITE_USE_MOCK !== 'false',
-
     // Integration tests только в dev режиме
     runIntegrationTests: import.meta.env.DEV
   }
 
-  DebugUtils.info(MODULE_NAME, '⚙️ Creating app initializer', {
+  DebugUtils.info(MODULE_NAME, '⚙️ Creating app initializer (simplified)', {
     config,
     env: {
       isDev: import.meta.env.DEV,
@@ -484,7 +467,7 @@ if (import.meta.env.DEV) {
         } else {
           await initializer.initialize()
         }
-        console.log('App reinitialized')
+        console.log('App reinitialized (without history)')
       },
 
       getStatus() {
@@ -507,7 +490,6 @@ if (import.meta.env.DEV) {
         const testInitializer = new AppInitializer({
           useMockData: true,
           enableDebug: true,
-          enableHistoryTracking: true,
           runIntegrationTests: true,
           ...config
         })
@@ -516,7 +498,7 @@ if (import.meta.env.DEV) {
       }
     }
 
-    console.log('\n💡 App Initializer loaded! Try:')
+    console.log('\n💡 App Initializer (simplified) loaded! Try:')
     console.log('  • window.__APP_INITIALIZER__.getStatus()')
     console.log('  • window.__APP_INITIALIZER__.reinitialize()')
     console.log('  • window.__APP_INITIALIZER__.validateIntegration()')

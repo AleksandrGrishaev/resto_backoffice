@@ -1,5 +1,5 @@
-// src/stores/debug/composables/useDebugStores.ts - ИСПРАВЛЕНО
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+// src/stores/debug/composables/useDebugStores.ts - SIMPLIFIED: Без History
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useDebugStore } from '../debugStore'
 import { useDebugFormatting } from './useDebugFormatting'
 import { DebugUtils } from '@/utils'
@@ -8,8 +8,7 @@ import type { DebugTabId } from '../types'
 const MODULE_NAME = 'useDebugStores'
 
 /**
- * Главный composable для работы с Debug системой
- * Объединяет Debug Store и форматирование данных
+ * Упрощенный composable для работы с Debug системой (без истории)
  */
 export function useDebugStores() {
   const debugStore = useDebugStore()
@@ -31,7 +30,6 @@ export function useDebugStores() {
   const availableStores = computed(() => debugStore.storesSortedByPriority)
   const selectedStore = computed(() => debugStore.selectedStore)
   const selectedStoreData = computed(() => debugStore.selectedStoreData)
-  const selectedStoreHistory = computed(() => debugStore.selectedStoreHistory)
 
   // =============================================
   // FORMATTED DATA
@@ -42,22 +40,6 @@ export function useDebugStores() {
    */
   const formattedStructuredData = computed(() => {
     return formatting.formatStructuredData(selectedStoreData.value)
-  })
-
-  /**
-   * Форматированная история для UI (ИСПРАВЛЕНИЕ ОШИБКИ)
-   */
-  const formattedHistory = computed(() => {
-    if (!selectedStoreHistory.value || selectedStoreHistory.value.length === 0) {
-      return []
-    }
-
-    try {
-      return formatting.formatHistory(selectedStoreHistory.value)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to format history', { error })
-      return []
-    }
   })
 
   /**
@@ -75,27 +57,7 @@ export function useDebugStores() {
    * Сводка по выбранному store
    */
   const storeSummary = computed(() => {
-    if (!selectedStoreData.value) return null
-
-    try {
-      const data = selectedStoreData.value
-      const analysis = data.analysis
-
-      return {
-        name: data.name,
-        totalItems: analysis.totalItems,
-        activeItems: analysis.activeItems,
-        inactiveItems: analysis.inactiveItems,
-        healthStatus: analysis.health.status,
-        lastUpdated: data.timestamp,
-        dataBreakdown: analysis.breakdown,
-        issuesCount: analysis.health.issues.length,
-        warningsCount: analysis.health.warnings.length
-      }
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to generate store summary', { error })
-      return null
-    }
+    return debugStore.getStoreSummary()
   })
 
   /**
@@ -103,19 +65,16 @@ export function useDebugStores() {
    */
   const globalSummary = computed(() => {
     try {
-      const stores = availableStores.value
-      const history = selectedStoreHistory.value
-      const statistics = debugStore.historyStatistics
-
+      const stats = debugStore.globalStatistics
       return {
-        totalStores: stores.length,
-        loadedStores: stores.filter(s => s.isLoaded).length,
-        totalRecords: stores.reduce((sum, s) => sum + s.recordCount, 0),
-        historyEntries: statistics.totalEntries,
-        recentActivity: statistics.recentActivity,
-        storesWithHistory: statistics.storesWithHistory,
-        healthyStores: 0, // TODO: Implement when health tracking is added
-        lastUpdate: formatting.formatTimestamp(new Date().toISOString())
+        ...stats,
+        formattedTotalRecords: formatting.formatNumber(stats.totalRecords),
+        formattedLastUpdate: formatting.formatTimestamp(stats.lastUpdate),
+        healthSummary: {
+          healthy: stats.healthyStores,
+          warnings: stats.storesWithWarnings,
+          errors: stats.storesWithIssues
+        }
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to generate global summary', { error })
@@ -123,11 +82,13 @@ export function useDebugStores() {
         totalStores: 0,
         loadedStores: 0,
         totalRecords: 0,
-        historyEntries: 0,
-        recentActivity: 0,
-        storesWithHistory: 0,
         healthyStores: 0,
-        lastUpdate: 'Error'
+        storesWithIssues: 0,
+        storesWithWarnings: 0,
+        lastUpdate: 'Error',
+        formattedTotalRecords: '0',
+        formattedLastUpdate: 'Error',
+        healthSummary: { healthy: 0, warnings: 0, errors: 0 }
       }
     }
   })
@@ -141,7 +102,7 @@ export function useDebugStores() {
    */
   async function initialize(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'useDebugStores mounted')
+      DebugUtils.info(MODULE_NAME, 'useDebugStores mounted (simplified)')
       await debugStore.initialize()
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to initialize debug stores', { error })
@@ -233,23 +194,16 @@ export function useDebugStores() {
   }
 
   // =============================================
-  // HISTORY MANAGEMENT
+  // SETTINGS
   // =============================================
 
   /**
-   * Очистить историю текущего store
+   * Обновить настройки
    */
-  function clearCurrentStoreHistory(): void {
-    if (selectedStoreId.value) {
-      debugStore.clearHistory(selectedStoreId.value)
-    }
-  }
-
-  /**
-   * Очистить всю историю
-   */
-  function clearAllHistory(): void {
-    debugStore.clearHistory()
+  function updateSettings(
+    newSettings: Partial<{ autoRefresh: boolean; refreshInterval: number }>
+  ): void {
+    debugStore.updateSettings(newSettings)
   }
 
   // =============================================
@@ -289,11 +243,10 @@ export function useDebugStores() {
   // =============================================
 
   onMounted(() => {
-    DebugUtils.debug(MODULE_NAME, 'useDebugStores mounted')
+    DebugUtils.debug(MODULE_NAME, 'useDebugStores mounted (simplified)')
   })
 
   onUnmounted(() => {
-    // Cleanup если необходимо
     debugStore.cleanup()
   })
 
@@ -312,11 +265,9 @@ export function useDebugStores() {
     availableStores,
     selectedStore,
     selectedStoreData,
-    selectedStoreHistory,
 
-    // Formatted data (ИСПРАВЛЕНО - добавлен formattedHistory)
+    // Formatted data
     formattedStructuredData,
-    formattedHistory, // ← ЭТО ИСПРАВЛЯЕТ ОШИБКУ
     formattedStores,
 
     // Summaries
@@ -335,9 +286,8 @@ export function useDebugStores() {
     copyFullData,
     copyRawData,
 
-    // History management
-    clearCurrentStoreHistory,
-    clearAllHistory,
+    // Settings
+    updateSettings,
 
     // Utilities
     getHealthColor,
@@ -354,9 +304,9 @@ export function useDebugStores() {
 if (import.meta.env.DEV) {
   // Expose debug functions globally for development
   setTimeout(() => {
-    window.__USE_DEBUG_STORES__ = () => {
-      console.log('=== useDebugStores composable ===')
-      console.log('Available for testing debug stores functionality')
+    window.__USE_DEBUG_STORES_SIMPLIFIED__ = () => {
+      console.log('=== useDebugStores composable (simplified) ===')
+      console.log('Available for testing debug stores functionality without history')
 
       const debugStores = useDebugStores()
       console.log('Debug stores instance:', debugStores)
@@ -364,7 +314,7 @@ if (import.meta.env.DEV) {
       return debugStores
     }
 
-    console.log('\n💡 useDebugStores loaded! Try:')
-    console.log('  • window.__USE_DEBUG_STORES__()')
+    console.log('\n💡 useDebugStores (simplified) loaded! Try:')
+    console.log('  • window.__USE_DEBUG_STORES_SIMPLIFIED__()')
   }, 1000)
 }

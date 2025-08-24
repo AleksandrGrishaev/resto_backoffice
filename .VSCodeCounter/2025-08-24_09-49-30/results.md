@@ -1,10 +1,10 @@
 # Summary
 
-Date : 2025-08-24 09:13:03
+Date : 2025-08-24 09:49:30
 
 Directory /Users/peaker/dev/kitchen-app/backoffice/src
 
-Total : 252 files, 75598 codes, 5711 comments, 12119 blanks, all 93428 lines
+Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 
 Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-details.md)
 
@@ -12,8 +12,8 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 
 | language   | files |   code | comment | blank |  total |
 | :--------- | ----: | -----: | ------: | ----: | -----: |
-| Vue        |   126 | 45,355 |   1,204 | 6,149 | 52,708 |
-| TypeScript |   113 | 25,611 |   4,502 | 4,827 | 34,940 |
+| Vue        |   123 | 44,446 |   1,172 | 6,030 | 51,648 |
+| TypeScript |   111 | 24,648 |   4,317 | 4,644 | 33,609 |
 | Markdown   |    10 |  4,591 |       0 | 1,135 |  5,726 |
 | SCSS       |     2 |     40 |       5 |     8 |     53 |
 | XML        |     1 |      1 |       0 |     0 |      1 |
@@ -22,7 +22,7 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 
 | path                                         | files |   code | comment |  blank |  total |
 | :------------------------------------------- | ----: | -----: | ------: | -----: | -----: |
-| .                                            |   252 | 75,598 |   5,711 | 12,119 | 93,428 |
+| .                                            |   247 | 73,726 |   5,494 | 11,817 | 91,037 |
 | . (Files)                                    |     3 |     63 |      15 |     23 |    101 |
 | About                                        |    10 |  4,591 |       0 |  1,135 |  5,726 |
 | assets                                       |     1 |      1 |       0 |      0 |      1 |
@@ -38,7 +38,7 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 | components/payment-settings                  |     4 |    304 |       0 |     43 |    347 |
 | composables                                  |     3 |    289 |      92 |     64 |    445 |
 | config                                       |     1 |     66 |       4 |      8 |     78 |
-| core                                         |     2 |    841 |     151 |    191 |  1,183 |
+| core                                         |     2 |    828 |     149 |    188 |  1,165 |
 | firebase                                     |     3 |    159 |       3 |     25 |    187 |
 | firebase (Files)                             |     2 |     78 |       2 |     15 |     95 |
 | firebase/services                            |     1 |     81 |       1 |     10 |     92 |
@@ -48,15 +48,15 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 | router (Files)                               |     2 |    187 |      13 |     11 |    211 |
 | router/guards                                |     1 |     35 |       1 |      6 |     42 |
 | services                                     |     5 |    217 |       6 |     50 |    273 |
-| stores                                       |    72 | 22,377 |   3,494 |  4,133 | 30,004 |
+| stores                                       |    70 | 21,427 |   3,311 |  3,953 | 28,691 |
 | stores (Files)                               |     3 |    252 |       8 |     44 |    304 |
 | stores/account                               |     6 |  2,251 |      99 |    311 |  2,661 |
 | stores/counteragents                         |     5 |  1,639 |     273 |    346 |  2,258 |
 | stores/counteragents (Files)                 |     4 |  1,292 |     199 |    313 |  1,804 |
 | stores/counteragents/mock                    |     1 |    347 |      74 |     33 |    454 |
-| stores/debug                                 |     8 |  3,130 |     563 |    546 |  4,239 |
-| stores/debug (Files)                         |     4 |  1,778 |     211 |    278 |  2,267 |
-| stores/debug/composables                     |     4 |  1,352 |     352 |    268 |  1,972 |
+| stores/debug                                 |     6 |  2,180 |     380 |    366 |  2,926 |
+| stores/debug (Files)                         |     4 |  1,708 |     205 |    271 |  2,184 |
+| stores/debug/composables                     |     2 |    472 |     175 |     95 |    742 |
 | stores/menu                                  |     5 |  1,463 |     163 |    182 |  1,808 |
 | stores/preparation                           |     5 |  1,598 |     225 |    326 |  2,149 |
 | stores/productsStore                         |    10 |  2,280 |     300 |    427 |  3,007 |
@@ -76,7 +76,7 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 | styles                                       |     2 |     40 |       5 |      8 |     53 |
 | types                                        |    10 |    366 |      67 |     60 |    493 |
 | utils                                        |     6 |    445 |     177 |    111 |    733 |
-| views                                        |   105 | 43,085 |   1,604 |  5,907 | 50,596 |
+| views                                        |   102 | 42,176 |   1,572 |  5,788 | 49,536 |
 | views (Files)                                |     3 |    201 |       5 |     38 |    244 |
 | views/Preparation                            |    13 |  4,503 |     269 |    593 |  5,365 |
 | views/Preparation (Files)                    |     1 |    439 |      14 |     64 |    517 |
@@ -87,9 +87,9 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 | views/counteragents/components               |     6 |  2,211 |      60 |    285 |  2,556 |
 | views/counteragents/components/counteragents |     5 |  2,046 |      54 |    259 |  2,359 |
 | views/counteragents/components/shared        |     1 |    165 |       6 |     26 |    197 |
-| views/debug                                  |     6 |  2,328 |      82 |    352 |  2,762 |
-| views/debug (Files)                          |     1 |    505 |      28 |     64 |    597 |
-| views/debug/components                       |     5 |  1,823 |      54 |    288 |  2,165 |
+| views/debug                                  |     3 |  1,419 |      50 |    233 |  1,702 |
+| views/debug (Files)                          |     1 |    488 |      27 |     62 |    577 |
+| views/debug/components                       |     2 |    931 |      23 |    171 |  1,125 |
 | views/menu                                   |     5 |  1,663 |      31 |    214 |  1,908 |
 | views/menu (Files)                           |     1 |    347 |       7 |     48 |    402 |
 | views/menu/components                        |     4 |  1,316 |      24 |    166 |  1,506 |

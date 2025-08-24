@@ -1,4 +1,4 @@
-<!-- src/views/debug/DebugView.vue -->
+<!-- src/views/debug/DebugView.vue - SIMPLIFIED: Без History -->
 <template>
   <div class="debug-view">
     <!-- Header -->
@@ -44,18 +44,25 @@
                 <div class="d-flex justify-space-between mb-1">
                   <span>Total Records:</span>
                   <span class="font-weight-medium">
-                    {{ formatNumber(globalSummary.totalRecords) }}
+                    {{ globalSummary.formattedTotalRecords }}
                   </span>
                 </div>
                 <div class="d-flex justify-space-between mb-1">
-                  <span>History Entries:</span>
-                  <span class="font-weight-medium">
-                    {{ formatNumber(globalSummary.historyEntries) }}
+                  <span>Healthy:</span>
+                  <span class="font-weight-medium text-success">
+                    {{ globalSummary.healthSummary.healthy }}
                   </span>
                 </div>
                 <div class="d-flex justify-space-between">
-                  <span>Recent Activity:</span>
-                  <span class="font-weight-medium">{{ globalSummary.recentActivity }}</span>
+                  <span>Issues/Warnings:</span>
+                  <span class="font-weight-medium">
+                    <span v-if="globalSummary.healthSummary.errors > 0" class="text-error">
+                      {{ globalSummary.healthSummary.errors }}
+                    </span>
+                    <span v-if="globalSummary.healthSummary.warnings > 0" class="text-warning ms-1">
+                      {{ globalSummary.healthSummary.warnings }}
+                    </span>
+                  </span>
                 </div>
               </div>
             </v-card-text>
@@ -155,7 +162,7 @@
 
         <!-- Store Content -->
         <div v-if="selectedStore && selectedStoreData" class="flex-grow-1 d-flex flex-column">
-          <!-- Tabs -->
+          <!-- Tabs (только Raw и Structured) -->
           <v-tabs
             v-model="selectedTab"
             align-tabs="start"
@@ -171,25 +178,12 @@
               <v-icon start>mdi-format-list-bulleted</v-icon>
               Structured
             </v-tab>
-            <v-tab value="history">
-              <v-icon start>mdi-history</v-icon>
-              History
-              <v-chip
-                v-if="selectedStoreHistory.length > 0"
-                size="x-small"
-                color="primary"
-                variant="tonal"
-                class="ms-2"
-              >
-                {{ selectedStoreHistory.length }}
-              </v-chip>
-            </v-tab>
           </v-tabs>
 
           <!-- Tab Content -->
           <div class="flex-grow-1 overflow-hidden">
             <v-window v-model="selectedTab" class="fill-height">
-              <!-- Raw JSON Tab with Navigator -->
+              <!-- Raw JSON Tab -->
               <v-window-item value="raw" class="fill-height">
                 <json-navigator
                   :data="selectedStoreData.state"
@@ -355,15 +349,6 @@
                   </div>
                 </div>
               </v-window-item>
-
-              <!-- Enhanced History Tab -->
-              <v-window-item value="history" class="fill-height">
-                <enhanced-history-view
-                  :history-entries="formattedHistory"
-                  @clear-history="clearCurrentStoreHistory"
-                  @copy-content="handleCopyContent"
-                />
-              </v-window-item>
             </v-window>
           </div>
         </div>
@@ -392,12 +377,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useDebugStores } from '@/stores/debug'
+import { useDebugStores } from '@/stores/debug/composables/useDebugStores'
 import { DebugUtils } from '@/utils'
-import type { DebugTabId } from '@/stores/debug'
-import EnhancedHistoryView from './components/EnhancedHistoryView.vue'
+import type { DebugTabId } from '@/stores/debug/types'
 
-// Import new components
+// Import components
 import JsonNavigator from './components/JsonNavigator.vue'
 
 const MODULE_NAME = 'DebugView'
@@ -417,7 +401,6 @@ const {
   availableStores,
   selectedStore,
   selectedStoreData,
-  selectedStoreHistory,
 
   // Formatted data
   formattedStructuredData,
@@ -436,9 +419,6 @@ const {
   // Copy operations
   copyStructuredData,
   copyFullData,
-
-  // History
-  clearCurrentStoreHistory,
 
   // Utilities
   getHealthColor,
@@ -512,7 +492,7 @@ watch(showErrorSnackbar, show => {
 
 onMounted(async () => {
   try {
-    DebugUtils.info(MODULE_NAME, 'Initializing DebugView with enhanced components')
+    DebugUtils.info(MODULE_NAME, 'Initializing DebugView (simplified - no history)')
     await initialize()
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize debug view', { error })

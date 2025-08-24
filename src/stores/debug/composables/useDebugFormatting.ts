@@ -1,304 +1,168 @@
-// src/stores/debug/composables/useDebugFormatting.ts
-import { computed } from 'vue'
-import { DebugUtils } from '@/utils'
-import type {
-  DebugStoreData,
-  DebugHistoryEntry,
-  DebugStoreInfo,
-  DebugStoreAnalysis
-} from '../types'
-
-const MODULE_NAME = 'useDebugFormatting'
+// src/stores/debug/composables/useDebugFormatting.ts - SIMPLIFIED: Без форматирования истории
+import { formatIDR, formatIDRShort } from '@/utils/currency'
+import { TimeUtils } from '@/utils/time'
+import type { DebugStoreInfo, DebugStoreData } from '../types'
 
 /**
- * Composable для форматирования debug данных для UI
- * Фокус только на форматировании - без логики stores и истории
+ * Упрощенный composable для форматирования debug данных (без истории)
  */
 export function useDebugFormatting() {
   // =============================================
-  // RAW JSON FORMATTING
+  // STORE FORMATTING
   // =============================================
 
   /**
-   * Форматирует raw JSON для отображения в UI
+   * Форматирование информации о store
    */
-  function formatRawJson(storeData: DebugStoreData | null): string {
-    if (!storeData) return ''
-
-    try {
-      return JSON.stringify(storeData.state, null, 2)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to format raw JSON', { error })
-      return '{\n  "error": "Failed to format JSON"\n}'
+  function formatStoreInfo(store: DebugStoreInfo) {
+    return {
+      ...store,
+      formattedRecordCount: formatNumber(store.recordCount),
+      formattedLastUpdated: store.lastUpdated
+        ? formatTimestamp(store.lastUpdated)
+        : 'Never updated',
+      statusColor: store.isLoaded ? 'success' : 'surface',
+      statusText: store.isLoaded ? 'Loaded' : 'Not Loaded'
     }
   }
 
   /**
-   * Форматирует JSON с подсветкой синтаксиса (упрощенная версия)
-   */
-  function formatJsonWithHighlight(data: any): string {
-    try {
-      const jsonString = JSON.stringify(data, null, 2)
-
-      // Простая подсветка синтаксиса через замены
-      return jsonString
-        .replace(/(".*?"):/g, '<span class="json-key">$1</span>:')
-        .replace(/: (".*?")/g, ': <span class="json-string">$1</span>')
-        .replace(/: (true|false|null)/g, ': <span class="json-boolean">$1</span>')
-        .replace(/: (\d+)/g, ': <span class="json-number">$1</span>')
-    } catch (error) {
-      return JSON.stringify(data, null, 2)
-    }
-  }
-
-  // =============================================
-  // STRUCTURED DATA FORMATTING
-  // =============================================
-
-  /**
-   * Форматирует структурированные данные для UI
+   * Форматирование структурированных данных store
    */
   function formatStructuredData(storeData: DebugStoreData | null) {
-    if (!storeData) return null
-
-    try {
+    if (!storeData) {
       return {
-        overview: formatOverview(storeData),
-        breakdown: formatBreakdown(storeData.analysis),
-        specificMetrics: formatSpecificMetrics(storeData.analysis),
-        actions: formatActions(storeData.actions),
-        health: formatHealth(storeData.analysis.health)
-      }
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to format structured data', { error })
-      return {
-        error: 'Failed to format structured data',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        overview: {
+          totalItems: 0,
+          activeItems: 0,
+          inactiveItems: 0,
+          health: { status: 'unknown', issues: [], warnings: [] }
+        },
+        health: { issues: [], warnings: [] },
+        specificMetrics: {},
+        actions: []
       }
     }
-  }
 
-  /**
-   * Форматирует обзорную информацию
-   */
-  function formatOverview(storeData: DebugStoreData) {
     const analysis = storeData.analysis
 
     return {
-      name: storeData.name,
-      timestamp: storeData.timestamp,
-      totalItems: analysis.totalItems,
-      activeItems: analysis.activeItems,
-      inactiveItems: analysis.inactiveItems,
-      health: analysis.health,
-      lastUpdated: formatTimestamp(storeData.timestamp)
+      overview: {
+        totalItems: analysis.totalItems,
+        activeItems: analysis.activeItems,
+        inactiveItems: analysis.inactiveItems,
+        health: analysis.health,
+        formattedTotalItems: formatNumber(analysis.totalItems),
+        formattedActiveItems: formatNumber(analysis.activeItems),
+        formattedInactiveItems: formatNumber(analysis.inactiveItems)
+      },
+      health: {
+        status: analysis.health.status,
+        issues: analysis.health.issues,
+        warnings: analysis.health.warnings,
+        issuesCount: analysis.health.issues.length,
+        warningsCount: analysis.health.warnings.length
+      },
+      specificMetrics: formatSpecificMetrics(analysis.specificMetrics),
+      actions: storeData.actions,
+      breakdown: {
+        ...analysis.breakdown,
+        total: Object.values(analysis.breakdown).reduce((sum, count) => sum + count, 0)
+      },
+      formattedTimestamp: formatTimestamp(storeData.timestamp),
+      dataSize: estimateDataSize(storeData)
     }
   }
 
   /**
-   * Форматирует разбивку данных по типам
+   * Форматирование специфичных метрик store
    */
-  function formatBreakdown(analysis: DebugStoreAnalysis) {
-    return {
-      arrays: analysis.breakdown.arrays,
-      objects: analysis.breakdown.objects,
-      primitives: analysis.breakdown.primitives,
-      functions: analysis.breakdown.functions,
-      total: Object.values(analysis.breakdown).reduce((sum, count) => sum + count, 0)
-    }
-  }
-
-  /**
-   * Форматирует специфичные метрики store
-   */
-  function formatSpecificMetrics(analysis: DebugStoreAnalysis) {
-    if (!analysis.specificMetrics || Object.keys(analysis.specificMetrics).length === 0) {
-      return null
+  function formatSpecificMetrics(metrics: any): any {
+    if (!metrics || typeof metrics !== 'object') {
+      return {}
     }
 
-    // Группируем метрики по категориям для лучшего отображения
-    const categorized: Record<string, any> = {}
+    const formatted = { ...metrics }
 
-    for (const [key, value] of Object.entries(analysis.specificMetrics)) {
-      if (key.includes('Count') || key.includes('Length') || key.includes('Total')) {
-        if (!categorized.counts) categorized.counts = {}
-        categorized.counts[key] = value
-      } else if (key.includes('Breakdown') || key.includes('By')) {
-        if (!categorized.breakdowns) categorized.breakdowns = {}
-        categorized.breakdowns[key] = value
-      } else if (key.includes('Avg') || key.includes('Average')) {
-        if (!categorized.averages) categorized.averages = {}
-        categorized.averages[key] = value
-      } else {
-        if (!categorized.other) categorized.other = {}
-        categorized.other[key] = value
+    // Форматируем денежные значения
+    const moneyFields = [
+      'avgCostPerUnit',
+      'avgPreparationCost',
+      'avgRecipeCost',
+      'totalBalance',
+      'totalValue',
+      'averageTransactionAmount',
+      'avgPricePerItem'
+    ]
+
+    moneyFields.forEach(field => {
+      if (typeof formatted[field] === 'number' && formatted[field] > 0) {
+        formatted[`formatted_${field}`] = formatIDR(formatted[field])
       }
-    }
+    })
 
-    return categorized
-  }
+    // Форматируем процентные значения
+    const percentFields = ['workflowEfficiency']
+    percentFields.forEach(field => {
+      if (typeof formatted[field] === 'number') {
+        formatted[`formatted_${field}`] = `${formatted[field]}%`
+      }
+    })
 
-  /**
-   * Форматирует список действий
-   */
-  function formatActions(actions: string[]) {
-    return actions.map(action => ({
-      name: action,
-      displayName: formatActionName(action),
-      category: getActionCategory(action)
-    }))
-  }
+    // Форматируем числовые значения
+    const numberFields = [
+      'totalProducts',
+      'totalCounterAgents',
+      'totalPreparations',
+      'totalRecipes',
+      'totalAccounts',
+      'totalTransactions',
+      'totalCategories',
+      'totalMenuItems',
+      'totalVariants',
+      'totalRequests',
+      'totalOrders',
+      'totalReceipts'
+    ]
 
-  /**
-   * Форматирует информацию о здоровье store
-   */
-  function formatHealth(health: DebugStoreAnalysis['health']) {
-    return {
-      status: health.status,
-      statusColor: getHealthColor(health.status),
-      statusIcon: getHealthIcon(health.status),
-      issues: health.issues,
-      warnings: health.warnings,
-      totalProblems: health.issues.length + health.warnings.length
-    }
-  }
+    numberFields.forEach(field => {
+      if (typeof formatted[field] === 'number') {
+        formatted[`formatted_${field}`] = formatNumber(formatted[field])
+      }
+    })
 
-  // =============================================
-  // HISTORY FORMATTING
-  // =============================================
-
-  /**
-   * Форматирует историю изменений для UI
-   */
-  function formatHistory(history: DebugHistoryEntry[]) {
-    return history.map(entry => ({
-      ...entry,
-      formattedTimestamp: formatTimestamp(entry.timestamp),
-      formattedChanges: formatChanges(entry.changes),
-      changesSummary: getChangesSummary(entry.changes),
-      hasSnapshot: !!entry.snapshot,
-      timeAgo: getTimeAgo(entry.timestamp),
-      actionIcon: getActionIcon(entry.action),
-      changeTypeColor: getChangeTypeColor(entry.changeType)
-    }))
-  }
-
-  /**
-   * Форматирует список изменений
-   */
-  function formatChanges(changes: any[]) {
-    if (changes.length === 0) return 'No specific changes tracked'
-
-    return changes
-      .map(change => {
-        const changeDesc = `${change.path}: ${change.type}`
-        if (change.type === 'modified') {
-          return `${changeDesc} (${String(change.oldValue)} → ${String(change.newValue)})`
-        }
-        return changeDesc
-      })
-      .join(', ')
-  }
-
-  /**
-   * Создает краткое описание изменений
-   */
-  function getChangesSummary(changes: any[]) {
-    if (changes.length === 0) return 'State updated'
-    return `${changes.length} change${changes.length > 1 ? 's' : ''}`
+    return formatted
   }
 
   // =============================================
-  // STORE INFO FORMATTING
+  // BASIC FORMATTING FUNCTIONS
   // =============================================
 
   /**
-   * Форматирует информацию о store для списка
-   */
-  function formatStoreInfo(storeInfo: DebugStoreInfo) {
-    return {
-      ...storeInfo,
-      formattedSize: formatDataSize(storeInfo.size),
-      formattedRecordCount: formatNumber(storeInfo.recordCount),
-      lastUpdatedAgo: storeInfo.lastUpdated ? getTimeAgo(storeInfo.lastUpdated) : 'Never',
-      statusColor: storeInfo.isLoaded ? 'success' : 'warning',
-      statusText: storeInfo.isLoaded ? 'Loaded' : 'Not loaded'
-    }
-  }
-
-  // =============================================
-  // UTILITY FORMATTING FUNCTIONS
-  // =============================================
-
-  /**
-   * Форматирует timestamp в читаемый вид
+   * Форматирование timestamp
    */
   function formatTimestamp(timestamp: string): string {
     try {
-      return new Date(timestamp).toLocaleString()
+      return TimeUtils.formatDateToDisplay(timestamp, 'dd.MM.yyyy HH:mm')
     } catch (error) {
       return timestamp
     }
   }
 
   /**
-   * Форматирует число с разделителями
+   * Форматирование чисел
    */
   function formatNumber(num: number): string {
-    return new Intl.NumberFormat().format(num)
-  }
-
-  /**
-   * Форматирует размер данных
-   */
-  function formatDataSize(size: string | number): string {
-    if (typeof size === 'string') return size
-
-    const bytes = size
-    if (bytes === 0) return '0 B'
-
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-  }
-
-  /**
-   * Получает время "назад" (time ago)
-   */
-  function getTimeAgo(timestamp: string): string {
-    try {
-      const now = new Date()
-      const time = new Date(timestamp)
-      const diffInSeconds = Math.floor((now.getTime() - time.getTime()) / 1000)
-
-      if (diffInSeconds < 60) return `${diffInSeconds}s ago`
-      if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
-      if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
-      return `${Math.floor(diffInSeconds / 86400)}d ago`
-    } catch (error) {
-      return 'Unknown'
+    if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(1)}M`
+    } else if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}K`
     }
+    return num.toString()
   }
 
   /**
-   * Форматирует имя действия в читаемый вид
-   */
-  function formatActionName(action: string): string {
-    return action
-      .replace(/_/g, ' ')
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-  }
-
-  // =============================================
-  // UI HELPER FUNCTIONS
-  // =============================================
-
-  /**
-   * Получает цвет для статуса здоровья
+   * Получение цвета для статуса здоровья
    */
   function getHealthColor(status: string): string {
     switch (status) {
@@ -309,84 +173,196 @@ export function useDebugFormatting() {
       case 'error':
         return 'error'
       default:
-        return 'default'
+        return 'surface'
     }
   }
 
   /**
-   * Получает иконку для статуса здоровья
+   * Форматирование размера данных
    */
-  function getHealthIcon(status: string): string {
+  function formatDataSize(bytes: number): string {
+    if (bytes === 0) return '0 B'
+
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+  }
+
+  /**
+   * Оценка размера данных объекта
+   */
+  function estimateDataSize(data: any): string {
+    try {
+      const jsonString = JSON.stringify(data)
+      return formatDataSize(jsonString.length)
+    } catch (error) {
+      return 'Unknown'
+    }
+  }
+
+  /**
+   * Форматирование процента
+   */
+  function formatPercentage(value: number, precision: number = 1): string {
+    return `${value.toFixed(precision)}%`
+  }
+
+  /**
+   * Форматирование булевого значения
+   */
+  function formatBoolean(value: boolean): string {
+    return value ? 'Yes' : 'No'
+  }
+
+  /**
+   * Форматирование массива в строку
+   */
+  function formatArray(array: any[], maxItems: number = 3): string {
+    if (!Array.isArray(array)) return 'Not an array'
+    if (array.length === 0) return 'Empty'
+
+    const preview = array.slice(0, maxItems).map(item => {
+      if (typeof item === 'string') return item
+      if (typeof item === 'object' && item.name) return item.name
+      if (typeof item === 'object' && item.id) return item.id
+      return String(item)
+    })
+
+    const result = preview.join(', ')
+    return array.length > maxItems ? `${result} and ${array.length - maxItems} more` : result
+  }
+
+  /**
+   * Форматирование объекта breakdown
+   */
+  function formatBreakdown(
+    breakdown: Record<string, number>
+  ): Array<{ label: string; value: number; formatted: string }> {
+    return Object.entries(breakdown).map(([key, value]) => ({
+      label: key.charAt(0).toUpperCase() + key.slice(1),
+      value,
+      formatted: formatNumber(value)
+    }))
+  }
+
+  // =============================================
+  // HEALTH STATUS FORMATTING
+  // =============================================
+
+  /**
+   * Форматирование статуса здоровья с иконками
+   */
+  function formatHealthStatus(status: string): {
+    text: string
+    color: string
+    icon: string
+    description: string
+  } {
     switch (status) {
       case 'healthy':
-        return 'mdi-check-circle'
+        return {
+          text: 'Healthy',
+          color: 'success',
+          icon: 'mdi-check-circle',
+          description: 'Store is operating normally'
+        }
       case 'warning':
-        return 'mdi-alert-circle'
+        return {
+          text: 'Warning',
+          color: 'warning',
+          icon: 'mdi-alert',
+          description: 'Store has minor issues'
+        }
       case 'error':
-        return 'mdi-close-circle'
+        return {
+          text: 'Error',
+          color: 'error',
+          icon: 'mdi-alert-circle',
+          description: 'Store has critical issues'
+        }
       default:
-        return 'mdi-help-circle'
+        return {
+          text: 'Unknown',
+          color: 'surface',
+          icon: 'mdi-help-circle',
+          description: 'Health status unknown'
+        }
     }
   }
 
   /**
-   * Получает категорию действия
+   * Форматирование списка проблем
    */
-  function getActionCategory(action: string): string {
-    if (action.includes('fetch') || action.includes('load')) return 'data'
-    if (action.includes('create') || action.includes('update') || action.includes('delete'))
-      return 'crud'
-    if (action.includes('filter') || action.includes('search')) return 'filtering'
-    if (action.includes('select') || action.includes('toggle')) return 'selection'
-    return 'other'
-  }
+  function formatHealthIssues(
+    issues: string[],
+    warnings: string[]
+  ): {
+    hasIssues: boolean
+    totalCount: number
+    criticalCount: number
+    warningCount: number
+    formattedIssues: Array<{ type: 'error' | 'warning'; message: string; color: string }>
+  } {
+    const formattedIssues = [
+      ...issues.map(issue => ({
+        type: 'error' as const,
+        message: issue,
+        color: 'error'
+      })),
+      ...warnings.map(warning => ({
+        type: 'warning' as const,
+        message: warning,
+        color: 'warning'
+      }))
+    ]
 
-  /**
-   * Получает иконку для действия
-   */
-  function getActionIcon(action: string): string {
-    if (action.includes('fetch') || action.includes('load')) return 'mdi-download'
-    if (action.includes('create')) return 'mdi-plus'
-    if (action.includes('update')) return 'mdi-pencil'
-    if (action.includes('delete')) return 'mdi-delete'
-    if (action.includes('state_change')) return 'mdi-swap-horizontal'
-    if (action.includes('tracking')) return 'mdi-radar'
-    return 'mdi-cog'
-  }
-
-  /**
-   * Получает цвет для типа изменения
-   */
-  function getChangeTypeColor(changeType: string): string {
-    switch (changeType) {
-      case 'state':
-        return 'info'
-      case 'data':
-        return 'primary'
-      case 'error':
-        return 'error'
-      default:
-        return 'default'
+    return {
+      hasIssues: formattedIssues.length > 0,
+      totalCount: formattedIssues.length,
+      criticalCount: issues.length,
+      warningCount: warnings.length,
+      formattedIssues
     }
   }
 
   // =============================================
-  // COMPUTED FORMATTERS
+  // STORE-SPECIFIC FORMATTING
   // =============================================
 
   /**
-   * Создает computed formatter для reactive использования
+   * Форматирование для Products store
    */
-  function createFormatterComputed<T, R>(source: () => T, formatter: (data: T) => R) {
-    return computed(() => {
-      try {
-        const data = source()
-        return formatter(data)
-      } catch (error) {
-        DebugUtils.error(MODULE_NAME, 'Formatter computed error', { error })
-        return null
-      }
-    })
+  function formatProductsData(data: any) {
+    if (!data.specificMetrics) return {}
+
+    const metrics = data.specificMetrics
+    return {
+      summary: `${metrics.totalProducts || 0} products (${metrics.sellableProducts || 0} sellable, ${metrics.rawMaterials || 0} raw materials)`,
+      avgCost: metrics.avgCostPerUnit ? formatIDR(metrics.avgCostPerUnit) : 'N/A',
+      suppliersConnected: `${metrics.productsWithSuppliers || 0}/${metrics.totalProducts || 0}`,
+      categories: Object.keys(metrics.categoriesBreakdown || {}).length,
+      units: Object.keys(metrics.baseUnitsBreakdown || {}).length
+    }
+  }
+
+  /**
+   * Форматирование для Account store
+   */
+  function formatAccountsData(data: any) {
+    if (!data.specificMetrics) return {}
+
+    const metrics = data.specificMetrics
+    return {
+      summary: `${metrics.totalAccounts || 0} accounts with ${formatIDR(metrics.totalBalance || 0)} total balance`,
+      transactions: `${metrics.totalTransactions || 0} transactions`,
+      pending: `${metrics.pendingPayments || 0} pending payments`,
+      urgent: `${metrics.urgentPayments || 0} urgent`,
+      avgTransaction: metrics.averageTransactionAmount
+        ? formatIDR(metrics.averageTransactionAmount)
+        : 'N/A'
+    }
   }
 
   // =============================================
@@ -394,41 +370,51 @@ export function useDebugFormatting() {
   // =============================================
 
   return {
-    // Raw JSON formatting
-    formatRawJson,
-    formatJsonWithHighlight,
-
-    // Structured data formatting
-    formatStructuredData,
-    formatOverview,
-    formatBreakdown,
-    formatSpecificMetrics,
-    formatActions,
-    formatHealth,
-
-    // History formatting
-    formatHistory,
-    formatChanges,
-    getChangesSummary,
-
-    // Store info formatting
+    // Store formatting
     formatStoreInfo,
+    formatStructuredData,
+    formatSpecificMetrics,
 
-    // Utility formatters
+    // Basic formatting
     formatTimestamp,
     formatNumber,
     formatDataSize,
-    getTimeAgo,
-    formatActionName,
+    formatPercentage,
+    formatBoolean,
+    formatArray,
+    formatBreakdown,
 
-    // UI helpers
+    // Health formatting
     getHealthColor,
-    getHealthIcon,
-    getActionCategory,
-    getActionIcon,
-    getChangeTypeColor,
+    formatHealthStatus,
+    formatHealthIssues,
 
-    // Computed formatter factory
-    createFormatterComputed
+    // Store-specific formatting
+    formatProductsData,
+    formatAccountsData,
+
+    // Utilities
+    estimateDataSize
   }
+}
+
+// =============================================
+// DEV HELPERS
+// =============================================
+
+if (import.meta.env.DEV) {
+  setTimeout(() => {
+    window.__DEBUG_FORMATTING_SIMPLIFIED__ = () => {
+      console.log('=== useDebugFormatting composable (simplified) ===')
+      console.log('Available for formatting debug data without history functions')
+
+      const formatting = useDebugFormatting()
+      console.log('Debug formatting instance:', formatting)
+
+      return formatting
+    }
+
+    console.log('\n💡 useDebugFormatting (simplified) loaded! Try:')
+    console.log('  • window.__DEBUG_FORMATTING_SIMPLIFIED__()')
+  }, 1000)
 }

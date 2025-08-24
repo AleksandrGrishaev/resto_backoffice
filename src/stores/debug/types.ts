@@ -1,4 +1,8 @@
-// src/stores/debug/types.ts
+// src/stores/debug/types.ts - SIMPLIFIED: Удалена вся функциональность History
+
+// =============================================
+// CORE DEBUG TYPES (без history)
+// =============================================
 
 export interface DebugStoreInfo {
   id: string
@@ -41,7 +45,7 @@ export interface DebugStoreAnalysis {
   }
 
   // Store-specific metrics
-  specificMetrics: Record<string, any>
+  specificMetrics: StoreSpecificMetrics
 
   // Health status
   health: {
@@ -51,22 +55,9 @@ export interface DebugStoreAnalysis {
   }
 }
 
-export interface DebugHistoryEntry {
-  id: string
-  storeId: string
-  timestamp: string
-  action: string
-  changeType: 'state' | 'data' | 'error'
-  changes: DebugChange[]
-  snapshot?: any // optional snapshot for major changes
-}
-
-export interface DebugChange {
-  path: string
-  oldValue: any
-  newValue: any
-  type: 'added' | 'modified' | 'deleted'
-}
+// =============================================
+// SIMPLIFIED DEBUG STATE (без history)
+// =============================================
 
 export interface DebugState {
   // Available stores
@@ -74,26 +65,26 @@ export interface DebugState {
 
   // Current selection
   selectedStoreId: string | null
-  selectedTab: 'raw' | 'structured' | 'history'
+  selectedTab: DebugTabId
 
   // Data cache
   storeData: Record<string, DebugStoreData>
-  history: DebugHistoryEntry[]
 
   // UI state
   loading: boolean
   error: string | null
 
-  // Settings
+  // Settings (упрощенные)
   settings: {
-    maxHistoryEntries: number
     autoRefresh: boolean
     refreshInterval: number
-    enableHistory: boolean
   }
 }
 
-// Store-specific types for analysis
+// =============================================
+// STORE-SPECIFIC METRICS
+// =============================================
+
 export interface ProductsStoreMetrics {
   totalProducts: number
   sellableProducts: number
@@ -174,24 +165,21 @@ export type StoreSpecificMetrics =
   | MenuStoreMetrics
   | StorageStoreMetrics
   | SupplierStoreMetrics
+  | Record<string, any>
 
-// Tab configuration
+// =============================================
+// TAB CONFIGURATION (без history)
+// =============================================
+
 export interface DebugTab {
-  id: 'raw' | 'structured' | 'history'
+  id: DebugTabId
   name: string
   icon: string
   description: string
 }
 
-// Copy operations
-export interface CopyOperation {
-  type: 'full' | 'selection'
-  content: string
-  timestamp: string
-  success: boolean
-}
+export type DebugTabId = 'raw' | 'structured'
 
-// Constants
 export const DEBUG_TABS: DebugTab[] = [
   {
     id: 'raw',
@@ -204,57 +192,75 @@ export const DEBUG_TABS: DebugTab[] = [
     name: 'Structured',
     icon: 'mdi-format-list-bulleted',
     description: 'Organized view with analysis'
-  },
-  {
-    id: 'history',
-    name: 'History',
-    icon: 'mdi-history',
-    description: 'Store changes history'
   }
 ]
 
+// =============================================
+// COPY OPERATIONS
+// =============================================
+
+export interface CopyOperation {
+  type: 'full' | 'raw' | 'structured'
+  content: string
+  timestamp: string
+  success: boolean
+}
+
+// =============================================
+// STORE CONFIGURATIONS
+// =============================================
+
 export const STORE_CONFIGURATIONS = {
   products: {
+    name: 'Products Store',
     icon: 'mdi-package-variant',
     description: 'Products catalog with pricing and suppliers',
     priority: 1
   },
   counteragents: {
+    name: 'Counteragents Store',
     icon: 'mdi-store',
     description: 'Suppliers and service providers',
     priority: 2
   },
   recipes: {
+    name: 'Recipes Store',
     icon: 'mdi-book-open-page-variant',
     description: 'Recipes and preparations with cost calculations',
     priority: 3
   },
   account: {
+    name: 'Account Store',
     icon: 'mdi-bank',
     description: 'Financial accounts and transactions',
     priority: 4
   },
   menu: {
+    name: 'Menu Store',
     icon: 'mdi-silverware-fork-knife',
     description: 'Menu categories and items',
     priority: 5
   },
   storage: {
+    name: 'Storage Store',
     icon: 'mdi-warehouse',
     description: 'Product storage and inventory',
     priority: 6
   },
   preparation: {
+    name: 'Preparation Store',
     icon: 'mdi-chef-hat',
     description: 'Preparation storage and operations',
     priority: 7
   },
   supplier: {
+    name: 'Supplier Store',
     icon: 'mdi-truck',
     description: 'Supplier orders and procurement',
     priority: 8
   },
   auth: {
+    name: 'Auth Store',
     icon: 'mdi-account-key',
     description: 'Authentication and user management',
     priority: 9
@@ -263,4 +269,3 @@ export const STORE_CONFIGURATIONS = {
 
 // Utility types
 export type StoreId = keyof typeof STORE_CONFIGURATIONS
-export type DebugTabId = 'raw' | 'structured' | 'history'

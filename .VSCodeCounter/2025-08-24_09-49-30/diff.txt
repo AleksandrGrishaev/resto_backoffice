@@ -1,0 +1,47 @@
+Date : 2025-08-24 09:49:30
+Directory : /Users/peaker/dev/kitchen-app/backoffice/src
+Total : 13 files,  -1872 codes, -217 comments, -302 blanks, all -2391 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| Vue        |          5 |       -909 |        -32 |       -119 |     -1,060 |
+| TypeScript |          8 |       -963 |       -185 |       -183 |     -1,331 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++-----------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                          | files      | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                             |         13 |     -1,872 |       -217 |       -302 |     -2,391 |
+| core                                                                                          |          1 |        -13 |         -2 |         -3 |        -18 |
+| stores                                                                                        |          7 |       -950 |       -183 |       -180 |     -1,313 |
+| stores/debug                                                                                  |          7 |       -950 |       -183 |       -180 |     -1,313 |
+| stores/debug (Files)                                                                          |          3 |        -70 |         -6 |         -7 |        -83 |
+| stores/debug/composables                                                                      |          4 |       -880 |       -177 |       -173 |     -1,230 |
+| views                                                                                         |          5 |       -909 |        -32 |       -119 |     -1,060 |
+| views/debug                                                                                   |          5 |       -909 |        -32 |       -119 |     -1,060 |
+| views/debug (Files)                                                                           |          1 |        -17 |         -1 |         -2 |        -20 |
+| views/debug/components                                                                        |          4 |       -892 |        -31 |       -117 |     -1,040 |
++-----------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-----------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                                                      | language   | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/appInitializer.ts                           | TypeScript |        -13 |         -2 |         -3 |        -18 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useDebugFormatting.ts   | TypeScript |         19 |        -29 |         -4 |        -14 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useDebugHistory_back.ts | TypeScript |       -479 |        -70 |        -90 |       -639 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useDebugStores.ts       | TypeScript |        -36 |         -8 |         -6 |        -50 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useEnhancedHistory.ts   | TypeScript |       -384 |        -70 |        -73 |       -527 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/debugService.ts                     | TypeScript |         -2 |         -2 |         -1 |         -5 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/debugStore.ts                       | TypeScript |        -54 |        -18 |        -11 |        -83 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/types.ts                            | TypeScript |        -14 |         14 |          5 |          5 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/debug/DebugView.vue                        | Vue        |        -17 |         -1 |         -2 |        -20 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/EnhancedHistoryEntry.vue  | Vue        |       -428 |        -15 |        -61 |       -504 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/EnhancedHistoryView.vue   | Vue        |       -348 |        -12 |        -46 |       -406 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/HistoryEntryDetails.vue   | Vue        |       -145 |         -4 |        -14 |       -163 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/JsonNavigator.vue         | Vue        |         29 |          0 |          4 |         33 |
+| Total                                                                                         |            |     -1,872 |       -217 |       -302 |     -2,391 |
++-----------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+

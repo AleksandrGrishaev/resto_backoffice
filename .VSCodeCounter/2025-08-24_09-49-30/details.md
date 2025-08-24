@@ -1,10 +1,10 @@
 # Details
 
-Date : 2025-08-24 09:13:03
+Date : 2025-08-24 09:49:30
 
 Directory /Users/peaker/dev/kitchen-app/backoffice/src
 
-Total : 252 files, 75598 codes, 5711 comments, 12119 blanks, all 93428 lines
+Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 
 [Summary](results.md) / Details / [Diff Summary](diff.md) / [Diff Details](diff-details.md)
 
@@ -50,7 +50,7 @@ Total : 252 files, 75598 codes, 5711 comments, 12119 blanks, all 93428 lines
 | [src/composables/useMeasurementUnits.ts](/src/composables/useMeasurementUnits.ts)                                                                               | TypeScript |   211 |      82 |    49 |   342 |
 | [src/composables/useVuetifyBreakpoints.ts](/src/composables/useVuetifyBreakpoints.ts)                                                                           | TypeScript |    19 |       4 |     5 |    28 |
 | [src/config/users.ts](/src/config/users.ts)                                                                                                                     | TypeScript |    66 |       4 |     8 |    78 |
-| [src/core/appInitializer.ts](/src/core/appInitializer.ts)                                                                                                       | TypeScript |   372 |      63 |    91 |   526 |
+| [src/core/appInitializer.ts](/src/core/appInitializer.ts)                                                                                                       | TypeScript |   359 |      61 |    88 |   508 |
 | [src/core/appInitializerTests.ts](/src/core/appInitializerTests.ts)                                                                                             | TypeScript |   469 |      88 |   100 |   657 |
 | [src/firebase/config.ts](/src/firebase/config.ts)                                                                                                               | TypeScript |    33 |       1 |    11 |    45 |
 | [src/firebase/converters.ts](/src/firebase/converters.ts)                                                                                                       | TypeScript |    45 |       1 |     4 |    50 |
@@ -80,14 +80,12 @@ Total : 252 files, 75598 codes, 5711 comments, 12119 blanks, all 93428 lines
 | [src/stores/counteragents/index.ts](/src/stores/counteragents/index.ts)                                                                                         | TypeScript |   167 |      20 |    34 |   221 |
 | [src/stores/counteragents/mock/counteragentsMock.ts](/src/stores/counteragents/mock/counteragentsMock.ts)                                                       | TypeScript |   347 |      74 |    33 |   454 |
 | [src/stores/counteragents/types.ts](/src/stores/counteragents/types.ts)                                                                                         | TypeScript |   150 |      50 |    39 |   239 |
-| [src/stores/debug/composables/useDebugFormatting.ts](/src/stores/debug/composables/useDebugFormatting.ts)                                                       | TypeScript |   276 |     107 |    52 |   435 |
-| [src/stores/debug/composables/useDebugHistory_back.ts](/src/stores/debug/composables/useDebugHistory_back.ts)                                                   | TypeScript |   479 |      70 |    90 |   639 |
-| [src/stores/debug/composables/useDebugStores.ts](/src/stores/debug/composables/useDebugStores.ts)                                                               | TypeScript |   213 |     105 |    53 |   371 |
-| [src/stores/debug/composables/useEnhancedHistory.ts](/src/stores/debug/composables/useEnhancedHistory.ts)                                                       | TypeScript |   384 |      70 |    73 |   527 |
-| [src/stores/debug/debugService.ts](/src/stores/debug/debugService.ts)                                                                                           | TypeScript | 1,123 |      81 |   152 | 1,356 |
-| [src/stores/debug/debugStore.ts](/src/stores/debug/debugStore.ts)                                                                                               | TypeScript |   412 |     106 |    91 |   609 |
+| [src/stores/debug/composables/useDebugFormatting.ts](/src/stores/debug/composables/useDebugFormatting.ts)                                                       | TypeScript |   295 |      78 |    48 |   421 |
+| [src/stores/debug/composables/useDebugStores.ts](/src/stores/debug/composables/useDebugStores.ts)                                                               | TypeScript |   177 |      97 |    47 |   321 |
+| [src/stores/debug/debugService.ts](/src/stores/debug/debugService.ts)                                                                                           | TypeScript | 1,121 |      79 |   151 | 1,351 |
+| [src/stores/debug/debugStore.ts](/src/stores/debug/debugStore.ts)                                                                                               | TypeScript |   358 |      88 |    80 |   526 |
 | [src/stores/debug/index.ts](/src/stores/debug/index.ts)                                                                                                         | TypeScript |    23 |       6 |     6 |    35 |
-| [src/stores/debug/types.ts](/src/stores/debug/types.ts)                                                                                                         | TypeScript |   220 |      18 |    29 |   267 |
+| [src/stores/debug/types.ts](/src/stores/debug/types.ts)                                                                                                         | TypeScript |   206 |      32 |    34 |   272 |
 | [src/stores/index.ts](/src/stores/index.ts)                                                                                                                     | TypeScript |     1 |       0 |     1 |     2 |
 | [src/stores/menu/index.ts](/src/stores/menu/index.ts)                                                                                                           | TypeScript |    42 |       8 |     7 |    57 |
 | [src/stores/menu/menuMock.ts](/src/stores/menu/menuMock.ts)                                                                                                     | TypeScript |   578 |      59 |    23 |   660 |
@@ -183,11 +181,8 @@ Total : 252 files, 75598 codes, 5711 comments, 12119 blanks, all 93428 lines
 | [src/views/counteragents/components/counteragents/CounteragentFilters.vue](/src/views/counteragents/components/counteragents/CounteragentFilters.vue)           | Vue        |   417 |      11 |    50 |   478 |
 | [src/views/counteragents/components/counteragents/CounteragentsTable.vue](/src/views/counteragents/components/counteragents/CounteragentsTable.vue)             | Vue        |   314 |      12 |    48 |   374 |
 | [src/views/counteragents/components/shared/ContactInfo.vue](/src/views/counteragents/components/shared/ContactInfo.vue)                                         | Vue        |   165 |       6 |    26 |   197 |
-| [src/views/debug/DebugView.vue](/src/views/debug/DebugView.vue)                                                                                                 | Vue        |   505 |      28 |    64 |   597 |
-| [src/views/debug/components/EnhancedHistoryEntry.vue](/src/views/debug/components/EnhancedHistoryEntry.vue)                                                     | Vue        |   428 |      15 |    61 |   504 |
-| [src/views/debug/components/EnhancedHistoryView.vue](/src/views/debug/components/EnhancedHistoryView.vue)                                                       | Vue        |   348 |      12 |    46 |   406 |
-| [src/views/debug/components/HistoryEntryDetails.vue](/src/views/debug/components/HistoryEntryDetails.vue)                                                       | Vue        |   145 |       4 |    14 |   163 |
-| [src/views/debug/components/JsonNavigator.vue](/src/views/debug/components/JsonNavigator.vue)                                                                   | Vue        |   477 |       9 |    78 |   564 |
+| [src/views/debug/DebugView.vue](/src/views/debug/DebugView.vue)                                                                                                 | Vue        |   488 |      27 |    62 |   577 |
+| [src/views/debug/components/JsonNavigator.vue](/src/views/debug/components/JsonNavigator.vue)                                                                   | Vue        |   506 |       9 |    82 |   597 |
 | [src/views/debug/components/JsonTreeNode.vue](/src/views/debug/components/JsonTreeNode.vue)                                                                     | Vue        |   425 |      14 |    89 |   528 |
 | [src/views/menu/MenuView.vue](/src/views/menu/MenuView.vue)                                                                                                     | Vue        |   347 |       7 |    48 |   402 |
 | [src/views/menu/components/MenuCategoryDialog.vue](/src/views/menu/components/MenuCategoryDialog.vue)                                                           | Vue        |   163 |       0 |    24 |   187 |
