@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/InventoryItemRow.vue - ОБНОВЛЕННАЯ ВЕРСИЯ -->
+<!-- src/views/storage/components/InventoryItemRow.vue - SIMPLE CLEAN VERSION -->
 <template>
   <v-card variant="outlined" class="inventory-item-row" :class="getRowClass()">
     <v-card-text class="pa-3">
@@ -15,6 +15,13 @@
               </div>
               <div class="text-caption text-medium-emphasis">
                 {{ formatItemType(modelValue.itemType) }}
+                <!-- Simple stock status indicator -->
+                <span v-if="modelValue.systemQuantity < 0" class="text-error ml-1">
+                  (Negative Stock)
+                </span>
+                <span v-else-if="modelValue.systemQuantity === 0" class="text-warning ml-1">
+                  (Zero Stock)
+                </span>
               </div>
             </div>
           </div>
@@ -24,7 +31,16 @@
         <v-col cols="6" md="2">
           <div class="text-center">
             <div class="text-caption text-medium-emphasis mb-1">System</div>
-            <div class="text-body-1 font-weight-medium">
+            <div
+              class="text-body-1 font-weight-medium"
+              :class="
+                modelValue.systemQuantity < 0
+                  ? 'text-error'
+                  : modelValue.systemQuantity === 0
+                    ? 'text-warning'
+                    : ''
+              "
+            >
               {{ modelValue.systemQuantity }} {{ modelValue.unit }}
             </div>
           </div>
@@ -47,7 +63,7 @@
           />
         </v-col>
 
-        <!-- ✅ ДОБАВЛЕНО: Кнопка подтверждения -->
+        <!-- Confirmation Button -->
         <v-col cols="6" md="1">
           <div class="text-center">
             <v-btn
@@ -88,7 +104,7 @@
             >
               {{ formatCurrency(modelValue.valueDifference) }}
             </div>
-            <!-- ✅ ДОБАВЛЕНО: Показываем кто считал под значением -->
+            <!-- Show who counted -->
             <div v-if="modelValue.countedBy" class="text-caption text-medium-emphasis mt-1">
               by {{ modelValue.countedBy }}
             </div>
@@ -112,7 +128,10 @@
       </v-expand-transition>
 
       <!-- Toggle Notes Button -->
-      <div v-if="modelValue.difference !== 0 || showNotes" class="text-center mt-2">
+      <div
+        v-if="modelValue.difference !== 0 || showNotes || modelValue.notes"
+        class="text-center mt-2"
+      >
         <v-btn
           size="small"
           variant="text"
@@ -120,6 +139,7 @@
           @click="showNotes = !showNotes"
         >
           {{ showNotes ? 'Hide' : 'Add' }} Notes
+          <span v-if="modelValue.notes && !showNotes" class="ml-1">(has notes)</span>
         </v-btn>
       </div>
     </v-card-text>
@@ -153,8 +173,6 @@ const isConfirmedOrChanged = computed(
     !!props.modelValue.countedBy
 )
 
-const hasBeenTouched = computed(() => isConfirmedOrChanged.value || !!props.modelValue.notes)
-
 // Methods
 function getItemIcon(itemType: StorageItemType): string {
   return itemType === 'product' ? '🥩' : '🍲'
@@ -185,22 +203,11 @@ function getDifferenceColor(value: number): string {
   return 'text-medium-emphasis'
 }
 
-function getStatusIcon(): string {
-  if (props.modelValue.confirmed) return 'mdi-check-circle'
-  if (props.modelValue.countedBy) return 'mdi-account-check'
-  if (props.modelValue.difference > 0) return 'mdi-plus-circle'
-  if (props.modelValue.difference < 0) return 'mdi-minus-circle'
-  return 'mdi-help-circle-outline'
-}
-
-function getStatusColor(): string {
-  if (props.modelValue.confirmed || props.modelValue.countedBy) return 'success'
-  if (props.modelValue.difference > 0) return 'success'
-  if (props.modelValue.difference < 0) return 'error'
-  return 'warning'
-}
-
 function getRowClass(): string {
+  const system = props.modelValue.systemQuantity
+
+  if (system < 0) return 'negative-stock-row'
+  if (system === 0) return 'zero-stock-row'
   if (props.modelValue.confirmed || props.modelValue.countedBy) return 'confirmed-row'
   if (Math.abs(props.modelValue.difference) > 0.001) return 'discrepancy-row'
   return 'default-row'
@@ -217,7 +224,7 @@ function toggleConfirmed() {
   const wasConfirmed = props.modelValue.confirmed
   const newConfirmed = !wasConfirmed
 
-  // Если подтверждаем и еще никто не считал, отмечаем текущего пользователя
+  // If confirming and no one has counted yet, mark current user
   const countedBy =
     newConfirmed && !props.modelValue.countedBy ? 'User' : props.modelValue.countedBy
 
@@ -234,7 +241,7 @@ function updateActualQuantity(value: string | number) {
   const difference = quantity - props.modelValue.systemQuantity
   const valueDifference = difference * props.modelValue.averageCost
 
-  // Если пользователь изменил количество, автоматически отмечаем как пересчитанное
+  // If user changed quantity, automatically mark as counted
   const countedBy = !props.modelValue.countedBy ? 'User' : props.modelValue.countedBy
 
   emit('update:modelValue', {
@@ -263,7 +270,17 @@ function updateNotes(notes: string) {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 
-  // ✅ ДОБАВЛЕНО: Стили для разных состояний строки
+  // Simple styles for different states
+  &.negative-stock-row {
+    border-left: 4px solid rgb(var(--v-theme-error));
+    background-color: rgba(var(--v-theme-error), 0.03);
+  }
+
+  &.zero-stock-row {
+    border-left: 4px solid rgb(var(--v-theme-warning));
+    background-color: rgba(var(--v-theme-warning), 0.02);
+  }
+
   &.confirmed-row {
     border-left: 4px solid rgb(var(--v-theme-success));
     background-color: rgba(var(--v-theme-success), 0.02);

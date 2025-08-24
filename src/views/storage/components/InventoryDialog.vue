@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/InventoryDialog.vue - ТОЛЬКО ПРОДУКТЫ -->
+<!-- src/views/storage/components/InventoryDialog.vue - FIXED VERSION -->
 <template>
   <v-dialog
     :model-value="modelValue"
@@ -61,6 +61,8 @@
                 <v-btn-toggle v-model="filterType" density="compact">
                   <v-btn value="all" size="small">All</v-btn>
                   <v-btn value="discrepancy" size="small">Discrepancies</v-btn>
+                  <v-btn value="negative" size="small">Negative Stock</v-btn>
+                  <v-btn value="zero" size="small">Zero Stock</v-btn>
                   <v-btn value="uncounted" size="small">Uncounted</v-btn>
                 </v-btn-toggle>
               </div>
@@ -93,6 +95,36 @@
                   </v-list-item>
                 </template>
               </v-select>
+            </div>
+
+            <!-- Stock Summary -->
+            <div v-if="stockSummary.total > 0" class="mb-2">
+              <v-row>
+                <v-col cols="3">
+                  <v-chip size="small" color="success" variant="tonal">
+                    <v-icon icon="mdi-check-circle" size="14" class="mr-1" />
+                    {{ stockSummary.withStock }} with stock
+                  </v-chip>
+                </v-col>
+                <v-col cols="3">
+                  <v-chip size="small" color="warning" variant="tonal">
+                    <v-icon icon="mdi-alert-circle" size="14" class="mr-1" />
+                    {{ stockSummary.zeroStock }} zero stock
+                  </v-chip>
+                </v-col>
+                <v-col cols="3">
+                  <v-chip size="small" color="error" variant="tonal">
+                    <v-icon icon="mdi-minus-circle" size="14" class="mr-1" />
+                    {{ stockSummary.negativeStock }} negative
+                  </v-chip>
+                </v-col>
+                <v-col cols="3">
+                  <v-chip size="small" color="info" variant="tonal">
+                    <v-icon icon="mdi-package-variant" size="14" class="mr-1" />
+                    {{ stockSummary.total }} total
+                  </v-chip>
+                </v-col>
+              </v-row>
             </div>
           </div>
 
@@ -138,13 +170,23 @@
                 </v-chip>
               </div>
 
-              <inventory-item-row
-                v-for="item in filteredItems"
-                :key="item.id"
-                v-model="inventoryItems[getItemIndex(item.id)]"
-                class="mb-2"
-                @update:model-value="updateInventoryItem"
-              />
+              <!-- Section Headers and Items -->
+              <div v-for="section in sectionsWithItems" :key="section.key" class="mb-4">
+                <div v-if="section.items.length > 0" class="mb-2">
+                  <v-chip :color="section.color" size="small" variant="flat" class="mb-2">
+                    <v-icon :icon="section.icon" size="14" class="mr-1" />
+                    {{ section.title }} ({{ section.items.length }})
+                  </v-chip>
+
+                  <inventory-item-row
+                    v-for="item in section.items"
+                    :key="item.id"
+                    v-model="inventoryItems[getItemIndex(item.id)]"
+                    class="mb-2"
+                    @update:model-value="updateInventoryItem"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -200,6 +242,7 @@
                 <div>Can finalize: {{ canFinalize }}</div>
                 <div>Available categories: {{ availableCategories.join(', ') }}</div>
                 <div>Categories with count: {{ categoriesWithCount.length }}</div>
+                <div>Stock summary: {{ JSON.stringify(stockSummary) }}</div>
               </div>
             </v-card-text>
           </v-card>
@@ -311,12 +354,13 @@ const isDev = computed(() => {
   return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
 })
 
-// Computed
-const availableBalances = computed(() =>
-  storageStore.state.balances.filter(
-    b => b.department === props.department && b.itemType === 'product' && b.totalQuantity > 0
+// ✅ FIXED: Get ALL balances including zero and negative stock
+const allAvailableBalances = computed(() => {
+  return storageStore.state.balances.filter(
+    b => b.department === props.department && b.itemType === 'product'
+    // ✅ REMOVED: && b.totalQuantity > 0 - now includes zero and negative stock
   )
-)
+})
 
 // Get available categories from products in inventory
 const availableCategories = computed(() => {
@@ -378,10 +422,26 @@ const categoriesWithCount = computed(() => {
   }
 })
 
-const filteredItems = computed(() => {
+// ✅ NEW: Stock summary statistics
+const stockSummary = computed(() => {
+  const total = inventoryItems.value.length
+  const withStock = inventoryItems.value.filter(item => item.systemQuantity > 0).length
+  const zeroStock = inventoryItems.value.filter(item => item.systemQuantity === 0).length
+  const negativeStock = inventoryItems.value.filter(item => item.systemQuantity < 0).length
+
+  return {
+    total,
+    withStock,
+    zeroStock,
+    negativeStock
+  }
+})
+
+// ✅ NEW: Group items by stock status for organized display
+const sectionsWithItems = computed(() => {
   let items = [...inventoryItems.value]
 
-  // Filter by category
+  // Apply category filter
   if (categoryFilter.value !== 'all') {
     items = items.filter(item => {
       try {
@@ -394,7 +454,7 @@ const filteredItems = computed(() => {
     })
   }
 
-  // Filter by status
+  // Apply status filter
   switch (filterType.value) {
     case 'discrepancy':
       items = items.filter(item => Math.abs(item.difference) > 0.01)
@@ -402,12 +462,72 @@ const filteredItems = computed(() => {
     case 'uncounted':
       items = items.filter(item => !hasItemBeenCounted(item))
       break
+    case 'negative':
+      items = items.filter(item => item.systemQuantity < 0)
+      break
+    case 'zero':
+      items = items.filter(item => item.systemQuantity === 0)
+      break
     default:
       // show all
       break
   }
 
-  return items
+  // If filtering, return single section
+  if (filterType.value !== 'all') {
+    return [
+      {
+        key: 'filtered',
+        title: 'Filtered Products',
+        items: items,
+        color: 'primary',
+        icon: 'mdi-filter'
+      }
+    ]
+  }
+
+  // Group by stock status for organized display
+  const negativeStock = items.filter(item => item.systemQuantity < 0)
+  const withStock = items.filter(item => item.systemQuantity > 0)
+  const zeroStock = items.filter(item => item.systemQuantity === 0)
+
+  const sections = []
+
+  if (withStock.length > 0) {
+    sections.push({
+      key: 'with-stock',
+      title: 'Products with Stock',
+      items: withStock.sort((a, b) => a.itemName.localeCompare(b.itemName)),
+      color: 'success',
+      icon: 'mdi-check-circle'
+    })
+  }
+
+  if (negativeStock.length > 0) {
+    sections.push({
+      key: 'negative-stock',
+      title: 'Negative Stock (Critical)',
+      items: negativeStock.sort((a, b) => a.itemName.localeCompare(b.itemName)),
+      color: 'error',
+      icon: 'mdi-alert-circle'
+    })
+  }
+
+  if (zeroStock.length > 0) {
+    sections.push({
+      key: 'zero-stock',
+      title: 'Zero Stock (Need Replenishment)',
+      items: zeroStock.sort((a, b) => a.itemName.localeCompare(b.itemName)),
+      color: 'warning',
+      icon: 'mdi-package-variant-closed'
+    })
+  }
+
+  return sections
+})
+
+const filteredItems = computed(() => {
+  return sectionsWithItems.value.flatMap(section => section.items)
 })
 
 const totalItems = computed(() => inventoryItems.value.length)
@@ -507,13 +627,14 @@ function updateInventoryItem(updatedItem: InventoryItem) {
   }
 }
 
+// ✅ FIXED: Initialize inventory items with ALL balances (including zero/negative stock)
 function initializeInventoryItems() {
-  inventoryItems.value = availableBalances.value.map(balance => ({
+  inventoryItems.value = allAvailableBalances.value.map(balance => ({
     id: `inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     itemId: balance.itemId,
     itemType: balance.itemType,
     itemName: balance.itemName,
-    systemQuantity: balance.totalQuantity,
+    systemQuantity: balance.totalQuantity, // ✅ This now includes 0 and negative values
     actualQuantity: balance.totalQuantity,
     difference: 0,
     unit: balance.unit,
@@ -523,9 +644,12 @@ function initializeInventoryItems() {
     countedBy: ''
   }))
 
-  DebugUtils.info(MODULE_NAME, 'Inventory items initialized', {
+  DebugUtils.info(MODULE_NAME, 'Inventory items initialized (including zero/negative stock)', {
     count: inventoryItems.value.length,
-    department: props.department
+    department: props.department,
+    withStock: inventoryItems.value.filter(item => item.systemQuantity > 0).length,
+    zeroStock: inventoryItems.value.filter(item => item.systemQuantity === 0).length,
+    negativeStock: inventoryItems.value.filter(item => item.systemQuantity < 0).length
   })
 }
 

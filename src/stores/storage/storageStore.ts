@@ -1,4 +1,4 @@
-// src/stores/storage/storageStore.ts - SIMPLIFIED (WriteOff delegated to useWriteOff)
+// src/stores/storage/storageStore.ts - FIXED BATCH SYNCHRONIZATION
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -8,6 +8,7 @@ import type {
   StorageState,
   StorageOperation,
   StorageBalance,
+  StorageBatch,
   InventoryDocument,
   InventoryItem,
   StorageDepartment,
@@ -114,6 +115,12 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.balances.filter(b => b.department === department)
   })
 
+  // ✅ NEW: Computed for batches
+  const departmentBatches = computed(() => {
+    return (department: StorageDepartment) =>
+      state.value.batches.filter(b => b.department === department)
+  })
+
   const totalInventoryValue = computed(() => {
     return (department?: StorageDepartment) => {
       let balances = state.value.balances
@@ -141,16 +148,46 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.balances = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Fetching product balances', { department })
+      DebugUtils.info(MODULE_NAME, 'Fetching product balances and batches', { department })
 
-      const balances = await storageService.getBalances(department)
+      // ✅ FIXED: Load both balances AND batches simultaneously
+      const [balances, batches] = await Promise.all([
+        storageService.getBalances(department),
+        storageService.getBatches(department)
+      ])
+
       state.value.balances = balances
+      state.value.batches = batches
 
-      DebugUtils.info(MODULE_NAME, 'Product balances loaded', {
-        count: balances.length
+      DebugUtils.info(MODULE_NAME, 'Product balances and batches loaded', {
+        balances: balances.length,
+        batches: batches.length
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch product balances'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, { error })
+      throw error
+    } finally {
+      state.value.loading.balances = false
+    }
+  }
+
+  async function fetchBatches(department?: StorageDepartment) {
+    try {
+      state.value.loading.balances = true // reuse balances loading flag
+      state.value.error = null
+
+      DebugUtils.info(MODULE_NAME, 'Fetching product batches', { department })
+
+      const batches = await storageService.getBatches(department)
+      state.value.batches = batches
+
+      DebugUtils.info(MODULE_NAME, 'Product batches loaded', {
+        count: batches.length
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch product batches'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -202,7 +239,7 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // CORE OPERATIONS (without write-offs)
+  // CORE OPERATIONS (with batch sync)
   // ===========================
 
   async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
@@ -212,6 +249,8 @@ export const useStorageStore = defineStore('storage', () => {
 
       const operation = await storageService.createCorrection(data)
       state.value.operations.unshift(operation)
+
+      // ✅ FIXED: Sync both balances AND batches
       await fetchBalances(data.department)
 
       return operation
@@ -232,6 +271,8 @@ export const useStorageStore = defineStore('storage', () => {
 
       const operation = await storageService.createReceipt(data)
       state.value.operations.unshift(operation)
+
+      // ✅ FIXED: Sync both balances AND batches
       await fetchBalances(data.department)
 
       return operation
@@ -246,13 +287,9 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // ✅ WRITE-OFF SUPPORT (minimal - just for useWriteOff integration)
+  // ✅ WRITE-OFF SUPPORT (with batch sync)
   // ===========================
 
-  /**
-   * Simplified write-off support for useWriteOff composable
-   * Just delegates to storageService and updates local state
-   */
   async function createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
     try {
       state.value.loading.writeOff = true
@@ -260,7 +297,7 @@ export const useStorageStore = defineStore('storage', () => {
 
       const operation = await storageService.createWriteOff(data)
 
-      // Update local state
+      // ✅ FIXED: Sync all data including batches
       state.value.operations.unshift(operation)
       await fetchBalances(data.department)
 
@@ -283,7 +320,7 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // INVENTORY OPERATIONS
+  // INVENTORY OPERATIONS (with batch sync)
   // ===========================
 
   async function startInventory(data: CreateInventoryData): Promise<InventoryDocument> {
@@ -346,6 +383,12 @@ export const useStorageStore = defineStore('storage', () => {
       correctionOperations.forEach(op => {
         state.value.operations.unshift(op)
       })
+
+      // ✅ FIXED: After inventory finalization, sync all data including batches
+      const inventory = state.value.inventories[inventoryIndex]
+      if (inventory) {
+        await fetchBalances(inventory.department)
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to finalize product inventory'
@@ -437,6 +480,17 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
+  // ✅ NEW: Batch helper methods
+  function getItemBatches(itemId: string, department: StorageDepartment): StorageBatch[] {
+    return state.value.batches
+      .filter(b => b.itemId === itemId && b.department === department && b.status === 'active')
+      .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
+  }
+
+  function getBatchById(batchId: string): StorageBatch | undefined {
+    return state.value.batches.find(b => b.id === batchId)
+  }
+
   // ===========================
   // FILTER ACTIONS
   // ===========================
@@ -501,7 +555,7 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // INITIALIZATION
+  // INITIALIZATION (with batch loading)
   // ===========================
 
   async function initialize() {
@@ -516,9 +570,20 @@ export const useStorageStore = defineStore('storage', () => {
       }
 
       await storageService.initialize()
-      await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
 
-      DebugUtils.info(MODULE_NAME, 'Product storage store initialized successfully')
+      // ✅ FIXED: Load ALL data including batches
+      await Promise.all([
+        fetchBalances(), // this now loads both balances AND batches
+        fetchOperations(),
+        fetchInventories()
+      ])
+
+      DebugUtils.info(MODULE_NAME, 'Product storage store initialized successfully', {
+        balances: state.value.balances.length,
+        batches: state.value.batches.length,
+        operations: state.value.operations.length,
+        inventories: state.value.inventories.length
+      })
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to initialize product storage store'
@@ -576,12 +641,14 @@ export const useStorageStore = defineStore('storage', () => {
     filteredBalances,
     filteredOperations,
     departmentBalances,
+    departmentBatches, // ✅ NEW
     totalInventoryValue,
     alertCounts,
     statistics,
 
     // Core Actions
     fetchBalances,
+    fetchBatches, // ✅ NEW
     fetchOperations,
     fetchInventories,
 
@@ -589,7 +656,7 @@ export const useStorageStore = defineStore('storage', () => {
     createCorrection,
     createReceipt,
 
-    // ✅ Write-off support (minimal - for useWriteOff integration)
+    // ✅ Write-off support (with batch sync)
     createWriteOff,
     getWriteOffStatistics,
 
@@ -607,6 +674,10 @@ export const useStorageStore = defineStore('storage', () => {
     getItemName,
     getItemUnit,
     getItemCostPerUnit,
+
+    // ✅ NEW: Batch helpers
+    getItemBatches,
+    getBatchById,
 
     // Filters
     setDepartmentFilter,

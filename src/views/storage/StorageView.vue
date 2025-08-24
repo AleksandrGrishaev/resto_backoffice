@@ -1,4 +1,4 @@
-<!-- src/views/storage/StorageView.vue - UPDATED WITH WRITEOFF WIDGET -->
+<!-- src/views/storage/StorageView.vue - FIXED: Proper display of negative stock -->
 <template>
   <div class="storage-view">
     <!-- Header -->
@@ -13,17 +13,7 @@
           Products Only
         </v-chip>
       </div>
-      <!-- Quick Actions -->
       <div class="d-flex gap-2">
-        <v-btn
-          color="success"
-          variant="flat"
-          prepend-icon="mdi-plus-circle"
-          :disabled="storageStore.state.loading.balances"
-          @click="showReceiptDialog = true"
-        >
-          Add Products
-        </v-btn>
         <v-btn
           color="primary"
           variant="outlined"
@@ -33,7 +23,6 @@
         >
           Count Inventory
         </v-btn>
-        <!-- ✅ NEW: Write-off Widget -->
         <writeoff-widget
           :department="selectedDepartment"
           @success="handleWriteOffSuccess"
@@ -42,7 +31,7 @@
       </div>
     </div>
 
-    <!-- ✅ Error Alert -->
+    <!-- Error Alert -->
     <v-alert
       v-if="storageStore.state.error"
       type="error"
@@ -75,7 +64,7 @@
 
     <!-- Alerts Banner -->
     <storage-alerts
-      :alerts="alertCounts"
+      :alerts="enhancedAlertCounts"
       :department="selectedDepartment"
       class="mb-4"
       @show-expiring="showExpiringItems"
@@ -83,13 +72,13 @@
       @show-low-stock="showLowStockItems"
     />
 
-    <!-- Main Content Tabs - WITHOUT WRITE-OFF TAB -->
+    <!-- Main Content Tabs -->
     <v-tabs v-model="selectedTab" class="mb-4">
       <v-tab value="products">
         <v-icon icon="mdi-package-variant" class="mr-2" />
         Raw Products
-        <v-chip v-if="productBalances.length > 0" size="small" class="ml-2" variant="tonal">
-          {{ productBalances.length }}
+        <v-chip v-if="displayProductBalances.length > 0" size="small" class="ml-2" variant="tonal">
+          {{ displayProductBalances.length }}
         </v-chip>
       </v-tab>
       <v-tab value="operations">
@@ -116,27 +105,28 @@
     <v-tabs-window v-model="selectedTab">
       <!-- Products Tab -->
       <v-tabs-window-item value="products">
-        <div v-if="productBalances.length === 0 && !storageStore.state.loading.balances">
+        <div v-if="allProductBalances.length === 0 && !storageStore.state.loading.balances">
           <v-empty-state
             headline="No Products Found"
             title="No products available for this department"
-            text="Add products through receipt or check if products are loaded."
+            text="Products will appear here after supplier deliveries. Use the Suppliers module to order and receive inventory."
           >
             <template #actions>
-              <v-btn color="success" variant="flat" @click="showReceiptDialog = true">
-                <v-icon icon="mdi-plus-circle" class="mr-2" />
-                Add Products
+              <v-btn color="primary" variant="flat" to="/suppliers" prepend-icon="mdi-truck">
+                Go to Suppliers
               </v-btn>
             </template>
           </v-empty-state>
         </div>
         <storage-stock-table
           v-else
-          :balances="productBalances"
+          :balances="displayProductBalances"
           :loading="storageStore.state.loading.balances"
           item-type="product"
           :department="selectedDepartment"
+          :show-zero-stock="showZeroStock"
           @write-off="handleWriteOffFromBalance"
+          @toggle-zero-stock="toggleZeroStockFilter"
         />
       </v-tabs-window-item>
 
@@ -146,7 +136,7 @@
           <v-empty-state
             headline="No Operations Found"
             title="No recent operations for this department"
-            text="Operations will appear here after receipt or inventory activities."
+            text="Operations will appear here after supplier deliveries or inventory activities."
           />
         </div>
         <storage-operations-table
@@ -178,8 +168,10 @@
           :inventories="recentInventories"
           :loading="storageStore.state.loading.inventory"
           :department="selectedDepartment"
+          :show-zero-stock="showZeroStock"
           @edit-inventory="handleEditInventory"
           @start-inventory="handleStartInventory"
+          @toggle-zero-stock="toggleZeroStockFilter"
         />
       </v-tabs-window-item>
 
@@ -190,20 +182,15 @@
     </v-tabs-window>
 
     <!-- Dialogs -->
-    <receipt-dialog
-      v-model="showReceiptDialog"
-      :department="selectedDepartment"
-      @success="handleOperationSuccess"
-      @error="handleOperationError"
-    />
-
     <inventory-dialog
       v-model="showInventoryDialog"
       :department="selectedDepartment"
       item-type="product"
       :existing-inventory="editingInventory"
+      :show-zero-stock="showZeroStock"
       @success="handleInventorySuccess"
       @error="handleOperationError"
+      @toggle-zero-stock="toggleZeroStockFilter"
     />
 
     <!-- Success Snackbar -->
@@ -226,12 +213,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
+import { useProductsStore } from '@/stores/productsStore'
 import { useWriteOff } from '@/stores/storage'
 import { formatIDR } from '@/utils/currency'
 import type { StorageDepartment, InventoryDocument } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 
-// ✅ NEW: Import Write-off Components
+// Import Write-off Components
 import WriteoffWidget from './components/writeoff/WriteOffWidget.vue'
 
 // Components
@@ -240,37 +228,183 @@ import StorageStockTable from './components/StorageStockTable.vue'
 import StorageOperationsTable from './components/StorageOperationsTable.vue'
 import StorageInventoriesTable from './components/StorageInventoriesTable.vue'
 import StorageAnalyticsTab from './components/tabs/StorageAnalyticsTab.vue'
-import ReceiptDialog from './components/ReceiptDialog.vue'
 import InventoryDialog from './components/InventoryDialog.vue'
 
 const MODULE_NAME = 'StorageView'
 
 // Store & Composables
 const storageStore = useStorageStore()
+const productsStore = useProductsStore()
 const writeOff = useWriteOff()
 
 // State
 const selectedDepartment = ref<StorageDepartment>('kitchen')
 const selectedTab = ref('products')
-const showReceiptDialog = ref(false)
 const showInventoryDialog = ref(false)
 const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
 const successMessage = ref('')
 const errorMessage = ref('')
 const editingInventory = ref<InventoryDocument | null>(null)
+const showZeroStock = ref(false)
 
-// Computed
-const productBalances = computed(() => {
+// ✅ ADDED: Development mode check
+const isDevelopment = computed(() => {
+  return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
+})
+
+// Enhanced computed properties with zero stock handling
+const allProductBalances = computed(() => {
   try {
-    return (
+    const filtered =
       storageStore.filteredBalances.filter(
         b => b && b.itemType === 'product' && b.department === selectedDepartment.value
       ) || []
-    )
+
+    // ✅ DEBUG: Log all balances in development
+    if (isDevelopment.value) {
+      console.log(`All product balances for ${selectedDepartment.value}:`, filtered.length)
+      console.log(
+        'Negative stock products:',
+        filtered.filter(b => b.totalQuantity < 0)
+      )
+      console.log(
+        'Zero stock products:',
+        filtered.filter(b => b.totalQuantity === 0)
+      )
+      console.log(
+        'Positive stock products:',
+        filtered.filter(b => b.totalQuantity > 0)
+      )
+    }
+
+    return filtered
   } catch (error) {
-    console.warn('Error filtering product balances:', error)
+    console.warn('Error filtering all product balances:', error)
     return []
+  }
+})
+
+// ✅ FIXED: Enhanced sorting with proper negative stock handling
+const displayProductBalances = computed(() => {
+  const all = allProductBalances.value
+
+  if (showZeroStock.value) {
+    // When filter is active, show products with zero OR negative stock
+    return all
+      .filter(b => b.totalQuantity <= 0)
+      .sort((a, b) => {
+        // First: Negative stock items (more critical)
+        if (a.totalQuantity < 0 && b.totalQuantity >= 0) return -1
+        if (a.totalQuantity >= 0 && b.totalQuantity < 0) return 1
+
+        // Then by category
+        const categoryA = getProductCategoryForSorting(a.itemId)
+        const categoryB = getProductCategoryForSorting(b.itemId)
+        const categoryCompare = categoryA.localeCompare(categoryB)
+        if (categoryCompare !== 0) return categoryCompare
+
+        // Finally by name
+        return a.itemName.localeCompare(b.itemName)
+      })
+  }
+
+  // ✅ FIXED: Default view - show ALL products with proper grouping
+  const withPositiveStock = all
+    .filter(b => b.totalQuantity > 0)
+    .sort((a, b) => {
+      const categoryA = getProductCategoryForSorting(a.itemId)
+      const categoryB = getProductCategoryForSorting(b.itemId)
+
+      const categoryCompare = categoryA.localeCompare(categoryB)
+      if (categoryCompare !== 0) return categoryCompare
+
+      return a.itemName.localeCompare(b.itemName)
+    })
+
+  // ✅ CRITICAL: Negative stock items (show them prominently after positive stock)
+  const withNegativeStock = all
+    .filter(b => b.totalQuantity < 0)
+    .sort((a, b) => {
+      const categoryA = getProductCategoryForSorting(a.itemId)
+      const categoryB = getProductCategoryForSorting(b.itemId)
+
+      const categoryCompare = categoryA.localeCompare(categoryB)
+      if (categoryCompare !== 0) return categoryCompare
+
+      return a.itemName.localeCompare(b.itemName)
+    })
+
+  const withZeroStock = all
+    .filter(b => b.totalQuantity === 0)
+    .sort((a, b) => {
+      const categoryA = getProductCategoryForSorting(a.itemId)
+      const categoryB = getProductCategoryForSorting(b.itemId)
+
+      const categoryCompare = categoryA.localeCompare(categoryB)
+      if (categoryCompare !== 0) return categoryCompare
+
+      return a.itemName.localeCompare(b.itemName)
+    })
+
+  // ✅ FIXED: Order: positive stock first, then negative stock (critical), then zero stock
+  const result = [...withPositiveStock, ...withNegativeStock, ...withZeroStock]
+
+  // ✅ DEBUG: Log the result in development
+  if (isDevelopment.value) {
+    console.log('Display product balances result:', {
+      total: result.length,
+      positive: withPositiveStock.length,
+      negative: withNegativeStock.length,
+      zero: withZeroStock.length,
+      negativeItems: withNegativeStock.map(b => ({ name: b.itemName, qty: b.totalQuantity }))
+    })
+  }
+
+  return result
+})
+
+// Helper function to get product category for sorting
+function getProductCategoryForSorting(productId: string): string {
+  try {
+    const product = productsStore.products.find(p => p.id === productId)
+    if (!product || !product.category) return 'ZZZ-Other'
+
+    const categoryMap: Record<string, string> = {
+      meat: 'A-Meat',
+      vegetables: 'B-Vegetables',
+      spices: 'C-Spices',
+      dairy: 'D-Dairy',
+      grains: 'E-Grains',
+      beverages: 'F-Beverages',
+      alcohol: 'G-Alcohol',
+      other: 'H-Other'
+    }
+
+    return categoryMap[product.category] || `H-${product.category}`
+  } catch (error) {
+    return 'ZZZ-Other'
+  }
+}
+
+// ✅ FIXED: Include negative stock products in "out of stock" category
+const zeroStockProducts = computed(() => {
+  try {
+    return allProductBalances.value.filter(b => b.totalQuantity <= 0)
+  } catch (error) {
+    console.warn('Error filtering zero stock products:', error)
+    return []
+  }
+})
+
+// ✅ ADDED: Debug info computed property
+const debugInfo = computed(() => {
+  const all = allProductBalances.value
+  return {
+    totalProducts: all.length,
+    negativeStockCount: all.filter(b => b.totalQuantity < 0).length,
+    zeroStockCount: all.filter(b => b.totalQuantity === 0).length,
+    positiveStockCount: all.filter(b => b.totalQuantity > 0).length
   }
 })
 
@@ -308,6 +442,12 @@ const alertCounts = computed(() => {
   }
 })
 
+const enhancedAlertCounts = computed(() => {
+  return {
+    ...alertCounts.value
+  }
+})
+
 const hasAlerts = computed(
   () =>
     alertCounts.value.expired > 0 ||
@@ -329,14 +469,6 @@ const barItemCount = computed(() => {
   } catch (error) {
     return 0
   }
-})
-
-const totalValue = computed(() => {
-  return productBalances.value.reduce((sum, balance) => sum + balance.totalValue, 0)
-})
-
-const alertsCount = computed(() => {
-  return alertCounts.value.expired + alertCounts.value.expiring + alertCounts.value.lowStock
 })
 
 // Methods
@@ -386,6 +518,30 @@ function showLowStockItems() {
   }
 }
 
+function showZeroStockItems() {
+  try {
+    showZeroStock.value = true
+    selectedTab.value = 'products'
+
+    DebugUtils.info(MODULE_NAME, 'Showing zero stock products', {
+      department: selectedDepartment.value,
+      zeroStockCount: zeroStockProducts.value.length
+    })
+  } catch (error) {
+    console.warn('Error showing zero stock items:', error)
+  }
+}
+
+function toggleZeroStockFilter() {
+  showZeroStock.value = !showZeroStock.value
+
+  DebugUtils.info(MODULE_NAME, 'Toggled zero stock filter', {
+    showZeroStock: showZeroStock.value,
+    department: selectedDepartment.value,
+    zeroStockCount: zeroStockProducts.value.length
+  })
+}
+
 async function handleExpiredWriteOff() {
   try {
     const operation = await writeOff.writeOffExpiredProducts(
@@ -407,18 +563,21 @@ async function handleExpiredWriteOff() {
 function handleWriteOffFromBalance(productData: any) {
   try {
     DebugUtils.info(MODULE_NAME, 'Write-off initiated from balance table', { productData })
-    // Switch to write-off tab for better UX
-    selectedTab.value = 'writeoff'
   } catch (error) {
     console.warn('Error handling write-off from balance:', error)
     handleOperationError('Failed to initiate write-off')
   }
 }
 
-// ✅ NEW: Write-off handlers
-function handleWriteOffSuccess(message: string) {
+async function handleWriteOffSuccess(message: string) {
   successMessage.value = message
   showSuccessSnackbar.value = true
+
+  try {
+    await refreshCurrentData()
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to refresh data after write-off', { error })
+  }
 }
 
 async function refreshCurrentData() {
@@ -429,20 +588,6 @@ async function refreshCurrentData() {
     ])
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to refresh data', { error })
-  }
-}
-
-async function handleOperationSuccess(message: string = 'Operation completed successfully') {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Operation completed, refreshing data')
-    successMessage.value = message
-    showSuccessSnackbar.value = true
-    await refreshCurrentData()
-    showReceiptDialog.value = false
-    DebugUtils.info(MODULE_NAME, 'Data refreshed successfully')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to refresh data', { error })
-    handleOperationError('Operation completed but failed to refresh data')
   }
 }
 
@@ -471,8 +616,6 @@ function handleOperationError(message: string) {
   DebugUtils.error(MODULE_NAME, 'Operation error', { message })
   errorMessage.value = message
   showErrorSnackbar.value = true
-  // Close all dialogs
-  showReceiptDialog.value = false
   showInventoryDialog.value = false
   editingInventory.value = null
 }
@@ -514,7 +657,10 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
       from: oldDepartment,
       to: newDepartment
     })
-    // Clear filters when changing department
+
+    // Reset filters when changing department
+    showZeroStock.value = false
+
     if (storageStore.clearFilters) {
       storageStore.clearFilters()
     }

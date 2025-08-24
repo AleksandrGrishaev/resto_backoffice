@@ -132,7 +132,41 @@ export class StorageService {
       throw error
     }
   }
+  async getBatches(department?: StorageDepartment): Promise<StorageBatch[]> {
+    try {
+      let batches = [...this.batches]
 
+      if (department && department !== 'all') {
+        batches = batches.filter(b => b.department === department)
+      }
+
+      // Возвращаем только активные батчи
+      return batches
+        .filter(b => b.status === 'active')
+        .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get batches', { error, department })
+      throw error
+    }
+  }
+
+  async getAllBatches(department?: StorageDepartment): Promise<StorageBatch[]> {
+    try {
+      let batches = [...this.batches]
+
+      if (department && department !== 'all') {
+        batches = batches.filter(b => b.department === department)
+      }
+
+      // Возвращаем ВСЕ батчи (включая consumed)
+      return batches.sort(
+        (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
+      )
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get all batches', { error, department })
+      throw error
+    }
+  }
   async getItemBatches(itemId: string, department: StorageDepartment): Promise<StorageBatch[]> {
     try {
       const batches = this.batches.filter(
@@ -789,22 +823,110 @@ export class StorageService {
     }
   }
 
+  // Updated recalculateBalances method for storageService.ts
+  // This method now properly includes zero and negative stock products
+
   private async recalculateBalances(department: StorageDepartment): Promise<void> {
     try {
+      // Remove old balances for this department
+      this.balances = this.balances.filter(
+        b => !(b.itemType === 'product' && b.department === department)
+      )
+
+      // ✅ FIXED: Get ALL products that should be tracked in this department
+      let departmentProducts: any[] = []
+
+      try {
+        const productsStore = useProductsStore()
+
+        if (department === 'kitchen') {
+          // Get raw materials and kitchen products
+          departmentProducts = productsStore.products.filter(
+            p =>
+              p.isActive &&
+              (p.type === 'raw_material' ||
+                p.category === 'meat' ||
+                p.category === 'vegetables' ||
+                p.category === 'dairy' ||
+                p.category === 'spices' ||
+                p.category === 'grains')
+          )
+        } else if (department === 'bar') {
+          // Get beverages and bar products
+          departmentProducts = productsStore.products.filter(
+            p => p.isActive && (p.category === 'beverages' || p.category === 'alcohol')
+          )
+        }
+
+        DebugUtils.info(
+          MODULE_NAME,
+          `Found ${departmentProducts.length} products for ${department}`,
+          {
+            department,
+            productCount: departmentProducts.length,
+            productNames: departmentProducts.map(p => p.name)
+          }
+        )
+      } catch (error) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'Products store not available, will only show products with existing batches',
+          {
+            error
+          }
+        )
+        departmentProducts = []
+      }
+
+      // Get active batches for this department (products with positive stock)
       const activeBatches = this.batches.filter(
         b => b.department === department && b.status === 'active' && b.currentQuantity > 0
       )
 
+      // Group batches by itemId
       const itemGroups = new Map<string, StorageBatch[]>()
-
       for (const batch of activeBatches) {
-        const key = `${batch.itemId}-${batch.itemType}`
+        const key = batch.itemId
         if (!itemGroups.has(key)) {
           itemGroups.set(key, [])
         }
         itemGroups.get(key)!.push(batch)
       }
 
+      // ✅ NEW: Check for write-offs/consumptions that may have created negative balances
+      const consumptionsByItem = new Map<string, number>()
+      const writeOffOps = this.operations.filter(
+        op =>
+          op.department === department &&
+          (op.operationType === 'write_off' || op.operationType === 'consumption')
+      )
+
+      // Calculate total consumed per item
+      writeOffOps.forEach(op => {
+        op.items.forEach(item => {
+          if (item.itemType === 'product') {
+            const currentConsumed = consumptionsByItem.get(item.itemId) || 0
+            consumptionsByItem.set(item.itemId, currentConsumed + item.quantity)
+          }
+        })
+      })
+
+      // ✅ NEW: Calculate receipts per item
+      const receiptsByItem = new Map<string, number>()
+      const receiptOps = this.operations.filter(
+        op => op.department === department && op.operationType === 'receipt'
+      )
+
+      receiptOps.forEach(op => {
+        op.items.forEach(item => {
+          if (item.itemType === 'product') {
+            const currentReceived = receiptsByItem.get(item.itemId) || 0
+            receiptsByItem.set(item.itemId, currentReceived + item.quantity)
+          }
+        })
+      })
+
+      // Create balances for products with positive stock (existing logic)
       for (const [, batches] of itemGroups) {
         const firstBatch = batches[0]
         const itemId = firstBatch.itemId
@@ -863,14 +985,115 @@ export class StorageService {
           lastCalculated: TimeUtils.getCurrentLocalISO()
         }
 
-        // Remove old balance for this product if exists
-        this.balances = this.balances.filter(
-          b => !(b.itemId === itemId && b.itemType === 'product' && b.department === department)
-        )
-
-        // Add new balance
         this.balances.push(balance)
       }
+
+      // ✅ CRITICAL FIX: Create balances for products without stock AND products with negative stock
+      if (departmentProducts.length > 0) {
+        for (const product of departmentProducts) {
+          const itemId = product.id
+
+          // Skip if we already have a balance for this product (has positive stock)
+          if (itemGroups.has(itemId)) {
+            continue
+          }
+
+          // ✅ NEW: Calculate theoretical balance (receipts - consumptions)
+          const totalReceived = receiptsByItem.get(itemId) || 0
+          const totalConsumed = consumptionsByItem.get(itemId) || 0
+          const theoreticalBalance = totalReceived - totalConsumed
+
+          // ✅ IMPORTANT: Include products with zero OR negative stock
+          const balance: StorageBalance = {
+            itemId,
+            itemType: 'product',
+            itemName: product.name,
+            department,
+            totalQuantity: theoreticalBalance, // ✅ This can be 0 or negative
+            unit: product.unit || 'kg',
+            totalValue:
+              theoreticalBalance > 0 ? theoreticalBalance * (product.costPerUnit || 0) : 0,
+            averageCost: product.costPerUnit || 0,
+            latestCost: product.costPerUnit || 0,
+            costTrend: 'stable',
+            batches: [],
+            oldestBatchDate: '',
+            newestBatchDate: '',
+            hasExpired: false,
+            hasNearExpiry: false,
+            belowMinStock: true, // Zero or negative stock is always below minimum
+            lastCalculated: TimeUtils.getCurrentLocalISO()
+          }
+
+          this.balances.push(balance)
+        }
+      }
+
+      // ✅ NEW: Also check for orphaned items (items with operations but not in product catalog)
+      const allOperatedItems = new Set<string>()
+      this.operations
+        .filter(op => op.department === department)
+        .forEach(op => {
+          op.items.forEach(item => {
+            if (item.itemType === 'product') {
+              allOperatedItems.add(item.itemId)
+            }
+          })
+        })
+
+      // Add balances for operated items not in catalog and not already added
+      for (const itemId of allOperatedItems) {
+        const alreadyExists = this.balances.some(
+          b => b.itemId === itemId && b.department === department
+        )
+
+        if (!alreadyExists) {
+          const totalReceived = receiptsByItem.get(itemId) || 0
+          const totalConsumed = consumptionsByItem.get(itemId) || 0
+          const theoreticalBalance = totalReceived - totalConsumed
+
+          // Get product info or use defaults
+          const productInfo = this.getProductInfo(itemId)
+
+          const balance: StorageBalance = {
+            itemId,
+            itemType: 'product',
+            itemName: productInfo.name,
+            department,
+            totalQuantity: theoreticalBalance,
+            unit: productInfo.unit,
+            totalValue: theoreticalBalance > 0 ? theoreticalBalance * productInfo.costPerUnit : 0,
+            averageCost: productInfo.costPerUnit,
+            latestCost: productInfo.costPerUnit,
+            costTrend: 'stable',
+            batches: [],
+            oldestBatchDate: '',
+            newestBatchDate: '',
+            hasExpired: false,
+            hasNearExpiry: false,
+            belowMinStock: true,
+            lastCalculated: TimeUtils.getCurrentLocalISO()
+          }
+
+          this.balances.push(balance)
+        }
+      }
+
+      const departmentBalances = this.balances.filter(b => b.department === department)
+      const positiveStock = departmentBalances.filter(b => b.totalQuantity > 0).length
+      const zeroStock = departmentBalances.filter(b => b.totalQuantity === 0).length
+      const negativeStock = departmentBalances.filter(b => b.totalQuantity < 0).length
+
+      DebugUtils.info(MODULE_NAME, `Balances recalculated for ${department}`, {
+        department,
+        totalProductsInCatalog: departmentProducts.length,
+        productsWithPositiveStock: positiveStock,
+        productsWithZeroStock: zeroStock,
+        productsWithNegativeStock: negativeStock,
+        totalBalances: departmentBalances.length,
+        batchesProcessed: activeBatches.length,
+        operationsProcessed: writeOffOps.length + receiptOps.length
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to recalculate product balances', { error })
       throw error
