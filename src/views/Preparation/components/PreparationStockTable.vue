@@ -1,17 +1,17 @@
-<!-- src/views/preparation/components/PreparationStockTable.vue - Адаптация StorageStockTable -->
+<!-- src/views/preparation/components/PreparationStockTable.vue - UPDATED: Categories, Write-off, Better Sorting -->
 <template>
   <div class="preparation-stock-table">
     <!-- Filters and Search -->
     <div class="d-flex align-center justify-space-between mb-4">
       <div class="d-flex align-center gap-2">
-        <v-text-field
-          v-model="searchQuery"
-          prepend-inner-icon="mdi-magnify"
-          label="Search preparations..."
+        <v-select
+          v-model="selectedCategory"
+          :items="categoryOptions"
+          label="Filter by type"
           variant="outlined"
           density="compact"
           hide-details
-          style="width: 300px"
+          style="width: 200px"
           clearable
         />
 
@@ -47,6 +47,27 @@
           <v-icon icon="mdi-alert-circle" class="mr-1" />
           Expired ({{ expiredCount }})
         </v-btn>
+
+        <!-- Out of Stock Filter -->
+        <v-btn
+          color="grey"
+          variant="outlined"
+          size="small"
+          :class="{ 'bg-grey': showZeroStock }"
+          @click="$emit('toggle-zero-stock')"
+        >
+          <v-icon icon="mdi-package-variant-closed" class="mr-1" />
+          No Stock ({{ outOfStockCount }})
+        </v-btn>
+      </div>
+
+      <!-- Write-off Button -->
+      <div>
+        <preparation-writeoff-widget
+          :department="department"
+          @success="handleWriteOffSuccess"
+          @refresh-needed="$emit('refresh-needed')"
+        />
       </div>
     </div>
 
@@ -62,7 +83,7 @@
           color="error"
           @click:close="toggleExpiredFilter"
         >
-          Expired Items
+          Expired
         </v-chip>
 
         <v-chip
@@ -85,32 +106,103 @@
           Low Stock
         </v-chip>
 
+        <v-chip
+          v-if="selectedCategory"
+          size="small"
+          closable
+          color="primary"
+          @click:close="selectedCategory = null"
+        >
+          {{ PREPARATION_CATEGORIES[selectedCategory] || selectedCategory }}
+        </v-chip>
+
+        <v-chip
+          v-if="showZeroStock"
+          size="small"
+          closable
+          color="grey"
+          @click:close="$emit('toggle-zero-stock')"
+        >
+          No Stock
+        </v-chip>
+
         <v-btn size="small" variant="text" @click="clearAllFilters">Clear All</v-btn>
       </div>
     </div>
+
+    <!-- Out of Stock Info Banner -->
+    <v-alert
+      v-if="showZeroStock && outOfStockCount > 0"
+      type="info"
+      variant="tonal"
+      class="mb-4"
+      density="compact"
+    >
+      <template #prepend>
+        <v-icon icon="mdi-information" />
+      </template>
+      <div class="d-flex align-center justify-space-between w-100">
+        <div>
+          <strong>{{ outOfStockCount }} preparations are out of stock</strong>
+          - showing preparations without inventory
+          <span v-if="negativeStockCount > 0" class="text-error ml-1">
+            ({{ negativeStockCount }} with negative stock - critical!)
+          </span>
+          <div class="text-caption">These preparations need to be produced</div>
+        </div>
+        <v-btn
+          size="small"
+          variant="outlined"
+          color="success"
+          prepend-icon="mdi-chef-hat"
+          @click="$emit('add-production')"
+        >
+          Add Production
+        </v-btn>
+      </div>
+    </v-alert>
 
     <!-- Stock Table -->
     <v-card>
       <v-data-table
         :headers="headers"
-        :items="filteredBalances"
+        :items="sortedFilteredBalances"
         :loading="loading"
         :search="searchQuery"
         item-key="preparationId"
         class="elevation-0"
         :items-per-page="25"
-        :sort-by="[{ key: 'preparationName', order: 'asc' }]"
+        disable-sort
       >
         <!-- Preparation Name -->
         <template #[`item.preparationName`]="{ item }">
           <div class="d-flex align-center">
-            <div class="item-icon mr-3">🍲</div>
+            <div class="preparation-icon mr-3">
+              {{ getPreparationIcon(item.preparationId) }}
+            </div>
             <div class="item-info">
-              <div class="font-weight-medium">{{ item.preparationName }}</div>
+              <div class="font-weight-medium" :class="getItemNameClass(item)">
+                {{ item.preparationName }}
+              </div>
               <div class="text-caption text-medium-emphasis">
-                Preparation • ID: {{ item.preparationId }}
+                {{ getPreparationType(item.preparationId) }}
               </div>
             </div>
+          </div>
+        </template>
+
+        <!-- Category -->
+        <template #[`item.category`]="{ item }">
+          <div class="d-flex align-center">
+            <v-icon
+              :icon="getCategoryIcon(getPreparationCategory(item.preparationId))"
+              :color="getCategoryColor(getPreparationCategory(item.preparationId))"
+              size="18"
+              class="mr-2"
+            />
+            <span class="text-caption">
+              {{ getPreparationCategoryDisplay(item.preparationId) }}
+            </span>
           </div>
         </template>
 
@@ -118,14 +210,20 @@
         <template #[`item.stock`]="{ item }">
           <div class="d-flex align-center">
             <div>
-              <div class="font-weight-medium">
+              <div class="font-weight-medium" :class="getStockQuantityClass(item)">
                 {{ formatQuantity(item.totalQuantity, item.unit) }}
               </div>
               <div class="text-caption text-medium-emphasis">
-                {{ item.batches.length }} batch{{ item.batches.length !== 1 ? 'es' : '' }}
-                <span v-if="item.batches.length > 0" class="ml-1">
-                  • Oldest: {{ formatDate(item.oldestBatchDate) }}
-                </span>
+                <template v-if="item.totalQuantity < 0">
+                  <span class="text-error">Critical: Negative stock!</span>
+                </template>
+                <template v-else-if="item.totalQuantity === 0">No stock available</template>
+                <template v-else>
+                  {{ item.batches.length }} batch{{ item.batches.length !== 1 ? 'es' : '' }}
+                  <span v-if="item.batches.length > 0" class="ml-1">
+                    • Oldest: {{ formatDate(item.oldestBatchDate) }}
+                  </span>
+                </template>
               </div>
             </div>
           </div>
@@ -134,10 +232,14 @@
         <!-- Cost Information -->
         <template #[`item.cost`]="{ item }">
           <div>
-            <div class="font-weight-medium">
-              {{ formatCurrency(item.averageCost) }}/{{ item.unit }}
+            <div class="font-weight-medium" :class="getCostDisplayClass(item)">
+              <template v-if="item.totalQuantity <= 0">
+                {{ formatCurrency(item.averageCost) }}/{{ item.unit }}
+                <div class="text-caption text-medium-emphasis">(last known)</div>
+              </template>
+              <template v-else>{{ formatCurrency(item.averageCost) }}/{{ item.unit }}</template>
             </div>
-            <div class="d-flex align-center text-caption">
+            <div v-if="item.totalQuantity > 0" class="d-flex align-center text-caption">
               <v-icon
                 :icon="getCostTrendIcon(item.costTrend)"
                 :color="getCostTrendColor(item.costTrend)"
@@ -156,65 +258,64 @@
 
         <!-- Total Value -->
         <template #[`item.totalValue`]="{ item }">
-          <div class="font-weight-medium">
+          <div class="font-weight-medium" :class="getValueDisplayClass(item)">
             {{ formatCurrency(item.totalValue) }}
-          </div>
-        </template>
-
-        <!-- Shelf Life Status -->
-        <template #[`item.shelfLife`]="{ item }">
-          <div>
-            <div class="text-caption text-medium-emphasis mb-1">Shelf Life</div>
-            <div v-if="item.hasExpired" class="text-error font-weight-medium">
-              <v-icon icon="mdi-alert-circle" size="16" class="mr-1" />
-              EXPIRED
-            </div>
-            <div v-else-if="item.hasNearExpiry" class="text-warning font-weight-medium">
-              <v-icon icon="mdi-clock-alert-outline" size="16" class="mr-1" />
-              Expires Soon
-            </div>
-            <div v-else class="text-success font-weight-medium">
-              <v-icon icon="mdi-check-circle" size="16" class="mr-1" />
-              Fresh
-            </div>
           </div>
         </template>
 
         <!-- Status -->
         <template #[`item.status`]="{ item }">
           <div class="d-flex flex-column gap-1">
-            <!-- Expiry Status -->
-            <v-chip v-if="item.hasExpired" size="x-small" color="error" variant="flat">
-              <v-icon icon="mdi-alert-circle" size="12" class="mr-1" />
-              Expired
-            </v-chip>
-            <v-chip v-else-if="item.hasNearExpiry" size="x-small" color="warning" variant="flat">
-              <v-icon icon="mdi-clock-alert-outline" size="12" class="mr-1" />
-              Expiring Soon
-            </v-chip>
-
-            <!-- Stock Level Status -->
+            <!-- Out of Stock Status -->
             <v-chip
-              v-if="item.belowMinStock"
+              v-if="item.totalQuantity <= 0"
               size="x-small"
-              color="info"
-              variant="flat"
-              class="mt-1"
-            >
-              <v-icon icon="mdi-chef-hat" size="12" class="mr-1" />
-              Low Stock
-            </v-chip>
-
-            <!-- All Good Status -->
-            <v-chip
-              v-if="!item.hasExpired && !item.hasNearExpiry && !item.belowMinStock"
-              size="x-small"
-              color="success"
+              :color="item.totalQuantity < 0 ? 'error' : 'grey'"
               variant="flat"
             >
-              <v-icon icon="mdi-check-circle" size="12" class="mr-1" />
-              OK
+              <v-icon
+                :icon="item.totalQuantity < 0 ? 'mdi-alert-circle' : 'mdi-package-variant-closed'"
+                size="12"
+                class="mr-1"
+              />
+              {{ item.totalQuantity < 0 ? 'Negative Stock' : 'No Stock' }}
             </v-chip>
+
+            <!-- Existing status chips for items with stock -->
+            <template v-else>
+              <!-- Expiry Status -->
+              <v-chip v-if="item.hasExpired" size="x-small" color="error" variant="flat">
+                <v-icon icon="mdi-alert-circle" size="12" class="mr-1" />
+                Expired
+              </v-chip>
+              <v-chip v-else-if="item.hasNearExpiry" size="x-small" color="warning" variant="flat">
+                <v-icon icon="mdi-clock-alert-outline" size="12" class="mr-1" />
+                Expiring Soon
+              </v-chip>
+
+              <!-- Stock Level Status -->
+              <v-chip
+                v-if="item.belowMinStock"
+                size="x-small"
+                color="info"
+                variant="flat"
+                class="mt-1"
+              >
+                <v-icon icon="mdi-chef-hat" size="12" class="mr-1" />
+                Low Stock
+              </v-chip>
+
+              <!-- All Good Status -->
+              <v-chip
+                v-if="!item.hasExpired && !item.hasNearExpiry && !item.belowMinStock"
+                size="x-small"
+                color="success"
+                variant="flat"
+              >
+                <v-icon icon="mdi-check-circle" size="12" class="mr-1" />
+                OK
+              </v-chip>
+            </template>
           </div>
         </template>
 
@@ -229,7 +330,9 @@
               @click="showItemDetails(item)"
             >
               <v-icon />
-              <v-tooltip activator="parent" location="top">View Details & Batches</v-tooltip>
+              <v-tooltip activator="parent" location="top">
+                {{ item.totalQuantity <= 0 ? 'View Preparation Info' : 'View Details & Batches' }}
+              </v-tooltip>
             </v-btn>
           </div>
         </template>
@@ -252,9 +355,14 @@
               <v-btn size="small" variant="outlined" @click="clearAllFilters">Clear Filters</v-btn>
             </div>
             <div v-else class="d-flex justify-center gap-2">
-              <div class="text-caption text-medium-emphasis">
-                Use "Add Production" button in the header to produce your first preparations
-              </div>
+              <v-btn
+                color="success"
+                variant="flat"
+                prepend-icon="mdi-chef-hat"
+                @click="$emit('add-production')"
+              >
+                Add Production
+              </v-btn>
             </div>
           </div>
         </template>
@@ -276,22 +384,40 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRecipesStore } from '@/stores/recipes'
 import type { PreparationBalance, PreparationDepartment } from '@/stores/preparation'
 
 // Components
 import PreparationItemDetailsDialog from './PreparationItemDetailsDialog.vue'
+import PreparationWriteoffWidget from './writeoff/PreparationWriteOffWidget.vue'
 
 // Props
 interface Props {
   balances: PreparationBalance[]
   loading: boolean
   department: PreparationDepartment
+  showZeroStock?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  loading: false,
+  showZeroStock: false
+})
+
+// Emits
+const emit = defineEmits<{
+  'write-off': [preparationData: any]
+  'toggle-zero-stock': []
+  'refresh-needed': []
+  'add-production': []
+}>()
+
+// Store
+const recipesStore = useRecipesStore()
 
 // State
 const searchQuery = ref('')
+const selectedCategory = ref<string | null>(null)
 const showDetailsDialog = ref(false)
 const selectedItem = ref<PreparationBalance | null>(null)
 
@@ -301,13 +427,24 @@ const filters = ref({
   showLowStock: false
 })
 
+// Preparation Categories
+const PREPARATION_CATEGORIES: Record<string, string> = {
+  sauce: 'Sauces',
+  base: 'Base Preparations',
+  garnish: 'Garnishes',
+  marinade: 'Marinades',
+  dough: 'Dough & Pastry',
+  filling: 'Fillings',
+  other: 'Other'
+}
+
 // Computed
 const headers = computed(() => [
-  { title: 'Preparation', key: 'preparationName', sortable: true, width: '250px' },
-  { title: 'Stock', key: 'stock', sortable: false, width: '200px' },
-  { title: 'Cost', key: 'cost', sortable: true, value: 'averageCost', width: '180px' },
-  { title: 'Total Value', key: 'totalValue', sortable: true, width: '150px' },
-  { title: 'Shelf Life', key: 'shelfLife', sortable: false, width: '120px' },
+  { title: 'Preparation', key: 'preparationName', sortable: false, width: '200px' },
+  { title: 'Type', key: 'category', sortable: false, width: '120px' },
+  { title: 'Stock', key: 'stock', sortable: false, width: '180px' },
+  { title: 'Cost', key: 'cost', sortable: false, width: '150px' },
+  { title: 'Total Value', key: 'totalValue', sortable: false, width: '120px' },
   { title: 'Status', key: 'status', sortable: false, width: '120px' },
   { title: 'Actions', key: 'actions', sortable: false, width: '60px' }
 ])
@@ -315,7 +452,19 @@ const headers = computed(() => [
 const filteredBalances = computed(() => {
   let items = [...props.balances]
 
-  // Apply status filters
+  // Apply category filter first
+  if (selectedCategory.value) {
+    items = items.filter(
+      item => getPreparationCategory(item.preparationId) === selectedCategory.value
+    )
+  }
+
+  // Apply out of stock filter
+  if (props.showZeroStock) {
+    items = items.filter(item => item.totalQuantity <= 0)
+  }
+
+  // Apply other status filters
   if (filters.value.showExpired) {
     items = items.filter(item => item.hasExpired)
   }
@@ -329,17 +478,168 @@ const filteredBalances = computed(() => {
   return items
 })
 
+// Custom sorting to show items by stock status
+const sortedFilteredBalances = computed(() => {
+  return [...filteredBalances.value].sort((a, b) => {
+    // Primary sort: Stock status (items with stock first, then negative stock, then zero stock)
+    if (a.totalQuantity > 0 && b.totalQuantity <= 0) return -1
+    if (a.totalQuantity <= 0 && b.totalQuantity > 0) return 1
+
+    // Within out-of-stock items: negative stock first (more critical)
+    if (a.totalQuantity <= 0 && b.totalQuantity <= 0) {
+      if (a.totalQuantity < 0 && b.totalQuantity === 0) return -1
+      if (a.totalQuantity === 0 && b.totalQuantity < 0) return 1
+    }
+
+    // Secondary sort: By category
+    const categoryA = getPreparationCategory(a.preparationId)
+    const categoryB = getPreparationCategory(b.preparationId)
+    const categoryCompare = categoryA.localeCompare(categoryB)
+    if (categoryCompare !== 0) return categoryCompare
+
+    // Tertiary sort: Alphabetical by name within each group
+    return a.preparationName.localeCompare(b.preparationName)
+  })
+})
+
 const hasActiveFilters = computed(
-  () => filters.value.showExpired || filters.value.showNearExpiry || filters.value.showLowStock
+  () =>
+    filters.value.showExpired ||
+    filters.value.showNearExpiry ||
+    filters.value.showLowStock ||
+    selectedCategory.value !== null ||
+    props.showZeroStock
 )
 
 const expiringCount = computed(() => props.balances.filter(b => b.hasNearExpiry).length)
 const lowStockCount = computed(() => props.balances.filter(b => b.belowMinStock).length)
 const expiredCount = computed(() => props.balances.filter(b => b.hasExpired).length)
+const outOfStockCount = computed(() => props.balances.filter(b => b.totalQuantity <= 0).length)
+const negativeStockCount = computed(() => props.balances.filter(b => b.totalQuantity < 0).length)
+
+// Category options for the filter
+const categoryOptions = computed(() => {
+  const categories = new Set<string>()
+
+  props.balances.forEach(balance => {
+    const category = getPreparationCategory(balance.preparationId)
+    if (category) {
+      categories.add(category)
+    }
+  })
+
+  return Array.from(categories)
+    .sort()
+    .map(category => ({
+      title: PREPARATION_CATEGORIES[category] || category,
+      value: category
+    }))
+})
+
+// Style helper methods
+function getItemNameClass(item: PreparationBalance): string {
+  if (item.totalQuantity < 0) return 'text-error'
+  if (item.totalQuantity === 0) return 'text-medium-emphasis'
+  return ''
+}
+
+function getStockQuantityClass(item: PreparationBalance): string {
+  if (item.totalQuantity < 0) return 'text-error'
+  if (item.totalQuantity === 0) return 'text-medium-emphasis'
+  return ''
+}
+
+function getCostDisplayClass(item: PreparationBalance): string {
+  if (item.totalQuantity < 0) return 'text-error'
+  if (item.totalQuantity === 0) return 'text-medium-emphasis'
+  return ''
+}
+
+function getValueDisplayClass(item: PreparationBalance): string {
+  if (item.totalQuantity < 0) return 'text-error'
+  if (item.totalQuantity === 0) return 'text-medium-emphasis'
+  return ''
+}
 
 // Methods
 function formatDepartment(dept: PreparationDepartment): string {
   return dept === 'kitchen' ? 'Kitchen' : 'Bar'
+}
+
+function getPreparationCategory(preparationId: string): string {
+  try {
+    const preparation = recipesStore.preparations.find(p => p.id === preparationId)
+    if (!preparation) return 'other'
+
+    // Map preparation type to category
+    const typeToCategory: Record<string, string> = {
+      sauce: 'sauce',
+      base: 'base',
+      garnish: 'garnish',
+      marinade: 'marinade',
+      dough: 'dough',
+      filling: 'filling'
+    }
+
+    return typeToCategory[preparation.type] || 'other'
+  } catch (error) {
+    console.warn('Error getting preparation category:', error)
+    return 'other'
+  }
+}
+
+function getPreparationCategoryDisplay(preparationId: string): string {
+  const category = getPreparationCategory(preparationId)
+  return PREPARATION_CATEGORIES[category] || 'Other'
+}
+
+function getPreparationType(preparationId: string): string {
+  try {
+    const preparation = recipesStore.preparations.find(p => p.id === preparationId)
+    return preparation?.type || 'preparation'
+  } catch (error) {
+    return 'preparation'
+  }
+}
+
+function getPreparationIcon(preparationId: string): string {
+  const category = getPreparationCategory(preparationId)
+  const iconMap: Record<string, string> = {
+    sauce: '🥫',
+    base: '🍲',
+    garnish: '🌿',
+    marinade: '🧄',
+    dough: '🥐',
+    filling: '🥟',
+    other: '👨‍🍳'
+  }
+  return iconMap[category] || '👨‍🍳'
+}
+
+function getCategoryIcon(category: string): string {
+  const iconMap: Record<string, string> = {
+    sauce: 'mdi-bottle-tonic',
+    base: 'mdi-pot-steam',
+    garnish: 'mdi-leaf',
+    marinade: 'mdi-food-variant',
+    dough: 'mdi-bread-slice',
+    filling: 'mdi-food-drumstick',
+    other: 'mdi-chef-hat'
+  }
+  return iconMap[category] || 'mdi-chef-hat'
+}
+
+function getCategoryColor(category: string): string {
+  const colorMap: Record<string, string> = {
+    sauce: 'red-darken-2',
+    base: 'orange-darken-2',
+    garnish: 'green-darken-2',
+    marinade: 'brown-darken-2',
+    dough: 'amber-darken-2',
+    filling: 'purple-darken-2',
+    other: 'grey-darken-2'
+  }
+  return colorMap[category] || 'grey-darken-2'
 }
 
 function formatQuantity(quantity: number, unit: string): string {
@@ -418,6 +718,16 @@ function clearAllFilters() {
     showLowStock: false
   }
   searchQuery.value = ''
+  selectedCategory.value = null
+
+  // Also clear out of stock filter
+  if (props.showZeroStock) {
+    emit('toggle-zero-stock')
+  }
+}
+
+function handleWriteOffSuccess(message: string) {
+  emit('refresh-needed')
 }
 </script>
 
@@ -431,8 +741,8 @@ function clearAllFilters() {
     min-width: 0;
   }
 
-  .item-icon {
-    font-size: 20px;
+  .preparation-icon {
+    font-size: 18px;
     width: 32px;
     height: 32px;
     display: flex;
@@ -456,6 +766,11 @@ function clearAllFilters() {
   .bg-error {
     background-color: rgb(var(--v-theme-error)) !important;
     color: rgb(var(--v-theme-on-error)) !important;
+  }
+
+  .bg-grey {
+    background-color: rgb(var(--v-theme-surface-variant)) !important;
+    color: rgb(var(--v-theme-on-surface-variant)) !important;
   }
 }
 </style>

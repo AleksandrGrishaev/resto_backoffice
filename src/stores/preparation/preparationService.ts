@@ -1,13 +1,14 @@
-// src/stores/preparation/preparationService.ts - Remove consumption operations
+// src/stores/preparation/preparationService.ts - UPDATED: Added Write-off Support
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useRecipesStore } from '@/stores/recipes'
 import {
   mockPreparationBatches,
   mockPreparationOperations,
-  mockPreparationBalances,
   generatePreparationBatchNumber,
   calculatePreparationFifoAllocation
 } from './preparationMock'
+
+// ✅ UPDATED: Import new types
 import type {
   PreparationBatch,
   PreparationOperation,
@@ -16,20 +17,29 @@ import type {
   CreatePreparationReceiptData,
   CreatePreparationCorrectionData,
   CreatePreparationInventoryData,
+  CreatePreparationWriteOffData,
   PreparationInventoryDocument,
   PreparationInventoryItem,
+  PreparationWriteOffStatistics,
   BatchAllocation
 } from './types'
+
+// ✅ UPDATED: Import write-off helper function
+import { doesPreparationWriteOffAffectKPI } from './types'
 
 const MODULE_NAME = 'PreparationService'
 
 export class PreparationService {
-  private batches: PreparationBatch[] = [...mockPreparationBatches]
-  private operations: PreparationOperation[] = [...mockPreparationOperations]
+  private batches: PreparationBatch[] = []
+  private operations: PreparationOperation[] = []
   private balances: PreparationBalance[] = []
   private inventories: PreparationInventoryDocument[] = []
+  private initialized: boolean = false
 
-  // ✅ Helper для получения данных полуфабриката
+  // ===========================
+  // HELPER METHODS
+  // ===========================
+
   private getPreparationInfo(preparationId: string) {
     try {
       const recipesStore = useRecipesStore()
@@ -42,7 +52,8 @@ export class PreparationService {
           unit: 'gram',
           outputQuantity: 1000,
           outputUnit: 'gram',
-          costPerPortion: 0
+          costPerPortion: 0,
+          shelfLife: 2 // days
         }
       }
 
@@ -51,7 +62,8 @@ export class PreparationService {
         unit: preparation.outputUnit,
         outputQuantity: preparation.outputQuantity,
         outputUnit: preparation.outputUnit,
-        costPerPortion: preparation.costPerPortion || 0
+        costPerPortion: preparation.costPerPortion || 0,
+        shelfLife: preparation.shelfLife || 2 // preparations expire faster
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting preparation info', { error, preparationId })
@@ -60,43 +72,78 @@ export class PreparationService {
         unit: 'gram',
         outputQuantity: 1000,
         outputUnit: 'gram',
-        costPerPortion: 0
+        costPerPortion: 0,
+        shelfLife: 2
       }
     }
   }
 
-  // ✅ Инициализация
+  // ===========================
+  // ✅ INITIALIZATION WITH MOCK DATA LOADING
+  // ===========================
+
   async initialize(): Promise<void> {
     try {
+      if (this.initialized) {
+        DebugUtils.info(MODULE_NAME, 'Service already initialized')
+        return
+      }
+
       DebugUtils.info(MODULE_NAME, 'Initializing preparation service')
 
-      // Загружаем данные из recipes store
       const recipesStore = useRecipesStore()
 
       if (recipesStore.preparations.length === 0) {
         await recipesStore.fetchPreparations()
       }
 
-      // Пересчитываем балансы с правильными данными
+      // ✅ FIXED: Load mock data during initialization
+      this.loadMockData()
       await this.recalculateAllBalances()
 
-      DebugUtils.info(MODULE_NAME, 'Preparation service initialized')
+      this.initialized = true
+      DebugUtils.info(MODULE_NAME, 'Preparation service initialized with mock data', {
+        batches: this.batches.length,
+        operations: this.operations.length,
+        balances: this.balances.length
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to initialize preparation service', { error })
       throw error
     }
   }
 
+  // ✅ NEW: Load mock data method
+  private loadMockData(): void {
+    try {
+      // Deep clone to avoid reference issues
+      this.batches = JSON.parse(JSON.stringify(mockPreparationBatches))
+      this.operations = JSON.parse(JSON.stringify(mockPreparationOperations))
+      this.inventories = []
+
+      DebugUtils.info(MODULE_NAME, 'Mock data loaded successfully', {
+        batches: this.batches.length,
+        operations: this.operations.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load mock data', { error })
+      // Initialize with empty arrays as fallback
+      this.batches = []
+      this.operations = []
+      this.inventories = []
+    }
+  }
+
   // ===========================
-  // BASIC PREPARATION OPERATIONS
+  // BASIC OPERATIONS
   // ===========================
 
-  // Get all preparation balances
   async getBalances(department?: PreparationDepartment): Promise<PreparationBalance[]> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Fetching preparation balances', { department })
+      if (!this.initialized) {
+        await this.initialize()
+      }
 
-      // Если балансы пустые, пересчитываем
       if (this.balances.length === 0) {
         await this.recalculateAllBalances()
       }
@@ -107,7 +154,6 @@ export class PreparationService {
         balances = balances.filter(b => b.department === department)
       }
 
-      DebugUtils.info(MODULE_NAME, 'Preparation balances fetched', { count: balances.length })
       return balances
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to fetch preparation balances', { error })
@@ -115,7 +161,6 @@ export class PreparationService {
     }
   }
 
-  // Get balance for specific preparation
   async getBalance(
     preparationId: string,
     department: PreparationDepartment
@@ -126,12 +171,53 @@ export class PreparationService {
       )
       return balance || null
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get balance', { error, preparationId })
+      DebugUtils.error(MODULE_NAME, 'Failed to get preparation balance', { error, preparationId })
       throw error
     }
   }
 
-  // Get all batches for preparation (for FIFO calculation)
+  async getBatches(department?: PreparationDepartment): Promise<PreparationBatch[]> {
+    try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
+      let batches = [...this.batches]
+
+      if (department && department !== 'all') {
+        batches = batches.filter(b => b.department === department)
+      }
+
+      return batches
+        .filter(b => b.status === 'active')
+        .sort((a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime())
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get batches', { error, department })
+      throw error
+    }
+  }
+
+  async getAllBatches(department?: PreparationDepartment): Promise<PreparationBatch[]> {
+    try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
+      let batches = [...this.batches]
+
+      if (department && department !== 'all') {
+        batches = batches.filter(b => b.department === department)
+      }
+
+      return batches.sort(
+        (a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
+      )
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get all batches', { error, department })
+      throw error
+    }
+  }
+
   async getPreparationBatches(
     preparationId: string,
     department: PreparationDepartment
@@ -145,7 +231,6 @@ export class PreparationService {
           b.currentQuantity > 0
       )
 
-      // Sort by production date (FIFO - oldest first)
       return batches.sort(
         (a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
       )
@@ -159,7 +244,6 @@ export class PreparationService {
   // FIFO CALCULATIONS
   // ===========================
 
-  // Calculate FIFO allocation for operations
   calculateFifoAllocation(
     preparationId: string,
     department: PreparationDepartment,
@@ -181,21 +265,231 @@ export class PreparationService {
     }
   }
 
-  // Calculate consumption cost based on FIFO (for display purposes only)
-  calculateConsumptionCost(
+  calculateCorrectionCost(
     preparationId: string,
     department: PreparationDepartment,
     quantity: number
   ): number {
     try {
       const { allocations } = this.calculateFifoAllocation(preparationId, department, quantity)
-
       return allocations.reduce(
         (total, allocation) => total + allocation.quantity * allocation.costPerUnit,
         0
       )
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to calculate consumption cost', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to calculate correction cost', { error })
+      throw error
+    }
+  }
+
+  // ===========================
+  // ✅ NEW: WRITE-OFF OPERATIONS
+  // ===========================
+
+  async createWriteOff(data: CreatePreparationWriteOffData): Promise<PreparationOperation> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating preparation write-off operation', { data })
+
+      const operationItems = []
+      let totalValue = 0
+      let totalBatchesUpdated = 0
+
+      for (const item of data.items) {
+        const preparationInfo = this.getPreparationInfo(item.preparationId)
+
+        const { allocations, remainingQuantity } = this.calculateFifoAllocation(
+          item.preparationId,
+          data.department,
+          item.quantity
+        )
+
+        if (remainingQuantity > 0) {
+          throw new Error(
+            `Insufficient stock for ${preparationInfo.name}. Missing: ${remainingQuantity} ${preparationInfo.unit}`
+          )
+        }
+
+        const totalCost = allocations.reduce(
+          (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
+          0
+        )
+
+        operationItems.push({
+          id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          preparationId: item.preparationId,
+          preparationName: preparationInfo.name,
+          quantity: item.quantity,
+          unit: preparationInfo.unit,
+          batchAllocations: allocations,
+          totalCost,
+          notes: item.notes
+        })
+
+        totalValue += totalCost
+        totalBatchesUpdated += allocations.length
+
+        // ✅ Update batches with precision handling
+        for (const allocation of allocations) {
+          const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
+          if (batchIndex !== -1) {
+            const batch = this.batches[batchIndex]
+
+            const newQuantity = batch.currentQuantity - allocation.quantity
+            batch.currentQuantity = Math.round(newQuantity * 10000) / 10000
+            batch.totalValue = Math.round(batch.currentQuantity * batch.costPerUnit * 100) / 100
+            batch.updatedAt = TimeUtils.getCurrentLocalISO()
+
+            if (batch.currentQuantity <= 0.0001) {
+              batch.currentQuantity = 0
+              batch.totalValue = 0
+              batch.status = 'consumed'
+              batch.isActive = false
+
+              DebugUtils.info(MODULE_NAME, 'Preparation batch marked as consumed', {
+                batchId: batch.id,
+                batchNumber: batch.batchNumber,
+                originalQuantity: batch.initialQuantity,
+                finalQuantity: batch.currentQuantity
+              })
+            }
+
+            this.batches[batchIndex] = batch
+          }
+        }
+      }
+
+      const operation: PreparationOperation = {
+        id: `prep-op-${Date.now()}`,
+        operationType: 'write_off',
+        documentNumber: `PREP-WR-${String(this.operations.length + 1).padStart(3, '0')}`,
+        operationDate: TimeUtils.getCurrentLocalISO(),
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: operationItems,
+        totalValue,
+        writeOffDetails: {
+          reason: data.reason,
+          affectsKPI: doesPreparationWriteOffAffectKPI(data.reason),
+          notes: data.notes
+        },
+        status: 'confirmed',
+        notes: data.notes,
+        createdAt: TimeUtils.getCurrentLocalISO(),
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      this.operations.push(operation)
+      await this.recalculateBalances(data.department)
+
+      DebugUtils.info(MODULE_NAME, 'Preparation write-off operation created', {
+        operationId: operation.id,
+        reason: data.reason,
+        affectsKPI: doesPreparationWriteOffAffectKPI(data.reason),
+        totalValue,
+        batchesUpdated: totalBatchesUpdated
+      })
+
+      return operation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create preparation write-off', { error })
+      throw error
+    }
+  }
+
+  // ===========================
+  // ✅ WRITE-OFF STATISTICS
+  // ===========================
+
+  getWriteOffStatistics(
+    department?: PreparationDepartment,
+    dateFrom?: string,
+    dateTo?: string
+  ): PreparationWriteOffStatistics {
+    try {
+      let writeOffOps = this.operations.filter(op => op.operationType === 'write_off')
+
+      if (department && department !== 'all') {
+        writeOffOps = writeOffOps.filter(op => op.department === department)
+      }
+
+      if (dateFrom) {
+        writeOffOps = writeOffOps.filter(op => op.operationDate >= dateFrom)
+      }
+      if (dateTo) {
+        writeOffOps = writeOffOps.filter(op => op.operationDate <= dateTo)
+      }
+
+      const stats: PreparationWriteOffStatistics = {
+        total: { count: 0, value: 0 },
+        kpiAffecting: {
+          count: 0,
+          value: 0,
+          reasons: {
+            expired: { count: 0, value: 0 },
+            spoiled: { count: 0, value: 0 },
+            contaminated: { count: 0, value: 0 },
+            overproduced: { count: 0, value: 0 },
+            quality_control: { count: 0, value: 0 },
+            other: { count: 0, value: 0 }
+          }
+        },
+        nonKpiAffecting: {
+          count: 0,
+          value: 0,
+          reasons: {
+            education: { count: 0, value: 0 },
+            test: { count: 0, value: 0 }
+          }
+        },
+        byDepartment: {
+          kitchen: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 },
+          bar: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 }
+        }
+      }
+
+      writeOffOps.forEach(op => {
+        const value = op.totalValue || 0
+        const reason = op.writeOffDetails?.reason
+        const affectsKPI = op.writeOffDetails?.affectsKPI || false
+
+        stats.total.count += 1
+        stats.total.value += value
+
+        if (affectsKPI && reason) {
+          stats.kpiAffecting.count += 1
+          stats.kpiAffecting.value += value
+
+          if (reason in stats.kpiAffecting.reasons) {
+            stats.kpiAffecting.reasons[reason as keyof typeof stats.kpiAffecting.reasons].count += 1
+            stats.kpiAffecting.reasons[reason as keyof typeof stats.kpiAffecting.reasons].value +=
+              value
+          }
+        } else if (!affectsKPI && reason) {
+          stats.nonKpiAffecting.count += 1
+          stats.nonKpiAffecting.value += value
+
+          if (reason in stats.nonKpiAffecting.reasons) {
+            stats.nonKpiAffecting.reasons[
+              reason as keyof typeof stats.nonKpiAffecting.reasons
+            ].count += 1
+            stats.nonKpiAffecting.reasons[
+              reason as keyof typeof stats.nonKpiAffecting.reasons
+            ].value += value
+          }
+        }
+
+        const dept = op.department
+        stats.byDepartment[dept].total += value
+        if (affectsKPI) {
+          stats.byDepartment[dept].kpiAffecting += value
+        } else {
+          stats.byDepartment[dept].nonKpiAffecting += value
+        }
+      })
+
+      return stats
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off statistics', { error })
       throw error
     }
   }
@@ -214,7 +508,6 @@ export class PreparationService {
       for (const item of data.items) {
         const preparationInfo = this.getPreparationInfo(item.preparationId)
 
-        // Create new batch
         const batch: PreparationBatch = {
           id: `prep-batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           batchNumber: generatePreparationBatchNumber(
@@ -227,7 +520,7 @@ export class PreparationService {
           currentQuantity: item.quantity,
           unit: preparationInfo.unit,
           costPerUnit: item.costPerUnit,
-          totalValue: item.quantity * item.costPerUnit,
+          totalValue: Math.round(item.quantity * item.costPerUnit * 100) / 100,
           productionDate: TimeUtils.getCurrentLocalISO(),
           expiryDate: item.expiryDate,
           sourceType: data.sourceType,
@@ -255,7 +548,6 @@ export class PreparationService {
         totalValue += batch.totalValue
       }
 
-      // Create operation
       const operation: PreparationOperation = {
         id: `prep-op-${Date.now()}`,
         operationType: 'receipt',
@@ -272,8 +564,6 @@ export class PreparationService {
       }
 
       this.operations.push(operation)
-
-      // Recalculate balances
       await this.recalculateBalances(data.department)
 
       DebugUtils.info(MODULE_NAME, 'Preparation receipt operation created', {
@@ -289,7 +579,7 @@ export class PreparationService {
   }
 
   // ===========================
-  // CORRECTION OPERATIONS
+  // ✅ CORRECTION OPERATIONS WITH PROPER ROUNDING
   // ===========================
 
   async createCorrection(data: CreatePreparationCorrectionData): Promise<PreparationOperation> {
@@ -302,56 +592,88 @@ export class PreparationService {
       for (const item of data.items) {
         const preparationInfo = this.getPreparationInfo(item.preparationId)
 
-        // Calculate FIFO allocation for correction
-        const { allocations, remainingQuantity } = this.calculateFifoAllocation(
-          item.preparationId,
-          data.department,
-          item.quantity
-        )
+        if (item.quantity > 0) {
+          // Positive correction (surplus) - create new batch
+          const batch: PreparationBatch = {
+            id: `prep-batch-corr-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            batchNumber: generatePreparationBatchNumber(
+              preparationInfo.name,
+              TimeUtils.getCurrentLocalISO()
+            ),
+            preparationId: item.preparationId,
+            department: data.department,
+            initialQuantity: item.quantity,
+            currentQuantity: item.quantity,
+            unit: preparationInfo.unit,
+            costPerUnit: preparationInfo.costPerPortion,
+            totalValue: Math.round(item.quantity * preparationInfo.costPerPortion * 100) / 100,
+            productionDate: TimeUtils.getCurrentLocalISO(),
+            sourceType: 'correction',
+            notes: `Correction surplus: ${item.notes || ''}`,
+            status: 'active',
+            isActive: true,
+            createdAt: TimeUtils.getCurrentLocalISO(),
+            updatedAt: TimeUtils.getCurrentLocalISO()
+          }
 
-        if (remainingQuantity > 0) {
-          throw new Error(
-            `Insufficient stock for ${preparationInfo.name}. Missing: ${remainingQuantity} ${preparationInfo.unit}`
+          this.batches.push(batch)
+          totalValue += batch.totalValue
+        } else {
+          // Negative correction (shortage) - write off from existing batches
+          const positiveQuantity = Math.abs(item.quantity)
+          const { allocations, remainingQuantity } = this.calculateFifoAllocation(
+            item.preparationId,
+            data.department,
+            positiveQuantity
           )
-        }
 
-        // Calculate cost
-        const totalCost = allocations.reduce(
-          (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
-          0
-        )
+          if (remainingQuantity > 0) {
+            throw new Error(
+              `Insufficient stock for correction of ${preparationInfo.name}. Missing: ${remainingQuantity} ${preparationInfo.unit}`
+            )
+          }
+
+          const totalCost = allocations.reduce(
+            (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
+            0
+          )
+
+          // Update batches with proper precision
+          for (const allocation of allocations) {
+            const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
+            if (batchIndex !== -1) {
+              const batch = this.batches[batchIndex]
+
+              const newQuantity = batch.currentQuantity - allocation.quantity
+              batch.currentQuantity = Math.round(newQuantity * 10000) / 10000
+              batch.totalValue = Math.round(batch.currentQuantity * batch.costPerUnit * 100) / 100
+              batch.updatedAt = TimeUtils.getCurrentLocalISO()
+
+              if (batch.currentQuantity <= 0.0001) {
+                batch.currentQuantity = 0
+                batch.totalValue = 0
+                batch.status = 'consumed'
+                batch.isActive = false
+              }
+
+              this.batches[batchIndex] = batch
+            }
+          }
+
+          totalValue += totalCost
+        }
 
         operationItems.push({
           id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           preparationId: item.preparationId,
           preparationName: preparationInfo.name,
-          quantity: item.quantity,
+          quantity: Math.abs(item.quantity),
           unit: preparationInfo.unit,
-          batchAllocations: allocations,
-          totalCost,
+          totalCost: Math.abs(item.quantity) * preparationInfo.costPerPortion,
           notes: item.notes
         })
-
-        totalValue += totalCost
-
-        // Update batches (reduce stock)
-        for (const allocation of allocations) {
-          const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
-          if (batchIndex !== -1) {
-            this.batches[batchIndex].currentQuantity -= allocation.quantity
-            this.batches[batchIndex].totalValue =
-              this.batches[batchIndex].currentQuantity * this.batches[batchIndex].costPerUnit
-            this.batches[batchIndex].updatedAt = TimeUtils.getCurrentLocalISO()
-
-            if (this.batches[batchIndex].currentQuantity <= 0) {
-              this.batches[batchIndex].status = 'consumed'
-              this.batches[batchIndex].isActive = false
-            }
-          }
-        }
       }
 
-      // Create operation
       const operation: PreparationOperation = {
         id: `prep-op-${Date.now()}`,
         operationType: 'correction',
@@ -369,8 +691,6 @@ export class PreparationService {
       }
 
       this.operations.push(operation)
-
-      // Recalculate balances for affected items
       await this.recalculateBalances(data.department)
 
       DebugUtils.info(MODULE_NAME, 'Preparation correction operation created', {
@@ -393,9 +713,6 @@ export class PreparationService {
     data: CreatePreparationInventoryData
   ): Promise<PreparationInventoryDocument> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Starting preparation inventory', { data })
-
-      // Get all current balances for the department
       const currentBalances = this.balances.filter(b => b.department === data.department)
 
       const inventoryItems = currentBalances.map(balance => ({
@@ -403,7 +720,7 @@ export class PreparationService {
         preparationId: balance.preparationId,
         preparationName: balance.preparationName,
         systemQuantity: balance.totalQuantity,
-        actualQuantity: balance.totalQuantity, // Default to system quantity
+        actualQuantity: balance.totalQuantity,
         difference: 0,
         unit: balance.unit,
         averageCost: balance.averageCost,
@@ -428,12 +745,6 @@ export class PreparationService {
       }
 
       this.inventories.push(inventory)
-
-      DebugUtils.info(MODULE_NAME, 'Preparation inventory started', {
-        inventoryId: inventory.id,
-        itemCount: inventoryItems.length
-      })
-
       return inventory
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to start preparation inventory', { error })
@@ -446,11 +757,6 @@ export class PreparationService {
     items: PreparationInventoryItem[]
   ): Promise<PreparationInventoryDocument> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Updating preparation inventory', {
-        inventoryId,
-        itemCount: items.length
-      })
-
       const inventoryIndex = this.inventories.findIndex(inv => inv.id === inventoryId)
       if (inventoryIndex === -1) {
         throw new Error('Preparation inventory not found')
@@ -458,15 +764,12 @@ export class PreparationService {
 
       const inventory = this.inventories[inventoryIndex]
 
-      // Update items in inventory
       inventory.items = items.map(item => ({
         ...item,
-        // Recalculate difference and value difference
         difference: item.actualQuantity - item.systemQuantity,
         valueDifference: (item.actualQuantity - item.systemQuantity) * item.averageCost
       }))
 
-      // Recalculate totals
       inventory.totalDiscrepancies = inventory.items.filter(
         item => Math.abs(item.difference) > 0.01
       ).length
@@ -477,15 +780,7 @@ export class PreparationService {
       )
 
       inventory.updatedAt = TimeUtils.getCurrentLocalISO()
-
-      // Update in array
       this.inventories[inventoryIndex] = inventory
-
-      DebugUtils.info(MODULE_NAME, 'Preparation inventory updated successfully', {
-        inventoryId,
-        totalDiscrepancies: inventory.totalDiscrepancies,
-        totalValueDifference: inventory.totalValueDifference
-      })
 
       return inventory
     } catch (error) {
@@ -499,61 +794,42 @@ export class PreparationService {
 
   async finalizeInventory(inventoryId: string): Promise<PreparationOperation[]> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Finalizing preparation inventory', { inventoryId })
-
       const inventoryIndex = this.inventories.findIndex(inv => inv.id === inventoryId)
       if (inventoryIndex === -1) {
-        throw new Error('Preparation inventory not found')
+        throw new Error('Inventory not found')
       }
 
       const inventory = this.inventories[inventoryIndex]
-
-      // Change status to confirmed
       inventory.status = 'confirmed'
       inventory.updatedAt = TimeUtils.getCurrentLocalISO()
 
       const correctionOperations: PreparationOperation[] = []
-
-      // Create correction operations for discrepancies
       const itemsWithDiscrepancies = inventory.items.filter(
         item => Math.abs(item.difference) > 0.01
       )
 
       if (itemsWithDiscrepancies.length > 0) {
-        // Group by operation type (positive and negative adjustments)
-        const positiveAdjustments = itemsWithDiscrepancies.filter(item => item.difference > 0)
-        const negativeAdjustments = itemsWithDiscrepancies.filter(item => item.difference < 0)
-
-        // Create receipt operation for surplus
-        if (positiveAdjustments.length > 0) {
-          const receiptOperation = await this.createInventoryAdjustment(
-            inventory,
-            positiveAdjustments,
-            'receipt'
-          )
-          correctionOperations.push(receiptOperation)
+        const correctionData: CreatePreparationCorrectionData = {
+          department: inventory.department,
+          responsiblePerson: inventory.responsiblePerson,
+          items: itemsWithDiscrepancies.map(item => ({
+            preparationId: item.preparationId,
+            quantity: item.difference,
+            notes: `Inventory adjustment: ${item.notes || 'No specific reason'}`
+          })),
+          correctionDetails: {
+            reason: 'other',
+            relatedId: inventory.id,
+            relatedName: `Inventory ${inventory.documentNumber}`
+          },
+          notes: `Inventory corrections from ${inventory.documentNumber}`
         }
 
-        // Create correction operation for shortages
-        if (negativeAdjustments.length > 0) {
-          const correctionOperation = await this.createInventoryAdjustment(
-            inventory,
-            negativeAdjustments,
-            'correction'
-          )
-          correctionOperations.push(correctionOperation)
-        }
+        const correctionOperation = await this.createCorrection(correctionData)
+        correctionOperations.push(correctionOperation)
       }
 
-      // Update inventory
       this.inventories[inventoryIndex] = inventory
-
-      DebugUtils.info(MODULE_NAME, 'Preparation inventory finalized successfully', {
-        inventoryId,
-        correctionOperations: correctionOperations.length,
-        discrepancies: itemsWithDiscrepancies.length
-      })
-
       return correctionOperations
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to finalize preparation inventory', {
@@ -564,138 +840,39 @@ export class PreparationService {
     }
   }
 
-  // ✅ Helper для создания корректирующих операций
-  private async createInventoryAdjustment(
-    inventory: PreparationInventoryDocument,
-    items: PreparationInventoryItem[],
-    operationType: 'receipt' | 'correction'
-  ): Promise<PreparationOperation> {
-    try {
-      const operationItems = []
-      let totalValue = 0
-
-      for (const item of items) {
-        const adjustmentQuantity = Math.abs(item.difference)
-        const itemCost = adjustmentQuantity * item.averageCost
-
-        if (operationType === 'receipt') {
-          // For surplus create new batch
-          const batch: PreparationBatch = {
-            id: `prep-batch-adj-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            batchNumber: generatePreparationBatchNumber(
-              item.preparationName,
-              TimeUtils.getCurrentLocalISO()
-            ),
-            preparationId: item.preparationId,
-            department: inventory.department,
-            initialQuantity: adjustmentQuantity,
-            currentQuantity: adjustmentQuantity,
-            unit: item.unit,
-            costPerUnit: item.averageCost,
-            totalValue: itemCost,
-            productionDate: TimeUtils.getCurrentLocalISO(),
-            sourceType: 'inventory_adjustment',
-            notes: `Inventory surplus from ${inventory.documentNumber}`,
-            status: 'active',
-            isActive: true,
-            createdAt: TimeUtils.getCurrentLocalISO(),
-            updatedAt: TimeUtils.getCurrentLocalISO()
-          }
-
-          this.batches.push(batch)
-        } else {
-          // For shortages write off from existing batches
-          const { allocations } = this.calculateFifoAllocation(
-            item.preparationId,
-            inventory.department,
-            adjustmentQuantity
-          )
-
-          // Update batches
-          for (const allocation of allocations) {
-            const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
-            if (batchIndex !== -1) {
-              this.batches[batchIndex].currentQuantity -= allocation.quantity
-              this.batches[batchIndex].totalValue =
-                this.batches[batchIndex].currentQuantity * this.batches[batchIndex].costPerUnit
-              this.batches[batchIndex].updatedAt = TimeUtils.getCurrentLocalISO()
-
-              if (this.batches[batchIndex].currentQuantity <= 0) {
-                this.batches[batchIndex].status = 'consumed'
-                this.batches[batchIndex].isActive = false
-              }
-            }
-          }
-        }
-
-        operationItems.push({
-          id: `prep-item-adj-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          preparationId: item.preparationId,
-          preparationName: item.preparationName,
-          quantity: adjustmentQuantity,
-          unit: item.unit,
-          totalCost: itemCost,
-          averageCostPerUnit: item.averageCost,
-          notes: `Inventory ${operationType === 'receipt' ? 'surplus' : 'shortage'}: ${item.difference} ${item.unit}`
-        })
-
-        totalValue += itemCost
-      }
-
-      // Create operation
-      const operation: PreparationOperation = {
-        id: `prep-op-adj-${Date.now()}`,
-        operationType: operationType === 'receipt' ? 'receipt' : 'correction',
-        documentNumber: `PREP-${operationType === 'receipt' ? 'ADJ-IN' : 'ADJ-OUT'}-${String(this.operations.length + 1).padStart(3, '0')}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
-        department: inventory.department,
-        responsiblePerson: inventory.responsiblePerson,
-        items: operationItems,
-        totalValue,
-        status: 'confirmed',
-        notes: `Preparation inventory adjustment from ${inventory.documentNumber}`,
-        relatedInventoryId: inventory.id,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-
-      this.operations.push(operation)
-
-      return operation
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create preparation inventory adjustment', { error })
-      throw error
-    }
-  }
-
   // ===========================
   // DATA RETRIEVAL
   // ===========================
 
-  // Get operations for department
   async getOperations(department?: PreparationDepartment): Promise<PreparationOperation[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
       let operations = [...this.operations]
 
       if (department && department !== 'all') {
         operations = operations.filter(op => op.department === department)
       }
 
-      // Sort by date (newest first)
       return operations.sort(
         (a, b) => new Date(b.operationDate).getTime() - new Date(a.operationDate).getTime()
       )
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get preparation operations', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to get operations', { error })
       throw error
     }
   }
 
-  // Get inventories
   async getInventories(
     department?: PreparationDepartment
   ): Promise<PreparationInventoryDocument[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize()
+      }
+
       let inventories = [...this.inventories]
 
       if (department && department !== 'all') {
@@ -706,7 +883,7 @@ export class PreparationService {
         (a, b) => new Date(b.inventoryDate).getTime() - new Date(a.inventoryDate).getTime()
       )
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get preparation inventories', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to get inventories', { error })
       throw error
     }
   }
@@ -715,7 +892,6 @@ export class PreparationService {
   // ALERT HELPERS
   // ===========================
 
-  // Get expiring preparations
   getExpiringPreparations(days: number = 1): PreparationBalance[] {
     try {
       return this.balances.filter(balance => balance.hasNearExpiry || balance.hasExpired)
@@ -725,7 +901,6 @@ export class PreparationService {
     }
   }
 
-  // Get low stock preparations
   getLowStockPreparations(): PreparationBalance[] {
     try {
       return this.balances.filter(balance => balance.belowMinStock)
@@ -736,63 +911,53 @@ export class PreparationService {
   }
 
   // ===========================
-  // QUICK ACCESS HELPERS
+  // ✅ BALANCE CALCULATION WITH PROPER PRECISION
   // ===========================
 
-  getQuickPreparations(department: PreparationDepartment): any[] {
-    try {
-      const recipesStore = useRecipesStore()
-
-      // Take first 10 preparations as "popular"
-      return recipesStore.activePreparations.slice(0, 10).map(prep => ({
-        id: prep.id,
-        name: prep.name,
-        unit: prep.outputUnit,
-        type: prep.type
-      }))
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get quick preparations', { error })
-      return []
-    }
-  }
-
-  // ===========================
-  // PRIVATE BALANCE CALCULATION
-  // ===========================
-
-  // ✅ Пересчет всех балансов
   private async recalculateAllBalances(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Recalculating all preparation balances')
-
-      // Clear old balances
       this.balances = []
-
-      // Recalculate for each department
       await this.recalculateBalances('kitchen')
       await this.recalculateBalances('bar')
-
-      DebugUtils.info(MODULE_NAME, 'All preparation balances recalculated', {
-        count: this.balances.length
-      })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to recalculate all preparation balances', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to recalculate all balances', { error })
       throw error
     }
   }
 
-  // ✅ Recalculate balances с правильными названиями
   private async recalculateBalances(department: PreparationDepartment): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Recalculating preparation balances', { department })
+      // Remove old balances for this department
+      this.balances = this.balances.filter(b => b.department !== department)
 
-      // Group active batches by preparation
+      // Get available preparations for this department
+      let departmentPreparations: any[] = []
+
+      try {
+        const recipesStore = useRecipesStore()
+        departmentPreparations = recipesStore.activePreparations.filter(p => p.isActive)
+
+        DebugUtils.info(
+          MODULE_NAME,
+          `Found ${departmentPreparations.length} preparations for ${department}`,
+          { department, preparationCount: departmentPreparations.length }
+        )
+      } catch (error) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'Recipes store not available, will only show preparations with existing batches',
+          { error }
+        )
+        departmentPreparations = []
+      }
+
+      // Get active batches for this department
       const activeBatches = this.batches.filter(
         b => b.department === department && b.status === 'active' && b.currentQuantity > 0
       )
 
+      // Group batches by preparationId
       const preparationGroups = new Map<string, PreparationBatch[]>()
-
       for (const batch of activeBatches) {
         const key = batch.preparationId
         if (!preparationGroups.has(key)) {
@@ -801,24 +966,34 @@ export class PreparationService {
         preparationGroups.get(key)!.push(batch)
       }
 
-      // Update balances
-      for (const [preparationId, batches] of preparationGroups) {
-        // ✅ Get correct preparation info
+      // Calculate actual balances from batches
+      const actualBalances = new Map<string, number>()
+      const allBatches = this.batches.filter(b => b.department === department)
+
+      allBatches.forEach(batch => {
+        if (batch.status === 'active') {
+          const currentBalance = actualBalances.get(batch.preparationId) || 0
+          actualBalances.set(batch.preparationId, currentBalance + batch.currentQuantity)
+        }
+      })
+
+      // Create balances for preparations with positive stock
+      for (const [, batches] of preparationGroups) {
+        const firstBatch = batches[0]
+        const preparationId = firstBatch.preparationId
         const preparationInfo = this.getPreparationInfo(preparationId)
 
-        // Calculate totals
-        const totalQuantity = batches.reduce((sum, b) => sum + b.currentQuantity, 0)
-        const totalValue = batches.reduce((sum, b) => sum + b.totalValue, 0)
-        const averageCost = totalValue / totalQuantity
+        const totalQuantity =
+          Math.round(batches.reduce((sum, b) => sum + b.currentQuantity, 0) * 10000) / 10000
+        const totalValue = Math.round(batches.reduce((sum, b) => sum + b.totalValue, 0) * 100) / 100
+        const averageCost = totalQuantity > 0 ? totalValue / totalQuantity : 0
 
-        // Sort batches by date
         const sortedBatches = batches.sort(
           (a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
         )
 
         const latestCost = sortedBatches[sortedBatches.length - 1].costPerUnit
 
-        // Determine cost trend (simplified)
         let costTrend: 'up' | 'down' | 'stable' = 'stable'
         if (sortedBatches.length > 1) {
           const oldestCost = sortedBatches[0].costPerUnit
@@ -826,10 +1001,8 @@ export class PreparationService {
           else if (latestCost < oldestCost * 0.95) costTrend = 'down'
         }
 
-        // ✅ Check for low stock for preparations
-        const belowMinStock = totalQuantity < 200 // less than 200g/ml
+        const belowMinStock = totalQuantity < 200 // 200g/ml for preparations
 
-        // Check for expiry warnings
         const now = new Date()
         const hasExpired = sortedBatches.some(batch => {
           if (!batch.expiryDate) return false
@@ -843,13 +1016,12 @@ export class PreparationService {
           return diffDays <= 1 && diffDays > 0 // 1 day for preparations
         })
 
-        // Update or create balance
         const balance: PreparationBalance = {
           preparationId,
-          preparationName: preparationInfo.name, // ✅ correct name
+          preparationName: preparationInfo.name,
           department,
           totalQuantity,
-          unit: preparationInfo.unit, // ✅ correct unit
+          unit: preparationInfo.unit,
           totalValue,
           averageCost,
           latestCost,
@@ -859,20 +1031,106 @@ export class PreparationService {
           newestBatchDate: sortedBatches[sortedBatches.length - 1].productionDate,
           hasExpired,
           hasNearExpiry,
-          belowMinStock, // ✅ correct check
+          belowMinStock,
           lastCalculated: TimeUtils.getCurrentLocalISO()
         }
 
-        // Remove old balance for this preparation if exists
-        this.balances = this.balances.filter(
-          b => !(b.preparationId === preparationId && b.department === department)
-        )
-
-        // Add new balance
         this.balances.push(balance)
       }
 
-      DebugUtils.info(MODULE_NAME, 'Preparation balances recalculated', { department })
+      // Add preparations without stock
+      if (departmentPreparations.length > 0) {
+        for (const preparation of departmentPreparations) {
+          const preparationId = preparation.id
+
+          if (preparationGroups.has(preparationId)) {
+            continue
+          }
+
+          const actualBalance = Math.round((actualBalances.get(preparationId) || 0) * 10000) / 10000
+
+          const balance: PreparationBalance = {
+            preparationId,
+            preparationName: preparation.name,
+            department,
+            totalQuantity: actualBalance,
+            unit: preparation.outputUnit || 'gram',
+            totalValue: actualBalance > 0 ? actualBalance * (preparation.costPerPortion || 0) : 0,
+            averageCost: preparation.costPerPortion || 0,
+            latestCost: preparation.costPerPortion || 0,
+            costTrend: 'stable',
+            batches: [],
+            oldestBatchDate: '',
+            newestBatchDate: '',
+            hasExpired: false,
+            hasNearExpiry: false,
+            belowMinStock: true,
+            lastCalculated: TimeUtils.getCurrentLocalISO()
+          }
+
+          this.balances.push(balance)
+        }
+      }
+
+      // Add preparations that have consumed batches but aren't in catalog
+      const allBatchPreparations = new Set<string>()
+      this.batches
+        .filter(b => b.department === department)
+        .forEach(batch => {
+          allBatchPreparations.add(batch.preparationId)
+        })
+
+      for (const preparationId of allBatchPreparations) {
+        const alreadyExists = this.balances.some(
+          b => b.preparationId === preparationId && b.department === department
+        )
+
+        if (!alreadyExists) {
+          const actualBalance = Math.round((actualBalances.get(preparationId) || 0) * 10000) / 10000
+          const preparationInfo = this.getPreparationInfo(preparationId)
+
+          const balance: PreparationBalance = {
+            preparationId,
+            preparationName: preparationInfo.name,
+            department,
+            totalQuantity: actualBalance,
+            unit: preparationInfo.unit,
+            totalValue: actualBalance > 0 ? actualBalance * preparationInfo.costPerPortion : 0,
+            averageCost: preparationInfo.costPerPortion,
+            latestCost: preparationInfo.costPerPortion,
+            costTrend: 'stable',
+            batches: [],
+            oldestBatchDate: '',
+            newestBatchDate: '',
+            hasExpired: false,
+            hasNearExpiry: false,
+            belowMinStock: true,
+            lastCalculated: TimeUtils.getCurrentLocalISO()
+          }
+
+          this.balances.push(balance)
+        }
+      }
+
+      const departmentBalances = this.balances.filter(b => b.department === department)
+      const positiveStock = departmentBalances.filter(b => b.totalQuantity > 0).length
+      const zeroStock = departmentBalances.filter(b => b.totalQuantity === 0).length
+      const negativeStock = departmentBalances.filter(b => b.totalQuantity < 0).length
+
+      DebugUtils.info(
+        MODULE_NAME,
+        `Balances recalculated for ${department} using batch-based approach`,
+        {
+          department,
+          totalPreparationsInCatalog: departmentPreparations.length,
+          preparationsWithPositiveStock: positiveStock,
+          preparationsWithZeroStock: zeroStock,
+          preparationsWithNegativeStock: negativeStock,
+          totalBalances: departmentBalances.length,
+          activeBatchesProcessed: activeBatches.length,
+          totalBatchesConsidered: allBatches.length
+        }
+      )
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to recalculate preparation balances', { error })
       throw error

@@ -1,4 +1,4 @@
-<!-- src/views/preparation/PreparationView.vue - Remove Use Preparations button and dialog -->
+<!-- src/views/preparation/PreparationView.vue - Updated with Write-off Integration -->
 <template>
   <div class="preparation-view">
     <!-- Header -->
@@ -31,10 +31,17 @@
         >
           Start Inventory
         </v-btn>
+
+        <!-- Write-off Widget -->
+        <preparation-writeoff-widget
+          :department="selectedDepartment"
+          @success="handleWriteOffSuccess"
+          @refresh-needed="refreshCurrentData"
+        />
       </div>
     </div>
 
-    <!-- ✅ Error Alert -->
+    <!-- Error Alert -->
     <v-alert
       v-if="preparationStore.state.error"
       type="error"
@@ -116,11 +123,17 @@
           </v-empty-state>
         </div>
 
+        <!-- ✅ UPDATED: Stock Table with write-off toggle -->
         <preparation-stock-table
           v-else
           :balances="preparationBalances"
           :loading="preparationStore.state.loading.balances"
           :department="selectedDepartment"
+          :show-zero-stock="showZeroStock"
+          @write-off="handleWriteOffFromBalance"
+          @toggle-zero-stock="toggleZeroStockFilter"
+          @refresh-needed="refreshCurrentData"
+          @add-production="showProductionDialog = true"
         />
       </v-tabs-window-item>
 
@@ -217,6 +230,9 @@ import PreparationInventoriesTable from './components/PreparationInventoriesTabl
 import PreparationProductionDialog from './components/PreparationProductionDialog.vue'
 import PreparationInventoryDialog from './components/PreparationInventoryDialog.vue'
 
+// ✅ NEW: Write-off Widget
+import PreparationWriteoffWidget from './components/writeoff/PreparationWriteOffWidget.vue'
+
 const MODULE_NAME = 'PreparationView'
 
 // Store
@@ -233,14 +249,23 @@ const successMessage = ref('')
 const errorMessage = ref('')
 const editingInventory = ref<PreparationInventoryDocument | null>(null)
 
+// ✅ NEW: Zero stock filter state
+const showZeroStock = ref(false)
+
 // Computed
 const preparationBalances = computed(() => {
   try {
-    return (
+    const filtered =
       preparationStore.filteredBalances.filter(
         b => b && b.department === selectedDepartment.value
       ) || []
-    )
+
+    // ✅ NEW: Apply zero stock filter
+    if (showZeroStock.value) {
+      return filtered.filter(b => b.totalQuantity <= 0)
+    }
+
+    return filtered
   } catch (error) {
     console.warn('Error filtering preparation balances:', error)
     return []
@@ -312,6 +337,16 @@ function openInventoryDialog() {
   }
 }
 
+// ✅ NEW: Zero stock filter toggle
+function toggleZeroStockFilter() {
+  showZeroStock.value = !showZeroStock.value
+
+  DebugUtils.info(MODULE_NAME, 'Toggled zero stock filter', {
+    showZeroStock: showZeroStock.value,
+    department: selectedDepartment.value
+  })
+}
+
 function showExpiringItems() {
   try {
     if (preparationStore.toggleNearExpiryFilter) {
@@ -345,6 +380,41 @@ function showLowStockItems() {
   }
 }
 
+// ✅ NEW: Write-off handler for balance table
+function handleWriteOffFromBalance(preparationData: any) {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Write-off initiated from balance table', { preparationData })
+    // TODO: Open write-off dialog with preselected preparation if needed
+  } catch (error) {
+    console.warn('Error handling write-off from balance:', error)
+    handleOperationError('Failed to initiate write-off')
+  }
+}
+
+// ✅ NEW: Write-off success handler
+async function handleWriteOffSuccess(message: string) {
+  successMessage.value = message
+  showSuccessSnackbar.value = true
+
+  try {
+    await refreshCurrentData()
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to refresh data after write-off', { error })
+  }
+}
+
+// ✅ NEW: Refresh current data
+async function refreshCurrentData() {
+  try {
+    await Promise.all([
+      preparationStore.fetchBalances(selectedDepartment.value),
+      preparationStore.fetchOperations(selectedDepartment.value)
+    ])
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to refresh data', { error })
+  }
+}
+
 async function handleOperationSuccess(message: string = 'Operation completed successfully') {
   try {
     DebugUtils.info(MODULE_NAME, 'Operation completed, refreshing data')
@@ -352,10 +422,7 @@ async function handleOperationSuccess(message: string = 'Operation completed suc
     successMessage.value = message
     showSuccessSnackbar.value = true
 
-    await Promise.all([
-      preparationStore.fetchBalances(selectedDepartment.value),
-      preparationStore.fetchOperations(selectedDepartment.value)
-    ])
+    await refreshCurrentData()
 
     // Close dialogs
     showProductionDialog.value = false
@@ -377,7 +444,9 @@ async function handleInventorySuccess(message: string = 'Inventory completed suc
     await Promise.all([
       preparationStore.fetchBalances(selectedDepartment.value),
       preparationStore.fetchOperations(selectedDepartment.value),
-      preparationStore.fetchInventories(selectedDepartment.value)
+      preparationStore.fetchInventories
+        ? preparationStore.fetchInventories(selectedDepartment.value)
+        : Promise.resolve()
     ])
 
     showInventoryDialog.value = false
@@ -446,6 +515,8 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
     })
 
     // Clear filters when changing department
+    showZeroStock.value = false
+
     if (preparationStore.clearFilters) {
       preparationStore.clearFilters()
     }
@@ -453,13 +524,7 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
       preparationStore.setDepartmentFilter(newDepartment)
     }
 
-    await Promise.all([
-      preparationStore.fetchBalances(newDepartment),
-      preparationStore.fetchOperations(newDepartment),
-      preparationStore.fetchInventories
-        ? preparationStore.fetchInventories(newDepartment)
-        : Promise.resolve()
-    ])
+    await refreshCurrentData()
 
     DebugUtils.info(MODULE_NAME, 'Department data loaded successfully')
   } catch (error) {
@@ -512,5 +577,30 @@ onMounted(async () => {
 .v-empty-state {
   padding: 48px 24px;
   text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+  .preparation-view {
+    padding: 16px;
+  }
+
+  .d-flex.justify-space-between {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .d-flex.justify-space-between > div:last-child {
+    align-self: stretch;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 600px) {
+  .d-flex.gap-2 {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }
 </style>

@@ -1,4 +1,4 @@
-// src/stores/preparation/preparationStore.ts - Remove consumption operations
+// src/stores/preparation/preparationStore.ts - UPDATED: Added Write-off Support
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -8,12 +8,14 @@ import type {
   PreparationState,
   PreparationOperation,
   PreparationBalance,
+  PreparationBatch,
   PreparationInventoryDocument,
   PreparationInventoryItem,
   PreparationDepartment,
   CreatePreparationReceiptData,
   CreatePreparationCorrectionData,
-  CreatePreparationInventoryData
+  CreatePreparationInventoryData,
+  CreatePreparationWriteOffData
 } from './types'
 
 const MODULE_NAME = 'PreparationStore'
@@ -30,11 +32,13 @@ export const usePreparationStore = defineStore('preparation', () => {
       operations: false,
       inventory: false,
       consumption: false,
-      production: false
+      production: false,
+      writeOff: false // ✅ NEW
     },
     error: null,
     filters: {
       department: 'all',
+      operationType: undefined, // ✅ NEW
       showExpired: false,
       showBelowMinStock: false,
       showNearExpiry: false,
@@ -43,17 +47,17 @@ export const usePreparationStore = defineStore('preparation', () => {
       dateTo: undefined
     },
     settings: {
-      expiryWarningDays: 1, // 1 день для полуфабрикатов
+      expiryWarningDays: 1,
       lowStockMultiplier: 1.2,
-      autoCalculateBalance: true
+      autoCalculateBalance: true,
+      enableQuickWriteOff: true // ✅ NEW
     }
   })
 
-  // ✅ Получение связанных stores
   const recipesStore = useRecipesStore()
 
   // ===========================
-  // COMPUTED PROPERTIES (GETTERS)
+  // COMPUTED PROPERTIES
   // ===========================
 
   const filteredBalances = computed(() => {
@@ -61,18 +65,15 @@ export const usePreparationStore = defineStore('preparation', () => {
       let balances = [...state.value.balances]
       const filters = state.value.filters
 
-      // Department filter
       if (filters.department !== 'all') {
         balances = balances.filter(b => b.department === filters.department)
       }
 
-      // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase()
         balances = balances.filter(b => b.preparationName.toLowerCase().includes(searchLower))
       }
 
-      // Status filters
       if (filters.showExpired) {
         balances = balances.filter(b => b.hasExpired)
       }
@@ -90,9 +91,35 @@ export const usePreparationStore = defineStore('preparation', () => {
     }
   })
 
+  const filteredOperations = computed(() => {
+    try {
+      let operations = [...state.value.operations]
+      const filters = state.value.filters
+
+      if (filters.department !== 'all') {
+        operations = operations.filter(op => op.department === filters.department)
+      }
+
+      if (filters.operationType) {
+        operations = operations.filter(op => op.operationType === filters.operationType)
+      }
+
+      return operations
+    } catch (error) {
+      console.warn('Error filtering operations:', error)
+      return []
+    }
+  })
+
   const departmentBalances = computed(() => {
     return (department: PreparationDepartment) =>
       state.value.balances.filter(b => b.department === department)
+  })
+
+  // ✅ NEW: Computed for batches
+  const departmentBatches = computed(() => {
+    return (department: PreparationDepartment) =>
+      state.value.batches.filter(b => b.department === department)
   })
 
   const totalInventoryValue = computed(() => {
@@ -116,7 +143,12 @@ export const usePreparationStore = defineStore('preparation', () => {
   const quickPreparations = computed(() => {
     return (department: PreparationDepartment) => {
       try {
-        return preparationService.getQuickPreparations(department)
+        return recipesStore.activePreparations.slice(0, 10).map(prep => ({
+          id: prep.id,
+          name: prep.name,
+          unit: prep.outputUnit,
+          type: prep.type
+        }))
       } catch (error) {
         DebugUtils.error(MODULE_NAME, 'Failed to get quick preparations', { error })
         return []
@@ -133,16 +165,47 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.balances = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Fetching preparation balances', { department })
+      DebugUtils.info(MODULE_NAME, 'Fetching preparation balances and batches', { department })
 
-      const balances = await preparationService.getBalances(department)
+      // ✅ FIXED: Load both balances AND batches simultaneously
+      const [balances, batches] = await Promise.all([
+        preparationService.getBalances(department),
+        preparationService.getBatches(department)
+      ])
+
       state.value.balances = balances
+      state.value.batches = batches
 
-      DebugUtils.info(MODULE_NAME, 'Preparation balances loaded', {
-        count: balances.length
+      DebugUtils.info(MODULE_NAME, 'Preparation balances and batches loaded', {
+        balances: balances.length,
+        batches: batches.length
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch balances'
+      const message =
+        error instanceof Error ? error.message : 'Failed to fetch preparation balances'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, { error })
+      throw error
+    } finally {
+      state.value.loading.balances = false
+    }
+  }
+
+  async function fetchBatches(department?: PreparationDepartment) {
+    try {
+      state.value.loading.balances = true
+      state.value.error = null
+
+      DebugUtils.info(MODULE_NAME, 'Fetching preparation batches', { department })
+
+      const batches = await preparationService.getBatches(department)
+      state.value.batches = batches
+
+      DebugUtils.info(MODULE_NAME, 'Preparation batches loaded', {
+        count: batches.length
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch preparation batches'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -155,8 +218,6 @@ export const usePreparationStore = defineStore('preparation', () => {
     try {
       state.value.loading.operations = true
       state.value.error = null
-
-      DebugUtils.info(MODULE_NAME, 'Fetching preparation operations', { department })
 
       const operations = await preparationService.getOperations(department)
       state.value.operations = operations
@@ -179,8 +240,6 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Fetching preparation inventories', { department })
-
       const inventories = await preparationService.getInventories(department)
       state.value.inventories = inventories
 
@@ -198,7 +257,7 @@ export const usePreparationStore = defineStore('preparation', () => {
   }
 
   // ===========================
-  // CORRECTION OPERATIONS
+  // CORE OPERATIONS (with batch sync)
   // ===========================
 
   async function createCorrection(
@@ -208,23 +267,16 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.consumption = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Creating preparation correction operation', { data })
-
       const operation = await preparationService.createCorrection(data)
-
-      // Update local state
       state.value.operations.unshift(operation)
 
-      // Refresh balances
+      // ✅ FIXED: Sync both balances AND batches
       await fetchBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Preparation correction operation created', {
-        operationId: operation.id
-      })
 
       return operation
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create correction'
+      const message =
+        error instanceof Error ? error.message : 'Failed to create preparation correction'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -233,32 +285,21 @@ export const usePreparationStore = defineStore('preparation', () => {
     }
   }
 
-  // ===========================
-  // RECEIPT OPERATIONS (PRODUCTION)
-  // ===========================
-
   async function createReceipt(data: CreatePreparationReceiptData): Promise<PreparationOperation> {
     try {
       state.value.loading.production = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Creating preparation receipt operation', { data })
-
       const operation = await preparationService.createReceipt(data)
-
-      // Update local state
       state.value.operations.unshift(operation)
 
-      // Refresh balances
+      // ✅ FIXED: Sync both balances AND batches
       await fetchBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Preparation receipt operation created', {
-        operationId: operation.id
-      })
 
       return operation
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create receipt'
+      const message =
+        error instanceof Error ? error.message : 'Failed to create preparation receipt'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -268,7 +309,42 @@ export const usePreparationStore = defineStore('preparation', () => {
   }
 
   // ===========================
-  // INVENTORY OPERATIONS
+  // ✅ WRITE-OFF SUPPORT (with batch sync)
+  // ===========================
+
+  async function createWriteOff(
+    data: CreatePreparationWriteOffData
+  ): Promise<PreparationOperation> {
+    try {
+      state.value.loading.writeOff = true
+      state.value.error = null
+
+      const operation = await preparationService.createWriteOff(data)
+
+      // ✅ FIXED: Sync all data including batches
+      state.value.operations.unshift(operation)
+      await fetchBalances(data.department)
+
+      return operation
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create write-off'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, { error })
+      throw error
+    } finally {
+      state.value.loading.writeOff = false
+    }
+  }
+
+  /**
+   * Get write-off statistics (delegated to preparationService)
+   */
+  function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
+    return preparationService.getWriteOffStatistics(department, dateFrom, dateTo)
+  }
+
+  // ===========================
+  // INVENTORY OPERATIONS (with batch sync)
   // ===========================
 
   async function startInventory(
@@ -278,20 +354,13 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Starting preparation inventory', { data })
-
       const inventory = await preparationService.startInventory(data)
-
-      // Update local state
       state.value.inventories.unshift(inventory)
-
-      DebugUtils.info(MODULE_NAME, 'Preparation inventory started', {
-        inventoryId: inventory.id
-      })
 
       return inventory
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to start inventory'
+      const message =
+        error instanceof Error ? error.message : 'Failed to start preparation inventory'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -308,21 +377,17 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Updating preparation inventory', { inventoryId })
-
       const inventory = await preparationService.updateInventory(inventoryId, items)
 
-      // Update local state
       const index = state.value.inventories.findIndex(inv => inv.id === inventoryId)
       if (index !== -1) {
         state.value.inventories[index] = inventory
       }
 
-      DebugUtils.info(MODULE_NAME, 'Preparation inventory updated', { inventoryId })
-
       return inventory
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update inventory'
+      const message =
+        error instanceof Error ? error.message : 'Failed to update preparation inventory'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -336,27 +401,25 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      DebugUtils.info(MODULE_NAME, 'Finalizing preparation inventory', { inventoryId })
-
       const correctionOperations = await preparationService.finalizeInventory(inventoryId)
 
-      // Update local state
       const inventoryIndex = state.value.inventories.findIndex(inv => inv.id === inventoryId)
       if (inventoryIndex !== -1) {
         state.value.inventories[inventoryIndex].status = 'confirmed'
       }
 
-      // Add correction operations to operations list
       correctionOperations.forEach(op => {
         state.value.operations.unshift(op)
       })
 
-      DebugUtils.info(MODULE_NAME, 'Preparation inventory finalized', {
-        inventoryId,
-        correctionOperations: correctionOperations.length
-      })
+      // ✅ FIXED: After inventory finalization, sync all data including batches
+      const inventory = state.value.inventories[inventoryIndex]
+      if (inventory) {
+        await fetchBalances(inventory.department)
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to finalize inventory'
+      const message =
+        error instanceof Error ? error.message : 'Failed to finalize preparation inventory'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
       throw error
@@ -366,7 +429,7 @@ export const usePreparationStore = defineStore('preparation', () => {
   }
 
   // ===========================
-  // FIFO CALCULATIONS (kept for display purposes)
+  // FIFO CALCULATIONS (delegated to preparationService)
   // ===========================
 
   function calculateFifoAllocation(
@@ -382,38 +445,16 @@ export const usePreparationStore = defineStore('preparation', () => {
     }
   }
 
-  function calculateConsumptionCost(
+  function calculateCorrectionCost(
     preparationId: string,
     department: PreparationDepartment,
     quantity: number
   ): number {
     try {
-      return preparationService.calculateConsumptionCost(preparationId, department, quantity)
+      return preparationService.calculateCorrectionCost(preparationId, department, quantity)
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to calculate consumption cost', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to calculate correction cost', { error })
       throw error
-    }
-  }
-
-  // ===========================
-  // ALERT HELPERS
-  // ===========================
-
-  function getExpiringPreparations(days: number = 1): PreparationBalance[] {
-    try {
-      return preparationService.getExpiringPreparations(days)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get expiring preparations', { error })
-      return []
-    }
-  }
-
-  function getLowStockPreparations(): PreparationBalance[] {
-    try {
-      return preparationService.getLowStockPreparations()
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get low stock preparations', { error })
-      return []
     }
   }
 
@@ -421,9 +462,9 @@ export const usePreparationStore = defineStore('preparation', () => {
   // DATA HELPERS
   // ===========================
 
-  function getAvailablePreparations(): any[] {
+  function getAvailablePreparations(department: PreparationDepartment): any[] {
     try {
-      return recipesStore.activePreparations
+      return recipesStore.activePreparations.filter(p => p.isActive)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get available preparations', { error })
       return []
@@ -460,12 +501,33 @@ export const usePreparationStore = defineStore('preparation', () => {
     }
   }
 
+  // ✅ NEW: Batch helper methods
+  function getPreparationBatches(
+    preparationId: string,
+    department: PreparationDepartment
+  ): PreparationBatch[] {
+    return state.value.batches
+      .filter(
+        b =>
+          b.preparationId === preparationId && b.department === department && b.status === 'active'
+      )
+      .sort((a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime())
+  }
+
+  function getBatchById(batchId: string): PreparationBatch | undefined {
+    return state.value.batches.find(b => b.id === batchId)
+  }
+
   // ===========================
   // FILTER ACTIONS
   // ===========================
 
   function setDepartmentFilter(department: PreparationDepartment | 'all') {
     state.value.filters.department = department
+  }
+
+  function setOperationTypeFilter(operationType?: typeof state.value.filters.operationType) {
+    state.value.filters.operationType = operationType
   }
 
   function setSearchFilter(search: string) {
@@ -487,47 +549,13 @@ export const usePreparationStore = defineStore('preparation', () => {
   function clearFilters() {
     state.value.filters = {
       department: 'all',
+      operationType: undefined,
       showExpired: false,
       showBelowMinStock: false,
       showNearExpiry: false,
       search: '',
       dateFrom: undefined,
       dateTo: undefined
-    }
-  }
-
-  // ===========================
-  // INITIALIZATION
-  // ===========================
-
-  async function initialize() {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Initializing preparation store')
-
-      state.value.loading.balances = true
-      state.value.error = null
-
-      // Load dependent stores if not loaded
-      if (recipesStore.preparations.length === 0) {
-        DebugUtils.info(MODULE_NAME, 'Loading recipes store')
-        await recipesStore.fetchPreparations()
-      }
-
-      // Initialize preparation service
-      await preparationService.initialize()
-
-      // Load preparation data
-      await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
-
-      DebugUtils.info(MODULE_NAME, 'Preparation store initialized successfully')
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to initialize preparation store'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.balances = false
     }
   }
 
@@ -554,6 +582,47 @@ export const usePreparationStore = defineStore('preparation', () => {
   }
 
   // ===========================
+  // INITIALIZATION (with batch loading)
+  // ===========================
+
+  async function initialize() {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Initializing preparation store')
+
+      state.value.loading.balances = true
+      state.value.error = null
+
+      if (recipesStore.preparations.length === 0) {
+        await recipesStore.fetchPreparations()
+      }
+
+      await preparationService.initialize()
+
+      // ✅ FIXED: Load ALL data including batches
+      await Promise.all([
+        fetchBalances(), // this now loads both balances AND batches
+        fetchOperations(),
+        fetchInventories()
+      ])
+
+      DebugUtils.info(MODULE_NAME, 'Preparation store initialized successfully', {
+        balances: state.value.balances.length,
+        batches: state.value.batches.length,
+        operations: state.value.operations.length,
+        inventories: state.value.inventories.length
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to initialize preparation store'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, { error })
+      throw error
+    } finally {
+      state.value.loading.balances = false
+    }
+  }
+
+  // ===========================
   // STATISTICS
   // ===========================
 
@@ -563,16 +632,16 @@ export const usePreparationStore = defineStore('preparation', () => {
     const barBalances = allBalances.filter(b => b.department === 'bar')
 
     return {
-      totalItems: allBalances.length,
+      totalPreparations: allBalances.length,
       totalValue: allBalances.reduce((sum, b) => sum + b.totalValue, 0),
 
       kitchen: {
-        items: kitchenBalances.length,
+        preparations: kitchenBalances.length,
         value: kitchenBalances.reduce((sum, b) => sum + b.totalValue, 0)
       },
 
       bar: {
-        items: barBalances.length,
+        preparations: barBalances.length,
         value: barBalances.reduce((sum, b) => sum + b.totalValue, 0)
       },
 
@@ -597,7 +666,9 @@ export const usePreparationStore = defineStore('preparation', () => {
 
     // Getters
     filteredBalances,
+    filteredOperations,
     departmentBalances,
+    departmentBatches, // ✅ NEW
     totalInventoryValue,
     alertCounts,
     quickPreparations,
@@ -605,6 +676,7 @@ export const usePreparationStore = defineStore('preparation', () => {
 
     // Core Actions
     fetchBalances,
+    fetchBatches, // ✅ NEW
     fetchOperations,
     fetchInventories,
 
@@ -612,18 +684,18 @@ export const usePreparationStore = defineStore('preparation', () => {
     createCorrection,
     createReceipt,
 
+    // ✅ Write-off support (with batch sync)
+    createWriteOff,
+    getWriteOffStatistics,
+
     // Inventory
     startInventory,
     updateInventory,
     finalizeInventory,
 
-    // FIFO calculations (kept for display purposes)
+    // FIFO calculations
     calculateFifoAllocation,
-    calculateConsumptionCost,
-
-    // Alerts
-    getExpiringPreparations,
-    getLowStockPreparations,
+    calculateCorrectionCost,
 
     // Data helpers
     getAvailablePreparations,
@@ -631,8 +703,13 @@ export const usePreparationStore = defineStore('preparation', () => {
     getPreparationUnit,
     getPreparationCostPerUnit,
 
+    // ✅ NEW: Batch helpers
+    getPreparationBatches,
+    getBatchById,
+
     // Filters
     setDepartmentFilter,
+    setOperationTypeFilter,
     setSearchFilter,
     toggleExpiredFilter,
     toggleLowStockFilter,

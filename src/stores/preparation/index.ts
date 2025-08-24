@@ -1,13 +1,13 @@
-// src/stores/preparation/index.ts
+// src/stores/preparation/index.ts - UPDATED: Added Write-off Support
 
 /**
  * Preparation Management Store
  *
- * Управление полуфабрикатами с FIFO учетом, отслеживанием коротких сроков годности
- * и интеграцией с системой рецептов для Kitchen и Bar департаментов.
+ * Управление полуфабрикатами с FIFO учетом, отслеживанием коротких сроков годности,
+ * поддержкой write-off операций и интеграцией с системой рецептов для Kitchen и Bar департаментов.
  */
 
-// Export all types
+// ✅ UPDATED: Export all types including write-off types
 export type {
   PreparationDepartment,
   PreparationOperationType,
@@ -22,12 +22,20 @@ export type {
   PreparationInventoryItem,
   CreatePreparationReceiptData,
   PreparationReceiptItem,
-  CreatePreparationConsumptionData,
-  PreparationConsumptionItem,
   CreatePreparationCorrectionData,
   PreparationCorrectionItem,
   CreatePreparationInventoryData,
-  PreparationState
+  PreparationState,
+  // ✅ NEW: Write-off types
+  PreparationWriteOffReason,
+  CreatePreparationWriteOffData,
+  PreparationWriteOffItem,
+  PreparationWriteOffStatistics,
+  QuickPreparationWriteOffItem,
+  PREPARATION_WRITE_OFF_CLASSIFICATION,
+  doesPreparationWriteOffAffectKPI,
+  getPreparationWriteOffReasonInfo,
+  PREPARATION_WRITE_OFF_REASON_OPTIONS
 } from './types'
 
 // Export service
@@ -36,11 +44,16 @@ export { preparationService } from './preparationService'
 // Export store
 export { usePreparationStore } from './preparationStore'
 
+// ✅ NEW: Export write-off composable
+export { usePreparationWriteOff } from './composables/usePreparationWriteOff'
+
 // Export mock data for testing
 export {
   mockPreparationBatches,
   mockPreparationOperations,
   mockPreparationBalances,
   generatePreparationBatchNumber,
-  calculatePreparationFifoAllocation
+  calculatePreparationFifoAllocation,
+  createPreparationBalances,
+  getPreparationStatistics
 } from './preparationMock'

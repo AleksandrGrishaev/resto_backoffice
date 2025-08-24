@@ -1,8 +1,9 @@
-// src/stores/preparation/types.ts - Remove consumption types
+// src/stores/preparation/types.ts - UPDATED: Added Write-off Support
 import { BaseEntity } from '@/types/common'
 
 export type PreparationDepartment = 'kitchen' | 'bar'
-export type PreparationOperationType = 'receipt' | 'correction' | 'inventory'
+// ✅ UPDATED: Added write_off operation type
+export type PreparationOperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType =
   | 'production'
   | 'correction'
@@ -11,36 +12,35 @@ export type BatchSourceType =
 export type BatchStatus = 'active' | 'expired' | 'consumed'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
-// Core preparation batch entity (адаптация StorageBatch)
+// ✅ NEW: Write-off Reason Types for Preparations
+export type PreparationWriteOffReason =
+  | 'expired'
+  | 'spoiled'
+  | 'contaminated'
+  | 'overproduced'
+  | 'quality_control'
+  | 'education'
+  | 'test'
+  | 'other'
+
+// Core preparation batch entity
 export interface PreparationBatch extends BaseEntity {
-  // Identification
-  batchNumber: string // "B-PREP-TOMATO-001-20250204"
-  preparationId: string // Preparation ID
+  batchNumber: string
+  preparationId: string
   department: PreparationDepartment
-
-  // Quantity tracking
-  initialQuantity: number // Original produced quantity
-  currentQuantity: number // Remaining quantity
-  unit: string // gram, ml, piece, etc.
-
-  // Cost tracking (FIFO)
-  costPerUnit: number // Cost per unit for THIS batch
-  totalValue: number // currentQuantity × costPerUnit
-
-  // Dates and expiry
-  productionDate: string // When batch was produced (вместо receiptDate)
-  expiryDate?: string // When batch expires
-
-  // Source tracking
+  initialQuantity: number
+  currentQuantity: number
+  unit: string
+  costPerUnit: number
+  totalValue: number
+  productionDate: string
+  expiryDate?: string
   sourceType: BatchSourceType
   notes?: string
-
-  // Status
   status: BatchStatus
   isActive: boolean
 }
 
-// Batch allocation for FIFO operations (идентично StorageBalance)
 export interface BatchAllocation {
   batchId: string
   batchNumber: string
@@ -49,142 +49,98 @@ export interface BatchAllocation {
   batchDate: string
 }
 
-// Preparation operation item (адаптация StorageOperationItem)
 export interface PreparationOperationItem {
   id: string
-  preparationId: string // вместо itemId
-  preparationName: string // Cached name for display
-
-  // Quantity
+  preparationId: string
+  preparationName: string
   quantity: number
   unit: string
-
-  // FIFO allocation (for corrections)
   batchAllocations?: BatchAllocation[]
-
-  // Cost tracking
   totalCost?: number
   averageCostPerUnit?: number
-
-  // Additional details
   notes?: string
-  expiryDate?: string // For production
+  expiryDate?: string
 }
 
-// Main preparation operation document (адаптация StorageOperation)
+// ✅ UPDATED: Added Write-off Details
 export interface PreparationOperation extends BaseEntity {
-  // Operation details
   operationType: PreparationOperationType
-  documentNumber: string // "PREP-REC-001", "PREP-COR-001", etc.
+  documentNumber: string
   operationDate: string
   department: PreparationDepartment
-
-  // Responsible person
   responsiblePerson: string
-
-  // Items involved
   items: PreparationOperationItem[]
-
-  // Financial impact
   totalValue?: number
 
-  // Correction details (адаптация correctionDetails из Storage)
   correctionDetails?: {
     reason: 'waste' | 'expired' | 'damage' | 'theft' | 'other'
     relatedId?: string
     relatedName?: string
   }
 
-  relatedInventoryId?: string
+  // ✅ NEW: Write-off Details
+  writeOffDetails?: {
+    reason: PreparationWriteOffReason
+    affectsKPI: boolean
+    notes?: string
+  }
 
-  // Status and workflow
+  relatedInventoryId?: string
   status: 'draft' | 'confirmed'
   notes?: string
 }
 
-// Current preparation stock summary (адаптация StorageBalance)
 export interface PreparationBalance {
-  // Preparation identification
-  preparationId: string // вместо itemId
-  preparationName: string // Cached name
+  preparationId: string
+  preparationName: string
   department: PreparationDepartment
-
-  // Current stock
-  totalQuantity: number // Sum of all active batches
+  totalQuantity: number
   unit: string
-
-  // Financial summary with cost analytics
-  totalValue: number // Total value of all batches
-  averageCost: number // Weighted average cost per unit
-  latestCost: number // Cost of most recent batch
+  totalValue: number
+  averageCost: number
+  latestCost: number
   costTrend: 'up' | 'down' | 'stable'
-
-  // FIFO batch details
-  batches: PreparationBatch[] // All active batches (sorted FIFO)
+  batches: PreparationBatch[]
   oldestBatchDate: string
   newestBatchDate: string
-
-  // Alerts and warnings
   hasExpired: boolean
-  hasNearExpiry: boolean // обычно 1-2 дня для полуфабрикатов
+  hasNearExpiry: boolean
   belowMinStock: boolean
-
-  // Usage analytics
   lastConsumptionDate?: string
   averageDailyUsage?: number
   daysOfStockRemaining?: number
-
-  // Cache timestamps
   lastCalculated: string
 }
 
-// Inventory document for preparation stock takes (адаптация InventoryDocument)
 export interface PreparationInventoryDocument extends BaseEntity {
-  // Document details
-  documentNumber: string // "INV-PREP-KITCHEN-001"
+  documentNumber: string
   inventoryDate: string
   department: PreparationDepartment
-
-  // Responsible person
   responsiblePerson: string
-
-  // Inventory results
   items: PreparationInventoryItem[]
-
-  // Summary
   totalItems: number
   totalDiscrepancies: number
   totalValueDifference: number
-
-  // Status
   status: InventoryStatus
   notes?: string
 }
 
-// Individual preparation inventory item (адаптация InventoryItem)
 export interface PreparationInventoryItem {
   id: string
-  preparationId: string // вместо itemId
+  preparationId: string
   preparationName: string
-
-  // Quantities
   systemQuantity: number
   actualQuantity: number
   difference: number
-
-  // Financial impact
   unit: string
   averageCost: number
   valueDifference: number
-
-  // Details
   notes?: string
   countedBy?: string
   confirmed?: boolean
 }
 
-// DTOs for operations (адаптация Storage DTOs)
-
+// DTOs
 export interface CreatePreparationReceiptData {
   department: PreparationDepartment
   responsiblePerson: string
@@ -194,10 +150,25 @@ export interface CreatePreparationReceiptData {
 }
 
 export interface PreparationReceiptItem {
-  preparationId: string // вместо itemId
+  preparationId: string
   quantity: number
   costPerUnit: number
   expiryDate?: string
+  notes?: string
+}
+
+// ✅ NEW: Write-off DTOs
+export interface CreatePreparationWriteOffData {
+  department: PreparationDepartment
+  responsiblePerson: string
+  reason: PreparationWriteOffReason
+  items: PreparationWriteOffItem[]
+  notes?: string
+}
+
+export interface PreparationWriteOffItem {
+  preparationId: string
+  quantity: number
   notes?: string
 }
 
@@ -214,7 +185,7 @@ export interface CreatePreparationCorrectionData {
 }
 
 export interface PreparationCorrectionItem {
-  preparationId: string // вместо itemId
+  preparationId: string
   quantity: number
   notes?: string
 }
@@ -224,27 +195,65 @@ export interface CreatePreparationInventoryData {
   responsiblePerson: string
 }
 
-// Store state interface (адаптация StorageState)
+// ✅ NEW: Write-off Statistics and Helper Types
+export interface PreparationWriteOffStatistics {
+  total: { count: number; value: number }
+  kpiAffecting: {
+    count: number
+    value: number
+    reasons: {
+      expired: { count: number; value: number }
+      spoiled: { count: number; value: number }
+      contaminated: { count: number; value: number }
+      overproduced: { count: number; value: number }
+      quality_control: { count: number; value: number }
+      other: { count: number; value: number }
+    }
+  }
+  nonKpiAffecting: {
+    count: number
+    value: number
+    reasons: {
+      education: { count: number; value: number }
+      test: { count: number; value: number }
+    }
+  }
+  byDepartment: {
+    kitchen: { total: number; kpiAffecting: number; nonKpiAffecting: number }
+    bar: { total: number; kpiAffecting: number; nonKpiAffecting: number }
+  }
+}
+
+export interface QuickPreparationWriteOffItem {
+  preparationId: string
+  preparationName: string
+  currentQuantity: number
+  unit: string
+  writeOffQuantity: number
+  reason: PreparationWriteOffReason
+  notes: string
+}
+
+// ✅ UPDATED: Added writeOff loading state
 export interface PreparationState {
-  // Core data
   batches: PreparationBatch[]
   operations: PreparationOperation[]
   balances: PreparationBalance[]
   inventories: PreparationInventoryDocument[]
 
-  // UI state
   loading: {
     balances: boolean
     operations: boolean
     inventory: boolean
     consumption: boolean
     production: boolean
+    writeOff: boolean // ✅ NEW
   }
   error: string | null
 
-  // Filters and search
   filters: {
     department: PreparationDepartment | 'all'
+    operationType?: PreparationOperationType // ✅ NEW: Added operation type filter
     showExpired: boolean
     showBelowMinStock: boolean
     showNearExpiry: boolean
@@ -253,10 +262,107 @@ export interface PreparationState {
     dateTo?: string
   }
 
-  // Settings
   settings: {
-    expiryWarningDays: number // Default: 1 (полуфабрикаты портятся быстрее)
+    expiryWarningDays: number
     lowStockMultiplier: number
     autoCalculateBalance: boolean
+    enableQuickWriteOff: boolean // ✅ NEW
   }
+}
+
+// ✅ NEW: Write-off Helper Functions and Constants
+export const PREPARATION_WRITE_OFF_CLASSIFICATION = {
+  KPI_AFFECTING: [
+    'expired',
+    'spoiled',
+    'contaminated',
+    'overproduced',
+    'quality_control',
+    'other'
+  ] as PreparationWriteOffReason[],
+  NON_KPI_AFFECTING: ['education', 'test'] as PreparationWriteOffReason[]
+} as const
+
+/**
+ * Preparation write-off reason options for UI components
+ */
+export const PREPARATION_WRITE_OFF_REASON_OPTIONS = [
+  {
+    value: 'expired' as PreparationWriteOffReason,
+    title: 'Expired',
+    description: 'Preparation has passed expiry date',
+    affectsKPI: true,
+    color: 'error'
+  },
+  {
+    value: 'spoiled' as PreparationWriteOffReason,
+    title: 'Spoiled',
+    description: 'Preparation is damaged or spoiled',
+    affectsKPI: true,
+    color: 'error'
+  },
+  {
+    value: 'contaminated' as PreparationWriteOffReason,
+    title: 'Contaminated',
+    description: 'Preparation is contaminated or unsafe',
+    affectsKPI: true,
+    color: 'error'
+  },
+  {
+    value: 'overproduced' as PreparationWriteOffReason,
+    title: 'Overproduced',
+    description: 'Excess production beyond demand',
+    affectsKPI: true,
+    color: 'warning'
+  },
+  {
+    value: 'quality_control' as PreparationWriteOffReason,
+    title: 'Quality Control',
+    description: 'Failed quality control standards',
+    affectsKPI: true,
+    color: 'warning'
+  },
+  {
+    value: 'other' as PreparationWriteOffReason,
+    title: 'Other Loss',
+    description: 'Other losses (spill, mistake, etc.)',
+    affectsKPI: true,
+    color: 'warning'
+  },
+  {
+    value: 'education' as PreparationWriteOffReason,
+    title: 'Education',
+    description: 'Staff training and education',
+    affectsKPI: false,
+    color: 'info'
+  },
+  {
+    value: 'test' as PreparationWriteOffReason,
+    title: 'Recipe Testing',
+    description: 'Recipe development and testing',
+    affectsKPI: false,
+    color: 'success'
+  }
+] as const
+
+/**
+ * Determines if a preparation write-off reason affects KPI metrics
+ */
+export function doesPreparationWriteOffAffectKPI(reason: PreparationWriteOffReason): boolean {
+  return PREPARATION_WRITE_OFF_CLASSIFICATION.KPI_AFFECTING.includes(reason)
+}
+
+/**
+ * Get preparation write-off reason info by reason value
+ */
+export function getPreparationWriteOffReasonInfo(reason: PreparationWriteOffReason) {
+  return (
+    PREPARATION_WRITE_OFF_REASON_OPTIONS.find(option => option.value === reason) || {
+      value: reason,
+      title: reason,
+      description: '',
+      affectsKPI: doesPreparationWriteOffAffectKPI(reason),
+      color: 'default'
+    }
+  )
 }
