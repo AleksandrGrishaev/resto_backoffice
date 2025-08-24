@@ -338,14 +338,75 @@ class DebugService {
   }
 
   private extractPreparationState(storeInstance: any): Record<string, any> {
-    const storeState = storeInstance.state?.value || storeInstance.state || {}
-    return {
-      preparations: this.serializeArray(storeState.preparations || []),
-      activePreparations: this.serializeArray(storeInstance.activePreparations || []),
-      loading: storeState.loading || {},
-      error: storeState.error,
-      selectedPreparationId: storeState.selectedPreparationId,
-      alertCounts: storeState.alertCounts || {}
+    try {
+      // The Preparation store uses a different structure - it returns an object with methods and computed values
+      // We need to access the actual state via storeInstance.state.value
+      const storeState = storeInstance.state?.value || storeInstance.state || {}
+
+      return {
+        // Core data arrays
+        batches: this.serializeArray(storeState.batches || []),
+        operations: this.serializeArray(storeState.operations || []),
+        balances: this.serializeArray(storeState.balances || []),
+        inventories: this.serializeArray(storeState.inventories || []),
+
+        // Loading states
+        loading: storeState.loading || {
+          balances: false,
+          operations: false,
+          inventory: false,
+          consumption: false,
+          production: false,
+          writeOff: false
+        },
+
+        // Error state
+        error: storeState.error,
+
+        // Filters
+        filters: storeState.filters || {
+          department: 'all',
+          operationType: undefined,
+          showExpired: false,
+          showBelowMinStock: false,
+          showNearExpiry: false,
+          search: '',
+          dateFrom: undefined,
+          dateTo: undefined
+        },
+
+        // Settings
+        settings: storeState.settings || {
+          expiryWarningDays: 1,
+          lowStockMultiplier: 1.2,
+          autoCalculateBalance: true,
+          enableQuickWriteOff: true
+        },
+
+        // Additional computed data that might be available directly on the store instance
+        filteredBalances: this.serializeArray(storeInstance.filteredBalances?.value || []),
+        filteredOperations: this.serializeArray(storeInstance.filteredOperations?.value || []),
+        alertCounts: storeInstance.alertCounts?.value || storeState.alertCounts || {},
+        statistics: storeInstance.statistics?.value || {}
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to extract preparation state', { error })
+      return {
+        error: 'Failed to extract preparation state',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        // Fallback structure to show what should be there
+        expectedStructure: {
+          batches: [],
+          operations: [],
+          balances: [],
+          inventories: [],
+          loading: {},
+          error: null,
+          filters: {},
+          settings: {},
+          alertCounts: {}
+        }
+      }
     }
   }
 
@@ -878,6 +939,9 @@ class DebugService {
         case 'storage':
           this.checkStorageHealth(state, issues, warnings)
           break
+        case 'preparation':
+          this.checkPreparationHealth(state, issues, warnings)
+          break
         case 'supplier':
           this.checkSupplierHealth(state, issues, warnings)
           break
@@ -1024,6 +1088,51 @@ class DebugService {
 
     if (alertCounts.expiring > 0) {
       warnings.push(`${alertCounts.expiring} items expiring soon`)
+    }
+  }
+
+  private checkPreparationHealth(
+    state: Record<string, any>,
+    issues: string[],
+    warnings: string[]
+  ): void {
+    const batches = state.batches || []
+    const operations = state.operations || []
+    const balances = state.balances || []
+    const alertCounts = state.alertCounts || {}
+
+    if (batches.length === 0 && balances.length === 0) {
+      issues.push('No preparation data found')
+      return
+    }
+
+    // Check for expired items
+    if (alertCounts.expired > 0) {
+      issues.push(`${alertCounts.expired} expired preparation items`)
+    }
+
+    // Check for low stock
+    if (alertCounts.lowStock > 0) {
+      warnings.push(`${alertCounts.lowStock} preparation items with low stock`)
+    }
+
+    // Check for items expiring soon
+    if (alertCounts.expiring > 0) {
+      warnings.push(`${alertCounts.expiring} preparation items expiring soon`)
+    }
+
+    // Check for inactive batches
+    const inactiveBatches = batches.filter((b: any) => !b.isActive || b.status !== 'active').length
+    if (inactiveBatches > batches.length * 0.5) {
+      warnings.push('More than 50% of preparation batches are inactive')
+    }
+
+    // Check for operations without proper costs
+    const operationsWithoutValue = operations.filter(
+      (op: any) => !op.totalValue || op.totalValue <= 0
+    ).length
+    if (operationsWithoutValue > 0) {
+      warnings.push(`${operationsWithoutValue} operations without proper value calculation`)
     }
   }
 
