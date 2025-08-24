@@ -19,7 +19,12 @@
         <v-tooltip activator="parent">Refresh All Stores</v-tooltip>
       </v-btn>
 
-      <v-btn v-if="selectedStoreData" icon="mdi-content-copy" variant="text" @click="copyFullData">
+      <v-btn
+        v-if="selectedStoreData"
+        icon="mdi-content-copy"
+        variant="text"
+        @click="copyFullDataWithFeedback"
+      >
         <v-icon>mdi-content-copy</v-icon>
         <v-tooltip activator="parent">Copy Full Data</v-tooltip>
       </v-btn>
@@ -184,29 +189,13 @@
           <!-- Tab Content -->
           <div class="flex-grow-1 overflow-hidden">
             <v-window v-model="selectedTab" class="fill-height">
-              <!-- Raw JSON Tab -->
+              <!-- Raw JSON Tab with Navigator -->
               <v-window-item value="raw" class="fill-height">
-                <div class="debug-tab-content fill-height d-flex flex-column">
-                  <!-- Raw JSON Header -->
-                  <div
-                    class="debug-tab-header pa-3 border-b d-flex align-center justify-space-between"
-                  >
-                    <h4 class="text-subtitle-1">Raw Store Data</h4>
-                    <v-btn
-                      prepend-icon="mdi-content-copy"
-                      variant="tonal"
-                      size="small"
-                      @click="copyRawData"
-                    >
-                      Copy Raw JSON
-                    </v-btn>
-                  </div>
-
-                  <!-- JSON Content -->
-                  <div class="flex-grow-1 overflow-auto pa-3">
-                    <pre class="debug-json-content"><code>{{ formattedRawJson }}</code></pre>
-                  </div>
-                </div>
+                <json-navigator
+                  :data="selectedStoreData.state"
+                  @navigate="handleJsonNavigate"
+                  @copy="handleCopyContent"
+                />
               </v-window-item>
 
               <!-- Structured Tab -->
@@ -221,7 +210,7 @@
                       prepend-icon="mdi-content-copy"
                       variant="tonal"
                       size="small"
-                      @click="copyStructuredData"
+                      @click="copyStructuredDataWithFeedback"
                     >
                       Copy Analysis
                     </v-btn>
@@ -283,8 +272,8 @@
                       <!-- Health Issues -->
                       <v-card
                         v-if="
-                          formattedStructuredData.overview.health.issues.length > 0 ||
-                          formattedStructuredData.overview.health.warnings.length > 0
+                          formattedStructuredData.health.issues.length > 0 ||
+                          formattedStructuredData.health.warnings.length > 0
                         "
                         class="mb-4"
                         variant="tonal"
@@ -295,13 +284,10 @@
                           Health Issues
                         </v-card-title>
                         <v-card-text>
-                          <div
-                            v-if="formattedStructuredData.overview.health.issues.length > 0"
-                            class="mb-3"
-                          >
+                          <div v-if="formattedStructuredData.health.issues.length > 0" class="mb-3">
                             <h5 class="text-subtitle-2 text-error mb-2">Issues:</h5>
                             <v-chip
-                              v-for="issue in formattedStructuredData.overview.health.issues"
+                              v-for="issue in formattedStructuredData.health.issues"
                               :key="issue"
                               size="small"
                               color="error"
@@ -311,10 +297,10 @@
                               {{ issue }}
                             </v-chip>
                           </div>
-                          <div v-if="formattedStructuredData.overview.health.warnings.length > 0">
+                          <div v-if="formattedStructuredData.health.warnings.length > 0">
                             <h5 class="text-subtitle-2 text-warning mb-2">Warnings:</h5>
                             <v-chip
-                              v-for="warning in formattedStructuredData.overview.health.warnings"
+                              v-for="warning in formattedStructuredData.health.warnings"
                               :key="warning"
                               size="small"
                               color="warning"
@@ -329,9 +315,11 @@
 
                       <!-- Store-Specific Metrics -->
                       <v-card
-                        v-if="Object.keys(formattedStructuredData.specificMetrics).length > 0"
+                        v-if="
+                          formattedStructuredData.specificMetrics &&
+                          Object.keys(formattedStructuredData.specificMetrics).length > 0
+                        "
                         class="mb-4"
-                        variant="tonal"
                       >
                         <v-card-title class="d-flex align-center">
                           <v-icon start>mdi-chart-line</v-icon>
@@ -344,55 +332,11 @@
                         </v-card-text>
                       </v-card>
 
-                      <!-- Data Breakdown -->
-                      <v-card class="mb-4" variant="tonal">
-                        <v-card-title class="d-flex align-center">
-                          <v-icon start>mdi-chart-pie</v-icon>
-                          Data Breakdown
-                        </v-card-title>
-                        <v-card-text>
-                          <v-row>
-                            <v-col cols="6" sm="3">
-                              <div class="text-center">
-                                <div class="text-h6">
-                                  {{ formattedStructuredData.breakdown.arrays }}
-                                </div>
-                                <div class="text-caption">Arrays</div>
-                              </div>
-                            </v-col>
-                            <v-col cols="6" sm="3">
-                              <div class="text-center">
-                                <div class="text-h6">
-                                  {{ formattedStructuredData.breakdown.objects }}
-                                </div>
-                                <div class="text-caption">Objects</div>
-                              </div>
-                            </v-col>
-                            <v-col cols="6" sm="3">
-                              <div class="text-center">
-                                <div class="text-h6">
-                                  {{ formattedStructuredData.breakdown.primitives }}
-                                </div>
-                                <div class="text-caption">Primitives</div>
-                              </div>
-                            </v-col>
-                            <v-col cols="6" sm="3">
-                              <div class="text-center">
-                                <div class="text-h6">
-                                  {{ formattedStructuredData.breakdown.functions }}
-                                </div>
-                                <div class="text-caption">Functions</div>
-                              </div>
-                            </v-col>
-                          </v-row>
-                        </v-card-text>
-                      </v-card>
-
                       <!-- Actions -->
-                      <v-card variant="tonal">
+                      <v-card>
                         <v-card-title class="d-flex align-center">
                           <v-icon start>mdi-function</v-icon>
-                          Available Actions
+                          Available Actions ({{ formattedStructuredData.actions.length }})
                         </v-card-title>
                         <v-card-text>
                           <div class="d-flex flex-wrap gap-2">
@@ -412,65 +356,13 @@
                 </div>
               </v-window-item>
 
-              <!-- History Tab -->
+              <!-- Enhanced History Tab -->
               <v-window-item value="history" class="fill-height">
-                <div class="debug-tab-content fill-height d-flex flex-column">
-                  <!-- History Header -->
-                  <div
-                    class="debug-tab-header pa-3 border-b d-flex align-center justify-space-between"
-                  >
-                    <h4 class="text-subtitle-1">Store History</h4>
-                    <div class="d-flex gap-2">
-                      <v-btn
-                        v-if="selectedStoreHistory.length > 0"
-                        prepend-icon="mdi-delete"
-                        variant="tonal"
-                        size="small"
-                        color="warning"
-                        @click="clearCurrentStoreHistory"
-                      >
-                        Clear History
-                      </v-btn>
-                    </div>
-                  </div>
-
-                  <!-- History Content -->
-                  <div class="flex-grow-1 overflow-auto pa-3">
-                    <div v-if="selectedStoreHistory.length === 0" class="text-center py-8">
-                      <v-icon icon="mdi-history" size="48" class="mb-3 text-medium-emphasis" />
-                      <h4 class="text-h6 mb-2">No History</h4>
-                      <p class="text-body-2 text-medium-emphasis">Store changes will appear here</p>
-                    </div>
-
-                    <v-timeline v-else side="end" density="compact" class="debug-history-timeline">
-                      <v-timeline-item
-                        v-for="entry in formattedHistory"
-                        :key="entry.id"
-                        size="small"
-                        :dot-color="entry.changeType === 'error' ? 'error' : 'primary'"
-                      >
-                        <div class="debug-history-entry">
-                          <div class="d-flex align-center justify-space-between mb-2">
-                            <h5 class="text-subtitle-2">{{ entry.action }}</h5>
-                            <v-chip size="x-small" variant="tonal">
-                              {{ entry.formattedTimestamp }}
-                            </v-chip>
-                          </div>
-                          <p class="text-body-2 text-medium-emphasis mb-2">
-                            {{ entry.formattedChanges }}
-                          </p>
-                          <v-chip
-                            :color="entry.changeType === 'error' ? 'error' : 'info'"
-                            size="x-small"
-                            variant="tonal"
-                          >
-                            {{ entry.changeType }}
-                          </v-chip>
-                        </div>
-                      </v-timeline-item>
-                    </v-timeline>
-                  </div>
-                </div>
+                <enhanced-history-view
+                  :history-entries="formattedHistory"
+                  @clear-history="clearCurrentStoreHistory"
+                  @copy-content="handleCopyContent"
+                />
               </v-window-item>
             </v-window>
           </div>
@@ -483,6 +375,11 @@
       <v-progress-circular indeterminate size="64" color="primary" />
     </v-overlay>
 
+    <!-- Success Snackbar -->
+    <v-snackbar v-model="showSuccessSnackbar" color="success" timeout="3000">
+      {{ successMessage }}
+    </v-snackbar>
+
     <!-- Error Snackbar -->
     <v-snackbar v-model="showErrorSnackbar" color="error" timeout="5000">
       {{ error }}
@@ -490,18 +387,20 @@
         <v-btn variant="text" @click="clearError">Close</v-btn>
       </template>
     </v-snackbar>
-
-    <!-- Success Snackbar -->
-    <v-snackbar v-model="showSuccessSnackbar" color="success" timeout="3000">
-      {{ successMessage }}
-    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useDebugStores } from '@/stores/debug'
+import { DebugUtils } from '@/utils'
 import type { DebugTabId } from '@/stores/debug'
+import EnhancedHistoryView from './components/EnhancedHistoryView.vue'
+
+// Import new components
+import JsonNavigator from './components/JsonNavigator.vue'
+
+const MODULE_NAME = 'DebugView'
 
 // =============================================
 // SETUP
@@ -521,9 +420,7 @@ const {
   selectedStoreHistory,
 
   // Formatted data
-  formattedRawJson,
   formattedStructuredData,
-  formattedHistory,
 
   // Summaries
   storeSummary,
@@ -537,7 +434,6 @@ const {
   refreshAllStores,
 
   // Copy operations
-  copyRawData,
   copyStructuredData,
   copyFullData,
 
@@ -569,12 +465,8 @@ async function handleCopyOperation(operation: () => Promise<any>, message: strin
     successMessage.value = message
     showSuccessSnackbar.value = true
   } catch (error) {
-    console.error('Copy operation failed:', error)
+    DebugUtils.error(MODULE_NAME, 'Copy operation failed', { error })
   }
-}
-
-async function copyRawDataWithFeedback() {
-  await handleCopyOperation(copyRawData, 'Raw JSON copied to clipboard!')
 }
 
 async function copyStructuredDataWithFeedback() {
@@ -583,6 +475,19 @@ async function copyStructuredDataWithFeedback() {
 
 async function copyFullDataWithFeedback() {
   await handleCopyOperation(copyFullData, 'Full store data copied to clipboard!')
+}
+
+function handleJsonNavigate(path: string[]) {
+  DebugUtils.debug(MODULE_NAME, 'JSON navigation', { path })
+  // TODO: Could implement breadcrumb or path tracking here
+}
+
+function handleCopyContent(content: string) {
+  successMessage.value = 'Content copied to clipboard!'
+  showSuccessSnackbar.value = true
+  DebugUtils.info(MODULE_NAME, 'Content copied via component', {
+    size: content.length
+  })
 }
 
 // =============================================
@@ -607,9 +512,10 @@ watch(showErrorSnackbar, show => {
 
 onMounted(async () => {
   try {
+    DebugUtils.info(MODULE_NAME, 'Initializing DebugView with enhanced components')
     await initialize()
   } catch (error) {
-    console.error('Failed to initialize debug view:', error)
+    DebugUtils.error(MODULE_NAME, 'Failed to initialize debug view', { error })
   }
 })
 </script>
@@ -683,21 +589,8 @@ onMounted(async () => {
   }
 }
 
-.debug-history-timeline {
-  .debug-history-entry {
-    background: rgba(var(--v-theme-surface), 0.8);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 8px;
-  }
-}
-
 // Border utilities
 .border-b {
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
-.border-r {
-  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 </style>

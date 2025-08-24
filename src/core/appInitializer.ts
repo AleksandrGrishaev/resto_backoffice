@@ -9,7 +9,7 @@ import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { useDebugStore } from '@/stores/debug'
-import { useDebugHistory } from '@/stores/debug/composables/useDebugHistory'
+import { useDebugHistory } from '../stores/debug/composables/useDebugHistory_back'
 import { AppInitializerTests } from './appInitializerTests'
 import { DebugUtils } from '@/utils'
 

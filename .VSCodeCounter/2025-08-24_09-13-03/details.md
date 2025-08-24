@@ -1,10 +1,10 @@
 # Details
 
-Date : 2025-08-12 00:02:37
+Date : 2025-08-24 09:13:03
 
 Directory /Users/peaker/dev/kitchen-app/backoffice/src
 
-Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
+Total : 252 files, 75598 codes, 5711 comments, 12119 blanks, all 93428 lines
 
 [Summary](results.md) / Details / [Diff Summary](diff.md) / [Diff Details](diff-details.md)
 
@@ -38,8 +38,9 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/components/base/BaseDialog.vue](/src/components/base/BaseDialog.vue)                                                                                       | Vue        |   124 |       0 |    14 |   138 |
 | [src/components/index.ts](/src/components/index.ts)                                                                                                             | TypeScript |     1 |       0 |     1 |     2 |
 | [src/components/navigation/AlertsBadge.vue](/src/components/navigation/AlertsBadge.vue)                                                                         | Vue        |   132 |       4 |    22 |   158 |
+| [src/components/navigation/DebugStoresBadge.vue](/src/components/navigation/DebugStoresBadge.vue)                                                               | Vue        |    54 |       1 |    13 |    68 |
 | [src/components/navigation/NavigationAccounts.vue](/src/components/navigation/NavigationAccounts.vue)                                                           | Vue        |    78 |       1 |     6 |    85 |
-| [src/components/navigation/NavigationMenu.vue](/src/components/navigation/NavigationMenu.vue)                                                                   | Vue        |   217 |      14 |    29 |   260 |
+| [src/components/navigation/NavigationMenu.vue](/src/components/navigation/NavigationMenu.vue)                                                                   | Vue        |   264 |      45 |    35 |   344 |
 | [src/components/navigation/StorageAlertsBadge.vue](/src/components/navigation/StorageAlertsBadge.vue)                                                           | Vue        |    46 |       3 |     9 |    58 |
 | [src/components/payment-settings/PaymentMethodDialog.vue](/src/components/payment-settings/PaymentMethodDialog.vue)                                             | Vue        |    85 |       0 |    11 |    96 |
 | [src/components/payment-settings/PaymentMethodList.vue](/src/components/payment-settings/PaymentMethodList.vue)                                                 | Vue        |    76 |       0 |    12 |    88 |
@@ -49,7 +50,8 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/composables/useMeasurementUnits.ts](/src/composables/useMeasurementUnits.ts)                                                                               | TypeScript |   211 |      82 |    49 |   342 |
 | [src/composables/useVuetifyBreakpoints.ts](/src/composables/useVuetifyBreakpoints.ts)                                                                           | TypeScript |    19 |       4 |     5 |    28 |
 | [src/config/users.ts](/src/config/users.ts)                                                                                                                     | TypeScript |    66 |       4 |     8 |    78 |
-| [src/core/appInitializer.ts](/src/core/appInitializer.ts)                                                                                                       | TypeScript |   319 |      57 |    75 |   451 |
+| [src/core/appInitializer.ts](/src/core/appInitializer.ts)                                                                                                       | TypeScript |   372 |      63 |    91 |   526 |
+| [src/core/appInitializerTests.ts](/src/core/appInitializerTests.ts)                                                                                             | TypeScript |   469 |      88 |   100 |   657 |
 | [src/firebase/config.ts](/src/firebase/config.ts)                                                                                                               | TypeScript |    33 |       1 |    11 |    45 |
 | [src/firebase/converters.ts](/src/firebase/converters.ts)                                                                                                       | TypeScript |    45 |       1 |     4 |    50 |
 | [src/firebase/services/base.service.ts](/src/firebase/services/base.service.ts)                                                                                 | TypeScript |    81 |       1 |    10 |    92 |
@@ -59,7 +61,7 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/main.ts](/src/main.ts)                                                                                                                                     | TypeScript |    45 |      14 |    18 |    77 |
 | [src/plugins/vuetify.ts](/src/plugins/vuetify.ts)                                                                                                               | TypeScript |    55 |       4 |     2 |    61 |
 | [src/router/guards/auth.guard.ts](/src/router/guards/auth.guard.ts)                                                                                             | TypeScript |    35 |       1 |     6 |    42 |
-| [src/router/index.ts](/src/router/index.ts)                                                                                                                     | TypeScript |   147 |       8 |     5 |   160 |
+| [src/router/index.ts](/src/router/index.ts)                                                                                                                     | TypeScript |   172 |      12 |     7 |   191 |
 | [src/router/types.ts](/src/router/types.ts)                                                                                                                     | TypeScript |    15 |       1 |     4 |    20 |
 | [src/services/auth.service.ts](/src/services/auth.service.ts)                                                                                                   | TypeScript |    80 |       2 |    18 |   100 |
 | [src/services/index.ts](/src/services/index.ts)                                                                                                                 | TypeScript |     1 |       0 |     1 |     2 |
@@ -78,6 +80,14 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/stores/counteragents/index.ts](/src/stores/counteragents/index.ts)                                                                                         | TypeScript |   167 |      20 |    34 |   221 |
 | [src/stores/counteragents/mock/counteragentsMock.ts](/src/stores/counteragents/mock/counteragentsMock.ts)                                                       | TypeScript |   347 |      74 |    33 |   454 |
 | [src/stores/counteragents/types.ts](/src/stores/counteragents/types.ts)                                                                                         | TypeScript |   150 |      50 |    39 |   239 |
+| [src/stores/debug/composables/useDebugFormatting.ts](/src/stores/debug/composables/useDebugFormatting.ts)                                                       | TypeScript |   276 |     107 |    52 |   435 |
+| [src/stores/debug/composables/useDebugHistory_back.ts](/src/stores/debug/composables/useDebugHistory_back.ts)                                                   | TypeScript |   479 |      70 |    90 |   639 |
+| [src/stores/debug/composables/useDebugStores.ts](/src/stores/debug/composables/useDebugStores.ts)                                                               | TypeScript |   213 |     105 |    53 |   371 |
+| [src/stores/debug/composables/useEnhancedHistory.ts](/src/stores/debug/composables/useEnhancedHistory.ts)                                                       | TypeScript |   384 |      70 |    73 |   527 |
+| [src/stores/debug/debugService.ts](/src/stores/debug/debugService.ts)                                                                                           | TypeScript | 1,123 |      81 |   152 | 1,356 |
+| [src/stores/debug/debugStore.ts](/src/stores/debug/debugStore.ts)                                                                                               | TypeScript |   412 |     106 |    91 |   609 |
+| [src/stores/debug/index.ts](/src/stores/debug/index.ts)                                                                                                         | TypeScript |    23 |       6 |     6 |    35 |
+| [src/stores/debug/types.ts](/src/stores/debug/types.ts)                                                                                                         | TypeScript |   220 |      18 |    29 |   267 |
 | [src/stores/index.ts](/src/stores/index.ts)                                                                                                                     | TypeScript |     1 |       0 |     1 |     2 |
 | [src/stores/menu/index.ts](/src/stores/menu/index.ts)                                                                                                           | TypeScript |    42 |       8 |     7 |    57 |
 | [src/stores/menu/menuMock.ts](/src/stores/menu/menuMock.ts)                                                                                                     | TypeScript |   578 |      59 |    23 |   660 |
@@ -115,12 +125,12 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/stores/shared/index.ts](/src/stores/shared/index.ts)                                                                                                       | TypeScript |     8 |       4 |     4 |    16 |
 | [src/stores/shared/mockDataCoordinator.ts](/src/stores/shared/mockDataCoordinator.ts)                                                                           | TypeScript |   429 |      84 |   116 |   629 |
 | [src/stores/shared/productDefinitions.ts](/src/stores/shared/productDefinitions.ts)                                                                             | TypeScript |   484 |      71 |   118 |   673 |
-| [src/stores/storage/composables/useWriteOff.ts](/src/stores/storage/composables/useWriteOff.ts)                                                                 | TypeScript |   348 |      68 |    50 |   466 |
+| [src/stores/storage/composables/useWriteOff.ts](/src/stores/storage/composables/useWriteOff.ts)                                                                 | TypeScript |   423 |      84 |    71 |   578 |
 | [src/stores/storage/index.ts](/src/stores/storage/index.ts)                                                                                                     | TypeScript |    37 |       6 |     6 |    49 |
 | [src/stores/storage/storageMock.ts](/src/stores/storage/storageMock.ts)                                                                                         | TypeScript |   561 |      32 |    46 |   639 |
-| [src/stores/storage/storageService.ts](/src/stores/storage/storageService.ts)                                                                                   | TypeScript |   711 |      38 |   123 |   872 |
-| [src/stores/storage/storageStore.ts](/src/stores/storage/storageStore.ts)                                                                                       | TypeScript |   506 |      72 |   121 |   699 |
-| [src/stores/storage/types.ts](/src/stores/storage/types.ts)                                                                                                     | TypeScript |   176 |      50 |    47 |   273 |
+| [src/stores/storage/storageService.ts](/src/stores/storage/storageService.ts)                                                                                   | TypeScript |   714 |      42 |   126 |   882 |
+| [src/stores/storage/storageStore.ts](/src/stores/storage/storageStore.ts)                                                                                       | TypeScript |   474 |      57 |    99 |   630 |
+| [src/stores/storage/types.ts](/src/stores/storage/types.ts)                                                                                                     | TypeScript |   286 |      19 |    30 |   335 |
 | [src/stores/supplier_2/composables/useOrderAssistant.ts](/src/stores/supplier_2/composables/useOrderAssistant.ts)                                               | TypeScript |   252 |      77 |    39 |   368 |
 | [src/stores/supplier_2/composables/useProcurementRequests.ts](/src/stores/supplier_2/composables/useProcurementRequests.ts)                                     | TypeScript |   317 |     113 |    65 |   495 |
 | [src/stores/supplier_2/composables/usePurchaseOrders.ts](/src/stores/supplier_2/composables/usePurchaseOrders.ts)                                               | TypeScript |   370 |     161 |    79 |   610 |
@@ -173,6 +183,12 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/views/counteragents/components/counteragents/CounteragentFilters.vue](/src/views/counteragents/components/counteragents/CounteragentFilters.vue)           | Vue        |   417 |      11 |    50 |   478 |
 | [src/views/counteragents/components/counteragents/CounteragentsTable.vue](/src/views/counteragents/components/counteragents/CounteragentsTable.vue)             | Vue        |   314 |      12 |    48 |   374 |
 | [src/views/counteragents/components/shared/ContactInfo.vue](/src/views/counteragents/components/shared/ContactInfo.vue)                                         | Vue        |   165 |       6 |    26 |   197 |
+| [src/views/debug/DebugView.vue](/src/views/debug/DebugView.vue)                                                                                                 | Vue        |   505 |      28 |    64 |   597 |
+| [src/views/debug/components/EnhancedHistoryEntry.vue](/src/views/debug/components/EnhancedHistoryEntry.vue)                                                     | Vue        |   428 |      15 |    61 |   504 |
+| [src/views/debug/components/EnhancedHistoryView.vue](/src/views/debug/components/EnhancedHistoryView.vue)                                                       | Vue        |   348 |      12 |    46 |   406 |
+| [src/views/debug/components/HistoryEntryDetails.vue](/src/views/debug/components/HistoryEntryDetails.vue)                                                       | Vue        |   145 |       4 |    14 |   163 |
+| [src/views/debug/components/JsonNavigator.vue](/src/views/debug/components/JsonNavigator.vue)                                                                   | Vue        |   477 |       9 |    78 |   564 |
+| [src/views/debug/components/JsonTreeNode.vue](/src/views/debug/components/JsonTreeNode.vue)                                                                     | Vue        |   425 |      14 |    89 |   528 |
 | [src/views/menu/MenuView.vue](/src/views/menu/MenuView.vue)                                                                                                     | Vue        |   347 |       7 |    48 |   402 |
 | [src/views/menu/components/MenuCategoryDialog.vue](/src/views/menu/components/MenuCategoryDialog.vue)                                                           | Vue        |   163 |       0 |    24 |   187 |
 | [src/views/menu/components/MenuItem.vue](/src/views/menu/components/MenuItem.vue)                                                                               | Vue        |   261 |       5 |    37 |   303 |
@@ -199,8 +215,7 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue](/src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue)                               | Vue        |   255 |       9 |    27 |   291 |
 | [src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue](/src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue)                 | Vue        |   559 |       8 |    75 |   642 |
 | [src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue](/src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue)                           | Vue        |   199 |       4 |    32 |   235 |
-| [src/views/storage/StorageView-copy.vue](/src/views/storage/StorageView-copy.vue)                                                                               | Vue        |   517 |      16 |    71 |   604 |
-| [src/views/storage/StorageView.vue](/src/views/storage/StorageView.vue)                                                                                         | Vue        |   662 |      24 |    92 |   778 |
+| [src/views/storage/StorageView.vue](/src/views/storage/StorageView.vue)                                                                                         | Vue        |   551 |      16 |    52 |   619 |
 | [src/views/storage/components/AddReceiptItemDialog.vue](/src/views/storage/components/AddReceiptItemDialog.vue)                                                 | Vue        |    47 |       2 |     8 |    57 |
 | [src/views/storage/components/InventoryDetailsDialog.vue](/src/views/storage/components/InventoryDetailsDialog.vue)                                             | Vue        |   385 |      14 |    48 |   447 |
 | [src/views/storage/components/InventoryDialog.vue](/src/views/storage/components/InventoryDialog.vue)                                                           | Vue        |   632 |      11 |    92 |   735 |
@@ -212,11 +227,15 @@ Total : 233 files, 68426 codes, 4958 comments, 10958 blanks, all 84342 lines
 | [src/views/storage/components/StorageInventoriesTable.vue](/src/views/storage/components/StorageInventoriesTable.vue)                                           | Vue        |   480 |      20 |    65 |   565 |
 | [src/views/storage/components/StorageOperationsTable.vue](/src/views/storage/components/StorageOperationsTable.vue)                                             | Vue        |   467 |      21 |    54 |   542 |
 | [src/views/storage/components/StorageStockTable.vue](/src/views/storage/components/StorageStockTable.vue)                                                       | Vue        |   393 |      16 |    53 |   462 |
-| [src/views/storage/components/dialogs/WriteOffDialog.vue](/src/views/storage/components/dialogs/WriteOffDialog.vue)                                             | Vue        |   392 |      16 |    56 |   464 |
 | [src/views/storage/components/index.ts](/src/views/storage/components/index.ts)                                                                                 | TypeScript |    11 |     135 |    21 |   167 |
-| [src/views/storage/components/tabs/StorageAnalyticsTab.vue](/src/views/storage/components/tabs/StorageAnalyticsTab.vue)                                         | Vue        |   433 |      18 |    56 |   507 |
-| [src/views/storage/components/widgets/QuickWriteOffButton.vue](/src/views/storage/components/widgets/QuickWriteOffButton.vue)                                   | Vue        |   334 |      13 |    53 |   400 |
+| [src/views/storage/components/tabs/StorageAnalyticsTab.vue](/src/views/storage/components/tabs/StorageAnalyticsTab.vue)                                         | Vue        |   432 |      13 |    52 |   497 |
 | [src/views/storage/components/widgets/WriteOffStatsWidget.vue](/src/views/storage/components/widgets/WriteOffStatsWidget.vue)                                   | Vue        |   424 |      22 |    43 |   489 |
+| [src/views/storage/components/writeoff/ProductCard.vue](/src/views/storage/components/writeoff/ProductCard.vue)                                                 | Vue        |   265 |       9 |    50 |   324 |
+| [src/views/storage/components/writeoff/ProductListRow.vue](/src/views/storage/components/writeoff/ProductListRow.vue)                                           | Vue        |   215 |       8 |    44 |   267 |
+| [src/views/storage/components/writeoff/ProductSelectorWidget.vue](/src/views/storage/components/writeoff/ProductSelectorWidget.vue)                             | Vue        |   714 |      11 |   111 |   836 |
+| [src/views/storage/components/writeoff/WriteOffDialog.vue](/src/views/storage/components/writeoff/WriteOffDialog.vue)                                           | Vue        |   513 |      21 |    69 |   603 |
+| [src/views/storage/components/writeoff/WriteOffQuantityDialog.vue](/src/views/storage/components/writeoff/WriteOffQuantityDialog.vue)                           | Vue        |   477 |       8 |    75 |   560 |
+| [src/views/storage/components/writeoff/WriteOffWidget.vue](/src/views/storage/components/writeoff/WriteOffWidget.vue)                                           | Vue        |    81 |       5 |    16 |   102 |
 | [src/views/supplier_2/SupplierView.vue](/src/views/supplier_2/SupplierView.vue)                                                                                 | Vue        |   615 |      14 |    79 |   708 |
 | [src/views/supplier_2/components/orders/BaseSupplierBaskets.vue](/src/views/supplier_2/components/orders/BaseSupplierBaskets.vue)                               | Vue        |   763 |      13 |   109 |   885 |
 | [src/views/supplier_2/components/orders/PurchaseOrderTable.vue](/src/views/supplier_2/components/orders/PurchaseOrderTable.vue)                                 | Vue        |   700 |      27 |   106 |   833 |
