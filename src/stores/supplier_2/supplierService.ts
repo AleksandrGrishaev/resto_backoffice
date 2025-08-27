@@ -128,12 +128,35 @@ class SupplierService {
     return this.orders.find(order => order.id === id) || null
   }
 
+  // src/stores/supplier_2/supplierService.ts
+  // ПОЛНОЕ ИСПРАВЛЕНИЕ: createOrder метод без автоматического изменения статуса
+
   async createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
     await this.delay(300)
 
-    // ✅ Enhanced: Get latest prices from storage
+    // ✅ ИСПРАВЛЕНИЕ 1: Безопасное получение цен из Storage
     const itemIds = data.items.map(item => item.itemId)
-    const latestPrices = await this.getLatestPrices(itemIds)
+    const latestPrices: Record<string, number> = {}
+
+    try {
+      const storageStore = useStorageStore()
+      if (storageStore && storageStore.getBalance) {
+        for (const itemId of itemIds) {
+          try {
+            const balance = storageStore.getBalance(itemId)
+            if (balance && balance.currentPrice) {
+              latestPrices[itemId] = balance.currentPrice
+            }
+          } catch (error) {
+            // Игнорируем ошибки отдельных товаров
+          }
+        }
+      }
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Could not access storage store, using provided prices', {
+        error
+      })
+    }
 
     const newOrder: PurchaseOrder = {
       id: `po-${Date.now()}`,
@@ -174,14 +197,18 @@ class SupplierService {
 
     this.orders.unshift(newOrder)
 
-    // Update related requests status
+    // ✅ ИСПРАВЛЕНИЕ 2: НЕ меняем статус заявок автоматически
+    // Это теперь делает updateRequestsStatusConditionally в usePurchaseOrders.ts
     if (data.requestIds) {
       data.requestIds.forEach(requestId => {
         const request = this.requests.find(req => req.id === requestId)
         if (request) {
+          // Только добавляем ID заказа к заявке
           request.purchaseOrderIds.push(newOrder.id)
-          request.status = 'converted'
           request.updatedAt = new Date().toISOString()
+
+          // ❌ УДАЛЕНО: НЕ меняем статус здесь!
+          // request.status = 'converted'
         }
       })
     }
@@ -191,7 +218,8 @@ class SupplierService {
       supplierId: data.supplierId,
       itemCount: newOrder.items.length,
       totalAmount: newOrder.totalAmount,
-      usedLatestPrices: Object.keys(latestPrices).length > 0
+      usedLatestPrices: Object.keys(latestPrices).length > 0,
+      requestIds: data.requestIds
     })
 
     return newOrder
@@ -473,43 +501,64 @@ class SupplierService {
   // =============================================
 
   async createSupplierBaskets(requestIds: string[]): Promise<SupplierBasket[]> {
-    await this.delay(100)
+    await this.delay(200)
 
     const requests = this.requests.filter(req => requestIds.includes(req.id))
+    if (requests.length === 0) {
+      return []
+    }
+
     const unassignedItems: UnassignedItem[] = []
 
-    // Group items from all requests
+    // ✅ НОВАЯ ЛОГИКА: Исключаем уже заказанные товары
     for (const request of requests) {
+      console.log(`Processing request ${request.requestNumber} (${request.status})`)
+
       for (const item of request.items) {
-        const existingItem = unassignedItems.find(ui => ui.itemId === item.itemId)
+        // ✅ КЛЮЧЕВАЯ ПРОВЕРКА: Сколько уже заказано этого товара?
+        const orderedQuantity = this.getOrderedQuantityForItem(request.id, item.itemId)
+        const remainingQuantity = item.requestedQuantity - orderedQuantity
 
-        if (existingItem) {
-          existingItem.totalQuantity += item.requestedQuantity
-          existingItem.sources.push({
-            requestId: request.id,
-            requestNumber: request.requestNumber,
-            department: request.department,
-            quantity: item.requestedQuantity
-          })
+        console.log(
+          `Item ${item.itemName}: requested=${item.requestedQuantity}, ordered=${orderedQuantity}, remaining=${remainingQuantity}`
+        )
+
+        if (remainingQuantity > 0) {
+          // Товар заказан частично или вообще не заказан
+          const existingItem = unassignedItems.find(ui => ui.itemId === item.itemId)
+
+          if (existingItem) {
+            // Объединяем с существующим товаром
+            existingItem.totalQuantity += remainingQuantity
+            existingItem.sources.push({
+              requestId: request.id,
+              requestNumber: request.requestNumber,
+              department: request.department,
+              quantity: remainingQuantity // ✅ ВАЖНО: только оставшееся количество
+            })
+          } else {
+            // Создаем новый товар
+            const estimatedPrice = await this.getEstimatedPrice(item.itemId)
+
+            unassignedItems.push({
+              itemId: item.itemId,
+              itemName: item.itemName,
+              category: this.getItemCategory(item.itemId),
+              totalQuantity: remainingQuantity, // ✅ ВАЖНО: только оставшееся количество
+              unit: item.unit,
+              estimatedPrice: estimatedPrice,
+              sources: [
+                {
+                  requestId: request.id,
+                  requestNumber: request.requestNumber,
+                  department: request.department,
+                  quantity: remainingQuantity // ✅ ВАЖНО: только оставшееся количество
+                }
+              ]
+            })
+          }
         } else {
-          const estimatedPrice = await this.getEstimatedPrice(item.itemId)
-
-          unassignedItems.push({
-            itemId: item.itemId,
-            itemName: item.itemName,
-            category: this.getItemCategory(item.itemId),
-            totalQuantity: item.requestedQuantity,
-            unit: item.unit,
-            estimatedPrice: estimatedPrice,
-            sources: [
-              {
-                requestId: request.id,
-                requestNumber: request.requestNumber,
-                department: request.department,
-                quantity: item.requestedQuantity
-              }
-            ]
-          })
+          console.log(`Item ${item.itemName} is fully ordered, skipping`)
         }
       }
     }
@@ -528,13 +577,30 @@ class SupplierService {
       }
     ]
 
-    DebugUtils.info(MODULE_NAME, 'Supplier baskets created', {
-      requestCount: requests.length,
-      itemCount: unassignedItems.length,
-      basketCount: baskets.length
-    })
+    console.log(
+      `Created baskets: ${unassignedItems.length} unassigned items from ${requests.length} requests`
+    )
 
     return baskets
+  }
+
+  /**
+   * ✅ НОВЫЙ МЕТОД: Подсчитывает сколько уже заказано конкретного товара из заявки
+   */
+  private getOrderedQuantityForItem(requestId: string, itemId: string): number {
+    let totalOrdered = 0
+
+    // Ищем все заказы, которые содержат этот товар из этой заявки
+    const relatedOrders = this.orders.filter(order => order.requestIds.includes(requestId))
+
+    for (const order of relatedOrders) {
+      const orderItem = order.items.find(item => item.itemId === itemId)
+      if (orderItem) {
+        totalOrdered += orderItem.orderedQuantity
+      }
+    }
+
+    return totalOrdered
   }
 
   // =============================================
@@ -555,20 +621,32 @@ class SupplierService {
    */
   async getLatestPrices(itemIds: string[]): Promise<Record<string, number>> {
     try {
-      const storageStore = useStorageStore()
+      let storageStore: any = null
+      try {
+        storageStore = useStorageStore()
+      } catch (error) {
+        DebugUtils.warn(MODULE_NAME, 'Storage store not available', { error })
+      }
+
       const prices: Record<string, number> = {}
 
-      for (const itemId of itemIds) {
-        const balance = storageStore.getBalance(itemId)
-        if (balance) {
-          prices[itemId] = balance.latestCost || balance.averageCost || 0
+      if (storageStore && storageStore.getBalance) {
+        for (const itemId of itemIds) {
+          try {
+            const balance = storageStore.getBalance(itemId)
+            if (balance && balance.currentPrice) {
+              prices[itemId] = balance.currentPrice
+            }
+          } catch (error) {
+            // Игнорируем ошибки отдельных товаров
+          }
         }
       }
 
       return prices
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get latest prices from storage', { error })
-      return {}
+      DebugUtils.error(MODULE_NAME, 'Failed to get latest prices', { error })
+      return {} // Возвращаем пустой объект вместо выбрасывания ошибки
     }
   }
 

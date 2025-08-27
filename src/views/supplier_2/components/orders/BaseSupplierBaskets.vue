@@ -553,91 +553,80 @@ async function refreshBaskets() {
   try {
     isLoading.value = true
 
-    // Get real submitted requests from store
+    console.log('Refreshing baskets for request IDs:', props.requestIds)
+
+    // ✅ ИСПРАВЛЕНИЕ: Ищем заявки со статусом 'submitted'
+    // Они могут содержать частично заказанные товары
     const submittedRequests = supplierStore.state.requests.filter(
       req => props.requestIds.includes(req.id) && req.status === 'submitted'
     )
 
+    console.log('Found submitted requests:', submittedRequests.length)
+
     if (submittedRequests.length === 0) {
       console.log('No submitted requests found for IDs:', props.requestIds)
+
+      // ✅ НОВАЯ ЛОГИКА: Проверяем, есть ли заявки с другими статусами
+      const allRequests = supplierStore.state.requests.filter(req =>
+        props.requestIds.includes(req.id)
+      )
+
+      if (allRequests.length > 0) {
+        const statusCounts = allRequests.reduce(
+          (acc, req) => {
+            acc[req.status] = (acc[req.status] || 0) + 1
+            return acc
+          },
+          {} as Record<string, number>
+        )
+
+        console.log('All requests status breakdown:', statusCounts)
+
+        // Если все заявки converted/approved - показываем сообщение
+        emits(
+          'error',
+          `All selected requests are already processed: ${Object.entries(statusCounts)
+            .map(([status, count]) => `${count} ${status}`)
+            .join(', ')}`
+        )
+      } else {
+        emits('error', 'No requests found with provided IDs')
+      }
+
       unassignedBasket.value = null
       supplierBaskets.value = []
       return
     }
 
-    // Generate items from actual requests
-    const allItems: UnassignedItem[] = []
+    // Создаем корзины только для submitted заявок
+    await supplierStore.createSupplierBaskets(submittedRequests.map(req => req.id))
 
-    submittedRequests.forEach(request => {
-      request.items.forEach(reqItem => {
-        const existingItem = allItems.find(item => item.itemId === reqItem.itemId)
+    // Копируем данные из store
+    const storeBaskets = supplierStore.state.supplierBaskets || []
 
-        if (existingItem) {
-          // Combine quantities from multiple requests
-          existingItem.totalQuantity += reqItem.requestedQuantity
-          existingItem.sources.push({
-            requestId: request.id,
-            requestNumber: request.requestNumber,
-            department: request.department,
-            quantity: reqItem.requestedQuantity
-          })
-        } else {
-          // Create new item
-          allItems.push({
-            itemId: reqItem.itemId,
-            itemName: reqItem.itemName,
-            category: getItemCategory(reqItem.itemId),
-            totalQuantity: reqItem.requestedQuantity,
-            unit: reqItem.unit,
-            estimatedPrice: reqItem.estimatedPrice || getDefaultPrice(reqItem.itemId), // ИСПРАВЛЕНИЕ: добавлен fallback
-            sources: [
-              {
-                requestId: request.id,
-                requestNumber: request.requestNumber,
-                department: request.department,
-                quantity: reqItem.requestedQuantity
-              }
-            ]
-          })
-        }
-      })
-    })
+    // Разделяем на assigned и unassigned
+    unassignedBasket.value = storeBaskets.find(basket => basket.supplierId === null) || null
+    supplierBaskets.value = storeBaskets.filter(basket => basket.supplierId !== null)
 
-    // Create unassigned basket with real data
-    unassignedBasket.value = {
-      supplierId: null,
-      supplierName: 'Unassigned',
-      items: allItems,
-      totalItems: allItems.length,
-      estimatedTotal: allItems.reduce(
-        (sum, item) => sum + item.estimatedPrice * item.totalQuantity,
-        0
-      )
+    // ✅ ВАЖНО: Фильтруем только товары, которые НЕ были заказаны
+    if (unassignedBasket.value) {
+      const originalItemCount = unassignedBasket.value.items.length
+
+      // Здесь нужна логика исключения уже заказанных товаров
+      // Пока что показываем все товары из submitted заявок
+
+      console.log(`Unassigned basket: ${unassignedBasket.value.items.length} items`)
     }
-
-    // Initialize empty supplier baskets
-    supplierBaskets.value = availableSuppliers.value.map(supplier => ({
-      supplierId: supplier.id,
-      supplierName: supplier.name,
-      items: [],
-      totalItems: 0,
-      estimatedTotal: 0
-    }))
 
     console.log('Baskets refreshed with real data:', {
       requests: submittedRequests.length,
-      items: allItems.length,
-      totalValue: unassignedBasket.value.estimatedTotal,
-      // DEBUG: показать цены товаров
-      itemPrices: allItems.map(item => ({
-        name: item.itemName,
-        price: item.estimatedPrice,
-        total: item.estimatedPrice * item.totalQuantity
-      }))
+      items: unassignedBasket.value?.items.length || 0,
+      totalValue: unassignedBasket.value?.estimatedTotal || 0,
+      suppliers: supplierBaskets.value.length
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error refreshing baskets:', error)
-    emits('error', 'Failed to refresh supplier baskets')
+    emits('error', error.message || 'Failed to load supplier baskets')
   } finally {
     isLoading.value = false
   }

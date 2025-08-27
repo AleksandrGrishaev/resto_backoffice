@@ -119,7 +119,7 @@
 
       <!-- Order Status -->
       <template #[`item.status`]="{ item }">
-        <v-chip size="small" :color="getStatusColor(item.status)" variant="flat">
+        <v-chip size="small" :color="getStatusColor(item.status)" variant="tonal">
           <v-icon :icon="getStatusIcon(item.status)" size="14" class="mr-1" />
           {{ getStatusText(item.status) }}
         </v-chip>
@@ -128,7 +128,7 @@
       <!-- Payment Status -->
       <template #[`item.paymentStatus`]="{ item }">
         <div class="d-flex align-center">
-          <v-chip size="small" :color="getPaymentStatusColor(item.paymentStatus)" variant="flat">
+          <v-chip size="small" :color="getPaymentStatusColor(item.paymentStatus)" variant="tonal">
             <v-icon :icon="getPaymentStatusIcon(item.paymentStatus)" size="14" class="mr-1" />
             {{ getPaymentStatusText(item.paymentStatus) }}
           </v-chip>

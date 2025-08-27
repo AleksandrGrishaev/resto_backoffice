@@ -62,6 +62,7 @@
               <div class="text-caption text-medium-emphasis">Total Requests</div>
             </div>
           </v-col>
+
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-warning">
@@ -70,22 +71,16 @@
               <div class="text-caption text-medium-emphasis">Pending Requests</div>
             </div>
           </v-col>
+
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-success">
                 {{ statisticsComputed.totalOrders }}
               </div>
-              <div class="text-caption text-medium-emphasis">Purchase Orders</div>
+              <div class="text-caption text-medium-emphasis">Total Orders</div>
             </div>
           </v-col>
-          <v-col cols="6" md="2">
-            <div class="text-center">
-              <div class="text-h6 font-weight-bold text-error">
-                {{ statisticsComputed.ordersAwaitingPayment }}
-              </div>
-              <div class="text-caption text-medium-emphasis">Awaiting Payment</div>
-            </div>
-          </v-col>
+
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-info">
@@ -94,161 +89,158 @@
               <div class="text-caption text-medium-emphasis">Awaiting Delivery</div>
             </div>
           </v-col>
+
           <v-col cols="6" md="2">
             <div class="text-center">
               <div class="text-h6 font-weight-bold text-purple">
+                {{ statisticsComputed.totalReceipts }}
+              </div>
+              <div class="text-caption text-medium-emphasis">Receipts</div>
+            </div>
+          </v-col>
+
+          <v-col cols="6" md="2">
+            <div class="text-center">
+              <div
+                class="text-h6 font-weight-bold"
+                :class="
+                  statisticsComputed.urgentSuggestions > 0
+                    ? 'text-error animate-ready'
+                    : 'text-grey'
+                "
+              >
                 {{ statisticsComputed.urgentSuggestions }}
               </div>
-              <div class="text-caption text-medium-emphasis">Urgent Suggestions</div>
+              <div class="text-caption text-medium-emphasis">Urgent Orders</div>
             </div>
           </v-col>
         </v-row>
       </v-card-text>
     </v-card>
 
-    <!-- Main Content Tabs -->
-    <v-tabs v-model="selectedTab" class="mb-4" color="primary">
-      <v-tab value="requests">
-        <v-icon icon="mdi-clipboard-list" class="mr-2" />
-        Requests
-        <v-chip
-          v-if="statisticsComputed.pendingRequests > 0"
-          size="small"
-          class="ml-2"
-          variant="tonal"
-          color="warning"
-        >
-          {{ statisticsComputed.pendingRequests }}
-        </v-chip>
-      </v-tab>
-
-      <v-tab value="orders">
-        <v-icon icon="mdi-package-variant" class="mr-2" />
-        Orders
-        <v-chip
-          v-if="statisticsComputed.ordersAwaitingPayment > 0"
-          size="small"
-          class="ml-2"
-          variant="tonal"
-          color="error"
-        >
-          {{ statisticsComputed.ordersAwaitingPayment }} unpaid
-        </v-chip>
-      </v-tab>
-
-      <v-tab value="receipts">
-        <v-icon icon="mdi-truck-check" class="mr-2" />
-        Receipts
-        <v-chip
-          v-if="ordersForReceiptArray.length > 0"
-          size="small"
-          class="ml-2"
-          variant="tonal"
-          color="success"
-        >
-          {{ ordersForReceiptArray.length }} ready
-        </v-chip>
-      </v-tab>
-    </v-tabs>
-
-    <!-- Content -->
-    <v-tabs-window v-model="selectedTab">
-      <!-- Requests Tab -->
-      <v-tabs-window-item value="requests">
-        <div v-if="requestsArray.length === 0 && !isLoadingValue" class="text-center pa-8">
-          <v-icon icon="mdi-clipboard-list-outline" size="64" color="grey" class="mb-4" />
-          <div class="text-h6 mb-2">No Procurement Requests</div>
-          <div class="text-body-2 text-medium-emphasis mb-4">
-            Create your first procurement request using the Order Assistant
-          </div>
-          <v-btn
-            color="primary"
-            variant="flat"
-            prepend-icon="mdi-robot"
-            @click="showOrderAssistant = true"
+    <!-- Main Tabs -->
+    <v-card>
+      <v-tabs v-model="selectedTab" color="primary" align-tabs="start">
+        <v-tab value="requests" prepend-icon="mdi-clipboard-list">
+          Requests
+          <v-chip
+            v-if="submittedRequestsArray.length > 0"
+            size="x-small"
+            color="warning"
+            class="ml-2"
           >
-            Start Order Assistant
-          </v-btn>
-        </div>
+            {{ submittedRequestsArray.length }}
+          </v-chip>
+        </v-tab>
 
-        <procurement-request-table
-          v-else
-          :requests="requestsArray"
-          :loading="isLoadingValue"
-          @edit-request="handleEditRequest"
-          @submit-request="handleSubmitRequest"
-          @delete-request="handleDeleteRequest"
-          @create-order="handleCreateOrderFromRequest"
-        />
-      </v-tabs-window-item>
+        <v-tab value="orders" prepend-icon="mdi-cart">
+          Orders
+          <v-chip v-if="draftOrdersArray.length > 0" size="x-small" color="info" class="ml-2">
+            {{ draftOrdersArray.length }} draft
+          </v-chip>
+        </v-tab>
 
-      <!-- Orders Tab -->
-      <v-tabs-window-item value="orders">
-        <div v-if="ordersArray.length === 0 && !isLoadingValue" class="text-center pa-8">
-          <v-icon icon="mdi-package-variant-closed" size="64" color="grey" class="mb-4" />
-          <div class="text-h6 mb-2">No Purchase Orders</div>
-          <div class="text-body-2 text-medium-emphasis mb-4">
-            Create purchase orders from submitted procurement requests
-          </div>
-          <div class="d-flex justify-center gap-2">
+        <v-tab value="receipts" prepend-icon="mdi-truck-check">
+          Receipts
+          <v-chip
+            v-if="pendingReceiptsArray.length > 0"
+            size="x-small"
+            color="success"
+            class="ml-2"
+          >
+            {{ pendingReceiptsArray.length }} pending
+          </v-chip>
+        </v-tab>
+      </v-tabs>
+
+      <v-divider />
+
+      <!-- Tab Content -->
+      <v-tabs-window v-model="selectedTab">
+        <!-- Requests Tab -->
+        <v-tabs-window-item value="requests">
+          <procurement-request-table
+            v-if="requestsArray.length > 0"
+            :requests="requestsArray"
+            :orders="ordersArray"
+            :loading="isLoadingValue"
+            @edit-request="handleEditRequest"
+            @submit-request="handleSubmitRequest"
+            @delete-request="handleDeleteRequest"
+            @create-order="handleCreateOrderFromRequest"
+            @go-to-order="handleGoToOrder"
+          />
+
+          <div v-else class="text-center pa-8">
+            <v-icon icon="mdi-clipboard-list-outline" size="64" color="grey" class="mb-4" />
+            <div class="text-h6 mb-2">No Procurement Requests</div>
+            <div class="text-body-2 text-medium-emphasis mb-4">
+              Start by using Order Assistant to create procurement requests
+            </div>
             <v-btn
               color="success"
               variant="flat"
-              prepend-icon="mdi-cart-variant"
+              prepend-icon="mdi-robot"
+              @click="showOrderAssistant = true"
+            >
+              Open Order Assistant
+            </v-btn>
+          </div>
+        </v-tabs-window-item>
+
+        <!-- Orders Tab -->
+        <v-tabs-window-item value="orders">
+          <purchase-order-table
+            v-if="ordersArray.length > 0"
+            :orders="ordersArray"
+            :highlighted-order-id="highlightedOrderId"
+            :loading="isLoadingValue"
+            @edit-order="handleEditOrder"
+            @view-order="handleViewOrder"
+            @send-order="handleSendOrder"
+            @confirm-order="handleConfirmOrder"
+            @start-receipt="handleStartReceipt"
+          />
+
+          <div v-else class="text-center pa-8">
+            <v-icon icon="mdi-cart-outline" size="64" color="grey" class="mb-4" />
+            <div class="text-h6 mb-2">No Purchase Orders</div>
+            <div class="text-body-2 text-medium-emphasis mb-4">
+              Create orders from submitted procurement requests
+            </div>
+            <v-btn
+              color="primary"
+              variant="flat"
+              prepend-icon="mdi-cart-plus"
               :disabled="submittedRequestsArray.length === 0"
               @click="openSupplierBaskets"
             >
               Create Orders
             </v-btn>
-            <v-btn
-              color="primary"
-              variant="outlined"
-              prepend-icon="mdi-robot"
-              @click="showOrderAssistant = true"
-            >
-              Order Assistant
-            </v-btn>
           </div>
-        </div>
+        </v-tabs-window-item>
 
-        <purchase-order-table
-          v-else
-          :orders="ordersArray"
-          :loading="isLoadingValue"
-          @edit-order="handleEditOrder"
-          @send-order="handleSendOrder"
-          @confirm-order="handleConfirmOrder"
-          @start-receipt="handleStartReceipt"
-        />
-      </v-tabs-window-item>
+        <!-- Receipts Tab -->
+        <v-tabs-window-item value="receipts">
+          <receipt-table
+            v-if="receiptsArray.length > 0"
+            :receipts="receiptsArray"
+            :loading="isLoadingValue"
+            @view-details="handleViewReceipt"
+            @edit-receipt="handleEditReceipt"
+            @complete-receipt="handleCompleteReceipt"
+          />
 
-      <!-- Receipts Tab -->
-      <v-tabs-window-item value="receipts">
-        <div v-if="receiptsArray.length === 0 && !isLoadingValue" class="text-center pa-8">
-          <v-icon icon="mdi-truck-check-outline" size="64" color="grey" class="mb-4" />
-          <div class="text-h6 mb-2">No Receipts</div>
-          <div class="text-body-2 text-medium-emphasis mb-4">
-            Receipts will appear here when you receive deliveries
+          <div v-else class="text-center pa-8">
+            <v-icon icon="mdi-truck-check-outline" size="64" color="grey" class="mb-4" />
+            <div class="text-h6 mb-2">No Receipts</div>
+            <div class="text-body-2 text-medium-emphasis mb-4">
+              Start receiving orders to create receipts
+            </div>
           </div>
-          <v-btn
-            color="primary"
-            variant="outlined"
-            prepend-icon="mdi-package-variant"
-            @click="selectedTab = 'orders'"
-          >
-            View Orders
-          </v-btn>
-        </div>
-
-        <receipt-table
-          v-else
-          :receipts="receiptsArray"
-          :loading="isLoadingValue"
-          @edit-receipt="handleEditReceipt"
-          @complete-receipt="handleCompleteReceipt"
-        />
-      </v-tabs-window-item>
-    </v-tabs-window>
+        </v-tabs-window-item>
+      </v-tabs-window>
+    </v-card>
 
     <!-- Dialogs -->
     <base-order-assistant
@@ -414,6 +406,9 @@ const errorMessage = ref('')
 const selectedRequestIds = ref<string[]>([])
 const selectedOrder = ref<PurchaseOrder | null>(null)
 
+// ✅ НОВОЕ: Подсветка заказа при переходе
+const highlightedOrderId = ref<string | null>(null)
+
 // =============================================
 // COMPUTED - Безопасные computed свойства
 // =============================================
@@ -431,130 +426,40 @@ const receiptsArray = computed(() => {
 })
 
 const submittedRequestsArray = computed(() => {
-  return requestsArray.value.filter(req => req.status === 'submitted')
+  return requestsArray.value.filter(request => request.status === 'submitted')
 })
 
-const ordersForReceiptArray = computed(() => {
-  return ordersArray.value.filter(
-    order =>
-      ['sent', 'confirmed'].includes(order.status) &&
-      !receiptsArray.value.some(
-        receipt => receipt.purchaseOrderId === order.id && receipt.status === 'completed'
-      )
-  )
+const draftOrdersArray = computed(() => {
+  return ordersArray.value.filter(order => order.status === 'draft')
 })
 
-const statisticsComputed = computed(() => ({
-  totalRequests: requestsArray.value.length,
-  pendingRequests: submittedRequestsArray.value.length,
-  totalOrders: ordersArray.value.length,
-  ordersAwaitingPayment: ordersArray.value.filter(order => order.paymentStatus === 'pending')
-    .length,
-  ordersAwaitingDelivery: ordersArray.value.filter(
-    order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
-  ).length,
-  totalReceipts: receiptsArray.value.length,
-  pendingReceipts: receiptsArray.value.filter(receipt => receipt.status === 'draft').length,
-  urgentSuggestions: Array.isArray(supplierStore.state.orderSuggestions)
-    ? supplierStore.state.orderSuggestions.filter(s => s.urgency === 'high').length
-    : 0
-}))
+const pendingReceiptsArray = computed(() => {
+  return receiptsArray.value.filter(receipt => receipt.status === 'draft')
+})
+
+const statisticsComputed = computed(() => {
+  const stats = supplierStore.statistics || {}
+  return {
+    totalRequests: stats.totalRequests || 0,
+    pendingRequests: stats.pendingRequests || 0,
+    totalOrders: stats.totalOrders || 0,
+    ordersAwaitingPayment: stats.ordersAwaitingPayment || 0,
+    ordersAwaitingDelivery: stats.ordersAwaitingDelivery || 0,
+    totalReceipts: stats.totalReceipts || 0,
+    pendingReceipts: stats.pendingReceipts || 0,
+    urgentSuggestions: stats.urgentSuggestions || 0
+  }
+})
 
 const isLoadingValue = computed(() => {
-  return (
-    supplierStore.state.loading.requests ||
-    supplierStore.state.loading.orders ||
-    supplierStore.state.loading.receipts
-  )
+  return supplierStore.isLoading || false
 })
 
 // =============================================
-// METHODS - Request Handlers
+// METHODS - Event Handlers
 // =============================================
 
-function handleEditRequest(request: ProcurementRequest) {
-  console.log(`${MODULE_NAME}: Edit request`, request.id)
-  showSuccess('Request editing not implemented yet')
-}
-
-async function handleSubmitRequest(request: ProcurementRequest) {
-  try {
-    await supplierStore.updateRequest(request.id, { status: 'submitted' })
-    showSuccess(`Request ${request.requestNumber} submitted successfully`)
-  } catch (error: any) {
-    handleError(error.message || 'Failed to submit request')
-  }
-}
-
-async function handleDeleteRequest(request: ProcurementRequest) {
-  try {
-    await supplierStore.deleteRequest(request.id)
-    showSuccess(`Request ${request.requestNumber} deleted successfully`)
-  } catch (error: any) {
-    handleError(error.message || 'Failed to delete request')
-  }
-}
-
-function handleCreateOrderFromRequest(request: ProcurementRequest) {
-  selectedRequestIds.value = [request.id]
-  showSupplierBaskets.value = true
-}
-
-// =============================================
-// METHODS - Order Handlers
-// =============================================
-
-function handleEditOrder(order: PurchaseOrder) {
-  console.log(`${MODULE_NAME}: Edit order`, order.id)
-  showSuccess('Order editing not implemented yet')
-}
-
-async function handleSendOrder(order: PurchaseOrder) {
-  try {
-    await supplierStore.updateOrder(order.id, { status: 'sent' })
-    showSuccess(`Order ${order.orderNumber} sent to supplier`)
-  } catch (error: any) {
-    handleError(error.message || 'Failed to send order')
-  }
-}
-
-async function handleConfirmOrder(order: PurchaseOrder) {
-  try {
-    await supplierStore.updateOrder(order.id, { status: 'confirmed' })
-    showSuccess(`Order ${order.orderNumber} confirmed by supplier`)
-  } catch (error: any) {
-    handleError(error.message || 'Failed to confirm order')
-  }
-}
-
-function handleStartReceipt(order: PurchaseOrder) {
-  selectedOrder.value = order
-  showReceiptDialog.value = true
-}
-
-// =============================================
-// METHODS - Receipt Handlers
-// =============================================
-
-function handleEditReceipt(receipt: Receipt) {
-  console.log(`${MODULE_NAME}: Edit receipt`, receipt.id)
-  showSuccess('Receipt editing not implemented yet')
-}
-
-async function handleCompleteReceipt(receipt: Receipt) {
-  try {
-    await supplierStore.completeReceipt(receipt.id)
-    showSuccess(`Receipt ${receipt.receiptNumber} completed successfully`)
-  } catch (error: any) {
-    handleError(error.message || 'Failed to complete receipt')
-  }
-}
-
-// =============================================
-// METHODS - Dialog Handlers
-// =============================================
-
-async function handleOrderAssistantSuccess(message: string) {
+function handleOrderAssistantSuccess(message: string) {
   showSuccess(message)
   showOrderAssistant.value = false
 
@@ -564,12 +469,6 @@ async function handleOrderAssistantSuccess(message: string) {
       showSuccess(`${submittedRequestsArray.value.length} requests ready for order creation`)
     }, 1000)
   }
-}
-
-function handleBasketsSuccess(message: string) {
-  showSuccess(message)
-  showSupplierBaskets.value = false
-  selectedRequestIds.value = []
 }
 
 function handleOrdersCreated(orderIds: string[]) {
@@ -583,6 +482,106 @@ function handleReceiptSuccess(message: string) {
   showSuccess(message)
   showReceiptDialog.value = false
   selectedOrder.value = null
+}
+
+// =============================================
+// ✅ НОВЫЕ МЕТОДЫ - Обработка событий таблицы заявок
+// =============================================
+
+function handleEditRequest(request: ProcurementRequest) {
+  // TODO: Логика редактирования заявки
+  console.log(`${MODULE_NAME}: Edit request`, request.id)
+  showSuccess(`Edit request ${request.requestNumber} - TODO: Implement`)
+}
+
+function handleSubmitRequest(request: ProcurementRequest) {
+  // TODO: Логика отправки заявки
+  console.log(`${MODULE_NAME}: Submit request`, request.id)
+  showSuccess(`Submit request ${request.requestNumber} - TODO: Implement`)
+}
+
+function handleDeleteRequest(request: ProcurementRequest) {
+  // TODO: Логика удаления заявки
+  console.log(`${MODULE_NAME}: Delete request`, request.id)
+  showSuccess(`Delete request ${request.requestNumber} - TODO: Implement`)
+}
+
+function handleCreateOrderFromRequest(request: ProcurementRequest) {
+  console.log(`${MODULE_NAME}: Create order from request`, request.id)
+
+  // Открываем диалог создания заказов с этой заявкой
+  selectedRequestIds.value = [request.id]
+  showSupplierBaskets.value = true
+}
+
+function handleGoToOrder(orderId: string) {
+  console.log(`${MODULE_NAME}: Navigating to order ${orderId}`)
+
+  // Переключаемся на вкладку Orders
+  selectedTab.value = 'orders'
+
+  // Подсвечиваем конкретный заказ
+  highlightedOrderId.value = orderId
+
+  // Убираем подсветку через 3 секунды
+  setTimeout(() => {
+    highlightedOrderId.value = null
+  }, 3000)
+
+  // Находим заказ для отображения номера
+  const order = ordersArray.value.find(o => o.id === orderId)
+  const orderNumber = order ? order.orderNumber : orderId.slice(-8)
+
+  showSuccess(`Found order ${orderNumber}`)
+}
+
+// =============================================
+// METHODS - Обработчики заказов
+// =============================================
+
+function handleEditOrder(order: PurchaseOrder) {
+  console.log(`${MODULE_NAME}: Edit order`, order.id)
+  showSuccess(`Edit order ${order.orderNumber} - TODO: Implement`)
+}
+
+function handleViewOrder(order: PurchaseOrder) {
+  console.log(`${MODULE_NAME}: View order`, order.id)
+  showSuccess(`View order ${order.orderNumber} - TODO: Implement`)
+}
+
+function handleSendOrder(order: PurchaseOrder) {
+  console.log(`${MODULE_NAME}: Send order`, order.id)
+  showSuccess(`Send order ${order.orderNumber} - TODO: Implement`)
+}
+
+function handleConfirmOrder(order: PurchaseOrder) {
+  console.log(`${MODULE_NAME}: Confirm order`, order.id)
+  showSuccess(`Confirm order ${order.orderNumber} - TODO: Implement`)
+}
+
+function handleStartReceipt(order: PurchaseOrder) {
+  console.log(`${MODULE_NAME}: Start receipt for order`, order.id)
+  selectedOrder.value = order
+  showReceiptDialog.value = true
+}
+
+// =============================================
+// METHODS - Обработчики поступлений
+// =============================================
+
+function handleViewReceipt(receipt: Receipt) {
+  console.log(`${MODULE_NAME}: View receipt`, receipt.id)
+  showSuccess(`View receipt ${receipt.receiptNumber} - TODO: Implement`)
+}
+
+function handleEditReceipt(receipt: Receipt) {
+  console.log(`${MODULE_NAME}: Edit receipt`, receipt.id)
+  showSuccess(`Edit receipt ${receipt.receiptNumber} - TODO: Implement`)
+}
+
+function handleCompleteReceipt(receipt: Receipt) {
+  console.log(`${MODULE_NAME}: Complete receipt`, receipt.id)
+  showSuccess(`Complete receipt ${receipt.receiptNumber} - TODO: Implement`)
 }
 
 // =============================================
@@ -690,8 +689,8 @@ onMounted(async () => {
   }
 }
 
-// Success highlighting
-.v-chip.animate-ready {
+// Success highlighting for urgent orders
+.animate-ready {
   animation: readyPulse 2s infinite;
 }
 
@@ -702,6 +701,14 @@ onMounted(async () => {
   }
   50% {
     opacity: 0.7;
+  }
+}
+
+// Order highlighting
+:deep(.v-data-table .v-data-table__td) {
+  &.highlighted-order {
+    background-color: rgb(var(--v-theme-warning-lighten-4)) !important;
+    transition: background-color 0.3s ease;
   }
 }
 </style>

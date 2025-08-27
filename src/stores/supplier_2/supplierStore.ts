@@ -597,12 +597,15 @@ export const useSupplierStore = defineStore('supplier', () => {
       // Update current order
       state.value.currentOrder = newOrder
 
-      // Mark related requests as processed
-      if (data.requestIds) {
-        for (const requestId of data.requestIds) {
-          await updateRequest(requestId, { status: 'approved' })
-        }
-      }
+      // ❌ УДАЛЯЕМ: НЕ меняем статус заявок автоматически!
+      // Статус теперь обновляется в updateRequestsStatusConditionally
+
+      // СТАРЫЙ КОД (УДАЛИТЬ):
+      // if (data.requestIds) {
+      //   for (const requestId of data.requestIds) {
+      //     await updateRequest(requestId, { status: 'approved' })
+      //   }
+      // }
 
       DebugUtils.info(MODULE_NAME, 'Purchase order created successfully', {
         orderId: newOrder.id,
