@@ -696,6 +696,46 @@ export const useSupplierStore = defineStore('supplier', () => {
       state.value.loading.orders = false
     }
   }
+  async function createSupplierBaskets(requestIds: string[]): Promise<void> {
+    try {
+      state.value.loading.requests = true
+
+      console.log('SupplierStore: Creating supplier baskets', { requestIds })
+
+      // Вызываем сервис для создания корзин
+      const baskets = await supplierService.createSupplierBaskets(requestIds)
+
+      // Сохраняем в состоянии
+      state.value.supplierBaskets = baskets
+
+      console.log(`SupplierStore: Created ${baskets.length} supplier baskets`, {
+        totalBaskets: baskets.length,
+        unassignedItems: baskets.find(b => b.supplierId === null)?.items.length || 0
+      })
+    } catch (error) {
+      console.error('SupplierStore: Failed to create supplier baskets', { error })
+      throw error
+    } finally {
+      state.value.loading.requests = false
+    }
+  }
+  /**
+   * ИСПРАВЛЕНИЕ: Update request status after order creation
+   */
+  async function updateRequestStatus(requestId: string, status: RequestStatus): Promise<void> {
+    try {
+      const request = state.value.requests.find(req => req.id === requestId)
+      if (request) {
+        request.status = status
+        request.updatedAt = new Date().toISOString()
+
+        console.log(`SupplierStore: Updated request ${requestId} status to ${status}`)
+      }
+    } catch (error) {
+      console.error('SupplierStore: Failed to update request status', { requestId, status, error })
+      throw error
+    }
+  }
 
   /**
    * ENHANCED: Create receipt with validation
@@ -1246,7 +1286,7 @@ export const useSupplierStore = defineStore('supplier', () => {
 
   function clearSupplierBaskets(): void {
     state.value.supplierBaskets = []
-    DebugUtils.debug(MODULE_NAME, 'Supplier baskets cleared')
+    console.log('SupplierStore: Cleared supplier baskets')
   }
 
   function getSupplierBasket(supplierId: string | null): SupplierBasket | undefined {
@@ -1533,6 +1573,9 @@ export const useSupplierStore = defineStore('supplier', () => {
     // ===== ANALYTICS AND REPORTING =====
     getDepartmentStatistics,
     getSupplierStatistics,
-    getPerformanceReport
+    getPerformanceReport,
+
+    createSupplierBaskets,
+    updateRequestStatus
   }
 })

@@ -260,7 +260,7 @@
     <base-supplier-baskets
       v-model="showSupplierBaskets"
       :request-ids="selectedRequestIds"
-      @success="handleBasketsSuccess"
+      @success="showSuccess"
       @error="handleError"
       @order-created="handleOrdersCreated"
     />

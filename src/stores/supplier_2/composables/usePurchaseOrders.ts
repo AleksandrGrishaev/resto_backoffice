@@ -4,13 +4,26 @@ import { ref, computed } from 'vue'
 import { useSupplierStore } from '../supplierStore'
 import type {
   PurchaseOrder,
+  OrderFilters,
   CreateOrderData,
   UpdateOrderData,
-  OrderFilters,
-  SupplierBasket
+  SupplierBasket,
+  UnassignedItem,
+  OrderStatus,
+  PaymentStatus
 } from '../types'
 
+const MODULE_NAME = 'usePurchaseOrders'
+
+// =============================================
+// COMPOSABLE DEFINITION
+// =============================================
+
 export function usePurchaseOrders() {
+  // =============================================
+  // DEPENDENCIES
+  // =============================================
+
   const supplierStore = useSupplierStore()
 
   // =============================================
@@ -20,52 +33,55 @@ export function usePurchaseOrders() {
   const filters = ref<OrderFilters>({
     status: 'all',
     paymentStatus: 'all',
-    supplier: 'all'
+    supplier: 'all',
+    dateFrom: null,
+    dateTo: null
   })
 
   // =============================================
-  // COMPUTED
+  // COMPUTED - Data
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Безопасный доступ к данным store
-  const orders = computed(() => {
-    return Array.isArray(supplierStore.state.orders) ? supplierStore.state.orders : []
-  })
+  const orders = computed(() => supplierStore.state.orders || [])
 
   const currentOrder = computed(() => supplierStore.state.currentOrder)
-  const isLoading = computed(() => supplierStore.state.loading.orders)
 
   const filteredOrders = computed(() => {
-    return orders.value.filter(order => {
-      if (
-        filters.value.status &&
-        filters.value.status !== 'all' &&
-        order.status !== filters.value.status
-      ) {
-        return false
-      }
-      if (
-        filters.value.paymentStatus &&
-        filters.value.paymentStatus !== 'all' &&
-        order.paymentStatus !== filters.value.paymentStatus
-      ) {
-        return false
-      }
-      if (
-        filters.value.supplier &&
-        filters.value.supplier !== 'all' &&
-        order.supplierId !== filters.value.supplier
-      ) {
-        return false
-      }
-      return true
-    })
+    let filtered = orders.value
+
+    if (filters.value.status !== 'all') {
+      filtered = filtered.filter(order => order.status === filters.value.status)
+    }
+
+    if (filters.value.paymentStatus !== 'all') {
+      filtered = filtered.filter(order => order.paymentStatus === filters.value.paymentStatus)
+    }
+
+    if (filters.value.supplier !== 'all') {
+      filtered = filtered.filter(order => order.supplierId === filters.value.supplier)
+    }
+
+    if (filters.value.dateFrom) {
+      filtered = filtered.filter(order => order.orderDate >= filters.value.dateFrom!)
+    }
+
+    if (filters.value.dateTo) {
+      filtered = filtered.filter(order => order.orderDate <= filters.value.dateTo!)
+    }
+
+    return filtered
   })
 
+  // =============================================
+  // COMPUTED - Filtered Lists
+  // =============================================
+
   const draftOrders = computed(() => orders.value.filter(order => order.status === 'draft'))
+
   const pendingOrders = computed(() =>
-    orders.value.filter(order => order.paymentStatus === 'pending')
+    orders.value.filter(order => ['sent', 'confirmed'].includes(order.status))
   )
+
   const unpaidOrders = computed(() =>
     orders.value.filter(order => order.paymentStatus === 'pending')
   )
@@ -76,34 +92,38 @@ export function usePurchaseOrders() {
     )
   )
 
-  const ordersForReceipt = computed(() =>
-    orders.value.filter(
+  const ordersForReceipt = computed(() => {
+    const receipts = supplierStore.state.receipts || []
+
+    return orders.value.filter(
       order =>
         ['sent', 'confirmed'].includes(order.status) &&
-        !supplierStore.state.receipts.some(
+        !receipts.some(
           receipt => receipt.purchaseOrderId === order.id && receipt.status === 'completed'
         )
     )
-  )
+  })
+
+  // =============================================
+  // COMPUTED - Statistics
+  // =============================================
 
   const orderStatistics = computed(() => ({
     total: orders.value.length,
     draft: draftOrders.value.length,
-    sent: orders.value.filter(o => o.status === 'sent').length,
-    confirmed: orders.value.filter(o => o.status === 'confirmed').length,
-    delivered: orders.value.filter(o => o.status === 'delivered').length,
-    cancelled: orders.value.filter(o => o.status === 'cancelled').length,
+    pending: pendingOrders.value.length,
     unpaid: unpaidOrders.value.length,
     awaitingDelivery: ordersAwaitingDelivery.value.length
   }))
 
-  // Orders with payment status (integrated with AccountStore)
   const ordersWithPaymentInfo = computed(() => {
     return orders.value.map(order => ({
       ...order,
-      paymentInfo: getPaymentInfo(order.billId) // This would come from AccountStore integration
+      paymentInfo: getPaymentInfo(order.billId)
     }))
   })
+
+  const isLoading = computed(() => supplierStore.state.loading.orders)
 
   // =============================================
   // ACTIONS - CRUD Operations
@@ -124,7 +144,7 @@ export function usePurchaseOrders() {
   }
 
   /**
-   * Create order from supplier basket
+   * Create order from supplier basket - ИСПРАВЛЕННАЯ ВЕРСИЯ
    */
   async function createOrderFromBasket(basket: SupplierBasket): Promise<PurchaseOrder> {
     if (!basket.supplierId) {
@@ -155,10 +175,16 @@ export function usePurchaseOrders() {
 
       const newOrder = await supplierStore.createOrder(orderData)
 
+      // ИСПРАВЛЕНИЕ 1: Убираем товары из рекомендаций после создания заказа
+      removeItemsFromSuggestions(basket.items)
+
+      // ИСПРАВЛЕНИЕ 2: Проверяем - нужно ли обновлять статус заявок
+      await updateRequestsStatusConditionally(requestIds, basket.items)
+
       // Auto-create bill in AccountStore
       await createBillInAccountStore(newOrder)
 
-      console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
+      console.log(`PurchaseOrders: Order created successfully`, newOrder.orderNumber)
       return newOrder
     } catch (error) {
       console.error('PurchaseOrders: Error creating order from basket:', error)
@@ -167,16 +193,51 @@ export function usePurchaseOrders() {
   }
 
   /**
-   * Create order manually
+   * НОВЫЙ МЕТОД: Условное обновление статуса запросов
+   * Меняет статус на 'converted' только если все товары из заявки заказаны
+   */
+  async function updateRequestsStatusConditionally(
+    requestIds: string[],
+    orderedItems: UnassignedItem[]
+  ) {
+    try {
+      for (const requestId of requestIds) {
+        const request = supplierStore.state.requests.find(req => req.id === requestId)
+        if (!request) continue
+
+        // Проверяем, все ли товары из заявки были заказаны
+        const allItemsOrdered = request.items.every(requestItem => {
+          return orderedItems.some(
+            orderedItem =>
+              orderedItem.itemId === requestItem.itemId &&
+              orderedItem.totalQuantity >= requestItem.requestedQuantity
+          )
+        })
+
+        if (allItemsOrdered) {
+          // Все товары заказаны - меняем статус на 'converted'
+          await supplierStore.updateRequest(requestId, { status: 'converted' })
+          console.log(`PurchaseOrders: Request ${requestId} fully converted (all items ordered)`)
+        } else {
+          // Частично заказаны - оставляем статус 'submitted'
+          console.log(
+            `PurchaseOrders: Request ${requestId} partially ordered, keeping status 'submitted'`
+          )
+        }
+      }
+    } catch (error) {
+      console.error('PurchaseOrders: Error updating request statuses conditionally:', error)
+    }
+  }
+
+  /**
+   * Create new order
    */
   async function createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
     try {
       console.log('PurchaseOrders: Creating order', data)
       const newOrder = await supplierStore.createOrder(data)
-
-      // Auto-create bill in AccountStore
       await createBillInAccountStore(newOrder)
-
       console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
       return newOrder
     } catch (error) {
@@ -226,7 +287,7 @@ export function usePurchaseOrders() {
   }
 
   /**
-   * Mark order as confirmed by supplier
+   * Confirm order from supplier
    */
   async function confirmOrder(id: string): Promise<PurchaseOrder> {
     return updateOrder(id, { status: 'confirmed' })
@@ -251,7 +312,7 @@ export function usePurchaseOrders() {
    */
   async function updatePaymentStatus(
     id: string,
-    paymentStatus: PurchaseOrder['paymentStatus']
+    paymentStatus: PaymentStatus
   ): Promise<PurchaseOrder> {
     return updateOrder(id, { paymentStatus })
   }
@@ -261,36 +322,27 @@ export function usePurchaseOrders() {
   // =============================================
 
   /**
-   * Create bill in AccountStore (auto-called when order is created)
+   * Create bill in AccountStore for order
    */
-  async function createBillInAccountStore(order: PurchaseOrder) {
+  async function createBillInAccountStore(order: PurchaseOrder): Promise<string> {
     try {
-      console.log(`PurchaseOrders: Creating bill for order ${order.orderNumber}`)
-
-      // This would be the actual integration with AccountStore
-      // const billData: CreateBillInAccountStore = {
-      //   counteragentId: order.supplierId,
-      //   counteragentName: order.supplierName,
+      // TODO: Интеграция с AccountStore
+      // const accountStore = useAccountStore()
+      // const billId = await accountStore.createBill({
+      //   type: 'purchase',
+      //   supplierId: order.supplierId,
       //   amount: order.totalAmount,
-      //   description: `Заказ ${order.orderNumber}`,
-      //   category: 'supplier',
-      //   invoiceNumber: order.orderNumber,
-      //   purchaseOrderId: order.id,
-      //   priority: 'medium',
-      //   createdBy: getCurrentUser()
-      // }
-      //
-      // const bill = await accountStore.createPayment(billData)
-      // order.billId = bill.id
+      //   items: order.items,
+      //   notes: `Purchase order ${order.orderNumber}`
+      // })
 
-      // For now, simulate bill creation
       const mockBillId = `bill-${Date.now()}`
-      await updateOrder(order.id, { billId: mockBillId })
-
       console.log(`PurchaseOrders: Created bill ${mockBillId} for order ${order.orderNumber}`)
+      return mockBillId
     } catch (error) {
       console.error('PurchaseOrders: Error creating bill:', error)
-      throw error
+      // Не выбрасываем ошибку, чтобы не прерывать создание заказа
+      return `bill-error-${Date.now()}`
     }
   }
 
@@ -300,20 +352,81 @@ export function usePurchaseOrders() {
   function getPaymentInfo(billId?: string) {
     if (!billId) return null
 
-    // This would come from AccountStore integration
-    // return accountStore.getPaymentById(billId)
+    // TODO: Интеграция с AccountStore
+    // const accountStore = useAccountStore()
+    // return accountStore.getBillById(billId)
 
-    // Mock payment info for now
     return {
-      id: billId,
-      status: Math.random() > 0.5 ? 'pending' : 'completed',
-      amount: Math.floor(Math.random() * 1000000),
-      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      billId,
+      status: 'pending',
+      amount: 0,
+      paidAmount: 0,
+      dueDate: null
     }
   }
 
   // =============================================
-  // ACTIONS - Filtering & Selection
+  // HELPER METHODS - НОВЫЕ ИСПРАВЛЕНИЯ
+  // =============================================
+
+  /**
+   * НОВЫЙ МЕТОД: Удаление товаров из рекомендаций
+   */
+  function removeItemsFromSuggestions(items: UnassignedItem[]) {
+    try {
+      const itemIds = items.map(item => item.itemId)
+
+      const originalCount = supplierStore.state.orderSuggestions.length
+
+      supplierStore.state.orderSuggestions = supplierStore.state.orderSuggestions.filter(
+        suggestion => !itemIds.includes(suggestion.itemId)
+      )
+
+      const removedCount = originalCount - supplierStore.state.orderSuggestions.length
+
+      console.log(`PurchaseOrders: Removed ${removedCount} items from order suggestions`, {
+        itemIds,
+        remainingSuggestions: supplierStore.state.orderSuggestions.length
+      })
+    } catch (error) {
+      console.error('PurchaseOrders: Error removing items from suggestions:', error)
+    }
+  }
+
+  /**
+   * НОВЫЙ МЕТОД: Обновление статуса запросов
+   */
+  async function updateRequestsStatus(requestIds: string[], status: 'converted' | 'cancelled') {
+    try {
+      const updatePromises = requestIds.map(requestId =>
+        supplierStore.updateRequest(requestId, { status })
+      )
+
+      await Promise.all(updatePromises)
+
+      console.log(`PurchaseOrders: Updated ${requestIds.length} requests to status: ${status}`)
+    } catch (error) {
+      console.error('PurchaseOrders: Error updating request statuses:', error)
+    }
+  }
+
+  /**
+   * Get unique request IDs from basket
+   */
+  function getUniqueRequestIds(basket: SupplierBasket): string[] {
+    const requestIds = new Set<string>()
+
+    basket.items.forEach(item => {
+      item.sources.forEach(source => {
+        requestIds.add(source.requestId)
+      })
+    })
+
+    return Array.from(requestIds)
+  }
+
+  // =============================================
+  // FILTERING & SELECTION
   // =============================================
 
   /**
@@ -338,7 +451,9 @@ export function usePurchaseOrders() {
     filters.value = {
       status: 'all',
       paymentStatus: 'all',
-      supplier: 'all'
+      supplier: 'all',
+      dateFrom: null,
+      dateTo: null
     }
     console.log('PurchaseOrders: Cleared all filters')
   }
@@ -357,16 +472,14 @@ export function usePurchaseOrders() {
   /**
    * Get orders by status
    */
-  function getOrdersByStatus(status: PurchaseOrder['status']): PurchaseOrder[] {
+  function getOrdersByStatus(status: OrderStatus): PurchaseOrder[] {
     return orders.value.filter(order => order.status === status)
   }
 
   /**
    * Get orders by payment status
    */
-  function getOrdersByPaymentStatus(
-    paymentStatus: PurchaseOrder['paymentStatus']
-  ): PurchaseOrder[] {
+  function getOrdersByPaymentStatus(paymentStatus: PaymentStatus): PurchaseOrder[] {
     return orders.value.filter(order => order.paymentStatus === paymentStatus)
   }
 
@@ -377,18 +490,9 @@ export function usePurchaseOrders() {
     return orders.value.filter(order => order.supplierId === supplierId)
   }
 
-  /**
-   * Get unique request IDs from basket
-   */
-  function getUniqueRequestIds(basket: SupplierBasket): string[] {
-    const requestIds = new Set<string>()
-    basket.items.forEach(item => {
-      item.sources.forEach(source => {
-        requestIds.add(source.requestId)
-      })
-    })
-    return Array.from(requestIds)
-  }
+  // =============================================
+  // VALIDATION FUNCTIONS
+  // =============================================
 
   /**
    * Check if order can be edited
@@ -415,7 +519,7 @@ export function usePurchaseOrders() {
    * Check if order can be received
    */
   function canReceiveOrder(order: PurchaseOrder): boolean {
-    return ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
+    return ['sent', 'confirmed'].includes(order.status)
   }
 
   /**
@@ -435,6 +539,10 @@ export function usePurchaseOrders() {
     )
   }
 
+  // =============================================
+  // CALCULATION FUNCTIONS
+  // =============================================
+
   /**
    * Calculate order totals
    */
@@ -444,35 +552,38 @@ export function usePurchaseOrders() {
       0
     )
 
-    // Could add tax, discount logic here
-    const tax = 0 // No tax for now
-    const discount = 0 // No discount for now
-    const total = subtotal + tax - discount
+    // TODO: Add tax calculation
+    const tax = 0
+    const shipping = 0
+    const total = subtotal + tax + shipping
 
     return {
       subtotal,
       tax,
-      discount,
-      total,
-      isEstimated: order.isEstimatedTotal
+      shipping,
+      total
     }
   }
+
+  // =============================================
+  // UI HELPER FUNCTIONS
+  // =============================================
 
   /**
    * Get status color for UI
    */
-  function getStatusColor(status: PurchaseOrder['status']): string {
+  function getStatusColor(status: OrderStatus): string {
     switch (status) {
       case 'draft':
         return 'grey'
       case 'sent':
-        return 'blue'
+        return 'info'
       case 'confirmed':
-        return 'orange'
+        return 'success'
       case 'delivered':
-        return 'green'
+        return 'success'
       case 'cancelled':
-        return 'red'
+        return 'error'
       default:
         return 'default'
     }
@@ -481,12 +592,14 @@ export function usePurchaseOrders() {
   /**
    * Get payment status color for UI
    */
-  function getPaymentStatusColor(paymentStatus: PurchaseOrder['paymentStatus']): string {
-    switch (paymentStatus) {
+  function getPaymentStatusColor(status: PaymentStatus): string {
+    switch (status) {
       case 'pending':
-        return 'orange'
+        return 'warning'
       case 'paid':
-        return 'green'
+        return 'success'
+      case 'overdue':
+        return 'error'
       default:
         return 'default'
     }
@@ -520,7 +633,8 @@ export function usePurchaseOrders() {
   function getOrderAge(order: PurchaseOrder): number {
     const orderDate = new Date(order.orderDate)
     const now = new Date()
-    return Math.floor((now.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24))
+    const diffTime = now.getTime() - orderDate.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   }
 
   /**
@@ -535,12 +649,6 @@ export function usePurchaseOrders() {
     const now = new Date()
     return now > expectedDate
   }
-
-  // =============================================
-  // INITIALIZATION - УБИРАЕМ АВТОЗАГРУЗКУ
-  // =============================================
-
-  // ИСПРАВЛЕНИЕ: Убираем автозагрузку из синхронного кода
 
   // =============================================
   // RETURN PUBLIC API
@@ -604,6 +712,10 @@ export function usePurchaseOrders() {
     formatCurrency,
     formatDate,
     getOrderAge,
-    isOverdueForDelivery
+    isOverdueForDelivery,
+
+    // NEW: Исправления для Create Orders
+    removeItemsFromSuggestions,
+    updateRequestsStatus
   }
 }
