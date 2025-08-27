@@ -2,6 +2,7 @@
 
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
+import { useSupplierStorageIntegration } from './integrations/storageIntegration'
 import { DebugUtils } from '@/utils'
 import type {
   ProcurementRequest,
@@ -39,6 +40,7 @@ class SupplierService {
   private requests: ProcurementRequest[] = [...mockProcurementRequests]
   private orders: PurchaseOrder[] = [...mockPurchaseOrders]
   private receipts: Receipt[] = [...mockReceipts]
+  private storageIntegration = useSupplierStorageIntegration()
 
   // =============================================
   // PROCUREMENT REQUESTS METHODS
@@ -319,38 +321,100 @@ class SupplierService {
     return newReceipt
   }
 
-  async completeReceipt(id: string, data?: UpdateReceiptData): Promise<Receipt> {
-    await this.delay(300)
+  async startReceipt(purchaseOrderId: string, data: CreateReceiptData): Promise<Receipt> {
+    await this.delay(200)
 
-    const receipt = this.receipts.find(rec => rec.id === id)
+    const order = this.orders.find(o => o.id === purchaseOrderId)
+    if (!order) {
+      throw new Error(`Order with id ${purchaseOrderId} not found`)
+    }
+
+    const newReceipt: Receipt = {
+      id: `receipt-${Date.now()}`,
+      receiptNumber: this.generateReceiptNumber(),
+      purchaseOrderId,
+      deliveryDate: new Date().toISOString(),
+      receivedBy: data.receivedBy,
+      items: data.items.map(item => {
+        const orderItem = order.items.find(oi => oi.id === item.orderItemId)
+        if (!orderItem) {
+          throw new Error(`Order item with id ${item.orderItemId} not found`)
+        }
+
+        return {
+          id: `receipt-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          orderItemId: item.orderItemId,
+          itemId: orderItem.itemId,
+          itemName: orderItem.itemName,
+          orderedQuantity: orderItem.orderedQuantity,
+          receivedQuantity: item.receivedQuantity,
+          orderedPrice: orderItem.pricePerUnit,
+          actualPrice: item.actualPrice,
+          notes: item.notes
+        }
+      }),
+      hasDiscrepancies: this.calculateDiscrepancies(data, order),
+      status: 'draft',
+      notes: data.notes,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    this.receipts.unshift(newReceipt)
+
+    DebugUtils.info(MODULE_NAME, 'Receipt started', {
+      receiptId: newReceipt.id,
+      receiptNumber: newReceipt.receiptNumber,
+      orderId: purchaseOrderId,
+      itemCount: newReceipt.items.length,
+      hasDiscrepancies: newReceipt.hasDiscrepancies
+    })
+
+    return newReceipt
+  }
+
+  async completeReceipt(id: string, notes?: string): Promise<Receipt> {
+    await this.delay(200)
+
+    const receipt = this.receipts.find(r => r.id === id)
     if (!receipt) {
       throw new Error(`Receipt with id ${id} not found`)
     }
 
-    // Update receipt data if provided
-    if (data) {
-      Object.assign(receipt, data)
+    if (receipt.status !== 'draft') {
+      throw new Error('Only draft receipts can be completed')
     }
 
-    // Update receipt status
+    const order = this.orders.find(o => o.id === receipt.purchaseOrderId)
+    if (!order) {
+      throw new Error(`Order not found for receipt ${id}`)
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Completing receipt with storage integration', {
+      receiptId: id,
+      receiptNumber: receipt.receiptNumber,
+      orderId: order.id
+    })
+
+    // 1. Обновляем статус поступления
     receipt.status = 'completed'
+    receipt.notes = notes || receipt.notes
     receipt.updatedAt = new Date().toISOString()
 
-    // Update related order
-    const order = this.orders.find(ord => ord.id === receipt.purchaseOrderId)
-    if (order) {
+    // 2. Обновляем статус заказа
+    if (order.status === 'confirmed') {
       order.status = 'delivered'
       order.receiptId = receipt.id
       order.updatedAt = new Date().toISOString()
 
-      // Update order items with received quantities and prices
+      // Обновляем количества в заказе
       receipt.items.forEach(receiptItem => {
         const orderItem = order.items.find(oi => oi.id === receiptItem.orderItemId)
         if (orderItem) {
           orderItem.receivedQuantity = receiptItem.receivedQuantity
           orderItem.status = 'received'
 
-          // Update price if changed
+          // Обновляем цену если изменилась
           if (receiptItem.actualPrice && receiptItem.actualPrice !== receiptItem.orderedPrice) {
             orderItem.pricePerUnit = receiptItem.actualPrice
             orderItem.totalPrice = receiptItem.receivedQuantity * receiptItem.actualPrice
@@ -359,7 +423,7 @@ class SupplierService {
         }
       })
 
-      // Recalculate total amount
+      // Пересчитываем общую сумму заказа
       order.totalAmount = order.items.reduce(
         (sum, item) => sum + (item.receivedQuantity || item.orderedQuantity) * item.pricePerUnit,
         0
@@ -367,31 +431,44 @@ class SupplierService {
       order.isEstimatedTotal = false
     }
 
-    // ✅ NEW: Create storage operation
+    // ✅ 3. Создаем операцию в Storage Store (НЕ блокируем если ошибка)
     try {
-      await this.createStorageOperation(receipt)
+      const operationId = await this.storageIntegration.createReceiptOperation(receipt, order)
+      receipt.storageOperationId = operationId
+
+      DebugUtils.info(MODULE_NAME, 'Storage operation created successfully', {
+        receiptId: id,
+        operationId
+      })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create storage operation for receipt', {
-        receiptId: receipt.id,
+      DebugUtils.error(MODULE_NAME, 'Storage operation failed, but receipt completed', {
+        receiptId: id,
         error
       })
-      // Don't throw - receipt is still valid even if storage fails
+      // НЕ бросаем ошибку - поступление все равно валидно
     }
 
-    // ✅ NEW: Update product prices if needed
+    // ✅ 4. Обновляем цены продуктов (НЕ блокируем если ошибка)
     try {
-      await this.updateProductPrices(receipt)
+      await this.storageIntegration.updateProductPrices(receipt)
+
+      DebugUtils.info(MODULE_NAME, 'Product prices updated successfully', {
+        receiptId: id
+      })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to update product prices from receipt', {
-        receiptId: receipt.id,
+      DebugUtils.error(MODULE_NAME, 'Price update failed, but receipt completed', {
+        receiptId: id,
         error
       })
-      // Don't throw - receipt is still valid even if price update fails
+      // НЕ бросаем ошибку - поступление все равно валидно
     }
 
-    DebugUtils.info(MODULE_NAME, 'Receipt completed with storage integration', {
+    DebugUtils.info(MODULE_NAME, 'Receipt completed successfully with full integration', {
       receiptId: receipt.id,
-      orderId: receipt.purchaseOrderId
+      receiptNumber: receipt.receiptNumber,
+      storageOperationId: receipt.storageOperationId,
+      orderId: order.id,
+      orderStatus: order.status
     })
 
     return receipt

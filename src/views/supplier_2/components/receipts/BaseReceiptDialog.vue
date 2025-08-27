@@ -1,145 +1,99 @@
-<!-- src/views/supplier_2/components/receipts/BaseReceiptDialog.vue -->
+<!-- src/views/supplier_2/components/receipts/BaseReceiptDialog.vue - ИСПРАВЛЕННАЯ ВЕРСИЯ -->
 <template>
   <v-dialog v-model="isOpen" max-width="1400px" persistent>
-    <v-card>
+    <v-card v-if="props.order" class="receipt-dialog">
       <!-- Header -->
       <v-card-title class="d-flex align-center justify-space-between pa-4 bg-primary text-white">
         <div class="d-flex align-center">
           <v-icon icon="mdi-truck-check" class="mr-3" size="24" />
           <div>
             <div class="text-h6 font-weight-bold">
-              {{
-                isEditMode
-                  ? `Edit Receipt ${currentReceipt?.receiptNumber}`
-                  : 'Start Receipt Process'
-              }}
+              {{ isEditMode ? 'Edit Receipt' : 'Create Receipt' }}
             </div>
             <div class="text-caption opacity-90">
-              {{ order?.orderNumber }} - {{ order?.supplierName }}
+              Order: {{ props.order.orderNumber }} | {{ props.order.supplierName }}
             </div>
           </div>
         </div>
-
         <v-btn icon="mdi-close" variant="text" color="white" @click="closeDialog" />
       </v-card-title>
 
-      <v-card-text class="pa-0">
-        <!-- Receipt Header Info -->
-        <div class="pa-4 border-b bg-surface">
+      <!-- Loading State -->
+      <div v-if="isLoading" class="pa-8 text-center">
+        <v-progress-circular indeterminate color="primary" size="48" class="mb-4" />
+        <div class="text-h6 mb-2">Initializing Receipt...</div>
+        <div class="text-body-2 text-medium-emphasis">Setting up items from purchase order</div>
+      </div>
+
+      <!-- Main Content -->
+      <div v-else>
+        <!-- Receipt Info -->
+        <div class="pa-4 bg-surface border-b">
           <v-row>
-            <v-col cols="12" md="3">
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 font-weight-bold mb-2">Receipt Information</div>
               <v-text-field
                 v-model="receiptForm.receivedBy"
                 label="Received By"
+                prepend-inner-icon="mdi-account"
                 variant="outlined"
                 density="compact"
-                :readonly="isEditMode && currentReceipt?.status === 'completed'"
-              />
-            </v-col>
-
-            <v-col cols="12" md="3">
-              <v-text-field
-                v-model="receiptForm.deliveryDate"
-                label="Delivery Date"
-                type="datetime-local"
-                variant="outlined"
-                density="compact"
-                :readonly="isEditMode && currentReceipt?.status === 'completed'"
+                :disabled="isCompleted"
+                :rules="[v => !!v || 'Required']"
               />
             </v-col>
 
             <v-col cols="12" md="6">
-              <v-textarea
-                v-model="receiptForm.notes"
-                label="Receipt Notes"
+              <div class="text-subtitle-2 font-weight-bold mb-2">Delivery Date</div>
+              <v-text-field
+                v-model="receiptForm.deliveryDate"
+                label="Delivery Date"
+                type="datetime-local"
+                prepend-inner-icon="mdi-calendar"
                 variant="outlined"
                 density="compact"
-                rows="1"
-                auto-grow
-                :readonly="isEditMode && currentReceipt?.status === 'completed'"
+                :disabled="isCompleted"
               />
             </v-col>
           </v-row>
-        </div>
 
-        <!-- Order Summary -->
-        <div class="pa-4 border-b">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <div class="text-subtitle-1 font-weight-bold">Order Summary</div>
-            <div class="d-flex gap-2">
-              <v-chip size="small" :color="getOrderStatusColor(order?.status)" variant="tonal">
-                {{ order?.status }}
-              </v-chip>
-              <v-chip
-                size="small"
-                :color="getPaymentStatusColor(order?.paymentStatus)"
-                variant="flat"
-              >
-                {{ order?.paymentStatus }}
-              </v-chip>
-            </div>
+          <!-- Order Summary -->
+          <div class="d-flex align-center gap-4 mt-2">
+            <v-chip color="info" size="small">
+              <v-icon start icon="mdi-package" />
+              {{ props.order.items.length }} items ordered
+            </v-chip>
+            <v-chip color="success" size="small">
+              <v-icon start icon="mdi-currency-usd" />
+              {{ formatCurrency(props.order.totalAmount) }} total
+            </v-chip>
+            <v-chip
+              v-if="props.order.status"
+              :color="getStatusColor(props.order.status)"
+              size="small"
+            >
+              {{ props.order.status }}
+            </v-chip>
           </div>
-
-          <v-row dense>
-            <v-col cols="6" md="3">
-              <div class="text-caption text-medium-emphasis">Order Date</div>
-              <div class="text-body-2">{{ formatDate(order?.orderDate) }}</div>
-            </v-col>
-
-            <v-col cols="6" md="3">
-              <div class="text-caption text-medium-emphasis">Expected Delivery</div>
-              <div class="text-body-2">
-                {{
-                  order?.expectedDeliveryDate ? formatDate(order.expectedDeliveryDate) : 'Not set'
-                }}
-              </div>
-            </v-col>
-
-            <v-col cols="6" md="3">
-              <div class="text-caption text-medium-emphasis">Original Total</div>
-              <div class="text-body-2 font-weight-bold">
-                {{ formatCurrency(order?.totalAmount || 0) }}
-              </div>
-            </v-col>
-
-            <v-col cols="6" md="3">
-              <div class="text-caption text-medium-emphasis">Actual Total</div>
-              <div class="text-body-2 font-weight-bold" :class="getActualTotalClass()">
-                {{ formatCurrency(calculatedActualTotal) }}
-              </div>
-            </v-col>
-          </v-row>
         </div>
 
         <!-- Financial Impact Summary -->
-        <div v-if="hasDiscrepancies" class="pa-4 border-b bg-warning-lighten-5">
+        <div v-if="hasDiscrepancies" class="pa-4 bg-warning-lighten-5 border-b">
           <div class="d-flex align-center justify-space-between">
             <div class="d-flex align-center">
               <v-icon icon="mdi-alert-triangle" color="warning" class="mr-2" />
-              <div class="text-subtitle-2 font-weight-bold">Discrepancies Detected</div>
-            </div>
-
-            <div class="text-right">
-              <div class="text-caption text-medium-emphasis">Financial Impact</div>
-              <div class="text-h6 font-weight-bold" :class="getFinancialImpactClass()">
-                {{ formatFinancialImpact() }}
+              <div>
+                <div class="text-subtitle-2 font-weight-bold text-warning">
+                  {{ discrepantItemsCount }} Discrepancies Detected
+                </div>
+                <div class="text-body-2">
+                  {{ quantityDiscrepancyCount }} quantity, {{ priceDiscrepancyCount }} price
+                  discrepancies
+                </div>
               </div>
             </div>
-          </div>
-
-          <div class="mt-2">
-            <v-chip
-              v-if="hasQuantityDiscrepancies"
-              size="small"
-              color="info"
-              variant="tonal"
-              class="mr-2"
-            >
-              {{ quantityDiscrepancyCount }} quantity issues
-            </v-chip>
-
-            <v-chip v-if="hasPriceDiscrepancies" size="small" color="warning" variant="tonal">
-              {{ priceDiscrepancyCount }} price changes
+            <v-chip :color="financialImpact >= 0 ? 'success' : 'error'" variant="flat" size="large">
+              {{ formatFinancialImpact() }}
             </v-chip>
           </div>
         </div>
@@ -201,35 +155,17 @@
               <v-text-field
                 v-model.number="item.receivedQuantity"
                 type="number"
+                step="0.001"
+                min="0"
                 variant="outlined"
                 density="compact"
-                hide-details
-                min="0"
-                step="0.1"
-                :readonly="isCompleted"
-                :class="{ 'qty-discrepancy': hasItemQuantityDiscrepancy(item) }"
-                @update:model-value="updateItemCalculations(item)"
+                hide-details="auto"
+                :disabled="isCompleted"
+                :class="{
+                  'qty-discrepancy': hasItemQuantityDiscrepancy(item)
+                }"
+                @blur="updateItemCalculations(item)"
               />
-            </template>
-
-            <!-- Quantity Comparison -->
-            <template #[`item.quantityComparison`]="{ item }">
-              <div class="text-center">
-                <div class="text-body-2">
-                  <span :class="getQuantityComparisonClass(item)">
-                    {{ getQuantityDifferenceText(item) }}
-                  </span>
-                </div>
-                <div v-if="hasItemQuantityDiscrepancy(item)" class="text-caption">
-                  <v-icon
-                    :icon="getQuantityDifferenceIcon(item)"
-                    :color="getQuantityComparisonColor(item)"
-                    size="12"
-                    class="mr-1"
-                  />
-                  {{ getQuantityDifferencePercent(item) }}
-                </div>
-              </div>
             </template>
 
             <!-- Actual Price Input -->
@@ -237,156 +173,135 @@
               <v-text-field
                 v-model.number="item.actualPrice"
                 type="number"
+                step="0.01"
+                min="0"
                 variant="outlined"
                 density="compact"
-                hide-details
-                min="0"
-                step="1000"
-                :readonly="isCompleted"
-                :class="{ 'price-discrepancy': hasItemPriceDiscrepancy(item) }"
-                @update:model-value="updateItemCalculations(item)"
+                hide-details="auto"
+                :disabled="isCompleted"
+                :placeholder="formatCurrency(item.orderedPrice)"
+                :class="{
+                  'price-discrepancy': hasItemPriceDiscrepancy(item)
+                }"
+                @blur="updateItemCalculations(item)"
               />
-            </template>
-
-            <!-- Price Comparison -->
-            <template #[`item.priceComparison`]="{ item }">
-              <div class="text-center">
-                <div v-if="hasItemPriceDiscrepancy(item)" class="text-body-2">
-                  <span :class="getPriceComparisonClass(item)">
-                    {{ getPriceDifferenceText(item) }}
-                  </span>
-                </div>
-                <div v-else class="text-body-2 text-success">Same price</div>
-              </div>
             </template>
 
             <!-- Line Total -->
             <template #[`item.lineTotal`]="{ item }">
-              <div class="text-right">
-                <div class="text-body-2 font-weight-bold">
-                  {{ formatCurrency(calculateLineTotal(item)) }}
-                </div>
+              <div class="text-end">
+                <div class="font-weight-bold">{{ formatCurrency(calculateLineTotal(item)) }}</div>
                 <div
                   v-if="hasItemDiscrepancy(item)"
                   class="text-caption"
-                  :class="getLineTotalImpactClass(item)"
+                  :class="getLineTotalDiffClass(item)"
                 >
-                  {{ formatLineTotalImpact(item) }}
+                  {{ formatLineTotalDiff(item) }}
                 </div>
               </div>
             </template>
 
-            <!-- Item Status -->
+            <!-- Status -->
             <template #[`item.status`]="{ item }">
-              <v-chip size="small" :color="getItemStatusColor(item)" variant="tonal">
-                <v-icon :icon="getItemStatusIcon(item)" size="12" class="mr-1" />
+              <v-chip
+                size="small"
+                :color="getItemStatusColor(item)"
+                :variant="hasItemDiscrepancy(item) ? 'flat' : 'tonal'"
+              >
+                <v-icon v-if="hasItemDiscrepancy(item)" start :icon="getItemStatusIcon(item)" />
                 {{ getItemStatusText(item) }}
               </v-chip>
             </template>
 
-            <!-- Item Notes -->
+            <!-- Notes Input -->
             <template #[`item.notes`]="{ item }">
               <v-text-field
                 v-model="item.notes"
+                placeholder="Add notes..."
                 variant="outlined"
                 density="compact"
-                hide-details
-                placeholder="Add notes..."
-                :readonly="isCompleted"
+                hide-details="auto"
+                :disabled="isCompleted"
               />
             </template>
           </v-data-table>
-
-          <!-- Receipt Totals -->
-          <div class="mt-4 pa-3 bg-surface rounded border">
-            <v-row align="center">
-              <v-col cols="12" md="8">
-                <div class="d-flex gap-4">
-                  <div class="text-center">
-                    <div class="text-caption text-medium-emphasis">Total Items</div>
-                    <div class="text-h6 font-weight-bold">{{ receiptForm.items.length }}</div>
-                  </div>
-
-                  <v-divider vertical />
-
-                  <div class="text-center">
-                    <div class="text-caption text-medium-emphasis">Items with Issues</div>
-                    <div class="text-h6 font-weight-bold text-warning">
-                      {{ discrepantItemsCount }}
-                    </div>
-                  </div>
-
-                  <v-divider vertical />
-
-                  <div class="text-center">
-                    <div class="text-caption text-medium-emphasis">Original Total</div>
-                    <div class="text-h6">{{ formatCurrency(order?.totalAmount || 0) }}</div>
-                  </div>
-                </div>
-              </v-col>
-
-              <v-col cols="12" md="4">
-                <div class="text-right">
-                  <div class="text-caption text-medium-emphasis">Actual Receipt Total</div>
-                  <div class="text-h5 font-weight-bold" :class="getActualTotalClass()">
-                    {{ formatCurrency(calculatedActualTotal) }}
-                  </div>
-                  <div
-                    v-if="financialImpact !== 0"
-                    class="text-body-2"
-                    :class="getFinancialImpactClass()"
-                  >
-                    {{ formatFinancialImpact() }} vs ordered
-                  </div>
-                </div>
-              </v-col>
-            </v-row>
-          </div>
         </div>
-      </v-card-text>
+
+        <!-- Summary -->
+        <div class="pa-4 bg-surface border-t">
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-textarea
+                v-model="receiptForm.notes"
+                label="Receipt Notes"
+                placeholder="Add any additional notes about this receipt..."
+                variant="outlined"
+                density="compact"
+                rows="3"
+                :disabled="isCompleted"
+              />
+            </v-col>
+
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 font-weight-bold mb-3">Receipt Summary</div>
+              <div class="d-flex justify-space-between mb-2">
+                <span>Items processed:</span>
+                <span class="font-weight-bold">{{ receiptForm.items.length }}</span>
+              </div>
+              <div class="d-flex justify-space-between mb-2">
+                <span>Original total:</span>
+                <span>{{ formatCurrency(props.order.totalAmount) }}</span>
+              </div>
+              <div class="d-flex justify-space-between mb-2">
+                <span>Actual total:</span>
+                <span class="font-weight-bold">{{ formatCurrency(calculatedActualTotal) }}</span>
+              </div>
+              <v-divider class="my-2" />
+              <div class="d-flex justify-space-between">
+                <span class="font-weight-bold">Financial impact:</span>
+                <span
+                  class="font-weight-bold"
+                  :class="financialImpact >= 0 ? 'text-success' : 'text-error'"
+                >
+                  {{ formatFinancialImpact() }}
+                </span>
+              </div>
+            </v-col>
+          </v-row>
+        </div>
+      </div>
 
       <!-- Actions -->
-      <v-card-actions class="pa-4 border-t">
-        <div class="d-flex align-center">
-          <v-icon
-            :icon="hasDiscrepancies ? 'mdi-alert-triangle' : 'mdi-check-circle'"
-            :color="hasDiscrepancies ? 'warning' : 'success'"
-            class="mr-2"
-          />
-          <div class="text-body-2">
-            {{
-              hasDiscrepancies
-                ? 'Discrepancies detected - review before completing'
-                : 'No discrepancies found'
-            }}
-          </div>
+      <v-card-actions class="pa-4 bg-surface border-t">
+        <div v-if="hasDiscrepancies" class="d-flex align-center mr-4">
+          <v-icon icon="mdi-alert-triangle" color="warning" size="20" class="mr-2" />
+          <span class="text-body-2 text-warning">{{ discrepantItemsCount }} discrepancies</span>
         </div>
 
         <v-spacer />
 
-        <v-btn color="grey" variant="outlined" @click="closeDialog">Cancel</v-btn>
+        <v-btn @click="closeDialog">Cancel</v-btn>
 
         <v-btn
-          v-if="!isEditMode"
+          v-if="!isCompleted"
           color="primary"
           variant="outlined"
-          prepend-icon="mdi-content-save"
           :disabled="!canSave"
           :loading="isSaving"
-          @click="saveDraft"
+          @click="saveReceipt"
         >
           Save Draft
         </v-btn>
 
         <v-btn
+          v-if="!isCompleted"
           color="success"
           variant="flat"
-          prepend-icon="mdi-check-circle"
           :disabled="!canComplete"
           :loading="isCompleting"
-          @click="completeReceipt"
+          @click="showConfirmDialog = true"
         >
-          {{ isEditMode ? 'Update & Complete' : 'Complete Receipt' }}
+          {{ hasDiscrepancies ? 'Complete with Discrepancies' : 'Complete Receipt' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -429,6 +344,7 @@
               <li>Create a storage operation to update inventory</li>
               <li>Update the purchase order status to "delivered"</li>
               <li>Lock this receipt from further editing</li>
+              <li>Update product costs based on actual prices</li>
             </ul>
           </div>
         </v-card-text>
@@ -446,13 +362,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
+import { useProductsStore } from '@/stores/productsStore'
 import type {
   PurchaseOrder,
   Receipt,
-  CreateReceiptData,
-  ReceiptItem
+  ReceiptItem,
+  CreateReceiptData
 } from '@/stores/supplier_2/types'
 
 // =============================================
@@ -475,17 +392,18 @@ const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
 
 // =============================================
-// COMPOSABLES
+// COMPOSABLES & STORES
 // =============================================
 
 const {
   startReceipt,
   completeReceipt: completeReceiptAction,
-  updateReceiptItem,
+  updateReceipt,
   formatCurrency,
-  getStatusColor,
-  calculateDiscrepancies
+  getStatusColor
 } = useReceipts()
+
+const productsStore = useProductsStore()
 
 // =============================================
 // LOCAL STATE
@@ -501,12 +419,11 @@ const isSaving = ref(false)
 const isCompleting = ref(false)
 const showConfirmDialog = ref(false)
 
-// ИСПРАВЛЕНИЕ: Правильная структура ReceiptItem
+// ✅ ИСПРАВЛЕНО: Правильная структура формы
 interface ReceiptFormItem extends ReceiptItem {
-  unit?: string // Добавляем unit для совместимости
+  unit?: string
 }
 
-// Form state
 const receiptForm = ref({
   receivedBy: 'Warehouse Manager',
   deliveryDate: new Date().toISOString().slice(0, 16),
@@ -514,7 +431,6 @@ const receiptForm = ref({
   items: [] as ReceiptFormItem[]
 })
 
-// Current receipt state
 const currentReceipt = ref<Receipt | null>(null)
 
 // =============================================
@@ -564,6 +480,8 @@ const discrepantItemsCount = computed(() => {
 
 const canSave = computed(() => {
   return (
+    receiptForm.value.receivedBy &&
+    typeof receiptForm.value.receivedBy === 'string' &&
     receiptForm.value.receivedBy.trim() !== '' &&
     receiptForm.value.items.length > 0 &&
     !isCompleted.value
@@ -584,362 +502,362 @@ const canComplete = computed(() => {
 
 const itemHeaders = [
   { title: 'Item', key: 'itemInfo', sortable: false, width: '200px' },
-  { title: 'Received Qty', key: 'receivedQuantity', sortable: false, width: '130px' },
-  { title: 'Qty Comparison', key: 'quantityComparison', sortable: false, width: '140px' },
-  { title: 'Actual Price', key: 'actualPrice', sortable: false, width: '130px' },
-  { title: 'Price Change', key: 'priceComparison', sortable: false, width: '120px' },
-  { title: 'Line Total', key: 'lineTotal', sortable: false, width: '130px', align: 'end' },
-  { title: 'Status', key: 'status', sortable: false, width: '120px' },
+  { title: 'Received Qty', key: 'receivedQuantity', sortable: false, width: '120px' },
+  { title: 'Actual Price', key: 'actualPrice', sortable: false, width: '120px' },
+  { title: 'Line Total', key: 'lineTotal', sortable: false, width: '140px', align: 'end' },
+  { title: 'Status', key: 'status', sortable: false, width: '140px' },
   { title: 'Notes', key: 'notes', sortable: false, width: '200px' }
 ]
 
 // =============================================
-// METHODS
+// METHODS - Initialization
 // =============================================
 
 async function initializeReceipt() {
   if (!props.order) return
 
-  try {
-    isLoading.value = true
+  console.log('BaseReceiptDialog: Initializing receipt', {
+    orderId: props.order.id,
+    isEditMode: isEditMode.value
+  })
 
+  isLoading.value = true
+  try {
     if (isEditMode.value && props.receipt) {
-      // Edit existing receipt
+      // Режим редактирования - загружаем существующий receipt
+      console.log('BaseReceiptDialog: Loading existing receipt for editing', props.receipt.id)
       currentReceipt.value = props.receipt
-      receiptForm.value = {
-        receivedBy: props.receipt.receivedBy,
-        deliveryDate: props.receipt.deliveryDate.slice(0, 16),
-        notes: props.receipt.notes || '',
-        items: props.receipt.items.map(item => ({
-          ...item,
-          unit: getItemUnit(item.itemId) // Добавляем unit
+      setupReceiptForm()
+    } else {
+      // Режим создания - создаем новый receipt
+      console.log('BaseReceiptDialog: Creating new receipt from order', props.order.id)
+
+      const createData: CreateReceiptData = {
+        purchaseOrderId: props.order.id,
+        receivedBy: receiptForm.value.receivedBy,
+        items: props.order.items.map(orderItem => ({
+          orderItemId: orderItem.id,
+          receivedQuantity: orderItem.orderedQuantity, // Предзаполняем заказанным количеством
+          actualPrice: undefined, // Оставляем пустым - будет использоваться orderedPrice
+          notes: ''
         }))
       }
-    } else {
-      // Start new receipt - ИСПРАВЛЕНИЕ: создаем items из order
-      receiptForm.value.items = props.order.items.map(orderItem => ({
-        id: `receipt-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        orderItemId: orderItem.id,
-        itemId: orderItem.itemId,
-        itemName: orderItem.itemName,
-        orderedQuantity: orderItem.orderedQuantity,
-        receivedQuantity: orderItem.orderedQuantity, // Start with ordered quantity
-        orderedPrice: orderItem.pricePerUnit,
-        actualPrice: orderItem.pricePerUnit, // Start with ordered price
-        notes: '',
-        unit: orderItem.unit
-      }))
+
+      const newReceipt = await startReceipt(props.order.id, createData)
+      currentReceipt.value = newReceipt
+      setupReceiptForm()
     }
-  } catch (error: any) {
-    console.error('Error initializing receipt:', error)
-    emits('error', error.message || 'Failed to initialize receipt')
+
+    console.log('BaseReceiptDialog: Receipt initialized successfully', {
+      receiptId: currentReceipt.value?.id,
+      itemsCount: receiptForm.value.items.length
+    })
+  } catch (error) {
+    console.error('BaseReceiptDialog: Failed to initialize receipt', error)
+    emits('error', `Failed to initialize receipt: ${error}`)
+    closeDialog()
   } finally {
     isLoading.value = false
   }
 }
 
-function autoFillFromOrder() {
-  if (!props.order) return
+function setupReceiptForm() {
+  if (!currentReceipt.value || !props.order) return
 
-  receiptForm.value.items = receiptForm.value.items.map(item => ({
-    ...item,
-    receivedQuantity: item.orderedQuantity,
-    actualPrice: item.orderedPrice
-  }))
+  console.log('BaseReceiptDialog: Setting up form with receipt data', {
+    receiptId: currentReceipt.value.id,
+    itemsCount: currentReceipt.value.items.length
+  })
+
+  // Заполняем основную информацию с проверками типов
+  receiptForm.value.receivedBy = currentReceipt.value.receivedBy || 'Warehouse Manager'
+  receiptForm.value.deliveryDate =
+    currentReceipt.value.deliveryDate || new Date().toISOString().slice(0, 16)
+  receiptForm.value.notes = currentReceipt.value.notes || ''
+
+  // Заполняем items
+  receiptForm.value.items = currentReceipt.value.items.map(receiptItem => {
+    const orderItem = props.order!.items.find(oi => oi.id === receiptItem.orderItemId)
+
+    return {
+      ...receiptItem,
+      unit: orderItem?.unit || getItemUnit(receiptItem.itemId),
+      actualPrice: receiptItem.actualPrice || undefined
+    } as ReceiptFormItem
+  })
+
+  console.log('BaseReceiptDialog: Form setup complete', {
+    itemsCount: receiptForm.value.items.length,
+    receivedBy: receiptForm.value.receivedBy,
+    hasDiscrepancies: hasDiscrepancies.value
+  })
 }
 
-function resetToOriginal() {
-  if (!props.order) return
+// =============================================
+// METHODS - Actions
+// =============================================
 
-  receiptForm.value.items = receiptForm.value.items.map(item => ({
-    ...item,
-    receivedQuantity: item.orderedQuantity,
-    actualPrice: item.orderedPrice,
-    notes: ''
-  }))
-}
+async function saveReceipt() {
+  if (!currentReceipt.value || !canSave.value) return
 
-function updateItemCalculations(item: ReceiptFormItem) {
-  // Ensure actualPrice is set
-  if (item.actualPrice === undefined || item.actualPrice === null) {
-    item.actualPrice = item.orderedPrice
-  }
+  console.log('BaseReceiptDialog: Saving receipt', currentReceipt.value.id)
 
-  // Validate received quantity
-  if (item.receivedQuantity < 0) {
-    item.receivedQuantity = 0
-  }
-}
-
-async function saveDraft() {
-  if (!canSave.value) return
-
+  isSaving.value = true
   try {
-    isSaving.value = true
-
-    // ИСПРАВЛЕНИЕ: Сначала создаем receipt если не в edit mode
-    if (!currentReceipt.value) {
-      const receiptData: CreateReceiptData = {
-        purchaseOrderId: props.order!.id,
-        receivedBy: receiptForm.value.receivedBy,
-        items: receiptForm.value.items.map(item => ({
-          orderItemId: item.orderItemId,
-          receivedQuantity: item.receivedQuantity,
-          actualPrice: item.actualPrice !== item.orderedPrice ? item.actualPrice : undefined,
-          notes: item.notes || undefined
-        })),
-        notes: receiptForm.value.notes || undefined
-      }
-
-      currentReceipt.value = await startReceipt(props.order!.id, receiptForm.value.receivedBy)
+    const updateData = {
+      notes: receiptForm.value.notes
+      // TODO: Обновить items если изменились
     }
 
-    // Update receipt items individually
-    for (const item of receiptForm.value.items) {
-      await updateReceiptItem(
-        currentReceipt.value.id,
-        item.id,
-        item.receivedQuantity,
-        item.actualPrice,
-        item.notes
-      )
-    }
-
-    emits('success', 'Receipt draft saved successfully')
-  } catch (error: any) {
-    console.error('Error saving draft:', error)
-    emits('error', error.message || 'Failed to save draft')
+    await updateReceipt(currentReceipt.value.id, updateData)
+    emits('success', `Receipt saved successfully`)
+  } catch (error) {
+    console.error('BaseReceiptDialog: Failed to save receipt', error)
+    emits('error', `Failed to save receipt: ${error}`)
   } finally {
     isSaving.value = false
   }
 }
 
-function completeReceipt() {
-  showConfirmDialog.value = true
-}
-
 async function confirmComplete() {
-  if (!canComplete.value) return
+  if (!currentReceipt.value || !canComplete.value) return
 
+  console.log('BaseReceiptDialog: Completing receipt', {
+    receiptId: currentReceipt.value.id,
+    hasDiscrepancies: hasDiscrepancies.value,
+    financialImpact: financialImpact.value
+  })
+
+  isCompleting.value = true
   try {
-    isCompleting.value = true
+    // Обновляем текущий receipt с данными из формы перед завершением
+    currentReceipt.value.receivedBy = receiptForm.value.receivedBy
+    currentReceipt.value.deliveryDate = receiptForm.value.deliveryDate
+    currentReceipt.value.notes = receiptForm.value.notes
 
-    // Сначала сохраняем draft если нужно
-    if (!currentReceipt.value) {
-      await saveDraft()
-    }
+    // Обновляем items с актуальными данными
+    receiptForm.value.items.forEach(formItem => {
+      const receiptItem = currentReceipt.value!.items.find(ri => ri.id === formItem.id)
+      if (receiptItem) {
+        receiptItem.receivedQuantity = formItem.receivedQuantity
+        receiptItem.actualPrice = formItem.actualPrice
+        receiptItem.notes = formItem.notes
+      }
+    })
 
-    if (currentReceipt.value) {
-      // Then complete the receipt
-      await completeReceiptAction(currentReceipt.value.id)
+    const completedReceipt = await completeReceiptAction(
+      currentReceipt.value.id,
+      receiptForm.value.notes
+    )
 
-      showConfirmDialog.value = false
-      emits('success', `Receipt ${currentReceipt.value.receiptNumber} completed successfully`)
-      closeDialog()
-    }
-  } catch (error: any) {
-    console.error('Error completing receipt:', error)
-    emits('error', error.message || 'Failed to complete receipt')
+    console.log('BaseReceiptDialog: Receipt completed successfully', {
+      receiptId: completedReceipt.id,
+      receiptNumber: completedReceipt.receiptNumber,
+      storageOperationId: completedReceipt.storageOperationId
+    })
+
+    emits(
+      'success',
+      `Receipt ${completedReceipt.receiptNumber} completed and integrated with storage`
+    )
+
+    showConfirmDialog.value = false
+    closeDialog()
+  } catch (error) {
+    console.error('BaseReceiptDialog: Failed to complete receipt', error)
+    emits('error', `Failed to complete receipt: ${error}`)
   } finally {
     isCompleting.value = false
   }
 }
 
-function closeDialog() {
-  isOpen.value = false
+function autoFillFromOrder() {
+  if (!props.order || isCompleted.value) return
 
-  // Reset form after animation
-  setTimeout(() => {
-    receiptForm.value = {
-      receivedBy: 'Warehouse Manager',
-      deliveryDate: new Date().toISOString().slice(0, 16),
-      notes: '',
-      items: []
+  console.log('BaseReceiptDialog: Auto-filling quantities from order')
+
+  receiptForm.value.items.forEach(item => {
+    const orderItem = props.order!.items.find(oi => oi.id === item.orderItemId)
+    if (orderItem) {
+      item.receivedQuantity = orderItem.orderedQuantity
+      item.actualPrice = undefined // Очищаем, чтобы использовался orderedPrice
     }
-    currentReceipt.value = null
-  }, 300)
+  })
+
+  console.log('BaseReceiptDialog: Auto-fill completed')
+}
+
+function resetToOriginal() {
+  if (!props.order || !currentReceipt.value || isCompleted.value) return
+
+  console.log('BaseReceiptDialog: Resetting form to original values')
+
+  // Возвращаем к исходным значениям receipt
+  setupReceiptForm()
+
+  console.log('BaseReceiptDialog: Reset completed')
+}
+
+function closeDialog() {
+  console.log('BaseReceiptDialog: Closing dialog')
+
+  // Очищаем состояние
+  currentReceipt.value = null
+  receiptForm.value.items = []
+  showConfirmDialog.value = false
+  isLoading.value = false
+  isSaving.value = false
+  isCompleting.value = false
+
+  emits('update:modelValue', false)
 }
 
 // =============================================
-// HELPER FUNCTIONS
+// METHODS - Item Calculations
 // =============================================
 
 function calculateLineTotal(item: ReceiptFormItem): number {
-  const price = item.actualPrice !== undefined ? item.actualPrice : item.orderedPrice
+  const price = item.actualPrice || item.orderedPrice
   return item.receivedQuantity * price
 }
+
+function updateItemCalculations(item: ReceiptFormItem) {
+  // Можно добавить дополнительную логику пересчета
+  console.log('BaseReceiptDialog: Item calculations updated', {
+    itemId: item.itemId,
+    receivedQuantity: item.receivedQuantity,
+    actualPrice: item.actualPrice,
+    lineTotal: calculateLineTotal(item)
+  })
+}
+
+// =============================================
+// METHODS - Discrepancy Analysis
+// =============================================
 
 function hasItemDiscrepancy(item: ReceiptFormItem): boolean {
   return hasItemQuantityDiscrepancy(item) || hasItemPriceDiscrepancy(item)
 }
 
 function hasItemQuantityDiscrepancy(item: ReceiptFormItem): boolean {
-  return Math.abs(item.receivedQuantity - item.orderedQuantity) > 0.01
+  const diff = Math.abs(item.receivedQuantity - item.orderedQuantity)
+  return diff > 0.001 // Учитываем погрешности с плавающей точкой
 }
 
 function hasItemPriceDiscrepancy(item: ReceiptFormItem): boolean {
-  return item.actualPrice !== undefined && Math.abs(item.actualPrice - item.orderedPrice) > 0.01
-}
-
-function getItemStatusText(item: ReceiptFormItem): string {
-  if (!hasItemDiscrepancy(item)) return 'OK'
-
-  const hasQty = hasItemQuantityDiscrepancy(item)
-  const hasPrice = hasItemPriceDiscrepancy(item)
-
-  if (hasQty && hasPrice) return 'Both Issues'
-  if (hasQty) return 'Qty Issue'
-  if (hasPrice) return 'Price Issue'
-  return 'OK'
+  if (!item.actualPrice) return false
+  const diff = Math.abs(item.actualPrice - item.orderedPrice)
+  return diff > 0.01 // Учитываем погрешности в копейках
 }
 
 function getItemStatusColor(item: ReceiptFormItem): string {
-  const status = getItemStatusText(item)
-  if (status === 'OK') return 'success'
-  if (status === 'Both Issues') return 'error'
-  return 'warning'
+  if (!hasItemDiscrepancy(item)) return 'success'
+  if (hasItemQuantityDiscrepancy(item) && hasItemPriceDiscrepancy(item)) return 'error'
+  if (hasItemQuantityDiscrepancy(item)) return 'warning'
+  if (hasItemPriceDiscrepancy(item)) return 'info'
+  return 'success'
 }
 
 function getItemStatusIcon(item: ReceiptFormItem): string {
-  const status = getItemStatusText(item)
-  if (status === 'OK') return 'mdi-check-circle'
-  if (status === 'Both Issues') return 'mdi-alert-circle'
-  return 'mdi-alert-triangle'
+  if (hasItemQuantityDiscrepancy(item) && hasItemPriceDiscrepancy(item)) {
+    return 'mdi-alert-circle'
+  }
+  if (hasItemQuantityDiscrepancy(item)) return 'mdi-scale'
+  if (hasItemPriceDiscrepancy(item)) return 'mdi-currency-usd'
+  return 'mdi-check'
 }
 
-function getQuantityDifferenceText(item: ReceiptFormItem): string {
-  const diff = item.receivedQuantity - item.orderedQuantity
-  if (Math.abs(diff) < 0.01) return 'Exact'
-  return diff > 0 ? `+${diff.toFixed(2)}` : `${diff.toFixed(2)}`
+function getItemStatusText(item: ReceiptFormItem): string {
+  if (hasItemQuantityDiscrepancy(item) && hasItemPriceDiscrepancy(item)) {
+    return 'Qty & Price'
+  }
+  if (hasItemQuantityDiscrepancy(item)) return 'Quantity'
+  if (hasItemPriceDiscrepancy(item)) return 'Price'
+  return 'OK'
 }
 
-function getQuantityDifferencePercent(item: ReceiptFormItem): string {
-  if (item.orderedQuantity === 0) return '0%'
-  const percent = ((item.receivedQuantity - item.orderedQuantity) / item.orderedQuantity) * 100
-  return `${percent > 0 ? '+' : ''}${percent.toFixed(1)}%`
-}
-
-function getQuantityDifferenceIcon(item: ReceiptFormItem): string {
-  const diff = item.receivedQuantity - item.orderedQuantity
-  if (diff > 0) return 'mdi-arrow-up'
-  if (diff < 0) return 'mdi-arrow-down'
-  return 'mdi-equal'
-}
-
-function getQuantityComparisonClass(item: ReceiptFormItem): string {
-  const diff = item.receivedQuantity - item.orderedQuantity
-  if (Math.abs(diff) < 0.01) return 'text-success'
-  return diff > 0 ? 'text-info' : 'text-warning'
-}
-
-function getQuantityComparisonColor(item: ReceiptFormItem): string {
-  const diff = item.receivedQuantity - item.orderedQuantity
-  if (Math.abs(diff) < 0.01) return 'success'
-  return diff > 0 ? 'info' : 'warning'
-}
-
-function getPriceDifferenceText(item: ReceiptFormItem): string {
-  if (!item.actualPrice) return 'No change'
-  const diff = item.actualPrice - item.orderedPrice
-  return diff > 0 ? `+${formatCurrency(diff)}` : formatCurrency(diff)
-}
-
-function getPriceComparisonClass(item: ReceiptFormItem): string {
-  if (!item.actualPrice) return 'text-success'
-  const diff = item.actualPrice - item.orderedPrice
-  if (Math.abs(diff) < 0.01) return 'text-success'
-  return diff > 0 ? 'text-error' : 'text-success'
-}
-
-function formatLineTotalImpact(item: ReceiptFormItem): string {
+function formatLineTotalDiff(item: ReceiptFormItem): string {
   const originalTotal = item.orderedQuantity * item.orderedPrice
   const actualTotal = calculateLineTotal(item)
   const diff = actualTotal - originalTotal
 
-  if (Math.abs(diff) < 1000) return '±0'
-  return diff > 0 ? `+${formatCurrency(diff)}` : formatCurrency(diff)
+  const sign = diff >= 0 ? '+' : ''
+  return `${sign}${formatCurrency(diff)}`
 }
 
-function getLineTotalImpactClass(item: ReceiptFormItem): string {
+function getLineTotalDiffClass(item: ReceiptFormItem): string {
   const originalTotal = item.orderedQuantity * item.orderedPrice
   const actualTotal = calculateLineTotal(item)
   const diff = actualTotal - originalTotal
 
-  if (Math.abs(diff) < 1000) return 'text-success'
+  if (Math.abs(diff) < 0.01) return 'text-success'
   return diff > 0 ? 'text-error' : 'text-success'
 }
 
-function getActualTotalClass(): string {
-  if (Math.abs(financialImpact.value) < 1000) return 'text-success'
-  return financialImpact.value > 0 ? 'text-error' : 'text-success'
-}
+// =============================================
+// UTILITY METHODS
+// =============================================
 
-function getFinancialImpactClass(): string {
-  if (Math.abs(financialImpact.value) < 1000) return 'text-success'
-  return financialImpact.value > 0 ? 'text-error' : 'text-success'
+function getItemUnit(itemId: string | any): string {
+  // Проверяем что itemId это строка
+  const id = typeof itemId === 'string' ? itemId : itemId?.itemId || ''
+
+  if (id.includes('beer') || id.includes('cola')) return 'piece'
+  if (id.includes('flour') || id.includes('sugar')) return 'kg'
+  return 'kg'
 }
 
 function formatFinancialImpact(): string {
-  if (Math.abs(financialImpact.value) < 1000) return '±0'
-  return financialImpact.value > 0
-    ? `+${formatCurrency(financialImpact.value)}`
-    : formatCurrency(financialImpact.value)
-}
-
-function getOrderStatusColor(status?: string): string {
-  const colorMap: Record<string, string> = {
-    draft: 'grey',
-    sent: 'blue',
-    confirmed: 'orange',
-    delivered: 'green',
-    cancelled: 'red'
-  }
-  return colorMap[status || ''] || 'grey'
-}
-
-function getPaymentStatusColor(paymentStatus?: string): string {
-  const colorMap: Record<string, string> = {
-    pending: 'orange',
-    paid: 'green'
-  }
-  return colorMap[paymentStatus || ''] || 'grey'
-}
-
-function getItemUnit(itemId: string): string {
-  // In real app, would get from ProductsStore
-  if (itemId.includes('beer') || itemId.includes('cola')) return 'piece'
-  return 'kg'
+  const impact = financialImpact.value
+  const sign = impact >= 0 ? '+' : ''
+  return `${sign}${formatCurrency(Math.abs(impact))}`
 }
 
 function formatDate(dateString?: string): string {
   if (!dateString) return 'Not set'
-  return new Date(dateString).toLocaleDateString('id-ID', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+
+  try {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch (error) {
+    console.error('BaseReceiptDialog: Error formatting date', error)
+    return 'Invalid date'
+  }
 }
 
 // =============================================
 // WATCHERS
 // =============================================
 
+// ✅ ИСПРАВЛЕНО: Правильная инициализация при открытии диалога
 watch(
-  () => props.modelValue,
-  newValue => {
-    if (newValue && props.order) {
-      initializeReceipt()
+  () => [props.modelValue, props.order],
+  async ([isOpen, order]) => {
+    console.log('BaseReceiptDialog: Dialog state changed', { isOpen, orderId: order?.id })
+
+    if (isOpen && order && !isLoading.value) {
+      // Небольшая задержка чтобы DOM обновился
+      await nextTick()
+      await initializeReceipt()
     }
-  }
+  },
+  { immediate: true }
 )
 
+// Следим за изменениями в receipt prop
 watch(
-  () => props.order,
-  newOrder => {
-    if (newOrder && isOpen.value) {
-      initializeReceipt()
+  () => props.receipt,
+  newReceipt => {
+    console.log('BaseReceiptDialog: Receipt prop changed', { receiptId: newReceipt?.id })
+
+    if (newReceipt && props.modelValue) {
+      currentReceipt.value = newReceipt
+      setupReceiptForm()
     }
   }
 )
@@ -949,8 +867,17 @@ watch(
 // =============================================
 
 onMounted(() => {
-  if (isOpen.value && props.order) {
-    initializeReceipt()
+  console.log('BaseReceiptDialog: Component mounted', {
+    isOpen: props.modelValue,
+    orderId: props.order?.id,
+    receiptId: props.receipt?.id
+  })
+
+  // Если диалог уже открыт при монтировании, инициализируем
+  if (props.modelValue && props.order) {
+    nextTick(() => {
+      initializeReceipt()
+    })
   }
 })
 </script>
@@ -1092,50 +1019,6 @@ onMounted(() => {
 
   .v-row {
     margin: 0;
-  }
-}
-
-// Confirmation dialog styling
-.v-dialog .v-card {
-  .v-alert {
-    margin-bottom: 16px;
-  }
-
-  ul {
-    padding-left: 20px;
-
-    li {
-      margin-bottom: 4px;
-    }
-  }
-}
-
-// Status indicators
-.v-icon.text-warning {
-  animation: pulseWarning 2s infinite;
-}
-
-@keyframes pulseWarning {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  51%,
-  100% {
-    opacity: 0.7;
-  }
-}
-
-// Input focus states
-.v-text-field:focus-within {
-  &.qty-discrepancy :deep(.v-field) {
-    border-left-color: rgb(var(--v-theme-warning));
-    box-shadow: 0 0 0 1px rgb(var(--v-theme-warning), 0.3);
-  }
-
-  &.price-discrepancy :deep(.v-field) {
-    border-left-color: rgb(var(--v-theme-error));
-    box-shadow: 0 0 0 1px rgb(var(--v-theme-error), 0.3);
   }
 }
 </style>

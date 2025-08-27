@@ -1,10 +1,10 @@
 # Summary
 
-Date : 2025-08-24 18:53:22
+Date : 2025-08-27 20:21:23
 
 Directory /Users/peaker/dev/kitchen-app/backoffice/src
 
-Total : 252 files, 77192 codes, 5621 comments, 12299 blanks, all 95112 lines
+Total : 239 files, 69958 codes, 5785 comments, 11762 blanks, all 87505 lines
 
 Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-details.md)
 
@@ -12,9 +12,9 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 
 | language   | files |   code | comment | blank |  total |
 | :--------- | ----: | -----: | ------: | ----: | -----: |
-| Vue        |   127 | 46,687 |   1,230 | 6,362 | 54,279 |
-| TypeScript |   112 | 25,873 |   4,386 | 4,794 | 35,053 |
-| Markdown   |    10 |  4,591 |       0 | 1,135 |  5,726 |
+| Vue        |   112 | 36,069 |   1,028 | 5,102 | 42,199 |
+| TypeScript |   113 | 29,071 |   4,752 | 5,445 | 39,268 |
+| Markdown   |    11 |  4,777 |       0 | 1,207 |  5,984 |
 | SCSS       |     2 |     40 |       5 |     8 |     53 |
 | XML        |     1 |      1 |       0 |     0 |      1 |
 
@@ -22,9 +22,9 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 
 | path                                         | files |   code | comment |  blank |  total |
 | :------------------------------------------- | ----: | -----: | ------: | -----: | -----: |
-| .                                            |   252 | 77,192 |   5,621 | 12,299 | 95,112 |
+| .                                            |   239 | 69,958 |   5,785 | 11,762 | 87,505 |
 | . (Files)                                    |     3 |     63 |      15 |     23 |    101 |
-| About                                        |    10 |  4,591 |       0 |  1,135 |  5,726 |
+| About                                        |    11 |  4,777 |       0 |  1,207 |  5,984 |
 | assets                                       |     1 |      1 |       0 |      0 |      1 |
 | components                                   |    22 |  2,714 |      72 |    371 |  3,157 |
 | components (Files)                           |     1 |      1 |       0 |      1 |      2 |
@@ -48,7 +48,7 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 | router (Files)                               |     2 |    187 |      13 |     11 |    211 |
 | router/guards                                |     1 |     35 |       1 |      6 |     42 |
 | services                                     |     5 |    217 |       6 |     50 |    273 |
-| stores                                       |    71 | 22,652 |   3,380 |  4,103 | 30,135 |
+| stores                                       |    74 | 26,132 |   3,878 |  4,825 | 34,835 |
 | stores (Files)                               |     3 |    252 |       8 |     44 |    304 |
 | stores/account                               |     6 |  2,251 |      99 |    311 |  2,661 |
 | stores/counteragents                         |     5 |  1,639 |     273 |    346 |  2,258 |
@@ -67,18 +67,20 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 | stores/recipes                               |    12 |  3,393 |     721 |    720 |  4,834 |
 | stores/recipes (Files)                       |     6 |  1,546 |     231 |    274 |  2,051 |
 | stores/recipes/composables                   |     6 |  1,847 |     490 |    446 |  2,783 |
-| stores/shared                                |     3 |    921 |     159 |    238 |  1,318 |
+| stores/shared                                |     4 |  1,831 |     214 |    366 |  2,411 |
 | stores/storage                               |     6 |  2,761 |     271 |    434 |  3,466 |
 | stores/storage (Files)                       |     5 |  2,338 |     187 |    363 |  2,888 |
 | stores/storage/composables                   |     1 |    423 |      84 |     71 |    578 |
-| stores/supplier_2                            |     9 |  2,955 |     743 |    615 |  4,313 |
-| stores/supplier_2 (Files)                    |     4 |  1,290 |     219 |    260 |  1,769 |
-| stores/supplier_2/composables                |     4 |  1,305 |     492 |    272 |  2,069 |
+| stores/supplier_2                            |    11 |  5,525 |   1,186 |  1,209 |  7,920 |
+| stores/supplier_2 (Files)                    |     4 |  2,259 |     424 |    514 |  3,197 |
+| stores/supplier_2/**tests**                  |     1 |    363 |      22 |     55 |    440 |
+| stores/supplier_2/composables                |     4 |  2,380 |     626 |    524 |  3,530 |
 | stores/supplier_2/mock                       |     1 |    360 |      32 |     83 |    475 |
+| stores/supplier_2/types                      |     1 |    163 |      82 |     33 |    278 |
 | styles                                       |     2 |     40 |       5 |      8 |     53 |
 | types                                        |    10 |    366 |      67 |     60 |    493 |
-| utils                                        |     6 |    445 |     177 |    111 |    733 |
-| views                                        |   106 | 44,417 |   1,630 |  6,120 | 52,167 |
+| utils                                        |     6 |    669 |     261 |    146 |  1,076 |
+| views                                        |    89 | 33,293 |   1,212 |  4,754 | 39,259 |
 | views (Files)                                |     3 |    201 |       5 |     38 |    244 |
 | views/Preparation                            |    17 |  6,246 |     316 |    852 |  7,414 |
 | views/Preparation (Files)                    |     1 |    511 |      16 |     80 |    607 |
@@ -112,19 +114,12 @@ Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-
 | views/storage/components/tabs                |     1 |    432 |      13 |     52 |    497 |
 | views/storage/components/widgets             |     1 |    424 |      22 |     43 |    489 |
 | views/storage/components/writeoff            |     6 |  2,265 |      62 |    365 |  2,692 |
-| views/supplier_2                             |     9 |  5,345 |     146 |    831 |  6,322 |
-| views/supplier_2 (Files)                     |     1 |    615 |      14 |     79 |    708 |
-| views/supplier_2/components                  |     8 |  4,730 |     132 |    752 |  5,614 |
-| views/supplier_2/components/orders           |     2 |  1,463 |      40 |    215 |  1,718 |
-| views/supplier_2/components/procurement      |     1 |    538 |      21 |     87 |    646 |
-| views/supplier_2/components/receipts         |     4 |  2,183 |      62 |    373 |  2,618 |
-| views/supplier_2/components/shared           |     1 |    546 |       9 |     77 |    632 |
-| views/supplier_back                          |    18 | 11,331 |     441 |  1,397 | 13,169 |
-| views/supplier_back (Files)                  |     2 |    988 |     137 |    141 |  1,266 |
-| views/supplier_back/components               |    16 | 10,343 |     304 |  1,256 | 11,903 |
-| views/supplier_back/components/consolidation |     7 |  2,859 |     168 |    367 |  3,394 |
-| views/supplier_back/components/procurement   |     3 |  2,251 |      40 |    286 |  2,577 |
-| views/supplier_back/components/purchase      |     4 |  4,141 |      74 |    476 |  4,691 |
-| views/supplier_back/components/supplier      |     2 |  1,092 |      22 |    127 |  1,241 |
+| views/supplier_2                             |    10 |  5,552 |     169 |    862 |  6,583 |
+| views/supplier_2 (Files)                     |     1 |    605 |      14 |     96 |    715 |
+| views/supplier_2/components                  |     9 |  4,947 |     155 |    766 |  5,868 |
+| views/supplier_2/components/orders           |     2 |  1,476 |      47 |    223 |  1,746 |
+| views/supplier_2/components/procurement      |     2 |    822 |      33 |    122 |    977 |
+| views/supplier_2/components/receipts         |     4 |  2,204 |      62 |    372 |  2,638 |
+| views/supplier_2/components/shared           |     1 |    445 |      13 |     49 |    507 |
 
 Summary / [Details](details.md) / [Diff Summary](diff.md) / [Diff Details](diff-details.md)
