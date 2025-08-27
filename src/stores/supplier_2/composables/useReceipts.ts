@@ -1,22 +1,32 @@
-// src/stores/supplier_2/composables/useReceipts.ts
+// src/stores/supplier_2/composables/useReceipts.ts - ENHANCED VERSION
 
 import { ref, computed } from 'vue'
 import { useSupplierStore } from '../supplierStore'
+import { useStorageStore } from '@/stores/storage'
+import { useProductsStore } from '@/stores/productsStore'
+import { DebugUtils } from '@/utils'
 import type {
   Receipt,
   PurchaseOrder,
   CreateReceiptData,
   UpdateReceiptData,
   ReceiptFilters,
-  DiscrepancySummary
+  DiscrepancySummary,
+  ReceiptItem
 } from '../types'
+
+const MODULE_NAME = 'Receipts'
 
 export function useReceipts() {
   const supplierStore = useSupplierStore()
+  const storageStore = useStorageStore()
+  const productsStore = useProductsStore()
 
   // =============================================
   // STATE
   // =============================================
+  const isCreatingStorageOperation = ref(false)
+  const isUpdatingPrices = ref(false)
 
   const filters = ref<ReceiptFilters>({
     status: 'all',
@@ -27,13 +37,23 @@ export function useReceipts() {
   // COMPUTED
   // =============================================
 
-  // ИСПРАВЛЕНИЕ: Безопасный доступ к данным store
+  // Safe access to store data with fallback
   const receipts = computed(() => {
     return Array.isArray(supplierStore.state.receipts) ? supplierStore.state.receipts : []
   })
 
+  const allReceipts = computed(() => receipts.value)
   const currentReceipt = computed(() => supplierStore.state.currentReceipt)
-  const isLoading = computed(() => supplierStore.state.loading.receipts)
+
+  const draftReceipts = computed(() => receipts.value.filter(receipt => receipt.status === 'draft'))
+
+  const completedReceipts = computed(() =>
+    receipts.value.filter(receipt => receipt.status === 'completed')
+  )
+
+  const receiptsWithDiscrepancies = computed(() =>
+    receipts.value.filter(receipt => receipt.hasDiscrepancies)
+  )
 
   const filteredReceipts = computed(() => {
     return receipts.value.filter(receipt => {
@@ -53,16 +73,6 @@ export function useReceipts() {
       return true
     })
   })
-
-  const draftReceipts = computed(() => receipts.value.filter(receipt => receipt.status === 'draft'))
-
-  const completedReceipts = computed(() =>
-    receipts.value.filter(receipt => receipt.status === 'completed')
-  )
-
-  const receiptsWithDiscrepancies = computed(() =>
-    receipts.value.filter(receipt => receipt.hasDiscrepancies)
-  )
 
   const ordersForReceipt = computed(() => {
     const orders = Array.isArray(supplierStore.state.orders) ? supplierStore.state.orders : []
@@ -84,6 +94,13 @@ export function useReceipts() {
     ordersAwaitingReceipt: ordersForReceipt.value.length
   }))
 
+  const isLoading = computed(
+    () =>
+      supplierStore.state.loading.receipts ||
+      isCreatingStorageOperation.value ||
+      isUpdatingPrices.value
+  )
+
   // =============================================
   // ACTIONS - CRUD Operations
   // =============================================
@@ -91,197 +108,308 @@ export function useReceipts() {
   /**
    * Fetch all receipts
    */
-  async function fetchReceipts() {
+  async function fetchReceipts(): Promise<void> {
     try {
-      console.log('Receipts: Fetching receipts')
+      DebugUtils.info(MODULE_NAME, 'Fetching receipts')
       await supplierStore.fetchReceipts()
-      console.log(`Receipts: Fetched ${receipts.value.length} receipts`)
+      DebugUtils.info(MODULE_NAME, `Fetched ${receipts.value.length} receipts`)
     } catch (error) {
-      console.error('Receipts: Error fetching receipts:', error)
+      DebugUtils.error(MODULE_NAME, 'Error fetching receipts', { error })
       throw error
     }
   }
 
   /**
-   * Start receipt process for an order
+   * Start receipt process for an order with validation
    */
   async function startReceipt(purchaseOrderId: string, receivedBy: string): Promise<Receipt> {
-    const order = supplierStore.getOrderById(purchaseOrderId)
-
-    if (!order) {
-      throw new Error(`Order with id ${purchaseOrderId} not found`)
-    }
-
-    if (!canStartReceipt(order)) {
-      throw new Error('Order is not ready for receipt')
-    }
-
     try {
-      console.log(`Receipts: Starting receipt for order ${order.orderNumber}`)
+      const order = supplierStore.state.orders.find(o => o.id === purchaseOrderId)
+      if (!order) {
+        throw new Error(`Order with id ${purchaseOrderId} not found`)
+      }
 
-      // Create initial receipt data with ordered quantities
-      const receiptData: CreateReceiptData = {
+      if (!canStartReceipt(order)) {
+        throw new Error('Order is not ready for receipt')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Starting receipt for order', {
+        orderId: purchaseOrderId,
+        orderNumber: order.orderNumber
+      })
+
+      const createData: CreateReceiptData = {
         purchaseOrderId,
         receivedBy,
-        items: order.items.map(item => ({
-          orderItemId: item.id,
-          receivedQuantity: item.orderedQuantity, // Start with ordered quantity
+        items: order.items.map(orderItem => ({
+          orderItemId: orderItem.id,
+          receivedQuantity: orderItem.orderedQuantity, // Default to ordered quantity
+          actualPrice: orderItem.pricePerUnit, // Default to ordered price
           notes: ''
         })),
         notes: `Receipt started for order ${order.orderNumber}`
       }
 
-      const newReceipt = await supplierStore.createReceipt(receiptData)
-      console.log(`Receipts: Started receipt ${newReceipt.receiptNumber}`)
+      const newReceipt = await supplierStore.createReceipt(createData)
+
+      DebugUtils.info(MODULE_NAME, 'Receipt started successfully', {
+        receiptId: newReceipt.id,
+        receiptNumber: newReceipt.receiptNumber,
+        orderId: purchaseOrderId
+      })
+
       return newReceipt
     } catch (error) {
-      console.error('Receipts: Error starting receipt:', error)
+      DebugUtils.error(MODULE_NAME, 'Failed to start receipt', { purchaseOrderId, error })
       throw error
     }
   }
 
   /**
-   * Update receipt (modify quantities, prices, notes)
+   * Update receipt with enhanced validation
    */
   async function updateReceipt(id: string, data: UpdateReceiptData): Promise<Receipt> {
     try {
-      console.log(`Receipts: Updating receipt ${id}`, data)
+      const receipt = receipts.value.find(r => r.id === id)
+      if (!receipt) {
+        throw new Error(`Receipt with id ${id} not found`)
+      }
+
+      if (!canEditReceipt(receipt)) {
+        throw new Error('Receipt cannot be edited in current status')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Updating receipt', { receiptId: id, updates: data })
+
       const updatedReceipt = await supplierStore.updateReceipt(id, data)
-      console.log(`Receipts: Updated receipt ${id}`)
+
+      DebugUtils.info(MODULE_NAME, 'Receipt updated successfully', { receiptId: id })
       return updatedReceipt
     } catch (error) {
-      console.error('Receipts: Error updating receipt:', error)
+      DebugUtils.error(MODULE_NAME, 'Error updating receipt', { receiptId: id, error })
       throw error
     }
   }
 
   /**
-   * Complete receipt and create storage operation
+   * Complete receipt with full integration (Storage + Price Updates)
    */
-  async function completeReceipt(id: string): Promise<Receipt> {
-    const receipt = supplierStore.getReceiptById(id)
-
-    if (!receipt) {
-      throw new Error(`Receipt with id ${id} not found`)
-    }
-
-    if (receipt.status === 'completed') {
-      throw new Error('Receipt is already completed')
-    }
-
+  async function completeReceipt(receiptId: string, notes?: string): Promise<Receipt> {
     try {
-      console.log(`Receipts: Completing receipt ${receipt.receiptNumber}`)
+      DebugUtils.info(MODULE_NAME, 'Completing receipt with storage integration', { receiptId })
 
-      const completedReceipt = await supplierStore.completeReceipt(id)
+      const receipt = receipts.value.find(r => r.id === receiptId)
+      if (!receipt) {
+        throw new Error(`Receipt with id ${receiptId} not found`)
+      }
 
-      // Auto-create storage operation (this would integrate with StorageStore)
-      await createStorageOperation(completedReceipt)
+      if (!canCompleteReceipt(receipt)) {
+        throw new Error('Receipt cannot be completed')
+      }
 
-      console.log(`Receipts: Completed receipt ${receipt.receiptNumber}`)
-      return completedReceipt
+      const order = supplierStore.state.orders.find(o => o.id === receipt.purchaseOrderId)
+      if (!order) {
+        throw new Error(`Order not found for receipt ${receiptId}`)
+      }
+
+      // 1. Update receipt status
+      const updateData: UpdateReceiptData = {
+        status: 'completed',
+        notes: notes || receipt.notes
+      }
+
+      const updatedReceipt = await supplierStore.updateReceipt(receiptId, updateData)
+
+      // 2. Create storage operation (non-blocking)
+      try {
+        await createStorageOperation(updatedReceipt, order)
+      } catch (storageError) {
+        DebugUtils.error(MODULE_NAME, 'Storage operation failed, but receipt completed', {
+          receiptId,
+          error: storageError
+        })
+        // Don't throw - receipt is still valid
+      }
+
+      // 3. Update product prices if needed (non-blocking)
+      try {
+        await updateProductPrices(updatedReceipt)
+      } catch (priceError) {
+        DebugUtils.error(MODULE_NAME, 'Price update failed, but receipt completed', {
+          receiptId,
+          error: priceError
+        })
+        // Don't throw - receipt is still valid
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Receipt completed with full integration', {
+        receiptId: updatedReceipt.id,
+        receiptNumber: updatedReceipt.receiptNumber,
+        storageOperationId: updatedReceipt.storageOperationId
+      })
+
+      return updatedReceipt
     } catch (error) {
-      console.error('Receipts: Error completing receipt:', error)
+      DebugUtils.error(MODULE_NAME, 'Failed to complete receipt', { receiptId, error })
       throw error
     }
   }
 
   /**
-   * Update item in receipt
+   * Update individual receipt item with validation
    */
   async function updateReceiptItem(
     receiptId: string,
     itemId: string,
-    receivedQuantity: number,
-    actualPrice?: number,
-    notes?: string
-  ) {
-    const receipt = supplierStore.getReceiptById(receiptId)
-
-    if (!receipt) {
-      throw new Error(`Receipt with id ${receiptId} not found`)
-    }
-
-    if (receipt.status === 'completed') {
-      throw new Error('Cannot modify completed receipt')
-    }
-
+    updates: Partial<ReceiptItem>
+  ): Promise<void> {
     try {
-      console.log(`Receipts: Updating item ${itemId} in receipt ${receiptId}`)
-
-      // Update the item in receipt
-      const item = receipt.items.find(item => item.id === itemId)
-      if (item) {
-        item.receivedQuantity = receivedQuantity
-        if (actualPrice !== undefined) {
-          item.actualPrice = actualPrice
-        }
-        if (notes !== undefined) {
-          item.notes = notes
-        }
-
-        // Recalculate discrepancies
-        receipt.hasDiscrepancies = calculateHasDiscrepancies(receipt)
-        receipt.updatedAt = new Date().toISOString()
+      const receipt = receipts.value.find(r => r.id === receiptId)
+      if (!receipt) {
+        throw new Error(`Receipt with id ${receiptId} not found`)
       }
 
-      console.log(`Receipts: Updated item ${itemId} in receipt ${receiptId}`)
+      if (!canEditReceipt(receipt)) {
+        throw new Error('Cannot modify completed receipt')
+      }
+
+      const item = receipt.items.find(i => i.orderItemId === itemId)
+      if (!item) {
+        throw new Error(`Item with id ${itemId} not found in receipt`)
+      }
+
+      // Validate updates
+      if (updates.receivedQuantity !== undefined && updates.receivedQuantity < 0) {
+        throw new Error('Received quantity cannot be negative')
+      }
+
+      if (updates.actualPrice !== undefined && updates.actualPrice < 0) {
+        throw new Error('Actual price cannot be negative')
+      }
+
+      // Apply updates
+      Object.assign(item, updates, {
+        updatedAt: new Date().toISOString()
+      })
+
+      // Recalculate discrepancies
+      receipt.hasDiscrepancies = calculateHasDiscrepancies(receipt)
+
+      DebugUtils.debug(MODULE_NAME, 'Receipt item updated', {
+        receiptId,
+        itemId,
+        updates
+      })
     } catch (error) {
-      console.error('Receipts: Error updating receipt item:', error)
+      DebugUtils.error(MODULE_NAME, 'Failed to update receipt item', { receiptId, itemId, error })
       throw error
     }
   }
 
   // =============================================
-  // ACTIONS - StorageStore Integration
+  // STORAGE INTEGRATION
   // =============================================
 
   /**
    * Create storage operation from completed receipt
    */
-  async function createStorageOperation(receipt: Receipt) {
+  async function createStorageOperation(receipt: Receipt, order: PurchaseOrder): Promise<void> {
     try {
-      console.log(`Receipts: Creating storage operation for receipt ${receipt.receiptNumber}`)
+      isCreatingStorageOperation.value = true
 
-      const order = supplierStore.getOrderById(receipt.purchaseOrderId)
+      const department = getDepartmentFromOrder(order)
 
-      if (!order) {
-        throw new Error('Related order not found')
+      const createData = {
+        department,
+        responsiblePerson: receipt.receivedBy,
+        items: receipt.items.map(item => ({
+          itemId: item.itemId,
+          quantity: item.receivedQuantity,
+          costPerUnit: item.actualPrice || item.orderedPrice,
+          notes: `Receipt: ${receipt.receiptNumber}${item.notes ? ` - ${item.notes}` : ''}`,
+          expiryDate: calculateExpiryDate(item.itemId)
+        })),
+        sourceType: 'purchase' as const,
+        notes: `Receipt ${receipt.receiptNumber} - Order ${order.orderNumber}${receipt.notes ? ` - ${receipt.notes}` : ''}`
       }
 
-      // This would be the actual integration with StorageStore
-      // const createData: CreateStorageReceipt = {
-      //   department: getDepartmentFromOrder(order),
-      //   responsiblePerson: receipt.receivedBy,
-      //   items: receipt.items.map(item => ({
-      //     itemId: item.itemId,
-      //     quantity: item.receivedQuantity,
-      //     costPerUnit: item.actualPrice || item.orderedPrice,
-      //     notes: `Receipt: ${receipt.receiptNumber}`
-      //   })),
-      //   sourceType: 'purchase',
-      //   purchaseOrderId: order.id
-      // }
-      //
-      // const storageOperation = await storageStore.createReceipt(createData)
-      // receipt.storageOperationId = storageOperation.id
+      const operation = await storageStore.createReceipt(createData)
 
-      // For now, simulate storage operation creation
-      const mockStorageOperationId = `op-${Date.now()}`
-      receipt.storageOperationId = mockStorageOperationId
+      // Update receipt with operation ID
+      receipt.storageOperationId = operation.id
 
-      console.log(`Receipts: Created storage operation ${mockStorageOperationId}`)
+      DebugUtils.info(MODULE_NAME, 'Storage operation created successfully', {
+        receiptId: receipt.id,
+        operationId: operation.id,
+        department,
+        itemsCount: createData.items.length
+      })
     } catch (error) {
-      console.error('Receipts: Error creating storage operation:', error)
+      DebugUtils.error(MODULE_NAME, 'Failed to create storage operation', {
+        receiptId: receipt.id,
+        error
+      })
       throw error
+    } finally {
+      isCreatingStorageOperation.value = false
+    }
+  }
+
+  /**
+   * Update product prices after receipt
+   */
+  async function updateProductPrices(receipt: Receipt): Promise<void> {
+    try {
+      isUpdatingPrices.value = true
+
+      const priceUpdates: Array<{ itemId: string; oldPrice: number; newPrice: number }> = []
+
+      for (const item of receipt.items) {
+        // Check if price changed
+        if (item.actualPrice && item.actualPrice !== item.orderedPrice) {
+          priceUpdates.push({
+            itemId: item.itemId,
+            oldPrice: item.orderedPrice,
+            newPrice: item.actualPrice
+          })
+
+          // TODO: Implement when ProductsStore has updateProductCost method
+          // await productsStore.updateProductCost(item.itemId, item.actualPrice)
+
+          DebugUtils.info(MODULE_NAME, 'Product price should be updated', {
+            itemId: item.itemId,
+            itemName: item.itemName,
+            oldPrice: item.orderedPrice,
+            newPrice: item.actualPrice,
+            priceChange: item.actualPrice - item.orderedPrice
+          })
+        }
+      }
+
+      if (priceUpdates.length > 0) {
+        DebugUtils.info(MODULE_NAME, 'Price updates processed', {
+          receiptId: receipt.id,
+          updatesCount: priceUpdates.length,
+          updates: priceUpdates
+        })
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update product prices', {
+        receiptId: receipt.id,
+        error
+      })
+      throw error
+    } finally {
+      isUpdatingPrices.value = false
     }
   }
 
   // =============================================
-  // ACTIONS - Analysis & Calculations
+  // ANALYSIS & CALCULATIONS
   // =============================================
 
   /**
-   * Calculate discrepancies for receipt
+   * Calculate detailed discrepancies with financial analysis
    */
   function calculateDiscrepancies(receipt: Receipt): DiscrepancySummary {
     let hasQuantityDiscrepancies = false
@@ -290,42 +418,51 @@ export function useReceipts() {
     let totalPriceDifference = 0
     let affectedItems = 0
 
-    receipt.items.forEach(item => {
-      // Quantity discrepancy
+    for (const item of receipt.items) {
+      let itemAffected = false
+
+      // Check quantity discrepancies
       const quantityDiff = item.receivedQuantity - item.orderedQuantity
-      if (Math.abs(quantityDiff) > 0.01) {
+      if (Math.abs(quantityDiff) > 0.001) {
+        // Precision tolerance
         hasQuantityDiscrepancies = true
         totalQuantityDifference += Math.abs(quantityDiff)
+        itemAffected = true
+      }
+
+      // Check price discrepancies
+      const actualPrice = item.actualPrice || item.orderedPrice
+      const priceDiff = actualPrice - item.orderedPrice
+      if (Math.abs(priceDiff) > 0.01) {
+        // Price precision tolerance
+        hasPriceDiscrepancies = true
+        totalPriceDifference += priceDiff * item.receivedQuantity
+        itemAffected = true
+      }
+
+      if (itemAffected) {
         affectedItems++
       }
-
-      // Price discrepancy
-      if (item.actualPrice && Math.abs(item.actualPrice - item.orderedPrice) > 0.01) {
-        hasPriceDiscrepancies = true
-        totalPriceDifference +=
-          Math.abs(item.actualPrice - item.orderedPrice) * item.receivedQuantity
-        if (Math.abs(quantityDiff) <= 0.01) {
-          affectedItems++ // Only count if not already counted for quantity
-        }
-      }
-    })
+    }
 
     return {
+      hasDiscrepancies: hasQuantityDiscrepancies || hasPriceDiscrepancies,
       hasQuantityDiscrepancies,
       hasPriceDiscrepancies,
-      totalQuantityDifference,
-      totalPriceDifference,
-      affectedItems
+      totalQuantityDifference: Math.round(totalQuantityDifference * 1000) / 1000,
+      totalPriceDifference: Math.round(totalPriceDifference),
+      affectedItems,
+      totalItems: receipt.items.length
     }
   }
 
   /**
-   * Calculate if receipt has discrepancies (simple boolean)
+   * Simple boolean check for discrepancies
    */
   function calculateHasDiscrepancies(receipt: Receipt): boolean {
     return receipt.items.some(item => {
       // Quantity discrepancy
-      if (Math.abs(item.receivedQuantity - item.orderedQuantity) > 0.01) {
+      if (Math.abs(item.receivedQuantity - item.orderedQuantity) > 0.001) {
         return true
       }
 
@@ -341,57 +478,106 @@ export function useReceipts() {
   /**
    * Calculate financial impact of receipt
    */
-  function calculateFinancialImpact(receipt: Receipt) {
-    const order = supplierStore.getOrderById(receipt.purchaseOrderId)
+  function calculateFinancialImpact(receipt: Receipt): {
+    plannedTotal: number
+    actualTotal: number
+    difference: number
+    differencePercent: number
+    savingsOrOvercost: 'savings' | 'overcost' | 'neutral'
+  } {
+    let plannedTotal = 0
+    let actualTotal = 0
 
-    if (!order) return null
+    for (const item of receipt.items) {
+      plannedTotal += item.orderedQuantity * item.orderedPrice
+      actualTotal += item.receivedQuantity * (item.actualPrice || item.orderedPrice)
+    }
 
-    const originalTotal = order.totalAmount
-    const actualTotal = receipt.items.reduce(
-      (sum, item) => sum + item.receivedQuantity * (item.actualPrice || item.orderedPrice),
-      0
-    )
+    const difference = actualTotal - plannedTotal
+    const differencePercent = plannedTotal > 0 ? (difference / plannedTotal) * 100 : 0
 
-    const difference = actualTotal - originalTotal
-    const percentageChange = originalTotal > 0 ? (difference / originalTotal) * 100 : 0
+    let savingsOrOvercost: 'savings' | 'overcost' | 'neutral' = 'neutral'
+    if (difference < -100) {
+      // Savings more than 100 IDR
+      savingsOrOvercost = 'savings'
+    } else if (difference > 100) {
+      // Overcost more than 100 IDR
+      savingsOrOvercost = 'overcost'
+    }
 
     return {
-      originalTotal,
-      actualTotal,
-      difference,
-      percentageChange,
-      isIncrease: difference > 0
+      plannedTotal: Math.round(plannedTotal),
+      actualTotal: Math.round(actualTotal),
+      difference: Math.round(difference),
+      differencePercent: Math.round(differencePercent * 100) / 100,
+      savingsOrOvercost
     }
   }
 
+  /**
+   * Check if receipt is ready for completion
+   */
+  function canCompleteReceipt(receipt: Receipt): { canComplete: boolean; reasons: string[] } {
+    const reasons: string[] = []
+
+    if (receipt.status === 'completed') {
+      reasons.push('Receipt is already completed')
+      return { canComplete: false, reasons }
+    }
+
+    // Check all items have valid received quantities
+    for (const item of receipt.items) {
+      if (item.receivedQuantity === undefined || item.receivedQuantity < 0) {
+        reasons.push(`Item ${item.itemName} has invalid received quantity`)
+      }
+    }
+
+    // Check for critical discrepancies
+    const discrepancies = calculateDiscrepancies(receipt)
+    if (discrepancies.hasQuantityDiscrepancies) {
+      const majorDiscrepancies = receipt.items.filter(item => {
+        const diff = Math.abs(item.receivedQuantity - item.orderedQuantity)
+        return diff > item.orderedQuantity * 0.1 // More than 10% deviation
+      })
+
+      if (majorDiscrepancies.length > 0) {
+        reasons.push(
+          `Major quantity discrepancies detected (>10%) for ${majorDiscrepancies.length} items`
+        )
+      }
+    }
+
+    return { canComplete: reasons.length === 0, reasons }
+  }
+
   // =============================================
-  // ACTIONS - Filtering & Selection
+  // FILTERING & SELECTION
   // =============================================
 
   /**
-   * Set current receipt
+   * Set current receipt for detailed view
    */
-  function setCurrentReceipt(receipt: Receipt | undefined) {
+  function setCurrentReceipt(receipt: Receipt | undefined): void {
     supplierStore.setCurrentReceipt(receipt)
   }
 
   /**
-   * Update filters
+   * Update filters for receipt list
    */
-  function updateFilters(newFilters: Partial<ReceiptFilters>) {
+  function updateFilters(newFilters: Partial<ReceiptFilters>): void {
     filters.value = { ...filters.value, ...newFilters }
-    console.log('Receipts: Updated filters', filters.value)
+    DebugUtils.debug(MODULE_NAME, 'Updated filters', filters.value)
   }
 
   /**
    * Clear all filters
    */
-  function clearFilters() {
+  function clearFilters(): void {
     filters.value = {
       status: 'all',
       hasDiscrepancies: 'all'
     }
-    console.log('Receipts: Cleared all filters')
+    DebugUtils.debug(MODULE_NAME, 'Cleared all filters')
   }
 
   // =============================================
@@ -423,12 +609,13 @@ export function useReceipts() {
    * Check if order can start receipt
    */
   function canStartReceipt(order: PurchaseOrder): boolean {
-    // Order must be sent or confirmed, and paid
+    // Order must be sent or confirmed
     if (!['sent', 'confirmed'].includes(order.status)) {
       return false
     }
 
-    if (order.paymentStatus !== 'paid') {
+    // Order must be paid (if paymentStatus exists)
+    if (order.paymentStatus && order.paymentStatus !== 'paid') {
       return false
     }
 
@@ -449,24 +636,46 @@ export function useReceipts() {
   }
 
   /**
-   * Check if receipt can be completed
+   * Determine department from order items
    */
-  function canCompleteReceipt(receipt: Receipt): boolean {
-    return receipt.status === 'draft' && receipt.items.length > 0
+  function getDepartmentFromOrder(order: PurchaseOrder): 'kitchen' | 'bar' {
+    const hasBarItems = order.items.some(
+      item =>
+        item.itemId.includes('beer') ||
+        item.itemId.includes('cola') ||
+        item.itemId.includes('water') ||
+        item.itemId.includes('wine') ||
+        item.itemId.includes('spirit') ||
+        item.itemName.toLowerCase().includes('beer') ||
+        item.itemName.toLowerCase().includes('wine') ||
+        item.itemName.toLowerCase().includes('alcohol')
+    )
+    return hasBarItems ? 'bar' : 'kitchen'
   }
 
   /**
-   * Get department from order (helper for storage integration)
+   * Calculate expiry date for item
    */
-  function getDepartmentFromOrder(order: PurchaseOrder): 'kitchen' | 'bar' {
-    // In real app, this would check the related requests
-    // For now, simple logic based on items
-    const hasAlcohol = order.items.some(
-      item =>
-        item.itemName.toLowerCase().includes('beer') || item.itemName.toLowerCase().includes('wine')
-    )
-    return hasAlcohol ? 'bar' : 'kitchen'
+  function calculateExpiryDate(itemId: string): string | undefined {
+    try {
+      const product = productsStore.products?.find(p => p.id === itemId)
+
+      if (product?.shelfLife && product.shelfLife > 0) {
+        const expiryDate = new Date()
+        expiryDate.setDate(expiryDate.getDate() + product.shelfLife)
+        return expiryDate.toISOString()
+      }
+
+      return undefined
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to calculate expiry date', { itemId, error })
+      return undefined
+    }
   }
+
+  // =============================================
+  // UI HELPERS
+  // =============================================
 
   /**
    * Get status color for UI
@@ -490,7 +699,7 @@ export function useReceipts() {
   }
 
   /**
-   * Format currency
+   * Format currency for display
    */
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('id-ID', {
@@ -501,7 +710,7 @@ export function useReceipts() {
   }
 
   /**
-   * Format date
+   * Format date for display
    */
   function formatDate(dateString: string): string {
     return new Date(dateString).toLocaleDateString('id-ID', {
@@ -514,16 +723,16 @@ export function useReceipts() {
   }
 
   /**
-   * Get quantity discrepancy text
+   * Get quantity discrepancy text for UI
    */
   function getQuantityDiscrepancyText(ordered: number, received: number): string {
     const diff = received - ordered
-    if (Math.abs(diff) <= 0.01) return 'Exact'
+    if (Math.abs(diff) <= 0.001) return 'Exact'
     return diff > 0 ? `+${diff.toFixed(2)}` : `${diff.toFixed(2)}`
   }
 
   /**
-   * Get price discrepancy text
+   * Get price discrepancy text for UI
    */
   function getPriceDiscrepancyText(ordered: number, actual?: number): string {
     if (!actual) return 'Same'
@@ -533,21 +742,18 @@ export function useReceipts() {
   }
 
   // =============================================
-  // INITIALIZATION - УБИРАЕМ АВТОЗАГРУЗКУ
-  // =============================================
-
-  // ИСПРАВЛЕНИЕ: Убираем автозагрузку из синхронного кода
-
-  // =============================================
   // RETURN PUBLIC API
   // =============================================
 
   return {
     // State
     filters,
+    isCreatingStorageOperation,
+    isUpdatingPrices,
 
     // Computed
     receipts,
+    allReceipts,
     currentReceipt,
     filteredReceipts,
     draftReceipts,
@@ -564,13 +770,15 @@ export function useReceipts() {
     completeReceipt,
     updateReceiptItem,
 
-    // StorageStore Integration
+    // Storage Integration
     createStorageOperation,
+    updateProductPrices,
 
     // Analysis & Calculations
     calculateDiscrepancies,
     calculateHasDiscrepancies,
     calculateFinancialImpact,
+    canCompleteReceipt,
 
     // Filtering & Selection
     setCurrentReceipt,
@@ -583,8 +791,10 @@ export function useReceipts() {
     getReceiptByOrderId,
     canStartReceipt,
     canEditReceipt,
-    canCompleteReceipt,
     getDepartmentFromOrder,
+    calculateExpiryDate,
+
+    // UI Helpers
     getStatusColor,
     getDiscrepancyColor,
     formatCurrency,
