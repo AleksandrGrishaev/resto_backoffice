@@ -1393,49 +1393,66 @@ export function useOrderAssistant() {
   // =============================================
 
   return {
-    // ===== STATE =====
-    state,
-    filters,
-    autoRefresh,
-    refreshInterval,
+    // ===== STATE - добавить computed для реактивности =====
+    selectedDepartment: computed(() => state.value.selectedDepartment),
+    selectedItems: computed(() => state.value.selectedItems),
+    isGenerating: computed(() => state.value.isGenerating),
+    isLoading: computed(() => state.value.isGenerating || state.value.isLoadingPrices),
 
-    // ===== COMPUTED PROPERTIES =====
-    // Suggestions
+    // ===== COMPUTED PROPERTIES - без изменений =====
     allSuggestions,
     filteredSuggestions,
     urgentSuggestions,
     mediumSuggestions,
     lowSuggestions,
     criticalSuggestions,
-
-    // Analytics
     requestSummary,
     departmentAnalytics,
     integrationHealth,
-
-    // Status
-    isLoading,
     hasErrors,
 
-    // ===== CORE ACTIONS =====
+    // ===== ACTIONS - добавить алиасы для совместимости =====
     generateSuggestions,
     refreshData,
     getEstimatedPrice,
     updatePrices,
 
-    // ===== ITEM MANAGEMENT =====
+    // Item management - добавить алиасы
     addItem,
-    addUrgentItems,
-    addItemsByCategory,
+    addSuggestionToRequest: addItem, // алиас
+    addManualItem: (
+      itemId: string,
+      itemName: string,
+      quantity: number,
+      unit: string,
+      notes?: string
+    ) => {
+      // Создать объект suggestion для совместимости
+      const mockSuggestion = {
+        itemId,
+        itemName,
+        suggestedQuantity: quantity,
+        urgency: 'medium' as Urgency,
+        reason: 'manual_add' as any
+      }
+      addItem(mockSuggestion)
+    },
     removeItem,
+    removeItemFromRequest: removeItem, // алиас
     updateItemQuantity,
     updateItemPriority,
     clearSelectedItems,
 
-    // ===== REQUEST CREATION =====
+    // Request creation - добавить алиас
     createRequest,
+    createRequestFromItems: createRequest, // алиас
 
-    // ===== INFORMATION =====
+    // Department management - добавить алиас
+    switchDepartment,
+    changeDepartment: switchDepartment, // алиас
+    compareDepartments,
+
+    // Information
     getItemInfo,
     getSuggestionsByUrgency,
     getSuggestionsByCategory,
@@ -1444,11 +1461,7 @@ export function useOrderAssistant() {
     getSuggestionsBelowMinStock,
     getSmartSuggestions,
 
-    // ===== DEPARTMENT MANAGEMENT =====
-    switchDepartment,
-    compareDepartments,
-
-    // ===== FILTER MANAGEMENT =====
+    // Filter management
     setUrgencyFilter,
     setCategoryFilter,
     setPriceRangeFilter,
@@ -1456,19 +1469,38 @@ export function useOrderAssistant() {
     clearFilters,
     getAvailableCategories,
 
-    // ===== AUTO-REFRESH =====
+    // Auto-refresh
     startAutoRefresh,
     stopAutoRefresh,
     setRefreshInterval,
 
-    // ===== ERROR MANAGEMENT =====
+    // Error management
     addError,
     clearErrors,
     getRecentErrors,
 
-    // ===== UTILITIES =====
+    // Utilities - добавить недостающие функции
     formatCurrency,
     formatPercentage,
+    isSuggestionAdded: (suggestion: OrderSuggestion) => {
+      return state.value.selectedItems.some(item => item.itemId === suggestion.itemId)
+    },
+    getUrgencyColor: (urgency: string) => {
+      const colorMap: Record<string, string> = {
+        low: 'success',
+        medium: 'warning',
+        high: 'error'
+      }
+      return colorMap[urgency] || 'primary'
+    },
+    getUrgencyIcon: (urgency: string) => {
+      const iconMap: Record<string, string> = {
+        low: 'mdi-check-circle',
+        medium: 'mdi-alert',
+        high: 'mdi-alert-circle'
+      }
+      return iconMap[urgency] || 'mdi-information'
+    },
     cleanup
   }
 }
