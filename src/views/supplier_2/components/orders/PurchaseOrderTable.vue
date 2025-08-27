@@ -184,73 +184,101 @@
 
       <!-- Actions -->
       <template #[`item.actions`]="{ item }">
-        <div class="d-flex gap-1">
+        <div class="d-flex align-center justify-center gap-1">
           <!-- View Details -->
-          <v-btn
-            icon="mdi-eye"
-            variant="text"
-            size="small"
-            color="info"
-            @click="viewOrderDetails(item)"
-          >
-            <v-tooltip activator="parent" location="top">View Details</v-tooltip>
-          </v-btn>
+          <v-tooltip location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="info"
+                @click="viewOrderDetails(item)"
+              >
+                <v-icon>mdi-eye</v-icon>
+              </v-btn>
+            </template>
+            <span>View Details</span>
+          </v-tooltip>
 
-          <!-- Edit (only for draft/sent) -->
-          <v-btn
-            v-if="canEditOrder(item)"
-            icon="mdi-pencil"
-            variant="text"
-            size="small"
-            color="primary"
-            @click="editOrder(item)"
-          >
-            <v-tooltip activator="parent" location="top">Edit Order</v-tooltip>
-          </v-btn>
+          <!-- Edit (только для draft/sent) -->
+          <v-tooltip v-if="canEditOrder(item)" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="primary"
+                @click="editOrder(item)"
+              >
+                <v-icon>mdi-pencil</v-icon>
+              </v-btn>
+            </template>
+            <span>Edit Order</span>
+          </v-tooltip>
 
-          <!-- Send (only for draft) -->
-          <v-btn
-            v-if="canSendOrder(item)"
-            icon="mdi-send"
-            variant="text"
-            size="small"
-            color="success"
-            @click="sendOrder(item)"
-          >
-            <v-tooltip activator="parent" location="top">Send to Supplier</v-tooltip>
-          </v-btn>
+          <!-- Send (только для draft) -->
+          <v-tooltip v-if="canSendOrder(item)" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="success"
+                @click="sendOrder(item)"
+              >
+                <v-icon>mdi-send</v-icon>
+              </v-btn>
+            </template>
+            <span>Send to Supplier</span>
+          </v-tooltip>
 
-          <!-- Confirm (only for sent) -->
-          <v-btn
-            v-if="item.status === 'sent'"
-            icon="mdi-check-circle"
-            variant="text"
-            size="small"
-            color="warning"
-            @click="confirmOrder(item)"
-          >
-            <v-tooltip activator="parent" location="top">Confirm Order</v-tooltip>
-          </v-btn>
+          <!-- Confirm (только для sent) -->
+          <v-tooltip v-if="item.status === 'sent'" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="warning"
+                @click="confirmOrder(item)"
+              >
+                <v-icon>mdi-check-circle</v-icon>
+              </v-btn>
+            </template>
+            <span>Confirm Order</span>
+          </v-tooltip>
 
-          <!-- Start Receipt (only for confirmed/paid) -->
-          <v-btn
-            v-if="canStartReceipt(item)"
-            icon="mdi-truck-check"
-            variant="text"
-            size="small"
-            color="purple"
-            @click="startReceipt(item)"
-          >
-            <v-tooltip activator="parent" location="top">Start Receipt</v-tooltip>
-          </v-btn>
+          <!-- Start Receipt (только для confirmed/paid) -->
+          <v-tooltip v-if="canStartReceipt(item)" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="purple"
+                @click="startReceipt(item)"
+              >
+                <v-icon>mdi-truck-check</v-icon>
+              </v-btn>
+            </template>
+            <span>Start Receipt</span>
+          </v-tooltip>
 
-          <!-- Menu for more actions -->
+          <!-- More Actions Menu -->
           <v-menu>
             <template #activator="{ props: menuProps }">
-              <v-btn v-bind="menuProps" icon="mdi-dots-vertical" variant="text" size="small" />
+              <v-btn v-bind="menuProps" icon variant="text" size="small" color="grey">
+                <v-icon>mdi-dots-vertical</v-icon>
+              </v-btn>
             </template>
 
-            <v-list>
+            <v-list density="compact" min-width="160">
               <v-list-item
                 v-if="canDeleteOrder(item)"
                 prepend-icon="mdi-delete"

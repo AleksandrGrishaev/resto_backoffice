@@ -132,61 +132,84 @@
 
       <!-- Actions -->
       <template #[`item.actions`]="{ item }">
-        <div class="d-flex gap-1">
+        <div class="d-flex align-center justify-center gap-1">
           <!-- View Details -->
-          <v-btn
-            icon="mdi-eye"
-            variant="text"
-            size="small"
-            color="info"
-            @click="viewRequestDetails(item)"
-          >
-            <v-tooltip activator="parent" location="top">View Details</v-tooltip>
-          </v-btn>
+          <v-tooltip location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="info"
+                @click="viewRequestDetails(item)"
+              >
+                <v-icon>mdi-eye</v-icon>
+              </v-btn>
+            </template>
+            <span>View Details</span>
+          </v-tooltip>
 
-          <!-- Edit (only for draft/submitted) -->
-          <v-btn
-            v-if="canEditRequest(item)"
-            icon="mdi-pencil"
-            variant="text"
-            size="small"
-            color="primary"
-            @click="editRequest(item)"
-          >
-            <v-tooltip activator="parent" location="top">Edit Request</v-tooltip>
-          </v-btn>
+          <!-- Edit (только для draft/submitted) -->
+          <v-tooltip v-if="canEditRequest(item)" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="primary"
+                @click="editRequest(item)"
+              >
+                <v-icon>mdi-pencil</v-icon>
+              </v-btn>
+            </template>
+            <span>Edit Request</span>
+          </v-tooltip>
 
-          <!-- Submit (only for draft) -->
-          <v-btn
-            v-if="item.status === 'draft'"
-            icon="mdi-send"
-            variant="text"
-            size="small"
-            color="success"
-            @click="submitRequest(item)"
-          >
-            <v-tooltip activator="parent" location="top">Submit Request</v-tooltip>
-          </v-btn>
+          <!-- Submit (только для draft) -->
+          <v-tooltip v-if="item.status === 'draft'" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="success"
+                @click="submitRequest(item)"
+              >
+                <v-icon>mdi-send</v-icon>
+              </v-btn>
+            </template>
+            <span>Submit Request</span>
+          </v-tooltip>
 
-          <!-- Create Order (only for submitted) -->
-          <v-btn
-            v-if="item.status === 'submitted'"
-            icon="mdi-cart-plus"
-            variant="text"
-            size="small"
-            color="warning"
-            @click="createOrderFromRequest(item)"
-          >
-            <v-tooltip activator="parent" location="top">Create Order</v-tooltip>
-          </v-btn>
+          <!-- Create Order (только для submitted) -->
+          <v-tooltip v-if="item.status === 'submitted'" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="warning"
+                @click="createOrderFromRequest(item)"
+              >
+                <v-icon>mdi-cart-plus</v-icon>
+              </v-btn>
+            </template>
+            <span>Create Order</span>
+          </v-tooltip>
 
-          <!-- Menu for more actions -->
+          <!-- More Actions Menu -->
           <v-menu>
             <template #activator="{ props: menuProps }">
-              <v-btn v-bind="menuProps" icon="mdi-dots-vertical" variant="text" size="small" />
+              <v-btn v-bind="menuProps" icon variant="text" size="small" color="grey">
+                <v-icon>mdi-dots-vertical</v-icon>
+              </v-btn>
             </template>
 
-            <v-list>
+            <v-list density="compact" min-width="160">
               <v-list-item
                 v-if="canDeleteRequest(item)"
                 prepend-icon="mdi-delete"

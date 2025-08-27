@@ -149,56 +149,76 @@
 
       <!-- Actions -->
       <template #[`item.actions`]="{ item }">
-        <div class="d-flex gap-1">
+        <div class="d-flex align-center justify-center gap-1">
           <!-- View Details -->
-          <v-btn
-            icon="mdi-eye"
-            variant="text"
-            size="small"
-            color="info"
-            @click="$emit('view-details', item)"
-          >
-            <v-tooltip activator="parent" location="top">View Details</v-tooltip>
-          </v-btn>
+          <v-tooltip location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="info"
+                @click="$emit('view-details', item)"
+              >
+                <v-icon>mdi-eye</v-icon>
+              </v-btn>
+            </template>
+            <span>View Details</span>
+          </v-tooltip>
 
           <!-- Edit -->
-          <v-btn
-            v-if="item.status === 'draft'"
-            icon="mdi-pencil"
-            variant="text"
-            size="small"
-            color="primary"
-            @click="$emit('edit-receipt', item)"
-          >
-            <v-tooltip activator="parent" location="top">Edit Receipt</v-tooltip>
-          </v-btn>
+          <v-tooltip v-if="item.status === 'draft'" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="primary"
+                @click="$emit('edit-receipt', item)"
+              >
+                <v-icon>mdi-pencil</v-icon>
+              </v-btn>
+            </template>
+            <span>Edit Receipt</span>
+          </v-tooltip>
 
           <!-- Complete -->
-          <v-btn
-            v-if="item.status === 'draft'"
-            icon="mdi-check-circle"
-            variant="text"
-            size="small"
-            color="success"
-            @click="$emit('complete-receipt', item)"
-          >
-            <v-tooltip activator="parent" location="top">Complete Receipt</v-tooltip>
-          </v-btn>
+          <v-tooltip v-if="item.status === 'draft'" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="success"
+                @click="$emit('complete-receipt', item)"
+              >
+                <v-icon>mdi-check-circle</v-icon>
+              </v-btn>
+            </template>
+            <span>Complete Receipt</span>
+          </v-tooltip>
 
           <!-- View Storage -->
-          <v-btn
-            v-if="item.storageOperationId"
-            icon="mdi-package-variant"
-            variant="text"
-            size="small"
-            color="purple"
-            @click="$emit('view-storage', item.storageOperationId)"
-          >
-            <v-tooltip activator="parent" location="top">View Storage Operation</v-tooltip>
-          </v-btn>
+          <v-tooltip v-if="item.storageOperationId" location="top">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                v-bind="tooltipProps"
+                icon
+                variant="text"
+                size="small"
+                color="purple"
+                @click="$emit('view-storage', item.storageOperationId)"
+              >
+                <v-icon>mdi-package-variant</v-icon>
+              </v-btn>
+            </template>
+            <span>View Storage Operation</span>
+          </v-tooltip>
         </div>
       </template>
-
       <!-- Loading state -->
       <template #loading>
         <v-skeleton-loader type="table-row@10" />
