@@ -1,10 +1,10 @@
 # Details
 
-Date : 2025-08-24 09:49:30
+Date : 2025-08-24 18:53:22
 
 Directory /Users/peaker/dev/kitchen-app/backoffice/src
 
-Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
+Total : 252 files, 77192 codes, 5621 comments, 12299 blanks, all 95112 lines
 
 [Summary](results.md) / Details / [Diff Summary](diff.md) / [Diff Details](diff-details.md)
 
@@ -82,7 +82,7 @@ Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 | [src/stores/counteragents/types.ts](/src/stores/counteragents/types.ts)                                                                                         | TypeScript |   150 |      50 |    39 |   239 |
 | [src/stores/debug/composables/useDebugFormatting.ts](/src/stores/debug/composables/useDebugFormatting.ts)                                                       | TypeScript |   295 |      78 |    48 |   421 |
 | [src/stores/debug/composables/useDebugStores.ts](/src/stores/debug/composables/useDebugStores.ts)                                                               | TypeScript |   177 |      97 |    47 |   321 |
-| [src/stores/debug/debugService.ts](/src/stores/debug/debugService.ts)                                                                                           | TypeScript | 1,121 |      79 |   151 | 1,351 |
+| [src/stores/debug/debugService.ts](/src/stores/debug/debugService.ts)                                                                                           | TypeScript | 1,203 |      93 |   164 | 1,460 |
 | [src/stores/debug/debugStore.ts](/src/stores/debug/debugStore.ts)                                                                                               | TypeScript |   358 |      88 |    80 |   526 |
 | [src/stores/debug/index.ts](/src/stores/debug/index.ts)                                                                                                         | TypeScript |    23 |       6 |     6 |    35 |
 | [src/stores/debug/types.ts](/src/stores/debug/types.ts)                                                                                                         | TypeScript |   206 |      32 |    34 |   272 |
@@ -93,11 +93,12 @@ Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 | [src/stores/menu/menuStore.ts](/src/stores/menu/menuStore.ts)                                                                                                   | TypeScript |   321 |      28 |    59 |   408 |
 | [src/stores/menu/types.ts](/src/stores/menu/types.ts)                                                                                                           | TypeScript |   177 |      34 |    38 |   249 |
 | [src/stores/payment-settings.store.ts](/src/stores/payment-settings.store.ts)                                                                                   | TypeScript |   147 |       4 |    27 |   178 |
-| [src/stores/preparation/index.ts](/src/stores/preparation/index.ts)                                                                                             | TypeScript |    30 |      11 |     6 |    47 |
+| [src/stores/preparation/composables/usePreparationWriteOff.ts](/src/stores/preparation/composables/usePreparationWriteOff.ts)                                   | TypeScript |   383 |      82 |    63 |   528 |
+| [src/stores/preparation/index.ts](/src/stores/preparation/index.ts)                                                                                             | TypeScript |    40 |      13 |     7 |    60 |
 | [src/stores/preparation/preparationMock.ts](/src/stores/preparation/preparationMock.ts)                                                                         | TypeScript |   253 |      18 |    32 |   303 |
-| [src/stores/preparation/preparationService.ts](/src/stores/preparation/preparationService.ts)                                                                   | TypeScript |   670 |      84 |   130 |   884 |
-| [src/stores/preparation/preparationStore.ts](/src/stores/preparation/preparationStore.ts)                                                                       | TypeScript |   474 |      67 |   111 |   652 |
-| [src/stores/preparation/types.ts](/src/stores/preparation/types.ts)                                                                                             | TypeScript |   171 |      45 |    47 |   263 |
+| [src/stores/preparation/preparationService.ts](/src/stores/preparation/preparationService.ts)                                                                   | TypeScript |   925 |      55 |   162 | 1,142 |
+| [src/stores/preparation/preparationStore.ts](/src/stores/preparation/preparationStore.ts)                                                                       | TypeScript |   555 |      61 |   113 |   729 |
+| [src/stores/preparation/types.ts](/src/stores/preparation/types.ts)                                                                                             | TypeScript |   319 |      20 |    30 |   369 |
 | [src/stores/productsStore/composables/index.ts](/src/stores/productsStore/composables/index.ts)                                                                 | TypeScript |     4 |       3 |     3 |    10 |
 | [src/stores/productsStore/composables/useProductConsumption.ts](/src/stores/productsStore/composables/useProductConsumption.ts)                                 | TypeScript |   251 |      30 |    54 |   335 |
 | [src/stores/productsStore/composables/useProductPriceHistory.ts](/src/stores/productsStore/composables/useProductPriceHistory.ts)                               | TypeScript |   298 |      43 |    60 |   401 |
@@ -126,8 +127,8 @@ Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 | [src/stores/storage/composables/useWriteOff.ts](/src/stores/storage/composables/useWriteOff.ts)                                                                 | TypeScript |   423 |      84 |    71 |   578 |
 | [src/stores/storage/index.ts](/src/stores/storage/index.ts)                                                                                                     | TypeScript |    37 |       6 |     6 |    49 |
 | [src/stores/storage/storageMock.ts](/src/stores/storage/storageMock.ts)                                                                                         | TypeScript |   561 |      32 |    46 |   639 |
-| [src/stores/storage/storageService.ts](/src/stores/storage/storageService.ts)                                                                                   | TypeScript |   714 |      42 |   126 |   882 |
-| [src/stores/storage/storageStore.ts](/src/stores/storage/storageStore.ts)                                                                                       | TypeScript |   474 |      57 |    99 |   630 |
+| [src/stores/storage/storageService.ts](/src/stores/storage/storageService.ts)                                                                                   | TypeScript |   926 |      69 |   169 | 1,164 |
+| [src/stores/storage/storageStore.ts](/src/stores/storage/storageStore.ts)                                                                                       | TypeScript |   528 |      61 |   112 |   701 |
 | [src/stores/storage/types.ts](/src/stores/storage/types.ts)                                                                                                     | TypeScript |   286 |      19 |    30 |   335 |
 | [src/stores/supplier_2/composables/useOrderAssistant.ts](/src/stores/supplier_2/composables/useOrderAssistant.ts)                                               | TypeScript |   252 |      77 |    39 |   368 |
 | [src/stores/supplier_2/composables/useProcurementRequests.ts](/src/stores/supplier_2/composables/useProcurementRequests.ts)                                     | TypeScript |   317 |     113 |    65 |   495 |
@@ -159,7 +160,7 @@ Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 | [src/views/LoginView.vue](/src/views/LoginView.vue)                                                                                                             | Vue        |    65 |       1 |    13 |    79 |
 | [src/views/NotFoundView.vue](/src/views/NotFoundView.vue)                                                                                                       | Vue        |    28 |       0 |     5 |    33 |
 | [src/views/PaymentSettingsView.vue](/src/views/PaymentSettingsView.vue)                                                                                         | Vue        |   108 |       4 |    20 |   132 |
-| [src/views/Preparation/PreparationView.vue](/src/views/Preparation/PreparationView.vue)                                                                         | Vue        |   439 |      14 |    64 |   517 |
+| [src/views/Preparation/PreparationView.vue](/src/views/Preparation/PreparationView.vue)                                                                         | Vue        |   511 |      16 |    80 |   607 |
 | [src/views/Preparation/components/AddPreparationProductionItemDialog.vue](/src/views/Preparation/components/AddPreparationProductionItemDialog.vue)             | Vue        |   124 |       5 |    21 |   150 |
 | [src/views/Preparation/components/InventoryDetailsDialog.vue](/src/views/Preparation/components/InventoryDetailsDialog.vue)                                     | Vue        |   633 |      18 |    66 |   717 |
 | [src/views/Preparation/components/PreparationAlerts.vue](/src/views/Preparation/components/PreparationAlerts.vue)                                               | Vue        |    92 |       2 |    14 |   108 |
@@ -170,8 +171,12 @@ Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 | [src/views/Preparation/components/PreparationOperationsTable.vue](/src/views/Preparation/components/PreparationOperationsTable.vue)                             | Vue        |   669 |      27 |    69 |   765 |
 | [src/views/Preparation/components/PreparationProductionDialog.vue](/src/views/Preparation/components/PreparationProductionDialog.vue)                           | Vue        |   228 |       9 |    39 |   276 |
 | [src/views/Preparation/components/PreparationProductionItemCard.vue](/src/views/Preparation/components/PreparationProductionItemCard.vue)                       | Vue        |   185 |       6 |    23 |   214 |
-| [src/views/Preparation/components/PreparationStockTable.vue](/src/views/Preparation/components/PreparationStockTable.vue)                                       | Vue        |   394 |      17 |    51 |   462 |
+| [src/views/Preparation/components/PreparationStockTable.vue](/src/views/Preparation/components/PreparationStockTable.vue)                                       | Vue        |   671 |      22 |    84 |   777 |
 | [src/views/Preparation/components/index.ts](/src/views/Preparation/components/index.ts)                                                                         | TypeScript |    11 |     124 |    19 |   154 |
+| [src/views/Preparation/components/writeoff/PreparationQuantityDialog.vue](/src/views/Preparation/components/writeoff/PreparationQuantityDialog.vue)             | Vue        |   479 |       8 |    75 |   562 |
+| [src/views/Preparation/components/writeoff/PreparationSelectorWidget.vue](/src/views/Preparation/components/writeoff/PreparationSelectorWidget.vue)             | Vue        |   324 |       7 |    55 |   386 |
+| [src/views/Preparation/components/writeoff/PreparationWriteOffDialog.vue](/src/views/Preparation/components/writeoff/PreparationWriteOffDialog.vue)             | Vue        |   510 |      20 |    64 |   594 |
+| [src/views/Preparation/components/writeoff/PreparationWriteOffWidget.vue](/src/views/Preparation/components/writeoff/PreparationWriteOffWidget.vue)             | Vue        |    81 |       5 |    16 |   102 |
 | [src/views/accounts/AccountDetailView.vue](/src/views/accounts/AccountDetailView.vue)                                                                           | Vue        |   386 |       5 |    55 |   446 |
 | [src/views/accounts/AccountListView.vue](/src/views/accounts/AccountListView.vue)                                                                               | Vue        |   126 |       2 |    23 |   151 |
 | [src/views/counteragents/CounteragentsView.vue](/src/views/counteragents/CounteragentsView.vue)                                                                 | Vue        |   293 |      13 |    48 |   354 |
@@ -210,18 +215,18 @@ Total : 247 files, 73726 codes, 5494 comments, 11817 blanks, all 91037 lines
 | [src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue](/src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue)                               | Vue        |   255 |       9 |    27 |   291 |
 | [src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue](/src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue)                 | Vue        |   559 |       8 |    75 |   642 |
 | [src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue](/src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue)                           | Vue        |   199 |       4 |    32 |   235 |
-| [src/views/storage/StorageView.vue](/src/views/storage/StorageView.vue)                                                                                         | Vue        |   551 |      16 |    52 |   619 |
+| [src/views/storage/StorageView.vue](/src/views/storage/StorageView.vue)                                                                                         | Vue        |   671 |      14 |    80 |   765 |
 | [src/views/storage/components/AddReceiptItemDialog.vue](/src/views/storage/components/AddReceiptItemDialog.vue)                                                 | Vue        |    47 |       2 |     8 |    57 |
 | [src/views/storage/components/InventoryDetailsDialog.vue](/src/views/storage/components/InventoryDetailsDialog.vue)                                             | Vue        |   385 |      14 |    48 |   447 |
-| [src/views/storage/components/InventoryDialog.vue](/src/views/storage/components/InventoryDialog.vue)                                                           | Vue        |   632 |      11 |    92 |   735 |
-| [src/views/storage/components/InventoryItemRow.vue](/src/views/storage/components/InventoryItemRow.vue)                                                         | Vue        |   245 |      10 |    38 |   293 |
+| [src/views/storage/components/InventoryDialog.vue](/src/views/storage/components/InventoryDialog.vue)                                                           | Vue        |   743 |      13 |   103 |   859 |
+| [src/views/storage/components/InventoryItemRow.vue](/src/views/storage/components/InventoryItemRow.vue)                                                         | Vue        |   261 |      11 |    38 |   310 |
 | [src/views/storage/components/ItemDetailsDialog.vue](/src/views/storage/components/ItemDetailsDialog.vue)                                                       | Vue        |   319 |       7 |    39 |   365 |
 | [src/views/storage/components/ReceiptDialog.vue](/src/views/storage/components/ReceiptDialog.vue)                                                               | Vue        |   302 |       9 |    49 |   360 |
 | [src/views/storage/components/ReceiptItemCard.vue](/src/views/storage/components/ReceiptItemCard.vue)                                                           | Vue        |   183 |       6 |    24 |   213 |
-| [src/views/storage/components/StorageAlerts.vue](/src/views/storage/components/StorageAlerts.vue)                                                               | Vue        |    92 |       2 |    14 |   108 |
+| [src/views/storage/components/StorageAlerts.vue](/src/views/storage/components/StorageAlerts.vue)                                                               | Vue        |   139 |       5 |    21 |   165 |
 | [src/views/storage/components/StorageInventoriesTable.vue](/src/views/storage/components/StorageInventoriesTable.vue)                                           | Vue        |   480 |      20 |    65 |   565 |
 | [src/views/storage/components/StorageOperationsTable.vue](/src/views/storage/components/StorageOperationsTable.vue)                                             | Vue        |   467 |      21 |    54 |   542 |
-| [src/views/storage/components/StorageStockTable.vue](/src/views/storage/components/StorageStockTable.vue)                                                       | Vue        |   393 |      16 |    53 |   462 |
+| [src/views/storage/components/StorageStockTable.vue](/src/views/storage/components/StorageStockTable.vue)                                                       | Vue        |   597 |      23 |    80 |   700 |
 | [src/views/storage/components/index.ts](/src/views/storage/components/index.ts)                                                                                 | TypeScript |    11 |     135 |    21 |   167 |
 | [src/views/storage/components/tabs/StorageAnalyticsTab.vue](/src/views/storage/components/tabs/StorageAnalyticsTab.vue)                                         | Vue        |   432 |      13 |    52 |   497 |
 | [src/views/storage/components/widgets/WriteOffStatsWidget.vue](/src/views/storage/components/widgets/WriteOffStatsWidget.vue)                                   | Vue        |   424 |      22 |    43 |   489 |
