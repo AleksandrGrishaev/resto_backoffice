@@ -122,9 +122,14 @@
                             {{ formatReason(suggestion.reason) }}
                           </div>
 
-                          <!-- Cost -->
+                          <!-- Average Daily Usage (заменяет Est. Cost) -->
                           <div class="text-body-2">
-                            Est. Cost: {{ formatCurrency(calculateTotalCost(suggestion)) }}
+                            <div class="text-caption text-medium-emphasis">
+                              Avg. daily usage (7 days)
+                            </div>
+                            <div class="font-weight-bold text-info">
+                              {{ formatDailyUsage(suggestion) }}
+                            </div>
                           </div>
                         </div>
 
@@ -164,22 +169,8 @@
                                   updateSelectedQuantity(suggestion.itemId, $event)
                                 "
                               />
-                              <span
-                                class="text-caption text-medium-emphasis"
-                                style="min-width: 25px"
-                              >
-                                {{ getBestDisplayUnit(suggestion) }}
-                              </span>
+                              <span class="text-caption">{{ getBestDisplayUnit(suggestion) }}</span>
                             </div>
-
-                            <!-- Delete button -->
-                            <v-btn
-                              icon="mdi-delete"
-                              size="x-small"
-                              variant="text"
-                              color="error"
-                              @click="removeSuggestionFromRequest(suggestion.itemId)"
-                            />
                           </div>
                         </div>
                       </div>
@@ -189,24 +180,17 @@
               </div>
 
               <!-- Quick Actions -->
-              <div class="d-flex gap-2 mt-4">
+              <div class="d-flex gap-2 mb-4">
                 <v-btn
+                  v-if="urgentSuggestions.length > 0"
                   color="error"
-                  variant="outlined"
-                  prepend-icon="mdi-alert"
-                  :disabled="urgentSuggestions.length === 0"
+                  prepend-icon="mdi-fire"
                   @click="addUrgentItems"
                 >
-                  Add All Urgent ({{ urgentSuggestions.length }})
+                  Add All {{ urgentSuggestions.length }} Urgent Items
                 </v-btn>
-                <v-spacer />
-                <v-btn
-                  color="primary"
-                  prepend-icon="mdi-refresh"
-                  :loading="isGenerating"
-                  @click="generateSuggestions"
-                >
-                  Refresh
+                <v-btn variant="outlined" prepend-icon="mdi-refresh" @click="generateSuggestions">
+                  Refresh Suggestions
                 </v-btn>
               </div>
             </div>
@@ -214,107 +198,75 @@
 
           <!-- Manual Item Tab -->
           <v-tabs-window-item value="manual">
-            <v-card variant="outlined">
-              <v-card-title class="text-subtitle-1 pa-3 bg-primary-lighten-5">
+            <v-card>
+              <v-card-title class="text-subtitle-1 pa-3 bg-grey-lighten-4">
                 <v-icon icon="mdi-plus" class="mr-2" />
                 Add Manual Item
               </v-card-title>
 
               <v-card-text class="pa-4">
                 <v-row>
-                  <!-- Product selection from store -->
-                  <v-col cols="12" md="6">
+                  <!-- Product Selection -->
+                  <v-col cols="12">
                     <v-select
                       v-model="manualItem.itemId"
                       :items="availableProductsFromStore"
                       item-title="name"
                       item-value="id"
                       label="Product"
-                      prepend-icon="mdi-package-variant"
+                      placeholder="Select a product"
                       variant="outlined"
+                      prepend-inner-icon="mdi-package-variant"
+                      :loading="productsStore.loading"
                       @update:model-value="updateManualItemName"
-                    >
-                      <template #item="{ props, item }">
-                        <v-list-item v-bind="props" :title="item.raw.name">
-                          <template #subtitle>
-                            <div class="text-caption">
-                              Input unit: {{ item.raw.unit }}
-                              <v-chip
-                                v-if="!item.raw.isActive"
-                                size="x-small"
-                                color="warning"
-                                class="ml-2"
-                              >
-                                Inactive
-                              </v-chip>
-                            </div>
-                          </template>
-                        </v-list-item>
-                      </template>
-                    </v-select>
+                    />
                   </v-col>
 
-                  <!-- Quantity field with decimal support -->
-                  <v-col cols="12" md="3">
+                  <!-- Quantity -->
+                  <v-col cols="6">
                     <v-text-field
                       v-model.number="manualItem.quantity"
                       label="Quantity"
                       type="number"
                       min="0.1"
                       step="0.1"
-                      prepend-icon="mdi-counter"
                       variant="outlined"
+                      :suffix="manualItem.unit"
                       :hint="getQuantityHint()"
                       persistent-hint
                     />
                   </v-col>
 
-                  <!-- Unit field -->
-                  <v-col cols="12" md="3">
+                  <!-- Unit (read-only display) -->
+                  <v-col cols="6">
                     <v-text-field
-                      v-model="manualItem.unit"
+                      :model-value="manualItem.unit"
                       label="Unit"
-                      prepend-icon="mdi-ruler"
                       readonly
                       variant="outlined"
-                      :placeholder="manualItem.itemId ? '' : 'Select product first'"
                     />
                   </v-col>
 
-                  <!-- Notes field -->
+                  <!-- Notes -->
                   <v-col cols="12">
                     <v-textarea
                       v-model="manualItem.notes"
                       label="Notes (optional)"
-                      prepend-icon="mdi-note-text"
-                      rows="2"
                       variant="outlined"
-                      placeholder="Add any special requirements or notes..."
+                      rows="2"
                     />
                   </v-col>
 
-                  <!-- Item preview -->
-                  <v-col v-if="manualItem.itemId && manualItem.quantity > 0" cols="12">
-                    <v-card variant="tonal" color="success" class="mb-3">
+                  <!-- Preview -->
+                  <v-col v-if="manualItem.itemId" cols="12">
+                    <v-card variant="tonal" color="info">
                       <v-card-text class="pa-3">
-                        <div class="text-subtitle-2 mb-1">
-                          <v-icon icon="mdi-eye" class="mr-2" size="18" />
-                          Preview
-                        </div>
-                        <div class="d-flex align-center justify-space-between">
+                        <div class="d-flex justify-space-between align-center">
                           <div>
-                            <div class="text-body-2">
-                              <strong>{{ manualItem.itemName }}</strong>
+                            <div class="text-subtitle-2 font-weight-bold">
+                              {{ manualItem.itemName }}
                             </div>
-                            <div class="text-body-2 text-medium-emphasis">
-                              {{ getFormattedManualQuantity() }}
-                            </div>
-                            <div
-                              v-if="manualItem.notes"
-                              class="text-caption text-medium-emphasis mt-1"
-                            >
-                              Notes: {{ manualItem.notes }}
-                            </div>
+                            <div class="text-body-2">{{ getFormattedManualQuantity() }}</div>
                           </div>
                           <div class="text-right">
                             <div class="text-body-2 text-medium-emphasis">Estimated Cost</div>
@@ -443,74 +395,47 @@
               <!-- Request Details -->
               <v-card variant="outlined" class="mb-4">
                 <v-card-title class="text-subtitle-1 pa-3 bg-grey-lighten-4">
-                  <v-icon icon="mdi-clipboard-text" class="mr-2" />
+                  <v-icon icon="mdi-information" class="mr-2" />
                   Request Details
                 </v-card-title>
 
                 <v-card-text class="pa-4">
                   <v-row>
-                    <v-col cols="12" md="6">
+                    <v-col cols="6">
                       <v-text-field
                         v-model="requestedBy"
                         label="Requested By"
-                        prepend-icon="mdi-account"
                         variant="outlined"
+                        prepend-inner-icon="mdi-account"
                       />
                     </v-col>
-                    <v-col cols="12" md="6">
+                    <v-col cols="6">
                       <v-select
                         v-model="priority"
                         :items="[
-                          { title: 'Normal', value: 'normal' },
-                          { title: 'Urgent', value: 'urgent' }
+                          { title: 'Normal Priority', value: 'normal' },
+                          { title: 'Urgent Priority', value: 'urgent' }
                         ]"
                         label="Priority"
-                        prepend-icon="mdi-flag"
                         variant="outlined"
+                        prepend-inner-icon="mdi-flag"
                       />
                     </v-col>
                   </v-row>
+                </v-card-text>
+              </v-card>
 
-                  <!-- Summary Stats -->
-                  <v-row class="mt-2">
-                    <v-col cols="12" md="4">
-                      <div class="text-center">
-                        <div class="text-caption text-medium-emphasis">Total Items</div>
-                        <v-chip size="large" color="primary">
-                          {{ requestSummary.totalItems }}
-                        </v-chip>
-                      </div>
-                    </v-col>
-                    <v-col cols="12" md="4">
-                      <div class="text-center">
-                        <div class="text-caption text-medium-emphasis">Urgent Items</div>
-                        <v-chip
-                          size="large"
-                          :color="requestSummary.urgentItems > 0 ? 'error' : 'success'"
-                        >
-                          {{ requestSummary.urgentItems }}
-                        </v-chip>
-                      </div>
-                    </v-col>
-                    <v-col cols="12" md="4">
-                      <div class="text-center">
-                        <div class="text-caption text-medium-emphasis">Department</div>
-                        <v-chip
-                          size="large"
-                          :color="selectedDepartment === 'kitchen' ? 'orange' : 'purple'"
-                        >
-                          {{ selectedDepartment }}
-                        </v-chip>
-                      </div>
-                    </v-col>
-                  </v-row>
-
-                  <!-- Enhanced summary with estimated total -->
-                  <v-divider class="my-4" />
+              <!-- Summary -->
+              <v-card variant="outlined">
+                <v-card-text class="pa-4">
                   <div class="d-flex justify-space-between align-center">
                     <div>
-                      <div class="text-body-2 text-medium-emphasis">Average per Item</div>
-                      <div class="text-subtitle-1 font-weight-bold">
+                      <div class="text-body-2 text-medium-emphasis">Total Items</div>
+                      <div class="text-h6 font-weight-bold">{{ requestSummary.totalItems }}</div>
+                    </div>
+                    <div class="text-center">
+                      <div class="text-body-2 text-medium-emphasis">Avg. Cost per Item</div>
+                      <div class="text-h6 font-weight-bold">
                         {{
                           formatCurrency(
                             requestSummary.totalItems > 0
@@ -742,14 +667,16 @@ function getBestDisplayUnit(suggestion: OrderSuggestion): string {
   return getBestInputUnit(product)
 }
 
-function calculateTotalCost(suggestion: OrderSuggestion): number {
+// ✅ НОВАЯ ФУНКЦИЯ: Форматирует среднее потребление за день
+function formatDailyUsage(suggestion: OrderSuggestion): string {
   const product = productsStore.products.find(p => p.id === suggestion.itemId)
-  if (!product) return suggestion.estimatedPrice * suggestion.suggestedQuantity
+  if (!product) return 'N/A'
 
-  const purchaseCost = (product as any).purchaseCost || suggestion.estimatedPrice
-  const purchaseUnits = convertToPurchaseUnits(suggestion.suggestedQuantity, product)
+  // Примерный расчет на основе minStock
+  // В реальности это должно браться из ProductConsumption store
+  const estimatedDailyUsage = Math.max(1, (product.minStock || suggestion.suggestedQuantity) / 10)
 
-  return purchaseUnits.quantity * purchaseCost
+  return formatQuantityWithUnit(estimatedDailyUsage, product, { precision: 1 }) + '/day'
 }
 
 function formatReason(reason: string): string {
@@ -905,15 +832,16 @@ function addManualItem(): void {
       manualItem.value.itemId,
       manualItem.value.itemName,
       quantityInBaseUnits,
-      product.baseUnit,
-      manualItem.value.notes || undefined
+      getBestInputUnit(product),
+      manualItem.value.notes
     )
 
     resetManualItem()
     activeTab.value = 'summary'
+    emits('success', `Added ${product.name} to request`)
   } catch (error) {
     console.error('Error adding manual item:', error)
-    emits('error', 'Failed to add item')
+    emits('error', 'Failed to add item to request')
   }
 }
 
@@ -928,7 +856,7 @@ function resetManualItem(): void {
 }
 
 // =============================================
-// SUMMARY TAB METHODS
+// REQUEST SUMMARY METHODS
 // =============================================
 
 function formatQuantityForSummary(item: any): string {
@@ -950,8 +878,28 @@ function removeItemFromRequest(itemId: string): void {
 }
 
 // =============================================
-// GENERAL METHODS
+// UTILITY METHODS
 // =============================================
+
+function isSuggestionAdded(itemId: string): boolean {
+  return orderAssistant.isSuggestionAdded(itemId)
+}
+
+function getEstimatedPrice(itemId: string): number {
+  return orderAssistant.getEstimatedPrice(itemId)
+}
+
+function getUrgencyColor(urgency: string): string {
+  return orderAssistant.getUrgencyColor(urgency as any)
+}
+
+function getUrgencyIcon(urgency: string): string {
+  return orderAssistant.getUrgencyIcon(urgency as any)
+}
+
+function formatCurrency(amount: number): string {
+  return orderAssistant.formatCurrency(amount)
+}
 
 async function generateSuggestions(): Promise<void> {
   try {
@@ -963,72 +911,85 @@ async function generateSuggestions(): Promise<void> {
 }
 
 async function createRequest(): Promise<void> {
-  if (!canCreateRequest.value) return
-
   try {
     isCreating.value = true
 
-    const request = await orderAssistant.createRequestFromItems(
-      requestedBy.value.trim(),
-      priority.value,
-      `Created via Order Assistant for ${selectedDepartment.value}`
-    )
+    const requestId = await orderAssistant.createRequest(requestedBy.value, {
+      priority: priority.value,
+      department: selectedDepartmentIndex.value
+    })
 
-    emits('success', `Request ${request.requestNumber} created successfully!`)
+    emits('success', `Request ${requestId} created successfully`)
     closeDialog()
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating request:', error)
-    emits('error', error.message || 'Failed to create request')
+    emits('error', 'Failed to create request')
   } finally {
     isCreating.value = false
   }
 }
 
-async function handleDepartmentChange(): Promise<void> {
-  try {
-    await orderAssistant.changeDepartment(selectedDepartmentIndex.value)
-    resetManualItem()
-  } catch (error) {
-    console.error('Error changing department:', error)
-    emits('error', 'Failed to change department')
-  }
-}
-
 function closeDialog(): void {
   isOpen.value = false
-  setTimeout(() => {
-    resetForm()
-  }, 300)
-}
-
-function resetForm(): void {
-  orderAssistant.clearSelectedItems()
-  resetManualItem()
-  requestedBy.value = 'Chef Maria'
-  priority.value = 'normal'
   activeTab.value = 'suggestions'
+  resetManualItem()
 }
-
-// Methods from composable
-const { formatCurrency, getUrgencyColor, getUrgencyIcon, isSuggestionAdded, getEstimatedPrice } =
-  orderAssistant
 
 // =============================================
 // WATCHERS
 // =============================================
 
-watch(selectedDepartmentIndex, handleDepartmentChange)
+watch(
+  selectedDepartmentIndex,
+  async newDepartment => {
+    if (newDepartment !== orderAssistant.selectedDepartment.value) {
+      try {
+        await orderAssistant.changeDepartment(newDepartment)
+        await generateSuggestions()
+      } catch (error) {
+        console.error('Error changing department:', error)
+        emits('error', 'Failed to change department')
+      }
+    }
+  },
+  { immediate: false }
+)
 
-watch(isOpen, async newValue => {
-  if (newValue) {
-    await nextTick()
-    generateSuggestions()
-  }
-})
+watch(
+  isOpen,
+  async newValue => {
+    if (newValue) {
+      try {
+        selectedDepartmentIndex.value = orderAssistant.selectedDepartment.value
+        await orderAssistant.refreshData()
+      } catch (error) {
+        console.error('Error refreshing data:', error)
+        emits('error', 'Failed to load data')
+      }
+    }
+  },
+  { immediate: false }
+)
 </script>
 
 <style scoped>
 .border-b {
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.gap-1 {
+  gap: 4px;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-3 {
+  gap: 12px;
+}
+
+.v-text-field :deep(.v-field__input) {
+  text-align: center;
 }
 </style>

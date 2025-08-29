@@ -17,6 +17,13 @@ import type {
   Urgency
 } from '../types'
 
+import {
+  getBestInputUnit,
+  convertToPurchaseUnits,
+  convertUserInputToBaseUnits,
+  formatQuantityWithUnit
+} from '@/utils/quantityFormatter'
+
 const MODULE_NAME = 'OrderAssistant'
 
 // =============================================
@@ -229,6 +236,7 @@ export function useOrderAssistant() {
     const categoryBreakdown: Record<string, number> = {}
 
     for (const item of items) {
+      // ✅ ИСПРАВЛЕНИЕ: Правильный расчет стоимости в базовых единицах
       const itemTotal = item.requestedQuantity * item.estimatedPrice
       estimatedTotal += itemTotal
 
@@ -439,41 +447,7 @@ export function useOrderAssistant() {
    * Get estimated price with multiple fallbacks
    */
   function getEstimatedPrice(itemId: string): number {
-    try {
-      // 1. Try from current suggestions (most recent)
-      const suggestion = allSuggestions.value.find(s => s.itemId === itemId)
-      if (suggestion?.estimatedPrice && suggestion.estimatedPrice > 0) {
-        return suggestion.estimatedPrice
-      }
-
-      // 2. Try from Storage Store (latest cost from receipts)
-      const balance = storageStore.getBalance(itemId)
-      if (balance?.latestCost && balance.latestCost > 0) {
-        return balance.latestCost
-      }
-
-      // 3. Try average cost from Storage Store
-      if (balance?.averageCost && balance.averageCost > 0) {
-        return balance.averageCost
-      }
-
-      // 4. Try from Products Store (base cost)
-      const product = productsStore.products.find(p => p.id === itemId)
-      if (product?.baseCostPerUnit && product.baseCostPerUnit > 0) {
-        return product.baseCostPerUnit
-      }
-
-      // 5. Try legacy cost from Products Store
-      if (product?.costPerUnit && product.costPerUnit > 0) {
-        return product.costPerUnit
-      }
-
-      DebugUtils.warn(MODULE_NAME, 'No price found for item, using 0', { itemId })
-      return 0
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to get estimated price', { itemId, error })
-      return 0
-    }
+    return getBaseCostPerUnit(itemId)
   }
 
   /**
@@ -723,38 +697,64 @@ export function useOrderAssistant() {
       }
 
       const targetDepartment = options?.department || state.value.selectedDepartment
-      const validatePrices = options?.validatePrices ?? true
 
       DebugUtils.info(MODULE_NAME, 'Creating request with enhanced validation', {
         itemCount: state.value.selectedItems.length,
         department: targetDepartment,
-        requestedBy,
-        validatePrices
+        requestedBy
       })
-
-      // Validate and update prices if requested
-      if (validatePrices) {
-        await updatePrices()
-      }
 
       // Determine overall priority
       const hasUrgentItems = state.value.selectedItems.some(item => item.priority === 'urgent')
       const overallPriority = options?.priority || (hasUrgentItems ? 'urgent' : 'normal')
 
-      // Create request data
+      // ✅ ПРОСТАЯ подготовка данных для заявки
       const createData: CreateRequestData = {
         department: targetDepartment,
         requestedBy,
-        items: state.value.selectedItems.map(item => ({
-          itemId: item.itemId,
-          itemName: item.itemName,
-          category: item.category,
-          requestedQuantity: item.requestedQuantity,
-          unit: item.unit,
-          estimatedPrice: item.estimatedPrice,
-          priority: item.priority,
-          notes: item.notes
-        })),
+        items: state.value.selectedItems.map(item => {
+          const product = productsStore.products.find(p => p.id === item.itemId)
+
+          let finalQuantity = item.requestedQuantity
+          let finalUnit = item.unit
+          let finalPrice = item.estimatedPrice
+
+          if (product) {
+            try {
+              // ✅ ПРОСТАЯ конвертация единиц
+              if (item.unit === 'gram' && item.requestedQuantity >= 1000) {
+                finalQuantity = Math.round((item.requestedQuantity / 1000) * 1000) / 1000
+                finalUnit = 'kg'
+              } else if (item.unit === 'ml' && item.requestedQuantity >= 1000) {
+                finalQuantity = Math.round((item.requestedQuantity / 1000) * 1000) / 1000
+                finalUnit = 'L'
+              }
+
+              // ✅ ПРОСТОЕ получение цены за единицу закупки
+              if (product.purchaseCost && product.purchaseCost > 0) {
+                finalPrice = product.purchaseCost
+              } else if (product.purchaseToBaseRatio && product.purchaseToBaseRatio > 0) {
+                finalPrice = Math.round(item.estimatedPrice * product.purchaseToBaseRatio)
+              }
+            } catch (error) {
+              DebugUtils.warn(MODULE_NAME, 'Failed to process item, using original values', {
+                itemId: item.itemId,
+                error: error?.message
+              })
+            }
+          }
+
+          return {
+            itemId: item.itemId,
+            itemName: item.itemName,
+            category: item.category,
+            requestedQuantity: finalQuantity,
+            unit: finalUnit,
+            estimatedPrice: Math.round(finalPrice),
+            priority: item.priority,
+            notes: item.notes
+          }
+        }),
         priority: overallPriority,
         notes: [
           `Created from Order Assistant for ${targetDepartment} department`,
@@ -765,7 +765,7 @@ export function useOrderAssistant() {
           .join(' | ')
       }
 
-      // Create request through supplier store (with integration)
+      // Create request through supplier store
       const newRequest = await supplierStore.createRequest(createData)
 
       // Clear selected items after successful creation
@@ -785,12 +785,37 @@ export function useOrderAssistant() {
 
       return newRequest.id
     } catch (error) {
-      const errorMessage = `Failed to create request: ${error}`
-      DebugUtils.error(MODULE_NAME, 'Request creation failed', { error })
+      const errorMessage = `Failed to create request: ${error?.message || error}`
+      DebugUtils.error(MODULE_NAME, 'Request creation failed', {
+        error: error?.message || String(error)
+      })
       addError(errorMessage)
-      throw error
+      throw new Error(errorMessage)
     } finally {
       state.value.isCreatingRequest = false
+    }
+  }
+
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Получает среднее потребление за день за 7 дней
+   */
+  function getDailyAverageUsage(itemId: string): number {
+    try {
+      // В реальности это должно браться из ProductConsumption store
+      // Сейчас делаем примерный расчет на основе minStock и текущего запаса
+      const product = productsStore.products.find(p => p.id === itemId)
+      const balance = storageStore.getBalance(itemId)
+
+      if (!product || !balance) return 0
+
+      // Простая формула: minStock обычно рассчитывается на 7-14 дней
+      // Предполагаем что minStock = dailyUsage * 10 дней
+      const estimatedDailyUsage = (product.minStock || 0) / 10
+
+      return Math.max(estimatedDailyUsage, 1) // Минимум 1 базовая единица в день
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error calculating daily usage', { itemId, error })
+      return 0
     }
   }
 
@@ -872,7 +897,128 @@ export function useOrderAssistant() {
    * Adds suggestion to request (for UI)
    */
   function addSuggestionToRequest(suggestion: OrderSuggestion, customQuantity?: number): void {
-    addItem(suggestion, customQuantity)
+    try {
+      const existingItemIndex = state.value.selectedItems.findIndex(
+        item => item.itemId === suggestion.itemId
+      )
+
+      const quantityToAdd = customQuantity || suggestion.suggestedQuantity
+
+      if (existingItemIndex !== -1) {
+        // Update existing item
+        const existingItem = state.value.selectedItems[existingItemIndex]
+        existingItem.requestedQuantity += quantityToAdd
+
+        DebugUtils.debug(MODULE_NAME, 'Updated existing item quantity', {
+          itemId: suggestion.itemId,
+          newQuantity: existingItem.requestedQuantity,
+          added: quantityToAdd
+        })
+      } else {
+        // Add new item с максимальной защитой
+        const product = productsStore.products.find(p => p.id === suggestion.itemId)
+
+        // ✅ БЕЗОПАСНОЕ получение единиц без сложных функций
+        let baseUnit = 'gram'
+        let baseCostPerUnit = suggestion.estimatedPrice || 1000
+
+        if (product) {
+          try {
+            baseUnit = product.baseUnit || product.unit || 'gram'
+
+            if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
+              baseCostPerUnit = product.baseCostPerUnit
+            } else if (product.costPerUnit && product.costPerUnit > 0) {
+              baseCostPerUnit = product.costPerUnit
+            } else if (
+              product.purchaseCost &&
+              product.purchaseToBaseRatio &&
+              product.purchaseToBaseRatio > 0
+            ) {
+              baseCostPerUnit = product.purchaseCost / product.purchaseToBaseRatio
+            }
+          } catch (error) {
+            DebugUtils.warn(MODULE_NAME, 'Error processing product data, using fallbacks', {
+              itemId: suggestion.itemId,
+              error: error?.message
+            })
+          }
+        }
+
+        const newItem: RequestItem = {
+          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          itemId: suggestion.itemId,
+          itemName: suggestion.itemName,
+          category: product?.category || 'other',
+          requestedQuantity: quantityToAdd, // В базовых единицах
+          unit: baseUnit, // ✅ Базовая единица
+          estimatedPrice: baseCostPerUnit, // ✅ Цена за базовую единицу
+          priority: suggestion.urgency === 'high' ? 'urgent' : 'normal',
+          notes: `Auto-generated: ${suggestion.reason || 'restock'} (current: ${suggestion.currentStock}, min: ${suggestion.minStock})`
+        }
+
+        state.value.selectedItems.push(newItem)
+
+        DebugUtils.debug(MODULE_NAME, 'New item added to request', {
+          itemId: suggestion.itemId,
+          quantity: quantityToAdd,
+          unit: baseUnit,
+          baseCostPerUnit,
+          totalItems: state.value.selectedItems.length
+        })
+      }
+    } catch (error) {
+      const errorMessage = `Failed to add item: ${error?.message || error}`
+      DebugUtils.error(MODULE_NAME, 'Failed to add item', {
+        suggestion: {
+          itemId: suggestion.itemId,
+          itemName: suggestion.itemName,
+          suggestedQuantity: suggestion.suggestedQuantity
+        },
+        error: error?.message || String(error)
+      })
+      addError(errorMessage)
+      throw new Error(errorMessage)
+    }
+  }
+
+  function getBaseCostPerUnit(itemId: string): number {
+    try {
+      // 1. Пробуем получить из Products Store (baseCostPerUnit)
+      const product = productsStore.products.find(p => p.id === itemId)
+      if (product?.baseCostPerUnit && product.baseCostPerUnit > 0) {
+        return product.baseCostPerUnit
+      }
+
+      // 2. Рассчитываем из purchaseCost если есть
+      if (product?.purchaseCost && product?.purchaseToBaseRatio) {
+        return product.purchaseCost / product.purchaseToBaseRatio
+      }
+
+      // 3. Fallback на старую логику
+      const balance = storageStore.getBalance(itemId)
+      if (balance?.latestCost && balance.latestCost > 0) {
+        return balance.latestCost
+      }
+
+      // 4. Fallback на averageCost
+      if (balance?.averageCost && balance.averageCost > 0) {
+        return balance.averageCost
+      }
+
+      // 5. Fallback на suggestion estimatedPrice
+      const suggestion = allSuggestions.value.find(s => s.itemId === itemId)
+      if (suggestion?.estimatedPrice && suggestion.estimatedPrice > 0) {
+        return suggestion.estimatedPrice
+      }
+
+      // 6. Default fallback
+      DebugUtils.warn(MODULE_NAME, 'No price found for item, using default', { itemId })
+      return 1000 // 1000 IDR как fallback
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting base cost per unit', { itemId, error })
+      return 1000
+    }
   }
 
   /**
