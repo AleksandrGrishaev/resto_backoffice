@@ -179,6 +179,14 @@
       @view-storage="handleViewStorage"
     />
 
+    <!-- Request Edit Dialog -->
+    <request-edit-dialog
+      v-model="showRequestEditDialog"
+      :request="selectedRequestForEdit"
+      :orders="ordersArray"
+      @save-request="handleSaveEditedRequest"
+    />
+
     <!-- Success Snackbar -->
     <v-snackbar v-model="showSuccessSnackbar" color="success" timeout="3000" location="top">
       <v-icon icon="mdi-check-circle" class="mr-2" />
@@ -255,6 +263,7 @@ import ReceiptDetailsDialog from './components/receipts/ReceiptDetailsDialog.vue
 import ProcurementRequestTable from './components/procurement/ProcurementRequestTable.vue'
 import PurchaseOrderTable from './components/orders/PurchaseOrderTable.vue'
 import ReceiptTable from './components/receipts/ReceiptTable.vue'
+import RequestEditDialog from './components/procurement/RequestEditDialog.vue'
 
 const MODULE_NAME = 'SupplierView'
 
@@ -275,7 +284,8 @@ const showOrderAssistant = ref(false)
 const showSupplierBaskets = ref(false)
 const showReceiptDialog = ref(false)
 const showReceiptDetailsDialog = ref(false)
-const showInfoDialog = ref(false) // ✅ ИСПРАВЛЕНО: Добавлено отсутствующее свойство
+const showInfoDialog = ref(false)
+const showRequestEditDialog = ref(false)
 const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
 const successMessage = ref('')
@@ -285,6 +295,7 @@ const errorMessage = ref('')
 const selectedRequestIds = ref<string[]>([])
 const selectedOrder = ref<PurchaseOrder | null>(null)
 const selectedReceipt = ref<Receipt | null>(null)
+const selectedRequestForEdit = ref<ProcurementRequest | null>(null)
 
 // Подсветка заказа при переходе
 const highlightedOrderId = ref<string | null>(null)
@@ -393,10 +404,9 @@ async function handleEditRequest(request: ProcurementRequest) {
     return
   }
 
-  // TODO: Открыть диалог редактирования заявки
-  showSuccess(
-    `Edit request ${request.requestNumber} - Opening edit dialog (TODO: Implement dialog)`
-  )
+  // Открываем диалог редактирования
+  selectedRequestForEdit.value = request
+  showRequestEditDialog.value = true
 }
 
 async function handleSubmitRequest(request: ProcurementRequest) {
@@ -469,6 +479,27 @@ function handleCreateOrdersFromSubmitted() {
   selectedRequestIds.value = submittedRequestsArray.value.map(req => req.id)
   console.log(`${MODULE_NAME}: Selected ${selectedRequestIds.value.length} submitted requests`)
   showSupplierBaskets.value = true
+}
+
+async function handleSaveEditedRequest(editedRequest: ProcurementRequest) {
+  console.log(`${MODULE_NAME}: Saving edited request`, editedRequest.id)
+
+  try {
+    const updatedRequest = await updateRequest(editedRequest.id, {
+      department: editedRequest.department,
+      priority: editedRequest.priority,
+      requestedBy: editedRequest.requestedBy,
+      notes: editedRequest.notes,
+      items: editedRequest.items
+    })
+
+    showSuccess(`Request ${updatedRequest.requestNumber} updated successfully`)
+    showRequestEditDialog.value = false
+    selectedRequestForEdit.value = null
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to update request`, error)
+    handleError(`Failed to update request: ${error}`)
+  }
 }
 
 // =============================================
