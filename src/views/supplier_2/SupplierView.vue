@@ -10,100 +10,70 @@
         </div>
       </div>
 
-      <div class="d-flex gap-2">
+      <div class="d-flex gap-4">
         <v-btn
           color="success"
           prepend-icon="mdi-robot"
           :loading="isLoadingValue"
           @click="showOrderAssistant = true"
         >
-          🤖 Order Assistant
+          AI Order Assistant
         </v-btn>
 
+        <!-- Create Orders кнопка появляется когда есть submitted заявки -->
         <v-btn
-          color="info"
-          prepend-icon="mdi-information"
-          variant="outlined"
-          @click="showInfoDialog = true"
+          v-if="submittedRequestsArray.length > 0"
+          color="primary"
+          prepend-icon="mdi-cart-plus"
+          @click="handleCreateOrdersFromSubmitted"
         >
-          About Workflow
+          Create Orders ({{ submittedRequestsArray.length }})
         </v-btn>
+
+        <!-- Debug info -->
+        <v-chip
+          v-if="isDevelopment && submittedRequestsArray.length > 0"
+          size="small"
+          color="success"
+        >
+          Ready: {{ submittedRequestsArray.length }}
+        </v-chip>
       </div>
     </div>
 
-    <!-- Statistics Cards -->
-    <v-row class="mb-6">
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon icon="mdi-file-document" size="32" color="primary" class="mb-2" />
-          <div class="text-h6 font-weight-bold">{{ statisticsComputed.totalRequests }}</div>
-          <div class="text-body-2 text-medium-emphasis">Total Requests</div>
-        </v-card>
-      </v-col>
+    <!-- Main Content Tabs -->
+    <v-tabs v-model="selectedTab" class="mb-4">
+      <v-tab value="requests">
+        <v-icon icon="mdi-file-document" class="mr-2" />
+        Requests
+        <v-chip v-if="activeRequestsCount > 0" size="small" class="ml-2" variant="tonal">
+          {{ activeRequestsCount }}
+        </v-chip>
+      </v-tab>
 
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon icon="mdi-cart" size="32" color="info" class="mb-2" />
-          <div class="text-h6 font-weight-bold">{{ statisticsComputed.totalOrders }}</div>
-          <div class="text-body-2 text-medium-emphasis">Total Orders</div>
-        </v-card>
-      </v-col>
+      <v-tab value="orders">
+        <v-icon icon="mdi-cart" class="mr-2" />
+        Orders
+        <v-chip v-if="activeOrdersCount > 0" size="small" class="ml-2" variant="tonal">
+          {{ activeOrdersCount }}
+        </v-chip>
+      </v-tab>
 
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon icon="mdi-truck-check" size="32" color="success" class="mb-2" />
-          <div class="text-h6 font-weight-bold">{{ statisticsComputed.totalReceipts }}</div>
-          <div class="text-body-2 text-medium-emphasis">Total Receipts</div>
-        </v-card>
-      </v-col>
+      <v-tab value="receipts">
+        <v-icon icon="mdi-truck-check" class="mr-2" />
+        Receipts
+        <v-chip v-if="activeReceiptsCount > 0" size="small" class="ml-2" variant="tonal">
+          {{ activeReceiptsCount }}
+        </v-chip>
+      </v-tab>
+    </v-tabs>
 
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon
-            icon="mdi-alert"
-            size="32"
-            :color="statisticsComputed.urgentSuggestions > 0 ? 'error' : 'grey'"
-            class="mb-2"
-          />
-          <div class="text-h6 font-weight-bold">{{ statisticsComputed.urgentSuggestions }}</div>
-          <div class="text-body-2 text-medium-emphasis">Urgent Items</div>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Main Content -->
+    <!-- Content -->
     <v-card>
-      <v-tabs v-model="selectedTab" bg-color="primary">
-        <v-tab value="requests" prepend-icon="mdi-file-document">
-          Requests
-          <v-chip
-            v-if="submittedRequestsArray.length > 0"
-            size="small"
-            color="warning"
-            class="ml-2"
-          >
-            {{ submittedRequestsArray.length }}
-          </v-chip>
-        </v-tab>
-
-        <v-tab value="orders" prepend-icon="mdi-cart">
-          Orders
-          <v-chip v-if="draftOrdersArray.length > 0" size="small" color="info" class="ml-2">
-            {{ draftOrdersArray.length }} draft
-          </v-chip>
-        </v-tab>
-
-        <v-tab value="receipts" prepend-icon="mdi-truck-check">
-          Receipts
-          <v-chip v-if="pendingReceiptsArray.length > 0" size="small" color="success" class="ml-2">
-            {{ pendingReceiptsArray.length }} pending
-          </v-chip>
-        </v-tab>
-      </v-tabs>
-
       <v-tabs-window v-model="selectedTab">
         <!-- Requests Tab -->
         <v-tabs-window-item value="requests">
+          <!-- ✅ ИСПРАВЛЕНО: Добавлен проп orders -->
           <procurement-request-table
             :requests="requestsArray"
             :orders="ordersArray"
@@ -116,22 +86,6 @@
             @selection-change="selectedRequestIds = $event"
           />
 
-          <!-- Action Bar for Requests -->
-          <div v-if="selectedRequestIds.length > 0" class="pa-4 bg-surface border-t">
-            <div class="d-flex align-center justify-space-between">
-              <div class="text-body-2 text-medium-emphasis">
-                {{ selectedRequestIds.length }} requests selected
-              </div>
-              <v-btn
-                color="primary"
-                prepend-icon="mdi-cart-plus"
-                @click="showSupplierBaskets = true"
-              >
-                Create Orders
-              </v-btn>
-            </div>
-          </div>
-
           <!-- Empty State -->
           <div v-if="requestsArray.length === 0 && !isLoadingValue" class="text-center pa-8">
             <v-icon icon="mdi-file-document-outline" size="64" color="grey" class="mb-4" />
@@ -140,7 +94,7 @@
               Use Order Assistant to create procurement requests
             </div>
             <v-btn color="success" prepend-icon="mdi-robot" @click="showOrderAssistant = true">
-              🤖 Start Order Assistant
+              Start Order Assistant
             </v-btn>
           </div>
         </v-tabs-window-item>
@@ -206,7 +160,7 @@
       @order-created="handleOrdersCreated"
     />
 
-    <!-- ✅ ИСПРАВЛЕНО: Receipt Dialog с правильными обработчиками -->
+    <!-- Receipt Dialog -->
     <base-receipt-dialog
       v-model="showReceiptDialog"
       :order="selectedOrder"
@@ -215,8 +169,9 @@
       @error="handleError"
     />
 
-    <!-- ✅ НОВОЕ: Receipt Details Dialog -->
+    <!-- Receipt Details Dialog -->
     <receipt-details-dialog
+      v-if="selectedReceipt"
       v-model="showReceiptDetailsDialog"
       :receipt="selectedReceipt"
       @edit-receipt="handleEditReceiptFromDetails"
@@ -239,7 +194,7 @@
       </template>
     </v-snackbar>
 
-    <!-- Info Dialog -->
+    <!-- ✅ ИСПРАВЛЕНО: Info Dialog объявлен в template и script -->
     <v-dialog v-model="showInfoDialog" max-width="700px">
       <v-card>
         <v-card-title class="d-flex align-center">
@@ -317,8 +272,8 @@ const selectedTab = ref('requests')
 const showOrderAssistant = ref(false)
 const showSupplierBaskets = ref(false)
 const showReceiptDialog = ref(false)
-const showReceiptDetailsDialog = ref(false) // ✅ НОВОЕ
-const showInfoDialog = ref(false)
+const showReceiptDetailsDialog = ref(false)
+const showInfoDialog = ref(false) // ✅ ИСПРАВЛЕНО: Добавлено отсутствующее свойство
 const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
 const successMessage = ref('')
@@ -327,7 +282,7 @@ const errorMessage = ref('')
 // Selected items for operations
 const selectedRequestIds = ref<string[]>([])
 const selectedOrder = ref<PurchaseOrder | null>(null)
-const selectedReceipt = ref<Receipt | null>(null) // ✅ НОВОЕ
+const selectedReceipt = ref<Receipt | null>(null)
 
 // Подсветка заказа при переходе
 const highlightedOrderId = ref<string | null>(null)
@@ -348,35 +303,35 @@ const receiptsArray = computed(() => {
   return Array.isArray(supplierStore.state.receipts) ? supplierStore.state.receipts : []
 })
 
+// Считаем только активные элементы в работе
+const activeRequestsCount = computed(() => {
+  return requestsArray.value.filter(
+    request => request.status !== 'converted' && request.status !== 'cancelled'
+  ).length
+})
+
+const activeOrdersCount = computed(() => {
+  return ordersArray.value.filter(
+    order => order.status !== 'delivered' && order.status !== 'cancelled'
+  ).length
+})
+
+const activeReceiptsCount = computed(() => {
+  return receiptsArray.value.filter(receipt => receipt.status !== 'completed').length
+})
+
 const submittedRequestsArray = computed(() => {
   return requestsArray.value.filter(request => request.status === 'submitted')
-})
-
-const draftOrdersArray = computed(() => {
-  return ordersArray.value.filter(order => order.status === 'draft')
-})
-
-const pendingReceiptsArray = computed(() => {
-  return receiptsArray.value.filter(receipt => receipt.status === 'draft')
-})
-
-const statisticsComputed = computed(() => {
-  const stats = supplierStore.statistics || {}
-  return {
-    totalRequests: stats.totalRequests || 0,
-    pendingRequests: stats.pendingRequests || 0,
-    totalOrders: stats.totalOrders || 0,
-    ordersAwaitingPayment: stats.ordersAwaitingPayment || 0,
-    ordersAwaitingDelivery: stats.ordersAwaitingDelivery || 0,
-    totalReceipts: stats.totalReceipts || 0,
-    pendingReceipts: stats.pendingReceipts || 0,
-    urgentSuggestions: stats.urgentSuggestions || 0
-  }
 })
 
 const isLoadingValue = computed(() => {
   return supplierStore.isLoading || false
 })
+
+// Development режим для отладки
+// const isDevelopment = computed(() => {
+//   return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
+// })
 
 // =============================================
 // UTILITY METHODS
@@ -402,7 +357,6 @@ function handleOrderAssistantSuccess(message: string) {
   showSuccess(message)
   showOrderAssistant.value = false
 
-  // If we have submitted requests, show option to create orders
   if (submittedRequestsArray.value.length > 0) {
     setTimeout(() => {
       showSuccess(`${submittedRequestsArray.value.length} requests ready for order creation`)
@@ -463,6 +417,13 @@ function handleGoToOrder(orderId: string) {
   showSuccess(`Found order ${orderNumber}`)
 }
 
+function handleCreateOrdersFromSubmitted() {
+  console.log(`${MODULE_NAME}: Creating orders from submitted requests`)
+  selectedRequestIds.value = submittedRequestsArray.value.map(req => req.id)
+  console.log(`${MODULE_NAME}: Selected ${selectedRequestIds.value.length} submitted requests`)
+  showSupplierBaskets.value = true
+}
+
 // =============================================
 // EVENT HANDLERS - Orders
 // =============================================
@@ -495,7 +456,7 @@ function handleStartReceipt(order: PurchaseOrder) {
 }
 
 // =============================================
-// ✅ EVENT HANDLERS - Receipts (ИСПРАВЛЕННЫЕ)
+// EVENT HANDLERS - Receipts
 // =============================================
 
 function handleViewReceiptDetails(receipt: Receipt) {
@@ -507,7 +468,6 @@ function handleViewReceiptDetails(receipt: Receipt) {
 function handleEditReceipt(receipt: Receipt) {
   console.log(`${MODULE_NAME}: Edit receipt`, receipt.id)
 
-  // Находим соответствующий заказ
   const order = ordersArray.value.find(o => o.id === receipt.purchaseOrderId)
   if (!order) {
     handleError(`Order not found for receipt ${receipt.receiptNumber}`)
@@ -520,7 +480,6 @@ function handleEditReceipt(receipt: Receipt) {
 }
 
 function handleEditReceiptFromDetails(receipt: Receipt) {
-  // Закрываем details dialog и открываем edit dialog
   showReceiptDetailsDialog.value = false
   handleEditReceipt(receipt)
 }
@@ -529,18 +488,13 @@ async function handleCompleteReceipt(receipt: Receipt) {
   console.log(`${MODULE_NAME}: Complete receipt`, receipt.id)
 
   try {
-    // Используем composable для завершения поступления
     const completedReceipt = await completeReceipt(receipt.id, 'Receipt completed from UI')
-
     showSuccess(`Receipt ${completedReceipt.receiptNumber} completed successfully`)
 
-    // Закрываем открытые диалоги
     showReceiptDialog.value = false
     showReceiptDetailsDialog.value = false
     selectedReceipt.value = null
     selectedOrder.value = null
-
-    // Переходим на вкладку receipts чтобы показать обновленный статус
     selectedTab.value = 'receipts'
   } catch (error) {
     console.error(`${MODULE_NAME}: Failed to complete receipt`, error)
@@ -550,108 +504,40 @@ async function handleCompleteReceipt(receipt: Receipt) {
 
 function handleViewStorage(operationId: string) {
   console.log(`${MODULE_NAME}: View storage operation`, operationId)
-  // TODO: Интеграция с Storage View
   showSuccess(`Navigate to storage operation ${operationId} - TODO: Implement storage integration`)
 }
+
 // =============================================
 // LIFECYCLE
 // =============================================
 
 onMounted(async () => {
-  try {
-    console.log(`${MODULE_NAME}: Initializing supplier view`)
-    await supplierStore.initialize()
-    console.log(`${MODULE_NAME}: Supplier view initialized successfully`)
+  console.log(`${MODULE_NAME}: Component mounted, initializing data`)
 
-    // Show urgent suggestions if any
-    if (statisticsComputed.value.urgentSuggestions > 0) {
-      setTimeout(() => {
-        showSuccess(
-          `${statisticsComputed.value.urgentSuggestions} urgent stock suggestions available`
-        )
-      }, 1500)
-    }
-  } catch (error: any) {
-    console.error(`${MODULE_NAME}: Failed to initialize`, error)
-    handleError('Failed to initialize supplier management system')
+  try {
+    await supplierStore.initialize()
+    console.log(`${MODULE_NAME}: Data initialized successfully`)
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to initialize data`, error)
+    handleError('Failed to load supplier data')
   }
 })
 </script>
 
-<style lang="scss" scoped>
+<style scoped>
 .supplier-view {
-  padding: 24px;
+  min-height: 100vh;
 }
 
-.gap-2 {
-  gap: 8px;
+.v-tab {
+  min-width: 120px;
 }
 
-.text-medium-emphasis {
-  opacity: 0.7;
-}
-
-// Stats styling
-.text-h6 {
-  line-height: 1.2;
-}
-
-// Tab styling
-.v-tabs {
-  .v-tab {
-    text-transform: none;
-    font-weight: 500;
-
-    .v-chip {
-      margin-left: 8px;
-      font-size: 0.75rem;
-    }
-  }
-}
-
-// Empty state styling
-.text-center {
-  .v-icon {
-    opacity: 0.5;
-  }
-}
-
-// Responsive adjustments
-@media (max-width: 768px) {
-  .supplier-view {
-    padding: 16px;
-  }
-
-  .d-flex.gap-2 {
-    flex-direction: column;
-    align-items: stretch;
-
-    .v-btn {
-      justify-content: center;
-    }
-  }
-}
-
-// Success highlighting for urgent orders
-.animate-ready {
-  animation: readyPulse 2s infinite;
-}
-
-@keyframes readyPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-// Order highlighting
-:deep(.v-data-table .v-data-table__td) {
-  &.highlighted-order {
-    background-color: rgb(var(--v-theme-warning-lighten-4)) !important;
-    transition: background-color 0.3s ease;
-  }
+/* Debug режим стили */
+.debug-chip {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 9999;
 }
 </style>
