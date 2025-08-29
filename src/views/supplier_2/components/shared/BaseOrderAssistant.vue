@@ -49,11 +49,13 @@
         <v-tabs-window v-model="activeTab" class="pa-4" style="min-height: 400px">
           <!-- AI Suggestions Tab -->
           <v-tabs-window-item value="suggestions">
+            <!-- Loading State -->
             <div v-if="isLoading" class="text-center pa-8">
               <v-progress-circular indeterminate color="primary" size="48" class="mb-4" />
               <div class="text-body-1">Analyzing stock levels...</div>
             </div>
 
+            <!-- Empty State -->
             <div v-else-if="categorizedSuggestions.length === 0" class="text-center pa-8">
               <v-icon icon="mdi-check-circle" size="64" color="success" class="mb-4" />
               <div class="text-h6 mb-2">All Stock Levels OK</div>
@@ -65,120 +67,142 @@
               </v-btn>
             </div>
 
+            <!-- Suggestions by Categories -->
             <div v-else>
-              <!-- Grouped suggestions by categories -->
               <div v-for="category in categorizedSuggestions" :key="category.name" class="mb-4">
                 <v-card variant="outlined" class="overflow-hidden">
-                  <!-- Category header -->
+                  <!-- Category Header -->
                   <v-card-title
                     class="d-flex align-center pa-3"
                     :class="`bg-${category.color}-lighten-4`"
                   >
                     <v-icon :icon="category.icon" :color="category.color" class="mr-2" size="20" />
                     <span class="font-weight-bold">{{ category.name }}</span>
-                    <v-chip size="small" :color="category.color" variant="flat" class="ml-auto">
+                    <v-spacer />
+                    <v-chip size="small" :color="category.color">
                       {{ category.items.length }} items
                     </v-chip>
                   </v-card-title>
 
-                  <!-- Category items -->
-                  <v-card-text class="pa-0">
-                    <div v-for="(suggestion, index) in category.items" :key="suggestion.itemId">
-                      <div class="pa-4" :class="{ 'border-b': index < category.items.length - 1 }">
-                        <div class="d-flex align-center justify-space-between">
-                          <div class="flex-grow-1">
-                            <!-- Product name and status -->
-                            <div class="d-flex align-center mb-2">
-                              <span class="font-weight-bold text-subtitle-2">
-                                {{ suggestion.itemName }}
-                              </span>
-                              <v-chip
-                                size="x-small"
-                                :color="getUrgencyColor(suggestion.urgency)"
-                                variant="tonal"
-                                class="ml-2"
-                              >
-                                {{ suggestion.urgency.toUpperCase() }}
-                              </v-chip>
+                  <!-- Category Items -->
+                  <div class="pa-0">
+                    <div
+                      v-for="(suggestion, index) in category.items"
+                      :key="suggestion.itemId"
+                      class="pa-4"
+                      :class="{ 'border-b': index < category.items.length - 1 }"
+                    >
+                      <div class="d-flex align-start">
+                        <!-- Product Info -->
+                        <div class="flex-grow-1 mr-4">
+                          <div class="d-flex align-center mb-2">
+                            <div class="font-weight-bold text-subtitle-2 mr-2">
+                              {{ suggestion.itemName }}
                             </div>
-
-                            <!-- Fixed: Proper unit display -->
-                            <div class="text-body-2 text-medium-emphasis mb-2">
-                              {{ formatSuggestionQuantityRange(suggestion) }}
-                            </div>
-
-                            <!-- Cost -->
-                            <div class="text-body-2">
-                              Est. Cost: {{ formatCurrency(calculateTotalCost(suggestion)) }}
-                            </div>
+                            <v-chip
+                              size="small"
+                              :color="getUrgencyColor(suggestion.urgency)"
+                              :prepend-icon="getUrgencyIcon(suggestion.urgency)"
+                            >
+                              {{ suggestion.urgency }}
+                            </v-chip>
                           </div>
 
-                          <!-- Extended actions -->
-                          <div class="ml-4 d-flex align-center gap-2">
-                            <!-- If not added -->
-                            <div v-if="!isSuggestionAdded(suggestion.itemId)">
-                              <v-btn
-                                color="success"
-                                size="small"
-                                @click="addSuggestionToRequest(suggestion)"
-                              >
-                                Add {{ formatSuggestedQuantity(suggestion) }}
-                              </v-btn>
-                            </div>
+                          <!-- Stock Information -->
+                          <div class="text-body-2 text-medium-emphasis mb-2">
+                            {{ formatSuggestionQuantityRange(suggestion) }}
+                          </div>
 
-                            <!-- If added - show editor -->
-                            <div v-else class="d-flex align-center gap-2">
-                              <v-chip color="success" size="small" variant="tonal">Added ✓</v-chip>
+                          <!-- Reason -->
+                          <div
+                            v-if="suggestion.reason"
+                            class="text-caption text-medium-emphasis mb-2"
+                          >
+                            <v-icon size="14" class="mr-1">mdi-information-outline</v-icon>
+                            {{ formatReason(suggestion.reason) }}
+                          </div>
 
-                              <!-- Inline quantity editor -->
-                              <div class="d-flex align-center gap-1">
-                                <v-text-field
-                                  :model-value="getSelectedQuantity(suggestion.itemId)"
-                                  type="number"
-                                  min="0.1"
-                                  step="0.1"
-                                  hide-details
-                                  density="compact"
-                                  variant="outlined"
-                                  style="width: 80px"
-                                  class="text-center"
-                                  @update:model-value="
-                                    updateSelectedQuantity(suggestion.itemId, $event)
-                                  "
-                                />
-                                <span
-                                  class="text-caption text-medium-emphasis"
-                                  style="min-width: 25px"
-                                >
-                                  {{ getBestDisplayUnit(suggestion) }}
-                                </span>
-                              </div>
+                          <!-- Cost -->
+                          <div class="text-body-2">
+                            Est. Cost: {{ formatCurrency(calculateTotalCost(suggestion)) }}
+                          </div>
+                        </div>
 
-                              <!-- Delete button -->
-                              <v-btn
-                                icon="mdi-delete"
-                                size="x-small"
-                                variant="text"
-                                color="error"
-                                @click="removeSuggestionFromRequest(suggestion.itemId)"
+                        <!-- Actions -->
+                        <div class="d-flex flex-column align-center">
+                          <!-- If not added -->
+                          <div v-if="!isSuggestionAdded(suggestion.itemId)">
+                            <v-btn
+                              color="success"
+                              size="small"
+                              prepend-icon="mdi-plus"
+                              @click="addSuggestionToRequest(suggestion)"
+                            >
+                              Add {{ formatSuggestedQuantity(suggestion) }}
+                            </v-btn>
+                          </div>
+
+                          <!-- If added - show editor -->
+                          <div v-else class="d-flex align-center gap-2">
+                            <v-chip color="success" size="small" prepend-icon="mdi-check">
+                              Added
+                            </v-chip>
+
+                            <!-- Inline quantity editor -->
+                            <div class="d-flex align-center gap-1">
+                              <v-text-field
+                                :model-value="getSelectedQuantity(suggestion.itemId)"
+                                type="number"
+                                min="0.1"
+                                step="0.1"
+                                hide-details
+                                density="compact"
+                                variant="outlined"
+                                style="width: 80px"
+                                class="text-center"
+                                @update:model-value="
+                                  updateSelectedQuantity(suggestion.itemId, $event)
+                                "
                               />
+                              <span
+                                class="text-caption text-medium-emphasis"
+                                style="min-width: 25px"
+                              >
+                                {{ getBestDisplayUnit(suggestion) }}
+                              </span>
                             </div>
+
+                            <!-- Delete button -->
+                            <v-btn
+                              icon="mdi-delete"
+                              size="x-small"
+                              variant="text"
+                              color="error"
+                              @click="removeSuggestionFromRequest(suggestion.itemId)"
+                            />
                           </div>
                         </div>
                       </div>
                     </div>
-                  </v-card-text>
+                  </div>
                 </v-card>
               </div>
 
               <!-- Quick Actions -->
-              <div class="d-flex gap-2">
-                <v-btn color="error" variant="outlined" @click="addUrgentItems">
+              <div class="d-flex gap-2 mt-4">
+                <v-btn
+                  color="error"
+                  variant="outlined"
+                  prepend-icon="mdi-alert"
+                  :disabled="urgentSuggestions.length === 0"
+                  @click="addUrgentItems"
+                >
                   Add All Urgent ({{ urgentSuggestions.length }})
                 </v-btn>
+                <v-spacer />
                 <v-btn
                   color="primary"
-                  variant="outlined"
+                  prepend-icon="mdi-refresh"
                   :loading="isGenerating"
                   @click="generateSuggestions"
                 >
@@ -190,117 +214,148 @@
 
           <!-- Manual Item Tab -->
           <v-tabs-window-item value="manual">
-            <v-row>
-              <!-- Product selection from store -->
-              <v-col cols="12" md="6">
-                <v-select
-                  v-model="manualItem.itemId"
-                  :items="availableProductsFromStore"
-                  item-title="name"
-                  item-value="id"
-                  label="Product"
-                  variant="outlined"
-                  @update:model-value="updateManualItemName"
-                >
-                  <template #item="{ props, item }">
-                    <v-list-item v-bind="props" :title="item.raw.name">
-                      <template #subtitle>
-                        <div class="text-caption">
-                          Input unit: {{ item.raw.unit }}
-                          <v-chip
-                            v-if="!item.raw.isActive"
-                            size="x-small"
-                            color="warning"
-                            class="ml-2"
-                          >
-                            Inactive
-                          </v-chip>
-                        </div>
+            <v-card variant="outlined">
+              <v-card-title class="text-subtitle-1 pa-3 bg-primary-lighten-5">
+                <v-icon icon="mdi-plus" class="mr-2" />
+                Add Manual Item
+              </v-card-title>
+
+              <v-card-text class="pa-4">
+                <v-row>
+                  <!-- Product selection from store -->
+                  <v-col cols="12" md="6">
+                    <v-select
+                      v-model="manualItem.itemId"
+                      :items="availableProductsFromStore"
+                      item-title="name"
+                      item-value="id"
+                      label="Product"
+                      prepend-icon="mdi-package-variant"
+                      variant="outlined"
+                      @update:model-value="updateManualItemName"
+                    >
+                      <template #item="{ props, item }">
+                        <v-list-item v-bind="props" :title="item.raw.name">
+                          <template #subtitle>
+                            <div class="text-caption">
+                              Input unit: {{ item.raw.unit }}
+                              <v-chip
+                                v-if="!item.raw.isActive"
+                                size="x-small"
+                                color="warning"
+                                class="ml-2"
+                              >
+                                Inactive
+                              </v-chip>
+                            </div>
+                          </template>
+                        </v-list-item>
                       </template>
-                    </v-list-item>
-                  </template>
-                </v-select>
-              </v-col>
+                    </v-select>
+                  </v-col>
 
-              <!-- Quantity field with decimal support -->
-              <v-col cols="12" md="3">
-                <v-text-field
-                  v-model.number="manualItem.quantity"
-                  label="Quantity"
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  variant="outlined"
-                  :hint="getQuantityHint()"
-                  persistent-hint
-                />
-              </v-col>
+                  <!-- Quantity field with decimal support -->
+                  <v-col cols="12" md="3">
+                    <v-text-field
+                      v-model.number="manualItem.quantity"
+                      label="Quantity"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      prepend-icon="mdi-counter"
+                      variant="outlined"
+                      :hint="getQuantityHint()"
+                      persistent-hint
+                    />
+                  </v-col>
 
-              <!-- Unit field -->
-              <v-col cols="12" md="3">
-                <v-text-field
-                  v-model="manualItem.unit"
-                  label="Unit"
-                  readonly
-                  variant="outlined"
-                  :placeholder="manualItem.itemId ? '' : 'Select product first'"
-                />
-              </v-col>
+                  <!-- Unit field -->
+                  <v-col cols="12" md="3">
+                    <v-text-field
+                      v-model="manualItem.unit"
+                      label="Unit"
+                      prepend-icon="mdi-ruler"
+                      readonly
+                      variant="outlined"
+                      :placeholder="manualItem.itemId ? '' : 'Select product first'"
+                    />
+                  </v-col>
 
-              <!-- Notes field -->
-              <v-col cols="12">
-                <v-textarea
-                  v-model="manualItem.notes"
-                  label="Notes (optional)"
-                  rows="2"
-                  variant="outlined"
-                  placeholder="Add any special requirements or notes..."
-                />
-              </v-col>
+                  <!-- Notes field -->
+                  <v-col cols="12">
+                    <v-textarea
+                      v-model="manualItem.notes"
+                      label="Notes (optional)"
+                      prepend-icon="mdi-note-text"
+                      rows="2"
+                      variant="outlined"
+                      placeholder="Add any special requirements or notes..."
+                    />
+                  </v-col>
 
-              <!-- Item preview -->
-              <v-col v-if="manualItem.itemId" cols="12">
-                <v-card variant="tonal" color="info" class="mb-3">
-                  <v-card-text class="pa-3">
-                    <div class="d-flex align-center justify-space-between">
-                      <div>
-                        <div class="font-weight-bold">{{ manualItem.itemName }}</div>
-                        <div class="text-body-2">
-                          {{ getFormattedManualQuantity() }}
+                  <!-- Item preview -->
+                  <v-col v-if="manualItem.itemId && manualItem.quantity > 0" cols="12">
+                    <v-card variant="tonal" color="success" class="mb-3">
+                      <v-card-text class="pa-3">
+                        <div class="text-subtitle-2 mb-1">
+                          <v-icon icon="mdi-eye" class="mr-2" size="18" />
+                          Preview
                         </div>
-                        <div v-if="manualItem.notes" class="text-caption text-medium-emphasis mt-1">
-                          Note: {{ manualItem.notes }}
+                        <div class="d-flex align-center justify-space-between">
+                          <div>
+                            <div class="text-body-2">
+                              <strong>{{ manualItem.itemName }}</strong>
+                            </div>
+                            <div class="text-body-2 text-medium-emphasis">
+                              {{ getFormattedManualQuantity() }}
+                            </div>
+                            <div
+                              v-if="manualItem.notes"
+                              class="text-caption text-medium-emphasis mt-1"
+                            >
+                              Notes: {{ manualItem.notes }}
+                            </div>
+                          </div>
+                          <div class="text-right">
+                            <div class="text-body-2 text-medium-emphasis">Estimated Cost</div>
+                            <div class="font-weight-bold">
+                              {{ formatCurrency(calculateManualItemCost()) }}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div class="text-right">
-                        <div class="text-body-2 text-medium-emphasis">Estimated Cost</div>
-                        <div class="font-weight-bold">
-                          {{ formatCurrency(calculateManualItemCost()) }}
-                        </div>
-                      </div>
-                    </div>
-                  </v-card-text>
-                </v-card>
-              </v-col>
+                      </v-card-text>
+                    </v-card>
+                  </v-col>
 
-              <!-- Add button -->
-              <v-col cols="12">
+                  <!-- Validation Messages -->
+                  <v-col v-if="manualItemValidationMessage" cols="12">
+                    <v-alert :type="manualItemValidationMessage.type" density="compact">
+                      {{ manualItemValidationMessage.text }}
+                    </v-alert>
+                  </v-col>
+                </v-row>
+              </v-card-text>
+
+              <v-card-actions class="pa-4">
+                <v-btn variant="outlined" prepend-icon="mdi-refresh" @click="resetManualItem">
+                  Reset
+                </v-btn>
+                <v-spacer />
                 <v-btn
-                  color="primary"
+                  color="success"
+                  prepend-icon="mdi-plus"
                   :disabled="!canAddManualItem"
-                  block
-                  size="large"
                   @click="addManualItem"
                 >
-                  <v-icon icon="mdi-plus" class="mr-2" />
                   Add Item to Request
                 </v-btn>
-              </v-col>
-            </v-row>
+              </v-card-actions>
+            </v-card>
           </v-tabs-window-item>
 
           <!-- Request Summary Tab -->
           <v-tabs-window-item value="summary">
+            <!-- Empty State -->
             <div v-if="selectedItems.length === 0" class="text-center pa-8">
               <v-icon icon="mdi-cart-outline" size="64" color="grey" class="mb-4" />
               <div class="text-h6 mb-2">No Items Selected</div>
@@ -309,8 +364,8 @@
               </div>
             </div>
 
+            <!-- Selected Items with editing -->
             <div v-else>
-              <!-- Updated: Selected Items with editing -->
               <v-card variant="outlined" class="mb-4">
                 <v-card-title class="text-subtitle-1 pa-3 bg-primary-lighten-5">
                   <v-icon icon="mdi-cart" class="mr-2" />
@@ -333,6 +388,7 @@
                           {{ formatQuantityForSummary(item) }}
                         </div>
                         <div v-if="item.notes" class="text-caption text-medium-emphasis mt-1">
+                          <v-icon size="14" class="mr-1">mdi-note-text</v-icon>
                           {{ item.notes }}
                         </div>
                       </div>
@@ -385,40 +441,75 @@
               </v-card>
 
               <!-- Request Details -->
-              <v-row class="mb-4">
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model="requestedBy"
-                    label="Requested By"
-                    prepend-icon="mdi-account"
-                    variant="outlined"
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-select
-                    v-model="priority"
-                    :items="[
-                      { title: 'Normal', value: 'normal' },
-                      { title: 'Urgent', value: 'urgent' }
-                    ]"
-                    label="Priority"
-                    prepend-icon="mdi-flag"
-                    variant="outlined"
-                  />
-                </v-col>
-              </v-row>
+              <v-card variant="outlined" class="mb-4">
+                <v-card-title class="text-subtitle-1 pa-3 bg-grey-lighten-4">
+                  <v-icon icon="mdi-clipboard-text" class="mr-2" />
+                  Request Details
+                </v-card-title>
 
-              <!-- Improved summary -->
-              <v-card variant="tonal" color="info" class="mb-4">
                 <v-card-text class="pa-4">
+                  <v-row>
+                    <v-col cols="12" md="6">
+                      <v-text-field
+                        v-model="requestedBy"
+                        label="Requested By"
+                        prepend-icon="mdi-account"
+                        variant="outlined"
+                      />
+                    </v-col>
+                    <v-col cols="12" md="6">
+                      <v-select
+                        v-model="priority"
+                        :items="[
+                          { title: 'Normal', value: 'normal' },
+                          { title: 'Urgent', value: 'urgent' }
+                        ]"
+                        label="Priority"
+                        prepend-icon="mdi-flag"
+                        variant="outlined"
+                      />
+                    </v-col>
+                  </v-row>
+
+                  <!-- Summary Stats -->
+                  <v-row class="mt-2">
+                    <v-col cols="12" md="4">
+                      <div class="text-center">
+                        <div class="text-caption text-medium-emphasis">Total Items</div>
+                        <v-chip size="large" color="primary">
+                          {{ requestSummary.totalItems }}
+                        </v-chip>
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="4">
+                      <div class="text-center">
+                        <div class="text-caption text-medium-emphasis">Urgent Items</div>
+                        <v-chip
+                          size="large"
+                          :color="requestSummary.urgentItems > 0 ? 'error' : 'success'"
+                        >
+                          {{ requestSummary.urgentItems }}
+                        </v-chip>
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="4">
+                      <div class="text-center">
+                        <div class="text-caption text-medium-emphasis">Department</div>
+                        <v-chip
+                          size="large"
+                          :color="selectedDepartment === 'kitchen' ? 'orange' : 'purple'"
+                        >
+                          {{ selectedDepartment }}
+                        </v-chip>
+                      </div>
+                    </v-col>
+                  </v-row>
+
+                  <!-- Enhanced summary with estimated total -->
+                  <v-divider class="my-4" />
                   <div class="d-flex justify-space-between align-center">
                     <div>
-                      <div class="text-body-2 text-medium-emphasis">Total Items</div>
-                      <div class="text-h6 font-weight-bold">{{ requestSummary.totalItems }}</div>
-                    </div>
-
-                    <div class="text-center">
-                      <div class="text-body-2 text-medium-emphasis">Avg per Item</div>
+                      <div class="text-body-2 text-medium-emphasis">Average per Item</div>
                       <div class="text-subtitle-1 font-weight-bold">
                         {{
                           formatCurrency(
@@ -429,35 +520,11 @@
                         }}
                       </div>
                     </div>
-
                     <div class="text-right">
                       <div class="text-body-2 text-medium-emphasis">Estimated Total</div>
                       <div class="text-h6 font-weight-bold text-primary">
                         {{ formatCurrency(requestSummary.estimatedTotal) }}
                       </div>
-                    </div>
-                  </div>
-
-                  <!-- Category breakdown -->
-                  <v-divider class="my-3" />
-                  <div class="d-flex gap-4 text-center">
-                    <div>
-                      <div class="text-caption text-medium-emphasis">Urgent Items</div>
-                      <v-chip
-                        size="small"
-                        :color="requestSummary.urgentItems > 0 ? 'error' : 'success'"
-                      >
-                        {{ requestSummary.urgentItems }}
-                      </v-chip>
-                    </div>
-                    <div>
-                      <div class="text-caption text-medium-emphasis">Department</div>
-                      <v-chip
-                        size="small"
-                        :color="selectedDepartment === 'kitchen' ? 'orange' : 'purple'"
-                      >
-                        {{ selectedDepartment }}
-                      </v-chip>
                     </div>
                   </div>
                 </v-card-text>
@@ -490,7 +557,6 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useOrderAssistant } from '@/stores/supplier_2/composables/useOrderAssistant'
 import { useProductsStore } from '@/stores/productsStore'
-// New utility imports
 import {
   formatQuantityWithUnit,
   formatQuantityRange,
@@ -526,7 +592,7 @@ const orderAssistant = useOrderAssistant()
 const productsStore = useProductsStore()
 
 // =============================================
-// LOCAL STATE (updated)
+// LOCAL STATE
 // =============================================
 
 const isOpen = computed({
@@ -544,12 +610,12 @@ const manualItem = ref({
   itemId: '',
   itemName: '',
   quantity: 1,
-  unit: 'кг', // Fixed: Using Russian units
+  unit: 'кг',
   notes: ''
 })
 
 // =============================================
-// UPDATED COMPUTED PROPERTIES
+// COMPUTED PROPERTIES
 // =============================================
 
 const selectedDepartment = computed(() => orderAssistant.selectedDepartment.value)
@@ -560,7 +626,7 @@ const filteredSuggestions = computed(() => orderAssistant.filteredSuggestions.va
 const urgentSuggestions = computed(() => orderAssistant.urgentSuggestions.value)
 const requestSummary = computed(() => orderAssistant.requestSummary.value)
 
-// New: Group suggestions by categories
+// Group suggestions by categories
 const categorizedSuggestions = computed(() => {
   const suggestions = filteredSuggestions.value
 
@@ -594,21 +660,20 @@ const categorizedSuggestions = computed(() => {
   return categories
 })
 
-// Fixed: Products from ProductsStore instead of hardcoded list
 const availableProductsFromStore = computed(() => {
   return productsStore.products
     .filter(product => product.isActive)
     .map(product => ({
       id: product.id,
       name: product.name,
-      unit: getBestInputUnit(product), // Best input unit for user
+      unit: getBestInputUnit(product),
       isActive: product.isActive
     }))
 })
 
 const canAddManualItem = computed(() => {
   return (
-    manualItem.value.itemId &&
+    manualItem.value.itemId !== '' &&
     manualItem.value.quantity > 0 &&
     !selectedItems.value.some(item => item.itemId === manualItem.value.itemId)
   )
@@ -618,17 +683,41 @@ const canCreateRequest = computed(() => {
   return selectedItems.value.length > 0 && requestedBy.value.trim() !== '' && !isCreating.value
 })
 
+const manualItemValidationMessage = computed(() => {
+  if (!manualItem.value.itemId) return null
+
+  if (selectedItems.value.some(item => item.itemId === manualItem.value.itemId)) {
+    return {
+      type: 'warning',
+      text: 'This item is already in your request'
+    }
+  }
+
+  if (manualItem.value.quantity <= 0) {
+    return {
+      type: 'error',
+      text: 'Quantity must be greater than 0'
+    }
+  }
+
+  return null
+})
+
 // =============================================
-// NEW METHODS FOR UNIT FORMATTING
+// AI SUGGESTIONS METHODS
 // =============================================
 
-/**
- * Formats quantity range for suggestion
- */
 function formatSuggestionQuantityRange(suggestion: OrderSuggestion): string {
   const product = productsStore.products.find(p => p.id === suggestion.itemId)
   if (!product) {
-    return `Current: ${suggestion.currentStock} • Min: ${suggestion.minStock} • Suggested: ${suggestion.suggestedQuantity}`
+    const formatNumber = (num: number) => {
+      if (num >= 1000) {
+        return `${(num / 1000).toFixed(1)}kg`
+      }
+      return `${num}g`
+    }
+
+    return `Current: ${formatNumber(suggestion.currentStock)} • Min: ${formatNumber(suggestion.minStock)} • Suggested: ${formatNumber(suggestion.suggestedQuantity)}`
   }
 
   return formatQuantityRange(
@@ -639,9 +728,6 @@ function formatSuggestionQuantityRange(suggestion: OrderSuggestion): string {
   )
 }
 
-/**
- * Formats suggested quantity for Add button
- */
 function formatSuggestedQuantity(suggestion: OrderSuggestion): string {
   const product = productsStore.products.find(p => p.id === suggestion.itemId)
   if (!product) return `${suggestion.suggestedQuantity}`
@@ -649,9 +735,6 @@ function formatSuggestedQuantity(suggestion: OrderSuggestion): string {
   return formatQuantityWithUnit(suggestion.suggestedQuantity, product, { precision: 1 })
 }
 
-/**
- * Gets best unit for editor display
- */
 function getBestDisplayUnit(suggestion: OrderSuggestion): string {
   const product = productsStore.products.find(p => p.id === suggestion.itemId)
   if (!product) return 'units'
@@ -659,39 +742,43 @@ function getBestDisplayUnit(suggestion: OrderSuggestion): string {
   return getBestInputUnit(product)
 }
 
-/**
- * Formats quantity for summary tab
- */
-function formatQuantityForSummary(item: any): string {
-  const product = productsStore.products.find(p => p.id === item.itemId)
-  if (!product) return `${item.requestedQuantity} ${item.unit}`
-
-  return formatQuantityWithUnit(item.requestedQuantity, product)
-}
-
-/**
- * Calculates total cost for suggestion
- */
 function calculateTotalCost(suggestion: OrderSuggestion): number {
   const product = productsStore.products.find(p => p.id === suggestion.itemId)
   if (!product) return suggestion.estimatedPrice * suggestion.suggestedQuantity
 
-  // Get purchase cost per unit
   const purchaseCost = (product as any).purchaseCost || suggestion.estimatedPrice
-
-  // Convert suggested quantity to purchase units
   const purchaseUnits = convertToPurchaseUnits(suggestion.suggestedQuantity, product)
 
   return purchaseUnits.quantity * purchaseCost
 }
 
+function formatReason(reason: string): string {
+  const reasons: Record<string, string> = {
+    below_minimum: 'Stock below minimum threshold',
+    running_low: 'Stock running low',
+    optimization: 'Optimization opportunity',
+    expired_soon: 'Items expiring soon'
+  }
+  return reasons[reason] || reason
+}
+
+function addSuggestionToRequest(suggestion: OrderSuggestion): void {
+  orderAssistant.addSuggestionToRequest(suggestion)
+}
+
+function addUrgentItems(): void {
+  urgentSuggestions.value.forEach(suggestion => {
+    if (!orderAssistant.isSuggestionAdded(suggestion.itemId)) {
+      orderAssistant.addSuggestionToRequest(suggestion)
+    }
+  })
+  activeTab.value = 'summary'
+}
+
 // =============================================
-// NEW METHODS FOR QUANTITY EDITING
+// QUANTITY EDITING METHODS
 // =============================================
 
-/**
- * Updates quantity of already added item
- */
 function updateSelectedQuantity(itemId: string, newQuantity: string | number): void {
   const quantity = typeof newQuantity === 'string' ? parseFloat(newQuantity) : newQuantity
   if (quantity <= 0 || isNaN(quantity)) return
@@ -700,11 +787,9 @@ function updateSelectedQuantity(itemId: string, newQuantity: string | number): v
     const product = productsStore.products.find(p => p.id === itemId)
     if (!product) return
 
-    // Convert user input to base units
     const inputUnit = getBestInputUnit(product)
     const quantityInBaseUnits = convertUserInputToBaseUnits(quantity, inputUnit, product)
 
-    // Update through composable
     orderAssistant.updateSelectedQuantity(itemId, quantityInBaseUnits)
   } catch (error) {
     console.error('Error updating quantity:', error)
@@ -712,9 +797,6 @@ function updateSelectedQuantity(itemId: string, newQuantity: string | number): v
   }
 }
 
-/**
- * Gets quantity for editor display (in convenient units)
- */
 function getSelectedQuantity(itemId: string): number {
   const item = selectedItems.value.find(item => item.itemId === itemId)
   if (!item) return 0
@@ -722,11 +804,10 @@ function getSelectedQuantity(itemId: string): number {
   const product = productsStore.products.find(p => p.id === itemId)
   if (!product) return item.requestedQuantity
 
-  // Всегда конвертируем в единицы ввода (kg для граммовых продуктов)
   const inputUnit = getBestInputUnit(product)
 
   if (inputUnit === 'kg' && product.baseUnit === 'gram') {
-    return Number((item.requestedQuantity / 1000).toFixed(3)) // 420г → 0.42кг
+    return Number((item.requestedQuantity / 1000).toFixed(3))
   }
 
   if (inputUnit === 'L' && product.baseUnit === 'ml') {
@@ -736,9 +817,6 @@ function getSelectedQuantity(itemId: string): number {
   return item.requestedQuantity
 }
 
-/**
- * Removes suggestion from request
- */
 function removeSuggestionFromRequest(itemId: string): void {
   try {
     orderAssistant.removeItemFromRequest(itemId)
@@ -749,12 +827,9 @@ function removeSuggestionFromRequest(itemId: string): void {
 }
 
 // =============================================
-// ADDITIONAL METHODS FOR MANUAL ITEM
+// MANUAL ITEM METHODS
 // =============================================
 
-/**
- * Updates manual item information when product is selected
- */
 function updateManualItemName(): void {
   const product = availableProductsFromStore.value.find(p => p.id === manualItem.value.itemId)
   if (product) {
@@ -763,9 +838,6 @@ function updateManualItemName(): void {
   }
 }
 
-/**
- * Gets quantity input hint
- */
 function getQuantityHint(): string {
   if (!manualItem.value.itemId) return ''
 
@@ -786,14 +858,10 @@ function getQuantityHint(): string {
   return `Enter in ${inputUnit}`
 }
 
-/**
- * Formats quantity for manual item preview
- */
 function getFormattedManualQuantity(): string {
   const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
   if (!product) return `${manualItem.value.quantity} ${manualItem.value.unit}`
 
-  // Convert to base units for accurate display
   const baseQuantity = convertUserInputToBaseUnits(
     manualItem.value.quantity,
     manualItem.value.unit,
@@ -803,9 +871,6 @@ function getFormattedManualQuantity(): string {
   return formatQuantityWithUnit(baseQuantity, product)
 }
 
-/**
- * Calculates manual item cost
- */
 function calculateManualItemCost(): number {
   if (!manualItem.value.itemId) return 0
 
@@ -822,19 +887,6 @@ function calculateManualItemCost(): number {
   return baseQuantity * baseCost
 }
 
-/**
- * Gets display unit for item in summary
- */
-function getBestDisplayUnitForItem(item: any): string {
-  const product = productsStore.products.find(p => p.id === item.itemId)
-  if (!product) return item.unit
-
-  return getBestInputUnit(product)
-}
-
-/**
- * Adds manual item to request
- */
 function addManualItem(): void {
   try {
     const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
@@ -843,7 +895,6 @@ function addManualItem(): void {
       return
     }
 
-    // Fixed: Convert quantity to base units
     const quantityInBaseUnits = convertUserInputToBaseUnits(
       manualItem.value.quantity,
       manualItem.value.unit,
@@ -853,8 +904,8 @@ function addManualItem(): void {
     orderAssistant.addManualItem(
       manualItem.value.itemId,
       manualItem.value.itemName,
-      quantityInBaseUnits, // Pass in base units
-      product.baseUnit, // Save base unit
+      quantityInBaseUnits,
+      product.baseUnit,
       manualItem.value.notes || undefined
     )
 
@@ -866,39 +917,41 @@ function addManualItem(): void {
   }
 }
 
-/**
- * Resets manual item form
- */
 function resetManualItem(): void {
   manualItem.value = {
     itemId: '',
     itemName: '',
     quantity: 1,
-    unit: 'kg',
+    unit: 'кг',
     notes: ''
   }
 }
 
 // =============================================
-// OTHER METHODS (existing, but updated)
+// SUMMARY TAB METHODS
 // =============================================
 
-function addSuggestionToRequest(suggestion: OrderSuggestion): void {
-  orderAssistant.addSuggestionToRequest(suggestion)
+function formatQuantityForSummary(item: any): string {
+  const product = productsStore.products.find(p => p.id === item.itemId)
+  if (!product) return `${item.requestedQuantity} ${item.unit}`
+
+  return formatQuantityWithUnit(item.requestedQuantity, product)
 }
 
-function addUrgentItems(): void {
-  urgentSuggestions.value.forEach(suggestion => {
-    if (!orderAssistant.isSuggestionAdded(suggestion.itemId)) {
-      orderAssistant.addSuggestionToRequest(suggestion)
-    }
-  })
-  activeTab.value = 'summary'
+function getBestDisplayUnitForItem(item: any): string {
+  const product = productsStore.products.find(p => p.id === item.itemId)
+  if (!product) return item.unit
+
+  return getBestInputUnit(product)
 }
 
 function removeItemFromRequest(itemId: string): void {
   orderAssistant.removeItemFromRequest(itemId)
 }
+
+// =============================================
+// GENERAL METHODS
+// =============================================
 
 async function generateSuggestions(): Promise<void> {
   try {
@@ -973,3 +1026,9 @@ watch(isOpen, async newValue => {
   }
 })
 </script>
+
+<style scoped>
+.border-b {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+</style>
