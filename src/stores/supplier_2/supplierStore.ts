@@ -472,10 +472,20 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const updatedRequest = await supplierService.updateRequest(id, data)
 
-      // Update in local state
+      // ✅ ИСПРАВЛЕНИЕ: Обновляем массив реактивно
+      // Создаем новый массив чтобы Vue увидел изменения
       const index = state.value.requests.findIndex(r => r.id === id)
       if (index !== -1) {
-        state.value.requests[index] = updatedRequest
+        // Вместо прямого изменения элемента массива, создаем новый массив
+        state.value.requests = [
+          ...state.value.requests.slice(0, index),
+          updatedRequest,
+          ...state.value.requests.slice(index + 1)
+        ]
+
+        console.log(`SupplierStore: Reactively updated request ${id} in array at index ${index}`)
+      } else {
+        console.warn(`SupplierStore: Request ${id} not found in local state for update`)
       }
 
       // Update current request if it's the same
@@ -485,7 +495,8 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       DebugUtils.info(MODULE_NAME, 'Request updated successfully', {
         requestId: id,
-        status: updatedRequest.status
+        status: updatedRequest.status,
+        updatedInArray: index !== -1
       })
 
       return updatedRequest

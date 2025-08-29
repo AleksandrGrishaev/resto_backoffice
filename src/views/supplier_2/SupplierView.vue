@@ -10,7 +10,7 @@
         </div>
       </div>
 
-      <div class="d-flex gap-4">
+      <div class="d-flex gap-2">
         <v-btn
           color="success"
           prepend-icon="mdi-robot"
@@ -244,6 +244,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
+import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcurementRequests'
 import type { ProcurementRequest, PurchaseOrder, Receipt } from '@/stores/supplier_2/types'
 
 // Components
@@ -263,6 +264,7 @@ const MODULE_NAME = 'SupplierView'
 
 const supplierStore = useSupplierStore()
 const { completeReceipt } = useReceipts()
+const { submitRequest, updateRequest, canEditRequest, canDeleteRequest } = useProcurementRequests()
 
 // =============================================
 // STATE
@@ -329,9 +331,9 @@ const isLoadingValue = computed(() => {
 })
 
 // Development режим для отладки
-// const isDevelopment = computed(() => {
-//   return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
-// })
+const isDevelopment = computed(() => {
+  return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
+})
 
 // =============================================
 // UTILITY METHODS
@@ -382,19 +384,64 @@ function handleReceiptSuccess(message: string) {
 // EVENT HANDLERS - Requests
 // =============================================
 
-function handleEditRequest(request: ProcurementRequest) {
+async function handleEditRequest(request: ProcurementRequest) {
   console.log(`${MODULE_NAME}: Edit request`, request.id)
-  showSuccess(`Edit request ${request.requestNumber} - TODO: Implement`)
+
+  // Проверяем можно ли редактировать
+  if (!canEditRequest(request)) {
+    handleError(`Cannot edit request with status: ${request.status}`)
+    return
+  }
+
+  // TODO: Открыть диалог редактирования заявки
+  showSuccess(
+    `Edit request ${request.requestNumber} - Opening edit dialog (TODO: Implement dialog)`
+  )
 }
 
-function handleSubmitRequest(request: ProcurementRequest) {
+async function handleSubmitRequest(request: ProcurementRequest) {
   console.log(`${MODULE_NAME}: Submit request`, request.id)
-  showSuccess(`Submit request ${request.requestNumber} - TODO: Implement`)
+
+  try {
+    // Проверяем статус - можно отправить только draft
+    if (request.status !== 'draft') {
+      handleError(`Cannot submit request with status: ${request.status}`)
+      return
+    }
+
+    console.log(`${MODULE_NAME}: Submitting request via composable...`)
+
+    // Отправляем заявку через composable
+    const submittedRequest = await submitRequest(request.id)
+
+    console.log(`${MODULE_NAME}: Request submitted, new status:`, submittedRequest.status)
+
+    showSuccess(`Request ${submittedRequest.requestNumber} submitted successfully`)
+
+    // Можем показать уведомление о возможности создания заказа
+    setTimeout(() => {
+      const submittedCount = submittedRequestsArray.value.length
+      if (submittedCount > 0) {
+        showSuccess(`${submittedCount} requests ready for order creation`)
+      }
+    }, 1000)
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to submit request`, error)
+    handleError(`Failed to submit request: ${error}`)
+  }
 }
 
 function handleDeleteRequest(request: ProcurementRequest) {
   console.log(`${MODULE_NAME}: Delete request`, request.id)
-  showSuccess(`Delete request ${request.requestNumber} - TODO: Implement`)
+
+  // Проверяем можно ли удалить
+  if (!canDeleteRequest(request)) {
+    handleError(`Cannot delete request with status: ${request.status}`)
+    return
+  }
+
+  // TODO: Показать подтверждение и удалить через composable
+  showSuccess(`Delete request ${request.requestNumber} - TODO: Implement with confirmation`)
 }
 
 function handleCreateOrderFromRequest(request: ProcurementRequest) {
