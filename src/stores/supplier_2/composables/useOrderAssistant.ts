@@ -1,4 +1,4 @@
-// src/stores/supplier_2/composables/useOrderAssistant.ts - COMPLETE ENHANCED WITH FULL INTEGRATION
+// src/stores/supplier_2/composables/useOrderAssistant.ts - COMPLETE ENHANCED WITH FULL INTEGRATION AND UI COMPATIBILITY
 
 import { ref, computed, watch, nextTick } from 'vue'
 import { useSupplierStore } from '../supplierStore'
@@ -117,7 +117,7 @@ export function useOrderAssistant() {
   // =============================================
 
   /**
-   * ✅ ENHANCED: Get suggestions with fallback and filtering
+   * Get suggestions with fallback and filtering
    */
   const allSuggestions = computed(() => {
     const storeSuggestions = supplierStore.state.orderSuggestions
@@ -136,7 +136,7 @@ export function useOrderAssistant() {
   })
 
   /**
-   * ✅ ENHANCED: Advanced suggestion filtering
+   * Advanced suggestion filtering
    */
   const filteredSuggestions = computed(() => {
     let suggestions = allSuggestions.value
@@ -188,7 +188,7 @@ export function useOrderAssistant() {
   })
 
   /**
-   * ✅ ENHANCED: Suggestions by urgency with detailed breakdown
+   * Suggestions by urgency with detailed breakdown
    */
   const urgentSuggestions = computed(() =>
     filteredSuggestions.value.filter(s => s.urgency === 'high')
@@ -205,7 +205,7 @@ export function useOrderAssistant() {
   )
 
   /**
-   * ✅ ENHANCED: Comprehensive request summary with analytics
+   * Comprehensive request summary with analytics
    */
   const requestSummary = computed((): RequestSummary => {
     const items = state.value.selectedItems
@@ -263,7 +263,7 @@ export function useOrderAssistant() {
   })
 
   /**
-   * ✅ ENHANCED: Comprehensive department analytics
+   * Comprehensive department analytics
    */
   const departmentAnalytics = computed((): DepartmentAnalytics => {
     try {
@@ -352,7 +352,7 @@ export function useOrderAssistant() {
   })
 
   /**
-   * ✅ ENHANCED: Loading states with detailed tracking
+   * Loading states with detailed tracking
    */
   const isLoading = computed(
     () =>
@@ -377,11 +377,11 @@ export function useOrderAssistant() {
   })
 
   // =============================================
-  // ACTIONS - Enhanced with comprehensive functionality
+  // MAIN ACTIONS - Enhanced with comprehensive functionality
   // =============================================
 
   /**
-   * ✅ ENHANCED: Generate suggestions with performance tracking
+   * Generate suggestions with performance tracking
    */
   async function generateSuggestions(department?: Department): Promise<OrderSuggestion[]> {
     const startTime = Date.now()
@@ -392,7 +392,7 @@ export function useOrderAssistant() {
 
       const targetDepartment = department || state.value.selectedDepartment
 
-      DebugUtils.info(MODULE_NAME, '🔍 Generating suggestions with full integration', {
+      DebugUtils.info(MODULE_NAME, 'Generating suggestions with full integration', {
         department: targetDepartment,
         autoRefresh: autoRefresh.value
       })
@@ -414,7 +414,7 @@ export function useOrderAssistant() {
       updatePerformanceMetric('lastGenerationTime', generationTime)
       updatePerformanceMetric('avgGenerationTime', generationTime)
 
-      DebugUtils.info(MODULE_NAME, '✅ Suggestions generated successfully', {
+      DebugUtils.info(MODULE_NAME, 'Suggestions generated successfully', {
         department: targetDepartment,
         total: newSuggestions.length,
         urgent: newSuggestions.filter(s => s.urgency === 'high').length,
@@ -427,7 +427,7 @@ export function useOrderAssistant() {
       return newSuggestions
     } catch (error) {
       const errorMessage = `Failed to generate suggestions: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Suggestion generation failed', { error })
+      DebugUtils.error(MODULE_NAME, 'Suggestion generation failed', { error })
       addError(errorMessage)
       throw error
     } finally {
@@ -436,7 +436,7 @@ export function useOrderAssistant() {
   }
 
   /**
-   * ✅ ENHANCED: Get estimated price with multiple fallbacks
+   * Get estimated price with multiple fallbacks
    */
   function getEstimatedPrice(itemId: string): number {
     try {
@@ -468,16 +468,16 @@ export function useOrderAssistant() {
         return product.costPerUnit
       }
 
-      DebugUtils.warn(MODULE_NAME, '⚠️  No price found for item, using 0', { itemId })
+      DebugUtils.warn(MODULE_NAME, 'No price found for item, using 0', { itemId })
       return 0
     } catch (error) {
-      DebugUtils.warn(MODULE_NAME, '⚠️  Failed to get estimated price', { itemId, error })
+      DebugUtils.warn(MODULE_NAME, 'Failed to get estimated price', { itemId, error })
       return 0
     }
   }
 
   /**
-   * ✅ ENHANCED: Update prices with batch processing and performance tracking
+   * Update prices with batch processing and performance tracking
    */
   async function updatePrices(itemIds?: string[]): Promise<void> {
     const startTime = Date.now()
@@ -492,7 +492,7 @@ export function useOrderAssistant() {
         return
       }
 
-      DebugUtils.info(MODULE_NAME, '💰 Updating prices from storage data', {
+      DebugUtils.info(MODULE_NAME, 'Updating prices from storage data', {
         itemCount: targetItemIds.length
       })
 
@@ -532,14 +532,14 @@ export function useOrderAssistant() {
       updatePerformanceMetric('lastPriceUpdateTime', updateTime)
       updatePerformanceMetric('avgPriceUpdateTime', updateTime)
 
-      DebugUtils.info(MODULE_NAME, '✅ Prices updated successfully', {
+      DebugUtils.info(MODULE_NAME, 'Prices updated successfully', {
         totalItems: targetItemIds.length,
         updatedPrices: updatedCount,
         updateTime: `${updateTime}ms`
       })
     } catch (error) {
       const errorMessage = `Failed to update prices: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Price update failed', { error })
+      DebugUtils.error(MODULE_NAME, 'Price update failed', { error })
       addError(errorMessage)
     } finally {
       state.value.isLoadingPrices = false
@@ -547,7 +547,7 @@ export function useOrderAssistant() {
   }
 
   /**
-   * ✅ ENHANCED: Add item with smart defaults and validation
+   * Add item with smart defaults and validation
    */
   function addItem(suggestion: OrderSuggestion, quantity?: number): void {
     try {
@@ -571,7 +571,7 @@ export function useOrderAssistant() {
         existingItem.notes =
           `${existingItem.notes || ''} [+${quantityToAdd} added at ${timestamp}]`.trim()
 
-        DebugUtils.debug(MODULE_NAME, '➕ Updated existing item quantity', {
+        DebugUtils.debug(MODULE_NAME, 'Updated existing item quantity', {
           itemId: suggestion.itemId,
           newQuantity: existingItem.requestedQuantity,
           added: quantityToAdd
@@ -594,7 +594,7 @@ export function useOrderAssistant() {
 
         state.value.selectedItems.push(newItem)
 
-        DebugUtils.debug(MODULE_NAME, '➕ New item added to request', {
+        DebugUtils.debug(MODULE_NAME, 'New item added to request', {
           itemId: suggestion.itemId,
           quantity: quantityToAdd,
           totalItems: state.value.selectedItems.length
@@ -605,69 +605,13 @@ export function useOrderAssistant() {
       updatePrices([suggestion.itemId])
     } catch (error) {
       const errorMessage = `Failed to add item: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Failed to add item', { suggestion, error })
+      DebugUtils.error(MODULE_NAME, 'Failed to add item', { suggestion, error })
       addError(errorMessage)
     }
   }
 
   /**
-   * ✅ ENHANCED: Add urgent items with smart grouping
-   */
-  function addUrgentItems(maxItems?: number): void {
-    try {
-      const urgentItems = urgentSuggestions.value.slice(0, maxItems || 10)
-      let addedCount = 0
-
-      for (const suggestion of urgentItems) {
-        addItem(suggestion)
-        addedCount++
-      }
-
-      DebugUtils.info(MODULE_NAME, '🚨 Urgent items added automatically', {
-        available: urgentSuggestions.value.length,
-        added: addedCount,
-        totalItems: state.value.selectedItems.length
-      })
-    } catch (error) {
-      const errorMessage = `Failed to add urgent items: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Failed to add urgent items', { error })
-      addError(errorMessage)
-    }
-  }
-
-  /**
-   * ✅ ENHANCED: Add items by category
-   */
-  function addItemsByCategory(category: string, urgencyFilter?: Urgency): void {
-    try {
-      const categoryItems = filteredSuggestions.value.filter(s => {
-        const product = productsStore.products.find(p => p.id === s.itemId)
-        return (
-          product?.category === category && (urgencyFilter ? s.urgency === urgencyFilter : true)
-        )
-      })
-
-      let addedCount = 0
-      for (const suggestion of categoryItems) {
-        addItem(suggestion)
-        addedCount++
-      }
-
-      DebugUtils.info(MODULE_NAME, '📦 Items added by category', {
-        category,
-        urgencyFilter,
-        available: categoryItems.length,
-        added: addedCount
-      })
-    } catch (error) {
-      const errorMessage = `Failed to add items by category: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Failed to add items by category', { category, error })
-      addError(errorMessage)
-    }
-  }
-
-  /**
-   * ✅ ENHANCED: Remove item with cleanup
+   * Remove item with cleanup
    */
   function removeItem(itemId: string): void {
     try {
@@ -677,19 +621,19 @@ export function useOrderAssistant() {
         const removedItem = state.value.selectedItems[index]
         state.value.selectedItems.splice(index, 1)
 
-        DebugUtils.debug(MODULE_NAME, '➖ Item removed from request', {
+        DebugUtils.debug(MODULE_NAME, 'Item removed from request', {
           itemId,
           itemName: removedItem.itemName,
           remainingItems: state.value.selectedItems.length
         })
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to remove item', { itemId, error })
+      DebugUtils.error(MODULE_NAME, 'Failed to remove item', { itemId, error })
     }
   }
 
   /**
-   * ✅ ENHANCED: Update item quantity with validation
+   * Update item quantity with validation
    */
   function updateItemQuantity(itemId: string, quantity: number): void {
     try {
@@ -713,7 +657,7 @@ export function useOrderAssistant() {
         item.notes =
           `${item.notes || ''} [Qty: ${oldQuantity} → ${item.requestedQuantity} at ${timestamp}]`.trim()
 
-        DebugUtils.debug(MODULE_NAME, '📝 Item quantity updated', {
+        DebugUtils.debug(MODULE_NAME, 'Item quantity updated', {
           itemId,
           oldQuantity,
           newQuantity: item.requestedQuantity
@@ -723,7 +667,7 @@ export function useOrderAssistant() {
         item.estimatedPrice = getEstimatedPrice(itemId)
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to update item quantity', {
+      DebugUtils.error(MODULE_NAME, 'Failed to update item quantity', {
         itemId,
         quantity,
         error
@@ -732,7 +676,7 @@ export function useOrderAssistant() {
   }
 
   /**
-   * ✅ ENHANCED: Update item priority with validation
+   * Update item priority with validation
    */
   function updateItemPriority(itemId: string, priority: Priority): void {
     try {
@@ -742,14 +686,14 @@ export function useOrderAssistant() {
         const oldPriority = item.priority
         item.priority = priority
 
-        DebugUtils.debug(MODULE_NAME, '⚡ Item priority updated', {
+        DebugUtils.debug(MODULE_NAME, 'Item priority updated', {
           itemId,
           oldPriority,
           newPriority: priority
         })
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to update item priority', {
+      DebugUtils.error(MODULE_NAME, 'Failed to update item priority', {
         itemId,
         priority,
         error
@@ -758,7 +702,7 @@ export function useOrderAssistant() {
   }
 
   /**
-   * ✅ ENHANCED: Create request with comprehensive validation and enhancement
+   * Create request with comprehensive validation and enhancement
    */
   async function createRequest(
     requestedBy: string,
@@ -781,7 +725,7 @@ export function useOrderAssistant() {
       const targetDepartment = options?.department || state.value.selectedDepartment
       const validatePrices = options?.validatePrices ?? true
 
-      DebugUtils.info(MODULE_NAME, '📝 Creating request with enhanced validation', {
+      DebugUtils.info(MODULE_NAME, 'Creating request with enhanced validation', {
         itemCount: state.value.selectedItems.length,
         department: targetDepartment,
         requestedBy,
@@ -829,7 +773,7 @@ export function useOrderAssistant() {
 
       const creationTime = Date.now() - startTime
 
-      DebugUtils.info(MODULE_NAME, '✅ Request created successfully', {
+      DebugUtils.info(MODULE_NAME, 'Request created successfully', {
         requestId: newRequest.id,
         requestNumber: newRequest.requestNumber,
         itemsCount: newRequest.items.length,
@@ -842,7 +786,7 @@ export function useOrderAssistant() {
       return newRequest.id
     } catch (error) {
       const errorMessage = `Failed to create request: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Request creation failed', { error })
+      DebugUtils.error(MODULE_NAME, 'Request creation failed', { error })
       addError(errorMessage)
       throw error
     } finally {
@@ -851,25 +795,25 @@ export function useOrderAssistant() {
   }
 
   /**
-   * ✅ ENHANCED: Clear selected items with confirmation
+   * Clear selected items with confirmation
    */
   function clearSelectedItems(): void {
     const itemCount = state.value.selectedItems.length
     state.value.selectedItems = []
 
-    DebugUtils.debug(MODULE_NAME, '🧹 Selected items cleared', {
+    DebugUtils.debug(MODULE_NAME, 'Selected items cleared', {
       clearedCount: itemCount
     })
   }
 
   /**
-   * ✅ NEW: Refresh data from all sources
+   * Refresh data from all sources
    */
   async function refreshData(): Promise<void> {
     try {
       clearErrors()
 
-      DebugUtils.info(MODULE_NAME, '🔄 Refreshing all data sources...')
+      DebugUtils.info(MODULE_NAME, 'Refreshing all data sources...')
 
       // Refresh storage data
       await storageStore.fetchBalances(state.value.selectedDepartment)
@@ -887,17 +831,172 @@ export function useOrderAssistant() {
         await updatePrices()
       }
 
-      DebugUtils.info(MODULE_NAME, '✅ All data refreshed successfully')
+      DebugUtils.info(MODULE_NAME, 'All data refreshed successfully')
     } catch (error) {
       const errorMessage = `Failed to refresh data: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Data refresh failed', { error })
+      DebugUtils.error(MODULE_NAME, 'Data refresh failed', { error })
       addError(errorMessage)
       throw error
     }
   }
 
+  // =============================================
+  // UI COMPATIBILITY METHODS
+  // =============================================
+
   /**
-   * ✅ ENHANCED: Get comprehensive item information
+   * Updates quantity of selected element (for UI)
+   */
+  function updateSelectedQuantity(itemId: string, quantityInBaseUnits: number): void {
+    updateItemQuantity(itemId, quantityInBaseUnits)
+  }
+
+  /**
+   * Gets quantity of selected element in units for display (for UI)
+   */
+  function getSelectedQuantityForDisplay(itemId: string): number {
+    const item = state.value.selectedItems.find(item => item.itemId === itemId)
+    if (!item) return 0
+
+    return item.requestedQuantity
+  }
+
+  /**
+   * Checks if suggestion is added (for UI)
+   */
+  function isSuggestionAdded(itemId: string): boolean {
+    return state.value.selectedItems.some(item => item.itemId === itemId)
+  }
+
+  /**
+   * Adds suggestion to request (for UI)
+   */
+  function addSuggestionToRequest(suggestion: OrderSuggestion, customQuantity?: number): void {
+    addItem(suggestion, customQuantity)
+  }
+
+  /**
+   * Removes item from request (for UI)
+   */
+  function removeItemFromRequest(itemId: string): void {
+    removeItem(itemId)
+  }
+
+  /**
+   * Creates request from selected items (for UI)
+   */
+  async function createRequestFromItems(
+    requestedBy: string,
+    priority: Priority,
+    notes?: string
+  ): Promise<any> {
+    return createRequest(requestedBy, { priority, notes })
+  }
+
+  /**
+   * Changes department (for UI)
+   */
+  async function changeDepartment(department: Department): Promise<void> {
+    return switchDepartment(department)
+  }
+
+  /**
+   * Gets color for urgency level (for UI)
+   */
+  function getUrgencyColor(urgency: string): string {
+    const colorMap: Record<string, string> = {
+      low: 'success',
+      medium: 'warning',
+      high: 'error'
+    }
+    return colorMap[urgency] || 'primary'
+  }
+
+  /**
+   * Gets icon for urgency level (for UI)
+   */
+  function getUrgencyIcon(urgency: string): string {
+    const iconMap: Record<string, string> = {
+      low: 'mdi-check-circle',
+      medium: 'mdi-alert',
+      high: 'mdi-alert-circle'
+    }
+    return iconMap[urgency] || 'mdi-information'
+  }
+
+  // =============================================
+  // DEPARTMENT MANAGEMENT
+  // =============================================
+
+  /**
+   * Switch department with data refresh
+   */
+  async function switchDepartment(department: Department): Promise<void> {
+    try {
+      if (state.value.selectedDepartment === department) {
+        return // Already on this department
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Switching department', {
+        from: state.value.selectedDepartment,
+        to: department
+      })
+
+      state.value.selectedDepartment = department
+
+      // Clear selected items when switching departments
+      if (state.value.selectedItems.length > 0) {
+        DebugUtils.info(MODULE_NAME, 'Clearing items due to department switch')
+        clearSelectedItems()
+      }
+
+      // Refresh data for new department
+      await generateSuggestions(department)
+    } catch (error) {
+      const errorMessage = `Failed to switch department: ${error}`
+      DebugUtils.error(MODULE_NAME, 'Department switch failed', { error })
+      addError(errorMessage)
+    }
+  }
+
+  /**
+   * Compare departments
+   */
+  function compareDepartments(): {
+    kitchen: DepartmentAnalytics
+    bar: DepartmentAnalytics
+    comparison: {
+      totalValueDiff: number
+      criticalItemsDiff: number
+      efficiencyScore: { kitchen: number; bar: number }
+    }
+  } {
+    const currentDept = state.value.selectedDepartment
+
+    // Calculate analytics for both departments
+    state.value.selectedDepartment = 'kitchen'
+    const kitchenAnalytics = departmentAnalytics.value
+
+    state.value.selectedDepartment = 'bar'
+    const barAnalytics = departmentAnalytics.value
+
+    // Restore original department
+    state.value.selectedDepartment = currentDept
+
+    const comparison = {
+      totalValueDiff: kitchenAnalytics.totalValue - barAnalytics.totalValue,
+      criticalItemsDiff: kitchenAnalytics.criticalItems - barAnalytics.criticalItems,
+      efficiencyScore: {
+        kitchen: calculateDepartmentEfficiency(kitchenAnalytics),
+        bar: calculateDepartmentEfficiency(barAnalytics)
+      }
+    }
+
+    return { kitchen: kitchenAnalytics, bar: barAnalytics, comparison }
+  }
+
+  /**
+   * Get comprehensive item information
    */
   function getItemInfo(itemId: string) {
     try {
@@ -960,13 +1059,13 @@ export function useOrderAssistant() {
 
       return itemInfo
     } catch (error) {
-      DebugUtils.warn(MODULE_NAME, '⚠️  Failed to get item info', { itemId, error })
+      DebugUtils.warn(MODULE_NAME, 'Failed to get item info', { itemId, error })
       return null
     }
   }
 
   /**
-   * ✅ NEW: Get suggestions by various criteria
+   * Get suggestions by various criteria
    */
   function getSuggestionsByUrgency(urgency: Urgency): OrderSuggestion[] {
     return filteredSuggestions.value.filter(s => s.urgency === urgency)
@@ -994,7 +1093,7 @@ export function useOrderAssistant() {
   }
 
   /**
-   * ✅ NEW: Smart suggestions based on patterns
+   * Smart suggestions based on patterns
    */
   function getSmartSuggestions(): {
     critical: OrderSuggestion[]
@@ -1024,98 +1123,27 @@ export function useOrderAssistant() {
   }
 
   // =============================================
-  // DEPARTMENT MANAGEMENT
-  // =============================================
-
-  /**
-   * ✅ ENHANCED: Switch department with data refresh
-   */
-  async function switchDepartment(department: Department): Promise<void> {
-    try {
-      if (state.value.selectedDepartment === department) {
-        return // Already on this department
-      }
-
-      DebugUtils.info(MODULE_NAME, '🏢 Switching department', {
-        from: state.value.selectedDepartment,
-        to: department
-      })
-
-      state.value.selectedDepartment = department
-
-      // Clear selected items when switching departments
-      if (state.value.selectedItems.length > 0) {
-        DebugUtils.info(MODULE_NAME, '🧹 Clearing items due to department switch')
-        clearSelectedItems()
-      }
-
-      // Refresh data for new department
-      await generateSuggestions(department)
-    } catch (error) {
-      const errorMessage = `Failed to switch department: ${error}`
-      DebugUtils.error(MODULE_NAME, '❌ Department switch failed', { error })
-      addError(errorMessage)
-    }
-  }
-
-  /**
-   * ✅ NEW: Compare departments
-   */
-  function compareDepartments(): {
-    kitchen: DepartmentAnalytics
-    bar: DepartmentAnalytics
-    comparison: {
-      totalValueDiff: number
-      criticalItemsDiff: number
-      efficiencyScore: { kitchen: number; bar: number }
-    }
-  } {
-    const currentDept = state.value.selectedDepartment
-
-    // Calculate analytics for both departments
-    state.value.selectedDepartment = 'kitchen'
-    const kitchenAnalytics = departmentAnalytics.value
-
-    state.value.selectedDepartment = 'bar'
-    const barAnalytics = departmentAnalytics.value
-
-    // Restore original department
-    state.value.selectedDepartment = currentDept
-
-    const comparison = {
-      totalValueDiff: kitchenAnalytics.totalValue - barAnalytics.totalValue,
-      criticalItemsDiff: kitchenAnalytics.criticalItems - barAnalytics.criticalItems,
-      efficiencyScore: {
-        kitchen: calculateDepartmentEfficiency(kitchenAnalytics),
-        bar: calculateDepartmentEfficiency(barAnalytics)
-      }
-    }
-
-    return { kitchen: kitchenAnalytics, bar: barAnalytics, comparison }
-  }
-
-  // =============================================
   // FILTER MANAGEMENT
   // =============================================
 
   function setUrgencyFilter(urgency: Urgency | 'all'): void {
     filters.value.urgency = urgency
-    DebugUtils.debug(MODULE_NAME, '🔍 Urgency filter set', { urgency })
+    DebugUtils.debug(MODULE_NAME, 'Urgency filter set', { urgency })
   }
 
   function setCategoryFilter(category: string): void {
     filters.value.category = category
-    DebugUtils.debug(MODULE_NAME, '🔍 Category filter set', { category })
+    DebugUtils.debug(MODULE_NAME, 'Category filter set', { category })
   }
 
   function setPriceRangeFilter(min: number, max: number): void {
     filters.value.priceRange = { min, max }
-    DebugUtils.debug(MODULE_NAME, '🔍 Price range filter set', { min, max })
+    DebugUtils.debug(MODULE_NAME, 'Price range filter set', { min, max })
   }
 
   function setSearchFilter(searchTerm: string): void {
     filters.value.searchTerm = searchTerm
-    DebugUtils.debug(MODULE_NAME, '🔍 Search filter set', { searchTerm })
+    DebugUtils.debug(MODULE_NAME, 'Search filter set', { searchTerm })
   }
 
   function clearFilters(): void {
@@ -1127,7 +1155,7 @@ export function useOrderAssistant() {
       priceRange: null,
       searchTerm: ''
     }
-    DebugUtils.debug(MODULE_NAME, '🧹 All filters cleared')
+    DebugUtils.debug(MODULE_NAME, 'All filters cleared')
   }
 
   function getAvailableCategories(): string[] {
@@ -1159,14 +1187,14 @@ export function useOrderAssistant() {
       if (!isLoading.value && autoRefresh.value) {
         try {
           await generateSuggestions()
-          DebugUtils.debug(MODULE_NAME, '🔄 Auto-refresh completed')
+          DebugUtils.debug(MODULE_NAME, 'Auto-refresh completed')
         } catch (error) {
-          DebugUtils.warn(MODULE_NAME, '⚠️  Auto-refresh failed', { error })
+          DebugUtils.warn(MODULE_NAME, 'Auto-refresh failed', { error })
         }
       }
     }, refreshInterval.value)
 
-    DebugUtils.info(MODULE_NAME, '🔄 Auto-refresh started', {
+    DebugUtils.info(MODULE_NAME, 'Auto-refresh started', {
       interval: `${refreshInterval.value / 1000}s`
     })
   }
@@ -1177,7 +1205,7 @@ export function useOrderAssistant() {
       refreshTimer = null
     }
     autoRefresh.value = false
-    DebugUtils.info(MODULE_NAME, '⏹️  Auto-refresh stopped')
+    DebugUtils.info(MODULE_NAME, 'Auto-refresh stopped')
   }
 
   function setRefreshInterval(intervalMs: number): void {
@@ -1188,7 +1216,7 @@ export function useOrderAssistant() {
       startAutoRefresh()
     }
 
-    DebugUtils.info(MODULE_NAME, '⏱️  Refresh interval updated', {
+    DebugUtils.info(MODULE_NAME, 'Refresh interval updated', {
       interval: `${refreshInterval.value / 1000}s`
     })
   }
@@ -1212,6 +1240,23 @@ export function useOrderAssistant() {
 
   function getRecentErrors(count = 5): string[] {
     return state.value.errors.slice(-count)
+  }
+
+  // =============================================
+  // UTILITY FUNCTIONS
+  // =============================================
+
+  function formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount)
+  }
+
+  function formatPercentage(value: number): string {
+    return `${Math.round(value * 10) / 10}%`
   }
 
   // =============================================
@@ -1347,19 +1392,6 @@ export function useOrderAssistant() {
     return (stockScore + expiryScore + turnoverScore) / 3
   }
 
-  function formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount)
-  }
-
-  function formatPercentage(value: number): string {
-    return `${Math.round(value * 10) / 10}%`
-  }
-
   // =============================================
   // WATCHERS - Enhanced reactivity
   // =============================================
@@ -1385,21 +1417,21 @@ export function useOrderAssistant() {
   function cleanup(): void {
     stopAutoRefresh()
     clearErrors()
-    DebugUtils.debug(MODULE_NAME, '🧹 Order Assistant cleanup completed')
+    DebugUtils.debug(MODULE_NAME, 'Order Assistant cleanup completed')
   }
 
   // =============================================
-  // RETURN PUBLIC API
+  // RETURN PUBLIC API WITH FULL UI COMPATIBILITY
   // =============================================
 
   return {
-    // ===== STATE - добавить computed для реактивности =====
+    // ===== STATE =====
     selectedDepartment: computed(() => state.value.selectedDepartment),
     selectedItems: computed(() => state.value.selectedItems),
     isGenerating: computed(() => state.value.isGenerating),
     isLoading: computed(() => state.value.isGenerating || state.value.isLoadingPrices),
 
-    // ===== COMPUTED PROPERTIES - без изменений =====
+    // ===== COMPUTED PROPERTIES =====
     allSuggestions,
     filteredSuggestions,
     urgentSuggestions,
@@ -1411,48 +1443,36 @@ export function useOrderAssistant() {
     integrationHealth,
     hasErrors,
 
-    // ===== ACTIONS - добавить алиасы для совместимости =====
+    // ===== MAIN ACTIONS =====
     generateSuggestions,
     refreshData,
     getEstimatedPrice,
     updatePrices,
 
-    // Item management - добавить алиасы
+    // ===== ITEM MANAGEMENT =====
     addItem,
-    addSuggestionToRequest: addItem, // алиас
-    addManualItem: (
-      itemId: string,
-      itemName: string,
-      quantity: number,
-      unit: string,
-      notes?: string
-    ) => {
-      // Создать объект suggestion для совместимости
-      const mockSuggestion = {
-        itemId,
-        itemName,
-        suggestedQuantity: quantity,
-        urgency: 'medium' as Urgency,
-        reason: 'manual_add' as any
-      }
-      addItem(mockSuggestion)
-    },
     removeItem,
-    removeItemFromRequest: removeItem, // алиас
     updateItemQuantity,
     updateItemPriority,
     clearSelectedItems,
 
-    // Request creation - добавить алиас
-    createRequest,
-    createRequestFromItems: createRequest, // алиас
+    // ===== UI COMPATIBILITY METHODS =====
+    addSuggestionToRequest,
+    removeItemFromRequest,
+    updateSelectedQuantity,
+    getSelectedQuantityForDisplay,
+    isSuggestionAdded,
 
-    // Department management - добавить алиас
+    // ===== REQUEST CREATION =====
+    createRequest,
+    createRequestFromItems,
+
+    // ===== DEPARTMENT MANAGEMENT =====
     switchDepartment,
-    changeDepartment: switchDepartment, // алиас
+    changeDepartment,
     compareDepartments,
 
-    // Information
+    // ===== INFORMATION =====
     getItemInfo,
     getSuggestionsByUrgency,
     getSuggestionsByCategory,
@@ -1461,7 +1481,7 @@ export function useOrderAssistant() {
     getSuggestionsBelowMinStock,
     getSmartSuggestions,
 
-    // Filter management
+    // ===== FILTERS =====
     setUrgencyFilter,
     setCategoryFilter,
     setPriceRangeFilter,
@@ -1469,38 +1489,45 @@ export function useOrderAssistant() {
     clearFilters,
     getAvailableCategories,
 
-    // Auto-refresh
+    // ===== AUTO-REFRESH =====
     startAutoRefresh,
     stopAutoRefresh,
     setRefreshInterval,
 
-    // Error management
+    // ===== ERROR MANAGEMENT =====
     addError,
     clearErrors,
     getRecentErrors,
 
-    // Utilities - добавить недостающие функции
+    // ===== UI UTILITIES =====
     formatCurrency,
     formatPercentage,
-    isSuggestionAdded: (suggestion: OrderSuggestion) => {
-      return state.value.selectedItems.some(item => item.itemId === suggestion.itemId)
-    },
-    getUrgencyColor: (urgency: string) => {
-      const colorMap: Record<string, string> = {
-        low: 'success',
-        medium: 'warning',
-        high: 'error'
+    getUrgencyColor,
+    getUrgencyIcon,
+
+    // ===== MANUAL ITEM ADDITION =====
+    addManualItem: (
+      itemId: string,
+      itemName: string,
+      quantity: number,
+      unit: string,
+      notes?: string
+    ) => {
+      // Create suggestion object for compatibility
+      const mockSuggestion = {
+        itemId,
+        itemName,
+        suggestedQuantity: quantity,
+        urgency: 'medium' as Urgency,
+        reason: 'manual_add' as any,
+        estimatedPrice: getEstimatedPrice(itemId),
+        currentStock: 0,
+        minStock: 0
       }
-      return colorMap[urgency] || 'primary'
+      addItem(mockSuggestion)
     },
-    getUrgencyIcon: (urgency: string) => {
-      const iconMap: Record<string, string> = {
-        low: 'mdi-check-circle',
-        medium: 'mdi-alert',
-        high: 'mdi-alert-circle'
-      }
-      return iconMap[urgency] || 'mdi-information'
-    },
+
+    // ===== CLEANUP =====
     cleanup
   }
 }
