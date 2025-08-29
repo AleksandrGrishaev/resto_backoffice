@@ -3,6 +3,8 @@
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { useSupplierStorageIntegration } from './integrations/storageIntegration'
+import { getProductDefinition } from '@/stores/shared/productDefinitions'
+
 import { DebugUtils } from '@/utils'
 import type {
   ProcurementRequest,
@@ -1070,30 +1072,24 @@ class SupplierService {
   }
 
   private async getEstimatedPrice(itemId: string): Promise<number> {
-    // Try to get price from storage first
+    // 1. Пробуем из storage
     try {
       const latestPrices = await this.getLatestPrices([itemId])
       if (latestPrices[itemId]) {
         return latestPrices[itemId]
       }
     } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Could not get price from storage, using fallback', { itemId })
+      DebugUtils.warn(MODULE_NAME, 'Could not get price from storage', { itemId })
     }
 
-    // Fallback to hardcoded prices
-    const fallbackPrices: Record<string, number> = {
-      'prod-beef-steak': 180000,
-      'prod-potato': 8000,
-      'prod-garlic': 25000,
-      'prod-tomato': 12000,
-      'prod-beer-bintang-330': 12000,
-      'prod-cola-330': 8000,
-      'prod-butter': 45000,
-      'prod-chicken-breast': 85000,
-      'prod-onion': 15000,
-      'prod-rice': 12000
+    // 2. Берём из product definition
+    const productDef = getProductDefinition(itemId)
+    if (productDef) {
+      return productDef.purchaseCost // Цена за закупочную единицу
     }
-    return fallbackPrices[itemId] || 0
+
+    DebugUtils.warn(MODULE_NAME, 'No price found for item', { itemId })
+    return 0
   }
 }
 

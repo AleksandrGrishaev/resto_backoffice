@@ -379,64 +379,35 @@ function isItemOrdered(item: RequestItem): boolean {
 // PRICING FUNCTIONS - ИСПРАВЛЕНО
 // =============================================
 
-/**
- * ✅ ИСПРАВЛЕННАЯ функция получения цены товара
- */
 function getEstimatedPrice(itemId: string, item?: any): number {
-  // 1. Приоритет: используем цену из самого item если есть
-  if (item?.estimatedPrice && item.estimatedPrice > 0) {
-    return item.estimatedPrice
-  }
+  if (item?.estimatedPrice) return item.estimatedPrice
 
-  // 2. Пробуем получить из ProductsStore
   const product = productsStore.products.find(p => p.id === itemId)
-
-  if (product) {
-    // Для единиц закупки (кг, л) используем purchaseCost
-    if (product.purchaseCost && product.purchaseCost > 0) {
-      return product.purchaseCost
-    }
-
-    // Для базовых единиц (г, мл) используем baseCostPerUnit
-    if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
-      return product.baseCostPerUnit
-    }
-
-    // Старое поле
-    if (product.costPerUnit && product.costPerUnit > 0) {
-      return product.costPerUnit
-    }
+  if (product && product.baseCostPerUnit) {
+    return product.baseCostPerUnit
   }
 
-  // 3. Fallback: захардкоженные цены только как крайний случай
-  const fallbackPrices: Record<string, number> = {
-    'prod-beef-steak': 180000,
-    'prod-potato': 8000,
-    'prod-garlic': 25000,
-    'prod-tomato': 12000,
-    'prod-beer-bintang-330': 12000,
-    'prod-cola-330': 8000,
-    'prod-butter': 45000,
-    'prod-chicken-breast': 85000,
-    'prod-onion': 15000,
-    'prod-rice': 12000,
-    'prod-milk': 15000,
-    'prod-salt': 3000,
-    'prod-oregano': 150000
-  }
-
-  return fallbackPrices[itemId] || 1000
+  return 0
 }
 
-/**
- * ✅ ИСПРАВЛЕННАЯ функция расчета общей стоимости
- */
 function calculateTotalEstimate(): number {
   if (!editableRequest.value) return 0
 
   return editableRequest.value.items.reduce((sum, item) => {
-    const price = getEstimatedPrice(item.itemId, item)
-    return sum + item.requestedQuantity * price
+    const product = productsStore.products.find(p => p.id === item.itemId)
+    if (!product) return sum
+
+    let baseQuantity = item.requestedQuantity
+
+    if (item.unit !== product.baseUnit) {
+      if (item.unit === 'kg' && product.baseUnit === 'gram') {
+        baseQuantity = item.requestedQuantity * 1000
+      } else if (item.unit === 'liter' && product.baseUnit === 'ml') {
+        baseQuantity = item.requestedQuantity * 1000
+      }
+    }
+
+    return sum + baseQuantity * product.baseCostPerUnit
   }, 0)
 }
 

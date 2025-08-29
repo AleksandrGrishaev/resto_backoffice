@@ -413,44 +413,38 @@ function formatDate(dateString: string): string {
 }
 
 function getEstimatedPrice(itemId: string, item?: any): number {
-  // 1. ✅ ПРИОРИТЕТ: Используем цену из item если есть
+  // 1. Если в item уже есть цена - используем её
   if (item?.estimatedPrice && item.estimatedPrice > 0) {
     return item.estimatedPrice
   }
 
-  // 2. Получаем из ProductsStore
+  // 2. Берём из продукта
   const product = productsStore.products.find(p => p.id === itemId)
-
-  if (product) {
-    if (product.purchaseCost && product.purchaseCost > 0) {
-      return product.purchaseCost
-    }
-    if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
-      return product.baseCostPerUnit
-    }
-    if (product.costPerUnit && product.costPerUnit > 0) {
-      return product.costPerUnit
-    }
+  if (product && product.baseCostPerUnit) {
+    return product.baseCostPerUnit
   }
 
-  // 3. Fallback цены
-  const fallbackPrices: Record<string, number> = {
-    'prod-milk': 15000,
-    'prod-salt': 3000,
-    'prod-oregano': 150000,
-    'prod-beef-steak': 180000,
-    'prod-potato': 8000,
-    'prod-garlic': 25000
-    // ... остальные
-  }
-
-  return fallbackPrices[itemId] || 1000
+  return 0
 }
 
 function calculateEstimatedTotal(request: ProcurementRequest): number {
   return request.items.reduce((sum, item) => {
-    const price = getEstimatedPrice(item.itemId, item)
-    return sum + item.requestedQuantity * price
+    const product = productsStore.products.find(p => p.id === item.itemId)
+    if (!product) return sum
+
+    // Конвертируем в базовые единицы
+    let baseQuantity = item.requestedQuantity
+
+    if (item.unit !== product.baseUnit) {
+      // Простая конвертация для основных единиц
+      if (item.unit === 'kg' && product.baseUnit === 'gram') {
+        baseQuantity = item.requestedQuantity * 1000
+      } else if (item.unit === 'liter' && product.baseUnit === 'ml') {
+        baseQuantity = item.requestedQuantity * 1000
+      }
+    }
+
+    return sum + baseQuantity * product.baseCostPerUnit
   }, 0)
 }
 

@@ -7,6 +7,7 @@ import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils, TimeUtils } from '@/utils'
 import { mockOrderSuggestions } from '../mock/supplierMock'
+import { getProductDefinition } from '@/stores/shared/productDefinitions'
 
 import type {
   OrderSuggestion,
@@ -447,7 +448,18 @@ export function useOrderAssistant() {
    * Get estimated price with multiple fallbacks
    */
   function getEstimatedPrice(itemId: string): number {
-    return getBaseCostPerUnit(itemId)
+    // Для отображения используем purchaseCost (цена за закупочную единицу)
+    const product = productsStore.products.find(p => p.id === itemId)
+    if (product && product.purchaseCost) {
+      return product.purchaseCost
+    }
+
+    const productDef = getProductDefinition(itemId)
+    if (productDef) {
+      return productDef.purchaseCost
+    }
+
+    return 0
   }
 
   /**
@@ -941,42 +953,19 @@ export function useOrderAssistant() {
   }
 
   function getBaseCostPerUnit(itemId: string): number {
-    try {
-      // 1. Пробуем получить из Products Store (baseCostPerUnit)
-      const product = productsStore.products.find(p => p.id === itemId)
-      if (product?.baseCostPerUnit && product.baseCostPerUnit > 0) {
-        return product.baseCostPerUnit
-      }
-
-      // 2. Рассчитываем из purchaseCost если есть
-      if (product?.purchaseCost && product?.purchaseToBaseRatio) {
-        return product.purchaseCost / product.purchaseToBaseRatio
-      }
-
-      // 3. Fallback на старую логику
-      const balance = storageStore.getBalance(itemId)
-      if (balance?.latestCost && balance.latestCost > 0) {
-        return balance.latestCost
-      }
-
-      // 4. Fallback на averageCost
-      if (balance?.averageCost && balance.averageCost > 0) {
-        return balance.averageCost
-      }
-
-      // 5. Fallback на suggestion estimatedPrice
-      const suggestion = allSuggestions.value.find(s => s.itemId === itemId)
-      if (suggestion?.estimatedPrice && suggestion.estimatedPrice > 0) {
-        return suggestion.estimatedPrice
-      }
-
-      // 6. Default fallback
-      DebugUtils.warn(MODULE_NAME, 'No price found for item, using default', { itemId })
-      return 1000 // 1000 IDR как fallback
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error getting base cost per unit', { itemId, error })
-      return 1000
+    // Сначала пробуем из productsStore
+    const product = productsStore.products.find(p => p.id === itemId)
+    if (product && product.baseCostPerUnit) {
+      return product.baseCostPerUnit
     }
+
+    // Если нет - из definitions
+    const productDef = getProductDefinition(itemId)
+    if (productDef) {
+      return productDef.baseCostPerUnit
+    }
+
+    return 0
   }
 
   /**

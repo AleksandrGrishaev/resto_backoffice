@@ -352,11 +352,28 @@ const noDataText = computed(() => {
 // Расчет цены
 const estimatedUnitPrice = computed(() => {
   if (!selectedItem.value) return 0
-  return getEstimatedPrice(selectedItem.value)
+
+  // Просто берём baseCostPerUnit из продукта
+  return selectedItem.value.baseCostPerUnit || 0
 })
 
 const estimatedTotalPrice = computed(() => {
-  return estimatedUnitPrice.value * quantity.value
+  if (!selectedItem.value) return 0
+
+  const product = selectedItem.value
+  let baseQuantity = quantity.value
+
+  // Конвертируем если нужно
+  const displayUnit = getDisplayUnit(product)
+  if (displayUnit !== product.baseUnit) {
+    if (displayUnit === 'kg' && product.baseUnit === 'gram') {
+      baseQuantity = quantity.value * 1000
+    } else if (displayUnit === 'liter' && product.baseUnit === 'ml') {
+      baseQuantity = quantity.value * 1000
+    }
+  }
+
+  return baseQuantity * (product.baseCostPerUnit || 0)
 })
 
 const isValid = computed(() => {
