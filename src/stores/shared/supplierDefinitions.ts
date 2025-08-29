@@ -112,6 +112,9 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         itemName: 'Beef Steak',
         requestedQuantity: 5,
         unit: 'kg',
+        estimatedPrice: 180000, // ✅ ДОБАВИТЬ
+        priority: 'urgent',
+        category: 'meat',
         notes: 'Urgent - for evening menu'
       },
       {
@@ -119,7 +122,8 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         itemId: 'prod-potato',
         itemName: 'Potato',
         requestedQuantity: 10,
-        unit: 'kg'
+        unit: 'kg',
+        estimatedPrice: 8000 // ✅ ДОБАВИТЬ
       },
       {
         id: 'req-item-003',
@@ -127,6 +131,7 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         itemName: 'Garlic',
         requestedQuantity: 2,
         unit: 'kg',
+        estimatedPrice: 18000, // ✅ ДОБАВИТЬ
         notes: 'Stock critically low'
       }
     ],

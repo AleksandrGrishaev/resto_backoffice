@@ -94,14 +94,21 @@
                     </td>
                     <td class="text-right">
                       <div class="text-body-2" :class="getItemTextClass(item)">
-                        {{ formatCurrency(getEstimatedPrice(item.itemId)) }}
+                        {{
+                          formatCurrency(
+                            item.estimatedPrice || getEstimatedPrice(item.itemId, item)
+                          )
+                        }}
                       </div>
                       <div
                         class="text-caption text-medium-emphasis"
                         :class="getItemTextClass(item)"
                       >
                         {{
-                          formatCurrency(item.requestedQuantity * getEstimatedPrice(item.itemId))
+                          formatCurrency(
+                            item.requestedQuantity *
+                              (item.estimatedPrice || getEstimatedPrice(item.itemId, item))
+                          )
                         }}
                       </div>
                     </td>
@@ -229,6 +236,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useProductsStore } from '@/stores/productsStore'
 import type { ProcurementRequest, PurchaseOrder } from '@/stores/supplier_2/types'
 
 // =============================================
@@ -249,6 +257,12 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
+
+// =============================================
+// STORES
+// =============================================
+
+const productsStore = useProductsStore()
 
 // =============================================
 // COMPUTED
@@ -405,6 +419,69 @@ function getOrderedItemsCount() {
 }
 
 // =============================================
+// PRICING FUNCTIONS - ИСПРАВЛЕНО
+// =============================================
+
+/**
+ * ✅ ИСПРАВЛЕННАЯ функция получения цены товара
+ */
+function getEstimatedPrice(itemId: string, item?: any): number {
+  // 1. Приоритет: используем цену из самого item если есть
+  if (item?.estimatedPrice && item.estimatedPrice > 0) {
+    return item.estimatedPrice
+  }
+
+  // 2. Пробуем получить из ProductsStore
+  const product = productsStore.products.find(p => p.id === itemId)
+
+  if (product) {
+    // Для единиц закупки (кг, л) используем purchaseCost
+    if (product.purchaseCost && product.purchaseCost > 0) {
+      return product.purchaseCost
+    }
+
+    // Для базовых единиц (г, мл) используем baseCostPerUnit
+    if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
+      return product.baseCostPerUnit
+    }
+
+    // Старое поле
+    if (product.costPerUnit && product.costPerUnit > 0) {
+      return product.costPerUnit
+    }
+  }
+
+  // 3. Fallback: захардкоженные цены только как крайний случай
+  const fallbackPrices: Record<string, number> = {
+    'prod-beef-steak': 180000,
+    'prod-potato': 8000,
+    'prod-garlic': 25000,
+    'prod-tomato': 12000,
+    'prod-beer-bintang-330': 12000,
+    'prod-cola-330': 8000,
+    'prod-butter': 45000,
+    'prod-chicken-breast': 85000,
+    'prod-onion': 15000,
+    'prod-rice': 12000,
+    'prod-milk': 15000,
+    'prod-salt': 3000,
+    'prod-oregano': 150000
+  }
+
+  return fallbackPrices[itemId] || 1000
+}
+
+/**
+ * ✅ ИСПРАВЛЕННАЯ функция расчета общей стоимости
+ */
+function calculateEstimatedTotal(request: ProcurementRequest): number {
+  return request.items.reduce((sum, item) => {
+    const price = getEstimatedPrice(item.itemId, item)
+    return sum + item.requestedQuantity * price
+  }, 0)
+}
+
+// =============================================
 // FORMATTING & UTILITY FUNCTIONS
 // =============================================
 
@@ -423,28 +500,6 @@ function formatDate(dateString: string): string {
     hour: '2-digit',
     minute: '2-digit'
   })
-}
-
-function getEstimatedPrice(itemId: string): number {
-  const prices: Record<string, number> = {
-    'prod-beef-steak': 180000,
-    'prod-potato': 8000,
-    'prod-garlic': 25000,
-    'prod-tomato': 12000,
-    'prod-beer-bintang-330': 12000,
-    'prod-cola-330': 8000,
-    'prod-butter': 45000,
-    'prod-chicken-breast': 85000,
-    'prod-onion': 15000,
-    'prod-rice': 12000
-  }
-  return prices[itemId] || 0
-}
-
-function calculateEstimatedTotal(request: ProcurementRequest): number {
-  return request.items.reduce((sum, item) => {
-    return sum + item.requestedQuantity * getEstimatedPrice(item.itemId)
-  }, 0)
 }
 
 function getStatusColor(status: string): string {

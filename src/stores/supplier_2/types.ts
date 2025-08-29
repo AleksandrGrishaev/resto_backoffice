@@ -29,6 +29,9 @@ export interface RequestItem {
   itemName: string // cached name
   requestedQuantity: number
   unit: string
+  estimatedPrice?: number // ✅ ДОБАВИТЬ
+  priority?: 'normal' | 'urgent' // ✅ ДОБАВИТЬ
+  category?: string // ✅ ДОБАВИТЬ
   notes?: string
 }
 

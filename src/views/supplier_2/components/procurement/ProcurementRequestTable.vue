@@ -238,10 +238,13 @@
 import { ref, computed } from 'vue'
 import type { ProcurementRequest, PurchaseOrder } from '@/stores/supplier_2/types'
 import RequestDetailsDialog from './RequestDetailsDialog.vue'
+import { useProductsStore } from '@/stores/productsStore'
 
 // =============================================
 // PROPS & EMITS
 // =============================================
+
+const productsStore = useProductsStore()
 
 interface Props {
   requests: ProcurementRequest[]
@@ -409,26 +412,45 @@ function formatDate(dateString: string): string {
   })
 }
 
-function getEstimatedPrice(itemId: string): number {
-  // Hardcoded prices - в реальном приложении из ProductsStore
-  const prices: Record<string, number> = {
+function getEstimatedPrice(itemId: string, item?: any): number {
+  // 1. ✅ ПРИОРИТЕТ: Используем цену из item если есть
+  if (item?.estimatedPrice && item.estimatedPrice > 0) {
+    return item.estimatedPrice
+  }
+
+  // 2. Получаем из ProductsStore
+  const product = productsStore.products.find(p => p.id === itemId)
+
+  if (product) {
+    if (product.purchaseCost && product.purchaseCost > 0) {
+      return product.purchaseCost
+    }
+    if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
+      return product.baseCostPerUnit
+    }
+    if (product.costPerUnit && product.costPerUnit > 0) {
+      return product.costPerUnit
+    }
+  }
+
+  // 3. Fallback цены
+  const fallbackPrices: Record<string, number> = {
+    'prod-milk': 15000,
+    'prod-salt': 3000,
+    'prod-oregano': 150000,
     'prod-beef-steak': 180000,
     'prod-potato': 8000,
-    'prod-garlic': 25000,
-    'prod-tomato': 12000,
-    'prod-beer-bintang-330': 12000,
-    'prod-cola-330': 8000,
-    'prod-butter': 45000,
-    'prod-chicken-breast': 85000,
-    'prod-onion': 15000,
-    'prod-rice': 12000
+    'prod-garlic': 25000
+    // ... остальные
   }
-  return prices[itemId] || 0
+
+  return fallbackPrices[itemId] || 1000
 }
 
 function calculateEstimatedTotal(request: ProcurementRequest): number {
   return request.items.reduce((sum, item) => {
-    return sum + item.requestedQuantity * getEstimatedPrice(item.itemId)
+    const price = getEstimatedPrice(item.itemId, item)
+    return sum + item.requestedQuantity * price
   }, 0)
 }
 

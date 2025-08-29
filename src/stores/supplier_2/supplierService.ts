@@ -520,20 +520,30 @@ class SupplierService {
 
         if (!product || !product.isActive) continue
 
-        // Conditions for creating suggestion:
-        // 1. Item is completely out of stock
-        // 2. Item is below minimum stock
-        // 3. Item has minimum stock configured
         const isOutOfStock = balance.totalQuantity <= 0
         const minStock = product.minStock || 0
         const isBelowMinimum = minStock > 0 && balance.totalQuantity < minStock
 
+        // ✅ НОВОЕ: Проверяем effective stock с учетом заказов
+        const pendingQuantity = this.getPendingOrderedQuantity(balance.itemId)
+        const effectiveStock = balance.totalQuantity + pendingQuantity
+
         if (isOutOfStock || isBelowMinimum) {
-          // Calculate suggested quantity
+          // Calculate suggested quantity (уже учитывает pending orders)
           const suggestedQuantity = this.calculateSuggestedQuantity(balance, product, minStock)
 
-          // Determine urgency
-          const urgency = this.determineUrgency(balance.totalQuantity, minStock)
+          // ✅ ФИЛЬТР: Если suggested quantity = 0, не добавляем suggestion
+          if (suggestedQuantity <= 0) {
+            DebugUtils.debug(MODULE_NAME, 'Skipping suggestion - sufficient pending orders', {
+              itemId: balance.itemId,
+              effectiveStock,
+              minStock
+            })
+            continue
+          }
+
+          // Determine urgency based on effective stock
+          const urgency = this.determineUrgency(effectiveStock, minStock)
 
           suggestions.push({
             itemId: balance.itemId,
@@ -543,8 +553,9 @@ class SupplierService {
             suggestedQuantity: suggestedQuantity,
             urgency: urgency,
             reason: isOutOfStock ? 'out_of_stock' : 'below_minimum',
-            estimatedPrice: balance.latestCost || product.baseCostPerUnit || product.costPerUnit,
-            lastPriceDate: balance.newestBatchDate || undefined
+            estimatedPrice:
+              balance.latestCost || balance.averageCost || product.baseCostPerUnit || 1000,
+            lastPriceDate: balance.newestBatchDate
           })
         }
       }
@@ -794,19 +805,92 @@ class SupplierService {
     }
   }
 
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Получает количество товара в pending заказах
+   */
+  private getPendingOrderedQuantity(itemId: string): number {
+    let totalPending = 0
+
+    try {
+      // 1. Проверяем активные заявки (draft, submitted)
+      for (const request of this.requests) {
+        if (['draft', 'submitted'].includes(request.status)) {
+          const item = request.items.find(item => item.itemId === itemId)
+          if (item) {
+            // Конвертируем в базовые единицы
+            let quantityInBaseUnits = item.requestedQuantity
+
+            if (item.unit === 'kg') {
+              quantityInBaseUnits = item.requestedQuantity * 1000 // кг -> г
+            } else if (item.unit === 'L') {
+              quantityInBaseUnits = item.requestedQuantity * 1000 // л -> мл
+            }
+
+            totalPending += quantityInBaseUnits
+          }
+        }
+      }
+
+      // 2. Проверяем активные заказы (draft, sent, confirmed - еще не получены)
+      for (const order of this.orders) {
+        if (['draft', 'sent', 'confirmed'].includes(order.status)) {
+          const orderItem = order.items.find(item => item.itemId === itemId)
+          if (orderItem) {
+            // Конвертируем в базовые единицы
+            let quantityInBaseUnits = orderItem.orderedQuantity
+
+            if (orderItem.unit === 'kg') {
+              quantityInBaseUnits = orderItem.orderedQuantity * 1000
+            } else if (orderItem.unit === 'L') {
+              quantityInBaseUnits = orderItem.orderedQuantity * 1000
+            }
+
+            totalPending += quantityInBaseUnits
+          }
+        }
+      }
+
+      return totalPending
+    } catch (error) {
+      DebugUtils.warn('SupplierService', 'Error calculating pending quantities', { itemId, error })
+      return 0
+    }
+  }
+
   // =============================================
   // HELPER METHODS
   // =============================================
 
   private calculateSuggestedQuantity(balance: any, product: any, minStock: number): number {
-    // If completely out of stock - order minimum * 2
-    if (balance.totalQuantity <= 0) {
+    // ✅ Получаем количество уже заказанных товаров
+    const pendingOrderedQuantity = this.getPendingOrderedQuantity(product.id)
+
+    // ✅ Эффективный остаток = текущий остаток + заказанное количество
+    const currentStock = balance.totalQuantity || 0
+    const effectiveStock = currentStock + pendingOrderedQuantity
+
+    DebugUtils.debug('SupplierService', 'Calculating suggestion with pending orders', {
+      itemId: product.id,
+      itemName: product.name,
+      currentStock,
+      pendingOrderedQuantity,
+      effectiveStock,
+      minStock
+    })
+
+    // Если эффективный остаток достаточный, не заказываем
+    if (effectiveStock >= minStock) {
+      return 0
+    }
+
+    // If completely out of stock (including pending) - order minimum * 2
+    if (effectiveStock <= 0) {
       return Math.max(minStock * 2, 1)
     }
 
     // If below minimum - order to reach minimum * 1.5
     const targetQuantity = minStock * 1.5
-    const neededQuantity = targetQuantity - balance.totalQuantity
+    const neededQuantity = targetQuantity - effectiveStock
 
     return Math.max(Math.ceil(neededQuantity), 1)
   }

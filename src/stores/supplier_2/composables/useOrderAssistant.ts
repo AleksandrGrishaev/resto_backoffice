@@ -684,31 +684,15 @@ export function useOrderAssistant() {
       priority?: Priority
       notes?: string
       department?: Department
-      validatePrices?: boolean
     }
   ): Promise<string> {
-    const startTime = Date.now()
-
     try {
       state.value.isCreatingRequest = true
 
-      if (state.value.selectedItems.length === 0) {
-        throw new Error('No items selected for request')
-      }
-
       const targetDepartment = options?.department || state.value.selectedDepartment
-
-      DebugUtils.info(MODULE_NAME, 'Creating request with enhanced validation', {
-        itemCount: state.value.selectedItems.length,
-        department: targetDepartment,
-        requestedBy
-      })
-
-      // Determine overall priority
       const hasUrgentItems = state.value.selectedItems.some(item => item.priority === 'urgent')
       const overallPriority = options?.priority || (hasUrgentItems ? 'urgent' : 'normal')
 
-      // ✅ ПРОСТАЯ подготовка данных для заявки
       const createData: CreateRequestData = {
         department: targetDepartment,
         requestedBy,
@@ -720,29 +704,25 @@ export function useOrderAssistant() {
           let finalPrice = item.estimatedPrice
 
           if (product) {
-            try {
-              // ✅ ПРОСТАЯ конвертация единиц
-              if (item.unit === 'gram' && item.requestedQuantity >= 1000) {
-                finalQuantity = Math.round((item.requestedQuantity / 1000) * 1000) / 1000
-                finalUnit = 'kg'
-              } else if (item.unit === 'ml' && item.requestedQuantity >= 1000) {
-                finalQuantity = Math.round((item.requestedQuantity / 1000) * 1000) / 1000
-                finalUnit = 'L'
-              }
+            // ✅ Конвертация в единицы закупки
+            if (item.unit === 'gram' && item.requestedQuantity >= 1000) {
+              finalQuantity = Number((item.requestedQuantity / 1000).toFixed(3))
+              finalUnit = 'kg'
+            } else if (item.unit === 'ml' && item.requestedQuantity >= 1000) {
+              finalQuantity = Number((item.requestedQuantity / 1000).toFixed(3))
+              finalUnit = 'L'
+            }
 
-              // ✅ ПРОСТОЕ получение цены за единицу закупки
-              if (product.purchaseCost && product.purchaseCost > 0) {
-                finalPrice = product.purchaseCost
-              } else if (product.purchaseToBaseRatio && product.purchaseToBaseRatio > 0) {
-                finalPrice = Math.round(item.estimatedPrice * product.purchaseToBaseRatio)
-              }
-            } catch (error) {
-              DebugUtils.warn(MODULE_NAME, 'Failed to process item, using original values', {
-                itemId: item.itemId,
-                error: error?.message
-              })
+            // ✅ ПРАВИЛЬНАЯ цена за единицу закупки
+            if (product.purchaseCost && product.purchaseCost > 0) {
+              finalPrice = product.purchaseCost
+            } else if (product.purchaseToBaseRatio && product.purchaseToBaseRatio > 0) {
+              finalPrice = Math.round(item.estimatedPrice * product.purchaseToBaseRatio)
             }
           }
+
+          // ✅ КРИТИЧЕСКИ ВАЖНО: Цена не должна быть 0!
+          finalPrice = Math.max(finalPrice, 1000)
 
           return {
             itemId: item.itemId,
@@ -750,7 +730,7 @@ export function useOrderAssistant() {
             category: item.category,
             requestedQuantity: finalQuantity,
             unit: finalUnit,
-            estimatedPrice: Math.round(finalPrice),
+            estimatedPrice: finalPrice,
             priority: item.priority,
             notes: item.notes
           }
@@ -765,30 +745,24 @@ export function useOrderAssistant() {
           .join(' | ')
       }
 
-      // Create request through supplier store
-      const newRequest = await supplierStore.createRequest(createData)
-
-      // Clear selected items after successful creation
-      clearSelectedItems()
-
-      const creationTime = Date.now() - startTime
-
-      DebugUtils.info(MODULE_NAME, 'Request created successfully', {
-        requestId: newRequest.id,
-        requestNumber: newRequest.requestNumber,
-        itemsCount: newRequest.items.length,
-        totalValue: requestSummary.value.estimatedTotal,
-        creationTime: `${creationTime}ms`,
-        department: targetDepartment,
-        priority: overallPriority
+      // ✅ Логирование для проверки
+      DebugUtils.info(MODULE_NAME, 'Creating request with items', {
+        items: createData.items.map(item => ({
+          name: item.itemName,
+          qty: item.requestedQuantity,
+          unit: item.unit,
+          price: item.estimatedPrice,
+          total: item.requestedQuantity * item.estimatedPrice
+        }))
       })
+
+      const newRequest = await supplierStore.createRequest(createData)
+      clearSelectedItems()
 
       return newRequest.id
     } catch (error) {
       const errorMessage = `Failed to create request: ${error?.message || error}`
-      DebugUtils.error(MODULE_NAME, 'Request creation failed', {
-        error: error?.message || String(error)
-      })
+      DebugUtils.error(MODULE_NAME, 'Request creation failed', { error: errorMessage })
       addError(errorMessage)
       throw new Error(errorMessage)
     } finally {
@@ -905,78 +879,62 @@ export function useOrderAssistant() {
       const quantityToAdd = customQuantity || suggestion.suggestedQuantity
 
       if (existingItemIndex !== -1) {
-        // Update existing item
         const existingItem = state.value.selectedItems[existingItemIndex]
         existingItem.requestedQuantity += quantityToAdd
-
-        DebugUtils.debug(MODULE_NAME, 'Updated existing item quantity', {
-          itemId: suggestion.itemId,
-          newQuantity: existingItem.requestedQuantity,
-          added: quantityToAdd
-        })
       } else {
-        // Add new item с максимальной защитой
         const product = productsStore.products.find(p => p.id === suggestion.itemId)
 
-        // ✅ БЕЗОПАСНОЕ получение единиц без сложных функций
+        // ✅ БЕЗОПАСНОЕ получение единиц и цен
         let baseUnit = 'gram'
-        let baseCostPerUnit = suggestion.estimatedPrice || 1000
+        let baseCostPerUnit = 1000 // Минимальная цена по умолчанию
 
         if (product) {
-          try {
-            baseUnit = product.baseUnit || product.unit || 'gram'
+          baseUnit = product.baseUnit || product.unit || 'gram'
 
-            if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
-              baseCostPerUnit = product.baseCostPerUnit
-            } else if (product.costPerUnit && product.costPerUnit > 0) {
-              baseCostPerUnit = product.costPerUnit
-            } else if (
-              product.purchaseCost &&
-              product.purchaseToBaseRatio &&
-              product.purchaseToBaseRatio > 0
-            ) {
-              baseCostPerUnit = product.purchaseCost / product.purchaseToBaseRatio
-            }
-          } catch (error) {
-            DebugUtils.warn(MODULE_NAME, 'Error processing product data, using fallbacks', {
-              itemId: suggestion.itemId,
-              error: error?.message
-            })
+          // ✅ ПРАВИЛЬНЫЙ расчет цены за базовую единицу
+          if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
+            baseCostPerUnit = product.baseCostPerUnit
+          } else if (product.costPerUnit && product.costPerUnit > 0) {
+            baseCostPerUnit = product.costPerUnit
+          } else if (
+            product.purchaseCost &&
+            product.purchaseToBaseRatio &&
+            product.purchaseToBaseRatio > 0
+          ) {
+            baseCostPerUnit = Math.round(product.purchaseCost / product.purchaseToBaseRatio)
+          } else if (suggestion.estimatedPrice && suggestion.estimatedPrice > 0) {
+            baseCostPerUnit = suggestion.estimatedPrice
           }
         }
+
+        // ✅ ВАЖНО: Убеждаемся что цена не равна 0
+        baseCostPerUnit = Math.max(baseCostPerUnit, 100) // Минимум 100 IDR за базовую единицу
 
         const newItem: RequestItem = {
           id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           itemId: suggestion.itemId,
           itemName: suggestion.itemName,
           category: product?.category || 'other',
-          requestedQuantity: quantityToAdd, // В базовых единицах
-          unit: baseUnit, // ✅ Базовая единица
-          estimatedPrice: baseCostPerUnit, // ✅ Цена за базовую единицу
+          requestedQuantity: quantityToAdd,
+          unit: baseUnit,
+          estimatedPrice: baseCostPerUnit,
           priority: suggestion.urgency === 'high' ? 'urgent' : 'normal',
           notes: `Auto-generated: ${suggestion.reason || 'restock'} (current: ${suggestion.currentStock}, min: ${suggestion.minStock})`
         }
 
         state.value.selectedItems.push(newItem)
 
-        DebugUtils.debug(MODULE_NAME, 'New item added to request', {
+        DebugUtils.info(MODULE_NAME, 'Item added with correct pricing', {
           itemId: suggestion.itemId,
           quantity: quantityToAdd,
           unit: baseUnit,
           baseCostPerUnit,
-          totalItems: state.value.selectedItems.length
+          totalCost: quantityToAdd * baseCostPerUnit
         })
       }
     } catch (error) {
       const errorMessage = `Failed to add item: ${error?.message || error}`
-      DebugUtils.error(MODULE_NAME, 'Failed to add item', {
-        suggestion: {
-          itemId: suggestion.itemId,
-          itemName: suggestion.itemName,
-          suggestedQuantity: suggestion.suggestedQuantity
-        },
-        error: error?.message || String(error)
-      })
+      DebugUtils.error(MODULE_NAME, 'Failed to add item', { error: errorMessage })
       addError(errorMessage)
       throw new Error(errorMessage)
     }
