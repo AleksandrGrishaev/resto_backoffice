@@ -727,9 +727,18 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const updatedOrder = await supplierService.updateOrder(id, data)
 
+      // ✅ ИСПРАВЛЕНО: Используем иммутабельный подход, как в updateRequest
       const index = state.value.orders.findIndex(o => o.id === id)
       if (index !== -1) {
-        state.value.orders[index] = updatedOrder
+        state.value.orders = [
+          ...state.value.orders.slice(0, index),
+          updatedOrder,
+          ...state.value.orders.slice(index + 1)
+        ]
+
+        console.log(`SupplierStore: Reactively updated order ${id} in array at index ${index}`)
+      } else {
+        console.warn(`SupplierStore: Order ${id} not found in local state for update`)
       }
 
       if (state.value.currentOrder?.id === id) {
@@ -739,7 +748,8 @@ export const useSupplierStore = defineStore('supplier', () => {
       DebugUtils.info(MODULE_NAME, 'Order updated successfully', {
         orderId: id,
         status: updatedOrder.status,
-        paymentStatus: updatedOrder.paymentStatus
+        paymentStatus: updatedOrder.paymentStatus,
+        updatedInArray: index !== -1
       })
 
       return updatedOrder

@@ -9,7 +9,6 @@
           Complete procurement workflow from requests to storage
         </div>
       </div>
-
       <div class="d-flex gap-2">
         <v-btn
           color="success"
@@ -22,22 +21,13 @@
 
         <!-- Create Orders кнопка появляется когда есть submitted заявки -->
         <v-btn
-          v-if="submittedRequestsArray.length > 0"
+          v-if="availableItemsCount > 0"
           color="primary"
           prepend-icon="mdi-cart-plus"
           @click="handleCreateOrdersFromSubmitted"
         >
-          Create Orders ({{ submittedRequestsArray.length }})
+          Create Orders ({{ availableItemsCount }})
         </v-btn>
-
-        <!-- Debug info -->
-        <v-chip
-          v-if="isDevelopment && submittedRequestsArray.length > 0"
-          size="small"
-          color="success"
-        >
-          Ready: {{ submittedRequestsArray.length }}
-        </v-chip>
       </div>
     </div>
 
@@ -186,6 +176,16 @@
       @save-request="handleSaveEditedRequest"
     />
 
+    <!-- Order Edit Dialog -->
+    <purchase-order-edit-dialog
+      v-model="showOrderEditDialog"
+      :order="selectedOrderForEdit"
+      @order-updated="handleSaveEditedOrder"
+      @order-sent="handleOrderSentFromDialog"
+      @success="showSuccess"
+      @error="handleError"
+    />
+
     <!-- Success Snackbar -->
     <v-snackbar v-model="showSuccessSnackbar" color="success" timeout="3000" location="top">
       <v-icon icon="mdi-check-circle" class="mr-2" />
@@ -253,6 +253,7 @@ import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcurementRequests'
 import type { ProcurementRequest, PurchaseOrder, Receipt } from '@/stores/supplier_2/types'
+import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 
 // Components
 import BaseOrderAssistant from './components/shared/BaseOrderAssistant.vue'
@@ -263,6 +264,7 @@ import ProcurementRequestTable from './components/procurement/ProcurementRequest
 import PurchaseOrderTable from './components/orders/PurchaseOrderTable.vue'
 import ReceiptTable from './components/receipts/ReceiptTable.vue'
 import RequestEditDialog from './components/procurement/RequestEditDialog.vue'
+import PurchaseOrderEditDialog from './components/orders/PurchaseOrderEditDialog.vue'
 
 const MODULE_NAME = 'SupplierView'
 
@@ -273,7 +275,7 @@ const MODULE_NAME = 'SupplierView'
 const supplierStore = useSupplierStore()
 const { completeReceipt } = useReceipts()
 const { submitRequest, updateRequest, canEditRequest, canDeleteRequest } = useProcurementRequests()
-
+const { sendOrder, updateOrder, canEditOrder, canSendOrder } = usePurchaseOrders()
 // =============================================
 // STATE
 // =============================================
@@ -289,6 +291,8 @@ const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
 const successMessage = ref('')
 const errorMessage = ref('')
+const showOrderEditDialog = ref(false)
+const selectedOrderForEdit = ref<PurchaseOrder | null>(null)
 
 // Selected items for operations
 const selectedRequestIds = ref<string[]>([])
@@ -315,6 +319,43 @@ const receiptsArray = computed(() => {
   return Array.isArray(supplierStore.state.receipts) ? supplierStore.state.receipts : []
 })
 
+// ✅ НОВЫЙ: Подсчет товаров готовых к заказу
+const availableItemsCount = computed(() => {
+  let totalItems = 0
+
+  // Проходим по всем submitted запросам
+  submittedRequestsArray.value.forEach(request => {
+    request.items.forEach(item => {
+      // Проверяем, заказан ли уже этот товар полностью
+      const isFullyOrdered = isItemFullyOrdered(request.id, item.itemId, item.requestedQuantity)
+
+      if (!isFullyOrdered) {
+        totalItems++
+      }
+    })
+  })
+
+  return totalItems
+})
+
+// ✅ HELPER: Функция проверки, заказан ли товар полностью
+function isItemFullyOrdered(requestId: string, itemId: string, requestedQuantity: number): boolean {
+  // Находим все заказы, связанные с этим запросом
+  const relatedOrders = ordersArray.value.filter(order => order.requestIds.includes(requestId))
+
+  // Считаем общее заказанное количество этого товара
+  let totalOrdered = 0
+  relatedOrders.forEach(order => {
+    const orderItem = order.items.find(item => item.itemId === itemId)
+    if (orderItem) {
+      totalOrdered += orderItem.orderedQuantity
+    }
+  })
+
+  // Товар полностью заказан, если заказанное количество >= запрашиваемого
+  return totalOrdered >= requestedQuantity
+}
+
 // Считаем только активные элементы в работе
 const activeRequestsCount = computed(() => {
   return requestsArray.value.filter(
@@ -338,11 +379,6 @@ const submittedRequestsArray = computed(() => {
 
 const isLoadingValue = computed(() => {
   return supplierStore.isLoading || false
-})
-
-// Development режим для отладки
-const isDevelopment = computed(() => {
-  return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
 })
 
 // =============================================
@@ -507,7 +543,16 @@ async function handleSaveEditedRequest(editedRequest: ProcurementRequest) {
 
 function handleEditOrder(order: PurchaseOrder) {
   console.log(`${MODULE_NAME}: Edit order`, order.id)
-  showSuccess(`Edit order ${order.orderNumber} - TODO: Implement`) // ❌ TODO
+
+  // Проверяем можно ли редактировать
+  if (!canEditOrder(order)) {
+    handleError(`Cannot edit order with status: ${order.status}`)
+    return
+  }
+
+  // Открываем диалог редактирования
+  selectedOrderForEdit.value = order
+  showOrderEditDialog.value = true
 }
 
 function handleViewOrder(order: PurchaseOrder) {
@@ -515,9 +560,54 @@ function handleViewOrder(order: PurchaseOrder) {
   showSuccess(`View order ${order.orderNumber} - TODO: Implement`)
 }
 
-function handleSendOrder(order: PurchaseOrder) {
+async function handleSendOrder(order: PurchaseOrder) {
   console.log(`${MODULE_NAME}: Send order`, order.id)
-  showSuccess(`Send order ${order.orderNumber} - TODO: Implement`) // ❌ TODO
+
+  try {
+    // Проверяем можно ли отправить
+    if (!canSendOrder(order)) {
+      handleError(`Cannot send order with status: ${order.status}`)
+      return
+    }
+
+    // Отправляем заказ через композабл
+    const sentOrder = await sendOrder(order.id)
+
+    console.log(`${MODULE_NAME}: Order sent successfully`, sentOrder.orderNumber)
+    showSuccess(`Order ${sentOrder.orderNumber} sent to supplier successfully`)
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to send order`, error)
+    handleError(`Failed to send order: ${error}`)
+  }
+}
+
+async function handleSaveEditedOrder(editedOrder: PurchaseOrder) {
+  console.log(`${MODULE_NAME}: Saving edited order`, editedOrder.id)
+
+  try {
+    const updatedOrder = await updateOrder(editedOrder.id, {
+      status: editedOrder.status,
+      orderDate: editedOrder.orderDate,
+      expectedDelivery: editedOrder.expectedDelivery,
+      paymentStatus: editedOrder.paymentStatus,
+      notes: editedOrder.notes,
+      items: editedOrder.items
+    })
+
+    showSuccess(`Order ${updatedOrder.orderNumber} updated successfully`)
+    showOrderEditDialog.value = false
+    selectedOrderForEdit.value = null
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to update order`, error)
+    handleError(`Failed to update order: ${error}`)
+  }
+}
+
+function handleOrderSentFromDialog(sentOrder: PurchaseOrder) {
+  console.log(`${MODULE_NAME}: Order sent from dialog`, sentOrder.orderNumber)
+  showSuccess(`Order ${sentOrder.orderNumber} sent to supplier successfully`)
+  showOrderEditDialog.value = false
+  selectedOrderForEdit.value = null
 }
 
 async function handleStartReceipt(order: PurchaseOrder) {
