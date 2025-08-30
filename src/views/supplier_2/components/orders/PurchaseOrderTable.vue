@@ -236,23 +236,6 @@
             <span>Send to Supplier</span>
           </v-tooltip>
 
-          <!-- Confirm (только для sent) -->
-          <v-tooltip v-if="item.status === 'sent'" location="top">
-            <template #activator="{ props: tooltipProps }">
-              <v-btn
-                v-bind="tooltipProps"
-                icon
-                variant="text"
-                size="small"
-                color="warning"
-                @click="confirmOrder(item)"
-              >
-                <v-icon>mdi-check-circle</v-icon>
-              </v-btn>
-            </template>
-            <span>Confirm Order</span>
-          </v-tooltip>
-
           <!-- Start Receipt (только для confirmed/paid) -->
           <v-tooltip v-if="canStartReceipt(item)" location="top">
             <template #activator="{ props: tooltipProps }">
@@ -488,16 +471,6 @@
           </v-btn>
 
           <v-btn
-            v-if="selectedOrder.status === 'sent'"
-            color="warning"
-            variant="flat"
-            prepend-icon="mdi-check-circle"
-            @click="confirmOrder(selectedOrder)"
-          >
-            Confirm Order
-          </v-btn>
-
-          <v-btn
             v-if="canStartReceipt(selectedOrder)"
             color="purple"
             variant="flat"
@@ -600,7 +573,6 @@ const statusOptions = [
   { title: 'All Statuses', value: 'all' },
   { title: 'Draft', value: 'draft' },
   { title: 'Sent', value: 'sent' },
-  { title: 'Confirmed', value: 'confirmed' },
   { title: 'Delivered', value: 'delivered' },
   { title: 'Cancelled', value: 'cancelled' }
 ]
@@ -679,11 +651,6 @@ function sendOrder(order: PurchaseOrder) {
   showDetailsDialog.value = false
 }
 
-function confirmOrder(order: PurchaseOrder) {
-  emits('confirm-order', order)
-  showDetailsDialog.value = false
-}
-
 function startReceipt(order: PurchaseOrder) {
   emits('start-receipt', order)
   showDetailsDialog.value = false
@@ -726,7 +693,6 @@ function getStatusText(status: string): string {
   const statusMap: Record<string, string> = {
     draft: 'Draft',
     sent: 'Sent',
-    confirmed: 'Confirmed',
     delivered: 'Delivered',
     cancelled: 'Cancelled'
   }
@@ -737,7 +703,6 @@ function getStatusIcon(status: string): string {
   const iconMap: Record<string, string> = {
     draft: 'mdi-file-edit',
     sent: 'mdi-send',
-    confirmed: 'mdi-check',
     delivered: 'mdi-truck-check',
     cancelled: 'mdi-cancel'
   }

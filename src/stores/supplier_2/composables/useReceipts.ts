@@ -82,7 +82,7 @@ export function useReceipts() {
 
     return orders.filter(
       order =>
-        ['sent', 'confirmed'].includes(order.status) &&
+        order.status === 'sent' && // ✅ Только 'sent' статус
         !receipts.value.some(
           receipt => receipt.purchaseOrderId === order.id && receipt.status === 'completed'
         )
@@ -207,82 +207,56 @@ export function useReceipts() {
   /**
    * Complete receipt with full integration (Storage + Price Updates)
    */
-  async function completeReceipt(receiptId: string, finalNotes?: string): Promise<Receipt> {
+  async function completeReceipt(receiptId: string): Promise<Receipt> {
     try {
+      console.log(`Receipts: Completing receipt ${receiptId}`)
+      isCreatingStorageOperation.value = true
+
+      // Получаем receipt и заказ
       const receipt = receipts.value.find(r => r.id === receiptId)
       if (!receipt) {
-        throw new Error(`Receipt with id ${receiptId} not found`)
+        throw new Error(`Receipt ${receiptId} not found`)
       }
 
-      if (receipt.status === 'completed') {
-        throw new Error('Receipt is already completed')
+      const order = supplierStore.state.orders.find(o => o.id === receipt.purchaseOrderId)
+      if (!order) {
+        throw new Error(`Order ${receipt.purchaseOrderId} not found`)
       }
-
-      DebugUtils.info(MODULE_NAME, 'Completing receipt', {
-        receiptId,
-        receiptNumber: receipt.receiptNumber,
-        purchaseOrderId: receipt.purchaseOrderId
-      })
 
       // Завершаем receipt
-      const completedReceipt = await supplierStore.updateReceipt(receiptId, {
+      const completedReceipt = await updateReceipt(receiptId, {
         status: 'completed',
-        completedDate: new Date().toISOString(),
-        notes: finalNotes || receipt.notes
+        completedDate: new Date().toISOString()
       })
 
-      // ✅ НОВОЕ: Создаем батчи из полученных товаров
+      // Создаем батчи в StorageStore
       try {
-        isCreatingStorageOperation.value = true
-
-        const batchIds = await plannedDeliveryIntegration.createBatchFromReceipt(
-          receiptId,
-          receipt.purchaseOrderId,
-          completedReceipt.items
+        console.log('Receipts: Creating batches in StorageStore...')
+        const batchIds = await plannedDeliveryIntegration.createBatchesFromReceipt(
+          completedReceipt,
+          order
         )
-
-        DebugUtils.info(MODULE_NAME, 'Storage batches created from receipt', {
-          receiptId,
-          batchIds,
-          batchCount: batchIds.length
-        })
-
-        // Обновляем receipt с информацией о созданных батчах
-        const finalReceipt = await supplierStore.updateReceipt(receiptId, {
-          batchIds,
-          storageIntegrated: true
-        })
-
-        DebugUtils.info(MODULE_NAME, 'Receipt completed and integrated with storage', {
-          receiptId: finalReceipt.id,
-          receiptNumber: finalReceipt.receiptNumber,
-          batchIds: finalReceipt.batchIds
-        })
-
-        return finalReceipt
-      } catch (storageError) {
-        DebugUtils.error(MODULE_NAME, 'Failed to create storage batches', {
-          receiptId,
-          error: storageError
-        })
-
-        // Receipt завершен, но интеграция со складом не удалась
-        // Можно продолжить без критической ошибки
-        DebugUtils.warn(MODULE_NAME, 'Receipt completed but storage integration failed', {
-          receiptId,
-          receiptNumber: completedReceipt.receiptNumber
-        })
-
-        return completedReceipt
-      } finally {
-        isCreatingStorageOperation.value = false
+        console.log(`Receipts: Created ${batchIds.length} batches:`, batchIds)
+      } catch (error) {
+        console.warn('Receipts: Failed to create batches in StorageStore (non-critical):', error)
       }
+
+      // ✅ АВТОМАТИЧЕСКИ МЕНЯЕМ СТАТУС ЗАКАЗА НА DELIVERED
+      if (order.status === 'sent') {
+        await supplierStore.updateOrder(order.id, {
+          status: 'delivered',
+          deliveredDate: new Date().toISOString()
+        })
+        console.log(`Receipts: Order ${order.orderNumber} automatically marked as delivered`)
+      }
+
+      console.log(`Receipts: Completed receipt ${completedReceipt.receiptNumber}`)
+      return completedReceipt
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error completing receipt', {
-        receiptId,
-        error
-      })
+      console.error('Receipts: Error completing receipt:', error)
       throw error
+    } finally {
+      isCreatingStorageOperation.value = false
     }
   }
 
@@ -640,19 +614,25 @@ export function useReceipts() {
    * Check if order can start receipt
    */
   function canStartReceipt(order: PurchaseOrder): boolean {
-    // Заказ должен быть отправлен или подтвержден для начала получения
-    const validStatuses = ['sent', 'confirmed']
-    const isValidStatus = validStatuses.includes(order.status)
+    const isValidStatus = order.status === 'sent'
 
-    DebugUtils.debug(MODULE_NAME, 'Checking if can start receipt', {
+    // Проверяем наличие активных receipts
+    const existingReceipts = receipts.value.filter(r => r.purchaseOrderId === order.id)
+    const activeReceipts = existingReceipts.filter(r => r.status === 'draft')
+    const hasActiveReceipt = activeReceipts.length > 0
+
+    DebugUtils.debug(MODULE_NAME, 'canStartReceipt check', {
       orderId: order.id,
       orderNumber: order.orderNumber,
-      status: order.status,
-      validStatuses,
-      isValidStatus
+      orderStatus: order.status,
+      isValidStatus,
+      existingReceipts: existingReceipts.length,
+      activeReceipts: activeReceipts.length,
+      hasActiveReceipt,
+      canStart: isValidStatus && !hasActiveReceipt
     })
 
-    return isValidStatus
+    return isValidStatus && !hasActiveReceipt
   }
 
   /**

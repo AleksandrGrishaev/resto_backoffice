@@ -108,7 +108,6 @@
             @edit-order="handleEditOrder"
             @view-order="handleViewOrder"
             @send-order="handleSendOrder"
-            @confirm-order="handleConfirmOrder"
             @start-receipt="handleStartReceipt"
           />
 
@@ -521,16 +520,49 @@ function handleSendOrder(order: PurchaseOrder) {
   showSuccess(`Send order ${order.orderNumber} - TODO: Implement`)
 }
 
-function handleConfirmOrder(order: PurchaseOrder) {
-  console.log(`${MODULE_NAME}: Confirm order`, order.id)
-  showSuccess(`Confirm order ${order.orderNumber} - TODO: Implement`)
-}
-
-function handleStartReceipt(order: PurchaseOrder) {
+async function handleStartReceipt(order: PurchaseOrder) {
   console.log(`${MODULE_NAME}: Start receipt for order`, order.id)
-  selectedOrder.value = order
-  selectedReceipt.value = null // Новый receipt
-  showReceiptDialog.value = true
+
+  try {
+    // ✅ УПРОЩЕННАЯ проверка - только статус 'sent'
+    if (order.status !== 'sent') {
+      let suggestion = ''
+      if (order.status === 'draft') {
+        suggestion = ' Please send the order first.'
+      } else if (order.status === 'delivered') {
+        suggestion = ' This order has already been delivered.'
+      }
+
+      handleError(
+        `Order ${order.orderNumber} is not ready for receipt.\n` +
+          `Current status: ${order.status}\n` +
+          `Required status: sent${suggestion}`
+      )
+      return
+    }
+
+    // Проверка активных receipts
+    const existingReceipts = receiptsArray.value.filter(r => r.purchaseOrderId === order.id)
+    const activeReceipts = existingReceipts.filter(r => r.status === 'draft')
+
+    if (activeReceipts.length > 0) {
+      const receiptNumbers = activeReceipts.map(r => r.receiptNumber).join(', ')
+      handleError(
+        `Order ${order.orderNumber} already has an active receipt in progress.\n` +
+          `Active receipt(s): ${receiptNumbers}\n` +
+          `Please complete or cancel the existing receipt first.`
+      )
+      return
+    }
+
+    // Открываем диалог создания receipt
+    selectedOrder.value = order
+    selectedReceipt.value = null
+    showReceiptDialog.value = true
+  } catch (error) {
+    console.error('Error starting receipt:', error)
+    handleError(`Failed to start receipt for order ${order.orderNumber}: ${error}`)
+  }
 }
 
 // =============================================

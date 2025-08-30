@@ -247,7 +247,6 @@ export class PlannedDeliveryIntegration {
     const statusMap: Record<string, string> = {
       draft: 'pending',
       sent: 'confirmed',
-      confirmed: 'confirmed',
       delivered: 'received',
       cancelled: 'cancelled'
     }

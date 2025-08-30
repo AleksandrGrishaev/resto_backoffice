@@ -366,7 +366,6 @@ export const REQUEST_PRIORITIES = {
 export const ORDER_STATUSES = {
   draft: 'Draft',
   sent: 'Sent',
-  confirmed: 'Confirmed',
   delivered: 'Delivered',
   cancelled: 'Cancelled'
 } as const

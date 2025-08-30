@@ -310,10 +310,12 @@ export function usePurchaseOrders() {
       console.log(`PurchaseOrders: Sending order ${id}`)
       const sentOrder = await updateOrder(id, {
         status: 'sent',
-        sentDate: new Date().toISOString() // Добавляем дату отправки
+        sentDate: new Date().toISOString()
       })
 
-      console.log(`PurchaseOrders: Order ${sentOrder.orderNumber} sent to supplier`)
+      console.log(
+        `PurchaseOrders: Order ${sentOrder.orderNumber} sent to supplier and ready for receipt`
+      )
       return sentOrder
     } catch (error) {
       console.error('PurchaseOrders: Error sending order:', error)
@@ -322,33 +324,19 @@ export function usePurchaseOrders() {
   }
 
   /**
-   * Confirm order from supplier
-   */
-  async function confirmOrder(id: string): Promise<PurchaseOrder> {
-    try {
-      console.log(`PurchaseOrders: Confirming order ${id}`)
-
-      // Обновляем статус на confirmed и добавляем дату подтверждения
-      const confirmedOrder = await updateOrder(id, {
-        status: 'confirmed',
-        confirmedDate: new Date().toISOString()
-      })
-
-      console.log(
-        `PurchaseOrders: Order ${confirmedOrder.orderNumber} confirmed - ready for receipt`
-      )
-      return confirmedOrder
-    } catch (error) {
-      console.error('PurchaseOrders: Error confirming order:', error)
-      throw error
-    }
-  }
-
-  /**
    * Mark order as delivered
    */
   async function markOrderDelivered(id: string): Promise<PurchaseOrder> {
-    return updateOrder(id, { status: 'delivered' })
+    try {
+      console.log(`PurchaseOrders: Marking order ${id} as delivered`)
+      return await updateOrder(id, {
+        status: 'delivered',
+        deliveredDate: new Date().toISOString()
+      })
+    } catch (error) {
+      console.error('PurchaseOrders: Error marking order as delivered:', error)
+      throw error
+    }
   }
 
   /**
@@ -592,27 +580,25 @@ export function usePurchaseOrders() {
    * Check if order can be received
    */
   function canReceiveOrder(order: PurchaseOrder): boolean {
-    return ['sent', 'confirmed'].includes(order.status)
+    return order.status === 'sent'
   }
 
   /**
    * Check if order is ready for receipt
    */
   function isReadyForReceipt(order: PurchaseOrder): boolean {
-    // Заказ готов к получению если он отправлен или подтвержден
-    const validStatuses = ['sent', 'confirmed']
-    const hasValidStatus = validStatuses.includes(order.status)
+    const isValidStatus = order.status === 'sent'
     const hasNoActiveReceipt = !hasActiveReceipt(order.id)
 
     console.log(`PurchaseOrders: isReadyForReceipt check`, {
       orderId: order.id,
       status: order.status,
-      hasValidStatus,
+      isValidStatus,
       hasNoActiveReceipt,
-      isReady: hasValidStatus && hasNoActiveReceipt
+      isReady: isValidStatus && hasNoActiveReceipt
     })
 
-    return hasValidStatus && hasNoActiveReceipt
+    return isValidStatus && hasNoActiveReceipt
   }
 
   /**

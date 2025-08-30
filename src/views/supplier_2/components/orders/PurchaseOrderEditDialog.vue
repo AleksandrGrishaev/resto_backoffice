@@ -373,7 +373,6 @@ const confirming = ref(false)
 const statusOptions = [
   { title: 'Draft', value: 'draft' },
   { title: 'Sent', value: 'sent' },
-  { title: 'Confirmed', value: 'confirmed' },
   { title: 'Delivered', value: 'delivered' },
   { title: 'Cancelled', value: 'cancelled' }
 ]
@@ -541,26 +540,6 @@ async function sendOrder() {
     emits('error', `Failed to send order: ${error}`)
   } finally {
     sending.value = false
-  }
-}
-
-async function confirmOrder() {
-  if (!editableOrder.value) return
-
-  confirming.value = true
-  try {
-    const confirmedOrder = await confirmOrderAction(editableOrder.value.id)
-
-    editableOrder.value = confirmedOrder
-    originalOrderJson.value = JSON.stringify(confirmedOrder)
-
-    emits('order-confirmed', confirmedOrder)
-    emits('success', `Order ${confirmedOrder.orderNumber} confirmed - ready for receipt`)
-  } catch (error) {
-    console.error('Failed to confirm order:', error)
-    emits('error', `Failed to confirm order: ${error}`)
-  } finally {
-    confirming.value = false
   }
 }
 
