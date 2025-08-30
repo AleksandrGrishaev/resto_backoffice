@@ -1,7 +1,7 @@
 <!-- src/views/supplier_2/components/shared/BaseOrderAssistant.vue -->
-<!-- ✅ ОБНОВЛЕНО: убрано дублирование, используется composable для utility функций -->
+<!-- ✅ UPDATED: Fixed unit display, shelf life from store, improved UI, compact cards -->
 <template>
-  <v-dialog v-model="isOpen" max-width="1000px" persistent>
+  <v-dialog v-model="isOpen" max-width="1200px" persistent>
     <v-card>
       <!-- Header -->
       <v-card-title class="d-flex align-center justify-space-between pa-4 bg-success text-white">
@@ -68,7 +68,7 @@
               </v-btn>
             </div>
 
-            <!-- Suggestions by Categories -->
+            <!-- Suggestions by Categories - ✅ UPDATED: Using compact cards -->
             <div v-else>
               <div v-for="category in categorizedSuggestions" :key="category.name" class="mb-4">
                 <v-card variant="outlined" class="overflow-hidden">
@@ -85,98 +85,20 @@
                     </v-chip>
                   </v-card-title>
 
-                  <!-- Category Items -->
+                  <!-- Category Items - ✅ NEW: Using SuggestionItemCard -->
                   <div class="pa-0">
-                    <div
+                    <SuggestionItemCard
                       v-for="(suggestion, index) in category.items"
                       :key="suggestion.itemId"
-                      class="pa-4"
-                      :class="{ 'border-b': index < category.items.length - 1 }"
-                    >
-                      <div class="d-flex align-start">
-                        <!-- Product Info -->
-                        <div class="flex-grow-1 mr-4">
-                          <div class="d-flex align-center mb-2">
-                            <div class="font-weight-bold text-subtitle-2 mr-2">
-                              {{ suggestion.itemName }}
-                            </div>
-                            <!-- ✅ ИСПРАВЛЕНО: используем composable -->
-                            <v-chip
-                              size="small"
-                              :color="orderAssistant.getUrgencyColor(suggestion.urgency)"
-                              :prepend-icon="orderAssistant.getUrgencyIcon(suggestion.urgency)"
-                            >
-                              {{ suggestion.urgency }}
-                            </v-chip>
-                          </div>
-
-                          <!-- Stock Information -->
-                          <div class="text-body-2 text-medium-emphasis mb-2">
-                            {{ formatSuggestionQuantityRange(suggestion) }}
-                          </div>
-
-                          <!-- Reason -->
-                          <div
-                            v-if="suggestion.reason"
-                            class="text-caption text-medium-emphasis mb-2"
-                          >
-                            <v-icon size="14" class="mr-1">mdi-information-outline</v-icon>
-                            {{ formatReason(suggestion.reason) }}
-                          </div>
-
-                          <!-- Average Daily Usage -->
-                          <div class="text-body-2">
-                            <div class="text-caption text-medium-emphasis">
-                              Avg. daily usage (7 days)
-                            </div>
-                            <div class="font-weight-bold text-info">
-                              {{ formatDailyUsage(suggestion) }}
-                            </div>
-                          </div>
-                        </div>
-
-                        <!-- Actions -->
-                        <div class="d-flex flex-column align-center">
-                          <!-- If not added -->
-                          <div v-if="!isSuggestionAdded(suggestion.itemId)">
-                            <v-btn
-                              color="success"
-                              size="small"
-                              prepend-icon="mdi-plus"
-                              @click="addSuggestionToRequest(suggestion)"
-                            >
-                              Add {{ formatSuggestedQuantity(suggestion) }}
-                            </v-btn>
-                          </div>
-
-                          <!-- If added - show editor -->
-                          <div v-else class="d-flex align-center gap-2">
-                            <v-chip color="success" size="small" prepend-icon="mdi-check">
-                              Added
-                            </v-chip>
-
-                            <!-- Inline quantity editor -->
-                            <div class="d-flex align-center gap-1">
-                              <v-text-field
-                                :model-value="getSelectedQuantity(suggestion.itemId)"
-                                type="number"
-                                min="0.1"
-                                step="0.1"
-                                hide-details
-                                density="compact"
-                                variant="outlined"
-                                style="width: 80px"
-                                class="text-center"
-                                @update:model-value="
-                                  updateSelectedQuantity(suggestion.itemId, $event)
-                                "
-                              />
-                              <span class="text-caption">{{ getBestDisplayUnit(suggestion) }}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                      :suggestion="suggestion"
+                      :is-added="isSuggestionAdded(suggestion.itemId)"
+                      :selected-quantity="getSelectedQuantityInBaseUnits(suggestion.itemId)"
+                      :is-last="index === category.items.length - 1"
+                      :products-store="productsStore"
+                      :order-assistant="orderAssistant"
+                      @add-suggestion="addSuggestionToRequest"
+                      @update-quantity="updateSelectedQuantityInBaseUnits"
+                    />
                   </div>
                 </v-card>
               </div>
@@ -224,29 +146,41 @@
                     />
                   </v-col>
 
-                  <!-- Quantity -->
-                  <v-col cols="6">
-                    <v-text-field
-                      v-model.number="manualItem.quantity"
-                      label="Quantity"
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      variant="outlined"
-                      :suffix="manualItem.unit"
-                      :hint="getQuantityHint()"
-                      persistent-hint
-                    />
-                  </v-col>
+                  <!-- ✅ UPDATED: Unit Toggle and Quantity -->
+                  <v-col cols="12">
+                    <div class="d-flex gap-3 align-end">
+                      <!-- Unit Selection -->
+                      <v-btn-toggle
+                        v-model="manualItem.displayUnit"
+                        color="primary"
+                        mandatory
+                        class="mb-6"
+                      >
+                        <v-btn :value="getManualItemBaseUnit()">
+                          {{ getManualItemBaseUnit() }}
+                        </v-btn>
+                        <v-btn
+                          v-if="getManualItemPurchaseUnit() !== getManualItemBaseUnit()"
+                          :value="getManualItemPurchaseUnit()"
+                        >
+                          {{ getManualItemPurchaseUnit() }}
+                        </v-btn>
+                      </v-btn-toggle>
 
-                  <!-- Unit (read-only display) -->
-                  <v-col cols="6">
-                    <v-text-field
-                      :model-value="manualItem.unit"
-                      label="Unit"
-                      readonly
-                      variant="outlined"
-                    />
+                      <!-- Quantity Input -->
+                      <v-text-field
+                        v-model.number="manualItem.quantity"
+                        label="Quantity"
+                        type="number"
+                        :min="getManualItemMinQuantity()"
+                        :step="getManualItemStep()"
+                        variant="outlined"
+                        :suffix="manualItem.displayUnit"
+                        :hint="getQuantityHint()"
+                        persistent-hint
+                        style="flex: 1"
+                      />
+                    </div>
                   </v-col>
 
                   <!-- Notes -->
@@ -259,7 +193,7 @@
                     />
                   </v-col>
 
-                  <!-- Preview -->
+                  <!-- ✅ UPDATED: Enhanced Preview -->
                   <v-col v-if="manualItem.itemId" cols="12">
                     <v-card variant="tonal" color="info">
                       <v-card-text class="pa-3">
@@ -269,10 +203,12 @@
                               {{ manualItem.itemName }}
                             </div>
                             <div class="text-body-2">{{ getFormattedManualQuantity() }}</div>
+                            <div class="text-caption text-medium-emphasis">
+                              Supply for {{ calculateManualItemDaysSupply() }} days
+                            </div>
                           </div>
                           <div class="text-right">
                             <div class="text-body-2 text-medium-emphasis">Estimated Cost</div>
-                            <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                             <div class="font-weight-bold">
                               {{ orderAssistant.formatCurrency(calculateManualItemCost()) }}
                             </div>
@@ -342,37 +278,66 @@
                         <div class="text-body-2 text-medium-emphasis">
                           {{ formatQuantityForSummary(item) }}
                         </div>
+                        <div class="text-caption text-medium-emphasis">
+                          Supply for {{ calculateItemDaysSupply(item) }} days
+                        </div>
                         <div v-if="item.notes" class="text-caption text-medium-emphasis mt-1">
                           <v-icon size="14" class="mr-1">mdi-note-text</v-icon>
                           {{ item.notes }}
                         </div>
                       </div>
 
-                      <!-- Quantity editing -->
+                      <!-- ✅ UPDATED: Unit toggle and quantity editing -->
                       <div class="d-flex align-center gap-3 ml-4">
-                        <!-- Inline editor -->
+                        <!-- Unit Toggle -->
+                        <v-btn-toggle
+                          :model-value="getItemDisplayUnit(item.itemId)"
+                          size="small"
+                          density="compact"
+                          mandatory
+                          @update:model-value="updateItemDisplayUnit(item.itemId, $event)"
+                        >
+                          <v-btn :value="getItemBaseUnit(item)" size="small">
+                            {{ getItemBaseUnit(item) }}
+                          </v-btn>
+                          <v-btn
+                            v-if="getItemPurchaseUnit(item) !== getItemBaseUnit(item)"
+                            :value="getItemPurchaseUnit(item)"
+                            size="small"
+                          >
+                            {{ getItemPurchaseUnit(item) }}
+                          </v-btn>
+                        </v-btn-toggle>
+
+                        <!-- Quantity Input -->
                         <div class="d-flex align-center gap-1">
                           <v-text-field
-                            :model-value="getSelectedQuantity(item.itemId)"
+                            :model-value="getSelectedQuantityInDisplayUnit(item.itemId)"
                             type="number"
-                            min="0.1"
-                            step="0.1"
+                            :min="getMinQuantityForDisplayUnit(item)"
+                            :step="getQuantityStepForDisplayUnit(item)"
                             hide-details
                             density="compact"
                             variant="outlined"
                             style="width: 90px"
                             class="text-center"
-                            @update:model-value="updateSelectedQuantity(item.itemId, $event)"
+                            @update:model-value="
+                              updateSelectedQuantityInDisplayUnit(item.itemId, $event)
+                            "
                           />
-                          <span class="text-caption text-medium-emphasis" style="min-width: 30px">
-                            {{ getBestDisplayUnitForItem(item) }}
-                          </span>
+                        </div>
+
+                        <!-- Days supply -->
+                        <div
+                          class="text-caption text-medium-emphasis text-center"
+                          style="min-width: 60px"
+                        >
+                          ~{{ calculateItemDaysSupply(item) }} days
                         </div>
 
                         <!-- Cost -->
                         <div class="text-right" style="min-width: 120px">
                           <div class="text-caption text-medium-emphasis">Cost</div>
-                          <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                           <div class="font-weight-bold">
                             {{
                               orderAssistant.formatCurrency(
@@ -440,7 +405,6 @@
                     </div>
                     <div class="text-center">
                       <div class="text-body-2 text-medium-emphasis">Avg. Cost per Item</div>
-                      <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                       <div class="text-h6 font-weight-bold">
                         {{
                           orderAssistant.formatCurrency(
@@ -453,7 +417,6 @@
                     </div>
                     <div class="text-right">
                       <div class="text-body-2 text-medium-emphasis">Estimated Total</div>
-                      <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                       <div class="text-h6 font-weight-bold text-primary">
                         {{ orderAssistant.formatCurrency(requestSummary.estimatedTotal) }}
                       </div>
@@ -496,6 +459,7 @@ import {
   convertUserInputToBaseUnits
 } from '@/utils/quantityFormatter'
 import type { OrderSuggestion, Department } from '@/stores/supplier_2/types'
+import SuggestionItemCard from './SuggestionItemCard.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -522,7 +486,7 @@ const orderAssistant = useOrderAssistant()
 const productsStore = useProductsStore()
 
 // =============================================
-// LOCAL STATE (без изменений)
+// LOCAL STATE
 // =============================================
 
 const isOpen = computed({
@@ -536,16 +500,20 @@ const requestedBy = ref('Chef Maria')
 const priority = ref<'normal' | 'urgent'>('normal')
 const selectedDepartmentIndex = ref<Department>('kitchen')
 
+// ✅ UPDATED: Manual item with display unit
 const manualItem = ref({
   itemId: '',
   itemName: '',
   quantity: 1,
-  unit: 'кг',
+  displayUnit: 'g',
   notes: ''
 })
 
+// ✅ NEW: Track display units for each item
+const itemDisplayUnits = ref<Record<string, string>>({})
+
 // =============================================
-// COMPUTED PROPERTIES (без изменений)
+// COMPUTED PROPERTIES
 // =============================================
 
 const selectedDepartment = computed(() => orderAssistant.selectedDepartment.value)
@@ -556,7 +524,7 @@ const filteredSuggestions = computed(() => orderAssistant.filteredSuggestions.va
 const urgentSuggestions = computed(() => orderAssistant.urgentSuggestions.value)
 const requestSummary = computed(() => orderAssistant.requestSummary.value)
 
-// Group suggestions by categories (уникальная логика UI)
+// Group suggestions by categories
 const categorizedSuggestions = computed(() => {
   const suggestions = filteredSuggestions.value
 
@@ -596,7 +564,7 @@ const availableProductsFromStore = computed(() => {
     .map(product => ({
       id: product.id,
       name: product.name,
-      unit: getBestInputUnit(product),
+      unit: getBaseUnitDisplay(product),
       isActive: product.isActive
     }))
 })
@@ -630,100 +598,264 @@ const manualItemValidationMessage = computed(() => {
     }
   }
 
+  const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
+  if (
+    product &&
+    product.baseUnit === 'piece' &&
+    manualItem.value.displayUnit === getBaseUnitDisplay(product)
+  ) {
+    if (manualItem.value.quantity % 1 !== 0) {
+      return {
+        type: 'error',
+        text: 'Piece quantities must be whole numbers'
+      }
+    }
+  }
+
   return null
 })
 
 // =============================================
-// ✅ УПРОЩЕННЫЕ UTILITY FUNCTIONS - используют composable
+// ✅ UPDATED: Unit handling functions
+// =============================================
+
+function getBaseUnitDisplay(product: any): string {
+  const baseUnits: Record<string, string> = {
+    gram: 'g',
+    ml: 'ml',
+    piece: 'pcs'
+  }
+  return baseUnits[product.baseUnit] || product.baseUnit
+}
+
+function getPurchaseUnitDisplay(product: any): string {
+  const purchaseUnits: Record<string, string> = {
+    kg: 'kg',
+    liter: 'L',
+    piece: 'pcs',
+    pack: 'pack'
+  }
+  return purchaseUnits[product.purchaseUnit] || product.purchaseUnit
+}
+
+function shouldShowInPurchaseUnits(quantity: number, product: any): boolean {
+  if (!product) return false
+
+  // Show in purchase units if quantity >= 1000 and purchase unit is different
+  return (
+    quantity >= 1000 &&
+    ((product.baseUnit === 'gram' && product.purchaseUnit === 'kg') ||
+      (product.baseUnit === 'ml' && product.purchaseUnit === 'liter'))
+  )
+}
+
+function getItemBaseUnit(item: any): string {
+  const product = productsStore.products.find(p => p.id === item.itemId)
+  return product ? getBaseUnitDisplay(product) : 'g'
+}
+
+function getItemPurchaseUnit(item: any): string {
+  const product = productsStore.products.find(p => p.id === item.itemId)
+  return product ? getPurchaseUnitDisplay(product) : 'kg'
+}
+
+function getItemDisplayUnit(itemId: string): string {
+  return itemDisplayUnits.value[itemId] || getItemBaseUnitById(itemId)
+}
+
+function getItemBaseUnitById(itemId: string): string {
+  const product = productsStore.products.find(p => p.id === itemId)
+  return product ? getBaseUnitDisplay(product) : 'g'
+}
+
+function updateItemDisplayUnit(itemId: string, unit: string): void {
+  itemDisplayUnits.value[itemId] = unit
+}
+
+// =============================================
+// ✅ UPDATED: Manual item unit functions
+// =============================================
+
+function getManualItemBaseUnit(): string {
+  const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
+  return product ? getBaseUnitDisplay(product) : 'g'
+}
+
+function getManualItemPurchaseUnit(): string {
+  const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
+  return product ? getPurchaseUnitDisplay(product) : 'kg'
+}
+
+function getManualItemMinQuantity(): number {
+  if (manualItem.value.displayUnit === getManualItemBaseUnit()) {
+    return 1 // Base units start from 1
+  }
+  return 0.1 // Purchase units can have decimals
+}
+
+function getManualItemStep(): number {
+  if (manualItem.value.displayUnit === getManualItemBaseUnit()) {
+    return 1 // Base units are whole numbers
+  }
+  return 0.1 // Purchase units can have decimals
+}
+
+// =============================================
+// ✅ UPDATED: Quantity management with unit conversion
+// =============================================
+
+function getSelectedQuantityInDisplayUnit(itemId: string): number {
+  const item = selectedItems.value.find(item => item.itemId === itemId)
+  if (!item) return 0
+
+  const displayUnit = getItemDisplayUnit(itemId)
+  const baseUnit = getItemBaseUnitById(itemId)
+
+  if (displayUnit === baseUnit) {
+    return Math.round(item.requestedQuantity)
+  }
+
+  // Convert to purchase units
+  const product = productsStore.products.find(p => p.id === itemId)
+  if (product && product.purchaseToBaseRatio) {
+    return Math.round((item.requestedQuantity / product.purchaseToBaseRatio) * 10) / 10
+  }
+
+  return Math.round(item.requestedQuantity)
+}
+
+function updateSelectedQuantityInDisplayUnit(itemId: string, newQuantity: string | number): void {
+  const quantity = typeof newQuantity === 'string' ? parseFloat(newQuantity) : newQuantity
+  if (quantity <= 0 || isNaN(quantity)) return
+
+  const displayUnit = getItemDisplayUnit(itemId)
+  const baseUnit = getItemBaseUnitById(itemId)
+
+  let finalQuantity = quantity
+
+  // Convert to base units if needed
+  if (displayUnit !== baseUnit) {
+    const product = productsStore.products.find(p => p.id === itemId)
+    if (product && product.purchaseToBaseRatio) {
+      finalQuantity = Math.round(quantity * product.purchaseToBaseRatio)
+    }
+  } else {
+    finalQuantity = Math.round(quantity)
+  }
+
+  orderAssistant.updateSelectedQuantity(itemId, finalQuantity)
+}
+
+function getMinQuantityForDisplayUnit(item: any): number {
+  const displayUnit = getItemDisplayUnit(item.itemId)
+  const baseUnit = getItemBaseUnit(item)
+
+  return displayUnit === baseUnit ? 1 : 0.1
+}
+
+function getQuantityStepForDisplayUnit(item: any): number {
+  const displayUnit = getItemDisplayUnit(item.itemId)
+  const baseUnit = getItemBaseUnit(item)
+
+  return displayUnit === baseUnit ? 1 : 0.1
+}
+
+function getSelectedQuantityInBaseUnits(itemId: string): number {
+  const item = selectedItems.value.find(item => item.itemId === itemId)
+  return item ? Math.round(item.requestedQuantity) : 0
+}
+
+function updateSelectedQuantityInBaseUnits(itemId: string, newQuantity: string | number): void {
+  const quantity = typeof newQuantity === 'string' ? parseInt(newQuantity) : Math.round(newQuantity)
+  if (quantity <= 0 || isNaN(quantity)) return
+
+  orderAssistant.updateSelectedQuantity(itemId, quantity)
+}
+
+// =============================================
+// ✅ UPDATED: Days supply calculations
+// =============================================
+
+function calculateItemDaysSupply(item: any): number {
+  const product = productsStore.products.find(p => p.id === item.itemId)
+  if (!product) return 0
+
+  // ✅ FIXED: Use dailyConsumption from product store instead of hardcoded calculation
+  const dailyUsage = Math.max(1, Math.round(product.dailyConsumption || product.minStock / 10))
+  return Math.floor(item.requestedQuantity / dailyUsage)
+}
+
+function calculateManualItemDaysSupply(): number {
+  if (!manualItem.value.itemId) return 0
+
+  const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
+  if (!product) return 0
+
+  const baseQuantity = convertDisplayQuantityToBase()
+  const dailyUsage = Math.max(1, Math.round(product.dailyConsumption || baseQuantity / 10))
+  return Math.floor(baseQuantity / dailyUsage)
+}
+
+function convertDisplayQuantityToBase(): number {
+  const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
+  if (!product) return Math.round(manualItem.value.quantity)
+
+  const displayUnit = manualItem.value.displayUnit
+  const baseUnit = getBaseUnitDisplay(product)
+
+  if (displayUnit === baseUnit) {
+    return Math.round(manualItem.value.quantity)
+  }
+
+  // Convert from purchase units to base units
+  if (product.purchaseToBaseRatio) {
+    return Math.round(manualItem.value.quantity * product.purchaseToBaseRatio)
+  }
+
+  return Math.round(manualItem.value.quantity)
+}
+
+// =============================================
+// UTILITY FUNCTIONS
 // =============================================
 
 function isSuggestionAdded(itemId: string): boolean {
   return orderAssistant.isSuggestionAdded(itemId)
 }
 
-// =============================================
-// AI SUGGESTIONS FORMATTING (уникальная UI логика)
-// =============================================
-
-function formatSuggestionQuantityRange(suggestion: OrderSuggestion): string {
-  const product = productsStore.products.find(p => p.id === suggestion.itemId)
-  if (!product) {
-    const formatNumber = (num: number) => {
-      if (num >= 1000) {
-        return `${(num / 1000).toFixed(1)}kg`
-      }
-      return `${num}g`
-    }
-
-    return `Current: ${formatNumber(suggestion.currentStock)} • Min: ${formatNumber(suggestion.minStock)} • Suggested: ${formatNumber(suggestion.suggestedQuantity)}`
-  }
-
-  return formatQuantityRange(
-    suggestion.currentStock,
-    suggestion.minStock,
-    suggestion.suggestedQuantity,
-    product
-  )
-}
-
-function formatSuggestedQuantity(suggestion: OrderSuggestion): string {
-  const product = productsStore.products.find(p => p.id === suggestion.itemId)
-  if (!product) return `${suggestion.suggestedQuantity}`
-
-  return formatQuantityWithUnit(suggestion.suggestedQuantity, product, { precision: 1 })
-}
-
-function getBestDisplayUnit(suggestion: OrderSuggestion): string {
-  const product = productsStore.products.find(p => p.id === suggestion.itemId)
-  if (!product) return 'units'
-
-  return getBestInputUnit(product)
-}
-
-function formatDailyUsage(suggestion: OrderSuggestion): string {
-  const product = productsStore.products.find(p => p.id === suggestion.itemId)
-  if (!product) return 'N/A'
-
-  // Примерный расчет на основе minStock
-  const estimatedDailyUsage = Math.max(1, (product.minStock || suggestion.suggestedQuantity) / 10)
-
-  return formatQuantityWithUnit(estimatedDailyUsage, product, { precision: 1 }) + '/day'
-}
-
-function formatReason(reason: string): string {
-  const reasons: Record<string, string> = {
-    below_minimum: 'Stock below minimum threshold',
-    out_of_stock: 'Out of stock - urgent reorder needed',
-    running_low: 'Stock running low',
-    optimization: 'Optimization opportunity',
-    expired_soon: 'Items expiring soon'
-  }
-  return reasons[reason] || reason
+function removeItemFromRequest(itemId: string): void {
+  orderAssistant.removeItemFromRequest(itemId)
 }
 
 // =============================================
-// ✅ УПРОЩЕННЫЕ EVENT HANDLERS
+// EVENT HANDLERS
 // =============================================
 
 function addSuggestionToRequest(suggestion: OrderSuggestion): void {
   orderAssistant.addSuggestionToRequest(suggestion)
+
+  // Set initial display unit based on suggested quantity
+  const product = productsStore.products.find(p => p.id === suggestion.itemId)
+  if (product && shouldShowInPurchaseUnits(suggestion.suggestedQuantity, product)) {
+    itemDisplayUnits.value[suggestion.itemId] = getPurchaseUnitDisplay(product)
+  } else {
+    itemDisplayUnits.value[suggestion.itemId] = getBaseUnitDisplay(product)
+  }
 }
 
 function addUrgentItems(): void {
   urgentSuggestions.value.forEach(suggestion => {
     if (!orderAssistant.isSuggestionAdded(suggestion.itemId)) {
-      orderAssistant.addSuggestionToRequest(suggestion)
+      addSuggestionToRequest(suggestion)
     }
   })
   activeTab.value = 'summary'
 }
 
-// ✅ УПРОЩЕНО: убран try/catch - ошибки обрабатываются в composable
 async function generateSuggestions(): Promise<void> {
   await orderAssistant.generateSuggestions()
 }
 
-// ✅ УПРОЩЕНО: минимальный try/catch только для UI состояния
 async function createRequest(): Promise<void> {
   try {
     isCreating.value = true
@@ -746,38 +878,18 @@ function closeDialog(): void {
   isOpen.value = false
   activeTab.value = 'suggestions'
   resetManualItem()
+  itemDisplayUnits.value = {} // Reset display units
 }
 
 // =============================================
-// ✅ УПРОЩЕННОЕ QUANTITY MANAGEMENT
-// =============================================
-
-function updateSelectedQuantity(itemId: string, newQuantity: string | number): void {
-  const quantity = typeof newQuantity === 'string' ? parseFloat(newQuantity) : newQuantity
-  if (quantity <= 0 || isNaN(quantity)) return
-
-  // ✅ УПРОЩЕНО: прямой вызов composable
-  orderAssistant.updateSelectedQuantity(itemId, quantity)
-}
-
-function getSelectedQuantity(itemId: string): number {
-  // ✅ УПРОЩЕНО: используем метод из composable
-  return orderAssistant.getSelectedQuantityForDisplay(itemId)
-}
-
-function removeItemFromRequest(itemId: string): void {
-  orderAssistant.removeItemFromRequest(itemId)
-}
-
-// =============================================
-// MANUAL ITEM MANAGEMENT (без изменений)
+// ✅ UPDATED: Manual item management
 // =============================================
 
 function updateManualItemName(): void {
   const product = availableProductsFromStore.value.find(p => p.id === manualItem.value.itemId)
   if (product) {
     manualItem.value.itemName = product.name
-    manualItem.value.unit = product.unit
+    manualItem.value.displayUnit = product.unit
   }
 }
 
@@ -787,31 +899,28 @@ function getQuantityHint(): string {
   const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
   if (!product) return ''
 
-  const baseUnit = product.baseUnit
-  const inputUnit = manualItem.value.unit
+  const isBaseUnit = manualItem.value.displayUnit === getBaseUnitDisplay(product)
 
-  if (inputUnit === 'kg' && baseUnit === 'gram') {
-    return 'Enter in kg (will be converted to grams internally)'
+  if (isBaseUnit) {
+    return `Enter in ${manualItem.value.displayUnit} (base units - whole numbers only)`
+  } else {
+    return `Enter in ${manualItem.value.displayUnit} (will be converted to base units)`
   }
-
-  if (inputUnit === 'L' && baseUnit === 'ml') {
-    return 'Enter in liters (will be converted to ml internally)'
-  }
-
-  return `Enter in ${inputUnit}`
 }
 
 function getFormattedManualQuantity(): string {
   const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
-  if (!product) return `${manualItem.value.quantity} ${manualItem.value.unit}`
+  if (!product) return `${Math.round(manualItem.value.quantity)} ${manualItem.value.displayUnit}`
 
-  const baseQuantity = convertUserInputToBaseUnits(
-    manualItem.value.quantity,
-    manualItem.value.unit,
-    product
-  )
+  const baseQuantity = convertDisplayQuantityToBase()
+  const baseUnit = getBaseUnitDisplay(product)
 
-  return formatQuantityWithUnit(baseQuantity, product)
+  // Show both display quantity and base quantity if different
+  if (manualItem.value.displayUnit !== baseUnit) {
+    return `${manualItem.value.quantity} ${manualItem.value.displayUnit} (${baseQuantity} ${baseUnit})`
+  }
+
+  return `${Math.round(manualItem.value.quantity)} ${manualItem.value.displayUnit}`
 }
 
 function calculateManualItemCost(): number {
@@ -820,13 +929,7 @@ function calculateManualItemCost(): number {
   const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
   if (!product) return 0
 
-  const baseQuantity = convertUserInputToBaseUnits(
-    manualItem.value.quantity,
-    manualItem.value.unit,
-    product
-  )
-
-  // ✅ ИСПРАВЛЕНО: используем метод из composable
+  const baseQuantity = convertDisplayQuantityToBase()
   const baseCost = orderAssistant.getEstimatedPrice(product.id)
   return baseQuantity * baseCost
 }
@@ -838,17 +941,13 @@ function addManualItem(): void {
     return
   }
 
-  const quantityInBaseUnits = convertUserInputToBaseUnits(
-    manualItem.value.quantity,
-    manualItem.value.unit,
-    product
-  )
+  const quantityInBaseUnits = convertDisplayQuantityToBase()
 
   orderAssistant.addManualItem(
     manualItem.value.itemId,
     manualItem.value.itemName,
     quantityInBaseUnits,
-    getBestInputUnit(product),
+    getBaseUnitDisplay(product),
     manualItem.value.notes
   )
 
@@ -862,31 +961,31 @@ function resetManualItem(): void {
     itemId: '',
     itemName: '',
     quantity: 1,
-    unit: 'кг',
+    displayUnit: 'g',
     notes: ''
   }
 }
 
 // =============================================
-// REQUEST SUMMARY FORMATTING (уникальная логика)
+// ✅ UPDATED: Summary formatting with best units
 // =============================================
 
 function formatQuantityForSummary(item: any): string {
   const product = productsStore.products.find(p => p.id === item.itemId)
-  if (!product) return `${item.requestedQuantity} ${item.unit}`
+  if (!product) return `${Math.round(item.requestedQuantity)} ${item.unit}`
 
-  return formatQuantityWithUnit(item.requestedQuantity, product)
-}
+  // Always show in the most appropriate unit
+  if (shouldShowInPurchaseUnits(item.requestedQuantity, product)) {
+    const purchaseQuantity = item.requestedQuantity / product.purchaseToBaseRatio
+    return `${purchaseQuantity.toFixed(1)} ${getPurchaseUnitDisplay(product)}`
+  }
 
-function getBestDisplayUnitForItem(item: any): string {
-  const product = productsStore.products.find(p => p.id === item.itemId)
-  if (!product) return item.unit
-
-  return getBestInputUnit(product)
+  const baseUnit = getBaseUnitDisplay(product)
+  return `${Math.round(item.requestedQuantity)} ${baseUnit}`
 }
 
 // =============================================
-// WATCHERS (без изменений)
+// WATCHERS
 // =============================================
 
 watch(
@@ -909,6 +1008,20 @@ watch(
     }
   },
   { immediate: false }
+)
+
+// ✅ NEW: Watch for manual item changes to update display unit
+watch(
+  () => manualItem.value.itemId,
+  newItemId => {
+    if (newItemId) {
+      const product = productsStore.products.find(p => p.id === newItemId)
+      if (product) {
+        // Start with base unit
+        manualItem.value.displayUnit = getBaseUnitDisplay(product)
+      }
+    }
+  }
 )
 </script>
 
