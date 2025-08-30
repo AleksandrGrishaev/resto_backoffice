@@ -373,7 +373,7 @@ export const useSupplierStore = defineStore('supplier', () => {
   }
 
   /**
-   * ✅ ENHANCED: Refresh suggestions from coordinator
+   * ✅ ИСПРАВЛЕННАЯ функция: Обновить предложения с учетом существующих заявок
    */
   async function refreshSuggestions(department?: Department): Promise<void> {
     const startTime = Date.now()
@@ -381,7 +381,7 @@ export const useSupplierStore = defineStore('supplier', () => {
     try {
       state.value.loading.suggestions = true
 
-      DebugUtils.info(MODULE_NAME, 'Refreshing suggestions from coordinator', { department })
+      DebugUtils.info(MODULE_NAME, 'Refreshing suggestions with request filtering', { department })
 
       // Get fresh data from coordinator
       const supplierData = mockDataCoordinator.getSupplierStoreData()
@@ -406,14 +406,25 @@ export const useSupplierStore = defineStore('supplier', () => {
         })
       }
 
+      // ✅ НОВАЯ ЛОГИКА: Фильтруем предложения с учетом существующих заявок
+      const activeRequests = state.value.requests.filter(
+        request => !['cancelled', 'converted'].includes(request.status)
+      )
+
+      suggestions = filterSuggestionsWithExistingRequests(suggestions, activeRequests)
+
       state.value.orderSuggestions = suggestions
       integrationState.value.lastSuggestionsUpdate = TimeUtils.getCurrentLocalISO()
 
       const generationTime = Date.now() - startTime
       updatePerformanceMetric('avgSuggestionGenerationTime', generationTime)
 
-      DebugUtils.info(MODULE_NAME, 'Order suggestions refreshed from coordinator', {
-        count: suggestions.length,
+      DebugUtils.info(MODULE_NAME, 'Order suggestions refreshed with request filtering', {
+        originalCount: supplierData.suggestions.length,
+        departmentFiltered:
+          suggestions.length + (supplierData.suggestions.length - suggestions.length),
+        finalCount: suggestions.length,
+        activeRequests: activeRequests.length,
         urgent: suggestions.filter(s => s.urgency === 'high').length,
         medium: suggestions.filter(s => s.urgency === 'medium').length,
         low: suggestions.filter(s => s.urgency === 'low').length,
@@ -427,6 +438,71 @@ export const useSupplierStore = defineStore('supplier', () => {
     } finally {
       state.value.loading.suggestions = false
     }
+  }
+
+  /**
+   * ✅ ИСПРАВЛЕННАЯ вспомогательная функция: Фильтрует предложения с учетом существующих заявок
+   */
+  function filterSuggestionsWithExistingRequests(
+    suggestions: OrderSuggestion[],
+    requests: ProcurementRequest[]
+  ): OrderSuggestion[] {
+    // Подсчитываем уже запрошенные количества по каждому товару
+    const requestedQuantities: Record<string, number> = {}
+
+    requests.forEach(request => {
+      request.items.forEach(item => {
+        if (!requestedQuantities[item.itemId]) {
+          requestedQuantities[item.itemId] = 0
+        }
+        requestedQuantities[item.itemId] += item.requestedQuantity
+      })
+    })
+
+    DebugUtils.debug(MODULE_NAME, 'Requested quantities calculated', {
+      requestedQuantities,
+      activeRequests: requests.length
+    })
+
+    // Фильтруем предложения
+    const filteredSuggestions = suggestions.filter(suggestion => {
+      const alreadyRequested = requestedQuantities[suggestion.itemId] || 0
+
+      // Если уже запросили столько же или больше - убираем из предложений
+      if (alreadyRequested >= suggestion.suggestedQuantity) {
+        DebugUtils.debug(MODULE_NAME, 'Removing suggestion - already requested', {
+          itemId: suggestion.itemId,
+          itemName: suggestion.itemName,
+          suggestedQuantity: suggestion.suggestedQuantity,
+          alreadyRequested
+        })
+        return false
+      }
+
+      // Если частично запросили - уменьшаем предлагаемое количество
+      if (alreadyRequested > 0) {
+        const originalQuantity = suggestion.suggestedQuantity
+        suggestion.suggestedQuantity = suggestion.suggestedQuantity - alreadyRequested
+
+        DebugUtils.debug(MODULE_NAME, 'Reducing suggestion quantity', {
+          itemId: suggestion.itemId,
+          itemName: suggestion.itemName,
+          originalQuantity,
+          alreadyRequested,
+          newSuggestedQuantity: suggestion.suggestedQuantity
+        })
+      }
+
+      return true
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Suggestions filtered with existing requests', {
+      originalCount: suggestions.length,
+      filteredCount: filteredSuggestions.length,
+      removedCount: suggestions.length - filteredSuggestions.length
+    })
+
+    return filteredSuggestions
   }
 
   async function createRequest(data: CreateRequestData): Promise<ProcurementRequest> {

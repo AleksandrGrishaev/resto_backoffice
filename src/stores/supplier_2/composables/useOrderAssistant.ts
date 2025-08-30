@@ -242,7 +242,7 @@ export function useOrderAssistant() {
   }
 
   /**
-   * ✅ УПРОЩЕННАЯ функция: Создать заявку
+   * ✅ ПОЛНАЯ ИСПРАВЛЕННАЯ функция: Создать заявку с обновлением предложений
    */
   async function createRequest(
     requestedBy: string,
@@ -291,17 +291,23 @@ export function useOrderAssistant() {
       try {
         DebugUtils.info(MODULE_NAME, 'Refreshing suggestions after request creation', {
           requestId: newRequest.id,
-          department: targetDepartment
+          requestNumber: newRequest.requestNumber,
+          department: targetDepartment,
+          itemsCreated: createData.items.length
         })
 
-        await generateSuggestions(targetDepartment)
+        // Используем supplierStore.refreshSuggestions вместо generateSuggestions
+        await supplierStore.refreshSuggestions(targetDepartment)
 
-        DebugUtils.info(MODULE_NAME, 'Suggestions refreshed successfully after request creation')
+        DebugUtils.info(MODULE_NAME, 'Suggestions refreshed successfully after request creation', {
+          newSuggestionsCount: supplierStore.state.orderSuggestions.length
+        })
       } catch (refreshError) {
         // Не бросаем ошибку если обновление предложений не удалось
         DebugUtils.warn(MODULE_NAME, 'Failed to refresh suggestions after request creation', {
           refreshError,
-          requestId: newRequest.id
+          requestId: newRequest.id,
+          requestNumber: newRequest.requestNumber
         })
       }
 
@@ -319,9 +325,6 @@ export function useOrderAssistant() {
   /**
    * ✅ Генерация предложений заказов
    */
-  /**
-   * ✅ Генерация предложений заказов
-   */
   async function generateSuggestions(department?: Department): Promise<OrderSuggestion[]> {
     const startTime = Date.now()
 
@@ -331,7 +334,7 @@ export function useOrderAssistant() {
 
       const targetDepartment = department || state.selectedDepartment
 
-      DebugUtils.info(MODULE_NAME, 'Generating suggestions', {
+      DebugUtils.info(MODULE_NAME, 'Generating suggestions via supplierStore', {
         department: targetDepartment
       })
 
@@ -342,19 +345,18 @@ export function useOrderAssistant() {
         DebugUtils.warn(MODULE_NAME, 'Storage fetch failed, continuing...', { error })
       }
 
-      // Генерируем предложения
-      const newSuggestions = await supplierService.getOrderSuggestions(targetDepartment)
+      // ✅ ИСПРАВЛЕНИЕ: Используем supplierStore.refreshSuggestions()
+      // вместо прямого обращения к supplierService
+      await supplierStore.refreshSuggestions(targetDepartment)
 
-      // Безопасно обновляем store
-      if (!supplierStore.state.orderSuggestions) {
-        supplierStore.state.orderSuggestions = []
-      }
-      supplierStore.state.orderSuggestions = newSuggestions
+      // Получаем отфильтрованные предложения из store
+      const newSuggestions = supplierStore.state.orderSuggestions || []
+
       state.lastRefresh = TimeUtils.getCurrentLocalISO()
 
       const generationTime = Date.now() - startTime
 
-      DebugUtils.info(MODULE_NAME, 'Suggestions generated successfully', {
+      DebugUtils.info(MODULE_NAME, 'Suggestions generated successfully via supplierStore', {
         department: targetDepartment,
         total: newSuggestions.length,
         urgent: newSuggestions.filter(s => s.urgency === 'high').length,
