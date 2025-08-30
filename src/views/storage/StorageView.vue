@@ -1,4 +1,4 @@
-<!-- src/views/storage/StorageView.vue - ИСПРАВЛЕНО: Обращение к balances -->
+<!-- src/views/storage/StorageView.vue - FIXED: Proper store access and error handling -->
 <template>
   <div class="storage-view">
     <!-- Header -->
@@ -18,12 +18,13 @@
           color="primary"
           variant="outlined"
           prepend-icon="mdi-clipboard-list"
-          :disabled="storageStore.state.loading.balances"
+          :disabled="storageStore.state.value.loading.balances"
           @click="openInventoryDialog"
         >
           Count Inventory
         </v-btn>
         <writeoff-widget
+          v-if="selectedDepartment"
           :department="selectedDepartment"
           @success="handleWriteOffSuccess"
           @refresh-needed="refreshCurrentData"
@@ -33,7 +34,7 @@
 
     <!-- Error Alert -->
     <v-alert
-      v-if="storageStore.state.error"
+      v-if="storageStore.state.value.error"
       type="error"
       variant="tonal"
       closable
@@ -41,7 +42,7 @@
       @click:close="storageStore.clearError"
     >
       <v-alert-title>Storage Error</v-alert-title>
-      {{ storageStore.state.error }}
+      {{ storageStore.state.value.error }}
     </v-alert>
 
     <!-- Department Tabs -->
@@ -64,6 +65,7 @@
 
     <!-- Alerts Banner -->
     <storage-alerts
+      v-if="isStoreReady"
       :alerts="enhancedAlertCounts"
       :department="selectedDepartment"
       class="mb-4"
@@ -101,11 +103,17 @@
       </v-tab>
     </v-tabs>
 
+    <!-- Loading State -->
+    <div v-if="isLoading" class="d-flex justify-center py-8">
+      <v-progress-circular indeterminate color="primary" size="48" />
+      <span class="ml-4">Loading storage data...</span>
+    </div>
+
     <!-- Content -->
-    <v-tabs-window v-model="selectedTab">
+    <v-tabs-window v-else-if="isStoreReady" v-model="selectedTab">
       <!-- Products Tab -->
       <v-tabs-window-item value="products">
-        <div v-if="allProductBalances.length === 0 && !storageStore.state.loading.balances">
+        <div v-if="allProductBalances.length === 0">
           <v-empty-state
             headline="No Products Found"
             title="No products available for this department"
@@ -121,7 +129,7 @@
         <storage-stock-table
           v-else
           :balances="displayProductBalances"
-          :loading="storageStore.state.loading.balances"
+          :loading="storageStore.state.value.loading.balances"
           item-type="product"
           :department="selectedDepartment"
           :show-zero-stock="showZeroStock"
@@ -132,7 +140,7 @@
 
       <!-- Operations Tab -->
       <v-tabs-window-item value="operations">
-        <div v-if="recentOperations.length === 0 && !storageStore.state.loading.operations">
+        <div v-if="recentOperations.length === 0">
           <v-empty-state
             headline="No Operations Found"
             title="No recent operations for this department"
@@ -148,14 +156,14 @@
         <storage-operations-table
           v-else
           :operations="recentOperations"
-          :loading="storageStore.state.loading.operations"
+          :loading="storageStore.state.value.loading.operations"
           :department="selectedDepartment"
         />
       </v-tabs-window-item>
 
       <!-- Inventories Tab -->
       <v-tabs-window-item value="inventories">
-        <div v-if="recentInventories.length === 0 && !storageStore.state.loading.inventory">
+        <div v-if="recentInventories.length === 0">
           <v-empty-state
             headline="No Inventories Found"
             title="No inventory records for this department"
@@ -172,7 +180,7 @@
         <storage-inventories-table
           v-else
           :inventories="recentInventories"
-          :loading="storageStore.state.loading.inventory"
+          :loading="storageStore.state.value.loading.inventory"
           :department="selectedDepartment"
           :show-zero-stock="showZeroStock"
           @edit-inventory="handleEditInventory"
@@ -217,11 +225,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { useWriteOff } from '@/stores/storage'
-import { formatIDR } from '@/utils/currency'
 import type { StorageDepartment, InventoryDocument } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 
@@ -253,33 +260,34 @@ const successMessage = ref('')
 const errorMessage = ref('')
 const editingInventory = ref<InventoryDocument | null>(null)
 const showZeroStock = ref(false)
+const isInitialized = ref(false)
 
-// ✅ ADDED: Development mode check
-const isDevelopment = computed(() => {
-  return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
+// ✅ FIXED: Store readiness check
+const isStoreReady = computed(() => {
+  return (
+    isInitialized.value &&
+    storageStore.state?.value &&
+    storageStore.filteredBalances?.value !== undefined
+  )
 })
 
-// ✅ ИСПРАВЛЕНО: Создаем функцию departmentBalances локально
-function getDepartmentBalances(department: StorageDepartment) {
-  try {
-    return (
-      storageStore.filteredBalances?.filter(
-        b => b && b.itemType === 'product' && b.department === department
-      ) || []
-    )
-  } catch (error) {
-    console.warn('Error getting department balances:', error)
+const isLoading = computed(() => {
+  return (
+    !isInitialized.value ||
+    storageStore.state?.value?.loading?.balances ||
+    storageStore.state?.value?.loading?.operations
+  )
+})
+
+// ✅ FIXED: Safe access to store data
+const allProductBalances = computed(() => {
+  if (!isStoreReady.value || !storageStore.filteredBalances?.value) {
     return []
   }
-}
 
-// Enhanced computed properties with zero stock handling
-const allProductBalances = computed(() => {
   try {
-    return (
-      storageStore.filteredBalances?.filter(
-        b => b && b.itemType === 'product' && b.department === selectedDepartment.value
-      ) || []
+    return storageStore.filteredBalances.value.filter(
+      b => b && b.itemType === 'product' && b.department === selectedDepartment.value
     )
   } catch (error) {
     console.warn('Error filtering all product balances:', error)
@@ -287,34 +295,15 @@ const allProductBalances = computed(() => {
   }
 })
 
-// ✅ ИСПРАВЛЕНО: Используем локальную функцию вместо storageStore.departmentBalances
-const zeroStockProductBalances = computed(() => {
-  try {
-    return allProductBalances.value.filter(b => b.totalQuantity <= 0)
-  } catch (error) {
-    console.warn('Error filtering zero stock products:', error)
+const recentOperations = computed(() => {
+  if (!isStoreReady.value || !storageStore.state?.value?.operations) {
     return []
   }
-})
 
-// ✅ ADDED: Debug info computed property
-const debugInfo = computed(() => {
-  const all = allProductBalances.value
-  return {
-    totalProducts: all.length,
-    negativeStockCount: all.filter(b => b.totalQuantity < 0).length,
-    zeroStockCount: all.filter(b => b.totalQuantity === 0).length,
-    positiveStockCount: all.filter(b => b.totalQuantity > 0).length
-  }
-})
-
-const recentOperations = computed(() => {
   try {
-    return (
-      storageStore.state.operations
-        .filter(op => op && op.department === selectedDepartment.value)
-        .slice(0, 20) || []
-    )
+    return storageStore.state.value.operations
+      .filter(op => op && op.department === selectedDepartment.value)
+      .slice(0, 20)
   } catch (error) {
     console.warn('Error filtering recent operations:', error)
     return []
@@ -322,9 +311,12 @@ const recentOperations = computed(() => {
 })
 
 const recentInventories = computed(() => {
+  if (!isStoreReady.value || !storageStore.state?.value?.inventories) {
+    return []
+  }
+
   try {
-    if (!storageStore.state.inventories) return []
-    return storageStore.state.inventories
+    return storageStore.state.value.inventories
       .filter(inv => inv && inv.department === selectedDepartment.value)
       .slice(0, 20)
   } catch (error) {
@@ -333,13 +325,17 @@ const recentInventories = computed(() => {
   }
 })
 
-// ✅ ИСПРАВЛЕНО: Используем прямое обращение к computed properties
+// ✅ FIXED: Proper computed property access
 const alertCounts = computed(() => {
+  if (!isStoreReady.value) {
+    return { expiring: 0, expired: 0, lowStock: 0 }
+  }
+
   try {
     return {
-      expiring: storageStore.nearExpiryItemsCount || 0,
-      expired: storageStore.expiredItemsCount || 0,
-      lowStock: storageStore.lowStockItemsCount || 0
+      expiring: storageStore.nearExpiryItemsCount?.value || 0,
+      expired: storageStore.expiredItemsCount?.value || 0,
+      lowStock: storageStore.lowStockItemsCount?.value || 0
     }
   } catch (error) {
     console.warn('Error getting alert counts:', error)
@@ -353,42 +349,41 @@ const enhancedAlertCounts = computed(() => {
   }
 })
 
-const hasAlerts = computed(
-  () =>
-    alertCounts.value.expired > 0 ||
-    alertCounts.value.expiring > 0 ||
-    alertCounts.value.lowStock > 0
-)
-
-// ✅ ИСПРАВЛЕНО: Используем локальную функцию departmentBalances
+// ✅ FIXED: Department counts with proper safety checks
 const kitchenItemCount = computed(() => {
+  if (!isStoreReady.value) return 0
+
   try {
-    return getDepartmentBalances('kitchen').length
+    return allProductBalances.value.filter(b => b.department === 'kitchen').length
   } catch (error) {
     return 0
   }
 })
 
 const barItemCount = computed(() => {
+  if (!isStoreReady.value) return 0
+
   try {
-    return getDepartmentBalances('bar').length
+    return allProductBalances.value.filter(b => b.department === 'bar').length
   } catch (error) {
     return 0
   }
 })
 
-// ✅ ИСПРАВЛЕНО: Создаем функцию для получения категории продукта
+// ✅ FIXED: Safe product category access
 function getProductCategoryForSorting(itemId: string): string {
   try {
-    const product = productsStore.products.find(p => p.id === itemId)
+    const product = productsStore.products?.find(p => p.id === itemId)
     return product?.category || 'other'
   } catch (error) {
     return 'other'
   }
 }
 
-// ✅ FIXED: Enhanced sorting with proper negative stock handling
+// ✅ FIXED: Enhanced sorting with proper safety checks
 const displayProductBalances = computed(() => {
+  if (!isStoreReady.value) return []
+
   const all = allProductBalances.value
 
   if (showZeroStock.value) {
@@ -411,7 +406,7 @@ const displayProductBalances = computed(() => {
       })
   }
 
-  // ✅ FIXED: Default view - show ALL products with proper grouping
+  // Default view - show ALL products with proper grouping
   const withPositiveStock = all
     .filter(b => b.totalQuantity > 0)
     .sort((a, b) => {
@@ -424,7 +419,7 @@ const displayProductBalances = computed(() => {
       return a.itemName.localeCompare(b.itemName)
     })
 
-  // ✅ CRITICAL: Negative stock items (show them prominently after positive stock)
+  // Negative stock items (show them prominently after positive stock)
   const withNegativeStock = all
     .filter(b => b.totalQuantity < 0)
     .sort((a, b) => {
@@ -437,7 +432,7 @@ const displayProductBalances = computed(() => {
       return a.itemName.localeCompare(b.itemName)
     })
 
-  // ✅ ORDERING: Positive stock first, then negative stock (critical items visible)
+  // Positive stock first, then negative stock (critical items visible)
   return [...withPositiveStock, ...withNegativeStock]
 })
 
@@ -480,26 +475,6 @@ function showLowStockItems() {
   // Implementation for showing low stock items
 }
 
-// Write-off success handler
-async function handleWriteOffAllExpired() {
-  try {
-    const expiredProducts = allProductBalances.value.filter(b => b.hasExpired)
-
-    if (expiredProducts.length === 0) {
-      DebugUtils.info(MODULE_NAME, 'No expired products to write off')
-      return
-    }
-
-    // Create write-off operation for all expired products
-    successMessage.value = `Successfully wrote off ${expiredProducts.length} expired products`
-    showSuccessSnackbar.value = true
-    await refreshCurrentData()
-  } catch (error) {
-    console.error('Failed to write-off expired products:', error)
-    handleOperationError('Failed to write-off expired products')
-  }
-}
-
 function handleWriteOffFromBalance(productData: any) {
   try {
     DebugUtils.info(MODULE_NAME, 'Write-off initiated from balance table', { productData })
@@ -521,6 +496,8 @@ async function handleWriteOffSuccess(message: string) {
 }
 
 async function refreshCurrentData() {
+  if (!isStoreReady.value) return
+
   try {
     await Promise.all([
       storageStore.fetchBalances(selectedDepartment.value),
@@ -536,13 +513,20 @@ async function handleInventorySuccess(message: string = 'Inventory completed suc
     DebugUtils.info(MODULE_NAME, 'Inventory completed, refreshing data')
     successMessage.value = message
     showSuccessSnackbar.value = true
-    await Promise.all([
-      storageStore.fetchBalances(selectedDepartment.value),
-      storageStore.fetchOperations(selectedDepartment.value),
-      storageStore.fetchInventories
-        ? storageStore.fetchInventories(selectedDepartment.value)
-        : Promise.resolve()
-    ])
+
+    if (storageStore.fetchInventories) {
+      await Promise.all([
+        storageStore.fetchBalances(selectedDepartment.value),
+        storageStore.fetchOperations(selectedDepartment.value),
+        storageStore.fetchInventories(selectedDepartment.value)
+      ])
+    } else {
+      await Promise.all([
+        storageStore.fetchBalances(selectedDepartment.value),
+        storageStore.fetchOperations(selectedDepartment.value)
+      ])
+    }
+
     showInventoryDialog.value = false
     editingInventory.value = null
     DebugUtils.info(MODULE_NAME, 'Inventory data refreshed successfully')
@@ -591,7 +575,8 @@ function handleStartInventory() {
 
 // Watch for department changes
 watch(selectedDepartment, async (newDepartment, oldDepartment) => {
-  if (newDepartment === oldDepartment) return
+  if (newDepartment === oldDepartment || !isStoreReady.value) return
+
   try {
     DebugUtils.info(MODULE_NAME, 'Department changed', {
       from: oldDepartment,
@@ -607,6 +592,7 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
     if (storageStore.setDepartmentFilter) {
       storageStore.setDepartmentFilter(newDepartment)
     }
+
     await refreshCurrentData()
     DebugUtils.info(MODULE_NAME, 'Department data loaded successfully')
   } catch (error) {
@@ -615,14 +601,25 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
   }
 })
 
-// Lifecycle
+// ✅ FIXED: Proper initialization lifecycle
 onMounted(async () => {
   try {
     DebugUtils.info(MODULE_NAME, 'StorageView mounted, initializing data')
+
+    // Wait for next tick to ensure DOM is ready
+    await nextTick()
+
+    // Initialize the store
     await storageStore.initialize()
+
+    // Mark as initialized
+    isInitialized.value = true
+
+    DebugUtils.info(MODULE_NAME, 'StorageView initialized successfully')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize storage data', { error })
     handleOperationError('Failed to initialize storage management system')
+    isInitialized.value = false
   }
 })
 </script>

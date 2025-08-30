@@ -243,6 +243,10 @@ export const useSupplierStore = defineStore('supplier', () => {
    * ✅ FIXED: Load data from mockDataCoordinator instead of old mocks
    */
   async function initialize(): Promise<void> {
+    if (integrationState.value.isInitialized) {
+      DebugUtils.info(MODULE_NAME, 'Store already initialized')
+      return
+    }
     const startTime = Date.now()
 
     try {
@@ -309,8 +313,22 @@ export const useSupplierStore = defineStore('supplier', () => {
     try {
       DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator...')
 
-      // Get coordinated data
+      // Проверить, что координатор существует
+      if (!mockDataCoordinator) {
+        throw new Error('mockDataCoordinator is not available')
+      }
+
+      // Получить данные с проверкой
       const supplierData = mockDataCoordinator.getSupplierStoreData()
+
+      if (!supplierData) {
+        throw new Error('No supplier data returned from coordinator')
+      }
+
+      // Проверить структуру данных
+      if (!Array.isArray(supplierData.requests)) {
+        throw new Error('Invalid requests data structure from coordinator')
+      }
 
       // Load data into state
       state.value.requests = [...supplierData.requests]
@@ -325,7 +343,10 @@ export const useSupplierStore = defineStore('supplier', () => {
         suggestions: state.value.orderSuggestions.length
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', {
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      })
       throw new Error(`Failed to load coordinator data: ${error}`)
     }
   }

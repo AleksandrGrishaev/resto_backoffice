@@ -1,5 +1,5 @@
 // src/stores/shared/storageDefinitions.ts
-// Определения для генерации данных склада в базовых единицах
+// FIXED: Use whole numbers for all physical quantities
 
 import { TimeUtils } from '@/utils'
 import { CORE_PRODUCTS, getProductDefinition } from './productDefinitions'
@@ -46,11 +46,35 @@ const STORAGE_CONFIG: StorageConfig = {
 }
 
 // =============================================
+// UTILITY FUNCTIONS FOR WHOLE NUMBERS
+// =============================================
+
+/**
+ * ✅ Rounds quantity to appropriate whole numbers based on unit type
+ */
+function roundToWholeQuantity(quantity: number, unit: string): number {
+  // All physical units should be whole numbers
+  if (unit === 'gram' || unit === 'ml' || unit === 'piece') {
+    return Math.round(quantity)
+  }
+
+  // Fallback for any other units
+  return Math.round(quantity)
+}
+
+/**
+ * ✅ Calculates total value with proper rounding
+ */
+function calculateTotalValue(quantity: number, costPerUnit: number): number {
+  return Math.round(quantity * costPerUnit)
+}
+
+// =============================================
 // ГЕНЕРАЦИЯ БАТЧЕЙ В БАЗОВЫХ ЕДИНИЦАХ
 // =============================================
 
 /**
- * ✅ Генерирует батчи для продукта в базовых единицах
+ * ✅ Генерирует батчи для продукта в базовых единицах (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateProductBatches(
   productId: string,
@@ -61,16 +85,23 @@ function generateProductBatches(
   if (!product) return []
 
   const batches: StorageBatch[] = []
-  let remainingQuantity = targetTotalQuantity
+  let remainingQuantity = Math.round(targetTotalQuantity) // ✅ Start with whole number
 
   // Создаем 1-3 батча для достижения целевого количества
   const batchCount = Math.min(3, Math.ceil(Math.random() * 2) + 1)
 
   for (let i = 0; i < batchCount && remainingQuantity > 0; i++) {
     const isLastBatch = i === batchCount - 1
-    const batchQuantity = isLastBatch
-      ? remainingQuantity
-      : Math.min(remainingQuantity, remainingQuantity * (0.3 + Math.random() * 0.4))
+    let batchQuantity: number
+
+    if (isLastBatch) {
+      batchQuantity = remainingQuantity
+    } else {
+      const ratio = 0.3 + Math.random() * 0.4
+      batchQuantity = Math.min(remainingQuantity, Math.round(remainingQuantity * ratio))
+      // Ensure at least 1 unit per batch
+      batchQuantity = Math.max(1, batchQuantity)
+    }
 
     const daysAgo = Math.floor(Math.random() * 14) // Батчи за последние 2 недели
     const receiptDate = TimeUtils.getDateDaysAgo(daysAgo)
@@ -92,11 +123,11 @@ function generateProductBatches(
       itemId: productId,
       itemType: 'product',
       department,
-      initialQuantity: Math.round(batchQuantity * 1000) / 1000, // В базовых единицах
-      currentQuantity: Math.round(batchQuantity * 1000) / 1000, // В базовых единицах
+      initialQuantity: batchQuantity, // ✅ Целое число
+      currentQuantity: batchQuantity, // ✅ Целое число
       unit: product.baseUnit, // ✅ Базовая единица (gram/ml/piece)
       costPerUnit: product.baseCostPerUnit, // ✅ Цена за базовую единицу
-      totalValue: Math.round(batchQuantity * product.baseCostPerUnit),
+      totalValue: calculateTotalValue(batchQuantity, product.baseCostPerUnit),
       receiptDate,
       expiryDate,
       sourceType: 'purchase',
@@ -131,7 +162,7 @@ function generateBatchNumber(productId: string, receiptDate: string): string {
 // =============================================
 
 /**
- * ✅ Генерирует баланс для продукта в определенном департаменте
+ * ✅ Генерирует баланс для продукта в определенном департаменте (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateProductBalance(
   productId: string,
@@ -151,7 +182,7 @@ function generateProductBalance(
   // Генерируем батчи для достижения целевого остатка
   const batches = generateProductBatches(productId, department, targetStock)
 
-  // Вычисляем общие показатели
+  // Вычисляем общие показатели (все в целых числах)
   const totalQuantity = batches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
   const totalValue = batches.reduce((sum, batch) => sum + batch.totalValue, 0)
   const averageCost = totalQuantity > 0 ? totalValue / totalQuantity : product.baseCostPerUnit
@@ -175,10 +206,10 @@ function generateProductBalance(
     return daysToExpiry <= 3 && daysToExpiry > 0
   })
 
-  // Минимальный запас для проверки
+  // Минимальный запас для проверки (целые числа)
   const minStock = Math.max(
-    product.dailyConsumption * (product.leadTimeDays + 3),
-    product.dailyConsumption
+    Math.round(product.dailyConsumption * (product.leadTimeDays + 3)),
+    Math.round(product.dailyConsumption)
   )
   const belowMinStock = totalQuantity < minStock
 
@@ -187,10 +218,10 @@ function generateProductBalance(
     itemType: 'product',
     itemName: product.name,
     department,
-    totalQuantity: Math.round(totalQuantity * 1000) / 1000, // В базовых единицах
+    totalQuantity, // ✅ Уже целое число
     unit: product.baseUnit, // ✅ Базовая единица
     totalValue: Math.round(totalValue),
-    averageCost: Math.round(averageCost * 1000) / 1000,
+    averageCost: Math.round(averageCost * 1000) / 1000, // Точность до 3 знаков для цены
     latestCost: product.baseCostPerUnit, // ✅ Цена за базовую единицу
     costTrend: 'stable', // Упрощенно для мока
     batches,
@@ -199,7 +230,7 @@ function generateProductBalance(
     hasExpired,
     hasNearExpiry,
     belowMinStock,
-    averageDailyUsage: product.dailyConsumption,
+    averageDailyUsage: Math.round(product.dailyConsumption), // ✅ Целое число
     daysOfStockRemaining:
       totalQuantity > 0 ? Math.floor(totalQuantity / product.dailyConsumption) : 0,
     lastCalculated: TimeUtils.getCurrentLocalISO(),
@@ -226,11 +257,11 @@ function shouldProductBeInDepartment(productId: string, department: StorageDepar
 }
 
 /**
- * ✅ Вычисляет целевой остаток для продукта
+ * ✅ Вычисляет целевой остаток для продукта (ЦЕЛЫЕ ЧИСЛА)
  */
 function calculateTargetStock(product: CoreProductDefinition): number {
-  const minStock = product.dailyConsumption * (product.leadTimeDays + 3) // Минимум + страховой запас
-  const maxStock = minStock * STORAGE_CONFIG.maxStockMultiplier
+  const minStock = Math.round(product.dailyConsumption * (product.leadTimeDays + 3)) // Минимум + страховой запас
+  const maxStock = Math.round(minStock * STORAGE_CONFIG.maxStockMultiplier)
 
   const rand = Math.random()
 
@@ -241,11 +272,11 @@ function calculateTargetStock(product: CoreProductDefinition): number {
 
   // 30% продуктов с низким остатком
   if (rand < STORAGE_CONFIG.lowStockChance) {
-    return Math.random() * minStock * 0.5
+    return Math.round(Math.random() * minStock * 0.5)
   }
 
   // Остальные между минимумом и максимумом
-  return minStock + Math.random() * (maxStock - minStock)
+  return Math.round(minStock + Math.random() * (maxStock - minStock))
 }
 
 // =============================================
@@ -253,7 +284,7 @@ function calculateTargetStock(product: CoreProductDefinition): number {
 // =============================================
 
 /**
- * ✅ Генерирует операции склада за период
+ * ✅ Генерирует операции склада за период (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateStorageOperations(): StorageOperation[] {
   const operations: StorageOperation[] = []
@@ -279,7 +310,7 @@ function generateStorageOperations(): StorageOperation[] {
 }
 
 /**
- * ✅ Генерирует случайную операцию склада
+ * ✅ Генерирует случайную операцию склада (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateRandomOperation(operationDate: string, index: number): StorageOperation | null {
   const operationTypes = ['receipt', 'correction', 'write_off'] as const
@@ -306,10 +337,10 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
       itemId: product.id,
       itemType: 'product' as const,
       itemName: product.name,
-      quantity: Math.round(quantity * 1000) / 1000, // В базовых единицах
+      quantity, // ✅ Уже целое число
       unit: product.baseUnit, // ✅ Базовая единица
       batchAllocations,
-      totalCost: Math.round(quantity * product.baseCostPerUnit),
+      totalCost: calculateTotalValue(quantity, product.baseCostPerUnit),
       averageCostPerUnit: product.baseCostPerUnit
     }
   })
@@ -350,28 +381,33 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
 }
 
 /**
- * ✅ Генерирует разумное количество для продукта в базовых единицах
+ * ✅ Генерирует разумное количество для продукта в базовых единицах (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateReasonableQuantity(product: CoreProductDefinition): number {
-  const dailyConsumption = product.dailyConsumption
+  const dailyConsumption = Math.round(product.dailyConsumption)
 
   // Для разных типов операций разные логики
   const operationSize = Math.random()
 
+  let quantity: number
+
   if (operationSize < 0.3) {
     // Маленькая операция (0.5-2 дня потребления)
-    return dailyConsumption * (0.5 + Math.random() * 1.5)
+    quantity = Math.round(dailyConsumption * (0.5 + Math.random() * 1.5))
   } else if (operationSize < 0.7) {
     // Средняя операция (2-7 дней потребления)
-    return dailyConsumption * (2 + Math.random() * 5)
+    quantity = Math.round(dailyConsumption * (2 + Math.random() * 5))
   } else {
     // Большая операция (1-2 недели потребления)
-    return dailyConsumption * (7 + Math.random() * 7)
+    quantity = Math.round(dailyConsumption * (7 + Math.random() * 7))
   }
+
+  // Ensure at least 1 unit
+  return Math.max(1, quantity)
 }
 
 /**
- * ✅ Генерирует распределения по батчам (FIFO логика)
+ * ✅ Генерирует распределения по батчам (FIFO логика) (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateBatchAllocations(
   product: CoreProductDefinition,
@@ -384,7 +420,7 @@ function generateBatchAllocations(
     {
       batchId: `batch-${product.id}-${Date.now()}`,
       batchNumber: generateBatchNumber(product.id, batchDate),
-      quantity: Math.round(totalQuantity * 1000) / 1000,
+      quantity: totalQuantity, // ✅ Уже целое число
       costPerUnit: product.baseCostPerUnit,
       batchDate
     }
@@ -489,10 +525,10 @@ export function regenerateStorageData(): CoreStorageWorkflow {
 }
 
 /**
- * ✅ Генерирует полные данные склада в базовых единицах
+ * ✅ Генерирует полные данные склада в базовых единицах (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateStorageWorkflowData(): CoreStorageWorkflow {
-  console.log('🏭 Generating storage data in BASE UNITS...')
+  console.log('🏭 Generating storage data with WHOLE NUMBERS in BASE UNITS...')
 
   const balances: StorageBalance[] = []
   const allBatches: StorageBatch[] = []
@@ -521,11 +557,12 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
   // Генерируем исторические операции
   const operations = generateStorageOperations()
 
-  console.log(`✅ Storage data generated:`, {
+  console.log(`✅ Storage data generated with WHOLE NUMBERS:`, {
     balances: balances.length,
     batches: allBatches.length,
     operations: operations.length,
-    unitSystem: 'BASE_UNITS (gram/ml/piece)'
+    unitSystem: 'BASE_UNITS (whole gram/ml/piece)',
+    sampleQuantities: balances.slice(0, 3).map(b => `${b.totalQuantity} ${b.unit}`)
   })
 
   return {
@@ -542,7 +579,7 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
 export { generateBatchNumber }
 
 /**
- * ✅ Валидация данных склада
+ * ✅ Валидация данных склада (проверяет целые числа)
  */
 export function validateStorageDefinitions(): {
   isValid: boolean
@@ -555,7 +592,7 @@ export function validateStorageDefinitions(): {
   try {
     const storageData = getStorageWorkflowData()
 
-    // Проверяем что все количества в базовых единицах
+    // Проверяем что все количества целые числа
     storageData.balances.forEach(balance => {
       const product = getProductDefinition(balance.itemId)
       if (!product) {
@@ -570,12 +607,19 @@ export function validateStorageDefinitions(): {
         )
       }
 
+      // ✅ NEW: Check for whole numbers
+      if (!Number.isInteger(balance.totalQuantity)) {
+        errors.push(
+          `Balance quantity should be whole number for ${balance.itemName}: ${balance.totalQuantity}`
+        )
+      }
+
       if (balance.totalQuantity < 0) {
         errors.push(`Negative quantity for ${balance.itemName}: ${balance.totalQuantity}`)
       }
     })
 
-    // Проверяем батчи
+    // Проверяем батчи на целые числа
     storageData.batches.forEach(batch => {
       const product = getProductDefinition(batch.itemId)
       if (!product) {
@@ -590,12 +634,36 @@ export function validateStorageDefinitions(): {
         )
       }
 
+      // ✅ NEW: Check for whole numbers in batches
+      if (!Number.isInteger(batch.currentQuantity)) {
+        errors.push(
+          `Batch quantity should be whole number for ${batch.itemId}: ${batch.currentQuantity}`
+        )
+      }
+
+      if (!Number.isInteger(batch.initialQuantity)) {
+        errors.push(
+          `Batch initial quantity should be whole number for ${batch.itemId}: ${batch.initialQuantity}`
+        )
+      }
+
       if (batch.costPerUnit !== product.baseCostPerUnit) {
         warnings.push(
           `Batch cost mismatch for ${batch.itemId}: ` +
             `expected ${product.baseCostPerUnit}, got ${batch.costPerUnit}`
         )
       }
+    })
+
+    // ✅ NEW: Check operations for whole numbers
+    storageData.operations.forEach(operation => {
+      operation.items.forEach(item => {
+        if (!Number.isInteger(item.quantity)) {
+          errors.push(
+            `Operation item quantity should be whole number: ${item.quantity} ${item.unit}`
+          )
+        }
+      })
     })
   } catch (error) {
     errors.push(`Failed to generate storage data: ${error}`)
@@ -609,11 +677,11 @@ export function validateStorageDefinitions(): {
 }
 
 /**
- * ✅ Демонстрация правильности базовых единиц
+ * ✅ Демонстрация правильности базовых единиц (ЦЕЛЫЕ ЧИСЛА)
  */
 export function demonstrateStorageCalculations(): void {
-  console.log('\n🧮 STORAGE CALCULATIONS DEMONSTRATION')
-  console.log('=====================================')
+  console.log('\n🧮 STORAGE CALCULATIONS DEMONSTRATION (WHOLE NUMBERS)')
+  console.log('====================================================')
 
   const storageData = getStorageWorkflowData()
 
@@ -623,18 +691,19 @@ export function demonstrateStorageCalculations(): void {
     if (!product) return
 
     console.log(`\n📦 ${balance.itemName} (${balance.department})`)
-    console.log(`   Stock: ${balance.totalQuantity} ${balance.unit} (BASE UNIT)`)
+    console.log(`   Stock: ${balance.totalQuantity} ${balance.unit} (WHOLE NUMBER BASE UNIT)`)
     console.log(`   Cost: ${balance.latestCost} IDR/${balance.unit}`)
     console.log(`   Total Value: ${balance.totalValue} IDR`)
-    console.log(`   Daily Usage: ${product.dailyConsumption} ${product.baseUnit}/day`)
+    console.log(`   Daily Usage: ${balance.averageDailyUsage} ${product.baseUnit}/day`)
     console.log(`   Days Remaining: ${balance.daysOfStockRemaining} days`)
+    console.log(`   ✅ Is Whole Number: ${Number.isInteger(balance.totalQuantity)}`)
 
     // Показываем пользовательское отображение
     const userDisplay = convertToUserDisplay(balance.totalQuantity, product)
     console.log(`   👁️ User Display: ${userDisplay.quantity} ${userDisplay.unit}`)
   })
 
-  console.log('\n✅ All calculations use BASE UNITS (gram/ml/piece)')
+  console.log('\n✅ All calculations use WHOLE NUMBER BASE UNITS (gram/ml/piece)')
 }
 
 /**
@@ -646,14 +715,14 @@ function convertToUserDisplay(
 ): { quantity: number; unit: string } {
   if (product.baseUnit === 'gram' && baseQuantity >= 1000) {
     return {
-      quantity: Number((baseQuantity / 1000).toFixed(2)),
+      quantity: Number((baseQuantity / 1000).toFixed(1)),
       unit: 'kg'
     }
   }
 
   if (product.baseUnit === 'ml' && baseQuantity >= 1000) {
     return {
-      quantity: Number((baseQuantity / 1000).toFixed(2)),
+      quantity: Number((baseQuantity / 1000).toFixed(1)),
       unit: 'L'
     }
   }
@@ -665,7 +734,7 @@ function convertToUserDisplay(
   }
 
   return {
-    quantity: Number(baseQuantity.toFixed(1)),
+    quantity: baseQuantity, // Keep whole number
     unit: unitNames[product.baseUnit] || product.baseUnit
   }
 }
