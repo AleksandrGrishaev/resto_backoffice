@@ -453,82 +453,64 @@ class SupplierService {
     try {
       DebugUtils.info(MODULE_NAME, 'Getting order suggestions', {
         department: department || 'all',
-        source: 'attempting_dynamic_from_storage'
+        source: 'ALWAYS_dynamic_from_storage'
       })
 
-      let suggestions: OrderSuggestion[] = []
-      let dataSource = 'unknown'
+      // ✅ ВСЕГДА используем только динамические данные из Storage
+      const suggestions = await this.storageIntegration.getSuggestionsFromStock(department)
 
-      try {
-        // ✅ ПРИОРИТЕТ 1: Получаем динамические предложения из Storage
-        suggestions = await this.storageIntegration.getSuggestionsFromStock(department)
-        dataSource = 'dynamic_storage_integration'
-
-        DebugUtils.info(MODULE_NAME, 'Dynamic suggestions loaded successfully', {
-          department: department || 'all',
-          total: suggestions.length,
-          urgent: suggestions.filter(s => s.urgency === 'high').length,
-          medium: suggestions.filter(s => s.urgency === 'medium').length,
-          low: suggestions.filter(s => s.urgency === 'low').length,
-          source: dataSource
-        })
-      } catch (integrationError) {
-        DebugUtils.warn(MODULE_NAME, 'Dynamic suggestions failed, using fallback', {
-          error: integrationError,
-          fallbackTo: 'static_coordinator_data'
-        })
-
-        // ✅ FALLBACK: Используем статичные данные из координатора
-        const supplierData = mockDataCoordinator.getSupplierStoreData()
-        suggestions = [...supplierData.suggestions]
-        dataSource = 'static_coordinator_fallback'
-
-        // Фильтруем по департаменту если нужно
-        if (department) {
-          suggestions = this.filterSuggestionsByDepartment(suggestions, department)
-        }
-
-        DebugUtils.info(MODULE_NAME, 'Fallback suggestions loaded', {
-          department: department || 'all',
-          total: suggestions.length,
-          source: dataSource
-        })
-      }
+      DebugUtils.info(MODULE_NAME, 'Dynamic suggestions loaded successfully', {
+        department: department || 'all',
+        total: suggestions.length,
+        urgent: suggestions.filter(s => s.urgency === 'high').length,
+        medium: suggestions.filter(s => s.urgency === 'medium').length,
+        low: suggestions.filter(s => s.urgency === 'low').length,
+        source: 'dynamic_storage_integration'
+      })
 
       // ✅ ВАЛИДАЦИЯ: Проверяем корректность данных
-      const validSuggestions = suggestions.filter(s => {
-        const isValid =
+      const validSuggestions = suggestions.filter(
+        s =>
           s.itemId &&
           s.itemName &&
           typeof s.currentStock === 'number' &&
           typeof s.minStock === 'number' &&
-          typeof s.suggestedQuantity === 'number' &&
-          s.urgency &&
-          s.reason
+          s.currentStock >= 0 &&
+          s.minStock >= 0
+      )
 
-        if (!isValid) {
-          DebugUtils.warn(MODULE_NAME, 'Invalid suggestion filtered out', {
-            suggestion: s,
-            source: dataSource
-          })
-        }
+      if (validSuggestions.length !== suggestions.length) {
+        DebugUtils.warn(MODULE_NAME, 'Some suggestions were invalid and filtered out', {
+          total: suggestions.length,
+          valid: validSuggestions.length,
+          filtered: suggestions.length - validSuggestions.length,
+          invalidSuggestions: suggestions
+            .filter(s => !validSuggestions.includes(s))
+            .map(s => ({
+              itemId: s.itemId,
+              issue: !s.itemId
+                ? 'missing itemId'
+                : !s.itemName
+                  ? 'missing itemName'
+                  : 'invalid stock values'
+            }))
+        })
+      }
 
-        return isValid
-      })
+      // ✅ ФИЛЬТРАЦИЯ: Убираем товары с существующими активными заявками
+      const filteredSuggestions = this.filterSuggestionsWithExistingRequests(
+        validSuggestions,
+        department
+      )
 
-      // ✅ ФИНАЛЬНАЯ СТАТИСТИКА
       DebugUtils.info(MODULE_NAME, 'Order suggestions processed successfully', {
         department: department || 'all',
-        dataSource,
+        dataSource: 'dynamic_storage_integration',
         totalSuggestions: suggestions.length,
         validSuggestions: validSuggestions.length,
-        filteredOut: suggestions.length - validSuggestions.length,
-        breakdown: {
-          urgent: validSuggestions.filter(s => s.urgency === 'high').length,
-          medium: validSuggestions.filter(s => s.urgency === 'medium').length,
-          low: validSuggestions.filter(s => s.urgency === 'low').length
-        },
-        sampleSuggestions: validSuggestions.slice(0, 3).map(s => ({
+        filteredOut: validSuggestions.length - filteredSuggestions.length,
+        finalSuggestions: filteredSuggestions.length,
+        sampleSuggestions: filteredSuggestions.slice(0, 3).map(s => ({
           itemName: s.itemName,
           currentStock: s.currentStock,
           minStock: s.minStock,
@@ -536,15 +518,116 @@ class SupplierService {
         }))
       })
 
-      return validSuggestions
+      return filteredSuggestions
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Complete failure to get order suggestions', {
+      DebugUtils.error(MODULE_NAME, 'Failed to get order suggestions', {
         error,
-        department
+        department,
+        errorMessage: error instanceof Error ? error.message : String(error)
       })
 
-      // В случае полного провала возвращаем пустой массив
+      // ✅ При ошибке возвращаем пустой массив, НЕ fallback на mock
+      DebugUtils.warn(
+        MODULE_NAME,
+        'Returning empty suggestions due to error - no fallback to mock data'
+      )
       return []
+    }
+  }
+
+  // ✅ ДОБАВИТЬ отсутствующую функцию filterSuggestionsWithExistingRequests в supplierService
+  private filterSuggestionsWithExistingRequests(
+    suggestions: OrderSuggestion[],
+    department?: Department
+  ): OrderSuggestion[] {
+    try {
+      // Получаем активные заявки (draft + submitted, НЕ converted/cancelled)
+      const activeRequests = this.requests.filter(
+        request => request.status === 'draft' || request.status === 'submitted'
+      )
+
+      // Фильтруем по департаменту если указан
+      const relevantRequests = department
+        ? activeRequests.filter(request => request.department === department)
+        : activeRequests
+
+      if (relevantRequests.length === 0) {
+        DebugUtils.debug(MODULE_NAME, 'No active requests found, returning all suggestions', {
+          department: department || 'all',
+          suggestionsCount: suggestions.length
+        })
+        return suggestions
+      }
+
+      // Подсчитываем уже запрошенные количества по каждому товару
+      const requestedQuantities: Record<string, number> = {}
+
+      relevantRequests.forEach(request => {
+        request.items.forEach(item => {
+          const currentRequested = requestedQuantities[item.itemId] || 0
+          requestedQuantities[item.itemId] = currentRequested + item.requestedQuantity
+        })
+      })
+
+      DebugUtils.debug(MODULE_NAME, 'Calculated requested quantities', {
+        requestedQuantities,
+        activeRequests: relevantRequests.length,
+        department: department || 'all'
+      })
+
+      // Фильтруем suggestions
+      const filtered = suggestions.filter(suggestion => {
+        const alreadyRequested = requestedQuantities[suggestion.itemId] || 0
+
+        // Если уже запросили достаточно количество - убираем suggestion
+        if (alreadyRequested >= suggestion.suggestedQuantity) {
+          DebugUtils.debug(MODULE_NAME, 'Removing suggestion - already requested enough', {
+            itemId: suggestion.itemId,
+            itemName: suggestion.itemName,
+            suggestedQuantity: suggestion.suggestedQuantity,
+            alreadyRequested
+          })
+          return false
+        }
+
+        // Если частично запросили - уменьшаем предлагаемое количество
+        if (alreadyRequested > 0) {
+          const originalQuantity = suggestion.suggestedQuantity
+          suggestion.suggestedQuantity = Math.max(
+            0,
+            suggestion.suggestedQuantity - alreadyRequested
+          )
+
+          DebugUtils.debug(MODULE_NAME, 'Reducing suggestion quantity', {
+            itemId: suggestion.itemId,
+            itemName: suggestion.itemName,
+            originalQuantity,
+            alreadyRequested,
+            newSuggestedQuantity: suggestion.suggestedQuantity
+          })
+        }
+
+        return true
+      })
+
+      DebugUtils.debug(MODULE_NAME, 'Filtered suggestions with existing requests', {
+        originalCount: suggestions.length,
+        filteredCount: filtered.length,
+        removedCount: suggestions.length - filtered.length,
+        department: department || 'all'
+      })
+
+      return filtered
+    } catch (error) {
+      DebugUtils.warn(
+        MODULE_NAME,
+        'Error filtering existing requests, returning original suggestions',
+        {
+          error,
+          suggestionsCount: suggestions.length
+        }
+      )
+      return suggestions
     }
   }
 
@@ -747,33 +830,6 @@ class SupplierService {
   // =============================================
   // HELPER METHODS
   // =============================================
-
-  private filterSuggestionsByDepartment(
-    suggestions: OrderSuggestion[],
-    department?: Department
-  ): OrderSuggestion[] {
-    if (!department) return suggestions
-
-    if (department === 'kitchen') {
-      return suggestions.filter(
-        s =>
-          !s.itemId.includes('beer') &&
-          !s.itemId.includes('cola') &&
-          !s.itemId.includes('water') &&
-          !s.itemId.includes('wine') &&
-          !s.itemId.includes('spirit')
-      )
-    } else {
-      return suggestions.filter(
-        s =>
-          s.itemId.includes('beer') ||
-          s.itemId.includes('cola') ||
-          s.itemId.includes('water') ||
-          s.itemId.includes('wine') ||
-          s.itemId.includes('spirit')
-      )
-    }
-  }
 
   private calculateDiscrepancies(data: CreateReceiptData, order: PurchaseOrder): boolean {
     return data.items.some(item => {

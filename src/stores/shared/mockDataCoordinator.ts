@@ -217,6 +217,31 @@ export class MockDataCoordinator {
 
   private loadSupplierStoreData() {
     try {
+      DebugUtils.info(MODULE_NAME, 'Loading supplier store data...')
+
+      const supplierData = getSupplierWorkflowData()
+
+      // ✅ ИСПРАВЛЕНИЕ: НЕ загружаем статичные suggestions
+      // Они будут генерироваться динамически из Storage данных
+      return {
+        requests: supplierData.requests,
+        orders: supplierData.orders,
+        receipts: supplierData.receipts,
+        suggestions: [] // ← ПУСТОЙ МАССИВ! Генерируются динамически
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load supplier store data', { error })
+      return {
+        requests: [],
+        orders: [],
+        receipts: [],
+        suggestions: [] // ← ПУСТОЙ даже при ошибке
+      }
+    }
+  }
+
+  private loadSupplierStoreData() {
+    try {
       DebugUtils.info(MODULE_NAME, 'Loading supplier store data from supplierDefinitions...')
 
       // ✅ Используем предопределенные данные с правильными базовыми единицами

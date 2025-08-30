@@ -250,50 +250,48 @@ export const useSupplierStore = defineStore('supplier', () => {
     const startTime = Date.now()
 
     try {
-      DebugUtils.info(MODULE_NAME, '🚀 Initializing supplier store from mockDataCoordinator...')
+      DebugUtils.info(MODULE_NAME, 'Initializing supplier store from mockDataCoordinator...')
 
       integrationState.value.integrationErrors = []
 
-      // Step 1: Load data from coordinator (which uses supplierDefinitions.ts)
+      // Step 1: Load data from coordinator (БЕЗ suggestions)
       await loadDataFromCoordinator()
 
       // Step 2: Ensure dependent stores are ready
       await ensureDependentStoresReady()
 
-      // Step 3: Validate integration health
+      // Step 3: ✅ НОВОЕ: Сразу генерируем suggestions из Storage данных
+      try {
+        DebugUtils.info(MODULE_NAME, 'Generating initial suggestions from Storage data...')
+        await refreshSuggestions() // Генерируем для всех департаментов
+        DebugUtils.info(MODULE_NAME, 'Initial suggestions generated successfully', {
+          total: state.value.orderSuggestions.length
+        })
+      } catch (suggestionsError) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to generate initial suggestions', {
+          error: suggestionsError
+        })
+        // Оставляем suggestions пустыми, не загружаем mock данные
+        state.value.orderSuggestions = []
+      }
+
+      // Step 4: Validate integration health
       validateIntegrationHealth()
 
-      // Step 4: Mark as successfully initialized
+      // Step 5: Mark as successfully initialized
       integrationState.value.isInitialized = true
-      integrationState.value.useMockData = true // Using coordinator data
-      integrationState.value.lastStorageSync = TimeUtils.getCurrentLocalISO()
-      integrationState.value.lastProductsSync = TimeUtils.getCurrentLocalISO()
+      integrationState.value.useMockData = false // ← Теперь всегда false для suggestions
 
       const initTime = Date.now() - startTime
 
-      DebugUtils.info(MODULE_NAME, '✅ Supplier store initialized successfully from coordinator', {
+      DebugUtils.info(MODULE_NAME, 'Supplier store initialized successfully', {
         initializationTime: `${initTime}ms`,
         suggestions: state.value.orderSuggestions.length,
         requests: state.value.requests.length,
         orders: state.value.orders.length,
         receipts: state.value.receipts.length,
-        integrationHealth: integrationState.value.integrationHealth,
-        dataSource: 'coordinator'
+        dataSource: 'dynamic_storage_only' // ← Новый источник данных
       })
-
-      // Show sample order for verification
-      if (import.meta.env.DEV && state.value.orders.length > 0) {
-        const sampleOrder = state.value.orders[0]
-        const sampleItem = sampleOrder.items[0]
-
-        console.log('\n🔍 SUPPLIER STORE DATA VERIFICATION:')
-        console.log(`Order: ${sampleOrder.orderNumber}`)
-        console.log(`Item: ${sampleItem.itemName}`)
-        console.log(`Quantity: ${sampleItem.orderedQuantity}`)
-        console.log(`Price per unit: ${sampleItem.pricePerUnit}`)
-        console.log(`Total: ${sampleItem.totalPrice}`)
-        console.log('✅ Data loaded from coordinator with base units\n')
-      }
     } catch (error) {
       const errorMessage = `Initialization failed: ${error}`
       DebugUtils.error(MODULE_NAME, 'Failed to initialize supplier store', { error })
@@ -302,7 +300,10 @@ export const useSupplierStore = defineStore('supplier', () => {
       integrationState.value.integrationHealth = 'critical'
       integrationState.value.isInitialized = true
 
-      DebugUtils.warn(MODULE_NAME, 'Supplier store initialized with errors')
+      // При ошибке suggestions остаются пустыми
+      state.value.orderSuggestions = []
+
+      DebugUtils.warn(MODULE_NAME, 'Supplier store initialized with errors - no suggestions loaded')
     }
   }
 

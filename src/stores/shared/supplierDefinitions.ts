@@ -606,7 +606,7 @@ export const CORE_RECEIPTS: Receipt[] = [
 
 export function getSupplierWorkflowData(): CoreSupplierWorkflow {
   return {
-    suggestions: CORE_ORDER_SUGGESTIONS,
+    suggestions: [],
     requests: CORE_PROCUREMENT_REQUESTS,
     orders: CORE_PURCHASE_ORDERS,
     receipts: CORE_RECEIPTS
