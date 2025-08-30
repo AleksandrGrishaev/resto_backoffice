@@ -73,26 +73,36 @@ export function useOrderAssistant() {
     const product = productsStore.products.find(p => p.id === itemId)
 
     if (!product) {
-      return 1000 // Минимальная цена по умолчанию
+      DebugUtils.error(MODULE_NAME, `Product not found in ProductStore: ${itemId}`, {
+        availableProducts: productsStore.products.map(p => p.id),
+        totalProducts: productsStore.products.length
+      })
+      throw new Error(`Product not found: ${itemId}`)
     }
 
-    // Приоритет 1: baseCostPerUnit (новая структура)
+    // Только приоритет 1: baseCostPerUnit (новая структура)
     if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
+      DebugUtils.debug(MODULE_NAME, `Using baseCostPerUnit for ${itemId}`, {
+        productName: product.name,
+        price: product.baseCostPerUnit,
+        baseUnit: product.baseUnit
+      })
       return product.baseCostPerUnit
     }
 
-    // Приоритет 2: purchaseCost с конвертацией в базовые единицы
-    if (product.purchaseCost && product.purchaseToBaseRatio && product.purchaseToBaseRatio > 0) {
-      return Math.round(product.purchaseCost / product.purchaseToBaseRatio)
-    }
+    // Если нет baseCostPerUnit - это ошибка в данных
+    DebugUtils.error(MODULE_NAME, `No baseCostPerUnit found for product ${itemId}`, {
+      product: {
+        id: product.id,
+        name: product.name,
+        baseCostPerUnit: product.baseCostPerUnit,
+        baseUnit: product.baseUnit,
+        hasBaseCostPerUnit: product.baseCostPerUnit !== undefined,
+        baseCostValue: product.baseCostPerUnit
+      }
+    })
 
-    // Приоритет 3: costPerUnit (старая структура)
-    if (product.costPerUnit && product.costPerUnit > 0) {
-      return product.costPerUnit
-    }
-
-    // Fallback: минимальная цена
-    return 1000
+    throw new Error(`No baseCostPerUnit for product: ${product.name} (${itemId})`)
   }
 
   /**
@@ -258,7 +268,7 @@ export function useOrderAssistant() {
           category: item.category,
           requestedQuantity: item.requestedQuantity,
           unit: item.unit,
-          estimatedPrice: Math.max(getProductPrice(item.itemId), 1000), // Гарантируем минимальную цену
+          estimatedPrice: getProductPrice(item.itemId), // Убрали Math.max(..., 1000)
           priority: item.priority,
           notes: item.notes
         })),
@@ -273,7 +283,27 @@ export function useOrderAssistant() {
       }
 
       const newRequest = await supplierStore.createRequest(createData)
+
+      // Очищаем выбранные товары
       clearSelectedItems()
+
+      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем предложения после создания заявки
+      try {
+        DebugUtils.info(MODULE_NAME, 'Refreshing suggestions after request creation', {
+          requestId: newRequest.id,
+          department: targetDepartment
+        })
+
+        await generateSuggestions(targetDepartment)
+
+        DebugUtils.info(MODULE_NAME, 'Suggestions refreshed successfully after request creation')
+      } catch (refreshError) {
+        // Не бросаем ошибку если обновление предложений не удалось
+        DebugUtils.warn(MODULE_NAME, 'Failed to refresh suggestions after request creation', {
+          refreshError,
+          requestId: newRequest.id
+        })
+      }
 
       return newRequest.id
     } catch (error) {
@@ -433,8 +463,13 @@ export function useOrderAssistant() {
   }
 
   function clearSelectedItems(): void {
+    const previousCount = state.selectedItems.length
     state.selectedItems = []
-    DebugUtils.debug(MODULE_NAME, 'Selected items cleared')
+
+    DebugUtils.debug(MODULE_NAME, 'Selected items cleared', {
+      previousCount,
+      currentCount: state.selectedItems.length
+    })
   }
 
   function setDepartment(department: Department): void {

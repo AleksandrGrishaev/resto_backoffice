@@ -292,9 +292,28 @@ function formatQuantity(quantity: number, itemId: string): string {
  */
 function getBaseCostPerUnit(itemId: string): number {
   const product = getProduct(itemId)
-  if (!product) return 1000
 
-  return product.baseCostPerUnit || product.costPerUnit || 1000
+  if (!product) {
+    console.error(`RequestDetailsDialog: Product not found: ${itemId}`)
+    throw new Error(`Product not found: ${itemId}`)
+  }
+
+  // Только baseCostPerUnit, никаких fallback
+  if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
+    return product.baseCostPerUnit
+  }
+
+  // Если нет baseCostPerUnit - это ошибка в данных
+  console.error(`RequestDetailsDialog: No baseCostPerUnit for ${itemId}`, {
+    product: {
+      id: product.id,
+      name: product.name,
+      baseCostPerUnit: product.baseCostPerUnit,
+      baseUnit: product.baseUnit
+    }
+  })
+
+  throw new Error(`No baseCostPerUnit for product: ${product.name}`)
 }
 
 /**
