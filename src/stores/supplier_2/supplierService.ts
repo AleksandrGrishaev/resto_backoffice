@@ -819,11 +819,12 @@ class SupplierService {
       totalOrders: this.orders.length,
       ordersAwaitingPayment: this.orders.filter(o => o.paymentStatus === 'pending').length,
       ordersAwaitingDelivery: this.orders.filter(
-        o => ['sent', 'confirmed'].includes(o.status) && o.paymentStatus === 'paid'
+        // o => ['sent', 'confirmed'].includes(o.status) && o.paymentStatus === 'paid' // ❌ СТАРОЕ
+        o => o.status === 'sent' && o.paymentStatus === 'paid' // ✅ НОВОЕ
       ).length,
       totalReceipts: this.receipts.length,
       pendingReceipts: this.receipts.filter(r => r.status === 'draft').length,
-      urgentSuggestions: 0 // Will be calculated from coordinator data
+      urgentSuggestions: 0
     }
   }
 

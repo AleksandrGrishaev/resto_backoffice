@@ -245,18 +245,6 @@
         </v-btn>
 
         <v-btn
-          v-if="canConfirmOrder"
-          color="success"
-          variant="outlined"
-          prepend-icon="mdi-check-circle"
-          :loading="confirming"
-          class="mr-2"
-          @click="confirmOrder"
-        >
-          Confirm Order
-        </v-btn>
-
-        <v-btn
           color="primary"
           :disabled="!canSave"
           :loading="saving"
@@ -336,7 +324,6 @@ interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'order-updated', order: PurchaseOrder): void
   (e: 'order-sent', order: PurchaseOrder): void
-  (e: 'order-confirmed', order: PurchaseOrder): void
   (e: 'success', message: string): void
   (e: 'error', message: string): void
 }
@@ -348,7 +335,7 @@ const emits = defineEmits<Emits>()
 const {
   updateOrder,
   sendOrder: sendOrderAction,
-  confirmOrder: confirmOrderAction,
+  // confirmOrder: confirmOrderAction, // ❌ УБИРАЕМ
   formatCurrency
 } = usePurchaseOrders()
 const { receipts } = useReceipts()
@@ -367,7 +354,6 @@ const itemToRemoveIndex = ref(-1)
 // Loading states
 const saving = ref(false)
 const sending = ref(false)
-const confirming = ref(false)
 
 // Options
 const statusOptions = [
@@ -413,10 +399,6 @@ const canEditPaymentStatus = computed(() => {
 
 const canSendOrder = computed(() => {
   return editableOrder.value?.status === 'draft'
-})
-
-const canConfirmOrder = computed(() => {
-  return editableOrder.value?.status === 'sent'
 })
 
 const orderDateFormatted = computed({

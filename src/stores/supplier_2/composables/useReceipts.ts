@@ -134,10 +134,8 @@ export function useReceipts() {
 
       // ✅ ИСПРАВЛЕННАЯ проверка статуса
       if (!canStartReceipt(order)) {
-        const validStatuses = ['sent', 'confirmed']
         throw new Error(
-          `Order is not ready for receipt. Current status: ${order.status}. ` +
-            `Required status: ${validStatuses.join(' or ')}`
+          `Order is not ready for receipt. Current status: ${order.status}. Required status: sent.` // ✅ НОВОЕ
         )
       }
 

@@ -504,7 +504,6 @@ interface Props {
 interface Emits {
   (e: 'edit-order', order: PurchaseOrder): void
   (e: 'send-order', order: PurchaseOrder): void
-  (e: 'confirm-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
 }
 
@@ -654,18 +653,6 @@ function sendOrder(order: PurchaseOrder) {
 function startReceipt(order: PurchaseOrder) {
   emits('start-receipt', order)
   showDetailsDialog.value = false
-}
-
-function deleteOrder(order: PurchaseOrder) {
-  if (confirm(`Are you sure you want to delete order ${order.orderNumber}?`)) {
-    console.log('Delete order:', order.id)
-  }
-}
-
-function cancelOrder(order: PurchaseOrder) {
-  if (confirm(`Are you sure you want to cancel order ${order.orderNumber}?`)) {
-    console.log('Cancel order:', order.id)
-  }
 }
 
 function duplicateOrder(order: PurchaseOrder) {

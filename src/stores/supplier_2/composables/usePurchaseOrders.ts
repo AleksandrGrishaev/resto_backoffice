@@ -80,8 +80,8 @@ export function usePurchaseOrders() {
 
   const draftOrders = computed(() => orders.value.filter(order => order.status === 'draft'))
 
-  const pendingOrders = computed(() =>
-    orders.value.filter(order => ['sent', 'confirmed'].includes(order.status))
+  const pendingOrders = computed(
+    () => orders.value.filter(order => order.status === 'sent') // ✅ НОВОЕ - только 'sent'
   )
 
   const unpaidOrders = computed(() =>
@@ -90,16 +90,15 @@ export function usePurchaseOrders() {
 
   const ordersAwaitingDelivery = computed(() =>
     orders.value.filter(
-      order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
+      order => order.status === 'sent' && order.paymentStatus === 'paid' // ✅ НОВОЕ - только 'sent'
     )
   )
 
   const ordersForReceipt = computed(() => {
     const receipts = supplierStore.state.receipts || []
-
     return orders.value.filter(
       order =>
-        ['sent', 'confirmed'].includes(order.status) &&
+        order.status === 'sent' && // ✅ НОВОЕ - только 'sent'
         !receipts.some(
           receipt => receipt.purchaseOrderId === order.id && receipt.status === 'completed'
         )
@@ -650,8 +649,6 @@ export function usePurchaseOrders() {
         return 'grey'
       case 'sent':
         return 'info'
-      case 'confirmed':
-        return 'success'
       case 'delivered':
         return 'success'
       case 'cancelled':
@@ -795,7 +792,6 @@ export function usePurchaseOrders() {
 
     // Status Management
     sendOrder,
-    confirmOrder,
     markOrderDelivered,
     cancelOrder,
     updatePaymentStatus,
