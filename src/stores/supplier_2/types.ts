@@ -48,7 +48,7 @@ export interface PurchaseOrder extends BaseEntity {
   totalAmount: number // calculated from items
   isEstimatedTotal: boolean // true if contains estimated prices
 
-  status: 'draft' | 'sent' | 'confirmed' | 'delivered' | 'cancelled'
+  status: 'draft' | 'sent' | 'delivered' | 'cancelled'
   paymentStatus: 'pending' | 'paid'
 
   // Relations to other Stores

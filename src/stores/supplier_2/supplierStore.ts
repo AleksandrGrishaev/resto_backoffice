@@ -117,13 +117,11 @@ export const useSupplierStore = defineStore('supplier', () => {
   const draftOrders = computed(() => state.value.orders.filter(order => order.status === 'draft'))
   const sentOrders = computed(() => state.value.orders.filter(order => order.status === 'sent'))
   const confirmedOrders = computed(
-    () =>
-      // state.value.orders.filter(order => order.status === 'confirmed') // ❌ УБИРАЕМ
-      state.value.orders.filter(order => order.status === 'sent') // ✅ ИЛИ ПЕРЕИМЕНОВАТЬ В sentOrders
+    () => state.value.orders.filter(order => order.status === 'sent') // Теперь это те же заказы что и sent
   )
   const ordersAwaitingDelivery = computed(() =>
     state.value.orders.filter(
-      // order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid' // ❌ СТАРОЕ
+      // ❌ СТАРОЕ: order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
       order => order.status === 'sent' && order.paymentStatus === 'paid' // ✅ НОВОЕ
     )
   )

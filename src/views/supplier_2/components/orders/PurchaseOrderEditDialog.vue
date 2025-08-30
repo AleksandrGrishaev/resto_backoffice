@@ -392,9 +392,7 @@ const canEditStatus = computed(() => {
 })
 
 const canEditPaymentStatus = computed(() => {
-  return (
-    editableOrder.value && ['sent', 'confirmed', 'delivered'].includes(editableOrder.value.status)
-  )
+  return editableOrder.value && ['sent', 'delivered'].includes(editableOrder.value.status)
 })
 
 const canSendOrder = computed(() => {

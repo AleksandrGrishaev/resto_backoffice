@@ -507,7 +507,7 @@ async function handleSaveEditedRequest(editedRequest: ProcurementRequest) {
 
 function handleEditOrder(order: PurchaseOrder) {
   console.log(`${MODULE_NAME}: Edit order`, order.id)
-  showSuccess(`Edit order ${order.orderNumber} - TODO: Implement`)
+  showSuccess(`Edit order ${order.orderNumber} - TODO: Implement`) // ❌ TODO
 }
 
 function handleViewOrder(order: PurchaseOrder) {
@@ -517,7 +517,7 @@ function handleViewOrder(order: PurchaseOrder) {
 
 function handleSendOrder(order: PurchaseOrder) {
   console.log(`${MODULE_NAME}: Send order`, order.id)
-  showSuccess(`Send order ${order.orderNumber} - TODO: Implement`)
+  showSuccess(`Send order ${order.orderNumber} - TODO: Implement`) // ❌ TODO
 }
 
 async function handleStartReceipt(order: PurchaseOrder) {

@@ -810,7 +810,6 @@ class SupplierService {
   // =============================================
   // STATISTICS
   // =============================================
-
   async getStatistics() {
     await this.delay(50)
     return {
@@ -819,7 +818,7 @@ class SupplierService {
       totalOrders: this.orders.length,
       ordersAwaitingPayment: this.orders.filter(o => o.paymentStatus === 'pending').length,
       ordersAwaitingDelivery: this.orders.filter(
-        // o => ['sent', 'confirmed'].includes(o.status) && o.paymentStatus === 'paid' // ❌ СТАРОЕ
+        // ❌ СТАРОЕ: o => ['sent', 'confirmed'].includes(o.status) && o.paymentStatus === 'paid'
         o => o.status === 'sent' && o.paymentStatus === 'paid' // ✅ НОВОЕ
       ).length,
       totalReceipts: this.receipts.length,
