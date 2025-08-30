@@ -90,29 +90,6 @@ export {
 export { isProcurementRequest, isPurchaseOrder, isReceipt } from './types'
 
 // =============================================
-// MOCK DATA EXPORT
-// =============================================
-
-export {
-  mockProcurementRequests,
-  mockPurchaseOrders,
-  mockReceipts,
-  mockOrderSuggestions
-} from './mock/supplierMock'
-
-// Mock utility functions
-export {
-  getRequestById,
-  getOrderById,
-  getReceiptById,
-  getRequestsByStatus,
-  getOrdersByStatus,
-  getOrdersByPaymentStatus,
-  getReceiptsByStatus,
-  getOrdersForReceipt,
-  getSuggestionsForDepartment,
-  getSupplierStatistics
-} from './mock/supplierMock'
 
 // =============================================
 // STORE EXPORT

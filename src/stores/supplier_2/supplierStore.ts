@@ -1,19 +1,12 @@
-// src/stores/supplier_2/supplierStore.ts - COMPLETE ENHANCED WITH FULL INTEGRATION
+// src/stores/supplier_2/supplierStore.ts - FIXED TO USE COORDINATOR
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supplierService } from './supplierService'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
+import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
 import { DebugUtils, TimeUtils } from '@/utils'
-
-// Import mock data as fallback
-import {
-  mockProcurementRequests,
-  mockPurchaseOrders,
-  mockReceipts,
-  mockOrderSuggestions
-} from './mock/supplierMock'
 
 import type {
   SupplierState,
@@ -39,10 +32,6 @@ import type {
 
 const MODULE_NAME = 'SupplierStore'
 
-// =============================================
-// ENHANCED SUPPLIER STATE WITH INTEGRATION
-// =============================================
-
 interface IntegrationState {
   isInitialized: boolean
   lastSuggestionsUpdate: string | null
@@ -60,22 +49,16 @@ interface IntegrationState {
   }
 }
 
-// =============================================
-// STORE DEFINITION
-// =============================================
-
 export const useSupplierStore = defineStore('supplier', () => {
   // =============================================
-  // STATE - Enhanced with integration
+  // STATE - Initialize empty, load from coordinator
   // =============================================
 
   const state = ref<SupplierState>({
-    // Core data - Initialize with mock, replace with integrated data
-    requests: [...mockProcurementRequests],
-    orders: [...mockPurchaseOrders],
-    receipts: [...mockReceipts],
+    requests: [], // ✅ Start empty, load from coordinator
+    orders: [], // ✅ Start empty, load from coordinator
+    receipts: [], // ✅ Start empty, load from coordinator
 
-    // UI loading states
     loading: {
       requests: false,
       orders: false,
@@ -83,26 +66,22 @@ export const useSupplierStore = defineStore('supplier', () => {
       suggestions: false
     },
 
-    // Current workflow objects
     currentRequest: undefined,
     currentOrder: undefined,
     currentReceipt: undefined,
 
-    // Order assistant data
     selectedRequestIds: [],
-    orderSuggestions: [...mockOrderSuggestions],
+    orderSuggestions: [], // ✅ Start empty, load from coordinator
 
-    // Supplier grouping for UI
     supplierBaskets: []
   })
 
-  // NEW: Integration state tracking
   const integrationState = ref<IntegrationState>({
     isInitialized: false,
     lastSuggestionsUpdate: null,
     lastStorageSync: null,
     lastProductsSync: null,
-    useMockData: true, // Start with mock data
+    useMockData: true,
     integrationErrors: [],
     storageOperationsCreated: 0,
     priceUpdatesProcessed: 0,
@@ -114,20 +93,17 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   })
 
-  // Store references for integration
   const storageStore = useStorageStore()
   const productsStore = useProductsStore()
 
   // =============================================
-  // COMPUTED PROPERTIES - Enhanced
+  // COMPUTED PROPERTIES
   // =============================================
 
   const draftRequests = computed(() => state.value.requests.filter(req => req.status === 'draft'))
-
   const submittedRequests = computed(() =>
     state.value.requests.filter(req => req.status === 'submitted')
   )
-
   const approvedRequests = computed(() =>
     state.value.requests.filter(req => req.status === 'approved')
   )
@@ -135,19 +111,14 @@ export const useSupplierStore = defineStore('supplier', () => {
   const pendingOrders = computed(() =>
     state.value.orders.filter(order => order.paymentStatus === 'pending')
   )
-
   const paidOrders = computed(() =>
     state.value.orders.filter(order => order.paymentStatus === 'paid')
   )
-
   const draftOrders = computed(() => state.value.orders.filter(order => order.status === 'draft'))
-
   const sentOrders = computed(() => state.value.orders.filter(order => order.status === 'sent'))
-
   const confirmedOrders = computed(() =>
     state.value.orders.filter(order => order.status === 'confirmed')
   )
-
   const ordersAwaitingDelivery = computed(() =>
     state.value.orders.filter(
       order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
@@ -157,11 +128,9 @@ export const useSupplierStore = defineStore('supplier', () => {
   const draftReceipts = computed(() =>
     state.value.receipts.filter(receipt => receipt.status === 'draft')
   )
-
   const completedReceipts = computed(() =>
     state.value.receipts.filter(receipt => receipt.status === 'completed')
   )
-
   const receiptsWithDiscrepancies = computed(() =>
     state.value.receipts.filter(receipt => receipt.hasDiscrepancies)
   )
@@ -169,19 +138,15 @@ export const useSupplierStore = defineStore('supplier', () => {
   const urgentSuggestions = computed(() =>
     state.value.orderSuggestions.filter(s => s.urgency === 'high')
   )
-
   const mediumSuggestions = computed(() =>
     state.value.orderSuggestions.filter(s => s.urgency === 'medium')
   )
-
   const lowSuggestions = computed(() =>
     state.value.orderSuggestions.filter(s => s.urgency === 'low')
   )
 
-  // ENHANCED: Comprehensive statistics with integration data
   const statistics = computed(
     (): SupplierStatistics & {
-      // Extended statistics
       currentMonthOrderValue: number
       currentMonthReceiptCount: number
       averageOrderValue: number
@@ -195,7 +160,6 @@ export const useSupplierStore = defineStore('supplier', () => {
       const thisMonth = now.getMonth()
       const thisYear = now.getFullYear()
 
-      // Filter current month data
       const currentMonthOrders = state.value.orders.filter(order => {
         const orderDate = new Date(order.createdAt || order.orderDate)
         return orderDate.getMonth() === thisMonth && orderDate.getFullYear() === thisYear
@@ -206,7 +170,6 @@ export const useSupplierStore = defineStore('supplier', () => {
         return receiptDate.getMonth() === thisMonth && receiptDate.getFullYear() === thisYear
       })
 
-      // Calculate averages
       const totalOrderValue = state.value.orders.reduce(
         (sum, order) => sum + (order.totalAmount || 0),
         0
@@ -214,7 +177,6 @@ export const useSupplierStore = defineStore('supplier', () => {
       const averageOrderValue =
         state.value.orders.length > 0 ? totalOrderValue / state.value.orders.length : 0
 
-      // Calculate receipt processing time
       let totalReceiptTime = 0
       let receiptTimeCount = 0
 
@@ -230,12 +192,9 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const averageReceiptTime =
         receiptTimeCount > 0 ? totalReceiptTime / receiptTimeCount / (1000 * 60 * 60 * 24) : 0
-
-      // Calculate performance score
       const performanceScore = calculatePerformanceScore()
 
       return {
-        // Basic statistics
         totalRequests: state.value.requests.length,
         pendingRequests: submittedRequests.value.length,
         totalOrders: state.value.orders.length,
@@ -245,7 +204,6 @@ export const useSupplierStore = defineStore('supplier', () => {
         pendingReceipts: draftReceipts.value.length,
         urgentSuggestions: urgentSuggestions.value.length,
 
-        // Enhanced statistics
         currentMonthOrderValue: currentMonthOrders.reduce(
           (sum, order) => sum + (order.totalAmount || 0),
           0
@@ -270,7 +228,6 @@ export const useSupplierStore = defineStore('supplier', () => {
   )
 
   const hasIntegrationErrors = computed(() => integrationState.value.integrationErrors.length > 0)
-
   const isFullyIntegrated = computed(
     () =>
       integrationState.value.isInitialized &&
@@ -279,74 +236,107 @@ export const useSupplierStore = defineStore('supplier', () => {
   )
 
   // =============================================
-  // CORE ACTIONS - Enhanced with integration
+  // CORE ACTIONS - Load from coordinator
   // =============================================
 
   /**
-   * ENHANCED: Complete initialization with full integration
+   * ✅ FIXED: Load data from mockDataCoordinator instead of old mocks
    */
   async function initialize(): Promise<void> {
     const startTime = Date.now()
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Initializing supplier store with full integration...')
+      DebugUtils.info(MODULE_NAME, '🚀 Initializing supplier store from mockDataCoordinator...')
 
-      // Clear previous errors
       integrationState.value.integrationErrors = []
 
-      // Step 1: Ensure dependent stores are initialized
-      await ensureDependentStoresReady()
+      // Step 1: Load data from coordinator (which uses supplierDefinitions.ts)
+      await loadDataFromCoordinator()
 
-      // Step 2: Initialize integrated data
-      await initializeIntegratedData()
+      // Step 2: Ensure dependent stores are ready
+      await ensureDependentStoresReady()
 
       // Step 3: Validate integration health
       validateIntegrationHealth()
 
       // Step 4: Mark as successfully initialized
       integrationState.value.isInitialized = true
-      integrationState.value.useMockData = false
+      integrationState.value.useMockData = true // Using coordinator data
       integrationState.value.lastStorageSync = TimeUtils.getCurrentLocalISO()
       integrationState.value.lastProductsSync = TimeUtils.getCurrentLocalISO()
 
       const initTime = Date.now() - startTime
 
-      DebugUtils.info(MODULE_NAME, 'Supplier store initialized successfully', {
+      DebugUtils.info(MODULE_NAME, '✅ Supplier store initialized successfully from coordinator', {
         initializationTime: `${initTime}ms`,
         suggestions: state.value.orderSuggestions.length,
         requests: state.value.requests.length,
         orders: state.value.orders.length,
         receipts: state.value.receipts.length,
         integrationHealth: integrationState.value.integrationHealth,
-        dataSource: integrationState.value.useMockData ? 'mock' : 'integrated'
+        dataSource: 'coordinator'
       })
+
+      // Show sample order for verification
+      if (import.meta.env.DEV && state.value.orders.length > 0) {
+        const sampleOrder = state.value.orders[0]
+        const sampleItem = sampleOrder.items[0]
+
+        console.log('\n🔍 SUPPLIER STORE DATA VERIFICATION:')
+        console.log(`Order: ${sampleOrder.orderNumber}`)
+        console.log(`Item: ${sampleItem.itemName}`)
+        console.log(`Quantity: ${sampleItem.orderedQuantity}`)
+        console.log(`Price per unit: ${sampleItem.pricePerUnit}`)
+        console.log(`Total: ${sampleItem.totalPrice}`)
+        console.log('✅ Data loaded from coordinator with base units\n')
+      }
     } catch (error) {
       const errorMessage = `Initialization failed: ${error}`
-      DebugUtils.error(MODULE_NAME, 'Failed to initialize with integration', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to initialize supplier store', { error })
 
       integrationState.value.integrationErrors.push(errorMessage)
-      integrationState.value.useMockData = true
       integrationState.value.integrationHealth = 'critical'
-
-      // Still mark as initialized but with mock data
       integrationState.value.isInitialized = true
 
-      DebugUtils.warn(MODULE_NAME, 'Falling back to mock data mode')
+      DebugUtils.warn(MODULE_NAME, 'Supplier store initialized with errors')
     }
   }
 
   /**
-   * NEW: Ensure dependent stores are ready
+   * ✅ NEW: Load all data from mockDataCoordinator
    */
+  async function loadDataFromCoordinator(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator...')
+
+      // Get coordinated data
+      const supplierData = mockDataCoordinator.getSupplierStoreData()
+
+      // Load data into state
+      state.value.requests = [...supplierData.requests]
+      state.value.orders = [...supplierData.orders]
+      state.value.receipts = [...supplierData.receipts]
+      state.value.orderSuggestions = [...supplierData.suggestions]
+
+      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator successfully', {
+        requests: state.value.requests.length,
+        orders: state.value.orders.length,
+        receipts: state.value.receipts.length,
+        suggestions: state.value.orderSuggestions.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', { error })
+      throw new Error(`Failed to load coordinator data: ${error}`)
+    }
+  }
+
   async function ensureDependentStoresReady(): Promise<void> {
     try {
-      // Initialize Storage Store if needed
       if (storageStore.state.balances.length === 0) {
         DebugUtils.info(MODULE_NAME, 'Initializing Storage Store...')
         await storageStore.initialize()
       }
 
-      // Initialize Products Store if needed
       if (productsStore.products.length === 0) {
         DebugUtils.info(MODULE_NAME, 'Initializing Products Store...')
         await productsStore.loadProducts()
@@ -362,24 +352,7 @@ export const useSupplierStore = defineStore('supplier', () => {
   }
 
   /**
-   * NEW: Initialize integrated data
-   */
-  async function initializeIntegratedData(): Promise<void> {
-    try {
-      // Generate real suggestions from storage data
-      await refreshSuggestions()
-
-      // TODO: Load integrated request/order/receipt data if available
-      // For now, we start with mock data and generate new data based on suggestions
-
-      DebugUtils.info(MODULE_NAME, 'Integrated data initialized')
-    } catch (error) {
-      throw new Error(`Failed to initialize integrated data: ${error}`)
-    }
-  }
-
-  /**
-   * ENHANCED: Refresh suggestions with performance tracking
+   * ✅ ENHANCED: Refresh suggestions from coordinator
    */
   async function refreshSuggestions(department?: Department): Promise<void> {
     const startTime = Date.now()
@@ -387,19 +360,38 @@ export const useSupplierStore = defineStore('supplier', () => {
     try {
       state.value.loading.suggestions = true
 
-      DebugUtils.info(MODULE_NAME, 'Refreshing order suggestions from integrated data', {
-        department
-      })
+      DebugUtils.info(MODULE_NAME, 'Refreshing suggestions from coordinator', { department })
 
-      const suggestions = await supplierService.getOrderSuggestions(department)
+      // Get fresh data from coordinator
+      const supplierData = mockDataCoordinator.getSupplierStoreData()
+      let suggestions = supplierData.suggestions
+
+      // Filter by department if provided
+      if (department) {
+        suggestions = suggestions.filter(suggestion => {
+          if (department === 'bar') {
+            return (
+              suggestion.itemId.includes('beer') ||
+              suggestion.itemId.includes('cola') ||
+              suggestion.itemId.includes('water')
+            )
+          } else {
+            return (
+              !suggestion.itemId.includes('beer') &&
+              !suggestion.itemId.includes('cola') &&
+              !suggestion.itemId.includes('water')
+            )
+          }
+        })
+      }
+
       state.value.orderSuggestions = suggestions
       integrationState.value.lastSuggestionsUpdate = TimeUtils.getCurrentLocalISO()
 
-      // Update performance metrics
       const generationTime = Date.now() - startTime
       updatePerformanceMetric('avgSuggestionGenerationTime', generationTime)
 
-      DebugUtils.info(MODULE_NAME, 'Order suggestions refreshed', {
+      DebugUtils.info(MODULE_NAME, 'Order suggestions refreshed from coordinator', {
         count: suggestions.length,
         urgent: suggestions.filter(s => s.urgency === 'high').length,
         medium: suggestions.filter(s => s.urgency === 'medium').length,
@@ -411,16 +403,11 @@ export const useSupplierStore = defineStore('supplier', () => {
       const errorMessage = `Suggestions refresh failed: ${error}`
       DebugUtils.error(MODULE_NAME, 'Failed to refresh suggestions', { error })
       integrationState.value.integrationErrors.push(errorMessage)
-
-      // Don't throw - keep existing suggestions
     } finally {
       state.value.loading.suggestions = false
     }
   }
 
-  /**
-   * ENHANCED: Create request with price validation and enhancement
-   */
   async function createRequest(data: CreateRequestData): Promise<ProcurementRequest> {
     try {
       state.value.loading.requests = true
@@ -431,16 +418,10 @@ export const useSupplierStore = defineStore('supplier', () => {
         priority: data.priority
       })
 
-      // Enhance request with latest prices from storage
       const enhancedData = await enhanceRequestWithLatestPrices(data)
-
-      // Create request through service
       const newRequest = await supplierService.createRequest(enhancedData)
 
-      // Add to local state
       state.value.requests.unshift(newRequest)
-
-      // Update current request for workflow
       state.value.currentRequest = newRequest
 
       DebugUtils.info(MODULE_NAME, 'Request created successfully', {
@@ -463,20 +444,14 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Update request with validation
-   */
   async function updateRequest(id: string, data: UpdateRequestData): Promise<ProcurementRequest> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating request', { requestId: id })
 
       const updatedRequest = await supplierService.updateRequest(id, data)
 
-      // ✅ ИСПРАВЛЕНИЕ: Обновляем массив реактивно
-      // Создаем новый массив чтобы Vue увидел изменения
       const index = state.value.requests.findIndex(r => r.id === id)
       if (index !== -1) {
-        // Вместо прямого изменения элемента массива, создаем новый массив
         state.value.requests = [
           ...state.value.requests.slice(0, index),
           updatedRequest,
@@ -488,7 +463,6 @@ export const useSupplierStore = defineStore('supplier', () => {
         console.warn(`SupplierStore: Request ${id} not found in local state for update`)
       }
 
-      // Update current request if it's the same
       if (state.value.currentRequest?.id === id) {
         state.value.currentRequest = updatedRequest
       }
@@ -506,27 +480,21 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Delete request with cleanup
-   */
   async function deleteRequest(id: string): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Deleting request', { requestId: id })
 
       await supplierService.deleteRequest(id)
 
-      // Remove from local state
       const index = state.value.requests.findIndex(r => r.id === id)
       if (index !== -1) {
         const deletedRequest = state.value.requests[index]
         state.value.requests.splice(index, 1)
 
-        // Clear current request if it's the deleted one
         if (state.value.currentRequest?.id === id) {
           state.value.currentRequest = undefined
         }
 
-        // Remove from selected requests
         const selectedIndex = state.value.selectedRequestIds.indexOf(id)
         if (selectedIndex !== -1) {
           state.value.selectedRequestIds.splice(selectedIndex, 1)
@@ -543,9 +511,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Get all requests with optional filtering
-   */
   async function getRequests(filters?: {
     status?: RequestStatus[]
     department?: Department
@@ -558,7 +523,6 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       let requests = await supplierService.getRequests()
 
-      // Apply filters if provided
       if (filters) {
         if (filters.status?.length) {
           requests = requests.filter(req => filters.status!.includes(req.status))
@@ -587,9 +551,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Create order with supplier assignment
-   */
   async function createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
     try {
       state.value.loading.orders = true
@@ -602,21 +563,8 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const newOrder = await supplierService.createOrder(data)
 
-      // Add to local state
       state.value.orders.unshift(newOrder)
-
-      // Update current order
       state.value.currentOrder = newOrder
-
-      // ❌ УДАЛЯЕМ: НЕ меняем статус заявок автоматически!
-      // Статус теперь обновляется в updateRequestsStatusConditionally
-
-      // СТАРЫЙ КОД (УДАЛИТЬ):
-      // if (data.requestIds) {
-      //   for (const requestId of data.requestIds) {
-      //     await updateRequest(requestId, { status: 'approved' })
-      //   }
-      // }
 
       DebugUtils.info(MODULE_NAME, 'Purchase order created successfully', {
         orderId: newOrder.id,
@@ -634,22 +582,17 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Update order with status tracking
-   */
   async function updateOrder(id: string, data: UpdateOrderData): Promise<PurchaseOrder> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating order', { orderId: id })
 
       const updatedOrder = await supplierService.updateOrder(id, data)
 
-      // Update in local state
       const index = state.value.orders.findIndex(o => o.id === id)
       if (index !== -1) {
         state.value.orders[index] = updatedOrder
       }
 
-      // Update current order if it's the same
       if (state.value.currentOrder?.id === id) {
         state.value.currentOrder = updatedOrder
       }
@@ -667,9 +610,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Get all orders with optional filtering
-   */
   async function getOrders(filters?: {
     status?: OrderStatus[]
     paymentStatus?: ('pending' | 'paid' | 'failed')[]
@@ -682,7 +622,6 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       let orders = await supplierService.getOrders()
 
-      // Apply filters if provided
       if (filters) {
         if (filters.status?.length) {
           orders = orders.filter(order => filters.status!.includes(order.status))
@@ -710,16 +649,14 @@ export const useSupplierStore = defineStore('supplier', () => {
       state.value.loading.orders = false
     }
   }
+
   async function createSupplierBaskets(requestIds: string[]): Promise<void> {
     try {
       state.value.loading.requests = true
 
       console.log('SupplierStore: Creating supplier baskets', { requestIds })
 
-      // Вызываем сервис для создания корзин
       const baskets = await supplierService.createSupplierBaskets(requestIds)
-
-      // Сохраняем в состоянии
       state.value.supplierBaskets = baskets
 
       console.log(`SupplierStore: Created ${baskets.length} supplier baskets`, {
@@ -733,9 +670,7 @@ export const useSupplierStore = defineStore('supplier', () => {
       state.value.loading.requests = false
     }
   }
-  /**
-   * ИСПРАВЛЕНИЕ: Update request status after order creation
-   */
+
   async function updateRequestStatus(requestId: string, status: RequestStatus): Promise<void> {
     try {
       const request = state.value.requests.find(req => req.id === requestId)
@@ -751,9 +686,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Create receipt with validation
-   */
   async function createReceipt(data: CreateReceiptData): Promise<Receipt> {
     try {
       state.value.loading.receipts = true
@@ -766,10 +698,7 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const newReceipt = await supplierService.createReceipt(data)
 
-      // Add to local state
       state.value.receipts.unshift(newReceipt)
-
-      // Update current receipt
       state.value.currentReceipt = newReceipt
 
       DebugUtils.info(MODULE_NAME, 'Receipt created successfully', {
@@ -787,22 +716,17 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Update receipt with basic validation
-   */
   async function updateReceipt(id: string, data: UpdateReceiptData): Promise<Receipt> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating receipt', { receiptId: id })
 
       const updatedReceipt = await supplierService.updateReceipt(id, data)
 
-      // Update in local state
       const index = state.value.receipts.findIndex(r => r.id === id)
       if (index !== -1) {
         state.value.receipts[index] = updatedReceipt
       }
 
-      // Update current receipt if it's the same
       if (state.value.currentReceipt?.id === id) {
         state.value.currentReceipt = updatedReceipt
       }
@@ -819,9 +743,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Get all receipts with optional filtering
-   */
   async function getReceipts(filters?: {
     status?: ReceiptStatus[]
     hasDiscrepancies?: boolean
@@ -833,7 +754,6 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       let receipts = await supplierService.getReceipts()
 
-      // Apply filters if provided
       if (filters) {
         if (filters.status?.length) {
           receipts = receipts.filter(receipt => filters.status!.includes(receipt.status))
@@ -861,9 +781,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * ENHANCED: Complete receipt with full storage integration
-   */
   async function completeReceipt(receiptId: string, data?: UpdateReceiptData): Promise<Receipt> {
     const startTime = Date.now()
 
@@ -872,21 +789,17 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       DebugUtils.info(MODULE_NAME, 'Completing receipt with storage integration', { receiptId })
 
-      // Use enhanced service method that handles storage operations and price updates
       const updatedReceipt = await supplierService.completeReceipt(receiptId, data || {})
 
-      // Update local state
       const index = state.value.receipts.findIndex(r => r.id === receiptId)
       if (index !== -1) {
         state.value.receipts[index] = updatedReceipt
       }
 
-      // Update current receipt
       if (state.value.currentReceipt?.id === receiptId) {
         state.value.currentReceipt = updatedReceipt
       }
 
-      // Update metrics
       integrationState.value.storageOperationsCreated += 1
       if (
         updatedReceipt.items.some(
@@ -922,9 +835,6 @@ export const useSupplierStore = defineStore('supplier', () => {
   // INTEGRATION HELPER METHODS
   // =============================================
 
-  /**
-   * ENHANCED: Enhance request data with latest prices from storage
-   */
   async function enhanceRequestWithLatestPrices(
     data: CreateRequestData
   ): Promise<CreateRequestData> {
@@ -975,9 +885,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * NEW: Get balance info for item with department filtering
-   */
   function getItemBalance(itemId: string, department?: Department) {
     try {
       if (department) {
@@ -992,9 +899,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * NEW: Get detailed item information from all sources
-   */
   function getItemInfo(itemId: string, department?: Department) {
     try {
       const balance = getItemBalance(itemId, department)
@@ -1002,40 +906,33 @@ export const useSupplierStore = defineStore('supplier', () => {
       const suggestion = state.value.orderSuggestions.find(s => s.itemId === itemId)
 
       return {
-        // Basic info
         itemId,
         itemName: product?.name || balance?.itemName || itemId,
         category: product?.category || 'unknown',
         unit: product?.unit || balance?.unit || 'kg',
 
-        // Stock info
         currentStock: balance?.totalQuantity || 0,
         minStock: product?.minStock || 0,
         maxStock: product?.maxStock,
         belowMinStock: balance?.belowMinStock || false,
 
-        // Pricing info
         baseCost: product?.baseCostPerUnit || product?.costPerUnit || 0,
         latestCost: balance?.latestCost || 0,
         averageCost: balance?.averageCost || 0,
 
-        // Dates
         lastReceiptDate: balance?.newestBatchDate,
         oldestBatchDate: balance?.oldestBatchDate,
 
-        // Status flags
         isActive: product?.isActive ?? true,
         canBeSold: product?.canBeSold ?? false,
         hasExpired: balance?.hasExpired || false,
         hasNearExpiry: balance?.hasNearExpiry || false,
 
-        // Suggestion info
         isUrgent: suggestion?.urgency === 'high',
         suggestedQuantity: suggestion?.suggestedQuantity,
         urgency: suggestion?.urgency,
         reason: suggestion?.reason,
 
-        // Additional data
         shelfLife: product?.shelfLife,
         totalValue: balance?.totalValue || 0
       }
@@ -1045,35 +942,26 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * NEW: Get comprehensive integration status
-   */
   function getIntegrationStatus() {
     return {
-      // Basic status
       isInitialized: integrationState.value.isInitialized,
       useMockData: integrationState.value.useMockData,
       hasErrors: integrationState.value.integrationErrors.length > 0,
       errors: [...integrationState.value.integrationErrors],
 
-      // Data sources
       storageConnected: storageStore.state.balances.length > 0,
       productsConnected: productsStore.products.length > 0,
 
-      // Sync status
       lastSuggestionsUpdate: integrationState.value.lastSuggestionsUpdate,
       lastStorageSync: integrationState.value.lastStorageSync,
       lastProductsSync: integrationState.value.lastProductsSync,
 
-      // Health and performance
       integrationHealth: integrationState.value.integrationHealth,
       performanceMetrics: { ...integrationState.value.performanceMetrics },
 
-      // Statistics
       storageOperationsCreated: integrationState.value.storageOperationsCreated,
       priceUpdatesProcessed: integrationState.value.priceUpdatesProcessed,
 
-      // Data counts
       totalSuggestions: state.value.orderSuggestions.length,
       urgentSuggestions: urgentSuggestions.value.length,
       totalRequests: state.value.requests.length,
@@ -1082,28 +970,20 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * NEW: Force refresh all integrated data
-   */
   async function refreshIntegratedData(): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Refreshing all integrated data...')
 
-      // Clear previous errors
       integrationState.value.integrationErrors = []
 
-      // Refresh storage data
       await storageStore.fetchBalances()
       integrationState.value.lastStorageSync = TimeUtils.getCurrentLocalISO()
 
-      // Refresh products data
       await productsStore.loadProducts()
       integrationState.value.lastProductsSync = TimeUtils.getCurrentLocalISO()
 
-      // Refresh suggestions based on new data
       await refreshSuggestions()
 
-      // Validate integration health
       validateIntegrationHealth()
 
       DebugUtils.info(MODULE_NAME, 'All integrated data refreshed successfully', {
@@ -1118,21 +998,12 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
-  /**
-   * NEW: Clear integration errors
-   */
   function clearIntegrationErrors(): void {
     integrationState.value.integrationErrors = []
-
-    // Recalculate health after clearing errors
     validateIntegrationHealth()
-
     DebugUtils.info(MODULE_NAME, 'Integration errors cleared')
   }
 
-  /**
-   * NEW: Validate integration health
-   */
   function validateIntegrationHealth(): void {
     const errors = integrationState.value.integrationErrors.length
     const hasStorageData = storageStore.state.balances.length > 0
@@ -1160,28 +1031,20 @@ export const useSupplierStore = defineStore('supplier', () => {
     })
   }
 
-  /**
-   * NEW: Update performance metrics
-   */
   function updatePerformanceMetric(
     metric: keyof IntegrationState['performanceMetrics'],
     newValue: number
   ): void {
     const current = integrationState.value.performanceMetrics[metric]
-    // Simple moving average
     integrationState.value.performanceMetrics[metric] =
       current === 0 ? newValue : (current + newValue) / 2
   }
 
-  /**
-   * NEW: Calculate overall performance score
-   */
   function calculatePerformanceScore(): number {
     const metrics = integrationState.value.performanceMetrics
     const health = integrationState.value.integrationHealth
     const errors = integrationState.value.integrationErrors.length
 
-    // Base score from health
     let score = 100
     switch (health) {
       case 'excellent':
@@ -1198,10 +1061,8 @@ export const useSupplierStore = defineStore('supplier', () => {
         break
     }
 
-    // Penalize for errors
     score -= errors * 5
 
-    // Bonus for fast performance
     if (metrics.avgSuggestionGenerationTime < 100) score += 5
     if (metrics.avgStorageOperationTime < 500) score += 5
     if (metrics.avgPriceUpdateTime < 50) score += 5
@@ -1231,7 +1092,6 @@ export const useSupplierStore = defineStore('supplier', () => {
 
   function addToSupplierBasket(item: any, supplierId: string | null): void {
     try {
-      // Find or create basket
       let basket = state.value.supplierBaskets.find(b => b.supplierId === supplierId)
 
       if (!basket) {
@@ -1247,7 +1107,6 @@ export const useSupplierStore = defineStore('supplier', () => {
         state.value.supplierBaskets.push(basket)
       }
 
-      // Add item to basket
       basket.items.push(item)
       basket.totalItems = basket.items.length
       basket.estimatedTotal = basket.items.reduce(
@@ -1280,7 +1139,6 @@ export const useSupplierStore = defineStore('supplier', () => {
             0
           )
 
-          // Remove empty baskets
           if (basket.items.length === 0) {
             const basketIndex = state.value.supplierBaskets.indexOf(basket)
             state.value.supplierBaskets.splice(basketIndex, 1)
@@ -1378,7 +1236,6 @@ export const useSupplierStore = defineStore('supplier', () => {
   function getDepartmentStatistics(department: Department) {
     const requests = state.value.requests.filter(req => req.department === department)
     const orders = state.value.orders.filter(order => {
-      // Determine department from order items
       return order.items.some(item => {
         if (department === 'bar') {
           return (
@@ -1456,7 +1313,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
     const monthlyOrders = state.value.orders.filter(order => new Date(order.createdAt) >= thisMonth)
-
     const monthlyReceipts = state.value.receipts.filter(
       receipt => new Date(receipt.createdAt) >= thisMonth
     )
@@ -1497,64 +1353,51 @@ export const useSupplierStore = defineStore('supplier', () => {
   // =============================================
 
   return {
-    // ===== STATE =====
+    // State
     state,
     integrationState,
 
-    // ===== COMPUTED PROPERTIES =====
-    // Request filters
+    // Computed properties
     draftRequests,
     submittedRequests,
     approvedRequests,
-
-    // Order filters
     pendingOrders,
     paidOrders,
     draftOrders,
     sentOrders,
     confirmedOrders,
     ordersAwaitingDelivery,
-
-    // Receipt filters
     draftReceipts,
     completedReceipts,
     receiptsWithDiscrepancies,
-
-    // Suggestion filters
     urgentSuggestions,
     mediumSuggestions,
     lowSuggestions,
-
-    // Status indicators
     statistics,
     isLoading,
     hasIntegrationErrors,
     isFullyIntegrated,
 
-    // ===== CORE ACTIONS =====
+    // Core actions
     initialize,
+    loadDataFromCoordinator,
     refreshSuggestions,
     refreshIntegratedData,
 
-    // ===== CRUD OPERATIONS =====
-    // Requests
+    // CRUD operations
     getRequests,
     createRequest,
     updateRequest,
     deleteRequest,
-
-    // Orders
     getOrders,
     createOrder,
     updateOrder,
-
-    // Receipts
     getReceipts,
     createReceipt,
     updateReceipt,
     completeReceipt,
 
-    // ===== INTEGRATION METHODS =====
+    // Integration methods
     enhanceRequestWithLatestPrices,
     getIntegrationStatus,
     getItemBalance,
@@ -1562,29 +1405,29 @@ export const useSupplierStore = defineStore('supplier', () => {
     clearIntegrationErrors,
     validateIntegrationHealth,
 
-    // ===== UTILITY METHODS =====
+    // Utility methods
     getRequestById,
     getOrderById,
     getReceiptById,
 
-    // ===== SUPPLIER BASKET MANAGEMENT =====
+    // Supplier basket management
     addToSupplierBasket,
     removeFromSupplierBasket,
     clearSupplierBaskets,
     getSupplierBasket,
 
-    // ===== WORKFLOW MANAGEMENT =====
+    // Workflow management
     setCurrentRequest,
     setCurrentOrder,
     setCurrentReceipt,
 
-    // ===== SELECTION MANAGEMENT =====
+    // Selection management
     toggleRequestSelection,
     selectAllRequests,
     clearRequestSelection,
     getSelectedRequests,
 
-    // ===== ANALYTICS AND REPORTING =====
+    // Analytics and reporting
     getDepartmentStatistics,
     getSupplierStatistics,
     getPerformanceReport,

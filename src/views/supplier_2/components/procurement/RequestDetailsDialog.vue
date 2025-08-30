@@ -53,7 +53,7 @@
                 <thead>
                   <tr>
                     <th class="text-left">Item</th>
-                    <th class="text-center">Qty</th>
+                    <th class="text-center">Quantity</th>
                     <th class="text-right">Price</th>
                   </tr>
                 </thead>
@@ -68,7 +68,6 @@
                           >
                             {{ item.itemName }}
                           </div>
-                          <div class="text-caption text-medium-emphasis">{{ item.unit }}</div>
                           <div v-if="item.notes" class="text-caption text-warning">
                             {{ item.notes }}
                           </div>
@@ -86,30 +85,21 @@
                         :variant="isItemOrdered(item) ? 'tonal' : 'outlined'"
                         :color="isItemOrdered(item) ? 'success' : 'grey'"
                       >
-                        {{ item.requestedQuantity }}
+                        {{ formatQuantity(item.requestedQuantity, item.itemId) }}
                         <span v-if="isItemPartiallyOrdered(item)" class="ml-1">
-                          / {{ getOrderedQuantityForItem(item) }}
+                          / {{ formatQuantity(getOrderedQuantityForItem(item), item.itemId) }}
                         </span>
                       </v-chip>
                     </td>
                     <td class="text-right">
                       <div class="text-body-2" :class="getItemTextClass(item)">
-                        {{
-                          formatCurrency(
-                            item.estimatedPrice || getEstimatedPrice(item.itemId, item)
-                          )
-                        }}
+                        {{ formatItemPrice(item) }}
                       </div>
                       <div
                         class="text-caption text-medium-emphasis"
                         :class="getItemTextClass(item)"
                       >
-                        {{
-                          formatCurrency(
-                            item.requestedQuantity *
-                              (item.estimatedPrice || getEstimatedPrice(item.itemId, item))
-                          )
-                        }}
+                        {{ formatCurrency(calculateItemTotal(item)) }}
                       </div>
                     </td>
                   </tr>
@@ -133,7 +123,7 @@
                   <thead>
                     <tr>
                       <th class="text-left">Order / Item</th>
-                      <th class="text-center">Qty</th>
+                      <th class="text-center">Quantity</th>
                       <th class="text-right">Price</th>
                     </tr>
                   </thead>
@@ -166,12 +156,12 @@
                         </td>
                         <td class="text-center">
                           <v-chip size="x-small" variant="tonal" color="success">
-                            {{ orderItem.orderedQuantity }}
+                            {{ formatQuantity(orderItem.orderedQuantity, orderItem.itemId) }}
                           </v-chip>
                         </td>
                         <td class="text-right">
                           <div class="text-body-2">
-                            {{ formatCurrency(orderItem.pricePerUnit) }}
+                            {{ formatOrderItemPrice(orderItem) }}
                           </div>
                           <div class="text-caption text-medium-emphasis">
                             {{ formatCurrency(orderItem.orderedQuantity * orderItem.pricePerUnit) }}
@@ -237,7 +227,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
+import { formatQuantityWithUnit } from '@/utils/quantityFormatter'
 import type { ProcurementRequest, PurchaseOrder } from '@/stores/supplier_2/types'
+import type { Product } from '@/stores/productsStore/types'
 
 // =============================================
 // PROPS & EMITS
@@ -274,22 +266,88 @@ const isOpen = computed({
 })
 
 // =============================================
-// METHODS
+// PRODUCT & FORMATTING HELPERS
 // =============================================
 
-function closeDialog() {
-  isOpen.value = false
+/**
+ * Получает продукт по itemId
+ */
+function getProduct(itemId: string): Product | null {
+  return productsStore.products.find(p => p.id === itemId) || null
 }
 
-function goToOrder(orderId: string) {
-  emits('go-to-order', orderId)
+/**
+ * Форматирует количество с единицами (используем готовую утилиту)
+ * Все количества уже в базовых единицах
+ */
+function formatQuantity(quantity: number, itemId: string): string {
+  const product = getProduct(itemId)
+  if (!product) return `${quantity}`
+
+  return formatQuantityWithUnit(quantity, product)
 }
 
-function createOrder() {
-  if (props.request) {
-    emits('create-order', props.request)
+/**
+ * Получает цену за базовую единицу
+ */
+function getBaseCostPerUnit(itemId: string): number {
+  const product = getProduct(itemId)
+  if (!product) return 1000
+
+  return product.baseCostPerUnit || product.costPerUnit || 1000
+}
+
+/**
+ * Рассчитывает общую стоимость элемента заявки
+ * requestedQuantity уже в базовых единицах
+ * estimatedPrice - цена за базовую единицу
+ */
+function calculateItemTotal(item: any): number {
+  const baseCostPerUnit = item.estimatedPrice || getBaseCostPerUnit(item.itemId)
+  return item.requestedQuantity * baseCostPerUnit
+}
+
+/**
+ * Форматирует цену за единицу для элемента заявки
+ */
+function formatItemPrice(item: any): string {
+  const product = getProduct(item.itemId)
+  const baseCostPerUnit = item.estimatedPrice || getBaseCostPerUnit(item.itemId)
+
+  if (!product) return formatCurrency(baseCostPerUnit) + '/unit'
+
+  // Показываем цену в удобных единицах
+  if (product.baseUnit === 'gram') {
+    return formatCurrency(baseCostPerUnit * 1000) + '/kg'
+  } else if (product.baseUnit === 'ml') {
+    return formatCurrency(baseCostPerUnit * 1000) + '/L'
+  } else {
+    return formatCurrency(baseCostPerUnit) + '/pcs'
   }
 }
+
+/**
+ * Форматирует цену элемента заказа
+ */
+function formatOrderItemPrice(orderItem: any): string {
+  const product = getProduct(orderItem.itemId)
+  // orderItem.pricePerUnit уже в базовых единицах
+
+  if (!product) return formatCurrency(orderItem.pricePerUnit) + '/unit'
+
+  // Показываем цену в удобных единицах
+  if (product.baseUnit === 'gram') {
+    return formatCurrency(orderItem.pricePerUnit * 1000) + '/kg'
+  } else if (product.baseUnit === 'ml') {
+    return formatCurrency(orderItem.pricePerUnit * 1000) + '/L'
+  } else {
+    return formatCurrency(orderItem.pricePerUnit) + '/pcs'
+  }
+}
+
+// =============================================
+// ORDER ANALYSIS METHODS
+// =============================================
 
 /**
  * Получает все заказанные товары сгруппированные по заказам
@@ -364,7 +422,7 @@ function isItemPartiallyOrdered(item: any): boolean {
 }
 
 /**
- * Получает заказанное количество для товара
+ * Получает заказанное количество для товара (в базовых единицах)
  */
 function getOrderedQuantityForItem(item: any): number {
   return getOrderedItems().reduce((total, orderGroup) => {
@@ -418,47 +476,31 @@ function getOrderedItemsCount() {
   }).length
 }
 
-// =============================================
-// PRICING FUNCTIONS - ИСПРАВЛЕНО
-// =============================================
-
 /**
- * ✅ ИСПРАВЛЕННАЯ функция получения цены товара
+ * Расчет общей стоимости заявки
  */
-function getEstimatedPrice(itemId: string, item?: any): number {
-  // 1. Если в item уже есть цена - используем её
-  if (item?.estimatedPrice && item.estimatedPrice > 0) {
-    return item.estimatedPrice
-  }
-
-  // 2. Берём из продукта
-  const product = productsStore.products.find(p => p.id === itemId)
-  if (product && product.baseCostPerUnit) {
-    return product.baseCostPerUnit
-  }
-
-  return 0
-}
-
 function calculateEstimatedTotal(request: ProcurementRequest): number {
   return request.items.reduce((sum, item) => {
-    const product = productsStore.products.find(p => p.id === item.itemId)
-    if (!product) return sum
-
-    // Конвертируем в базовые единицы
-    let baseQuantity = item.requestedQuantity
-
-    if (item.unit !== product.baseUnit) {
-      // Простая конвертация для основных единиц
-      if (item.unit === 'kg' && product.baseUnit === 'gram') {
-        baseQuantity = item.requestedQuantity * 1000
-      } else if (item.unit === 'liter' && product.baseUnit === 'ml') {
-        baseQuantity = item.requestedQuantity * 1000
-      }
-    }
-
-    return sum + baseQuantity * product.baseCostPerUnit
+    return sum + calculateItemTotal(item)
   }, 0)
+}
+
+// =============================================
+// DIALOG METHODS
+// =============================================
+
+function closeDialog() {
+  isOpen.value = false
+}
+
+function goToOrder(orderId: string) {
+  emits('go-to-order', orderId)
+}
+
+function createOrder() {
+  if (props.request) {
+    emits('create-order', props.request)
+  }
 }
 
 // =============================================

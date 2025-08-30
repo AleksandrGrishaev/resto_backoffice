@@ -109,21 +109,14 @@
                 <!-- Estimated Price -->
                 <td class="text-right">
                   <div class="text-body-2">
-                    {{
-                      formatCurrency(item.estimatedPrice || getEstimatedPrice(item.itemId, item))
-                    }}
+                    {{ formatCurrency(getItemPrice(item)) }}
                   </div>
                 </td>
 
                 <!-- Line Total -->
                 <td class="text-right">
                   <div class="text-body-2 font-weight-medium">
-                    {{
-                      formatCurrency(
-                        item.requestedQuantity *
-                          (item.estimatedPrice || getEstimatedPrice(item.itemId, item))
-                      )
-                    }}
+                    {{ formatCurrency(item.requestedQuantity * getItemPrice(item)) }}
                   </div>
                 </td>
 
@@ -135,7 +128,7 @@
                     size="small"
                     variant="text"
                     color="error"
-                    @click="removeItem(index)"
+                    @click="confirmRemoveItem(index)"
                   >
                     <v-icon size="18">mdi-delete</v-icon>
                   </v-btn>
@@ -206,6 +199,50 @@
       :department="editableRequest?.department"
       @add-item="handleItemAdded"
     />
+
+    <!-- Unsaved Changes Confirmation Dialog -->
+    <v-dialog v-model="showUnsavedChangesDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="text-h6">Unsaved Changes</v-card-title>
+        <v-card-text>
+          You have unsaved changes. Are you sure you want to cancel without saving?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="grey" variant="text" @click="showUnsavedChangesDialog = false">
+            Keep Editing
+          </v-btn>
+          <v-btn color="error" variant="text" @click="confirmCloseDialog">Discard Changes</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Remove Item Confirmation Dialog -->
+    <v-dialog v-model="showRemoveItemDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="text-h6">Remove Item</v-card-title>
+        <v-card-text>Remove "{{ itemToRemove?.itemName }}" from request?</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="grey" variant="text" @click="showRemoveItemDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="text" @click="confirmRemoveItemAction">Remove</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Cannot Remove Ordered Item Dialog -->
+    <v-dialog v-model="showCannotRemoveDialog" max-width="400px">
+      <v-card>
+        <v-card-title class="text-h6 text-warning">Cannot Remove Item</v-card-title>
+        <v-card-text>
+          Cannot remove "{{ itemToRemove?.itemName }}" because it has already been ordered.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="primary" variant="text" @click="showCannotRemoveDialog = false">OK</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-dialog>
 </template>
 
@@ -247,6 +284,12 @@ const originalRequest = ref<ProcurementRequest | null>(null)
 const editableRequest = ref<ProcurementRequest | null>(null)
 const saving = ref(false)
 const showAddItemDialog = ref(false)
+const showUnsavedChangesDialog = ref(false)
+const showRemoveItemDialog = ref(false)
+const showCannotRemoveDialog = ref(false)
+const itemToRemove = ref<RequestItem | null>(null)
+const itemToRemoveIndex = ref<number>(-1)
+const originalRequestJson = ref<string>('')
 
 // =============================================
 // COMPUTED
@@ -289,6 +332,7 @@ watch(
     if (newRequest) {
       originalRequest.value = newRequest
       editableRequest.value = JSON.parse(JSON.stringify(newRequest)) // Deep copy
+      originalRequestJson.value = JSON.stringify(newRequest) // Store original for comparison
     }
   },
   { immediate: true }
@@ -302,16 +346,20 @@ function closeDialog() {
   if (saving.value) return
 
   if (hasUnsavedChanges()) {
-    if (confirm('You have unsaved changes. Are you sure you want to cancel?')) {
-      isOpen.value = false
-    }
+    showUnsavedChangesDialog.value = true
   } else {
     isOpen.value = false
   }
 }
 
+function confirmCloseDialog() {
+  showUnsavedChangesDialog.value = false
+  isOpen.value = false
+}
+
 function hasUnsavedChanges(): boolean {
-  return JSON.stringify(originalRequest.value) !== JSON.stringify(editableRequest.value)
+  if (!originalRequestJson.value || !editableRequest.value) return false
+  return originalRequestJson.value !== JSON.stringify(editableRequest.value)
 }
 
 async function saveRequest() {
@@ -320,6 +368,8 @@ async function saveRequest() {
   try {
     saving.value = true
     emits('save-request', editableRequest.value)
+    // Update original after successful save
+    originalRequestJson.value = JSON.stringify(editableRequest.value)
   } finally {
     saving.value = false
   }
@@ -338,19 +388,29 @@ function handleItemAdded(newItem: RequestItem) {
   }
 }
 
-function removeItem(index: number) {
-  if (editableRequest.value && canEditItems.value) {
-    const item = editableRequest.value.items[index]
+function confirmRemoveItem(index: number) {
+  if (!editableRequest.value || !canEditItems.value) return
 
-    if (isItemOrdered(item)) {
-      alert('Cannot remove item that has already been ordered')
-      return
-    }
+  const item = editableRequest.value.items[index]
 
-    if (confirm(`Remove "${item.itemName}" from request?`)) {
-      editableRequest.value.items.splice(index, 1)
-    }
+  if (isItemOrdered(item)) {
+    itemToRemove.value = item
+    showCannotRemoveDialog.value = true
+    return
   }
+
+  itemToRemove.value = item
+  itemToRemoveIndex.value = index
+  showRemoveItemDialog.value = true
+}
+
+function confirmRemoveItemAction() {
+  if (editableRequest.value && itemToRemoveIndex.value >= 0) {
+    editableRequest.value.items.splice(itemToRemoveIndex.value, 1)
+  }
+  showRemoveItemDialog.value = false
+  itemToRemove.value = null
+  itemToRemoveIndex.value = -1
 }
 
 function validateQuantity(item: RequestItem) {
@@ -375,39 +435,44 @@ function isItemOrdered(item: RequestItem): boolean {
   )
 }
 
-// =============================================
-// PRICING FUNCTIONS - ИСПРАВЛЕНО
-// =============================================
+/**
+ * Получает правильную цену для товара (та же логика что в useOrderAssistant)
+ */
+function getItemPrice(item: any): number {
+  // 1. Приоритет: цена из самого item
+  if (item.estimatedPrice && item.estimatedPrice > 0) {
+    return item.estimatedPrice
+  }
 
-function getEstimatedPrice(itemId: string, item?: any): number {
-  if (item?.estimatedPrice) return item.estimatedPrice
+  // 2. Получаем из ProductStore (та же логика что в useOrderAssistant)
+  const product = productsStore.products.find(p => p.id === item.itemId)
+  if (!product) return 1000
 
-  const product = productsStore.products.find(p => p.id === itemId)
-  if (product && product.baseCostPerUnit) {
+  // 3. Используем ту же логику что и в useOrderAssistant
+  if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
     return product.baseCostPerUnit
   }
 
-  return 0
+  if (product.purchaseCost && product.purchaseToBaseRatio && product.purchaseToBaseRatio > 0) {
+    return Math.round(product.purchaseCost / product.purchaseToBaseRatio)
+  }
+
+  if (product.costPerUnit && product.costPerUnit > 0) {
+    return product.costPerUnit
+  }
+
+  return 1000
 }
 
+/**
+ * Расчет общей стоимости
+ */
 function calculateTotalEstimate(): number {
   if (!editableRequest.value) return 0
 
   return editableRequest.value.items.reduce((sum, item) => {
-    const product = productsStore.products.find(p => p.id === item.itemId)
-    if (!product) return sum
-
-    let baseQuantity = item.requestedQuantity
-
-    if (item.unit !== product.baseUnit) {
-      if (item.unit === 'kg' && product.baseUnit === 'gram') {
-        baseQuantity = item.requestedQuantity * 1000
-      } else if (item.unit === 'liter' && product.baseUnit === 'ml') {
-        baseQuantity = item.requestedQuantity * 1000
-      }
-    }
-
-    return sum + baseQuantity * product.baseCostPerUnit
+    const itemPrice = getItemPrice(item)
+    return sum + item.requestedQuantity * itemPrice
   }, 0)
 }
 
