@@ -1,15 +1,55 @@
-// src/stores/shared/index.ts - Шаг 3: Exports (обновлено)
+// src/stores/shared/index.ts - ОБНОВЛЕНО с storageDefinitions.ts
 
-// Основной координатор
+// =============================================
+// ОСНОВНОЙ КООРДИНАТОР
+// =============================================
+
 export { mockDataCoordinator } from './mockDataCoordinator'
 
-// Определения продуктов
+// =============================================
+// ОПРЕДЕЛЕНИЯ ПРОДУКТОВ
+// =============================================
+
 export {
   CORE_PRODUCTS,
   getProductDefinition,
   getRawMaterials,
-  getSellableProducts
+  getSellableProducts,
+  validateAllProducts,
+  demonstrateCostCalculation
 } from './productDefinitions'
 
-// Типы
 export type { CoreProductDefinition } from './productDefinitions'
+
+// =============================================
+// ОПРЕДЕЛЕНИЯ ПОСТАВЩИКОВ
+// =============================================
+
+export {
+  getSupplierWorkflowData,
+  getRequestById,
+  getOrderById,
+  getReceiptById,
+  getRequestsByStatus,
+  getOrdersByStatus,
+  getReceiptsByStatus,
+  getSupplierStatistics,
+  getSuggestionsForDepartment,
+  validateSupplierDefinitions
+} from './supplierDefinitions'
+
+export type { CoreSupplierWorkflow } from './supplierDefinitions'
+
+// =============================================
+// ОПРЕДЕЛЕНИЯ СКЛАДА (НОВОЕ)
+// =============================================
+
+export {
+  getStorageWorkflowData,
+  regenerateStorageData,
+  generateBatchNumber,
+  validateStorageDefinitions,
+  demonstrateStorageCalculations
+} from './storageDefinitions'
+
+export type { CoreStorageWorkflow } from './storageDefinitions'

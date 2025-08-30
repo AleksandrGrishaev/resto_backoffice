@@ -1,685 +1,612 @@
-// src/stores/storage/storageStore.ts - FIXED BATCH SYNCHRONIZATION
-import { defineStore } from 'pinia'
+// src/stores/storage/storageStore.ts - ОБНОВЛЕНО ДЛЯ ИНТЕГРАЦИИ С MockDataCoordinator
+// Удалена собственная генерация моков, используется единый координатор
+
 import { ref, computed } from 'vue'
-import { DebugUtils } from '@/utils'
 import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
+import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
+import { DebugUtils } from '@/utils'
+
 import type {
   StorageState,
+  StorageBatch,
   StorageOperation,
   StorageBalance,
-  StorageBatch,
-  InventoryDocument,
-  InventoryItem,
   StorageDepartment,
+  InventoryDocument,
   CreateReceiptData,
+  CreateWriteOffData,
   CreateCorrectionData,
   CreateInventoryData,
-  CreateWriteOffData
+  InventoryItem
 } from './types'
 
 const MODULE_NAME = 'StorageStore'
 
-export const useStorageStore = defineStore('storage', () => {
-  // State
-  const state = ref<StorageState>({
-    batches: [],
-    operations: [],
-    balances: [],
-    inventories: [],
-    loading: {
-      balances: false,
-      operations: false,
-      inventory: false,
-      writeOff: false,
-      correction: false
-    },
-    error: null,
-    filters: {
-      department: 'all',
-      operationType: undefined,
-      showExpired: false,
-      showBelowMinStock: false,
-      showNearExpiry: false,
-      search: '',
-      dateFrom: undefined,
-      dateTo: undefined
-    },
-    settings: {
-      expiryWarningDays: 3,
-      lowStockMultiplier: 1.2,
-      autoCalculateBalance: true,
-      enableQuickWriteOff: true
-    }
-  })
+// ===========================
+// STATE - ИНТЕГРАЦИЯ С КООРДИНАТОРОМ
+// ===========================
 
-  const productsStore = useProductsStore()
+const state = ref<StorageState>({
+  batches: [],
+  operations: [],
+  balances: [],
+  inventories: [],
 
-  // ===========================
-  // COMPUTED PROPERTIES
-  // ===========================
+  loading: {
+    balances: false,
+    operations: false,
+    inventory: false,
+    correction: false,
+    writeOff: false
+  },
+  error: null,
 
-  const filteredBalances = computed(() => {
-    try {
-      let balances = [...state.value.balances]
-      const filters = state.value.filters
+  filters: {
+    department: 'all',
+    operationType: undefined,
+    showExpired: false,
+    showBelowMinStock: false,
+    showNearExpiry: false,
+    search: '',
+    dateFrom: undefined,
+    dateTo: undefined
+  }
+})
 
-      if (filters.department !== 'all') {
-        balances = balances.filter(b => b.department === filters.department)
-      }
+// ===========================
+// COMPUTED PROPERTIES
+// ===========================
 
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase()
-        balances = balances.filter(b => b.itemName.toLowerCase().includes(searchLower))
-      }
+const filteredBalances = computed(() => {
+  let balances = [...state.value.balances]
 
-      if (filters.showExpired) {
-        balances = balances.filter(b => b.hasExpired)
-      }
-      if (filters.showBelowMinStock) {
-        balances = balances.filter(b => b.belowMinStock)
-      }
-      if (filters.showNearExpiry) {
-        balances = balances.filter(b => b.hasNearExpiry)
-      }
-
-      return balances
-    } catch (error) {
-      console.warn('Error filtering product balances:', error)
-      return []
-    }
-  })
-
-  const filteredOperations = computed(() => {
-    try {
-      let operations = [...state.value.operations]
-      const filters = state.value.filters
-
-      if (filters.department !== 'all') {
-        operations = operations.filter(op => op.department === filters.department)
-      }
-
-      if (filters.operationType) {
-        operations = operations.filter(op => op.operationType === filters.operationType)
-      }
-
-      return operations
-    } catch (error) {
-      console.warn('Error filtering operations:', error)
-      return []
-    }
-  })
-
-  const departmentBalances = computed(() => {
-    return (department: StorageDepartment) =>
-      state.value.balances.filter(b => b.department === department)
-  })
-
-  // ✅ NEW: Computed for batches
-  const departmentBatches = computed(() => {
-    return (department: StorageDepartment) =>
-      state.value.batches.filter(b => b.department === department)
-  })
-
-  const totalInventoryValue = computed(() => {
-    return (department?: StorageDepartment) => {
-      let balances = state.value.balances
-      if (department && department !== 'all') {
-        balances = balances.filter(b => b.department === department)
-      }
-      return balances.reduce((sum, b) => sum + b.totalValue, 0)
-    }
-  })
-
-  const alertCounts = computed(() => {
-    return {
-      expiring: state.value.balances.filter(b => b.hasNearExpiry).length,
-      expired: state.value.balances.filter(b => b.hasExpired).length,
-      lowStock: state.value.balances.filter(b => b.belowMinStock).length
-    }
-  })
-
-  // ===========================
-  // CORE STORAGE ACTIONS
-  // ===========================
-
-  async function fetchBalances(department?: StorageDepartment) {
-    try {
-      state.value.loading.balances = true
-      state.value.error = null
-
-      DebugUtils.info(MODULE_NAME, 'Fetching product balances and batches', { department })
-
-      // ✅ FIXED: Load both balances AND batches simultaneously
-      const [balances, batches] = await Promise.all([
-        storageService.getBalances(department),
-        storageService.getBatches(department)
-      ])
-
-      state.value.balances = balances
-      state.value.batches = batches
-
-      DebugUtils.info(MODULE_NAME, 'Product balances and batches loaded', {
-        balances: balances.length,
-        batches: batches.length
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch product balances'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.balances = false
-    }
+  // Фильтр по департаменту
+  if (state.value.filters.department !== 'all') {
+    balances = balances.filter(b => b.department === state.value.filters.department)
   }
 
-  async function fetchBatches(department?: StorageDepartment) {
-    try {
-      state.value.loading.balances = true // reuse balances loading flag
-      state.value.error = null
-
-      DebugUtils.info(MODULE_NAME, 'Fetching product batches', { department })
-
-      const batches = await storageService.getBatches(department)
-      state.value.batches = batches
-
-      DebugUtils.info(MODULE_NAME, 'Product batches loaded', {
-        count: batches.length
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch product batches'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.balances = false
-    }
+  // Фильтр по поиску
+  if (state.value.filters.search) {
+    const search = state.value.filters.search.toLowerCase()
+    balances = balances.filter(b => b.itemName.toLowerCase().includes(search))
   }
 
-  async function fetchOperations(department?: StorageDepartment) {
-    try {
-      state.value.loading.operations = true
-      state.value.error = null
-
-      const operations = await storageService.getOperations(department)
-      state.value.operations = operations
-
-      DebugUtils.info(MODULE_NAME, 'Storage operations loaded', {
-        count: operations.length
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch operations'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.operations = false
-    }
+  // Специальные фильтры
+  if (state.value.filters.showExpired) {
+    balances = balances.filter(b => b.hasExpired)
   }
 
-  async function fetchInventories(department?: StorageDepartment) {
-    try {
-      state.value.loading.inventory = true
-      state.value.error = null
-
-      const inventories = await storageService.getInventories(department)
-      state.value.inventories = inventories
-
-      DebugUtils.info(MODULE_NAME, 'Product inventories loaded', {
-        count: inventories.length
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch inventories'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.inventory = false
-    }
+  if (state.value.filters.showBelowMinStock) {
+    balances = balances.filter(b => b.belowMinStock)
   }
 
-  // ===========================
-  // CORE OPERATIONS (with batch sync)
-  // ===========================
-
-  async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
-    try {
-      state.value.loading.correction = true
-      state.value.error = null
-
-      const operation = await storageService.createCorrection(data)
-      state.value.operations.unshift(operation)
-
-      // ✅ FIXED: Sync both balances AND batches
-      await fetchBalances(data.department)
-
-      return operation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create product correction'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.correction = false
-    }
+  if (state.value.filters.showNearExpiry) {
+    balances = balances.filter(b => b.hasNearExpiry)
   }
 
-  async function createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
-    try {
-      state.value.loading.correction = true
-      state.value.error = null
+  return balances
+})
 
-      const operation = await storageService.createReceipt(data)
-      state.value.operations.unshift(operation)
+const filteredOperations = computed(() => {
+  let operations = [...state.value.operations]
 
-      // ✅ FIXED: Sync both balances AND batches
-      await fetchBalances(data.department)
-
-      return operation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create product receipt'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.correction = false
-    }
+  // Фильтр по департаменту
+  if (state.value.filters.department !== 'all') {
+    operations = operations.filter(op => op.department === state.value.filters.department)
   }
 
-  // ===========================
-  // ✅ WRITE-OFF SUPPORT (with batch sync)
-  // ===========================
-
-  async function createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
-    try {
-      state.value.loading.writeOff = true
-      state.value.error = null
-
-      const operation = await storageService.createWriteOff(data)
-
-      // ✅ FIXED: Sync all data including batches
-      state.value.operations.unshift(operation)
-      await fetchBalances(data.department)
-
-      return operation
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create write-off'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.writeOff = false
-    }
+  // Фильтр по типу операции
+  if (state.value.filters.operationType) {
+    operations = operations.filter(op => op.operationType === state.value.filters.operationType)
   }
 
-  /**
-   * Get write-off statistics (delegated to storageService)
-   */
-  function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
-    return storageService.getWriteOffStatistics(department, dateFrom, dateTo)
-  }
-
-  // ===========================
-  // INVENTORY OPERATIONS (with batch sync)
-  // ===========================
-
-  async function startInventory(data: CreateInventoryData): Promise<InventoryDocument> {
-    try {
-      state.value.loading.inventory = true
-      state.value.error = null
-
-      const inventory = await storageService.startInventory(data)
-      state.value.inventories.unshift(inventory)
-
-      return inventory
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to start product inventory'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.inventory = false
-    }
-  }
-
-  async function updateInventory(
-    inventoryId: string,
-    items: InventoryItem[]
-  ): Promise<InventoryDocument> {
-    try {
-      state.value.loading.inventory = true
-      state.value.error = null
-
-      const inventory = await storageService.updateInventory(inventoryId, items)
-
-      const index = state.value.inventories.findIndex(inv => inv.id === inventoryId)
-      if (index !== -1) {
-        state.value.inventories[index] = inventory
-      }
-
-      return inventory
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update product inventory'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.inventory = false
-    }
-  }
-
-  async function finalizeInventory(inventoryId: string): Promise<void> {
-    try {
-      state.value.loading.inventory = true
-      state.value.error = null
-
-      const correctionOperations = await storageService.finalizeInventory(inventoryId)
-
-      const inventoryIndex = state.value.inventories.findIndex(inv => inv.id === inventoryId)
-      if (inventoryIndex !== -1) {
-        state.value.inventories[inventoryIndex].status = 'confirmed'
-      }
-
-      correctionOperations.forEach(op => {
-        state.value.operations.unshift(op)
-      })
-
-      // ✅ FIXED: After inventory finalization, sync all data including batches
-      const inventory = state.value.inventories[inventoryIndex]
-      if (inventory) {
-        await fetchBalances(inventory.department)
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to finalize product inventory'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.inventory = false
-    }
-  }
-
-  // ===========================
-  // FIFO CALCULATIONS (delegated to storageService)
-  // ===========================
-
-  function calculateFifoAllocation(
-    itemId: string,
-    department: StorageDepartment,
-    quantity: number
-  ) {
-    try {
-      return storageService.calculateFifoAllocation(itemId, department, quantity)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to calculate FIFO allocation', { error })
-      throw error
-    }
-  }
-
-  function calculateCorrectionCost(
-    itemId: string,
-    department: StorageDepartment,
-    quantity: number
-  ): number {
-    try {
-      return storageService.calculateCorrectionCost(itemId, department, quantity)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to calculate correction cost', { error })
-      throw error
-    }
-  }
-
-  // ===========================
-  // DATA HELPERS
-  // ===========================
-
-  function getAvailableProducts(department: StorageDepartment): any[] {
-    try {
-      if (department === 'kitchen') {
-        return productsStore.rawProducts.filter(p => p.isActive)
-      } else if (department === 'bar') {
-        return productsStore.sellableProducts.filter(
-          p => p.isActive && ['beverages'].includes(p.category)
-        )
-      }
-      return productsStore.activeProducts
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get available products', { error })
-      return []
-    }
-  }
-
-  function getItemName(itemId: string): string {
-    try {
-      const product = productsStore.products.find(p => p.id === itemId)
-      return product?.name || itemId
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get product name', { error, itemId })
-      return itemId
-    }
-  }
-
-  function getItemUnit(itemId: string): string {
-    try {
-      const product = productsStore.products.find(p => p.id === itemId)
-      return product?.unit || 'kg'
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get product unit', { error, itemId })
-      return 'kg'
-    }
-  }
-
-  function getItemCostPerUnit(itemId: string): number {
-    try {
-      const product = productsStore.products.find(p => p.id === itemId)
-      return product?.costPerUnit || 0
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get product cost', { error, itemId })
-      return 0
-    }
-  }
-
-  // ✅ NEW: Batch helper methods
-  function getItemBatches(itemId: string, department: StorageDepartment): StorageBatch[] {
-    return state.value.batches
-      .filter(b => b.itemId === itemId && b.department === department && b.status === 'active')
-      .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
-  }
-
-  function getBatchById(batchId: string): StorageBatch | undefined {
-    return state.value.batches.find(b => b.id === batchId)
-  }
-
-  // ===========================
-  // FILTER ACTIONS
-  // ===========================
-
-  function setDepartmentFilter(department: StorageDepartment | 'all') {
-    state.value.filters.department = department
-  }
-
-  function setOperationTypeFilter(operationType?: typeof state.value.filters.operationType) {
-    state.value.filters.operationType = operationType
-  }
-
-  function setSearchFilter(search: string) {
-    state.value.filters.search = search
-  }
-
-  function toggleExpiredFilter() {
-    state.value.filters.showExpired = !state.value.filters.showExpired
-  }
-
-  function toggleLowStockFilter() {
-    state.value.filters.showBelowMinStock = !state.value.filters.showBelowMinStock
-  }
-
-  function toggleNearExpiryFilter() {
-    state.value.filters.showNearExpiry = !state.value.filters.showNearExpiry
-  }
-
-  function clearFilters() {
-    state.value.filters = {
-      department: 'all',
-      operationType: undefined,
-      showExpired: false,
-      showBelowMinStock: false,
-      showNearExpiry: false,
-      search: '',
-      dateFrom: undefined,
-      dateTo: undefined
-    }
-  }
-
-  // ===========================
-  // UTILITIES
-  // ===========================
-
-  function clearError() {
-    state.value.error = null
-  }
-
-  function getBalance(itemId: string, department: StorageDepartment) {
-    return state.value.balances.find(
-      b => b.itemId === itemId && b.itemType === 'product' && b.department === department
+  // Фильтр по поиску
+  if (state.value.filters.search) {
+    const search = state.value.filters.search.toLowerCase()
+    operations = operations.filter(
+      op =>
+        op.documentNumber.toLowerCase().includes(search) ||
+        op.responsiblePerson.toLowerCase().includes(search) ||
+        op.items.some(item => item.itemName.toLowerCase().includes(search))
     )
   }
 
-  function getOperation(operationId: string) {
-    return state.value.operations.find(op => op.id === operationId)
+  // Фильтр по датам
+  if (state.value.filters.dateFrom) {
+    const fromDate = new Date(state.value.filters.dateFrom)
+    operations = operations.filter(op => new Date(op.operationDate) >= fromDate)
   }
 
-  function getInventory(inventoryId: string) {
-    return state.value.inventories.find(inv => inv.id === inventoryId)
+  if (state.value.filters.dateTo) {
+    const toDate = new Date(state.value.filters.dateTo)
+    operations = operations.filter(op => new Date(op.operationDate) <= toDate)
   }
 
-  // ===========================
-  // INITIALIZATION (with batch loading)
-  // ===========================
+  return operations
+})
 
-  async function initialize() {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Initializing product storage store')
+const totalStockValue = computed(() => {
+  return state.value.balances.reduce((sum, balance) => sum + balance.totalValue, 0)
+})
 
-      state.value.loading.balances = true
-      state.value.error = null
+const lowStockItemsCount = computed(() => {
+  return state.value.balances.filter(balance => balance.belowMinStock).length
+})
 
-      if (productsStore.products.length === 0) {
-        await productsStore.loadProducts(true)
-      }
+const expiredItemsCount = computed(() => {
+  return state.value.balances.filter(balance => balance.hasExpired).length
+})
 
-      await storageService.initialize()
+const nearExpiryItemsCount = computed(() => {
+  return state.value.balances.filter(balance => balance.hasNearExpiry).length
+})
 
-      // ✅ FIXED: Load ALL data including batches
-      await Promise.all([
-        fetchBalances(), // this now loads both balances AND batches
-        fetchOperations(),
-        fetchInventories()
-      ])
+// ===========================
+// INITIALIZATION - ИСПОЛЬЗУЕТ MockDataCoordinator
+// ===========================
 
-      DebugUtils.info(MODULE_NAME, 'Product storage store initialized successfully', {
-        balances: state.value.balances.length,
-        batches: state.value.batches.length,
-        operations: state.value.operations.length,
-        inventories: state.value.inventories.length
-      })
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to initialize product storage store'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.balances = false
+async function initialize() {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Initializing storage store with MockDataCoordinator')
+
+    state.value.loading.balances = true
+    state.value.error = null
+
+    const productsStore = useProductsStore()
+    if (productsStore.products.length === 0) {
+      await productsStore.loadProducts(true)
     }
+
+    // ✅ КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Инициализируем service с координатором
+    await storageService.initialize()
+
+    // ✅ Загружаем ВСЕ данные включая батчи
+    await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
+
+    DebugUtils.info(MODULE_NAME, 'Storage store initialized successfully', {
+      balances: state.value.balances.length,
+      batches: state.value.batches.length,
+      operations: state.value.operations.length,
+      inventories: state.value.inventories.length,
+      unitSystem: 'BASE_UNITS (gram/ml/piece)'
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to initialize storage store'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.balances = false
   }
+}
 
-  // ===========================
-  // STATISTICS
-  // ===========================
+// ===========================
+// DATA FETCHING - ОБНОВЛЕНО ДЛЯ КООРДИНАТОРА
+// ===========================
 
-  const statistics = computed(() => {
-    const allBalances = state.value.balances
-    const kitchenBalances = allBalances.filter(b => b.department === 'kitchen')
-    const barBalances = allBalances.filter(b => b.department === 'bar')
+async function fetchBalances(department?: StorageDepartment) {
+  try {
+    state.value.loading.balances = true
+    state.value.error = null
 
-    return {
-      totalProducts: allBalances.length,
-      totalValue: allBalances.reduce((sum, b) => sum + b.totalValue, 0),
+    // ✅ ИЗМЕНЕНО: Получаем данные через service (который использует координатор)
+    const [balances, batches] = await Promise.all([
+      storageService.getBalances(department),
+      storageService.getBatches(department)
+    ])
 
-      kitchen: {
-        products: kitchenBalances.length,
-        value: kitchenBalances.reduce((sum, b) => sum + b.totalValue, 0)
-      },
+    state.value.balances = balances
+    state.value.batches = batches
 
-      bar: {
-        products: barBalances.length,
-        value: barBalances.reduce((sum, b) => sum + b.totalValue, 0)
-      },
+    DebugUtils.debug(MODULE_NAME, 'Balances and batches fetched', {
+      balances: balances.length,
+      batches: batches.length,
+      department: department || 'all'
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch balances'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.balances = false
+  }
+}
 
-      alerts: {
-        expiring: allBalances.filter(b => b.hasNearExpiry).length,
-        expired: allBalances.filter(b => b.hasExpired).length,
-        lowStock: allBalances.filter(b => b.belowMinStock).length
-      },
+async function fetchOperations(department?: StorageDepartment) {
+  try {
+    state.value.loading.operations = true
+    state.value.error = null
 
-      recentOperations: state.value.operations.slice(0, 10),
-      recentInventories: state.value.inventories.slice(0, 5)
+    const operations = await storageService.getOperations(department)
+    state.value.operations = operations
+
+    DebugUtils.debug(MODULE_NAME, 'Operations fetched', {
+      operations: operations.length,
+      department: department || 'all'
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch operations'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.operations = false
+  }
+}
+
+async function fetchInventories(department?: StorageDepartment) {
+  try {
+    state.value.loading.inventory = true
+    state.value.error = null
+
+    const inventories = await storageService.getInventories(department)
+    state.value.inventories = inventories
+
+    DebugUtils.debug(MODULE_NAME, 'Inventories fetched', {
+      inventories: inventories.length,
+      department: department || 'all'
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch inventories'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.inventory = false
+  }
+}
+
+// ===========================
+// CRUD OPERATIONS - БАЗОВЫЕ ЕДИНИЦЫ
+// ===========================
+
+async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
+  try {
+    state.value.loading.correction = true
+    state.value.error = null
+
+    DebugUtils.info(MODULE_NAME, 'Creating correction in BASE UNITS', {
+      department: data.department,
+      items: data.items.length,
+      reason: data.correctionDetails.reason
+    })
+
+    const operation = await storageService.createCorrection(data)
+    state.value.operations.unshift(operation)
+
+    // ✅ Синхронизируем балансы И батчи после операции
+    await fetchBalances(data.department)
+
+    DebugUtils.info(MODULE_NAME, 'Correction created successfully', {
+      operationId: operation.id,
+      unitSystem: 'BASE_UNITS'
+    })
+
+    return operation
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create correction'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.correction = false
+  }
+}
+
+async function createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
+  try {
+    state.value.loading.correction = true
+    state.value.error = null
+
+    DebugUtils.info(MODULE_NAME, 'Creating receipt in BASE UNITS', {
+      department: data.department,
+      items: data.items.length,
+      sourceType: data.sourceType
+    })
+
+    const operation = await storageService.createReceipt(data)
+    state.value.operations.unshift(operation)
+
+    // ✅ Синхронизируем данные после создания
+    await fetchBalances(data.department)
+
+    DebugUtils.info(MODULE_NAME, 'Receipt created successfully', {
+      operationId: operation.id,
+      unitSystem: 'BASE_UNITS'
+    })
+
+    return operation
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create receipt'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.correction = false
+  }
+}
+
+// ===========================
+// WRITE-OFF SUPPORT
+// ===========================
+
+async function createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
+  try {
+    state.value.loading.writeOff = true
+    state.value.error = null
+
+    DebugUtils.info(MODULE_NAME, 'Creating write-off in BASE UNITS', {
+      department: data.department,
+      reason: data.reason,
+      items: data.items.length
+    })
+
+    const operation = await storageService.createWriteOff(data)
+    state.value.operations.unshift(operation)
+
+    // ✅ Синхронизируем все данные включая батчи
+    await fetchBalances(data.department)
+
+    DebugUtils.info(MODULE_NAME, 'Write-off created successfully', {
+      operationId: operation.id,
+      reason: data.reason,
+      unitSystem: 'BASE_UNITS'
+    })
+
+    return operation
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create write-off'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.writeOff = false
+  }
+}
+
+function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
+  return storageService.getWriteOffStatistics(department, dateFrom, dateTo)
+}
+
+// ===========================
+// INVENTORY OPERATIONS
+// ===========================
+
+async function startInventory(data: CreateInventoryData): Promise<InventoryDocument> {
+  try {
+    state.value.loading.inventory = true
+    state.value.error = null
+
+    const inventory = await storageService.startInventory(data)
+    state.value.inventories.unshift(inventory)
+
+    return inventory
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to start inventory'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.inventory = false
+  }
+}
+
+async function updateInventory(
+  inventoryId: string,
+  items: InventoryItem[]
+): Promise<InventoryDocument> {
+  try {
+    state.value.loading.inventory = true
+    state.value.error = null
+
+    const inventory = await storageService.updateInventory(inventoryId, items)
+
+    const index = state.value.inventories.findIndex(inv => inv.id === inventoryId)
+    if (index !== -1) {
+      state.value.inventories[index] = inventory
     }
-  })
 
-  // ===========================
-  // RETURN PUBLIC API
-  // ===========================
+    return inventory
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update inventory'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.inventory = false
+  }
+}
+
+async function finalizeInventory(inventoryId: string): Promise<void> {
+  try {
+    state.value.loading.inventory = true
+    state.value.error = null
+
+    const correctionOperations = await storageService.finalizeInventory(inventoryId)
+
+    const inventoryIndex = state.value.inventories.findIndex(inv => inv.id === inventoryId)
+    if (inventoryIndex !== -1) {
+      state.value.inventories[inventoryIndex].status = 'confirmed'
+    }
+
+    correctionOperations.forEach(op => {
+      state.value.operations.unshift(op)
+    })
+
+    // ✅ После финализации инвентаризации синхронизируем данные
+    const inventory = state.value.inventories[inventoryIndex]
+    if (inventory) {
+      await fetchBalances(inventory.department)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to finalize inventory'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.inventory = false
+  }
+}
+
+// ===========================
+// HELPER METHODS - ИСПОЛЬЗУЮТ БАЗОВЫЕ ЕДИНИЦЫ
+// ===========================
+
+function getItemName(itemId: string): string {
+  try {
+    const productDef = mockDataCoordinator.getProductDefinition(itemId)
+    return productDef?.name || itemId
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to get product name', { error, itemId })
+    return itemId
+  }
+}
+
+function getItemUnit(itemId: string): string {
+  try {
+    const productDef = mockDataCoordinator.getProductDefinition(itemId)
+    return productDef?.baseUnit || 'gram' // ✅ Возвращаем базовую единицу
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to get product unit', { error, itemId })
+    return 'gram'
+  }
+}
+
+function getItemCostPerUnit(itemId: string): number {
+  try {
+    const productDef = mockDataCoordinator.getProductDefinition(itemId)
+    return productDef?.baseCostPerUnit || 0 // ✅ Возвращаем цену за базовую единицу
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to get product cost', { error, itemId })
+    return 0
+  }
+}
+
+// ===========================
+// BATCH HELPER METHODS
+// ===========================
+
+function getItemBatches(itemId: string, department: StorageDepartment): StorageBatch[] {
+  return state.value.batches
+    .filter(b => b.itemId === itemId && b.department === department && b.status === 'active')
+    .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
+}
+
+function getBatchById(batchId: string): StorageBatch | undefined {
+  return state.value.batches.find(b => b.id === batchId)
+}
+
+// ===========================
+// FILTER ACTIONS
+// ===========================
+
+function setDepartmentFilter(department: StorageDepartment | 'all') {
+  state.value.filters.department = department
+}
+
+function setOperationTypeFilter(operationType?: typeof state.value.filters.operationType) {
+  state.value.filters.operationType = operationType
+}
+
+function setSearchFilter(search: string) {
+  state.value.filters.search = search
+}
+
+function toggleExpiredFilter() {
+  state.value.filters.showExpired = !state.value.filters.showExpired
+}
+
+function toggleLowStockFilter() {
+  state.value.filters.showBelowMinStock = !state.value.filters.showBelowMinStock
+}
+
+function toggleNearExpiryFilter() {
+  state.value.filters.showNearExpiry = !state.value.filters.showNearExpiry
+}
+
+function clearFilters() {
+  state.value.filters = {
+    department: 'all',
+    operationType: undefined,
+    showExpired: false,
+    showBelowMinStock: false,
+    showNearExpiry: false,
+    search: '',
+    dateFrom: undefined,
+    dateTo: undefined
+  }
+}
+
+// ===========================
+// UTILITIES
+// ===========================
+
+function clearError() {
+  state.value.error = null
+}
+
+function getBalance(itemId: string, department: StorageDepartment) {
+  return state.value.balances.find(
+    b => b.itemId === itemId && b.itemType === 'product' && b.department === department
+  )
+}
+
+function getOperation(operationId: string) {
+  return state.value.operations.find(op => op.id === operationId)
+}
+
+function getInventory(inventoryId: string) {
+  return state.value.inventories.find(inv => inv.id === inventoryId)
+}
+
+// ===========================
+// COMPOSABLE EXPORT
+// ===========================
+
+export function useStorageStore() {
+  const productsStore = useProductsStore()
 
   return {
     // State
-    state,
+    state: state,
 
-    // Getters
+    // Computed
     filteredBalances,
     filteredOperations,
-    departmentBalances,
-    departmentBatches, // ✅ NEW
-    totalInventoryValue,
-    alertCounts,
-    statistics,
+    totalStockValue,
+    lowStockItemsCount,
+    expiredItemsCount,
+    nearExpiryItemsCount,
 
-    // Core Actions
+    // Core actions
+    initialize,
     fetchBalances,
-    fetchBatches, // ✅ NEW
     fetchOperations,
     fetchInventories,
 
-    // Operations
+    // CRUD operations
     createCorrection,
     createReceipt,
-
-    // ✅ Write-off support (with batch sync)
     createWriteOff,
-    getWriteOffStatistics,
 
-    // Inventory
+    // Inventory operations
     startInventory,
     updateInventory,
     finalizeInventory,
 
-    // FIFO calculations
-    calculateFifoAllocation,
-    calculateCorrectionCost,
+    // Write-off statistics
+    getWriteOffStatistics,
 
-    // Data helpers
-    getAvailableProducts,
+    // Helper methods
     getItemName,
     getItemUnit,
     getItemCostPerUnit,
-
-    // ✅ NEW: Batch helpers
     getItemBatches,
     getBatchById,
 
-    // Filters
+    // Filter actions
     setDepartmentFilter,
     setOperationTypeFilter,
     setSearchFilter,
@@ -694,7 +621,73 @@ export const useStorageStore = defineStore('storage', () => {
     getOperation,
     getInventory,
 
-    // Initialize
-    initialize
+    // External stores
+    productsStore
   }
-})
+}
+
+// =============================================
+// DEV HELPERS
+// =============================================
+
+if (import.meta.env.DEV) {
+  ;(window as any).__STORAGE_STORE__ = { state, useStorageStore }
+  ;(window as any).__TEST_STORAGE_STORE_INTEGRATION__ = async () => {
+    console.log('=== STORAGE STORE INTEGRATION TEST ===')
+
+    try {
+      const store = useStorageStore()
+      await store.initialize()
+
+      console.log('✅ Store initialized successfully')
+      console.log(`📦 Balances: ${store.state.value.balances.length}`)
+      console.log(`🏷️ Batches: ${store.state.value.batches.length}`)
+      console.log(`📋 Operations: ${store.state.value.operations.length}`)
+      console.log(`📊 Inventories: ${store.state.value.inventories.length}`)
+
+      // Тестируем несколько балансов
+      store.state.value.balances.slice(0, 3).forEach(balance => {
+        const productDef = mockDataCoordinator.getProductDefinition(balance.itemId)
+        console.log(`\n📦 ${balance.itemName} (${balance.department}):`)
+        console.log(`   Stock: ${balance.totalQuantity} ${balance.unit}`)
+        console.log(`   Expected unit: ${productDef?.baseUnit}`)
+        console.log(`   Cost: ${balance.latestCost} IDR/${balance.unit}`)
+        console.log(`   ✅ Unit correct: ${balance.unit === productDef?.baseUnit}`)
+        console.log(`   ✅ Cost source: baseCostPerUnit`)
+      })
+
+      // Проверяем что filteredBalances работает
+      console.log('\n=== FILTERED DATA TEST ===')
+      console.log(`Filtered balances: ${store.filteredBalances.value.length}`)
+      console.log(`Filtered operations: ${store.filteredOperations.value.length}`)
+      console.log(`Total stock value: ${store.totalStockValue.value} IDR`)
+      console.log(`Low stock items: ${store.lowStockItemsCount.value}`)
+      console.log(`Expired items: ${store.expiredItemsCount.value}`)
+      console.log(`Near expiry items: ${store.nearExpiryItemsCount.value}`)
+
+      return {
+        balances: store.state.value.balances,
+        batches: store.state.value.batches,
+        operations: store.state.value.operations,
+        statistics: {
+          totalValue: store.totalStockValue.value,
+          lowStock: store.lowStockItemsCount.value,
+          expired: store.expiredItemsCount.value,
+          nearExpiry: store.nearExpiryItemsCount.value
+        }
+      }
+    } catch (error) {
+      console.error('❌ Storage store integration test failed:', error)
+      throw error
+    }
+  }
+
+  setTimeout(() => {
+    console.log('\n🎯 UPDATED Storage Store loaded!')
+    console.log('🔧 Now integrated with MockDataCoordinator')
+    console.log('📏 All data in BASE UNITS (gram/ml/piece)')
+    console.log('🔄 No more duplicate mock data generation')
+    console.log('\nAvailable commands:')
+    console.log('• window.__TEST_STORAGE_STORE_INTEGRATION__()')
+  }, 100)
+}

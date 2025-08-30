@@ -1,5 +1,5 @@
-// src/stores/shared/mockDataCoordinator.ts - FIXED VERSION
-// UPDATED TO USE supplierDefinitions.ts instead of generating data
+// src/stores/shared/mockDataCoordinator.ts - ОБНОВЛЕННАЯ ВЕРСИЯ
+// ИНТЕГРАЦИЯ С storageDefinitions.ts и использование базовых единиц
 
 import {
   CORE_PRODUCTS,
@@ -7,17 +7,16 @@ import {
   validateAllProducts
 } from './productDefinitions'
 import { getSupplierWorkflowData } from './supplierDefinitions'
+import { getStorageWorkflowData } from './storageDefinitions'
 import type { Product, ProductPriceHistory } from '@/stores/productsStore/types'
 import type { Counteragent } from '@/stores/counteragents/types'
 import type {
   ProcurementRequest,
   PurchaseOrder,
   Receipt,
-  OrderSuggestion,
-  RequestItem,
-  OrderItem,
-  ReceiptItem
+  OrderSuggestion
 } from '@/stores/supplier_2/types'
+import type { StorageOperation, StorageBalance, StorageBatch } from '@/stores/storage/types'
 import { generateCounteragentsMockData } from '@/stores/counteragents/mock/counteragentsMock'
 import { DebugUtils, TimeUtils } from '@/utils'
 
@@ -42,20 +41,21 @@ export class MockDataCoordinator {
   } | null = null
 
   private storageStoreData: {
-    operations: any[]
-    balances: any[]
-    batches: any[]
+    operations: StorageOperation[]
+    balances: StorageBalance[]
+    batches: StorageBatch[]
   } | null = null
 
   constructor() {
     DebugUtils.info(
       MODULE_NAME,
-      'Initializing unified mock data coordinator with supplierDefinitions integration'
+      'Initializing unified mock data coordinator with BASE UNITS support'
     )
 
     // Validate product definitions
     if (import.meta.env.DEV) {
       this.validateProductDefinitions()
+      this.validateStorageIntegration()
     }
   }
 
@@ -79,15 +79,20 @@ export class MockDataCoordinator {
         console.warn('=== WARNINGS ===')
         validation.warnings.forEach(warning => console.warn('⚠️', warning))
       }
-    } else {
-      DebugUtils.info(MODULE_NAME, 'All product definitions are valid', {
-        validProducts: validation.validProducts,
-        warnings: validation.warnings.length
-      })
+    }
+  }
 
-      if (validation.warnings.length > 0) {
-        DebugUtils.warn(MODULE_NAME, 'Product definition warnings:', validation.warnings)
-      }
+  private validateStorageIntegration(): void {
+    try {
+      const storageData = this.getStorageStoreData()
+
+      DebugUtils.info(MODULE_NAME, 'Storage integration validated', {
+        balances: storageData.balances.length,
+        batches: storageData.batches.length,
+        operations: storageData.operations.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Storage integration validation failed', { error })
     }
   }
 
@@ -97,13 +102,81 @@ export class MockDataCoordinator {
 
   getProductsStoreData() {
     if (!this.productsData) {
-      this.productsData = this.generateProductsData()
+      this.productsData = this.generateProductsStoreData()
     }
     return this.productsData
   }
 
-  getProductDefinition(productId: string): CoreProductDefinition | undefined {
-    return CORE_PRODUCTS.find(p => p.id === productId)
+  private generateProductsStoreData() {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Converting product definitions to store format...')
+
+      const products: Product[] = CORE_PRODUCTS.map(productDef => ({
+        id: productDef.id,
+        name: productDef.name,
+        nameEn: productDef.nameEn,
+        description: this.generateProductDescription(productDef),
+        category: productDef.category,
+
+        // ✅ СОВМЕСТИМОСТЬ: Старые поля для обратной совместимости
+        unit: this.mapBaseUnitToLegacy(productDef.baseUnit),
+        costPerUnit: productDef.purchaseCost, // Цена за единицу закупки
+
+        // ✅ НОВЫЕ ПОЛЯ: Базовые единицы для расчетов
+        baseUnit: productDef.baseUnit,
+        baseCostPerUnit: productDef.baseCostPerUnit,
+
+        // ✅ ЗАКУПОЧНЫЕ ЕДИНИЦЫ
+        purchaseUnit: productDef.purchaseUnit,
+        purchaseToBaseRatio: productDef.purchaseToBaseRatio,
+        purchaseCost: productDef.purchaseCost,
+
+        // Business logic
+        canBeSold: productDef.canBeSold,
+        isActive: true,
+        tags: this.generateTags(productDef),
+
+        // Supply chain info
+        minStock: this.calculateMinStock(productDef),
+        maxStock: this.calculateMaxStock(productDef),
+        leadTimeDays: productDef.leadTimeDays,
+        primarySupplierId: productDef.primarySupplierId,
+
+        // Shelf life and yield
+        shelfLifeDays: productDef.shelfLifeDays,
+        yieldPercentage: productDef.yieldPercentage,
+
+        // Storage
+        storageConditions: this.getStorageConditions(productDef.category),
+
+        // Metadata
+        createdAt: TimeUtils.getCurrentLocalISO(),
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }))
+
+      const priceHistory: ProductPriceHistory[] = this.generatePriceHistory(products)
+
+      DebugUtils.info(MODULE_NAME, 'Products store data generated', {
+        products: products.length,
+        priceHistory: priceHistory.length,
+        unitSystem: 'BASE_UNITS (gram/ml/piece)'
+      })
+
+      return { products, priceHistory }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to generate products store data', { error })
+      return { products: [], priceHistory: [] }
+    }
+  }
+
+  private mapBaseUnitToLegacy(baseUnit: string): string {
+    // Маппинг базовых единиц в старые единицы для совместимости
+    const mapping: Record<string, string> = {
+      gram: 'kg', // Показываем кг, но считаем в граммах
+      ml: 'liter', // Показываем литры, но считаем в мл
+      piece: 'piece' // Штуки остаются штуками
+    }
+    return mapping[baseUnit] || baseUnit
   }
 
   // =============================================
@@ -112,175 +185,27 @@ export class MockDataCoordinator {
 
   getCounteragentsStoreData() {
     if (!this.counteragentsData) {
-      this.counteragentsData = this.generateCounteragentsData()
+      this.counteragentsData = this.loadCounteragentsData()
     }
     return this.counteragentsData
   }
 
-  getCounterAgentsStoreData() {
-    return this.getCounteragentsStoreData()
-  }
+  private loadCounteragentsData() {
+    const mockData = generateCounteragentsMockData()
 
-  private generateCounteragentsData() {
-    DebugUtils.info(MODULE_NAME, 'Generating counteragents data with product integration')
-
-    const counteragents = generateCounteragentsMockData()
-    const suppliers = counteragents.filter(ca => ca.type === 'supplier')
-
-    this.validateSupplierProductLinks(counteragents)
-
-    const result = {
-      counteragents,
-      suppliers
-    }
-
-    DebugUtils.info(MODULE_NAME, 'Counteragents data generated', {
-      total: counteragents.length,
-      suppliers: suppliers.length,
-      services: counteragents.filter(ca => ca.type === 'service').length,
-      active: counteragents.filter(ca => ca.isActive).length,
-      preferred: counteragents.filter(ca => ca.isPreferred).length
+    DebugUtils.info(MODULE_NAME, 'Counteragents data loaded', {
+      counteragents: mockData.counteragents.length,
+      suppliers: mockData.suppliers.length
     })
-
-    return result
-  }
-
-  private validateSupplierProductLinks(counteragents: Counteragent[]): void {
-    DebugUtils.debug(MODULE_NAME, 'Validating supplier-product links')
-
-    const suppliers = counteragents.filter(ca => ca.type === 'supplier')
-    const supplierIds = new Set(suppliers.map(s => s.id))
-
-    const orphanedProducts: string[] = []
-    const linkedProducts: string[] = []
-
-    CORE_PRODUCTS.forEach(product => {
-      if (product.primarySupplierId && supplierIds.has(product.primarySupplierId)) {
-        linkedProducts.push(product.id)
-      } else {
-        orphanedProducts.push(product.id)
-        DebugUtils.warn(MODULE_NAME, 'Product has invalid supplier link', {
-          productId: product.id,
-          productName: product.name,
-          invalidSupplierId: product.primarySupplierId
-        })
-      }
-    })
-
-    suppliers.forEach(supplier => {
-      const supplierProducts = CORE_PRODUCTS.filter(p => p.primarySupplierId === supplier.id)
-      const supplierCategories = new Set(supplier.productCategories)
-
-      supplierProducts.forEach(product => {
-        if (!supplierCategories.has(product.category)) {
-          DebugUtils.warn(MODULE_NAME, 'Supplier category mismatch', {
-            supplierId: supplier.id,
-            supplierName: supplier.name,
-            supplierCategories: Array.from(supplierCategories),
-            productId: product.id,
-            productCategory: product.category
-          })
-        }
-      })
-    })
-
-    DebugUtils.info(MODULE_NAME, 'Supplier-product links validated', {
-      totalProducts: CORE_PRODUCTS.length,
-      linkedProducts: linkedProducts.length,
-      orphanedProducts: orphanedProducts.length,
-      totalSuppliers: suppliers.length,
-      supplierIds: Array.from(supplierIds)
-    })
-
-    if (orphanedProducts.length > 0) {
-      DebugUtils.warn(MODULE_NAME, 'Found orphaned products without valid suppliers', {
-        orphanedProducts
-      })
-    }
-  }
-
-  // =============================================
-  // STORAGE STORE DATA
-  // =============================================
-
-  getStorageStoreData() {
-    if (!this.storageStoreData) {
-      this.storageStoreData = this.generateStorageStoreData()
-    }
-    return this.storageStoreData
-  }
-
-  private generateStorageStoreData() {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Generating storage store data...')
-
-      const productsData = this.getProductsStoreData()
-      const operations: any[] = []
-      const balances: any[] = []
-      const batches: any[] = []
-
-      productsData.products.forEach(product => {
-        const kitchenBalance = this.generateProductBalance(product, 'kitchen')
-        if (kitchenBalance) {
-          balances.push(kitchenBalance)
-        }
-
-        if (this.isBarItem(product.id)) {
-          const barBalance = this.generateProductBalance(product, 'bar')
-          if (barBalance) {
-            balances.push(barBalance)
-          }
-        }
-      })
-
-      DebugUtils.info(MODULE_NAME, 'Storage store data generated', {
-        operations: operations.length,
-        balances: balances.length,
-        batches: batches.length
-      })
-
-      return { operations, balances, batches }
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to generate storage store data', { error })
-      return { operations: [], balances: [], batches: [] }
-    }
-  }
-
-  private generateProductBalance(product: Product, department: 'kitchen' | 'bar') {
-    const productDef = this.getProductDefinition(product.id)
-    if (!productDef) return null
-
-    const minStock = productDef.minStock || 1
-    const maxStock = productDef.maxStock || minStock * 3
-
-    let currentStock: number
-    const rand = Math.random()
-    if (rand < 0.1) {
-      currentStock = 0
-    } else if (rand < 0.3) {
-      currentStock = Math.random() * minStock * 0.5
-    } else {
-      currentStock = minStock + Math.random() * (maxStock - minStock)
-    }
-
-    const newestBatchDate = new Date()
-    newestBatchDate.setDate(newestBatchDate.getDate() - Math.floor(Math.random() * 7))
 
     return {
-      itemId: product.id,
-      itemName: product.name,
-      department,
-      totalQuantity: Math.round(currentStock * 1000) / 1000,
-      unit: productDef.baseUnit,
-      latestCost: productDef.baseCostPerUnit,
-      newestBatchDate: newestBatchDate.toISOString(),
-      oldestBatchDate: newestBatchDate.toISOString(),
-      batchCount: 1
+      counteragents: mockData.counteragents,
+      suppliers: mockData.suppliers
     }
   }
 
   // =============================================
-  // SUPPLIER STORE DATA - FIXED TO USE DEFINITIONS
+  // SUPPLIER STORE DATA - ИСПОЛЬЗУЕМ supplierDefinitions.ts
   // =============================================
 
   getSupplierStoreData() {
@@ -290,40 +215,24 @@ export class MockDataCoordinator {
     return this.supplierStoreData
   }
 
-  // ✅ FIXED: Use supplierDefinitions.ts instead of generating
   private loadSupplierStoreData() {
     try {
       DebugUtils.info(MODULE_NAME, 'Loading supplier store data from supplierDefinitions...')
 
-      // ✅ Use predefined data with correct base units
-      const { suggestions, requests, orders, receipts } = getSupplierWorkflowData()
+      // ✅ Используем предопределенные данные с правильными базовыми единицами
+      const supplierData = getSupplierWorkflowData()
 
       DebugUtils.info(MODULE_NAME, 'Supplier store data loaded successfully', {
-        suggestions: suggestions.length,
-        requests: requests.length,
-        orders: orders.length,
-        receipts: receipts.length
+        requests: supplierData.requests.length,
+        orders: supplierData.orders.length,
+        receipts: supplierData.receipts.length,
+        suggestions: supplierData.suggestions.length,
+        unitSystem: 'BASE_UNITS (gram/ml/piece)'
       })
 
-      // Log sample data to verify base units
-      if (import.meta.env.DEV && orders.length > 0) {
-        const sampleOrder = orders[0]
-        const sampleItem = sampleOrder.items[0]
-        const product = this.getProductDefinition(sampleItem.itemId)
-
-        console.log('\n🔍 SAMPLE ORDER VERIFICATION:')
-        console.log(`Order: ${sampleOrder.orderNumber}`)
-        console.log(`Item: ${sampleItem.itemName}`)
-        console.log(`Quantity: ${sampleItem.orderedQuantity} ${product?.baseUnit}`)
-        console.log(`Price per unit: ${sampleItem.pricePerUnit} IDR/${product?.baseUnit}`)
-        console.log(`Total: ${sampleItem.totalPrice} IDR`)
-        console.log('✅ All values are in BASE UNITS\n')
-      }
-
-      return { requests, orders, receipts, suggestions }
+      return supplierData
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load supplier store data', { error })
-
       return {
         requests: [],
         orders: [],
@@ -334,305 +243,72 @@ export class MockDataCoordinator {
   }
 
   // =============================================
-  // INTEGRATION METHODS
+  // STORAGE STORE DATA - ИСПОЛЬЗУЕМ storageDefinitions.ts
   // =============================================
 
-  getSupplierForProduct(productId: string): Counteragent | undefined {
-    const product = this.getProductDefinition(productId)
-    if (!product?.primarySupplierId) {
-      return undefined
+  getStorageStoreData() {
+    if (!this.storageStoreData) {
+      this.storageStoreData = this.loadStorageStoreData()
     }
-
-    const counteragentsData = this.getCounteragentsStoreData()
-    return counteragentsData.counteragents.find(ca => ca.id === product.primarySupplierId)
+    return this.storageStoreData
   }
 
-  getProductsForSupplier(supplierId: string): CoreProductDefinition[] {
-    return CORE_PRODUCTS.filter(p => p.primarySupplierId === supplierId)
-  }
+  private loadStorageStoreData() {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Loading storage store data from storageDefinitions...')
 
-  getSuppliersForCategory(category: string): Counteragent[] {
-    const counteragentsData = this.getCounteragentsStoreData()
-    return counteragentsData.counteragents.filter(
-      ca => ca.type === 'supplier' && ca.isActive && ca.productCategories.includes(category as any)
-    )
-  }
+      // ✅ НОВАЯ ИНТЕГРАЦИЯ: Используем storageDefinitions.ts
+      const storageData = getStorageWorkflowData()
 
-  validateStoreIntegration(): {
-    isValid: boolean
-    errors: string[]
-    warnings: string[]
-    summary: {
-      productsCount: number
-      counteragentsCount: number
-      linkedProductsCount: number
-      orphanedProductsCount: number
-      supplierCoverage: Record<string, number>
-    }
-  } {
-    DebugUtils.info(MODULE_NAME, 'Validating complete store integration')
+      DebugUtils.info(MODULE_NAME, 'Storage store data loaded successfully', {
+        operations: storageData.operations.length,
+        balances: storageData.balances.length,
+        batches: storageData.batches.length,
+        unitSystem: 'BASE_UNITS (gram/ml/piece)'
+      })
 
-    const errors: string[] = []
-    const warnings: string[] = []
-
-    const productsData = this.getProductsStoreData()
-    const counteragentsData = this.getCounteragentsStoreData()
-
-    const products = productsData.products
-    const counteragents = counteragentsData.counteragents
-    const suppliers = counteragents.filter(ca => ca.type === 'supplier')
-
-    let linkedProductsCount = 0
-    let orphanedProductsCount = 0
-    const supplierCoverage: Record<string, number> = {}
-
-    products.forEach(product => {
-      const productDef = this.getProductDefinition(product.id)
-      if (productDef?.primarySupplierId) {
-        const supplier = suppliers.find(s => s.id === productDef.primarySupplierId)
-        if (supplier) {
-          linkedProductsCount++
-          supplierCoverage[supplier.id] = (supplierCoverage[supplier.id] || 0) + 1
-        } else {
-          orphanedProductsCount++
-          errors.push(
-            `Product ${product.name} has invalid supplier ID: ${productDef.primarySupplierId}`
-          )
-        }
-      } else {
-        orphanedProductsCount++
-        warnings.push(`Product ${product.name} has no primary supplier`)
+      return {
+        operations: storageData.operations,
+        balances: storageData.balances,
+        batches: storageData.batches
       }
-    })
-
-    suppliers.forEach(supplier => {
-      if (!supplierCoverage[supplier.id]) {
-        warnings.push(`Supplier ${supplier.name} has no assigned products`)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load storage store data', { error })
+      return {
+        operations: [],
+        balances: [],
+        batches: []
       }
-    })
-
-    const summary = {
-      productsCount: products.length,
-      counteragentsCount: counteragents.length,
-      linkedProductsCount,
-      orphanedProductsCount,
-      supplierCoverage
     }
-
-    const isValid = errors.length === 0
-
-    DebugUtils.info(MODULE_NAME, 'Store integration validation completed', {
-      isValid,
-      errorsCount: errors.length,
-      warningsCount: warnings.length,
-      summary
-    })
-
-    return {
-      isValid,
-      errors,
-      warnings,
-      summary
-    }
-  }
-
-  // =============================================
-  // PRODUCTS GENERATION
-  // =============================================
-
-  private generateProductsData() {
-    DebugUtils.info(MODULE_NAME, 'Generating products data with base units')
-
-    const products = this.generateEnhancedProducts()
-    const priceHistory = this.generateEnhancedPriceHistory()
-
-    const result = {
-      products,
-      priceHistory
-    }
-
-    DebugUtils.info(MODULE_NAME, 'Products data generated', {
-      total: products.length,
-      sellable: products.filter(p => p.canBeSold).length,
-      rawMaterials: products.filter(p => !p.canBeSold).length,
-      priceRecords: priceHistory.length,
-      baseUnitsUsed: this.getBaseUnitsStats(products)
-    })
-
-    if (import.meta.env.DEV) {
-      this.demonstrateCorrectCalculations(products)
-    }
-
-    return result
-  }
-
-  private generateEnhancedProducts(): Product[] {
-    const now = new Date().toISOString()
-
-    return CORE_PRODUCTS.map(productDef => {
-      const product = {
-        id: productDef.id,
-        name: productDef.name,
-        nameEn: productDef.nameEn,
-        description: this.generateDescription(productDef),
-        category: productDef.category,
-
-        baseUnit: productDef.baseUnit,
-        baseCostPerUnit: productDef.baseCostPerUnit,
-
-        purchaseUnit: productDef.purchaseUnit,
-        purchaseToBaseRatio: productDef.purchaseToBaseRatio,
-        purchaseCost: productDef.purchaseCost,
-
-        costPerUnit: productDef.purchaseCost,
-        currentCostPerUnit: productDef.baseCostPerUnit,
-
-        yieldPercentage: productDef.yieldPercentage,
-        canBeSold: productDef.canBeSold,
-        isActive: true,
-
-        primarySupplierId: productDef.primarySupplierId,
-
-        storageConditions: this.getStorageConditions(productDef.category),
-        shelfLife: productDef.shelfLifeDays,
-        minStock: this.calculateMinStock(productDef),
-        maxStock: this.calculateMaxStock(productDef),
-        leadTimeDays: productDef.leadTimeDays,
-        tags: this.generateTags(productDef),
-
-        createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: now
-      } as Product & {
-        baseUnit: 'gram' | 'ml' | 'piece'
-        baseCostPerUnit: number
-        purchaseUnit: string
-        purchaseToBaseRatio: number
-        purchaseCost: number
-        currentCostPerUnit: number
-        primarySupplierId?: string
-      }
-
-      const expectedBaseCost = productDef.purchaseCost / productDef.purchaseToBaseRatio
-      if (Math.abs(expectedBaseCost - productDef.baseCostPerUnit) > 0.01) {
-        DebugUtils.error(MODULE_NAME, `Base cost calculation error for ${productDef.name}`, {
-          expected: expectedBaseCost,
-          actual: productDef.baseCostPerUnit,
-          purchaseCost: productDef.purchaseCost,
-          ratio: productDef.purchaseToBaseRatio
-        })
-      }
-
-      return product as Product
-    })
-  }
-
-  private generateEnhancedPriceHistory(): ProductPriceHistory[] {
-    const now = new Date().toISOString()
-
-    return CORE_PRODUCTS.map(productDef => ({
-      id: `price-${productDef.id}-current`,
-      productId: productDef.id,
-
-      basePricePerUnit: productDef.baseCostPerUnit,
-
-      purchasePrice: productDef.purchaseCost,
-      purchaseUnit: productDef.purchaseUnit,
-      purchaseQuantity: productDef.purchaseToBaseRatio,
-
-      effectiveDate: now,
-      sourceType: 'manual_update' as const,
-      notes: `Base cost: ${productDef.baseCostPerUnit} IDR/${productDef.baseUnit}`,
-      createdAt: now,
-      updatedAt: now
-    })) as ProductPriceHistory[]
   }
 
   // =============================================
   // UTILITY METHODS
   // =============================================
 
-  private isBarItem(itemId: string): boolean {
-    return (
-      itemId.includes('beer') ||
-      itemId.includes('cola') ||
-      itemId.includes('water') ||
-      itemId.includes('wine') ||
-      itemId.includes('spirit') ||
-      itemId.includes('juice')
-    )
+  getProductDefinition(productId: string): CoreProductDefinition | null {
+    return CORE_PRODUCTS.find(p => p.id === productId) || null
   }
 
-  private demonstrateCorrectCalculations(products: Product[]): void {
-    console.log('\n' + '='.repeat(60))
-    console.log('DEMONSTRATION OF CORRECT COST CALCULATIONS')
-    console.log('='.repeat(60))
+  getSupplierForProduct(productId: string): any {
+    const product = this.getProductDefinition(productId)
+    if (!product?.primarySupplierId) return null
 
-    const oliveOil = products.find(p => p.id === 'prod-olive-oil')
-    const garlic = products.find(p => p.id === 'prod-garlic')
-    const salt = products.find(p => p.id === 'prod-salt')
-    const pepper = products.find(p => p.id === 'prod-black-pepper')
-
-    if (oliveOil && garlic && salt && pepper) {
-      console.log('\nRECIPE: Classic Salad Dressing')
-      console.log('Yield: 130 ml\n')
-
-      console.log('INGREDIENTS:')
-
-      const oilCost = 120 * (oliveOil as any).baseCostPerUnit
-      console.log(
-        `• Olive Oil: 120 ml × ${(oliveOil as any).baseCostPerUnit} IDR/ml = ${oilCost} IDR`
-      )
-
-      const garlicCost = 10 * (garlic as any).baseCostPerUnit
-      console.log(`• Garlic: 10 g × ${(garlic as any).baseCostPerUnit} IDR/g = ${garlicCost} IDR`)
-
-      const saltCost = 3 * (salt as any).baseCostPerUnit
-      console.log(`• Salt: 3 g × ${(salt as any).baseCostPerUnit} IDR/g = ${saltCost} IDR`)
-
-      const pepperCost = 1 * (pepper as any).baseCostPerUnit
-      console.log(
-        `• Black Pepper: 1 g × ${(pepper as any).baseCostPerUnit} IDR/g = ${pepperCost} IDR`
-      )
-
-      const totalCost = oilCost + garlicCost + saltCost + pepperCost
-      const costPerMl = totalCost / 130
-
-      console.log(`\nTOTAL: ${totalCost} IDR`)
-      console.log(`Cost per ml: ${costPerMl.toFixed(2)} IDR/ml`)
-
-      console.log('\n✅ All calculations are now correct!')
-    }
-
-    console.log('\n' + '='.repeat(60))
+    const counteragents = this.getCounteragentsStoreData()
+    return counteragents.suppliers.find(s => s.id === product.primarySupplierId) || null
   }
 
-  private getBaseUnitsStats(products: Product[]): Record<string, number> {
-    const stats = { gram: 0, ml: 0, piece: 0 }
+  // =============================================
+  // HELPER METHODS (используют Utils)
+  // =============================================
 
-    products.forEach(product => {
-      const baseUnit = (product as any).baseUnit
-      if (baseUnit && stats.hasOwnProperty(baseUnit)) {
-        stats[baseUnit]++
-      }
-    })
-
-    return stats
+  private generateProductDescription(productDef: CoreProductDefinition): string {
+    const unitInfo = this.getDisplayUnitInfo(productDef.baseUnit, productDef.purchaseUnit)
+    return `${productDef.nameEn} - ${unitInfo}`
   }
 
-  private generateDescription(productDef: CoreProductDefinition): string {
-    const baseDescriptions: Record<string, string> = {
-      meat: 'Premium quality meat for restaurant preparation',
-      vegetables: 'Fresh vegetables sourced from local suppliers',
-      dairy: 'Fresh dairy products with proper storage requirements',
-      spices: 'High-quality spices and seasonings',
-      beverages: 'Ready-to-serve beverages for direct sale',
-      other: 'Quality ingredient for food preparation'
-    }
-
-    const baseDesc = baseDescriptions[productDef.category] || 'Quality product for restaurant use'
-    const unitInfo = `Price: ${productDef.baseCostPerUnit} IDR/${productDef.baseUnit} (${productDef.purchaseCost} IDR/${productDef.purchaseUnit})`
-
-    return `${baseDesc}. ${unitInfo}`
+  private getDisplayUnitInfo(baseUnit: string, purchaseUnit: string): string {
+    return `Stored in ${baseUnit}, purchased in ${purchaseUnit}`
   }
 
   private getStorageConditions(category: string): string {
@@ -648,11 +324,12 @@ export class MockDataCoordinator {
   }
 
   private calculateMinStock(productDef: CoreProductDefinition): number {
-    return Math.round(productDef.dailyConsumption * productDef.leadTimeDays * 1.5 * 100) / 100
+    // ✅ Расчет в базовых единицах
+    return Math.round(productDef.dailyConsumption * productDef.leadTimeDays * 1.5 * 1000) / 1000
   }
 
   private calculateMaxStock(productDef: CoreProductDefinition): number {
-    return Math.round(this.calculateMinStock(productDef) * 3 * 100) / 100
+    return Math.round(this.calculateMinStock(productDef) * 3 * 1000) / 1000
   }
 
   private generateTags(productDef: CoreProductDefinition): string[] {
@@ -678,6 +355,202 @@ export class MockDataCoordinator {
     return tags
   }
 
+  private generatePriceHistory(products: Product[]): ProductPriceHistory[] {
+    const priceHistory: ProductPriceHistory[] = []
+
+    products.forEach(product => {
+      // Генерируем 3-5 записей истории цен за последние 6 месяцев
+      const historyCount = 3 + Math.floor(Math.random() * 3)
+
+      for (let i = 0; i < historyCount; i++) {
+        const daysAgo = i * 30 + Math.floor(Math.random() * 20) // Примерно каждый месяц
+
+        priceHistory.push({
+          id: `price-${product.id}-${i}`,
+          productId: product.id,
+
+          // ✅ СТАРЫЕ ПОЛЯ (совместимость)
+          pricePerUnit: product.costPerUnit,
+
+          // ✅ НОВЫЕ ПОЛЯ (базовые единицы)
+          basePricePerUnit: product.baseCostPerUnit,
+          purchasePrice: product.purchaseCost,
+          purchaseUnit: product.purchaseUnit,
+          purchaseQuantity: product.purchaseToBaseRatio,
+
+          effectiveDate: TimeUtils.getDateDaysAgo(daysAgo),
+          sourceType: 'purchase_order',
+          supplierId: product.primarySupplierId,
+          notes: `Historical price data (${i + 1}/${historyCount})`,
+          createdAt: TimeUtils.getDateDaysAgo(daysAgo),
+          updatedAt: TimeUtils.getDateDaysAgo(daysAgo)
+        })
+      }
+    })
+
+    return priceHistory.sort(
+      (a, b) => new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime()
+    )
+  }
+
+  // =============================================
+  // CROSS-STORE INTEGRATION VALIDATION
+  // =============================================
+
+  validateStoreIntegration(): {
+    isValid: boolean
+    errors: string[]
+    warnings: string[]
+    summary: any
+  } {
+    const errors: string[] = []
+    const warnings: string[] = []
+
+    try {
+      // Проверяем данные всех сторов
+      const products = this.getProductsStoreData()
+      const counteragents = this.getCounteragentsStoreData()
+      const suppliers = this.getSupplierStoreData()
+      const storage = this.getStorageStoreData()
+
+      // Валидация связей продуктов-поставщиков
+      this.validateProductSupplierLinks(
+        products.products,
+        counteragents.suppliers,
+        errors,
+        warnings
+      )
+
+      // Валидация данных склада
+      this.validateStorageData(storage, products.products, errors, warnings)
+
+      // Валидация единиц измерения
+      this.validateUnitsConsistency(products.products, storage, errors, warnings)
+
+      const summary = {
+        products: products.products.length,
+        suppliers: counteragents.suppliers.length,
+        storageBalances: storage.balances.length,
+        storageBatches: storage.batches.length,
+        storageOperations: storage.operations.length,
+        supplierRequests: suppliers.requests.length,
+        supplierOrders: suppliers.orders.length,
+        supplierReceipts: suppliers.receipts.length
+      }
+
+      return {
+        isValid: errors.length === 0,
+        errors,
+        warnings,
+        summary
+      }
+    } catch (error) {
+      errors.push(`Integration validation failed: ${error}`)
+      return {
+        isValid: false,
+        errors,
+        warnings,
+        summary: {}
+      }
+    }
+  }
+
+  private validateProductSupplierLinks(
+    products: Product[],
+    suppliers: Counteragent[],
+    errors: string[],
+    warnings: string[]
+  ): void {
+    const supplierIds = new Set(suppliers.map(s => s.id))
+
+    products.forEach(product => {
+      if (product.primarySupplierId && !supplierIds.has(product.primarySupplierId)) {
+        errors.push(`Product ${product.name} has invalid supplier ID: ${product.primarySupplierId}`)
+      }
+    })
+  }
+
+  private validateStorageData(
+    storage: {
+      balances: StorageBalance[]
+      batches: StorageBatch[]
+      operations: StorageOperation[]
+    },
+    products: Product[],
+    errors: string[],
+    warnings: string[]
+  ): void {
+    const productIds = new Set(products.map(p => p.id))
+
+    // Проверяем балансы
+    storage.balances.forEach(balance => {
+      if (!productIds.has(balance.itemId)) {
+        errors.push(`Storage balance references unknown product: ${balance.itemId}`)
+      }
+
+      const product = products.find(p => p.id === balance.itemId)
+      if (product && balance.unit !== product.baseUnit) {
+        errors.push(
+          `Unit mismatch for ${balance.itemName}: ` +
+            `balance uses ${balance.unit}, product uses ${product.baseUnit}`
+        )
+      }
+    })
+
+    // Проверяем батчи
+    storage.batches.forEach(batch => {
+      if (!productIds.has(batch.itemId)) {
+        errors.push(`Storage batch references unknown product: ${batch.itemId}`)
+      }
+    })
+  }
+
+  private validateUnitsConsistency(
+    products: Product[],
+    storage: { balances: StorageBalance[]; batches: StorageBatch[] },
+    errors: string[],
+    warnings: string[]
+  ): void {
+    // ✅ КРИТИЧНО: Проверяем что все данные в базовых единицах
+
+    products.forEach(product => {
+      if (!product.baseUnit) {
+        errors.push(`Product ${product.name} missing baseUnit`)
+        return
+      }
+
+      if (!product.baseCostPerUnit) {
+        errors.push(`Product ${product.name} missing baseCostPerUnit`)
+        return
+      }
+
+      // Проверяем корректность расчета базовой цены
+      if (product.purchaseCost && product.purchaseToBaseRatio) {
+        const expectedBaseCost = product.purchaseCost / product.purchaseToBaseRatio
+        const actualBaseCost = product.baseCostPerUnit
+
+        if (Math.abs(expectedBaseCost - actualBaseCost) > 1) {
+          warnings.push(
+            `Price calculation mismatch for ${product.name}: ` +
+              `expected ${expectedBaseCost} IDR/${product.baseUnit}, ` +
+              `got ${actualBaseCost} IDR/${product.baseUnit}`
+          )
+        }
+      }
+    })
+
+    // Проверяем что все балансы в базовых единицах
+    storage.balances.forEach(balance => {
+      const product = products.find(p => p.id === balance.itemId)
+      if (product && balance.unit !== product.baseUnit) {
+        errors.push(
+          `Storage balance unit error for ${balance.itemName}: ` +
+            `should be ${product.baseUnit}, got ${balance.unit}`
+        )
+      }
+    })
+  }
+
   // =============================================
   // STUB METHODS FOR FUTURE STORES
   // =============================================
@@ -691,7 +564,10 @@ export class MockDataCoordinator {
   }
 }
 
-// Singleton instance
+// =============================================
+// SINGLETON INSTANCE
+// =============================================
+
 export const mockDataCoordinator = new MockDataCoordinator()
 
 // =============================================
@@ -703,65 +579,77 @@ if (import.meta.env.DEV) {
   ;(window as any).__VALIDATE_STORE_INTEGRATION__ = () => {
     return mockDataCoordinator.validateStoreIntegration()
   }
-  ;(window as any).__TEST_SUPPLIER_INTEGRATION__ = () => {
-    const productsData = mockDataCoordinator.getProductsStoreData()
-    const counteragentsData = mockDataCoordinator.getCounteragentsStoreData()
-
-    console.log('=== SUPPLIER INTEGRATION TEST ===')
-    console.log('Products:', productsData.products.length)
-    console.log('Counteragents:', counteragentsData.counteragents.length)
-
-    const testProduct = productsData.products[0]
-    const supplier = mockDataCoordinator.getSupplierForProduct(testProduct.id)
-
-    console.log('Test product:', testProduct.name)
-    console.log('Supplier found:', supplier?.name || 'None')
-
-    return { testProduct, supplier, productsData, counteragentsData }
-  }
   ;(window as any).__TEST_STORAGE_INTEGRATION__ = () => {
     const storageData = mockDataCoordinator.getStorageStoreData()
-    const supplierData = mockDataCoordinator.getSupplierStoreData()
+    const productsData = mockDataCoordinator.getProductsStoreData()
 
     console.log('=== STORAGE INTEGRATION TEST ===')
     console.log('Storage balances:', storageData.balances.length)
-    console.log('Supplier suggestions:', supplierData.suggestions.length)
-    console.log('Supplier requests:', supplierData.requests.length)
-    console.log('Supplier orders:', supplierData.orders.length)
-    console.log('Supplier receipts:', supplierData.receipts.length)
+    console.log('Storage batches:', storageData.batches.length)
+    console.log('Storage operations:', storageData.operations.length)
+    console.log('Products:', productsData.products.length)
 
-    return { storageData, supplierData }
-  }
-  ;(window as any).__TEST_BASE_UNITS__ = () => {
-    const supplierData = mockDataCoordinator.getSupplierStoreData()
+    // Тестируем несколько продуктов
+    const testProducts = productsData.products.slice(0, 3)
+    testProducts.forEach(product => {
+      const balances = storageData.balances.filter(b => b.itemId === product.id)
+      const batches = storageData.batches.filter(b => b.itemId === product.id)
 
-    console.log('=== BASE UNITS VERIFICATION ===')
+      console.log(`\n📦 ${product.name}:`)
+      console.log(`  Base Unit: ${product.baseUnit}`)
+      console.log(`  Base Cost: ${product.baseCostPerUnit} IDR/${product.baseUnit}`)
+      console.log(`  Balances: ${balances.length}`)
+      console.log(`  Batches: ${batches.length}`)
 
-    if (supplierData.orders.length > 0) {
-      const order = supplierData.orders[0]
-      console.log(`\nOrder: ${order.orderNumber}`)
-
-      order.items.forEach(item => {
-        const product = mockDataCoordinator.getProductDefinition(item.itemId)
-        console.log(`${item.itemName}:`)
-        console.log(`  Quantity: ${item.orderedQuantity} ${product?.baseUnit}`)
-        console.log(`  Price: ${item.pricePerUnit} IDR/${product?.baseUnit}`)
-        console.log(`  Total: ${item.totalPrice} IDR`)
+      balances.forEach(balance => {
+        console.log(`    ${balance.department}: ${balance.totalQuantity} ${balance.unit}`)
       })
+    })
 
-      console.log(`\nOrder Total: ${order.totalAmount} IDR`)
-      console.log('✅ All values are in BASE UNITS')
-    }
+    return { storageData, productsData }
+  }
+  ;(window as any).__TEST_BASE_UNITS_STORAGE__ = () => {
+    const storageData = mockDataCoordinator.getStorageStoreData()
 
-    return supplierData
+    console.log('=== STORAGE BASE UNITS VERIFICATION ===')
+
+    // Проверяем первые несколько балансов
+    storageData.balances.slice(0, 5).forEach(balance => {
+      const product = mockDataCoordinator.getProductDefinition(balance.itemId)
+      if (!product) return
+
+      console.log(`\n📦 ${balance.itemName} (${balance.department})`)
+      console.log(`  Stock: ${balance.totalQuantity} ${balance.unit}`)
+      console.log(`  Expected unit: ${product.baseUnit}`)
+      console.log(`  Cost: ${balance.latestCost} IDR/${balance.unit}`)
+      console.log(`  Expected cost: ${product.baseCostPerUnit} IDR/${product.baseUnit}`)
+      console.log(`  ✅ Units match: ${balance.unit === product.baseUnit}`)
+      console.log(`  ✅ Cost match: ${Math.abs(balance.latestCost - product.baseCostPerUnit) < 1}`)
+    })
+
+    // Проверяем батчи
+    console.log('\n=== BATCH VERIFICATION ===')
+    storageData.batches.slice(0, 3).forEach(batch => {
+      const product = mockDataCoordinator.getProductDefinition(batch.itemId)
+      if (!product) return
+
+      console.log(`\nBatch: ${batch.batchNumber}`)
+      console.log(`  Quantity: ${batch.currentQuantity} ${batch.unit}`)
+      console.log(`  Expected unit: ${product.baseUnit}`)
+      console.log(`  Cost per unit: ${batch.costPerUnit} IDR/${batch.unit}`)
+      console.log(`  ✅ Unit correct: ${batch.unit === product.baseUnit}`)
+    })
+
+    return storageData
   }
 
   setTimeout(() => {
-    console.log('\n🎯 FIXED Mock Data Coordinator loaded!')
-    console.log('Available commands:')
+    console.log('\n🎯 UPDATED Mock Data Coordinator loaded!')
+    console.log('🔧 Now using storageDefinitions.ts for storage data')
+    console.log('📏 All data in BASE UNITS (gram/ml/piece)')
+    console.log('\nAvailable commands:')
     console.log('• window.__VALIDATE_STORE_INTEGRATION__()')
-    console.log('• window.__TEST_SUPPLIER_INTEGRATION__()')
     console.log('• window.__TEST_STORAGE_INTEGRATION__()')
-    console.log('• window.__TEST_BASE_UNITS__() - verify base unit calculations')
+    console.log('• window.__TEST_BASE_UNITS_STORAGE__() - verify base units')
   }, 100)
 }
