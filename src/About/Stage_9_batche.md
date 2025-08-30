@@ -128,28 +128,187 @@ export interface StorageBalance {
 }
 ```
 
-## 2. Расширение StorageStore методами
+## 2. Расширение StorageStore и создание useBatches composable
 
-### Файл: `src/stores/storage/storageStore.ts`
+### Архитектурное решение: Разделение ответственности
 
-#### 2.1 Новые computed свойства
+**useBatches.ts (НОВЫЙ композабл)** - специализированная логика для транзитных batch-ей:
+
+- `createTransitBatches()`
+- `convertTransitBatchesToActive()`
+- `getTransitBatchesByOrder()`
+- `generateTransitBatchNumber()`
+- `transitMetrics` computed
+- `deliveryAlerts` computed
+
+**storageStore.ts** - общее состояние и базовые операции:
+
+- `getBatchById()`
+- `calculateFifoAllocation()`
+- `activeBatches` computed
+- Базовые CRUD операции
+- Общие computed свойства
+
+### Файл: `src/stores/storage/composables/useBatches.ts`
+
+#### 2.1 Основная структура композабла
 
 ```typescript
-// Только активные (не транзитные) batch-и
+import { ref, computed } from 'vue'
+import { DebugUtils } from '@/utils/debugger'
+import { useStorageStore } from '../storageStore'
+import type { CreateTransitBatchData, StorageBatch, StorageDepartment } from '../types'
+
+const MODULE_NAME = 'useBatches'
+
+export function useBatches() {
+  // Dependencies
+  const storageStore = useStorageStore()
+
+  // Local state
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  // ===========================
+  // COMPUTED - Transit Batches
+  // ===========================
+
+  const transitBatches = computed(() => {
+    return storageStore.state.value.batches.filter(batch => batch.status === 'in_transit')
+  })
+
+  const transitMetrics = computed(() => {
+    const batches = transitBatches.value
+    const now = new Date()
+
+    return {
+      totalTransitOrders: new Set(batches.map(b => b.purchaseOrderId)).size,
+      totalTransitItems: batches.length,
+      totalTransitValue: batches.reduce((sum, b) => sum + b.totalValue, 0),
+
+      overdueCount: batches.filter(
+        b => b.plannedDeliveryDate && new Date(b.plannedDeliveryDate) < now
+      ).length,
+
+      dueTodayCount: batches.filter(b => {
+        if (!b.plannedDeliveryDate) return false
+        const deliveryDate = new Date(b.plannedDeliveryDate)
+        const today = new Date()
+        return deliveryDate.toDateString() === today.toDateString()
+      }).length
+    }
+  })
+
+  const deliveryAlerts = computed(() => {
+    // Реализация из раздела 12.3
+    // Возвращает массив уведомлений о просрочках
+  })
+
+  // ===========================
+  // METHODS - Transit Operations
+  // ===========================
+
+  async function createTransitBatches(orderData: CreateTransitBatchData[]): Promise<string[]> {
+    // Полная реализация из раздела 12.1
+  }
+
+  async function convertTransitBatchesToActive(
+    purchaseOrderId: string,
+    receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
+  ): Promise<void> {
+    // Полная реализация из раздела 12.2
+  }
+
+  function getTransitBatchesByOrder(purchaseOrderId: string): StorageBatch[] {
+    return transitBatches.value.filter(batch => batch.purchaseOrderId === purchaseOrderId)
+  }
+
+  function generateTransitBatchNumber(): string {
+    // Реализация из раздела 12.1
+  }
+
+  // ===========================
+  // EXPORTS
+  // ===========================
+
+  return {
+    // State
+    loading: readonly(loading),
+    error: readonly(error),
+
+    // Computed
+    transitBatches: readonly(transitBatches),
+    transitMetrics: readonly(transitMetrics),
+    deliveryAlerts: readonly(deliveryAlerts),
+
+    // Methods
+    createTransitBatches,
+    convertTransitBatchesToActive,
+    getTransitBatchesByOrder,
+    generateTransitBatchNumber
+  }
+}
+```
+
+### Файл: `src/stores/storage/storageStore.ts` (обновления)
+
+#### 2.2 Интеграция с useBatches
+
+```typescript
+// В storageStore.ts добавляем только базовые computed
 const activeBatches = computed(() => {
   return state.value.batches.filter(batch => batch.status === 'active' && batch.isActive === true)
 })
 
-// Только транзитные batch-и
-const transitBatches = computed(() => {
-  return state.value.batches.filter(batch => batch.status === 'in_transit')
-})
+// useBatches композабл будет доступен через экспорт
+const batchesComposable = useBatches()
 
-// Балансы с учетом транзита
+// В return секции:
+return {
+  // ... существующие экспорты
+
+  // Transit functionality через композабл
+  ...batchesComposable,
+
+  // Базовые batch операции остаются в store
+  activeBatches: readonly(activeBatches),
+  getBatchById,
+  calculateFifoAllocation
+}
+```
+
+### Файл: `src/stores/storage/index.ts` (обновления)
+
+#### 2.3 Экспорт композабла
+
+```typescript
+// Export specialized composables
+export { useWriteOff } from './composables/useWriteOff'
+export { useBatches } from './composables/useBatches' // ← НОВЫЙ
+```
+
+### Преимущества такой архитектуры:
+
+1. **Разделение ответственности**: storageStore управляет состоянием, useBatches - бизнес-логикой
+2. **Переиспользование**: useBatches можно использовать в других частях приложения
+3. **Тестируемость**: легче тестировать изолированную логику
+4. **Консистентность**: следует паттерну useWriteOff
+5. **Масштабируемость**: легко добавлять новую функциональность без раздувания store
+
+## 3. Обновление балансов с учетом транзита
+
+### Файл: `src/stores/storage/storageStore.ts` (дополнения)
+
+#### 3.1 Computed для балансов с транзитом
+
+```typescript
+// В storageStore.ts - используем useBatches для получения транзитной информации
 const balancesWithTransit = computed(() => {
-  // Добавляем к каждому балансу информацию о транзитных товарах
+  const batchesComposable = useBatches()
+  const transitBatches = batchesComposable.transitBatches.value
+
   return state.value.balances.map(balance => {
-    const transitItems = transitBatches.value.filter(
+    const transitItems = transitBatches.filter(
       batch => batch.itemId === balance.itemId && batch.department === balance.department
     )
 
@@ -167,41 +326,6 @@ const balancesWithTransit = computed(() => {
   })
 })
 ```
-
-#### 2.2 Новые методы
-
-```typescript
-/**
- * Создает транзитные batch-и при отправке заказа поставщику
- */
-async function createTransitBatches(orderData: CreateTransitBatchData[]): Promise<string[]> {
-  // Создание batch-ей со статусом 'in_transit'
-  // Подробная реализация в разделе 12
-}
-
-/**
- * Переводит транзитные batch-и в активные при получении товара
- */
-async function convertTransitBatchesToActive(
-  purchaseOrderId: string,
-  receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
-): Promise<void> {
-  // Обновление статуса с 'in_transit' на 'active'
-  // Корректировка количества и цены
-  // Подробная реализация в разделе 12
-}
-
-/**
- * Получение транзитных batch-ей по заказу
- */
-function getTransitBatchesByOrder(purchaseOrderId: string): StorageBatch[] {
-  return state.value.batches.filter(
-    batch => batch.purchaseOrderId === purchaseOrderId && batch.status === 'in_transit'
-  )
-}
-```
-
-## 3. Упрощение PlannedDeliveryIntegration
 
 ### Файл: `src/stores/supplier_2/integrations/plannedDeliveryIntegration.ts`
 
@@ -242,7 +366,88 @@ async convertTransitBatchesOnReceipt(
 }
 ```
 
-## 4. Интеграция с PurchaseOrders
+## 4. Упрощение PlannedDeliveryIntegration
+
+### Файл: `src/stores/supplier_2/integrations/plannedDeliveryIntegration.ts`
+
+#### 4.1 Переписать под useBatches архитектуру
+
+```typescript
+import { useBatches } from '@/stores/storage/composables/useBatches'
+import type { PurchaseOrder } from '../types'
+
+/**
+ * ПЕРЕПИСАНО: Упрощенная интеграция через useBatches
+ */
+export class PlannedDeliveryIntegration {
+  private batchesComposable = useBatches()
+
+  /**
+   * Создает транзитные batch-и при отправке заказа
+   */
+  async createTransitBatchesFromOrder(order: PurchaseOrder): Promise<string[]> {
+    const department = this.getDepartmentFromOrder(order)
+
+    const transitBatchData: CreateTransitBatchData[] = order.items.map(item => ({
+      itemId: item.itemId,
+      itemName: item.itemName,
+      quantity: item.orderedQuantity,
+      unit: item.unit,
+      estimatedCostPerUnit: item.pricePerUnit,
+      department,
+      purchaseOrderId: order.id,
+      supplierId: order.supplierId,
+      supplierName: order.supplierName,
+      plannedDeliveryDate: order.expectedDeliveryDate || this.calculateDefaultDeliveryDate(order),
+      notes: `Transit from order ${order.orderNumber}`
+    }))
+
+    return await this.batchesComposable.createTransitBatches(transitBatchData)
+  }
+
+  /**
+   * Конвертирует транзитные batch-и в активные при получении
+   */
+  async convertTransitBatchesOnReceipt(
+    purchaseOrderId: string,
+    receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
+  ): Promise<void> {
+    await this.batchesComposable.convertTransitBatchesToActive(purchaseOrderId, receiptItems)
+  }
+
+  /**
+   * Получение транзитных batch-ей для заказа
+   */
+  getTransitBatchesByOrder(purchaseOrderId: string): StorageBatch[] {
+    return this.batchesComposable.getTransitBatchesByOrder(purchaseOrderId)
+  }
+
+  /**
+   * Удаление транзитных batch-ей при отмене заказа
+   */
+  async removeTransitBatchesOnOrderCancel(orderId: string): Promise<void> {
+    const storageStore = await this.getStorageStore()
+
+    // Находим и удаляем транзитные batch-и
+    const transitBatches = this.batchesComposable.getTransitBatchesByOrder(orderId)
+
+    if (transitBatches.length > 0) {
+      storageStore.state.value.batches = storageStore.state.value.batches.filter(
+        batch => !(batch.purchaseOrderId === orderId && batch.status === 'in_transit')
+      )
+
+      await storageStore.recalculateAllBalances()
+
+      DebugUtils.info(MODULE_NAME, 'Transit batches removed on order cancel', {
+        orderId,
+        removedBatches: transitBatches.length
+      })
+    }
+  }
+
+  // ... остальные helper методы без изменений
+}
+```
 
 ### Файл: `src/stores/supplier_2/composables/usePurchaseOrders.ts`
 
@@ -460,11 +665,14 @@ export interface OrderSuggestion {
 
 ## 8. Mock данные для тестирования
 
-### Файл: `src/stores/storage/storageMock.ts`
+### Файл: `src/stores/shared/storageDefinitions.ts` (обновления)
 
 ```typescript
-// Примеры транзитных batch-ей для тестирования
-export const mockTransitBatches: StorageBatch[] = [
+// Добавить транзитные batch-и в storageDefinitions
+export const CORE_STORAGE_BATCHES: StorageBatch[] = [
+  // ... существующие batch-и
+
+  // ✅ НОВЫЕ: Транзитные batch-и для тестирования
   {
     id: 'transit-batch-1',
     batchNumber: 'TRN-250831-001',
@@ -517,6 +725,43 @@ export const mockTransitBatches: StorageBatch[] = [
     updatedAt: '2025-08-29T10:00:00Z'
   }
 ]
+```
+
+### Файл: `src/stores/shared/mockDataCoordinator.ts` (обновления)
+
+```typescript
+// Обновить метод для работы с транзитными batch-ами
+private loadStorageStoreData() {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Loading storage store data with transit batches...')
+
+    const storageData = getStorageWorkflowData()
+
+    // Убедиться что транзитные batch-и включены
+    const transitBatches = storageData.batches.filter(b => b.status === 'in_transit')
+
+    DebugUtils.info(MODULE_NAME, 'Storage store data loaded successfully', {
+      operations: storageData.operations.length,
+      balances: storageData.balances.length,
+      batches: storageData.batches.length,
+      transitBatches: transitBatches.length,
+      unitSystem: 'BASE_UNITS (gram/ml/piece)'
+    })
+
+    return {
+      operations: storageData.operations,
+      balances: storageData.balances,
+      batches: storageData.batches
+    }
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load storage store data', { error })
+    return {
+      operations: [],
+      balances: [],
+      batches: []
+    }
+  }
+}
 ```
 
 ## 9. Workflow и точки интеграции
