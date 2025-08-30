@@ -1,4 +1,4 @@
-// src/stores/storage/storageStore.ts - ОБНОВЛЕНО ДЛЯ ИНТЕГРАЦИИ С MockDataCoordinator
+// src/stores/storage/storageStore.ts - ИСПРАВЛЕНО: Добавлен departmentBalances
 // Удалена собственная генерация моков, используется единый координатор
 
 import { ref, computed } from 'vue'
@@ -141,6 +141,13 @@ const expiredItemsCount = computed(() => {
 const nearExpiryItemsCount = computed(() => {
   return state.value.balances.filter(balance => balance.hasNearExpiry).length
 })
+
+// ✅ ДОБАВЛЕНО: Метод departmentBalances
+const departmentBalances = (department: StorageDepartment) => {
+  return state.value.balances.filter(
+    b => b && b.itemType === 'product' && b.department === department
+  )
+}
 
 // ===========================
 // INITIALIZATION - ИСПОЛЬЗУЕТ MockDataCoordinator
@@ -403,6 +410,7 @@ async function updateInventory(
 
     const inventory = await storageService.updateInventory(inventoryId, items)
 
+    // Обновляем в локальном состоянии
     const index = state.value.inventories.findIndex(inv => inv.id === inventoryId)
     if (index !== -1) {
       state.value.inventories[index] = inventory
@@ -419,27 +427,23 @@ async function updateInventory(
   }
 }
 
-async function finalizeInventory(inventoryId: string): Promise<void> {
+async function finalizeInventory(inventoryId: string): Promise<InventoryDocument> {
   try {
     state.value.loading.inventory = true
     state.value.error = null
 
-    const correctionOperations = await storageService.finalizeInventory(inventoryId)
+    const inventory = await storageService.finalizeInventory(inventoryId)
 
-    const inventoryIndex = state.value.inventories.findIndex(inv => inv.id === inventoryId)
-    if (inventoryIndex !== -1) {
-      state.value.inventories[inventoryIndex].status = 'confirmed'
+    // Обновляем в локальном состоянии
+    const index = state.value.inventories.findIndex(inv => inv.id === inventoryId)
+    if (index !== -1) {
+      state.value.inventories[index] = inventory
     }
 
-    correctionOperations.forEach(op => {
-      state.value.operations.unshift(op)
-    })
+    // Обновляем балансы после финализации
+    await fetchBalances(inventory.department)
 
-    // ✅ После финализации инвентаризации синхронизируем данные
-    const inventory = state.value.inventories[inventoryIndex]
-    if (inventory) {
-      await fetchBalances(inventory.department)
-    }
+    return inventory
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to finalize inventory'
     state.value.error = message
@@ -451,47 +455,29 @@ async function finalizeInventory(inventoryId: string): Promise<void> {
 }
 
 // ===========================
-// HELPER METHODS - ИСПОЛЬЗУЮТ БАЗОВЫЕ ЕДИНИЦЫ
+// HELPER METHODS
 // ===========================
 
 function getItemName(itemId: string): string {
-  try {
-    const productDef = mockDataCoordinator.getProductDefinition(itemId)
-    return productDef?.name || itemId
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to get product name', { error, itemId })
-    return itemId
-  }
+  const productsStore = useProductsStore()
+  const product = productsStore.products.find(p => p.id === itemId)
+  return product?.name || 'Unknown Product'
 }
 
 function getItemUnit(itemId: string): string {
-  try {
-    const productDef = mockDataCoordinator.getProductDefinition(itemId)
-    return productDef?.baseUnit || 'gram' // ✅ Возвращаем базовую единицу
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to get product unit', { error, itemId })
-    return 'gram'
-  }
+  const productDef = mockDataCoordinator.getProductDefinition(itemId)
+  return productDef?.baseUnit || 'piece'
 }
 
 function getItemCostPerUnit(itemId: string): number {
-  try {
-    const productDef = mockDataCoordinator.getProductDefinition(itemId)
-    return productDef?.baseCostPerUnit || 0 // ✅ Возвращаем цену за базовую единицу
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to get product cost', { error, itemId })
-    return 0
-  }
+  const productDef = mockDataCoordinator.getProductDefinition(itemId)
+  return productDef?.baseCostPerUnit || 0
 }
 
-// ===========================
-// BATCH HELPER METHODS
-// ===========================
-
 function getItemBatches(itemId: string, department: StorageDepartment): StorageBatch[] {
-  return state.value.batches
-    .filter(b => b.itemId === itemId && b.department === department && b.status === 'active')
-    .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
+  return state.value.batches.filter(
+    b => b.itemId === itemId && b.department === department && b.status === 'active'
+  )
 }
 
 function getBatchById(batchId: string): StorageBatch | undefined {
@@ -580,6 +566,9 @@ export function useStorageStore() {
     expiredItemsCount,
     nearExpiryItemsCount,
 
+    // ✅ ДОБАВЛЕНО: departmentBalances как функция
+    departmentBalances,
+
     // Core actions
     initialize,
     fetchBalances,
@@ -665,6 +654,13 @@ if (import.meta.env.DEV) {
       console.log(`Expired items: ${store.expiredItemsCount.value}`)
       console.log(`Near expiry items: ${store.nearExpiryItemsCount.value}`)
 
+      // ✅ ТЕСТИРУЕМ: departmentBalances функцию
+      console.log('\n=== DEPARTMENT BALANCES TEST ===')
+      const kitchenBalances = store.departmentBalances('kitchen')
+      const barBalances = store.departmentBalances('bar')
+      console.log(`Kitchen balances: ${kitchenBalances.length}`)
+      console.log(`Bar balances: ${barBalances.length}`)
+
       return {
         balances: store.state.value.balances,
         batches: store.state.value.batches,
@@ -687,6 +683,7 @@ if (import.meta.env.DEV) {
     console.log('🔧 Now integrated with MockDataCoordinator')
     console.log('📏 All data in BASE UNITS (gram/ml/piece)')
     console.log('🔄 No more duplicate mock data generation')
+    console.log('✅ Added departmentBalances function')
     console.log('\nAvailable commands:')
     console.log('• window.__TEST_STORAGE_STORE_INTEGRATION__()')
   }, 100)
