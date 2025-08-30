@@ -37,12 +37,3 @@ export { useStorageStore } from './storageStore'
 
 // ✅ Export specialized composables
 export { useWriteOff } from './composables/useWriteOff'
-
-// Export mock data for testing
-export {
-  mockStorageBatches,
-  mockStorageOperations,
-  mockStorageBalances,
-  generateBatchNumber,
-  calculateFifoAllocation
-} from './storageMock'
