@@ -15,7 +15,7 @@ import type {
   ReceiptItem
 } from '../types'
 
-import { plannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
+import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 
 const MODULE_NAME = 'Receipts'
 
@@ -23,6 +23,7 @@ export function useReceipts() {
   const supplierStore = useSupplierStore()
   const storageStore = useStorageStore()
   const productsStore = useProductsStore()
+  const plannedDeliveryIntegration = usePlannedDeliveryIntegration()
 
   // =============================================
   // STATE

@@ -12,7 +12,7 @@ import type {
   OrderStatus,
   PaymentStatus
 } from '../types'
-import { plannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
+import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 
 const MODULE_NAME = 'usePurchaseOrders'
 
@@ -26,6 +26,7 @@ export function usePurchaseOrders() {
   // =============================================
 
   const supplierStore = useSupplierStore()
+  const plannedDeliveryIntegration = usePlannedDeliveryIntegration()
 
   // =============================================
   // STATE
