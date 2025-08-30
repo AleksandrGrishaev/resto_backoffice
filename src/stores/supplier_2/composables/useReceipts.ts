@@ -15,6 +15,8 @@ import type {
   ReceiptItem
 } from '../types'
 
+import { plannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
+
 const MODULE_NAME = 'Receipts'
 
 export function useReceipts() {
@@ -129,13 +131,20 @@ export function useReceipts() {
         throw new Error(`Order with id ${purchaseOrderId} not found`)
       }
 
+      // ✅ ИСПРАВЛЕННАЯ проверка статуса
       if (!canStartReceipt(order)) {
-        throw new Error('Order is not ready for receipt')
+        const validStatuses = ['sent', 'confirmed']
+        throw new Error(
+          `Order is not ready for receipt. Current status: ${order.status}. ` +
+            `Required status: ${validStatuses.join(' or ')}`
+        )
       }
 
       DebugUtils.info(MODULE_NAME, 'Starting receipt for order', {
         orderId: purchaseOrderId,
-        orderNumber: order.orderNumber
+        orderNumber: order.orderNumber,
+        status: order.status,
+        itemsCount: order.items.length
       })
 
       const createData: CreateReceiptData = {
@@ -155,12 +164,15 @@ export function useReceipts() {
       DebugUtils.info(MODULE_NAME, 'Receipt started successfully', {
         receiptId: newReceipt.id,
         receiptNumber: newReceipt.receiptNumber,
-        orderId: purchaseOrderId
+        status: newReceipt.status
       })
 
       return newReceipt
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to start receipt', { purchaseOrderId, error })
+      DebugUtils.error(MODULE_NAME, 'Error starting receipt', {
+        purchaseOrderId,
+        error
+      })
       throw error
     }
   }
@@ -194,63 +206,81 @@ export function useReceipts() {
   /**
    * Complete receipt with full integration (Storage + Price Updates)
    */
-  async function completeReceipt(receiptId: string, notes?: string): Promise<Receipt> {
+  async function completeReceipt(receiptId: string, finalNotes?: string): Promise<Receipt> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Completing receipt with storage integration', { receiptId })
-
       const receipt = receipts.value.find(r => r.id === receiptId)
       if (!receipt) {
         throw new Error(`Receipt with id ${receiptId} not found`)
       }
 
-      if (!canCompleteReceipt(receipt)) {
-        throw new Error('Receipt cannot be completed')
+      if (receipt.status === 'completed') {
+        throw new Error('Receipt is already completed')
       }
 
-      const order = supplierStore.state.orders.find(o => o.id === receipt.purchaseOrderId)
-      if (!order) {
-        throw new Error(`Order not found for receipt ${receiptId}`)
-      }
+      DebugUtils.info(MODULE_NAME, 'Completing receipt', {
+        receiptId,
+        receiptNumber: receipt.receiptNumber,
+        purchaseOrderId: receipt.purchaseOrderId
+      })
 
-      // 1. Update receipt status
-      const updateData: UpdateReceiptData = {
+      // Завершаем receipt
+      const completedReceipt = await supplierStore.updateReceipt(receiptId, {
         status: 'completed',
-        notes: notes || receipt.notes
-      }
+        completedDate: new Date().toISOString(),
+        notes: finalNotes || receipt.notes
+      })
 
-      const updatedReceipt = await supplierStore.updateReceipt(receiptId, updateData)
-
-      // 2. Create storage operation (non-blocking)
+      // ✅ НОВОЕ: Создаем батчи из полученных товаров
       try {
-        await createStorageOperation(updatedReceipt, order)
+        isCreatingStorageOperation.value = true
+
+        const batchIds = await plannedDeliveryIntegration.createBatchFromReceipt(
+          receiptId,
+          receipt.purchaseOrderId,
+          completedReceipt.items
+        )
+
+        DebugUtils.info(MODULE_NAME, 'Storage batches created from receipt', {
+          receiptId,
+          batchIds,
+          batchCount: batchIds.length
+        })
+
+        // Обновляем receipt с информацией о созданных батчах
+        const finalReceipt = await supplierStore.updateReceipt(receiptId, {
+          batchIds,
+          storageIntegrated: true
+        })
+
+        DebugUtils.info(MODULE_NAME, 'Receipt completed and integrated with storage', {
+          receiptId: finalReceipt.id,
+          receiptNumber: finalReceipt.receiptNumber,
+          batchIds: finalReceipt.batchIds
+        })
+
+        return finalReceipt
       } catch (storageError) {
-        DebugUtils.error(MODULE_NAME, 'Storage operation failed, but receipt completed', {
+        DebugUtils.error(MODULE_NAME, 'Failed to create storage batches', {
           receiptId,
           error: storageError
         })
-        // Don't throw - receipt is still valid
-      }
 
-      // 3. Update product prices if needed (non-blocking)
-      try {
-        await updateProductPrices(updatedReceipt)
-      } catch (priceError) {
-        DebugUtils.error(MODULE_NAME, 'Price update failed, but receipt completed', {
+        // Receipt завершен, но интеграция со складом не удалась
+        // Можно продолжить без критической ошибки
+        DebugUtils.warn(MODULE_NAME, 'Receipt completed but storage integration failed', {
           receiptId,
-          error: priceError
+          receiptNumber: completedReceipt.receiptNumber
         })
-        // Don't throw - receipt is still valid
+
+        return completedReceipt
+      } finally {
+        isCreatingStorageOperation.value = false
       }
-
-      DebugUtils.info(MODULE_NAME, 'Receipt completed with full integration', {
-        receiptId: updatedReceipt.id,
-        receiptNumber: updatedReceipt.receiptNumber,
-        storageOperationId: updatedReceipt.storageOperationId
-      })
-
-      return updatedReceipt
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to complete receipt', { receiptId, error })
+      DebugUtils.error(MODULE_NAME, 'Error completing receipt', {
+        receiptId,
+        error
+      })
       throw error
     }
   }
@@ -609,23 +639,19 @@ export function useReceipts() {
    * Check if order can start receipt
    */
   function canStartReceipt(order: PurchaseOrder): boolean {
-    // Order must be sent or confirmed
-    if (!['sent', 'confirmed'].includes(order.status)) {
-      return false
-    }
+    // Заказ должен быть отправлен или подтвержден для начала получения
+    const validStatuses = ['sent', 'confirmed']
+    const isValidStatus = validStatuses.includes(order.status)
 
-    // Order must be paid (if paymentStatus exists)
-    if (order.paymentStatus && order.paymentStatus !== 'paid') {
-      return false
-    }
+    DebugUtils.debug(MODULE_NAME, 'Checking if can start receipt', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      validStatuses,
+      isValidStatus
+    })
 
-    // No existing active receipt
-    const existingReceipt = getReceiptByOrderId(order.id)
-    if (existingReceipt && existingReceipt.status !== 'completed') {
-      return false
-    }
-
-    return true
+    return isValidStatus
   }
 
   /**
@@ -741,6 +767,47 @@ export function useReceipts() {
     return diff > 0 ? `+${formatCurrency(diff)}` : `${formatCurrency(diff)}`
   }
 
+  /**
+   * Проверить интеграцию receipt со складом
+   */
+  function isReceiptIntegratedWithStorage(receipt: Receipt): boolean {
+    return !!(receipt.storageIntegrated && receipt.batchIds?.length)
+  }
+
+  /**
+   * Получить информацию о созданных батчах для receipt
+   */
+  async function getReceiptBatches(receipt: Receipt): Promise<any[]> {
+    if (!receipt.batchIds?.length) return []
+
+    try {
+      const batches = await Promise.all(receipt.batchIds.map(id => storageStore.getBatchById(id)))
+
+      return batches.filter(batch => batch !== null)
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to get receipt batches', {
+        receiptId: receipt.id,
+        error
+      })
+      return []
+    }
+  }
+
+  /**
+   * Получить статистику по интеграции со складом
+   */
+  const storageIntegrationStats = computed(() => {
+    const total = receipts.value.length
+    const integrated = receipts.value.filter(r => isReceiptIntegratedWithStorage(r)).length
+
+    return {
+      total,
+      integrated,
+      notIntegrated: total - integrated,
+      integrationRate: total > 0 ? Math.round((integrated / total) * 100) : 0
+    }
+  })
+
   // =============================================
   // RETURN PUBLIC API
   // =============================================
@@ -800,6 +867,11 @@ export function useReceipts() {
     formatCurrency,
     formatDate,
     getQuantityDiscrepancyText,
-    getPriceDiscrepancyText
+    getPriceDiscrepancyText,
+
+    // ✅ НОВЫЕ exports:
+    isReceiptIntegratedWithStorage,
+    getReceiptBatches,
+    storageIntegrationStats
   }
 }

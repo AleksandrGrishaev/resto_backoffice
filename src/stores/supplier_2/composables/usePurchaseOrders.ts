@@ -12,6 +12,7 @@ import type {
   OrderStatus,
   PaymentStatus
 } from '../types'
+import { plannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 
 const MODULE_NAME = 'usePurchaseOrders'
 
@@ -237,6 +238,16 @@ export function usePurchaseOrders() {
     try {
       console.log('PurchaseOrders: Creating order', data)
       const newOrder = await supplierStore.createOrder(data)
+
+      // ✅ НОВОЕ: Создаем планируемую поставку в StorageStore
+      try {
+        await plannedDeliveryIntegration.createPlannedDelivery(newOrder)
+        console.log(`PurchaseOrders: Planned delivery created for order ${newOrder.orderNumber}`)
+      } catch (error) {
+        console.warn('PurchaseOrders: Failed to create planned delivery (non-critical):', error)
+        // Не прерываем создание заказа из-за ошибки интеграции
+      }
+
       await createBillInAccountStore(newOrder)
       console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
       return newOrder
@@ -253,6 +264,17 @@ export function usePurchaseOrders() {
     try {
       console.log(`PurchaseOrders: Updating order ${id}`, data)
       const updatedOrder = await supplierStore.updateOrder(id, data)
+
+      // ✅ НОВОЕ: Обновляем планируемую поставку при изменении заказа
+      try {
+        await plannedDeliveryIntegration.updatePlannedDelivery(updatedOrder)
+        console.log(
+          `PurchaseOrders: Planned delivery updated for order ${updatedOrder.orderNumber}`
+        )
+      } catch (error) {
+        console.warn('PurchaseOrders: Failed to update planned delivery (non-critical):', error)
+      }
+
       console.log(`PurchaseOrders: Updated order ${id}`)
       return updatedOrder
     } catch (error) {
@@ -283,14 +305,42 @@ export function usePurchaseOrders() {
    * Send order to supplier
    */
   async function sendOrder(id: string): Promise<PurchaseOrder> {
-    return updateOrder(id, { status: 'sent' })
+    try {
+      console.log(`PurchaseOrders: Sending order ${id}`)
+      const sentOrder = await updateOrder(id, {
+        status: 'sent',
+        sentDate: new Date().toISOString() // Добавляем дату отправки
+      })
+
+      console.log(`PurchaseOrders: Order ${sentOrder.orderNumber} sent to supplier`)
+      return sentOrder
+    } catch (error) {
+      console.error('PurchaseOrders: Error sending order:', error)
+      throw error
+    }
   }
 
   /**
    * Confirm order from supplier
    */
   async function confirmOrder(id: string): Promise<PurchaseOrder> {
-    return updateOrder(id, { status: 'confirmed' })
+    try {
+      console.log(`PurchaseOrders: Confirming order ${id}`)
+
+      // Обновляем статус на confirmed и добавляем дату подтверждения
+      const confirmedOrder = await updateOrder(id, {
+        status: 'confirmed',
+        confirmedDate: new Date().toISOString()
+      })
+
+      console.log(
+        `PurchaseOrders: Order ${confirmedOrder.orderNumber} confirmed - ready for receipt`
+      )
+      return confirmedOrder
+    } catch (error) {
+      console.error('PurchaseOrders: Error confirming order:', error)
+      throw error
+    }
   }
 
   /**
@@ -304,7 +354,29 @@ export function usePurchaseOrders() {
    * Cancel order
    */
   async function cancelOrder(id: string): Promise<PurchaseOrder> {
-    return updateOrder(id, { status: 'cancelled' })
+    try {
+      console.log(`PurchaseOrders: Cancelling order ${id}`)
+      const cancelledOrder = await updateOrder(id, {
+        status: 'cancelled',
+        cancelledDate: new Date().toISOString()
+      })
+
+      // ✅ НОВОЕ: Отменяем планируемую поставку
+      try {
+        await plannedDeliveryIntegration.cancelPlannedDelivery(id)
+        console.log(
+          `PurchaseOrders: Planned delivery cancelled for order ${cancelledOrder.orderNumber}`
+        )
+      } catch (error) {
+        console.warn('PurchaseOrders: Failed to cancel planned delivery (non-critical):', error)
+      }
+
+      console.log(`PurchaseOrders: Order ${cancelledOrder.orderNumber} cancelled`)
+      return cancelledOrder
+    } catch (error) {
+      console.error('PurchaseOrders: Error cancelling order:', error)
+      throw error
+    }
   }
 
   /**
@@ -526,7 +598,20 @@ export function usePurchaseOrders() {
    * Check if order is ready for receipt
    */
   function isReadyForReceipt(order: PurchaseOrder): boolean {
-    return canReceiveOrder(order) && !hasActiveReceipt(order.id)
+    // Заказ готов к получению если он отправлен или подтвержден
+    const validStatuses = ['sent', 'confirmed']
+    const hasValidStatus = validStatuses.includes(order.status)
+    const hasNoActiveReceipt = !hasActiveReceipt(order.id)
+
+    console.log(`PurchaseOrders: isReadyForReceipt check`, {
+      orderId: order.id,
+      status: order.status,
+      hasValidStatus,
+      hasNoActiveReceipt,
+      isReady: hasValidStatus && hasNoActiveReceipt
+    })
+
+    return hasValidStatus && hasNoActiveReceipt
   }
 
   /**
@@ -650,6 +735,49 @@ export function usePurchaseOrders() {
     return now > expectedDate
   }
 
+  /**
+   * Получить планируемую дату поставки из StorageStore
+   */
+  async function getPlannedDeliveryDate(orderId: string): Promise<string | null> {
+    try {
+      const delivery = await storageStore.getPlannedDeliveryByOrderId(orderId)
+      return delivery?.plannedDate || null
+    } catch (error) {
+      console.warn('Failed to get planned delivery date:', error)
+      return null
+    }
+  }
+
+  /**
+   * Проверить статус планируемой поставки
+   */
+  async function getDeliveryStatus(orderId: string): Promise<string | null> {
+    try {
+      const delivery = await storageStore.getPlannedDeliveryByOrderId(orderId)
+      return delivery?.status || null
+    } catch (error) {
+      console.warn('Failed to get delivery status:', error)
+      return null
+    }
+  }
+
+  /**
+   * Получить информацию о созданных батчах для заказа
+   */
+  async function getOrderBatches(orderId: string): Promise<any[]> {
+    try {
+      const delivery = await storageStore.getPlannedDeliveryByOrderId(orderId)
+      if (!delivery?.batchIds) return []
+
+      const batches = await Promise.all(delivery.batchIds.map(id => storageStore.getBatchById(id)))
+
+      return batches.filter(batch => batch !== null)
+    } catch (error) {
+      console.warn('Failed to get order batches:', error)
+      return []
+    }
+  }
+
   // =============================================
   // RETURN PUBLIC API
   // =============================================
@@ -716,6 +844,10 @@ export function usePurchaseOrders() {
 
     // NEW: Исправления для Create Orders
     removeItemsFromSuggestions,
-    updateRequestsStatus
+    updateRequestsStatus,
+    // ✅ НОВЫЕ exports для интеграции:
+    getPlannedDeliveryDate,
+    getDeliveryStatus,
+    getOrderBatches
   }
 }
