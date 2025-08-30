@@ -810,6 +810,7 @@ class SupplierService {
   // =============================================
   // STATISTICS
   // =============================================
+
   async getStatistics() {
     await this.delay(50)
     return {
