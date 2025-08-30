@@ -451,30 +451,181 @@ class SupplierService {
 
   async getOrderSuggestions(department?: Department): Promise<OrderSuggestion[]> {
     try {
-      // Get suggestions from coordinator
-      const supplierData = mockDataCoordinator.getSupplierStoreData()
-      let suggestions = supplierData.suggestions
-
-      // Filter by department if provided
-      if (department) {
-        suggestions = this.filterSuggestionsByDepartment(suggestions, department)
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Order suggestions loaded from coordinator', {
-        department,
-        totalSuggestions: suggestions.length,
-        urgent: suggestions.filter(s => s.urgency === 'high').length,
-        medium: suggestions.filter(s => s.urgency === 'medium').length,
-        low: suggestions.filter(s => s.urgency === 'low').length
+      DebugUtils.info(MODULE_NAME, 'Getting order suggestions', {
+        department: department || 'all',
+        source: 'attempting_dynamic_from_storage'
       })
 
-      return suggestions
+      let suggestions: OrderSuggestion[] = []
+      let dataSource = 'unknown'
+
+      try {
+        // ✅ ПРИОРИТЕТ 1: Получаем динамические предложения из Storage
+        suggestions = await this.storageIntegration.getSuggestionsFromStock(department)
+        dataSource = 'dynamic_storage_integration'
+
+        DebugUtils.info(MODULE_NAME, 'Dynamic suggestions loaded successfully', {
+          department: department || 'all',
+          total: suggestions.length,
+          urgent: suggestions.filter(s => s.urgency === 'high').length,
+          medium: suggestions.filter(s => s.urgency === 'medium').length,
+          low: suggestions.filter(s => s.urgency === 'low').length,
+          source: dataSource
+        })
+      } catch (integrationError) {
+        DebugUtils.warn(MODULE_NAME, 'Dynamic suggestions failed, using fallback', {
+          error: integrationError,
+          fallbackTo: 'static_coordinator_data'
+        })
+
+        // ✅ FALLBACK: Используем статичные данные из координатора
+        const supplierData = mockDataCoordinator.getSupplierStoreData()
+        suggestions = [...supplierData.suggestions]
+        dataSource = 'static_coordinator_fallback'
+
+        // Фильтруем по департаменту если нужно
+        if (department) {
+          suggestions = this.filterSuggestionsByDepartment(suggestions, department)
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Fallback suggestions loaded', {
+          department: department || 'all',
+          total: suggestions.length,
+          source: dataSource
+        })
+      }
+
+      // ✅ ВАЛИДАЦИЯ: Проверяем корректность данных
+      const validSuggestions = suggestions.filter(s => {
+        const isValid =
+          s.itemId &&
+          s.itemName &&
+          typeof s.currentStock === 'number' &&
+          typeof s.minStock === 'number' &&
+          typeof s.suggestedQuantity === 'number' &&
+          s.urgency &&
+          s.reason
+
+        if (!isValid) {
+          DebugUtils.warn(MODULE_NAME, 'Invalid suggestion filtered out', {
+            suggestion: s,
+            source: dataSource
+          })
+        }
+
+        return isValid
+      })
+
+      // ✅ ФИНАЛЬНАЯ СТАТИСТИКА
+      DebugUtils.info(MODULE_NAME, 'Order suggestions processed successfully', {
+        department: department || 'all',
+        dataSource,
+        totalSuggestions: suggestions.length,
+        validSuggestions: validSuggestions.length,
+        filteredOut: suggestions.length - validSuggestions.length,
+        breakdown: {
+          urgent: validSuggestions.filter(s => s.urgency === 'high').length,
+          medium: validSuggestions.filter(s => s.urgency === 'medium').length,
+          low: validSuggestions.filter(s => s.urgency === 'low').length
+        },
+        sampleSuggestions: validSuggestions.slice(0, 3).map(s => ({
+          itemName: s.itemName,
+          currentStock: s.currentStock,
+          minStock: s.minStock,
+          urgency: s.urgency
+        }))
+      })
+
+      return validSuggestions
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get order suggestions from coordinator', { error })
+      DebugUtils.error(MODULE_NAME, 'Complete failure to get order suggestions', {
+        error,
+        department
+      })
+
+      // В случае полного провала возвращаем пустой массив
       return []
     }
   }
 
+  // =============================================
+  // ✅ НОВЫЙ МЕТОД: Получение актуальных цен из Storage (усовершенствованный)
+  // =============================================
+
+  async getLatestPrices(itemIds: string[]): Promise<Record<string, number>> {
+    try {
+      DebugUtils.debug(MODULE_NAME, 'Getting latest prices', {
+        itemIds,
+        source: 'attempting_storage_integration'
+      })
+
+      // Пытаемся получить цены через storageIntegration
+      const storagePrice = await this.storageIntegration.getLatestPrices(itemIds)
+
+      // Дополняем недостающие цены из Products Store
+      const productsStore = useProductsStore()
+      const combinedPrices: Record<string, number> = {}
+
+      for (const itemId of itemIds) {
+        // Приоритет 1: цена из Storage (самая актуальная)
+        if (storagePrice[itemId] && storagePrice[itemId] > 0) {
+          combinedPrices[itemId] = storagePrice[itemId]
+          continue
+        }
+
+        // Приоритет 2: цена из Products Store
+        const product = productsStore.products.find(p => p.id === itemId)
+        if (product) {
+          if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
+            combinedPrices[itemId] = product.baseCostPerUnit
+          } else if (product.costPerUnit && product.costPerUnit > 0) {
+            combinedPrices[itemId] = product.costPerUnit
+          }
+        }
+      }
+
+      DebugUtils.debug(MODULE_NAME, 'Latest prices retrieved', {
+        requested: itemIds.length,
+        found: Object.keys(combinedPrices).length,
+        fromStorage: Object.keys(storagePrice).length,
+        fromProducts: Object.keys(combinedPrices).length - Object.keys(storagePrice).length
+      })
+
+      return combinedPrices
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get latest prices', { error, itemIds })
+      return {}
+    }
+  }
+
+  // =============================================
+  // ✅ НОВЫЙ МЕТОД: Принудительное обновление suggestions
+  // =============================================
+
+  async refreshSuggestions(department?: Department): Promise<OrderSuggestion[]> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Force refreshing suggestions', {
+        department: department || 'all'
+      })
+
+      // Инвалидируем кэш перед получением новых данных
+      this.storageIntegration.invalidateCache()
+
+      // Получаем свежие suggestions
+      const suggestions = await this.getOrderSuggestions(department)
+
+      DebugUtils.info(MODULE_NAME, 'Suggestions force refreshed', {
+        department: department || 'all',
+        total: suggestions.length,
+        urgent: suggestions.filter(s => s.urgency === 'high').length
+      })
+
+      return suggestions
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to refresh suggestions', { error, department })
+      return []
+    }
+  }
   // =============================================
   // SUPPLIER BASKET METHODS
   // =============================================
@@ -590,41 +741,6 @@ class SupplierService {
       totalReceipts: this.receipts.length,
       pendingReceipts: this.receipts.filter(r => r.status === 'draft').length,
       urgentSuggestions: 0 // Will be calculated from coordinator data
-    }
-  }
-
-  // =============================================
-  // INTEGRATION METHODS
-  // =============================================
-
-  async getLatestPrices(itemIds: string[]): Promise<Record<string, number>> {
-    try {
-      let storageStore: any = null
-      try {
-        storageStore = useStorageStore()
-      } catch (error) {
-        DebugUtils.warn(MODULE_NAME, 'Storage store not available', { error })
-      }
-
-      const prices: Record<string, number> = {}
-
-      if (storageStore && storageStore.getBalance) {
-        for (const itemId of itemIds) {
-          try {
-            const balance = storageStore.getBalance(itemId)
-            if (balance && balance.currentPrice) {
-              prices[itemId] = balance.currentPrice
-            }
-          } catch (error) {
-            // Ignore individual item errors
-          }
-        }
-      }
-
-      return prices
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get latest prices', { error })
-      return {}
     }
   }
 

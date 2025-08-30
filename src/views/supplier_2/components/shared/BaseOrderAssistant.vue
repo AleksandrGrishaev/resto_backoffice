@@ -1,4 +1,5 @@
 <!-- src/views/supplier_2/components/shared/BaseOrderAssistant.vue -->
+<!-- ✅ ОБНОВЛЕНО: убрано дублирование, используется composable для utility функций -->
 <template>
   <v-dialog v-model="isOpen" max-width="1000px" persistent>
     <v-card>
@@ -99,10 +100,11 @@
                             <div class="font-weight-bold text-subtitle-2 mr-2">
                               {{ suggestion.itemName }}
                             </div>
+                            <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                             <v-chip
                               size="small"
-                              :color="getUrgencyColor(suggestion.urgency)"
-                              :prepend-icon="getUrgencyIcon(suggestion.urgency)"
+                              :color="orderAssistant.getUrgencyColor(suggestion.urgency)"
+                              :prepend-icon="orderAssistant.getUrgencyIcon(suggestion.urgency)"
                             >
                               {{ suggestion.urgency }}
                             </v-chip>
@@ -122,7 +124,7 @@
                             {{ formatReason(suggestion.reason) }}
                           </div>
 
-                          <!-- Average Daily Usage (заменяет Est. Cost) -->
+                          <!-- Average Daily Usage -->
                           <div class="text-body-2">
                             <div class="text-caption text-medium-emphasis">
                               Avg. daily usage (7 days)
@@ -270,8 +272,9 @@
                           </div>
                           <div class="text-right">
                             <div class="text-body-2 text-medium-emphasis">Estimated Cost</div>
+                            <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                             <div class="font-weight-bold">
-                              {{ formatCurrency(calculateManualItemCost()) }}
+                              {{ orderAssistant.formatCurrency(calculateManualItemCost()) }}
                             </div>
                           </div>
                         </div>
@@ -369,10 +372,12 @@
                         <!-- Cost -->
                         <div class="text-right" style="min-width: 120px">
                           <div class="text-caption text-medium-emphasis">Cost</div>
+                          <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                           <div class="font-weight-bold">
                             {{
-                              formatCurrency(
-                                getEstimatedPrice(item.itemId) * item.requestedQuantity
+                              orderAssistant.formatCurrency(
+                                orderAssistant.getEstimatedPrice(item.itemId) *
+                                  item.requestedQuantity
                               )
                             }}
                           </div>
@@ -435,9 +440,10 @@
                     </div>
                     <div class="text-center">
                       <div class="text-body-2 text-medium-emphasis">Avg. Cost per Item</div>
+                      <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                       <div class="text-h6 font-weight-bold">
                         {{
-                          formatCurrency(
+                          orderAssistant.formatCurrency(
                             requestSummary.totalItems > 0
                               ? requestSummary.estimatedTotal / requestSummary.totalItems
                               : 0
@@ -447,8 +453,9 @@
                     </div>
                     <div class="text-right">
                       <div class="text-body-2 text-medium-emphasis">Estimated Total</div>
+                      <!-- ✅ ИСПРАВЛЕНО: используем composable -->
                       <div class="text-h6 font-weight-bold text-primary">
-                        {{ formatCurrency(requestSummary.estimatedTotal) }}
+                        {{ orderAssistant.formatCurrency(requestSummary.estimatedTotal) }}
                       </div>
                     </div>
                   </div>
@@ -479,16 +486,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useOrderAssistant } from '@/stores/supplier_2/composables/useOrderAssistant'
 import { useProductsStore } from '@/stores/productsStore'
 import {
   formatQuantityWithUnit,
   formatQuantityRange,
   getBestInputUnit,
-  convertToPurchaseUnits,
-  convertUserInputToBaseUnits,
-  convertBaseUnitsToUserDisplay
+  convertUserInputToBaseUnits
 } from '@/utils/quantityFormatter'
 import type { OrderSuggestion, Department } from '@/stores/supplier_2/types'
 
@@ -517,7 +522,7 @@ const orderAssistant = useOrderAssistant()
 const productsStore = useProductsStore()
 
 // =============================================
-// LOCAL STATE
+// LOCAL STATE (без изменений)
 // =============================================
 
 const isOpen = computed({
@@ -540,7 +545,7 @@ const manualItem = ref({
 })
 
 // =============================================
-// COMPUTED PROPERTIES
+// COMPUTED PROPERTIES (без изменений)
 // =============================================
 
 const selectedDepartment = computed(() => orderAssistant.selectedDepartment.value)
@@ -551,7 +556,7 @@ const filteredSuggestions = computed(() => orderAssistant.filteredSuggestions.va
 const urgentSuggestions = computed(() => orderAssistant.urgentSuggestions.value)
 const requestSummary = computed(() => orderAssistant.requestSummary.value)
 
-// Group suggestions by categories
+// Group suggestions by categories (уникальная логика UI)
 const categorizedSuggestions = computed(() => {
   const suggestions = filteredSuggestions.value
 
@@ -629,7 +634,15 @@ const manualItemValidationMessage = computed(() => {
 })
 
 // =============================================
-// AI SUGGESTIONS METHODS
+// ✅ УПРОЩЕННЫЕ UTILITY FUNCTIONS - используют composable
+// =============================================
+
+function isSuggestionAdded(itemId: string): boolean {
+  return orderAssistant.isSuggestionAdded(itemId)
+}
+
+// =============================================
+// AI SUGGESTIONS FORMATTING (уникальная UI логика)
 // =============================================
 
 function formatSuggestionQuantityRange(suggestion: OrderSuggestion): string {
@@ -667,13 +680,11 @@ function getBestDisplayUnit(suggestion: OrderSuggestion): string {
   return getBestInputUnit(product)
 }
 
-// ✅ НОВАЯ ФУНКЦИЯ: Форматирует среднее потребление за день
 function formatDailyUsage(suggestion: OrderSuggestion): string {
   const product = productsStore.products.find(p => p.id === suggestion.itemId)
   if (!product) return 'N/A'
 
   // Примерный расчет на основе minStock
-  // В реальности это должно браться из ProductConsumption store
   const estimatedDailyUsage = Math.max(1, (product.minStock || suggestion.suggestedQuantity) / 10)
 
   return formatQuantityWithUnit(estimatedDailyUsage, product, { precision: 1 }) + '/day'
@@ -682,12 +693,17 @@ function formatDailyUsage(suggestion: OrderSuggestion): string {
 function formatReason(reason: string): string {
   const reasons: Record<string, string> = {
     below_minimum: 'Stock below minimum threshold',
+    out_of_stock: 'Out of stock - urgent reorder needed',
     running_low: 'Stock running low',
     optimization: 'Optimization opportunity',
     expired_soon: 'Items expiring soon'
   }
   return reasons[reason] || reason
 }
+
+// =============================================
+// ✅ УПРОЩЕННЫЕ EVENT HANDLERS
+// =============================================
 
 function addSuggestionToRequest(suggestion: OrderSuggestion): void {
   orderAssistant.addSuggestionToRequest(suggestion)
@@ -702,59 +718,59 @@ function addUrgentItems(): void {
   activeTab.value = 'summary'
 }
 
+// ✅ УПРОЩЕНО: убран try/catch - ошибки обрабатываются в composable
+async function generateSuggestions(): Promise<void> {
+  await orderAssistant.generateSuggestions()
+}
+
+// ✅ УПРОЩЕНО: минимальный try/catch только для UI состояния
+async function createRequest(): Promise<void> {
+  try {
+    isCreating.value = true
+
+    const requestId = await orderAssistant.createRequest(requestedBy.value, {
+      priority: priority.value,
+      department: selectedDepartmentIndex.value
+    })
+
+    emits('success', `Request ${requestId} created successfully`)
+    closeDialog()
+  } catch (error) {
+    emits('error', 'Failed to create request')
+  } finally {
+    isCreating.value = false
+  }
+}
+
+function closeDialog(): void {
+  isOpen.value = false
+  activeTab.value = 'suggestions'
+  resetManualItem()
+}
+
 // =============================================
-// QUANTITY EDITING METHODS
+// ✅ УПРОЩЕННОЕ QUANTITY MANAGEMENT
 // =============================================
 
 function updateSelectedQuantity(itemId: string, newQuantity: string | number): void {
   const quantity = typeof newQuantity === 'string' ? parseFloat(newQuantity) : newQuantity
   if (quantity <= 0 || isNaN(quantity)) return
 
-  try {
-    const product = productsStore.products.find(p => p.id === itemId)
-    if (!product) return
-
-    const inputUnit = getBestInputUnit(product)
-    const quantityInBaseUnits = convertUserInputToBaseUnits(quantity, inputUnit, product)
-
-    orderAssistant.updateSelectedQuantity(itemId, quantityInBaseUnits)
-  } catch (error) {
-    console.error('Error updating quantity:', error)
-    emits('error', 'Failed to update quantity')
-  }
+  // ✅ УПРОЩЕНО: прямой вызов composable
+  orderAssistant.updateSelectedQuantity(itemId, quantity)
 }
 
 function getSelectedQuantity(itemId: string): number {
-  const item = selectedItems.value.find(item => item.itemId === itemId)
-  if (!item) return 0
-
-  const product = productsStore.products.find(p => p.id === itemId)
-  if (!product) return item.requestedQuantity
-
-  const inputUnit = getBestInputUnit(product)
-
-  if (inputUnit === 'kg' && product.baseUnit === 'gram') {
-    return Number((item.requestedQuantity / 1000).toFixed(3))
-  }
-
-  if (inputUnit === 'L' && product.baseUnit === 'ml') {
-    return Number((item.requestedQuantity / 1000).toFixed(3))
-  }
-
-  return item.requestedQuantity
+  // ✅ УПРОЩЕНО: используем метод из composable
+  return orderAssistant.getSelectedQuantityForDisplay(itemId)
 }
 
-function removeSuggestionFromRequest(itemId: string): void {
-  try {
-    orderAssistant.removeItemFromRequest(itemId)
-  } catch (error) {
-    console.error('Error removing item:', error)
-    emits('error', 'Failed to remove item')
-  }
+function removeItemFromRequest(itemId: string): void {
+  orderAssistant.removeItemFromRequest(itemId)
 }
 
 // =============================================
-// MANUAL ITEM METHODS
+// MANUAL ITEM MANAGEMENT (без изменений)
 // =============================================
 
 function updateManualItemName(): void {
@@ -810,39 +826,35 @@ function calculateManualItemCost(): number {
     product
   )
 
-  const baseCost = (product as any).baseCostPerUnit || product.costPerUnit || 0
+  // ✅ ИСПРАВЛЕНО: используем метод из composable
+  const baseCost = orderAssistant.getEstimatedPrice(product.id)
   return baseQuantity * baseCost
 }
 
 function addManualItem(): void {
-  try {
-    const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
-    if (!product) {
-      emits('error', 'Product not found')
-      return
-    }
-
-    const quantityInBaseUnits = convertUserInputToBaseUnits(
-      manualItem.value.quantity,
-      manualItem.value.unit,
-      product
-    )
-
-    orderAssistant.addManualItem(
-      manualItem.value.itemId,
-      manualItem.value.itemName,
-      quantityInBaseUnits,
-      getBestInputUnit(product),
-      manualItem.value.notes
-    )
-
-    resetManualItem()
-    activeTab.value = 'summary'
-    emits('success', `Added ${product.name} to request`)
-  } catch (error) {
-    console.error('Error adding manual item:', error)
-    emits('error', 'Failed to add item to request')
+  const product = productsStore.products.find(p => p.id === manualItem.value.itemId)
+  if (!product) {
+    emits('error', 'Product not found')
+    return
   }
+
+  const quantityInBaseUnits = convertUserInputToBaseUnits(
+    manualItem.value.quantity,
+    manualItem.value.unit,
+    product
+  )
+
+  orderAssistant.addManualItem(
+    manualItem.value.itemId,
+    manualItem.value.itemName,
+    quantityInBaseUnits,
+    getBestInputUnit(product),
+    manualItem.value.notes
+  )
+
+  resetManualItem()
+  activeTab.value = 'summary'
+  emits('success', `Added ${product.name} to request`)
 }
 
 function resetManualItem(): void {
@@ -856,7 +868,7 @@ function resetManualItem(): void {
 }
 
 // =============================================
-// REQUEST SUMMARY METHODS
+// REQUEST SUMMARY FORMATTING (уникальная логика)
 // =============================================
 
 function formatQuantityForSummary(item: any): string {
@@ -873,83 +885,16 @@ function getBestDisplayUnitForItem(item: any): string {
   return getBestInputUnit(product)
 }
 
-function removeItemFromRequest(itemId: string): void {
-  orderAssistant.removeItemFromRequest(itemId)
-}
-
 // =============================================
-// UTILITY METHODS
-// =============================================
-
-function isSuggestionAdded(itemId: string): boolean {
-  return orderAssistant.isSuggestionAdded(itemId)
-}
-
-function getEstimatedPrice(itemId: string): number {
-  return orderAssistant.getEstimatedPrice(itemId)
-}
-
-function getUrgencyColor(urgency: string): string {
-  return orderAssistant.getUrgencyColor(urgency as any)
-}
-
-function getUrgencyIcon(urgency: string): string {
-  return orderAssistant.getUrgencyIcon(urgency as any)
-}
-
-function formatCurrency(amount: number): string {
-  return orderAssistant.formatCurrency(amount)
-}
-
-async function generateSuggestions(): Promise<void> {
-  try {
-    await orderAssistant.generateSuggestions()
-  } catch (error) {
-    console.error('Error generating suggestions:', error)
-    emits('error', 'Failed to generate suggestions')
-  }
-}
-
-async function createRequest(): Promise<void> {
-  try {
-    isCreating.value = true
-
-    const requestId = await orderAssistant.createRequest(requestedBy.value, {
-      priority: priority.value,
-      department: selectedDepartmentIndex.value
-    })
-
-    emits('success', `Request ${requestId} created successfully`)
-    closeDialog()
-  } catch (error) {
-    console.error('Error creating request:', error)
-    emits('error', 'Failed to create request')
-  } finally {
-    isCreating.value = false
-  }
-}
-
-function closeDialog(): void {
-  isOpen.value = false
-  activeTab.value = 'suggestions'
-  resetManualItem()
-}
-
-// =============================================
-// WATCHERS
+// WATCHERS (без изменений)
 // =============================================
 
 watch(
   selectedDepartmentIndex,
   async newDepartment => {
     if (newDepartment !== orderAssistant.selectedDepartment.value) {
-      try {
-        await orderAssistant.changeDepartment(newDepartment)
-        await generateSuggestions()
-      } catch (error) {
-        console.error('Error changing department:', error)
-        emits('error', 'Failed to change department')
-      }
+      await orderAssistant.changeDepartment(newDepartment)
+      await generateSuggestions()
     }
   },
   { immediate: false }
@@ -959,13 +904,8 @@ watch(
   isOpen,
   async newValue => {
     if (newValue) {
-      try {
-        selectedDepartmentIndex.value = orderAssistant.selectedDepartment.value
-        await orderAssistant.refreshData()
-      } catch (error) {
-        console.error('Error refreshing data:', error)
-        emits('error', 'Failed to load data')
-      }
+      selectedDepartmentIndex.value = orderAssistant.selectedDepartment.value
+      await orderAssistant.refreshData()
     }
   },
   { immediate: false }

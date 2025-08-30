@@ -322,6 +322,24 @@ export function useOrderAssistant() {
     }
   }
 
+  // =============================================
+  // ✅ НОВАЯ ФУНКЦИЯ: getCurrentStock - для отладки
+  // =============================================
+
+  // ДОБАВИТЬ эту функцию для получения актуальных остатков
+  function getCurrentStock(itemId: string, department?: Department): number {
+    try {
+      const balance = department
+        ? storageStore.departmentBalances(department).find(b => b.itemId === itemId)
+        : storageStore.getBalance(itemId)
+
+      return balance?.totalQuantity || 0
+    } catch (error) {
+      DebugUtils.debug(MODULE_NAME, 'Could not get current stock', { itemId, department, error })
+      return 0
+    }
+  }
+
   /**
    * ✅ Генерация предложений заказов
    */
@@ -334,39 +352,64 @@ export function useOrderAssistant() {
 
       const targetDepartment = department || state.selectedDepartment
 
-      DebugUtils.info(MODULE_NAME, 'Generating suggestions via supplierStore', {
-        department: targetDepartment
+      DebugUtils.info(MODULE_NAME, 'Generating suggestions - new flow', {
+        department: targetDepartment,
+        flow: 'useOrderAssistant → supplierStore → supplierService → storageIntegration'
       })
 
-      // Получаем актуальные остатки
+      // ✅ КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Обновляем Storage балансы перед генерацией
       try {
         await storageStore.fetchBalances(targetDepartment)
+        DebugUtils.debug(MODULE_NAME, 'Storage balances refreshed', {
+          department: targetDepartment,
+          balancesCount: storageStore.state.balances.length
+        })
       } catch (error) {
-        DebugUtils.warn(MODULE_NAME, 'Storage fetch failed, continuing...', { error })
+        DebugUtils.warn(MODULE_NAME, 'Storage fetch failed, continuing with cached data...', {
+          error
+        })
       }
 
-      // ✅ ИСПРАВЛЕНИЕ: Используем supplierStore.refreshSuggestions()
-      // вместо прямого обращения к supplierService
+      // ✅ КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Обновляем Products если нужно
+      if (productsStore.products.length === 0) {
+        try {
+          await productsStore.loadProducts()
+          DebugUtils.debug(MODULE_NAME, 'Products loaded', {
+            productsCount: productsStore.products.length
+          })
+        } catch (error) {
+          DebugUtils.warn(MODULE_NAME, 'Products load failed', { error })
+        }
+      }
+
+      // ✅ ОСНОВНОЙ ВЫЗОВ: Используем supplierStore для получения динамических данных
       await supplierStore.refreshSuggestions(targetDepartment)
 
-      // Получаем отфильтрованные предложения из store
+      // Получаем результат из store
       const newSuggestions = supplierStore.state.orderSuggestions || []
 
       state.lastRefresh = TimeUtils.getCurrentLocalISO()
-
       const generationTime = Date.now() - startTime
 
-      DebugUtils.info(MODULE_NAME, 'Suggestions generated successfully via supplierStore', {
+      DebugUtils.info(MODULE_NAME, 'Suggestions generated successfully - new flow', {
         department: targetDepartment,
         total: newSuggestions.length,
         urgent: newSuggestions.filter(s => s.urgency === 'high').length,
-        generationTime: `${generationTime}ms`
+        medium: newSuggestions.filter(s => s.urgency === 'medium').length,
+        low: newSuggestions.filter(s => s.urgency === 'low').length,
+        generationTime: `${generationTime}ms`,
+        sampleData: newSuggestions.slice(0, 2).map(s => ({
+          itemName: s.itemName,
+          currentStock: s.currentStock,
+          minStock: s.minStock,
+          urgency: s.urgency
+        }))
       })
 
       return newSuggestions
     } catch (error) {
       const errorMessage = `Failed to generate suggestions: ${error}`
-      DebugUtils.error(MODULE_NAME, 'Suggestion generation failed', { error })
+      DebugUtils.error(MODULE_NAME, 'Suggestion generation failed - new flow', { error })
       addError(errorMessage)
       throw error
     } finally {
@@ -661,6 +704,7 @@ export function useOrderAssistant() {
     updateItemQuantity,
     clearSelectedItems,
     createRequest,
+    getCurrentStock,
 
     // ===== DEPARTMENT MANAGEMENT =====
     setDepartment,

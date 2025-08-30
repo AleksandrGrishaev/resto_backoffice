@@ -380,63 +380,104 @@ export const useSupplierStore = defineStore('supplier', () => {
 
     try {
       state.value.loading.suggestions = true
+      integrationState.value.integrationErrors = []
 
-      DebugUtils.info(MODULE_NAME, 'Refreshing suggestions with request filtering', { department })
+      DebugUtils.info(MODULE_NAME, 'Refreshing suggestions with dynamic data', {
+        department: department || 'all',
+        flow: 'supplierStore → supplierService → storageIntegration'
+      })
 
-      // Get fresh data from coordinator
-      const supplierData = mockDataCoordinator.getSupplierStoreData()
-      let suggestions = supplierData.suggestions
+      // ✅ КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Используем supplierService.refreshSuggestions()
+      // вместо getOrderSuggestions() для принудительного обновления
+      const suggestions = await supplierService.refreshSuggestions(department)
 
-      // Filter by department if provided
-      if (department) {
-        suggestions = suggestions.filter(suggestion => {
-          if (department === 'bar') {
-            return (
-              suggestion.itemId.includes('beer') ||
-              suggestion.itemId.includes('cola') ||
-              suggestion.itemId.includes('water')
-            )
-          } else {
-            return (
-              !suggestion.itemId.includes('beer') &&
-              !suggestion.itemId.includes('cola') &&
-              !suggestion.itemId.includes('water')
-            )
-          }
-        })
-      }
-
-      // ✅ НОВАЯ ЛОГИКА: Фильтруем предложения с учетом существующих заявок
-      const activeRequests = state.value.requests.filter(
-        request => !['cancelled', 'converted'].includes(request.status)
-      )
-
-      suggestions = filterSuggestionsWithExistingRequests(suggestions, activeRequests)
-
+      // Обновляем состояние
       state.value.orderSuggestions = suggestions
       integrationState.value.lastSuggestionsUpdate = TimeUtils.getCurrentLocalISO()
 
-      const generationTime = Date.now() - startTime
-      updatePerformanceMetric('avgSuggestionGenerationTime', generationTime)
+      // Обновляем метрики
+      const refreshTime = Date.now() - startTime
+      updatePerformanceMetric('avgSuggestionGenerationTime', refreshTime)
 
-      DebugUtils.info(MODULE_NAME, 'Order suggestions refreshed with request filtering', {
-        originalCount: supplierData.suggestions.length,
-        departmentFiltered:
-          suggestions.length + (supplierData.suggestions.length - suggestions.length),
-        finalCount: suggestions.length,
-        activeRequests: activeRequests.length,
+      // Проверяем качество данных
+      const dataQuality = analyzeSuggestionsQuality(suggestions)
+
+      DebugUtils.info(MODULE_NAME, 'Suggestions refreshed successfully', {
+        department: department || 'all',
+        total: suggestions.length,
         urgent: suggestions.filter(s => s.urgency === 'high').length,
         medium: suggestions.filter(s => s.urgency === 'medium').length,
         low: suggestions.filter(s => s.urgency === 'low').length,
-        department,
-        generationTime: `${generationTime}ms`
+        refreshTime: `${refreshTime}ms`,
+        dataQuality: {
+          withCurrentStock: dataQuality.withCurrentStock,
+          withPrices: dataQuality.withPrices,
+          withMinStock: dataQuality.withMinStock
+        },
+        sampleSuggestions: suggestions.slice(0, 3).map(s => ({
+          itemName: s.itemName,
+          currentStock: s.currentStock,
+          minStock: s.minStock,
+          suggestedQuantity: s.suggestedQuantity,
+          urgency: s.urgency
+        }))
       })
+
+      // Обновляем health status
+      if (suggestions.length > 0 && dataQuality.withCurrentStock > 0.8) {
+        integrationState.value.integrationHealth = 'excellent'
+      } else if (suggestions.length > 0) {
+        integrationState.value.integrationHealth = 'good'
+      } else {
+        integrationState.value.integrationHealth = 'poor'
+        integrationState.value.integrationErrors.push('No suggestions generated')
+      }
     } catch (error) {
-      const errorMessage = `Suggestions refresh failed: ${error}`
-      DebugUtils.error(MODULE_NAME, 'Failed to refresh suggestions', { error })
+      const errorMessage = `Failed to refresh suggestions: ${error}`
+      DebugUtils.error(MODULE_NAME, 'Suggestions refresh failed', {
+        error,
+        department,
+        errorType: error?.constructor?.name,
+        errorMessage: error?.message
+      })
+
       integrationState.value.integrationErrors.push(errorMessage)
+      integrationState.value.integrationHealth = 'critical'
+
+      // Не бросаем ошибку - пусть UI покажет пустой список
+      state.value.orderSuggestions = []
     } finally {
       state.value.loading.suggestions = false
+    }
+  }
+
+  function analyzeSuggestionsQuality(suggestions: OrderSuggestion[]) {
+    if (suggestions.length === 0) {
+      return {
+        withCurrentStock: 0,
+        withPrices: 0,
+        withMinStock: 0,
+        isEmpty: true
+      }
+    }
+
+    const withCurrentStock = suggestions.filter(
+      s => typeof s.currentStock === 'number' && s.currentStock >= 0
+    ).length
+
+    const withPrices = suggestions.filter(
+      s => typeof s.estimatedPrice === 'number' && s.estimatedPrice > 0
+    ).length
+
+    const withMinStock = suggestions.filter(
+      s => typeof s.minStock === 'number' && s.minStock > 0
+    ).length
+
+    return {
+      withCurrentStock: withCurrentStock / suggestions.length,
+      withPrices: withPrices / suggestions.length,
+      withMinStock: withMinStock / suggestions.length,
+      isEmpty: false
     }
   }
 
