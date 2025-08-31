@@ -349,6 +349,19 @@ const inventoryItems = ref<InventoryItem[]>([])
 const currentInventory = ref<InventoryDocument | null>(null)
 const showDebugInfo = ref(false)
 
+const debugLog = (message, data = {}) => {
+  console.log(`[InventoryDialog] ${message}`, {
+    ...data,
+    timestamp: new Date().toISOString(),
+    inventoryItemsType: typeof inventoryItems.value,
+    inventoryItemsIsArray: Array.isArray(inventoryItems.value),
+    inventoryItemsLength: inventoryItems.value?.length,
+    storageStoreReady: !!storageStore.state?.value,
+    balancesLength: storageStore.state?.value?.balances?.length,
+    productsLength: productsStore.products?.length
+  })
+}
+
 // Dev mode check
 const isDev = computed(() => {
   return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
@@ -356,10 +369,32 @@ const isDev = computed(() => {
 
 // ✅ FIXED: Get ALL balances including zero and negative stock
 const allAvailableBalances = computed(() => {
-  return storageStore.state.balances.filter(
-    b => b.department === props.department && b.itemType === 'product'
-    // ✅ REMOVED: && b.totalQuantity > 0 - now includes zero and negative stock
-  )
+  debugLog('allAvailableBalances computed called', {
+    hasStorageState: !!storageStore.state?.value,
+    hasBalances: !!storageStore.state?.value?.balances,
+    balancesLength: storageStore.state?.value?.balances?.length,
+    department: props.department
+  })
+
+  if (!storageStore.state?.value?.balances) {
+    debugLog('allAvailableBalances: no balances available')
+    return []
+  }
+
+  try {
+    const filtered = storageStore.state.value.balances.filter(
+      b => b && b.department === props.department && b.itemType === 'product'
+    )
+    debugLog('allAvailableBalances: filtered result', {
+      originalLength: storageStore.state.value.balances.length,
+      filteredLength: filtered.length,
+      firstBalance: filtered[0]
+    })
+    return filtered
+  } catch (error) {
+    debugLog('allAvailableBalances: error filtering', { error })
+    return []
+  }
 })
 
 // Get available categories from products in inventory
@@ -422,23 +457,50 @@ const categoriesWithCount = computed(() => {
   }
 })
 
-// ✅ NEW: Stock summary statistics
+// ✅ ИСПРАВЛЕНО: Добавлена защита от undefined
 const stockSummary = computed(() => {
+  debugLog('stockSummary computed called', {
+    inventoryItems: inventoryItems.value,
+    hasInventoryItems: !!inventoryItems.value
+  })
+
+  // Защита от undefined с логированием
+  if (!inventoryItems.value) {
+    debugLog('stockSummary: inventoryItems.value is null/undefined')
+    return { total: 0, withStock: 0, zeroStock: 0, negativeStock: 0 }
+  }
+
+  if (!Array.isArray(inventoryItems.value)) {
+    debugLog('stockSummary: inventoryItems.value is not an array', {
+      type: typeof inventoryItems.value,
+      value: inventoryItems.value
+    })
+    return { total: 0, withStock: 0, zeroStock: 0, negativeStock: 0 }
+  }
+
+  debugLog('stockSummary: processing array', {
+    length: inventoryItems.value.length,
+    firstItem: inventoryItems.value[0]
+  })
+
   const total = inventoryItems.value.length
   const withStock = inventoryItems.value.filter(item => item.systemQuantity > 0).length
   const zeroStock = inventoryItems.value.filter(item => item.systemQuantity === 0).length
   const negativeStock = inventoryItems.value.filter(item => item.systemQuantity < 0).length
 
-  return {
-    total,
-    withStock,
-    zeroStock,
-    negativeStock
-  }
+  const result = { total, withStock, zeroStock, negativeStock }
+  debugLog('stockSummary: result', result)
+
+  return result
 })
 
-// ✅ NEW: Group items by stock status for organized display
+// ✅ ИСПРАВЛЕНО: Защита от undefined в sectionsWithItems
 const sectionsWithItems = computed(() => {
+  // Проверяем, что inventoryItems.value существует и является массивом
+  if (!inventoryItems.value || !Array.isArray(inventoryItems.value)) {
+    return []
+  }
+
   let items = [...inventoryItems.value]
 
   // Apply category filter
@@ -486,55 +548,85 @@ const sectionsWithItems = computed(() => {
     ]
   }
 
-  // Group by stock status for organized display
-  const negativeStock = items.filter(item => item.systemQuantity < 0)
-  const withStock = items.filter(item => item.systemQuantity > 0)
-  const zeroStock = items.filter(item => item.systemQuantity === 0)
-
-  const sections = []
-
-  if (withStock.length > 0) {
-    sections.push({
-      key: 'with-stock',
+  // Return sections grouped by stock status
+  return [
+    {
+      key: 'withStock',
       title: 'Products with Stock',
-      items: withStock.sort((a, b) => a.itemName.localeCompare(b.itemName)),
+      items: items.filter(item => item.systemQuantity > 0),
       color: 'success',
-      icon: 'mdi-check-circle'
-    })
-  }
-
-  if (negativeStock.length > 0) {
-    sections.push({
-      key: 'negative-stock',
-      title: 'Negative Stock (Critical)',
-      items: negativeStock.sort((a, b) => a.itemName.localeCompare(b.itemName)),
+      icon: 'mdi-package-variant'
+    },
+    {
+      key: 'zeroStock',
+      title: 'Zero Stock',
+      items: items.filter(item => item.systemQuantity === 0),
+      color: 'warning',
+      icon: 'mdi-package-variant-remove'
+    },
+    {
+      key: 'negativeStock',
+      title: 'Negative Stock',
+      items: items.filter(item => item.systemQuantity < 0),
       color: 'error',
       icon: 'mdi-alert-circle'
-    })
-  }
+    }
+  ].filter(section => section.items.length > 0)
+})
 
-  if (zeroStock.length > 0) {
-    sections.push({
-      key: 'zero-stock',
-      title: 'Zero Stock (Need Replenishment)',
-      items: zeroStock.sort((a, b) => a.itemName.localeCompare(b.itemName)),
-      color: 'warning',
-      icon: 'mdi-package-variant-closed'
-    })
-  }
+// ✅ ИСПРАВЛЕНО: Защита от undefined в других computed свойствах
+const totalItems = computed(() => {
+  return inventoryItems.value?.length || 0
+})
 
-  return sections
+const countedItems = computed(() => {
+  if (!inventoryItems.value || !Array.isArray(inventoryItems.value)) {
+    return 0
+  }
+  return inventoryItems.value.filter(item => hasItemBeenCounted(item)).length
 })
 
 const filteredItems = computed(() => {
-  return sectionsWithItems.value.flatMap(section => section.items)
+  if (!inventoryItems.value || !Array.isArray(inventoryItems.value)) {
+    return []
+  }
+
+  let items = [...inventoryItems.value]
+
+  // Apply category filter
+  if (categoryFilter.value !== 'all') {
+    items = items.filter(item => {
+      try {
+        const product = productsStore.products.find(p => p.id === item.itemId)
+        return (product?.category || 'other') === categoryFilter.value
+      } catch (error) {
+        console.warn('Error filtering by category:', error)
+        return true
+      }
+    })
+  }
+
+  // Apply status filter
+  switch (filterType.value) {
+    case 'discrepancy':
+      items = items.filter(item => Math.abs(item.difference) > 0.01)
+      break
+    case 'uncounted':
+      items = items.filter(item => !hasItemBeenCounted(item))
+      break
+    case 'negative':
+      items = items.filter(item => item.systemQuantity < 0)
+      break
+    case 'zero':
+      items = items.filter(item => item.systemQuantity === 0)
+      break
+    default:
+      // show all
+      break
+  }
+
+  return items
 })
-
-const totalItems = computed(() => inventoryItems.value.length)
-
-const countedItems = computed(
-  () => inventoryItems.value.filter(item => hasItemBeenCounted(item)).length
-)
 
 // Helper for determining if item has been counted
 function hasItemBeenCounted(item: InventoryItem): boolean {
@@ -549,9 +641,12 @@ const progressPercentage = computed(() =>
   totalItems.value > 0 ? (countedItems.value / totalItems.value) * 100 : 0
 )
 
-const discrepancyCount = computed(
-  () => inventoryItems.value.filter(item => Math.abs(item.difference) > 0.01).length
-)
+const discrepancyCount = computed(() => {
+  if (!inventoryItems.value || !Array.isArray(inventoryItems.value)) {
+    return 0
+  }
+  return inventoryItems.value.filter(item => Math.abs(item.difference) > 0.01).length
+})
 
 const valueDifference = computed(() =>
   inventoryItems.value.reduce((sum, item) => sum + item.valueDifference, 0)
@@ -629,28 +724,88 @@ function updateInventoryItem(updatedItem: InventoryItem) {
 
 // ✅ FIXED: Initialize inventory items with ALL balances (including zero/negative stock)
 function initializeInventoryItems() {
-  inventoryItems.value = allAvailableBalances.value.map(balance => ({
-    id: `inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    itemId: balance.itemId,
-    itemType: balance.itemType,
-    itemName: balance.itemName,
-    systemQuantity: balance.totalQuantity, // ✅ This now includes 0 and negative values
-    actualQuantity: balance.totalQuantity,
-    difference: 0,
-    unit: balance.unit,
-    averageCost: balance.averageCost,
-    valueDifference: 0,
-    notes: '',
-    countedBy: ''
-  }))
-
-  DebugUtils.info(MODULE_NAME, 'Inventory items initialized (including zero/negative stock)', {
-    count: inventoryItems.value.length,
+  debugLog('initializeInventoryItems called', {
     department: props.department,
-    withStock: inventoryItems.value.filter(item => item.systemQuantity > 0).length,
-    zeroStock: inventoryItems.value.filter(item => item.systemQuantity === 0).length,
-    negativeStock: inventoryItems.value.filter(item => item.systemQuantity < 0).length
+    hasStorageStore: !!storageStore,
+    hasStorageState: !!storageStore.state?.value,
+    balancesAvailable: allAvailableBalances.value?.length || 0
   })
+
+  try {
+    const balances = allAvailableBalances.value
+
+    debugLog('initializeInventoryItems: got balances', {
+      balances: balances,
+      balancesLength: balances?.length,
+      balancesType: typeof balances
+    })
+
+    if (!balances || !Array.isArray(balances)) {
+      debugLog('initializeInventoryItems: invalid balances')
+      inventoryItems.value = []
+      return
+    }
+
+    if (balances.length === 0) {
+      debugLog('initializeInventoryItems: no balances for department', {
+        department: props.department,
+        allBalances: storageStore.state?.value?.balances?.length || 0
+      })
+      inventoryItems.value = []
+      return
+    }
+
+    const newItems = balances.map((balance, index) => {
+      debugLog(`Processing balance ${index}`, { balance })
+
+      return {
+        id: `inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        itemId: balance.itemId,
+        itemType: balance.itemType,
+        itemName: balance.itemName,
+        systemQuantity: balance.totalQuantity,
+        actualQuantity: balance.totalQuantity,
+        difference: 0,
+        unit: balance.unit,
+        averageCost: balance.averageCost,
+        valueDifference: 0,
+        notes: '',
+        countedBy: ''
+      }
+    })
+
+    debugLog('initializeInventoryItems: setting inventoryItems', {
+      newItemsLength: newItems.length,
+      firstItem: newItems[0]
+    })
+
+    // Сначала логируем ПЕРЕД присвоением
+    debugLog('BEFORE setting inventoryItems.value', {
+      oldValue: inventoryItems.value,
+      newValue: newItems
+    })
+
+    inventoryItems.value = newItems
+
+    // Затем логируем AFTER присвоения
+    debugLog('AFTER setting inventoryItems.value', {
+      currentValue: inventoryItems.value,
+      isArray: Array.isArray(inventoryItems.value),
+      length: inventoryItems.value?.length
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Inventory items initialized', {
+      count: inventoryItems.value.length,
+      department: props.department,
+      withStock: inventoryItems.value.filter(item => item.systemQuantity > 0).length,
+      zeroStock: inventoryItems.value.filter(item => item.systemQuantity === 0).length,
+      negativeStock: inventoryItems.value.filter(item => item.systemQuantity < 0).length
+    })
+  } catch (error) {
+    debugLog('initializeInventoryItems: error', { error })
+    console.error('Error initializing inventory items:', error)
+    inventoryItems.value = []
+  }
 }
 
 function loadExistingInventory() {
@@ -824,16 +979,28 @@ watch(
   () => props.modelValue,
   async isOpen => {
     if (isOpen) {
-      // Initialize stores before loading data
-      await initializeStores()
+      try {
+        // Initialize stores before loading data
+        await initializeStores()
 
-      if (props.existingInventory) {
-        loadExistingInventory()
-      } else {
-        initializeInventoryItems()
+        // Проверяем готовность stores перед инициализацией
+        if (!storageStore.state || !productsStore.products) {
+          console.warn('Stores not ready yet')
+          return
+        }
+
+        if (props.existingInventory) {
+          loadExistingInventory()
+        } else {
+          initializeInventoryItems()
+        }
+      } catch (error) {
+        console.error('Error opening inventory dialog:', error)
+        emit('error', 'Failed to initialize inventory dialog')
       }
     }
-  }
+  },
+  { immediate: true }
 )
 
 // Watch for existing inventory changes
