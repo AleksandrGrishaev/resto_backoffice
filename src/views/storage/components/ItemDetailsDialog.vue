@@ -70,17 +70,22 @@
             <h4 class="mb-3 d-flex align-center">
               <v-icon color="primary" class="mr-2">mdi-package-variant</v-icon>
               Active Batches (FIFO Order)
-              <v-chip size="small" class="ml-2">{{ item.batches.length }}</v-chip>
+              <!-- ИЗМЕНИТЬ: item.batches.length → activeBatchesForItem.length -->
+              <v-chip size="small" class="ml-2">{{ activeBatchesForItem.length }}</v-chip>
             </h4>
 
-            <div v-if="item.batches.length === 0" class="text-center py-6 text-medium-emphasis">
+            <!-- ИЗМЕНИТЬ: item.batches.length → activeBatchesForItem.length -->
+            <div
+              v-if="activeBatchesForItem.length === 0"
+              class="text-center py-6 text-medium-emphasis"
+            >
               <v-icon icon="mdi-package-variant-closed" size="48" class="mb-2" />
               <div>No active batches</div>
             </div>
 
             <div v-else class="batches-list">
               <v-card
-                v-for="(batch, index) in item.batches"
+                v-for="(batch, index) in activeBatchesForItem"
                 :key="batch.id"
                 variant="outlined"
                 class="mb-3"
@@ -246,6 +251,15 @@ const storageStore = useStorageStore()
 // ===========================
 // COMPUTED ДЛЯ ТРАНЗИТНЫХ BATCH-ЕЙ
 // ===========================
+
+const activeBatchesForItem = computed(() => {
+  if (!props.item) return []
+
+  // ✅ ФИЛЬТРУЕМ: Показываем ТОЛЬКО активные батчи с quantity > 0
+  return props.item.batches.filter(
+    batch => batch.status === 'active' && batch.isActive === true && batch.currentQuantity > 0
+  )
+})
 
 const transitBatchesForItem = computed(() => {
   if (!props.item || !storageStore.transitBatches?.value) return []

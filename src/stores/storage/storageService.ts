@@ -298,8 +298,15 @@ export class StorageService {
   private groupBatchesByProductAndDepartment(): Map<string, StorageBatch[]> {
     const grouped = new Map<string, StorageBatch[]>()
 
+    // ❌ БЫЛО (неправильно - исключало транзитные):
+    // this.batches
+    //   .filter(batch => batch.status === 'active' && batch.currentQuantity > 0)
+
+    // ✅ ИСПРАВЛЕНО (правильно - только активные, исключаем consumed/expired):
     this.batches
-      .filter(batch => batch.status === 'active' && batch.currentQuantity > 0)
+      .filter(
+        batch => batch.status === 'active' && batch.currentQuantity > 0 && batch.isActive === true
+      )
       .forEach(batch => {
         const key = `${batch.itemId}|${batch.department}`
 
@@ -313,6 +320,8 @@ export class StorageService {
     return grouped
   }
 
+  // И дополнительно исправить метод calculateBalanceFromBatches():
+
   private calculateBalanceFromBatches(
     itemId: string,
     department: StorageDepartment,
@@ -321,47 +330,58 @@ export class StorageService {
     productDef: any
   ): StorageBalance | null {
     try {
-      if (batches.length === 0) {
+      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Берем ТОЛЬКО активные батчи с количеством > 0
+      const activeBatches = batches.filter(
+        batch => batch.status === 'active' && batch.isActive === true && batch.currentQuantity > 0
+      )
+
+      if (activeBatches.length === 0) {
         return this.createZeroBalance(itemId, department, product, productDef)
       }
 
-      // ✅ РАСЧЕТЫ В БАЗОВЫХ ЕДИНИЦАХ
-      const totalQuantity = batches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
-      const totalValue = batches.reduce((sum, batch) => sum + batch.totalValue, 0)
+      // ✅ Расчеты ТОЛЬКО по активным батчам
+      const totalQuantity = activeBatches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
+      const totalValue = activeBatches.reduce((sum, batch) => sum + batch.totalValue, 0)
       const averageCost =
-        totalQuantity > 0 ? totalValue / totalQuantity : productDef.baseCostPerUnit
+        totalQuantity > 0 ? Math.round(totalValue / totalQuantity) : productDef.baseCostPerUnit
 
-      // Сортируем батчи по дате поступления
-      const sortedBatches = [...batches].sort(
-        (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
-      )
+      const hasExpired = activeBatches.some(batch => {
+        if (!batch.expiryDate) return false
+        return new Date(batch.expiryDate) < new Date()
+      })
 
-      // Проверки состояния
-      const hasExpired = batches.some(b => b.status === 'expired')
-      const hasNearExpiry = this.checkNearExpiry(batches)
-      const belowMinStock = totalQuantity < (product.minStock || 0)
+      const hasNearExpiry = this.checkNearExpiry(activeBatches)
+      const belowMinStock = totalQuantity < (productDef.minStock || 0)
+
+      // Find oldest and newest batch dates FROM ACTIVE BATCHES ONLY
+      const sortedDates = activeBatches
+        .map(b => new Date(b.receiptDate))
+        .sort((a, b) => a.getTime() - b.getTime())
 
       return {
         itemId,
         itemType: 'product',
         itemName: product.name,
         department,
-        totalQuantity: Math.round(totalQuantity * 1000) / 1000, // ✅ В базовых единицах
-        unit: productDef.baseUnit, // ✅ Базовая единица
-        totalValue: Math.round(totalValue),
-        averageCost: Math.round(averageCost * 1000) / 1000,
-        latestCost: productDef.baseCostPerUnit, // ✅ Цена за базовую единицу
+        totalQuantity, // ← ТОЛЬКО активные батчи (0 для помидоров)
+        unit: productDef.baseUnit,
+        totalValue,
+        averageCost,
+        latestCost:
+          activeBatches[activeBatches.length - 1]?.costPerUnit || productDef.baseCostPerUnit,
         costTrend: 'stable',
-        batches: sortedBatches,
-        oldestBatchDate: sortedBatches[0]?.receiptDate || TimeUtils.getCurrentLocalISO(),
+        batches: activeBatches, // ← ТОЛЬКО активные батчи в массиве!
+        oldestBatchDate: sortedDates[0]?.toISOString() || TimeUtils.getCurrentLocalISO(),
         newestBatchDate:
-          sortedBatches[sortedBatches.length - 1]?.receiptDate || TimeUtils.getCurrentLocalISO(),
+          sortedDates[sortedDates.length - 1]?.toISOString() || TimeUtils.getCurrentLocalISO(),
         hasExpired,
         hasNearExpiry,
-        belowMinStock,
-        averageDailyUsage: productDef.dailyConsumption, // ✅ В базовых единицах
+        belowMinStock: totalQuantity === 0 ? true : belowMinStock, // Zero stock = below min
+        averageDailyUsage: productDef.dailyConsumption || 0,
         daysOfStockRemaining:
-          totalQuantity > 0 ? Math.floor(totalQuantity / productDef.dailyConsumption) : 0,
+          totalQuantity > 0 && productDef.dailyConsumption
+            ? Math.floor(totalQuantity / productDef.dailyConsumption)
+            : 0,
         lastCalculated: TimeUtils.getCurrentLocalISO(),
         id: `balance-${itemId}-${department}`,
         createdAt: TimeUtils.getCurrentLocalISO(),

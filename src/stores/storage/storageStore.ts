@@ -297,10 +297,16 @@ async function fetchBalances(department?: StorageDepartment) {
     state.value.loading.balances = true
     state.value.error = null
 
-    // ✅ ИЗМЕНЕНО: Получаем данные через service (который использует координатор)
+    // ❌ БЫЛО (загружались только активные батчи):
+    // const [balances, batches] = await Promise.all([
+    //   storageService.getBalances(department),
+    //   storageService.getBatches(department)  // ← Только активные!
+    // ])
+
+    // ✅ ИСПРАВЛЕНО (загружаются ВСЕ батчи):
     const [balances, batches] = await Promise.all([
       storageService.getBalances(department),
-      storageService.getBatches(department)
+      storageService.getAllBatches(department) // ← ВСЕ батчи (активные + транзитные)
     ])
 
     state.value.balances = balances
@@ -309,6 +315,8 @@ async function fetchBalances(department?: StorageDepartment) {
     DebugUtils.debug(MODULE_NAME, 'Balances and batches fetched', {
       balances: balances.length,
       batches: batches.length,
+      activeBatches: batches.filter(b => b.status === 'active').length,
+      transitBatches: batches.filter(b => b.status === 'in_transit').length,
       department: department || 'all'
     })
   } catch (error) {
