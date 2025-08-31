@@ -221,78 +221,31 @@ export function useWriteOff() {
    */
   async function createWriteOffOperation(data: CreateWriteOffData): Promise<StorageOperation> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Creating write-off operation', { data })
-
-      const operationItems: StorageOperationItem[] = []
-      let totalValue = 0
-
-      for (const item of data.items) {
-        const productInfo = getProductInfo(item.itemId)
-
-        // Calculate FIFO allocation
-        const { allocations, remainingQuantity } = storageStore.calculateFifoAllocation(
-          item.itemId,
-          data.department,
-          item.quantity
-        )
-
-        if (remainingQuantity > 0) {
-          throw new Error(
-            `Insufficient stock for ${productInfo.name}. Missing: ${remainingQuantity} ${productInfo.unit}`
-          )
-        }
-
-        const totalCost = allocations.reduce(
-          (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
-          0
-        )
-
-        operationItems.push({
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          itemId: item.itemId,
-          itemType: 'product',
-          itemName: productInfo.name,
-          quantity: item.quantity,
-          unit: productInfo.unit,
-          batchAllocations: allocations,
-          totalCost,
-          notes: item.notes
-        })
-
-        totalValue += totalCost
-      }
-
-      const operation: StorageOperation = {
-        id: `op-${Date.now()}`,
-        operationType: 'write_off',
-        documentNumber: `WR-${String(Date.now()).slice(-6)}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
+      DebugUtils.info(MODULE_NAME, 'Delegating write-off operation to storageStore', {
         department: data.department,
-        responsiblePerson: data.responsiblePerson,
-        items: operationItems,
-        totalValue,
-        writeOffDetails: {
-          reason: data.reason,
-          affectsKPI: doesWriteOffAffectKPI(data.reason),
-          notes: data.notes
-        },
-        status: 'confirmed',
-        notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-
-      // Delegate to storage store for persistence and batch updates
-      const savedOperation = await storageStore.createWriteOff(data)
-
-      DebugUtils.info(MODULE_NAME, 'Write-off operation created', {
-        operationId: savedOperation.id,
         reason: data.reason,
-        affectsKPI: doesWriteOffAffectKPI(data.reason),
-        totalValue
+        itemCount: data.items.length
       })
 
-      return savedOperation
+      // ✅ ЕДИНСТВЕННАЯ ЛОГИКА: делегируем в storageStore
+      // storageStore.createWriteOff уже:
+      // - Рассчитывает FIFO allocation
+      // - Создает operationItems
+      // - Обновляет батчи
+      // - Создает StorageOperation
+      // - Сохраняет в state
+      // - Синхронизирует балансы
+      const operation = await storageStore.createWriteOff(data)
+
+      DebugUtils.info(MODULE_NAME, 'Write-off operation completed successfully', {
+        operationId: operation.id,
+        reason: data.reason,
+        affectsKPI: doesWriteOffAffectKPI(data.reason),
+        totalValue: operation.totalValue,
+        itemCount: operation.items.length
+      })
+
+      return operation
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create write-off operation', { error })
       throw error
