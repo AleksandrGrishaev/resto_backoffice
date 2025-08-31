@@ -255,13 +255,32 @@ export class MockDataCoordinator {
     try {
       DebugUtils.info(MODULE_NAME, 'Loading storage store data from storageDefinitions...')
 
+      console.log('🔍 Step 1: Calling getStorageWorkflowData...')
       // ✅ НОВАЯ ИНТЕГРАЦИЯ: Используем storageDefinitions.ts
       const storageData = getStorageWorkflowData()
+      console.log('✅ Step 1 completed, got storageData:', storageData)
+
+      console.log('🔍 Step 2: Filtering batches...')
       const transitBatches = storageData.batches.filter(b => b.status === 'in_transit')
       const activeBatches = storageData.batches.filter(b => b.status === 'active')
+      console.log('✅ Step 2 completed:', {
+        transitBatches: transitBatches.length,
+        activeBatches: activeBatches.length
+      })
+
+      console.log('🔍 Step 3: Filtering balances...')
       const balancesWithTransit = storageData.balances.filter(
         b => b.transitQuantity && b.transitQuantity > 0
       )
+      console.log('✅ Step 3 completed:', { balancesWithTransit: balancesWithTransit.length })
+
+      console.log('🔍 Step 4: Creating return object...')
+      const result = {
+        operations: storageData.operations,
+        balances: storageData.balances,
+        batches: storageData.batches
+      }
+      console.log('✅ Step 4 completed, returning:', result)
 
       DebugUtils.info(MODULE_NAME, 'Storage store data loaded successfully', {
         operations: storageData.operations.length,
@@ -273,12 +292,10 @@ export class MockDataCoordinator {
         unitSystem: 'BASE_UNITS (gram/ml/piece)'
       })
 
-      return {
-        operations: storageData.operations,
-        balances: storageData.balances,
-        batches: storageData.batches
-      }
+      return result
     } catch (error) {
+      console.error('❌ Error in loadStorageStoreData:', error)
+      console.error('❌ Error stack:', error.stack)
       DebugUtils.error(MODULE_NAME, 'Failed to load storage store data', { error })
       return {
         operations: [],
@@ -615,44 +632,74 @@ if (import.meta.env.DEV) {
     return { storageData, productsData }
   }
   ;(window as any).__TEST_TRANSIT_BATCHES__ = () => {
-    const storageData = mockDataCoordinator.getStorageStoreData()
+    console.log('🚛 Testing Transit Batches Functionality...')
 
-    console.log('\n🚛 === TRANSIT BATCHES TEST ===')
+    const coordinator = new MockDataCoordinator()
+    const storageData = coordinator.getStorageStoreData()
 
+    // Фильтруем транзитные batch-и
     const transitBatches = storageData.batches.filter(b => b.status === 'in_transit')
-    console.log(`Transit batches found: ${transitBatches.length}`)
-
-    transitBatches.forEach(batch => {
-      const isOverdue =
-        batch.plannedDeliveryDate && new Date(batch.plannedDeliveryDate) < new Date()
-      const isToday = batch.plannedDeliveryDate && TimeUtils.isToday(batch.plannedDeliveryDate)
-
-      console.log(`\n📦 ${batch.itemId} (${batch.batchNumber})`)
-      console.log(`  Quantity: ${batch.currentQuantity} ${batch.unit}`)
-      console.log(`  Supplier: ${batch.supplierName}`)
-      console.log(`  Order ID: ${batch.purchaseOrderId}`)
-      console.log(`  Planned delivery: ${batch.plannedDeliveryDate}`)
-      console.log(`  Status: ${isOverdue ? '🔴 OVERDUE' : isToday ? '🟡 DUE TODAY' : '🟢 ON TIME'}`)
-    })
-
-    // Тестируем балансы с транзитом
-    console.log('\n📊 === BALANCES WITH TRANSIT ===')
     const balancesWithTransit = storageData.balances.filter(
       b => b.transitQuantity && b.transitQuantity > 0
     )
-    console.log(`Balances with transit stock: ${balancesWithTransit.length}`)
 
+    console.log('📊 Transit Batches Analysis:')
+    console.table(
+      transitBatches.map(batch => ({
+        Product: batch.itemName,
+        Quantity: `${batch.quantity} ${batch.unit}`,
+        Supplier: batch.supplierName || 'Unknown',
+        PlannedDelivery: batch.plannedDeliveryDate,
+        Status: batch.notes?.includes('OVERDUE')
+          ? '🔴 OVERDUE'
+          : batch.notes?.includes('DUE TODAY')
+            ? '🟡 DUE TODAY'
+            : '🟢 ON TIME',
+        Value: `${batch.totalValue} IDR`
+      }))
+    )
+
+    console.log('\n📦 Balances with Transit Data:')
+    console.table(
+      balancesWithTransit.map(balance => ({
+        Product: balance.itemName,
+        OnHand: `${balance.totalQuantity} ${balance.unit}`,
+        InTransit: `${balance.transitQuantity} ${balance.unit}`,
+        Total: `${balance.totalWithTransit} ${balance.unit}`,
+        NextDelivery: balance.nearestDelivery || 'None planned'
+      }))
+    )
+
+    // Анализ статусов поставок
+    const overdueBatches = transitBatches.filter(b => b.notes?.includes('OVERDUE'))
+    const dueTodayBatches = transitBatches.filter(b => b.notes?.includes('DUE TODAY'))
+    const onTimeBatches = transitBatches.filter(
+      b => !b.notes?.includes('OVERDUE') && !b.notes?.includes('DUE TODAY')
+    )
+
+    console.log('\n🚨 Delivery Status Summary:')
+    console.log(`• Overdue deliveries: ${overdueBatches.length}`)
+    console.log(`• Due today: ${dueTodayBatches.length}`)
+    console.log(`• On time: ${onTimeBatches.length}`)
+
+    // Показываем продукты с транзитом
+    console.log('\n✅ Products with transit inventory:')
     balancesWithTransit.forEach(balance => {
-      console.log(`\n📦 ${balance.itemName} (${balance.department})`)
-      console.log(`  On hand: ${balance.totalQuantity} ${balance.unit}`)
-      console.log(`  In transit: ${balance.transitQuantity} ${balance.unit}`)
-      console.log(`  Total available: ${balance.totalWithTransit} ${balance.unit}`)
       console.log(
-        `  Next delivery: ${balance.nearestDelivery ? TimeUtils.formatDateForDisplay(balance.nearestDelivery) : 'N/A'}`
+        `• ${balance.itemName}: ${balance.totalQuantity} on hand + ${balance.transitQuantity} in transit = ${balance.totalWithTransit} total available`
       )
     })
 
-    return { transitBatches, balancesWithTransit }
+    return {
+      totalTransitBatches: transitBatches.length,
+      totalTransitValue: transitBatches.reduce((sum, b) => sum + b.totalValue, 0),
+      balancesWithTransit: balancesWithTransit.length,
+      deliveryStatus: {
+        overdue: overdueBatches.length,
+        dueToday: dueTodayBatches.length,
+        onTime: onTimeBatches.length
+      }
+    }
   }
   ;(window as any).__TEST_BASE_UNITS_STORAGE__ = () => {
     const storageData = mockDataCoordinator.getStorageStoreData()

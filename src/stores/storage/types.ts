@@ -55,7 +55,7 @@ export interface CreateTransitBatchData {
 }
 
 // 4. РАСШИРЕНИЕ StorageBalance для учета транзита
-export interface StorageBalance {
+export interface StorageBalance extends BaseEntity {
   itemId: string
   itemType: 'product'
   itemName: string
@@ -72,14 +72,15 @@ export interface StorageBalance {
   hasExpired: boolean
   hasNearExpiry: boolean
   belowMinStock: boolean
+  lastCalculated: string
   lastCorrectionDate?: string
   averageDailyUsage?: number
   daysOfStockRemaining?: number
 
   // ✅ НОВЫЕ ПОЛЯ для учета транзита
-  transitQuantity: number // Количество в пути
-  transitValue: number // Стоимость товара в пути
-  totalWithTransit: number // Общее количество (склад + транзит)
+  transitQuantity?: number // Количество в пути
+  transitValue?: number // Стоимость товара в пути
+  totalWithTransit?: number // Общее количество (склад + транзит)
   nearestDelivery?: string // Ближайшая ожидаемая поставка
 }
 

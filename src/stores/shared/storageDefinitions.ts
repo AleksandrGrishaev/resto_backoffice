@@ -1,7 +1,7 @@
 // src/stores/shared/storageDefinitions.ts
 // FIXED: Use whole numbers for all physical quantities
 
-import { TimeUtils } from '@/utils'
+import { TimeUtils, DebugUtils } from '@/utils' // ✅ Добавить DebugUtils
 import { CORE_PRODUCTS, getProductDefinition } from './productDefinitions'
 import type {
   StorageBatch,
@@ -432,36 +432,81 @@ function generateBatchAllocations(
 // ТРАНЗИТНЫЕ BATCH-И ДЛЯ ТЕСТИРОВАНИЯ
 // =============================================
 
-/**
- * ✅ Генерирует транзитные batch-и для тестирования
- */
 function generateTransitBatches(): StorageBatch[] {
   const transitBatches: StorageBatch[] = []
 
-  // ✅ ИСПРАВЛЕНО: Проверяем существование продуктов
+  // ✅ ИСПРАВЛЕНО: Используем только существующие продукты из системы
   const requiredProducts = [
-    { id: 'prod-tomato', fallback: 'prod-potato' },
-    { id: 'prod-onion', fallback: 'prod-potato' },
-    { id: 'prod-flour', fallback: 'prod-rice' }
+    { id: 'prod-tomato', name: 'Fresh Tomato' },
+    { id: 'prod-onion', name: 'Onion' },
+    { id: 'prod-salt', name: 'Salt' } // Заменили prod-flour на prod-salt
   ]
 
   requiredProducts.forEach((productSpec, index) => {
-    let product = getProductDefinition(productSpec.id)
-    if (!product && productSpec.fallback) {
-      product = getProductDefinition(productSpec.fallback)
-      console.warn(`Product ${productSpec.id} not found, using ${productSpec.fallback}`)
-    }
+    const product = getProductDefinition(productSpec.id)
 
     if (!product) {
-      console.warn(
-        `Neither ${productSpec.id} nor ${productSpec.fallback} found, skipping transit batch`
-      )
+      console.warn(`Product ${productSpec.id} not found, skipping transit batch`)
       return
     }
 
     // Создаем batch с найденным продуктом
-    // ... остальной код создания batch-а
+    const quantity = Math.round(1000 + Math.random() * 2000) // 1-3 кг в граммах
+    const estimatedCostPerUnit = Math.round(product.baseCostPerUnit * (0.9 + Math.random() * 0.2)) // ±10% от стандартной цены
+
+    // Даты поставок для тестирования разных сценариев
+    let plannedDeliveryDate: string
+    let deliveryStatus: 'overdue' | 'due_today' | 'on_time'
+
+    if (index === 0) {
+      // Первый продукт - поставка через 5 дней (on_time)
+      plannedDeliveryDate = TimeUtils.getDateDaysFromNow(5)
+      deliveryStatus = 'on_time'
+    } else if (index === 1) {
+      // Второй продукт - просроченная поставка (overdue)
+      plannedDeliveryDate = TimeUtils.getDateDaysAgo(2)
+      deliveryStatus = 'overdue'
+    } else {
+      // Третий продукт - поставка сегодня (due_today)
+      plannedDeliveryDate = TimeUtils.getCurrentLocalISO().split('T')[0]
+      deliveryStatus = 'due_today'
+    }
+
+    const transitBatch: StorageBatch = {
+      id: `batch-transit-${index + 1}`,
+      batchNumber: generateTransitBatchNumber(),
+      itemId: product.id,
+      itemName: productSpec.name,
+      itemType: 'product' as const,
+      quantity: quantity,
+      unit: product.baseUnit,
+      costPerUnit: estimatedCostPerUnit,
+      totalValue: Math.round(quantity * estimatedCostPerUnit),
+      department: 'kitchen',
+      status: 'in_transit' as const,
+      isActive: false, // Transit batches не активны до получения
+
+      // ✅ НОВЫЕ ПОЛЯ для транзита
+      purchaseOrderId: `po-transit-${index + 1}`,
+      supplierId: index === 0 ? 'sup-fresh-veg-market' : 'sup-basic-supplies',
+      supplierName: index === 0 ? 'Fresh Vegetable Market' : 'Basic Supplies Co',
+      plannedDeliveryDate,
+      // actualDeliveryDate будет заполнен при получении
+
+      // Стандартные поля
+      sourceType: 'purchase',
+      sourceId: `po-transit-${index + 1}`,
+      batchDate: plannedDeliveryDate,
+      notes: `Transit batch - ${deliveryStatus === 'overdue' ? 'OVERDUE' : deliveryStatus === 'due_today' ? 'DUE TODAY' : 'on schedule'}`,
+
+      createdAt: TimeUtils.getCurrentLocalISO(),
+      updatedAt: TimeUtils.getCurrentLocalISO()
+    }
+
+    transitBatches.push(transitBatch)
   })
+
+  console.log(`✅ Generated ${transitBatches.length} transit batches for testing`)
 
   return transitBatches
 }
@@ -479,6 +524,49 @@ function generateTransitBatchNumber(): string {
     .padStart(3, '0')
 
   return `TRN-${dateStr}-${timeStr}-${sequence}`
+}
+
+/**
+ * ✅ Обновляет баланс с данными транзита
+ */
+function updateBalanceWithTransitData(
+  balance: StorageBalance,
+  transitBatches: StorageBatch[]
+): StorageBalance {
+  // Находим транзитные batch-и для этого продукта
+  const relevantTransitBatches = transitBatches.filter(
+    batch => batch.itemId === balance.itemId && batch.status === 'in_transit'
+  )
+
+  if (relevantTransitBatches.length === 0) {
+    // Нет транзитных batch-ей - возвращаем баланс как есть
+    return balance
+  }
+
+  // Рассчитываем транзитные данные
+  const transitQuantity = relevantTransitBatches.reduce((sum, batch) => sum + batch.quantity, 0)
+  const transitValue = relevantTransitBatches.reduce((sum, batch) => sum + batch.totalValue, 0)
+
+  // Находим ближайшую поставку
+  const plannedDeliveries = relevantTransitBatches
+    .map(batch => batch.plannedDeliveryDate)
+    .filter(date => date)
+    .sort()
+  const nearestDelivery = plannedDeliveries[0]
+
+  // Обновляем баланс
+  return {
+    ...balance,
+
+    // ✅ НОВЫЕ ПОЛЯ для транзита
+    transitQuantity,
+    transitValue,
+    totalWithTransit: balance.totalQuantity + transitQuantity,
+    nearestDelivery,
+
+    // Обновляем время последнего расчета
+    lastCalculated: TimeUtils.getCurrentLocalISO()
+  }
 }
 
 // =============================================
@@ -739,34 +827,7 @@ export function validateStorageDefinitions(): {
     warnings
   }
 }
-export function updateBalanceWithTransitData(
-  balance: StorageBalance,
-  transitBatches: StorageBatch[]
-): StorageBalance {
-  const transitItems = transitBatches.filter(
-    batch =>
-      batch.itemId === balance.itemId &&
-      batch.department === balance.department &&
-      batch.status === 'in_transit'
-  )
 
-  const transitQuantity = transitItems.reduce((sum, batch) => sum + batch.currentQuantity, 0)
-  const transitValue = transitItems.reduce((sum, batch) => sum + batch.totalValue, 0)
-
-  return {
-    ...balance,
-    // ✅ ИСПРАВЛЕНО: Устанавливаем только если есть транзитные товары
-    ...(transitQuantity > 0 && {
-      transitQuantity,
-      transitValue,
-      totalWithTransit: balance.totalQuantity + transitQuantity,
-      nearestDelivery: transitItems
-        .map(b => b.plannedDeliveryDate)
-        .filter(date => date)
-        .sort()[0]
-    })
-  }
-}
 /**
  * ✅ Демонстрация правильности базовых единиц (ЦЕЛЫЕ ЧИСЛА)
  */
