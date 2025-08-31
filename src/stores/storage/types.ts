@@ -1,4 +1,4 @@
-// src/stores/storage/types.ts - FIXED: Added Write-off Types and Functions
+// src/stores/storage/types.ts - FIXED: Added Write-off Types and Functions + Transit Support
 import { BaseEntity } from '@/types/common'
 
 export type StorageDepartment = 'kitchen' | 'bar'
@@ -6,13 +6,16 @@ export type StorageItemType = 'product'
 // ✅ FIXED: Added write_off operation type
 export type OperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType = 'purchase' | 'correction' | 'opening_balance' | 'inventory_adjustment'
-export type BatchStatus = 'active' | 'expired' | 'consumed'
+
+// ✅ UPDATED: Added 'in_transit' status for transit batches
+export type BatchStatus = 'active' | 'expired' | 'consumed' | 'in_transit'
+
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
 // ✅ FIXED: Added Write-off Reason Types
 export type WriteOffReason = 'expired' | 'spoiled' | 'other' | 'education' | 'test'
 
-// Core storage batch entity
+// ✅ UPDATED: Core storage batch entity with transit support
 export interface StorageBatch extends BaseEntity {
   batchNumber: string
   itemId: string
@@ -29,6 +32,14 @@ export interface StorageBatch extends BaseEntity {
   notes?: string
   status: BatchStatus
   isActive: boolean
+
+  // ✅ NEW: Transit-related fields for integration with purchase orders
+  purchaseOrderId?: string // Link to PurchaseOrder
+  supplierId?: string // Supplier ID
+  supplierName?: string // Supplier name (cached)
+  plannedDeliveryDate?: string // Expected delivery date
+  actualDeliveryDate?: string // Actual delivery date (when converted to active)
+  itemName?: string // Item name (cached for transit batches)
 }
 
 export interface BatchAllocation {
@@ -82,6 +93,7 @@ export interface StorageOperation extends BaseEntity {
   notes?: string
 }
 
+// ✅ UPDATED: StorageBalance extended with transit information
 export interface StorageBalance {
   itemId: string
   itemType: 'product'
@@ -103,6 +115,12 @@ export interface StorageBalance {
   averageDailyUsage?: number
   daysOfStockRemaining?: number
   lastCalculated: string
+
+  // ✅ NEW: Transit-related fields for balance calculations
+  transitQuantity: number // Quantity in transit
+  transitValue: number // Value of goods in transit
+  totalWithTransit: number // Total quantity (stock + transit)
+  nearestDelivery?: string // Nearest expected delivery date
 }
 
 export interface InventoryDocument extends BaseEntity {
@@ -189,146 +207,103 @@ export interface WriteOffItem {
   notes?: string
 }
 
+// ✅ NEW: DTO for creating transit batches from purchase orders
+export interface CreateTransitBatchData {
+  itemId: string
+  itemName: string
+  quantity: number
+  unit: string
+  estimatedCostPerUnit: number
+  department: StorageDepartment
+  purchaseOrderId: string
+  supplierId: string
+  supplierName: string
+  plannedDeliveryDate: string
+  notes?: string
+}
+
 export interface CreateInventoryData {
   department: StorageDepartment
   responsiblePerson: string
+  notes?: string
 }
 
-// ✅ FIXED: Added Write-off Statistics and Helper Types
-export interface WriteOffStatistics {
-  total: { count: number; value: number }
-  kpiAffecting: {
-    count: number
-    value: number
-    reasons: {
-      expired: { count: number; value: number }
-      spoiled: { count: number; value: number }
-      other: { count: number; value: number }
-    }
-  }
-  nonKpiAffecting: {
-    count: number
-    value: number
-    reasons: {
-      education: { count: number; value: number }
-      test: { count: number; value: number }
-    }
-  }
-  byDepartment: {
-    kitchen: { total: number; kpiAffecting: number; nonKpiAffecting: number }
-    bar: { total: number; kpiAffecting: number; nonKpiAffecting: number }
-  }
-}
-
-export interface QuickWriteOffItem {
-  itemId: string
-  itemName: string
-  currentQuantity: number
-  unit: string
-  writeOffQuantity: number
-  reason: WriteOffReason
-  notes: string
-}
-
+// Storage State
 export interface StorageState {
-  batches: StorageBatch[]
-  operations: StorageOperation[]
+  // Data
   balances: StorageBalance[]
+  operations: StorageOperation[]
+  batches: StorageBatch[]
   inventories: InventoryDocument[]
 
+  // Loading states
   loading: {
     balances: boolean
     operations: boolean
     inventory: boolean
     correction: boolean
-    writeOff: boolean // ✅ FIXED: Added writeOff loading state
+    writeOff: boolean
+    plannedDeliveries: boolean // ✅ NEW: Loading state for transit operations
   }
-  error: string | null
 
+  // UI State
   filters: {
     department: StorageDepartment | 'all'
-    operationType?: OperationType // ✅ FIXED: Added operationType filter
+    operationType?: OperationType
+    search?: string
     showExpired: boolean
-    showBelowMinStock: boolean
+    showLowStock: boolean
     showNearExpiry: boolean
-    search: string
-    dateFrom?: string
-    dateTo?: string
   }
 
-  settings: {
-    expiryWarningDays: number
-    lowStockMultiplier: number
-    autoCalculateBalance: boolean
-    enableQuickWriteOff: boolean // ✅ FIXED: Added write-off setting
-  }
+  // Error state
+  error: string | null
+
+  // Last update timestamp
+  lastUpdated: string | null
 }
 
-// ✅ FIXED: Added Write-off Helper Functions and Constants
+// Write-off related types
+export interface QuickWriteOffItem {
+  itemId: string
+  itemName: string
+  availableQuantity: number
+  selectedQuantity: number
+  unit: string
+  reason: WriteOffReason
+  notes?: string
+}
+
+export interface WriteOffStatistics {
+  totalWriteOffs: number
+  totalValue: number
+  byReason: Record<WriteOffReason, { count: number; value: number }>
+  affectingKPI: { count: number; value: number }
+  notAffectingKPI: { count: number; value: number }
+  recentWriteOffs: StorageOperation[]
+}
+
+// Write-off classification helpers
 export const WRITE_OFF_CLASSIFICATION = {
-  KPI_AFFECTING: ['expired', 'spoiled', 'other'] as WriteOffReason[],
-  NON_KPI_AFFECTING: ['education', 'test'] as WriteOffReason[]
+  AFFECTS_KPI: ['spoiled', 'expired'] as WriteOffReason[],
+  DOES_NOT_AFFECT_KPI: ['education', 'test', 'other'] as WriteOffReason[]
 } as const
 
-/**
- * Write-off reason options for UI components
- */
+// ✅ NEW: Write-off reason options for UI components
 export const WRITE_OFF_REASON_OPTIONS = [
-  {
-    value: 'expired' as WriteOffReason,
-    title: 'Expired',
-    description: 'Product has passed expiry date',
-    affectsKPI: true,
-    color: 'error'
-  },
-  {
-    value: 'spoiled' as WriteOffReason,
-    title: 'Spoiled',
-    description: 'Product is damaged or spoiled',
-    affectsKPI: true,
-    color: 'error'
-  },
-  {
-    value: 'other' as WriteOffReason,
-    title: 'Other Loss',
-    description: 'Other losses (spill, mistake, etc.)',
-    affectsKPI: true,
-    color: 'warning'
-  },
-  {
-    value: 'education' as WriteOffReason,
-    title: 'Education',
-    description: 'Staff training and education',
-    affectsKPI: false,
-    color: 'info'
-  },
-  {
-    value: 'test' as WriteOffReason,
-    title: 'Recipe Testing',
-    description: 'Recipe development and testing',
-    affectsKPI: false,
-    color: 'success'
-  }
+  { value: 'expired', label: 'Expired', affectsKPI: true },
+  { value: 'spoiled', label: 'Spoiled', affectsKPI: true },
+  { value: 'education', label: 'Education/Training', affectsKPI: false },
+  { value: 'test', label: 'Testing', affectsKPI: false },
+  { value: 'other', label: 'Other', affectsKPI: false }
 ] as const
 
-/**
- * Determines if a write-off reason affects KPI metrics
- */
 export function doesWriteOffAffectKPI(reason: WriteOffReason): boolean {
-  return WRITE_OFF_CLASSIFICATION.KPI_AFFECTING.includes(reason)
+  return WRITE_OFF_CLASSIFICATION.AFFECTS_KPI.includes(reason)
 }
 
-/**
- * Get write-off reason info by reason value
- */
+// ✅ NEW: Helper function for getting write-off reason information
 export function getWriteOffReasonInfo(reason: WriteOffReason) {
-  return (
-    WRITE_OFF_REASON_OPTIONS.find(option => option.value === reason) || {
-      value: reason,
-      title: reason,
-      description: '',
-      affectsKPI: doesWriteOffAffectKPI(reason),
-      color: 'default'
-    }
-  )
+  const option = WRITE_OFF_REASON_OPTIONS.find(opt => opt.value === reason)
+  return option || { value: reason, label: reason, affectsKPI: false }
 }

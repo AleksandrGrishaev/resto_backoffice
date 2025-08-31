@@ -1,5 +1,6 @@
-// src/stores/shared/storageDefinitions.ts
+// src/stores/shared/storageDefinitions.ts - UNIFIED VERSION
 // FIXED: Use whole numbers for all physical quantities
+// INCLUDES: Transit batches support + validation utilities
 
 import { TimeUtils } from '@/utils'
 import { CORE_PRODUCTS, getProductDefinition } from './productDefinitions'
@@ -22,6 +23,102 @@ export interface CoreStorageWorkflow {
   operations: StorageOperation[]
   balances: StorageBalance[]
 }
+
+// =============================================
+// ADDITIONAL TRANSIT BATCHES FOR TESTING
+// =============================================
+
+/**
+ * ✅ NEW: Additional transit batches for testing transit functionality
+ */
+export const CORE_TRANSIT_BATCHES: StorageBatch[] = [
+  // Transit batch 1: Tomatoes expected in 2 days
+  {
+    id: 'transit-batch-1',
+    batchNumber: 'TRN-250831-001',
+    itemId: 'prod-tomato',
+    itemName: 'Tomato',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 10000, // 10kg in grams
+    currentQuantity: 10000,
+    unit: 'gram',
+    costPerUnit: 25, // 25 IDR per gram
+    totalValue: 250000, // 10kg * 25 IDR/gram
+    receiptDate: '2025-09-02T10:00:00Z', // Expected receipt
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false,
+
+    // Transit-specific fields
+    purchaseOrderId: 'po-001',
+    supplierId: 'supplier-fresh-veg',
+    supplierName: 'Fresh Vegetables Ltd',
+    plannedDeliveryDate: '2025-09-02T10:00:00Z',
+    notes: 'Transit from order ORD-20250831-001',
+
+    createdAt: '2025-08-31T08:00:00Z',
+    updatedAt: '2025-08-31T08:00:00Z'
+  },
+
+  // Transit batch 2: Onions - overdue delivery
+  {
+    id: 'transit-batch-2',
+    batchNumber: 'TRN-250829-002',
+    itemId: 'prod-onion',
+    itemName: 'Onion',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 5000, // 5kg in grams
+    currentQuantity: 5000,
+    unit: 'gram',
+    costPerUnit: 15, // 15 IDR per gram
+    totalValue: 75000, // 5kg * 15 IDR/gram
+    receiptDate: '2025-08-30T14:00:00Z', // Was expected yesterday (overdue)
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false,
+
+    // Transit-specific fields
+    purchaseOrderId: 'po-002',
+    supplierId: 'supplier-fresh-veg',
+    supplierName: 'Fresh Vegetables Ltd',
+    plannedDeliveryDate: '2025-08-30T14:00:00Z', // Overdue delivery
+    notes: 'Transit from order ORD-20250829-003 - OVERDUE',
+
+    createdAt: '2025-08-29T10:00:00Z',
+    updatedAt: '2025-08-29T10:00:00Z'
+  },
+
+  // Transit batch 3: Beer for bar - due today
+  {
+    id: 'transit-batch-3',
+    batchNumber: 'TRN-250831-003',
+    itemId: 'prod-beer',
+    itemName: 'Beer',
+    itemType: 'product',
+    department: 'bar',
+    initialQuantity: 24, // 24 bottles (pieces)
+    currentQuantity: 24,
+    unit: 'piece',
+    costPerUnit: 15000, // 15000 IDR per bottle
+    totalValue: 360000, // 24 * 15000 IDR
+    receiptDate: '2025-08-31T18:00:00Z', // Due today evening
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false,
+
+    // Transit-specific fields
+    purchaseOrderId: 'po-003',
+    supplierId: 'supplier-beverages',
+    supplierName: 'Premium Beverages Supply',
+    plannedDeliveryDate: '2025-08-31T18:00:00Z',
+    notes: 'Transit from order ORD-20250830-005 - Due today',
+
+    createdAt: '2025-08-30T09:00:00Z',
+    updatedAt: '2025-08-30T09:00:00Z'
+  }
+]
 
 // =============================================
 // КОНФИГУРАЦИЯ СКЛАДА
@@ -236,7 +333,13 @@ function generateProductBalance(
     lastCalculated: TimeUtils.getCurrentLocalISO(),
     id: `balance-${productId}-${department}`,
     createdAt: TimeUtils.getCurrentLocalISO(),
-    updatedAt: TimeUtils.getCurrentLocalISO()
+    updatedAt: TimeUtils.getCurrentLocalISO(),
+
+    // ✅ NEW: Transit fields initialized to zero (will be calculated by useBatches)
+    transitQuantity: 0,
+    transitValue: 0,
+    totalWithTransit: totalQuantity,
+    nearestDelivery: undefined
   }
 }
 
@@ -525,10 +628,10 @@ export function regenerateStorageData(): CoreStorageWorkflow {
 }
 
 /**
- * ✅ Генерирует полные данные склада в базовых единицах (ЦЕЛЫЕ ЧИСЛА)
+ * ✅ Генерирует полные данные склада в базовых единицах (ЦЕЛЫЕ ЧИСЛА) + транзитные batches
  */
 function generateStorageWorkflowData(): CoreStorageWorkflow {
-  console.log('🏭 Generating storage data with WHOLE NUMBERS in BASE UNITS...')
+  console.log('🏭 Generating storage data with WHOLE NUMBERS in BASE UNITS + transit batches...')
 
   const balances: StorageBalance[] = []
   const allBatches: StorageBatch[] = []
@@ -554,15 +657,22 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
     }
   })
 
+  // ✅ NEW: Добавляем транзитные batch-и для тестирования
+  allBatches.push(...CORE_TRANSIT_BATCHES)
+
   // Генерируем исторические операции
   const operations = generateStorageOperations()
 
-  console.log(`✅ Storage data generated with WHOLE NUMBERS:`, {
+  console.log(`✅ Storage data generated with WHOLE NUMBERS + transit support:`, {
     balances: balances.length,
-    batches: allBatches.length,
+    activeBatches: allBatches.filter(b => b.status === 'active').length,
+    transitBatches: allBatches.filter(b => b.status === 'in_transit').length,
     operations: operations.length,
     unitSystem: 'BASE_UNITS (whole gram/ml/piece)',
-    sampleQuantities: balances.slice(0, 3).map(b => `${b.totalQuantity} ${b.unit}`)
+    sampleQuantities: balances.slice(0, 3).map(b => `${b.totalQuantity} ${b.unit}`),
+    transitSample: CORE_TRANSIT_BATCHES.map(
+      b => `${b.itemName}: ${b.currentQuantity} ${b.unit} from ${b.supplierName}`
+    )
   })
 
   return {
@@ -736,5 +846,43 @@ function convertToUserDisplay(
   return {
     quantity: baseQuantity, // Keep whole number
     unit: unitNames[product.baseUnit] || product.baseUnit
+  }
+}
+
+/**
+ * ✅ Creates zero balance for products with no stock
+ */
+function createZeroBalance(productId: string, department: StorageDepartment): StorageBalance {
+  const product = getProductDefinition(productId)!
+
+  return {
+    itemId: productId,
+    itemType: 'product',
+    itemName: product.name,
+    department,
+    totalQuantity: 0,
+    unit: product.baseUnit,
+    totalValue: 0,
+    averageCost: product.baseCostPerUnit,
+    latestCost: product.baseCostPerUnit,
+    costTrend: 'stable',
+    batches: [],
+    oldestBatchDate: TimeUtils.getCurrentLocalISO(),
+    newestBatchDate: TimeUtils.getCurrentLocalISO(),
+    hasExpired: false,
+    hasNearExpiry: false,
+    belowMinStock: true, // Zero stock is always below minimum
+    averageDailyUsage: Math.round(product.dailyConsumption),
+    daysOfStockRemaining: 0,
+    lastCalculated: TimeUtils.getCurrentLocalISO(),
+    id: `balance-${productId}-${department}`,
+    createdAt: TimeUtils.getCurrentLocalISO(),
+    updatedAt: TimeUtils.getCurrentLocalISO(),
+
+    // ✅ NEW: Transit fields for zero balance
+    transitQuantity: 0,
+    transitValue: 0,
+    totalWithTransit: 0,
+    nearestDelivery: undefined
   }
 }
