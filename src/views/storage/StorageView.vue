@@ -128,11 +128,11 @@
         </div>
         <storage-stock-table
           v-else
-          :balances="displayProductBalances"
-          :loading="storageStore.state.value.loading.balances"
-          item-type="product"
-          :department="selectedDepartment"
+          :balances="allProductBalances"
+          :loading="isLoading"
           :show-zero-stock="showZeroStock"
+          :storage-store="storageStore"
+          :department="selectedDepartment"
           @write-off="handleWriteOffFromBalance"
           @toggle-zero-stock="toggleZeroStockFilter"
         />

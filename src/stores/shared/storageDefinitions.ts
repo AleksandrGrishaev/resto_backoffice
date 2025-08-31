@@ -528,12 +528,12 @@ export function regenerateStorageData(): CoreStorageWorkflow {
  * ✅ Генерирует полные данные склада в базовых единицах (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateStorageWorkflowData(): CoreStorageWorkflow {
-  console.log('🏭 Generating storage data with WHOLE NUMBERS in BASE UNITS...')
+  console.log('🏭 Generating storage data with TRANSIT BATCHES...')
 
   const balances: StorageBalance[] = []
   const allBatches: StorageBatch[] = []
 
-  // Генерируем балансы для всех продуктов в соответствующих департаментах
+  // Генерируем обычные балансы и батчи для всех продуктов
   CORE_PRODUCTS.forEach(product => {
     // Kitchen balance (все кроме напитков)
     if (product.category !== 'beverages') {
@@ -554,15 +554,18 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
     }
   })
 
-  // Генерируем исторические операции
+  // ✅ НОВОЕ: Добавляем транзитные batch-и для тестирования
+  const transitBatches = generateTransitTestBatches()
+  allBatches.push(...transitBatches)
+
+  // Генерируем операции
   const operations = generateStorageOperations()
 
-  console.log(`✅ Storage data generated with WHOLE NUMBERS:`, {
+  console.log(`✅ Storage data generated with TRANSIT BATCHES:`, {
     balances: balances.length,
-    batches: allBatches.length,
-    operations: operations.length,
-    unitSystem: 'BASE_UNITS (whole gram/ml/piece)',
-    sampleQuantities: balances.slice(0, 3).map(b => `${b.totalQuantity} ${b.unit}`)
+    activeBatches: allBatches.filter(b => b.status === 'active').length,
+    transitBatches: allBatches.filter(b => b.status === 'in_transit').length,
+    operations: operations.length
   })
 
   return {
@@ -572,6 +575,103 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
   }
 }
 
+/**
+ * ✅ Генерирует тестовые транзитные batch-и
+ */
+function generateTransitTestBatches(): StorageBatch[] {
+  const transitBatches: StorageBatch[] = []
+  const now = new Date()
+
+  // Transit batch 1: Помидоры (доставка через 3 дня)
+  const futureDelivery = new Date(now)
+  futureDelivery.setDate(now.getDate() + 3)
+
+  transitBatches.push({
+    id: 'transit-batch-test-1',
+    batchNumber: 'TRN-250831-001',
+    itemId: 'prod-tomato',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 5000, // 5кг в граммах
+    currentQuantity: 5000,
+    unit: 'gram',
+    costPerUnit: 25, // 25 IDR за грамм
+    totalValue: 125000, // 5000 * 25
+    receiptDate: futureDelivery.toISOString(),
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false, // ← Важно: неактивен до получения
+
+    // Новые поля для транзита
+    purchaseOrderId: 'test-po-001',
+    supplierId: 'supplier-fresh-veg',
+    supplierName: 'Fresh Vegetables Ltd',
+    plannedDeliveryDate: futureDelivery.toISOString(),
+    notes: 'Тестовый транзитный batch - прибытие через 3 дня',
+
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString()
+  })
+
+  // Transit batch 2: Лук (просроченная доставка)
+  const pastDelivery = new Date(now)
+  pastDelivery.setDate(now.getDate() - 2)
+
+  transitBatches.push({
+    id: 'transit-batch-test-2',
+    batchNumber: 'TRN-250829-001',
+    itemId: 'prod-onion',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 3000, // 3кг в граммах
+    currentQuantity: 3000,
+    unit: 'gram',
+    costPerUnit: 15, // 15 IDR за грамм
+    totalValue: 45000, // 3000 * 15
+    receiptDate: pastDelivery.toISOString(),
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false,
+
+    purchaseOrderId: 'test-po-002',
+    supplierId: 'supplier-fresh-veg',
+    supplierName: 'Fresh Vegetables Ltd',
+    plannedDeliveryDate: pastDelivery.toISOString(), // Просроченная доставка!
+    notes: 'Тестовый транзитный batch - ПРОСРОЧЕНО на 2 дня',
+
+    createdAt: pastDelivery.toISOString(),
+    updatedAt: pastDelivery.toISOString()
+  })
+
+  // Transit batch 3: Мука (доставка сегодня)
+  transitBatches.push({
+    id: 'transit-batch-test-3',
+    batchNumber: 'TRN-250831-002',
+    itemId: 'prod-flour',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 10000, // 10кг в граммах
+    currentQuantity: 10000,
+    unit: 'gram',
+    costPerUnit: 8, // 8 IDR за грамм
+    totalValue: 80000, // 10000 * 8
+    receiptDate: now.toISOString(),
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false,
+
+    purchaseOrderId: 'test-po-003',
+    supplierId: 'supplier-dry-goods',
+    supplierName: 'Dry Goods Wholesale',
+    plannedDeliveryDate: now.toISOString(), // Доставка сегодня
+    notes: 'Тестовый транзитный batch - прибытие сегодня',
+
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString()
+  })
+
+  return transitBatches
+}
 // =============================================
 // ЭКСПОРТИРУЕМЫЕ УТИЛИТЫ
 // =============================================

@@ -1,7 +1,7 @@
 // src/stores/storage/storageStore.ts - ИСПРАВЛЕНО: Добавлен departmentBalances
 // Удалена собственная генерация моков, используется единый координатор
 
-import { ref, computed } from 'vue'
+import { ref, computed, readonly } from 'vue' // ✅ ДОБАВЛЕН readonly
 import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
 import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
@@ -12,6 +12,7 @@ import type {
   StorageBatch,
   StorageOperation,
   StorageBalance,
+  StorageBalanceWithTransit, // ✅ ДОБАВЛЕН новый тип
   StorageDepartment,
   InventoryDocument,
   CreateReceiptData,
@@ -51,6 +52,13 @@ const state = ref<StorageState>({
     search: '',
     dateFrom: undefined,
     dateTo: undefined
+  },
+
+  settings: {
+    expiryWarningDays: 7,
+    lowStockMultiplier: 1.5,
+    autoCalculateBalance: true,
+    enableQuickWriteOff: true
   }
 })
 
@@ -147,6 +155,98 @@ const departmentBalances = (department: StorageDepartment) => {
   return state.value.balances.filter(
     b => b && b.itemType === 'product' && b.department === department
   )
+}
+
+// ===========================
+// COMPUTED PROPERTIES - ТРАНЗИТНЫЕ BATCH-И
+// ===========================
+
+const transitBatches = computed(() => {
+  return state.value.batches.filter(batch => batch.status === 'in_transit')
+})
+
+const balancesWithTransit = computed((): StorageBalanceWithTransit[] => {
+  const transit = transitBatches.value
+
+  return state.value.balances.map(balance => {
+    // Найти транзитные batch-и для этого товара и департамента
+    const itemTransitBatches = transit.filter(
+      batch => batch.itemId === balance.itemId && batch.department === balance.department
+    )
+
+    const transitQuantity = itemTransitBatches.reduce(
+      (sum, batch) => sum + batch.currentQuantity,
+      0
+    )
+    const transitValue = itemTransitBatches.reduce((sum, batch) => sum + batch.totalValue, 0)
+
+    // Найти ближайшую ожидаемую доставку
+    const deliveryDates = itemTransitBatches
+      .map(b => b.plannedDeliveryDate)
+      .filter(date => date)
+      .sort()
+
+    const extendedBalance: StorageBalanceWithTransit = {
+      ...balance,
+      transitQuantity,
+      transitValue,
+      totalWithTransit: balance.totalQuantity + transitQuantity,
+      nearestDelivery: deliveryDates[0] || undefined,
+      transitBatches: itemTransitBatches
+    }
+
+    return extendedBalance
+  })
+})
+
+const transitMetrics = computed(() => {
+  const transit = transitBatches.value
+  const now = new Date()
+
+  // Подсчет просроченных доставок
+  const overdueTransit = transit.filter(batch => {
+    if (!batch.plannedDeliveryDate) return false
+    return new Date(batch.plannedDeliveryDate) < now
+  })
+
+  // Подсчет доставок сегодня
+  const dueTodayTransit = transit.filter(batch => {
+    if (!batch.plannedDeliveryDate) return false
+    const deliveryDate = new Date(batch.plannedDeliveryDate)
+    return deliveryDate.toDateString() === now.toDateString()
+  })
+
+  return {
+    totalTransitBatches: transit.length,
+    totalTransitOrders: new Set(transit.map(b => b.purchaseOrderId)).size,
+    totalTransitValue: transit.reduce((sum, b) => sum + b.totalValue, 0),
+    overdueCount: overdueTransit.length,
+    overdueValue: overdueTransit.reduce((sum, b) => sum + b.totalValue, 0),
+    dueTodayCount: dueTodayTransit.length,
+    dueTodayValue: dueTodayTransit.reduce((sum, b) => sum + b.totalValue, 0)
+  }
+})
+
+// ===========================
+// HELPER FUNCTIONS ДЛЯ ТРАНЗИТА
+// ===========================
+
+function getTransitBatchesForItem(itemId: string, department: StorageDepartment) {
+  return transitBatches.value.filter(
+    batch => batch.itemId === itemId && batch.department === department
+  )
+}
+
+function isTransitDeliveryOverdue(plannedDate?: string): boolean {
+  if (!plannedDate) return false
+  return new Date(plannedDate) < new Date()
+}
+
+function isTransitDeliveryToday(plannedDate?: string): boolean {
+  if (!plannedDate) return false
+  const deliveryDate = new Date(plannedDate)
+  const today = new Date()
+  return deliveryDate.toDateString() === today.toDateString()
 }
 
 // ===========================
@@ -558,16 +658,19 @@ export function useStorageStore() {
     // State
     state: state,
 
-    // Computed
+    // Existing computed
     filteredBalances,
     filteredOperations,
     totalStockValue,
     lowStockItemsCount,
     expiredItemsCount,
     nearExpiryItemsCount,
-
-    // ✅ ДОБАВЛЕНО: departmentBalances как функция
     departmentBalances,
+
+    // ✅ НОВЫЕ computed для транзита
+    transitBatches: readonly(transitBatches),
+    balancesWithTransit: readonly(balancesWithTransit),
+    transitMetrics: readonly(transitMetrics),
 
     // Core actions
     initialize,
@@ -594,6 +697,11 @@ export function useStorageStore() {
     getItemCostPerUnit,
     getItemBatches,
     getBatchById,
+
+    // ✅ НОВЫЕ helper-ы для транзита
+    getTransitBatchesForItem,
+    isTransitDeliveryOverdue,
+    isTransitDeliveryToday,
 
     // Filter actions
     setDepartmentFilter,

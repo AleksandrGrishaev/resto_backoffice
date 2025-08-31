@@ -1,18 +1,19 @@
-// src/stores/storage/types.ts - FIXED: Added Write-off Types and Functions
+// src/stores/storage/types.ts - ДОБАВЛЕНЫ ТИПЫ ДЛЯ ТРАНЗИТНЫХ BATCH-ЕЙ
+
 import { BaseEntity } from '@/types/common'
 
 export type StorageDepartment = 'kitchen' | 'bar'
 export type StorageItemType = 'product'
-// ✅ FIXED: Added write_off operation type
 export type OperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType = 'purchase' | 'correction' | 'opening_balance' | 'inventory_adjustment'
-export type BatchStatus = 'active' | 'expired' | 'consumed'
-export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
-// ✅ FIXED: Added Write-off Reason Types
+// ✅ ИЗМЕНЕНО: Добавлен статус 'in_transit'
+export type BatchStatus = 'active' | 'expired' | 'consumed' | 'in_transit' | 'in_transit'
+
+export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 export type WriteOffReason = 'expired' | 'spoiled' | 'other' | 'education' | 'test'
 
-// Core storage batch entity
+// ✅ РАСШИРЕН: StorageBatch с полями для транзита
 export interface StorageBatch extends BaseEntity {
   batchNumber: string
   itemId: string
@@ -29,8 +30,16 @@ export interface StorageBatch extends BaseEntity {
   notes?: string
   status: BatchStatus
   isActive: boolean
+
+  // ✅ НОВЫЕ ПОЛЯ для транзитных batch-ей
+  purchaseOrderId?: string // Связь с заказом поставщику
+  supplierId?: string // ID поставщика
+  supplierName?: string // Название поставщика
+  plannedDeliveryDate?: string // Ожидаемая дата доставки
+  actualDeliveryDate?: string // Фактическая дата доставки (заполняется при конвертации)
 }
 
+// Остальные существующие интерфейсы остаются без изменений...
 export interface BatchAllocation {
   batchId: string
   batchNumber: string
@@ -53,7 +62,6 @@ export interface StorageOperationItem {
   expiryDate?: string
 }
 
-// ✅ FIXED: Updated StorageOperation with Write-off Details
 export interface StorageOperation extends BaseEntity {
   operationType: OperationType
   documentNumber: string
@@ -70,7 +78,6 @@ export interface StorageOperation extends BaseEntity {
     portionCount?: number
   }
 
-  // ✅ FIXED: Added Write-off Details
   writeOffDetails?: {
     reason: WriteOffReason
     affectsKPI: boolean
@@ -105,6 +112,16 @@ export interface StorageBalance {
   lastCalculated: string
 }
 
+// ✅ НОВЫЙ ТИП: Баланс с транзитными данными
+export interface StorageBalanceWithTransit extends StorageBalance {
+  transitQuantity: number // Количество в пути
+  transitValue: number // Стоимость товаров в пути
+  totalWithTransit: number // Общее количество (остаток + в пути)
+  nearestDelivery?: string // Ближайшая ожидаемая поставка
+  transitBatches: StorageBatch[] // Транзитные batch-и для этого товара
+}
+
+// Остальные интерфейсы остаются без изменений...
 export interface InventoryDocument extends BaseEntity {
   documentNumber: string
   inventoryDate: string
@@ -173,7 +190,6 @@ export interface CorrectionItem {
   notes?: string
 }
 
-// ✅ FIXED: Added Write-off DTOs
 export interface CreateWriteOffData {
   department: StorageDepartment
   responsiblePerson: string
@@ -194,7 +210,6 @@ export interface CreateInventoryData {
   responsiblePerson: string
 }
 
-// ✅ FIXED: Added Write-off Statistics and Helper Types
 export interface WriteOffStatistics {
   total: { count: number; value: number }
   kpiAffecting: {
@@ -241,13 +256,13 @@ export interface StorageState {
     operations: boolean
     inventory: boolean
     correction: boolean
-    writeOff: boolean // ✅ FIXED: Added writeOff loading state
+    writeOff: boolean
   }
   error: string | null
 
   filters: {
     department: StorageDepartment | 'all'
-    operationType?: OperationType // ✅ FIXED: Added operationType filter
+    operationType?: OperationType
     showExpired: boolean
     showBelowMinStock: boolean
     showNearExpiry: boolean
@@ -260,11 +275,11 @@ export interface StorageState {
     expiryWarningDays: number
     lowStockMultiplier: number
     autoCalculateBalance: boolean
-    enableQuickWriteOff: boolean // ✅ FIXED: Added write-off setting
+    enableQuickWriteOff: boolean
   }
 }
 
-// ✅ FIXED: Added Write-off Helper Functions and Constants
+// ✅ ДОБАВЛЕНЫ: Write-off Helper Functions и Constants
 export const WRITE_OFF_CLASSIFICATION = {
   KPI_AFFECTING: ['expired', 'spoiled', 'other'] as WriteOffReason[],
   NON_KPI_AFFECTING: ['education', 'test'] as WriteOffReason[]

@@ -1,4 +1,4 @@
-// src/stores/storage/index.ts - UPDATED WITH WRITE-OFF COMPOSABLE
+// src/stores/storage/index.ts - ДОБАВЛЕН ЭКСПОРТ StorageBalanceWithTransit
 
 // Export all types
 export type {
@@ -13,6 +13,7 @@ export type {
   StorageOperationItem,
   StorageOperation,
   StorageBalance,
+  StorageBalanceWithTransit, // ✅ ДОБАВЛЕН новый тип
   InventoryDocument,
   InventoryItem,
   CreateReceiptData,
@@ -26,7 +27,9 @@ export type {
   QuickWriteOffItem,
   WriteOffStatistics,
   WRITE_OFF_CLASSIFICATION,
-  doesWriteOffAffectKPI
+  WRITE_OFF_REASON_OPTIONS, // ✅ ДОБАВЛЕН
+  doesWriteOffAffectKPI,
+  getWriteOffReasonInfo // ✅ ДОБАВЛЕН
 } from './types'
 
 // Export service

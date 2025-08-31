@@ -1,8 +1,8 @@
-<!-- src/views/storage/components/ItemDetailsDialog.vue -->
+<!-- src/views/storage/components/ItemDetailsDialog.vue - ДОБАВЛЕНА СЕКЦИЯ ТРАНЗИТНЫХ BATCH-ЕЙ -->
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="700px"
+    max-width="800px"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card v-if="item">
@@ -27,7 +27,7 @@
         <!-- Summary Cards -->
         <div class="pa-6 pb-0">
           <v-row>
-            <v-col cols="12" md="4">
+            <v-col cols="12" md="3">
               <v-card variant="tonal" color="primary">
                 <v-card-text class="text-center">
                   <div class="text-h4 font-weight-bold">{{ item.totalQuantity }}</div>
@@ -35,15 +35,24 @@
                 </v-card-text>
               </v-card>
             </v-col>
-            <v-col cols="12" md="4">
-              <v-card variant="tonal" color="success">
+            <!-- ✅ НОВАЯ КАРТОЧКА: В пути -->
+            <v-col cols="12" md="3">
+              <v-card variant="tonal" color="orange">
                 <v-card-text class="text-center">
-                  <div class="text-h4 font-weight-bold">{{ formatCurrency(item.totalValue) }}</div>
-                  <div class="text-body-2">Total value</div>
+                  <div class="text-h4 font-weight-bold">{{ totalTransitQuantity }}</div>
+                  <div class="text-body-2">{{ item.unit }} in transit</div>
                 </v-card-text>
               </v-card>
             </v-col>
-            <v-col cols="12" md="4">
+            <v-col cols="12" md="3">
+              <v-card variant="tonal" color="success">
+                <v-card-text class="text-center">
+                  <div class="text-h4 font-weight-bold">{{ formatCurrency(item.totalValue) }}</div>
+                  <div class="text-body-2">Stock value</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+            <v-col cols="12" md="3">
               <v-card variant="tonal" color="info">
                 <v-card-text class="text-center">
                   <div class="text-h4 font-weight-bold">{{ formatCurrency(item.averageCost) }}</div>
@@ -54,25 +63,17 @@
           </v-row>
         </div>
 
-        <!-- Tabs -->
-        <v-tabs v-model="selectedTab" class="px-6">
-          <v-tab value="batches">Batches (FIFO)</v-tab>
-          <v-tab value="analytics">Analytics</v-tab>
-        </v-tabs>
+        <!-- Content Sections -->
+        <div class="px-6 pb-6">
+          <!-- Active Batches Section -->
+          <div class="mb-4">
+            <h4 class="mb-3 d-flex align-center">
+              <v-icon color="primary" class="mr-2">mdi-package-variant</v-icon>
+              Active Batches (FIFO Order)
+              <v-chip size="small" class="ml-2">{{ item.batches.length }}</v-chip>
+            </h4>
 
-        <v-tabs-window v-model="selectedTab">
-          <!-- Batches Tab -->
-          <v-tabs-window-item value="batches" class="pa-6">
-            <div class="mb-4">
-              <h4 class="mb-2">Current Batches (FIFO Order)</h4>
-              <p class="text-body-2 text-medium-emphasis">
-                Oldest batches are consumed first. Total: {{ item.batches.length }} batch{{
-                  item.batches.length !== 1 ? 'es' : ''
-                }}
-              </p>
-            </div>
-
-            <div v-if="item.batches.length === 0" class="text-center py-8 text-medium-emphasis">
+            <div v-if="item.batches.length === 0" class="text-center py-6 text-medium-emphasis">
               <v-icon icon="mdi-package-variant-closed" size="48" class="mb-2" />
               <div>No active batches</div>
             </div>
@@ -123,86 +124,85 @@
                   />
 
                   <div class="d-flex justify-space-between text-caption">
-                    <span>{{ formatSource(batch.sourceType) }}</span>
-                    <span class="font-weight-medium">
+                    <span class="text-medium-emphasis">
                       Value: {{ formatCurrency(batch.totalValue) }}
                     </span>
+                    <span v-if="batch.expiryDate" class="text-medium-emphasis">
+                      Expires: {{ formatDate(batch.expiryDate) }}
+                    </span>
                   </div>
-
-                  <!-- Expiry warning -->
-                  <v-alert
-                    v-if="batch.expiryDate && isExpiringSoon(batch.expiryDate)"
-                    type="warning"
-                    variant="tonal"
-                    density="compact"
-                    class="mt-2"
-                  >
-                    <v-icon icon="mdi-clock-alert-outline" class="mr-1" />
-                    Expires {{ formatDate(batch.expiryDate) }}
-                  </v-alert>
                 </v-card-text>
               </v-card>
             </div>
-          </v-tabs-window-item>
+          </div>
 
-          <!-- Analytics Tab -->
-          <v-tabs-window-item value="analytics" class="pa-6">
-            <div class="analytics-section">
-              <h4 class="mb-3">Price Trends</h4>
+          <!-- ✅ НОВАЯ СЕКЦИЯ: Транзитные batch-и -->
+          <v-expansion-panels v-if="transitBatchesForItem.length > 0" class="mb-4">
+            <v-expansion-panel>
+              <v-expansion-panel-title>
+                <div class="d-flex align-center">
+                  <v-icon color="orange" class="mr-2">mdi-truck-delivery</v-icon>
+                  <span class="subtitle-1">
+                    In Transit ({{ transitBatchesForItem.length }} shipment{{
+                      transitBatchesForItem.length !== 1 ? 's' : ''
+                    }})
+                  </span>
+                  <v-spacer />
+                  <span class="text-h6 orange--text">
+                    {{ totalTransitQuantity }} {{ itemUnit }}
+                  </span>
+                </div>
+              </v-expansion-panel-title>
 
-              <div class="d-flex align-center mb-4">
-                <v-icon
-                  :icon="getCostTrendIcon(item.costTrend)"
-                  :color="getCostTrendColor(item.costTrend)"
-                  class="mr-2"
-                />
-                <span :class="getCostTrendColor(item.costTrend)" class="font-weight-medium">
-                  Price trend: {{ formatCostTrend(item.costTrend) }}
-                </span>
-              </div>
+              <v-expansion-panel-text>
+                <v-data-table
+                  :headers="transitBatchHeaders"
+                  :items="transitBatchesForItem"
+                  hide-default-footer
+                  disable-pagination
+                  class="transit-batches-table"
+                >
+                  <template #[`item.plannedDeliveryDate`]="{ item }">
+                    <div class="d-flex align-center">
+                      <span :class="isOverdue(item.plannedDeliveryDate) ? 'error--text' : ''">
+                        {{ formatDate(item.plannedDeliveryDate) }}
+                      </span>
+                      <v-icon
+                        v-if="isOverdue(item.plannedDeliveryDate)"
+                        color="error"
+                        size="16"
+                        class="ml-1"
+                      >
+                        mdi-alert-circle
+                      </v-icon>
+                    </div>
+                  </template>
 
-              <v-row>
-                <v-col cols="12" md="6">
-                  <v-card variant="outlined">
-                    <v-card-text>
-                      <div class="text-subtitle-2 mb-2">Latest Cost</div>
-                      <div class="text-h5 font-weight-bold">
-                        {{ formatCurrency(item.latestCost) }}/{{ item.unit }}
-                      </div>
-                      <div class="text-caption text-medium-emphasis">From newest batch</div>
-                    </v-card-text>
-                  </v-card>
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-card variant="outlined">
-                    <v-card-text>
-                      <div class="text-subtitle-2 mb-2">Average Cost</div>
-                      <div class="text-h5 font-weight-bold">
-                        {{ formatCurrency(item.averageCost) }}/{{ item.unit }}
-                      </div>
-                      <div class="text-caption text-medium-emphasis">Weighted average</div>
-                    </v-card-text>
-                  </v-card>
-                </v-col>
-              </v-row>
+                  <template #[`item.status`]="{ item }">
+                    <v-chip small :color="getTransitStatusColor(item)">
+                      {{ getTransitStatusText(item) }}
+                    </v-chip>
+                  </template>
 
-              <h4 class="mb-3 mt-6">Usage Information</h4>
+                  <template #[`item.supplierName`]="{ item }">
+                    <div class="d-flex align-center">
+                      <v-icon size="16" class="mr-1">mdi-store</v-icon>
+                      {{ item.supplierName }}
+                    </div>
+                  </template>
 
-              <v-row>
-                <v-col cols="12" md="6">
-                  <div class="text-subtitle-2 mb-1">Last Consumption</div>
-                  <div class="text-body-1">
-                    {{ item.lastConsumptionDate ? formatDate(item.lastConsumptionDate) : 'Never' }}
-                  </div>
-                </v-col>
-                <v-col cols="12" md="6">
-                  <div class="text-subtitle-2 mb-1">Stock Age</div>
-                  <div class="text-body-1">{{ calculateStockAge(item.oldestBatchDate) }} days</div>
-                </v-col>
-              </v-row>
-            </div>
-          </v-tabs-window-item>
-        </v-tabs-window>
+                  <template #[`item.currentQuantity`]="{ item }">
+                    {{ formatQuantity(item.currentQuantity) }} {{ item.unit }}
+                  </template>
+
+                  <template #[`item.totalValue`]="{ item }">
+                    {{ formatCurrency(item.totalValue) }}
+                  </template>
+                </v-data-table>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </div>
       </v-card-text>
 
       <v-divider />
@@ -216,8 +216,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { StorageBalance, StorageItemType, StorageDepartment } from '@/stores/storage'
+import { ref, computed } from 'vue'
+import { useStorageStore } from '@/stores/storage'
+import type {
+  StorageBalance,
+  StorageItemType,
+  StorageDepartment,
+  StorageBatch
+} from '@/stores/storage'
 
 // Props
 interface Props {
@@ -225,17 +231,80 @@ interface Props {
   item: StorageBalance | null
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 // Emits
 defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-// State
-const selectedTab = ref('batches')
+// Store
+const storageStore = useStorageStore()
 
-// Methods
+// Убираем неиспользуемую переменную selectedTab
+
+// ===========================
+// COMPUTED ДЛЯ ТРАНЗИТНЫХ BATCH-ЕЙ
+// ===========================
+
+const transitBatchesForItem = computed(() => {
+  if (!props.item || !storageStore.transitBatches?.value) return []
+
+  return storageStore.transitBatches.value.filter(
+    (batch: StorageBatch) =>
+      batch.itemId === props.item!.itemId && batch.department === props.item!.department
+  )
+})
+
+const totalTransitQuantity = computed(() => {
+  return transitBatchesForItem.value.reduce((sum, batch) => sum + batch.currentQuantity, 0)
+})
+
+const itemUnit = computed(() => {
+  return props.item?.unit || 'gram'
+})
+
+const transitBatchHeaders = [
+  { text: 'Batch Number', value: 'batchNumber' },
+  { text: 'Quantity', value: 'currentQuantity' },
+  { text: 'Value', value: 'totalValue' },
+  { text: 'Supplier', value: 'supplierName' },
+  { text: 'Planned Date', value: 'plannedDeliveryDate' },
+  { text: 'Status', value: 'status' }
+]
+
+// ===========================
+// HELPER METHODS ДЛЯ ТРАНЗИТА
+// ===========================
+
+function isOverdue(plannedDate?: string): boolean {
+  if (!plannedDate) return false
+  return new Date(plannedDate) < new Date()
+}
+
+function getTransitStatusColor(batch: StorageBatch): string {
+  if (isOverdue(batch.plannedDeliveryDate)) return 'error'
+  if (isDeliveryToday(batch.plannedDeliveryDate)) return 'warning'
+  return 'orange'
+}
+
+function getTransitStatusText(batch: StorageBatch): string {
+  if (isOverdue(batch.plannedDeliveryDate)) return 'Overdue'
+  if (isDeliveryToday(batch.plannedDeliveryDate)) return 'Today'
+  return 'In Transit'
+}
+
+function isDeliveryToday(plannedDate?: string): boolean {
+  if (!plannedDate) return false
+  const deliveryDate = new Date(plannedDate)
+  const today = new Date()
+  return deliveryDate.toDateString() === today.toDateString()
+}
+
+// ===========================
+// СУЩЕСТВУЮЩИЕ МЕТОДЫ
+// ===========================
+
 function getItemIcon(itemType: StorageItemType): string {
   return itemType === 'product' ? '🥩' : '🍲'
 }
@@ -249,15 +318,8 @@ function formatDepartment(department: StorageDepartment): string {
 }
 
 function getItemName(itemId: string): string {
-  const mockNames: Record<string, string> = {
-    'beef-steak': 'Beef Steak',
-    potato: 'Potato',
-    garlic: 'Garlic',
-    vodka: 'Vodka',
-    beer: 'Beer',
-    'beef-rendang-prep': 'Beef Rendang (Prepared)'
-  }
-  return mockNames[itemId] || itemId
+  // Здесь должна быть логика получения имени товара
+  return itemId // Временно
 }
 
 function formatCurrency(amount: number): string {
@@ -270,95 +332,58 @@ function formatCurrency(amount: number): string {
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
+    year: 'numeric'
   })
 }
 
-function formatSource(sourceType: string): string {
-  const sources: Record<string, string> = {
-    purchase: 'Purchase',
-    production: 'Production',
-    correction: 'Correction',
-    opening_balance: 'Opening Balance'
-  }
-  return sources[sourceType] || sourceType
+function formatQuantity(quantity: number): string {
+  return quantity.toLocaleString()
 }
 
-function getUsageColor(ratio: number): string {
-  if (ratio > 0.7) return 'success'
-  if (ratio > 0.3) return 'warning'
-  return 'error'
-}
-
-function isExpiringSoon(expiryDate: string): boolean {
-  const expiry = new Date(expiryDate)
-  const now = new Date()
-  const diffDays = (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  return diffDays <= 3 && diffDays >= 0
-}
-
-function getCostTrendIcon(trend: 'up' | 'down' | 'stable'): string {
-  switch (trend) {
-    case 'up':
-      return 'mdi-trending-up'
-    case 'down':
-      return 'mdi-trending-down'
-    default:
-      return 'mdi-minus'
-  }
-}
-
-function getCostTrendColor(trend: 'up' | 'down' | 'stable'): string {
-  switch (trend) {
-    case 'up':
-      return 'text-error'
-    case 'down':
-      return 'text-success'
-    default:
-      return 'text-medium-emphasis'
-  }
-}
-
-function formatCostTrend(trend: 'up' | 'down' | 'stable'): string {
-  switch (trend) {
-    case 'up':
-      return 'Rising'
-    case 'down':
-      return 'Falling'
-    default:
-      return 'Stable'
-  }
-}
-
-function calculateStockAge(oldestDate: string): number {
-  const oldest = new Date(oldestDate)
-  const now = new Date()
-  return Math.floor((now.getTime() - oldest.getTime()) / (1000 * 60 * 60 * 24))
+function getUsageColor(usageRatio: number): string {
+  if (usageRatio < 0.3) return 'error'
+  if (usageRatio < 0.6) return 'warning'
+  return 'success'
 }
 </script>
 
-<style lang="scss" scoped>
+<style scoped>
+.transit-card {
+  border-left: 4px solid #ff9800 !important;
+}
+
+.warning-card {
+  border-left-color: #f44336 !important;
+}
+
+.info-card {
+  border-left-color: #2196f3 !important;
+}
+
+.success-card {
+  border-left-color: #4caf50 !important;
+}
+
+.transit-batches-table >>> .v-data-table__wrapper {
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.transit-batches-table >>> tbody tr:hover {
+  background-color: #fff3e0 !important;
+}
+
 .item-icon {
-  font-size: 32px;
-  width: 56px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(var(--v-theme-primary), 0.1);
-  border-radius: 12px;
+  font-size: 2rem;
 }
 
-.batches-list {
-  max-height: 400px;
-  overflow-y: auto;
+.batches-list .v-card {
+  transition: all 0.2s ease;
 }
 
-.analytics-section {
-  .v-card {
-    height: 100%;
-  }
+.batches-list .v-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
 }
 </style>

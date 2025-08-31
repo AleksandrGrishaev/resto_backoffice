@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/StorageStockTable.vue - FIXED: Support for Negative Stock -->
+<!-- src/views/storage/components/StorageStockTable.vue - ПОЛНАЯ ВЕРСИЯ С ТРАНЗИТОМ -->
 <template>
   <div class="storage-stock-table">
     <!-- Filters and Search -->
@@ -173,6 +173,10 @@
         <template #[`item.itemName`]="{ item }">
           <div class="font-weight-medium" :class="getItemNameClass(item)">
             {{ item.itemName }}
+            <!-- ✅ НОВОЕ: Индикатор товаров с транзитом -->
+            <v-icon v-if="hasTransitForItem(item)" color="orange" size="14" class="ml-1">
+              mdi-plus
+            </v-icon>
           </div>
         </template>
 
@@ -189,6 +193,7 @@
           </div>
         </template>
 
+        <!-- Stock Column -->
         <template #[`item.stock`]="{ item }">
           <div class="d-flex align-center">
             <div>
@@ -208,6 +213,28 @@
                     • Oldest: {{ formatDate(item.oldestBatchDate) }}
                   </span>
                 </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ✅ НОВАЯ КОЛОНКА: В пути -->
+        <template #[`item.transit`]="{ item }">
+          <div class="d-flex align-center">
+            <div>
+              <div class="font-weight-medium" :class="getTransitQuantityClass(item)">
+                {{ formatQuantity(getTransitQuantity(item), item.unit) }}
+              </div>
+              <div v-if="getTransitQuantity(item) > 0" class="text-caption">
+                <div class="d-flex align-center">
+                  <!-- Индикатор статуса доставки -->
+                  <v-icon :color="getTransitStatusColor(item)" size="12" class="mr-1">
+                    {{ getTransitStatusIcon(item) }}
+                  </v-icon>
+                  <span :class="getTransitStatusTextClass(item)">
+                    {{ getTransitStatusText(item) }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -377,6 +404,7 @@ interface Props {
   loading: boolean
   department: StorageDepartment
   showZeroStock?: boolean
+  storageStore: any // ✅ ДОБАВЛЕНО: передаем storageStore для транзитных данных
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -410,6 +438,7 @@ const headers = computed(() => [
   { title: 'Product', key: 'itemName', sortable: false, width: '200px' },
   { title: 'Category', key: 'category', sortable: false, width: '150px' },
   { title: 'Stock', key: 'stock', sortable: false, width: '200px' },
+  { title: 'In Transit', key: 'transit', sortable: false, width: '180px' }, // ✅ НОВАЯ КОЛОНКА
   { title: 'Cost', key: 'cost', sortable: false, width: '180px' },
   { title: 'Total Value', key: 'totalValue', sortable: false, width: '150px' },
   { title: 'Status', key: 'status', sortable: false, width: '120px' },
@@ -498,6 +527,123 @@ const categoryOptions = computed(() => {
       value: category
     }))
 })
+
+// ===========================
+// ТРАНЗИТНЫЕ BATCH-И МЕТОДЫ
+// ===========================
+
+function hasTransitForItem(item: StorageBalance): boolean {
+  if (!props.storageStore?.transitBatches?.value) return false
+
+  return props.storageStore.transitBatches.value.some(
+    (batch: any) => batch.itemId === item.itemId && batch.department === item.department
+  )
+}
+
+function getTransitQuantity(item: StorageBalance): number {
+  if (!props.storageStore?.transitBatches?.value) return 0
+
+  return props.storageStore.transitBatches.value
+    .filter((batch: any) => batch.itemId === item.itemId && batch.department === item.department)
+    .reduce((sum: number, batch: any) => sum + batch.currentQuantity, 0)
+}
+
+function getTransitStatusColor(item: StorageBalance): string {
+  if (!props.storageStore?.transitBatches?.value) return 'grey'
+
+  const transitBatches = props.storageStore.transitBatches.value.filter(
+    (batch: any) => batch.itemId === item.itemId && batch.department === item.department
+  )
+
+  if (transitBatches.length === 0) return 'grey'
+
+  // Проверяем есть ли просроченные
+  const hasOverdue = transitBatches.some(
+    (batch: any) => batch.plannedDeliveryDate && new Date(batch.plannedDeliveryDate) < new Date()
+  )
+  if (hasOverdue) return 'error'
+
+  // Проверяем есть ли доставки сегодня
+  const hasToday = transitBatches.some((batch: any) => {
+    if (!batch.plannedDeliveryDate) return false
+    const deliveryDate = new Date(batch.plannedDeliveryDate)
+    const today = new Date()
+    return deliveryDate.toDateString() === today.toDateString()
+  })
+  if (hasToday) return 'warning'
+
+  return 'orange'
+}
+
+function getTransitStatusIcon(item: StorageBalance): string {
+  const color = getTransitStatusColor(item)
+  switch (color) {
+    case 'error':
+      return 'mdi-alert-circle'
+    case 'warning':
+      return 'mdi-clock-alert'
+    default:
+      return 'mdi-truck-delivery'
+  }
+}
+
+function getTransitStatusText(item: StorageBalance): string {
+  if (!props.storageStore?.transitBatches?.value) return ''
+
+  const transitBatches = props.storageStore.transitBatches.value.filter(
+    (batch: any) => batch.itemId === item.itemId && batch.department === item.department
+  )
+
+  if (transitBatches.length === 0) return ''
+
+  const now = new Date()
+  const hasOverdue = transitBatches.some(
+    (batch: any) => batch.plannedDeliveryDate && new Date(batch.plannedDeliveryDate) < now
+  )
+
+  if (hasOverdue) return 'Overdue'
+
+  const hasToday = transitBatches.some((batch: any) => {
+    if (!batch.plannedDeliveryDate) return false
+    const deliveryDate = new Date(batch.plannedDeliveryDate)
+    return deliveryDate.toDateString() === now.toDateString()
+  })
+
+  if (hasToday) return 'Today'
+
+  return `${transitBatches.length} shipment${transitBatches.length !== 1 ? 's' : ''}`
+}
+
+function getTransitQuantityClass(item: StorageBalance): string {
+  const quantity = getTransitQuantity(item)
+  if (quantity === 0) return 'text-medium-emphasis'
+
+  const color = getTransitStatusColor(item)
+  switch (color) {
+    case 'error':
+      return 'text-error'
+    case 'warning':
+      return 'text-warning'
+    default:
+      return 'text-orange'
+  }
+}
+
+function getTransitStatusTextClass(item: StorageBalance): string {
+  const color = getTransitStatusColor(item)
+  switch (color) {
+    case 'error':
+      return 'text-error'
+    case 'warning':
+      return 'text-warning'
+    default:
+      return 'text-orange'
+  }
+}
+
+// ===========================
+// СУЩЕСТВУЮЩИЕ МЕТОДЫ
+// ===========================
 
 // ✅ FIXED: Style helper methods for zero and negative stock items
 function getItemNameClass(item: StorageBalance): string {
@@ -695,5 +841,10 @@ function clearAllFilters() {
     background-color: rgb(var(--v-theme-surface-variant)) !important;
     color: rgb(var(--v-theme-on-surface-variant)) !important;
   }
+}
+
+// Стили для транзитных элементов
+.text-orange {
+  color: #ff9800 !important;
 }
 </style>
