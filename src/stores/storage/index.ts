@@ -37,3 +37,4 @@ export { useStorageStore } from './storageStore'
 
 // ✅ Export specialized composables
 export { useWriteOff } from './composables/useWriteOff'
+export { useBatches } from './composables/useBatches'

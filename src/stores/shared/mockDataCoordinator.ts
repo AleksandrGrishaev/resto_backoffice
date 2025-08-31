@@ -240,33 +240,6 @@ export class MockDataCoordinator {
     }
   }
 
-  private loadSupplierStoreData() {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Loading supplier store data from supplierDefinitions...')
-
-      // ✅ Используем предопределенные данные с правильными базовыми единицами
-      const supplierData = getSupplierWorkflowData()
-
-      DebugUtils.info(MODULE_NAME, 'Supplier store data loaded successfully', {
-        requests: supplierData.requests.length,
-        orders: supplierData.orders.length,
-        receipts: supplierData.receipts.length,
-        suggestions: supplierData.suggestions.length,
-        unitSystem: 'BASE_UNITS (gram/ml/piece)'
-      })
-
-      return supplierData
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load supplier store data', { error })
-      return {
-        requests: [],
-        orders: [],
-        receipts: [],
-        suggestions: []
-      }
-    }
-  }
-
   // =============================================
   // STORAGE STORE DATA - ИСПОЛЬЗУЕМ storageDefinitions.ts
   // =============================================
@@ -284,11 +257,19 @@ export class MockDataCoordinator {
 
       // ✅ НОВАЯ ИНТЕГРАЦИЯ: Используем storageDefinitions.ts
       const storageData = getStorageWorkflowData()
+      const transitBatches = storageData.batches.filter(b => b.status === 'in_transit')
+      const activeBatches = storageData.batches.filter(b => b.status === 'active')
+      const balancesWithTransit = storageData.balances.filter(
+        b => b.transitQuantity && b.transitQuantity > 0
+      )
 
       DebugUtils.info(MODULE_NAME, 'Storage store data loaded successfully', {
         operations: storageData.operations.length,
         balances: storageData.balances.length,
         batches: storageData.batches.length,
+        activeBatches: activeBatches.length,
+        transitBatches: transitBatches.length,
+        balancesWithTransit: balancesWithTransit.length,
         unitSystem: 'BASE_UNITS (gram/ml/piece)'
       })
 
@@ -633,6 +614,46 @@ if (import.meta.env.DEV) {
 
     return { storageData, productsData }
   }
+  ;(window as any).__TEST_TRANSIT_BATCHES__ = () => {
+    const storageData = mockDataCoordinator.getStorageStoreData()
+
+    console.log('\n🚛 === TRANSIT BATCHES TEST ===')
+
+    const transitBatches = storageData.batches.filter(b => b.status === 'in_transit')
+    console.log(`Transit batches found: ${transitBatches.length}`)
+
+    transitBatches.forEach(batch => {
+      const isOverdue =
+        batch.plannedDeliveryDate && new Date(batch.plannedDeliveryDate) < new Date()
+      const isToday = batch.plannedDeliveryDate && TimeUtils.isToday(batch.plannedDeliveryDate)
+
+      console.log(`\n📦 ${batch.itemId} (${batch.batchNumber})`)
+      console.log(`  Quantity: ${batch.currentQuantity} ${batch.unit}`)
+      console.log(`  Supplier: ${batch.supplierName}`)
+      console.log(`  Order ID: ${batch.purchaseOrderId}`)
+      console.log(`  Planned delivery: ${batch.plannedDeliveryDate}`)
+      console.log(`  Status: ${isOverdue ? '🔴 OVERDUE' : isToday ? '🟡 DUE TODAY' : '🟢 ON TIME'}`)
+    })
+
+    // Тестируем балансы с транзитом
+    console.log('\n📊 === BALANCES WITH TRANSIT ===')
+    const balancesWithTransit = storageData.balances.filter(
+      b => b.transitQuantity && b.transitQuantity > 0
+    )
+    console.log(`Balances with transit stock: ${balancesWithTransit.length}`)
+
+    balancesWithTransit.forEach(balance => {
+      console.log(`\n📦 ${balance.itemName} (${balance.department})`)
+      console.log(`  On hand: ${balance.totalQuantity} ${balance.unit}`)
+      console.log(`  In transit: ${balance.transitQuantity} ${balance.unit}`)
+      console.log(`  Total available: ${balance.totalWithTransit} ${balance.unit}`)
+      console.log(
+        `  Next delivery: ${balance.nearestDelivery ? TimeUtils.formatDateForDisplay(balance.nearestDelivery) : 'N/A'}`
+      )
+    })
+
+    return { transitBatches, balancesWithTransit }
+  }
   ;(window as any).__TEST_BASE_UNITS_STORAGE__ = () => {
     const storageData = mockDataCoordinator.getStorageStoreData()
 
@@ -676,5 +697,6 @@ if (import.meta.env.DEV) {
     console.log('• window.__VALIDATE_STORE_INTEGRATION__()')
     console.log('• window.__TEST_STORAGE_INTEGRATION__()')
     console.log('• window.__TEST_BASE_UNITS_STORAGE__() - verify base units')
+    console.log('• window.__TEST_TRANSIT_BATCHES__() - test transit functionality')
   }, 100)
 }

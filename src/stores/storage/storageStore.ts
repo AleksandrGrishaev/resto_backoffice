@@ -5,6 +5,7 @@ import { ref, computed } from 'vue'
 import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
 import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
+import { useBatches } from './composables/useBatches'
 import { DebugUtils } from '@/utils'
 
 import type {
@@ -22,6 +23,7 @@ import type {
 } from './types'
 
 const MODULE_NAME = 'StorageStore'
+const batches = useBatches()
 
 // ===========================
 // STATE - ИНТЕГРАЦИЯ С КООРДИНАТОРОМ
@@ -454,6 +456,64 @@ async function finalizeInventory(inventoryId: string): Promise<InventoryDocument
   }
 }
 
+// ✅ НОВЫЙ: Балансы с учетом транзита
+const balancesWithTransit = computed(() => {
+  const transitBatches = batches.transitBatches.value
+
+  return state.value.balances.map(balance => {
+    const transitItems = transitBatches.filter(
+      batch =>
+        batch.itemId === balance.itemId &&
+        batch.department === balance.department &&
+        batch.status === 'in_transit'
+    )
+
+    const transitQuantity = transitItems.reduce((sum, batch) => sum + batch.currentQuantity, 0)
+    const transitValue = transitItems.reduce((sum, batch) => sum + batch.totalValue, 0)
+
+    return {
+      ...balance,
+      transitQuantity,
+      transitValue,
+      totalWithTransit: balance.totalQuantity + transitQuantity,
+      nearestDelivery: transitItems
+        .map(b => b.plannedDeliveryDate)
+        .filter(date => date)
+        .sort()[0]
+    }
+  })
+})
+
+// 4. ДОБАВИТЬ метод для пересчета балансов (после fetchInventories):
+
+// ===========================
+// BALANCE RECALCULATION
+// ===========================
+
+async function recalculateAllBalances(): Promise<void> {
+  try {
+    state.value.loading.balances = true
+    state.value.error = null
+
+    DebugUtils.info(MODULE_NAME, 'Recalculating all balances with transit support...')
+
+    // Делегируем пересчет в storageService
+    await storageService.recalculateAllBalances()
+
+    // Перезагружаем балансы
+    await fetchBalances()
+
+    DebugUtils.info(MODULE_NAME, 'Balance recalculation completed')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to recalculate balances'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error })
+    throw error
+  } finally {
+    state.value.loading.balances = false
+  }
+}
+
 // ===========================
 // HELPER METHODS
 // ===========================
@@ -565,6 +625,7 @@ export function useStorageStore() {
     lowStockItemsCount,
     expiredItemsCount,
     nearExpiryItemsCount,
+    balancesWithTransit,
 
     // ✅ ДОБАВЛЕНО: departmentBalances как функция
     departmentBalances,
@@ -574,6 +635,7 @@ export function useStorageStore() {
     fetchBalances,
     fetchOperations,
     fetchInventories,
+    recalculateAllBalances,
 
     // CRUD operations
     createCorrection,
@@ -609,6 +671,15 @@ export function useStorageStore() {
     getBalance,
     getOperation,
     getInventory,
+
+    // Transit batches functionality
+    createTransitBatches: batches.createTransitBatches,
+    convertTransitBatchesToActive: batches.convertTransitBatchesToActive,
+    getTransitBatchesByOrder: batches.getTransitBatchesByOrder,
+    removeTransitBatchesOnOrderCancel: batches.removeTransitBatchesOnOrderCancel,
+    transitBatches: batches.transitBatches,
+    transitMetrics: batches.transitMetrics,
+    deliveryAlerts: batches.deliveryAlerts,
 
     // External stores
     productsStore

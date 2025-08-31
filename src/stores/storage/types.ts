@@ -6,7 +6,8 @@ export type StorageItemType = 'product'
 // ✅ FIXED: Added write_off operation type
 export type OperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType = 'purchase' | 'correction' | 'opening_balance' | 'inventory_adjustment'
-export type BatchStatus = 'active' | 'expired' | 'consumed'
+export type BatchStatus = 'active' | 'expired' | 'consumed' | 'in_transit'
+
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
 // ✅ FIXED: Added Write-off Reason Types
@@ -29,6 +30,57 @@ export interface StorageBatch extends BaseEntity {
   notes?: string
   status: BatchStatus
   isActive: boolean
+
+  // ✅ НОВЫЕ ПОЛЯ для интеграции с заказами поставщикам
+  purchaseOrderId?: string // Связь с PurchaseOrder
+  supplierId?: string // ID поставщика
+  supplierName?: string // Название поставщика (кеш)
+  plannedDeliveryDate?: string // Ожидаемая дата поставки
+  actualDeliveryDate?: string // Фактическая дата получения
+}
+
+// 3. НОВЫЕ DTO для создания транзитных batch-ей
+export interface CreateTransitBatchData {
+  itemId: string
+  itemName: string
+  quantity: number
+  unit: string
+  estimatedCostPerUnit: number
+  department: StorageDepartment
+  purchaseOrderId: string
+  supplierId: string
+  supplierName: string
+  plannedDeliveryDate: string
+  notes?: string
+}
+
+// 4. РАСШИРЕНИЕ StorageBalance для учета транзита
+export interface StorageBalance {
+  itemId: string
+  itemType: 'product'
+  itemName: string
+  department: StorageDepartment
+  totalQuantity: number
+  unit: string
+  totalValue: number
+  averageCost: number
+  latestCost: number
+  costTrend: 'up' | 'down' | 'stable'
+  batches: StorageBatch[]
+  oldestBatchDate: string
+  newestBatchDate: string
+  hasExpired: boolean
+  hasNearExpiry: boolean
+  belowMinStock: boolean
+  lastCorrectionDate?: string
+  averageDailyUsage?: number
+  daysOfStockRemaining?: number
+
+  // ✅ НОВЫЕ ПОЛЯ для учета транзита
+  transitQuantity: number // Количество в пути
+  transitValue: number // Стоимость товара в пути
+  totalWithTransit: number // Общее количество (склад + транзит)
+  nearestDelivery?: string // Ближайшая ожидаемая поставка
 }
 
 export interface BatchAllocation {
@@ -80,29 +132,6 @@ export interface StorageOperation extends BaseEntity {
   relatedInventoryId?: string
   status: 'draft' | 'confirmed'
   notes?: string
-}
-
-export interface StorageBalance {
-  itemId: string
-  itemType: 'product'
-  itemName: string
-  department: StorageDepartment
-  totalQuantity: number
-  unit: string
-  totalValue: number
-  averageCost: number
-  latestCost: number
-  costTrend: 'up' | 'down' | 'stable'
-  batches: StorageBatch[]
-  oldestBatchDate: string
-  newestBatchDate: string
-  hasExpired: boolean
-  hasNearExpiry: boolean
-  belowMinStock: boolean
-  lastCorrectionDate?: string
-  averageDailyUsage?: number
-  daysOfStockRemaining?: number
-  lastCalculated: string
 }
 
 export interface InventoryDocument extends BaseEntity {

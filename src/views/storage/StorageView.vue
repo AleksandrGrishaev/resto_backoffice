@@ -74,6 +74,105 @@
       @show-low-stock="showLowStockItems"
     />
 
+    <!-- Transit Delivery Alerts -->
+    <div v-if="deliveryAlerts.length > 0" class="mb-4">
+      <v-alert
+        v-for="alert in deliveryAlerts.slice(0, 3)"
+        :key="alert.batchId"
+        :type="
+          alert.severity === 'critical'
+            ? 'error'
+            : alert.severity === 'warning'
+              ? 'warning'
+              : 'info'
+        "
+        variant="tonal"
+        class="mb-2"
+      >
+        <div class="d-flex align-center justify-space-between">
+          <div class="d-flex align-center">
+            <v-icon
+              :icon="alert.type === 'overdue' ? 'mdi-truck-alert' : 'mdi-truck-delivery'"
+              class="mr-2"
+            />
+            <div>
+              <div class="font-weight-medium">{{ alert.message }}</div>
+              <div class="text-caption">{{ alert.itemName }}</div>
+            </div>
+          </div>
+
+          <v-btn
+            size="small"
+            variant="outlined"
+            :color="
+              alert.severity === 'critical'
+                ? 'error'
+                : alert.severity === 'warning'
+                  ? 'warning'
+                  : 'info'
+            "
+            @click="showTransitDetails(alert.orderId)"
+          >
+            View Details
+          </v-btn>
+        </div>
+      </v-alert>
+
+      <!-- Show More Alerts Link -->
+      <div v-if="deliveryAlerts.length > 3" class="text-center">
+        <v-btn variant="text" size="small" @click="showAllTransitAlerts = !showAllTransitAlerts">
+          {{ showAllTransitAlerts ? 'Show Less' : `Show ${deliveryAlerts.length - 3} More Alerts` }}
+        </v-btn>
+      </div>
+    </div>
+
+    <!-- Transit Statistics Card -->
+    <div v-if="transitStatistics && transitStatistics.totalTransitItems > 0" class="mb-4">
+      <v-card variant="outlined">
+        <v-card-title class="d-flex align-center">
+          <v-icon icon="mdi-truck-delivery" color="orange" class="mr-2" />
+          Deliveries in Transit
+        </v-card-title>
+
+        <v-card-text>
+          <v-row>
+            <v-col cols="6" md="3">
+              <div class="text-center">
+                <div class="text-h4 font-weight-bold text-orange">
+                  {{ transitStatistics.totalTransitOrders }}
+                </div>
+                <div class="text-caption">Orders</div>
+              </div>
+            </v-col>
+            <v-col cols="6" md="3">
+              <div class="text-center">
+                <div class="text-h4 font-weight-bold text-orange">
+                  {{ transitStatistics.totalTransitItems }}
+                </div>
+                <div class="text-caption">Items</div>
+              </div>
+            </v-col>
+            <v-col cols="6" md="3">
+              <div class="text-center">
+                <div class="text-h4 font-weight-bold text-error">
+                  {{ transitStatistics.overdueCount }}
+                </div>
+                <div class="text-caption">Overdue</div>
+              </div>
+            </v-col>
+            <v-col cols="6" md="3">
+              <div class="text-center">
+                <div class="text-h4 font-weight-bold text-warning">
+                  {{ transitStatistics.dueTodayCount }}
+                </div>
+                <div class="text-caption">Due Today</div>
+              </div>
+            </v-col>
+          </v-row>
+        </v-card-text>
+      </v-card>
+    </div>
+
     <!-- Main Content Tabs -->
     <v-tabs v-model="selectedTab" class="mb-4">
       <v-tab value="products">
@@ -261,8 +360,9 @@ const errorMessage = ref('')
 const editingInventory = ref<InventoryDocument | null>(null)
 const showZeroStock = ref(false)
 const isInitialized = ref(false)
+const showAllTransitAlerts = ref(false) // ✅ ДОБАВЛЕНО
 
-// ✅ FIXED: Store readiness check
+// Store readiness check
 const isStoreReady = computed(() => {
   return (
     isInitialized.value &&
@@ -279,18 +379,43 @@ const isLoading = computed(() => {
   )
 })
 
-// ✅ FIXED: Safe access to store data
+// ✅ ИСПРАВЛЕНО: Правильное обращение к balancesWithTransit
 const allProductBalances = computed(() => {
-  if (!isStoreReady.value || !storageStore.filteredBalances?.value) {
+  if (!isStoreReady.value || !storageStore.balancesWithTransit) {
     return []
   }
 
   try {
-    return storageStore.filteredBalances.value.filter(
+    return storageStore.balancesWithTransit.value.filter(
       b => b && b.itemType === 'product' && b.department === selectedDepartment.value
     )
   } catch (error) {
-    console.warn('Error filtering all product balances:', error)
+    console.warn('Error filtering product balances with transit:', error)
+    return []
+  }
+})
+
+// ✅ ДОБАВЛЕНО: Transit statistics
+const transitStatistics = computed(() => {
+  if (!storageStore.transitMetrics) return null
+
+  try {
+    return storageStore.transitMetrics.value
+  } catch (error) {
+    console.warn('Error getting transit metrics:', error)
+    return null
+  }
+})
+
+// ✅ ДОБАВЛЕНО: Delivery alerts
+const deliveryAlerts = computed(() => {
+  if (!storageStore.deliveryAlerts) return []
+
+  try {
+    const alerts = storageStore.deliveryAlerts.value
+    return showAllTransitAlerts.value ? alerts : alerts.slice(0, 3)
+  } catch (error) {
+    console.warn('Error getting delivery alerts:', error)
     return []
   }
 })
@@ -325,7 +450,7 @@ const recentInventories = computed(() => {
   }
 })
 
-// ✅ FIXED: Proper computed property access
+// Alert counts with proper safety checks
 const alertCounts = computed(() => {
   if (!isStoreReady.value) {
     return { expiring: 0, expired: 0, lowStock: 0 }
@@ -349,7 +474,7 @@ const enhancedAlertCounts = computed(() => {
   }
 })
 
-// ✅ FIXED: Department counts with proper safety checks
+// Department counts with proper safety checks
 const kitchenItemCount = computed(() => {
   if (!isStoreReady.value) return 0
 
@@ -370,7 +495,7 @@ const barItemCount = computed(() => {
   }
 })
 
-// ✅ FIXED: Safe product category access
+// Safe product category access
 function getProductCategoryForSorting(itemId: string): string {
   try {
     const product = productsStore.products?.find(p => p.id === itemId)
@@ -380,7 +505,7 @@ function getProductCategoryForSorting(itemId: string): string {
   }
 }
 
-// ✅ FIXED: Enhanced sorting with proper safety checks
+// Enhanced sorting with proper safety checks
 const displayProductBalances = computed(() => {
   if (!isStoreReady.value) return []
 
@@ -460,6 +585,12 @@ function toggleZeroStockFilter() {
   } catch (error) {
     console.warn('Error toggling zero stock filter:', error)
   }
+}
+
+function showTransitDetails(orderId: string) {
+  // Навигация к деталям заказа или открытие диалога
+  console.log('Show transit details for order:', orderId)
+  // TODO: Implementация навигации к supplier orders
 }
 
 // Alert handlers

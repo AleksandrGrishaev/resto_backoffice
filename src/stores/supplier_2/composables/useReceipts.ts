@@ -23,7 +23,6 @@ export function useReceipts() {
   const supplierStore = useSupplierStore()
   const storageStore = useStorageStore()
   const productsStore = useProductsStore()
-  const plannedDeliveryIntegration = usePlannedDeliveryIntegration()
 
   // =============================================
   // STATE
@@ -206,56 +205,48 @@ export function useReceipts() {
    * Complete receipt with full integration (Storage + Price Updates)
    */
   async function completeReceipt(receiptId: string): Promise<Receipt> {
-    try {
-      console.log(`Receipts: Completing receipt ${receiptId}`)
-      isCreatingStorageOperation.value = true
-
-      // Получаем receipt и заказ
-      const receipt = receipts.value.find(r => r.id === receiptId)
-      if (!receipt) {
-        throw new Error(`Receipt ${receiptId} not found`)
-      }
-
-      const order = supplierStore.state.orders.find(o => o.id === receipt.purchaseOrderId)
-      if (!order) {
-        throw new Error(`Order ${receipt.purchaseOrderId} not found`)
-      }
-
-      // Завершаем receipt
-      const completedReceipt = await updateReceipt(receiptId, {
-        status: 'completed',
-        completedDate: new Date().toISOString()
-      })
-
-      // Создаем батчи в StorageStore
-      try {
-        console.log('Receipts: Creating batches in StorageStore...')
-        const batchIds = await plannedDeliveryIntegration.createBatchesFromReceipt(
-          completedReceipt,
-          order
-        )
-        console.log(`Receipts: Created ${batchIds.length} batches:`, batchIds)
-      } catch (error) {
-        console.warn('Receipts: Failed to create batches in StorageStore (non-critical):', error)
-      }
-
-      // ✅ АВТОМАТИЧЕСКИ МЕНЯЕМ СТАТУС ЗАКАЗА НА DELIVERED
-      if (order.status === 'sent') {
-        await supplierStore.updateOrder(order.id, {
-          status: 'delivered',
-          deliveredDate: new Date().toISOString()
-        })
-        console.log(`Receipts: Order ${order.orderNumber} automatically marked as delivered`)
-      }
-
-      console.log(`Receipts: Completed receipt ${completedReceipt.receiptNumber}`)
-      return completedReceipt
-    } catch (error) {
-      console.error('Receipts: Error completing receipt:', error)
-      throw error
-    } finally {
-      isCreatingStorageOperation.value = false
+    const receipt = receipts.value.find(r => r.id === receiptId)
+    if (!receipt) {
+      throw new Error(`Receipt with id ${receiptId} not found`)
     }
+
+    const order = supplierStore.state.orders.find(o => o.id === receipt.purchaseOrderId)
+    if (!order) {
+      throw new Error(`Order with id ${receipt.purchaseOrderId} not found`)
+    }
+
+    const completedReceipt = await updateReceipt(receiptId, {
+      status: 'completed',
+      completedDate: new Date().toISOString()
+    })
+
+    // ✅ ИСПРАВИТЬ: Конвертируем транзитные batch-и в активные
+    try {
+      const plannedDeliveryIntegration = usePlannedDeliveryIntegration() // ✅ ПЕРЕНЕСТИ СЮДА
+
+      const receiptItems = completedReceipt.items.map(item => ({
+        itemId: item.itemId,
+        receivedQuantity: item.receivedQuantity,
+        actualPrice: item.actualPrice
+      }))
+
+      await plannedDeliveryIntegration.convertTransitBatchesOnReceipt(order.id, receiptItems)
+      DebugUtils.info(MODULE_NAME, 'Transit batches converted to active', {
+        orderId: order.id,
+        receiptId
+      })
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to convert transit batches', {
+        orderId: order.id,
+        receiptId,
+        error
+      })
+    }
+
+    // Автоматически меняем статус заказа на delivered
+    await supplierStore.updateOrder(order.id, { status: 'delivered' })
+
+    return completedReceipt
   }
 
   /**

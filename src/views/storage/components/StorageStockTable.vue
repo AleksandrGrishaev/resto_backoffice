@@ -213,6 +213,58 @@
           </div>
         </template>
 
+        <!-- In Transit Column -->
+        <template #[`item.transit`]="{ item }">
+          <div v-if="item.transitQuantity && item.transitQuantity > 0" class="d-flex align-center">
+            <v-chip size="small" color="orange" variant="flat" prepend-icon="mdi-truck-delivery">
+              {{ formatQuantity(item.transitQuantity, item.unit) }}
+            </v-chip>
+          </div>
+          <div v-else class="text-medium-emphasis text-center">—</div>
+        </template>
+
+        <!-- Total Available Column -->
+        <template #[`item.totalAvailable`]="{ item }">
+          <div class="d-flex flex-column align-center">
+            <div class="font-weight-medium" :class="getTotalAvailableClass(item)">
+              {{ formatQuantity(item.totalWithTransit || item.totalQuantity, item.unit) }}
+            </div>
+            <div
+              v-if="item.transitQuantity && item.transitQuantity > 0"
+              class="text-caption text-medium-emphasis"
+            >
+              {{ formatQuantity(item.totalQuantity, item.unit) }} +
+              {{ formatQuantity(item.transitQuantity, item.unit) }}
+            </div>
+          </div>
+        </template>
+
+        <!-- Next Delivery Column -->
+        <template #[`item.nextDelivery`]="{ item }">
+          <div v-if="item.nearestDelivery" class="d-flex flex-column align-center">
+            <div :class="getDeliveryStatusClass(item.nearestDelivery)">
+              {{ formatDateShort(item.nearestDelivery) }}
+            </div>
+            <v-chip
+              v-if="isDeliveryOverdue(item.nearestDelivery)"
+              size="x-small"
+              color="error"
+              variant="flat"
+            >
+              OVERDUE
+            </v-chip>
+            <v-chip
+              v-else-if="isDeliveryToday(item.nearestDelivery)"
+              size="x-small"
+              color="warning"
+              variant="flat"
+            >
+              TODAY
+            </v-chip>
+          </div>
+          <div v-else class="text-center text-medium-emphasis">—</div>
+        </template>
+
         <!-- Cost Information -->
         <template #[`item.cost`]="{ item }">
           <div>
@@ -367,6 +419,7 @@ import { ref, computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 import type { StorageBalance, StorageDepartment } from '@/stores/storage'
+import { TimeUtils } from '@/utils'
 
 // Components
 import ItemDetailsDialog from './ItemDetailsDialog.vue'
@@ -410,13 +463,16 @@ const headers = computed(() => [
   { title: 'Product', key: 'itemName', sortable: false, width: '200px' },
   { title: 'Category', key: 'category', sortable: false, width: '150px' },
   { title: 'Stock', key: 'stock', sortable: false, width: '200px' },
+  { title: 'In Transit', key: 'transit', sortable: false, width: '120px' }, // ✅ НОВАЯ КОЛОНКА
+  { title: 'Total Available', key: 'totalAvailable', sortable: false, width: '130px' }, // ✅ НОВАЯ КОЛОНКА
+  { title: 'Next Delivery', key: 'nextDelivery', sortable: false, width: '120px' }, // ✅ НОВАЯ КОЛОНКА
   { title: 'Cost', key: 'cost', sortable: false, width: '180px' },
   { title: 'Total Value', key: 'totalValue', sortable: false, width: '150px' },
   { title: 'Status', key: 'status', sortable: false, width: '120px' },
   { title: 'Actions', key: 'actions', sortable: false, width: '60px' }
 ])
 
-// ✅ FIXED: Custom sorting to show out of stock items last (including negative stock)
+// Custom sorting to show out of stock items last (including negative stock)
 const customSort = (items: StorageBalance[], sortBy: any[]) => {
   return [...items].sort((a, b) => {
     // Primary sort: Stock status (products with stock first, then negative stock, then zero stock)
@@ -442,7 +498,7 @@ const filteredBalances = computed(() => {
     items = items.filter(item => getProductCategory(item.itemId) === selectedCategory.value)
   }
 
-  // ✅ FIXED: Apply out of stock filter (includes negative stock)
+  // Apply out of stock filter (includes negative stock)
   if (props.showZeroStock) {
     items = items.filter(item => item.totalQuantity <= 0)
   }
@@ -474,10 +530,10 @@ const expiringCount = computed(() => props.balances.filter(b => b.hasNearExpiry)
 const lowStockCount = computed(() => props.balances.filter(b => b.belowMinStock).length)
 const expiredCount = computed(() => props.balances.filter(b => b.hasExpired).length)
 
-// ✅ FIXED: Out of stock count (zero AND negative stock)
+// Out of stock count (zero AND negative stock)
 const outOfStockCount = computed(() => props.balances.filter(b => b.totalQuantity <= 0).length)
 
-// ✅ NEW: Separate negative stock count for alerts
+// Separate negative stock count for alerts
 const negativeStockCount = computed(() => props.balances.filter(b => b.totalQuantity < 0).length)
 
 // Category options for the filter
@@ -499,7 +555,7 @@ const categoryOptions = computed(() => {
     }))
 })
 
-// ✅ FIXED: Style helper methods for zero and negative stock items
+// Style helper methods for zero and negative stock items
 function getItemNameClass(item: StorageBalance): string {
   if (item.totalQuantity < 0) return 'text-error'
   if (item.totalQuantity === 0) return 'text-medium-emphasis'
@@ -524,7 +580,7 @@ function getValueDisplayClass(item: StorageBalance): string {
   return ''
 }
 
-// Methods
+// Остальные методы остаются прежними
 function formatDepartment(dept: StorageDepartment): string {
   return dept === 'kitchen' ? 'Kitchen' : 'Bar'
 }
@@ -650,6 +706,45 @@ function toggleNearExpiryFilter() {
 
 function toggleLowStockFilter() {
   filters.value.showLowStock = !filters.value.showLowStock
+}
+
+// ✅ ДОБАВЛЕНО: Helper методы для новых колонок
+function getTotalAvailableClass(item: StorageBalance): string {
+  const total = item.totalWithTransit || item.totalQuantity
+  if (total < 0) return 'text-error'
+  if (total === 0) return 'text-medium-emphasis'
+  return 'text-success'
+}
+
+function getDeliveryStatusClass(deliveryDate: string): string {
+  if (TimeUtils.isOverdue(deliveryDate)) return 'text-error font-weight-bold'
+  if (TimeUtils.isToday(deliveryDate)) return 'text-warning font-weight-bold'
+  return 'text-medium-emphasis'
+}
+
+function isDeliveryOverdue(deliveryDate: string): boolean {
+  return TimeUtils.isOverdue(deliveryDate)
+}
+
+function isDeliveryToday(deliveryDate: string): boolean {
+  return TimeUtils.isToday(deliveryDate)
+}
+
+function formatDateShort(dateString: string): string {
+  try {
+    const date = new Date(dateString)
+    const today = new Date()
+    const diffDays = Math.floor((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (diffDays < 0) return `${Math.abs(diffDays)}d ago`
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Tomorrow'
+    if (diffDays <= 7) return `${diffDays}d`
+
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  } catch (error) {
+    return 'Invalid'
+  }
 }
 
 function clearAllFilters() {

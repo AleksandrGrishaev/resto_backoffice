@@ -151,12 +151,15 @@ export interface OrderSuggestion {
   itemId: string
   itemName: string
   currentStock: number
+  transitStock?: number // ✅ ДОБАВЛЕНО: Количество в пути
+  effectiveStock?: number // ✅ ДОБАВЛЕНО: Общий доступный (склад + транзит)
   minStock: number
   suggestedQuantity: number
   urgency: 'low' | 'medium' | 'high'
   reason: 'below_minimum' | 'out_of_stock'
-  estimatedPrice: number // automatically from Storage operations
-  lastPriceDate?: string
+  estimatedPrice: number
+  nearestDelivery?: string // ✅ ДОБАВЛЕНО: Ожидаемая дата поставки
+  lastPriceDate?: string // ✅ ДОБАВЛЕНО: Дата последнего обновления цены
 }
 
 // Supplier baskets for UI distribution

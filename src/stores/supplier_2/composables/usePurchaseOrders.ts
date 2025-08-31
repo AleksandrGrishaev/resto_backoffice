@@ -2,6 +2,7 @@
 
 import { ref, computed } from 'vue'
 import { useSupplierStore } from '../supplierStore'
+import { DebugUtils } from '@/utils'
 import type {
   PurchaseOrder,
   OrderFilters,
@@ -12,7 +13,7 @@ import type {
   OrderStatus,
   PaymentStatus
 } from '../types'
-import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
+import { usePlannedDeliveryIntegration } from '../integrations/plannedDeliveryIntegration'
 
 const MODULE_NAME = 'usePurchaseOrders'
 
@@ -26,7 +27,6 @@ export function usePurchaseOrders() {
   // =============================================
 
   const supplierStore = useSupplierStore()
-  const plannedDeliveryIntegration = usePlannedDeliveryIntegration()
 
   // =============================================
   // STATE
@@ -305,21 +305,29 @@ export function usePurchaseOrders() {
    * Send order to supplier
    */
   async function sendOrder(id: string): Promise<PurchaseOrder> {
-    try {
-      console.log(`PurchaseOrders: Sending order ${id}`)
-      const sentOrder = await updateOrder(id, {
-        status: 'sent',
-        sentDate: new Date().toISOString()
-      })
+    const sentOrder = await updateOrder(id, {
+      status: 'sent',
+      sentDate: new Date().toISOString()
+    })
 
-      console.log(
-        `PurchaseOrders: Order ${sentOrder.orderNumber} sent to supplier and ready for receipt`
-      )
-      return sentOrder
+    // ✅ ИСПРАВИТЬ: Создаем транзитные batch-и
+    try {
+      const plannedDeliveryIntegration = usePlannedDeliveryIntegration() // ✅ ПЕРЕНЕСТИ СЮДА
+      const batchIds = await plannedDeliveryIntegration.createTransitBatchesFromOrder(sentOrder)
+      DebugUtils.info(MODULE_NAME, 'Transit batches created', {
+        // ✅ ИЗМЕНИТЬ НА MODULE_NAME
+        orderId: sentOrder.id,
+        batchIds: batchIds.length
+      })
     } catch (error) {
-      console.error('PurchaseOrders: Error sending order:', error)
-      throw error
+      DebugUtils.warn(MODULE_NAME, 'Failed to create transit batches', {
+        // ✅ ИЗМЕНИТЬ НА MODULE_NAME
+        orderId: sentOrder.id,
+        error
+      })
     }
+
+    return sentOrder
   }
 
   /**
@@ -341,30 +349,27 @@ export function usePurchaseOrders() {
   /**
    * Cancel order
    */
-  async function cancelOrder(id: string): Promise<PurchaseOrder> {
+  async function cancelOrder(id: string, reason?: string): Promise<PurchaseOrder> {
+    const cancelledOrder = await updateOrder(id, {
+      status: 'cancelled',
+      cancelledDate: new Date().toISOString(),
+      notes: reason ? `Cancelled: ${reason}` : 'Order cancelled'
+    })
+
+    // ✅ ИСПРАВИТЬ: Удаляем транзитные batch-и при отмене
     try {
-      console.log(`PurchaseOrders: Cancelling order ${id}`)
-      const cancelledOrder = await updateOrder(id, {
-        status: 'cancelled',
-        cancelledDate: new Date().toISOString()
-      })
-
-      // ✅ НОВОЕ: Отменяем планируемую поставку
-      try {
-        await plannedDeliveryIntegration.cancelPlannedDelivery(id)
-        console.log(
-          `PurchaseOrders: Planned delivery cancelled for order ${cancelledOrder.orderNumber}`
-        )
-      } catch (error) {
-        console.warn('PurchaseOrders: Failed to cancel planned delivery (non-critical):', error)
-      }
-
-      console.log(`PurchaseOrders: Order ${cancelledOrder.orderNumber} cancelled`)
-      return cancelledOrder
+      const plannedDeliveryIntegration = usePlannedDeliveryIntegration() // ✅ ПЕРЕНЕСТИ СЮДА
+      await plannedDeliveryIntegration.removeTransitBatchesOnOrderCancel(id)
+      DebugUtils.info(MODULE_NAME, 'Transit batches removed on cancel', { orderId: id }) // ✅ ИЗМЕНИТЬ НА MODULE_NAME
     } catch (error) {
-      console.error('PurchaseOrders: Error cancelling order:', error)
-      throw error
+      DebugUtils.warn(MODULE_NAME, 'Failed to remove transit batches on cancel', {
+        // ✅ ИЗМЕНИТЬ НА MODULE_NAME
+        orderId: id,
+        error
+      })
     }
+
+    return cancelledOrder
   }
 
   /**
