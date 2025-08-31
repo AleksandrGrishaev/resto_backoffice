@@ -1,4 +1,4 @@
-<!-- src/views/storage/StorageView.vue - FIXED: Proper store access and error handling -->
+<!-- StorageView.vue - Enhanced with Transit Support -->
 <template>
   <div class="storage-view">
     <!-- Header -->
@@ -8,10 +8,22 @@
         <p class="text-body-2 text-medium-emphasis mt-1">
           Raw ingredients inventory with FIFO cost tracking
         </p>
-        <v-chip size="small" color="primary" variant="tonal" class="mt-1">
-          <v-icon icon="mdi-package-variant" size="14" class="mr-1" />
-          Products Only
-        </v-chip>
+        <div class="d-flex gap-2 mt-1">
+          <v-chip size="small" color="primary" variant="tonal">
+            <v-icon icon="mdi-package-variant" size="14" class="mr-1" />
+            Products Only
+          </v-chip>
+          <!-- ✅ NEW: Transit Status Chip -->
+          <v-chip
+            v-if="transitMetrics.totalTransitItems > 0"
+            size="small"
+            color="orange"
+            variant="tonal"
+          >
+            <v-icon icon="mdi-truck-delivery" size="14" class="mr-1" />
+            {{ transitMetrics.totalTransitItems }} in Transit
+          </v-chip>
+        </div>
       </div>
       <div class="d-flex gap-2">
         <v-btn
@@ -45,6 +57,44 @@
       {{ storageStore.state.value.error }}
     </v-alert>
 
+    <!-- ✅ NEW: Transit Delivery Alerts -->
+    <div v-if="deliveryAlerts.length > 0" class="mb-4">
+      <v-alert
+        v-for="alert in deliveryAlerts"
+        :key="`${alert.batchId}-${alert.type}`"
+        :type="
+          alert.severity === 'critical'
+            ? 'error'
+            : alert.severity === 'warning'
+              ? 'warning'
+              : 'info'
+        "
+        variant="tonal"
+        density="compact"
+        class="mb-2"
+        closable
+      >
+        <template #prepend>
+          <v-icon :icon="alert.type === 'overdue' ? 'mdi-truck-alert' : 'mdi-truck-delivery'" />
+        </template>
+        <div class="d-flex align-center justify-space-between w-100">
+          <div>
+            <strong>{{ alert.message }}</strong>
+            <div class="text-caption">{{ alert.itemName }}</div>
+          </div>
+          <v-btn
+            size="small"
+            variant="outlined"
+            :color="alert.severity === 'critical' ? 'error' : 'primary'"
+            prepend-icon="mdi-receipt"
+            :to="`/suppliers?tab=receipts&orderId=${alert.orderId}`"
+          >
+            {{ alert.type === 'overdue' ? 'Process Receipt' : 'View Order' }}
+          </v-btn>
+        </div>
+      </v-alert>
+    </div>
+
     <!-- Department Tabs -->
     <v-tabs v-model="selectedDepartment" class="mb-4" color="primary">
       <v-tab value="kitchen">
@@ -53,6 +103,16 @@
         <v-chip v-if="kitchenItemCount > 0" size="small" class="ml-2" variant="tonal">
           {{ kitchenItemCount }}
         </v-chip>
+        <!-- ✅ NEW: Kitchen transit indicator -->
+        <v-chip
+          v-if="kitchenTransitCount > 0"
+          size="small"
+          color="orange"
+          variant="outlined"
+          class="ml-1"
+        >
+          +{{ kitchenTransitCount }} transit
+        </v-chip>
       </v-tab>
       <v-tab value="bar">
         <v-icon icon="mdi-coffee" class="mr-2" />
@@ -60,18 +120,30 @@
         <v-chip v-if="barItemCount > 0" size="small" class="ml-2" variant="tonal">
           {{ barItemCount }}
         </v-chip>
+        <!-- ✅ NEW: Bar transit indicator -->
+        <v-chip
+          v-if="barTransitCount > 0"
+          size="small"
+          color="orange"
+          variant="outlined"
+          class="ml-1"
+        >
+          +{{ barTransitCount }} transit
+        </v-chip>
       </v-tab>
     </v-tabs>
 
-    <!-- Alerts Banner -->
+    <!-- ✅ ENHANCED: Alerts Banner with Transit Info -->
     <storage-alerts
       v-if="isStoreReady"
       :alerts="enhancedAlertCounts"
       :department="selectedDepartment"
+      :transit-metrics="transitMetrics"
       class="mb-4"
       @show-expiring="showExpiringItems"
       @show-expired="showExpiredItems"
       @show-low-stock="showLowStockItems"
+      @show-transit="showTransitItems"
     />
 
     <!-- Main Content Tabs -->
@@ -95,6 +167,20 @@
         Inventories
         <v-chip v-if="recentInventories.length > 0" size="small" class="ml-2" variant="tonal">
           {{ recentInventories.length }}
+        </v-chip>
+      </v-tab>
+      <!-- ✅ NEW: Transit Tab -->
+      <v-tab value="transit">
+        <v-icon icon="mdi-truck-delivery" class="mr-2" />
+        In Transit
+        <v-chip
+          v-if="transitMetrics.totalTransitItems > 0"
+          size="small"
+          color="orange"
+          variant="tonal"
+          class="ml-2"
+        >
+          {{ transitMetrics.totalTransitItems }}
         </v-chip>
       </v-tab>
       <v-tab value="analytics">
@@ -126,9 +212,10 @@
             </template>
           </v-empty-state>
         </div>
+        <!-- ✅ CRITICAL: Pass balancesWithTransit instead of regular balances -->
         <storage-stock-table
           v-else
-          :balances="displayProductBalances"
+          :balances="displayProductBalancesWithTransit"
           :loading="storageStore.state.value.loading.balances"
           item-type="product"
           :department="selectedDepartment"
@@ -189,6 +276,15 @@
         />
       </v-tabs-window-item>
 
+      <!-- ✅ NEW: Transit Tab -->
+      <v-tabs-window-item value="transit">
+        <transit-overview-tab
+          :department="selectedDepartment"
+          :transit-metrics="transitMetrics"
+          :delivery-alerts="deliveryAlerts"
+        />
+      </v-tabs-window-item>
+
       <!-- Analytics Tab -->
       <v-tabs-window-item value="analytics">
         <storage-analytics-tab :department="selectedDepartment" />
@@ -243,6 +339,9 @@ import StorageInventoriesTable from './components/StorageInventoriesTable.vue'
 import StorageAnalyticsTab from './components/tabs/StorageAnalyticsTab.vue'
 import InventoryDialog from './components/InventoryDialog.vue'
 
+// ✅ NEW: Transit Components
+import TransitOverviewTab from './components/tabs/TransitOverviewTab.vue'
+
 const MODULE_NAME = 'StorageView'
 
 // Store & Composables
@@ -262,7 +361,7 @@ const editingInventory = ref<InventoryDocument | null>(null)
 const showZeroStock = ref(false)
 const isInitialized = ref(false)
 
-// ✅ FIXED: Store readiness check
+// Store readiness check
 const isStoreReady = computed(() => {
   return (
     isInitialized.value &&
@@ -279,7 +378,27 @@ const isLoading = computed(() => {
   )
 })
 
-// ✅ FIXED: Safe access to store data
+// ✅ NEW: Transit Metrics and Alerts
+const transitMetrics = computed(() => {
+  if (!isStoreReady.value || !storageStore.transitMetrics) {
+    return {
+      totalTransitItems: 0,
+      totalTransitValue: 0,
+      overdueCount: 0,
+      dueTodayCount: 0
+    }
+  }
+  return storageStore.transitMetrics
+})
+
+const deliveryAlerts = computed(() => {
+  if (!isStoreReady.value || !storageStore.deliveryAlerts) {
+    return []
+  }
+  return storageStore.deliveryAlerts
+})
+
+// Safe access to store data
 const allProductBalances = computed(() => {
   if (!isStoreReady.value || !storageStore.filteredBalances?.value) {
     return []
@@ -292,6 +411,22 @@ const allProductBalances = computed(() => {
   } catch (error) {
     console.warn('Error filtering all product balances:', error)
     return []
+  }
+})
+
+// ✅ NEW: Use balancesWithTransit for displaying products
+const allProductBalancesWithTransit = computed(() => {
+  if (!isStoreReady.value || !storageStore.balancesWithTransit?.value) {
+    return []
+  }
+
+  try {
+    return storageStore.balancesWithTransit.value.filter(
+      b => b && b.itemType === 'product' && b.department === selectedDepartment.value
+    )
+  } catch (error) {
+    console.warn('Error filtering balances with transit:', error)
+    return allProductBalances.value // Fallback to regular balances
   }
 })
 
@@ -325,7 +460,6 @@ const recentInventories = computed(() => {
   }
 })
 
-// ✅ FIXED: Proper computed property access
 const alertCounts = computed(() => {
   if (!isStoreReady.value) {
     return { expiring: 0, expired: 0, lowStock: 0 }
@@ -345,11 +479,14 @@ const alertCounts = computed(() => {
 
 const enhancedAlertCounts = computed(() => {
   return {
-    ...alertCounts.value
+    ...alertCounts.value,
+    // ✅ NEW: Add transit metrics to alerts
+    transit: transitMetrics.value.totalTransitItems,
+    overdue: transitMetrics.value.overdueCount
   }
 })
 
-// ✅ FIXED: Department counts with proper safety checks
+// Department counts with proper safety checks
 const kitchenItemCount = computed(() => {
   if (!isStoreReady.value) return 0
 
@@ -370,7 +507,27 @@ const barItemCount = computed(() => {
   }
 })
 
-// ✅ FIXED: Safe product category access
+// ✅ NEW: Transit counts by department
+const kitchenTransitCount = computed(() => {
+  if (!isStoreReady.value || !storageStore.transitBatches) return 0
+
+  try {
+    return storageStore.transitBatches.filter(b => b.department === 'kitchen').length
+  } catch (error) {
+    return 0
+  }
+})
+
+const barTransitCount = computed(() => {
+  if (!isStoreReady.value || !storageStore.transitBatches) return 0
+
+  try {
+    return storageStore.transitBatches.filter(b => b.department === 'bar').length
+  } catch (error) {
+    return 0
+  }
+})
+
 function getProductCategoryForSorting(itemId: string): string {
   try {
     const product = productsStore.products?.find(p => p.id === itemId)
@@ -380,33 +537,28 @@ function getProductCategoryForSorting(itemId: string): string {
   }
 }
 
-// ✅ FIXED: Enhanced sorting with proper safety checks
+// Enhanced sorting with proper safety checks - ✅ USE balancesWithTransit
 const displayProductBalances = computed(() => {
   if (!isStoreReady.value) return []
 
-  const all = allProductBalances.value
+  const all = allProductBalancesWithTransit.value // ✅ Changed to use transit-aware balances
 
   if (showZeroStock.value) {
-    // When filter is active, show products with zero OR negative stock
     return all
       .filter(b => b.totalQuantity <= 0)
       .sort((a, b) => {
-        // First: Negative stock items (more critical)
         if (a.totalQuantity < 0 && b.totalQuantity >= 0) return -1
         if (a.totalQuantity >= 0 && b.totalQuantity < 0) return 1
 
-        // Then by category
         const categoryA = getProductCategoryForSorting(a.itemId)
         const categoryB = getProductCategoryForSorting(b.itemId)
         const categoryCompare = categoryA.localeCompare(categoryB)
         if (categoryCompare !== 0) return categoryCompare
 
-        // Finally by name
         return a.itemName.localeCompare(b.itemName)
       })
   }
 
-  // Default view - show ALL products with proper grouping
   const withPositiveStock = all
     .filter(b => b.totalQuantity > 0)
     .sort((a, b) => {
@@ -419,7 +571,6 @@ const displayProductBalances = computed(() => {
       return a.itemName.localeCompare(b.itemName)
     })
 
-  // Negative stock items (show them prominently after positive stock)
   const withNegativeStock = all
     .filter(b => b.totalQuantity < 0)
     .sort((a, b) => {
@@ -432,8 +583,12 @@ const displayProductBalances = computed(() => {
       return a.itemName.localeCompare(b.itemName)
     })
 
-  // Positive stock first, then negative stock (critical items visible)
   return [...withPositiveStock, ...withNegativeStock]
+})
+
+// ✅ NEW: Separate computed for passing to StorageStockTable
+const displayProductBalancesWithTransit = computed(() => {
+  return displayProductBalances.value
 })
 
 // Methods
@@ -462,17 +617,28 @@ function toggleZeroStockFilter() {
   }
 }
 
-// Alert handlers
+// ✅ NEW: Alert handlers
 function showExpiringItems() {
-  // Implementation for showing expiring items
+  // Set filters to show expiring items
+  selectedTab.value = 'products'
+  // Implementation would trigger filter in StorageStockTable
 }
 
 function showExpiredItems() {
-  // Implementation for showing expired items
+  // Set filters to show expired items
+  selectedTab.value = 'products'
+  // Implementation would trigger filter in StorageStockTable
 }
 
 function showLowStockItems() {
-  // Implementation for showing low stock items
+  // Set filters to show low stock items
+  selectedTab.value = 'products'
+  // Implementation would trigger filter in StorageStockTable
+}
+
+function showTransitItems() {
+  // Switch to transit tab or filter products by transit
+  selectedTab.value = 'transit'
 }
 
 function handleWriteOffFromBalance(productData: any) {
@@ -490,6 +656,7 @@ async function handleWriteOffSuccess(message: string) {
 
   try {
     await refreshCurrentData()
+    DebugUtils.info(MODULE_NAME, 'Data refreshed after write-off success')
   } catch (error) {
     DebugUtils.warn(MODULE_NAME, 'Failed to refresh data after write-off', { error })
   }
@@ -583,7 +750,6 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
       to: newDepartment
     })
 
-    // Reset filters when changing department
     showZeroStock.value = false
 
     if (storageStore.clearFilters) {
@@ -601,7 +767,7 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
   }
 })
 
-// ✅ FIXED: Proper initialization lifecycle
+// Proper initialization lifecycle
 onMounted(async () => {
   try {
     DebugUtils.info(MODULE_NAME, 'StorageView mounted, initializing data')

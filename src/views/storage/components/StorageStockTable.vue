@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/StorageStockTable.vue - FIXED: Support for Negative Stock -->
+<!-- Enhanced StorageStockTable.vue with Transit Support -->
 <template>
   <div class="storage-stock-table">
     <!-- Filters and Search -->
@@ -14,6 +14,18 @@
           style="width: 300px"
           clearable
         />
+
+        <!-- ✅ NEW: Transit Filter Button -->
+        <v-btn
+          color="orange"
+          variant="outlined"
+          size="small"
+          :class="{ 'bg-orange': filters.showTransit }"
+          @click="toggleTransitFilter"
+        >
+          <v-icon icon="mdi-truck-delivery" class="mr-1" />
+          In Transit ({{ transitCount }})
+        </v-btn>
 
         <v-btn
           color="warning"
@@ -48,7 +60,6 @@
           Expired ({{ expiredCount }})
         </v-btn>
 
-        <!-- ✅ FIXED: Out of Stock Filter Button (includes negative stock) -->
         <v-btn
           color="grey"
           variant="outlined"
@@ -66,6 +77,18 @@
     <div v-if="hasActiveFilters" class="mb-3">
       <div class="d-flex align-center gap-2">
         <span class="text-caption text-medium-emphasis">Active filters:</span>
+
+        <!-- ✅ NEW: Transit Filter Chip -->
+        <v-chip
+          v-if="filters.showTransit"
+          size="small"
+          closable
+          color="orange"
+          @click:close="toggleTransitFilter"
+        >
+          <v-icon icon="mdi-truck-delivery" size="16" class="mr-1" />
+          In Transit
+        </v-chip>
 
         <v-chip
           v-if="filters.showExpired"
@@ -121,7 +144,38 @@
       </div>
     </div>
 
-    <!-- ✅ FIXED: Out of Stock Info Banner (includes negative stock warning) -->
+    <!-- ✅ NEW: Transit Info Banner -->
+    <v-alert
+      v-if="filters.showTransit && transitCount > 0"
+      type="info"
+      variant="tonal"
+      class="mb-4"
+      density="compact"
+    >
+      <template #prepend>
+        <v-icon icon="mdi-truck-delivery" />
+      </template>
+      <div class="d-flex align-center justify-space-between w-100">
+        <div>
+          <strong>{{ transitCount }} products have incoming deliveries</strong>
+          - showing items currently in transit
+          <div class="text-caption">
+            These deliveries are expected from suppliers and will be converted to stock upon receipt
+          </div>
+        </div>
+        <v-btn
+          size="small"
+          variant="outlined"
+          color="primary"
+          prepend-icon="mdi-receipt"
+          to="/suppliers?tab=receipts"
+        >
+          Manage Receipts
+        </v-btn>
+      </div>
+    </v-alert>
+
+    <!-- Out of Stock Info Banner -->
     <v-alert
       v-if="showZeroStock && outOfStockCount > 0"
       type="info"
@@ -173,6 +227,17 @@
         <template #[`item.itemName`]="{ item }">
           <div class="font-weight-medium" :class="getItemNameClass(item)">
             {{ item.itemName }}
+            <!-- ✅ NEW: Transit indicator next to name -->
+            <v-chip
+              v-if="item.transitQuantity > 0"
+              size="x-small"
+              color="orange"
+              variant="outlined"
+              class="ml-2"
+            >
+              <v-icon icon="mdi-truck-delivery" size="10" class="mr-1" />
+              {{ formatQuantity(item.transitQuantity, item.unit) }} incoming
+            </v-chip>
           </div>
         </template>
 
@@ -189,25 +254,39 @@
           </div>
         </template>
 
+        <!-- ✅ ENHANCED: Stock column with transit information -->
         <template #[`item.stock`]="{ item }">
           <div class="d-flex align-center">
             <div>
-              <!-- ✅ FIXED: Handle zero and negative stock display -->
               <div class="font-weight-medium" :class="getStockQuantityClass(item)">
                 {{ formatQuantity(item.totalQuantity, item.unit) }}
               </div>
-              <div class="text-caption text-medium-emphasis">
-                <!-- ✅ FIXED: Different info for out of stock including negative -->
+
+              <!-- ✅ NEW: Transit information -->
+              <div v-if="item.transitQuantity > 0" class="text-caption">
+                <span class="text-orange">
+                  <v-icon icon="mdi-plus" size="12" class="mr-1" />
+                  {{ formatQuantity(item.transitQuantity, item.unit) }} in transit
+                </span>
+                <div class="text-medium-emphasis">
+                  = {{ formatQuantity(item.totalWithTransit, item.unit) }} total available
+                </div>
+              </div>
+
+              <!-- Existing stock info for items with inventory -->
+              <div v-else-if="item.totalQuantity > 0" class="text-caption text-medium-emphasis">
+                {{ item.batches.length }} batch{{ item.batches.length !== 1 ? 'es' : '' }}
+                <span v-if="item.batches.length > 0" class="ml-1">
+                  • Oldest: {{ formatDate(item.oldestBatchDate) }}
+                </span>
+              </div>
+
+              <!-- Out of stock info -->
+              <div v-else class="text-caption text-medium-emphasis">
                 <template v-if="item.totalQuantity < 0">
                   <span class="text-error">Critical: Negative stock!</span>
                 </template>
-                <template v-else-if="item.totalQuantity === 0">No stock available</template>
-                <template v-else>
-                  {{ item.batches.length }} batch{{ item.batches.length !== 1 ? 'es' : '' }}
-                  <span v-if="item.batches.length > 0" class="ml-1">
-                    • Oldest: {{ formatDate(item.oldestBatchDate) }}
-                  </span>
-                </template>
+                <template v-else>No stock available</template>
               </div>
             </div>
           </div>
@@ -216,7 +295,6 @@
         <!-- Cost Information -->
         <template #[`item.cost`]="{ item }">
           <div>
-            <!-- ✅ FIXED: Handle zero and negative stock cost display -->
             <div class="font-weight-medium" :class="getCostDisplayClass(item)">
               <template v-if="item.totalQuantity <= 0">
                 {{ formatCurrency(item.averageCost) }}/{{ item.unit }}
@@ -241,17 +319,32 @@
           </div>
         </template>
 
-        <!-- Total Value -->
+        <!-- ✅ ENHANCED: Total Value with transit value -->
         <template #[`item.totalValue`]="{ item }">
-          <div class="font-weight-medium" :class="getValueDisplayClass(item)">
-            {{ formatCurrency(item.totalValue) }}
+          <div>
+            <div class="font-weight-medium" :class="getValueDisplayClass(item)">
+              {{ formatCurrency(item.totalValue) }}
+            </div>
+            <!-- ✅ NEW: Transit value -->
+            <div v-if="item.transitValue > 0" class="text-caption text-orange">
+              + {{ formatCurrency(item.transitValue) }} incoming
+            </div>
           </div>
         </template>
 
-        <!-- Status -->
+        <!-- ✅ ENHANCED: Status with transit status -->
         <template #[`item.status`]="{ item }">
           <div class="d-flex flex-column gap-1">
-            <!-- ✅ FIXED: Out of Stock Status for zero AND negative stock -->
+            <!-- ✅ NEW: Transit Status -->
+            <v-chip v-if="item.transitQuantity > 0" size="x-small" color="orange" variant="flat">
+              <v-icon icon="mdi-truck-delivery" size="12" class="mr-1" />
+              In Transit
+              <span v-if="item.nearestDelivery" class="ml-1">
+                • {{ formatDeliveryDate(item.nearestDelivery) }}
+              </span>
+            </v-chip>
+
+            <!-- Out of Stock Status for zero AND negative stock -->
             <v-chip
               v-if="item.totalQuantity <= 0"
               size="x-small"
@@ -280,7 +373,7 @@
 
               <!-- Stock Level Status -->
               <v-chip
-                v-if="item.belowMinStock"
+                v-if="item.belowMinStock && item.transitQuantity === 0"
                 size="x-small"
                 color="info"
                 variant="flat"
@@ -288,6 +381,18 @@
               >
                 <v-icon icon="mdi-package-variant" size="12" class="mr-1" />
                 Low Stock
+              </v-chip>
+
+              <!-- ✅ NEW: Adequate with Transit Status -->
+              <v-chip
+                v-else-if="item.belowMinStock && item.transitQuantity > 0"
+                size="x-small"
+                color="success"
+                variant="flat"
+                class="mt-1"
+              >
+                <v-icon icon="mdi-check-circle" size="12" class="mr-1" />
+                Covered by Transit
               </v-chip>
 
               <!-- All Good Status -->
@@ -316,7 +421,11 @@
             >
               <v-icon />
               <v-tooltip activator="parent" location="top">
-                {{ item.totalQuantity <= 0 ? 'View Product Info' : 'View Details & Batches' }}
+                {{
+                  item.totalQuantity <= 0 && item.transitQuantity === 0
+                    ? 'View Product Info'
+                    : 'View Details, Batches & Transit'
+                }}
               </v-tooltip>
             </v-btn>
           </div>
@@ -325,16 +434,18 @@
         <!-- No data -->
         <template #no-data>
           <div class="text-center py-8">
-            <v-icon icon="mdi-package-variant-closed" size="64" class="text-medium-emphasis mb-4" />
+            <v-icon
+              :icon="
+                filters.showTransit ? 'mdi-truck-delivery-outline' : 'mdi-package-variant-closed'
+              "
+              size="64"
+              class="text-medium-emphasis mb-4"
+            />
             <div class="text-h6 text-medium-emphasis mb-2">
-              {{ hasActiveFilters ? 'No products match filters' : 'No products found' }}
+              {{ getNoDataTitle() }}
             </div>
             <div class="text-body-2 text-medium-emphasis mb-4">
-              {{
-                hasActiveFilters
-                  ? 'Try adjusting or clearing your filters'
-                  : `No products in ${formatDepartment(department)} inventory`
-              }}
+              {{ getNoDataDescription() }}
             </div>
             <div v-if="hasActiveFilters" class="d-flex justify-center gap-2">
               <v-btn size="small" variant="outlined" @click="clearAllFilters">Clear Filters</v-btn>
@@ -371,9 +482,9 @@ import type { StorageBalance, StorageDepartment } from '@/stores/storage'
 // Components
 import ItemDetailsDialog from './ItemDetailsDialog.vue'
 
-// Props
+// Props - ✅ ENHANCED: Accept balancesWithTransit instead of regular balances
 interface Props {
-  balances: StorageBalance[]
+  balances: StorageBalance[] // This should be balancesWithTransit from storageStore
   loading: boolean
   department: StorageDepartment
   showZeroStock?: boolean
@@ -399,27 +510,35 @@ const selectedCategory = ref<string | null>(null)
 const showDetailsDialog = ref(false)
 const selectedItem = ref<StorageBalance | null>(null)
 
+// ✅ ENHANCED: Add transit filter
 const filters = ref({
   showExpired: false,
   showNearExpiry: false,
-  showLowStock: false
+  showLowStock: false,
+  showTransit: false // NEW
 })
 
 // Computed
 const headers = computed(() => [
-  { title: 'Product', key: 'itemName', sortable: false, width: '200px' },
+  { title: 'Product', key: 'itemName', sortable: false, width: '250px' }, // ✅ Wider for transit chips
   { title: 'Category', key: 'category', sortable: false, width: '150px' },
-  { title: 'Stock', key: 'stock', sortable: false, width: '200px' },
+  { title: 'Stock', key: 'stock', sortable: false, width: '220px' }, // ✅ Wider for transit info
   { title: 'Cost', key: 'cost', sortable: false, width: '180px' },
   { title: 'Total Value', key: 'totalValue', sortable: false, width: '150px' },
-  { title: 'Status', key: 'status', sortable: false, width: '120px' },
+  { title: 'Status', key: 'status', sortable: false, width: '140px' }, // ✅ Wider for transit status
   { title: 'Actions', key: 'actions', sortable: false, width: '60px' }
 ])
 
-// ✅ FIXED: Custom sorting to show out of stock items last (including negative stock)
+// ✅ ENHANCED: Custom sorting that considers transit
 const customSort = (items: StorageBalance[], sortBy: any[]) => {
   return [...items].sort((a, b) => {
-    // Primary sort: Stock status (products with stock first, then negative stock, then zero stock)
+    // Primary sort: Show items with transit first if filtering by transit
+    if (filters.value.showTransit) {
+      if ((a.transitQuantity || 0) > 0 && (b.transitQuantity || 0) === 0) return -1
+      if ((a.transitQuantity || 0) === 0 && (b.transitQuantity || 0) > 0) return 1
+    }
+
+    // Stock status sort (products with stock first, then negative stock, then zero stock)
     if (a.totalQuantity > 0 && b.totalQuantity <= 0) return -1
     if (a.totalQuantity <= 0 && b.totalQuantity > 0) return 1
 
@@ -429,11 +548,12 @@ const customSort = (items: StorageBalance[], sortBy: any[]) => {
       if (a.totalQuantity === 0 && b.totalQuantity < 0) return 1
     }
 
-    // Secondary sort: Alphabetical by name within each group
+    // Alphabetical by name within each group
     return a.itemName.localeCompare(b.itemName)
   })
 }
 
+// ✅ ENHANCED: Filter logic with transit support
 const filteredBalances = computed(() => {
   let items = [...props.balances]
 
@@ -442,7 +562,12 @@ const filteredBalances = computed(() => {
     items = items.filter(item => getProductCategory(item.itemId) === selectedCategory.value)
   }
 
-  // ✅ FIXED: Apply out of stock filter (includes negative stock)
+  // ✅ NEW: Apply transit filter
+  if (filters.value.showTransit) {
+    items = items.filter(item => (item.transitQuantity || 0) > 0)
+  }
+
+  // Apply out of stock filter (includes negative stock)
   if (props.showZeroStock) {
     items = items.filter(item => item.totalQuantity <= 0)
   }
@@ -461,24 +586,26 @@ const filteredBalances = computed(() => {
   return items
 })
 
+// ✅ ENHANCED: hasActiveFilters includes transit filter
 const hasActiveFilters = computed(
   () =>
     filters.value.showExpired ||
     filters.value.showNearExpiry ||
     filters.value.showLowStock ||
+    filters.value.showTransit ||
     selectedCategory.value !== null ||
     props.showZeroStock
 )
 
+// Existing filter counts
 const expiringCount = computed(() => props.balances.filter(b => b.hasNearExpiry).length)
 const lowStockCount = computed(() => props.balances.filter(b => b.belowMinStock).length)
 const expiredCount = computed(() => props.balances.filter(b => b.hasExpired).length)
-
-// ✅ FIXED: Out of stock count (zero AND negative stock)
 const outOfStockCount = computed(() => props.balances.filter(b => b.totalQuantity <= 0).length)
-
-// ✅ NEW: Separate negative stock count for alerts
 const negativeStockCount = computed(() => props.balances.filter(b => b.totalQuantity < 0).length)
+
+// ✅ NEW: Transit count
+const transitCount = computed(() => props.balances.filter(b => (b.transitQuantity || 0) > 0).length)
 
 // Category options for the filter
 const categoryOptions = computed(() => {
@@ -499,7 +626,7 @@ const categoryOptions = computed(() => {
     }))
 })
 
-// ✅ FIXED: Style helper methods for zero and negative stock items
+// Style helper methods (existing + enhanced)
 function getItemNameClass(item: StorageBalance): string {
   if (item.totalQuantity < 0) return 'text-error'
   if (item.totalQuantity === 0) return 'text-medium-emphasis'
@@ -524,6 +651,45 @@ function getValueDisplayClass(item: StorageBalance): string {
   return ''
 }
 
+// ✅ NEW: Format delivery date
+function formatDeliveryDate(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffTime = date.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) {
+    return `${Math.abs(diffDays)}d overdue`
+  } else if (diffDays === 0) {
+    return 'Today'
+  } else if (diffDays === 1) {
+    return 'Tomorrow'
+  } else {
+    return `${diffDays} days`
+  }
+}
+
+// ✅ NEW: Dynamic no-data messages
+function getNoDataTitle(): string {
+  if (filters.value.showTransit) {
+    return 'No items in transit'
+  }
+  if (hasActiveFilters.value) {
+    return 'No products match filters'
+  }
+  return 'No products found'
+}
+
+function getNoDataDescription(): string {
+  if (filters.value.showTransit) {
+    return 'No deliveries are currently in transit for this department'
+  }
+  if (hasActiveFilters.value) {
+    return 'Try adjusting or clearing your filters'
+  }
+  return `No products in ${formatDepartment(props.department)} inventory`
+}
+
 // Methods
 function formatDepartment(dept: StorageDepartment): string {
   return dept === 'kitchen' ? 'Kitchen' : 'Bar'
@@ -533,7 +699,6 @@ function getProductCategory(productId: string): string {
   try {
     const product = productsStore.products.find(p => p.id === productId)
     if (!product || !product.category) return ''
-
     return PRODUCT_CATEGORIES[product.category] || product.category
   } catch (error) {
     console.warn('Error getting product category:', error)
@@ -545,7 +710,6 @@ function getProductCategoryDisplay(productId: string): string {
   try {
     const product = productsStore.products.find(p => p.id === productId)
     if (!product || !product.category) return 'Other'
-
     return PRODUCT_CATEGORIES[product.category] || product.category
   } catch (error) {
     console.warn('Error getting product category display:', error)
@@ -564,7 +728,6 @@ function getCategoryIcon(category: string): string {
     alcohol: 'mdi-bottle-wine',
     other: 'mdi-package-variant'
   }
-
   return iconMap[category.toLowerCase()] || 'mdi-package-variant'
 }
 
@@ -579,7 +742,6 @@ function getCategoryColor(category: string): string {
     alcohol: 'purple-darken-2',
     other: 'grey-darken-2'
   }
-
   return colorMap[category.toLowerCase()] || 'grey-darken-2'
 }
 
@@ -652,11 +814,17 @@ function toggleLowStockFilter() {
   filters.value.showLowStock = !filters.value.showLowStock
 }
 
+// ✅ NEW: Toggle transit filter
+function toggleTransitFilter() {
+  filters.value.showTransit = !filters.value.showTransit
+}
+
 function clearAllFilters() {
   filters.value = {
     showExpired: false,
     showNearExpiry: false,
-    showLowStock: false
+    showLowStock: false,
+    showTransit: false
   }
   searchQuery.value = ''
   selectedCategory.value = null
@@ -690,10 +858,20 @@ function clearAllFilters() {
     color: rgb(var(--v-theme-on-error)) !important;
   }
 
-  // Out of stock filter styling
   .bg-grey {
     background-color: rgb(var(--v-theme-surface-variant)) !important;
     color: rgb(var(--v-theme-on-surface-variant)) !important;
+  }
+
+  // ✅ NEW: Transit filter styling
+  .bg-orange {
+    background-color: rgb(var(--v-theme-warning)) !important;
+    color: rgb(var(--v-theme-on-warning)) !important;
+  }
+
+  // ✅ NEW: Transit-specific styling
+  .text-orange {
+    color: rgb(var(--v-theme-warning)) !important;
   }
 }
 </style>
