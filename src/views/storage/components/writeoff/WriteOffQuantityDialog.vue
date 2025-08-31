@@ -200,7 +200,7 @@ import { useStorageStore } from '@/stores/storage'
 import { formatIDR } from '@/utils/currency'
 import { DebugUtils } from '@/utils'
 import type { StorageDepartment } from '@/stores/storage/types'
-
+import { useWriteOff } from '../../../../stores/storage'
 const MODULE_NAME = 'WriteOffQuantityDialog'
 
 interface Product {
@@ -227,6 +227,7 @@ const emit = defineEmits<{
 
 // Store
 const storageStore = useStorageStore()
+const writeOff = useWriteOff()
 
 // State
 const quantityToWriteOff = ref(0)
@@ -235,8 +236,13 @@ const quantityError = ref('')
 
 // ✅ FIXED: Better computed properties with null safety
 const productBalance = computed(() => {
-  if (!props.product) return null
-  return storageStore.getBalance(props.product.id, props.department)
+  try {
+    if (!props.product || !storageStore?.getBalance) return null
+    return storageStore.getBalance(props.product.id, props.department)
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to get product balance', { error })
+    return null
+  }
 })
 
 const productStock = computed(() => {
@@ -248,7 +254,22 @@ const productUnit = computed(() => {
 })
 
 const averageUnitCost = computed(() => {
-  return productBalance.value?.averageCost || 0
+  try {
+    // Сначала пробуем получить из баланса
+    if (productBalance.value?.averageCost) {
+      return productBalance.value.averageCost
+    }
+
+    // Fallback: получаем из storageStore
+    if (props.product && storageStore?.getItemCostPerUnit) {
+      return storageStore.getItemCostPerUnit(props.product.id)
+    }
+
+    return 0
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Could not get average unit cost', { error })
+    return 0
+  }
 })
 
 // ✅ FIXED: More accurate stock breakdown calculation
@@ -341,13 +362,20 @@ const writeOffCost = computed(() => {
   if (!props.product || quantityToWriteOff.value <= 0) return 0
 
   try {
-    return storageStore.calculateCorrectionCost(
-      props.product.id,
-      props.department,
-      quantityToWriteOff.value
-    )
+    // ИСПРАВЛЕНИЕ: используем writeOff composable вместо storageStore
+    if (writeOff && typeof writeOff.calculateWriteOffCost === 'function') {
+      return writeOff.calculateWriteOffCost(
+        props.product.id,
+        quantityToWriteOff.value,
+        props.department
+      )
+    }
+
+    // Fallback: простой расчет по средней стоимости
+    return quantityToWriteOff.value * averageUnitCost.value
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off cost', { error })
+    // Fallback: простой расчет
     return quantityToWriteOff.value * averageUnitCost.value
   }
 })

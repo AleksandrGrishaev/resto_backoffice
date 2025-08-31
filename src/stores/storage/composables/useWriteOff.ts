@@ -359,10 +359,91 @@ export function useWriteOff() {
     department: StorageDepartment
   ): number {
     try {
-      return storageStore.calculateCorrectionCost(itemId, department, quantity)
+      // ИСПРАВЛЕНИЕ: Вместо несуществующего calculateCorrectionCost
+      // используем логику расчета стоимости через балансы и батчи
+
+      const balance = storageStore.getBalance(itemId, department)
+      if (!balance || !balance.batches || balance.batches.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No balance or batches found for cost calculation', {
+          itemId,
+          department,
+          hasBalance: !!balance
+        })
+        return 0
+      }
+
+      // Получаем активные батчи, отсортированные по FIFO (первый пришел - первый ушел)
+      const availableBatches = balance.batches
+        .filter(batch => batch.currentQuantity > 0)
+        .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
+
+      if (availableBatches.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No available batches for cost calculation', {
+          itemId,
+          department
+        })
+        return 0
+      }
+
+      // Рассчитываем стоимость по FIFO принципу
+      let remainingQuantity = quantity
+      let totalCost = 0
+
+      for (const batch of availableBatches) {
+        if (remainingQuantity <= 0) break
+
+        const allocationQuantity = Math.min(batch.currentQuantity, remainingQuantity)
+        const batchCost = allocationQuantity * batch.costPerUnit
+
+        totalCost += batchCost
+        remainingQuantity -= allocationQuantity
+
+        DebugUtils.debug(MODULE_NAME, 'Batch allocation for cost calculation', {
+          batchId: batch.id,
+          batchQuantity: batch.currentQuantity,
+          allocationQuantity,
+          costPerUnit: batch.costPerUnit,
+          batchCost,
+          remainingQuantity
+        })
+      }
+
+      if (remainingQuantity > 0) {
+        DebugUtils.warn(MODULE_NAME, 'Insufficient stock for full cost calculation', {
+          requestedQuantity: quantity,
+          calculatedQuantity: quantity - remainingQuantity,
+          shortage: remainingQuantity
+        })
+      }
+
+      DebugUtils.debug(MODULE_NAME, 'Write-off cost calculated', {
+        itemId,
+        quantity,
+        totalCost,
+        averageCostPerUnit: totalCost / (quantity - remainingQuantity || 1)
+      })
+
+      return Math.round(totalCost * 100) / 100 // Округляем до центов
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off cost', { err })
-      return 0
+
+      // Критический fallback: используем среднюю стоимость из баланса
+      try {
+        const balance = storageStore.getBalance(itemId, department)
+        const fallbackCost = (balance?.averageCost || 0) * quantity
+
+        DebugUtils.warn(MODULE_NAME, 'Using fallback cost calculation', {
+          itemId,
+          quantity,
+          averageCost: balance?.averageCost || 0,
+          fallbackCost
+        })
+
+        return fallbackCost
+      } catch (fallbackError) {
+        DebugUtils.error(MODULE_NAME, 'Fallback cost calculation also failed', { fallbackError })
+        return 0
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-<!-- src/views/storage/components/writeoff/ProductSelectorWidget.vue - FIXED DIALOG CLOSING -->
+<!-- src/views/storage/components/writeoff/ProductSelectorWidget.vue -->
 <template>
   <div class="product-selector-widget">
     <!-- Search and Filters Bar -->
@@ -132,6 +132,9 @@
         <br />
         <strong>After Filters:</strong>
         {{ displayedProducts.length }} products
+        <br />
+        <strong>Store State:</strong>
+        {{ storageStore?.state?.value ? 'Initialized' : 'Not initialized' }}
       </div>
       <template #append>
         <v-btn size="small" variant="outlined" @click="forceRefresh">
@@ -147,6 +150,14 @@
       <div class="text-body-1">Loading {{ department }} products...</div>
       <div class="text-body-2 text-medium-emphasis">{{ loadingMessage }}</div>
     </div>
+
+    <!-- Error State -->
+    <v-alert v-else-if="storageStore?.state?.value?.error" type="error" class="mb-4">
+      {{ storageStore.state.value.error }}
+      <template #append>
+        <v-btn variant="text" size="small" @click="forceRefresh">Retry</v-btn>
+      </template>
+    </v-alert>
 
     <!-- Products List -->
     <div v-else class="products-list">
@@ -260,7 +271,7 @@
       </v-card>
     </div>
 
-    <!-- ✅ FIXED: Quantity Input Dialog with proper closing -->
+    <!-- Quantity Input Dialog with proper closing -->
     <write-off-quantity-dialog
       v-model="showQuantityDialog"
       :product="selectedProduct"
@@ -338,12 +349,12 @@ const statusFilterOptions = [
 ]
 
 // =============================================
-// COMPUTED PROPERTIES
+// COMPUTED PROPERTIES - ИСПРАВЛЕНЫ
 // =============================================
 
 const availableProducts = computed(() => {
   try {
-    if (productsStore.products.length === 0) {
+    if (!productsStore?.products || productsStore.products.length === 0) {
       return []
     }
 
@@ -395,8 +406,21 @@ const categoryOptions = computed(() => {
   ]
 })
 
+// ГЛАВНОЕ ИСПРАВЛЕНИЕ: безопасное получение балансов
 const productBalances = computed(() => {
-  return storageStore.departmentBalances(props.department)
+  try {
+    // Проверяем что storageStore и его методы доступны
+    if (!storageStore || typeof storageStore.departmentBalances !== 'function') {
+      DebugUtils.warn(MODULE_NAME, 'StorageStore or departmentBalances method not available')
+      return []
+    }
+
+    const balances = storageStore.departmentBalances(props.department)
+    return Array.isArray(balances) ? balances : []
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to get department balances', { error })
+    return []
+  }
 })
 
 const filteredProducts = computed(() => {
@@ -413,7 +437,7 @@ const filteredProducts = computed(() => {
 
   if (statusFilter.value) {
     products = products.filter(product => {
-      const balance = productBalances.value.find(b => b.itemId === product.id)
+      const balance = productBalances.value?.find(b => b?.itemId === product.id)
       if (!balance) return statusFilter.value === 'available' ? false : true
 
       switch (statusFilter.value) {
@@ -440,19 +464,19 @@ const displayedProducts = computed(() => {
   switch (quickFilter.value) {
     case 'expired':
       products = products.filter(product => {
-        const balance = productBalances.value.find(b => b.itemId === product.id)
+        const balance = productBalances.value?.find(b => b?.itemId === product.id)
         return balance?.hasExpired || false
       })
       break
     case 'expiring':
       products = products.filter(product => {
-        const balance = productBalances.value.find(b => b.itemId === product.id)
+        const balance = productBalances.value?.find(b => b?.itemId === product.id)
         return balance?.hasNearExpiry || false
       })
       break
     case 'low_stock':
       products = products.filter(product => {
-        const balance = productBalances.value.find(b => b.itemId === product.id)
+        const balance = productBalances.value?.find(b => b?.itemId === product.id)
         return balance?.belowMinStock || false
       })
       break
@@ -465,8 +489,8 @@ const displayedProducts = computed(() => {
 
 const sortedDisplayedProducts = computed(() => {
   return [...displayedProducts.value].sort((a, b) => {
-    const balanceA = productBalances.value.find(bal => bal.itemId === a.id)
-    const balanceB = productBalances.value.find(bal => bal.itemId === b.id)
+    const balanceA = productBalances.value?.find(bal => bal?.itemId === a.id)
+    const balanceB = productBalances.value?.find(bal => bal?.itemId === b.id)
 
     const getPriority = (product: Product, balance: any) => {
       if (!balance || balance.totalQuantity === 0) return 4
@@ -486,30 +510,30 @@ const sortedDisplayedProducts = computed(() => {
   })
 })
 
-const expiredProducts = computed(() =>
-  availableProducts.value.filter(product => {
-    const balance = productBalances.value.find(b => b.itemId === product.id)
+const expiredProducts = computed(() => {
+  return availableProducts.value.filter(product => {
+    const balance = productBalances.value?.find(b => b?.itemId === product.id)
     return balance?.hasExpired || false
   })
-)
+})
 
-const expiringProducts = computed(() =>
-  availableProducts.value.filter(product => {
-    const balance = productBalances.value.find(b => b.itemId === product.id)
+const expiringProducts = computed(() => {
+  return availableProducts.value.filter(product => {
+    const balance = productBalances.value?.find(b => b?.itemId === product.id)
     return balance?.hasNearExpiry || false
   })
-)
+})
 
-const lowStockProducts = computed(() =>
-  availableProducts.value.filter(product => {
-    const balance = productBalances.value.find(b => b.itemId === product.id)
+const lowStockProducts = computed(() => {
+  return availableProducts.value.filter(product => {
+    const balance = productBalances.value?.find(b => b?.itemId === product.id)
     return balance?.belowMinStock || false
   })
-)
+})
 
 const selectedTotalValue = computed(() => {
   return selectedProducts.value.reduce((sum, product) => {
-    const balance = productBalances.value.find(b => b.itemId === product.id)
+    const balance = productBalances.value?.find(b => b?.itemId === product.id)
     return sum + (balance?.totalValue || 0)
   }, 0)
 })
@@ -520,8 +544,16 @@ const hasFilters = computed(() => {
   )
 })
 
+// ИСПРАВЛЕНИЕ isLoading - безопасная проверка состояния
 const isLoading = computed(() => {
-  return storageStore.state.loading.balances || productsStore.loading || !isInitialized.value
+  try {
+    const storeLoading = storageStore?.state?.value?.loading?.balances || false
+    const productsLoading = productsStore?.loading || false
+    return storeLoading || productsLoading || !isInitialized.value
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Error checking loading state', { error })
+    return true // Безопаснее показать loading при ошибке
+  }
 })
 
 // =============================================
@@ -537,7 +569,6 @@ function handleProductClick(product: Product) {
   showQuantityDialog.value = true
 }
 
-// ✅ FIXED: Properly close quantity dialog after confirm
 function handleQuantityConfirm(product: Product, quantity: number, notes: string) {
   DebugUtils.info(MODULE_NAME, 'Quantity confirmed', {
     productId: product.id,
@@ -553,14 +584,13 @@ function handleQuantityConfirm(product: Product, quantity: number, notes: string
     emit('selection-changed', [...selectedProducts.value])
   }
 
-  // ✅ FIXED: Close the quantity dialog
+  // Close the quantity dialog
   showQuantityDialog.value = false
   selectedProduct.value = null
 }
 
-// ✅ FIXED: Properly close quantity dialog after cancel
 function handleQuantityCancel() {
-  // ✅ FIXED: Close the quantity dialog
+  // Close the quantity dialog
   showQuantityDialog.value = false
   selectedProduct.value = null
 }
@@ -571,7 +601,7 @@ function writeOffAllExpired() {
   })
 
   expiredProducts.value.forEach(product => {
-    const balance = productBalances.value.find(b => b.itemId === product.id)
+    const balance = productBalances.value?.find(b => b?.itemId === product.id)
     const stock = balance?.totalQuantity || 0
 
     if (stock > 0) {
@@ -586,19 +616,19 @@ function writeOffAllExpired() {
   emit('selection-changed', [...selectedProducts.value])
 }
 
-// Helper methods for selection summary
+// Helper methods for selection summary - ВСЕ С БЕЗОПАСНЫМИ ПРОВЕРКАМИ
 function getProductStock(productId: string): number {
-  const balance = productBalances.value.find(b => b.itemId === productId)
+  const balance = productBalances.value?.find(b => b?.itemId === productId)
   return balance?.totalQuantity || 0
 }
 
 function getProductUnit(productId: string): string {
-  const balance = productBalances.value.find(b => b.itemId === productId)
+  const balance = productBalances.value?.find(b => b?.itemId === productId)
   return balance?.unit || 'kg'
 }
 
 function getProductValue(productId: string): number {
-  const balance = productBalances.value.find(b => b.itemId === productId)
+  const balance = productBalances.value?.find(b => b?.itemId === productId)
   return balance?.totalValue || 0
 }
 
@@ -614,7 +644,7 @@ function removeFromSelection(index: number) {
 }
 
 function getProductStatusIcon(productId: string): string {
-  const balance = productBalances.value.find(b => b.itemId === productId)
+  const balance = productBalances.value?.find(b => b?.itemId === productId)
 
   if (!balance || balance.totalQuantity === 0) return 'mdi-package-variant-closed'
   if (balance.hasExpired) return 'mdi-alert-circle'
@@ -624,7 +654,7 @@ function getProductStatusIcon(productId: string): string {
 }
 
 function getProductStatusColor(productId: string): string {
-  const balance = productBalances.value.find(b => b.itemId === productId)
+  const balance = productBalances.value?.find(b => b?.itemId === productId)
 
   if (!balance || balance.totalQuantity === 0) return 'grey'
   if (balance.hasExpired) return 'error'
@@ -634,7 +664,7 @@ function getProductStatusColor(productId: string): string {
 }
 
 function getProductExpiryStatus(productId: string): string | null {
-  const balance = productBalances.value.find(b => b.itemId === productId)
+  const balance = productBalances.value?.find(b => b?.itemId === productId)
 
   if (balance?.hasExpired) return 'Expired'
   if (balance?.hasNearExpiry) return 'Expiring'
@@ -642,7 +672,7 @@ function getProductExpiryStatus(productId: string): string | null {
 }
 
 function getProductExpiryColor(productId: string): string {
-  const balance = productBalances.value.find(b => b.itemId === productId)
+  const balance = productBalances.value?.find(b => b?.itemId === productId)
 
   if (balance?.hasExpired) return 'error'
   if (balance?.hasNearExpiry) return 'warning'
@@ -656,7 +686,7 @@ function clearSelection() {
 
 function writeOffSelected() {
   selectedProducts.value.forEach(product => {
-    const balance = productBalances.value.find(b => b.itemId === product.id)
+    const balance = productBalances.value?.find(b => b?.itemId === product.id)
     const stock = balance?.totalQuantity || 0
     if (stock > 0) {
       emit('quick-write-off', product, stock, 'Selected for bulk write-off')
@@ -698,22 +728,52 @@ function getEmptyStateMessage(): string {
 }
 
 // =============================================
-// LIFECYCLE
+// LIFECYCLE - ИСПРАВЛЕНА ИНИЦИАЛИЗАЦИЯ
 // =============================================
 
 async function initializeForDepartment(department: StorageDepartment) {
   try {
+    loadingMessage.value = 'Initializing storage store...'
+
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала инициализируем storageStore
+    if (!storageStore?.state?.value || !storageStore.state.value.balances) {
+      DebugUtils.warn(MODULE_NAME, 'StorageStore not initialized, initializing...')
+      await storageStore.initialize()
+    }
+
     loadingMessage.value = 'Loading products store...'
-    if (productsStore.products.length === 0) {
+    if (!productsStore?.products || productsStore.products.length === 0) {
       await productsStore.loadProducts(true)
     }
 
     loadingMessage.value = `Loading ${department} balances...`
+
+    // Убеждаемся, что балансы загружены
     await storageStore.fetchBalances(department)
+
+    // Проверяем, что departmentBalances возвращает массив
+    const balances = storageStore.departmentBalances(department)
+    if (!Array.isArray(balances)) {
+      DebugUtils.warn(MODULE_NAME, 'Department balances is not an array, retrying...', {
+        balances,
+        department,
+        storeState: storageStore.state.value
+      })
+      // Попробуем еще раз
+      await storageStore.fetchBalances(department)
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Initialization completed', {
+      department,
+      availableProducts: availableProducts.value.length,
+      productBalances: productBalances.value.length
+    })
 
     isInitialized.value = true
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize', { error, department })
+  } finally {
+    loadingMessage.value = ''
   }
 }
 
@@ -730,6 +790,28 @@ watch(
 )
 
 onMounted(async () => {
+  // Исправляем потенциальную проблему с blockScrollStrategy
+  try {
+    if (typeof window !== 'undefined' && !window.blockScrollStrategy) {
+      window.blockScrollStrategy = {
+        block: target => {
+          const element = target || document.body
+          if (element && element.classList) {
+            element.classList.add('v-overlay-scroll-blocked')
+          }
+        },
+        unblock: target => {
+          const element = target || document.body
+          if (element && element.classList) {
+            element.classList.remove('v-overlay-scroll-blocked')
+          }
+        }
+      }
+    }
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Could not fix blockScrollStrategy', { error })
+  }
+
   await initializeForDepartment(props.department)
 })
 </script>
