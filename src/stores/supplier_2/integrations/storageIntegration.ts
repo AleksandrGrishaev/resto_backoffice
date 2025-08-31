@@ -68,7 +68,7 @@ export class SupplierStorageIntegration {
         return suggestionsCache.data
       }
 
-      DebugUtils.info(MODULE_NAME, 'Generating fresh suggestions from storage data', {
+      DebugUtils.info(MODULE_NAME, 'Generating fresh suggestions with transit support', {
         department: cacheKey
       })
 
@@ -81,13 +81,14 @@ export class SupplierStorageIntegration {
         throw new Error('Required stores not available')
       }
 
-      // Получаем актуальные балансы
-      const balances =
+      // ✅ ИСПРАВЛЕНИЕ: Используем balancesWithTransit вместо обычных балансов
+      const balancesWithTransit = storageStore.balancesWithTransit
+      const filteredBalances =
         department && department !== 'all'
-          ? storageStore.departmentBalances(department)
-          : storageStore.state.balances.filter(b => b.itemType === 'product')
+          ? balancesWithTransit.filter(b => b.department === department && b.itemType === 'product')
+          : balancesWithTransit.filter(b => b.itemType === 'product')
 
-      if (!balances || balances.length === 0) {
+      if (!filteredBalances || filteredBalances.length === 0) {
         DebugUtils.warn(MODULE_NAME, 'No storage balances available', { department })
         return []
       }
@@ -104,60 +105,72 @@ export class SupplierStorageIntegration {
       // Фильтрация продуктов по департаменту
       const relevantProducts = this.filterProductsByDepartment(products, department)
 
-      DebugUtils.debug(MODULE_NAME, 'Processing suggestions', {
-        totalBalances: balances.length,
+      DebugUtils.debug(MODULE_NAME, 'Processing suggestions with transit data', {
+        totalBalances: filteredBalances.length,
         relevantProducts: relevantProducts.length,
         department: cacheKey
       })
 
       for (const product of relevantProducts) {
-        // Найти баланс для этого продукта в нужном департаменте
-        const balance = balances.find(
-          b =>
-            b.itemId === product.id &&
-            b.itemType === 'product' &&
-            (!department || department === 'all' || b.department === department)
+        // Найти баланс с транзитной информацией
+        const balanceWithTransit = filteredBalances.find(
+          b => b.itemId === product.id && b.itemType === 'product'
         )
 
-        const currentStock = balance?.totalQuantity || 0
+        if (!balanceWithTransit) continue
+
+        const currentStock = balanceWithTransit.totalQuantity
+        const transitStock = balanceWithTransit.transitQuantity || 0
+        const effectiveStock = balanceWithTransit.totalWithTransit || currentStock
         const minStock = product.minStock || 0
         const latestCost =
-          balance?.latestCost || product.baseCostPerUnit || product.costPerUnit || 0
+          balanceWithTransit.latestCost || product.baseCostPerUnit || product.costPerUnit || 0
 
-        // Определяем нужен ли заказ
-        const needsOrder = this.shouldCreateSuggestion(currentStock, minStock, balance)
+        // ✅ ИСПРАВЛЕНИЕ: Учитываем эффективный запас (склад + транзит)
+        const needsOrder = this.shouldCreateSuggestionWithTransit(
+          currentStock,
+          effectiveStock,
+          transitStock,
+          minStock,
+          balanceWithTransit
+        )
 
         if (needsOrder) {
-          const suggestion = this.createSuggestion(
+          const suggestion = this.createSuggestionWithTransit(
             product,
             currentStock,
+            transitStock,
+            effectiveStock,
             minStock,
             latestCost,
-            balance
+            balanceWithTransit
           )
           suggestions.push(suggestion)
 
-          DebugUtils.debug(MODULE_NAME, 'Created suggestion', {
+          DebugUtils.debug(MODULE_NAME, 'Created suggestion with transit data', {
             itemId: product.id,
             itemName: product.name,
             currentStock,
-            minStock,
+            transitStock,
+            effectiveStock,
             urgency: suggestion.urgency,
             reason: suggestion.reason
           })
         }
       }
 
-      // Сортировка по срочности и затем по дефициту
+      // Сортировка по срочности
       suggestions.sort((a, b) => {
         const urgencyOrder = { high: 3, medium: 2, low: 1 }
         if (a.urgency !== b.urgency) {
           return urgencyOrder[b.urgency] - urgencyOrder[a.urgency]
         }
 
-        // При одинаковой срочности - сортируем по проценту дефицита
-        const aDeficit = a.minStock > 0 ? (a.minStock - a.currentStock) / a.minStock : 0
-        const bDeficit = b.minStock > 0 ? (b.minStock - b.currentStock) / b.minStock : 0
+        // При одинаковой срочности - сортируем по проценту дефицита эффективного запаса
+        const aDeficit =
+          a.minStock > 0 ? (a.minStock - (a.effectiveStock || a.currentStock)) / a.minStock : 0
+        const bDeficit =
+          b.minStock > 0 ? (b.minStock - (b.effectiveStock || b.currentStock)) / b.minStock : 0
         return bDeficit - aDeficit
       })
 
@@ -168,12 +181,11 @@ export class SupplierStorageIntegration {
         department: cacheKey
       }
 
-      DebugUtils.info(MODULE_NAME, 'Dynamic suggestions generated and cached', {
+      DebugUtils.info(MODULE_NAME, 'Dynamic suggestions with transit generated', {
         department: cacheKey,
         total: suggestions.length,
         urgent: suggestions.filter(s => s.urgency === 'high').length,
-        medium: suggestions.filter(s => s.urgency === 'medium').length,
-        low: suggestions.filter(s => s.urgency === 'low').length,
+        withTransit: suggestions.filter(s => (s.transitStock || 0) > 0).length,
         cached: true
       })
 
@@ -183,9 +195,153 @@ export class SupplierStorageIntegration {
         error,
         department
       })
-      // Возвращаем пустой массив вместо броска ошибки для graceful degradation
       return []
     }
+  }
+
+  // ✅ НОВЫЕ helper методы с поддержкой транзита:
+
+  private shouldCreateSuggestionWithTransit(
+    currentStock: number,
+    effectiveStock: number,
+    transitStock: number,
+    minStock: number,
+    balance: any
+  ): boolean {
+    // Случай 1: Совсем нет товара (ни на складе, ни в пути)
+    if (effectiveStock === 0) {
+      return true
+    }
+
+    // Случай 2: Эффективный запас (склад + транзит) ниже минимума
+    if (minStock > 0 && effectiveStock < minStock) {
+      return true
+    }
+
+    // Случай 3: Помечен как "below min stock" но учитываем транзит
+    if (balance?.belowMinStock && transitStock === 0) {
+      return true
+    }
+
+    // Случай 4: Есть только транзит, но нет товара на складе (нужен срочный заказ)
+    if (currentStock === 0 && transitStock > 0 && transitStock < minStock * 0.5) {
+      return true
+    }
+
+    return false
+  }
+
+  private createSuggestionWithTransit(
+    product: any,
+    currentStock: number,
+    transitStock: number,
+    effectiveStock: number,
+    minStock: number,
+    latestCost: number,
+    balance: any
+  ): OrderSuggestion {
+    // Расчет срочности с учетом транзита
+    const urgency = this.calculateUrgencyWithTransit(
+      currentStock,
+      effectiveStock,
+      transitStock,
+      minStock,
+      balance
+    )
+
+    // Расчет причины
+    const reason = effectiveStock === 0 ? 'out_of_stock' : 'below_minimum'
+
+    // Расчет предлагаемого количества с учетом транзита
+    const suggestedQuantity = this.calculateSuggestedQuantityWithTransit(
+      currentStock,
+      effectiveStock,
+      transitStock,
+      minStock,
+      product,
+      balance
+    )
+
+    return {
+      itemId: product.id,
+      itemName: product.name,
+      currentStock,
+      transitStock, // ✅ НОВОЕ поле
+      effectiveStock, // ✅ НОВОЕ поле
+      minStock,
+      suggestedQuantity,
+      urgency,
+      reason,
+      estimatedPrice: latestCost,
+      nearestDelivery: balance?.nearestDelivery, // ✅ НОВОЕ поле
+      lastPriceDate: balance?.newestBatchDate || undefined
+    }
+  }
+
+  private calculateUrgencyWithTransit(
+    currentStock: number,
+    effectiveStock: number,
+    transitStock: number,
+    minStock: number,
+    balance?: any
+  ): 'low' | 'medium' | 'high' {
+    // Критично: совсем нет товара
+    if (effectiveStock === 0) {
+      return 'high'
+    }
+
+    // Критично: только транзит есть, но на складе пусто
+    if (currentStock === 0 && transitStock > 0) {
+      return 'high'
+    }
+
+    // Критично: эффективный запас очень мал (меньше 20% от минимума)
+    if (minStock > 0 && effectiveStock < minStock * 0.2) {
+      return 'high'
+    }
+
+    // Срочно: эффективный запас ниже минимума
+    if (minStock > 0 && effectiveStock < minStock) {
+      return 'high'
+    }
+
+    // Внимание: есть транзит но он может быть просрочен
+    if (transitStock > 0 && currentStock < minStock * 0.3) {
+      return 'medium'
+    }
+
+    // Низкий приоритет
+    return 'low'
+  }
+
+  private calculateSuggestedQuantityWithTransit(
+    currentStock: number,
+    effectiveStock: number,
+    transitStock: number,
+    minStock: number,
+    product: any,
+    balance?: any
+  ): number {
+    // Если совсем нет товара - заказываем достаточно
+    if (effectiveStock === 0) {
+      return Math.max(minStock * 1.5, 1000)
+    }
+
+    // Если есть только транзит - заказываем для пополнения склада
+    if (currentStock === 0 && transitStock > 0) {
+      const additionalNeed = Math.max(minStock - transitStock, minStock * 0.5)
+      return Math.ceil(additionalNeed)
+    }
+
+    // Если эффективный запас ниже минимума - доводим до безопасного уровня
+    if (effectiveStock < minStock) {
+      const deficit = minStock - effectiveStock
+      const safetyBuffer = minStock * 0.3
+      return Math.ceil(deficit + safetyBuffer)
+    }
+
+    // Стандартный профилактический заказ
+    return Math.max(minStock * 0.5, 500)
   }
 
   // =============================================

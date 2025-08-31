@@ -227,16 +227,20 @@ export function useReceipts() {
         completedDate: new Date().toISOString()
       })
 
-      // Создаем батчи в StorageStore
+      // ✅ НОВОЕ: Конвертируем транзитные batch-и в активные
       try {
-        console.log('Receipts: Creating batches in StorageStore...')
-        const batchIds = await plannedDeliveryIntegration.createBatchesFromReceipt(
-          completedReceipt,
-          order
-        )
-        console.log(`Receipts: Created ${batchIds.length} batches:`, batchIds)
+        console.log('Receipts: Converting transit batches to active...')
+
+        const receiptItems = completedReceipt.items.map(item => ({
+          itemId: item.itemId,
+          receivedQuantity: item.receivedQuantity,
+          actualPrice: item.actualPrice || item.orderedPrice
+        }))
+
+        await plannedDeliveryIntegration.convertTransitBatchesOnReceipt(order.id, receiptItems)
+        console.log('Receipts: Transit batches converted to active successfully')
       } catch (error) {
-        console.warn('Receipts: Failed to create batches in StorageStore (non-critical):', error)
+        console.warn('Receipts: Failed to convert transit batches (non-critical):', error)
       }
 
       // ✅ АВТОМАТИЧЕСКИ МЕНЯЕМ СТАТУС ЗАКАЗА НА DELIVERED
@@ -257,6 +261,46 @@ export function useReceipts() {
       isCreatingStorageOperation.value = false
     }
   }
+
+  // ✅ НОВЫЙ МЕТОД: Получение транзитных batch-ей для receipt
+  async function getTransitBatchesForReceipt(receipt: Receipt) {
+    try {
+      if (!receipt.purchaseOrderId) return []
+      return await plannedDeliveryIntegration.getTransitBatchesByOrder(receipt.purchaseOrderId)
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to get transit batches for receipt', {
+        receiptId: receipt.id,
+        error
+      })
+      return []
+    }
+  }
+
+  // ✅ НОВЫЙ COMPUTED: Статистика транзитных batch-ей
+  const transitBatchesStats = computed(() => {
+    const receiptsStore = useReceipts() // Получаем instance
+
+    // Подсчитываем статистику по всем receipts
+    let totalTransitBatches = 0
+    let convertedBatches = 0
+
+    receipts.value.forEach(receipt => {
+      if (receipt.status === 'completed') {
+        convertedBatches += receipt.items.length // Приблизительная оценка
+      } else {
+        totalTransitBatches += receipt.items.length
+      }
+    })
+
+    return {
+      totalTransitBatches,
+      convertedBatches,
+      conversionRate:
+        totalTransitBatches > 0
+          ? Math.round((convertedBatches / (totalTransitBatches + convertedBatches)) * 100)
+          : 0
+    }
+  })
 
   /**
    * Update individual receipt item with validation
@@ -851,6 +895,8 @@ export function useReceipts() {
     // ✅ НОВЫЕ exports:
     isReceiptIntegratedWithStorage,
     getReceiptBatches,
-    storageIntegrationStats
+    storageIntegrationStats,
+    getTransitBatchesForReceipt,
+    transitBatchesStats
   }
 }

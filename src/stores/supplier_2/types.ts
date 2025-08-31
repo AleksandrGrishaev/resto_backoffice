@@ -151,11 +151,14 @@ export interface OrderSuggestion {
   itemId: string
   itemName: string
   currentStock: number
+  transitStock?: number // ← НОВОЕ
+  effectiveStock?: number // ← НОВОЕ
   minStock: number
   suggestedQuantity: number
   urgency: 'low' | 'medium' | 'high'
   reason: 'below_minimum' | 'out_of_stock'
-  estimatedPrice: number // automatically from Storage operations
+  estimatedPrice: number
+  nearestDelivery?: string // ← НОВОЕ
   lastPriceDate?: string
 }
 

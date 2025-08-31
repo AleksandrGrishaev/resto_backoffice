@@ -3,6 +3,8 @@ import { ref, computed, readonly } from 'vue'
 import { storageService } from './storageService'
 import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
 import { useProductsStore } from '@/stores/productsStore'
+import { useBatches } from './composables/useBatches'
+
 import { DebugUtils } from '@/utils'
 import type {
   StorageState,
@@ -475,99 +477,6 @@ async function finalizeInventory(inventoryId: string): Promise<void> {
 }
 
 // ===========================
-// TRANSIT BATCH OPERATIONS
-// ===========================
-
-async function createTransitBatches(orderData: any[]): Promise<void> {
-  try {
-    state.value.loading.plannedDeliveries = true
-    state.value.error = null
-
-    DebugUtils.info(MODULE_NAME, 'Creating transit batches', { orderCount: orderData.length })
-
-    for (const order of orderData) {
-      for (const item of order.items) {
-        const transitBatch: StorageBatch = {
-          id: `transit_${order.orderId}_${item.itemId}_${Date.now()}`,
-          itemId: item.itemId,
-          department: order.department,
-          status: 'in_transit',
-          isActive: false,
-          initialQuantity: item.quantity,
-          currentQuantity: item.quantity,
-          unitCost: item.unitCost,
-          totalValue: item.quantity * item.unitCost,
-          expirationDate: item.expirationDate,
-          plannedDeliveryDate: order.plannedDeliveryDate,
-          orderId: order.orderId,
-          supplierName: order.supplierName,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-
-        state.value.batches.push(transitBatch)
-      }
-    }
-
-    DebugUtils.info(MODULE_NAME, 'Transit batches created successfully')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to create transit batches'
-    state.value.error = message
-    DebugUtils.error(MODULE_NAME, message, { error })
-    throw error
-  } finally {
-    state.value.loading.plannedDeliveries = false
-  }
-}
-
-async function convertTransitBatchesToActive(orderId: string, items: any[]): Promise<void> {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Converting transit batches to active', { orderId })
-
-    const transitBatches = state.value.batches.filter(
-      b => b.status === 'in_transit' && b.orderId === orderId
-    )
-
-    for (const batch of transitBatches) {
-      const itemData = items.find(item => item.itemId === batch.itemId)
-      if (itemData) {
-        batch.status = 'active'
-        batch.isActive = true
-        batch.currentQuantity = itemData.receivedQuantity || batch.currentQuantity
-        batch.updatedAt = new Date().toISOString()
-      }
-    }
-
-    // Refresh balances after conversion
-    await fetchBalances()
-
-    DebugUtils.info(MODULE_NAME, 'Transit batches converted successfully')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to convert transit batches'
-    state.value.error = message
-    DebugUtils.error(MODULE_NAME, message, { error })
-    throw error
-  }
-}
-
-async function removeTransitBatchesOnOrderCancel(orderId: string): Promise<void> {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Removing transit batches for cancelled order', { orderId })
-
-    state.value.batches = state.value.batches.filter(
-      b => !(b.status === 'in_transit' && b.orderId === orderId)
-    )
-
-    DebugUtils.info(MODULE_NAME, 'Transit batches removed successfully')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to remove transit batches'
-    state.value.error = message
-    DebugUtils.error(MODULE_NAME, message, { error })
-    throw error
-  }
-}
-
-// ===========================
 // HELPER METHODS
 // ===========================
 
@@ -665,6 +574,34 @@ function getInventory(inventoryId: string) {
 export function useStorageStore() {
   const productsStore = useProductsStore()
 
+  // ✅ ИСПРАВИТЬ: Создаем композабл с правильным параметром
+  const batchesComposable = useBatches(state)
+
+  // ✅ ИСПРАВИТЬ: balancesWithTransit должен использовать useBatches
+  const balancesWithTransitFixed = computed(() => {
+    const transitBatches = batchesComposable.transitBatches.value
+
+    return state.value.balances.map(balance => {
+      const transitItems = transitBatches.filter(
+        batch => batch.itemId === balance.itemId && batch.department === balance.department
+      )
+
+      const transitQuantity = transitItems.reduce((sum, batch) => sum + batch.currentQuantity, 0)
+      const transitValue = transitItems.reduce((sum, batch) => sum + batch.totalValue, 0)
+
+      return {
+        ...balance,
+        transitQuantity,
+        transitValue,
+        totalWithTransit: balance.totalQuantity + transitQuantity,
+        nearestDelivery: transitItems
+          .map(b => b.plannedDeliveryDate)
+          .filter(date => date)
+          .sort()[0]
+      }
+    })
+  })
+
   return {
     // State
     state: readonly(state),
@@ -676,11 +613,10 @@ export function useStorageStore() {
     lowStockItemsCount,
     expiredItemsCount,
     nearExpiryItemsCount,
-    balancesWithTransit,
+    balancesWithTransit: balancesWithTransitFixed, // ✅ ИСПРАВЛЕННАЯ версия
 
-    // Transit functionality
-    transitBatches: readonly(transitBatches),
-    transitMetrics: readonly(transitMetrics),
+    // ✅ Transit functionality через композабл (БЕЗ дублирования)
+    ...batchesComposable,
 
     // Department balances function
     departmentBalances,
@@ -707,10 +643,10 @@ export function useStorageStore() {
     updateInventory,
     finalizeInventory,
 
-    // Transit operations
-    createTransitBatches,
-    convertTransitBatchesToActive,
-    removeTransitBatchesOnOrderCancel,
+    // ❌ УДАЛИТЬ эти строки (дублирующие методы):
+    // createTransitBatches,
+    // convertTransitBatchesToActive,
+    // removeTransitBatchesOnOrderCancel,
 
     // Write-off statistics
     getWriteOffStatistics,
