@@ -533,25 +533,26 @@ const categoryOptions = computed(() => {
 // ===========================
 
 function hasTransitForItem(item: StorageBalance): boolean {
-  if (!props.storageStore?.transitBatches?.value) return false
+  if (!props.storageStore?.transitBatches) return false // ✅ убрать .value
 
-  return props.storageStore.transitBatches.value.some(
+  return props.storageStore.transitBatches.some(
+    // ✅ убрать .value
     (batch: any) => batch.itemId === item.itemId && batch.department === item.department
   )
 }
 
 function getTransitQuantity(item: StorageBalance): number {
-  if (!props.storageStore?.transitBatches?.value) return 0
+  if (!props.storageStore?.transitBatches) return 0 // ✅ убрать .value
 
-  return props.storageStore.transitBatches.value
+  return props.storageStore.transitBatches // ✅ убрать .value
     .filter((batch: any) => batch.itemId === item.itemId && batch.department === item.department)
     .reduce((sum: number, batch: any) => sum + batch.currentQuantity, 0)
 }
 
 function getTransitStatusColor(item: StorageBalance): string {
-  if (!props.storageStore?.transitBatches?.value) return 'grey'
+  if (!props.storageStore?.transitBatches) return 'grey'
 
-  const transitBatches = props.storageStore.transitBatches.value.filter(
+  const transitBatches = props.storageStore.transitBatches.filter(
     (batch: any) => batch.itemId === item.itemId && batch.department === item.department
   )
 
@@ -588,9 +589,9 @@ function getTransitStatusIcon(item: StorageBalance): string {
 }
 
 function getTransitStatusText(item: StorageBalance): string {
-  if (!props.storageStore?.transitBatches?.value) return ''
+  if (!props.storageStore?.transitBatches) return ''
 
-  const transitBatches = props.storageStore.transitBatches.value.filter(
+  const transitBatches = props.storageStore.transitBatches.filter(
     (batch: any) => batch.itemId === item.itemId && batch.department === item.department
   )
 

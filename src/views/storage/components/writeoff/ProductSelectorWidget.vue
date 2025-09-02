@@ -283,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { formatIDR } from '@/utils/currency'
@@ -409,9 +409,7 @@ const categoryOptions = computed(() => {
 // ГЛАВНОЕ ИСПРАВЛЕНИЕ: безопасное получение балансов
 const productBalances = computed(() => {
   try {
-    // Проверяем что storageStore и его методы доступны
-    if (!storageStore || typeof storageStore.departmentBalances !== 'function') {
-      DebugUtils.warn(MODULE_NAME, 'StorageStore or departmentBalances method not available')
+    if (!storageStore?.initialized || typeof storageStore.departmentBalances !== 'function') {
       return []
     }
 
@@ -547,12 +545,15 @@ const hasFilters = computed(() => {
 // ИСПРАВЛЕНИЕ isLoading - безопасная проверка состояния
 const isLoading = computed(() => {
   try {
-    const storeLoading = storageStore?.state?.value?.loading?.balances || false
+    // ✅ ИСПРАВИТЬ доступ к Pinia store:
+    const storeLoading = storageStore?.state?.loading?.balances || false // без .value
     const productsLoading = productsStore?.loading || false
-    return storeLoading || productsLoading || !isInitialized.value
+    const notInitialized = !isInitialized.value
+
+    return storeLoading || productsLoading || notInitialized
   } catch (error) {
     DebugUtils.warn(MODULE_NAME, 'Error checking loading state', { error })
-    return true // Безопаснее показать loading при ошибке
+    return true
   }
 })
 
@@ -733,50 +734,37 @@ function getEmptyStateMessage(): string {
 
 async function initializeForDepartment(department: StorageDepartment) {
   try {
-    loadingMessage.value = 'Initializing storage store...'
+    DebugUtils.info(MODULE_NAME, 'Store state check', {
+      hasStorageStore: !!storageStore,
+      storeInitialized: storageStore?.initialized,
+      storeState: !!storageStore?.state,
+      storeBalances: storageStore?.state?.balances?.length || 0
+    })
 
-    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала инициализируем storageStore
-    if (!storageStore?.state?.value || !storageStore.state.value.balances) {
-      DebugUtils.warn(MODULE_NAME, 'StorageStore not initialized, initializing...')
-      await storageStore.initialize()
-    }
-
-    loadingMessage.value = 'Loading products store...'
-    if (!productsStore?.products || productsStore.products.length === 0) {
-      await productsStore.loadProducts(true)
-    }
-
-    loadingMessage.value = `Loading ${department} balances...`
-
-    // Убеждаемся, что балансы загружены
-    await storageStore.fetchBalances(department)
-
-    // Проверяем, что departmentBalances возвращает массив
-    const balances = storageStore.departmentBalances(department)
-    if (!Array.isArray(balances)) {
-      DebugUtils.warn(MODULE_NAME, 'Department balances is not an array, retrying...', {
-        balances,
-        department,
-        storeState: storageStore.state.value
+    // ✅ Store уже инициализирован глобально
+    if (!storageStore || !storageStore.initialized) {
+      DebugUtils.warn(MODULE_NAME, 'Storage store not ready', {
+        hasStore: !!storageStore,
+        initialized: storageStore?.initialized,
+        department
       })
-      // Попробуем еще раз
-      await storageStore.fetchBalances(department)
+      return
     }
 
-    DebugUtils.info(MODULE_NAME, 'Initialization completed', {
+    // ✅ Только ожидаем готовности данных, не перезагружаем
+    await nextTick()
+
+    isInitialized.value = true
+
+    DebugUtils.info(MODULE_NAME, 'ProductSelector ready', {
       department,
       availableProducts: availableProducts.value.length,
       productBalances: productBalances.value.length
     })
-
-    isInitialized.value = true
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to initialize', { error, department })
-  } finally {
-    loadingMessage.value = ''
+    DebugUtils.error(MODULE_NAME, 'Failed to prepare ProductSelector', { error, department })
   }
 }
-
 watch(
   () => props.department,
   async (newDepartment, oldDepartment) => {

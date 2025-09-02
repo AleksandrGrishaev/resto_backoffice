@@ -789,6 +789,7 @@ export const useStorageStore = defineStore('storage', () => {
   return {
     // State
     state: state,
+    initialized: readonly(initialized),
 
     // Existing computed
     filteredBalances,

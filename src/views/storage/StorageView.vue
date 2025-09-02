@@ -18,7 +18,7 @@
           color="primary"
           variant="outlined"
           prepend-icon="mdi-clipboard-list"
-          :disabled="storageStore.state.value.loading.balances"
+          :disabled="storageStore.state.loading.balances"
           @click="openInventoryDialog"
         >
           Count Inventory
@@ -34,7 +34,7 @@
 
     <!-- Error Alert -->
     <v-alert
-      v-if="storageStore.state.value.error"
+      v-if="storageStore.state.error"
       type="error"
       variant="tonal"
       closable
@@ -42,7 +42,7 @@
       @click:close="storageStore.clearError"
     >
       <v-alert-title>Storage Error</v-alert-title>
-      {{ storageStore.state.value.error }}
+      {{ storageStore.state.error }}
     </v-alert>
 
     <!-- Department Tabs -->
@@ -156,7 +156,7 @@
         <storage-operations-table
           v-else
           :operations="recentOperations"
-          :loading="storageStore.state.value.loading.operations"
+          :loading="storageStore.state.loading.operations"
           :department="selectedDepartment"
         />
       </v-tabs-window-item>
@@ -180,7 +180,7 @@
         <storage-inventories-table
           v-else
           :inventories="recentInventories"
-          :loading="storageStore.state.value.loading.inventory"
+          :loading="storageStore.state.loading.inventory"
           :department="selectedDepartment"
           :show-zero-stock="showZeroStock"
           @edit-inventory="handleEditInventory"
@@ -260,69 +260,56 @@ const successMessage = ref('')
 const errorMessage = ref('')
 const editingInventory = ref<InventoryDocument | null>(null)
 const showZeroStock = ref(false)
-const isInitialized = ref(false)
+const isViewReady = ref(false) // Избегаем путаницы с storageStore.initialized
 
-// ✅ FIXED: Store readiness check
 const isStoreReady = computed(() => {
   return (
-    isInitialized.value &&
-    storageStore.state?.value &&
-    storageStore.filteredBalances?.value !== undefined
+    isViewReady.value &&
+    storageStore.initialized && // Используем Pinia флаг
+    storageStore.state &&
+    storageStore.filteredBalances !== undefined
   )
 })
 
 const isLoading = computed(() => {
   return (
-    !isInitialized.value ||
-    storageStore.state?.value?.loading?.balances ||
-    storageStore.state?.value?.loading?.operations
+    !isViewReady.value ||
+    !storageStore.initialized ||
+    storageStore.state?.loading?.balances ||
+    storageStore.state?.loading?.operations
   )
 })
 
 // ✅ FIXED: Safe access to store data
 const allProductBalances = computed(() => {
-  if (!isStoreReady.value || !storageStore.filteredBalances?.value) {
+  if (!isStoreReady.value || !storageStore.filteredBalances) {
     return []
   }
 
   try {
-    return storageStore.filteredBalances.value.filter(
-      b => b && b.itemType === 'product' && b.department === selectedDepartment.value
-    )
+    return storageStore.filteredBalances // ✅ Без .value - это уже computed
+      .filter(b => b && b.itemType === 'product' && b.department === selectedDepartment.value)
   } catch (error) {
-    console.warn('Error filtering all product balances:', error)
-    return []
-  }
-})
-
-const recentOperations = computed(() => {
-  if (!isStoreReady.value || !storageStore.state?.value?.operations) {
-    return []
-  }
-
-  try {
-    return storageStore.state.value.operations
-      .filter(op => op && op.department === selectedDepartment.value)
-      .slice(0, 20)
-  } catch (error) {
-    console.warn('Error filtering recent operations:', error)
+    console.warn('Error filtering product balances:', error)
     return []
   }
 })
 
 const recentInventories = computed(() => {
-  if (!isStoreReady.value || !storageStore.state?.value?.inventories) {
+  if (!isStoreReady.value || !storageStore.state?.inventories) {
     return []
   }
-
-  try {
-    return storageStore.state.value.inventories
-      .filter(inv => inv && inv.department === selectedDepartment.value)
-      .slice(0, 20)
-  } catch (error) {
-    console.warn('Error filtering recent inventories:', error)
+  return storageStore.state.inventories // ✅ без .value
+    .filter(inv => inv && inv.department === selectedDepartment.value)
+    .slice(0, 20)
+})
+const recentOperations = computed(() => {
+  if (!isStoreReady.value || !storageStore.state?.operations) {
     return []
   }
+  return storageStore.state.operations // ✅ без .value
+    .filter(op => op && op.department === selectedDepartment.value)
+    .slice(0, 20)
 })
 
 // ✅ FIXED: Proper computed property access
@@ -333,9 +320,9 @@ const alertCounts = computed(() => {
 
   try {
     return {
-      expiring: storageStore.nearExpiryItemsCount?.value || 0,
-      expired: storageStore.expiredItemsCount?.value || 0,
-      lowStock: storageStore.lowStockItemsCount?.value || 0
+      expiring: storageStore.nearExpiryItemsCount || 0, // ✅ без .value
+      expired: storageStore.expiredItemsCount || 0, // ✅ без .value
+      lowStock: storageStore.lowStockItemsCount || 0 // ✅ без .value
     }
   } catch (error) {
     console.warn('Error getting alert counts:', error)
@@ -499,6 +486,7 @@ async function refreshCurrentData() {
   if (!isStoreReady.value) return
 
   try {
+    // ✅ НЕ вызываем initialize()! Только обновляем данные
     await Promise.all([
       storageStore.fetchBalances(selectedDepartment.value),
       storageStore.fetchOperations(selectedDepartment.value)
@@ -583,20 +571,18 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
       to: newDepartment
     })
 
-    // Reset filters when changing department
+    // ✅ ТОЛЬКО фильтрация, НЕ реинициализация!
     showZeroStock.value = false
 
-    if (storageStore.clearFilters) {
-      storageStore.clearFilters()
-    }
+    // ✅ Используем фильтр вместо повторной загрузки
     if (storageStore.setDepartmentFilter) {
       storageStore.setDepartmentFilter(newDepartment)
     }
 
+    // ✅ Легкое обновление без полной загрузки
     await refreshCurrentData()
-    DebugUtils.info(MODULE_NAME, 'Department data loaded successfully')
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to load department data', { error })
+    DebugUtils.error(MODULE_NAME, 'Failed to switch department', { error })
     handleOperationError(`Failed to load data for ${newDepartment} department`)
   }
 })
@@ -604,22 +590,16 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
 // ✅ FIXED: Proper initialization lifecycle
 onMounted(async () => {
   try {
-    DebugUtils.info(MODULE_NAME, 'StorageView mounted, initializing data')
-
-    // Wait for next tick to ensure DOM is ready
+    DebugUtils.info(MODULE_NAME, 'StorageView mounted')
     await nextTick()
 
-    // Initialize the store
-    await storageStore.initialize()
+    // Store уже инициализирован в AppInitializer
+    isViewReady.value = true
 
-    // Mark as initialized
-    isInitialized.value = true
-
-    DebugUtils.info(MODULE_NAME, 'StorageView initialized successfully')
+    DebugUtils.info(MODULE_NAME, 'StorageView ready')
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to initialize storage data', { error })
-    handleOperationError('Failed to initialize storage management system')
-    isInitialized.value = false
+    DebugUtils.error(MODULE_NAME, 'Failed to prepare view', { error })
+    handleOperationError('Failed to prepare storage view')
   }
 })
 </script>
