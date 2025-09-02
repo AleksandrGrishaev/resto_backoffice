@@ -356,8 +356,8 @@ const debugLog = (message, data = {}) => {
     inventoryItemsType: typeof inventoryItems.value,
     inventoryItemsIsArray: Array.isArray(inventoryItems.value),
     inventoryItemsLength: inventoryItems.value?.length,
-    storageStoreReady: !!storageStore.state?.value,
-    balancesLength: storageStore.state?.value?.balances?.length,
+    storageStoreReady: !!storageStore.state,
+    balancesLength: storageStore.state?.balances?.length,
     productsLength: productsStore.products?.length
   })
 }
@@ -371,22 +371,22 @@ const isDev = computed(() => {
 const allAvailableBalances = computed(() => {
   debugLog('allAvailableBalances computed called', {
     hasStorageState: !!storageStore.state?.value,
-    hasBalances: !!storageStore.state?.value?.balances,
-    balancesLength: storageStore.state?.value?.balances?.length,
+    hasBalances: !!storageStore.state?.balances,
+    balancesLength: storageStore.state?.balances?.length,
     department: props.department
   })
 
-  if (!storageStore.state?.value?.balances) {
+  if (!storageStore.state.balances) {
     debugLog('allAvailableBalances: no balances available')
     return []
   }
 
   try {
-    const filtered = storageStore.state.value.balances.filter(
+    const filtered = storageStore.state.balances.filter(
       b => b && b.department === props.department && b.itemType === 'product'
     )
     debugLog('allAvailableBalances: filtered result', {
-      originalLength: storageStore.state.value.balances.length,
+      originalLength: storageStore.state.balances.length,
       filteredLength: filtered.length,
       firstBalance: filtered[0]
     })
@@ -727,7 +727,7 @@ function initializeInventoryItems() {
   debugLog('initializeInventoryItems called', {
     department: props.department,
     hasStorageStore: !!storageStore,
-    hasStorageState: !!storageStore.state?.value,
+    hasStorageState: !!storageStore.state,
     balancesAvailable: allAvailableBalances.value?.length || 0
   })
 
@@ -749,7 +749,7 @@ function initializeInventoryItems() {
     if (balances.length === 0) {
       debugLog('initializeInventoryItems: no balances for department', {
         department: props.department,
-        allBalances: storageStore.state?.value?.balances?.length || 0
+        allBalances: storageStore.state?.balances?.length || 0
       })
       inventoryItems.value = []
       return
@@ -984,7 +984,7 @@ watch(
         await initializeStores()
 
         // Проверяем готовность stores перед инициализацией
-        if (!storageStore.state || !productsStore.products) {
+        if (!storageStore.initialized || !productsStore.products) {
           console.warn('Stores not ready yet')
           return
         }
