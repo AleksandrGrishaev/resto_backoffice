@@ -336,7 +336,9 @@ export class SupplierStorageIntegration {
         notes: this.buildStorageNotes(receipt, order)
       }
 
-      const operationId = await storageStore.createReceiptOperation(storageData)
+      // ✅ ИСПРАВЛЕНО: Используем правильный метод createReceipt вместо createReceiptOperation
+      const operation = await storageStore.createReceipt(storageData)
+      const operationId = operation.id
 
       // Инвалидируем кэш suggestions после создания операции
       this.invalidateCache()

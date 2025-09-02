@@ -16,6 +16,7 @@ import type {
 } from '../types'
 
 import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
+import { useSupplierStorageIntegration } from '../integrations/storageIntegration'
 
 const MODULE_NAME = 'Receipts'
 
@@ -23,6 +24,7 @@ export function useReceipts() {
   const supplierStore = useSupplierStore()
   const storageStore = useStorageStore()
   const productsStore = useProductsStore()
+  const storageIntegration = useSupplierStorageIntegration() // ✅ ДОБАВИТЬ ЭТУ СТРОКУ
   const plannedDeliveryIntegration = usePlannedDeliveryIntegration()
 
   // =============================================
@@ -215,21 +217,19 @@ export function useReceipts() {
         throw new Error(`Receipt not found: ${receiptId}`)
       }
 
+      // ✅ ПРОВЕРЯЕМ СТАТУС ДО НАЧАЛА ОПЕРАЦИЙ
+      if (!canEditReceipt(receipt)) {
+        throw new Error(`Receipt cannot be edited in current status: ${receipt.status}`)
+      }
+
       const order = supplierStore.state.orders.find(o => o.id === receipt.purchaseOrderId)
       if (!order) {
         throw new Error(`Order not found for receipt: ${receipt.purchaseOrderId}`)
       }
 
-      // Завершаем приемку
-      const completedReceipt = await updateReceipt(receiptId, {
-        status: 'completed',
-        completedDate: new Date().toISOString()
-      })
-
-      // ✅ НОВОЕ: Конвертируем транзитные batch-и в активные
+      // ✅ НОВОЕ: Конвертируем транзитные batch-и в активные (до завершения приемки)
       try {
-        // Подготавливаем данные о полученных товарах
-        const receiptItems = completedReceipt.items.map(item => ({
+        const receiptItems = receipt.items.map(item => ({
           itemId: item.itemId,
           receivedQuantity: item.receivedQuantity,
           actualPrice: item.actualPrice
@@ -237,25 +237,30 @@ export function useReceipts() {
 
         await plannedDeliveryIntegration.convertTransitBatchesOnReceipt(order.id, receiptItems)
         console.log(
-          `Receipts: Transit batches converted to active for receipt ${completedReceipt.receiptNumber}`
+          `Receipts: Transit batches converted to active for receipt ${receipt.receiptNumber}`
         )
       } catch (transitError) {
-        // НЕ останавливаем завершение приемки из-за ошибки конвертации batch-ей
-        console.warn(
-          'Receipts: Failed to convert transit batches (receipt completed successfully):',
-          transitError
-        )
+        console.warn('Receipts: Failed to convert transit batches:', transitError)
       }
 
-      // ✅ СУЩЕСТВУЮЩАЯ ЛОГИКА: Создаем операцию в StorageStore
+      // ✅ СОЗДАЕМ STORAGE OPERATION (до завершения приемки)
+      let operationId: string | undefined
       try {
-        await storageIntegration.createReceiptOperation(completedReceipt, order)
+        operationId = await storageIntegration.createReceiptOperation(receipt, order)
         console.log(
-          `Receipts: Storage operation created for receipt ${completedReceipt.receiptNumber}`
+          `Receipts: Storage operation created for receipt ${receipt.receiptNumber}, operationId: ${operationId}`
         )
       } catch (storageError) {
-        console.warn('Receipts: Failed to create storage operation:', storageError)
+        console.error('Receipts: Failed to create storage operation:', storageError)
+        throw storageError
       }
+
+      // ✅ ЗАВЕРШАЕМ ПРИЕМКУ (в самом конце)
+      const completedReceipt = await updateReceipt(receiptId, {
+        status: 'completed',
+        completedDate: new Date().toISOString(),
+        storageOperationId: operationId // Добавляем ID операции
+      })
 
       // Обновляем статус заказа
       await supplierStore.updateOrder(order.id, { status: 'delivered' })
@@ -330,32 +335,12 @@ export function useReceipts() {
     try {
       isCreatingStorageOperation.value = true
 
-      const department = getDepartmentFromOrder(order)
-
-      const createData = {
-        department,
-        responsiblePerson: receipt.receivedBy,
-        items: receipt.items.map(item => ({
-          itemId: item.itemId,
-          quantity: item.receivedQuantity,
-          costPerUnit: item.actualPrice || item.orderedPrice,
-          notes: `Receipt: ${receipt.receiptNumber}${item.notes ? ` - ${item.notes}` : ''}`,
-          expiryDate: calculateExpiryDate(item.itemId)
-        })),
-        sourceType: 'purchase' as const,
-        notes: `Receipt ${receipt.receiptNumber} - Order ${order.orderNumber}${receipt.notes ? ` - ${receipt.notes}` : ''}`
-      }
-
-      const operation = await storageStore.createReceipt(createData)
-
-      // Update receipt with operation ID
-      receipt.storageOperationId = operation.id
+      // ✅ ИСПРАВЛЕНО: Используем правильный integration
+      const operationId = await storageIntegration.createReceiptOperation(receipt, order)
 
       DebugUtils.info(MODULE_NAME, 'Storage operation created successfully', {
         receiptId: receipt.id,
-        operationId: operation.id,
-        department,
-        itemsCount: createData.items.length
+        operationId
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create storage operation', {
@@ -375,37 +360,12 @@ export function useReceipts() {
     try {
       isUpdatingPrices.value = true
 
-      const priceUpdates: Array<{ itemId: string; oldPrice: number; newPrice: number }> = []
+      // ✅ ИСПРАВЛЕНО: Используем правильный integration
+      await storageIntegration.updateProductPrices(receipt)
 
-      for (const item of receipt.items) {
-        // Check if price changed
-        if (item.actualPrice && item.actualPrice !== item.orderedPrice) {
-          priceUpdates.push({
-            itemId: item.itemId,
-            oldPrice: item.orderedPrice,
-            newPrice: item.actualPrice
-          })
-
-          // TODO: Implement when ProductsStore has updateProductCost method
-          // await productsStore.updateProductCost(item.itemId, item.actualPrice)
-
-          DebugUtils.info(MODULE_NAME, 'Product price should be updated', {
-            itemId: item.itemId,
-            itemName: item.itemName,
-            oldPrice: item.orderedPrice,
-            newPrice: item.actualPrice,
-            priceChange: item.actualPrice - item.orderedPrice
-          })
-        }
-      }
-
-      if (priceUpdates.length > 0) {
-        DebugUtils.info(MODULE_NAME, 'Price updates processed', {
-          receiptId: receipt.id,
-          updatesCount: priceUpdates.length,
-          updates: priceUpdates
-        })
-      }
+      DebugUtils.info(MODULE_NAME, 'Product prices updated successfully', {
+        receiptId: receipt.id
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update product prices', {
         receiptId: receipt.id,
