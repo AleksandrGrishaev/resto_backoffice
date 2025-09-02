@@ -136,6 +136,22 @@ export interface InventoryDocument extends BaseEntity {
   notes?: string
 }
 
+// DTO для создания транзитного batch-а из заказа
+
+export interface CreateTransitBatchData {
+  itemId: string
+  itemName: string
+  quantity: number
+  unit: string
+  estimatedCostPerUnit: number
+  department: StorageDepartment
+  purchaseOrderId: string
+  supplierId: string
+  supplierName: string
+  plannedDeliveryDate: string
+  notes?: string
+}
+
 export interface InventoryItem {
   id: string
   itemId: string
