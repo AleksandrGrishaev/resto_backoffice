@@ -157,9 +157,11 @@ export interface OrderSuggestion {
   reason: 'below_minimum' | 'out_of_stock'
   estimatedPrice: number // automatically from Storage operations
   lastPriceDate?: string
-  // ✅ НОВЫЕ ПОЛЯ для поддержки транзитных товаров:
-  transitStock?: number // Количество в пути
-  effectiveStock?: number // Общий доступный запас (склад + транзит)
+
+  // ✅ РАСШИРЕННЫЕ ПОЛЯ для полного учета запасов:
+  transitStock?: number // Количество в пути (уже созданные transit batches)
+  pendingOrderStock?: number // ✅ НОВОЕ: Количество в заказах (draft + sent без transit)
+  effectiveStock?: number // Общий доступный запас (склад + транзит + заказы)
   nearestDelivery?: string
 }
 
