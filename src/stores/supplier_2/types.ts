@@ -157,6 +157,10 @@ export interface OrderSuggestion {
   reason: 'below_minimum' | 'out_of_stock'
   estimatedPrice: number // automatically from Storage operations
   lastPriceDate?: string
+  // ✅ НОВЫЕ ПОЛЯ для поддержки транзитных товаров:
+  transitStock?: number // Количество в пути
+  effectiveStock?: number // Общий доступный запас (склад + транзит)
+  nearestDelivery?: string
 }
 
 // Supplier baskets for UI distribution

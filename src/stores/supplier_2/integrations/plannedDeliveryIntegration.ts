@@ -1,31 +1,28 @@
 // src/stores/supplier_2/integrations/plannedDeliveryIntegration.ts
-// ✅ ИСПРАВЛЕНО: Ленивая инициализация Pinia store для избежания ошибки getActivePinia
+// ✅ ПЕРЕПИСАНО: Интеграция через транзитные batch-и вместо PlannedDelivery
 
 import { DebugUtils } from '@/utils/debugger'
-import type { PurchaseOrder, PurchaseOrderItem } from '@/types/supplier_2/supplier.types'
-import type { PlannedDelivery, PlannedDeliveryItem } from '@/types/storage/storage.types'
+import type { PurchaseOrder, PurchaseOrderItem } from '@/stores/supplier_2/types'
+import type { CreateTransitBatchData, StorageDepartment } from '@/stores/storage/types'
 
 const MODULE_NAME = 'PlannedDeliveryIntegration'
 
 /**
- * Интеграция планируемых поставок между SupplierStore и StorageStore
+ * ✅ ПЕРЕПИСАННАЯ интеграция планируемых поставок через транзитные batch-и
  *
- * Ключевые функции:
- * 1. Создание планируемых поставок при создании/подтверждении заказа
- * 2. Обновление планируемых дат поставок
- * 3. Синхронизация статусов заказов с планируемыми поставками
- * 4. Создание Batch при получении товаров
- *
- * ✅ ИСПРАВЛЕНИЕ: Используется ленивая инициализация storageStore
+ * НОВЫЙ подход:
+ * - Вместо создания PlannedDelivery создаем транзитные batch-и
+ * - Вместо обновления PlannedDelivery обновляем транзитные batch-и
+ * - При получении конвертируем транзитные batch-и в активные
  */
 export class PlannedDeliveryIntegration {
-  // ✅ НЕ инициализируем store сразу, только когда понадобится
+  // ✅ Ленивая инициализация storageStore
   private _storageStore: ReturnType<
     typeof import('@/stores/storage/storageStore').useStorageStore
   > | null = null
 
   /**
-   * ✅ Ленивое получение storageStore (инициализация только при первом вызове)
+   * ✅ Ленивое получение storageStore
    */
   private async getStorageStore() {
     if (!this._storageStore) {
@@ -35,12 +32,17 @@ export class PlannedDeliveryIntegration {
     return this._storageStore
   }
 
+  // =============================================
+  // ОСНОВНЫЕ МЕТОДЫ - НОВЫЙ ПОДХОД ЧЕРЕЗ ТРАНЗИТНЫЕ BATCH-И
+  // =============================================
+
   /**
-   * Создает планируемую поставку на основе заказа
+   * ✅ ПЕРЕПИСАНО: Создает транзитные batch-и при отправке заказа
+   * ЗАМЕНЯЕТ: createPlannedDelivery()
    */
-  async createPlannedDelivery(order: PurchaseOrder): Promise<string> {
+  async createTransitBatchesFromOrder(order: PurchaseOrder): Promise<string[]> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Creating planned delivery for order', {
+      DebugUtils.info(MODULE_NAME, 'Creating transit batches from order', {
         orderId: order.id,
         orderNumber: order.orderNumber,
         supplierName: order.supplierName,
@@ -48,233 +50,140 @@ export class PlannedDeliveryIntegration {
       })
 
       const storageStore = await this.getStorageStore()
+      const department = this.getDepartmentFromOrder(order)
 
-      const plannedDelivery: Omit<PlannedDelivery, 'id'> = {
-        orderNumber: order.orderNumber,
+      // Готовим данные для создания транзитных batch-ей
+      const transitBatchData: CreateTransitBatchData[] = order.items.map(item => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.orderedQuantity,
+        unit: item.unit,
+        estimatedCostPerUnit: item.pricePerUnit,
+        department,
+        purchaseOrderId: order.id,
         supplierId: order.supplierId,
         supplierName: order.supplierName,
-        purchaseOrderId: order.id,
-        plannedDate: order.expectedDelivery || this.calculateDefaultDeliveryDate(order),
-        status: this.mapOrderStatusToDeliveryStatus(order.status),
-        items: order.items.map(item => this.mapOrderItemToDeliveryItem(item, order)),
-        notes: `Planned delivery for order ${order.orderNumber}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+        plannedDeliveryDate: order.expectedDeliveryDate || this.calculateDefaultDeliveryDate(order),
+        notes: `Transit batch from order ${order.orderNumber}`
+      }))
 
-      // Создаем планируемую поставку в StorageStore
-      const deliveryId = await storageStore.createPlannedDelivery(plannedDelivery)
+      // Создаем транзитные batch-и в StorageStore
+      const batchIds = await storageStore.createTransitBatches(transitBatchData)
 
-      DebugUtils.info(MODULE_NAME, 'Planned delivery created successfully', {
-        deliveryId,
+      DebugUtils.info(MODULE_NAME, 'Transit batches created successfully', {
         orderId: order.id,
-        plannedDate: plannedDelivery.plannedDate
-      })
-
-      return deliveryId
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create planned delivery', {
-        orderId: order.id,
-        error
-      })
-      throw new Error(`Failed to create planned delivery: ${error}`)
-    }
-  }
-
-  /**
-   * Обновляет планируемую поставку при изменении заказа
-   */
-  async updatePlannedDelivery(order: PurchaseOrder): Promise<void> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Updating planned delivery for order', {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status
-      })
-
-      const storageStore = await this.getStorageStore()
-
-      // Находим существующую планируемую поставку
-      const existingDelivery = await storageStore.getPlannedDeliveryByOrderId(order.id)
-
-      if (!existingDelivery) {
-        DebugUtils.warn(MODULE_NAME, 'No planned delivery found for order - creating new', {
-          orderId: order.id
-        })
-        await this.createPlannedDelivery(order)
-        return
-      }
-
-      // Обновляем данные
-      const updatedDelivery: Partial<PlannedDelivery> = {
-        plannedDate: order.expectedDelivery || existingDelivery.plannedDate,
-        status: this.mapOrderStatusToDeliveryStatus(order.status),
-        items: order.items.map(item => this.mapOrderItemToDeliveryItem(item, order)),
-        notes: existingDelivery.notes,
-        updatedAt: new Date().toISOString()
-      }
-
-      await storageStore.updatePlannedDelivery(existingDelivery.id, updatedDelivery)
-
-      DebugUtils.info(MODULE_NAME, 'Planned delivery updated successfully', {
-        deliveryId: existingDelivery.id,
-        orderId: order.id
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to update planned delivery', {
-        orderId: order.id,
-        error
-      })
-      throw new Error(`Failed to update planned delivery: ${error}`)
-    }
-  }
-
-  /**
-   * Удаляет планируемую поставку при отмене заказа
-   */
-  async cancelPlannedDelivery(orderId: string): Promise<void> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Cancelling planned delivery for order', { orderId })
-
-      const storageStore = await this.getStorageStore()
-      const existingDelivery = await storageStore.getPlannedDeliveryByOrderId(orderId)
-
-      if (!existingDelivery) {
-        DebugUtils.warn(MODULE_NAME, 'No planned delivery found to cancel', { orderId })
-        return
-      }
-
-      // Отмечаем как отмененную
-      await storageStore.updatePlannedDelivery(existingDelivery.id, {
-        status: 'cancelled',
-        updatedAt: new Date().toISOString()
-      })
-
-      DebugUtils.info(MODULE_NAME, 'Planned delivery cancelled successfully', {
-        deliveryId: existingDelivery.id,
-        orderId
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to cancel planned delivery', {
-        orderId,
-        error
-      })
-      throw new Error(`Failed to cancel planned delivery: ${error}`)
-    }
-  }
-
-  /**
-   * Создает батчи в StorageStore при завершении receipt
-   */
-  async createBatchesFromReceipt(receipt: any, order: PurchaseOrder): Promise<string[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Creating batches from receipt', {
-        receiptId: receipt.id,
-        orderId: order.id,
-        itemsCount: receipt.items.length
-      })
-
-      const storageStore = await this.getStorageStore()
-      const batchIds: string[] = []
-
-      // Группируем полученные товары по продуктам
-      const itemGroups = this.groupReceiptItemsByProduct(receipt.items)
-
-      // Создаем batch для каждого продукта
-      for (const [productId, items] of itemGroups) {
-        try {
-          const batchId = await this.createBatchForProduct(productId, items, receipt.id, order.id)
-          batchIds.push(batchId)
-
-          DebugUtils.debug(MODULE_NAME, 'Batch created for product', {
-            productId,
-            batchId,
-            itemsCount: items.length
-          })
-        } catch (error) {
-          DebugUtils.error(MODULE_NAME, 'Failed to create batch for product', {
-            productId,
-            error
-          })
-          // Продолжаем создавать другие батчи
-        }
-      }
-
-      // Отмечаем планируемую поставку как полученную
-      await this.markDeliveryAsReceived(order.id, batchIds)
-
-      DebugUtils.info(MODULE_NAME, 'Batches created successfully', {
-        receiptId: receipt.id,
         batchesCreated: batchIds.length,
         batchIds
       })
 
       return batchIds
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create batches from receipt', {
-        receiptId: receipt.id,
+      DebugUtils.error(MODULE_NAME, 'Failed to create transit batches from order', {
         orderId: order.id,
         error
       })
-      throw new Error(`Failed to create batches from receipt: ${error}`)
+      throw new Error(`Failed to create transit batches: ${error}`)
     }
   }
 
   /**
-   * Получает информацию о планируемой поставке по orderId
+   * ✅ ПЕРЕПИСАНО: Конвертирует транзитные batch-и в активные при получении товара
+   * ЗАМЕНЯЕТ: createBatchesFromReceipt()
    */
-  async getPlannedDeliveryInfo(orderId: string): Promise<PlannedDelivery | null> {
+  async convertTransitBatchesOnReceipt(
+    purchaseOrderId: string,
+    receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
+  ): Promise<void> {
     try {
+      DebugUtils.info(MODULE_NAME, 'Converting transit batches on receipt', {
+        purchaseOrderId,
+        itemsCount: receiptItems.length
+      })
+
       const storageStore = await this.getStorageStore()
-      return await storageStore.getPlannedDeliveryByOrderId(orderId)
+
+      // Используем новый метод StorageStore для конвертации
+      await storageStore.convertTransitBatchesToActive(purchaseOrderId, receiptItems)
+
+      DebugUtils.info(MODULE_NAME, 'Transit batches converted successfully', {
+        purchaseOrderId,
+        itemsCount: receiptItems.length
+      })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get planned delivery info', {
+      DebugUtils.error(MODULE_NAME, 'Failed to convert transit batches', {
+        purchaseOrderId,
+        error
+      })
+      throw new Error(`Failed to convert transit batches: ${error}`)
+    }
+  }
+
+  /**
+   * ✅ ПЕРЕПИСАНО: Удаляет транзитные batch-и при отмене заказа
+   * ЗАМЕНЯЕТ: cancelPlannedDelivery()
+   */
+  async removeTransitBatchesOnOrderCancel(orderId: string): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Removing transit batches on order cancel', { orderId })
+
+      const storageStore = await this.getStorageStore()
+
+      // Используем новый метод StorageStore для удаления транзитных batch-ей
+      await storageStore.removeTransitBatchesOnOrderCancel(orderId)
+
+      DebugUtils.info(MODULE_NAME, 'Transit batches removed successfully', { orderId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to remove transit batches', {
         orderId,
         error
       })
-      return null
+      throw new Error(`Failed to remove transit batches: ${error}`)
+    }
+  }
+
+  /**
+   * ✅ НОВЫЙ МЕТОД: Получает транзитные batch-и для заказа
+   * ЗАМЕНЯЕТ: getPlannedDeliveryInfo()
+   */
+  getTransitBatchesForOrder(purchaseOrderId: string) {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Getting transit batches for order', { purchaseOrderId })
+
+      // Используем synchronous метод - не требует await
+      const storageStore = this._storageStore
+      if (!storageStore) {
+        DebugUtils.warn(MODULE_NAME, 'StorageStore not initialized yet')
+        return []
+      }
+
+      return storageStore.getTransitBatchesByOrder(purchaseOrderId)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get transit batches for order', {
+        purchaseOrderId,
+        error
+      })
+      return []
     }
   }
 
   // =============================================
-  // PRIVATE HELPER METHODS
+  // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (АДАПТИРОВАНЫ)
   // =============================================
 
   /**
-   * Маппит статус заказа в статус планируемой поставки
+   * Определяет департамент из заказа
    */
-  private mapOrderStatusToDeliveryStatus(orderStatus: string): string {
-    const statusMap: Record<string, string> = {
-      draft: 'pending',
-      sent: 'confirmed',
-      delivered: 'received',
-      cancelled: 'cancelled'
-    }
+  private getDepartmentFromOrder(order: PurchaseOrder): StorageDepartment {
+    // TODO: Реализовать правильное определение департамента
+    // Можно использовать requestIds для определения департамента
+    // или анализировать первый item в заказе
 
-    return statusMap[orderStatus] || 'pending'
+    // Пока возвращаем kitchen по умолчанию
+    return 'kitchen'
   }
 
   /**
-   * Маппит item заказа в item планируемой поставки
-   */
-  private mapOrderItemToDeliveryItem(
-    orderItem: PurchaseOrderItem,
-    order: PurchaseOrder
-  ): PlannedDeliveryItem {
-    return {
-      id: `delivery-item-${orderItem.id}`,
-      itemId: orderItem.itemId,
-      itemName: orderItem.itemName,
-      plannedQuantity: orderItem.orderedQuantity,
-      unit: orderItem.unit,
-      estimatedPrice: orderItem.pricePerUnit,
-      department: this.getDepartmentFromOrder(order),
-      notes: `From order ${order.orderNumber}`
-    }
-  }
-
-  /**
-   * Вычисляет дату поставки по умолчанию (через 3-7 дней)
+   * Вычисляет дату поставки по умолчанию (через 5 дней)
    */
   private calculateDefaultDeliveryDate(order: PurchaseOrder): string {
     const orderDate = new Date(order.orderDate)
@@ -286,111 +195,100 @@ export class PlannedDeliveryIntegration {
     return deliveryDate.toISOString()
   }
 
+  // =============================================
+  // УСТАРЕВШИЕ МЕТОДЫ - ОСТАВЛЕНЫ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
+  // =============================================
+
   /**
-   * Определяет департамент из заказа
+   * @deprecated Используйте createTransitBatchesFromOrder()
+   * Оставлен для обратной совместимости
    */
-  private getDepartmentFromOrder(order: PurchaseOrder): string {
-    // Можно использовать requestIds для определения департамента
-    // или использовать первый item для определения
-    return 'kitchen' // TODO: Implement proper department detection
+  async createPlannedDelivery(order: PurchaseOrder): Promise<string> {
+    DebugUtils.warn(
+      MODULE_NAME,
+      'createPlannedDelivery() is deprecated, use createTransitBatchesFromOrder()'
+    )
+
+    const batchIds = await this.createTransitBatchesFromOrder(order)
+    return batchIds[0] || 'no-batches-created'
   }
 
   /**
-   * Группирует полученные товары по продуктам
+   * @deprecated Используйте createTransitBatchesFromOrder() при изменениях
+   * Оставлен для обратной совместимости
    */
-  private groupReceiptItemsByProduct(receivedItems: any[]): Map<string, any[]> {
-    const groups = new Map<string, any[]>()
+  async updatePlannedDelivery(order: PurchaseOrder): Promise<void> {
+    DebugUtils.warn(
+      MODULE_NAME,
+      'updatePlannedDelivery() is deprecated, recreate transit batches if needed'
+    )
 
-    receivedItems.forEach(item => {
-      const productId = item.itemId
-      if (!groups.has(productId)) {
-        groups.set(productId, [])
-      }
-      groups.get(productId)!.push(item)
-    })
-
-    return groups
+    // Для простоты игнорируем обновления
+    // В будущем можно реализовать логику обновления транзитных batch-ей
+    DebugUtils.info(MODULE_NAME, 'Update ignored - transit batches are immutable until receipt')
   }
 
   /**
-   * Создает Batch для конкретного продукта
+   * @deprecated Используйте removeTransitBatchesOnOrderCancel()
+   * Оставлен для обратной совместимости
    */
-  private async createBatchForProduct(
-    productId: string,
-    items: any[],
-    receiptId: string,
-    orderId: string
-  ): Promise<any> {
-    const storageStore = await this.getStorageStore()
+  async cancelPlannedDelivery(orderId: string): Promise<void> {
+    DebugUtils.warn(
+      MODULE_NAME,
+      'cancelPlannedDelivery() is deprecated, use removeTransitBatchesOnOrderCancel()'
+    )
 
-    const totalQuantity = items.reduce((sum, item) => sum + item.receivedQuantity, 0)
-    const avgPrice =
-      items.reduce((sum, item) => sum + (item.actualPrice || item.estimatedPrice), 0) / items.length
-
-    const batch = {
-      itemId: productId,
-      quantity: totalQuantity,
-      unit: items[0].unit,
-      costPerUnit: avgPrice,
-      supplierId: items[0].supplierId, // Нужно передавать из receipt
-      receiptId,
-      orderId,
-      status: 'received',
-      receivedDate: new Date().toISOString(),
-      expiryDate: this.calculateExpiryDate(productId),
-      notes: `Batch from order receipt ${receiptId}`
-    }
-
-    return await storageStore.createBatch(batch)
+    await this.removeTransitBatchesOnOrderCancel(orderId)
   }
 
   /**
-   * Вычисляет срок годности для продукта
+   * @deprecated Используйте getTransitBatchesForOrder()
+   * Оставлен для обратной совместимости
    */
-  private calculateExpiryDate(productId: string): string {
-    // TODO: Получать срок годности из ProductStore
-    const defaultShelfLifeDays = 30
-    const expiryDate = new Date()
-    expiryDate.setDate(expiryDate.getDate() + defaultShelfLifeDays)
-    return expiryDate.toISOString()
-  }
+  async getPlannedDeliveryInfo(orderId: string): Promise<any> {
+    DebugUtils.warn(
+      MODULE_NAME,
+      'getPlannedDeliveryInfo() is deprecated, use getTransitBatchesForOrder()'
+    )
 
-  /**
-   * Отмечает планируемую поставку как полученную
-   */
-  private async markDeliveryAsReceived(orderId: string, batchIds: string[]): Promise<void> {
-    const storageStore = await this.getStorageStore()
-    const delivery = await storageStore.getPlannedDeliveryByOrderId(orderId)
+    const transitBatches = this.getTransitBatchesForOrder(orderId)
 
-    if (delivery) {
-      await storageStore.updatePlannedDelivery(delivery.id, {
-        status: 'received',
-        actualDeliveryDate: new Date().toISOString(),
-        batchIds,
-        updatedAt: new Date().toISOString()
-      })
+    // Эмулируем старый формат ответа
+    return {
+      id: `planned-${orderId}`,
+      purchaseOrderId: orderId,
+      status: transitBatches.length > 0 ? 'confirmed' : 'cancelled',
+      items: transitBatches.map(batch => ({
+        itemId: batch.itemId,
+        plannedQuantity: batch.currentQuantity,
+        unit: batch.unit
+      }))
     }
   }
 }
 
 // =============================================
-// COMPOSABLE EXPORT (НЕ SINGLETON)
+// COMPOSABLE EXPORT
 // =============================================
 
 let integrationInstance: PlannedDeliveryIntegration | null = null
 
 /**
- * ✅ ИСПРАВЛЕНО: Используем composable паттерн вместо прямого singleton экспорта
- * Это позволяет избежать ошибки getActivePinia при импорте модуля
+ * ✅ Композабл для получения интеграции планируемых поставок
  */
-export function usePlannedDeliveryIntegration() {
+export function usePlannedDeliveryIntegration(): PlannedDeliveryIntegration {
   if (!integrationInstance) {
     integrationInstance = new PlannedDeliveryIntegration()
   }
   return integrationInstance
 }
 
-// ✅ Для обратной совместимости экспортируем функцию получения instance
+/**
+ * ✅ Для обратной совместимости
+ */
 export const plannedDeliveryIntegration = {
   getInstance: () => usePlannedDeliveryIntegration()
 }
+
+// Экспорт типа для использования в других файлах
+export type { PlannedDeliveryIntegration }

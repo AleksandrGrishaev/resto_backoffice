@@ -13,7 +13,8 @@ export type {
   StorageOperationItem,
   StorageOperation,
   StorageBalance,
-  StorageBalanceWithTransit, // ✅ ДОБАВЛЕН новый тип
+  StorageBalanceWithTransit,
+  CreateTransitBatchData, // ✅ ДОБАВИТЬ
   InventoryDocument,
   InventoryItem,
   CreateReceiptData,
@@ -27,9 +28,9 @@ export type {
   QuickWriteOffItem,
   WriteOffStatistics,
   WRITE_OFF_CLASSIFICATION,
-  WRITE_OFF_REASON_OPTIONS, // ✅ ДОБАВЛЕН
+  WRITE_OFF_REASON_OPTIONS,
   doesWriteOffAffectKPI,
-  getWriteOffReasonInfo // ✅ ДОБАВЛЕН
+  getWriteOffReasonInfo
 } from './types'
 
 // Export service

@@ -6,6 +6,7 @@ import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
 import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
 import { DebugUtils } from '@/utils'
+import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
 
 import type {
   StorageState,
@@ -160,6 +161,327 @@ const departmentBalances = (department: StorageDepartment) => {
 // ===========================
 // COMPUTED PROPERTIES - ТРАНЗИТНЫЕ BATCH-И
 // ===========================
+
+/**
+ * Создает транзитные batch-и при отправке заказа поставщику
+ */
+async function createTransitBatches(orderData: CreateTransitBatchData[]): Promise<string[]> {
+  try {
+    state.value.loading.correction = true // Используем существующий loading
+    const batchIds: string[] = []
+
+    DebugUtils.info(MODULE_NAME, 'Creating transit batches', {
+      orderCount: orderData.length,
+      firstOrderId: orderData[0]?.purchaseOrderId
+    })
+
+    // Защита от дубликатов - проверяем, не созданы ли уже batch-и для этого заказа
+    if (orderData.length > 0) {
+      const existingBatches = state.value.batches.filter(
+        batch =>
+          batch.purchaseOrderId === orderData[0].purchaseOrderId && batch.status === 'in_transit'
+      )
+
+      if (existingBatches.length > 0) {
+        DebugUtils.warn(MODULE_NAME, 'Transit batches already exist for order', {
+          purchaseOrderId: orderData[0].purchaseOrderId,
+          existingCount: existingBatches.length
+        })
+        return existingBatches.map(b => b.id)
+      }
+    }
+
+    for (const item of orderData) {
+      // Валидация входных данных
+      if (!item.itemId || !item.quantity || item.quantity <= 0) {
+        DebugUtils.warn(MODULE_NAME, 'Skipping invalid transit batch item', { item })
+        continue
+      }
+
+      // Получаем информацию о продукте
+      const productDef = mockDataCoordinator.getProductDefinition(item.itemId)
+      if (!productDef) {
+        DebugUtils.warn(MODULE_NAME, 'Product definition not found, skipping', {
+          itemId: item.itemId
+        })
+        continue
+      }
+
+      // Определяем тип единицы для конвертации
+      let unitType: 'weight' | 'volume' | 'piece' = 'piece'
+      if (productDef.baseUnit === 'gram') {
+        unitType = 'weight'
+      } else if (productDef.baseUnit === 'ml') {
+        unitType = 'volume'
+      }
+
+      // Конвертируем в базовые единицы
+      const conversionResult = convertToBaseUnits(item.quantity, item.unit, unitType)
+
+      if (!conversionResult.success) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to convert units, using original quantity', {
+          itemId: item.itemId,
+          quantity: item.quantity,
+          unit: item.unit,
+          error: conversionResult.error
+        })
+        // Используем оригинальное количество, если конвертация не удалась
+      }
+
+      const quantityInBaseUnits = conversionResult.success ? conversionResult.value! : item.quantity
+      const baseUnit = conversionResult.success ? conversionResult.baseUnit! : item.unit
+
+      // Конвертируем цену в базовые единицы
+      let costPerUnitInBase = item.estimatedCostPerUnit
+      if (conversionResult.success && item.unit !== baseUnit) {
+        // Если единица изменилась, нужно пересчитать цену за единицу
+        const conversionFactor = item.quantity / quantityInBaseUnits
+        costPerUnitInBase = item.estimatedCostPerUnit * conversionFactor
+      }
+
+      // Генерация уникального ID и номера
+      const batchId = `transit-batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const batchNumber = generateTransitBatchNumber()
+
+      const batch: StorageBatch = {
+        id: batchId,
+        batchNumber,
+        itemId: item.itemId,
+        itemType: 'product',
+        department: item.department,
+        initialQuantity: quantityInBaseUnits,
+        currentQuantity: quantityInBaseUnits,
+        unit: baseUnit, // Базовая единица
+        costPerUnit: costPerUnitInBase, // Цена в базовых единицах
+        totalValue: quantityInBaseUnits * costPerUnitInBase,
+        receiptDate: item.plannedDeliveryDate,
+        sourceType: 'purchase',
+        status: 'in_transit',
+        isActive: false, // Важно: не активен до получения
+
+        // Новые поля для связи с заказами
+        purchaseOrderId: item.purchaseOrderId,
+        supplierId: item.supplierId,
+        supplierName: item.supplierName,
+        plannedDeliveryDate: item.plannedDeliveryDate,
+        notes: item.notes || `Transit batch from order`,
+
+        // BaseEntity поля
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Добавляем в начало массива (новые batch-и сверху)
+      state.value.batches.unshift(batch)
+      batchIds.push(batchId)
+
+      DebugUtils.info(MODULE_NAME, 'Transit batch created', {
+        batchId,
+        itemId: item.itemId,
+        originalQuantity: item.quantity,
+        originalUnit: item.unit,
+        baseQuantity: quantityInBaseUnits,
+        baseUnit: baseUnit,
+        supplier: item.supplierName
+      })
+    }
+
+    // Пересчитываем балансы
+    await recalculateAllBalances()
+
+    DebugUtils.info(MODULE_NAME, 'Transit batches created successfully', {
+      totalCreated: batchIds.length,
+      batchIds
+    })
+
+    return batchIds
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create transit batches'
+    state.value.error = message
+    DebugUtils.error(MODULE_NAME, message, { error, orderData })
+    throw error
+  } finally {
+    state.value.loading.correction = false
+  }
+}
+
+/**
+ * Конвертирует транзитные batch-и в активные при получении товара
+ */
+async function convertTransitBatchesToActive(
+  purchaseOrderId: string,
+  receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
+): Promise<void> {
+  try {
+    state.value.loading.correction = true
+
+    DebugUtils.info(MODULE_NAME, 'Converting transit batches to active', {
+      purchaseOrderId,
+      itemsCount: receiptItems.length
+    })
+
+    // Находим все транзитные batch-и для данного заказа
+    const transitBatches = state.value.batches.filter(
+      batch => batch.purchaseOrderId === purchaseOrderId && batch.status === 'in_transit'
+    )
+
+    if (transitBatches.length === 0) {
+      DebugUtils.warn(MODULE_NAME, 'No transit batches found for order', { purchaseOrderId })
+      return
+    }
+
+    for (const receiptItem of receiptItems) {
+      // Находим соответствующий транзитный batch
+      const transitBatch = transitBatches.find(batch => batch.itemId === receiptItem.itemId)
+
+      if (!transitBatch) {
+        DebugUtils.warn(MODULE_NAME, 'No transit batch found for received item', {
+          itemId: receiptItem.itemId,
+          purchaseOrderId
+        })
+        continue
+      }
+
+      // Предполагаем что receiptItem.receivedQuantity уже в базовых единицах
+      // (это ответственность вызывающего кода - supplier store)
+      const receivedQuantityInBase = receiptItem.receivedQuantity
+      const originalQuantity = transitBatch.initialQuantity
+      const actualPrice = receiptItem.actualPrice || transitBatch.costPerUnit
+
+      // Обновляем batch для перехода в active статус
+      transitBatch.status = 'active'
+      transitBatch.isActive = true
+      transitBatch.currentQuantity = receivedQuantityInBase
+      transitBatch.initialQuantity = receivedQuantityInBase
+      transitBatch.actualDeliveryDate = new Date().toISOString()
+      transitBatch.updatedAt = new Date().toISOString()
+
+      // Обновляем цену и стоимость, если отличается
+      if (actualPrice !== transitBatch.costPerUnit) {
+        const oldPrice = transitBatch.costPerUnit
+        transitBatch.costPerUnit = actualPrice
+        transitBatch.totalValue = receivedQuantityInBase * actualPrice
+        transitBatch.notes += ` | Price updated: ${oldPrice.toFixed(2)} → ${actualPrice.toFixed(2)}`
+      } else {
+        transitBatch.totalValue = receivedQuantityInBase * actualPrice
+      }
+
+      // Логируем расхождения
+      if (receivedQuantityInBase !== originalQuantity) {
+        if (receivedQuantityInBase < originalQuantity) {
+          transitBatch.notes += ` | Partial delivery: ${receivedQuantityInBase}/${originalQuantity}`
+        } else {
+          transitBatch.notes += ` | Excess delivery: ${receivedQuantityInBase}/${originalQuantity}`
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Transit batch converted to active', {
+        batchId: transitBatch.id,
+        itemId: receiptItem.itemId,
+        originalQuantity,
+        receivedQuantity: receivedQuantityInBase,
+        actualPrice
+      })
+    }
+
+    // Пересчитываем балансы
+    await recalculateAllBalances()
+
+    DebugUtils.info(MODULE_NAME, 'Transit batches converted successfully', {
+      purchaseOrderId,
+      convertedCount: receiptItems.length
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to convert transit batches', {
+      error,
+      purchaseOrderId
+    })
+    throw error
+  } finally {
+    state.value.loading.correction = false
+  }
+}
+
+/**
+ * Пересчитывает все балансы (добавить только если метода еще нет)
+ */
+async function recalculateAllBalances(): Promise<void> {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Recalculating all balances...')
+
+    // Загружаем свежие данные из координатора
+    const freshData = mockDataCoordinator.getStorageStoreData()
+
+    // Обновляем только balances, но сохраняем текущие batches
+    // (так как они могли быть модифицированы добавлением транзитных)
+    state.value.balances = freshData.balances
+    state.value.operations = freshData.operations
+
+    DebugUtils.info(MODULE_NAME, 'Balances recalculated successfully', {
+      balancesCount: state.value.balances.length,
+      batchesCount: state.value.batches.length,
+      operationsCount: state.value.operations.length
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to recalculate balances', { error })
+    throw error
+  }
+}
+
+/**
+ * Удаляет транзитные batch-и при отмене заказа
+ */
+async function removeTransitBatchesOnOrderCancel(orderId: string): Promise<void> {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Removing transit batches on order cancel', { orderId })
+
+    // Находим транзитные batch-и для заказа
+    const transitBatchesToRemove = state.value.batches.filter(
+      batch => batch.purchaseOrderId === orderId && batch.status === 'in_transit'
+    )
+
+    if (transitBatchesToRemove.length === 0) {
+      DebugUtils.info(MODULE_NAME, 'No transit batches to remove', { orderId })
+      return
+    }
+
+    // Удаляем batch-и
+    state.value.batches = state.value.batches.filter(
+      batch => !(batch.purchaseOrderId === orderId && batch.status === 'in_transit')
+    )
+
+    // Пересчитываем балансы
+    await recalculateAllBalances()
+
+    DebugUtils.info(MODULE_NAME, 'Transit batches removed successfully', {
+      orderId,
+      removedCount: transitBatchesToRemove.length
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to remove transit batches', { error, orderId })
+    throw error
+  }
+}
+
+/**
+ * Генерирует номер для транзитного batch-а
+ */
+function generateTransitBatchNumber(): string {
+  const date = new Date()
+  const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '') // YYMMDD
+  const timeStr =
+    date.getHours().toString().padStart(2, '0') + date.getMinutes().toString().padStart(2, '0')
+  const sequence = state.value.batches.filter(b => b.status === 'in_transit').length + 1
+
+  return `TRN-${dateStr}-${timeStr}-${sequence.toString().padStart(3, '0')}`
+}
+
+/**
+ * Получает транзитные batch-и для конкретного заказа
+ */
+function getTransitBatchesByOrder(purchaseOrderId: string): StorageBatch[] {
+  return transitBatches.value.filter(batch => batch.purchaseOrderId === purchaseOrderId)
+}
 
 const transitBatches = computed(() => {
   return state.value.batches.filter(batch => batch.status === 'in_transit')
@@ -675,7 +997,7 @@ export function useStorageStore() {
     nearExpiryItemsCount,
     departmentBalances,
 
-    // ✅ НОВЫЕ computed для транзита
+    // ✅ ТРАНЗИТНЫЕ computed
     transitBatches: readonly(transitBatches),
     balancesWithTransit: readonly(balancesWithTransit),
     transitMetrics: readonly(transitMetrics),
@@ -706,10 +1028,17 @@ export function useStorageStore() {
     getItemBatches,
     getBatchById,
 
-    // ✅ НОВЫЕ helper-ы для транзита
+    // ✅ СУЩЕСТВУЮЩИЕ helper-ы для транзита
     getTransitBatchesForItem,
     isTransitDeliveryOverdue,
     isTransitDeliveryToday,
+
+    // ✅ НОВЫЕ методы для транзита
+    createTransitBatches,
+    convertTransitBatchesToActive,
+    removeTransitBatchesOnOrderCancel,
+    generateTransitBatchNumber,
+    getTransitBatchesByOrder,
 
     // Filter actions
     setDepartmentFilter,

@@ -52,129 +52,84 @@ export class SupplierStorageIntegration {
 
   async getSuggestionsFromStock(department?: StorageDepartment): Promise<OrderSuggestion[]> {
     try {
-      const cacheKey = department || 'all'
-
-      // Проверяем кэш
-      if (
-        suggestionsCache &&
-        suggestionsCache.department === cacheKey &&
-        Date.now() - suggestionsCache.timestamp < CACHE_DURATION
-      ) {
-        DebugUtils.debug(MODULE_NAME, 'Returning cached suggestions', {
-          department: cacheKey,
-          count: suggestionsCache.data.length,
-          cacheAge: Date.now() - suggestionsCache.timestamp
-        })
-        return suggestionsCache.data
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Generating fresh suggestions from storage data', {
-        department: cacheKey
+      DebugUtils.info(MODULE_NAME, 'Generating suggestions from storage with transit data', {
+        department
       })
 
-      const [storageStore, productsStore] = await Promise.all([
-        this.getStorageStore(),
-        this.getProductsStore()
-      ])
+      const storageStore = await this.getStorageStore()
+      const productsStore = await this.getProductsStore()
 
-      if (!storageStore || !productsStore) {
-        throw new Error('Required stores not available')
-      }
+      // ✅ НОВОЕ: Используем balancesWithTransit вместо обычных balances
+      const balancesWithTransit = storageStore.balancesWithTransit.value
 
-      // Получаем актуальные балансы
-      const balances =
-        department && department !== 'all'
-          ? storageStore.departmentBalances(department)
-          : storageStore.state.balances.filter(b => b.itemType === 'product')
-
-      if (!balances || balances.length === 0) {
-        DebugUtils.warn(MODULE_NAME, 'No storage balances available', { department })
-        return []
-      }
-
-      // Получаем продукты
-      const products = productsStore.products
-      if (!products || products.length === 0) {
-        DebugUtils.warn(MODULE_NAME, 'No products available')
+      if (!balancesWithTransit || balancesWithTransit.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No storage balances available for suggestions')
         return []
       }
 
       const suggestions: OrderSuggestion[] = []
 
-      // Фильтрация продуктов по департаменту
-      const relevantProducts = this.filterProductsByDepartment(products, department)
+      for (const balance of balancesWithTransit) {
+        // Фильтр по департаменту если указан
+        if (department && balance.department !== department) {
+          continue
+        }
 
-      DebugUtils.debug(MODULE_NAME, 'Processing suggestions', {
-        totalBalances: balances.length,
-        relevantProducts: relevantProducts.length,
-        department: cacheKey
-      })
+        // Находим продукт
+        const product = productsStore.products.find(p => p.id === balance.itemId)
+        if (!product || !product.isActive) {
+          continue
+        }
 
-      for (const product of relevantProducts) {
-        // Найти баланс для этого продукта в нужном департаменте
-        const balance = balances.find(
-          b =>
-            b.itemId === product.id &&
-            b.itemType === 'product' &&
-            (!department || department === 'all' || b.department === department)
-        )
-
-        const currentStock = balance?.totalQuantity || 0
         const minStock = product.minStock || 0
-        const latestCost =
-          balance?.latestCost || product.baseCostPerUnit || product.costPerUnit || 0
 
-        // Определяем нужен ли заказ
-        const needsOrder = this.shouldCreateSuggestion(currentStock, minStock, balance)
+        // ✅ НОВОЕ: Используем эффективный запас (склад + транзит)
+        const effectiveStock = balance.totalWithTransit
 
-        if (needsOrder) {
-          const suggestion = this.createSuggestion(
-            product,
-            currentStock,
+        // Проверяем нужно ли заказывать
+        if (effectiveStock <= minStock) {
+          const suggestedQuantity = Math.max(minStock * 2 - effectiveStock, minStock)
+
+          suggestions.push({
+            itemId: balance.itemId,
+            itemName: balance.itemName,
+            currentStock: balance.totalQuantity,
+
+            // ✅ НОВЫЕ ПОЛЯ:
+            transitStock: balance.transitQuantity,
+            effectiveStock: effectiveStock,
+            nearestDelivery: balance.nearestDelivery,
+
             minStock,
-            latestCost,
-            balance
-          )
-          suggestions.push(suggestion)
-
-          DebugUtils.debug(MODULE_NAME, 'Created suggestion', {
-            itemId: product.id,
-            itemName: product.name,
-            currentStock,
-            minStock,
-            urgency: suggestion.urgency,
-            reason: suggestion.reason
+            suggestedQuantity,
+            urgency:
+              effectiveStock <= 0 ? 'high' : effectiveStock <= minStock * 0.5 ? 'medium' : 'low',
+            reason: effectiveStock <= 0 ? 'out_of_stock' : 'below_minimum',
+            estimatedPrice: balance.latestCost
           })
         }
       }
 
-      // Сортировка по срочности и затем по дефициту
+      // Сортируем по важности
       suggestions.sort((a, b) => {
         const urgencyOrder = { high: 3, medium: 2, low: 1 }
-        if (a.urgency !== b.urgency) {
-          return urgencyOrder[b.urgency] - urgencyOrder[a.urgency]
+        const aUrgency = urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 0
+        const bUrgency = urgencyOrder[b.urgency as keyof typeof urgencyOrder] || 0
+
+        if (aUrgency !== bUrgency) {
+          return bUrgency - aUrgency // Высокий приоритет первым
         }
 
-        // При одинаковой срочности - сортируем по проценту дефицита
-        const aDeficit = a.minStock > 0 ? (a.minStock - a.currentStock) / a.minStock : 0
-        const bDeficit = b.minStock > 0 ? (b.minStock - b.currentStock) / b.minStock : 0
-        return bDeficit - aDeficit
+        // При одинаковом приоритете - по эффективному запасу (меньше = важнее)
+        return (a.effectiveStock || 0) - (b.effectiveStock || 0)
       })
 
-      // Кэшируем результат
-      suggestionsCache = {
-        data: suggestions,
-        timestamp: Date.now(),
-        department: cacheKey
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Dynamic suggestions generated and cached', {
-        department: cacheKey,
-        total: suggestions.length,
-        urgent: suggestions.filter(s => s.urgency === 'high').length,
-        medium: suggestions.filter(s => s.urgency === 'medium').length,
-        low: suggestions.filter(s => s.urgency === 'low').length,
-        cached: true
+      DebugUtils.info(MODULE_NAME, 'Suggestions generated successfully', {
+        department,
+        totalSuggestions: suggestions.length,
+        highUrgency: suggestions.filter(s => s.urgency === 'high').length,
+        mediumUrgency: suggestions.filter(s => s.urgency === 'medium').length,
+        lowUrgency: suggestions.filter(s => s.urgency === 'low').length
       })
 
       return suggestions
@@ -183,11 +138,9 @@ export class SupplierStorageIntegration {
         error,
         department
       })
-      // Возвращаем пустой массив вместо броска ошибки для graceful degradation
       return []
     }
   }
-
   // =============================================
   // HELPER ФУНКЦИИ ДЛЯ SUGGESTIONS
   // =============================================

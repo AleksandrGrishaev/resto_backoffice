@@ -307,13 +307,31 @@ export function usePurchaseOrders() {
   async function sendOrder(id: string): Promise<PurchaseOrder> {
     try {
       console.log(`PurchaseOrders: Sending order ${id}`)
+
+      // Отправляем заказ
       const sentOrder = await updateOrder(id, {
         status: 'sent',
         sentDate: new Date().toISOString()
       })
 
+      // ✅ НОВОЕ: Создаем транзитные batch-и при отправке заказа
+      try {
+        const batchIds = await plannedDeliveryIntegration.createTransitBatchesFromOrder(sentOrder)
+        console.log(`PurchaseOrders: Transit batches created successfully`, {
+          orderId: sentOrder.id,
+          batchesCreated: batchIds.length,
+          batchIds
+        })
+      } catch (transitError) {
+        // НЕ останавливаем отправку заказа из-за ошибки создания batch-ей
+        console.warn(
+          'PurchaseOrders: Failed to create transit batches (order sent successfully):',
+          transitError
+        )
+      }
+
       console.log(
-        `PurchaseOrders: Order ${sentOrder.orderNumber} sent to supplier and ready for receipt`
+        `PurchaseOrders: Order ${sentOrder.orderNumber} sent to supplier and transit batches created`
       )
       return sentOrder
     } catch (error) {
@@ -344,22 +362,30 @@ export function usePurchaseOrders() {
   async function cancelOrder(id: string): Promise<PurchaseOrder> {
     try {
       console.log(`PurchaseOrders: Cancelling order ${id}`)
+
+      // Отменяем заказ
       const cancelledOrder = await updateOrder(id, {
         status: 'cancelled',
         cancelledDate: new Date().toISOString()
       })
 
-      // ✅ НОВОЕ: Отменяем планируемую поставку
+      // ✅ НОВОЕ: Удаляем транзитные batch-и при отмене заказа
       try {
-        await plannedDeliveryIntegration.cancelPlannedDelivery(id)
+        await plannedDeliveryIntegration.removeTransitBatchesOnOrderCancel(id)
         console.log(
-          `PurchaseOrders: Planned delivery cancelled for order ${cancelledOrder.orderNumber}`
+          `PurchaseOrders: Transit batches removed for cancelled order ${cancelledOrder.orderNumber}`
         )
-      } catch (error) {
-        console.warn('PurchaseOrders: Failed to cancel planned delivery (non-critical):', error)
+      } catch (transitError) {
+        // НЕ критично, если не удалось удалить batch-и
+        console.warn(
+          'PurchaseOrders: Failed to remove transit batches (non-critical):',
+          transitError
+        )
       }
 
-      console.log(`PurchaseOrders: Order ${cancelledOrder.orderNumber} cancelled`)
+      console.log(
+        `PurchaseOrders: Order ${cancelledOrder.orderNumber} cancelled and transit batches removed`
+      )
       return cancelledOrder
     } catch (error) {
       console.error('PurchaseOrders: Error cancelling order:', error)
