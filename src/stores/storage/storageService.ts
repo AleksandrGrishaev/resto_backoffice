@@ -119,21 +119,19 @@ export class StorageService {
   // ✅ НОВЫЙ МЕТОД: Загрузка данных из координатора
   private loadDataFromCoordinator(): void {
     try {
-      DebugUtils.info(MODULE_NAME, 'Loading storage data from MockDataCoordinator...')
-
       const storageData = mockDataCoordinator.getStorageStoreData()
 
-      // Deep clone для избежания проблем с ссылками
-      this.batches = JSON.parse(JSON.stringify(storageData.batches))
-      this.operations = JSON.parse(JSON.stringify(storageData.operations))
-      // balances будут пересчитаны в recalculateAllBalances()
-      this.inventories = []
+      // ✅ СОХРАНЯЕМ runtime данные
+      const existingRuntimeBatches = this.batches.filter(
+        batch => batch.status === 'in_transit' && batch.id.includes('transit-batch-')
+      )
 
-      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator successfully', {
-        batches: this.batches.length,
-        operations: this.operations.length,
-        note: 'Balances will be recalculated'
-      })
+      // Загружаем базовые данные
+      const baseBatches = JSON.parse(JSON.stringify(storageData.batches))
+      this.operations = JSON.parse(JSON.stringify(storageData.operations))
+
+      // ✅ MERGE вместо перезаписи
+      this.batches = [...baseBatches, ...existingRuntimeBatches]
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', { error })
       // Fallback к пустым массивам
