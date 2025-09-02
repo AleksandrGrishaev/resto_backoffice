@@ -1037,10 +1037,11 @@ export const useSupplierStore = defineStore('supplier', () => {
   function getItemBalance(itemId: string, department?: Department) {
     try {
       if (department) {
+        // ✅ ИСПРАВЛЕНИЕ: departmentBalances это computed функция в Pinia
         const balances = storageStore.departmentBalances(department)
         return balances.find(b => b.itemId === itemId)
       } else {
-        return storageStore.getBalance(itemId)
+        return storageStore.getBalance(itemId, 'kitchen') // Дефолтный департамент
       }
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Failed to get item balance', { itemId, department, error })

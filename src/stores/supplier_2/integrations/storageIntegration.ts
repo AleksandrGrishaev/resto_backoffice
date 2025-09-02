@@ -58,7 +58,7 @@ export class SupplierStorageIntegration {
       const supplierStore = await this.getSupplierStore()
 
       // Получаем базовые балансы с транзитом
-      const balancesWithTransit = storageStore.balancesWithTransit.value
+      const balancesWithTransit = storageStore.balancesWithTransit
 
       if (!balancesWithTransit || balancesWithTransit.length === 0) {
         DebugUtils.warn(MODULE_NAME, 'No storage balances available for suggestions')

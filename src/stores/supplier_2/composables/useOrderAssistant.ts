@@ -329,9 +329,10 @@ export function useOrderAssistant() {
   // ДОБАВИТЬ эту функцию для получения актуальных остатков
   function getCurrentStock(itemId: string, department?: Department): number {
     try {
+      // ✅ ИСПРАВЛЕНИЕ: departmentBalances это computed функция в Pinia
       const balance = department
         ? storageStore.departmentBalances(department).find(b => b.itemId === itemId)
-        : storageStore.getBalance(itemId)
+        : storageStore.getBalance(itemId, 'kitchen') // Дефолтный департамент
 
       return balance?.totalQuantity || 0
     } catch (error) {
