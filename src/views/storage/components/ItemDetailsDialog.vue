@@ -262,9 +262,9 @@ const activeBatchesForItem = computed(() => {
 })
 
 const transitBatchesForItem = computed(() => {
-  if (!props.item || !storageStore.transitBatches?.value) return []
+  if (!props.item || !storageStore.transitBatches) return []
 
-  return storageStore.transitBatches.value.filter(
+  return storageStore.transitBatches.filter(
     (batch: StorageBatch) =>
       batch.itemId === props.item!.itemId && batch.department === props.item!.department
   )
