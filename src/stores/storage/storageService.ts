@@ -31,6 +31,9 @@ export class StorageService {
   private inventories: InventoryDocument[] = []
   private initialized: boolean = false
 
+  isInitialized(): boolean {
+    return this.initialized
+  }
   // ===========================
   // HELPER METHODS (используют базовые единицы)
   // ===========================
@@ -83,29 +86,31 @@ export class StorageService {
   // ===========================
 
   async initialize(): Promise<void> {
-    try {
-      if (this.initialized) {
-        DebugUtils.info(MODULE_NAME, 'Service already initialized')
-        return
-      }
+    if (this.initialized) {
+      DebugUtils.info(MODULE_NAME, 'Storage service already initialized, skipping')
+      return
+    }
 
-      DebugUtils.info(MODULE_NAME, 'Initializing storage service with MockDataCoordinator')
+    try {
+      DebugUtils.info(MODULE_NAME, 'First-time storage service initialization')
 
       const productsStore = useProductsStore()
-
       if (productsStore.products.length === 0) {
         await productsStore.loadProducts(true)
       }
 
-      // ✅ КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Загружаем данные из MockDataCoordinator
+      // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Загружаем данные с сохранением runtime
       this.loadDataFromCoordinator()
 
-      // Пересчитываем балансы на основе загруженных данных
+      // Пересчитываем балансы на основе всех данных (базовых + runtime)
       await this.recalculateAllBalances()
 
       this.initialized = true
-      DebugUtils.info(MODULE_NAME, 'Storage service initialized with MockDataCoordinator', {
+
+      DebugUtils.info(MODULE_NAME, 'Storage service initialized successfully', {
         batches: this.batches.length,
+        activeBatches: this.batches.filter(b => b.status === 'active').length,
+        transitBatches: this.batches.filter(b => b.status === 'in_transit').length,
         operations: this.operations.length,
         balances: this.balances.length,
         unitSystem: 'BASE_UNITS (gram/ml/piece)'
@@ -119,25 +124,73 @@ export class StorageService {
   // ✅ НОВЫЙ МЕТОД: Загрузка данных из координатора
   private loadDataFromCoordinator(): void {
     try {
+      DebugUtils.info(MODULE_NAME, 'Loading data from coordinator with runtime preservation')
+
       const storageData = mockDataCoordinator.getStorageStoreData()
 
-      // ✅ СОХРАНЯЕМ runtime данные
+      // СОХРАНЯЕМ существующие runtime данные (transit batches)
       const existingRuntimeBatches = this.batches.filter(
         batch => batch.status === 'in_transit' && batch.id.includes('transit-batch-')
       )
 
-      // Загружаем базовые данные
-      const baseBatches = JSON.parse(JSON.stringify(storageData.batches))
-      this.operations = JSON.parse(JSON.stringify(storageData.operations))
+      // СОХРАНЯЕМ другие runtime данные (если есть)
+      const existingRuntimeOperations = this.operations.filter(
+        op => op.id.includes('runtime-') || op.notes?.includes('runtime')
+      )
 
-      // ✅ MERGE вместо перезаписи
+      DebugUtils.debug(MODULE_NAME, 'Runtime data to preserve', {
+        runtimeBatches: existingRuntimeBatches.length,
+        runtimeOperations: existingRuntimeOperations.length,
+        runtimeBatchIds: existingRuntimeBatches.map(b => b.id)
+      })
+
+      // Загружаем базовые данные из координатора (deep clone)
+      const baseBatches = JSON.parse(JSON.stringify(storageData.batches))
+      const baseOperations = JSON.parse(JSON.stringify(storageData.operations))
+
+      // MERGE: базовые данные + сохраненные runtime данные
       this.batches = [...baseBatches, ...existingRuntimeBatches]
+      this.operations = [...baseOperations, ...existingRuntimeOperations]
+
+      // balances будут пересчитаны в recalculateAllBalances()
+      this.inventories = []
+
+      DebugUtils.info(MODULE_NAME, 'Data loaded and merged successfully', {
+        baseBatches: baseBatches.length,
+        baseOperations: baseOperations.length,
+        runtimeBatches: existingRuntimeBatches.length,
+        runtimeOperations: existingRuntimeOperations.length,
+        totalBatches: this.batches.length,
+        totalOperations: this.operations.length,
+        note: 'Runtime data preserved, balances will be recalculated'
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', { error })
-      // Fallback к пустым массивам
+
+      // Fallback: если совсем ничего нет, создаем пустые массивы
+      if (this.batches.length === 0) {
+        this.batches = []
+        this.operations = []
+        this.inventories = []
+      }
+    }
+  }
+
+  async reinitialize(preserveRuntimeData: boolean = true): Promise<void> {
+    DebugUtils.info(MODULE_NAME, 'Force reinitializing storage service', { preserveRuntimeData })
+
+    if (preserveRuntimeData) {
+      // Обычная реинициализация с сохранением runtime данных
+      this.loadDataFromCoordinator()
+      await this.recalculateAllBalances()
+    } else {
+      // Полная реинициализация (потеря runtime данных)
+      this.initialized = false
       this.batches = []
       this.operations = []
+      this.balances = []
       this.inventories = []
+      await this.initialize()
     }
   }
 
@@ -1108,6 +1161,82 @@ export class StorageService {
     }
   }
 
+  /**
+   * Добавление runtime batch (для transit)
+   */
+  addRuntimeBatch(batch: StorageBatch): void {
+    if (!batch.id.includes('transit-batch-')) {
+      DebugUtils.warn(MODULE_NAME, 'Adding non-transit batch as runtime', {
+        batchId: batch.id,
+        status: batch.status
+      })
+    }
+
+    this.batches.push(batch)
+    DebugUtils.info(MODULE_NAME, 'Runtime batch added', {
+      batchId: batch.id,
+      itemId: batch.itemId,
+      totalBatches: this.batches.length
+    })
+  }
+
+  /**
+   * Удаление runtime batch
+   */
+  removeRuntimeBatch(batchId: string): boolean {
+    const index = this.batches.findIndex(b => b.id === batchId)
+    if (index !== -1) {
+      const removedBatch = this.batches.splice(index, 1)[0]
+      DebugUtils.info(MODULE_NAME, 'Runtime batch removed', {
+        batchId,
+        itemId: removedBatch.itemId,
+        remainingBatches: this.batches.length
+      })
+      return true
+    }
+
+    DebugUtils.warn(MODULE_NAME, 'Runtime batch not found for removal', { batchId })
+    return false
+  }
+
+  /**
+   * Получение статистики runtime данных
+   */
+  getRuntimeDataStats() {
+    const runtimeBatches = this.batches.filter(
+      b => b.status === 'in_transit' && b.id.includes('transit-batch-')
+    )
+
+    return {
+      totalBatches: this.batches.length,
+      runtimeBatches: runtimeBatches.length,
+      activeBatches: this.batches.filter(b => b.status === 'active').length,
+      runtimeBatchIds: runtimeBatches.map(b => b.id),
+      runtimeValue: runtimeBatches.reduce((sum, b) => sum + b.currentQuantity * b.costPerUnit, 0)
+    }
+  }
+
+  /**
+   * Отладочная информация
+   */
+  getDebugInfo() {
+    return {
+      initialized: this.initialized,
+      dataStats: {
+        batches: this.batches.length,
+        operations: this.operations.length,
+        balances: this.balances.length,
+        inventories: this.inventories.length
+      },
+      runtimeStats: this.getRuntimeDataStats(),
+      batchesByStatus: {
+        active: this.batches.filter(b => b.status === 'active').length,
+        transit: this.batches.filter(b => b.status === 'in_transit').length,
+        expired: this.batches.filter(b => b.status === 'expired').length
+      }
+    }
+  }
+
   // ===========================
   // INVENTORY OPERATIONS
   // ===========================
@@ -1155,42 +1284,41 @@ export const storageService = new StorageService()
 
 if (import.meta.env.DEV) {
   ;(window as any).__STORAGE_SERVICE__ = storageService
-  ;(window as any).__TEST_STORAGE_SERVICE_INTEGRATION__ = async () => {
-    console.log('=== STORAGE SERVICE INTEGRATION TEST ===')
+  ;(window as any).__TEST_STORAGE_SERVICE_RUNTIME__ = async () => {
+    console.log('=== STORAGE SERVICE RUNTIME DATA TEST ===')
 
     try {
+      const debugInfo = storageService.getDebugInfo()
+      console.log('Current state:', debugInfo)
+
+      // Тест 1: Инициализация
       await storageService.initialize()
+      console.log('Initialization completed')
 
-      const balances = await storageService.getBalances()
-      const batches = await storageService.getBatches()
-      const operations = await storageService.getOperations()
+      // Тест 2: Runtime data stats
+      const runtimeStats = storageService.getRuntimeDataStats()
+      console.log('Runtime data stats:', runtimeStats)
 
-      console.log('✅ Service initialized successfully')
-      console.log(`📦 Balances: ${balances.length}`)
-      console.log(`🏷️ Batches: ${batches.length}`)
-      console.log(`📋 Operations: ${operations.length}`)
+      // Тест 3: Повторная инициализация (должна быть пропущена)
+      console.log('Testing double initialization...')
+      await storageService.initialize()
+      console.log('Double initialization correctly skipped')
 
-      // Тестируем несколько балансов
-      balances.slice(0, 3).forEach(balance => {
-        const productDef = mockDataCoordinator.getProductDefinition(balance.itemId)
-        console.log(`\n📦 ${balance.itemName}:`)
-        console.log(`   Stock: ${balance.totalQuantity} ${balance.unit}`)
-        console.log(`   Expected unit: ${productDef?.baseUnit}`)
-        console.log(`   ✅ Unit correct: ${balance.unit === productDef?.baseUnit}`)
-      })
-
-      return { balances, batches, operations }
+      return debugInfo
     } catch (error) {
-      console.error('❌ Integration test failed:', error)
+      console.error('Runtime test failed:', error)
       throw error
     }
   }
 
   setTimeout(() => {
-    console.log('\n🎯 UPDATED Storage Service loaded!')
-    console.log('🔧 Now using MockDataCoordinator for data')
-    console.log('📏 All operations in BASE UNITS (gram/ml/piece)')
+    console.log('\nUPDATED Storage Service with Runtime Data Preservation!')
+    console.log('Runtime transit batches are now preserved')
+    console.log('Single initialization protection added')
+    console.log('Runtime data merge instead of overwrite')
     console.log('\nAvailable commands:')
-    console.log('• window.__TEST_STORAGE_SERVICE_INTEGRATION__()')
+    console.log('• window.__TEST_STORAGE_SERVICE_RUNTIME__()')
+    console.log('• storageService.getDebugInfo()')
+    console.log('• storageService.getRuntimeDataStats()')
   }, 100)
 }
