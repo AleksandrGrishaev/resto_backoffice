@@ -33,6 +33,35 @@ export class TimeUtils {
     }
   }
 
+  /**
+   * Форматировать дату для HTML datetime-local input
+   * Возвращает формат: YYYY-MM-DDTHH:mm
+   */
+  static formatForHTMLInput(date?: string | Date): string {
+    try {
+      const dateObj = date ? (typeof date === 'string' ? new Date(date) : date) : new Date()
+
+      // Получаем компоненты даты в локальном времени
+      const year = dateObj.getFullYear()
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+      const day = String(dateObj.getDate()).padStart(2, '0')
+      const hours = String(dateObj.getHours()).padStart(2, '0')
+      const minutes = String(dateObj.getMinutes()).padStart(2, '0')
+
+      return `${year}-${month}-${day}T${hours}:${minutes}`
+    } catch (error) {
+      console.error('Error formatting date for HTML input:', error)
+      // Fallback: текущая дата
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      const hours = String(now.getHours()).padStart(2, '0')
+      const minutes = String(now.getMinutes()).padStart(2, '0')
+      return `${year}-${month}-${day}T${hours}:${minutes}`
+    }
+  }
+
   static isSameDay(date1: string | Date, date2: string | Date): boolean {
     try {
       const zonedDate1 = utcToZonedTime(

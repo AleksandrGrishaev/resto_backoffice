@@ -265,15 +265,8 @@ export function usePurchaseOrders() {
       console.log(`PurchaseOrders: Updating order ${id}`, data)
       const updatedOrder = await supplierStore.updateOrder(id, data)
 
-      // ✅ НОВОЕ: Обновляем планируемую поставку при изменении заказа
-      try {
-        await plannedDeliveryIntegration.updatePlannedDelivery(updatedOrder)
-        console.log(
-          `PurchaseOrders: Planned delivery updated for order ${updatedOrder.orderNumber}`
-        )
-      } catch (error) {
-        console.warn('PurchaseOrders: Failed to update planned delivery (non-critical):', error)
-      }
+      // ✅ УДАЛЕНО: Убираем deprecated вызов updatePlannedDelivery
+      // Транзитные batch-и создаются только при sendOrder, не при updateOrder
 
       console.log(`PurchaseOrders: Updated order ${id}`)
       return updatedOrder

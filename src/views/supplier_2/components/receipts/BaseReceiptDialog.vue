@@ -365,6 +365,8 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProductsStore } from '@/stores/productsStore'
+import { TimeUtils } from '@/utils/time'
+
 import type {
   PurchaseOrder,
   Receipt,
@@ -426,7 +428,7 @@ interface ReceiptFormItem extends ReceiptItem {
 
 const receiptForm = ref({
   receivedBy: 'Warehouse Manager',
-  deliveryDate: new Date().toISOString().slice(0, 16),
+  deliveryDate: TimeUtils.formatForHTMLInput(), // ✅ ИСПРАВЛЕНО
   notes: '',
   items: [] as ReceiptFormItem[]
 })
@@ -571,8 +573,8 @@ function setupReceiptForm() {
 
   // Заполняем основную информацию с проверками типов
   receiptForm.value.receivedBy = currentReceipt.value.receivedBy || 'Warehouse Manager'
-  receiptForm.value.deliveryDate =
-    currentReceipt.value.deliveryDate || new Date().toISOString().slice(0, 16)
+  // ✅ ИСПРАВЛЕНО: Убираем дублирование логики
+  receiptForm.value.deliveryDate = TimeUtils.formatForHTMLInput(currentReceipt.value.deliveryDate)
   receiptForm.value.notes = currentReceipt.value.notes || ''
 
   // Заполняем items
@@ -589,6 +591,7 @@ function setupReceiptForm() {
   console.log('BaseReceiptDialog: Form setup complete', {
     itemsCount: receiptForm.value.items.length,
     receivedBy: receiptForm.value.receivedBy,
+    deliveryDate: receiptForm.value.deliveryDate, // ✅ ДОБАВЛЕНО для отладки
     hasDiscrepancies: hasDiscrepancies.value
   })
 }
