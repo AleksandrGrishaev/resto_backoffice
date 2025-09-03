@@ -266,7 +266,7 @@ export function usePurchaseOrders() {
       console.log(`PurchaseOrders: Updating order ${id}`, data)
 
       // Получаем старую версию для сравнения
-      const oldOrder = state.value.orders.find(o => o.id === id)
+      const oldOrder = supplierStore.state.orders.find(o => o.id === id)
       const oldTotalAmount = oldOrder?.totalAmount || 0
 
       const updatedOrder = await supplierStore.updateOrder(id, data)
