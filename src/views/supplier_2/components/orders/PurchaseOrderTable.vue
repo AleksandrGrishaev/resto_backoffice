@@ -125,7 +125,7 @@
         </v-chip>
       </template>
 
-      <!-- ✅ ЗАМЕНЯЕМ Payment Status на Bill Status -->
+      <!-- Bill Status -->
       <template #[`item.billStatus`]="{ item }">
         <bill-status
           :bill="getBillForOrder(item)"
@@ -298,7 +298,7 @@
     </v-data-table>
 
     <!-- Order Details Dialog -->
-    <v-dialog v-model="showDetailsDialog" max-width="1000px">
+    <v-dialog v-model="showDetailsDialog" max-width="1200px">
       <v-card v-if="selectedOrder">
         <v-card-title class="d-flex align-center justify-space-between pa-4 bg-primary text-white">
           <div>
@@ -322,17 +322,6 @@
                 <v-chip size="small" :color="getStatusColor(selectedOrder.status)" variant="flat">
                   {{ getStatusText(selectedOrder.status) }}
                 </v-chip>
-              </v-col>
-
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Bill Status</div>
-                <bill-status
-                  :bill="getBillForOrder(selectedOrder)"
-                  :order-amount="selectedOrder.totalAmount"
-                  :has-shortfall="selectedOrder.hasShortfall"
-                  @show-sync-warning="handleSyncWarning(selectedOrder)"
-                  @show-shortfall="handleShortfall(selectedOrder)"
-                />
               </v-col>
 
               <v-col cols="6" md="3">
@@ -375,24 +364,273 @@
                 </div>
               </v-col>
 
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Bill Status</div>
-                <v-btn
-                  v-if="selectedOrder.billId"
-                  color="info"
-                  variant="outlined"
-                  size="small"
-                  prepend-icon="mdi-receipt"
-                  @click="viewBill(selectedOrder.billId)"
-                >
-                  View Bill
-                </v-btn>
-                <div v-else class="text-body-2 text-medium-emphasis">No bill created</div>
-              </v-col>
-
               <v-col cols="12">
                 <div class="text-subtitle-2 mb-1">Notes</div>
                 <div class="text-body-2">{{ selectedOrder.notes || 'No notes' }}</div>
+              </v-col>
+
+              <!-- Enhanced Payment Management Section -->
+              <v-col cols="12">
+                <div class="text-subtitle-2 mb-3">
+                  <v-icon icon="mdi-credit-card-outline" class="mr-2" />
+                  Payment Management
+                </div>
+
+                <!-- If no bills -->
+                <div v-if="!orderBills || orderBills.length === 0" class="no-bills-section">
+                  <v-card variant="outlined" class="pa-3">
+                    <div class="d-flex justify-space-between align-center">
+                      <div>
+                        <div class="text-body-2 text-medium-emphasis">No bills created</div>
+                        <div class="text-caption text-medium-emphasis">
+                          Create or attach a bill to manage payments
+                        </div>
+                      </div>
+                      <v-btn
+                        color="primary"
+                        variant="outlined"
+                        size="small"
+                        prepend-icon="mdi-plus"
+                        @click="createBillForOrder(selectedOrder)"
+                      >
+                        Create Bill
+                      </v-btn>
+                    </div>
+                  </v-card>
+                </div>
+
+                <!-- If bills exist -->
+                <div v-else class="bills-section">
+                  <!-- Payment Summary -->
+                  <v-card variant="tonal" class="payment-summary pa-3 mb-3">
+                    <v-row dense>
+                      <v-col cols="6" md="3">
+                        <div class="text-caption text-medium-emphasis">Bills</div>
+                        <div class="text-subtitle-1 font-weight-bold">{{ orderBills.length }}</div>
+                      </v-col>
+                      <v-col cols="6" md="3">
+                        <div class="text-caption text-medium-emphasis">Total Billed</div>
+                        <div class="text-subtitle-1 font-weight-bold">
+                          {{ formatCurrency(totalBilledAmount) }}
+                        </div>
+                      </v-col>
+                      <v-col cols="6" md="3">
+                        <div class="text-caption text-medium-emphasis">Order Amount</div>
+                        <div class="text-subtitle-1" :class="amountDifferenceClass">
+                          {{ formatCurrency(selectedOrder.totalAmount) }}
+                        </div>
+                      </v-col>
+                      <v-col cols="6" md="3">
+                        <div class="text-caption text-medium-emphasis">Payment Status</div>
+                        <v-chip
+                          :color="getPaymentStatusColor(paymentStatus)"
+                          size="small"
+                          variant="flat"
+                        >
+                          {{ getPaymentStatusText(paymentStatus) }}
+                        </v-chip>
+                      </v-col>
+                    </v-row>
+
+                    <!-- Amount mismatch warning -->
+                    <v-alert
+                      v-if="hasAmountMismatch"
+                      :type="amountDifference > 0 ? 'warning' : 'error'"
+                      variant="tonal"
+                      density="compact"
+                      class="mt-3"
+                    >
+                      <div class="d-flex align-center">
+                        <v-icon
+                          :icon="amountDifference > 0 ? 'mdi-alert-circle' : 'mdi-alert'"
+                          class="mr-2"
+                        />
+                        <span class="text-caption">
+                          Amount mismatch: {{ formatCurrency(Math.abs(amountDifference)) }}
+                          {{ amountDifference > 0 ? 'over-billed' : 'under-billed' }}
+                        </span>
+                      </div>
+                    </v-alert>
+                  </v-card>
+
+                  <!-- Detailed Bills List -->
+                  <v-card variant="outlined">
+                    <v-card-title class="d-flex justify-space-between align-center pa-3">
+                      <span class="text-subtitle-1">
+                        Associated Bills ({{ orderBills.length }})
+                      </span>
+                      <div class="d-flex gap-2">
+                        <v-btn
+                          color="primary"
+                          variant="text"
+                          size="small"
+                          prepend-icon="mdi-link"
+                          @click="attachExistingBill(selectedOrder)"
+                        >
+                          Attach Bill
+                        </v-btn>
+                        <v-btn
+                          color="primary"
+                          variant="text"
+                          size="small"
+                          prepend-icon="mdi-plus"
+                          @click="createBillForOrder(selectedOrder)"
+                        >
+                          Create New
+                        </v-btn>
+                      </div>
+                    </v-card-title>
+
+                    <v-divider />
+
+                    <v-card-text class="pa-0">
+                      <div v-for="(bill, index) in orderBills" :key="bill.id" class="bill-item">
+                        <div class="pa-3" :class="{ 'border-b': index < orderBills.length - 1 }">
+                          <div class="d-flex justify-space-between align-center">
+                            <!-- Bill Information -->
+                            <div class="bill-info flex-grow-1">
+                              <div class="d-flex align-center mb-1">
+                                <v-chip
+                                  :color="getStatusColor(bill.status)"
+                                  size="x-small"
+                                  variant="flat"
+                                  class="mr-2"
+                                >
+                                  {{ getStatusText(bill.status) }}
+                                </v-chip>
+                                <div class="text-body-1 font-weight-medium">
+                                  {{ bill.description }}
+                                </div>
+                              </div>
+
+                              <div class="text-caption text-medium-emphasis mb-1">
+                                ID: {{ bill.id.slice(-8) }} | Invoice:
+                                {{ bill.invoiceNumber || 'N/A' }} | Priority: {{ bill.priority }}
+                              </div>
+
+                              <div v-if="bill.dueDate" class="text-caption text-medium-emphasis">
+                                Due: {{ formatDate(bill.dueDate) }}
+                                <span
+                                  v-if="isOverdue(bill.dueDate)"
+                                  class="text-error font-weight-bold ml-1"
+                                >
+                                  (OVERDUE)
+                                </span>
+                              </div>
+                            </div>
+
+                            <!-- Amount -->
+                            <div class="bill-amount text-right mr-3">
+                              <div class="text-h6 font-weight-bold">
+                                {{ formatCurrency(bill.amount) }}
+                              </div>
+                              <div
+                                v-if="bill.lastAmountUpdate"
+                                class="text-caption text-medium-emphasis"
+                              >
+                                Updated: {{ formatDate(bill.lastAmountUpdate) }}
+                              </div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="bill-actions d-flex gap-1">
+                              <v-tooltip text="View Bill Details">
+                                <template #activator="{ props: tooltipProps }">
+                                  <v-btn
+                                    v-bind="tooltipProps"
+                                    icon="mdi-eye"
+                                    variant="text"
+                                    size="small"
+                                    color="info"
+                                    @click="viewBill(bill.id)"
+                                  />
+                                </template>
+                              </v-tooltip>
+
+                              <v-tooltip text="Process Payment">
+                                <template #activator="{ props: tooltipProps }">
+                                  <v-btn
+                                    v-if="bill.status === 'pending'"
+                                    v-bind="tooltipProps"
+                                    icon="mdi-credit-card"
+                                    variant="text"
+                                    size="small"
+                                    color="success"
+                                    @click="processPayment(bill.id)"
+                                  />
+                                </template>
+                              </v-tooltip>
+
+                              <v-tooltip text="Detach from Order">
+                                <template #activator="{ props: tooltipProps }">
+                                  <v-btn
+                                    v-if="bill.status === 'pending'"
+                                    v-bind="tooltipProps"
+                                    icon="mdi-link-off"
+                                    variant="text"
+                                    size="small"
+                                    color="warning"
+                                    @click="detachBillFromOrder(bill.id)"
+                                  />
+                                </template>
+                              </v-tooltip>
+
+                              <v-menu>
+                                <template #activator="{ props: menuProps }">
+                                  <v-btn
+                                    v-bind="menuProps"
+                                    icon="mdi-dots-vertical"
+                                    variant="text"
+                                    size="small"
+                                    color="grey"
+                                  />
+                                </template>
+
+                                <v-list density="compact">
+                                  <v-list-item
+                                    prepend-icon="mdi-pencil"
+                                    title="Edit Amount"
+                                    @click="editBillAmount(bill)"
+                                  />
+                                  <v-list-item
+                                    v-if="bill.status === 'pending'"
+                                    prepend-icon="mdi-cancel"
+                                    title="Cancel Bill"
+                                    @click="cancelBill(bill.id)"
+                                  />
+                                </v-list>
+                              </v-menu>
+                            </div>
+                          </div>
+
+                          <!-- Amount History (collapsible) -->
+                          <div
+                            v-if="bill.amountHistory?.length && showBillHistory[bill.id]"
+                            class="mt-2"
+                          >
+                            <v-divider class="mb-2" />
+                            <div class="text-caption text-medium-emphasis mb-1">
+                              Amount History:
+                            </div>
+                            <div class="history-items">
+                              <div
+                                v-for="change in bill.amountHistory.slice(-3)"
+                                :key="change.timestamp"
+                                class="d-flex justify-space-between text-caption py-1"
+                              >
+                                <span>{{ change.reason }}</span>
+                                <span>
+                                  {{ formatCurrency(change.oldAmount) }} →
+                                  {{ formatCurrency(change.newAmount) }}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                </div>
               </v-col>
             </v-row>
           </div>
@@ -476,10 +714,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import type { PurchaseOrder, OrderFilters } from '@/stores/supplier_2/types'
+import type { PendingPayment } from '@/stores/account/types'
 import BillStatus from './BillStatus.vue'
+
 // =============================================
 // PROPS & EMITS
 // =============================================
@@ -493,8 +733,13 @@ interface Emits {
   (e: 'edit-order', order: PurchaseOrder): void
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
-  (e: 'manage-bill', order: PurchaseOrder): void // ✅ НОВОЕ СОБЫТИЕ
-  (e: 'show-shortfall', order: PurchaseOrder): void // ✅ НОВОЕ СОБЫТИЕ
+  (e: 'manage-bill', order: PurchaseOrder): void
+  (e: 'show-shortfall', order: PurchaseOrder): void
+  (e: 'view-bill', billId: string): void
+  (e: 'process-payment', billId: string): void
+  (e: 'detach-bill', billId: string): void
+  (e: 'edit-bill', billId: string): void
+  (e: 'cancel-bill', billId: string): void
 }
 
 const props = defineProps<Props>()
@@ -527,6 +772,10 @@ const showDetailsDialog = ref(false)
 const selectedOrder = ref<PurchaseOrder | null>(null)
 const searchQuery = ref('')
 
+// New state for bill management
+const orderBills = ref<PendingPayment[]>([])
+const showBillHistory = ref<Record<string, boolean>>({})
+
 // =============================================
 // TABLE CONFIGURATION
 // =============================================
@@ -535,7 +784,7 @@ const headers = [
   { title: 'Order #', key: 'orderNumber', sortable: true, width: '140px' },
   { title: 'Supplier', key: 'supplierName', sortable: true, width: '180px' },
   { title: 'Status', key: 'status', sortable: true, width: '120px' },
-  { title: 'Bill Status', key: 'billStatus', sortable: false, width: '220px' }, // ✅ ЗАМЕНЯЕМ Payment
+  { title: 'Bill Status', key: 'billStatus', sortable: false, width: '220px' },
   { title: 'Items', key: 'itemsCount', sortable: false, width: '80px', align: 'center' },
   { title: 'Total', key: 'totalAmount', sortable: true, width: '120px', align: 'end' },
   { title: 'Order Date', key: 'orderDate', sortable: true, width: '140px' },
@@ -582,7 +831,7 @@ const supplierOptions = computed(() => {
 })
 
 // =============================================
-// COMPUTED
+// COMPUTED PROPERTIES
 // =============================================
 
 const filteredOrders = computed(() => {
@@ -593,7 +842,7 @@ const filteredOrders = computed(() => {
     filtered = filtered.filter(order => order.status === filters.value.status)
   }
 
-  // ✅ НОВАЯ ЛОГИКА: фильтрация по статусу счета
+  // Bill status filtering
   if (filters.value.billStatus && filters.value.billStatus !== 'all') {
     filtered = filtered.filter(order => {
       const bill = getBillForOrder(order)
@@ -620,6 +869,37 @@ const filteredOrders = computed(() => {
   }
 
   return filtered
+})
+
+// =============================================
+// COMPUTED PROPERTIES FOR BILL MANAGEMENT
+// =============================================
+
+const totalBilledAmount = computed(() =>
+  orderBills.value.reduce((sum, bill) => sum + bill.amount, 0)
+)
+
+const amountDifference = computed(
+  () => totalBilledAmount.value - (selectedOrder.value?.totalAmount || 0)
+)
+
+const hasAmountMismatch = computed(() => Math.abs(amountDifference.value) > 1)
+
+const amountDifferenceClass = computed(() => {
+  if (!hasAmountMismatch.value) return ''
+  return amountDifference.value > 0 ? 'text-warning' : 'text-error'
+})
+
+const paymentStatus = computed(() => {
+  if (!orderBills.value.length) return 'not_billed'
+
+  const completedBills = orderBills.value.filter(bill => bill.status === 'completed')
+  const totalPaid = completedBills.reduce((sum, bill) => sum + bill.amount, 0)
+  const totalBilled = totalBilledAmount.value
+
+  if (totalPaid === 0) return 'pending'
+  if (totalPaid < totalBilled) return 'partial'
+  return 'paid'
 })
 
 // =============================================
@@ -663,11 +943,138 @@ function exportOrder(order: PurchaseOrder) {
 
 function viewBill(billId: string) {
   console.log('View bill:', billId)
-  // TODO: Integrate with AccountStore
+  emits('view-bill', billId)
 }
 
 function canStartReceipt(order: PurchaseOrder): boolean {
   return canReceiveOrder(order) && isReadyForReceipt(order)
+}
+
+function deleteOrder(order: PurchaseOrder) {
+  console.log('Delete order:', order.id)
+  // TODO: Implement delete functionality
+}
+
+function cancelOrder(order: PurchaseOrder) {
+  console.log('Cancel order:', order.id)
+  // TODO: Implement cancel functionality
+}
+
+// =============================================
+// BILL MANAGEMENT METHODS
+// =============================================
+
+/**
+ * Load bills for the current order
+ */
+async function loadOrderBills(order: PurchaseOrder) {
+  if (!order) {
+    orderBills.value = []
+    return
+  }
+
+  try {
+    const { supplierAccountIntegration } = await import(
+      '@/stores/supplier_2/integrations/accountIntegration'
+    )
+    orderBills.value = await supplierAccountIntegration.getBillsForOrder(order.id)
+
+    console.log(`Loaded ${orderBills.value.length} bills for order ${order.orderNumber}`)
+  } catch (error) {
+    console.error('Failed to load order bills:', error)
+    orderBills.value = []
+  }
+}
+
+/**
+ * Get bill for order (temporary stub)
+ */
+function getBillForOrder(order: PurchaseOrder) {
+  if (!order.billId) return null
+
+  // Mock data for demonstration
+  return {
+    id: order.billId,
+    amount: order.totalAmount || 0,
+    paidAmount: 0,
+    status: 'pending'
+  }
+}
+
+/**
+ * Handle sync warning
+ */
+function handleSyncWarning(order: PurchaseOrder): void {
+  emits('manage-bill', order)
+}
+
+/**
+ * Handle shortfall
+ */
+function handleShortfall(order: PurchaseOrder): void {
+  emits('show-shortfall', order)
+}
+
+/**
+ * Create bill for order
+ */
+function createBillForOrder(order: PurchaseOrder) {
+  console.log('Creating bill for order:', order.orderNumber)
+  emits('manage-bill', order)
+}
+
+/**
+ * Attach existing bill to order
+ */
+function attachExistingBill(order: PurchaseOrder) {
+  console.log('Attaching existing bill to order:', order.orderNumber)
+  emits('manage-bill', order)
+}
+
+/**
+ * Process payment for bill
+ */
+function processPayment(billId: string) {
+  console.log('Processing payment for bill:', billId)
+  emits('process-payment', billId)
+}
+
+/**
+ * Detach bill from order
+ */
+function detachBillFromOrder(billId: string) {
+  console.log('Detaching bill from order:', billId)
+  emits('detach-bill', billId)
+}
+
+/**
+ * Edit bill amount
+ */
+function editBillAmount(bill: PendingPayment) {
+  console.log('Editing bill amount:', bill.id)
+  emits('edit-bill', bill.id)
+}
+
+/**
+ * Cancel bill
+ */
+function cancelBill(billId: string) {
+  console.log('Cancelling bill:', billId)
+  emits('cancel-bill', billId)
+}
+
+/**
+ * Toggle bill history display
+ */
+function toggleBillHistory(billId: string) {
+  showBillHistory.value[billId] = !showBillHistory.value[billId]
+}
+
+/**
+ * Check if bill is overdue
+ */
+function isOverdue(dueDate: string): boolean {
+  return new Date(dueDate) < new Date()
 }
 
 // =============================================
@@ -679,7 +1086,10 @@ function getStatusText(status: string): string {
     draft: 'Draft',
     sent: 'Sent',
     delivered: 'Delivered',
-    cancelled: 'Cancelled'
+    cancelled: 'Cancelled',
+    pending: 'Pending',
+    processing: 'Processing',
+    completed: 'Completed'
   }
   return statusMap[status] || status
 }
@@ -723,48 +1133,52 @@ function formatDate(dateString: string): string {
   })
 }
 
-function deleteOrder(order: PurchaseOrder) {
-  console.log('Delete order:', order.id)
-  // TODO: Implement delete functionality
-}
-
-function cancelOrder(order: PurchaseOrder) {
-  console.log('Cancel order:', order.id)
-  // TODO: Implement cancel functionality
-}
-
-// =============================================
-// BILL MANAGEMENT METHODS
-// =============================================
-
-/**
- * Получить счет для заказа (временная заглушка)
- */
-function getBillForOrder(order: PurchaseOrder) {
-  if (!order.billId) return null
-
-  // Мок-данные для демонстрации
-  return {
-    id: order.billId,
-    amount: order.totalAmount || 0,
-    paidAmount: 0,
-    status: 'pending'
+function getPaymentStatusColor(status: string): string {
+  switch (status) {
+    case 'not_billed':
+      return 'grey'
+    case 'pending':
+      return 'warning'
+    case 'partial':
+      return 'info'
+    case 'paid':
+      return 'success'
+    default:
+      return 'grey'
   }
 }
 
-/**
- * Обработка предупреждения о рассинхронизации
- */
-function handleSyncWarning(order: PurchaseOrder): void {
-  emits('manage-bill', order)
+function getPaymentStatusText(status: string): string {
+  switch (status) {
+    case 'not_billed':
+      return 'Not Billed'
+    case 'pending':
+      return 'Pending Payment'
+    case 'partial':
+      return 'Partially Paid'
+    case 'paid':
+      return 'Fully Paid'
+    default:
+      return status
+  }
 }
 
-/**
- * Обработка недопоставки
- */
-function handleShortfall(order: PurchaseOrder): void {
-  emits('show-shortfall', order)
-}
+// =============================================
+// WATCHERS
+// =============================================
+
+// Load bills when order details dialog opens
+watch(
+  () => selectedOrder.value,
+  order => {
+    if (order) {
+      loadOrderBills(order)
+    } else {
+      orderBills.value = []
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style lang="scss" scoped>
@@ -772,6 +1186,36 @@ function handleShortfall(order: PurchaseOrder): void {
   .v-data-table {
     border-radius: 8px;
   }
+}
+
+.bills-section {
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.payment-summary {
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+.bill-item:not(:last-child) {
+  border-bottom: 1px solid rgb(var(--v-theme-outline-variant));
+}
+
+.bill-info {
+  min-width: 0; /* Allows text to shrink */
+}
+
+.bill-actions {
+  flex-shrink: 0;
+}
+
+.history-items {
+  max-height: 120px;
+  overflow-y: auto;
+  background: rgb(var(--v-theme-surface));
+  border-radius: 4px;
+  padding: 8px;
 }
 
 .border-b {
@@ -832,6 +1276,20 @@ function handleShortfall(order: PurchaseOrder): void {
       padding: 8px 4px;
       font-size: 0.8rem;
     }
+  }
+
+  .payment-summary .v-row {
+    text-align: center;
+  }
+
+  .bill-item {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .bill-actions {
+    justify-content: center;
+    margin-top: 8px;
   }
 }
 </style>

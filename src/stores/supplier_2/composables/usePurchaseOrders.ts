@@ -148,9 +148,59 @@ export function usePurchaseOrders() {
   /**
    * Create order from supplier basket - ИСПРАВЛЕННАЯ ВЕРСИЯ
    */
+  // ✅ ИСПРАВЛЕНИЕ 1: Убираем автоматическое создание счетов
+  // Файл: src/stores/supplier_2/composables/usePurchaseOrders.ts
+
+  // ЗАМЕНИТЬ функцию createOrder:
+  async function createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
+    try {
+      console.log('PurchaseOrders: Creating order', data)
+      const newOrder = await supplierStore.createOrder(data)
+
+      // ✅ ОСТАВЛЯЕМ: Создаем планируемую поставку в StorageStore
+      try {
+        await plannedDeliveryIntegration.createPlannedDelivery(newOrder)
+        console.log(`PurchaseOrders: Planned delivery created for order ${newOrder.orderNumber}`)
+      } catch (error) {
+        console.warn('PurchaseOrders: Failed to create planned delivery (non-critical):', error)
+        // Не прерываем создание заказа из-за ошибки интеграции
+      }
+
+      // ❌ УБИРАЕМ: await createBillInAccountStore(newOrder)
+      // Теперь счета создаются только вручную через UI
+
+      console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
+      console.log(`PurchaseOrders: Bill can be created manually via UI`)
+      return newOrder
+    } catch (error) {
+      console.error('PurchaseOrders: Error creating order:', error)
+      throw error
+    }
+  }
+
+  // ТАКЖЕ ЗАМЕНИТЬ функцию sendOrderToSupplier:
+  async function sendOrderToSupplier(id: string): Promise<PurchaseOrder> {
+    try {
+      console.log(`PurchaseOrders: Sending order to supplier ${id}`)
+
+      // Обновляем статус на 'sent'
+      const updatedOrder = await updateOrder(id, { status: 'sent' })
+
+      // ❌ УБИРАЕМ автоматическое создание счета при отправке
+      // Теперь счета создаются только через UI диалог
+      console.log(`PurchaseOrders: Order sent. Bill can be created via manage payment dialog`)
+
+      return updatedOrder
+    } catch (error) {
+      console.error('PurchaseOrders: Error sending order to supplier:', error)
+      throw error
+    }
+  }
+
+  // ЗАМЕНИТЬ функцию createOrderFromBasket:
   async function createOrderFromBasket(basket: SupplierBasket): Promise<PurchaseOrder> {
     if (!basket.supplierId) {
-      throw new Error('Cannot create order from unassigned basket')
+      throw new Error('Supplier not selected')
     }
 
     if (basket.items.length === 0) {
@@ -183,9 +233,9 @@ export function usePurchaseOrders() {
       // ИСПРАВЛЕНИЕ 2: Проверяем - нужно ли обновлять статус заявок
       await updateRequestsStatusConditionally(requestIds, basket.items)
 
-      // ✅ ИЗМЕНЕНО: Создаем счет только для draft заказов (будет создан при отправке)
+      // ❌ УБИРАЕМ автоматическое создание счета
       console.log(`PurchaseOrders: Order created successfully`, newOrder.orderNumber)
-      console.log(`PurchaseOrders: Bill will be created when order is sent to supplier`)
+      console.log(`PurchaseOrders: Payment can be managed via UI after order creation`)
 
       return newOrder
     } catch (error) {
@@ -240,7 +290,7 @@ export function usePurchaseOrders() {
       console.log('PurchaseOrders: Creating order', data)
       const newOrder = await supplierStore.createOrder(data)
 
-      // ✅ НОВОЕ: Создаем планируемую поставку в StorageStore
+      // ✅ ОСТАВЛЯЕМ: Создаем планируемую поставку в StorageStore
       try {
         await plannedDeliveryIntegration.createPlannedDelivery(newOrder)
         console.log(`PurchaseOrders: Planned delivery created for order ${newOrder.orderNumber}`)
@@ -249,8 +299,11 @@ export function usePurchaseOrders() {
         // Не прерываем создание заказа из-за ошибки интеграции
       }
 
-      await createBillInAccountStore(newOrder)
+      // ❌ УБИРАЕМ: await createBillInAccountStore(newOrder)
+      // Теперь счета создаются только вручную через UI
+
       console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
+      console.log(`PurchaseOrders: Bill can be created manually via UI`)
       return newOrder
     } catch (error) {
       console.error('PurchaseOrders: Error creating order:', error)
@@ -298,27 +351,9 @@ export function usePurchaseOrders() {
       // Обновляем статус на 'sent'
       const updatedOrder = await updateOrder(id, { status: 'sent' })
 
-      // ✅ НОВОЕ: Создаем счет при отправке заказа
-      if (updatedOrder.status === 'sent' && !updatedOrder.billId) {
-        const { supplierAccountIntegration } = await import('../integrations/accountIntegration')
-        const bill = await supplierAccountIntegration.createBillFromOrder(updatedOrder)
-
-        // Обновляем заказ с billId
-        const orderWithBill = await supplierStore.updateOrder(id, {
-          billId: bill.id,
-          paymentStatus: 'pending'
-        })
-
-        // Обновляем в state
-        const index = state.value.orders.findIndex(o => o.id === id)
-        if (index !== -1) {
-          state.value.orders[index] = orderWithBill
-        }
-
-        console.log(`PurchaseOrders: Bill created for order ${id}`, bill.id)
-
-        return orderWithBill
-      }
+      // ❌ УБИРАЕМ автоматическое создание счета при отправке
+      // Теперь счета создаются только через UI диалог
+      console.log(`PurchaseOrders: Order sent. Bill can be created via manage payment dialog`)
 
       return updatedOrder
     } catch (error) {

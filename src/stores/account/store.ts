@@ -508,6 +508,87 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  // 1. Добавить новый метод getPaymentsByPurchaseOrder:
+  async function getPaymentsByPurchaseOrder(purchaseOrderId: string): Promise<PendingPayment[]> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Getting payments by purchase order', { purchaseOrderId })
+
+      // Обеспечиваем актуальные данные
+      await fetchPayments()
+
+      const payments = state.value.pendingPayments.filter(
+        payment => payment.purchaseOrderId === purchaseOrderId
+      )
+
+      DebugUtils.info(MODULE_NAME, 'Found payments for purchase order', {
+        purchaseOrderId,
+        count: payments.length
+      })
+
+      return payments
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get payments by purchase order', { error })
+      return []
+    }
+  }
+
+  // 2. Добавить метод для обновления привязки к заказу:
+  async function updatePaymentOrderLink(paymentId: string, purchaseOrderId: string | null) {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Updating payment order link', { paymentId, purchaseOrderId })
+
+      // Находим платеж в state
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (!payment) {
+        throw new Error('Payment not found')
+      }
+
+      // Оптимистическое обновление
+      payment.purchaseOrderId = purchaseOrderId || undefined
+      payment.updatedAt = new Date().toISOString()
+
+      // TODO: Добавить вызов API для обновления на сервере
+      // await paymentService.updatePaymentOrderLink(paymentId, purchaseOrderId)
+
+      DebugUtils.info(MODULE_NAME, 'Payment order link updated successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment order link', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  // 3. Добавить метод для отвязки счета от заказа:
+  async function detachPaymentFromOrder(paymentId: string) {
+    try {
+      await updatePaymentOrderLink(paymentId, null)
+      DebugUtils.info(MODULE_NAME, 'Payment detached from order successfully', { paymentId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to detach payment from order', { error })
+      throw error
+    }
+  }
+
+  // 4. Добавить метод для привязки счета к заказу:
+  async function attachPaymentToOrder(paymentId: string, purchaseOrderId: string) {
+    try {
+      await updatePaymentOrderLink(paymentId, purchaseOrderId)
+      DebugUtils.info(MODULE_NAME, 'Payment attached to order successfully', {
+        paymentId,
+        purchaseOrderId
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to attach payment to order', { error })
+      throw error
+    }
+  }
+
+  // 5. Добавить computed для платежей без привязки к заказам:
+  const unlinkedPayments = computed(() =>
+    state.value.pendingPayments.filter(payment => !payment.purchaseOrderId)
+  )
+
   async function updatePaymentPriority(paymentId: string, priority: PendingPayment['priority']) {
     try {
       clearError()
@@ -606,6 +687,14 @@ export const useAccountStore = defineStore('account', () => {
     // Other
     updatePaymentAmount,
     getPaymentsByPurchaseOrder,
-    getPaymentById
+    getPaymentById,
+    // ✅ НОВЫЕ методы для работы с заказами:
+    getPaymentsByPurchaseOrder,
+    updatePaymentOrderLink,
+    detachPaymentFromOrder,
+    attachPaymentToOrder,
+
+    // ✅ НОВЫЕ computed:
+    unlinkedPayments
   }
 })

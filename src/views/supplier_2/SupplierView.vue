@@ -206,11 +206,12 @@
       v-model:open="showPaymentDialog"
       :mode="paymentDialogMode"
       :order-data="selectedOrderForBill"
-      :current-bill="getCurrentBill(selectedOrderForBill)"
-      :available-bills="getAvailableBills(selectedOrderForBill?.supplierId)"
+      :linked-bills="linkedBills"
+      :available-bills="availableBills"
       @create-bill="handleCreateBill"
       @attach-bill="handleAttachBill"
       @detach-bill="handleDetachBill"
+      @view-bill="handleViewBill"
       @process-payment="handleProcessPayment"
     />
 
@@ -219,7 +220,7 @@
       v-if="shortfallData"
       :show="showShortfallAlert"
       :shortfall-amount="shortfallData.amount"
-      :paid-amount="getCurrentBill(shortfallData.order)?.paidAmount"
+      :paid-amount="getOrderPaidAmount(shortfallData.order)"
       :delivered-amount="shortfallData.order.actualDeliveredAmount"
       @dismiss="showShortfallAlert = false"
       @create-credit-note="handleCreateCreditNote"
@@ -278,6 +279,12 @@ import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcurementRequests'
 import type { ProcurementRequest, PurchaseOrder, Receipt } from '@/stores/supplier_2/types'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
+import { useAccountStore } from '@/stores/account'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.store'
+
+// Types
+import type { PendingPayment } from '@/stores/account/types'
 
 // Components
 import BaseOrderAssistant from './components/shared/BaseOrderAssistant.vue'
@@ -302,6 +309,9 @@ const supplierStore = useSupplierStore()
 const { completeReceipt } = useReceipts()
 const { submitRequest, updateRequest, canEditRequest, canDeleteRequest } = useProcurementRequests()
 const { sendOrder, updateOrder, canEditOrder, canSendOrder } = usePurchaseOrders()
+const accountStore = useAccountStore()
+const router = useRouter()
+const authStore = useAuthStore()
 // =============================================
 // STATE
 // =============================================
@@ -325,6 +335,8 @@ const paymentDialogMode = ref<'create' | 'view' | 'attach'>('create')
 const selectedOrderForBill = ref<PurchaseOrder | null>(null)
 const showShortfallAlert = ref(false)
 const shortfallData = ref<{ order: PurchaseOrder; amount: number } | null>(null)
+const linkedBills = ref<PendingPayment[]>([])
+const availableBills = ref<PendingPayment[]>([])
 
 // Selected items for operations
 const selectedRequestIds = ref<string[]>([])
@@ -338,6 +350,21 @@ const highlightedOrderId = ref<string | null>(null)
 // =============================================
 // COMPUTED - Безопасные computed свойства
 // =============================================
+
+const totalBilledAmount = computed(() =>
+  linkedBills.value.reduce((sum, bill) => sum + bill.amount, 0)
+)
+
+const amountDifference = computed(
+  () => totalBilledAmount.value - (selectedOrderForBill.value?.totalAmount || 0)
+)
+
+const hasAmountMismatch = computed(() => Math.abs(amountDifference.value) > 1)
+
+const amountDifferenceClass = computed(() => {
+  if (!hasAmountMismatch.value) return ''
+  return amountDifference.value > 0 ? 'text-warning' : 'text-error'
+})
 
 const requestsArray = computed(() => {
   return Array.isArray(supplierStore.state.requests) ? supplierStore.state.requests : []
@@ -573,25 +600,49 @@ async function handleSaveEditedRequest(editedRequest: ProcurementRequest) {
 // EVENT HANDLERS - bills
 // =============================================
 
-function handleManageBill(order: PurchaseOrder): void {
-  console.log(`${MODULE_NAME}: Managing bill for order`, order.orderNumber)
-  selectedOrderForBill.value = order
+async function handleManageBill(order: PurchaseOrder): Promise<void> {
+  console.log(`${MODULE_NAME}: Managing bills for order`, order.orderNumber)
 
-  // Определяем режим диалога
-  if (order.billId) {
-    paymentDialogMode.value = 'view'
-  } else {
-    paymentDialogMode.value = 'create'
+  try {
+    // ✅ ЗАГРУЖАЕМ ОБА списка перед открытием диалога
+    const [linked, available] = await Promise.all([
+      getLinkedBills(order),
+      getAvailableBills(order.supplierId)
+    ])
+
+    linkedBills.value = linked
+    availableBills.value = available
+    selectedOrderForBill.value = order
+
+    // Определяем режим диалога
+    if (linkedBills.value.length > 0) {
+      paymentDialogMode.value = 'view'
+    } else {
+      paymentDialogMode.value = 'create'
+    }
+
+    showPaymentDialog.value = true
+  } catch (error) {
+    console.error('Failed to load bills for order:', error)
+    handleError('Failed to load payment information')
   }
+}
 
-  showPaymentDialog.value = true
+async function refreshAvailableBills(): Promise<void> {
+  if (selectedOrderForBill.value) {
+    try {
+      availableBills.value = await getAvailableBills(selectedOrderForBill.value.supplierId)
+    } catch (error) {
+      console.error('Failed to refresh available bills:', error)
+    }
+  }
 }
 
 function handleShowShortfall(order: PurchaseOrder): void {
   console.log(`${MODULE_NAME}: Showing shortfall for order`, order.orderNumber)
 
-  // Рассчитываем сумму недопоставки
-  const paidAmount = getCurrentBill(order)?.paidAmount || 0
+  // ✅ ИСПОЛЬЗУЕМ linkedBills вместо getCurrentBill
+  const paidAmount = getOrderPaidAmount(order)
   const deliveredAmount = order.actualDeliveredAmount || 0
   const shortfallAmount = paidAmount - deliveredAmount
 
@@ -599,31 +650,71 @@ function handleShowShortfall(order: PurchaseOrder): void {
   showShortfallAlert.value = true
 }
 
+// ✅ НОВАЯ функция вместо getCurrentBill:
+function getOrderPaidAmount(order: PurchaseOrder): number {
+  // Ищем счета для этого заказа в linkedBills или через integration
+  return 0 // TODO: Рассчитать из транзакций, пока 0
+}
+
+// УБРАТЬ функции getCurrentBill и getAvailableBills - они заменены на:
+// - linkedBills state
+// - availableBills state
+// - getLinkedBills() method
+// - getAvailableBills() method
+
+// ✅ ДОБАВИТЬ функцию обновления списков:
+async function refreshBillsData(): Promise<void> {
+  if (selectedOrderForBill.value) {
+    try {
+      linkedBills.value = await getLinkedBills(selectedOrderForBill.value)
+      availableBills.value = await getAvailableBills(selectedOrderForBill.value.supplierId)
+    } catch (error) {
+      console.error('Failed to refresh bills data:', error)
+    }
+  }
+}
+
 // =============================================
 // PAYMENT MANAGEMENT METHODS
 // =============================================
 
-function getCurrentBill(order: PurchaseOrder | null) {
-  if (!order?.billId) return null
+async function getLinkedBills(order: PurchaseOrder | null): Promise<PendingPayment[]> {
+  if (!order) return []
 
-  // TODO: Интеграция с accountStore
-  // Временная заглушка
-  return {
-    id: order.billId,
-    amount: order.totalAmount || 0,
-    paidAmount: 0,
-    status: 'pending',
-    description: `Bill for ${order.orderNumber}`,
-    amountHistory: []
+  try {
+    // ✅ РЕАЛЬНАЯ ИНТЕГРАЦИЯ с AccountStore
+    await accountStore.fetchPayments()
+
+    // Получаем все счета, связанные с этим заказом
+    const bills = accountStore.state.pendingPayments.filter(
+      payment => payment.purchaseOrderId === order.id
+    )
+
+    console.log(`Found ${bills.length} bills for order ${order.orderNumber}`)
+    return bills
+  } catch (error) {
+    console.error('Failed to get linked bills:', error)
+    return []
   }
 }
 
-function getAvailableBills(supplierId: string | undefined) {
+async function getAvailableBills(supplierId: string | undefined): Promise<PendingPayment[]> {
   if (!supplierId) return []
 
-  // TODO: Интеграция с accountStore
-  // Временная заглушка - список доступных счетов поставщика
-  return []
+  try {
+    await accountStore.fetchPayments()
+
+    // Получаем неприкрепленные счета этого поставщика
+    return accountStore.state.pendingPayments.filter(
+      payment =>
+        payment.counteragentId === supplierId &&
+        payment.status === 'pending' &&
+        !payment.purchaseOrderId // Только свободные счета
+    )
+  } catch (error) {
+    console.error('Failed to get available bills:', error)
+    return []
+  }
 }
 
 async function handleCreateBill(data: {
@@ -636,48 +727,87 @@ async function handleCreateBill(data: {
   console.log(`${MODULE_NAME}: Creating bill`, data)
 
   try {
-    // TODO: Интеграция с SupplierAccountIntegration.createBillFromOrder()
-    showSuccess(`Bill created for order ${selectedOrderForBill.value.orderNumber}`)
-    showPaymentDialog.value = false
-    selectedOrderForBill.value = null
+    const createDto = {
+      counteragentId: selectedOrderForBill.value.supplierId,
+      counteragentName: selectedOrderForBill.value.supplierName,
+      amount: data.amount,
+      description: data.description,
+      priority: data.priority as any,
+      category: 'supplier' as const,
+      invoiceNumber: selectedOrderForBill.value.orderNumber,
+      purchaseOrderId: selectedOrderForBill.value.id,
+      sourceOrderId: selectedOrderForBill.value.id,
+      autoSyncEnabled: true,
+      createdBy: {
+        type: 'user',
+        id: authStore.currentUser?.id || 'system',
+        name: authStore.currentUser?.name || 'System'
+      }
+    }
+
+    const bill = await accountStore.createPayment(createDto)
+
+    // ✅ ОБНОВЛЯЕМ состояния
+    await refreshBillsData()
+
+    showSuccess(`Bill created: ${formatCurrency(data.amount)}`)
+
+    // Переключаем в режим просмотра
+    paymentDialogMode.value = 'view'
   } catch (error) {
     console.error('Failed to create bill:', error)
     handleError('Failed to create bill')
   }
 }
-
 async function handleAttachBill(billId: string): Promise<void> {
   if (!selectedOrderForBill.value) return
 
-  console.log(
-    `${MODULE_NAME}: Attaching bill ${billId} to order`,
-    selectedOrderForBill.value.orderNumber
-  )
+  console.log(`${MODULE_NAME}: Attaching bill ${billId}`)
 
   try {
-    // TODO: Интеграция с SupplierAccountIntegration
+    // Используем метод из AccountStore
+    await accountStore.attachPaymentToOrder(billId, selectedOrderForBill.value.id)
+
+    // ✅ ОБНОВЛЯЕМ состояния
+    await refreshBillsData()
+
     showSuccess(`Bill attached to order ${selectedOrderForBill.value.orderNumber}`)
-    showPaymentDialog.value = false
-    selectedOrderForBill.value = null
+    paymentDialogMode.value = 'view'
   } catch (error) {
     console.error('Failed to attach bill:', error)
     handleError('Failed to attach bill')
   }
 }
 
+function handleViewBill(billId: string): void {
+  console.log(`${MODULE_NAME}: Viewing bill ${billId}`)
+
+  try {
+    // Навигация к детальному просмотру счета
+    router.push(`/accounts/payments/${billId}`)
+  } catch (error) {
+    console.error('Failed to navigate to bill:', error)
+    handleError('Failed to open bill details')
+  }
+}
+
 async function handleDetachBill(billId: string): Promise<void> {
   if (!selectedOrderForBill.value) return
 
-  console.log(
-    `${MODULE_NAME}: Detaching bill ${billId} from order`,
-    selectedOrderForBill.value.orderNumber
-  )
+  console.log(`${MODULE_NAME}: Detaching bill ${billId}`)
 
   try {
-    // TODO: Интеграция с SupplierAccountIntegration
-    showSuccess(`Bill detached from order ${selectedOrderForBill.value.orderNumber}`)
-    showPaymentDialog.value = false
-    selectedOrderForBill.value = null
+    await accountStore.detachPaymentFromOrder(billId)
+
+    // ✅ ОБНОВЛЯЕМ состояния
+    await refreshBillsData()
+
+    showSuccess(`Bill detached from order`)
+
+    // Если больше нет счетов, переключаемся в режим создания
+    if (linkedBills.value.length === 0) {
+      paymentDialogMode.value = 'create'
+    }
   } catch (error) {
     console.error('Failed to detach bill:', error)
     handleError('Failed to detach bill')
@@ -694,6 +824,15 @@ async function handleProcessPayment(billId: string): Promise<void> {
     console.error('Failed to process payment:', error)
     handleError('Failed to process payment')
   }
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(amount)
 }
 
 async function handleCreateCreditNote(): Promise<void> {
