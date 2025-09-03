@@ -96,9 +96,10 @@
             :loading="isLoadingValue"
             :highlighted-order-id="highlightedOrderId"
             @edit-order="handleEditOrder"
-            @view-order="handleViewOrder"
             @send-order="handleSendOrder"
             @start-receipt="handleStartReceipt"
+            @manage-bill="handleManageBill"
+            @show-shortfall="handleShowShortfall"
           />
 
           <!-- Empty State -->
@@ -200,7 +201,30 @@
         <v-btn variant="text" @click="showErrorSnackbar = false">Close</v-btn>
       </template>
     </v-snackbar>
+    <!-- Payment Management Dialog -->
+    <payment-dialog
+      v-model:open="showPaymentDialog"
+      :mode="paymentDialogMode"
+      :order-data="selectedOrderForBill"
+      :current-bill="getCurrentBill(selectedOrderForBill)"
+      :available-bills="getAvailableBills(selectedOrderForBill?.supplierId)"
+      @create-bill="handleCreateBill"
+      @attach-bill="handleAttachBill"
+      @detach-bill="handleDetachBill"
+      @process-payment="handleProcessPayment"
+    />
 
+    <!-- Shortfall Alert -->
+    <shortfall-alert
+      v-if="shortfallData"
+      :show="showShortfallAlert"
+      :shortfall-amount="shortfallData.amount"
+      :paid-amount="getCurrentBill(shortfallData.order)?.paidAmount"
+      :delivered-amount="shortfallData.order.actualDeliveredAmount"
+      @dismiss="showShortfallAlert = false"
+      @create-credit-note="handleCreateCreditNote"
+      @request-additional-payment="handleRequestAdditionalPayment"
+    />
     <!-- ✅ ИСПРАВЛЕНО: Info Dialog объявлен в template и script -->
     <v-dialog v-model="showInfoDialog" max-width="700px">
       <v-card>
@@ -265,6 +289,8 @@ import PurchaseOrderTable from './components/orders/PurchaseOrderTable.vue'
 import ReceiptTable from './components/receipts/ReceiptTable.vue'
 import RequestEditDialog from './components/procurement/RequestEditDialog.vue'
 import PurchaseOrderEditDialog from './components/orders/PurchaseOrderEditDialog.vue'
+import PaymentDialog from '../accounts/components/dialogs/PaymentDialog.vue'
+import ShortfallAlert from './components/orders/ShortfallAlert.vue'
 
 const MODULE_NAME = 'SupplierView'
 
@@ -293,6 +319,12 @@ const successMessage = ref('')
 const errorMessage = ref('')
 const showOrderEditDialog = ref(false)
 const selectedOrderForEdit = ref<PurchaseOrder | null>(null)
+// Payment Management
+const showPaymentDialog = ref(false)
+const paymentDialogMode = ref<'create' | 'view' | 'attach'>('create')
+const selectedOrderForBill = ref<PurchaseOrder | null>(null)
+const showShortfallAlert = ref(false)
+const shortfallData = ref<{ order: PurchaseOrder; amount: number } | null>(null)
 
 // Selected items for operations
 const selectedRequestIds = ref<string[]>([])
@@ -534,6 +566,171 @@ async function handleSaveEditedRequest(editedRequest: ProcurementRequest) {
   } catch (error) {
     console.error(`${MODULE_NAME}: Failed to update request`, error)
     handleError(`Failed to update request: ${error}`)
+  }
+}
+
+// =============================================
+// EVENT HANDLERS - bills
+// =============================================
+
+function handleManageBill(order: PurchaseOrder): void {
+  console.log(`${MODULE_NAME}: Managing bill for order`, order.orderNumber)
+  selectedOrderForBill.value = order
+
+  // Определяем режим диалога
+  if (order.billId) {
+    paymentDialogMode.value = 'view'
+  } else {
+    paymentDialogMode.value = 'create'
+  }
+
+  showPaymentDialog.value = true
+}
+
+function handleShowShortfall(order: PurchaseOrder): void {
+  console.log(`${MODULE_NAME}: Showing shortfall for order`, order.orderNumber)
+
+  // Рассчитываем сумму недопоставки
+  const paidAmount = getCurrentBill(order)?.paidAmount || 0
+  const deliveredAmount = order.actualDeliveredAmount || 0
+  const shortfallAmount = paidAmount - deliveredAmount
+
+  shortfallData.value = { order, amount: shortfallAmount }
+  showShortfallAlert.value = true
+}
+
+// =============================================
+// PAYMENT MANAGEMENT METHODS
+// =============================================
+
+function getCurrentBill(order: PurchaseOrder | null) {
+  if (!order?.billId) return null
+
+  // TODO: Интеграция с accountStore
+  // Временная заглушка
+  return {
+    id: order.billId,
+    amount: order.totalAmount || 0,
+    paidAmount: 0,
+    status: 'pending',
+    description: `Bill for ${order.orderNumber}`,
+    amountHistory: []
+  }
+}
+
+function getAvailableBills(supplierId: string | undefined) {
+  if (!supplierId) return []
+
+  // TODO: Интеграция с accountStore
+  // Временная заглушка - список доступных счетов поставщика
+  return []
+}
+
+async function handleCreateBill(data: {
+  amount: number
+  priority: string
+  description: string
+}): Promise<void> {
+  if (!selectedOrderForBill.value) return
+
+  console.log(`${MODULE_NAME}: Creating bill`, data)
+
+  try {
+    // TODO: Интеграция с SupplierAccountIntegration.createBillFromOrder()
+    showSuccess(`Bill created for order ${selectedOrderForBill.value.orderNumber}`)
+    showPaymentDialog.value = false
+    selectedOrderForBill.value = null
+  } catch (error) {
+    console.error('Failed to create bill:', error)
+    handleError('Failed to create bill')
+  }
+}
+
+async function handleAttachBill(billId: string): Promise<void> {
+  if (!selectedOrderForBill.value) return
+
+  console.log(
+    `${MODULE_NAME}: Attaching bill ${billId} to order`,
+    selectedOrderForBill.value.orderNumber
+  )
+
+  try {
+    // TODO: Интеграция с SupplierAccountIntegration
+    showSuccess(`Bill attached to order ${selectedOrderForBill.value.orderNumber}`)
+    showPaymentDialog.value = false
+    selectedOrderForBill.value = null
+  } catch (error) {
+    console.error('Failed to attach bill:', error)
+    handleError('Failed to attach bill')
+  }
+}
+
+async function handleDetachBill(billId: string): Promise<void> {
+  if (!selectedOrderForBill.value) return
+
+  console.log(
+    `${MODULE_NAME}: Detaching bill ${billId} from order`,
+    selectedOrderForBill.value.orderNumber
+  )
+
+  try {
+    // TODO: Интеграция с SupplierAccountIntegration
+    showSuccess(`Bill detached from order ${selectedOrderForBill.value.orderNumber}`)
+    showPaymentDialog.value = false
+    selectedOrderForBill.value = null
+  } catch (error) {
+    console.error('Failed to detach bill:', error)
+    handleError('Failed to detach bill')
+  }
+}
+
+async function handleProcessPayment(billId: string): Promise<void> {
+  console.log(`${MODULE_NAME}: Processing payment for bill ${billId}`)
+
+  try {
+    // TODO: Перенаправить в Account модуль для обработки платежа
+    showSuccess('Redirecting to payment processing - TODO: Account integration')
+  } catch (error) {
+    console.error('Failed to process payment:', error)
+    handleError('Failed to process payment')
+  }
+}
+
+async function handleCreateCreditNote(): Promise<void> {
+  if (!shortfallData.value) return
+
+  console.log(
+    `${MODULE_NAME}: Creating credit note for order`,
+    shortfallData.value.order.orderNumber
+  )
+
+  try {
+    // TODO: Интеграция с SupplierAccountIntegration.handleShortfall()
+    showSuccess(`Credit note created for ${shortfallData.value.order.orderNumber}`)
+    showShortfallAlert.value = false
+    shortfallData.value = null
+  } catch (error) {
+    console.error('Failed to create credit note:', error)
+    handleError('Failed to create credit note')
+  }
+}
+
+async function handleRequestAdditionalPayment(): Promise<void> {
+  if (!shortfallData.value) return
+
+  console.log(
+    `${MODULE_NAME}: Requesting additional payment for order`,
+    shortfallData.value.order.orderNumber
+  )
+
+  try {
+    // TODO: Создать дополнительный счет на недоплаченную сумму
+    showSuccess(`Additional payment requested for ${shortfallData.value.order.orderNumber}`)
+    showShortfallAlert.value = false
+    shortfallData.value = null
+  } catch (error) {
+    console.error('Failed to request additional payment:', error)
+    handleError('Failed to request additional payment')
   }
 }
 

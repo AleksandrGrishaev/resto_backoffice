@@ -19,9 +19,9 @@
 
           <v-col cols="12" md="2">
             <v-select
-              v-model="filters.paymentStatus"
-              :items="paymentStatusOptions"
-              label="Payment Status"
+              v-model="filters.billStatus"
+              :items="billStatusOptions"
+              label="Bill Status"
               variant="outlined"
               density="compact"
               clearable
@@ -125,27 +125,15 @@
         </v-chip>
       </template>
 
-      <!-- Payment Status -->
-      <template #[`item.paymentStatus`]="{ item }">
-        <div class="d-flex align-center">
-          <v-chip size="small" :color="getPaymentStatusColor(item.paymentStatus)" variant="tonal">
-            <v-icon :icon="getPaymentStatusIcon(item.paymentStatus)" size="14" class="mr-1" />
-            {{ getPaymentStatusText(item.paymentStatus) }}
-          </v-chip>
-
-          <!-- Bill link -->
-          <v-btn
-            v-if="item.billId"
-            icon="mdi-receipt"
-            variant="text"
-            size="x-small"
-            color="info"
-            class="ml-1"
-            @click="viewBill(item.billId)"
-          >
-            <v-tooltip activator="parent" location="top">View Bill</v-tooltip>
-          </v-btn>
-        </div>
+      <!-- ✅ ЗАМЕНЯЕМ Payment Status на Bill Status -->
+      <template #[`item.billStatus`]="{ item }">
+        <bill-status
+          :bill="getBillForOrder(item)"
+          :order-amount="item.totalAmount"
+          :has-shortfall="item.hasShortfall"
+          @show-sync-warning="handleSyncWarning(item)"
+          @show-shortfall="handleShortfall(item)"
+        />
       </template>
 
       <!-- Items Count -->
@@ -337,14 +325,14 @@
               </v-col>
 
               <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Payment</div>
-                <v-chip
-                  size="small"
-                  :color="getPaymentStatusColor(selectedOrder.paymentStatus)"
-                  variant="flat"
-                >
-                  {{ getPaymentStatusText(selectedOrder.paymentStatus) }}
-                </v-chip>
+                <div class="text-subtitle-2 mb-1">Bill Status</div>
+                <bill-status
+                  :bill="getBillForOrder(selectedOrder)"
+                  :order-amount="selectedOrder.totalAmount"
+                  :has-shortfall="selectedOrder.hasShortfall"
+                  @show-sync-warning="handleSyncWarning(selectedOrder)"
+                  @show-shortfall="handleShortfall(selectedOrder)"
+                />
               </v-col>
 
               <v-col cols="6" md="3">
@@ -491,7 +479,7 @@
 import { ref, computed } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import type { PurchaseOrder, OrderFilters } from '@/stores/supplier_2/types'
-
+import BillStatus from './BillStatus.vue'
 // =============================================
 // PROPS & EMITS
 // =============================================
@@ -505,6 +493,8 @@ interface Emits {
   (e: 'edit-order', order: PurchaseOrder): void
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
+  (e: 'manage-bill', order: PurchaseOrder): void // ✅ НОВОЕ СОБЫТИЕ
+  (e: 'show-shortfall', order: PurchaseOrder): void // ✅ НОВОЕ СОБЫТИЕ
 }
 
 const props = defineProps<Props>()
@@ -520,7 +510,6 @@ const {
   clearFilters,
   formatCurrency,
   getStatusColor,
-  getPaymentStatusColor,
   canEditOrder,
   canDeleteOrder,
   canSendOrder,
@@ -546,7 +535,7 @@ const headers = [
   { title: 'Order #', key: 'orderNumber', sortable: true, width: '140px' },
   { title: 'Supplier', key: 'supplierName', sortable: true, width: '180px' },
   { title: 'Status', key: 'status', sortable: true, width: '120px' },
-  { title: 'Payment', key: 'paymentStatus', sortable: true, width: '140px' },
+  { title: 'Bill Status', key: 'billStatus', sortable: false, width: '220px' }, // ✅ ЗАМЕНЯЕМ Payment
   { title: 'Items', key: 'itemsCount', sortable: false, width: '80px', align: 'center' },
   { title: 'Total', key: 'totalAmount', sortable: true, width: '120px', align: 'end' },
   { title: 'Order Date', key: 'orderDate', sortable: true, width: '140px' },
@@ -576,10 +565,12 @@ const statusOptions = [
   { title: 'Cancelled', value: 'cancelled' }
 ]
 
-const paymentStatusOptions = [
-  { title: 'All Payment Statuses', value: 'all' },
+const billStatusOptions = [
+  { title: 'All Bill Statuses', value: 'all' },
+  { title: 'No Bill', value: 'no_bill' },
   { title: 'Pending', value: 'pending' },
-  { title: 'Paid', value: 'paid' }
+  { title: 'Partial', value: 'processing' },
+  { title: 'Paid', value: 'completed' }
 ]
 
 const supplierOptions = computed(() => {
@@ -602,8 +593,15 @@ const filteredOrders = computed(() => {
     filtered = filtered.filter(order => order.status === filters.value.status)
   }
 
-  if (filters.value.paymentStatus && filters.value.paymentStatus !== 'all') {
-    filtered = filtered.filter(order => order.paymentStatus === filters.value.paymentStatus)
+  // ✅ НОВАЯ ЛОГИКА: фильтрация по статусу счета
+  if (filters.value.billStatus && filters.value.billStatus !== 'all') {
+    filtered = filtered.filter(order => {
+      const bill = getBillForOrder(order)
+      if (filters.value.billStatus === 'no_bill') {
+        return !bill
+      }
+      return bill?.status === filters.value.billStatus
+    })
   }
 
   if (filters.value.supplier && filters.value.supplier !== 'all') {
@@ -696,22 +694,6 @@ function getStatusIcon(status: string): string {
   return iconMap[status] || 'mdi-help-circle'
 }
 
-function getPaymentStatusText(paymentStatus: string): string {
-  const statusMap: Record<string, string> = {
-    pending: 'Pending',
-    paid: 'Paid'
-  }
-  return statusMap[paymentStatus] || paymentStatus
-}
-
-function getPaymentStatusIcon(paymentStatus: string): string {
-  const iconMap: Record<string, string> = {
-    pending: 'mdi-clock',
-    paid: 'mdi-check-circle'
-  }
-  return iconMap[paymentStatus] || 'mdi-help-circle'
-}
-
 function getItemStatusColor(status: string): string {
   const colorMap: Record<string, string> = {
     ordered: 'blue',
@@ -739,6 +721,49 @@ function formatDate(dateString: string): string {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+function deleteOrder(order: PurchaseOrder) {
+  console.log('Delete order:', order.id)
+  // TODO: Implement delete functionality
+}
+
+function cancelOrder(order: PurchaseOrder) {
+  console.log('Cancel order:', order.id)
+  // TODO: Implement cancel functionality
+}
+
+// =============================================
+// BILL MANAGEMENT METHODS
+// =============================================
+
+/**
+ * Получить счет для заказа (временная заглушка)
+ */
+function getBillForOrder(order: PurchaseOrder) {
+  if (!order.billId) return null
+
+  // Мок-данные для демонстрации
+  return {
+    id: order.billId,
+    amount: order.totalAmount || 0,
+    paidAmount: 0,
+    status: 'pending'
+  }
+}
+
+/**
+ * Обработка предупреждения о рассинхронизации
+ */
+function handleSyncWarning(order: PurchaseOrder): void {
+  emits('manage-bill', order)
+}
+
+/**
+ * Обработка недопоставки
+ */
+function handleShortfall(order: PurchaseOrder): void {
+  emits('show-shortfall', order)
 }
 </script>
 
