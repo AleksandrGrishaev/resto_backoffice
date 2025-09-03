@@ -202,16 +202,21 @@
       </template>
     </v-snackbar>
     <!-- Payment Management Dialog -->
+    <!-- Payment Management Dialog -->
     <payment-dialog
       v-model:open="showPaymentDialog"
       :mode="paymentDialogMode"
       :order-data="selectedOrderForBill"
       :linked-bills="linkedBills"
       :available-bills="availableBills"
+      :loading="paymentLoading"
+      :error="paymentError"
       @create-bill="handleCreateBill"
       @attach-bill="handleAttachBill"
       @detach-bill="handleDetachBill"
       @view-bill="handleViewBill"
+      @edit-bill="handleEditBill"
+      @navigate-to-accounts="handleNavigateToAccounts"
       @process-payment="handleProcessPayment"
     />
 
@@ -337,6 +342,8 @@ const showShortfallAlert = ref(false)
 const shortfallData = ref<{ order: PurchaseOrder; amount: number } | null>(null)
 const linkedBills = ref<PendingPayment[]>([])
 const availableBills = ref<PendingPayment[]>([])
+const paymentLoading = ref(false)
+const paymentError = ref<string | null>(null)
 
 // Selected items for operations
 const selectedRequestIds = ref<string[]>([])
@@ -454,6 +461,187 @@ function handleError(error: string | Error) {
   console.error(`${MODULE_NAME}: Error -`, message)
   errorMessage.value = message
   showErrorSnackbar.value = true
+}
+
+// =============================================
+// PAYMENT
+// =============================================
+
+/**
+ * ✅ Обработчик редактирования счета
+ */
+async function handleEditBill(billId: string): Promise<void> {
+  console.log(`${MODULE_NAME}: Editing bill ${billId}`)
+
+  try {
+    // Перенаправляем в модуль Accounts для редактирования
+    router.push(`/accounts/payments/${billId}/edit`)
+  } catch (error) {
+    console.error('Failed to navigate to edit bill:', error)
+    handleError('Failed to open bill editor')
+  }
+}
+
+/**
+ * ✅ Навигация в модуль Accounts с контекстом заказа
+ */
+async function handleNavigateToAccounts(order: PurchaseOrder): Promise<void> {
+  console.log(`${MODULE_NAME}: Navigating to accounts for order ${order.orderNumber}`)
+
+  try {
+    // Закрываем диалог платежей
+    showPaymentDialog.value = false
+
+    // Навигация в Accounts с фильтром по заказу
+    router.push({
+      path: '/accounts',
+      query: {
+        tab: 'payments',
+        filter: `order:${order.orderNumber}`,
+        supplierId: order.supplierId
+      }
+    })
+
+    showSuccess(`Opened Accounts module for order ${order.orderNumber}`)
+  } catch (error) {
+    console.error('Failed to navigate to accounts:', error)
+    handleError('Failed to open Accounts module')
+  }
+}
+
+/**
+ * ✅ Улучшенная обработка создания счета с error handling
+ */
+async function handleCreateBill(data: {
+  amount: number
+  priority: string
+  description: string
+}): Promise<void> {
+  if (!selectedOrderForBill.value) return
+
+  console.log(`${MODULE_NAME}: Creating bill`, data)
+
+  paymentLoading.value = true
+  paymentError.value = null
+
+  try {
+    const createDto = {
+      counteragentId: selectedOrderForBill.value.supplierId,
+      counteragentName: selectedOrderForBill.value.supplierName,
+      amount: data.amount,
+      description: data.description,
+      priority: data.priority as any,
+      category: 'supplier' as const,
+      invoiceNumber: selectedOrderForBill.value.orderNumber,
+      purchaseOrderId: selectedOrderForBill.value.id,
+      sourceOrderId: selectedOrderForBill.value.id,
+      autoSyncEnabled: true,
+      createdBy: {
+        type: 'user',
+        id: authStore.currentUser?.id || 'system',
+        name: authStore.currentUser?.name || 'System'
+      }
+    }
+
+    const bill = await accountStore.createPayment(createDto)
+
+    // ✅ ОБНОВЛЯЕМ состояния
+    await refreshBillsData()
+
+    showSuccess(`Bill created: ${formatCurrency(data.amount)}`)
+
+    // Автоматически переключаем в режим просмотра
+    paymentDialogMode.value = 'view'
+  } catch (error) {
+    console.error('Failed to create bill:', error)
+    paymentError.value = 'Failed to create bill. Please try again.'
+    handleError(`Failed to create bill: ${error}`)
+  } finally {
+    paymentLoading.value = false
+  }
+}
+
+/**
+ * ✅ Улучшенная обработка привязки счета
+ */
+async function handleAttachBill(billId: string): Promise<void> {
+  if (!selectedOrderForBill.value) return
+
+  console.log(`${MODULE_NAME}: Attaching bill ${billId}`)
+
+  paymentLoading.value = true
+  paymentError.value = null
+
+  try {
+    // Используем метод из AccountStore
+    await accountStore.attachPaymentToOrder(billId, selectedOrderForBill.value.id)
+
+    // ✅ ОБНОВЛЯЕМ состояния
+    await refreshBillsData()
+
+    showSuccess(`Bill attached to order ${selectedOrderForBill.value.orderNumber}`)
+
+    // Автоматически переключаем в режим просмотра
+    paymentDialogMode.value = 'view'
+  } catch (error) {
+    console.error('Failed to attach bill:', error)
+    paymentError.value = 'Failed to attach bill. Please try again.'
+    handleError('Failed to attach bill')
+  } finally {
+    paymentLoading.value = false
+  }
+}
+
+/**
+ * ✅ Улучшенная обработка отвязки счета
+ */
+async function handleDetachBill(billId: string): Promise<void> {
+  if (!selectedOrderForBill.value) return
+
+  console.log(`${MODULE_NAME}: Detaching bill ${billId}`)
+
+  paymentLoading.value = true
+  paymentError.value = null
+
+  try {
+    await accountStore.detachPaymentFromOrder(billId)
+
+    // ✅ ОБНОВЛЯЕМ состояния
+    await refreshBillsData()
+
+    showSuccess(`Bill detached from order`)
+
+    // Если больше нет счетов, переключаемся в режим создания
+    if (linkedBills.value.length === 0) {
+      paymentDialogMode.value = 'create'
+    }
+  } catch (error) {
+    console.error('Failed to detach bill:', error)
+    paymentError.value = 'Failed to detach bill. Please try again.'
+    handleError('Failed to detach bill')
+  } finally {
+    paymentLoading.value = false
+  }
+}
+
+/**
+ * ✅ Улучшенная функция обновления данных с error handling
+ */
+async function refreshBillsData(): Promise<void> {
+  if (!selectedOrderForBill.value) return
+
+  try {
+    const [linked, available] = await Promise.all([
+      getLinkedBills(selectedOrderForBill.value),
+      getAvailableBills(selectedOrderForBill.value.supplierId)
+    ])
+
+    linkedBills.value = linked
+    availableBills.value = available
+  } catch (error) {
+    console.error('Failed to refresh bills data:', error)
+    paymentError.value = 'Failed to refresh data'
+  }
 }
 
 // =============================================
@@ -656,24 +844,6 @@ function getOrderPaidAmount(order: PurchaseOrder): number {
   return 0 // TODO: Рассчитать из транзакций, пока 0
 }
 
-// УБРАТЬ функции getCurrentBill и getAvailableBills - они заменены на:
-// - linkedBills state
-// - availableBills state
-// - getLinkedBills() method
-// - getAvailableBills() method
-
-// ✅ ДОБАВИТЬ функцию обновления списков:
-async function refreshBillsData(): Promise<void> {
-  if (selectedOrderForBill.value) {
-    try {
-      linkedBills.value = await getLinkedBills(selectedOrderForBill.value)
-      availableBills.value = await getAvailableBills(selectedOrderForBill.value.supplierId)
-    } catch (error) {
-      console.error('Failed to refresh bills data:', error)
-    }
-  }
-}
-
 // =============================================
 // PAYMENT MANAGEMENT METHODS
 // =============================================
@@ -717,68 +887,6 @@ async function getAvailableBills(supplierId: string | undefined): Promise<Pendin
   }
 }
 
-async function handleCreateBill(data: {
-  amount: number
-  priority: string
-  description: string
-}): Promise<void> {
-  if (!selectedOrderForBill.value) return
-
-  console.log(`${MODULE_NAME}: Creating bill`, data)
-
-  try {
-    const createDto = {
-      counteragentId: selectedOrderForBill.value.supplierId,
-      counteragentName: selectedOrderForBill.value.supplierName,
-      amount: data.amount,
-      description: data.description,
-      priority: data.priority as any,
-      category: 'supplier' as const,
-      invoiceNumber: selectedOrderForBill.value.orderNumber,
-      purchaseOrderId: selectedOrderForBill.value.id,
-      sourceOrderId: selectedOrderForBill.value.id,
-      autoSyncEnabled: true,
-      createdBy: {
-        type: 'user',
-        id: authStore.currentUser?.id || 'system',
-        name: authStore.currentUser?.name || 'System'
-      }
-    }
-
-    const bill = await accountStore.createPayment(createDto)
-
-    // ✅ ОБНОВЛЯЕМ состояния
-    await refreshBillsData()
-
-    showSuccess(`Bill created: ${formatCurrency(data.amount)}`)
-
-    // Переключаем в режим просмотра
-    paymentDialogMode.value = 'view'
-  } catch (error) {
-    console.error('Failed to create bill:', error)
-    handleError('Failed to create bill')
-  }
-}
-async function handleAttachBill(billId: string): Promise<void> {
-  if (!selectedOrderForBill.value) return
-
-  console.log(`${MODULE_NAME}: Attaching bill ${billId}`)
-
-  try {
-    // Используем метод из AccountStore
-    await accountStore.attachPaymentToOrder(billId, selectedOrderForBill.value.id)
-
-    // ✅ ОБНОВЛЯЕМ состояния
-    await refreshBillsData()
-
-    showSuccess(`Bill attached to order ${selectedOrderForBill.value.orderNumber}`)
-    paymentDialogMode.value = 'view'
-  } catch (error) {
-    console.error('Failed to attach bill:', error)
-    handleError('Failed to attach bill')
-  }
-}
-
 function handleViewBill(billId: string): void {
   console.log(`${MODULE_NAME}: Viewing bill ${billId}`)
 
@@ -788,29 +896,6 @@ function handleViewBill(billId: string): void {
   } catch (error) {
     console.error('Failed to navigate to bill:', error)
     handleError('Failed to open bill details')
-  }
-}
-
-async function handleDetachBill(billId: string): Promise<void> {
-  if (!selectedOrderForBill.value) return
-
-  console.log(`${MODULE_NAME}: Detaching bill ${billId}`)
-
-  try {
-    await accountStore.detachPaymentFromOrder(billId)
-
-    // ✅ ОБНОВЛЯЕМ состояния
-    await refreshBillsData()
-
-    showSuccess(`Bill detached from order`)
-
-    // Если больше нет счетов, переключаемся в режим создания
-    if (linkedBills.value.length === 0) {
-      paymentDialogMode.value = 'create'
-    }
-  } catch (error) {
-    console.error('Failed to detach bill:', error)
-    handleError('Failed to detach bill')
   }
 }
 
