@@ -67,7 +67,7 @@
           <procurement-request-table
             :requests="requestsArray"
             :orders="ordersArray"
-            :loading="isLoadingValue"
+            :loading="supplierStore.state.loading?.requests || false"
             @edit-request="handleEditRequest"
             @submit-request="handleSubmitRequest"
             @delete-request="handleDeleteRequest"
@@ -93,13 +93,19 @@
         <v-tabs-window-item value="orders">
           <purchase-order-table
             :orders="ordersArray"
-            :loading="isLoadingValue"
-            :highlighted-order-id="highlightedOrderId"
+            :loading="Boolean(supplierStore.state.loading?.orders)"
             @edit-order="handleEditOrder"
             @send-order="handleSendOrder"
             @start-receipt="handleStartReceipt"
-            @manage-bill="handleManageBill"
+            @manage-bill-create="handleManageBillCreate"
+            @manage-bill-attach="handleManageBillAttach"
+            @manage-bill-view="handleManageBillView"
             @show-shortfall="handleShowShortfall"
+            @view-bill="handleViewBill"
+            @process-payment="handleProcessPayment"
+            @detach-bill="handleDetachBill"
+            @edit-bill="handleEditBill"
+            @cancel-bill="handleCancelBill"
           />
 
           <!-- Empty State -->
@@ -116,7 +122,7 @@
         <v-tabs-window-item value="receipts">
           <receipt-table
             :receipts="receiptsArray"
-            :loading="isLoadingValue"
+            :loading="supplierStore.state.loading?.requests || false"
             @view-details="handleViewReceiptDetails"
             @edit-receipt="handleEditReceipt"
             @complete-receipt="handleCompleteReceipt"
@@ -202,22 +208,22 @@
       </template>
     </v-snackbar>
     <!-- Payment Management Dialog -->
-    <!-- Payment Management Dialog -->
-    <payment-dialog
-      v-model:open="showPaymentDialog"
+    <PaymentDialog
+      :open="showPaymentDialog"
       :mode="paymentDialogMode"
       :order-data="selectedOrderForBill"
       :linked-bills="linkedBills"
       :available-bills="availableBills"
       :loading="paymentLoading"
       :error="paymentError"
+      @update:open="handlePaymentDialogClose"
       @create-bill="handleCreateBill"
       @attach-bill="handleAttachBill"
       @detach-bill="handleDetachBill"
+      @process-payment="handleProcessPayment"
       @view-bill="handleViewBill"
       @edit-bill="handleEditBill"
       @navigate-to-accounts="handleNavigateToAccounts"
-      @process-payment="handleProcessPayment"
     />
 
     <!-- Shortfall Alert -->
@@ -404,6 +410,53 @@ const availableItemsCount = computed(() => {
   return totalItems
 })
 
+async function handlePaymentDialogClose(isOpen: boolean): Promise<void> {
+  console.log(`${MODULE_NAME}: Payment dialog close event, isOpen:`, isOpen)
+
+  if (!isOpen) {
+    // Диалог закрывается - обновляем данные
+    showPaymentDialog.value = false
+
+    // Обновляем данные заказов в основной таблице для отображения актуального статуса счетов
+    try {
+      await supplierStore.getOrders() // Или refreshOrders() если такой метод есть
+      console.log(`${MODULE_NAME}: Orders refreshed after payment dialog close`)
+    } catch (error) {
+      console.error('Failed to refresh orders after dialog close:', error)
+    }
+  } else {
+    // Диалог открывается
+    showPaymentDialog.value = true
+  }
+}
+
+async function handleCancelBill(billId: string): Promise<void> {
+  console.log(`${MODULE_NAME}: Cancelling bill ${billId}`)
+
+  paymentLoading.value = true
+  paymentError.value = null
+
+  try {
+    await accountStore.cancelPayment(billId)
+
+    // Обновляем данные счетов
+    await refreshBillsData()
+
+    showSuccess(`Bill cancelled successfully`)
+
+    // Если это был единственный счет, переключаемся в режим создания
+    if (linkedBills.value.length === 0) {
+      paymentDialogMode.value = 'create'
+    }
+  } catch (error) {
+    console.error('Failed to cancel bill:', error)
+    paymentError.value = 'Failed to cancel bill. Please try again.'
+    handleError('Failed to cancel bill')
+  } finally {
+    paymentLoading.value = false
+  }
+}
+
 // ✅ HELPER: Функция проверки, заказан ли товар полностью
 function isItemFullyOrdered(requestId: string, itemId: string, requestedQuantity: number): boolean {
   // Находим все заказы, связанные с этим запросом
@@ -444,7 +497,8 @@ const submittedRequestsArray = computed(() => {
 })
 
 const isLoadingValue = computed(() => {
-  return supplierStore.isLoading || false
+  // Убедиться что loading это boolean, а не объект
+  return Boolean(supplierStore.state.loading?.orders || supplierStore.isLoading)
 })
 
 // =============================================
@@ -788,27 +842,15 @@ async function handleSaveEditedRequest(editedRequest: ProcurementRequest) {
 // EVENT HANDLERS - bills
 // =============================================
 
-async function handleManageBill(order: PurchaseOrder): Promise<void> {
-  console.log(`${MODULE_NAME}: Managing bills for order`, order.orderNumber)
+/**
+ * ✅ Открыть PaymentDialog в режиме CREATE
+ */
+async function handleManageBillCreate(order: PurchaseOrder): Promise<void> {
+  console.log(`${MODULE_NAME}: Creating bill for order`, order.orderNumber)
 
   try {
-    // ✅ ЗАГРУЖАЕМ ОБА списка перед открытием диалога
-    const [linked, available] = await Promise.all([
-      getLinkedBills(order),
-      getAvailableBills(order.supplierId)
-    ])
-
-    linkedBills.value = linked
-    availableBills.value = available
-    selectedOrderForBill.value = order
-
-    // Определяем режим диалога
-    if (linkedBills.value.length > 0) {
-      paymentDialogMode.value = 'view'
-    } else {
-      paymentDialogMode.value = 'create'
-    }
-
+    await loadBillsDataForOrder(order)
+    paymentDialogMode.value = 'create'
     showPaymentDialog.value = true
   } catch (error) {
     console.error('Failed to load bills for order:', error)
@@ -816,14 +858,50 @@ async function handleManageBill(order: PurchaseOrder): Promise<void> {
   }
 }
 
-async function refreshAvailableBills(): Promise<void> {
-  if (selectedOrderForBill.value) {
-    try {
-      availableBills.value = await getAvailableBills(selectedOrderForBill.value.supplierId)
-    } catch (error) {
-      console.error('Failed to refresh available bills:', error)
-    }
+/**
+ * ✅ Открыть PaymentDialog в режиме ATTACH
+ */
+async function handleManageBillAttach(order: PurchaseOrder): Promise<void> {
+  console.log(`${MODULE_NAME}: Attaching bill for order`, order.orderNumber)
+
+  try {
+    await loadBillsDataForOrder(order)
+    paymentDialogMode.value = 'attach'
+    showPaymentDialog.value = true
+  } catch (error) {
+    console.error('Failed to load bills for order:', error)
+    handleError('Failed to load payment information')
   }
+}
+
+/**
+ * ✅ Открыть PaymentDialog в режиме VIEW (управление всеми счетами)
+ */
+async function handleManageBillView(order: PurchaseOrder): Promise<void> {
+  console.log(`${MODULE_NAME}: Managing all bills for order`, order.orderNumber)
+
+  try {
+    await loadBillsDataForOrder(order)
+    paymentDialogMode.value = 'view'
+    showPaymentDialog.value = true
+  } catch (error) {
+    console.error('Failed to load bills for order:', error)
+    handleError('Failed to load payment information')
+  }
+}
+
+/**
+ * ✅ Вспомогательная функция для загрузки данных счетов
+ */
+async function loadBillsDataForOrder(order: PurchaseOrder): Promise<void> {
+  const [linked, available] = await Promise.all([
+    getLinkedBills(order),
+    getAvailableBills(order.supplierId)
+  ])
+
+  linkedBills.value = linked
+  availableBills.value = available
+  selectedOrderForBill.value = order
 }
 
 function handleShowShortfall(order: PurchaseOrder): void {

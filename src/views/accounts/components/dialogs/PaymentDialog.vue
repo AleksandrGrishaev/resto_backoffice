@@ -21,7 +21,7 @@
 
       <v-card-text class="pa-0">
         <!-- Текущие счета заказа -->
-        <div v-if="linkedBills.length > 0" class="pa-4 bg-grey-lighten-5">
+        <div v-if="props.linkedBills.length > 0" class="pa-4 bg-grey-lighten-5">
           <div class="text-subtitle-1 font-weight-bold mb-3">
             <v-icon icon="mdi-receipt-text" class="mr-2" />
             Linked Bills ({{ linkedBills.length }})
@@ -256,7 +256,7 @@
             </div>
 
             <!-- ✅ Empty State -->
-            <div v-if="linkedBills.length === 0" class="text-center pa-8">
+            <div v-if="props.linkedBills.length === 0" class="text-center pa-8">
               <v-icon
                 icon="mdi-receipt-text-outline"
                 size="64"
@@ -358,7 +358,7 @@
       <v-card-actions class="px-6 pb-6">
         <!-- ✅ Кнопка Back в режимах create/attach -->
         <v-btn
-          v-if="currentMode !== 'view' && linkedBills.length > 0"
+          v-if="currentMode !== 'view' && props.linkedBills.length > 0"
           variant="outlined"
           prepend-icon="mdi-arrow-left"
           @click="switchToViewMode"
@@ -398,7 +398,7 @@
 
         <!-- ✅ В режиме view показываем навигацию в Accounts модуль -->
         <v-btn
-          v-if="currentMode === 'view' && linkedBills.length > 0"
+          v-if="currentMode === 'view' && props.linkedBills.length > 0"
           color="info"
           variant="elevated"
           prepend-icon="mdi-open-in-new"
@@ -480,9 +480,9 @@ const form = ref<CreateBillData & { existingBillId?: string }>({
 const dialogTitle = computed(() => {
   switch (currentMode.value) {
     case 'create':
-      return linkedBills.value.length > 0 ? 'Create Additional Bill' : 'Create New Bill'
+      return props.linkedBills.length > 0 ? 'Create Additional Bill' : 'Create New Bill'
     case 'attach':
-      return linkedBills.value.length > 0 ? 'Link Another Bill' : 'Link Existing Bill'
+      return props.linkedBills.length > 0 ? 'Link Another Bill' : 'Link Existing Bill'
     case 'view':
       return 'Manage Bills'
     default:
@@ -528,7 +528,7 @@ const suggestedAmount = computed(() => {
 })
 
 const suggestedDescription = computed(() => {
-  const isAdditional = props.linkedBills.length > 0
+  const isAdditional = props.linkedBills.length > 0 // вместо linkedBills.value.length
   return `Payment for order ${props.orderData?.orderNumber}${isAdditional ? ' (additional)' : ''}`
 })
 
@@ -563,16 +563,18 @@ const canAttach = computed(() => {
 // ✅ Статусы счетов
 const allBillsPaid = computed(() => {
   return (
-    props.linkedBills.length > 0 && props.linkedBills.every(bill => bill.status === 'completed')
+    props.linkedBills.length > 0 && props.linkedBills.every(bill => bill.status === 'completed') // вместо linkedBills
   )
 })
 
+// 3. hasPendingBills computed:
 const hasPendingBills = computed(() => {
-  return props.linkedBills.some(bill => bill.status === 'pending')
+  return props.linkedBills.some(bill => bill.status === 'pending') // вместо linkedBills
 })
 
+// 4. pendingBillsCount computed:
 const pendingBillsCount = computed(() => {
-  return props.linkedBills.filter(bill => bill.status === 'pending').length
+  return props.linkedBills.filter(bill => bill.status === 'pending').length // вместо linkedBills
 })
 
 // =============================================
