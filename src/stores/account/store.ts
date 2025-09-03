@@ -15,7 +15,9 @@ import type {
   TransactionFilters,
   PaymentFilters,
   PaymentStatistics,
-  AccountStoreState
+  AccountStoreState,
+  UpdatePaymentAmountDto,
+  AmountChange
 } from './types'
 
 const MODULE_NAME = 'AccountStore'
@@ -211,6 +213,60 @@ export const useAccountStore = defineStore('account', () => {
       throw error
     } finally {
       state.value.loading.accounts = false
+    }
+  }
+
+  async function updatePaymentAmount(data: UpdatePaymentAmountDto) {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Updating payment amount', { data })
+
+      await paymentService.updatePaymentAmount(data)
+
+      // Оптимистическое обновление
+      const payment = state.value.pendingPayments.find(p => p.id === data.paymentId)
+      if (payment) {
+        const amountChange: AmountChange = {
+          oldAmount: payment.amount,
+          newAmount: data.newAmount,
+          reason: data.reason,
+          timestamp: new Date().toISOString(),
+          userId: data.userId,
+          notes: data.notes
+        }
+
+        payment.amount = data.newAmount
+        payment.lastAmountUpdate = new Date().toISOString()
+        payment.amountHistory = [...(payment.amountHistory || []), amountChange]
+        payment.updatedAt = new Date().toISOString()
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Payment amount updated successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment amount', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  async function getPaymentsByPurchaseOrder(purchaseOrderId: string) {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Getting payments by purchase order', { purchaseOrderId })
+      return await paymentService.getPaymentsByPurchaseOrder(purchaseOrderId)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get payments by purchase order', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  async function getPaymentById(paymentId: string) {
+    try {
+      return await paymentService.getPaymentById(paymentId)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get payment by ID', { error })
+      setError(error)
+      return null
     }
   }
 
@@ -545,6 +601,11 @@ export const useAccountStore = defineStore('account', () => {
     assignPaymentToAccount,
     updatePaymentPriority,
     cancelPayment,
-    setPaymentFilters
+    setPaymentFilters,
+
+    // Other
+    updatePaymentAmount,
+    getPaymentsByPurchaseOrder,
+    getPaymentById
   }
 })

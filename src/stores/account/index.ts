@@ -44,7 +44,9 @@ export type {
   CreatePaymentDto,
   ProcessPaymentDto,
   PaymentFilters,
-  PaymentStatistics
+  PaymentStatistics,
+  AmountChange,
+  UpdatePaymentAmountDto
 } from './types'
 
 export {
@@ -52,5 +54,6 @@ export {
   OPERATION_TYPES,
   PAYMENT_PRIORITIES,
   PAYMENT_STATUSES,
-  PAYMENT_CATEGORIES
+  PAYMENT_CATEGORIES,
+  AMOUNT_CHANGE_REASONS
 } from './types'

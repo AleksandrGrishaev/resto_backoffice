@@ -10,7 +10,9 @@ import type {
   ProcessPaymentDto,
   TransactionFilters,
   PaymentFilters,
-  PaymentStatistics
+  PaymentStatistics,
+  UpdatePaymentAmountDto,
+  AmountChange
 } from './types'
 import { mockAccounts, mockTransactions } from './mock'
 import {
@@ -425,6 +427,56 @@ export class PaymentService extends MockBaseService<PendingPayment> {
       DebugUtils.error(MODULE_NAME, 'Failed to create payment', { error })
       throw error
     }
+  }
+
+  async updatePaymentAmount(data: UpdatePaymentAmountDto): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating payment amount', { data })
+
+      const payment = await this.getById(data.paymentId)
+      if (!payment) {
+        throw new Error('Payment not found')
+      }
+
+      // Проверяем, можно ли обновлять сумму
+      if (payment.status !== 'pending') {
+        throw new Error('Cannot update amount for non-pending payment')
+      }
+
+      // Создаем запись об изменении
+      const amountChange: AmountChange = {
+        oldAmount: payment.amount,
+        newAmount: data.newAmount,
+        reason: data.reason,
+        timestamp: new Date().toISOString(),
+        userId: data.userId,
+        notes: data.notes
+      }
+
+      // В реальной системе здесь был бы API вызов
+      await this.update(data.paymentId, {
+        amount: data.newAmount,
+        lastAmountUpdate: new Date().toISOString(),
+        amountHistory: [...(payment.amountHistory || []), amountChange]
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment amount updated successfully', {
+        paymentId: data.paymentId,
+        oldAmount: amountChange.oldAmount,
+        newAmount: amountChange.newAmount
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment amount', { error })
+      throw error
+    }
+  }
+
+  async getPaymentsByPurchaseOrder(purchaseOrderId: string): Promise<PendingPayment[]> {
+    return mockPendingPayments.filter(payment => payment.purchaseOrderId === purchaseOrderId)
+  }
+
+  async getPaymentById(paymentId: string): Promise<PendingPayment | null> {
+    return await this.getById(paymentId)
   }
 
   async processPayment(data: ProcessPaymentDto): Promise<void> {

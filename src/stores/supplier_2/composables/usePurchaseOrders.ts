@@ -13,6 +13,7 @@ import type {
   PaymentStatus
 } from '../types'
 import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
+import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'usePurchaseOrders'
 
@@ -182,10 +183,10 @@ export function usePurchaseOrders() {
       // ИСПРАВЛЕНИЕ 2: Проверяем - нужно ли обновлять статус заявок
       await updateRequestsStatusConditionally(requestIds, basket.items)
 
-      // Auto-create bill in AccountStore
-      await createBillInAccountStore(newOrder)
-
+      // ✅ ИЗМЕНЕНО: Создаем счет только для draft заказов (будет создан при отправке)
       console.log(`PurchaseOrders: Order created successfully`, newOrder.orderNumber)
+      console.log(`PurchaseOrders: Bill will be created when order is sent to supplier`)
+
       return newOrder
     } catch (error) {
       console.error('PurchaseOrders: Error creating order from basket:', error)
@@ -263,15 +264,92 @@ export function usePurchaseOrders() {
   async function updateOrder(id: string, data: UpdateOrderData): Promise<PurchaseOrder> {
     try {
       console.log(`PurchaseOrders: Updating order ${id}`, data)
+
+      // Получаем старую версию для сравнения
+      const oldOrder = state.value.orders.find(o => o.id === id)
+      const oldTotalAmount = oldOrder?.totalAmount || 0
+
       const updatedOrder = await supplierStore.updateOrder(id, data)
 
-      // ✅ УДАЛЕНО: Убираем deprecated вызов updatePlannedDelivery
-      // Транзитные batch-и создаются только при sendOrder, не при updateOrder
+      // ✅ НОВОЕ: Автосинхронизация суммы счета при изменении
+      if (updatedOrder.billId && updatedOrder.totalAmount !== oldTotalAmount) {
+        try {
+          const { supplierAccountIntegration } = await import('../integrations/accountIntegration')
+          await supplierAccountIntegration.syncBillAmount(updatedOrder)
+          console.log(`PurchaseOrders: Bill amount synced for order ${id}`)
+        } catch (syncError) {
+          console.warn(`PurchaseOrders: Bill sync failed for order ${id}:`, syncError)
+          // Не прерываем обновление заказа из-за ошибки синхронизации
+        }
+      }
 
       console.log(`PurchaseOrders: Updated order ${id}`)
       return updatedOrder
     } catch (error) {
       console.error('PurchaseOrders: Error updating order:', error)
+      throw error
+    }
+  }
+
+  async function sendOrderToSupplier(id: string): Promise<PurchaseOrder> {
+    try {
+      console.log(`PurchaseOrders: Sending order to supplier ${id}`)
+
+      // Обновляем статус на 'sent'
+      const updatedOrder = await updateOrder(id, { status: 'sent' })
+
+      // ✅ НОВОЕ: Создаем счет при отправке заказа
+      if (updatedOrder.status === 'sent' && !updatedOrder.billId) {
+        const { supplierAccountIntegration } = await import('../integrations/accountIntegration')
+        const bill = await supplierAccountIntegration.createBillFromOrder(updatedOrder)
+
+        // Обновляем заказ с billId
+        const orderWithBill = await supplierStore.updateOrder(id, {
+          billId: bill.id,
+          paymentStatus: 'pending'
+        })
+
+        // Обновляем в state
+        const index = state.value.orders.findIndex(o => o.id === id)
+        if (index !== -1) {
+          state.value.orders[index] = orderWithBill
+        }
+
+        console.log(`PurchaseOrders: Bill created for order ${id}`, bill.id)
+
+        return orderWithBill
+      }
+
+      return updatedOrder
+    } catch (error) {
+      console.error('PurchaseOrders: Error sending order to supplier:', error)
+      throw error
+    }
+  }
+
+  async function getOrderPaymentStatus(orderId: string) {
+    try {
+      const { supplierAccountIntegration } = await import('../integrations/accountIntegration')
+      return await supplierAccountIntegration.getOrderPaymentStatus(orderId)
+    } catch (error) {
+      console.error('PurchaseOrders: Error getting payment status:', error)
+      return {
+        hasBills: false,
+        totalBilled: 0,
+        totalPaid: 0,
+        pendingAmount: 0,
+        status: 'not_billed' as const
+      }
+    }
+  }
+
+  async function cancelOrderBills(orderId: string): Promise<void> {
+    try {
+      const { supplierAccountIntegration } = await import('../integrations/accountIntegration')
+      await supplierAccountIntegration.cancelBillForOrder(orderId)
+      console.log(`PurchaseOrders: Bills cancelled for order ${orderId}`)
+    } catch (error) {
+      console.error('PurchaseOrders: Error cancelling bills:', error)
       throw error
     }
   }
@@ -403,25 +481,33 @@ export function usePurchaseOrders() {
   /**
    * Create bill in AccountStore for order
    */
-  async function createBillInAccountStore(order: PurchaseOrder): Promise<string> {
+  async function createBillInAccountStore(order: PurchaseOrder): Promise<void> {
     try {
-      // TODO: Интеграция с AccountStore
-      // const accountStore = useAccountStore()
-      // const billId = await accountStore.createBill({
-      //   type: 'purchase',
-      //   supplierId: order.supplierId,
-      //   amount: order.totalAmount,
-      //   items: order.items,
-      //   notes: `Purchase order ${order.orderNumber}`
-      // })
+      DebugUtils.info(MODULE_NAME, 'Creating bill in account store', { orderId: order.id })
 
-      const mockBillId = `bill-${Date.now()}`
-      console.log(`PurchaseOrders: Created bill ${mockBillId} for order ${order.orderNumber}`)
-      return mockBillId
+      // ✅ НОВОЕ: Используем интеграционный сервис
+      const { supplierAccountIntegration } = await import('../integrations/accountIntegration')
+      const bill = await supplierAccountIntegration.createBillFromOrder(order)
+
+      // ✅ НОВОЕ: Обновляем заказ с billId
+      const updatedOrder = await supplierStore.updateOrder(order.id, {
+        billId: bill.id,
+        paymentStatus: 'pending'
+      })
+
+      // Обновляем в state
+      const index = state.value.orders.findIndex(o => o.id === order.id)
+      if (index !== -1) {
+        state.value.orders[index] = updatedOrder
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Bill created and linked to order', {
+        orderId: order.id,
+        billId: bill.id
+      })
     } catch (error) {
-      console.error('PurchaseOrders: Error creating bill:', error)
-      // Не выбрасываем ошибку, чтобы не прерывать создание заказа
-      return `bill-error-${Date.now()}`
+      DebugUtils.error(MODULE_NAME, 'Failed to create bill in account store', { error })
+      throw error
     }
   }
 
@@ -850,6 +936,9 @@ export function usePurchaseOrders() {
     // ✅ НОВЫЕ exports для интеграции:
     getPlannedDeliveryDate,
     getDeliveryStatus,
-    getOrderBatches
+    getOrderBatches,
+    sendOrderToSupplier,
+    getOrderPaymentStatus,
+    cancelOrderBills
   }
 }

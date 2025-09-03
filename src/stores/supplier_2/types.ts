@@ -57,6 +57,10 @@ export interface PurchaseOrder extends BaseEntity {
   billId?: string // relation to bill in Account Store (PendingPayment.id)
 
   notes?: string
+  // ✅ НОВЫЕ ПОЛЯ для обработки недопоставок
+  actualDeliveredAmount?: number // Фактическая стоимость доставленного
+  hasShortfall?: boolean // Есть недопоставка
+  shortfallAmount?: number // Сумма недопоставки
 }
 
 export interface OrderItem {

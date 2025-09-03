@@ -122,6 +122,12 @@ export interface PendingPayment extends BaseEntity {
   notes?: string
   assignedToAccount?: string // ID счета для списания
   createdBy: TransactionPerformer
+  // ✅ НОВЫЕ ПОЛЯ для интеграции с supplier store
+  purchaseOrderId?: string // Обратная связь с заказом
+  sourceOrderId?: string // Источник для автосинхронизации суммы
+  lastAmountUpdate?: string // Когда последний раз менялась сумма
+  amountHistory?: AmountChange[] // История изменений суммы
+  autoSyncEnabled?: boolean // Разрешена ли автосинхронизация суммы
 }
 
 export interface CreatePaymentDto {
@@ -135,6 +141,10 @@ export interface CreatePaymentDto {
   invoiceNumber?: string
   notes?: string
   createdBy: TransactionPerformer
+  // ✅ НОВЫЕ ПОЛЯ для создания платежа из заказа
+  purchaseOrderId?: string
+  sourceOrderId?: string
+  autoSyncEnabled?: boolean
 }
 
 export interface ProcessPaymentDto {
@@ -210,6 +220,13 @@ export const PAYMENT_CATEGORIES = {
   other: 'Прочее'
 } as const
 
+export const AMOUNT_CHANGE_REASONS = {
+  order_updated: 'Заказ обновлен',
+  items_added: 'Добавлены товары',
+  items_removed: 'Удалены товары',
+  price_changed: 'Изменены цены',
+  manual_update: 'Ручное изменение'
+} as const
 // ============ STORE TYPES ============
 
 export interface LoadingState {
@@ -235,4 +252,23 @@ export interface AccountStoreState {
     transactions: Record<string, string> // accountId -> timestamp
     payments: string | null
   }
+}
+
+// ✅ НОВЫЙ: История изменений суммы платежа
+export interface AmountChange {
+  oldAmount: number
+  newAmount: number
+  reason: 'order_updated' | 'items_added' | 'items_removed' | 'price_changed' | 'manual_update'
+  timestamp: string
+  userId?: string
+  notes?: string
+}
+
+// ✅ НОВЫЙ: DTO для обновления суммы платежа
+export interface UpdatePaymentAmountDto {
+  paymentId: string
+  newAmount: number
+  reason: AmountChange['reason']
+  notes?: string
+  userId?: string
 }
