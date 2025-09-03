@@ -1,122 +1,87 @@
+<!-- src/views/supplier_2/components/orders/PurchaseOrderTable.vue -->
 <template>
   <div class="purchase-order-table">
-    <!-- Filters Bar -->
-    <v-card variant="outlined" class="mb-4">
-      <v-card-text class="pa-4">
+    <!-- Filters Section -->
+    <v-card variant="flat" class="mb-4">
+      <v-card-text class="pa-3">
         <v-row align="center">
-          <v-col cols="12" md="2">
+          <v-col cols="12" sm="6" md="3">
             <v-select
               v-model="filters.status"
               :items="statusOptions"
-              label="Order Status"
-              variant="outlined"
+              label="Status"
               density="compact"
+              variant="outlined"
               clearable
               @update:model-value="updateFilters"
             />
           </v-col>
 
-          <v-col cols="12" md="2">
+          <v-col cols="12" sm="6" md="3">
             <v-select
               v-model="filters.billStatus"
               :items="billStatusOptions"
               label="Bill Status"
-              variant="outlined"
               density="compact"
+              variant="outlined"
               clearable
               @update:model-value="updateFilters"
             />
           </v-col>
 
-          <v-col cols="12" md="3">
+          <v-col cols="12" sm="6" md="3">
             <v-select
               v-model="filters.supplier"
               :items="supplierOptions"
               label="Supplier"
-              variant="outlined"
               density="compact"
+              variant="outlined"
               clearable
               @update:model-value="updateFilters"
             />
           </v-col>
 
-          <v-col cols="12" md="2">
+          <v-col cols="12" sm="6" md="3">
             <v-text-field
               v-model="searchQuery"
               label="Search orders..."
-              variant="outlined"
-              density="compact"
               prepend-inner-icon="mdi-magnify"
+              density="compact"
+              variant="outlined"
               clearable
-              @update:model-value="handleSearch"
+              @input="handleSearch"
             />
           </v-col>
-
-          <v-col cols="12" md="3">
-            <div class="d-flex gap-2">
-              <v-btn
-                color="grey"
-                variant="outlined"
-                prepend-icon="mdi-filter-off"
-                size="small"
-                @click="clearFilters"
-              >
-                Clear Filters
-              </v-btn>
-
-              <v-btn
-                color="primary"
-                variant="flat"
-                prepend-icon="mdi-refresh"
-                size="small"
-                :loading="loading"
-                @click="refreshData"
-              >
-                Refresh
-              </v-btn>
-            </div>
-          </v-col>
         </v-row>
+
+        <div class="d-flex justify-space-between align-center mt-2">
+          <div class="text-caption text-medium-emphasis">
+            Showing {{ filteredOrders.length }} of {{ props.orders?.length || 0 }} orders
+          </div>
+          <v-btn
+            variant="text"
+            color="primary"
+            size="small"
+            prepend-icon="mdi-filter-off"
+            @click="clearFilters"
+          >
+            Clear Filters
+          </v-btn>
+        </div>
       </v-card-text>
     </v-card>
 
-    <!-- Data Table -->
+    <!-- Orders Data Table -->
     <v-data-table
       :headers="headers"
       :items="filteredOrders"
-      :loading="loading"
-      class="elevation-1"
+      :loading="props.loading"
+      density="comfortable"
       :items-per-page="25"
-      :sort-by="[{ key: 'orderDate', order: 'desc' }]"
+      :items-per-page-options="[25, 50, 100]"
+      class="elevation-1"
     >
-      <!-- Order Number -->
-      <template #[`item.orderNumber`]="{ item }">
-        <div class="d-flex align-center">
-          <v-chip size="small" :color="getStatusColor(item.status)" variant="tonal" class="mr-2">
-            {{ item.orderNumber }}
-          </v-chip>
-
-          <!-- Overdue indicator -->
-          <v-icon
-            v-if="isOverdueForDelivery(item)"
-            icon="mdi-clock-alert"
-            color="error"
-            size="16"
-            class="ml-1"
-          >
-            <v-tooltip activator="parent" location="top">Overdue for delivery</v-tooltip>
-          </v-icon>
-        </div>
-      </template>
-
-      <!-- Supplier -->
-      <template #[`item.supplierName`]="{ item }">
-        <div class="text-subtitle-2 font-weight-medium">
-          {{ item.supplierName }}
-        </div>
-      </template>
-
-      <!-- Order Status -->
+      <!-- Status Column -->
       <template #[`item.status`]="{ item }">
         <v-chip size="small" :color="getStatusColor(item.status)" variant="tonal">
           <v-icon :icon="getStatusIcon(item.status)" size="14" class="mr-1" />
@@ -124,123 +89,62 @@
         </v-chip>
       </template>
 
-      <!-- Bill Status -->
+      <!-- Bill Status Column -->
       <template #[`item.billStatus`]="{ item }">
-        <bill-status
-          :bill="getBillForOrder(item)"
-          :order-amount="item.totalAmount"
-          :has-shortfall="item.hasShortfall"
-          @show-sync-warning="handleSyncWarning(item)"
-          @show-shortfall="handleShortfall(item)"
-        />
+        <bill-status :order="item" @sync-warning="handleSyncWarning" @shortfall="handleShortfall" />
       </template>
 
-      <!-- Items Count -->
+      <!-- Items Count Column -->
       <template #[`item.itemsCount`]="{ item }">
-        <div class="text-center">
-          <v-chip size="small" variant="outlined">{{ item.items.length }} items</v-chip>
-        </div>
+        <v-chip size="small" variant="outlined">{{ item.items?.length || 0 }}</v-chip>
       </template>
 
-      <!-- Total Amount -->
+      <!-- Total Amount Column -->
       <template #[`item.totalAmount`]="{ item }">
         <div class="text-right">
-          <div class="font-weight-bold">
-            {{ formatCurrency(item.totalAmount) }}
-          </div>
+          <div class="font-weight-bold">{{ formatCurrency(item.totalAmount) }}</div>
           <div v-if="item.isEstimatedTotal" class="text-caption text-warning">Estimated</div>
         </div>
       </template>
 
-      <!-- Order Date -->
+      <!-- Order Date Column -->
       <template #[`item.orderDate`]="{ item }">
-        <div class="text-body-2">
-          {{ formatDate(item.orderDate) }}
-        </div>
-        <div v-if="item.expectedDeliveryDate" class="text-caption text-medium-emphasis">
-          Expected: {{ formatDate(item.expectedDeliveryDate) }}
-        </div>
+        {{ formatDate(item.orderDate) }}
       </template>
 
-      <!-- Age -->
+      <!-- Age Column -->
       <template #[`item.age`]="{ item }">
-        <v-chip size="small" :color="getAgeColor(getOrderAge(item))" variant="tonal">
+        <v-chip size="x-small" :color="getAgeColor(getOrderAge(item))" variant="tonal">
           {{ getOrderAge(item) }}d
         </v-chip>
       </template>
 
-      <!-- Actions -->
+      <!-- Actions Column -->
       <template #[`item.actions`]="{ item }">
         <div class="d-flex align-center justify-center gap-1">
-          <!-- View Details -->
-          <v-tooltip location="top">
-            <template #activator="{ props: tooltipProps }">
-              <v-btn
-                v-bind="tooltipProps"
-                icon
-                variant="text"
-                size="small"
-                color="info"
-                @click="viewOrderDetails(item)"
-              >
-                <v-icon>mdi-eye</v-icon>
-              </v-btn>
-            </template>
-            <span>View Details</span>
-          </v-tooltip>
+          <v-btn
+            icon="mdi-eye"
+            variant="text"
+            size="small"
+            color="primary"
+            @click="viewOrderDetails(item)"
+          >
+            <v-icon>mdi-eye</v-icon>
+            <v-tooltip activator="parent" location="top">View Details</v-tooltip>
+          </v-btn>
 
-          <!-- Edit (только для draft/sent) -->
-          <v-tooltip v-if="canEditOrder(item)" location="top">
-            <template #activator="{ props: tooltipProps }">
-              <v-btn
-                v-bind="tooltipProps"
-                icon
-                variant="text"
-                size="small"
-                color="primary"
-                @click="editOrder(item)"
-              >
-                <v-icon>mdi-pencil</v-icon>
-              </v-btn>
-            </template>
-            <span>Edit Order</span>
-          </v-tooltip>
+          <v-btn
+            v-if="canEditOrder(item)"
+            icon="mdi-pencil"
+            variant="text"
+            size="small"
+            color="info"
+            @click="editOrder(item)"
+          >
+            <v-icon>mdi-pencil</v-icon>
+            <v-tooltip activator="parent" location="top">Edit Order</v-tooltip>
+          </v-btn>
 
-          <!-- Send (только для draft) -->
-          <v-tooltip v-if="canSendOrder(item)" location="top">
-            <template #activator="{ props: tooltipProps }">
-              <v-btn
-                v-bind="tooltipProps"
-                icon
-                variant="text"
-                size="small"
-                color="success"
-                @click="sendOrder(item)"
-              >
-                <v-icon>mdi-send</v-icon>
-              </v-btn>
-            </template>
-            <span>Send to Supplier</span>
-          </v-tooltip>
-
-          <!-- Start Receipt (только для confirmed/paid) -->
-          <v-tooltip v-if="canStartReceipt(item)" location="top">
-            <template #activator="{ props: tooltipProps }">
-              <v-btn
-                v-bind="tooltipProps"
-                icon
-                variant="text"
-                size="small"
-                color="purple"
-                @click="startReceipt(item)"
-              >
-                <v-icon>mdi-truck-check</v-icon>
-              </v-btn>
-            </template>
-            <span>Start Receipt</span>
-          </v-tooltip>
-
-          <!-- More Actions Menu -->
           <v-menu>
             <template #activator="{ props: menuProps }">
               <v-btn v-bind="menuProps" icon variant="text" size="small" color="grey">
@@ -250,18 +154,20 @@
 
             <v-list density="compact" min-width="160">
               <v-list-item
-                v-if="canDeleteOrder(item)"
-                prepend-icon="mdi-delete"
-                title="Delete"
-                @click="deleteOrder(item)"
+                v-if="canSendOrder(item)"
+                prepend-icon="mdi-send"
+                title="Send to Supplier"
+                @click="sendOrder(item)"
               />
 
               <v-list-item
-                v-if="item.status !== 'cancelled'"
-                prepend-icon="mdi-cancel"
-                title="Cancel"
-                @click="cancelOrder(item)"
+                v-if="canReceiveOrder(item) && isReadyForReceipt(item)"
+                prepend-icon="mdi-truck-check"
+                title="Start Receipt"
+                @click="startReceipt(item)"
               />
+
+              <v-divider />
 
               <v-list-item
                 prepend-icon="mdi-content-copy"
@@ -269,10 +175,15 @@
                 @click="duplicateOrder(item)"
               />
 
+              <v-list-item prepend-icon="mdi-download" title="Export" @click="exportOrder(item)" />
+
+              <v-divider v-if="canDeleteOrder(item)" />
+
               <v-list-item
-                prepend-icon="mdi-download"
-                title="Export PDF"
-                @click="exportOrder(item)"
+                v-if="canDeleteOrder(item)"
+                prepend-icon="mdi-delete"
+                title="Delete"
+                @click="deleteOrder(item)"
               />
             </v-list>
           </v-menu>
@@ -287,7 +198,7 @@
       <!-- No data state -->
       <template #no-data>
         <div class="text-center pa-4">
-          <v-icon icon="mdi-package-variant-closed" size="48" color="grey" class="mb-2" />
+          <v-icon icon="mdi-clipboard-list-outline" size="48" color="grey" class="mb-2" />
           <div class="text-body-1 text-medium-emphasis">No purchase orders found</div>
           <div class="text-body-2 text-medium-emphasis">
             Try adjusting your filters or create orders from requests
@@ -296,182 +207,30 @@
       </template>
     </v-data-table>
 
-    <!-- Order Details Dialog -->
-    <v-dialog v-model="showDetailsDialog" max-width="1200px">
-      <v-card v-if="selectedOrder">
-        <v-card-title class="d-flex align-center justify-space-between pa-4 bg-primary text-white">
-          <div>
-            <div class="text-h6">{{ selectedOrder.orderNumber }}</div>
-            <div class="text-caption opacity-90">Purchase Order Details</div>
-          </div>
-          <v-btn icon="mdi-close" variant="text" color="white" @click="showDetailsDialog = false" />
-        </v-card-title>
-
-        <v-card-text class="pa-0">
-          <!-- Order Summary -->
-          <div class="pa-4 border-b">
-            <v-row>
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Supplier</div>
-                <div class="text-body-1 font-weight-bold">{{ selectedOrder.supplierName }}</div>
-              </v-col>
-
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Status</div>
-                <v-chip size="small" :color="getStatusColor(selectedOrder.status)" variant="flat">
-                  {{ getStatusText(selectedOrder.status) }}
-                </v-chip>
-              </v-col>
-
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Total Amount</div>
-                <div class="text-h6 font-weight-bold">
-                  {{ formatCurrency(selectedOrder.totalAmount) }}
-                </div>
-                <div v-if="selectedOrder.isEstimatedTotal" class="text-caption text-warning">
-                  Estimated Total
-                </div>
-              </v-col>
-
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Order Date</div>
-                <div class="text-body-2">{{ formatDate(selectedOrder.orderDate) }}</div>
-              </v-col>
-
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Expected Delivery</div>
-                <div class="text-body-2">
-                  {{
-                    selectedOrder.expectedDeliveryDate
-                      ? formatDate(selectedOrder.expectedDeliveryDate)
-                      : 'Not set'
-                  }}
-                </div>
-              </v-col>
-
-              <v-col cols="6" md="3">
-                <div class="text-subtitle-2 mb-1">Related Requests</div>
-                <div class="d-flex flex-wrap gap-1">
-                  <v-chip
-                    v-for="requestId in selectedOrder.requestIds"
-                    :key="requestId"
-                    size="x-small"
-                    variant="outlined"
-                  >
-                    {{ getRequestNumber(requestId) }}
-                  </v-chip>
-                </div>
-              </v-col>
-
-              <v-col cols="12">
-                <div class="text-subtitle-2 mb-1">Notes</div>
-                <div class="text-body-2">{{ selectedOrder.notes || 'No notes' }}</div>
-              </v-col>
-
-              <!-- ✅ НОВЫЙ: Используем PurchaseOrderPayment компонент -->
-              <v-col cols="12">
-                <purchase-order-payment
-                  :order="selectedOrder"
-                  :bills="orderBills"
-                  :loading="false"
-                  @create-bill="handleCreateBill"
-                  @attach-bill="handleAttachBill"
-                  @manage-all-bills="handleManageAllBills"
-                  @view-bill="viewBill"
-                  @process-payment="processPayment"
-                  @detach-bill="detachBillFromOrder"
-                  @edit-bill="editBillAmount"
-                  @cancel-bill="cancelBill"
-                />
-              </v-col>
-            </v-row>
-          </div>
-
-          <!-- Items List -->
-          <div class="pa-4">
-            <div class="text-subtitle-1 font-weight-bold mb-3">
-              Order Items ({{ selectedOrder.items.length }})
-            </div>
-
-            <v-data-table
-              :headers="itemHeaders"
-              :items="selectedOrder.items"
-              density="compact"
-              :items-per-page="-1"
-              hide-default-footer
-            >
-              <template #[`item.pricePerUnit`]="{ item }">
-                <div class="text-right">
-                  {{ formatCurrency(item.pricePerUnit) }}
-                  <div v-if="item.isEstimatedPrice" class="text-caption text-warning">
-                    Est. ({{ formatDate(item.lastPriceDate || '') }})
-                  </div>
-                </div>
-              </template>
-
-              <template #[`item.totalPrice`]="{ item }">
-                <div class="text-right font-weight-bold">
-                  {{ formatCurrency(item.totalPrice) }}
-                </div>
-              </template>
-
-              <template #[`item.status`]="{ item }">
-                <v-chip size="x-small" :color="getItemStatusColor(item.status)" variant="tonal">
-                  {{ item.status }}
-                </v-chip>
-              </template>
-            </v-data-table>
-
-            <!-- Order Total -->
-            <div class="d-flex justify-end mt-4 pa-3 bg-surface rounded">
-              <div>
-                <div class="text-body-2 text-medium-emphasis mb-1">Order Total:</div>
-                <div class="text-h6 font-weight-bold">
-                  {{ formatCurrency(selectedOrder.totalAmount) }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </v-card-text>
-
-        <!-- Dialog Actions -->
-        <v-card-actions class="pa-4 border-t">
-          <v-spacer />
-
-          <v-btn
-            v-if="canSendOrder(selectedOrder)"
-            color="success"
-            variant="flat"
-            prepend-icon="mdi-send"
-            @click="sendOrder(selectedOrder)"
-          >
-            Send to Supplier
-          </v-btn>
-
-          <v-btn
-            v-if="canStartReceipt(selectedOrder)"
-            color="purple"
-            variant="flat"
-            prepend-icon="mdi-truck-check"
-            @click="startReceipt(selectedOrder)"
-          >
-            Start Receipt
-          </v-btn>
-
-          <v-btn color="grey" variant="outlined" @click="showDetailsDialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- ✅ НОВЫЙ КОМПОНЕНТ: Order Details Dialog -->
+    <purchase-order-details-dialog
+      v-model="showDetailsDialog"
+      :order="selectedOrder"
+      @send-order="sendOrder"
+      @start-receipt="startReceipt"
+      @manage-bill-create="handleCreateBill"
+      @manage-bill-attach="handleAttachBill"
+      @manage-bill-view="handleManageAllBills"
+      @view-bill="viewBill"
+      @process-payment="processPayment"
+      @detach-bill="detachBillFromOrder"
+      @edit-bill="editBillAmount"
+      @cancel-bill="cancelBill"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import type { PurchaseOrder, OrderFilters } from '@/stores/supplier_2/types'
-import type { PendingPayment } from '@/stores/account/types'
 import BillStatus from './BillStatus.vue'
-import PurchaseOrderPayment from './PurchaseOrderPayment.vue'
+import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -487,7 +246,7 @@ interface Emits {
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
 
-  // ✅ Новые специфичные emits для разных режимов PaymentDialog
+  // ✅ Bill management emits (проксирование от PurchaseOrderDetailsDialog)
   (e: 'manage-bill-create', order: PurchaseOrder): void
   (e: 'manage-bill-attach', order: PurchaseOrder): void
   (e: 'manage-bill-view', order: PurchaseOrder): void
@@ -523,13 +282,12 @@ const {
 } = usePurchaseOrders()
 
 // =============================================
-// LOCAL STATE
+// LOCAL STATE (упрощенный - убраны orderBills)
 // =============================================
 
 const showDetailsDialog = ref(false)
 const selectedOrder = ref<PurchaseOrder | null>(null)
 const searchQuery = ref('')
-const orderBills = ref<PendingPayment[]>([])
 
 // =============================================
 // TABLE CONFIGURATION
@@ -545,16 +303,6 @@ const headers = [
   { title: 'Order Date', key: 'orderDate', sortable: true, width: '140px' },
   { title: 'Age', key: 'age', sortable: false, width: '80px' },
   { title: 'Actions', key: 'actions', sortable: false, width: '200px', align: 'center' }
-]
-
-const itemHeaders = [
-  { title: 'Item', key: 'itemName', sortable: false },
-  { title: 'Qty Ordered', key: 'orderedQuantity', sortable: false, width: '100px', align: 'end' },
-  { title: 'Qty Received', key: 'receivedQuantity', sortable: false, width: '100px', align: 'end' },
-  { title: 'Unit', key: 'unit', sortable: false, width: '80px' },
-  { title: 'Price/Unit', key: 'pricePerUnit', sortable: false, width: '120px', align: 'end' },
-  { title: 'Total', key: 'totalPrice', sortable: false, width: '120px', align: 'end' },
-  { title: 'Status', key: 'status', sortable: false, width: '100px' }
 ]
 
 // =============================================
@@ -646,12 +394,10 @@ function editOrder(order: PurchaseOrder) {
 
 function sendOrder(order: PurchaseOrder) {
   emits('send-order', order)
-  showDetailsDialog.value = false
 }
 
 function startReceipt(order: PurchaseOrder) {
   emits('start-receipt', order)
-  showDetailsDialog.value = false
 }
 
 function duplicateOrder(order: PurchaseOrder) {
@@ -670,75 +416,23 @@ function cancelOrder(order: PurchaseOrder) {
   console.log('Cancel order:', order.id)
 }
 
-function canStartReceipt(order: PurchaseOrder): boolean {
-  return canReceiveOrder(order) && isReadyForReceipt(order)
-}
-
 // =============================================
-// BILL MANAGEMENT METHODS - Обновленные для новой архитектуры
+// BILL MANAGEMENT METHODS (проксирование от dialog)
 // =============================================
 
-/**
- * ✅ Create bill - открывает PaymentDialog в режиме 'create'
- */
 function handleCreateBill(order: PurchaseOrder) {
   console.log('Creating bill for order:', order.orderNumber)
   emits('manage-bill-create', order)
 }
 
-/**
- * ✅ Attach bill - открывает PaymentDialog в режиме 'attach'
- */
 function handleAttachBill(order: PurchaseOrder) {
   console.log('Attaching bill to order:', order.orderNumber)
   emits('manage-bill-attach', order)
 }
 
-/**
- * ✅ Manage all bills - открывает PaymentDialog в режиме 'view'
- */
 function handleManageAllBills(order: PurchaseOrder) {
   console.log('Managing all bills for order:', order.orderNumber)
   emits('manage-bill-view', order)
-}
-
-/**
- * Load bills for the current order
- */
-async function loadOrderBills(order: PurchaseOrder) {
-  if (!order) {
-    orderBills.value = []
-    return
-  }
-
-  try {
-    const { supplierAccountIntegration } = await import(
-      '@/stores/supplier_2/integrations/accountIntegration'
-    )
-    orderBills.value = await supplierAccountIntegration.getBillsForOrder(order.id)
-    console.log(`Loaded ${orderBills.value.length} bills for order ${order.orderNumber}`)
-  } catch (error) {
-    console.error('Failed to load order bills:', error)
-    orderBills.value = []
-  }
-}
-
-function getBillForOrder(order: PurchaseOrder) {
-  if (!order.billId) return null
-  return {
-    id: order.billId,
-    amount: order.totalAmount || 0,
-    paidAmount: 0,
-    status: 'pending'
-  }
-}
-
-function handleSyncWarning(order: PurchaseOrder): void {
-  emits('manage-bill-view', order)
-}
-
-function handleShortfall(order: PurchaseOrder): void {
-  emits('show-shortfall', order)
 }
 
 function viewBill(billId: string) {
@@ -765,6 +459,24 @@ function cancelBill(billId: string) {
 // HELPER FUNCTIONS
 // =============================================
 
+function getBillForOrder(order: PurchaseOrder) {
+  if (!order.billId) return null
+  return {
+    id: order.billId,
+    amount: order.totalAmount || 0,
+    paidAmount: 0,
+    status: 'pending'
+  }
+}
+
+function handleSyncWarning(order: PurchaseOrder): void {
+  emits('manage-bill-view', order)
+}
+
+function handleShortfall(order: PurchaseOrder): void {
+  emits('show-shortfall', order)
+}
+
 function getStatusText(status: string): string {
   const statusMap: Record<string, string> = {
     draft: 'Draft',
@@ -788,23 +500,10 @@ function getStatusIcon(status: string): string {
   return iconMap[status] || 'mdi-help-circle'
 }
 
-function getItemStatusColor(status: string): string {
-  const colorMap: Record<string, string> = {
-    ordered: 'blue',
-    received: 'green',
-    cancelled: 'red'
-  }
-  return colorMap[status] || 'grey'
-}
-
 function getAgeColor(days: number): string {
   if (days <= 1) return 'green'
   if (days <= 3) return 'orange'
   return 'red'
-}
-
-function getRequestNumber(requestId: string): string {
-  return `REQ-${requestId.slice(-3)}`
 }
 
 function formatDate(dateString: string): string {
@@ -815,22 +514,6 @@ function formatDate(dateString: string): string {
     minute: '2-digit'
   })
 }
-
-// =============================================
-// WATCHERS
-// =============================================
-
-watch(
-  () => selectedOrder.value,
-  order => {
-    if (order) {
-      loadOrderBills(order)
-    } else {
-      orderBills.value = []
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <style lang="scss" scoped>
@@ -838,14 +521,6 @@ watch(
   .v-data-table {
     border-radius: 8px;
   }
-}
-
-.border-b {
-  border-bottom: 1px solid rgb(var(--v-theme-surface-variant));
-}
-
-.border-t {
-  border-top: 1px solid rgb(var(--v-theme-surface-variant));
 }
 
 .text-medium-emphasis {
