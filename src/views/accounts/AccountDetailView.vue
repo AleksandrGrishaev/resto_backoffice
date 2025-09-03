@@ -133,9 +133,10 @@ import { formatIDR } from '@/utils/currency'
 import { formatDate } from '@/utils/formatter'
 
 // Импорты диалогов
-import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
-import TransferDialog from '@/components/accounts/dialogs/TransferDialog.vue'
-import CorrectionDialog from '@/components/accounts/dialogs/CorrectionDialog.vue'
+import AccountOperations from './components/detail/AccountOperations.vue'
+import OperationDialog from './components/dialogs/OperationDialog.vue'
+import TransferDialog from './components/dialogs/TransferDialog.vue'
+import CorrectionDialog from './components/dialogs/CorrectionDialog.vue'
 
 const route = useRoute()
 const router = useRouter()

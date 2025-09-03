@@ -38,11 +38,10 @@ import { useAuthStore } from '@/stores/auth.store'
 import type { Account, OperationType } from '@/stores/account'
 
 // ✅ ИСПРАВЛЕНО: Импорты реальных компонентов
-import AccountList from '@/components/accounts/list/AccountList.vue'
-import AccountListToolbar from '@/components/accounts/list/AccountListToolbar.vue'
-import AccountDialog from '@/components/accounts/dialogs/AccountDialog.vue'
-import OperationDialog from '@/components/accounts/dialogs/OperationDialog.vue'
-
+import AccountList from './components/list/AccountList.vue'
+import AccountListToolbar from './components/list/AccountListToolbar.vue'
+import AccountDialog from './components/dialogs/AccountDialog.vue'
+import OperationDialog from './components/dialogs/OperationDialog.vue'
 const router = useRouter()
 const store = useAccountStore()
 const authStore = useAuthStore()
