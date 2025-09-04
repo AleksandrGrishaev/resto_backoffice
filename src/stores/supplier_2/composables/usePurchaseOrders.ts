@@ -283,35 +283,6 @@ export function usePurchaseOrders() {
   }
 
   /**
-   * Create new order
-   */
-  async function createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
-    try {
-      console.log('PurchaseOrders: Creating order', data)
-      const newOrder = await supplierStore.createOrder(data)
-
-      // ✅ ОСТАВЛЯЕМ: Создаем планируемую поставку в StorageStore
-      try {
-        await plannedDeliveryIntegration.createPlannedDelivery(newOrder)
-        console.log(`PurchaseOrders: Planned delivery created for order ${newOrder.orderNumber}`)
-      } catch (error) {
-        console.warn('PurchaseOrders: Failed to create planned delivery (non-critical):', error)
-        // Не прерываем создание заказа из-за ошибки интеграции
-      }
-
-      // ❌ УБИРАЕМ: await createBillInAccountStore(newOrder)
-      // Теперь счета создаются только вручную через UI
-
-      console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
-      console.log(`PurchaseOrders: Bill can be created manually via UI`)
-      return newOrder
-    } catch (error) {
-      console.error('PurchaseOrders: Error creating order:', error)
-      throw error
-    }
-  }
-
-  /**
    * Update order
    */
   async function updateOrder(id: string, data: UpdateOrderData): Promise<PurchaseOrder> {
@@ -340,24 +311,6 @@ export function usePurchaseOrders() {
       return updatedOrder
     } catch (error) {
       console.error('PurchaseOrders: Error updating order:', error)
-      throw error
-    }
-  }
-
-  async function sendOrderToSupplier(id: string): Promise<PurchaseOrder> {
-    try {
-      console.log(`PurchaseOrders: Sending order to supplier ${id}`)
-
-      // Обновляем статус на 'sent'
-      const updatedOrder = await updateOrder(id, { status: 'sent' })
-
-      // ❌ УБИРАЕМ автоматическое создание счета при отправке
-      // Теперь счета создаются только через UI диалог
-      console.log(`PurchaseOrders: Order sent. Bill can be created via manage payment dialog`)
-
-      return updatedOrder
-    } catch (error) {
-      console.error('PurchaseOrders: Error sending order to supplier:', error)
       throw error
     }
   }
