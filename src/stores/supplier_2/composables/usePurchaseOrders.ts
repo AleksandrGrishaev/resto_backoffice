@@ -10,7 +10,9 @@ import type {
   SupplierBasket,
   UnassignedItem,
   OrderStatus,
-  PaymentStatus
+  BillStatus,
+  BILL_STATUSES,
+  getBillStatusColor
 } from '../types'
 import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 import { DebugUtils } from '@/utils'
@@ -35,7 +37,7 @@ export function usePurchaseOrders() {
 
   const filters = ref<OrderFilters>({
     status: 'all',
-    paymentStatus: 'all',
+    billStatus: 'all', // ИЗМЕНЕНО с paymentStatus
     supplier: 'all',
     dateFrom: null,
     dateTo: null
@@ -56,8 +58,11 @@ export function usePurchaseOrders() {
       filtered = filtered.filter(order => order.status === filters.value.status)
     }
 
-    if (filters.value.paymentStatus !== 'all') {
-      filtered = filtered.filter(order => order.paymentStatus === filters.value.paymentStatus)
+    if (filters.value.billStatus !== 'all') {
+      filtered = filtered.filter(order => {
+        const orderBillStatus = getBillStatus(order)
+        return orderBillStatus === filters.value.billStatus
+      })
     }
 
     if (filters.value.supplier !== 'all') {
@@ -85,8 +90,8 @@ export function usePurchaseOrders() {
     () => orders.value.filter(order => order.status === 'sent') // ✅ НОВОЕ - только 'sent'
   )
 
-  const unpaidOrders = computed(() =>
-    orders.value.filter(order => order.paymentStatus === 'pending')
+  const ordersNeedingBills = computed(() =>
+    orders.value.filter(order => ['not_billed', 'billed', 'overdue'].includes(getBillStatus(order)))
   )
 
   const ordersAwaitingDelivery = computed(() =>
@@ -106,6 +111,30 @@ export function usePurchaseOrders() {
     )
   })
 
+  /**
+   * Получить статус счетов для заказа
+   */
+  function getBillStatus(order: PurchaseOrder): BillStatus {
+    // Если есть billStatus в заказе, используем его
+    if (order.billStatus) {
+      return order.billStatus
+    }
+  }
+
+  /**
+   * Получить цвет статуса счетов для UI
+   */
+  function getBillStatusColorForOrder(status: BillStatus): string {
+    return getBillStatusColor(status)
+  }
+
+  /**
+   * Получить текст статуса счетов для UI
+   */
+  function getBillStatusText(status: BillStatus): string {
+    return BILL_STATUSES[status] || status
+  }
+
   // =============================================
   // COMPUTED - Statistics
   // =============================================
@@ -114,7 +143,7 @@ export function usePurchaseOrders() {
     total: orders.value.length,
     draft: draftOrders.value.length,
     pending: pendingOrders.value.length,
-    unpaid: unpaidOrders.value.length,
+    needingBills: ordersNeedingBills.value.length, // ИЗМЕНЕНО с unpaid
     awaitingDelivery: ordersAwaitingDelivery.value.length
   }))
 
@@ -175,6 +204,35 @@ export function usePurchaseOrders() {
     } catch (error) {
       console.error('PurchaseOrders: Error creating order:', error)
       throw error
+    }
+  }
+
+  /**
+   * Асинхронно вычислить статус счетов на основе платежей из AccountStore
+   */
+  async function calculateBillStatus(order: PurchaseOrder): Promise<BillStatus> {
+    try {
+      // Получить платежи для заказа из AccountStore
+      const paymentStatus = await getOrderPaymentStatus(order.id)
+
+      if (!paymentStatus.hasBills) {
+        return 'not_billed'
+      }
+
+      const { totalBilled, totalPaid, status } = paymentStatus
+
+      if (totalPaid === 0) {
+        return 'billed'
+      }
+
+      if (totalPaid >= totalBilled) {
+        return totalPaid > totalBilled ? 'overpaid' : 'fully_paid'
+      }
+
+      return 'partially_paid'
+    } catch (error) {
+      console.error('Error calculating bill status:', error)
+      return 'not_billed'
     }
   }
 
@@ -452,16 +510,6 @@ export function usePurchaseOrders() {
     }
   }
 
-  /**
-   * Update payment status
-   */
-  async function updatePaymentStatus(
-    id: string,
-    paymentStatus: PaymentStatus
-  ): Promise<PurchaseOrder> {
-    return updateOrder(id, { paymentStatus })
-  }
-
   // =============================================
   // ACTIONS - AccountStore Integration
   // =============================================
@@ -603,7 +651,7 @@ export function usePurchaseOrders() {
   function clearFilters() {
     filters.value = {
       status: 'all',
-      paymentStatus: 'all',
+      billStatus: 'all',
       supplier: 'all',
       dateFrom: null,
       dateTo: null
@@ -628,12 +676,11 @@ export function usePurchaseOrders() {
   function getOrdersByStatus(status: OrderStatus): PurchaseOrder[] {
     return orders.value.filter(order => order.status === status)
   }
-
   /**
-   * Get orders by payment status
+   * Get orders by bill status
    */
-  function getOrdersByPaymentStatus(paymentStatus: PaymentStatus): PurchaseOrder[] {
-    return orders.value.filter(order => order.paymentStatus === paymentStatus)
+  function getOrdersByBillStatus(billStatus: BillStatus): PurchaseOrder[] {
+    return orders.value.filter(order => getBillStatus(order) === billStatus)
   }
 
   /**
@@ -869,7 +916,7 @@ export function usePurchaseOrders() {
     filteredOrders,
     draftOrders,
     pendingOrders,
-    unpaidOrders,
+    ordersNeedingBills,
     ordersAwaitingDelivery,
     ordersForReceipt,
     orderStatistics,
@@ -927,6 +974,12 @@ export function usePurchaseOrders() {
     getOrderBatches,
     sendOrderToSupplier,
     getOrderPaymentStatus,
-    cancelOrderBills
+    cancelOrderBills,
+    getBillStatus,
+    getBillStatusColorForOrder,
+    getBillStatusText,
+    calculateBillStatus,
+    getOrdersByBillStatus,
+    getBillStatus
   }
 }

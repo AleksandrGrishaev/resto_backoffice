@@ -592,7 +592,7 @@ async function handleSaveEditedOrder(editedOrder: PurchaseOrder) {
       status: editedOrder.status,
       orderDate: editedOrder.orderDate,
       expectedDelivery: editedOrder.expectedDelivery,
-      paymentStatus: editedOrder.paymentStatus,
+      billStatus: editedOrder.billStatus,
       notes: editedOrder.notes,
       items: editedOrder.items
     })

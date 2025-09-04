@@ -92,30 +92,26 @@
       <!-- Bill Status Column -->
       <template #[`item.billStatus`]="{ item }">
         <div class="bill-status">
-          <!-- Если есть счет -->
-          <div v-if="item.billId" class="d-flex align-center">
-            <span class="text-body-2 mr-2">1 bill</span>
+          <v-chip
+            :color="getBillStatusColorForOrder(getBillStatus(item))"
+            size="small"
+            variant="tonal"
+          >
+            {{ getBillStatusText(getBillStatus(item)) }}
+          </v-chip>
 
-            <v-chip :color="getBillStatusColor(item.paymentStatus)" size="x-small" variant="flat">
-              {{ getBillStatusText(item.paymentStatus) }}
-            </v-chip>
-
-            <!-- Индикатор проблем -->
-            <v-icon
-              v-if="
-                item.hasShortfall ||
-                (item.actualDeliveredAmount && item.actualDeliveredAmount < item.totalAmount)
-              "
-              color="warning"
-              size="small"
-              class="ml-1"
-            >
-              mdi-alert-circle
-            </v-icon>
-          </div>
-
-          <!-- Нет счетов -->
-          <div v-else class="text-grey-400 text-caption">No bills</div>
+          <!-- Индикатор проблем -->
+          <v-icon
+            v-if="
+              item.hasShortfall ||
+              (item.actualDeliveredAmount && item.actualDeliveredAmount < item.totalAmount)
+            "
+            color="warning"
+            size="small"
+            class="ml-1"
+          >
+            mdi-alert-circle
+          </v-icon>
         </div>
       </template>
 
@@ -247,7 +243,11 @@ import { ref, computed } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import type { PurchaseOrder, OrderFilters } from '@/stores/supplier_2/types'
 import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
-
+import {
+  getBillStatus,
+  getBillStatusColorForOrder,
+  getBillStatusText
+} from '@/stores/supplier_2/composables/usePurchaseOrders'
 // =============================================
 // PROPS & EMITS
 // =============================================
@@ -322,9 +322,12 @@ const statusOptions = [
 
 const billStatusOptions = [
   { title: 'All Bill Statuses', value: 'all' },
-  { title: 'No Bills', value: 'no_bills' },
-  { title: 'Pending Payment', value: 'pending' },
-  { title: 'Paid', value: 'paid' }
+  { title: 'Not Billed', value: 'not_billed' },
+  { title: 'Billed', value: 'billed' },
+  { title: 'Partially Paid', value: 'partially_paid' },
+  { title: 'Fully Paid', value: 'fully_paid' },
+  { title: 'Overdue', value: 'overdue' },
+  { title: 'Overpaid', value: 'overpaid' }
 ]
 
 const supplierOptions = computed(() => {
@@ -348,11 +351,8 @@ const filteredOrders = computed(() => {
 
   if (filters.value.billStatus && filters.value.billStatus !== 'all') {
     filtered = filtered.filter(order => {
-      if (filters.value.billStatus === 'no_bills') {
-        return !order.billId
-      }
-      // Для 'pending' и 'paid' проверяем paymentStatus
-      return order.paymentStatus === filters.value.billStatus
+      const orderBillStatus = getBillStatus(order)
+      return orderBillStatus === filters.value.billStatus
     })
   }
 
@@ -412,26 +412,6 @@ function deleteOrder(order: PurchaseOrder) {
 
 function cancelOrder(order: PurchaseOrder) {
   console.log('Cancel order:', order.id)
-}
-
-// =============================================
-// BILL FUNCTIONS
-// =============================================
-
-function getBillStatusColor(paymentStatus: string): string {
-  const colors = {
-    pending: 'orange',
-    paid: 'green'
-  }
-  return colors[paymentStatus as keyof typeof colors] || 'grey'
-}
-
-function getBillStatusText(paymentStatus: string): string {
-  const texts = {
-    pending: 'Pending',
-    paid: 'Paid'
-  }
-  return texts[paymentStatus as keyof typeof texts] || paymentStatus
 }
 
 // =============================================

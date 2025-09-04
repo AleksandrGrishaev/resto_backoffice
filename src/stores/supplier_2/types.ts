@@ -49,7 +49,7 @@ export interface PurchaseOrder extends BaseEntity {
   isEstimatedTotal: boolean // true if contains estimated prices
 
   status: 'draft' | 'sent' | 'delivered' | 'cancelled'
-  paymentStatus: 'pending' | 'paid'
+  billStatus?: BillStatus
 
   // Relations to other Stores
   requestIds: string[] // created from
@@ -146,6 +146,14 @@ export interface SupplierState {
   supplierBaskets: SupplierBasket[]
 }
 
+export type BillStatus =
+  | 'not_billed' // Счета не выставлены
+  | 'billed' // Счета выставлены, но не оплачены
+  | 'partially_paid' // Частично оплачено
+  | 'fully_paid' // Полностью оплачено
+  | 'overdue' // Есть просроченные неоплаченные счета
+  | 'overpaid' // Переплата
+
 // =============================================
 // HELPER TYPES - Helper types
 // =============================================
@@ -239,7 +247,7 @@ export interface UpdateRequestData {
 
 export interface UpdateOrderData {
   status?: PurchaseOrder['status']
-  paymentStatus?: PurchaseOrder['paymentStatus']
+  billStatus?: PurchaseOrder['billStatus']
   expectedDeliveryDate?: string
   notes?: string
 }
@@ -327,7 +335,7 @@ export interface RequestFilters {
 
 export interface OrderFilters {
   status?: PurchaseOrder['status'] | 'all'
-  paymentStatus?: PurchaseOrder['paymentStatus'] | 'all'
+  billStatus?: PurchaseOrder['billStatus'] | 'all'
   supplier?: string | 'all'
 }
 
@@ -380,9 +388,13 @@ export const ORDER_STATUSES = {
   cancelled: 'Cancelled'
 } as const
 
-export const PAYMENT_STATUSES = {
-  pending: 'Pending Payment',
-  paid: 'Paid'
+export const BILL_STATUSES = {
+  not_billed: 'Not Billed',
+  billed: 'Billed',
+  partially_paid: 'Partially Paid',
+  fully_paid: 'Fully Paid',
+  overdue: 'Overdue',
+  overpaid: 'Overpaid'
 } as const
 
 export const RECEIPT_STATUSES = {
@@ -405,6 +417,18 @@ export const SUGGESTION_REASONS = {
 // TYPE GUARDS - Type guards
 // =============================================
 
+export function getBillStatusColor(status: BillStatus): string {
+  const colors = {
+    not_billed: 'grey',
+    billed: 'orange',
+    partially_paid: 'blue',
+    fully_paid: 'green',
+    overdue: 'red',
+    overpaid: 'purple'
+  }
+  return colors[status] || 'grey'
+}
+
 export function isProcurementRequest(obj: any): obj is ProcurementRequest {
   return obj && typeof obj.requestNumber === 'string' && obj.department && obj.items
 }
@@ -424,7 +448,7 @@ export function isReceipt(obj: any): obj is Receipt {
 // Status union types
 export type RequestStatus = ProcurementRequest['status']
 export type OrderStatus = PurchaseOrder['status']
-export type PaymentStatus = PurchaseOrder['paymentStatus']
+export type BillStatusType = PurchaseOrder['billStatus']
 export type ReceiptStatus = Receipt['status']
 export type Department = 'kitchen' | 'bar'
 export type Priority = 'normal' | 'urgent'

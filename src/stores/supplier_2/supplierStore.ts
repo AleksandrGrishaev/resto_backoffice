@@ -748,7 +748,7 @@ export const useSupplierStore = defineStore('supplier', () => {
       DebugUtils.info(MODULE_NAME, 'Order updated successfully', {
         orderId: id,
         status: updatedOrder.status,
-        paymentStatus: updatedOrder.paymentStatus,
+        billStatus: updatedOrder.billStatus,
         updatedInArray: index !== -1
       })
 

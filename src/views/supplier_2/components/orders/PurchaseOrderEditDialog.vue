@@ -83,12 +83,12 @@
 
               <v-select
                 v-model="editableOrder.paymentStatus"
-                :items="paymentStatusOptions"
+                :items="billStatusOptions"
                 label="Payment Status"
                 prepend-inner-icon="mdi-credit-card"
                 variant="outlined"
                 density="compact"
-                :disabled="!canEditPaymentStatus"
+                :disabled="!canEditBillStatus"
                 class="mb-3"
               />
             </v-col>
@@ -363,10 +363,13 @@ const statusOptions = [
   { title: 'Cancelled', value: 'cancelled' }
 ]
 
-const paymentStatusOptions = [
-  { title: 'Pending', value: 'pending' },
-  { title: 'Paid', value: 'paid' },
-  { title: 'Overdue', value: 'overdue' }
+const billStatusOptions = [
+  { title: 'Not Billed', value: 'not_billed' },
+  { title: 'Billed', value: 'billed' },
+  { title: 'Partially Paid', value: 'partially_paid' },
+  { title: 'Fully Paid', value: 'fully_paid' },
+  { title: 'Overdue', value: 'overdue' },
+  { title: 'Overpaid', value: 'overpaid' }
 ]
 
 // Computed
@@ -391,7 +394,7 @@ const canEditStatus = computed(() => {
   return editableOrder.value && ['draft', 'sent'].includes(editableOrder.value.status)
 })
 
-const canEditPaymentStatus = computed(() => {
+const canEditBillStatus = computed(() => {
   return editableOrder.value && ['sent', 'delivered'].includes(editableOrder.value.status)
 })
 
@@ -484,7 +487,7 @@ async function saveOrder() {
       status: editableOrder.value.status,
       orderDate: editableOrder.value.orderDate,
       expectedDelivery: editableOrder.value.expectedDelivery,
-      paymentStatus: editableOrder.value.paymentStatus,
+      billStatus: editableOrder.value.billStatus,
       notes: editableOrder.value.notes,
       items: editableOrder.value.items
     })

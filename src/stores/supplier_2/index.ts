@@ -10,6 +10,8 @@ import { usePurchaseOrders } from './composables/usePurchaseOrders'
 import { useReceipts } from './composables/useReceipts'
 import { useSupplierStore } from './supplierStore'
 
+export type { BillStatus } from './types'
+
 // =============================================
 // TYPES EXPORT
 // =============================================
@@ -62,7 +64,6 @@ export type {
 export type {
   RequestStatus,
   OrderStatus,
-  PaymentStatus,
   ReceiptStatus,
   Department,
   Priority,
@@ -80,12 +81,12 @@ export {
   REQUEST_STATUSES,
   REQUEST_PRIORITIES,
   ORDER_STATUSES,
-  PAYMENT_STATUSES,
+  BILL_STATUSES, // ИЗМЕНЕНО с PAYMENT_STATUSES
   RECEIPT_STATUSES,
   SUGGESTION_URGENCY,
-  SUGGESTION_REASONS
+  SUGGESTION_REASONS,
+  getBillStatusColor // ДОБАВЛЕНО
 } from './types'
-
 // Type guards
 export { isProcurementRequest, isPurchaseOrder, isReceipt } from './types'
 
@@ -156,7 +157,12 @@ export function useOrderCreationWorkflow() {
     clearSupplierBaskets
   } = useProcurementRequests()
 
-  const { createOrderFromBasket, getStatusColor, formatCurrency } = usePurchaseOrders()
+  const {
+    createOrderFromBasket,
+    getStatusColor,
+    getBillStatusColorForOrder, // ДОБАВЛЕНО
+    formatCurrency
+  } = usePurchaseOrders()
 
   const store = useSupplierStore()
 
@@ -174,6 +180,7 @@ export function useOrderCreationWorkflow() {
 
     // Utilities
     getStatusColor,
+    getBillStatusColorForOrder,
     formatCurrency
   }
 }
