@@ -93,11 +93,11 @@
       <template #[`item.billStatus`]="{ item }">
         <div class="bill-status">
           <v-chip
-            :color="getBillStatusColorForOrder(getBillStatus(item))"
+            :color="getBillStatusColorForOrder(getBillStatusForOrder(item))"
             size="small"
             variant="tonal"
           >
-            {{ getBillStatusText(getBillStatus(item)) }}
+            {{ getBillStatusText(getBillStatusForOrder(item)) }}
           </v-chip>
 
           <!-- Индикатор проблем -->
@@ -239,10 +239,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
-import type { PurchaseOrder, OrderFilters } from '@/stores/supplier_2/types'
+import type { PurchaseOrder, OrderFilters, BillStatus } from '@/stores/supplier_2/types'
 import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
+import { useAccountStore } from '@/stores/account'
+
 // =============================================
 // PROPS & EMITS
 // =============================================
@@ -277,7 +279,6 @@ const {
   canReceiveOrder,
   isReadyForReceipt,
   getOrderAge,
-  getBillStatus,
   getBillStatusColorForOrder,
   getBillStatusText
 } = usePurchaseOrders()
@@ -285,7 +286,7 @@ const {
 // =============================================
 // LOCAL STATE (упрощенный - убраны orderBills)
 // =============================================
-
+const accountStore = useAccountStore()
 const showDetailsDialog = ref(false)
 const selectedOrder = ref<PurchaseOrder | null>(null)
 const searchQuery = ref('')
@@ -349,7 +350,7 @@ const filteredOrders = computed(() => {
 
   if (filters.value.billStatus && filters.value.billStatus !== 'all') {
     filtered = filtered.filter(order => {
-      const orderBillStatus = getBillStatus(order)
+      const orderBillStatus = getBillStatusForOrder(order)
       return orderBillStatus === filters.value.billStatus
     })
   }
@@ -408,22 +409,9 @@ function deleteOrder(order: PurchaseOrder) {
   console.log('Delete order:', order.id)
 }
 
-function cancelOrder(order: PurchaseOrder) {
-  console.log('Cancel order:', order.id)
-}
-
 // =============================================
 // HELPER FUNCTIONS
 // =============================================
-
-function getBillForOrder(order: PurchaseOrder) {
-  return order.billId
-    ? {
-        id: order.billId,
-        status: order.paymentStatus || 'pending'
-      }
-    : null
-}
 
 function getStatusText(status: string): string {
   const statusMap: Record<string, string> = {
@@ -462,6 +450,112 @@ function formatDate(dateString: string): string {
     minute: '2-digit'
   })
 }
+// ===== ИСПРАВЛЕНИЕ ПРЕДУПРЕЖДЕНИЙ VUE =====
+
+// ЗАМЕНИТЬ весь блок BILL STATUS CALCULATION на этот код:
+
+// =============================================
+// BILL STATUS CALCULATION - ИСПРАВЛЕННАЯ ВЕРСИЯ
+// =============================================
+
+// ✅ Кеш статусов с реактивностью через ref
+const billStatusCache = ref<Record<string, BillStatus>>({})
+const lastUpdateTime = ref<number>(0)
+
+function calculateBillStatusFromBills(bills: any[], order: PurchaseOrder): BillStatus {
+  if (bills.length === 0) return 'not_billed'
+
+  const totalPaid = bills
+    .filter(bill => bill.status === 'completed')
+    .reduce((sum, bill) => sum + bill.amount, 0)
+
+  const totalBilled = bills.reduce((sum, bill) => sum + bill.amount, 0)
+
+  const now = new Date()
+  const hasOverdueBills = bills.some(
+    bill => bill.status === 'pending' && bill.dueDate && new Date(bill.dueDate) < now
+  )
+
+  if (hasOverdueBills) return 'overdue'
+  if (totalPaid === 0) return 'billed'
+  if (totalPaid > totalBilled) return 'overpaid'
+  if (totalPaid < totalBilled) return 'partially_paid'
+  return 'fully_paid'
+}
+
+// ✅ Функция обновления кеша статусов
+async function updateBillStatusCache() {
+  try {
+    await accountStore.fetchPayments()
+
+    const newCache: Record<string, BillStatus> = {}
+
+    for (const order of props.orders) {
+      const orderBills = accountStore.state.pendingPayments.filter(
+        payment => payment.purchaseOrderId === order.id
+      )
+      newCache[order.id] = calculateBillStatusFromBills(orderBills, order)
+    }
+
+    billStatusCache.value = newCache
+    lastUpdateTime.value = Date.now()
+
+    console.log('Bill status cache updated for', Object.keys(newCache).length, 'orders')
+  } catch (error) {
+    console.error('Failed to update bill status cache:', error)
+  }
+}
+
+// ✅ Простая функция получения статуса (без computed)
+function getBillStatusForOrder(order: PurchaseOrder): BillStatus {
+  // Если есть в кеше - используем кеш
+  if (billStatusCache.value[order.id]) {
+    return billStatusCache.value[order.id]
+  }
+
+  // Иначе - возвращаем статичное значение
+  return order.billStatus || 'not_billed'
+}
+
+// ✅ Функция обновления с дебаунсингом
+let refreshTimeout: NodeJS.Timeout | null = null
+
+async function refreshBillStatuses() {
+  // Дебаунсинг - не обновляем чаще чем раз в 500мс
+  if (refreshTimeout) {
+    clearTimeout(refreshTimeout)
+  }
+
+  refreshTimeout = setTimeout(async () => {
+    await updateBillStatusCache()
+    refreshTimeout = null
+  }, 500)
+}
+
+// ✅ Автообновление каждые 10 секунд
+let autoRefreshInterval: NodeJS.Timeout | null = null
+
+onMounted(async () => {
+  // Первоначальная загрузка
+  await updateBillStatusCache()
+
+  // Автообновление каждые 10 секунд
+  autoRefreshInterval = setInterval(() => {
+    updateBillStatusCache()
+  }, 10000)
+})
+
+// ✅ Очистка интервалов при размонтировании
+import { onUnmounted } from 'vue'
+
+onUnmounted(() => {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval)
+  }
+  if (refreshTimeout) {
+    clearTimeout(refreshTimeout)
+  }
+})
 </script>
 
 <style lang="scss" scoped>
