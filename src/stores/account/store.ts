@@ -249,17 +249,6 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
-  async function getPaymentsByPurchaseOrder(purchaseOrderId: string) {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Getting payments by purchase order', { purchaseOrderId })
-      return await paymentService.getPaymentsByPurchaseOrder(purchaseOrderId)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get payments by purchase order', { error })
-      setError(error)
-      throw error
-    }
-  }
-
   async function getPaymentById(paymentId: string) {
     try {
       return await paymentService.getPaymentById(paymentId)
@@ -448,6 +437,11 @@ export const useAccountStore = defineStore('account', () => {
       // Оптимистическое обновление
       state.value.pendingPayments.unshift(payment)
 
+      // ✅ ДОБАВИТЬ: Уведомляем о изменении статуса заказа
+      if (data.purchaseOrderId) {
+        await notifyOrderStatusChange(data.purchaseOrderId)
+      }
+
       DebugUtils.info(MODULE_NAME, 'Payment created successfully', { paymentId: payment.id })
       return payment
     } catch (error) {
@@ -475,6 +469,11 @@ export const useAccountStore = defineStore('account', () => {
           ? fetchTransactions(state.value.selectedAccountId)
           : Promise.resolve()
       ])
+
+      // ✅ ДОБАВИТЬ: Уведомляем о изменении статуса заказа
+      if (data.purchaseOrderId) {
+        await notifyOrderStatusChange(data.purchaseOrderId)
+      }
 
       DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
     } catch (error) {
@@ -609,6 +608,15 @@ export const useAccountStore = defineStore('account', () => {
       setError(error)
       throw error
     }
+  }
+
+  /**
+   * Уведомить supplier store об изменении статуса заказа
+   */
+  async function notifyOrderStatusChange(orderId: string): Promise<void> {
+    const { usePurchaseOrders } = await import('@/stores/supplier_2/composables/usePurchaseOrders')
+    const { updateOrderBillStatus } = usePurchaseOrders()
+    await updateOrderBillStatus(orderId)
   }
 
   async function cancelPayment(paymentId: string) {

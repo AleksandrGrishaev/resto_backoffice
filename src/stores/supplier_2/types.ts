@@ -49,7 +49,8 @@ export interface PurchaseOrder extends BaseEntity {
   isEstimatedTotal: boolean // true if contains estimated prices
 
   status: 'draft' | 'sent' | 'delivered' | 'cancelled'
-  billStatus?: BillStatus
+  billStatus: BillStatus
+  billStatusCalculatedAt?: string
 
   // Relations to other Stores
   requestIds: string[] // created from

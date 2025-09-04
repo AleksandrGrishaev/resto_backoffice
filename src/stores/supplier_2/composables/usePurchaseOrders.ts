@@ -212,27 +212,61 @@ export function usePurchaseOrders() {
    */
   async function calculateBillStatus(order: PurchaseOrder): Promise<BillStatus> {
     try {
-      // Получить платежи для заказа из AccountStore
-      const paymentStatus = await getOrderPaymentStatus(order.id)
+      const { useAccountStore } = await import('@/stores/account')
+      const accountStore = useAccountStore()
 
-      if (!paymentStatus.hasBills) {
-        return 'not_billed'
+      // ✅ ДОБАВИТЬ: Проверка на инициализацию accountStore
+      if (!accountStore.state.pendingPayments || accountStore.state.pendingPayments.length === 0) {
+        console.warn(
+          `AccountStore not initialized, fetching payments for order ${order.orderNumber}`
+        )
+        await accountStore.fetchPayments()
       }
 
-      const { totalBilled, totalPaid, status } = paymentStatus
+      const bills = accountStore.state.pendingPayments.filter(
+        payment => payment.purchaseOrderId === order.id
+      )
 
-      if (totalPaid === 0) {
-        return 'billed'
-      }
+      if (bills.length === 0) return 'not_billed'
 
-      if (totalPaid >= totalBilled) {
-        return totalPaid > totalBilled ? 'overpaid' : 'fully_paid'
-      }
+      const totalPaid = bills
+        .filter(bill => bill.status === 'completed')
+        .reduce((sum, bill) => sum + bill.amount, 0)
 
-      return 'partially_paid'
+      // Проверка просроченных счетов
+      const now = new Date()
+      const hasOverdueBills = bills.some(
+        bill => bill.status === 'pending' && bill.dueDate && new Date(bill.dueDate) < now
+      )
+
+      // ✅ ПРАВИЛЬНАЯ ЛОГИКА: сравниваем с суммой ЗАКАЗА, а не счетов
+      if (hasOverdueBills) return 'overdue'
+      if (totalPaid === 0) return 'billed'
+      if (totalPaid > order.totalAmount) return 'overpaid'
+      if (totalPaid < order.totalAmount) return 'partially_paid'
+      return 'fully_paid'
     } catch (error) {
-      console.error('Error calculating bill status:', error)
-      return 'not_billed'
+      console.error('Failed to calculate bill status:', error)
+      // ✅ FALLBACK: возвращаем статус из заказа или дефолт
+      return order.billStatus || 'not_billed'
+    }
+  }
+
+  /**
+   * Обновление статуса заказа в store
+   */
+  async function updateOrderBillStatus(orderId: string): Promise<void> {
+    const order = getOrderById(orderId)
+    if (!order) return
+
+    // ✅ ИСПРАВИТЬ: функция теперь async
+    const newStatus = await calculateBillStatus(order)
+
+    if (order.billStatus !== newStatus) {
+      order.billStatus = newStatus
+      order.billStatusCalculatedAt = new Date().toISOString()
+
+      console.log(`Bill status updated for ${order.orderNumber}: ${newStatus}`)
     }
   }
 
@@ -942,7 +976,7 @@ export function usePurchaseOrders() {
     // Helpers
     getOrderById,
     getOrdersByStatus,
-    getOrdersByBillStatus, // ИЗМЕНЕНО с getOrdersByPaymentStatus
+    getOrdersByBillStatus,
     getOrdersBySupplier,
     getUniqueRequestIds,
     canEditOrder,
@@ -958,11 +992,12 @@ export function usePurchaseOrders() {
     getOrderAge,
     isOverdueForDelivery,
 
-    // NEW: Bill Status functions
-    getBillStatus, // ТОЛЬКО ОДИН РАЗ!
+    // ✅ ДОБАВИТЬ эти три метода:
+    getBillStatus,
     getBillStatusColorForOrder,
     getBillStatusText,
     calculateBillStatus,
+    updateOrderBillStatus,
 
     // Integration helpers
     getOrderPaymentStatus,
