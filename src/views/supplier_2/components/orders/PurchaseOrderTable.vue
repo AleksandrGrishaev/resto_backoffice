@@ -91,7 +91,32 @@
 
       <!-- Bill Status Column -->
       <template #[`item.billStatus`]="{ item }">
-        <bill-status :order="item" />
+        <div class="bill-status">
+          <!-- Если есть счет -->
+          <div v-if="item.billId" class="d-flex align-center">
+            <span class="text-body-2 mr-2">1 bill</span>
+
+            <v-chip :color="getBillStatusColor(item.paymentStatus)" size="x-small" variant="flat">
+              {{ getBillStatusText(item.paymentStatus) }}
+            </v-chip>
+
+            <!-- Индикатор проблем -->
+            <v-icon
+              v-if="
+                item.hasShortfall ||
+                (item.actualDeliveredAmount && item.actualDeliveredAmount < item.totalAmount)
+              "
+              color="warning"
+              size="small"
+              class="ml-1"
+            >
+              mdi-alert-circle
+            </v-icon>
+          </div>
+
+          <!-- Нет счетов -->
+          <div v-else class="text-grey-400 text-caption">No bills</div>
+        </div>
       </template>
 
       <!-- Items Count Column -->
@@ -221,7 +246,6 @@
 import { ref, computed } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import type { PurchaseOrder, OrderFilters } from '@/stores/supplier_2/types'
-import BillStatus from './BillStatus.vue'
 import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
 
 // =============================================
@@ -298,10 +322,9 @@ const statusOptions = [
 
 const billStatusOptions = [
   { title: 'All Bill Statuses', value: 'all' },
-  { title: 'No Bill', value: 'no_bill' },
-  { title: 'Pending', value: 'pending' },
-  { title: 'Partial', value: 'processing' },
-  { title: 'Paid', value: 'completed' }
+  { title: 'No Bills', value: 'no_bills' },
+  { title: 'Pending Payment', value: 'pending' },
+  { title: 'Paid', value: 'paid' }
 ]
 
 const supplierOptions = computed(() => {
@@ -325,11 +348,11 @@ const filteredOrders = computed(() => {
 
   if (filters.value.billStatus && filters.value.billStatus !== 'all') {
     filtered = filtered.filter(order => {
-      const bill = getBillForOrder(order)
-      if (filters.value.billStatus === 'no_bill') {
-        return !bill
+      if (filters.value.billStatus === 'no_bills') {
+        return !order.billId
       }
-      return bill?.status === filters.value.billStatus
+      // Для 'pending' и 'paid' проверяем paymentStatus
+      return order.paymentStatus === filters.value.billStatus
     })
   }
 
@@ -392,17 +415,36 @@ function cancelOrder(order: PurchaseOrder) {
 }
 
 // =============================================
+// BILL FUNCTIONS
+// =============================================
+
+function getBillStatusColor(paymentStatus: string): string {
+  const colors = {
+    pending: 'orange',
+    paid: 'green'
+  }
+  return colors[paymentStatus as keyof typeof colors] || 'grey'
+}
+
+function getBillStatusText(paymentStatus: string): string {
+  const texts = {
+    pending: 'Pending',
+    paid: 'Paid'
+  }
+  return texts[paymentStatus as keyof typeof texts] || paymentStatus
+}
+
+// =============================================
 // HELPER FUNCTIONS
 // =============================================
 
 function getBillForOrder(order: PurchaseOrder) {
-  if (!order.billId) return null
-  return {
-    id: order.billId,
-    amount: order.totalAmount || 0,
-    paidAmount: 0,
-    status: 'pending'
-  }
+  return order.billId
+    ? {
+        id: order.billId,
+        status: order.paymentStatus || 'pending'
+      }
+    : null
 }
 
 function getStatusText(status: string): string {
@@ -490,5 +532,11 @@ function formatDate(dateString: string): string {
       font-size: 0.8rem;
     }
   }
+}
+
+.bill-status {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
 }
 </style>

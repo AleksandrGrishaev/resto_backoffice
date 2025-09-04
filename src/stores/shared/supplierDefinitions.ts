@@ -353,7 +353,6 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     status: 'sent',
     paymentStatus: 'pending',
     requestIds: ['req-001'],
-    billId: 'payment_11',
     notes: 'Urgent meat order for evening menu',
     createdAt: TimeUtils.getDateDaysAgo(2),
     updatedAt: TimeUtils.getDateDaysAgo(2)
@@ -396,7 +395,6 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     status: 'confirmed',
     paymentStatus: 'paid',
     requestIds: ['req-001'],
-    billId: 'payment_12',
     notes: 'Vegetables for weekly menu prep',
     createdAt: TimeUtils.getDateDaysAgo(3),
     updatedAt: TimeUtils.getDateDaysAgo(1)
@@ -459,7 +457,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     totalAmount: 220482, // Сумма всех товаров
     isEstimatedTotal: true,
     status: 'sent',
-    paymentStatus: 'pending',
+    paymentStatus: 'paid',
     requestIds: ['req-003'],
     notes: 'Order from REQ-KIT-0830-003',
     createdAt: TimeUtils.getCurrentLocalISO(),
