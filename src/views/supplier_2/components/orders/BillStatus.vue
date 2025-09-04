@@ -1,117 +1,102 @@
+<!-- src/views/supplier_2/components/orders/BillStatus.vue - УПРОЩЕННАЯ ВЕРСИЯ -->
 <template>
   <div class="bill-status">
-    <!-- Нет счета -->
-    <span v-if="!bill" class="text-grey-400 text-caption">No bill</span>
+    <!-- ✅ УПРОЩЕННАЯ логика: только показываем статус -->
+    <div v-if="hasBills" class="d-flex align-center">
+      <span class="text-body-2">{{ billCount }} bill{{ billCount > 1 ? 's' : '' }}</span>
 
-    <!-- Есть счет -->
-    <div v-else class="d-flex align-center">
-      <!-- Основная сумма -->
-      <span class="text-body-2">
-        {{ formatCurrency(bill.paidAmount || 0) }}
-        <span class="text-grey-400">/ {{ formatCurrency(bill.amount) }}</span>
-      </span>
-
-      <!-- Индикатор статуса -->
-      <v-chip :color="getStatusColor(bill.status)" size="x-small" variant="flat" class="ml-2">
-        {{ getStatusText(bill.status) }}
+      <v-chip
+        :color="getPaymentStatusColor(paymentStatus)"
+        size="x-small"
+        variant="flat"
+        class="ml-2"
+      >
+        {{ getPaymentStatusText(paymentStatus) }}
       </v-chip>
 
-      <!-- Индикатор рассинхронизации -->
-      <v-icon
-        v-if="isAmountOutOfSync"
-        color="warning"
-        size="small"
-        class="ml-1"
-        @click.stop="$emit('show-sync-warning')"
-      >
-        mdi-alert-circle
-      </v-icon>
-
-      <!-- Индикатор недопоставки -->
-      <v-icon
-        v-if="hasShortfall"
-        color="error"
-        size="small"
-        class="ml-1"
-        @click.stop="$emit('show-shortfall')"
-      >
-        mdi-package-down
-      </v-icon>
+      <!-- Индикатор проблем -->
+      <v-icon v-if="hasIssues" color="warning" size="small" class="ml-1">mdi-alert-circle</v-icon>
     </div>
+
+    <!-- Нет счетов -->
+    <div v-else class="text-grey-400 text-caption">No bills</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PendingPayment } from '@/stores/account/types'
+import type { PurchaseOrder } from '@/stores/supplier_2/types'
 
 // =============================================
-// PROPS & EMITS
+// PROPS - Упрощенные до минимума
 // =============================================
 
 interface Props {
-  bill?: TempBill | null
-  orderAmount?: number
-  hasShortfall?: boolean
+  order: PurchaseOrder
 }
 
 const props = defineProps<Props>()
 
-const emit = defineEmits<{
-  'show-sync-warning': []
-  'show-shortfall': []
-}>()
-
 // =============================================
-// COMPUTED
+// COMPUTED - Простая логика на основе order данных
 // =============================================
 
-const isAmountOutOfSync = computed(() => {
-  if (!props.bill || !props.orderAmount) return false
-  return Math.abs(props.bill.amount - props.orderAmount) > 1 // допуск в 1 IDR
+const hasBills = computed(() => {
+  // Простая проверка наличия billId в заказе
+  return !!props.order.billId
+})
+
+const billCount = computed(() => {
+  // Пока упрощенно - считаем что у заказа может быть только 1 счет
+  // В будущем можно расширить если нужно множественные счета
+  return hasBills.value ? 1 : 0
+})
+
+const paymentStatus = computed(() => {
+  if (!hasBills.value) return 'no_bills'
+
+  // Упрощенная логика на основе paymentStatus заказа
+  switch (props.order.paymentStatus) {
+    case 'pending':
+      return 'pending'
+    case 'paid':
+      return 'paid'
+    default:
+      return 'pending'
+  }
+})
+
+const hasIssues = computed(() => {
+  // Простая проверка наличия проблем
+  return (
+    props.order.hasShortfall ||
+    (props.order.actualDeliveredAmount &&
+      props.order.actualDeliveredAmount < props.order.totalAmount)
+  )
 })
 
 // =============================================
-// METHODS
+// METHODS - Только для отображения
 // =============================================
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
+function getPaymentStatusColor(status: string): string {
+  const colors = {
+    no_bills: 'grey',
+    pending: 'orange',
+    partial: 'blue',
+    paid: 'green'
+  }
+  return colors[status as keyof typeof colors] || 'grey'
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case 'pending':
-      return 'grey'
-    case 'processing':
-      return 'warning'
-    case 'completed':
-      return 'success'
-    case 'failed':
-      return 'error'
-    default:
-      return 'grey'
+function getPaymentStatusText(status: string): string {
+  const texts = {
+    no_bills: 'No Bills',
+    pending: 'Pending',
+    partial: 'Partial',
+    paid: 'Paid'
   }
-}
-
-function getStatusText(status: string): string {
-  switch (status) {
-    case 'pending':
-      return 'Pending'
-    case 'processing':
-      return 'Partial'
-    case 'completed':
-      return 'Paid'
-    case 'failed':
-      return 'Failed'
-    default:
-      return status
-  }
+  return texts[status as keyof typeof texts] || status
 }
 </script>
 

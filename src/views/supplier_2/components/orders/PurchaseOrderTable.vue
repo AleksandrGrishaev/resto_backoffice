@@ -91,7 +91,7 @@
 
       <!-- Bill Status Column -->
       <template #[`item.billStatus`]="{ item }">
-        <bill-status :order="item" @sync-warning="handleSyncWarning" @shortfall="handleShortfall" />
+        <bill-status :order="item" />
       </template>
 
       <!-- Items Count Column -->
@@ -213,14 +213,6 @@
       :order="selectedOrder"
       @send-order="sendOrder"
       @start-receipt="startReceipt"
-      @manage-bill-create="handleCreateBill"
-      @manage-bill-attach="handleAttachBill"
-      @manage-bill-view="handleManageAllBills"
-      @view-bill="viewBill"
-      @process-payment="processPayment"
-      @detach-bill="detachBillFromOrder"
-      @edit-bill="editBillAmount"
-      @cancel-bill="cancelBill"
     />
   </div>
 </template>
@@ -245,18 +237,6 @@ interface Emits {
   (e: 'edit-order', order: PurchaseOrder): void
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
-
-  // ✅ Bill management emits (проксирование от PurchaseOrderDetailsDialog)
-  (e: 'manage-bill-create', order: PurchaseOrder): void
-  (e: 'manage-bill-attach', order: PurchaseOrder): void
-  (e: 'manage-bill-view', order: PurchaseOrder): void
-
-  (e: 'show-shortfall', order: PurchaseOrder): void
-  (e: 'view-bill', billId: string): void
-  (e: 'process-payment', billId: string): void
-  (e: 'detach-bill', billId: string): void
-  (e: 'edit-bill', billId: string): void
-  (e: 'cancel-bill', billId: string): void
 }
 
 const props = defineProps<Props>()
@@ -277,8 +257,7 @@ const {
   canSendOrder,
   canReceiveOrder,
   isReadyForReceipt,
-  getOrderAge,
-  isOverdueForDelivery
+  getOrderAge
 } = usePurchaseOrders()
 
 // =============================================
@@ -375,10 +354,6 @@ const filteredOrders = computed(() => {
 // METHODS
 // =============================================
 
-function refreshData() {
-  console.log('Refreshing purchase orders data')
-}
-
 function handleSearch() {
   // Search is handled by computed property
 }
@@ -417,45 +392,6 @@ function cancelOrder(order: PurchaseOrder) {
 }
 
 // =============================================
-// BILL MANAGEMENT METHODS (проксирование от dialog)
-// =============================================
-
-function handleCreateBill(order: PurchaseOrder) {
-  console.log('Creating bill for order:', order.orderNumber)
-  emits('manage-bill-create', order)
-}
-
-function handleAttachBill(order: PurchaseOrder) {
-  console.log('Attaching bill to order:', order.orderNumber)
-  emits('manage-bill-attach', order)
-}
-
-function handleManageAllBills(order: PurchaseOrder) {
-  console.log('Managing all bills for order:', order.orderNumber)
-  emits('manage-bill-view', order)
-}
-
-function viewBill(billId: string) {
-  emits('view-bill', billId)
-}
-
-function processPayment(billId: string) {
-  emits('process-payment', billId)
-}
-
-function detachBillFromOrder(billId: string) {
-  emits('detach-bill', billId)
-}
-
-function editBillAmount(billId: string) {
-  emits('edit-bill', billId)
-}
-
-function cancelBill(billId: string) {
-  emits('cancel-bill', billId)
-}
-
-// =============================================
 // HELPER FUNCTIONS
 // =============================================
 
@@ -467,14 +403,6 @@ function getBillForOrder(order: PurchaseOrder) {
     paidAmount: 0,
     status: 'pending'
   }
-}
-
-function handleSyncWarning(order: PurchaseOrder): void {
-  emits('manage-bill-view', order)
-}
-
-function handleShortfall(order: PurchaseOrder): void {
-  emits('show-shortfall', order)
 }
 
 function getStatusText(status: string): string {
