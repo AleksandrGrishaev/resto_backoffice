@@ -243,11 +243,6 @@ import { ref, computed } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import type { PurchaseOrder, OrderFilters } from '@/stores/supplier_2/types'
 import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
-import {
-  getBillStatus,
-  getBillStatusColorForOrder,
-  getBillStatusText
-} from '@/stores/supplier_2/composables/usePurchaseOrders'
 // =============================================
 // PROPS & EMITS
 // =============================================
@@ -281,7 +276,10 @@ const {
   canSendOrder,
   canReceiveOrder,
   isReadyForReceipt,
-  getOrderAge
+  getOrderAge,
+  getBillStatus,
+  getBillStatusColorForOrder,
+  getBillStatusText
 } = usePurchaseOrders()
 
 // =============================================

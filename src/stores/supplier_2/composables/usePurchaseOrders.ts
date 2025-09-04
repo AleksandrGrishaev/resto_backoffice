@@ -10,10 +10,9 @@ import type {
   SupplierBasket,
   UnassignedItem,
   OrderStatus,
-  BillStatus,
-  BILL_STATUSES,
-  getBillStatusColor
+  BillStatus // ДОБАВИТЬ
 } from '../types'
+import { BILL_STATUSES, getBillStatusColor } from '../types'
 import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 import { DebugUtils } from '@/utils'
 
@@ -95,9 +94,7 @@ export function usePurchaseOrders() {
   )
 
   const ordersAwaitingDelivery = computed(() =>
-    orders.value.filter(
-      order => order.status === 'sent' && order.paymentStatus === 'paid' // ✅ НОВОЕ - только 'sent'
-    )
+    orders.value.filter(order => order.status === 'sent' && getBillStatus(order) === 'fully_paid')
   )
 
   const ordersForReceipt = computed(() => {
@@ -115,10 +112,13 @@ export function usePurchaseOrders() {
    * Получить статус счетов для заказа
    */
   function getBillStatus(order: PurchaseOrder): BillStatus {
-    // Если есть billStatus в заказе, используем его
+    // Если billStatus уже установлен, используем его
     if (order.billStatus) {
       return order.billStatus
     }
+
+    // Иначе возвращаем дефолт (позже можно вызвать calculateBillStatus для точного расчета)
+    return 'not_billed'
   }
 
   /**
@@ -528,7 +528,7 @@ export function usePurchaseOrders() {
       // ✅ НОВОЕ: Обновляем заказ с billId
       const updatedOrder = await supplierStore.updateOrder(order.id, {
         billId: bill.id,
-        paymentStatus: 'pending'
+        billStatus: 'billed' // ВМЕСТО paymentStatus: 'pending'
       })
 
       // Обновляем в state
@@ -801,17 +801,12 @@ export function usePurchaseOrders() {
   /**
    * Get payment status color for UI
    */
-  function getPaymentStatusColor(status: PaymentStatus): string {
-    switch (status) {
-      case 'pending':
-        return 'warning'
-      case 'paid':
-        return 'success'
-      case 'overdue':
-        return 'error'
-      default:
-        return 'default'
-    }
+  function getBillStatusColorWrapper(status: string): string {
+    // Для обратной совместимости
+    if (status === 'pending') return 'warning'
+    if (status === 'paid') return 'success'
+
+    return getBillStatusColor(status as BillStatus)
   }
 
   /**
@@ -934,7 +929,6 @@ export function usePurchaseOrders() {
     sendOrder,
     markOrderDelivered,
     cancelOrder,
-    updatePaymentStatus,
 
     // AccountStore Integration
     createBillInAccountStore,
@@ -948,7 +942,7 @@ export function usePurchaseOrders() {
     // Helpers
     getOrderById,
     getOrdersByStatus,
-    getOrdersByPaymentStatus,
+    getOrdersByBillStatus, // ИЗМЕНЕНО с getOrdersByPaymentStatus
     getOrdersBySupplier,
     getUniqueRequestIds,
     canEditOrder,
@@ -959,27 +953,29 @@ export function usePurchaseOrders() {
     hasActiveReceipt,
     calculateOrderTotals,
     getStatusColor,
-    getPaymentStatusColor,
     formatCurrency,
     formatDate,
     getOrderAge,
     isOverdueForDelivery,
 
-    // NEW: Исправления для Create Orders
-    removeItemsFromSuggestions,
-    updateRequestsStatus,
-    // ✅ НОВЫЕ exports для интеграции:
-    getPlannedDeliveryDate,
-    getDeliveryStatus,
-    getOrderBatches,
-    sendOrderToSupplier,
-    getOrderPaymentStatus,
-    cancelOrderBills,
-    getBillStatus,
+    // NEW: Bill Status functions
+    getBillStatus, // ТОЛЬКО ОДИН РАЗ!
     getBillStatusColorForOrder,
     getBillStatusText,
     calculateBillStatus,
-    getOrdersByBillStatus,
-    getBillStatus
+
+    // Integration helpers
+    getOrderPaymentStatus,
+    cancelOrderBills,
+    sendOrderToSupplier,
+
+    // Storage integration
+    getPlannedDeliveryDate,
+    getDeliveryStatus,
+    getOrderBatches,
+
+    // Request management
+    removeItemsFromSuggestions,
+    updateRequestsStatus
   }
 }
