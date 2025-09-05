@@ -23,6 +23,13 @@ export interface CoreSupplierWorkflow {
   receipts: Receipt[]
 }
 
+function createMockDateWithTime(daysAgo: number, time: string): string {
+  const date = new Date()
+  date.setDate(date.getDate() - daysAgo)
+  const dateStr = date.toISOString().split('T')[0]
+  return `${dateStr}T${time}`
+}
+
 // =============================================
 // УТИЛИТА: Конвертация в базовые единицы
 // =============================================
@@ -339,28 +346,27 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     items: [
       {
         id: 'oi-001-beef',
-        itemId: 'prod-beef-steak', // ✅ ИСПРАВЛЕНО: используем существующий продукт
+        itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
-        orderedQuantity: 5000, // 5 кг в граммах
-        receivedQuantity: 4500, // Получили только 4.5 кг
+        orderedQuantity: 5000,
+        receivedQuantity: 4500,
         unit: 'g',
-        pricePerUnit: 180, // 180 IDR за грамм
-        totalPrice: 810000, // Фактически получено: 4500 * 180 = 810k
+        pricePerUnit: 180,
+        totalPrice: 810000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(3),
         status: 'received'
       }
     ],
 
-    // ✅ НОВЫЕ ПОЛЯ для приемки с расхождениями
-    totalAmount: 810000, // Обновлено после приемки
-    originalTotalAmount: 900000, // Изначально заказали на 900k
-    actualDeliveredAmount: 810000, // Фактически получили на 810k
+    totalAmount: 810000,
+    originalTotalAmount: 900000,
+    actualDeliveredAmount: 810000,
     hasReceiptDiscrepancies: true,
     receiptDiscrepancies: [
       {
         type: 'quantity',
-        itemId: 'prod-beef-steak', // ✅ ИСПРАВЛЕНО
+        itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
         ordered: {
           quantity: 5000,
@@ -373,27 +379,27 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
           total: 810000
         },
         impact: {
-          quantityDifference: -500, // недопоставка 500г
+          quantityDifference: -500,
           priceDifference: 0,
-          totalDifference: -90000 // потеря 90k IDR
+          totalDifference: -90000
         }
       }
     ],
-    receiptCompletedAt: TimeUtils.getDateDaysAgo(1) + 'T14:30:00.000Z',
+    receiptCompletedAt: createMockDateWithTime(1, '14:30:00.000Z'),
     receiptCompletedBy: 'Warehouse Manager',
 
     isEstimatedTotal: false,
     status: 'delivered',
-    billStatus: 'overpaid', // Потому что заплатили за 900k, а получили на 810k
-    billStatusCalculatedAt: TimeUtils.getDateDaysAgo(1) + 'T14:35:00.000Z',
+    billStatus: 'overpaid',
+    billStatusCalculatedAt: createMockDateWithTime(1, '14:35:00.000Z'),
 
     requestIds: ['req-001'],
     receiptId: 'receipt-001',
     billId: 'payment_po_001_partial',
     notes: 'Недопоставка 500г говядины из-за проблем поставщика',
 
-    createdAt: TimeUtils.getDateDaysAgo(5) + 'T09:00:00.000Z',
-    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T14:35:00.000Z'
+    createdAt: createMockDateWithTime(5, '09:00:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '14:35:00.000Z')
   },
 
   // PO-002: Заказ доставлен без расхождений (картофель)
@@ -408,12 +414,12 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     items: [
       {
         id: 'oi-002-potato',
-        itemId: 'prod-potato', // ✅ Существующий продукт
+        itemId: 'prod-potato',
         itemName: 'Potato',
-        orderedQuantity: 15000, // 15 кг
-        receivedQuantity: 15000, // Получили точно как заказали
+        orderedQuantity: 15000,
+        receivedQuantity: 15000,
         unit: 'g',
-        pricePerUnit: 8, // 8 IDR за грамм
+        pricePerUnit: 8,
         totalPrice: 120000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(2),
@@ -422,25 +428,25 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     ],
 
     totalAmount: 120000,
-    originalTotalAmount: 120000, // Без изменений
-    actualDeliveredAmount: 120000, // Точно как заказали
-    hasReceiptDiscrepancies: false, // ✅ Без расхождений
+    originalTotalAmount: 120000,
+    actualDeliveredAmount: 120000,
+    hasReceiptDiscrepancies: false,
     receiptDiscrepancies: [],
-    receiptCompletedAt: TimeUtils.getDateDaysAgo(1) + 'T11:15:00.000Z',
+    receiptCompletedAt: createMockDateWithTime(1, '11:15:00.000Z'),
     receiptCompletedBy: 'Kitchen Manager',
 
     isEstimatedTotal: false,
     status: 'delivered',
     billStatus: 'fully_paid',
-    billStatusCalculatedAt: TimeUtils.getDateDaysAgo(1) + 'T11:20:00.000Z',
+    billStatusCalculatedAt: createMockDateWithTime(1, '11:20:00.000Z'),
 
     requestIds: ['req-002'],
     receiptId: 'receipt-002',
     billId: 'payment_po_002_full',
     notes: 'Доставлено без замечаний',
 
-    createdAt: TimeUtils.getDateDaysAgo(3) + 'T10:00:00.000Z',
-    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T11:20:00.000Z'
+    createdAt: createMockDateWithTime(3, '10:00:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '11:20:00.000Z')
   },
 
   // PO-003: Заказ отправлен, ожидает доставки (томаты)
@@ -455,11 +461,11 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     items: [
       {
         id: 'oi-003-tomato',
-        itemId: 'prod-tomato', // ✅ Существующий продукт
+        itemId: 'prod-tomato',
         itemName: 'Fresh Tomato',
-        orderedQuantity: 5000, // 5 кг
+        orderedQuantity: 5000,
         unit: 'g',
-        pricePerUnit: 12, // 12 IDR за грамм
+        pricePerUnit: 12,
         totalPrice: 60000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(1),
@@ -468,18 +474,16 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     ],
 
     totalAmount: 60000,
-    // Нет полей приемки - заказ еще не доставлен
-
     isEstimatedTotal: false,
     status: 'sent',
     billStatus: 'not_billed',
-    billStatusCalculatedAt: TimeUtils.getDateDaysAgo(2) + 'T15:00:00.000Z',
+    billStatusCalculatedAt: createMockDateWithTime(2, '15:00:00.000Z'),
 
     requestIds: ['req-003'],
     notes: 'Ожидается доставка сегодня',
 
-    createdAt: TimeUtils.getDateDaysAgo(2) + 'T15:00:00.000Z',
-    updatedAt: TimeUtils.getDateDaysAgo(2) + 'T15:00:00.000Z'
+    createdAt: createMockDateWithTime(2, '15:00:00.000Z'),
+    updatedAt: createMockDateWithTime(2, '15:00:00.000Z')
   },
 
   // PO-0904-006: Заказ пива с расхождениями по количеству и цене
@@ -494,27 +498,26 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     items: [
       {
         id: 'oi-beer-330ml',
-        itemId: 'prod-beer-bintang-330', // ✅ Существующий продукт
+        itemId: 'prod-beer-bintang-330',
         itemName: 'Bintang Beer 330ml',
-        orderedQuantity: 24, // 24 банки
-        receivedQuantity: 20, // Привезли только 20
+        orderedQuantity: 24,
+        receivedQuantity: 20,
         unit: 'pcs',
-        pricePerUnit: 10000, // Заказали по 10k за банку
-        totalPrice: 240000, // ✅ ИСПРАВЛЕНО: 24 * 10k = 240k (до приемки)
+        pricePerUnit: 10000,
+        totalPrice: 240000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(1),
         status: 'received'
       }
     ],
 
-    // ✅ Расхождения по количеству И цене
-    totalAmount: 160000, // Обновлено после приемки (20 * 8k)
-    originalTotalAmount: 240000, // Изначально: 24 * 10k
-    actualDeliveredAmount: 160000, // Фактически: 20 * 8k (цена снижена!)
+    totalAmount: 160000,
+    originalTotalAmount: 240000,
+    actualDeliveredAmount: 160000,
     hasReceiptDiscrepancies: true,
     receiptDiscrepancies: [
       {
-        type: 'both', // И количество, и цена
+        type: 'both',
         itemId: 'prod-beer-bintang-330',
         itemName: 'Bintang Beer 330ml',
         ordered: {
@@ -524,13 +527,13 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
         },
         received: {
           quantity: 20,
-          price: 8000, // Цена снижена до 8k
+          price: 8000,
           total: 160000
         },
         impact: {
-          quantityDifference: -4, // на 4 банки меньше
-          priceDifference: -2000, // на 2k дешевле за банку
-          totalDifference: -80000 // экономия 80k IDR
+          quantityDifference: -4,
+          priceDifference: -2000,
+          totalDifference: -80000
         }
       }
     ],
@@ -539,20 +542,20 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
 
     isEstimatedTotal: false,
     status: 'delivered',
-    billStatus: 'fully_paid', // Статус пересчитается после приемки
+    billStatus: 'fully_paid',
     billStatusCalculatedAt: TimeUtils.getCurrentLocalISO(),
 
-    requestIds: ['req-001'], // ✅ ИСПРАВЛЕНО: используем существующий req-001
+    requestIds: ['req-001'],
     receiptId: 'receipt-1757014065706',
     notes: 'Количество меньше заказанного, но цена снижена',
 
-    createdAt: TimeUtils.getDateDaysAgo(1) + 'T12:00:00.000Z',
+    createdAt: createMockDateWithTime(1, '12:00:00.000Z'),
     updatedAt: TimeUtils.getCurrentLocalISO()
   }
 ]
 
 // =============================================
-// 2. ЗАМЕНИТЬ CORE_RECEIPTS:
+// ИСПРАВЛЕННЫЕ CORE_RECEIPTS:
 // =============================================
 
 export const CORE_RECEIPTS: Receipt[] = [
@@ -561,19 +564,19 @@ export const CORE_RECEIPTS: Receipt[] = [
     id: 'receipt-001',
     receiptNumber: 'RCP-001',
     purchaseOrderId: 'po-001',
-    deliveryDate: TimeUtils.getDateDaysAgo(1) + 'T14:00:00.000Z',
+    deliveryDate: createMockDateWithTime(1, '14:00:00.000Z'),
     receivedBy: 'Warehouse Manager',
 
     items: [
       {
         id: 'ri-001',
         orderItemId: 'oi-001-beef',
-        itemId: 'prod-beef-steak', // ✅ ИСПРАВЛЕНО
+        itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
         orderedQuantity: 5000,
-        receivedQuantity: 4500, // Недопоставка
+        receivedQuantity: 4500,
         orderedPrice: 180,
-        actualPrice: 180, // Цена не изменилась
+        actualPrice: 180,
         unit: 'g',
         notes: 'Поставщик объяснил недопоставку проблемами на складе'
       }
@@ -584,8 +587,8 @@ export const CORE_RECEIPTS: Receipt[] = [
     storageOperationId: 'op-receipt-001',
     notes: 'Недопоставка 500г говядины',
 
-    createdAt: TimeUtils.getDateDaysAgo(1) + 'T14:00:00.000Z',
-    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T14:30:00.000Z'
+    createdAt: createMockDateWithTime(1, '14:00:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '14:30:00.000Z')
   },
 
   // Receipt для PO-002 без расхождений
@@ -593,19 +596,19 @@ export const CORE_RECEIPTS: Receipt[] = [
     id: 'receipt-002',
     receiptNumber: 'RCP-002',
     purchaseOrderId: 'po-002',
-    deliveryDate: TimeUtils.getDateDaysAgo(1) + 'T11:00:00.000Z',
+    deliveryDate: createMockDateWithTime(1, '11:00:00.000Z'),
     receivedBy: 'Kitchen Manager',
 
     items: [
       {
         id: 'ri-002',
         orderItemId: 'oi-002-potato',
-        itemId: 'prod-potato', // ✅ Существующий продукт
+        itemId: 'prod-potato',
         itemName: 'Potato',
         orderedQuantity: 15000,
-        receivedQuantity: 15000, // Точно как заказали
+        receivedQuantity: 15000,
         orderedPrice: 8,
-        actualPrice: 8, // Цена не изменилась
+        actualPrice: 8,
         unit: 'g',
         notes: 'Отличное качество, доставлено в срок'
       }
@@ -616,8 +619,8 @@ export const CORE_RECEIPTS: Receipt[] = [
     storageOperationId: 'op-receipt-002',
     notes: 'Приемка прошла без замечаний',
 
-    createdAt: TimeUtils.getDateDaysAgo(1) + 'T11:00:00.000Z',
-    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T11:15:00.000Z'
+    createdAt: createMockDateWithTime(1, '11:00:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '11:15:00.000Z')
   },
 
   // Receipt для PO-0904-006 с расхождениями по количеству и цене
@@ -632,12 +635,12 @@ export const CORE_RECEIPTS: Receipt[] = [
       {
         id: 'ri-beer-330',
         orderItemId: 'oi-beer-330ml',
-        itemId: 'prod-beer-bintang-330', // ✅ Существующий продукт
+        itemId: 'prod-beer-bintang-330',
         itemName: 'Bintang Beer 330ml',
         orderedQuantity: 24,
-        receivedQuantity: 20, // Меньше количество
+        receivedQuantity: 20,
         orderedPrice: 10000,
-        actualPrice: 8000, // И цена снижена!
+        actualPrice: 8000,
         unit: 'pcs',
         notes: 'Количество меньше, но поставщик снизил цену в качестве компенсации'
       }

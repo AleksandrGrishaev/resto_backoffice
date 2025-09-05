@@ -1,4 +1,4 @@
-// Создать src/views/supplier_2/components/orders/OrderReceiptWidget.vue
+<!-- src/views/supplier_2/components/orders/OrderReceiptWidget.vue -->
 <template>
   <v-card v-if="order.hasReceiptDiscrepancies || order.status === 'delivered'" variant="outlined">
     <v-card-title class="text-subtitle-1 pa-3 pb-2">
@@ -91,6 +91,8 @@
 
 <script setup lang="ts">
 import type { PurchaseOrder, ReceiptDiscrepancyInfo } from '@/stores/supplier_2/types'
+import { formatIDR } from '@/utils/currency'
+import { TimeUtils } from '@/utils/time'
 
 interface Props {
   order: PurchaseOrder
@@ -98,34 +100,67 @@ interface Props {
 
 defineProps<Props>()
 
+// =============================================
+// ФОРМАТИРОВАНИЕ С ИСПОЛЬЗОВАНИЕМ УТИЛИТ
+// =============================================
+
 function formatCurrency(amount: number | undefined): string {
-  if (!amount) return '—'
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    minimumFractionDigits: 0
-  }).format(amount)
+  if (!amount || isNaN(amount)) return '—'
+
+  try {
+    return formatIDR(amount)
+  } catch (error) {
+    console.error('Error formatting currency:', error)
+    return 'Rp 0'
+  }
 }
 
 function formatDate(dateString: string | undefined): string {
   if (!dateString) return '—'
-  return new Intl.DateTimeFormat('ru-RU', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(new Date(dateString))
+
+  try {
+    // Сначала проверяем валидность даты
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date string:', dateString)
+      return 'Invalid date'
+    }
+
+    // Используем простое форматирование без проблематичной временной зоны
+    return date.toLocaleDateString('id-ID', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch (error) {
+    console.error('Error formatting date:', error, { dateString })
+    return 'Invalid date'
+  }
 }
+
+// =============================================
+// БИЗНЕС-ЛОГИКА ДЛЯ UI
+// =============================================
 
 function getAmountDifferenceClass(order: PurchaseOrder): string {
   const difference = (order.actualDeliveredAmount || 0) - (order.originalTotalAmount || 0)
-  return difference > 0 ? 'text-warning' : 'text-error'
+
+  if (Math.abs(difference) < 1000) return 'text-medium-emphasis' // Незначительная разница
+
+  return difference > 0 ? 'text-success' : 'text-warning'
 }
 
 function formatAmountDifference(order: PurchaseOrder): string {
   const difference = (order.actualDeliveredAmount || 0) - (order.originalTotalAmount || 0)
   const sign = difference > 0 ? '+' : ''
-  return `${sign}${formatCurrency(Math.abs(difference))}`
+
+  try {
+    return `${sign}${formatIDR(Math.abs(difference))}`
+  } catch (error) {
+    console.error('Error formatting amount difference:', error)
+    return '—'
+  }
 }
 
 function getDiscrepancyTypeColor(type: ReceiptDiscrepancyInfo['type']): string {
@@ -154,3 +189,40 @@ function getDiscrepancyTypeText(type: ReceiptDiscrepancyInfo['type']): string {
   }
 }
 </script>
+
+<style lang="scss" scoped>
+.border {
+  border: 1px solid rgb(var(--v-theme-surface-variant));
+}
+
+.text-medium-emphasis {
+  opacity: 0.7;
+}
+
+.v-chip {
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+.text-warning {
+  color: rgb(var(--v-theme-warning)) !important;
+}
+
+.text-success {
+  color: rgb(var(--v-theme-success)) !important;
+}
+
+@media (max-width: 768px) {
+  .d-flex.gap-2 {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .v-chip {
+    align-self: flex-start;
+  }
+}
+</style>

@@ -3,7 +3,7 @@ import { format, parseISO, formatISO } from 'date-fns'
 import { utcToZonedTime } from 'date-fns-tz'
 import { Timestamp } from 'firebase/firestore'
 
-const TIMEZONE = 'Asia/Denpasar'
+const TIMEZONE = 'Asia/Jakarta' // Вместо 'Asia/Denpasar'
 const DATE_FORMAT = 'yyyy-MM-dd HH:mm:ss'
 
 export class TimeUtils {
@@ -158,14 +158,17 @@ export class TimeUtils {
    */
   static formatDateForDisplay(dateString: string): string {
     try {
-      const parsedDate = parseISO(dateString)
-      const zonedDate = utcToZonedTime(parsedDate, TIMEZONE)
-      return new Intl.DateTimeFormat('id-ID', {
+      if (!dateString) return 'Invalid date'
+
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return 'Invalid date'
+
+      // Используем простое форматирование без проблематичной временной зоны
+      return date.toLocaleDateString('id-ID', {
         year: 'numeric',
         month: 'short',
-        day: 'numeric',
-        timeZone: TIMEZONE
-      }).format(zonedDate)
+        day: 'numeric'
+      })
     } catch (error) {
       console.error('Error formatting date:', error)
       return 'Invalid date'
@@ -173,20 +176,23 @@ export class TimeUtils {
   }
 
   /**
-   * Форматировать дату и время для отображения
+   * ✅ ИСПРАВЛЕНО: Форматировать дату и время для отображения
    */
   static formatDateTimeForDisplay(dateString: string): string {
     try {
-      const parsedDate = parseISO(dateString)
-      const zonedDate = utcToZonedTime(parsedDate, TIMEZONE)
-      return new Intl.DateTimeFormat('id-ID', {
+      if (!dateString) return 'Invalid date'
+
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return 'Invalid date'
+
+      // Используем простое форматирование без проблематичной временной зоны
+      return date.toLocaleDateString('id-ID', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit',
-        timeZone: TIMEZONE
-      }).format(zonedDate)
+        minute: '2-digit'
+      })
     } catch (error) {
       console.error('Error formatting datetime:', error)
       return 'Invalid date'
@@ -194,17 +200,19 @@ export class TimeUtils {
   }
 
   /**
-   * Форматировать только время для отображения
+   * ✅ ИСПРАВЛЕНО: Форматировать только время для отображения
    */
   static formatTimeForDisplay(dateString: string): string {
     try {
-      const parsedDate = parseISO(dateString)
-      const zonedDate = utcToZonedTime(parsedDate, TIMEZONE)
-      return new Intl.DateTimeFormat('id-ID', {
+      if (!dateString) return 'Invalid time'
+
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return 'Invalid time'
+
+      return date.toLocaleTimeString('id-ID', {
         hour: '2-digit',
-        minute: '2-digit',
-        timeZone: TIMEZONE
-      }).format(zonedDate)
+        minute: '2-digit'
+      })
     } catch (error) {
       console.error('Error formatting time:', error)
       return 'Invalid time'
