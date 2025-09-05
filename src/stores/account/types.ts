@@ -117,17 +117,22 @@ export interface PendingPayment extends BaseEntity {
   dueDate?: string
   priority: PaymentPriority
   status: PaymentStatus
-  category: 'supplier' | 'service' | 'utilities' | 'salary' | 'other'
+  category: 'supplier' | 'service' | 'utilities' | 'salary' | 'other' | 'rent' | 'maintenance'
   invoiceNumber?: string
   notes?: string
   assignedToAccount?: string // ID счета для списания
   createdBy: TransactionPerformer
+
   // ✅ НОВЫЕ ПОЛЯ для интеграции с supplier store
   purchaseOrderId?: string // Обратная связь с заказом
   sourceOrderId?: string // Источник для автосинхронизации суммы
   lastAmountUpdate?: string // Когда последний раз менялась сумма
   amountHistory?: AmountChange[] // История изменений суммы
   autoSyncEnabled?: boolean // Разрешена ли автосинхронизация суммы
+
+  // Payment completion fields
+  paidAmount?: number
+  paidDate?: string
 }
 
 export interface CreatePaymentDto {
@@ -213,20 +218,15 @@ export const PAYMENT_STATUSES = {
 } as const
 
 export const PAYMENT_CATEGORIES = {
-  supplier: 'Поставщики',
-  service: 'Услуги',
-  utilities: 'Коммунальные',
-  salary: 'Зарплата',
-  other: 'Прочее'
+  supplier: 'Supplier Payment',
+  service: 'Service Payment',
+  utilities: 'Utilities',
+  salary: 'Salary',
+  rent: 'Rent',
+  maintenance: 'Maintenance',
+  other: 'Other'
 } as const
 
-export const AMOUNT_CHANGE_REASONS = {
-  order_updated: 'Заказ обновлен',
-  items_added: 'Добавлены товары',
-  items_removed: 'Удалены товары',
-  price_changed: 'Изменены цены',
-  manual_update: 'Ручное изменение'
-} as const
 // ============ STORE TYPES ============
 
 export interface LoadingState {
@@ -258,10 +258,30 @@ export interface AccountStoreState {
 export interface AmountChange {
   oldAmount: number
   newAmount: number
-  reason: 'order_updated' | 'items_added' | 'items_removed' | 'price_changed' | 'manual_update'
-  timestamp: string
-  userId?: string
+  reason: AmountChangeReason
+  changedAt: string
+  changedBy: TransactionPerformer
   notes?: string
+}
+
+export type AmountChangeReason =
+  | 'original_order' // Первоначальная сумма заказа
+  | 'receipt_discrepancy' // Корректировка после приемки
+  | 'manual_adjustment' // Ручная корректировка
+  | 'supplier_credit' // Зачет от поставщика
+  | 'payment_split' // Разделение платежа
+  | 'order_cancellation' // Отмена заказа
+  | 'other' // Другая причина
+
+// ✅ ДОБАВИТЬ константы
+export const AMOUNT_CHANGE_REASONS: Record<AmountChangeReason, string> = {
+  original_order: 'Original Order Amount',
+  receipt_discrepancy: 'Receipt Discrepancy Adjustment',
+  manual_adjustment: 'Manual Adjustment',
+  supplier_credit: 'Supplier Credit',
+  payment_split: 'Payment Split',
+  order_cancellation: 'Order Cancellation',
+  other: 'Other'
 }
 
 // ✅ НОВЫЙ: DTO для обновления суммы платежа

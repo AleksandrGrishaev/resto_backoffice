@@ -323,281 +323,335 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
 ]
 
 // =============================================
-// ИСПРАВЛЕННЫЕ ЗАКАЗЫ (все количества в базовых единицах)
+// ЗАМЕНИТЬ секцию CORE_PURCHASE_ORDERS:
 // =============================================
 
 export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
-  // Заказ мяса
+  // PO-001: Заказ с расхождениями при приемке (недопоставка говядины)
   {
     id: 'po-001',
     orderNumber: 'PO-001',
     supplierId: 'sup-premium-meat-co',
     supplierName: 'Premium Meat Company',
-    orderDate: TimeUtils.getDateDaysAgo(2),
-    expectedDeliveryDate: TimeUtils.getDateDaysFromNow(1),
+    orderDate: TimeUtils.getDateDaysAgo(5),
+    expectedDeliveryDate: TimeUtils.getDateDaysAgo(1),
+
     items: [
       {
-        id: 'po-item-001',
-        itemId: 'prod-beef-steak',
+        id: 'oi-001-beef',
+        itemId: 'prod-beef-steak', // ✅ ИСПРАВЛЕНО: используем существующий продукт
         itemName: 'Beef Steak',
-        orderedQuantity: 5000, // ✅ 5000 грамм (было 5 кг)
-        pricePerUnit: 180, // ✅ 180 IDR за ГРАММ (не за кг!)
-        totalPrice: 900000, // 5000 * 180 = 900,000 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(30),
-        status: 'ordered'
+        orderedQuantity: 5000, // 5 кг в граммах
+        receivedQuantity: 4500, // Получили только 4.5 кг
+        unit: 'g',
+        pricePerUnit: 180, // 180 IDR за грамм
+        totalPrice: 810000, // Фактически получено: 4500 * 180 = 810k
+        isEstimatedPrice: false,
+        lastPriceDate: TimeUtils.getDateDaysAgo(3),
+        status: 'received'
       }
     ],
-    totalAmount: 900000,
-    isEstimatedTotal: true,
-    status: 'sent',
-    billStatus: 'partially_paid',
+
+    // ✅ НОВЫЕ ПОЛЯ для приемки с расхождениями
+    totalAmount: 810000, // Обновлено после приемки
+    originalTotalAmount: 900000, // Изначально заказали на 900k
+    actualDeliveredAmount: 810000, // Фактически получили на 810k
+    hasReceiptDiscrepancies: true,
+    receiptDiscrepancies: [
+      {
+        type: 'quantity',
+        itemId: 'prod-beef-steak', // ✅ ИСПРАВЛЕНО
+        itemName: 'Beef Steak',
+        ordered: {
+          quantity: 5000,
+          price: 180,
+          total: 900000
+        },
+        received: {
+          quantity: 4500,
+          price: 180,
+          total: 810000
+        },
+        impact: {
+          quantityDifference: -500, // недопоставка 500г
+          priceDifference: 0,
+          totalDifference: -90000 // потеря 90k IDR
+        }
+      }
+    ],
+    receiptCompletedAt: TimeUtils.getDateDaysAgo(1) + 'T14:30:00.000Z',
+    receiptCompletedBy: 'Warehouse Manager',
+
+    isEstimatedTotal: false,
+    status: 'delivered',
+    billStatus: 'overpaid', // Потому что заплатили за 900k, а получили на 810k
+    billStatusCalculatedAt: TimeUtils.getDateDaysAgo(1) + 'T14:35:00.000Z',
+
     requestIds: ['req-001'],
-    notes: 'Urgent meat order for evening menu',
-    createdAt: TimeUtils.getDateDaysAgo(2),
-    updatedAt: TimeUtils.getDateDaysAgo(2)
+    receiptId: 'receipt-001',
+    billId: 'payment_po_001_partial',
+    notes: 'Недопоставка 500г говядины из-за проблем поставщика',
+
+    createdAt: TimeUtils.getDateDaysAgo(5) + 'T09:00:00.000Z',
+    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T14:35:00.000Z'
   },
 
-  // Заказ овощей
+  // PO-002: Заказ доставлен без расхождений (картофель)
   {
     id: 'po-002',
     orderNumber: 'PO-002',
-    supplierId: 'sup-fresh-veg-market',
-    supplierName: 'Fresh Vegetable Market',
+    supplierId: 'sup-fresh-greens',
+    supplierName: 'Fresh Greens Ltd',
     orderDate: TimeUtils.getDateDaysAgo(3),
-    expectedDeliveryDate: TimeUtils.getDateDaysFromNow(1),
+    expectedDeliveryDate: TimeUtils.getDateDaysAgo(1),
+
     items: [
       {
-        id: 'po-item-002',
-        itemId: 'prod-potato',
+        id: 'oi-002-potato',
+        itemId: 'prod-potato', // ✅ Существующий продукт
         itemName: 'Potato',
-        orderedQuantity: 10000, // ✅ 10000 грамм (было 10 кг)
-        pricePerUnit: 8, // ✅ 8 IDR за ГРАММ
-        totalPrice: 80000, // 10000 * 8 = 80,000 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(15),
-        status: 'ordered'
-      },
-      {
-        id: 'po-item-003',
-        itemId: 'prod-garlic',
-        itemName: 'Garlic',
-        orderedQuantity: 2000, // ✅ 2000 грамм (было 2 кг)
-        pricePerUnit: 25, // ✅ 25 IDR за ГРАММ
-        totalPrice: 50000, // 2000 * 25 = 50,000 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(10),
-        status: 'ordered'
+        orderedQuantity: 15000, // 15 кг
+        receivedQuantity: 15000, // Получили точно как заказали
+        unit: 'g',
+        pricePerUnit: 8, // 8 IDR за грамм
+        totalPrice: 120000,
+        isEstimatedPrice: false,
+        lastPriceDate: TimeUtils.getDateDaysAgo(2),
+        status: 'received'
       }
     ],
-    totalAmount: 130000,
-    isEstimatedTotal: true,
-    status: 'confirmed',
+
+    totalAmount: 120000,
+    originalTotalAmount: 120000, // Без изменений
+    actualDeliveredAmount: 120000, // Точно как заказали
+    hasReceiptDiscrepancies: false, // ✅ Без расхождений
+    receiptDiscrepancies: [],
+    receiptCompletedAt: TimeUtils.getDateDaysAgo(1) + 'T11:15:00.000Z',
+    receiptCompletedBy: 'Kitchen Manager',
+
+    isEstimatedTotal: false,
+    status: 'delivered',
     billStatus: 'fully_paid',
-    requestIds: ['req-001'],
-    notes: 'Vegetables for weekly menu prep',
-    createdAt: TimeUtils.getDateDaysAgo(3),
-    updatedAt: TimeUtils.getDateDaysAgo(1)
+    billStatusCalculatedAt: TimeUtils.getDateDaysAgo(1) + 'T11:20:00.000Z',
+
+    requestIds: ['req-002'],
+    receiptId: 'receipt-002',
+    billId: 'payment_po_002_full',
+    notes: 'Доставлено без замечаний',
+
+    createdAt: TimeUtils.getDateDaysAgo(3) + 'T10:00:00.000Z',
+    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T11:20:00.000Z'
   },
 
-  // Заказ специй от заявки REQ-KIT-0830-003
-  {
-    id: 'po-0830-005',
-    orderNumber: 'PO-0830-005',
-    supplierId: 'sup-fresh-veg-market',
-    supplierName: 'Fresh Vegetable Market',
-    orderDate: TimeUtils.getCurrentLocalISO(),
-    expectedDeliveryDate: TimeUtils.getDateDaysFromNow(2),
-    items: [
-      {
-        id: 'po-item-011',
-        itemId: 'prod-onion',
-        itemName: 'Onion',
-        orderedQuantity: 4497, // ✅ 4497 грамм
-        pricePerUnit: 6, // ✅ 6 IDR за грамм
-        totalPrice: 26982, // 4497 * 6 = 26,982 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(1),
-        status: 'ordered'
-      },
-      {
-        id: 'po-item-012',
-        itemId: 'prod-salt',
-        itemName: 'Salt',
-        orderedQuantity: 1500, // ✅ 1500 грамм
-        pricePerUnit: 3, // ✅ 3 IDR за грамм
-        totalPrice: 4500, // 1500 * 3 = 4,500 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(1),
-        status: 'ordered'
-      },
-      {
-        id: 'po-item-013',
-        itemId: 'prod-black-pepper',
-        itemName: 'Black Pepper',
-        orderedQuantity: 1050, // ✅ 1050 грамм
-        pricePerUnit: 120, // ✅ 120 IDR за грамм
-        totalPrice: 126000, // 1050 * 120 = 126,000 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(1),
-        status: 'ordered'
-      },
-      {
-        id: 'po-item-014',
-        itemId: 'prod-oregano',
-        itemName: 'Oregano',
-        orderedQuantity: 420, // ✅ 420 грамм
-        pricePerUnit: 150, // ✅ 150 IDR за грамм
-        totalPrice: 63000, // 420 * 150 = 63,000 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(1),
-        status: 'ordered'
-      }
-    ],
-    totalAmount: 220482, // Сумма всех товаров
-    isEstimatedTotal: true,
-    status: 'sent',
-    billStatus: 'overpaid',
-    requestIds: ['req-003'],
-    notes: 'Order from REQ-KIT-0830-003',
-    createdAt: TimeUtils.getCurrentLocalISO(),
-    updatedAt: TimeUtils.getCurrentLocalISO()
-  },
-
-  // Заказ молока
-  {
-    id: 'po-0830-004',
-    orderNumber: 'PO-0830-004',
-    supplierId: 'sup-dairy-fresh',
-    supplierName: 'Jakarta Beverage Distribution',
-    orderDate: TimeUtils.getCurrentLocalISO(),
-    expectedDeliveryDate: TimeUtils.getDateDaysFromNow(2),
-    items: [
-      {
-        id: 'po-item-015',
-        itemId: 'prod-milk',
-        itemName: 'Milk 3.2%',
-        orderedQuantity: 6000, // ✅ 6000 мл
-        pricePerUnit: 15, // ✅ 15 IDR за мл
-        totalPrice: 90000, // 6000 * 15 = 90,000 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(1),
-        status: 'ordered'
-      }
-    ],
-    totalAmount: 90000,
-    isEstimatedTotal: true,
-    status: 'draft',
-    billStatus: 'not_billed',
-    requestIds: ['req-003'],
-    notes: 'Milk order from kitchen request',
-    createdAt: TimeUtils.getCurrentLocalISO(),
-    updatedAt: TimeUtils.getCurrentLocalISO()
-  },
-
-  // Заказ напитков
+  // PO-003: Заказ отправлен, ожидает доставки (томаты)
   {
     id: 'po-003',
     orderNumber: 'PO-003',
-    supplierId: 'sup-beverage-distribution',
-    supplierName: 'Jakarta Beverage Distribution',
-    orderDate: TimeUtils.getCurrentLocalISO(),
-    expectedDeliveryDate: TimeUtils.getDateDaysFromNow(3),
+    supplierId: 'sup-global-imports',
+    supplierName: 'Global Food Imports',
+    orderDate: TimeUtils.getDateDaysAgo(2),
+    expectedDeliveryDate: TimeUtils.getCurrentLocalISO(),
+
     items: [
       {
-        id: 'po-item-004',
-        itemId: 'prod-beer-bintang-330',
-        itemName: 'Bintang Beer 330ml',
-        orderedQuantity: 48, // ✅ 48 штук (piece)
-        pricePerUnit: 12000, // ✅ 12000 IDR за штуку
-        totalPrice: 576000, // 48 * 12000 = 576,000 IDR
-        isEstimatedPrice: true,
-        lastPriceDate: TimeUtils.getDateDaysAgo(5),
+        id: 'oi-003-tomato',
+        itemId: 'prod-tomato', // ✅ Существующий продукт
+        itemName: 'Fresh Tomato',
+        orderedQuantity: 5000, // 5 кг
+        unit: 'g',
+        pricePerUnit: 12, // 12 IDR за грамм
+        totalPrice: 60000,
+        isEstimatedPrice: false,
+        lastPriceDate: TimeUtils.getDateDaysAgo(1),
         status: 'ordered'
       }
     ],
-    totalAmount: 576000,
-    isEstimatedTotal: true,
-    status: 'draft',
+
+    totalAmount: 60000,
+    // Нет полей приемки - заказ еще не доставлен
+
+    isEstimatedTotal: false,
+    status: 'sent',
     billStatus: 'not_billed',
-    requestIds: ['req-002'],
-    notes: 'Beverage restock for bar',
-    createdAt: TimeUtils.getCurrentLocalISO(),
+    billStatusCalculatedAt: TimeUtils.getDateDaysAgo(2) + 'T15:00:00.000Z',
+
+    requestIds: ['req-003'],
+    notes: 'Ожидается доставка сегодня',
+
+    createdAt: TimeUtils.getDateDaysAgo(2) + 'T15:00:00.000Z',
+    updatedAt: TimeUtils.getDateDaysAgo(2) + 'T15:00:00.000Z'
+  },
+
+  // PO-0904-006: Заказ пива с расхождениями по количеству и цене
+  {
+    id: 'po-1757014034857',
+    orderNumber: 'PO-0904-006',
+    supplierId: 'sup-beverage-center',
+    supplierName: 'Beverage Distribution Center',
+    orderDate: TimeUtils.getDateDaysAgo(1),
+    expectedDeliveryDate: TimeUtils.getCurrentLocalISO(),
+
+    items: [
+      {
+        id: 'oi-beer-330ml',
+        itemId: 'prod-beer-bintang-330', // ✅ Существующий продукт
+        itemName: 'Bintang Beer 330ml',
+        orderedQuantity: 24, // 24 банки
+        receivedQuantity: 20, // Привезли только 20
+        unit: 'pcs',
+        pricePerUnit: 10000, // Заказали по 10k за банку
+        totalPrice: 240000, // ✅ ИСПРАВЛЕНО: 24 * 10k = 240k (до приемки)
+        isEstimatedPrice: false,
+        lastPriceDate: TimeUtils.getDateDaysAgo(1),
+        status: 'received'
+      }
+    ],
+
+    // ✅ Расхождения по количеству И цене
+    totalAmount: 160000, // Обновлено после приемки (20 * 8k)
+    originalTotalAmount: 240000, // Изначально: 24 * 10k
+    actualDeliveredAmount: 160000, // Фактически: 20 * 8k (цена снижена!)
+    hasReceiptDiscrepancies: true,
+    receiptDiscrepancies: [
+      {
+        type: 'both', // И количество, и цена
+        itemId: 'prod-beer-bintang-330',
+        itemName: 'Bintang Beer 330ml',
+        ordered: {
+          quantity: 24,
+          price: 10000,
+          total: 240000
+        },
+        received: {
+          quantity: 20,
+          price: 8000, // Цена снижена до 8k
+          total: 160000
+        },
+        impact: {
+          quantityDifference: -4, // на 4 банки меньше
+          priceDifference: -2000, // на 2k дешевле за банку
+          totalDifference: -80000 // экономия 80k IDR
+        }
+      }
+    ],
+    receiptCompletedAt: TimeUtils.getCurrentLocalISO(),
+    receiptCompletedBy: 'Bar Manager',
+
+    isEstimatedTotal: false,
+    status: 'delivered',
+    billStatus: 'fully_paid', // Статус пересчитается после приемки
+    billStatusCalculatedAt: TimeUtils.getCurrentLocalISO(),
+
+    requestIds: ['req-001'], // ✅ ИСПРАВЛЕНО: используем существующий req-001
+    receiptId: 'receipt-1757014065706',
+    notes: 'Количество меньше заказанного, но цена снижена',
+
+    createdAt: TimeUtils.getDateDaysAgo(1) + 'T12:00:00.000Z',
     updatedAt: TimeUtils.getCurrentLocalISO()
   }
 ]
 
 // =============================================
-// ИСПРАВЛЕННЫЕ ПОСТУПЛЕНИЯ (все количества в базовых единицах)
+// 2. ЗАМЕНИТЬ CORE_RECEIPTS:
 // =============================================
 
 export const CORE_RECEIPTS: Receipt[] = [
-  // Поступление овощей
+  // Receipt для PO-001 с расхождениями по количеству
   {
     id: 'receipt-001',
     receiptNumber: 'RCP-001',
-    purchaseOrderId: 'po-002',
-    deliveryDate: TimeUtils.getDateDaysAgo(1),
+    purchaseOrderId: 'po-001',
+    deliveryDate: TimeUtils.getDateDaysAgo(1) + 'T14:00:00.000Z',
     receivedBy: 'Warehouse Manager',
+
     items: [
       {
-        id: 'receipt-item-001',
-        orderItemId: 'po-item-002',
-        itemId: 'prod-potato',
-        itemName: 'Potato',
-        orderedQuantity: 10000, // ✅ 10000 грамм
-        receivedQuantity: 10000, // ✅ 10000 грамм (получили точно)
-        orderedPrice: 8, // 8 IDR за грамм
-        actualPrice: 8, // цена не изменилась
-        notes: 'Good quality'
-      },
-      {
-        id: 'receipt-item-002',
-        orderItemId: 'po-item-003',
-        itemId: 'prod-garlic',
-        itemName: 'Garlic',
-        orderedQuantity: 2000, // ✅ 2000 грамм
-        receivedQuantity: 2000, // ✅ 2000 грамм
-        orderedPrice: 25, // 25 IDR за грамм
-        actualPrice: 27, // ✅ цена выросла до 27 IDR за грамм
-        notes: 'Price increased by 2 IDR per gram'
+        id: 'ri-001',
+        orderItemId: 'oi-001-beef',
+        itemId: 'prod-beef-steak', // ✅ ИСПРАВЛЕНО
+        itemName: 'Beef Steak',
+        orderedQuantity: 5000,
+        receivedQuantity: 4500, // Недопоставка
+        orderedPrice: 180,
+        actualPrice: 180, // Цена не изменилась
+        unit: 'g',
+        notes: 'Поставщик объяснил недопоставку проблемами на складе'
       }
     ],
+
     hasDiscrepancies: true,
     status: 'completed',
-    storageOperationId: 'op-storage-006',
-    notes: 'Receipt completed, minor price increase on garlic',
-    createdAt: TimeUtils.getDateDaysAgo(1),
-    updatedAt: TimeUtils.getDateDaysAgo(1)
+    storageOperationId: 'op-receipt-001',
+    notes: 'Недопоставка 500г говядины',
+
+    createdAt: TimeUtils.getDateDaysAgo(1) + 'T14:00:00.000Z',
+    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T14:30:00.000Z'
   },
 
-  // Поступление мяса (в процессе)
+  // Receipt для PO-002 без расхождений
   {
     id: 'receipt-002',
     receiptNumber: 'RCP-002',
-    purchaseOrderId: 'po-001',
-    deliveryDate: TimeUtils.getCurrentLocalISO(),
-    receivedBy: 'Chef Maria',
+    purchaseOrderId: 'po-002',
+    deliveryDate: TimeUtils.getDateDaysAgo(1) + 'T11:00:00.000Z',
+    receivedBy: 'Kitchen Manager',
+
     items: [
       {
-        id: 'receipt-item-003',
-        orderItemId: 'po-item-001',
-        itemId: 'prod-beef-steak',
-        itemName: 'Beef Steak',
-        orderedQuantity: 5000, // ✅ 5000 грамм
-        receivedQuantity: 4800, // ✅ 4800 грамм (небольшая недостача)
-        orderedPrice: 180, // 180 IDR за грамм
-        notes: 'Small weight shortage: 200g short'
+        id: 'ri-002',
+        orderItemId: 'oi-002-potato',
+        itemId: 'prod-potato', // ✅ Существующий продукт
+        itemName: 'Potato',
+        orderedQuantity: 15000,
+        receivedQuantity: 15000, // Точно как заказали
+        orderedPrice: 8,
+        actualPrice: 8, // Цена не изменилась
+        unit: 'g',
+        notes: 'Отличное качество, доставлено в срок'
       }
     ],
+
+    hasDiscrepancies: false,
+    status: 'completed',
+    storageOperationId: 'op-receipt-002',
+    notes: 'Приемка прошла без замечаний',
+
+    createdAt: TimeUtils.getDateDaysAgo(1) + 'T11:00:00.000Z',
+    updatedAt: TimeUtils.getDateDaysAgo(1) + 'T11:15:00.000Z'
+  },
+
+  // Receipt для PO-0904-006 с расхождениями по количеству и цене
+  {
+    id: 'receipt-1757014065706',
+    receiptNumber: 'RCP-0904-003',
+    purchaseOrderId: 'po-1757014034857',
+    deliveryDate: TimeUtils.getCurrentLocalISO(),
+    receivedBy: 'Bar Manager',
+
+    items: [
+      {
+        id: 'ri-beer-330',
+        orderItemId: 'oi-beer-330ml',
+        itemId: 'prod-beer-bintang-330', // ✅ Существующий продукт
+        itemName: 'Bintang Beer 330ml',
+        orderedQuantity: 24,
+        receivedQuantity: 20, // Меньше количество
+        orderedPrice: 10000,
+        actualPrice: 8000, // И цена снижена!
+        unit: 'pcs',
+        notes: 'Количество меньше, но поставщик снизил цену в качестве компенсации'
+      }
+    ],
+
     hasDiscrepancies: true,
-    status: 'draft',
-    notes: 'Receipt in progress, checking meat quality',
+    status: 'completed',
+    storageOperationId: 'op-1757014083495',
+    notes: 'Расхождения по количеству компенсированы снижением цены',
+
     createdAt: TimeUtils.getCurrentLocalISO(),
     updatedAt: TimeUtils.getCurrentLocalISO()
   }
 ]
-
 // =============================================
 // УТИЛИТЫ ДЛЯ РАБОТЫ С ОПРЕДЕЛЕНИЯМИ
 // =============================================

@@ -58,10 +58,40 @@ export interface PurchaseOrder extends BaseEntity {
   billId?: string // relation to bill in Account Store (PendingPayment.id)
 
   notes?: string
-  // ✅ НОВЫЕ ПОЛЯ для обработки недопоставок
+
+  // ✅ НОВЫЕ ПОЛЯ для обработки результатов приемки
+  originalTotalAmount?: number // Первоначальная сумма заказа (до приемки)
+  actualDeliveredAmount?: number // Фактическая стоимость доставленного
+  receiptDiscrepancies?: ReceiptDiscrepancyInfo[] // Информация о расхождениях при приемке
+  hasReceiptDiscrepancies?: boolean // Быстрая проверка наличия расхождений
+  receiptCompletedAt?: string // Дата завершения приемки
+  receiptCompletedBy?: string // Кто завершил приемку
+
+  // ✅ УСТАРЕВШИЕ ПОЛЯ (для обратной совместимости)
   actualDeliveredAmount?: number // Фактическая стоимость доставленного
   hasShortfall?: boolean // Есть недопоставка
   shortfallAmount?: number // Сумма недопоставки
+}
+
+export interface ReceiptDiscrepancyInfo {
+  type: 'quantity' | 'price' | 'both'
+  itemId: string
+  itemName: string
+  ordered: {
+    quantity: number
+    price: number
+    total: number
+  }
+  received: {
+    quantity: number
+    price: number
+    total: number
+  }
+  impact: {
+    quantityDifference: number
+    priceDifference: number
+    totalDifference: number
+  }
 }
 
 export interface OrderItem {

@@ -116,16 +116,48 @@
       </template>
 
       <!-- Items Count Column -->
+
       <template #[`item.itemsCount`]="{ item }">
         <v-chip size="small" variant="outlined">{{ item.items?.length || 0 }}</v-chip>
       </template>
 
+      <template #[`item.originalAmount`]="{ item }">
+        {{ formatCurrency(item.originalTotalAmount || item.totalAmount) }}
+      </template>
       <!-- Total Amount Column -->
-      <template #[`item.totalAmount`]="{ item }">
-        <div class="text-right">
-          <div class="font-weight-bold">{{ formatCurrency(item.totalAmount) }}</div>
-          <div v-if="item.isEstimatedTotal" class="text-caption text-warning">Estimated</div>
+      <template #[`item.deliveredAmount`]="{ item }">
+        <div v-if="item.actualDeliveredAmount" class="d-flex flex-column">
+          <span>{{ formatCurrency(item.actualDeliveredAmount) }}</span>
+          <span
+            v-if="hasAmountDifference(item)"
+            class="text-caption"
+            :class="getAmountDifferenceClass(item)"
+          >
+            {{ formatAmountDifference(item) }}
+          </span>
         </div>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+
+      <template #[`item.receiptInfo`]="{ item }">
+        <v-chip
+          v-if="item.hasReceiptDiscrepancies"
+          :color="getReceiptDiscrepancyColor(item)"
+          size="x-small"
+          variant="flat"
+        >
+          <v-icon icon="mdi-alert-triangle" size="12" class="mr-1" />
+          {{ item.receiptDiscrepancies?.length || 0 }}
+        </v-chip>
+        <v-chip
+          v-else-if="item.status === 'delivered'"
+          color="success"
+          size="x-small"
+          variant="flat"
+        >
+          <v-icon icon="mdi-check" size="12" />
+        </v-chip>
+        <span v-else class="text-medium-emphasis">—</span>
       </template>
 
       <!-- Order Date Column -->
@@ -299,11 +331,12 @@ const headers = [
   { title: 'Order #', key: 'orderNumber', sortable: true, width: '140px' },
   { title: 'Supplier', key: 'supplierName', sortable: true, width: '180px' },
   { title: 'Status', key: 'status', sortable: true, width: '120px' },
-  { title: 'Bill Status', key: 'billStatus', sortable: false, width: '220px' },
+  { title: 'Bill Status', key: 'billStatus', sortable: false, width: '160px' },
   { title: 'Items', key: 'itemsCount', sortable: false, width: '80px', align: 'center' },
-  { title: 'Total', key: 'totalAmount', sortable: true, width: '120px', align: 'end' },
+  { title: 'Original', key: 'originalAmount', sortable: true, width: '120px', align: 'end' },
+  { title: 'Delivered', key: 'deliveredAmount', sortable: true, width: '120px', align: 'end' },
+  { title: 'Receipt', key: 'receiptInfo', sortable: false, width: '100px' },
   { title: 'Order Date', key: 'orderDate', sortable: true, width: '140px' },
-  { title: 'Age', key: 'age', sortable: false, width: '80px' },
   { title: 'Actions', key: 'actions', sortable: false, width: '200px', align: 'center' }
 ]
 
@@ -375,7 +408,29 @@ const filteredOrders = computed(() => {
 // =============================================
 // METHODS
 // =============================================
+function hasAmountDifference(order: PurchaseOrder): boolean {
+  if (!order.actualDeliveredAmount || !order.originalTotalAmount) return false
+  return Math.abs(order.actualDeliveredAmount - order.originalTotalAmount) > 1
+}
 
+function getAmountDifferenceClass(order: PurchaseOrder): string {
+  const difference =
+    (order.actualDeliveredAmount || 0) - (order.originalTotalAmount || order.totalAmount)
+  return difference > 0 ? 'text-warning' : 'text-error'
+}
+
+function formatAmountDifference(order: PurchaseOrder): string {
+  const difference =
+    (order.actualDeliveredAmount || 0) - (order.originalTotalAmount || order.totalAmount)
+  const sign = difference > 0 ? '+' : ''
+  return `${sign}${formatCurrency(Math.abs(difference))}`
+}
+
+function getReceiptDiscrepancyColor(order: PurchaseOrder): string {
+  const totalImpact =
+    (order.actualDeliveredAmount || 0) - (order.originalTotalAmount || order.totalAmount)
+  return totalImpact > 0 ? 'warning' : 'error'
+}
 function getBillStatusForOrder(order: PurchaseOrder): BillStatus {
   return getBillStatus(order) // используем функцию из usePurchaseOrders
 }

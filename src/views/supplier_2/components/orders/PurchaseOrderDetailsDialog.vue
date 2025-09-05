@@ -324,6 +324,11 @@
           </div>
         </div>
 
+        <!-- Receipt Information (если есть) -->
+        <div v-if="order.status === 'delivered'" class="pa-4 border-b">
+          <OrderReceiptWidget :order="order" />
+        </div>
+
         <!-- Items List -->
         <div class="pa-4">
           <div class="text-subtitle-1 font-weight-bold mb-3">
@@ -569,6 +574,7 @@ import { ref, computed, watch } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
+import OrderReceiptWidget from './OrderReceiptWidget.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -587,6 +593,10 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
+
+components: {
+  OrderReceiptWidget
+}
 
 // =============================================
 // COMPOSABLES

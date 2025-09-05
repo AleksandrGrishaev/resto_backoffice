@@ -12,7 +12,8 @@ import type {
   UpdateReceiptData,
   ReceiptFilters,
   DiscrepancySummary,
-  ReceiptItem
+  ReceiptItem,
+  ReceiptDiscrepancyInfo
 } from '../types'
 
 import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
@@ -227,7 +228,7 @@ export function useReceipts() {
         throw new Error(`Order not found for receipt: ${receipt.purchaseOrderId}`)
       }
 
-      // ✅ НОВОЕ: Конвертируем транзитные batch-и в активные (до завершения приемки)
+      // ✅ КОНВЕРТИРУЕМ ТРАНЗИТНЫЕ BATCH-И В АКТИВНЫЕ
       try {
         const receiptItems = receipt.items.map(item => ({
           itemId: item.itemId,
@@ -243,7 +244,7 @@ export function useReceipts() {
         console.warn('Receipts: Failed to convert transit batches:', transitError)
       }
 
-      // ✅ СОЗДАЕМ STORAGE OPERATION (до завершения приемки)
+      // ✅ СОЗДАЕМ STORAGE OPERATION
       let operationId: string | undefined
       try {
         operationId = await storageIntegration.createReceiptOperation(receipt, order)
@@ -255,20 +256,172 @@ export function useReceipts() {
         throw storageError
       }
 
-      // ✅ ЗАВЕРШАЕМ ПРИЕМКУ (в самом конце)
+      // ✅ ЗАВЕРШАЕМ ПРИЕМКУ
       const completedReceipt = await updateReceipt(receiptId, {
         status: 'completed',
         completedDate: new Date().toISOString(),
-        storageOperationId: operationId // Добавляем ID операции
+        storageOperationId: operationId
       })
 
-      // Обновляем статус заказа
-      await supplierStore.updateOrder(order.id, { status: 'delivered' })
+      // ✅ НОВОЕ: ОБНОВЛЯЕМ ЗАКАЗ С ИНФОРМАЦИЕЙ О ПРИЕМКЕ
+      await updateOrderAfterReceiptCompletion(completedReceipt, order, receipt.receivedBy)
 
-      console.log(`Receipts: Receipt ${completedReceipt.receiptNumber} completed successfully`)
+      console.log(`Receipts: Receipt ${receipt.receiptNumber} completed successfully`)
       return completedReceipt
     } catch (error) {
       console.error('Receipts: Error completing receipt:', error)
+      throw error
+    }
+  }
+
+  function calculateReceiptDiscrepancies(
+    receipt: Receipt,
+    order: PurchaseOrder
+  ): {
+    discrepancies: ReceiptDiscrepancyInfo[]
+    hasDiscrepancies: boolean
+    totalFinancialImpact: number
+    newOrderAmount: number
+  } {
+    const discrepancies: ReceiptDiscrepancyInfo[] = []
+    let totalFinancialImpact = 0
+    let newOrderAmount = 0
+
+    receipt.items.forEach(receiptItem => {
+      const orderItem = order.items.find(oi => oi.id === receiptItem.orderItemId)
+      if (!orderItem) return
+
+      const orderedTotal = orderItem.orderedQuantity * orderItem.pricePerUnit
+      const actualPrice = receiptItem.actualPrice || orderItem.pricePerUnit
+      const receivedTotal = receiptItem.receivedQuantity * actualPrice
+
+      const quantityDifference = receiptItem.receivedQuantity - orderItem.orderedQuantity
+      const priceDifference = actualPrice - orderItem.pricePerUnit
+      const totalDifference = receivedTotal - orderedTotal
+
+      newOrderAmount += receivedTotal
+      totalFinancialImpact += totalDifference
+
+      // Проверяем наличие расхождений (допуск 0.01 для избежания проблем с плавающей точкой)
+      const hasQuantityDiscrepancy = Math.abs(quantityDifference) > 0.001
+      const hasPriceDiscrepancy = Math.abs(priceDifference) > 0.01
+
+      if (hasQuantityDiscrepancy || hasPriceDiscrepancy) {
+        let discrepancyType: 'quantity' | 'price' | 'both'
+        if (hasQuantityDiscrepancy && hasPriceDiscrepancy) {
+          discrepancyType = 'both'
+        } else if (hasQuantityDiscrepancy) {
+          discrepancyType = 'quantity'
+        } else {
+          discrepancyType = 'price'
+        }
+
+        discrepancies.push({
+          type: discrepancyType,
+          itemId: receiptItem.itemId,
+          itemName: orderItem.itemName,
+          ordered: {
+            quantity: orderItem.orderedQuantity,
+            price: orderItem.pricePerUnit,
+            total: orderedTotal
+          },
+          received: {
+            quantity: receiptItem.receivedQuantity,
+            price: actualPrice,
+            total: receivedTotal
+          },
+          impact: {
+            quantityDifference,
+            priceDifference,
+            totalDifference
+          }
+        })
+      }
+    })
+
+    return {
+      discrepancies,
+      hasDiscrepancies: discrepancies.length > 0,
+      totalFinancialImpact,
+      newOrderAmount
+    }
+  }
+
+  /**
+   * Update order with receipt completion data
+   */
+  async function updateOrderAfterReceiptCompletion(
+    receipt: Receipt,
+    order: PurchaseOrder,
+    receivedBy: string
+  ): Promise<void> {
+    try {
+      const discrepancyAnalysis = calculateReceiptDiscrepancies(receipt, order)
+
+      console.log(`Receipts: Analyzing receipt impact for order ${order.orderNumber}`, {
+        originalAmount: order.totalAmount,
+        newAmount: discrepancyAnalysis.newOrderAmount,
+        financialImpact: discrepancyAnalysis.totalFinancialImpact,
+        hasDiscrepancies: discrepancyAnalysis.hasDiscrepancies,
+        discrepanciesCount: discrepancyAnalysis.discrepancies.length
+      })
+
+      // Подготавливаем данные для обновления заказа
+      const updateData: any = {
+        status: 'delivered',
+        // Сохраняем оригинальную сумму при первом обновлении
+        originalTotalAmount: order.originalTotalAmount || order.totalAmount,
+        actualDeliveredAmount: discrepancyAnalysis.newOrderAmount,
+        receiptDiscrepancies: discrepancyAnalysis.discrepancies,
+        hasReceiptDiscrepancies: discrepancyAnalysis.hasDiscrepancies,
+        receiptCompletedAt: new Date().toISOString(),
+        receiptCompletedBy: receivedBy
+      }
+
+      // Обновляем сумму заказа только если есть существенные изменения
+      if (Math.abs(discrepancyAnalysis.totalFinancialImpact) > 0.01) {
+        updateData.totalAmount = discrepancyAnalysis.newOrderAmount
+
+        console.log(`Receipts: Updating order amount due to receipt discrepancies`, {
+          orderId: order.id,
+          originalAmount: order.totalAmount,
+          newAmount: discrepancyAnalysis.newOrderAmount,
+          impact: discrepancyAnalysis.totalFinancialImpact
+        })
+      }
+
+      // Обновляем заказ
+      const { usePurchaseOrders } = await import('./usePurchaseOrders')
+      const { updateOrder } = usePurchaseOrders()
+
+      const updatedOrder = await updateOrder(order.id, updateData)
+
+      // Пересчитываем статус платежей после обновления суммы
+      if (updateData.totalAmount) {
+        try {
+          const { calculateBillStatus } = usePurchaseOrders()
+          const newBillStatus = await calculateBillStatus(updatedOrder)
+
+          if (newBillStatus !== updatedOrder.billStatus) {
+            await updateOrder(updatedOrder.id, {
+              billStatus: newBillStatus
+            })
+            console.log(
+              `Receipts: Bill status updated to ${newBillStatus} for order ${updatedOrder.orderNumber}`
+            )
+          }
+        } catch (billStatusError) {
+          console.warn('Receipts: Failed to update bill status:', billStatusError)
+        }
+      }
+
+      console.log(`Receipts: Order updated successfully after receipt completion`, {
+        orderId: order.id,
+        hasDiscrepancies: discrepancyAnalysis.hasDiscrepancies,
+        financialImpact: discrepancyAnalysis.totalFinancialImpact
+      })
+    } catch (error) {
+      console.error(`Receipts: Failed to update order after receipt completion:`, error)
       throw error
     }
   }

@@ -1,5 +1,6 @@
-// src/stores/account/paymentMock.ts - ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ ВЕРСИЯ
-// ✅ Все платежи теперь связаны с заказами через purchaseOrderId
+// =============================================
+// ПОЛНАЯ ЗАМЕНА src/stores/account/paymentMock.ts
+// =============================================
 
 import type { PendingPayment, PaymentStatistics } from './types'
 
@@ -7,26 +8,47 @@ const now = new Date().toISOString()
 
 export const mockPendingPayments: PendingPayment[] = [
   // =============================================
-  // ПЛАТЕЖИ ПО ЗАКАЗАМ ПОСТАВЩИКОВ
+  // ПЛАТЕЖИ ПО ЗАКАЗАМ ПОСТАВЩИКОВ (с новыми полями)
   // =============================================
 
-  // 📦 po-001: ЧАСТИЧНАЯ ОПЛАТА (600k из 900k) + ПРОСРОЧКА на остаток
+  // 📦 po-001: ПЕРЕПЛАТА из-за недопоставки (заплатили 900k, получили на 810k)
   {
-    id: 'payment_po_001_partial',
+    id: 'payment_po_001_full',
     counteragentId: 'sup-premium-meat-co',
     counteragentName: 'Premium Meat Company',
-    amount: 600000,
-    description: 'Partial payment for order PO-001 (meat)',
+    amount: 900000, // Заплатили за полный заказ
+    description: 'Payment for order PO-001 (beef tenderloin)',
     dueDate: '2025-09-01T00:00:00.000Z',
     priority: 'medium',
-    status: 'completed', // уже оплачено
+    status: 'completed',
     category: 'supplier',
     invoiceNumber: 'PO-001',
-    purchaseOrderId: 'po-001', // ✅ СВЯЗЬ С ЗАКАЗОМ
+
+    // ✅ НОВЫЕ ПОЛЯ для интеграции с supplier store
+    purchaseOrderId: 'po-001',
     sourceOrderId: 'po-001',
-    paidAmount: 600000,
+    autoSyncEnabled: true,
+    lastAmountUpdate: now,
+    amountHistory: [
+      {
+        oldAmount: 900000,
+        newAmount: 900000,
+        reason: 'original_order',
+        changedAt: '2025-08-30T09:00:00.000Z',
+        changedBy: {
+          type: 'user',
+          id: 'user_1',
+          name: 'Admin'
+        },
+        notes: 'Initial payment amount set based on order total'
+      }
+      // После приемки должна добавиться запись о том, что нужно вернуть 90k
+    ],
+
+    paidAmount: 900000,
     paidDate: '2025-09-01T10:30:00.000Z',
-    notes: 'Частичная оплата мяса, остаток в следующем платеже',
+    assignedToAccount: 'acc_1',
+    notes: 'ПЕРЕПЛАТА: заплачено 900k, получено товара на 810k. Требуется возврат 90k.',
     createdBy: {
       type: 'user',
       id: 'user_1',
@@ -36,220 +58,197 @@ export const mockPendingPayments: PendingPayment[] = [
     updatedAt: '2025-09-01T10:30:00.000Z'
   },
 
-  {
-    id: 'payment_po_001_remaining',
-    counteragentId: 'sup-premium-meat-co',
-    counteragentName: 'Premium Meat Company',
-    amount: 300000,
-    description: 'Remaining payment for order PO-001 (meat)',
-    dueDate: '2025-09-03T00:00:00.000Z', // ПРОСРОЧКА!
-    priority: 'urgent',
-    status: 'pending',
-    category: 'supplier',
-    invoiceNumber: 'PO-001',
-    purchaseOrderId: 'po-001', // ✅ ТОТ ЖЕ ЗАКАЗ
-    sourceOrderId: 'po-001',
-    notes: 'ПРОСРОЧКА! Остаток за мясо, поставщик требует оплату',
-    createdBy: {
-      type: 'user',
-      id: 'user_1',
-      name: 'Admin'
-    },
-    createdAt: '2025-08-30T09:01:00.000Z',
-    updatedAt: '2025-09-04T08:00:00.000Z'
-  },
-
-  // 📦 po-002: ПОЛНАЯ ОПЛАТА (130k)
+  // 📦 po-002: ТОЧНАЯ ОПЛАТА (без расхождений)
   {
     id: 'payment_po_002_full',
-    counteragentId: 'sup-fresh-veg-market',
-    counteragentName: 'Fresh Vegetable Market',
+    counteragentId: 'sup-fresh-greens',
+    counteragentName: 'Fresh Greens Ltd',
     amount: 130000,
-    description: 'Full payment for order PO-002 (vegetables)',
-    dueDate: '2025-08-29T00:00:00.000Z',
+    description: 'Payment for order PO-002 (iceberg lettuce)',
+    dueDate: '2025-09-02T00:00:00.000Z',
     priority: 'medium',
     status: 'completed',
     category: 'supplier',
     invoiceNumber: 'PO-002',
-    purchaseOrderId: 'po-002', // ✅ СВЯЗЬ С ЗАКАЗОМ
+
+    purchaseOrderId: 'po-002',
     sourceOrderId: 'po-002',
+    autoSyncEnabled: true,
+    lastAmountUpdate: now,
+    amountHistory: [
+      {
+        oldAmount: 130000,
+        newAmount: 130000,
+        reason: 'original_order',
+        changedAt: '2025-08-31T10:00:00.000Z',
+        changedBy: {
+          type: 'user',
+          id: 'user_2',
+          name: 'Manager'
+        },
+        notes: 'Payment amount matches delivered amount perfectly'
+      }
+    ],
+
     paidAmount: 130000,
-    paidDate: '2025-08-28T14:20:00.000Z',
-    notes: 'Полная оплата овощей, без проблем',
+    paidDate: '2025-09-02T09:15:00.000Z',
     assignedToAccount: 'acc_1',
+    notes: 'Точная оплата, приемка без расхождений',
     createdBy: {
       type: 'user',
       id: 'user_2',
       name: 'Manager'
     },
-    createdAt: '2025-08-27T11:00:00.000Z',
-    updatedAt: '2025-08-28T14:20:00.000Z'
+    createdAt: '2025-08-31T10:00:00.000Z',
+    updatedAt: '2025-09-02T09:15:00.000Z'
   },
 
-  // 📦 po-0830-005: ПЕРЕПЛАТА (250k вместо 220k)
+  // 📦 po-003: НЕ ОПЛАЧЕН (заказ еще не доставлен)
   {
-    id: 'payment_po_005_overpaid',
-    counteragentId: 'sup-fresh-veg-market',
-    counteragentName: 'Fresh Vegetable Market',
-    amount: 250000,
-    description: 'Payment for order PO-0830-005 (spices) - overpayment',
-    dueDate: '2025-09-06T00:00:00.000Z',
-    priority: 'low',
-    status: 'completed',
-    category: 'supplier',
-    invoiceNumber: 'PO-0830-005',
-    purchaseOrderId: 'po-0830-005', // ✅ СВЯЗЬ С ЗАКАЗОМ
-    sourceOrderId: 'po-0830-005',
-    paidAmount: 250000,
-    paidDate: '2025-09-04T16:45:00.000Z',
-    notes: 'ПЕРЕПЛАТА на 29,518 IDR! Можно зачесть в следующий заказ',
-    assignedToAccount: 'acc_1',
-    createdBy: {
-      type: 'user',
-      id: 'user_2',
-      name: 'Manager'
-    },
-    createdAt: '2025-09-04T10:00:00.000Z',
-    updatedAt: '2025-09-04T16:45:00.000Z'
-  },
-
-  // 📦 po-0830-004: БЕЗ ПЛАТЕЖЕЙ (заказ молока остается без счетов)
-  // 📦 po-003: БЕЗ ПЛАТЕЖЕЙ (заказ пива остается без счетов)
-
-  // =============================================
-  // ОБЫЧНЫЕ ОПЕРАЦИОННЫЕ ПЛАТЕЖИ (НЕ ПО ЗАКАЗАМ)
-  // =============================================
-
-  // 💡 Электричество - ПРОСРОЧКА
-  {
-    id: 'payment_electricity_overdue',
-    counteragentId: 'utility-company-pln',
-    counteragentName: 'PLN (Электричество)',
-    amount: 1200000,
-    description: 'Счет за электричество за август',
-    dueDate: '2025-09-01T00:00:00.000Z', // ПРОСРОЧКА!
-    priority: 'urgent',
-    status: 'pending',
-    category: 'utilities',
-    invoiceNumber: 'PLN-082025-REST',
-    notes: 'ПРОСРОЧКА! Грозят отключением света',
-    createdBy: {
-      type: 'user',
-      id: 'user_1',
-      name: 'Admin'
-    },
-    createdAt: '2025-08-25T10:00:00.000Z',
-    updatedAt: '2025-09-04T09:15:00.000Z'
-  },
-
-  // 💰 Зарплата персонала - СРОЧНО
-  {
-    id: 'payment_salary_august',
-    counteragentId: 'staff-payroll',
-    counteragentName: 'Зарплата персонала',
-    amount: 8500000,
-    description: 'Зарплата за август 2025',
+    id: 'payment_po_003_pending',
+    counteragentId: 'sup-global-imports',
+    counteragentName: 'Global Food Imports',
+    amount: 660000,
+    description: 'Payment for order PO-003 (salmon fillet)',
     dueDate: '2025-09-10T00:00:00.000Z',
-    priority: 'urgent',
-    status: 'pending',
-    category: 'salary',
-    notes: 'Зарплата должна быть выплачена в срок!',
-    createdBy: {
-      type: 'user',
-      id: 'user_1',
-      name: 'Admin'
-    },
-    createdAt: '2025-09-01T08:00:00.000Z',
-    updatedAt: '2025-09-01T08:00:00.000Z'
-  },
-
-  // 🏪 Аренда - СРЕДНИЙ ПРИОРИТЕТ
-  {
-    id: 'payment_rent_september',
-    counteragentId: 'landlord-restaurant',
-    counteragentName: 'Арендодатель ресторана',
-    amount: 15000000,
-    description: 'Аренда ресторана за сентябрь',
-    dueDate: '2025-09-15T00:00:00.000Z',
     priority: 'medium',
     status: 'pending',
-    category: 'rent',
-    invoiceNumber: 'RENT-SEP-2025',
-    notes: 'Ежемесячная аренда основного зала',
-    assignedToAccount: 'acc_2', // назначено на банковский счет
+    category: 'supplier',
+    invoiceNumber: 'PO-003',
+
+    purchaseOrderId: 'po-003',
+    sourceOrderId: 'po-003',
+    autoSyncEnabled: true,
+    lastAmountUpdate: now,
+    amountHistory: [
+      {
+        oldAmount: 660000,
+        newAmount: 660000,
+        reason: 'original_order',
+        changedAt: '2025-09-03T15:00:00.000Z',
+        changedBy: {
+          type: 'user',
+          id: 'user_1',
+          name: 'Admin'
+        },
+        notes: 'Initial payment created for order PO-003'
+      }
+    ],
+
+    notes: 'Ожидается доставка, затем оплата',
     createdBy: {
       type: 'user',
       id: 'user_1',
       name: 'Admin'
     },
-    createdAt: '2025-08-20T12:00:00.000Z',
-    updatedAt: '2025-08-20T12:00:00.000Z'
+    createdAt: '2025-09-03T15:00:00.000Z',
+    updatedAt: '2025-09-03T15:00:00.000Z'
   },
 
-  // 📞 Интернет и связь - НИЗКИЙ ПРИОРИТЕТ
+  // 📦 po-0904-006: ПЕРЕПЛАТА, которая превратилась в точную оплату после приемки
   {
-    id: 'payment_internet_september',
-    counteragentId: 'telecom-provider',
-    counteragentName: 'Telkom Indonesia',
-    amount: 850000,
-    description: 'Интернет и телефония за сентябрь',
-    dueDate: '2025-09-20T00:00:00.000Z',
-    priority: 'low',
+    id: 'payment_po_0904_006',
+    counteragentId: 'sup-beverage-center',
+    counteragentName: 'Beverage Distribution Center',
+    amount: 160000, // Обновлено после приемки (было 240000)
+    description: 'Payment for order PO-0904-006 (cola 330ml)',
+    dueDate: '2025-09-06T00:00:00.000Z',
+    priority: 'medium',
+    status: 'completed',
+    category: 'supplier',
+    invoiceNumber: 'PO-0904-006',
+
+    purchaseOrderId: 'po-1757014034857',
+    sourceOrderId: 'po-1757014034857',
+    autoSyncEnabled: true,
+    lastAmountUpdate: now,
+    amountHistory: [
+      {
+        oldAmount: 240000,
+        newAmount: 240000,
+        reason: 'original_order',
+        changedAt: '2025-09-04T12:00:00.000Z',
+        changedBy: {
+          type: 'user',
+          id: 'user_1',
+          name: 'Admin'
+        },
+        notes: 'Initial payment for 24 cans at 10k each'
+      },
+      {
+        oldAmount: 240000,
+        newAmount: 160000,
+        reason: 'receipt_discrepancy',
+        changedAt: now,
+        changedBy: {
+          type: 'system',
+          id: 'receipt-system',
+          name: 'Receipt Processing System'
+        },
+        notes:
+          'Amount adjusted after receipt completion: received 20 cans at 8k each instead of 24 at 10k'
+      }
+    ],
+
+    paidAmount: 160000,
+    paidDate: '2025-09-04T19:35:00.000Z',
+    assignedToAccount: 'acc_1',
+    notes: 'Сумма автоматически скорректирована после приемки с расхождениями',
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Admin'
+    },
+    createdAt: '2025-09-04T12:00:00.000Z',
+    updatedAt: now
+  },
+
+  // =============================================
+  // ОПЕРАЦИОННЫЕ ПЛАТЕЖИ (не связанные с заказами)
+  // =============================================
+
+  // 🔥 Коммунальные услуги - СРОЧНО И ПРОСРОЧЕНО
+  {
+    id: 'payment_utilities_september_urgent',
+    counteragentId: 'utility-company',
+    counteragentName: 'PT. Listrik Negara',
+    amount: 2500000,
+    description: 'Электричество за сентябрь - СРОЧНО!',
+    dueDate: '2025-09-03T00:00:00.000Z', // ПРОСРОЧКА!
+    priority: 'urgent',
     status: 'pending',
     category: 'utilities',
-    invoiceNumber: 'TELKOM-SEP-2025',
-    notes: 'Можно оплатить в течение месяца',
-    createdBy: {
-      type: 'user',
-      id: 'user_2',
-      name: 'Manager'
-    },
-    createdAt: '2025-08-25T14:30:00.000Z',
-    updatedAt: '2025-08-25T14:30:00.000Z'
-  },
-
-  // 🛡️ Страхование - НИЗКИЙ ПРИОРИТЕТ
-  {
-    id: 'payment_insurance_annual',
-    counteragentId: 'insurance-company',
-    counteragentName: 'Страховая компания',
-    amount: 2200000,
-    description: 'Страхование ресторана на год',
-    dueDate: '2025-09-30T00:00:00.000Z',
-    priority: 'low',
-    status: 'pending',
-    category: 'other',
-    invoiceNumber: 'INS-REST-2025',
-    notes: 'Годовая страховка, можно оплатить до конца месяца',
+    invoiceNumber: 'ELEC-SEP-2025',
+    notes: 'ВНИМАНИЕ: Угроза отключения электричества при несвоевременной оплате!',
     createdBy: {
       type: 'user',
       id: 'user_1',
       name: 'Admin'
     },
-    createdAt: '2025-08-15T08:00:00.000Z',
-    updatedAt: '2025-08-15T08:00:00.000Z'
+    createdAt: '2025-08-28T14:00:00.000Z',
+    updatedAt: '2025-08-28T14:00:00.000Z'
   },
 
   // 🧹 Клининг - СРЕДНИЙ ПРИОРИТЕТ
   {
-    id: 'payment_cleaning_august',
+    id: 'payment_cleaning_september',
     counteragentId: 'cleaning-service',
     counteragentName: 'Служба уборки',
     amount: 750000,
-    description: 'Услуги клининга за август',
-    dueDate: '2025-09-08T00:00:00.000Z',
+    description: 'Услуги клининга за сентябрь',
+    dueDate: '2025-09-10T00:00:00.000Z',
     priority: 'medium',
     status: 'pending',
     category: 'services',
-    invoiceNumber: 'CLEAN-AUG-2025',
+    invoiceNumber: 'CLEAN-SEP-2025',
     notes: 'Ежемесячная глубокая уборка',
     createdBy: {
       type: 'user',
       id: 'user_2',
       name: 'Manager'
     },
-    createdAt: '2025-08-30T16:00:00.000Z',
-    updatedAt: '2025-08-30T16:00:00.000Z'
+    createdAt: '2025-09-01T16:00:00.000Z',
+    updatedAt: '2025-09-01T16:00:00.000Z'
   },
 
   // 🔧 Ремонт оборудования - ЗАВЕРШЕН
@@ -266,8 +265,8 @@ export const mockPendingPayments: PendingPayment[] = [
     invoiceNumber: 'REPAIR-AUG-024',
     paidAmount: 1250000,
     paidDate: '2025-08-24T11:15:00.000Z',
-    notes: 'Экстренный ремонт кухонного оборудования - оплачен',
     assignedToAccount: 'acc_1',
+    notes: 'Экстренный ремонт кухонного оборудования - успешно завершен',
     createdBy: {
       type: 'user',
       id: 'user_1',
@@ -275,10 +274,34 @@ export const mockPendingPayments: PendingPayment[] = [
     },
     createdAt: '2025-08-22T13:45:00.000Z',
     updatedAt: '2025-08-24T11:15:00.000Z'
+  },
+
+  // 🏢 Аренда помещения - ВЫСОКИЙ ПРИОРИТЕТ
+  {
+    id: 'payment_rent_october',
+    counteragentId: 'landlord-company',
+    counteragentName: 'Property Management Co.',
+    amount: 15000000,
+    description: 'Аренда помещения за октябрь',
+    dueDate: '2025-09-25T00:00:00.000Z',
+    priority: 'high',
+    status: 'pending',
+    category: 'rent',
+    invoiceNumber: 'RENT-OCT-2025',
+    notes: 'Ежемесячная арендная плата',
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Admin'
+    },
+    createdAt: '2025-09-01T08:00:00.000Z',
+    updatedAt: '2025-09-01T08:00:00.000Z'
   }
 ]
 
-// ============ UTILITY FUNCTIONS ============
+// =============================================
+// ОБНОВЛЕННЫЕ UTILITY FUNCTIONS с поддержкой новых полей
+// =============================================
 
 export function getPaymentsByStatus(status: string): PendingPayment[] {
   if (status === 'all') return mockPendingPayments
@@ -320,19 +343,27 @@ export function getPaymentsByCounteragent(counteragentId: string): PendingPaymen
   return mockPendingPayments.filter(payment => payment.counteragentId === counteragentId)
 }
 
-// ✅ НОВАЯ ФУНКЦИЯ: Получить платежи по заказу
+// ✅ НОВЫЕ ФУНКЦИИ для работы с заказами поставщиков
 export function getPaymentsByPurchaseOrder(purchaseOrderId: string): PendingPayment[] {
   return mockPendingPayments.filter(payment => payment.purchaseOrderId === purchaseOrderId)
 }
 
-// ✅ НОВАЯ ФУНКЦИЯ: Получить все платежи по заказам поставщиков
 export function getSupplierOrderPayments(): PendingPayment[] {
   return mockPendingPayments.filter(payment => payment.purchaseOrderId)
 }
 
-// ✅ НОВАЯ ФУНКЦИЯ: Получить операционные платежи (не по заказам)
 export function getOperationalPayments(): PendingPayment[] {
   return mockPendingPayments.filter(payment => !payment.purchaseOrderId)
+}
+
+export function getPaymentsWithAmountHistory(): PendingPayment[] {
+  return mockPendingPayments.filter(
+    payment => payment.amountHistory && payment.amountHistory.length > 1
+  )
+}
+
+export function getAutoSyncEnabledPayments(): PendingPayment[] {
+  return mockPendingPayments.filter(payment => payment.autoSyncEnabled)
 }
 
 // ============ STATISTICS ============
@@ -351,8 +382,6 @@ export function calculatePaymentStatistics(): PaymentStatistics {
     overdueCount: overdue.length
   }
 }
-
-// ============ QUICK ACCESS ============
 
 export function getTotalPendingAmount(): number {
   return getPendingPayments().reduce((sum, payment) => sum + payment.amount, 0)
@@ -385,26 +414,34 @@ export function getPaymentsSummaryForDebug() {
   const operationalPayments = getOperationalPayments()
   const pending = getPendingPayments()
   const completed = getPaymentsByStatus('completed')
+  const withAmountHistory = getPaymentsWithAmountHistory()
 
-  console.log('=== PAYMENTS SUMMARY ===')
+  console.log('=== ОБНОВЛЕННЫЕ PAYMENTS SUMMARY ===')
   console.log(`Total payments: ${mockPendingPayments.length}`)
   console.log(`├── Order-related: ${orderPayments.length}`)
   console.log(`├── Operational: ${operationalPayments.length}`)
   console.log(`├── Pending: ${pending.length}`)
-  console.log(`└── Completed: ${completed.length}`)
+  console.log(`├── Completed: ${completed.length}`)
+  console.log(`└── With amount history: ${withAmountHistory.length}`)
 
-  console.log('\n=== ORDERS COVERAGE ===')
-  console.log('po-001: partial + overdue (600k paid + 300k pending)')
-  console.log('po-002: fully paid (130k)')
-  console.log('po-0830-005: overpaid (250k instead of 220k)')
-  console.log('po-0830-004: NO PAYMENTS')
-  console.log('po-003: NO PAYMENTS')
+  console.log('\n=== ORDERS COVERAGE (UPDATED) ===')
+  console.log('po-001: ПЕРЕПЛАЧЕН (900k заплачено, 810k получено) - возврат 90k')
+  console.log('po-002: ТОЧНО ОПЛАЧЕН (130k заплачено = 130k получено)')
+  console.log('po-003: НЕ ОПЛАЧЕН (660k ожидает доставки)')
+  console.log('po-0904-006: АВТОКОРРЕКТИРОВКА (240k → 160k после приемки)')
+
+  console.log('\n=== НОВЫЕ ПОЛЯ ===')
+  console.log(`Payments with purchaseOrderId: ${orderPayments.length}`)
+  console.log(`Payments with autoSync enabled: ${getAutoSyncEnabledPayments().length}`)
+  console.log(`Payments with amount history: ${withAmountHistory.length}`)
 
   return {
     total: mockPendingPayments.length,
     orderRelated: orderPayments.length,
     operational: operationalPayments.length,
     pending: pending.length,
-    completed: completed.length
+    completed: completed.length,
+    withAmountHistory: withAmountHistory.length,
+    autoSyncEnabled: getAutoSyncEnabledPayments().length
   }
 }
