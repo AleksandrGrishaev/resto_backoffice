@@ -123,205 +123,17 @@
           </div>
 
           <!-- Bills Management -->
-          <div class="mb-4">
-            <!-- No Bills State -->
-            <div v-if="selectedOrderBills.length === 0" class="text-center pa-6">
-              <v-icon
-                icon="mdi-receipt-text-outline"
-                size="48"
-                color="grey-lighten-1"
-                class="mb-3"
-              />
-              <div class="text-h6 text-medium-emphasis mb-2">No Bills Created</div>
-              <div class="text-body-2 text-medium-emphasis mb-4">
-                Create a new bill or attach an existing one to manage payments for this order
-              </div>
-
-              <div class="d-flex gap-3 justify-center">
-                <v-btn
-                  color="primary"
-                  variant="elevated"
-                  prepend-icon="mdi-plus"
-                  :loading="paymentState.loading"
-                  @click="handleCreateBill"
-                >
-                  Create New Bill
-                </v-btn>
-
-                <v-btn
-                  color="primary"
-                  variant="outlined"
-                  prepend-icon="mdi-link"
-                  :loading="paymentState.loading"
-                  :disabled="availableBillsForSupplier.length === 0"
-                  @click="showAttachBillDialog = true"
-                >
-                  Attach Existing Bill
-                  <v-badge
-                    v-if="availableBillsForSupplier.length > 0"
-                    :content="availableBillsForSupplier.length"
-                    color="success"
-                  />
-                </v-btn>
-              </div>
-            </div>
-
-            <!-- Bills List -->
-            <div v-else>
-              <div class="d-flex justify-space-between align-center mb-3">
-                <div class="text-subtitle-2">
-                  Associated Bills ({{ selectedOrderBills.length }})
-                </div>
-                <div class="d-flex gap-2">
-                  <v-btn
-                    color="primary"
-                    variant="text"
-                    size="small"
-                    prepend-icon="mdi-plus"
-                    :loading="paymentState.loading"
-                    @click="handleCreateBill"
-                  >
-                    Create New
-                  </v-btn>
-
-                  <v-btn
-                    color="primary"
-                    variant="text"
-                    size="small"
-                    prepend-icon="mdi-link"
-                    :loading="paymentState.loading"
-                    :disabled="availableBillsForSupplier.length === 0"
-                    @click="handleAttachBill"
-                  >
-                    Attach Bill
-                    <v-badge
-                      v-if="availableBillsForSupplier.length > 0"
-                      :content="availableBillsForSupplier.length"
-                      color="success"
-                    />
-                  </v-btn>
-                </div>
-              </div>
-
-              <!-- Bills Cards -->
-              <div class="d-flex flex-column gap-2">
-                <v-card
-                  v-for="bill in selectedOrderBills"
-                  :key="bill.id"
-                  variant="outlined"
-                  class="pa-3"
-                >
-                  <div class="d-flex justify-space-between align-center">
-                    <div class="flex-grow-1">
-                      <div class="d-flex align-center mb-1">
-                        <v-chip
-                          :color="getPaymentStatusColor(bill.status)"
-                          size="x-small"
-                          variant="flat"
-                          class="mr-2"
-                        >
-                          {{ getBillStatusText(bill.status) }}
-                        </v-chip>
-                        <div class="text-body-1 font-weight-medium">
-                          {{ bill.description }}
-                        </div>
-                      </div>
-
-                      <div class="text-caption text-medium-emphasis mb-1">
-                        ID: {{ bill.id.slice(-8) }} | Invoice: {{ bill.invoiceNumber || 'N/A' }} |
-                        Priority: {{ bill.priority }}
-                      </div>
-
-                      <div v-if="bill.dueDate" class="text-caption text-medium-emphasis">
-                        Due: {{ formatDate(bill.dueDate) }}
-                        <span
-                          v-if="isOverdue(bill.dueDate)"
-                          class="text-error font-weight-bold ml-1"
-                        >
-                          (OVERDUE)
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="text-right mr-3">
-                      <div class="text-h6 font-weight-bold">
-                        {{ formatCurrency(bill.amount) }}
-                      </div>
-                    </div>
-
-                    <div class="d-flex gap-1">
-                      <v-btn
-                        icon="mdi-eye"
-                        variant="text"
-                        size="small"
-                        color="info"
-                        @click="actions.navigateToPayment(bill.id)"
-                      >
-                        <v-icon>mdi-eye</v-icon>
-                        <v-tooltip activator="parent">View Bill</v-tooltip>
-                      </v-btn>
-
-                      <v-btn
-                        v-if="bill.status === 'pending'"
-                        icon="mdi-link-off"
-                        variant="text"
-                        size="small"
-                        color="warning"
-                        @click="handleDetachBill(bill.id)"
-                      >
-                        <v-icon>mdi-link-off</v-icon>
-                        <v-tooltip activator="parent">Detach Bill</v-tooltip>
-                      </v-btn>
-
-                      <v-menu>
-                        <template #activator="{ props: menuProps }">
-                          <v-btn
-                            v-bind="menuProps"
-                            icon="mdi-dots-vertical"
-                            variant="text"
-                            size="small"
-                            color="grey"
-                          />
-                        </template>
-
-                        <v-list density="compact">
-                          <v-list-item
-                            v-if="bill.status === 'pending'"
-                            prepend-icon="mdi-cancel"
-                            title="Cancel Bill"
-                            @click="handleCancelBill(bill.id)"
-                          />
-                          <v-list-item prepend-icon="mdi-history" title="Show History" disabled />
-                        </v-list>
-                      </v-menu>
-                    </div>
-                  </div>
-                </v-card>
-              </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="d-flex gap-2 justify-center mt-4">
-              <v-btn
-                v-if="paymentCalculations.hasAmountMismatch"
-                color="warning"
-                variant="outlined"
-                prepend-icon="mdi-alert-circle"
-                @click="actions.showShortfall()"
-              >
-                Review Amount Mismatch
-              </v-btn>
-
-              <v-btn
-                color="info"
-                variant="text"
-                prepend-icon="mdi-view-list"
-                @click="actions.navigateToAccounts()"
-              >
-                Manage in Accounts Module
-              </v-btn>
-            </div>
-          </div>
+          <PurchaseOrderPayment
+            :order="order"
+            :bills="selectedOrderBills"
+            :loading="paymentState.loading"
+            @create-bill="handleCreateBill"
+            @attach-bill="handleAttachBill"
+            @detach-bill="handleDetachBill"
+            @view-bill="billId => actions.navigateToPayment(billId)"
+            @cancel-bill="handleCancelBill"
+            @manage-all-bills="() => actions.navigateToAccounts()"
+          />
         </div>
 
         <!-- Receipt Information (если есть) -->
@@ -530,6 +342,7 @@ import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPaymen
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
 import OrderReceiptWidget from './OrderReceiptWidget.vue'
 import AttachBillDialog from './AttachBillDialog.vue'
+import PurchaseOrderPayment from './PurchaseOrderPayment.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -553,7 +366,8 @@ const showAttachBillDialog = ref(false)
 defineOptions({
   components: {
     OrderReceiptWidget,
-    AttachBillDialog
+    AttachBillDialog,
+    PurchaseOrderPayment
   }
 })
 

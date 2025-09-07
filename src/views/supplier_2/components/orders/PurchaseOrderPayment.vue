@@ -104,13 +104,22 @@
                       (OVERDUE)
                     </span>
                   </div>
+
+                  <div
+                    v-if="getLinkedAmountForOrder(bill, order.id) !== bill.amount"
+                    class="text-caption text-medium-emphasis"
+                  >
+                    Original payment: {{ formatCurrency(bill.amount) }} • Linked to this order:
+                    {{ formatCurrency(getLinkedAmountForOrder(bill, order.id)) }}
+                  </div>
                 </div>
 
                 <!-- Amount -->
                 <div class="bill-amount text-right mr-3">
                   <div class="text-h6 font-weight-bold">
-                    {{ formatCurrency(bill.amount) }}
+                    {{ formatCurrency(getLinkedAmountForOrder(bill, order.id)) }}
                   </div>
+
                   <div
                     v-if="bill.paidAmount && bill.paidAmount > 0"
                     class="text-caption text-success"
@@ -277,27 +286,12 @@ const showBillHistory = ref<Record<string, boolean>>({})
 // COMPUTED PROPERTIES
 // =============================================
 
-const totalBilledAmount = computed(() => props.bills.reduce((sum, bill) => sum + bill.amount, 0))
-
-const amountDifference = computed(() => totalBilledAmount.value - props.order.totalAmount)
-
-const hasAmountMismatch = computed(() => Math.abs(amountDifference.value) > 1)
-
-const amountDifferenceClass = computed(() => {
-  if (!hasAmountMismatch.value) return ''
-  return amountDifference.value > 0 ? 'text-warning' : 'text-error'
-})
-
-const paymentStatus = computed(() => {
-  if (!props.bills.length) return 'not_billed'
-
-  const completedBills = props.bills.filter(bill => bill.status === 'completed')
-  const totalPaid = completedBills.reduce((sum, bill) => sum + (bill.paidAmount || bill.amount), 0)
-
-  if (totalPaid === 0) return 'pending'
-  if (totalPaid < totalBilledAmount.value) return 'partial'
-  return 'paid'
-})
+const totalBilledAmount = computed(() =>
+  props.bills.reduce((sum, bill) => {
+    const link = bill.linkedOrders?.find(o => o.orderId === props.order.id && o.isActive)
+    return sum + (link?.linkedAmount || 0)
+  }, 0)
+)
 
 // =============================================
 // METHODS
@@ -349,24 +343,19 @@ function getBillStatusText(status: string): string {
   return statusTexts[status as keyof typeof statusTexts] || status
 }
 
-function getPaymentStatusColor(status: string): string {
-  const statusColors = {
-    not_billed: 'grey',
-    pending: 'orange',
-    partial: 'blue',
-    paid: 'green'
-  }
-  return statusColors[status as keyof typeof statusColors] || 'grey'
-}
+function getLinkedAmountForOrder(payment: PendingPayment, orderId: string): number {
+  console.log(`DEBUG getLinkedAmountForOrder for payment ${payment.id}:`, {
+    orderId,
+    linkedOrders: payment.linkedOrders,
+    hasLinkedOrders: !!payment.linkedOrders,
+    linkedOrdersLength: payment.linkedOrders?.length || 0
+  })
 
-function getPaymentStatusText(status: string): string {
-  const statusTexts = {
-    not_billed: 'Not Billed',
-    pending: 'Pending Payment',
-    partial: 'Partially Paid',
-    paid: 'Fully Paid'
-  }
-  return statusTexts[status as keyof typeof statusTexts] || status
+  const link = payment.linkedOrders?.find(o => o.orderId === orderId && o.isActive)
+  const result = link?.linkedAmount || 0
+
+  console.log(`DEBUG result for ${payment.id}:`, result, 'link found:', !!link)
+  return result
 }
 </script>
 

@@ -90,7 +90,10 @@ export function useOrderPayments() {
       }
     }
 
-    const totalBilled = bills.reduce((sum, bill) => sum + bill.amount, 0)
+    const totalBilled = bills.reduce((sum, bill) => {
+      const link = bill.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+      return sum + (link?.linkedAmount || 0)
+    }, 0)
     const orderTotal = order.totalAmount
     const amountDifference = totalBilled - orderTotal
     const hasAmountMismatch = Math.abs(amountDifference) > 1
