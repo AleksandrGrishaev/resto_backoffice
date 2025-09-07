@@ -174,12 +174,25 @@ export function useOrderPayments() {
       await accountStore.fetchPayments()
 
       // ✅ НОВОЕ: Фильтруем платежи с доступной суммой
-      const bills = accountStore.state.pendingPayments.filter(
-        payment =>
-          payment.counteragentId === supplierId &&
-          payment.linkedOrders && // Только платежи связанные с заказами
-          getAvailableAmount(payment) > 0 // С доступной суммой
-      )
+      const bills = accountStore.state.pendingPayments.filter(payment => {
+        // Базовые условия
+        if (payment.counteragentId !== supplierId) return false
+        if (!payment.linkedOrders) return false // Только связанные с заказами
+
+        const availableAmount = getAvailableAmount(payment)
+        if (availableAmount <= 0) return false // Нет доступной суммы
+
+        // ✅ НОВОЕ: Исключаем счета, уже привязанные к текущему заказу
+        const currentOrderId = paymentState.selectedOrder?.id
+        if (currentOrderId) {
+          const alreadyLinkedToCurrentOrder = payment.linkedOrders?.some(
+            link => link.orderId === currentOrderId && link.isActive
+          )
+          if (alreadyLinkedToCurrentOrder) return false
+        }
+
+        return true
+      })
 
       availableBills.value = bills
 
