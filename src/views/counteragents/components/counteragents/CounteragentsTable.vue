@@ -38,6 +38,28 @@
           </v-chip>
         </template>
 
+        <!-- ✅ НОВАЯ КОЛОНКА: Balance -->
+        <template #[`item.currentBalance`]="{ item }">
+          <div class="balance-cell">
+            <!-- Показываем баланс только для поставщиков -->
+            <div v-if="item.type === 'supplier'" class="balance-content">
+              <v-chip
+                v-if="hasBalance(item)"
+                :color="getBalanceColor(item.currentBalance || 0)"
+                :prepend-icon="getBalanceIcon(item.currentBalance || 0)"
+                size="small"
+                variant="flat"
+                class="balance-chip"
+              >
+                {{ formatBalance(item.currentBalance || 0) }}
+              </v-chip>
+              <span v-else class="text-medium-emphasis">—</span>
+            </div>
+            <!-- Для остальных типов показываем прочерк -->
+            <span v-else class="text-medium-emphasis">—</span>
+          </div>
+        </template>
+
         <!-- Categories Column -->
         <template #[`item.productCategories`]="{ item }">
           <div class="categories-cell">
@@ -152,6 +174,7 @@ import {
 } from '@/stores/counteragents'
 import type { Counteragent } from '@/stores/counteragents'
 import CounteragentCard from './CounteragentCard.vue'
+import { useCounteragentBalance } from '@/stores/counteragents/composables/useCounteragentBalance'
 
 // Props & Emits
 defineEmits<{
@@ -161,6 +184,7 @@ defineEmits<{
 }>()
 
 const store = useCounteragentsStore()
+const { getBalanceColor, getBalanceIcon, formatBalance } = useCounteragentBalance()
 
 // Local state
 const selected = ref<string[]>([])
@@ -170,6 +194,7 @@ const viewMode = ref<'table' | 'grid'>('table')
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
   { title: 'Type', key: 'type', sortable: true },
+  { title: 'Balance', key: 'currentBalance', sortable: true, width: '120px' }, // ✅ НОВАЯ КОЛОНКА
   { title: 'Categories', key: 'productCategories', sortable: false },
   { title: 'Payment Terms', key: 'paymentTerms', sortable: true },
   { title: 'Status', key: 'isActive', sortable: true },
@@ -269,6 +294,9 @@ const getPaymentLabel = (terms: string): string => {
   return getPaymentTermsLabel(terms as any)
 }
 
+const hasBalance = (counteragent: Counteragent): boolean => {
+  return (counteragent.currentBalance || 0) !== 0
+}
 // Watch store selection
 watch(
   () => store.selectedIds,
@@ -322,6 +350,11 @@ watch(
   text-align: center;
   padding: 48px 24px;
   color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.balance-content {
+  display: flex;
+  align-items: center;
 }
 
 .grid-view {

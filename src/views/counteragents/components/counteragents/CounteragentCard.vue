@@ -4,7 +4,7 @@
   <v-dialog
     v-if="!compact"
     :model-value="modelValue"
-    max-width="600"
+    max-width="700px"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card class="counteragent-card">
@@ -12,7 +12,7 @@
         <div class="header-content">
           <div class="title-section">
             <v-icon icon="mdi-store" class="me-2" />
-            Counteragent Details
+            {{ counteragent?.name || 'Counteragent Details' }}
           </div>
           <v-btn
             icon="mdi-close"
@@ -23,21 +23,61 @@
         </div>
       </v-card-title>
 
-      <v-card-text v-if="counteragent" class="card-content">
-        <CounteragentCardContent
-          :counteragent="counteragent"
-          detailed
-          @edit="$emit('edit')"
-          @delete="$emit('delete')"
-        />
-      </v-card-text>
-      <v-card-text v-else class="card-content">
-        <div class="no-data">No counteragent data available</div>
-      </v-card-text>
+      <div v-if="counteragent" class="card-body">
+        <!-- ✅ ПРОСТЫЕ ВКЛАДКИ только если поставщик -->
+        <v-tabs v-if="counteragent.type === 'supplier'" v-model="activeTab" class="tabs-header">
+          <v-tab value="details">Details</v-tab>
+          <v-tab value="payments">
+            Payments & Balance
+            <!-- Показываем индикатор если есть баланс -->
+            <v-chip
+              v-if="hasBalance"
+              :color="balanceColor"
+              size="x-small"
+              variant="flat"
+              class="ml-2"
+            >
+              {{ balanceText }}
+            </v-chip>
+          </v-tab>
+        </v-tabs>
+
+        <!-- Контент вкладок -->
+        <div v-if="counteragent.type === 'supplier'" class="tabs-content">
+          <!-- Вкладка Details -->
+          <div v-if="activeTab === 'details'" class="pa-4">
+            <CounteragentCardContent
+              :counteragent="counteragent"
+              detailed
+              @edit="$emit('edit')"
+              @delete="$emit('delete')"
+            />
+          </div>
+
+          <!-- ✅ ПРОСТАЯ вкладка Payments -->
+          <div v-if="activeTab === 'payments'" class="pa-4">
+            <CounteragentPaymentsSimple :counteragent="counteragent" />
+          </div>
+        </div>
+
+        <!-- Если НЕ поставщик - показываем только детали без вкладок -->
+        <div v-else class="pa-4">
+          <CounteragentCardContent
+            :counteragent="counteragent"
+            detailed
+            @edit="$emit('edit')"
+            @delete="$emit('delete')"
+          />
+        </div>
+      </div>
+
+      <div v-else class="card-body">
+        <div class="no-data pa-4">No counteragent data available</div>
+      </div>
     </v-card>
   </v-dialog>
 
-  <!-- Compact card version -->
+  <!-- Compact card version (без изменений) -->
   <v-card
     v-else-if="counteragent"
     class="counteragent-card compact"
@@ -62,8 +102,11 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import type { Counteragent } from '@/stores/counteragents'
+import { useCounteragentBalance } from '@/stores/counteragents/composables/useCounteragentBalance'
 import CounteragentCardContent from './CounteragentCardContent.vue'
+import CounteragentPaymentsSimple from './CounteragentPaymentsSimple.vue'
 
 interface Props {
   modelValue?: boolean
@@ -72,7 +115,7 @@ interface Props {
   selected?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   modelValue: false,
   compact: false,
   selected: false
@@ -84,6 +127,26 @@ defineEmits<{
   delete: []
   click: []
 }>()
+
+// State
+const activeTab = ref('details')
+
+// Composables
+const { getBalanceColor, getBalanceText } = useCounteragentBalance()
+
+// Computed
+const hasBalance = computed(() => {
+  return (props.counteragent?.currentBalance || 0) !== 0
+})
+
+const balanceColor = computed(() => {
+  return getBalanceColor(props.counteragent?.currentBalance || 0)
+})
+
+const balanceText = computed(() => {
+  const balance = props.counteragent?.currentBalance || 0
+  return balance > 0 ? 'Credit' : 'Debt'
+})
 </script>
 
 <style scoped>
@@ -125,12 +188,18 @@ defineEmits<{
   align-items: center;
   font-weight: 600;
   font-size: 1.1rem;
-  color: white;
 }
 
-.card-content {
-  padding: 20px;
+.card-body {
   background-color: rgb(var(--v-theme-surface));
+}
+
+.tabs-header {
+  border-bottom: 1px solid #333;
+}
+
+.tabs-content {
+  min-height: 400px;
 }
 
 .no-data {
