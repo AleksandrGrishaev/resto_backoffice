@@ -135,6 +135,7 @@ export function useOrderPayments() {
   // DATA LOADING FUNCTIONS
   // =============================================
 
+  // ✅ НОВЫЙ метод loadOrderBills с getPaymentsByOrder
   async function loadOrderBills(orderId: string): Promise<void> {
     try {
       paymentState.loading = true
@@ -145,10 +146,8 @@ export function useOrderPayments() {
       // Обеспечиваем свежие данные платежей
       await accountStore.fetchPayments()
 
-      // Фильтруем счета для этого заказа
-      const bills = accountStore.state.pendingPayments.filter(
-        payment => payment.purchaseOrderId === orderId
-      )
+      // ✅ НОВОЕ: Используем getPaymentsByOrder вместо фильтрации по purchaseOrderId
+      const bills = await accountStore.getPaymentsByOrder(orderId)
 
       orderBills.value = bills
 
@@ -164,6 +163,7 @@ export function useOrderPayments() {
     }
   }
 
+  // ✅ НОВЫЙ метод loadAvailableBills с фильтрацией по availableAmount
   async function loadAvailableBills(supplierId: string): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Loading available bills for supplier', { supplierId })
@@ -173,19 +173,20 @@ export function useOrderPayments() {
       // Обеспечиваем свежие данные
       await accountStore.fetchPayments()
 
-      // Фильтруем доступные счета поставщика
+      // ✅ НОВОЕ: Фильтруем платежи с доступной суммой
       const bills = accountStore.state.pendingPayments.filter(
         payment =>
           payment.counteragentId === supplierId &&
-          payment.status === 'pending' &&
-          !payment.purchaseOrderId // Только неприкрепленные
+          payment.linkedOrders && // Только платежи связанные с заказами
+          getAvailableAmount(payment) > 0 // С доступной суммой
       )
 
       availableBills.value = bills
 
       DebugUtils.info(MODULE_NAME, 'Available bills loaded', {
         supplierId,
-        billsCount: bills.length
+        billsCount: bills.length,
+        availableAmounts: bills.map(b => getAvailableAmount(b))
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load available bills', { error, supplierId })
@@ -258,14 +259,23 @@ export function useOrderPayments() {
         })
 
         const createDto: CreatePaymentDto = {
-          counteragentId: order.supplierId,
-          counteragentName: order.supplierName,
-          amount: data.amount,
-          description: data.description,
-          category: 'supplier',
-          priority: data.priority,
-          invoiceNumber: order.orderNumber,
-          purchaseOrderId: order.id,
+          counteragentId: order.supplierId, // ✅ ДОБАВИТЬ
+          counteragentName: order.supplierName, // ✅ ДОБАВИТЬ
+          amount: data.amount, // ✅ ДОБАВИТЬ
+          description: data.description, // ✅ ДОБАВИТЬ
+          priority: data.priority, // ✅ ДОБАВИТЬ
+          category: 'supplier', // ✅ ДОБАВИТЬ
+          usedAmount: 0,
+          linkedOrders: [
+            {
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              linkedAmount: data.amount,
+              linkedAt: new Date().toISOString(),
+              isActive: true
+            }
+          ],
+
           sourceOrderId: order.id,
           autoSyncEnabled: true,
           createdBy: {
@@ -299,6 +309,7 @@ export function useOrderPayments() {
     /**
      * ✅ Привязать существующий счет к заказу
      */
+    // ✅ НОВЫЙ метод attachBill с linkPaymentToOrder
     async attachBill(billId: string): Promise<void> {
       if (!paymentState.selectedOrder) {
         throw new Error('No order selected')
@@ -316,9 +327,26 @@ export function useOrderPayments() {
           orderId: order.id
         })
 
-        await accountStore.attachPaymentToOrder(billId, order.id)
+        // ✅ НОВЫЙ: Используем linkPaymentToOrder вместо attachPaymentToOrder
+        const payment = accountStore.state.pendingPayments.find(p => p.id === billId)
+        if (!payment) throw new Error('Payment not found')
 
-        DebugUtils.info(MODULE_NAME, 'Bill attached successfully', { billId, orderId: order.id })
+        // Вычисляем сумму для привязки
+        const availableAmount = getAvailableAmount(payment)
+        const linkAmount = Math.min(availableAmount, order.totalAmount)
+
+        await accountStore.linkPaymentToOrder({
+          paymentId: billId,
+          orderId: order.id,
+          linkAmount: linkAmount,
+          orderNumber: order.orderNumber
+        })
+
+        DebugUtils.info(MODULE_NAME, 'Bill attached successfully', {
+          billId,
+          orderId: order.id,
+          linkedAmount: linkAmount
+        })
 
         // Обновляем данные
         await Promise.all([loadOrderBills(order.id), loadAvailableBills(order.supplierId)])
@@ -335,6 +363,7 @@ export function useOrderPayments() {
     /**
      * ✅ Отвязать счет от заказа
      */
+    // ✅ НОВЫЙ метод detachBill с unlinkPaymentFromOrder
     async detachBill(billId: string): Promise<void> {
       if (!paymentState.selectedOrder) {
         throw new Error('No order selected')
@@ -352,7 +381,8 @@ export function useOrderPayments() {
           orderId: order.id
         })
 
-        await accountStore.detachPaymentFromOrder(billId)
+        // ✅ НОВЫЙ: Используем unlinkPaymentFromOrder
+        await accountStore.unlinkPaymentFromOrder(billId, order.id)
 
         DebugUtils.info(MODULE_NAME, 'Bill detached successfully', { billId })
 
@@ -523,10 +553,8 @@ export function useOrderPayments() {
       // Обеспечиваем свежие данные платежей
       await accountStore.fetchPayments()
 
-      // Получаем все связанные платежи этого заказа
-      const orderPayments = accountStore.state.pendingPayments.filter(
-        payment => payment.purchaseOrderId === order.id
-      )
+      // ✅ НОВОЕ: Получаем все связанные платежи через linkedOrders
+      const orderPayments = await accountStore.getPaymentsByOrder(order.id)
 
       console.log(`OrderPayments: Found ${orderPayments.length} payments for order`, {
         orderId: order.id,
@@ -534,7 +562,8 @@ export function useOrderPayments() {
           id: p.id,
           amount: p.amount,
           status: p.status,
-          autoSyncEnabled: p.autoSyncEnabled
+          autoSyncEnabled: p.autoSyncEnabled,
+          hasLinkedOrders: !!p.linkedOrders?.length
         }))
       })
 
@@ -543,9 +572,12 @@ export function useOrderPayments() {
         return
       }
 
-      // Находим основной счет для автосинхронизации
+      // ✅ ИСПРАВЛЕНИЕ: Находим основной счет через linkedOrders
       const mainPayment = orderPayments.find(
-        p => p.status === 'pending' && p.autoSyncEnabled !== false && p.purchaseOrderId === order.id
+        p =>
+          p.status === 'pending' &&
+          p.autoSyncEnabled !== false &&
+          p.linkedOrders?.some(o => o.orderId === order.id && o.isActive)
       )
 
       if (!mainPayment) {
@@ -557,56 +589,82 @@ export function useOrderPayments() {
         const fallbackPayment = orderPayments.find(p => p.status === 'pending')
         if (fallbackPayment) {
           console.log(`OrderPayments: Using fallback payment for sync:`, fallbackPayment.id)
-          await syncSinglePayment(
-            fallbackPayment,
-            order,
-            order.totalAmount - fallbackPayment.amount
-          )
+
+          // ✅ НОВОЕ: Обновляем usedAmount для completed платежей
+          if (fallbackPayment.status === 'completed') {
+            await updatePaymentUsedAmount(fallbackPayment, order)
+          }
         }
         return
       }
 
-      // ✅ УМНОЕ РАСПРЕДЕЛЕНИЕ: используем новую логику
-      const distributionResult = await distributeAmountChanges(
-        orderPayments,
-        order.totalAmount,
-        mainPayment.id
-      )
-
-      // Применяем изменения только к pending платежам
-      for (const change of distributionResult.changes) {
-        if (Math.abs(change.amountChange) > 0.01) {
-          // Специальная обработка для обнуленных платежей
-          if (change.reason === 'payment_cancellation') {
-            await handleZeroedPayment(change.payment, order)
-          } else {
-            await syncSinglePayment(change.payment, order, change.amountChange)
-          }
-
-          console.log(`OrderPayments: Payment ${change.payment.id} processed`, {
-            oldAmount: change.payment.amount,
-            change: change.amountChange,
-            reason: change.reason,
-            finalAmount:
-              change.reason === 'payment_cancellation'
-                ? 0
-                : change.payment.amount + change.amountChange
-          })
+      // ✅ НОВОЕ: Для completed платежей обновляем usedAmount
+      for (const payment of orderPayments) {
+        if (payment.status === 'completed') {
+          await updatePaymentUsedAmount(payment, order)
         }
       }
 
-      // Если появилась переплата, создаем кредит
-      if (amountDifference < 0) {
-        // отрицательная разница = переплата
-        const overpaymentAmount = Math.abs(amountDifference)
-        await createSupplierCredit(order, overpaymentAmount)
-      }
+      console.log(`OrderPayments: Updated usedAmount for completed payments`)
     } catch (error) {
       console.error(`OrderPayments: Failed to sync order payments:`, error)
       throw error
     }
   }
 
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Обновляет usedAmount для completed платежей
+   */
+  async function updatePaymentUsedAmount(
+    payment: PendingPayment,
+    order: PurchaseOrder
+  ): Promise<void> {
+    try {
+      const { accountStore } = await getStores()
+
+      if (payment.status !== 'completed') {
+        console.warn(`Payment ${payment.id} is not completed, skipping usedAmount update`)
+        return
+      }
+
+      // Находим привязку к текущему заказу
+      const orderLink = payment.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+      if (!orderLink) {
+        console.warn(`No active link found for payment ${payment.id} and order ${order.id}`)
+        return
+      }
+
+      // Вычисляем фактически использованную сумму
+      const actualDeliveredAmount = order.actualDeliveredAmount || order.totalAmount
+
+      // Если это единственная привязка, просто обновляем usedAmount
+      const activeLinks = payment.linkedOrders?.filter(o => o.isActive) || []
+
+      if (activeLinks.length === 1) {
+        // Простой случай: один платеж - один заказ
+        payment.usedAmount = actualDeliveredAmount
+      } else {
+        // Сложный случай: один платеж на несколько заказов
+        // Обновляем пропорционально
+        const otherLinkedAmount = activeLinks
+          .filter(o => o.orderId !== order.id)
+          .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+        payment.usedAmount = actualDeliveredAmount + otherLinkedAmount
+      }
+
+      payment.updatedAt = new Date().toISOString()
+
+      console.log(`OrderPayments: Updated usedAmount for payment ${payment.id}`, {
+        oldUsedAmount: payment.usedAmount,
+        newUsedAmount: actualDeliveredAmount,
+        availableAmount: payment.amount - payment.usedAmount
+      })
+    } catch (error) {
+      console.error(`OrderPayments: Failed to update payment usedAmount:`, error)
+      throw error
+    }
+  }
   // =============================================
   // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
   // =============================================
@@ -638,263 +696,6 @@ export function useOrderPayments() {
     }
   }
 
-  /**
-   * Умное распределение изменений суммы между платежами
-   */
-  async function distributeAmountChanges(
-    orderPayments: PendingPayment[],
-    newOrderTotal: number,
-    mainPaymentId: string
-  ): Promise<{
-    changes: Array<{
-      payment: PendingPayment
-      amountChange: number
-      reason: string
-    }>
-  }> {
-    const changes: Array<{
-      payment: PendingPayment
-      amountChange: number
-      reason: string
-    }> = []
-
-    // Разделяем платежи по категориям
-    const completedPayments = orderPayments.filter(p => p.status === 'completed')
-    const mainPayment = orderPayments.find(p => p.id === mainPaymentId)
-    const otherPendingPayments = orderPayments.filter(
-      p => p.status === 'pending' && p.id !== mainPaymentId && p.purchaseOrderId // только те, что привязаны к заказу
-    )
-
-    console.log(`OrderPayments: Analyzing payment distribution`, {
-      newOrderTotal,
-      completedCount: completedPayments.length,
-      hasMainPayment: !!mainPayment,
-      otherPendingCount: otherPendingPayments.length
-    })
-
-    // Считаем "неприкасаемую" сумму (уже оплаченные)
-    const lockedAmount = completedPayments.reduce((sum, p) => sum + p.amount, 0)
-    const availableForDistribution = newOrderTotal - lockedAmount
-
-    console.log(`OrderPayments: Payment distribution calculation`, {
-      lockedAmount,
-      availableForDistribution,
-      currentPendingTotal:
-        (mainPayment?.amount || 0) + otherPendingPayments.reduce((sum, p) => sum + p.amount, 0)
-    })
-
-    if (availableForDistribution < 0) {
-      // ПЕРЕПЛАТА: создается кредит, платежи не меняются
-      console.log(`OrderPayments: Overpayment detected: ${Math.abs(availableForDistribution)}`)
-      return { changes: [] }
-    }
-
-    if (availableForDistribution === 0) {
-      // ВСЕ ОПЛАЧЕНО: обнуляем все pending платежи
-      if (mainPayment && mainPayment.amount > 0) {
-        changes.push({
-          payment: mainPayment,
-          amountChange: -mainPayment.amount,
-          reason: 'payment_cancellation'
-        })
-      }
-
-      for (const payment of otherPendingPayments) {
-        if (payment.amount > 0) {
-          changes.push({
-            payment,
-            amountChange: -payment.amount,
-            reason: 'payment_cancellation'
-          })
-        }
-      }
-
-      return { changes }
-    }
-
-    // НОРМАЛЬНОЕ РАСПРЕДЕЛЕНИЕ
-    const currentPendingTotal =
-      (mainPayment?.amount || 0) + otherPendingPayments.reduce((sum, p) => sum + p.amount, 0)
-
-    if (currentPendingTotal === 0) {
-      // Нет pending платежей - создаем в основном
-      if (mainPayment) {
-        changes.push({
-          payment: mainPayment,
-          amountChange: availableForDistribution,
-          reason: 'order_amount_adjustment'
-        })
-      }
-      return { changes }
-    }
-
-    // Если нужно УМЕНЬШИТЬ pending платежи
-    if (availableForDistribution < currentPendingTotal) {
-      const reductionNeeded = currentPendingTotal - availableForDistribution
-      console.log(`OrderPayments: Need to reduce pending payments by ${reductionNeeded}`)
-
-      // СТРАТЕГИЯ: Сначала уменьшаем дополнительные платежи, потом основной
-      let remainingReduction = reductionNeeded
-
-      // 1. Уменьшаем дополнительные платежи пропорционально
-      if (otherPendingPayments.length > 0 && remainingReduction > 0) {
-        const otherTotal = otherPendingPayments.reduce((sum, p) => sum + p.amount, 0)
-
-        for (const payment of otherPendingPayments) {
-          if (remainingReduction <= 0) break
-
-          const proportion = payment.amount / otherTotal
-          const paymentReduction = Math.min(
-            remainingReduction * proportion,
-            payment.amount // не можем уменьшить больше чем есть
-          )
-
-          if (paymentReduction > 0.01) {
-            // Проверяем: если платеж обнуляется полностью
-            if (paymentReduction >= payment.amount - 0.01) {
-              changes.push({
-                payment,
-                amountChange: -payment.amount, // обнуляем полностью
-                reason: 'payment_cancellation' // специальная причина для обнуления
-              })
-            } else {
-              changes.push({
-                payment,
-                amountChange: -paymentReduction,
-                reason: 'proportional_reduction'
-              })
-            }
-            remainingReduction -= paymentReduction
-          }
-        }
-      }
-
-      // 2. Оставшуюся сумму списываем с основного платежа
-      if (remainingReduction > 0.01 && mainPayment) {
-        const mainReduction = Math.min(remainingReduction, mainPayment.amount)
-        if (mainReduction >= mainPayment.amount - 0.01) {
-          changes.push({
-            payment: mainPayment,
-            amountChange: -mainPayment.amount,
-            reason: 'payment_cancellation'
-          })
-        } else {
-          changes.push({
-            payment: mainPayment,
-            amountChange: -mainReduction,
-            reason: 'main_payment_adjustment'
-          })
-        }
-      }
-    }
-    // Если нужно УВЕЛИЧИТЬ pending платежи
-    else if (availableForDistribution > currentPendingTotal) {
-      const increaseNeeded = availableForDistribution - currentPendingTotal
-      console.log(`OrderPayments: Need to increase pending payments by ${increaseNeeded}`)
-
-      // Увеличиваем основной платеж
-      if (mainPayment) {
-        changes.push({
-          payment: mainPayment,
-          amountChange: increaseNeeded,
-          reason: 'order_amount_increase'
-        })
-      }
-    }
-
-    console.log(`OrderPayments: Distribution completed`, {
-      changesCount: changes.length,
-      totalChange: changes.reduce((sum, c) => sum + c.amountChange, 0)
-    })
-
-    return { changes }
-  }
-
-  /**
-   * Обработка платежей, которые должны быть обнулены
-   */
-  /**
-   * Обработка платежей, которые должны быть обнулены
-   */
-  async function handleZeroedPayment(payment: PendingPayment, order: PurchaseOrder): Promise<void> {
-    try {
-      const { accountStore, authStore } = await getStores()
-
-      console.log(`OrderPayments: Cancelling zeroed payment`, {
-        paymentId: payment.id,
-        originalAmount: payment.amount,
-        orderNumber: order.orderNumber,
-        description: payment.description
-      })
-
-      // ✅ ИСПРАВЛЕНИЕ: Используем правильный метод cancelPayment
-      await accountStore.cancelPayment(payment.id)
-
-      // ✅ ИСПРАВЛЕНИЕ: Добавляем запись в историю изменений суммы
-      await accountStore.updatePaymentAmount({
-        paymentId: payment.id,
-        newAmount: 0,
-        reason: 'order_cancellation',
-        userId: authStore.currentUser?.id,
-        notes: `Payment cancelled due to order amount reduction after receipt completion`
-      })
-
-      console.log(`OrderPayments: Payment ${payment.id} cancelled successfully`)
-    } catch (error) {
-      console.error(`OrderPayments: Failed to cancel zeroed payment:`, error)
-      // Не прерываем основной процесс, только логируем ошибку
-    }
-  }
-
-  /**
-   * Создание кредита поставщика при переплате
-   */
-  async function createSupplierCredit(
-    order: PurchaseOrder,
-    overpaymentAmount: number
-  ): Promise<void> {
-    try {
-      const { accountStore, authStore } = await getStores()
-
-      console.log(`OrderPayments: Creating supplier credit for overpayment`, {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        overpaymentAmount
-      })
-
-      // Создаем кредит как отдельный платеж
-      const creditPayment = await accountStore.createPayment({
-        counteragentId: order.supplierId,
-        counteragentName: order.supplierName,
-        amount: overpaymentAmount,
-        description: `Supplier credit from overpayment ${order.orderNumber}`,
-        priority: 'medium',
-        status: 'pending',
-        category: 'supplier',
-
-        // НЕ привязываем к заказу - делаем доступным для использования
-        sourceOrderId: order.id, // указываем источник
-        autoSyncEnabled: false, // кредит не синхронизируется автоматически
-
-        notes: `Available credit from previous order overpayment. Can be used for new orders.`,
-        createdBy: {
-          type: 'system',
-          id: 'receipt-system',
-          name: 'Receipt Processing System'
-        }
-      })
-
-      console.log(`OrderPayments: Supplier credit created`, {
-        creditId: creditPayment.id,
-        amount: overpaymentAmount,
-        sourceOrder: order.orderNumber
-      })
-    } catch (error) {
-      console.error(`OrderPayments: Failed to create supplier credit:`, error)
-      // Не прерываем основной процесс из-за ошибки создания кредита
-    }
-  }
-
   // =============================================
   // WATCHER - Auto refresh when order changes
   // =============================================
@@ -910,6 +711,22 @@ export function useOrderPayments() {
       }
     }
   )
+
+  // Getters
+
+  function getAvailableAmount(payment: PendingPayment): number {
+    if (!payment.linkedOrders) return 0 // Операционные платежи = 0
+
+    if (payment.status === 'completed') {
+      return payment.amount - (payment.usedAmount || 0)
+    }
+
+    const linkedAmount = payment.linkedOrders
+      .filter(o => o.isActive)
+      .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+    return payment.amount - linkedAmount
+  }
 
   // =============================================
   // RETURN INTERFACE

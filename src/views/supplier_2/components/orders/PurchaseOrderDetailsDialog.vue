@@ -154,7 +154,7 @@
                   prepend-icon="mdi-link"
                   :loading="paymentState.loading"
                   :disabled="availableBillsForSupplier.length === 0"
-                  @click="handleAttachBill"
+                  @click="showAttachBillDialog = true"
                 >
                   Attach Existing Bill
                   <v-badge
@@ -454,60 +454,14 @@
       </v-card>
     </v-dialog>
 
-    <!-- Bill Attachment Dialog -->
-    <v-dialog v-model="showAttachBillDialog" max-width="600px">
-      <v-card>
-        <v-card-title>Attach Existing Bill</v-card-title>
-
-        <v-card-text>
-          <div v-if="availableBillsForSupplier.length === 0" class="text-center pa-4">
-            <v-icon icon="mdi-receipt-text-outline" size="48" color="grey-lighten-1" class="mb-3" />
-            <div class="text-h6 text-medium-emphasis mb-2">No Available Bills</div>
-            <div class="text-body-2 text-medium-emphasis">
-              There are no unattached bills for {{ order?.supplierName }}
-            </div>
-          </div>
-
-          <div v-else>
-            <div class="text-body-2 text-medium-emphasis mb-4">
-              Select a bill to attach to order {{ order?.orderNumber }}:
-            </div>
-
-            <v-list>
-              <v-list-item
-                v-for="bill in availableBillsForSupplier"
-                :key="bill.id"
-                :value="bill.id"
-                @click="selectedBillToAttach = bill.id"
-              >
-                <template #prepend>
-                  <v-radio :model-value="selectedBillToAttach" :value="bill.id" color="primary" />
-                </template>
-
-                <v-list-item-title>{{ bill.description }}</v-list-item-title>
-                <v-list-item-subtitle>
-                  {{ formatCurrency(bill.amount) }} • {{ bill.priority }} priority
-                  <span v-if="bill.dueDate">• Due: {{ formatDate(bill.dueDate) }}</span>
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
-          </div>
-        </v-card-text>
-
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="showAttachBillDialog = false">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            :disabled="!selectedBillToAttach"
-            :loading="paymentState.loading"
-            @click="handleAttachBillSubmit"
-          >
-            Attach Bill
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- ✅ ДОБАВИТЬ вместо старого диалога -->
+    <AttachBillDialog
+      v-model="showAttachBillDialog"
+      :order="order"
+      :available-bills="availableBillsForSupplier"
+      :loading="paymentState.loading"
+      @attach-bill="onAttachBill"
+    />
 
     <!-- Shortfall Alert -->
     <v-dialog v-model="paymentState.showShortfallAlert" max-width="500px">
@@ -575,6 +529,7 @@ import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOr
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
 import OrderReceiptWidget from './OrderReceiptWidget.vue'
+import AttachBillDialog from './AttachBillDialog.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -593,10 +548,14 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
+const showAttachBillDialog = ref(false)
 
-components: {
-  OrderReceiptWidget
-}
+defineOptions({
+  components: {
+    OrderReceiptWidget,
+    AttachBillDialog
+  }
+})
 
 // =============================================
 // COMPOSABLES
@@ -620,8 +579,6 @@ const {
 
 // Dialog states
 const showCreateBillDialog = ref(false)
-const showAttachBillDialog = ref(false)
-const selectedBillToAttach = ref<string | null>(null)
 
 // Form states
 const createBillForm = ref({
@@ -705,30 +662,23 @@ async function handleCreateBillSubmit() {
   }
 }
 
-async function handleAttachBill() {
-  if (!props.order) return
-
-  selectedBillToAttach.value = null
+function handleAttachBill() {
   showAttachBillDialog.value = true
 }
-
-async function handleAttachBillSubmit() {
-  if (!selectedBillToAttach.value) return
-
-  try {
-    await actions.attachBill(selectedBillToAttach.value)
-    showAttachBillDialog.value = false
-    selectedBillToAttach.value = null
-  } catch (error) {
-    console.error('Failed to attach bill:', error)
-  }
-}
-
 async function handleDetachBill(billId: string) {
   try {
     await actions.detachBill(billId)
   } catch (error) {
     console.error('Failed to detach bill:', error)
+  }
+}
+
+async function onAttachBill(billId: string) {
+  try {
+    await actions.attachBill(billId)
+  } catch (error) {
+    console.error('Failed to attach bill:', error)
+    // Можно добавить toast уведомление об ошибке
   }
 }
 

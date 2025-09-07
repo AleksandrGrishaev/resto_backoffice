@@ -2,10 +2,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { accountService, transactionService, paymentService } from './service'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, generateId } from '@/utils'
 import type {
   Account,
-  Transaction,
   PendingPayment,
   CreateOperationDto,
   CreateTransferDto,
@@ -14,10 +13,10 @@ import type {
   ProcessPaymentDto,
   TransactionFilters,
   PaymentFilters,
-  PaymentStatistics,
   AccountStoreState,
   UpdatePaymentAmountDto,
-  AmountChange
+  AmountChange,
+  LinkPaymentToOrderDto // ✅ ДОБАВИТЬ эту строку
 } from './types'
 
 const MODULE_NAME = 'AccountStore'
@@ -249,12 +248,14 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
-  async function getPaymentById(paymentId: string) {
+  async function getPaymentById(paymentId: string): Promise<PendingPayment | null> {
     try {
-      return await paymentService.getPaymentById(paymentId)
+      await fetchPayments() // Обеспечиваем свежие данные
+
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      return payment || null
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get payment by ID', { error })
-      setError(error)
       return null
     }
   }
@@ -426,30 +427,56 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
-  async function createPayment(data: CreatePaymentDto) {
+  // ✅ ПОЛНОСТЬЮ ЗАМЕНИТЬ метод createPayment
+  async function createPayment(data: CreatePaymentDto): Promise<PendingPayment> {
     try {
       clearError()
-      state.value.loading.payments = true
-      DebugUtils.info(MODULE_NAME, 'Creating payment', { data })
+      DebugUtils.info(MODULE_NAME, 'Creating payment', {
+        amount: data.amount,
+        counteragentId: data.counteragentId,
+        hasLinkedOrders: !!data.linkedOrders?.length
+      })
 
-      const payment = await paymentService.createPayment(data)
+      const payment: PendingPayment = {
+        id: generateId(),
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName,
+        amount: data.amount,
+        description: data.description,
+        dueDate: data.dueDate,
+        priority: data.priority,
+        status: 'pending',
+        category: data.category,
+        invoiceNumber: data.invoiceNumber,
+        notes: data.notes,
+        createdBy: data.createdBy,
 
-      // Оптимистическое обновление
-      state.value.pendingPayments.unshift(payment)
+        // ✅ НОВЫЕ ПОЛЯ вместо purchaseOrderId
+        usedAmount: data.usedAmount || 0,
+        linkedOrders: data.linkedOrders || [],
 
-      // ✅ ДОБАВИТЬ: Уведомляем о изменении статуса заказа
-      if (data.purchaseOrderId) {
-        await notifyOrderStatusChange(data.purchaseOrderId)
+        // ✅ СОХРАНЯЕМ существующие поля интеграции
+        sourceOrderId: data.sourceOrderId,
+        autoSyncEnabled: data.autoSyncEnabled,
+
+        // BaseEntity поля
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
 
-      DebugUtils.info(MODULE_NAME, 'Payment created successfully', { paymentId: payment.id })
+      // Добавляем в state
+      state.value.pendingPayments.push(payment)
+
+      DebugUtils.info(MODULE_NAME, 'Payment created successfully', {
+        paymentId: payment.id,
+        linkedOrdersCount: payment.linkedOrders.length
+      })
+
       return payment
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create payment', { error })
       setError(error)
       throw error
-    } finally {
-      state.value.loading.payments = false
     }
   }
 
@@ -506,87 +533,6 @@ export const useAccountStore = defineStore('account', () => {
       throw error
     }
   }
-
-  // 1. Добавить новый метод getPaymentsByPurchaseOrder:
-  async function getPaymentsByPurchaseOrder(purchaseOrderId: string): Promise<PendingPayment[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Getting payments by purchase order', { purchaseOrderId })
-
-      // Обеспечиваем актуальные данные
-      await fetchPayments()
-
-      const payments = state.value.pendingPayments.filter(
-        payment => payment.purchaseOrderId === purchaseOrderId
-      )
-
-      DebugUtils.info(MODULE_NAME, 'Found payments for purchase order', {
-        purchaseOrderId,
-        count: payments.length
-      })
-
-      return payments
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get payments by purchase order', { error })
-      return []
-    }
-  }
-
-  // 2. Добавить метод для обновления привязки к заказу:
-  async function updatePaymentOrderLink(paymentId: string, purchaseOrderId: string | null) {
-    try {
-      clearError()
-      DebugUtils.info(MODULE_NAME, 'Updating payment order link', { paymentId, purchaseOrderId })
-
-      // Находим платеж в state
-      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
-      if (!payment) {
-        throw new Error('Payment not found')
-      }
-
-      // Оптимистическое обновление
-      payment.purchaseOrderId = purchaseOrderId || undefined
-      payment.updatedAt = new Date().toISOString()
-
-      // TODO: Добавить вызов API для обновления на сервере
-      // await paymentService.updatePaymentOrderLink(paymentId, purchaseOrderId)
-
-      DebugUtils.info(MODULE_NAME, 'Payment order link updated successfully')
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to update payment order link', { error })
-      setError(error)
-      throw error
-    }
-  }
-
-  // 3. Добавить метод для отвязки счета от заказа:
-  async function detachPaymentFromOrder(paymentId: string) {
-    try {
-      await updatePaymentOrderLink(paymentId, null)
-      DebugUtils.info(MODULE_NAME, 'Payment detached from order successfully', { paymentId })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to detach payment from order', { error })
-      throw error
-    }
-  }
-
-  // 4. Добавить метод для привязки счета к заказу:
-  async function attachPaymentToOrder(paymentId: string, purchaseOrderId: string) {
-    try {
-      await updatePaymentOrderLink(paymentId, purchaseOrderId)
-      DebugUtils.info(MODULE_NAME, 'Payment attached to order successfully', {
-        paymentId,
-        purchaseOrderId
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to attach payment to order', { error })
-      throw error
-    }
-  }
-
-  // 5. Добавить computed для платежей без привязки к заказам:
-  const unlinkedPayments = computed(() =>
-    state.value.pendingPayments.filter(payment => !payment.purchaseOrderId)
-  )
 
   async function updatePaymentPriority(paymentId: string, priority: PendingPayment['priority']) {
     try {
@@ -646,6 +592,136 @@ export const useAccountStore = defineStore('account', () => {
     fetchPayments(true)
   }
 
+  // Payment link
+  // ✅ НОВЫЙ метод: привязка платежа к заказу с указанием суммы
+  // ✅ ИСПРАВЛЕННАЯ версия с проверками
+  async function linkPaymentToOrder(data: LinkPaymentToOrderDto): Promise<void> {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Linking payment to order', data)
+
+      const payment = state.value.pendingPayments.find(p => p.id === data.paymentId)
+      if (!payment) {
+        throw new Error('Payment not found')
+      }
+
+      // ✅ ИСПРАВЛЕНИЕ: Безопасная проверка linkedOrders
+      const linkedAmount =
+        payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) ||
+        0
+
+      const availableAmount =
+        payment.status === 'completed'
+          ? payment.amount - (payment.usedAmount || 0)
+          : payment.amount - linkedAmount
+
+      if (availableAmount < data.linkAmount) {
+        throw new Error(
+          `Insufficient available amount. Available: ${availableAmount}, Requested: ${data.linkAmount}`
+        )
+      }
+
+      // ✅ ИСПРАВЛЕНИЕ: Инициализируем массив если undefined
+      if (!payment.linkedOrders) {
+        payment.linkedOrders = []
+      }
+
+      // ✅ ИСПРАВЛЕНИЕ: Проверяем существование массива перед поиском
+      const existingLink = payment.linkedOrders.find(o => o.orderId === data.orderId && o.isActive)
+      if (existingLink) {
+        throw new Error('Order already linked to this payment')
+      }
+
+      // Добавляем привязку (теперь массив точно существует)
+      payment.linkedOrders.push({
+        orderId: data.orderId,
+        orderNumber: data.orderNumber,
+        linkedAmount: data.linkAmount,
+        linkedAt: new Date().toISOString(),
+        isActive: true
+      })
+
+      payment.updatedAt = new Date().toISOString()
+
+      DebugUtils.info(MODULE_NAME, 'Payment linked to order successfully', {
+        paymentId: data.paymentId,
+        orderId: data.orderId,
+        linkedAmount: data.linkAmount
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to link payment to order', { error })
+      setError(error)
+      throw error
+    }
+  }
+  // ✅ НОВЫЙ метод: отвязка платежа от заказа
+  // ✅ ИСПРАВЛЕННАЯ версия с проверками
+  async function unlinkPaymentFromOrder(paymentId: string, orderId: string): Promise<void> {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Unlinking payment from order', { paymentId, orderId })
+
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (!payment) {
+        DebugUtils.warn(MODULE_NAME, 'Payment not found', { paymentId })
+        return
+      }
+
+      // ✅ ИСПРАВЛЕНИЕ: Проверяем существование linkedOrders
+      if (!payment.linkedOrders || payment.linkedOrders.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No linked orders found for payment', { paymentId })
+        return
+      }
+
+      const linkIndex = payment.linkedOrders.findIndex(o => o.orderId === orderId && o.isActive)
+      if (linkIndex === -1) {
+        DebugUtils.warn(MODULE_NAME, 'Active link not found', { paymentId, orderId })
+        return
+      }
+
+      const link = payment.linkedOrders[linkIndex]
+
+      // Деактивируем привязку (сохраняем для истории)
+      link.isActive = false
+
+      payment.updatedAt = new Date().toISOString()
+
+      DebugUtils.info(MODULE_NAME, 'Payment unlinked from order successfully', {
+        paymentId,
+        orderId,
+        unlinkedAmount: link.linkedAmount
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to unlink payment from order', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  // ✅ НОВЫЙ метод: получение платежей по заказу
+  async function getPaymentsByOrder(orderId: string): Promise<PendingPayment[]> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Getting payments by order', { orderId })
+
+      // Обеспечиваем актуальные данные
+      await fetchPayments()
+
+      const payments = state.value.pendingPayments.filter(payment =>
+        payment.linkedOrders?.some(o => o.orderId === orderId && o.isActive)
+      )
+
+      DebugUtils.info(MODULE_NAME, 'Found payments for order', {
+        orderId,
+        count: payments.length
+      })
+
+      return payments
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get payments by order', { error })
+      return []
+    }
+  }
+
   // ============ RETURN ============
   return {
     // State
@@ -691,18 +767,12 @@ export const useAccountStore = defineStore('account', () => {
     updatePaymentPriority,
     cancelPayment,
     setPaymentFilters,
+    linkPaymentToOrder,
+    unlinkPaymentFromOrder,
+    getPaymentsByOrder,
 
     // Other
     updatePaymentAmount,
-    getPaymentsByPurchaseOrder,
-    getPaymentById,
-
-    // ✅ НОВЫЕ методы для работы с заказами:
-    updatePaymentOrderLink,
-    detachPaymentFromOrder,
-    attachPaymentToOrder,
-
-    // ✅ НОВЫЕ computed:
-    unlinkedPayments
+    getPaymentById
   }
 })

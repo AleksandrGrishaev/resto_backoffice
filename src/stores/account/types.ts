@@ -124,7 +124,15 @@ export interface PendingPayment extends BaseEntity {
   createdBy: TransactionPerformer
 
   // ✅ НОВЫЕ ПОЛЯ для интеграции с supplier store
-  purchaseOrderId?: string // Обратная связь с заказом
+  usedAmount?: number // сколько уже использовано из платежа
+  linkedOrders?: Array<{
+    // множественные привязки к заказам
+    orderId: string
+    orderNumber?: string
+    linkedAmount: number // сколько привязано к этому заказу
+    linkedAt: string
+    isActive: boolean // можно отвязать
+  }>
   sourceOrderId?: string // Источник для автосинхронизации суммы
   lastAmountUpdate?: string // Когда последний раз менялась сумма
   amountHistory?: AmountChange[] // История изменений суммы
@@ -135,6 +143,12 @@ export interface PendingPayment extends BaseEntity {
   paidDate?: string
 }
 
+export interface LinkPaymentToOrderDto {
+  paymentId: string
+  orderId: string
+  linkAmount: number
+  orderNumber?: string
+}
 export interface CreatePaymentDto {
   counteragentId: string
   counteragentName: string
@@ -147,7 +161,14 @@ export interface CreatePaymentDto {
   notes?: string
   createdBy: TransactionPerformer
   // ✅ НОВЫЕ ПОЛЯ для создания платежа из заказа
-  purchaseOrderId?: string
+  usedAmount?: number
+  linkedOrders?: Array<{
+    orderId: string
+    orderNumber?: string
+    linkedAmount: number
+    linkedAt: string
+    isActive: boolean
+  }>
   sourceOrderId?: string
   autoSyncEnabled?: boolean
 }

@@ -8,406 +8,260 @@ const now = new Date().toISOString()
 
 export const mockPendingPayments: PendingPayment[] = [
   // =============================================
-  // ПЛАТЕЖИ ПО ЗАКАЗАМ ПОСТАВЩИКОВ (с новыми полями)
+  // ПЕРЕПЛАЧЕННЫЙ СЧЕТ PO-001 (переплата 90k доступна)
   // =============================================
   {
-    id: 'payment-credit-main',
-    counteragentId: 'sup-premium-meat-co', // ✅ Существующий поставщик
+    id: 'payment_po_001_overpaid',
+    counteragentId: 'sup-premium-meat-co', // ✅ Правильный ID
     counteragentName: 'Premium Meat Company',
-    amount: 1200000, // скорректированная сумма после приемки
-    description: 'Purchase order PO-CREDIT-001',
-    priority: 'medium',
-    status: 'pending',
-    category: 'supplier',
-    invoiceNumber: 'PO-CREDIT-001',
-
-    purchaseOrderId: 'po-credit-test',
-    sourceOrderId: 'po-credit-test',
-    autoSyncEnabled: true,
-
-    amountHistory: [
-      {
-        oldAmount: 1500000, // была изначальная сумма
-        newAmount: 1200000, // стала после приемки
-        reason: 'receipt_discrepancy',
-        changedAt: createMockDateWithTime(2, '16:35:00.000Z'),
-        changedBy: {
-          type: 'system',
-          id: 'receipt-system',
-          name: 'Receipt Processing System'
-        },
-        notes: 'Amount adjusted after receipt completion (quantity discrepancy)'
-      }
-    ],
-
-    notes: 'Main payment auto-adjusted after receipt. Created 300k supplier credit.',
-    createdBy: {
-      type: 'user',
-      id: 'user_1',
-      name: 'Test Manager'
-    },
-    createdAt: createMockDateWithTime(7, '10:15:00.000Z'),
-    updatedAt: createMockDateWithTime(2, '16:35:00.000Z')
-  },
-
-  // ✅ КРЕДИТ ПОСТАВЩИКА (создан автоматически)
-  {
-    id: 'payment-supplier-credit',
-    counteragentId: 'sup-premium-meat-co',
-    counteragentName: 'Premium Meat Company',
-    amount: 300000, // размер переплаты
-    description: 'Supplier credit from overpayment PO-CREDIT-001',
-    priority: 'medium',
-    status: 'pending',
-    category: 'supplier',
-
-    sourceOrderId: 'po-credit-test', // источник кредита
-    autoSyncEnabled: false,
-
-    amountHistory: [
-      {
-        oldAmount: 0,
-        newAmount: 300000,
-        reason: 'supplier_credit',
-        changedAt: createMockDateWithTime(2, '16:36:00.000Z'),
-        changedBy: {
-          type: 'system',
-          id: 'receipt-system',
-          name: 'Receipt Processing System'
-        },
-        notes: 'Supplier credit created from order overpayment'
-      }
-    ],
-
-    notes: 'Available credit from previous order overpayment',
-    createdBy: {
-      type: 'system',
-      id: 'receipt-system',
-      name: 'Receipt Processing System'
-    },
-    createdAt: createMockDateWithTime(2, '16:36:00.000Z'),
-    updatedAt: createMockDateWithTime(2, '16:36:00.000Z')
-  },
-
-  // ✅ ЧАСТИЧНОЕ ИСПОЛЬЗОВАНИЕ КРЕДИТА
-  {
-    id: 'payment-use-credit-partial',
-    counteragentId: 'sup-premium-meat-co',
-    counteragentName: 'Premium Meat Company',
-    amount: 250000, // используем 250k из 300k
-    description: 'Partial use of supplier credit for PO-USE-CREDIT-001',
-    priority: 'medium',
-    status: 'pending',
-    category: 'supplier',
-
-    purchaseOrderId: 'po-using-credit', // привязан к новому заказу
-    sourceOrderId: 'po-credit-test', // источник кредита
-    autoSyncEnabled: false,
-
-    amountHistory: [
-      {
-        oldAmount: 300000,
-        newAmount: 250000,
-        reason: 'payment_split',
-        changedAt: createMockDateWithTime(1, '11:15:00.000Z'),
-        changedBy: {
-          type: 'user',
-          id: 'user_1',
-          name: 'Test Manager'
-        },
-        notes: 'Used 250k from 300k supplier credit for new order'
-      }
-    ],
-
-    notes: 'Partial use of supplier credit. Remaining 50k available.',
-    createdBy: {
-      type: 'user',
-      id: 'user_1',
-      name: 'Test Manager'
-    },
-    createdAt: createMockDateWithTime(1, '11:15:00.000Z'),
-    updatedAt: createMockDateWithTime(1, '11:15:00.000Z')
-  },
-
-  // ✅ ОСТАВШИЙСЯ КРЕДИТ
-  {
-    id: 'payment-credit-remaining',
-    counteragentId: 'sup-premium-meat-co',
-    counteragentName: 'Premium Meat Company',
-    amount: 50000, // остаток кредита
-    description: 'Remaining supplier credit from PO-CREDIT-001',
-    priority: 'medium',
-    status: 'pending',
-    category: 'supplier',
-
-    sourceOrderId: 'po-credit-test',
-    autoSyncEnabled: false,
-
-    amountHistory: [
-      {
-        oldAmount: 300000,
-        newAmount: 50000,
-        reason: 'payment_split',
-        changedAt: createMockDateWithTime(1, '11:15:00.000Z'),
-        changedBy: {
-          type: 'user',
-          id: 'user_1',
-          name: 'Test Manager'
-        },
-        notes: 'Remaining credit after 250k was used for new order'
-      }
-    ],
-
-    notes: 'Remaining supplier credit available for future orders',
-    createdBy: {
-      type: 'system',
-      id: 'credit-split-system',
-      name: 'Credit Split System'
-    },
-    createdAt: createMockDateWithTime(1, '11:15:00.000Z'),
-    updatedAt: createMockDateWithTime(1, '11:15:00.000Z')
-  },
-
-  // ✅ ДОПОЛНИТЕЛЬНЫЙ ПЛАТЕЖ к новому заказу
-  {
-    id: 'payment-additional-new',
-    counteragentId: 'sup-premium-meat-co',
-    counteragentName: 'Premium Meat Company',
-    amount: 550000, // 800k - 250k кредита = 550k
-    description: 'Additional payment for PO-USE-CREDIT-001',
-    priority: 'medium',
-    status: 'pending',
-    category: 'supplier',
-
-    purchaseOrderId: 'po-using-credit',
-    sourceOrderId: 'po-using-credit',
-    autoSyncEnabled: true,
-
-    notes: 'Additional payment to cover remaining amount after using supplier credit',
-    createdBy: {
-      type: 'user',
-      id: 'user_1',
-      name: 'Test Manager'
-    },
-    createdAt: createMockDateWithTime(1, '11:20:00.000Z'),
-    updatedAt: createMockDateWithTime(1, '11:20:00.000Z')
-  },
-
-  // ✅ ДОПОЛНИТЕЛЬНЫЙ СЧЕТ к новому заказу (МОЖНО СОЗДАТЬ ЧЕРЕЗ ИНТЕРФЕЙС)
-  {
-    id: 'payment-additional-new',
-    counteragentId: 'sup-premium-meat-co',
-    counteragentName: 'Premium Meat Company',
-    amount: 550000, // недостающая сумма для заказа (800k - 250k кредита)
-    description: 'Additional payment for PO-USE-CREDIT-001',
-    priority: 'medium',
-    status: 'pending',
-    category: 'supplier',
-
-    // Привязан к новому заказу
-    purchaseOrderId: 'po-using-credit',
-    sourceOrderId: 'po-using-credit',
-    autoSyncEnabled: true, // может синхронизироваться с заказом
-
-    notes: 'Additional payment to cover remaining amount after using supplier credit',
-    createdBy: {
-      type: 'user',
-      id: 'user_1',
-      name: 'Test Manager'
-    },
-    createdAt: createMockDateWithTime(1, '11:20:00.000Z'),
-    updatedAt: createMockDateWithTime(1, '11:20:00.000Z')
-  },
-  // 📦 po-001: ПЕРЕПЛАТА из-за недопоставки (заплатили 900k, получили на 810k)
-  {
-    id: 'payment_po_001_full',
-    counteragentId: 'sup-premium-meat-co',
-    counteragentName: 'Premium Meat Company',
-    amount: 900000, // Заплатили за полный заказ
+    amount: 900000,
     description: 'Payment for order PO-001 (beef tenderloin)',
-    dueDate: '2025-09-01T00:00:00.000Z',
+    dueDate: '2025-09-01T12:00:00.000Z',
     priority: 'medium',
     status: 'completed',
     category: 'supplier',
-    invoiceNumber: 'PO-001',
+    invoiceNumber: 'PMC-2025-001',
 
-    // ✅ НОВЫЕ ПОЛЯ для интеграции с supplier store
-    purchaseOrderId: 'po-001',
+    // ✅ НОВЫЕ ПОЛЯ: показывает переплату через usedAmount
+    usedAmount: 810000, // Фактически использовано после приемки
+    linkedOrders: [
+      {
+        orderId: 'po-001',
+        orderNumber: 'PO-001',
+        linkedAmount: 810000, // Фактически получено товара
+        linkedAt: '2025-09-01T10:30:00.000Z',
+        isActive: true
+      }
+    ],
+    // availableAmount = 900000 - 810000 = 90000 ✅ ДОСТУПНО
+
     sourceOrderId: 'po-001',
     autoSyncEnabled: true,
-    lastAmountUpdate: now,
-    amountHistory: [
-      {
-        oldAmount: 900000,
-        newAmount: 900000,
-        reason: 'original_order',
-        changedAt: '2025-08-30T09:00:00.000Z',
-        changedBy: {
-          type: 'user',
-          id: 'user_1',
-          name: 'Admin'
-        },
-        notes: 'Initial payment amount set based on order total'
-      }
-      // После приемки должна добавиться запись о том, что нужно вернуть 90k
-    ],
-
     paidAmount: 900000,
     paidDate: '2025-09-01T10:30:00.000Z',
     assignedToAccount: 'acc_1',
-    notes: 'ПЕРЕПЛАТА: заплачено 900k, получено товара на 810k. Требуется возврат 90k.',
+
     createdBy: {
       type: 'user',
       id: 'user_1',
       name: 'Admin'
     },
     createdAt: '2025-08-30T09:00:00.000Z',
-    updatedAt: '2025-09-01T10:30:00.000Z'
+    updatedAt: '2025-09-01T15:30:00.000Z'
   },
 
-  // 📦 po-002: ТОЧНАЯ ОПЛАТА (без расхождений)
+  // =============================================
+  // ТОЧНО ОПЛАЧЕННЫЙ СЧЕТ PO-002 (без переплаты)
+  // =============================================
   {
-    id: 'payment_po_002_full',
-    counteragentId: 'sup-fresh-veg-market',
+    id: 'payment_po_002_exact',
+    counteragentId: 'sup-fresh-veg-market', // ✅ Правильный ID
     counteragentName: 'Fresh Vegetable Market',
     amount: 130000,
     description: 'Payment for order PO-002 (iceberg lettuce)',
-    dueDate: '2025-09-02T00:00:00.000Z',
+    dueDate: '2025-09-02T10:00:00.000Z',
     priority: 'medium',
     status: 'completed',
     category: 'supplier',
-    invoiceNumber: 'PO-002',
+    invoiceNumber: 'FVG-2025-002',
 
-    purchaseOrderId: 'po-002',
-    sourceOrderId: 'po-002',
-    autoSyncEnabled: true,
-    lastAmountUpdate: now,
-    amountHistory: [
+    // ✅ НОВЫЕ ПОЛЯ: полностью использован, нет переплаты
+    usedAmount: 130000, // Использован полностью
+    linkedOrders: [
       {
-        oldAmount: 130000,
-        newAmount: 130000,
-        reason: 'original_order',
-        changedAt: '2025-08-31T10:00:00.000Z',
-        changedBy: {
-          type: 'user',
-          id: 'user_2',
-          name: 'Manager'
-        },
-        notes: 'Payment amount matches delivered amount perfectly'
+        orderId: 'po-002',
+        orderNumber: 'PO-002',
+        linkedAmount: 130000,
+        linkedAt: '2025-09-02T09:15:00.000Z',
+        isActive: true
       }
     ],
 
+    sourceOrderId: 'po-002',
+    autoSyncEnabled: true,
     paidAmount: 130000,
     paidDate: '2025-09-02T09:15:00.000Z',
     assignedToAccount: 'acc_1',
-    notes: 'Точная оплата, приемка без расхождений',
-    createdBy: {
-      type: 'user',
-      id: 'user_2',
-      name: 'Manager'
-    },
-    createdAt: '2025-08-31T10:00:00.000Z',
-    updatedAt: '2025-09-02T09:15:00.000Z'
-  },
 
-  // 📦 po-003: НЕ ОПЛАЧЕН (заказ еще не доставлен)
-  {
-    id: 'payment_po_003_pending',
-    counteragentId: 'sup-specialty-foods', // ✅ ИСПРАВЛЕНО
-    counteragentName: 'Specialty Foods Supply', // ✅ ИСПРАВЛЕНО
-    amount: 660000,
-    description: 'Payment for order PO-003 (salmon fillet)',
-    dueDate: '2025-09-10T00:00:00.000Z',
-    priority: 'medium',
-    status: 'pending',
-    category: 'supplier',
-    invoiceNumber: 'PO-003',
-
-    purchaseOrderId: 'po-003',
-    sourceOrderId: 'po-003',
-    autoSyncEnabled: true,
-    lastAmountUpdate: now,
-    amountHistory: [
-      {
-        oldAmount: 660000,
-        newAmount: 660000,
-        reason: 'original_order',
-        changedAt: '2025-09-03T15:00:00.000Z',
-        changedBy: {
-          type: 'user',
-          id: 'user_1',
-          name: 'Admin'
-        },
-        notes: 'Initial payment created for order PO-003'
-      }
-    ],
-
-    notes: 'Ожидается доставка, затем оплата',
     createdBy: {
       type: 'user',
       id: 'user_1',
       name: 'Admin'
     },
-    createdAt: '2025-09-03T15:00:00.000Z',
+    createdAt: '2025-09-02T08:30:00.000Z',
+    updatedAt: '2025-09-02T14:20:00.000Z'
+  },
+
+  // =============================================
+  // PENDING СЧЕТ PO-003 (ожидает доставки)
+  // =============================================
+  {
+    id: 'payment_po_003_pending',
+    counteragentId: 'sup-specialty-foods', // ✅ Правильный ID
+    counteragentName: 'Specialty Foods Supply',
+    amount: 660000,
+    description: 'Payment for order PO-003 (salmon fillet)',
+    dueDate: '2025-09-03T16:00:00.000Z',
+    priority: 'high',
+    status: 'pending',
+    category: 'supplier',
+    invoiceNumber: 'SFS-2025-003',
+
+    // ✅ НОВЫЕ ПОЛЯ: pending, весь зарезервирован под заказ
+    usedAmount: 0, // Еще не использован (pending)
+    linkedOrders: [
+      {
+        orderId: 'po-003',
+        orderNumber: 'PO-003',
+        linkedAmount: 660000, // Полностью зарезервирован
+        linkedAt: '2025-09-03T15:00:00.000Z',
+        isActive: true
+      }
+    ],
+
+    sourceOrderId: 'po-003',
+    autoSyncEnabled: true,
+
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Admin'
+    },
+    createdAt: '2025-09-03T14:45:00.000Z',
     updatedAt: '2025-09-03T15:00:00.000Z'
   },
 
-  // 📦 po-0904-006: ПЕРЕПЛАТА, которая превратилась в точную оплату после приемки
+  // =============================================
+  // КОРРЕКТИРОВАННЫЙ СЧЕТ PO-0904-006 (240k -> 160k)
+  // =============================================
   {
-    id: 'payment_po_0904_006',
-    counteragentId: 'sup-beverage-distribution', // ✅ ИСПРАВЛЕНО
-    counteragentName: 'Jakarta Beverage Distribution', // ✅ ИСПРАВЛЕНО
-    amount: 160000, // Обновлено после приемки (было 240000)
+    id: 'payment_po_006_adjusted',
+    counteragentId: 'sup-beverage-distribution', // ✅ Правильный ID
+    counteragentName: 'Jakarta Beverage Distribution',
+    amount: 160000, // Скорректирован после приемки
     description: 'Payment for order PO-0904-006 (cola 330ml)',
-    dueDate: '2025-09-06T00:00:00.000Z',
+    dueDate: '2025-09-04T11:00:00.000Z',
     priority: 'medium',
     status: 'completed',
     category: 'supplier',
-    invoiceNumber: 'PO-0904-006',
+    invoiceNumber: 'JBD-2025-006',
 
-    purchaseOrderId: 'po-1757014034857',
+    // ✅ НОВЫЕ ПОЛЯ: изначально был 240k, скорректирован до 160k
+    usedAmount: 160000, // Использован полностью после корректировки
+    linkedOrders: [
+      {
+        orderId: 'po-1757014034857', // ✅ Правильный orderId
+        orderNumber: 'PO-0904-006',
+        linkedAmount: 160000, // Скорректированная сумма
+        linkedAt: '2025-09-04T10:30:00.000Z',
+        isActive: true
+      }
+    ],
+
     sourceOrderId: 'po-1757014034857',
     autoSyncEnabled: true,
-    lastAmountUpdate: now,
+
     amountHistory: [
-      {
-        oldAmount: 240000,
-        newAmount: 240000,
-        reason: 'original_order',
-        changedAt: '2025-09-04T12:00:00.000Z',
-        changedBy: {
-          type: 'user',
-          id: 'user_1',
-          name: 'Admin'
-        },
-        notes: 'Initial payment for 24 cans at 10k each'
-      },
       {
         oldAmount: 240000,
         newAmount: 160000,
         reason: 'receipt_discrepancy',
-        changedAt: now,
+        changedAt: '2025-09-04T14:30:00.000Z',
         changedBy: {
           type: 'system',
           id: 'receipt-system',
           name: 'Receipt Processing System'
         },
-        notes:
-          'Amount adjusted after receipt completion: received 20 cans at 8k each instead of 24 at 10k'
+        notes: 'Amount adjusted after receipt: received 20 cans at 8k each instead of 24 at 10k'
       }
     ],
 
     paidAmount: 160000,
-    paidDate: '2025-09-04T19:35:00.000Z',
+    paidDate: '2025-09-04T16:00:00.000Z',
     assignedToAccount: 'acc_1',
-    notes: 'Сумма автоматически скорректирована после приемки с расхождениями',
+
     createdBy: {
       type: 'user',
       id: 'user_1',
       name: 'Admin'
     },
-    createdAt: '2025-09-04T12:00:00.000Z',
-    updatedAt: now
+    createdAt: '2025-09-04T10:15:00.000Z',
+    updatedAt: '2025-09-04T14:30:00.000Z'
+  },
+
+  // =============================================
+  // ТЕСТОВЫЕ ЗАКАЗЫ ИЗ ДОКУМЕНТОВ
+  // =============================================
+  {
+    id: 'payment_credit_test',
+    counteragentId: 'sup-premium-meat-co', // ✅ Правильный ID
+    counteragentName: 'Premium Meat Company',
+    amount: 1500000,
+    description: 'Payment for order PO-CREDIT-001',
+    dueDate: '2025-09-01T12:00:00.000Z',
+    priority: 'medium',
+    status: 'completed',
+    category: 'supplier',
+    invoiceNumber: 'PMC-CREDIT-001',
+
+    // ✅ НОВЫЕ ПОЛЯ: переплата по тестовому заказу
+    usedAmount: 1200000, // Фактически получено
+    linkedOrders: [
+      {
+        orderId: 'po-credit-test', // ✅ Правильный orderId
+        orderNumber: 'PO-CREDIT-001',
+        linkedAmount: 1200000, // Фактически использовано
+        linkedAt: '2025-08-31T10:30:00.000Z',
+        isActive: true
+      }
+    ],
+    // availableAmount = 1500000 - 1200000 = 300000 ✅ БОЛЬШАЯ ПЕРЕПЛАТА
+
+    sourceOrderId: 'po-credit-test',
+    autoSyncEnabled: true,
+    paidAmount: 1500000,
+    paidDate: '2025-08-31T16:00:00.000Z',
+    assignedToAccount: 'acc_1',
+
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Test Manager'
+    },
+    createdAt: '2025-08-31T10:00:00.000Z',
+    updatedAt: '2025-09-05T16:30:00.000Z'
+  },
+
+  // =============================================
+  // ОПЕРАЦИОННЫЕ ПЛАТЕЖИ (правильные ID)
+  // =============================================
+  {
+    id: 'payment_rent_monthly',
+    counteragentId: 'landlord-main', // Можно оставить как есть
+    counteragentName: 'Restaurant Space Rental',
+    amount: 12000000,
+    description: 'Monthly restaurant rent - September 2025',
+    dueDate: '2025-09-01T00:00:00.000Z',
+    priority: 'urgent',
+    status: 'completed',
+    category: 'rent',
+
+    // ✅ НОВЫЕ ПОЛЯ: завершенный операционный платеж
+    usedAmount: 12000000,
+    linkedOrders: [], // Не связан с заказами
+
+    paidAmount: 12000000,
+    paidDate: '2025-08-31T16:00:00.000Z',
+    autoSyncEnabled: false,
+    assignedToAccount: 'acc_1',
+
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Admin'
+    },
+    createdAt: '2025-08-25T10:00:00.000Z',
+    updatedAt: '2025-08-31T16:00:00.000Z'
   },
 
   // =============================================
@@ -550,19 +404,6 @@ export function getPaymentsByCounteragent(counteragentId: string): PendingPaymen
   return mockPendingPayments.filter(payment => payment.counteragentId === counteragentId)
 }
 
-// ✅ НОВЫЕ ФУНКЦИИ для работы с заказами поставщиков
-export function getPaymentsByPurchaseOrder(purchaseOrderId: string): PendingPayment[] {
-  return mockPendingPayments.filter(payment => payment.purchaseOrderId === purchaseOrderId)
-}
-
-export function getSupplierOrderPayments(): PendingPayment[] {
-  return mockPendingPayments.filter(payment => payment.purchaseOrderId)
-}
-
-export function getOperationalPayments(): PendingPayment[] {
-  return mockPendingPayments.filter(payment => !payment.purchaseOrderId)
-}
-
 export function getPaymentsWithAmountHistory(): PendingPayment[] {
   return mockPendingPayments.filter(
     payment => payment.amountHistory && payment.amountHistory.length > 1
@@ -571,6 +412,46 @@ export function getPaymentsWithAmountHistory(): PendingPayment[] {
 
 export function getAutoSyncEnabledPayments(): PendingPayment[] {
   return mockPendingPayments.filter(payment => payment.autoSyncEnabled)
+}
+
+// ✅ НОВЫЕ ФУНКЦИИ для работы с linkedOrders
+
+export function getPaymentsByOrder(orderId: string): PendingPayment[] {
+  return mockPendingPayments.filter(payment =>
+    payment.linkedOrders?.some(order => order.orderId === orderId && order.isActive)
+  )
+}
+
+// ✅ БЕЗОПАСНЫЕ ФУНКЦИИ с проверками
+export function getSupplierOrderPayments(): PendingPayment[] {
+  return mockPendingPayments.filter(
+    payment => payment.linkedOrders && payment.linkedOrders.length > 0
+  )
+}
+
+export function getOperationalPayments(): PendingPayment[] {
+  return mockPendingPayments.filter(
+    payment => !payment.linkedOrders || payment.linkedOrders.length === 0
+  )
+}
+
+export function getPaymentsWithAvailableAmount(): PendingPayment[] {
+  return mockPendingPayments.filter(payment => {
+    // Только для платежей связанных с заказами
+    if (!payment.linkedOrders || payment.linkedOrders.length === 0) {
+      return false // Операционные платежи не показываем в AttachBill
+    }
+
+    if (payment.status === 'completed') {
+      return payment.amount > (payment.usedAmount || 0)
+    }
+
+    const linkedAmount = payment.linkedOrders
+      .filter(o => o.isActive)
+      .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+    return payment.amount > linkedAmount
+  })
 }
 
 // ============ STATISTICS ============
@@ -614,13 +495,6 @@ export function getPaymentsRequiringAttention(): PendingPayment[] {
   )
 }
 
-function createMockDateWithTime(daysAgo: number, time: string): string {
-  const date = new Date()
-  date.setDate(date.getDate() - daysAgo)
-  const dateStr = date.toISOString().split('T')[0]
-  return `${dateStr}T${time}`
-}
-
 // ============ SUMMARY FOR DEBUGGING ============
 
 export function getPaymentsSummaryForDebug() {
@@ -629,25 +503,29 @@ export function getPaymentsSummaryForDebug() {
   const pending = getPendingPayments()
   const completed = getPaymentsByStatus('completed')
   const withAmountHistory = getPaymentsWithAmountHistory()
+  const withAvailableAmount = getPaymentsWithAvailableAmount()
 
-  console.log('=== ОБНОВЛЕННЫЕ PAYMENTS SUMMARY ===')
+  console.log('=== НОВАЯ СИСТЕМА PAYMENTS SUMMARY ===')
   console.log(`Total payments: ${mockPendingPayments.length}`)
   console.log(`├── Order-related: ${orderPayments.length}`)
   console.log(`├── Operational: ${operationalPayments.length}`)
   console.log(`├── Pending: ${pending.length}`)
   console.log(`├── Completed: ${completed.length}`)
-  console.log(`└── With amount history: ${withAmountHistory.length}`)
+  console.log(`├── With amount history: ${withAmountHistory.length}`)
+  console.log(`└── With available amount: ${withAvailableAmount.length}`)
 
-  console.log('\n=== ORDERS COVERAGE (UPDATED) ===')
-  console.log('po-001: ПЕРЕПЛАЧЕН (900k заплачено, 810k получено) - возврат 90k')
-  console.log('po-002: ТОЧНО ОПЛАЧЕН (130k заплачено = 130k получено)')
-  console.log('po-003: НЕ ОПЛАЧЕН (660k ожидает доставки)')
-  console.log('po-0904-006: АВТОКОРРЕКТИРОВКА (240k → 160k после приемки)')
+  console.log('\n=== ДОСТУПНЫЕ ПЕРЕПЛАТЫ ===')
+  withAvailableAmount.forEach(payment => {
+    const available =
+      payment.status === 'completed'
+        ? payment.amount - (payment.usedAmount || 0)
+        : payment.amount -
+          (payment.linkedOrders
+            ?.filter(o => o.isActive)
+            .reduce((sum, o) => sum + o.linkedAmount, 0) || 0)
 
-  console.log('\n=== НОВЫЕ ПОЛЯ ===')
-  console.log(`Payments with purchaseOrderId: ${orderPayments.length}`)
-  console.log(`Payments with autoSync enabled: ${getAutoSyncEnabledPayments().length}`)
-  console.log(`Payments with amount history: ${withAmountHistory.length}`)
+    console.log(`${payment.counteragentName}: ${available.toLocaleString()} IDR available`)
+  })
 
   return {
     total: mockPendingPayments.length,
@@ -656,6 +534,6 @@ export function getPaymentsSummaryForDebug() {
     pending: pending.length,
     completed: completed.length,
     withAmountHistory: withAmountHistory.length,
-    autoSyncEnabled: getAutoSyncEnabledPayments().length
+    withAvailableAmount: withAvailableAmount.length
   }
 }

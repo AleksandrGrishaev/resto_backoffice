@@ -50,7 +50,19 @@ export class SupplierAccountIntegration {
         category: 'supplier',
         invoiceNumber: order.orderNumber,
         priority: 'medium',
-        purchaseOrderId: order.id,
+
+        // ✅ НОВЫЕ ПОЛЯ вместо purchaseOrderId
+        usedAmount: 0,
+        linkedOrders: [
+          {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            linkedAmount: order.totalAmount,
+            linkedAt: new Date().toISOString(),
+            isActive: true
+          }
+        ],
+
         sourceOrderId: order.id,
         autoSyncEnabled: true,
         createdBy: {
@@ -85,97 +97,77 @@ export class SupplierAccountIntegration {
         return
       }
 
-      DebugUtils.info(MODULE_NAME, 'Syncing bill amount', {
+      DebugUtils.info(MODULE_NAME, 'Syncing bill amount after receipt', {
         orderId: order.id,
         billId: order.billId,
-        newAmount: order.totalAmount,
+        actualDeliveredAmount: order.actualDeliveredAmount,
         orderStatus: order.status,
         hasDiscrepancies: order.hasReceiptDiscrepancies
       })
 
-      const canUpdate = await this.canUpdateBillAmount(order.billId)
-      if (!canUpdate) {
-        DebugUtils.warn(MODULE_NAME, 'Bill amount sync blocked - payment already processed', {
-          orderId: order.id,
-          billId: order.billId
-        })
-        return
+      // ✅ НОВОЕ: В новой системе НЕ МЕНЯЕМ amount платежа
+      // Вместо этого обновляем usedAmount для completed платежей
+      if (order.status === 'delivered' && order.actualDeliveredAmount) {
+        await this.updatePaymentUsedAmount(order.billId, order)
       }
 
-      const accountStore = await this.getAccountStore()
-      const authStore = await this.getAuthStore()
-
-      // ✅ УЛУЧШЕНИЕ: Получаем текущий платеж для определения причины изменения
-      const currentPayment = await accountStore.getPaymentById(order.billId)
-
-      if (!currentPayment) {
-        DebugUtils.warn(MODULE_NAME, 'Payment not found for sync', { billId: order.billId })
-        return
-      }
-
-      // ✅ УЛУЧШЕНИЕ: Определяем причину изменения суммы на основе состояния заказа
-      let reason: 'receipt_discrepancy' | 'order_updated' | 'manual_adjustment' = 'order_updated'
-      let notes = `Auto-sync from order ${order.orderNumber}`
-
-      // Приоритет 1: Изменения после приемки
-      if (order.status === 'delivered' && order.hasReceiptDiscrepancies) {
-        reason = 'receipt_discrepancy'
-        notes = `Amount adjusted after receipt completion for order ${order.orderNumber}`
-
-        // Добавляем детали расхождений если есть
-        if (order.receiptDiscrepancies && order.receiptDiscrepancies.length > 0) {
-          const discrepancyTypes = order.receiptDiscrepancies.map(d => d.type).join(', ')
-          notes += ` (discrepancies: ${discrepancyTypes})`
-        }
-      }
-      // Приоритет 2: Ручные корректировки
-      else if (
-        order.originalTotalAmount &&
-        Math.abs(order.totalAmount - order.originalTotalAmount) > 0.01
-      ) {
-        reason = 'manual_adjustment'
-        notes = `Manual order adjustment from ${order.originalTotalAmount} to ${order.totalAmount}`
-      }
-
-      // ✅ НОВОЕ: Подготавливаем DTO с улучшенной информацией
-      const updateDto: UpdatePaymentAmountDto = {
-        paymentId: order.billId,
-        newAmount: order.totalAmount,
-        reason,
-        userId: authStore.currentUser?.id,
-        notes
-      }
-
-      // ✅ ЛОГИРОВАНИЕ: Детальное логирование операции
-      DebugUtils.info(MODULE_NAME, 'Updating payment amount', {
-        paymentId: order.billId,
-        oldAmount: currentPayment.amount,
-        newAmount: order.totalAmount,
-        difference: order.totalAmount - currentPayment.amount,
-        reason,
-        notes
-      })
-
-      await accountStore.updatePaymentAmount(updateDto)
-
-      DebugUtils.info(MODULE_NAME, 'Bill amount synced successfully', {
-        paymentId: order.billId,
-        oldAmount: currentPayment.amount,
-        newAmount: order.totalAmount,
-        reason,
-        timeTaken: 'immediate'
+      DebugUtils.info(MODULE_NAME, 'Bill sync completed', {
+        orderId: order.id,
+        billId: order.billId
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to sync bill amount', {
-        error,
-        orderId: order.id,
-        billId: order.billId,
-        orderAmount: order.totalAmount
-      })
+      DebugUtils.error(MODULE_NAME, 'Failed to sync bill amount', { error })
       throw error
     }
   }
 
+  // ✅ ИСПРАВИТЬ - использовать прямое обновление объекта
+  private async updatePaymentUsedAmount(paymentId: string, order: PurchaseOrder): Promise<void> {
+    try {
+      const accountStore = await this.getAccountStore()
+
+      const payment = await accountStore.getPaymentById(paymentId)
+      if (!payment) {
+        DebugUtils.warn(MODULE_NAME, 'Payment not found for usedAmount update', { paymentId })
+        return
+      }
+
+      if (payment.status !== 'completed') {
+        DebugUtils.info(MODULE_NAME, 'Payment not completed, skipping usedAmount update', {
+          paymentId,
+          status: payment.status
+        })
+        return
+      }
+
+      // Находим привязку к текущему заказу
+      const orderLink = payment.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+      if (!orderLink) {
+        DebugUtils.warn(MODULE_NAME, 'No active link found for payment and order', {
+          paymentId,
+          orderId: order.id
+        })
+        return
+      }
+
+      // Вычисляем фактически использованную сумму
+      const actualDeliveredAmount = order.actualDeliveredAmount || order.totalAmount
+
+      // ✅ ИСПРАВЛЕНИЕ: Прямое обновление объекта
+      payment.usedAmount = actualDeliveredAmount
+      payment.updatedAt = new Date().toISOString()
+
+      DebugUtils.info(MODULE_NAME, 'Payment usedAmount updated', {
+        paymentId,
+        orderId: order.id,
+        usedAmount: actualDeliveredAmount,
+        availableAmount: payment.amount - actualDeliveredAmount
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment usedAmount', { error })
+      throw error
+    }
+  }
   // ========== ДОБАВИТЬ НОВЫЕ ФУНКЦИИ В КОНЕЦ КЛАССА ПЕРЕД ЗАКРЫВАЮЩЕЙ СКОБКОЙ ==========
 
   // ✅ НОВАЯ ФУНКЦИЯ: Проверка возможности массового обновления платежей
@@ -302,31 +294,10 @@ export class SupplierAccountIntegration {
     }
   }
 
-  async canUpdateBillAmount(billId: string): Promise<boolean> {
-    try {
-      const accountStore = await this.getAccountStore()
-      const payment = await accountStore.getPaymentById(billId)
-
-      if (!payment) {
-        DebugUtils.warn(MODULE_NAME, 'Payment not found', { billId })
-        return false
-      }
-
-      // Блокируем автообновление если есть платежи
-      const canUpdate = payment.status === 'pending' && payment.autoSyncEnabled !== false
-
-      DebugUtils.info(MODULE_NAME, 'Bill amount update check', {
-        billId,
-        status: payment.status,
-        autoSyncEnabled: payment.autoSyncEnabled,
-        canUpdate
-      })
-
-      return canUpdate
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to check bill update permissions', { error })
-      return false
-    }
+  // ✅ УПРОСТИТЬ: В новой системе можем всегда обновлять usedAmount
+  private async canUpdateBillAmount(paymentId: string): Promise<boolean> {
+    // В новой системе всегда можем обновить usedAmount
+    return true
   }
 
   // =============================================
@@ -346,7 +317,8 @@ export class SupplierAccountIntegration {
   async getBillsForOrder(orderId: string): Promise<PendingPayment[]> {
     try {
       const accountStore = await this.getAccountStore()
-      return await accountStore.getPaymentsByPurchaseOrder(orderId)
+      // ✅ ИСПРАВЛЕНИЕ: Используем новый метод
+      return await accountStore.getPaymentsByOrder(orderId)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get bills for order', { error })
       return []
@@ -366,8 +338,24 @@ export class SupplierAccountIntegration {
 
       for (const bill of bills) {
         if (bill.status === 'pending') {
-          await accountStore.cancelPayment(bill.id)
-          DebugUtils.info(MODULE_NAME, 'Bill cancelled', { billId: bill.id })
+          // ✅ НОВОЕ: Отвязываем платеж от заказа вместо полной отмены
+          await accountStore.unlinkPaymentFromOrder(bill.id, orderId)
+          DebugUtils.info(MODULE_NAME, 'Bill unlinked from order', {
+            billId: bill.id,
+            orderId
+          })
+
+          // Если после отвязки у платежа нет активных связей, отменяем его
+          const hasOtherActiveLinks = bill.linkedOrders?.some(
+            o => o.orderId !== orderId && o.isActive
+          )
+
+          if (!hasOtherActiveLinks) {
+            await accountStore.cancelPayment(bill.id)
+            DebugUtils.info(MODULE_NAME, 'Bill cancelled (no other active links)', {
+              billId: bill.id
+            })
+          }
         }
       }
     } catch (error) {
