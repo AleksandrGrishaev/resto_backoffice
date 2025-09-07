@@ -61,6 +61,7 @@
       class="elevation-1"
       :items-per-page="25"
       :sort-by="[{ key: 'deliveryDate', order: 'desc' }]"
+      item-key="id"
     >
       <!-- Receipt Number -->
       <template #[`item.receiptNumber`]="{ item }">
@@ -312,27 +313,44 @@ const discrepancyOptions = [
 // =============================================
 
 const filteredReceipts = computed(() => {
-  let filtered = props.receipts || []
+  // Проверяем что receipts является массивом
+  if (!Array.isArray(props.receipts)) {
+    return []
+  }
+
+  let filtered = props.receipts.filter(receipt => {
+    // Базовая проверка что receipt существует и является объектом
+    if (!receipt || typeof receipt !== 'object') {
+      return false
+    }
+    return true
+  })
 
   // Status filter
   if (statusFilter.value) {
-    filtered = filtered.filter(receipt => receipt.status === statusFilter.value)
+    filtered = filtered.filter(receipt => receipt?.status === statusFilter.value)
   }
 
   // Discrepancy filter
-  if (discrepancyFilter.value !== undefined) {
-    filtered = filtered.filter(receipt => receipt.hasDiscrepancies === discrepancyFilter.value)
+  if (discrepancyFilter.value !== undefined && discrepancyFilter.value !== '') {
+    filtered = filtered.filter(receipt => receipt?.hasDiscrepancies === discrepancyFilter.value)
   }
 
   // Search filter
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(
-      receipt =>
-        receipt.receiptNumber.toLowerCase().includes(query) ||
-        receipt.receivedBy.toLowerCase().includes(query) ||
-        receipt.notes?.toLowerCase().includes(query)
-    )
+    filtered = filtered.filter(receipt => {
+      // Безопасно получаем строковые значения с fallback
+      const receiptNumber = receipt?.receiptNumber || ''
+      const receivedBy = receipt?.receivedBy || ''
+      const notes = receipt?.notes || ''
+
+      return (
+        receiptNumber.toLowerCase().includes(query) ||
+        receivedBy.toLowerCase().includes(query) ||
+        notes.toLowerCase().includes(query)
+      )
+    })
   }
 
   return filtered
