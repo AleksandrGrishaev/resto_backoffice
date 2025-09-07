@@ -696,8 +696,8 @@ export const useAccountStore = defineStore('account', () => {
     updatePaymentAmount,
     getPaymentsByPurchaseOrder,
     getPaymentById,
+
     // ✅ НОВЫЕ методы для работы с заказами:
-    getPaymentsByPurchaseOrder,
     updatePaymentOrderLink,
     detachPaymentFromOrder,
     attachPaymentToOrder,

@@ -88,7 +88,9 @@ export class SupplierAccountIntegration {
       DebugUtils.info(MODULE_NAME, 'Syncing bill amount', {
         orderId: order.id,
         billId: order.billId,
-        newAmount: order.totalAmount
+        newAmount: order.totalAmount,
+        orderStatus: order.status,
+        hasDiscrepancies: order.hasReceiptDiscrepancies
       })
 
       const canUpdate = await this.canUpdateBillAmount(order.billId)
@@ -103,19 +105,199 @@ export class SupplierAccountIntegration {
       const accountStore = await this.getAccountStore()
       const authStore = await this.getAuthStore()
 
+      // ✅ УЛУЧШЕНИЕ: Получаем текущий платеж для определения причины изменения
+      const currentPayment = await accountStore.getPaymentById(order.billId)
+
+      if (!currentPayment) {
+        DebugUtils.warn(MODULE_NAME, 'Payment not found for sync', { billId: order.billId })
+        return
+      }
+
+      // ✅ УЛУЧШЕНИЕ: Определяем причину изменения суммы на основе состояния заказа
+      let reason: 'receipt_discrepancy' | 'order_updated' | 'manual_adjustment' = 'order_updated'
+      let notes = `Auto-sync from order ${order.orderNumber}`
+
+      // Приоритет 1: Изменения после приемки
+      if (order.status === 'delivered' && order.hasReceiptDiscrepancies) {
+        reason = 'receipt_discrepancy'
+        notes = `Amount adjusted after receipt completion for order ${order.orderNumber}`
+
+        // Добавляем детали расхождений если есть
+        if (order.receiptDiscrepancies && order.receiptDiscrepancies.length > 0) {
+          const discrepancyTypes = order.receiptDiscrepancies.map(d => d.type).join(', ')
+          notes += ` (discrepancies: ${discrepancyTypes})`
+        }
+      }
+      // Приоритет 2: Ручные корректировки
+      else if (
+        order.originalTotalAmount &&
+        Math.abs(order.totalAmount - order.originalTotalAmount) > 0.01
+      ) {
+        reason = 'manual_adjustment'
+        notes = `Manual order adjustment from ${order.originalTotalAmount} to ${order.totalAmount}`
+      }
+
+      // ✅ НОВОЕ: Подготавливаем DTO с улучшенной информацией
       const updateDto: UpdatePaymentAmountDto = {
         paymentId: order.billId,
         newAmount: order.totalAmount,
-        reason: 'order_updated',
+        reason,
         userId: authStore.currentUser?.id,
-        notes: `Auto-sync from order ${order.orderNumber}`
+        notes
       }
+
+      // ✅ ЛОГИРОВАНИЕ: Детальное логирование операции
+      DebugUtils.info(MODULE_NAME, 'Updating payment amount', {
+        paymentId: order.billId,
+        oldAmount: currentPayment.amount,
+        newAmount: order.totalAmount,
+        difference: order.totalAmount - currentPayment.amount,
+        reason,
+        notes
+      })
 
       await accountStore.updatePaymentAmount(updateDto)
 
-      DebugUtils.info(MODULE_NAME, 'Bill amount synced successfully')
+      DebugUtils.info(MODULE_NAME, 'Bill amount synced successfully', {
+        paymentId: order.billId,
+        oldAmount: currentPayment.amount,
+        newAmount: order.totalAmount,
+        reason,
+        timeTaken: 'immediate'
+      })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to sync bill amount', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to sync bill amount', {
+        error,
+        orderId: order.id,
+        billId: order.billId,
+        orderAmount: order.totalAmount
+      })
+      throw error
+    }
+  }
+
+  // ========== ДОБАВИТЬ НОВЫЕ ФУНКЦИИ В КОНЕЦ КЛАССА ПЕРЕД ЗАКРЫВАЮЩЕЙ СКОБКОЙ ==========
+
+  // ✅ НОВАЯ ФУНКЦИЯ: Проверка возможности массового обновления платежей
+  async canUpdateMultiplePayments(paymentIds: string[]): Promise<{
+    canUpdate: boolean
+    updatablePayments: string[]
+    blockedPayments: Array<{ id: string; reason: string }>
+  }> {
+    try {
+      const accountStore = await this.getAccountStore()
+      const results = {
+        canUpdate: false,
+        updatablePayments: [] as string[],
+        blockedPayments: [] as Array<{ id: string; reason: string }>
+      }
+
+      for (const paymentId of paymentIds) {
+        const canUpdate = await this.canUpdateBillAmount(paymentId)
+
+        if (canUpdate) {
+          results.updatablePayments.push(paymentId)
+        } else {
+          const payment = await accountStore.getPaymentById(paymentId)
+          results.blockedPayments.push({
+            id: paymentId,
+            reason: payment?.status === 'completed' ? 'already_paid' : 'processing'
+          })
+        }
+      }
+
+      results.canUpdate = results.updatablePayments.length > 0
+
+      DebugUtils.info(MODULE_NAME, 'Multiple payments update check completed', {
+        totalPayments: paymentIds.length,
+        updatable: results.updatablePayments.length,
+        blocked: results.blockedPayments.length
+      })
+
+      return results
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to check multiple payments update capability', {
+        error
+      })
+      throw error
+    }
+  }
+
+  // ✅ НОВАЯ ФУНКЦИЯ: Пакетное обновление платежей заказа
+  async syncMultipleOrderPayments(
+    orderId: string,
+    paymentUpdates: Array<{ paymentId: string; newAmount: number; reason?: string }>
+  ): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Starting batch payment sync', {
+        orderId,
+        updatesCount: paymentUpdates.length
+      })
+
+      const accountStore = await this.getAccountStore()
+      const authStore = await this.getAuthStore()
+
+      // Проверяем возможность обновления всех платежей
+      const paymentIds = paymentUpdates.map(u => u.paymentId)
+      const updateCheck = await this.canUpdateMultiplePayments(paymentIds)
+
+      if (updateCheck.blockedPayments.length > 0) {
+        DebugUtils.warn(MODULE_NAME, 'Some payments cannot be updated', {
+          blockedPayments: updateCheck.blockedPayments
+        })
+      }
+
+      // Обновляем только разрешенные платежи
+      const successfulUpdates: string[] = []
+      const failedUpdates: Array<{ paymentId: string; error: any }> = []
+
+      for (const update of paymentUpdates) {
+        if (!updateCheck.updatablePayments.includes(update.paymentId)) {
+          continue // Пропускаем заблокированные платежи
+        }
+
+        try {
+          const updateDto: UpdatePaymentAmountDto = {
+            paymentId: update.paymentId,
+            newAmount: update.newAmount,
+            reason: update.reason || 'order_updated',
+            userId: authStore.currentUser?.id,
+            notes: `Batch sync for order ${orderId}`
+          }
+
+          await accountStore.updatePaymentAmount(updateDto)
+          successfulUpdates.push(update.paymentId)
+
+          DebugUtils.debug(MODULE_NAME, 'Payment updated in batch', {
+            paymentId: update.paymentId,
+            newAmount: update.newAmount
+          })
+        } catch (updateError) {
+          failedUpdates.push({
+            paymentId: update.paymentId,
+            error: updateError
+          })
+          DebugUtils.error(MODULE_NAME, 'Failed to update payment in batch', {
+            paymentId: update.paymentId,
+            error: updateError
+          })
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Batch payment sync completed', {
+        orderId,
+        totalUpdates: paymentUpdates.length,
+        successful: successfulUpdates.length,
+        failed: failedUpdates.length,
+        blocked: updateCheck.blockedPayments.length
+      })
+
+      // Если есть критические ошибки, выбрасываем исключение
+      if (failedUpdates.length > 0 && successfulUpdates.length === 0) {
+        throw new Error(`All payment updates failed for order ${orderId}`)
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Batch payment sync failed', { error, orderId })
       throw error
     }
   }

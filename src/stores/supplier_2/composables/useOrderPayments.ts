@@ -4,7 +4,7 @@ import { reactive, computed, readonly, ref, watch } from 'vue'
 import { DebugUtils } from '@/utils'
 import type { PurchaseOrder } from '../types'
 import type { PendingPayment, CreatePaymentDto } from '@/stores/account'
-
+import type { UpdatePaymentAmountDto } from '@/stores/account/types'
 const MODULE_NAME = 'useOrderPayments'
 
 /**
@@ -502,6 +502,399 @@ export function useOrderPayments() {
     return colors[status] || 'grey'
   }
 
+  /**
+   * Синхронизация всех платежей заказа после завершения приемки
+   * Вызывается из useReceipts
+   */
+  async function syncOrderPaymentsAfterReceipt(
+    order: PurchaseOrder,
+    amountDifference: number
+  ): Promise<void> {
+    try {
+      console.log(`OrderPayments: Syncing payments for order ${order.orderNumber}`, {
+        orderId: order.id,
+        newOrderAmount: order.totalAmount,
+        amountDifference,
+        originalAmount: order.originalTotalAmount
+      })
+
+      const { accountStore } = await getStores()
+
+      // Обеспечиваем свежие данные платежей
+      await accountStore.fetchPayments()
+
+      // Получаем все связанные платежи этого заказа
+      const orderPayments = accountStore.state.pendingPayments.filter(
+        payment => payment.purchaseOrderId === order.id
+      )
+
+      console.log(`OrderPayments: Found ${orderPayments.length} payments for order`, {
+        orderId: order.id,
+        payments: orderPayments.map(p => ({
+          id: p.id,
+          amount: p.amount,
+          status: p.status,
+          autoSyncEnabled: p.autoSyncEnabled
+        }))
+      })
+
+      if (orderPayments.length === 0) {
+        console.warn(`OrderPayments: No payments found for order ${order.orderNumber}`)
+        return
+      }
+
+      // Находим основной счет для автосинхронизации
+      const mainPayment = orderPayments.find(
+        p => p.status === 'pending' && p.autoSyncEnabled !== false && p.purchaseOrderId === order.id
+      )
+
+      if (!mainPayment) {
+        console.warn(
+          `OrderPayments: No main payment found for auto-sync for order ${order.orderNumber}`
+        )
+
+        // Если нет основного платежа с автосинхронизацией, используем первый pending
+        const fallbackPayment = orderPayments.find(p => p.status === 'pending')
+        if (fallbackPayment) {
+          console.log(`OrderPayments: Using fallback payment for sync:`, fallbackPayment.id)
+          await syncSinglePayment(
+            fallbackPayment,
+            order,
+            order.totalAmount - fallbackPayment.amount
+          )
+        }
+        return
+      }
+
+      // ✅ УМНОЕ РАСПРЕДЕЛЕНИЕ: используем новую логику
+      const distributionResult = await distributeAmountChanges(
+        orderPayments,
+        order.totalAmount,
+        mainPayment.id
+      )
+
+      // Применяем изменения только к pending платежам
+      for (const change of distributionResult.changes) {
+        if (Math.abs(change.amountChange) > 0.01) {
+          // Специальная обработка для обнуленных платежей
+          if (change.reason === 'payment_cancellation') {
+            await handleZeroedPayment(change.payment, order)
+          } else {
+            await syncSinglePayment(change.payment, order, change.amountChange)
+          }
+
+          console.log(`OrderPayments: Payment ${change.payment.id} processed`, {
+            oldAmount: change.payment.amount,
+            change: change.amountChange,
+            reason: change.reason,
+            finalAmount:
+              change.reason === 'payment_cancellation'
+                ? 0
+                : change.payment.amount + change.amountChange
+          })
+        }
+      }
+
+      // Если появилась переплата, создаем кредит
+      if (amountDifference < 0) {
+        // отрицательная разница = переплата
+        const overpaymentAmount = Math.abs(amountDifference)
+        await createSupplierCredit(order, overpaymentAmount)
+      }
+    } catch (error) {
+      console.error(`OrderPayments: Failed to sync order payments:`, error)
+      throw error
+    }
+  }
+
+  // =============================================
+  // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+  // =============================================
+
+  /**
+   * Синхронизация одного платежа
+   */
+  async function syncSinglePayment(
+    payment: PendingPayment,
+    order: PurchaseOrder,
+    amountChange: number
+  ): Promise<void> {
+    try {
+      const accountIntegration = await getAccountIntegration()
+
+      // Создаем временный заказ с данными платежа для существующего API
+      const orderForSync: PurchaseOrder = {
+        ...order,
+        billId: payment.id,
+        totalAmount: payment.amount + amountChange
+      }
+
+      await accountIntegration.syncBillAmount(orderForSync)
+
+      console.log(`OrderPayments: Synced payment ${payment.id} with amount change ${amountChange}`)
+    } catch (error) {
+      console.error(`OrderPayments: Failed to sync single payment:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Умное распределение изменений суммы между платежами
+   */
+  async function distributeAmountChanges(
+    orderPayments: PendingPayment[],
+    newOrderTotal: number,
+    mainPaymentId: string
+  ): Promise<{
+    changes: Array<{
+      payment: PendingPayment
+      amountChange: number
+      reason: string
+    }>
+  }> {
+    const changes: Array<{
+      payment: PendingPayment
+      amountChange: number
+      reason: string
+    }> = []
+
+    // Разделяем платежи по категориям
+    const completedPayments = orderPayments.filter(p => p.status === 'completed')
+    const mainPayment = orderPayments.find(p => p.id === mainPaymentId)
+    const otherPendingPayments = orderPayments.filter(
+      p => p.status === 'pending' && p.id !== mainPaymentId && p.purchaseOrderId // только те, что привязаны к заказу
+    )
+
+    console.log(`OrderPayments: Analyzing payment distribution`, {
+      newOrderTotal,
+      completedCount: completedPayments.length,
+      hasMainPayment: !!mainPayment,
+      otherPendingCount: otherPendingPayments.length
+    })
+
+    // Считаем "неприкасаемую" сумму (уже оплаченные)
+    const lockedAmount = completedPayments.reduce((sum, p) => sum + p.amount, 0)
+    const availableForDistribution = newOrderTotal - lockedAmount
+
+    console.log(`OrderPayments: Payment distribution calculation`, {
+      lockedAmount,
+      availableForDistribution,
+      currentPendingTotal:
+        (mainPayment?.amount || 0) + otherPendingPayments.reduce((sum, p) => sum + p.amount, 0)
+    })
+
+    if (availableForDistribution < 0) {
+      // ПЕРЕПЛАТА: создается кредит, платежи не меняются
+      console.log(`OrderPayments: Overpayment detected: ${Math.abs(availableForDistribution)}`)
+      return { changes: [] }
+    }
+
+    if (availableForDistribution === 0) {
+      // ВСЕ ОПЛАЧЕНО: обнуляем все pending платежи
+      if (mainPayment && mainPayment.amount > 0) {
+        changes.push({
+          payment: mainPayment,
+          amountChange: -mainPayment.amount,
+          reason: 'payment_cancellation'
+        })
+      }
+
+      for (const payment of otherPendingPayments) {
+        if (payment.amount > 0) {
+          changes.push({
+            payment,
+            amountChange: -payment.amount,
+            reason: 'payment_cancellation'
+          })
+        }
+      }
+
+      return { changes }
+    }
+
+    // НОРМАЛЬНОЕ РАСПРЕДЕЛЕНИЕ
+    const currentPendingTotal =
+      (mainPayment?.amount || 0) + otherPendingPayments.reduce((sum, p) => sum + p.amount, 0)
+
+    if (currentPendingTotal === 0) {
+      // Нет pending платежей - создаем в основном
+      if (mainPayment) {
+        changes.push({
+          payment: mainPayment,
+          amountChange: availableForDistribution,
+          reason: 'order_amount_adjustment'
+        })
+      }
+      return { changes }
+    }
+
+    // Если нужно УМЕНЬШИТЬ pending платежи
+    if (availableForDistribution < currentPendingTotal) {
+      const reductionNeeded = currentPendingTotal - availableForDistribution
+      console.log(`OrderPayments: Need to reduce pending payments by ${reductionNeeded}`)
+
+      // СТРАТЕГИЯ: Сначала уменьшаем дополнительные платежи, потом основной
+      let remainingReduction = reductionNeeded
+
+      // 1. Уменьшаем дополнительные платежи пропорционально
+      if (otherPendingPayments.length > 0 && remainingReduction > 0) {
+        const otherTotal = otherPendingPayments.reduce((sum, p) => sum + p.amount, 0)
+
+        for (const payment of otherPendingPayments) {
+          if (remainingReduction <= 0) break
+
+          const proportion = payment.amount / otherTotal
+          const paymentReduction = Math.min(
+            remainingReduction * proportion,
+            payment.amount // не можем уменьшить больше чем есть
+          )
+
+          if (paymentReduction > 0.01) {
+            // Проверяем: если платеж обнуляется полностью
+            if (paymentReduction >= payment.amount - 0.01) {
+              changes.push({
+                payment,
+                amountChange: -payment.amount, // обнуляем полностью
+                reason: 'payment_cancellation' // специальная причина для обнуления
+              })
+            } else {
+              changes.push({
+                payment,
+                amountChange: -paymentReduction,
+                reason: 'proportional_reduction'
+              })
+            }
+            remainingReduction -= paymentReduction
+          }
+        }
+      }
+
+      // 2. Оставшуюся сумму списываем с основного платежа
+      if (remainingReduction > 0.01 && mainPayment) {
+        const mainReduction = Math.min(remainingReduction, mainPayment.amount)
+        if (mainReduction >= mainPayment.amount - 0.01) {
+          changes.push({
+            payment: mainPayment,
+            amountChange: -mainPayment.amount,
+            reason: 'payment_cancellation'
+          })
+        } else {
+          changes.push({
+            payment: mainPayment,
+            amountChange: -mainReduction,
+            reason: 'main_payment_adjustment'
+          })
+        }
+      }
+    }
+    // Если нужно УВЕЛИЧИТЬ pending платежи
+    else if (availableForDistribution > currentPendingTotal) {
+      const increaseNeeded = availableForDistribution - currentPendingTotal
+      console.log(`OrderPayments: Need to increase pending payments by ${increaseNeeded}`)
+
+      // Увеличиваем основной платеж
+      if (mainPayment) {
+        changes.push({
+          payment: mainPayment,
+          amountChange: increaseNeeded,
+          reason: 'order_amount_increase'
+        })
+      }
+    }
+
+    console.log(`OrderPayments: Distribution completed`, {
+      changesCount: changes.length,
+      totalChange: changes.reduce((sum, c) => sum + c.amountChange, 0)
+    })
+
+    return { changes }
+  }
+
+  /**
+   * Обработка платежей, которые должны быть обнулены
+   */
+  /**
+   * Обработка платежей, которые должны быть обнулены
+   */
+  async function handleZeroedPayment(payment: PendingPayment, order: PurchaseOrder): Promise<void> {
+    try {
+      const { accountStore, authStore } = await getStores()
+
+      console.log(`OrderPayments: Cancelling zeroed payment`, {
+        paymentId: payment.id,
+        originalAmount: payment.amount,
+        orderNumber: order.orderNumber,
+        description: payment.description
+      })
+
+      // ✅ ИСПРАВЛЕНИЕ: Используем правильный метод cancelPayment
+      await accountStore.cancelPayment(payment.id)
+
+      // ✅ ИСПРАВЛЕНИЕ: Добавляем запись в историю изменений суммы
+      await accountStore.updatePaymentAmount({
+        paymentId: payment.id,
+        newAmount: 0,
+        reason: 'order_cancellation',
+        userId: authStore.currentUser?.id,
+        notes: `Payment cancelled due to order amount reduction after receipt completion`
+      })
+
+      console.log(`OrderPayments: Payment ${payment.id} cancelled successfully`)
+    } catch (error) {
+      console.error(`OrderPayments: Failed to cancel zeroed payment:`, error)
+      // Не прерываем основной процесс, только логируем ошибку
+    }
+  }
+
+  /**
+   * Создание кредита поставщика при переплате
+   */
+  async function createSupplierCredit(
+    order: PurchaseOrder,
+    overpaymentAmount: number
+  ): Promise<void> {
+    try {
+      const { accountStore, authStore } = await getStores()
+
+      console.log(`OrderPayments: Creating supplier credit for overpayment`, {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        overpaymentAmount
+      })
+
+      // Создаем кредит как отдельный платеж
+      const creditPayment = await accountStore.createPayment({
+        counteragentId: order.supplierId,
+        counteragentName: order.supplierName,
+        amount: overpaymentAmount,
+        description: `Supplier credit from overpayment ${order.orderNumber}`,
+        priority: 'medium',
+        status: 'pending',
+        category: 'supplier',
+
+        // НЕ привязываем к заказу - делаем доступным для использования
+        sourceOrderId: order.id, // указываем источник
+        autoSyncEnabled: false, // кредит не синхронизируется автоматически
+
+        notes: `Available credit from previous order overpayment. Can be used for new orders.`,
+        createdBy: {
+          type: 'system',
+          id: 'receipt-system',
+          name: 'Receipt Processing System'
+        }
+      })
+
+      console.log(`OrderPayments: Supplier credit created`, {
+        creditId: creditPayment.id,
+        amount: overpaymentAmount,
+        sourceOrder: order.orderNumber
+      })
+    } catch (error) {
+      console.error(`OrderPayments: Failed to create supplier credit:`, error)
+      // Не прерываем основной процесс из-за ошибки создания кредита
+    }
+  }
+
   // =============================================
   // WATCHER - Auto refresh when order changes
   // =============================================
@@ -536,7 +929,10 @@ export function useOrderPayments() {
 
     // Utilities
     formatCurrency,
-    getPaymentStatusColor
+    getPaymentStatusColor,
+
+    //Other
+    syncOrderPaymentsAfterReceipt
   }
 }
 

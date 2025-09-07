@@ -406,8 +406,8 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
   {
     id: 'po-002',
     orderNumber: 'PO-002',
-    supplierId: 'sup-fresh-greens',
-    supplierName: 'Fresh Greens Ltd',
+    supplierId: 'sup-fresh-veg-market',
+    supplierName: 'Fresh Vegetable Market',
     orderDate: TimeUtils.getDateDaysAgo(3),
     expectedDeliveryDate: TimeUtils.getDateDaysAgo(1),
 
@@ -453,8 +453,8 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
   {
     id: 'po-003',
     orderNumber: 'PO-003',
-    supplierId: 'sup-global-imports',
-    supplierName: 'Global Food Imports',
+    supplierId: 'sup-specialty-foods', // ✅ ИСПРАВЛЕНО
+    supplierName: 'Specialty Foods Supply', // ✅ ИСПРАВЛЕНО
     orderDate: TimeUtils.getDateDaysAgo(2),
     expectedDeliveryDate: TimeUtils.getCurrentLocalISO(),
 
@@ -490,8 +490,8 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
   {
     id: 'po-1757014034857',
     orderNumber: 'PO-0904-006',
-    supplierId: 'sup-beverage-center',
-    supplierName: 'Beverage Distribution Center',
+    supplierId: 'sup-beverage-distribution', // ✅ ИСПРАВЛЕНО
+    supplierName: 'Jakarta Beverage Distribution', // ✅ ИСПРАВЛЕНО
     orderDate: TimeUtils.getDateDaysAgo(1),
     expectedDeliveryDate: TimeUtils.getCurrentLocalISO(),
 
@@ -560,6 +560,178 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
 
 export const CORE_RECEIPTS: Receipt[] = [
   // Receipt для PO-001 с расхождениями по количеству
+  // ✅ ТЕСТОВЫЙ ЗАКАЗ: Заказ с переплатой (создает кредит)
+  {
+    id: 'po-credit-test',
+    orderNumber: 'PO-CREDIT-001',
+    supplierId: 'sup-premium-meat-co',
+    supplierName: 'Premium Meat Company',
+    requestIds: ['req-credit-test'],
+    status: 'delivered', // уже доставлен с расхождениями
+    billStatus: 'overpaid',
+    billId: 'payment-credit-main',
+
+    // Изначально заказали на 1.5M, получили на 1.2M - переплата 300k
+    originalTotalAmount: 1500000, // изначальная сумма заказа
+    totalAmount: 1200000, // фактически получили товара
+    actualDeliveredAmount: 1200000,
+
+    items: [
+      {
+        id: 'oi-credit-001',
+        itemId: 'prod-beef-steak',
+        itemName: 'Beef Steak',
+        orderedQuantity: 5000, // заказали 5 кг
+        receivedQuantity: 4000, // получили 4 кг
+        unit: 'gram',
+        pricePerUnit: 180, // 180 IDR за грамм
+        totalPrice: 720000, // 4000 * 180 = 720k (фактически)
+        notes: 'Получили меньше чем заказали'
+      },
+      {
+        id: 'oi-credit-002',
+        itemId: 'prod-garlic',
+        itemName: 'Garlic',
+        orderedQuantity: 2000, // заказали 2 кг
+        receivedQuantity: 2000, // получили полностью
+        unit: 'gram',
+        pricePerUnit: 25, // 25 IDR за грамм
+        totalPrice: 50000, // 2000 * 25 = 50k
+        notes: 'Доставлено полностью'
+      },
+      {
+        id: 'oi-credit-003',
+        itemId: 'prod-tomato',
+        itemName: 'Fresh Tomato',
+        orderedQuantity: 5000, // заказали 5 кг
+        receivedQuantity: 5000, // получили полностью
+        unit: 'gram',
+        pricePerUnit: 12, // 12 IDR за грамм
+        totalPrice: 60000, // 5000 * 12 = 60k
+        notes: 'Доставлено полностью'
+      },
+      {
+        id: 'oi-credit-004',
+        itemId: 'prod-onion',
+        itemName: 'Onion',
+        orderedQuantity: 15000, // заказали 15 кг
+        receivedQuantity: 15000, // получили полностью
+        unit: 'gram',
+        pricePerUnit: 6, // 6 IDR за грамм
+        totalPrice: 90000, // 15000 * 6 = 90k
+        notes: 'Доставлено полностью'
+      },
+      {
+        id: 'oi-credit-005',
+        itemId: 'prod-potato',
+        itemName: 'Potato',
+        orderedQuantity: 40000, // заказали 40 кг
+        receivedQuantity: 40000, // получили полностью
+        unit: 'gram',
+        pricePerUnit: 8, // 8 IDR за грамм
+        totalPrice: 320000, // 40000 * 8 = 320k
+        notes: 'Доставлено полностью'
+      }
+    ],
+
+    // Информация о расхождениях
+    receiptDiscrepancies: [
+      {
+        type: 'quantity',
+        itemId: 'prod-beef-steak',
+        itemName: 'Beef Steak',
+        ordered: { quantity: 5000, price: 180, total: 900000 },
+        received: { quantity: 4000, price: 180, total: 720000 },
+        impact: {
+          quantityDifference: -1000,
+          priceDifference: 0,
+          totalDifference: -180000
+        }
+      }
+    ],
+    hasReceiptDiscrepancies: true,
+    receiptCompletedAt: createMockDateWithTime(2, '16:30:00.000Z'),
+    receiptCompletedBy: 'Warehouse Manager',
+
+    orderDate: createMockDateWithTime(7, '10:00:00.000Z'),
+    expectedDeliveryDate: createMockDateWithTime(3, '14:00:00.000Z'),
+    notes: 'TEST ORDER: Overpayment scenario - creates supplier credit',
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Test Manager'
+    },
+    createdAt: createMockDateWithTime(7, '10:00:00.000Z'),
+    updatedAt: createMockDateWithTime(2, '16:30:00.000Z')
+  },
+
+  // ✅ НОВЫЙ ЗАКАЗ: Использует кредит от предыдущего заказа
+  {
+    id: 'po-using-credit',
+    orderNumber: 'PO-USE-CREDIT-001',
+    supplierId: 'sup-premium-meat-co',
+    supplierName: 'Premium Meat Company',
+    requestIds: ['req-new-test'],
+    status: 'confirmed',
+    billStatus: 'partially_paid', // частично оплачен кредитом
+
+    totalAmount: 800000, // новый заказ на 800k
+
+    items: [
+      {
+        id: 'oi-new-001',
+        itemId: 'prod-beef-steak',
+        itemName: 'Beef Steak',
+        orderedQuantity: 3000, // 3 кг
+        unit: 'gram',
+        pricePerUnit: 180,
+        totalPrice: 540000, // 3000 * 180
+        notes: 'New order using credit'
+      },
+      {
+        id: 'oi-new-002',
+        itemId: 'prod-garlic',
+        itemName: 'Garlic',
+        orderedQuantity: 1000, // 1 кг
+        unit: 'gram',
+        pricePerUnit: 25,
+        totalPrice: 25000, // 1000 * 25
+        notes: 'Regular restock'
+      },
+      {
+        id: 'oi-new-003',
+        itemId: 'prod-milk',
+        itemName: 'Milk 3.2%',
+        orderedQuantity: 15000, // 15 литров = 15000 мл
+        unit: 'ml',
+        pricePerUnit: 15,
+        totalPrice: 225000, // 15000 * 15
+        notes: 'Dairy restock'
+      },
+      {
+        id: 'oi-new-004',
+        itemId: 'prod-olive-oil',
+        itemName: 'Olive Oil',
+        orderedQuantity: 1000, // 1 литр = 1000 мл
+        unit: 'ml',
+        pricePerUnit: 85,
+        totalPrice: 85000, // 1000 * 85
+        notes: 'Kitchen supplies'
+      }
+    ],
+
+    orderDate: createMockDateWithTime(1, '11:00:00.000Z'),
+    expectedDeliveryDate: createMockDateWithTime(-2, '15:00:00.000Z'), // через 2 дня
+    notes: 'TEST ORDER: Uses supplier credit from previous overpayment',
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Test Manager'
+    },
+    createdAt: createMockDateWithTime(1, '11:00:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '11:00:00.000Z')
+  },
+
   {
     id: 'receipt-001',
     receiptNumber: 'RCP-001',

@@ -15,6 +15,7 @@ import type {
   ReceiptItem,
   ReceiptDiscrepancyInfo
 } from '../types'
+import type { PendingPayment } from '@/stores/account/types'
 
 import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 import { useSupplierStorageIntegration } from '../integrations/storageIntegration'
@@ -395,6 +396,26 @@ export function useReceipts() {
       const { updateOrder } = usePurchaseOrders()
 
       const updatedOrder = await updateOrder(order.id, updateData)
+
+      // ✅ НОВОЕ: Синхронизируем платежи через useOrderPayments
+      if (updateData.totalAmount) {
+        try {
+          console.log(`Receipts: Starting payment auto-sync for order ${order.orderNumber}`)
+
+          const { useOrderPayments } = await import('./useOrderPayments')
+          const { syncOrderPaymentsAfterReceipt } = useOrderPayments()
+
+          await syncOrderPaymentsAfterReceipt(
+            updatedOrder,
+            discrepancyAnalysis.totalFinancialImpact
+          )
+
+          console.log(`Receipts: Payment auto-sync completed for order ${order.orderNumber}`)
+        } catch (syncError) {
+          console.warn('Receipts: Failed to sync order payments:', syncError)
+          // Не блокируем процесс, только логируем ошибку
+        }
+      }
 
       // Пересчитываем статус платежей после обновления суммы
       if (updateData.totalAmount) {

@@ -10,7 +10,195 @@ export const mockPendingPayments: PendingPayment[] = [
   // =============================================
   // ПЛАТЕЖИ ПО ЗАКАЗАМ ПОСТАВЩИКОВ (с новыми полями)
   // =============================================
+  {
+    id: 'payment-credit-main',
+    counteragentId: 'sup-premium-meat-co',
+    counteragentName: 'Premium Meat Company',
+    amount: 1200000, // синхронизировано с фактической суммой заказа
+    description: 'Purchase order PO-CREDIT-001',
+    priority: 'medium',
+    status: 'pending',
+    category: 'supplier',
+    invoiceNumber: 'PO-CREDIT-001',
 
+    // Связь с заказом
+    purchaseOrderId: 'po-credit-test',
+    sourceOrderId: 'po-credit-test',
+    autoSyncEnabled: true, // основной платеж с автосинхронизацией
+
+    // История изменений суммы (АВТОСИНХРОНИЗАЦИЯ СРАБОТАЛА)
+    amountHistory: [
+      {
+        oldAmount: 1500000, // была изначальная сумма
+        newAmount: 1200000, // стала фактическая после приемки
+        reason: 'receipt_discrepancy',
+        changedAt: createMockDateWithTime(2, '16:35:00.000Z'),
+        changedBy: {
+          type: 'system',
+          id: 'receipt-system',
+          name: 'Receipt Processing System'
+        },
+        notes:
+          'Amount adjusted after receipt completion for order PO-CREDIT-001 (discrepancies: quantity)'
+      }
+    ],
+
+    notes: 'Main payment automatically adjusted after receipt processing',
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Test Manager'
+    },
+    createdAt: createMockDateWithTime(7, '10:15:00.000Z'),
+    updatedAt: createMockDateWithTime(2, '16:35:00.000Z')
+  },
+
+  // ✅ КРЕДИТ ПОСТАВЩИКА от переплаты (СОЗДАН АВТОМАТИЧЕСКИ)
+  {
+    id: 'payment-supplier-credit',
+    counteragentId: 'sup-premium-meat-co',
+    counteragentName: 'Premium Meat Company',
+    amount: 300000, // размер переплаты (1500k - 1200k)
+    description: 'Supplier credit from overpayment PO-CREDIT-001',
+    priority: 'medium',
+    status: 'pending',
+    category: 'supplier',
+
+    // НЕ привязан к заказу - доступен для использования
+    sourceOrderId: 'po-credit-test', // откуда взялся кредит
+    autoSyncEnabled: false, // кредит не синхронизируется автоматически
+
+    amountHistory: [
+      {
+        oldAmount: 0,
+        newAmount: 300000,
+        reason: 'supplier_credit',
+        changedAt: createMockDateWithTime(2, '16:36:00.000Z'),
+        changedBy: {
+          type: 'system',
+          id: 'receipt-system',
+          name: 'Receipt Processing System'
+        },
+        notes: 'Supplier credit created from order overpayment after receipt completion'
+      }
+    ],
+
+    notes: 'Available credit from previous order overpayment. Can be used for new orders.',
+    createdBy: {
+      type: 'system',
+      id: 'receipt-system',
+      name: 'Receipt Processing System'
+    },
+    createdAt: createMockDateWithTime(2, '16:36:00.000Z'),
+    updatedAt: createMockDateWithTime(2, '16:36:00.000Z')
+  },
+
+  // ✅ ИСПОЛЬЗОВАНИЕ ЧАСТИ КРЕДИТА для нового заказа (ПРИВЯЗАН ВРУЧНУЮ)
+  {
+    id: 'payment-use-credit-partial',
+    counteragentId: 'sup-premium-meat-co',
+    counteragentName: 'Premium Meat Company',
+    amount: 250000, // используем 250k из 300k кредита
+    description: 'Partial use of supplier credit for PO-USE-CREDIT-001',
+    priority: 'medium',
+    status: 'pending',
+    category: 'supplier',
+
+    // Привязан к новому заказу
+    purchaseOrderId: 'po-using-credit',
+    sourceOrderId: 'po-credit-test', // источник кредита
+    autoSyncEnabled: false, // кредит не автосинхронизируется
+
+    amountHistory: [
+      {
+        oldAmount: 300000, // был полный кредит
+        newAmount: 250000, // используем частично
+        reason: 'payment_split',
+        changedAt: createMockDateWithTime(1, '11:15:00.000Z'),
+        changedBy: {
+          type: 'user',
+          id: 'user_1',
+          name: 'Test Manager'
+        },
+        notes: 'Used 250k from 300k supplier credit for new order PO-USE-CREDIT-001'
+      }
+    ],
+
+    notes: 'Partial use of supplier credit. Remaining 50k still available.',
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Test Manager'
+    },
+    createdAt: createMockDateWithTime(1, '11:15:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '11:15:00.000Z')
+  },
+
+  // ✅ ОСТАВШАЯСЯ ЧАСТЬ КРЕДИТА (ДОСТУПНА ДЛЯ ПРИВЯЗКИ)
+  {
+    id: 'payment-credit-remaining',
+    counteragentId: 'sup-premium-meat-co',
+    counteragentName: 'Premium Meat Company',
+    amount: 50000, // оставшаяся часть кредита
+    description: 'Remaining supplier credit from PO-CREDIT-001',
+    priority: 'medium',
+    status: 'pending',
+    category: 'supplier',
+
+    // НЕ привязан к заказу - доступен для использования
+    sourceOrderId: 'po-credit-test',
+    autoSyncEnabled: false,
+
+    amountHistory: [
+      {
+        oldAmount: 300000, // был полный кредит
+        newAmount: 50000, // осталось после использования 250k
+        reason: 'payment_split',
+        changedAt: createMockDateWithTime(1, '11:15:00.000Z'),
+        changedBy: {
+          type: 'user',
+          id: 'user_1',
+          name: 'Test Manager'
+        },
+        notes: 'Remaining credit after 250k was used for order PO-USE-CREDIT-001'
+      }
+    ],
+
+    notes: 'Remaining supplier credit available for future orders.',
+    createdBy: {
+      type: 'system',
+      id: 'credit-split-system',
+      name: 'Credit Split System'
+    },
+    createdAt: createMockDateWithTime(1, '11:15:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '11:15:00.000Z')
+  },
+
+  // ✅ ДОПОЛНИТЕЛЬНЫЙ СЧЕТ к новому заказу (МОЖНО СОЗДАТЬ ЧЕРЕЗ ИНТЕРФЕЙС)
+  {
+    id: 'payment-additional-new',
+    counteragentId: 'sup-premium-meat-co',
+    counteragentName: 'Premium Meat Company',
+    amount: 550000, // недостающая сумма для заказа (800k - 250k кредита)
+    description: 'Additional payment for PO-USE-CREDIT-001',
+    priority: 'medium',
+    status: 'pending',
+    category: 'supplier',
+
+    // Привязан к новому заказу
+    purchaseOrderId: 'po-using-credit',
+    sourceOrderId: 'po-using-credit',
+    autoSyncEnabled: true, // может синхронизироваться с заказом
+
+    notes: 'Additional payment to cover remaining amount after using supplier credit',
+    createdBy: {
+      type: 'user',
+      id: 'user_1',
+      name: 'Test Manager'
+    },
+    createdAt: createMockDateWithTime(1, '11:20:00.000Z'),
+    updatedAt: createMockDateWithTime(1, '11:20:00.000Z')
+  },
   // 📦 po-001: ПЕРЕПЛАТА из-за недопоставки (заплатили 900k, получили на 810k)
   {
     id: 'payment_po_001_full',
@@ -61,8 +249,8 @@ export const mockPendingPayments: PendingPayment[] = [
   // 📦 po-002: ТОЧНАЯ ОПЛАТА (без расхождений)
   {
     id: 'payment_po_002_full',
-    counteragentId: 'sup-fresh-greens',
-    counteragentName: 'Fresh Greens Ltd',
+    counteragentId: 'sup-fresh-veg-market',
+    counteragentName: 'Fresh Vegetable Market',
     amount: 130000,
     description: 'Payment for order PO-002 (iceberg lettuce)',
     dueDate: '2025-09-02T00:00:00.000Z',
@@ -106,8 +294,8 @@ export const mockPendingPayments: PendingPayment[] = [
   // 📦 po-003: НЕ ОПЛАЧЕН (заказ еще не доставлен)
   {
     id: 'payment_po_003_pending',
-    counteragentId: 'sup-global-imports',
-    counteragentName: 'Global Food Imports',
+    counteragentId: 'sup-specialty-foods', // ✅ ИСПРАВЛЕНО
+    counteragentName: 'Specialty Foods Supply', // ✅ ИСПРАВЛЕНО
     amount: 660000,
     description: 'Payment for order PO-003 (salmon fillet)',
     dueDate: '2025-09-10T00:00:00.000Z',
@@ -148,8 +336,8 @@ export const mockPendingPayments: PendingPayment[] = [
   // 📦 po-0904-006: ПЕРЕПЛАТА, которая превратилась в точную оплату после приемки
   {
     id: 'payment_po_0904_006',
-    counteragentId: 'sup-beverage-center',
-    counteragentName: 'Beverage Distribution Center',
+    counteragentId: 'sup-beverage-distribution', // ✅ ИСПРАВЛЕНО
+    counteragentName: 'Jakarta Beverage Distribution', // ✅ ИСПРАВЛЕНО
     amount: 160000, // Обновлено после приемки (было 240000)
     description: 'Payment for order PO-0904-006 (cola 330ml)',
     dueDate: '2025-09-06T00:00:00.000Z',
@@ -405,6 +593,13 @@ export function getPaymentsRequiringAttention(): PendingPayment[] {
       payment.status === 'pending' &&
       (payment.priority === 'urgent' || getOverduePayments().includes(payment))
   )
+}
+
+function createMockDateWithTime(daysAgo: number, time: string): string {
+  const date = new Date()
+  date.setDate(date.getDate() - daysAgo)
+  const dateStr = date.toISOString().split('T')[0]
+  return `${dateStr}T${time}`
 }
 
 // ============ SUMMARY FOR DEBUGGING ============
