@@ -303,10 +303,8 @@ export const useAccountStore = defineStore('account', () => {
 
   async function getPaymentById(paymentId: string): Promise<PendingPayment | null> {
     try {
-      await fetchPayments() // Обеспечиваем свежие данные
-
-      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
-      return payment || null
+      // ✅ ИСПРАВЛЕНИЕ: Ищем в service (единственный источник истины)
+      return await paymentService.getById(paymentId)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get payment by ID', { error })
       return null
@@ -540,8 +538,9 @@ export const useAccountStore = defineStore('account', () => {
     try {
       clearError()
       state.value.loading.payments = true
-      DebugUtils.info(MODULE_NAME, 'Fetching payments')
+      DebugUtils.info(MODULE_NAME, 'Fetching payments from service')
 
+      // ✅ ИСПРАВЛЕНИЕ: Получаем данные из service (единственный источник истины)
       state.value.pendingPayments = await paymentService.getPaymentsByFilters(
         state.value.paymentFilters
       )
@@ -563,45 +562,22 @@ export const useAccountStore = defineStore('account', () => {
   async function createPayment(data: CreatePaymentDto): Promise<PendingPayment> {
     try {
       clearError()
-      DebugUtils.info(MODULE_NAME, 'Creating payment', {
+      state.value.loading.payments = true
+      DebugUtils.info(MODULE_NAME, 'Creating payment via service', {
         amount: data.amount,
         counteragentId: data.counteragentId,
         hasLinkedOrders: !!data.linkedOrders?.length
       })
 
-      const payment: PendingPayment = {
-        id: generateId(),
-        counteragentId: data.counteragentId,
-        counteragentName: data.counteragentName,
-        amount: data.amount,
-        description: data.description,
-        dueDate: data.dueDate,
-        priority: data.priority,
-        status: 'pending',
-        category: data.category,
-        invoiceNumber: data.invoiceNumber,
-        notes: data.notes,
-        createdBy: data.createdBy,
+      // ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Создаем через service (как в Supplier)
+      const payment = await paymentService.createPayment(data)
 
-        // ✅ НОВЫЕ ПОЛЯ вместо purchaseOrderId
-        usedAmount: data.usedAmount || 0,
-        linkedOrders: data.linkedOrders || [],
-
-        // ✅ СОХРАНЯЕМ существующие поля интеграции
-        sourceOrderId: data.sourceOrderId,
-        autoSyncEnabled: data.autoSyncEnabled,
-
-        // BaseEntity поля
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-
-      // Добавляем в state
+      // ✅ Обновляем кеш в store
       state.value.pendingPayments.push(payment)
 
       DebugUtils.info(MODULE_NAME, 'Payment created successfully', {
         paymentId: payment.id,
-        linkedOrdersCount: payment.linkedOrders.length
+        linkedOrdersCount: payment.linkedOrders?.length || 0
       })
 
       return payment
@@ -609,6 +585,8 @@ export const useAccountStore = defineStore('account', () => {
       DebugUtils.error(MODULE_NAME, 'Failed to create payment', { error })
       setError(error)
       throw error
+    } finally {
+      state.value.loading.payments = false
     }
   }
 
@@ -676,7 +654,7 @@ export const useAccountStore = defineStore('account', () => {
 
       await paymentService.assignToAccount(paymentId, accountId)
 
-      // Оптимистическое обновление
+      // ✅ ИСПРАВЛЕНИЕ: Синхронизируем кеш с service
       const payment = state.value.pendingPayments.find(p => p.id === paymentId)
       if (payment) {
         payment.assignedToAccount = accountId
@@ -698,7 +676,7 @@ export const useAccountStore = defineStore('account', () => {
 
       await paymentService.updatePaymentPriority(paymentId, priority)
 
-      // Оптимистическое обновление
+      // ✅ ИСПРАВЛЕНИЕ: Синхронизируем кеш с service
       const payment = state.value.pendingPayments.find(p => p.id === paymentId)
       if (payment) {
         payment.priority = priority
@@ -729,7 +707,7 @@ export const useAccountStore = defineStore('account', () => {
 
       await paymentService.cancelPayment(paymentId)
 
-      // Оптимистическое обновление
+      // ✅ ИСПРАВЛЕНИЕ: Синхронизируем кеш с service
       const payment = state.value.pendingPayments.find(p => p.id === paymentId)
       if (payment) {
         payment.status = 'cancelled'
