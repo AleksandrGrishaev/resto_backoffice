@@ -44,9 +44,6 @@ export interface DebugStoreAnalysis {
     functions: number
   }
 
-  // Store-specific metrics
-  specificMetrics: StoreSpecificMetrics
-
   // Health status
   health: {
     status: 'healthy' | 'warning' | 'error'
@@ -116,14 +113,44 @@ export interface RecipesStoreMetrics {
   complexityBreakdown: Record<string, number>
 }
 
-export interface AccountStoreMetrics {
+export interface AccountStoreMetrics extends StoreSpecificMetrics {
+  // Базовые метрики
   totalAccounts: number
   activeAccounts: number
   totalBalance: number
+
+  // ✅ ОБНОВЛЕННЫЕ метрики транзакций для новой архитектуры
   totalTransactions: number
+  averageTransactionAmount: number
+  transactionTypeBreakdown: {
+    income: number
+    expense: number
+    transfer: number
+    correction: number
+  }
+
+  // Метрики платежей
   pendingPayments: number
   urgentPayments: number
-  averageTransactionAmount: number
+
+  // ✅ НОВЫЕ метрики для accountTransactions архитектуры
+  accountsWithTransactions: number
+  averageTransactionsPerAccount: number
+
+  // ✅ НОВЫЕ метрики кеширования
+  hasCachedTransactions: boolean
+  cacheTimestamp?: string
+
+  // ✅ НОВОЕ: Распределение транзакций
+  transactionDistribution: Record<string, number>
+
+  // ✅ НОВОЕ: Согласованность balanceAfter
+  balanceConsistencyRate?: number
+  balanceIssuesCount?: number
+}
+
+export interface StoreSpecificMetrics {
+  [key: string]: any
 }
 
 export interface MenuStoreMetrics {

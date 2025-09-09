@@ -296,17 +296,161 @@ class DebugService {
   }
 
   private extractAccountState(storeInstance: any): Record<string, any> {
-    const storeState = storeInstance.state?.value || storeInstance.state || {}
-    return {
-      accounts: this.serializeArray(storeState.accounts || []),
-      transactions: this.serializeArray(storeState.transactions || []),
-      pendingPayments: this.serializeArray(storeState.pendingPayments || []),
-      loading: storeState.loading || {},
-      error: storeState.error,
-      selectedAccountId: storeState.selectedAccountId,
-      filters: storeState.filters || {},
-      paymentFilters: storeState.paymentFilters || {}
+    try {
+      const storeState = storeInstance.state?.value || storeInstance.state || {}
+
+      // ✅ НОВАЯ АРХИТЕКТУРА: accountTransactions вместо transactions
+      const accountTransactions = storeState.accountTransactions || {}
+      const allTransactionsCache = storeState.allTransactionsCache
+
+      // Подсчитаем общее количество транзакций
+      const totalTransactions = Object.values(accountTransactions).reduce(
+        (sum: number, txns: any[]) => sum + (txns?.length || 0),
+        0
+      )
+
+      // Информация о распределении по аккаунтам
+      const transactionDistribution: Record<string, number> = {}
+      Object.entries(accountTransactions).forEach(([accountId, txns]: [string, any[]]) => {
+        transactionDistribution[accountId] = txns?.length || 0
+      })
+
+      return {
+        // ✅ ОБНОВЛЕННАЯ СТРУКТУРА
+        accounts: this.serializeArray(storeState.accounts || []),
+
+        // ✅ НОВОЕ: Раздельные транзакции по аккаунтам
+        accountTransactions: this.serializeAccountTransactions(accountTransactions),
+        transactionDistribution,
+        totalTransactions,
+
+        // ✅ НОВОЕ: Кеш всех транзакций
+        allTransactionsCache: allTransactionsCache
+          ? {
+              cached: true,
+              count: allTransactionsCache.length,
+              timestamp: storeState.cacheTimestamp,
+              sample: this.serializeArray(allTransactionsCache.slice(0, 3)) // Показываем первые 3
+            }
+          : null,
+
+        // Остальные поля без изменений
+        pendingPayments: this.serializeArray(storeState.pendingPayments || []),
+        loading: storeState.loading || {},
+        error: storeState.error,
+        selectedAccountId: storeState.selectedAccountId,
+        filters: storeState.filters || {},
+        paymentFilters: storeState.paymentFilters || {},
+
+        // ✅ НОВОЕ: Метаданные для анализа
+        lastFetch: storeState.lastFetch || {},
+
+        // ✅ НОВОЕ: Статистика по balanceAfter
+        balanceAfterStats: this.analyzeBalanceAfterData(accountTransactions, storeState.accounts)
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to extract account state', { error })
+      return {
+        error: 'Failed to extract account state',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        fallbackStructure: {
+          accounts: [],
+          accountTransactions: {},
+          totalTransactions: 0,
+          pendingPayments: [],
+          loading: {},
+          selectedAccountId: null
+        }
+      }
     }
+  }
+
+  // ✅ ДОБАВИТЬ новые helper методы
+  private serializeAccountTransactions(
+    accountTransactions: Record<string, any[]>
+  ): Record<string, any> {
+    const serialized: Record<string, any> = {}
+
+    Object.entries(accountTransactions).forEach(([accountId, transactions]) => {
+      if (!Array.isArray(transactions)) {
+        serialized[accountId] = { error: 'Invalid transaction array' }
+        return
+      }
+
+      // Показываем только первые 5 транзакций + метаданные
+      serialized[accountId] = {
+        count: transactions.length,
+        transactions: this.serializeArray(transactions.slice(0, 5)),
+        hasMore: transactions.length > 5,
+        latestTransaction: transactions[0]
+          ? {
+              id: transactions[0].id,
+              type: transactions[0].type,
+              amount: transactions[0].amount,
+              balanceAfter: transactions[0].balanceAfter,
+              createdAt: transactions[0].createdAt
+            }
+          : null
+      }
+    })
+
+    return serialized
+  }
+
+  private analyzeBalanceAfterData(
+    accountTransactions: Record<string, any[]>,
+    accounts: any[]
+  ): Record<string, any> {
+    const analysis: Record<string, any> = {
+      totalAccounts: Object.keys(accountTransactions).length,
+      accountsWithTransactions: 0,
+      balanceConsistency: {},
+      issues: []
+    }
+
+    try {
+      Object.entries(accountTransactions).forEach(([accountId, transactions]) => {
+        if (!Array.isArray(transactions) || transactions.length === 0) return
+
+        analysis.accountsWithTransactions++
+
+        const account = accounts?.find((a: any) => a.id === accountId)
+        if (!account) {
+          analysis.issues.push(`Account ${accountId} has transactions but no account record`)
+          return
+        }
+
+        const latestTransaction = transactions[0] // Первая = самая новая
+        const balanceMatches = account.balance === latestTransaction?.balanceAfter
+
+        analysis.balanceConsistency[accountId] = {
+          accountBalance: account.balance,
+          latestTransactionBalance: latestTransaction?.balanceAfter,
+          matches: balanceMatches,
+          transactionCount: transactions.length
+        }
+
+        if (!balanceMatches) {
+          analysis.issues.push(
+            `Balance mismatch for ${account.name}: ` +
+              `account=${account.balance}, latest_tx=${latestTransaction?.balanceAfter}`
+          )
+        }
+      })
+
+      // Подсчитываем consistency rate
+      const consistentAccounts = Object.values(analysis.balanceConsistency).filter(
+        (item: any) => item.matches
+      ).length
+      analysis.consistencyRate =
+        analysis.accountsWithTransactions > 0
+          ? Math.round((consistentAccounts / analysis.accountsWithTransactions) * 100)
+          : 100
+    } catch (error) {
+      analysis.issues.push('Failed to analyze balance consistency')
+    }
+
+    return analysis
   }
 
   private extractMenuState(storeInstance: any): Record<string, any> {
@@ -482,10 +626,33 @@ class DebugService {
           break
 
         case 'account':
+          // ✅ НОВЫЕ GETTERS для новой архитектуры
           getters.totalBalance = storeInstance.totalBalance?.value || 0
-          getters.urgentPayments = this.serializeArray(storeInstance.urgentPayments?.value || [])
-          getters.pendingPayments = this.serializeArray(storeInstance.pendingPayments?.value || [])
           getters.activeAccounts = this.serializeArray(storeInstance.activeAccounts || [])
+          getters.pendingPayments = this.serializeArray(storeInstance.pendingPayments?.value || [])
+          getters.urgentPayments = this.serializeArray(storeInstance.urgentPayments?.value || [])
+
+          // ✅ НОВОЕ: getAllTransactions из новой архитектуры
+          getters.getAllTransactions = this.serializeArray(storeInstance.getAllTransactions || [])
+          getters.allTransactionsCount = storeInstance.getAllTransactions?.length || 0
+
+          // ✅ НОВОЕ: getAccountTransactions примеры
+          const sampleAccountIds = ['acc_1', 'acc_2', 'acc_3']
+          getters.accountTransactionsSample = {}
+          sampleAccountIds.forEach(accId => {
+            try {
+              const txns = storeInstance.getAccountTransactions?.(accId) || []
+              getters.accountTransactionsSample[accId] = {
+                count: txns.length,
+                sample: this.serializeArray(txns.slice(0, 2))
+              }
+            } catch (error) {
+              getters.accountTransactionsSample[accId] = { error: 'Failed to get transactions' }
+            }
+          })
+
+          // Statistics
+          getters.paymentStatistics = storeInstance.paymentStatistics?.value || {}
           break
 
         case 'menu':
@@ -813,21 +980,67 @@ class DebugService {
     getters: Record<string, any>
   ): AccountStoreMetrics {
     const accounts = state.accounts || []
-    const transactions = state.transactions || []
+    const accountTransactions = state.accountTransactions || {}
     const pendingPayments = state.pendingPayments || []
 
+    // ✅ НОВОЕ: Подсчет транзакций из новой структуры
+    const totalTransactions = Object.values(accountTransactions).reduce(
+      (sum: number, txns: any[]) => sum + (txns?.length || 0),
+      0
+    )
+
+    // ✅ НОВОЕ: Анализ последних транзакций с balanceAfter
+    let totalAmountFromTransactions = 0
+    const transactionTypeBreakdown = { income: 0, expense: 0, transfer: 0, correction: 0 }
+
+    Object.values(accountTransactions).forEach((txns: any[]) => {
+      txns?.forEach((tx: any) => {
+        totalAmountFromTransactions += Math.abs(tx.amount || 0)
+        if (tx.type && transactionTypeBreakdown.hasOwnProperty(tx.type)) {
+          transactionTypeBreakdown[tx.type as keyof typeof transactionTypeBreakdown]++
+        }
+      })
+    })
+
+    const balanceAfterStats = state.balanceAfterStats || {}
+
     return {
+      // Базовые метрики
       totalAccounts: accounts.length,
       activeAccounts:
         getters.activeAccounts?.length || accounts.filter((a: any) => a.isActive).length,
       totalBalance:
         getters.totalBalance || accounts.reduce((sum: number, a: any) => sum + (a.balance || 0), 0),
-      totalTransactions: transactions.length,
+
+      // ✅ ОБНОВЛЕННЫЕ метрики транзакций
+      totalTransactions,
+      averageTransactionAmount:
+        totalTransactions > 0 ? totalAmountFromTransactions / totalTransactions : 0,
+      transactionTypeBreakdown,
+
+      // Метрики платежей
       pendingPayments: pendingPayments.filter((p: any) => p.status === 'pending').length,
       urgentPayments:
         getters.urgentPayments?.length ||
         pendingPayments.filter((p: any) => p.priority === 'urgent').length,
-      averageTransactionAmount: this.calculateAverage(transactions, 'amount')
+
+      // ✅ НОВЫЕ метрики для новой архитектуры
+      accountsWithTransactions: Object.keys(accountTransactions).length,
+      averageTransactionsPerAccount:
+        Object.keys(accountTransactions).length > 0
+          ? totalTransactions / Object.keys(accountTransactions).length
+          : 0,
+
+      // Кеширование
+      hasCachedTransactions: Boolean(state.allTransactionsCache),
+      cacheTimestamp: state.cacheTimestamp,
+
+      // Распределение транзакций по аккаунтам
+      transactionDistribution: state.transactionDistribution || {},
+
+      // ✅ НОВОЕ: Согласованность balanceAfter
+      balanceConsistencyRate: balanceAfterStats.consistencyRate,
+      balanceIssuesCount: balanceAfterStats.issues?.length || 0
     }
   }
 
@@ -1047,6 +1260,7 @@ class DebugService {
     warnings: string[]
   ): void {
     const accounts = state.accounts || []
+    const accountTransactions = state.accountTransactions || {}
     const pendingPayments = state.pendingPayments || []
 
     if (accounts.length === 0) {
@@ -1054,14 +1268,66 @@ class DebugService {
       return
     }
 
+    // ✅ НОВОЕ: Проверка согласованности balanceAfter
+    const balanceAfterStats = state.balanceAfterStats
+    if (balanceAfterStats) {
+      if (balanceAfterStats.consistencyRate < 100) {
+        issues.push(
+          `Balance inconsistency detected: ${balanceAfterStats.consistencyRate}% accounts consistent`
+        )
+      }
+
+      if (balanceAfterStats.issues?.length > 0) {
+        balanceAfterStats.issues.forEach((issue: string) => {
+          warnings.push(`Balance issue: ${issue}`)
+        })
+      }
+    }
+
+    // ✅ НОВОЕ: Проверка структуры accountTransactions
+    const transactionDistribution = state.transactionDistribution || {}
+    const accountsWithTransactions = Object.keys(transactionDistribution).length
+    const activeAccountsCount = accounts.filter((a: any) => a.isActive).length
+
+    if (accountsWithTransactions < activeAccountsCount) {
+      warnings.push(
+        `${activeAccountsCount - accountsWithTransactions} active accounts without transactions`
+      )
+    }
+
+    // Проверка критических платежей
     const urgentPayments = pendingPayments.filter((p: any) => p.priority === 'urgent').length
     if (urgentPayments > 0) {
       warnings.push(`${urgentPayments} urgent payments pending`)
     }
 
+    const overduePayments = pendingPayments.filter((p: any) => {
+      if (!p.dueDate) return false
+      return new Date(p.dueDate) < new Date() && p.status === 'pending'
+    }).length
+    if (overduePayments > 0) {
+      issues.push(`${overduePayments} overdue payments`)
+    }
+
+    // Проверка отрицательных балансов
     const negativeBalanceAccounts = accounts.filter((a: any) => a.balance < 0).length
     if (negativeBalanceAccounts > 0) {
       warnings.push(`${negativeBalanceAccounts} accounts with negative balance`)
+    }
+
+    // ✅ НОВОЕ: Проверка кеширования
+    const hasCachedData = Boolean(state.allTransactionsCache)
+    const totalTransactions = state.totalTransactions || 0
+
+    if (!hasCachedData && totalTransactions > 50) {
+      warnings.push('Large transaction set without caching - performance may suffer')
+    }
+
+    // Проверка загрузочных состояний
+    const loading = state.loading || {}
+    const activeLoadingStates = Object.values(loading).filter(Boolean).length
+    if (activeLoadingStates > 2) {
+      warnings.push(`Multiple loading states active (${activeLoadingStates})`)
     }
   }
 
