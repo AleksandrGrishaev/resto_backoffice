@@ -20,7 +20,8 @@ import type {
   UpdateReceiptData,
   SupplierBasket,
   UnassignedItem,
-  Department
+  Department,
+  BillStatus
 } from './types'
 
 const MODULE_NAME = 'SupplierService'
@@ -203,7 +204,7 @@ class SupplierService {
       }, 0),
       isEstimatedTotal: !data.items.every(item => latestPrices[item.itemId]),
       status: 'draft',
-      paymentStatus: 'pending',
+      billStatus: 'not_billed',
       requestIds: data.requestIds || [],
       notes: data.notes,
       createdAt: new Date().toISOString(),

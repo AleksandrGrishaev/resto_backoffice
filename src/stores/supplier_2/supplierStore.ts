@@ -27,7 +27,8 @@ import type {
   OrderStatus,
   ReceiptStatus,
   Priority,
-  Urgency
+  Urgency,
+  BillStatus
 } from './types'
 
 const MODULE_NAME = 'SupplierStore'
@@ -104,27 +105,32 @@ export const useSupplierStore = defineStore('supplier', () => {
   const submittedRequests = computed(() =>
     state.value.requests.filter(req => req.status === 'submitted')
   )
-  const approvedRequests = computed(() =>
-    state.value.requests.filter(req => req.status === 'approved')
+  const approvedRequests = computed(
+    () => state.value.requests.filter(req => req.status === 'submitted') // ✅ ИСПРАВЛЕНО: нет статуса 'approved'
   )
 
-  const pendingOrders = computed(() =>
-    state.value.orders.filter(order => order.paymentStatus === 'pending')
+  // 2. pendingOrders - заменить на billStatus
+  const pendingOrders = computed(
+    () => state.value.orders.filter(order => order.billStatus === 'not_billed') // ✅ ИСПРАВЛЕНО
   )
-  const paidOrders = computed(() =>
-    state.value.orders.filter(order => order.paymentStatus === 'paid')
+
+  // 3. paidOrders - заменить на billStatus
+  const paidOrders = computed(
+    () => state.value.orders.filter(order => order.billStatus === 'fully_paid') // ✅ ИСПРАВЛЕНО
+  )
+
+  // 4. ordersAwaitingDelivery - заменить на billStatus
+  const ordersAwaitingDelivery = computed(() =>
+    state.value.orders.filter(
+      order => order.status === 'sent' && order.billStatus === 'fully_paid' // ✅ ИСПРАВЛЕНО
+    )
   )
   const draftOrders = computed(() => state.value.orders.filter(order => order.status === 'draft'))
   const sentOrders = computed(() => state.value.orders.filter(order => order.status === 'sent'))
   const confirmedOrders = computed(
     () => state.value.orders.filter(order => order.status === 'sent') // Теперь это те же заказы что и sent
   )
-  const ordersAwaitingDelivery = computed(() =>
-    state.value.orders.filter(
-      // ❌ СТАРОЕ: order => ['sent', 'confirmed'].includes(order.status) && order.paymentStatus === 'paid'
-      order => order.status === 'sent' && order.paymentStatus === 'paid' // ✅ НОВОЕ
-    )
-  )
+
   const draftReceipts = computed(() =>
     state.value.receipts.filter(receipt => receipt.status === 'draft')
   )
@@ -761,7 +767,7 @@ export const useSupplierStore = defineStore('supplier', () => {
 
   async function getOrders(filters?: {
     status?: OrderStatus[]
-    paymentStatus?: ('pending' | 'paid' | 'failed')[]
+    billStatus?: BillStatus[]
     supplierId?: string
     dateFrom?: string
     dateTo?: string
@@ -775,8 +781,8 @@ export const useSupplierStore = defineStore('supplier', () => {
         if (filters.status?.length) {
           orders = orders.filter(order => filters.status!.includes(order.status))
         }
-        if (filters.paymentStatus?.length) {
-          orders = orders.filter(order => filters.paymentStatus!.includes(order.paymentStatus))
+        if (filters.billStatus?.length) {
+          orders = orders.filter(order => filters.billStatus!.includes(order.billStatus))
         }
         if (filters.supplierId) {
           orders = orders.filter(order => order.supplierId === filters.supplierId)

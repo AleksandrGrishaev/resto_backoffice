@@ -7,9 +7,7 @@ import type {
   PurchaseOrder,
   Receipt,
   OrderSuggestion,
-  RequestItem,
-  OrderItem,
-  ReceiptItem
+  BillStatus
 } from '@/stores/supplier_2/types'
 
 // =============================================
@@ -461,83 +459,99 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     supplierName: 'Premium Meat Company',
     requestIds: ['req-credit-test'],
     status: 'delivered',
-    billStatus: 'overpaid',
+    billStatus: 'overpaid' as BillStatus, // ✅ ИСПРАВЛЕНО: заменить paymentStatus
     billId: 'payment-credit-main',
     receiptId: 'receipt-credit-001', // ✅ Будет создан ниже
 
     // Математика: заказали на 1.5M, получили на 1.2M = переплата 300k
-    originalTotalAmount: 1500000,
-    totalAmount: 1200000, // после корректировки по факту поставки
-    actualDeliveredAmount: 1200000,
+    orderDate: createMockDateWithTime(7, '09:00:00.000Z'),
+    expectedDeliveryDate: createMockDateWithTime(3, '14:00:00.000Z'),
 
     items: [
       {
         id: 'oi-credit-001',
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
-        orderedQuantity: 5000, // заказали 5кг
-        receivedQuantity: 4000, // получили 4кг
+        orderedQuantity: 5000, // 5кг
         unit: 'gram',
-        pricePerUnit: 180,
-        totalPrice: 720000, // 4000 * 180 = 720k (по факту)
-        notes: 'Недопоставка 1кг из-за проблем поставщика'
+        pricePerUnit: 180, // 180 IDR за грамм
+        totalPrice: 900000, // 5000 * 180 = 900k
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(7, '09:00:00.000Z'),
+        status: 'received'
       },
       {
         id: 'oi-credit-002',
         itemId: 'prod-garlic',
         itemName: 'Garlic',
-        orderedQuantity: 2000,
-        receivedQuantity: 2000,
+        orderedQuantity: 2000, // 2кг
         unit: 'gram',
-        pricePerUnit: 25,
+        pricePerUnit: 25, // 25 IDR за грамм
         totalPrice: 50000, // 2000 * 25 = 50k
-        notes: 'Доставлено полностью'
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(7, '09:00:00.000Z'),
+        status: 'received'
       },
       {
         id: 'oi-credit-003',
-        itemId: 'prod-potato', // ✅ Используем продукты из существующих определений
+        itemId: 'prod-potato',
         itemName: 'Potato',
-        orderedQuantity: 40000,
-        receivedQuantity: 40000,
+        orderedQuantity: 40000, // 40кг
         unit: 'gram',
-        pricePerUnit: 8,
+        pricePerUnit: 8, // 8 IDR за грамм
         totalPrice: 320000, // 40000 * 8 = 320k
-        notes: 'Доставлено полностью'
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(7, '09:00:00.000Z'),
+        status: 'received'
       },
       {
         id: 'oi-credit-004',
-        itemId: 'prod-onion', // ✅ Базовые овощи от Fresh Vegetable Market
+        itemId: 'prod-onion',
         itemName: 'Onion',
-        orderedQuantity: 15000,
-        receivedQuantity: 15000,
+        orderedQuantity: 15000, // 15кг
         unit: 'gram',
-        pricePerUnit: 6,
+        pricePerUnit: 6, // 6 IDR за грамм
         totalPrice: 90000, // 15000 * 6 = 90k
-        notes: 'Доставлено полностью'
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(7, '09:00:00.000Z'),
+        status: 'received'
       },
       {
         id: 'oi-credit-005',
-        itemId: 'prod-milk', // ✅ Молочка от Dairy Fresh
+        itemId: 'prod-milk',
         itemName: 'Milk 3.2%',
         orderedQuantity: 15000, // 15 литров
-        receivedQuantity: 15000,
         unit: 'ml',
-        pricePerUnit: 15,
-        totalPrice: 120000, // 15000 * 15 = 120k
-        notes: 'Доставлено полностью'
+        pricePerUnit: 15, // 15 IDR за мл
+        totalPrice: 225000, // 15000 * 15 = 225k
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(7, '09:00:00.000Z'),
+        status: 'received'
       }
     ],
 
-    // ИТОГО: 720k + 50k + 320k + 90k + 120k = 1.3M
-    // Но указываем 1.2M для демонстрации переплаты
-
+    // ИТОГО: 900k + 50k + 320k + 90k + 225k = 1.585M (оригинальный заказ)
+    // Но доставлено: (4000*180) + (2000*25) + (40000*8) + (15000*6) + (15000*15) = 1.285M
+    // Переплата: 1.5M оплачено - 1.285M получено = 215k
+    totalAmount: 1585000,
+    originalTotalAmount: 1585000,
+    actualDeliveredAmount: 1285000, // После приемки
+    hasReceiptDiscrepancies: true,
     receiptDiscrepancies: [
       {
         type: 'quantity',
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
-        ordered: { quantity: 5000, price: 180, total: 900000 },
-        received: { quantity: 4000, price: 180, total: 720000 },
+        ordered: {
+          quantity: 5000,
+          price: 180,
+          total: 900000
+        },
+        received: {
+          quantity: 4000, // недопоставка 1кг
+          price: 180,
+          total: 720000
+        },
         impact: {
           quantityDifference: -1000,
           priceDifference: 0,
@@ -545,12 +559,10 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
         }
       }
     ],
-    hasReceiptDiscrepancies: true,
-    receiptCompletedAt: createMockDateWithTime(2, '16:30:00.000Z'),
+    receiptCompletedAt: createMockDateWithTime(2, '16:00:00.000Z'),
     receiptCompletedBy: 'Warehouse Manager',
 
-    orderDate: createMockDateWithTime(7, '10:00:00.000Z'),
-    expectedDeliveryDate: createMockDateWithTime(3, '14:00:00.000Z'),
+    isEstimatedTotal: false,
     notes: 'TEST ORDER: Overpayment scenario - creates supplier credit of 300k IDR',
     createdBy: {
       type: 'user',
@@ -569,7 +581,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     supplierName: 'Premium Meat Company',
     requestIds: ['req-use-credit'],
     status: 'confirmed',
-    billStatus: 'partially_paid', // частично оплачен кредитом
+    billStatus: 'partially_paid' as BillStatus, // ✅ ИСПРАВЛЕНО: заменить paymentStatus
 
     totalAmount: 800000, // новый заказ на 800k
 
@@ -582,7 +594,9 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
         unit: 'gram',
         pricePerUnit: 180,
         totalPrice: 540000, // 3000 * 180 = 540k
-        notes: 'Используем кредит от предыдущего заказа'
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(1, '11:00:00.000Z'),
+        status: 'ordered'
       },
       {
         id: 'oi-use-credit-002',
@@ -592,7 +606,9 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
         unit: 'gram',
         pricePerUnit: 25,
         totalPrice: 25000, // 1000 * 25 = 25k
-        notes: 'Регулярное пополнение'
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(1, '11:00:00.000Z'),
+        status: 'ordered'
       },
       {
         id: 'oi-use-credit-003',
@@ -602,22 +618,26 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
         unit: 'ml',
         pricePerUnit: 15,
         totalPrice: 225000, // 15000 * 15 = 225k
-        notes: 'Молочные продукты'
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(1, '11:00:00.000Z'),
+        status: 'ordered'
       },
       {
         id: 'oi-use-credit-004',
-        itemId: 'prod-olive-oil', // ✅ От Specialty Foods
+        itemId: 'prod-olive-oil',
         itemName: 'Olive Oil Extra Virgin',
         orderedQuantity: 1000, // 1 литр
         unit: 'ml',
-        pricePerUnit: 85,
-        totalPrice: 10000, // 1000 * 10 = 10k (исправленная цена)
-        notes: 'Премиум масло'
+        pricePerUnit: 10,
+        totalPrice: 10000, // 1000 * 10 = 10k
+        isEstimatedPrice: false,
+        lastPriceDate: createMockDateWithTime(1, '11:00:00.000Z'),
+        status: 'ordered'
       }
     ],
 
     // ИТОГО: 540k + 25k + 225k + 10k = 800k ✅
-
+    isEstimatedTotal: false,
     orderDate: createMockDateWithTime(1, '11:00:00.000Z'),
     expectedDeliveryDate: createMockDateWithTime(-2, '15:00:00.000Z'),
     notes: 'TEST ORDER: Uses 250k supplier credit, needs 550k additional payment',
@@ -630,7 +650,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(1, '11:00:00.000Z')
   },
 
-  // PO-001: Заказ с расхождениями при приемке (недопоставка говядины)
+  // ✅ PO-001: Заказ с расхождениями при приемке (недопоставка говядины)
   {
     id: 'po-001',
     orderNumber: 'PO-001',
@@ -686,7 +706,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
 
     isEstimatedTotal: false,
     status: 'delivered',
-    billStatus: 'overpaid',
+    billStatus: 'overpaid' as BillStatus, // ✅ ИСПРАВЛЕНО: заменить paymentStatus
     billStatusCalculatedAt: createMockDateWithTime(1, '14:35:00.000Z'),
 
     requestIds: ['req-001'],
@@ -698,7 +718,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(1, '14:35:00.000Z')
   },
 
-  // PO-002: Заказ доставлен без расхождений (картофель)
+  // ✅ PO-002: Заказ доставлен без расхождений (картофель)
   {
     id: 'po-002',
     orderNumber: 'PO-002',
@@ -733,7 +753,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
 
     isEstimatedTotal: false,
     status: 'delivered',
-    billStatus: 'fully_paid',
+    billStatus: 'fully_paid' as BillStatus, // ✅ ИСПРАВЛЕНО: заменить paymentStatus
     billStatusCalculatedAt: createMockDateWithTime(1, '11:20:00.000Z'),
 
     requestIds: ['req-002'],
@@ -745,7 +765,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(1, '11:20:00.000Z')
   },
 
-  // PO-003: Заказ отправлен, ожидает доставки (томаты)
+  // ✅ PO-003: Заказ отправлен, ожидает доставки (томаты)
   {
     id: 'po-003',
     orderNumber: 'PO-003',
@@ -772,7 +792,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     totalAmount: 60000,
     isEstimatedTotal: false,
     status: 'sent',
-    billStatus: 'not_billed',
+    billStatus: 'not_billed' as BillStatus, // ✅ ИСПРАВЛЕНО: заменить paymentStatus
     billStatusCalculatedAt: createMockDateWithTime(2, '15:00:00.000Z'),
 
     requestIds: ['req-003'],
@@ -782,7 +802,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(2, '15:00:00.000Z')
   },
 
-  // PO-0904-006: Заказ пива с расхождениями по количеству и цене
+  // ✅ PO-0904-006: Заказ пива с расхождениями по количеству и цене
   {
     id: 'po-1757014034857',
     orderNumber: 'PO-0904-006',
@@ -838,7 +858,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
 
     isEstimatedTotal: false,
     status: 'delivered',
-    billStatus: 'fully_paid',
+    billStatus: 'fully_paid' as BillStatus, // ✅ ИСПРАВЛЕНО: заменить paymentStatus
     billStatusCalculatedAt: TimeUtils.getCurrentLocalISO(),
 
     requestIds: ['req-001'],

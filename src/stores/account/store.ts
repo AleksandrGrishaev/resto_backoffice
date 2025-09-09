@@ -1,8 +1,14 @@
 // src/stores/account/store.ts
+
+// ✅ АРХИТЕКТУРА: Service как источник данных + Store как координатор
+// - paymentService.data - единственный источник истины
+// - state.value.pendingPayments - только кеш для UI
+// - Все CRUD операции через service методы
+
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { accountService, transactionService, paymentService } from './service'
-import { DebugUtils, generateId } from '@/utils'
+import { DebugUtils } from '@/utils'
 import type {
   Account,
   Transaction,
@@ -513,12 +519,6 @@ export const useAccountStore = defineStore('account', () => {
     } finally {
       state.value.loading.transactions = false
     }
-  }
-
-  function shouldRefetchTransactions(): boolean {
-    // Логика определения необходимости обновления
-    // Пока просто обновляем всегда для простоты
-    return true
   }
 
   function setFilters(filters: TransactionFilters) {
