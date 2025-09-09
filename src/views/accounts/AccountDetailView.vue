@@ -310,7 +310,7 @@ const {
   setCategory,
   clearFilters,
   refreshAfterTransaction
-} = useAccountTransactions(accountId.value, 20)
+} = useAccountTransactions(accountId, 20)
 
 // Props for LazyList component
 const lazyProps = computed(() => ({

@@ -1,8 +1,9 @@
 // src/stores/account/composables/useAccountTransactions.ts
 
-// ============ SIMPLIFIED VERSION ============
+// ============ РЕАКТИВНАЯ ВЕРСИЯ ============
 
-import { computed } from 'vue'
+import { computed, watch, readonly } from 'vue'
+import type { Ref, ComputedRef } from 'vue'
 import { useAccountStore } from '../store'
 import { useLazyLoading } from '@/composables/useLazyLoading'
 import type { LazyLoadRequest } from '@/composables/useLazyLoading'
@@ -22,7 +23,6 @@ interface TransactionFilters {
   category?: ExpenseCategory['type'] | null
 }
 
-// ✅ УПРОЩЕНИЕ: balanceAfter уже есть в Transaction!
 export interface TransactionWithBalance extends Transaction {
   // Это просто alias - balanceAfter уже включен в Transaction
 }
@@ -34,8 +34,23 @@ interface DateRange {
 
 // ============ MAIN COMPOSABLE ============
 
-export function useAccountTransactions(accountId?: string, pageSize = 20) {
+// ✅ ИЗМЕНЕНИЕ: Принимаем как Ref<string> | ComputedRef<string> | string
+export function useAccountTransactions(
+  accountId?: string | Ref<string> | ComputedRef<string>,
+  pageSize = 20
+) {
   const store = useAccountStore()
+
+  // ✅ НОВОЕ: Создаем реактивную ссылку
+  const reactiveAccountId = computed(() => {
+    if (typeof accountId === 'string') {
+      return accountId
+    }
+    if (accountId && 'value' in accountId) {
+      return accountId.value
+    }
+    return undefined
+  })
 
   // ============ LAZY LOADING SETUP ============
 
@@ -43,12 +58,18 @@ export function useAccountTransactions(accountId?: string, pageSize = 20) {
     const { page, limit, filters } = request
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Fetching transactions', { page, limit, filters })
+      DebugUtils.info(MODULE_NAME, 'Fetching transactions', {
+        page,
+        limit,
+        filters,
+        reactiveAccountId: reactiveAccountId.value
+      })
 
-      const targetAccountId = filters?.accountId || accountId
+      // ✅ ИЗМЕНЕНИЕ: Используем реактивный accountId
+      const targetAccountId = filters?.accountId || reactiveAccountId.value
 
       if (targetAccountId) {
-        // ✅ УПРОЩЕНИЕ: Просто устанавливаем фильтры и загружаем
+        // Устанавливаем фильтры и загружаем
         store.setFilters({
           dateFrom: filters?.dateFrom,
           dateTo: filters?.dateTo,
@@ -58,7 +79,7 @@ export function useAccountTransactions(accountId?: string, pageSize = 20) {
 
         await store.fetchTransactions(targetAccountId)
 
-        // ✅ УПРОЩЕНИЕ: Получаем отфильтрованные данные напрямую из store
+        // Получаем отфильтрованные данные напрямую из store
         let transactions = store.getAccountTransactions(targetAccountId)
 
         // Дополнительная фильтрация по поиску
@@ -135,17 +156,35 @@ export function useAccountTransactions(accountId?: string, pageSize = 20) {
     enableFilters: true
   })
 
+  // ✅ НОВОЕ: Отслеживаем изменения accountId и перезагружаем данные
+  watch(
+    reactiveAccountId,
+    async (newAccountId, oldAccountId) => {
+      if (newAccountId && newAccountId !== oldAccountId) {
+        DebugUtils.info(MODULE_NAME, 'Account changed, refreshing data', {
+          from: oldAccountId,
+          to: newAccountId
+        })
+
+        // Обновляем фильтры с новым accountId и перезагружаем
+        await lazyLoading.updateFilters({ accountId: newAccountId })
+        await lazyLoading.refresh()
+      }
+    },
+    { immediate: false } // Не выполняем при первой инициализации
+  )
+
   // ============ COMPUTED PROPERTIES ============
 
-  // ✅ МАКСИМАЛЬНОЕ УПРОЩЕНИЕ: balanceAfter уже есть!
   const transactionsWithBalance = computed<TransactionWithBalance[]>(() => {
-    // Просто приводим тип - данные уже содержат balanceAfter
     return lazyLoading.items.value as TransactionWithBalance[]
   })
 
+  // ✅ ИЗМЕНЕНИЕ: Используем реактивный accountId
   const currentAccount = computed<Account | undefined>(() => {
-    if (!accountId) return undefined
-    return store.getAccountById(accountId)
+    const currentAccountId = reactiveAccountId.value
+    if (!currentAccountId) return undefined
+    return store.getAccountById(currentAccountId)
   })
 
   const filterStats = computed(() => {
@@ -217,7 +256,7 @@ export function useAccountTransactions(accountId?: string, pageSize = 20) {
     // Lazy loading properties
     ...lazyLoading,
 
-    // ✅ УПРОЩЕННЫЕ данные (balanceAfter уже включен)
+    // Данные
     transactionsWithBalance,
     currentAccount,
     filterStats,
@@ -237,7 +276,10 @@ export function useAccountTransactions(accountId?: string, pageSize = 20) {
     // Utility methods
     getTransactionById,
     getTransactionsByType,
-    getTransactionsByDateRange
+    getTransactionsByDateRange,
+
+    // ✅ НОВОЕ: Экспортируем реактивный accountId для дебага
+    reactiveAccountId: readonly(reactiveAccountId)
   }
 }
 
@@ -253,7 +295,10 @@ export function useAllTransactions(pageSize = 50) {
 /**
  * Hook только для чтения транзакций (без операций)
  */
-export function useTransactionsReadonly(accountId?: string, pageSize = 20) {
+export function useTransactionsReadonly(
+  accountId?: string | Ref<string> | ComputedRef<string>,
+  pageSize = 20
+) {
   const {
     state,
     items,
