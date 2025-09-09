@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="dialogModel" max-width="600" persistent>
+  <v-dialog v-model="dialogModel" max-width="800" persistent>
     <v-card v-if="payment">
       <v-card-title class="d-flex align-center">
         <v-icon
@@ -58,6 +58,15 @@
           </v-card>
         </div>
 
+        <!-- ✅ НОВОЕ: Supplier Payment Context Widget -->
+        <supplier-payment-context-widget
+          v-if="isSupplierPayment"
+          :payment="payment"
+          :related-order-ids="payment.linkedOrders?.map(order => order.orderId) || []"
+          mode="pending-payment"
+          class="mb-4"
+        />
+
         <!-- Выбор счета для списания -->
         <div class="account-selection">
           <h4 class="text-h6 mb-3">Выберите счет для списания</h4>
@@ -70,47 +79,28 @@
             label="Счет для списания"
             :rules="[v => !!v || 'Выберите счет']"
             required
-            variant="outlined"
           >
-            <template #item="{ props, item }">
-              <v-list-item v-bind="props">
+            <template #item="{ props: itemProps, item }">
+              <v-list-item v-bind="itemProps">
                 <template #prepend>
-                  <v-icon :icon="item.raw.icon" class="mr-2" />
+                  <v-icon :icon="item.raw.icon" />
                 </template>
-                <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
-                <v-list-item-subtitle>
-                  Баланс: {{ formatIDR(item.raw.balance) }}
-                  <span v-if="item.raw.balance < payment.amount" class="text-error ml-2">
-                    (Недостаточно средств)
-                  </span>
-                </v-list-item-subtitle>
+                <template #append>
+                  <div class="text-right">
+                    <div class="text-body-2">{{ formatIDR(item.raw.balance) }}</div>
+                    <div
+                      class="text-caption"
+                      :class="item.raw.balance >= payment.amount ? 'text-success' : 'text-error'"
+                    >
+                      {{ item.raw.balance >= payment.amount ? 'Достаточно' : 'Недостаточно' }}
+                    </div>
+                  </div>
+                </template>
               </v-list-item>
             </template>
           </v-select>
 
-          <!-- Предупреждение о недостатке средств -->
-          <v-alert
-            v-if="selectedAccount && selectedAccount.balance < payment.amount"
-            type="warning"
-            variant="tonal"
-            class="mt-3"
-          >
-            <template #prepend>
-              <v-icon icon="mdi-alert" />
-            </template>
-            <div>
-              <strong>Недостаточно средств на счете</strong>
-              <div class="text-body-2 mt-1">
-                Доступно: {{ formatIDR(selectedAccount.balance) }}
-                <br />
-                Требуется: {{ formatIDR(payment.amount) }}
-                <br />
-                Не хватает: {{ formatIDR(payment.amount - selectedAccount.balance) }}
-              </div>
-            </div>
-          </v-alert>
-
-          <!-- Подтверждение суммы -->
+          <!-- Предварительный просмотр списания -->
           <div v-if="selectedAccount" class="mt-4">
             <v-card variant="outlined" color="info">
               <v-card-text>
@@ -159,8 +149,13 @@ import { ref, computed, watch } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatIDR } from '@/utils/currency'
+import { formatDate } from '@/utils/formatter'
+
 import type { PendingPayment, Account } from '@/stores/account'
 import { PAYMENT_PRIORITIES } from '@/stores/account'
+
+import SupplierPaymentContextWidget from '../dialogs/transaction-detail/SupplierPaymentContextWidget.vue'
+import type { Transaction } from '../../../../stores/account'
 
 interface Props {
   modelValue: boolean
@@ -186,6 +181,14 @@ const loading = ref(false)
 const dialogModel = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value)
+})
+
+const isSupplierPayment = computed(() => {
+  return (
+    props.payment?.category === 'supplier' &&
+    props.payment?.linkedOrders &&
+    props.payment.linkedOrders.length > 0
+  )
 })
 
 const activeAccounts = computed(() => accountStore.activeAccounts)
@@ -216,6 +219,32 @@ const canConfirm = computed(() => {
     selectedAccount.value &&
     selectedAccount.value.balance >= (props.payment?.amount || 0)
   )
+})
+
+const paymentAsTransaction = computed((): Transaction | null => {
+  if (!props.payment || !isSupplierPayment.value) return null
+
+  // Создаем "псевдо-транзакцию" для совместимости с виджетом
+  return {
+    id: `payment-${props.payment.id}`,
+    accountId: '', // Не важно для виджета
+    type: 'expense',
+    amount: props.payment.amount,
+    balanceAfter: 0, // Не важно для виджета
+    description: props.payment.description,
+    expenseCategory: { type: 'daily', category: 'product' },
+    performedBy: props.payment.createdBy,
+    status: 'completed',
+
+    // Ключевые поля для виджета
+    counteragentId: props.payment.counteragentId,
+    counteragentName: props.payment.counteragentName,
+    relatedOrderIds: props.payment.linkedOrders?.map(order => order.orderId) || [],
+    relatedPaymentId: props.payment.id,
+
+    createdAt: props.payment.createdAt,
+    updatedAt: props.payment.updatedAt
+  } as Transaction
 })
 
 // Methods
@@ -296,6 +325,18 @@ watch(
 </script>
 
 <style lang="scss" scoped>
+.payment-info {
+  .v-card {
+    background-color: rgb(var(--v-theme-surface-variant));
+  }
+}
+
+.account-selection {
+  .v-select {
+    margin-bottom: 0;
+  }
+}
+
 .payment-info {
   .v-card {
     background-color: rgb(var(--v-theme-surface-variant));
