@@ -215,7 +215,7 @@ export function usePurchaseOrders() {
       const { useAccountStore } = await import('@/stores/account')
       const accountStore = useAccountStore()
 
-      // ✅ ДОБАВИТЬ: Проверка на инициализацию accountStore
+      // ✅ НОВАЯ ЛОГИКА: Проверка инициализации accountStore
       if (!accountStore.state.pendingPayments || accountStore.state.pendingPayments.length === 0) {
         console.warn(
           `AccountStore not initialized, fetching payments for order ${order.orderNumber}`
@@ -223,28 +223,65 @@ export function usePurchaseOrders() {
         await accountStore.fetchPayments()
       }
 
-      const bills = accountStore.state.pendingPayments.filter(
-        payment => payment.purchaseOrderId === order.id
-      )
+      // ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Используем новый метод getPaymentsByOrder вместо фильтрации по purchaseOrderId
+      const bills = await accountStore.getPaymentsByOrder(order.id)
 
       if (bills.length === 0) return 'not_billed'
 
+      // ✅ НОВАЯ ЛОГИКА: Подсчет оплаченной суммы через linkedOrders
       const totalPaid = bills
         .filter(bill => bill.status === 'completed')
-        .reduce((sum, bill) => sum + bill.amount, 0)
+        .reduce((sum, bill) => {
+          // Для каждого completed платежа находим активную привязку к данному заказу
+          const orderLink = bill.linkedOrders?.find(
+            link => link.orderId === order.id && link.isActive
+          )
+          return sum + (orderLink?.linkedAmount || 0)
+        }, 0)
 
-      // Проверка просроченных счетов
+      // ✅ НОВАЯ ЛОГИКА: Подсчет общей суммы выставленных счетов через linkedOrders
+      const totalBilled = bills.reduce((sum, bill) => {
+        const orderLink = bill.linkedOrders?.find(
+          link => link.orderId === order.id && link.isActive
+        )
+        return sum + (orderLink?.linkedAmount || 0)
+      }, 0)
+
+      // ✅ НОВАЯ ЛОГИКА: Проверка просроченных счетов
       const now = new Date()
-      const hasOverdueBills = bills.some(
-        bill => bill.status === 'pending' && bill.dueDate && new Date(bill.dueDate) < now
-      )
+      const hasOverdueBills = bills.some(bill => {
+        // Проверяем только pending платежи, привязанные к этому заказу
+        if (bill.status !== 'pending') return false
+        if (!bill.dueDate) return false
 
-      // ✅ ПРАВИЛЬНАЯ ЛОГИКА: сравниваем с суммой ЗАКАЗА, а не счетов
+        const hasActiveLink = bill.linkedOrders?.some(
+          link => link.orderId === order.id && link.isActive
+        )
+
+        return hasActiveLink && new Date(bill.dueDate) < now
+      })
+
+      // ✅ ПРАВИЛЬНАЯ ЛОГИКА: сравниваем с actualDeliveredAmount или totalAmount заказа
+      const orderAmount = order.actualDeliveredAmount || order.totalAmount
+
+      console.log(`Bill status calculation for order ${order.orderNumber}:`, {
+        orderId: order.id,
+        orderAmount,
+        totalBilled,
+        totalPaid,
+        billsCount: bills.length,
+        hasOverdueBills
+      })
+
+      // Определяем статус по приоритету
       if (hasOverdueBills) return 'overdue'
-      if (totalPaid === 0) return 'billed'
-      if (totalPaid > order.totalAmount) return 'overpaid'
-      if (totalPaid < order.totalAmount) return 'partially_paid'
-      return 'fully_paid'
+      if (totalPaid === 0 && totalBilled > 0) return 'billed'
+      if (totalPaid > orderAmount) return 'overpaid'
+      if (totalPaid > 0 && totalPaid < orderAmount) return 'partially_paid'
+      if (totalPaid >= orderAmount) return 'fully_paid'
+
+      // Если нет счетов или все обнулены
+      return 'not_billed'
     } catch (error) {
       console.error('Failed to calculate bill status:', error)
       // ✅ FALLBACK: возвращаем статус из заказа или дефолт
@@ -253,20 +290,154 @@ export function usePurchaseOrders() {
   }
 
   /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Получить детальную информацию о платежах заказа для отладки
+   */
+  async function getOrderPaymentDetails(order: PurchaseOrder): Promise<{
+    bills: any[]
+    totalBilled: number
+    totalPaid: number
+    orderAmount: number
+    billsBreakdown: Array<{
+      billId: string
+      billAmount: number
+      linkedAmount: number
+      status: string
+      isOverdue: boolean
+    }>
+  }> {
+    try {
+      const { useAccountStore } = await import('@/stores/account')
+      const accountStore = useAccountStore()
+
+      await accountStore.fetchPayments()
+      const bills = await accountStore.getPaymentsByOrder(order.id)
+
+      const now = new Date()
+      const orderAmount = order.actualDeliveredAmount || order.totalAmount
+
+      let totalBilled = 0
+      let totalPaid = 0
+
+      const billsBreakdown = bills.map(bill => {
+        const orderLink = bill.linkedOrders?.find(
+          link => link.orderId === order.id && link.isActive
+        )
+        const linkedAmount = orderLink?.linkedAmount || 0
+
+        totalBilled += linkedAmount
+
+        if (bill.status === 'completed') {
+          totalPaid += linkedAmount
+        }
+
+        const isOverdue =
+          bill.status === 'pending' && bill.dueDate && new Date(bill.dueDate) < now && !!orderLink
+
+        return {
+          billId: bill.id,
+          billAmount: bill.amount,
+          linkedAmount,
+          status: bill.status,
+          isOverdue
+        }
+      })
+
+      return {
+        bills,
+        totalBilled,
+        totalPaid,
+        orderAmount,
+        billsBreakdown
+      }
+    } catch (error) {
+      console.error('Failed to get order payment details:', error)
+      throw error
+    }
+  }
+
+  /**
    * Обновление статуса заказа в store
    */
   async function updateOrderBillStatus(orderId: string): Promise<void> {
     const order = getOrderById(orderId)
-    if (!order) return
+    if (!order) {
+      console.warn(`Order not found for bill status update: ${orderId}`)
+      return
+    }
 
-    // ✅ ИСПРАВИТЬ: функция теперь async
-    const newStatus = await calculateBillStatus(order)
+    try {
+      // ✅ ИСПРАВИТЬ: функция теперь async
+      const newStatus = await calculateBillStatus(order)
 
-    if (order.billStatus !== newStatus) {
-      order.billStatus = newStatus
-      order.billStatusCalculatedAt = new Date().toISOString()
+      if (order.billStatus !== newStatus) {
+        order.billStatus = newStatus
+        order.billStatusCalculatedAt = new Date().toISOString()
 
-      console.log(`Bill status updated for ${order.orderNumber}: ${newStatus}`)
+        console.log(
+          `Bill status updated for ${order.orderNumber}: ${order.billStatus} -> ${newStatus}`
+        )
+
+        // ✅ ОПЦИОНАЛЬНО: Сохраняем изменения в supplierStore если нужно
+        try {
+          await supplierStore.updateOrder(orderId, {
+            billStatus: newStatus,
+            billStatusCalculatedAt: order.billStatusCalculatedAt
+          })
+        } catch (error) {
+          console.warn('Failed to persist bill status update:', error)
+          // Не критично, статус обновлен в локальном состоянии
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to update bill status for order ${order.orderNumber}:`, error)
+      // Не выбрасываем ошибку, чтобы не блокировать UI
+    }
+  }
+
+  /**
+   * ✅ НОВАЯ функция: Массовое обновление статусов для списка заказов
+   */
+  async function updateMultipleOrderBillStatuses(orderIds: string[]): Promise<void> {
+    console.log(`Updating bill statuses for ${orderIds.length} orders`)
+
+    // Обновляем параллельно, но ограничиваем количество одновременных запросов
+    const batchSize = 5
+    for (let i = 0; i < orderIds.length; i += batchSize) {
+      const batch = orderIds.slice(i, i + batchSize)
+
+      await Promise.allSettled(batch.map(orderId => updateOrderBillStatus(orderId)))
+
+      // Небольшая пауза между батчами для избежания перегрузки
+      if (i + batchSize < orderIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+
+    console.log(`Finished updating bill statuses for ${orderIds.length} orders`)
+  }
+
+  /**
+   * ✅ НОВАЯ функция: Принудительное обновление всех статусов
+   */
+  async function refreshAllBillStatuses(): Promise<void> {
+    try {
+      console.log('Starting full bill status refresh...')
+
+      // Получаем все заказы со статусом 'sent' (которые могут иметь счета)
+      const ordersToUpdate = orders.value
+        .filter(order => order.status === 'sent')
+        .map(order => order.id)
+
+      if (ordersToUpdate.length === 0) {
+        console.log('No orders to update')
+        return
+      }
+
+      await updateMultipleOrderBillStatuses(ordersToUpdate)
+      console.log('Bill status refresh completed')
+    } catch (error) {
+      console.error('Failed to refresh all bill statuses:', error)
+      throw error
     }
   }
 
@@ -998,6 +1169,9 @@ export function usePurchaseOrders() {
     getBillStatusText,
     calculateBillStatus,
     updateOrderBillStatus,
+    updateMultipleOrderBillStatuses,
+    refreshAllBillStatuses,
+    getOrderPaymentDetails,
 
     // Integration helpers
     getOrderPaymentStatus,

@@ -313,7 +313,10 @@ const {
   getBillStatusColorForOrder,
   getBillStatusText,
   getBillStatus,
-  updateOrderBillStatus
+  updateOrderBillStatus,
+  updateMultipleOrderBillStatuses,
+  refreshAllBillStatuses,
+  getOrderPaymentDetails
 } = usePurchaseOrders()
 
 // =============================================
@@ -511,12 +514,19 @@ function formatDate(dateString: string): string {
 }
 
 onMounted(async () => {
-  // Обновляем статусы для видимых заказов при загрузке
+  // ✅ ЗАМЕНИТЬ существующий onMounted на это:
   if (props.orders?.length) {
     try {
-      // Обновляем параллельно первые 10 заказов для производительности
-      const ordersToUpdate = props.orders.slice(0, 10)
-      await Promise.all(ordersToUpdate.map(order => updateOrderBillStatus(order.id)))
+      // Фильтруем только заказы, которые могут иметь счета
+      const ordersNeedingStatusUpdate = props.orders
+        .filter(order => order.status === 'sent')
+        .slice(0, 20) // Ограничиваем для производительности
+        .map(order => order.id)
+
+      if (ordersNeedingStatusUpdate.length > 0) {
+        // Используем батчевое обновление вместо Promise.all
+        await updateMultipleOrderBillStatuses(ordersNeedingStatusUpdate)
+      }
     } catch (error) {
       console.warn('Failed to update bill statuses:', error)
     }
