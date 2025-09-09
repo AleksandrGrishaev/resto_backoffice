@@ -560,16 +560,13 @@ export function useOrderPayments() {
       console.log(`OrderPayments: Syncing payments for order ${order.orderNumber}`, {
         orderId: order.id,
         newOrderAmount: order.totalAmount,
+        actualDeliveredAmount: order.actualDeliveredAmount, // Добавь эту строку
         amountDifference,
         originalAmount: order.originalTotalAmount
       })
 
       const { accountStore } = await getStores()
-
-      // Обеспечиваем свежие данные платежей
       await accountStore.fetchPayments()
-
-      // ✅ НОВОЕ: Получаем все связанные платежи через linkedOrders
       const orderPayments = await accountStore.getPaymentsByOrder(order.id)
 
       console.log(`OrderPayments: Found ${orderPayments.length} payments for order`, {
@@ -588,15 +585,70 @@ export function useOrderPayments() {
         return
       }
 
+      // ✅ COMPLETED платежи - обновляем usedAmount
       const completedPayments = orderPayments.filter(p => p.status === 'completed')
-
       for (const payment of completedPayments) {
         await updatePaymentUsedAmount(payment, order)
       }
 
-      console.log(`OrderPayments: Updated usedAmount for completed payments`)
+      // ✅ НОВОЕ: PENDING платежи с автосинхронизацией - обновляем сумму
+      const pendingPayments = orderPayments.filter(
+        p => p.status === 'pending' && p.autoSyncEnabled && p.sourceOrderId === order.id // Только для исходного заказа
+      )
+
+      if (pendingPayments.length > 0) {
+        console.log(`OrderPayments: Auto-syncing ${pendingPayments.length} pending payments`)
+
+        for (const payment of pendingPayments) {
+          await autoSyncPendingPaymentAmount(payment, order)
+        }
+      }
+
+      console.log(`OrderPayments: Payment sync completed for order ${order.orderNumber}`)
     } catch (error) {
       console.error(`OrderPayments: Failed to sync order payments:`, error)
+      throw error
+    }
+  }
+
+  // ✅ НОВАЯ ФУНКЦИЯ: Автосинхронизация суммы pending платежа
+  async function autoSyncPendingPaymentAmount(
+    payment: PendingPayment,
+    order: PurchaseOrder
+  ): Promise<void> {
+    try {
+      const { accountStore } = await getStores()
+
+      const newAmount = order.actualDeliveredAmount || order.totalAmount
+      const oldAmount = payment.amount
+
+      if (Math.abs(newAmount - oldAmount) < 1) {
+        console.log(`OrderPayments: No significant amount change for payment ${payment.id}`)
+        return
+      }
+
+      console.log(`OrderPayments: Auto-syncing payment amount`, {
+        paymentId: payment.id,
+        oldAmount,
+        newAmount,
+        difference: newAmount - oldAmount
+      })
+
+      // Обновляем сумму платежа через accountStore
+      await accountStore.updatePaymentAmount({
+        paymentId: payment.id,
+        newAmount,
+        reason: 'receipt_discrepancy',
+        notes: `Auto-sync after receipt completion for order ${order.orderNumber}`
+      })
+
+      // Обновляем linkedAmount тоже
+      const orderLink = payment.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+      if (orderLink) {
+        orderLink.linkedAmount = newAmount
+      }
+    } catch (error) {
+      console.error(`OrderPayments: Failed to auto-sync payment amount:`, error)
       throw error
     }
   }
