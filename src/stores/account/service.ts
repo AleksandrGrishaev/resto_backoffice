@@ -513,56 +513,55 @@ export class PaymentService extends MockBaseService<PendingPayment> {
 
   async processPayment(data: ProcessPaymentDto): Promise<void> {
     try {
-      clearError()
-      state.value.loading.payments = true
       DebugUtils.info(MODULE_NAME, 'Processing payment', { data })
 
-      const payment = await paymentService.getById(data.paymentId)
+      const payment = await this.getById(data.paymentId)
       if (!payment) {
         throw new Error('Payment not found')
       }
 
-      // Создаем транзакцию expense с информацией о контрагенте
-      const transactionData: CreateOperationDto = {
+      const account = await accountService.getById(data.accountId)
+      if (!account) {
+        throw new Error('Account not found')
+      }
+
+      const actualAmount = data.actualAmount || payment.amount
+
+      if (account.balance < actualAmount) {
+        throw new Error('Insufficient funds')
+      }
+
+      // Обновляем статус платежа
+      await this.update(data.paymentId, {
+        status: 'processing',
+        assignedToAccount: data.accountId,
+        notes: data.notes || payment.notes
+      })
+
+      // Создаем транзакцию расхода
+      await transactionService.createTransaction({
         accountId: data.accountId,
         type: 'expense',
-        amount: data.actualAmount || payment.amount,
-        description: `Payment: ${payment.description}`,
+        amount: actualAmount,
+        description: `Платеж: ${payment.description} (${payment.counteragentName})`,
         expenseCategory: {
           type: 'daily',
           category: payment.category === 'supplier' ? 'product' : 'other'
         },
-        performedBy: data.performedBy,
-
-        // ✅ НОВЫЕ поля для связи с контрагентом
-        counteragentId: payment.counteragentId,
-        counteragentName: payment.counteragentName,
-        relatedOrderIds: payment.linkedOrders?.map(order => order.orderId) || [],
-        relatedPaymentId: payment.id
-      }
-
-      await transactionService.createTransaction(transactionData)
-
-      // Обновляем статус платежа
-      await paymentService.update(payment.id, {
-        status: 'completed',
-        assignedToAccount: data.accountId
+        performedBy: data.performedBy
       })
 
-      // Обновляем локальные данные
-      await Promise.all([
-        fetchAccounts(true),
-        fetchPayments(true),
-        state.value.selectedAccountId ? refreshAllTransactions() : Promise.resolve()
-      ])
+      // Помечаем платеж как выполненный
+      await this.update(data.paymentId, {
+        status: 'completed'
+      })
 
       DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
     } catch (error) {
+      // В случае ошибки возвращаем статус обратно
+      await this.update(data.paymentId, { status: 'failed' })
       DebugUtils.error(MODULE_NAME, 'Failed to process payment', { error })
-      setError(error)
       throw error
-    } finally {
-      state.value.loading.payments = false
     }
   }
 

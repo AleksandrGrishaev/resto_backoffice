@@ -118,6 +118,12 @@
       :account="account"
       @success="handleCorrectionSuccess"
     />
+
+    <transaction-detail-dialog
+      v-if="dialogs.transactionDetail"
+      v-model="dialogs.transactionDetail"
+      :transaction="selectedTransaction"
+    />
   </div>
 </template>
 
@@ -137,6 +143,7 @@ import AccountOperations from './components/detail/AccountOperations.vue'
 import OperationDialog from './components/dialogs/OperationDialog.vue'
 import TransferDialog from './components/dialogs/TransferDialog.vue'
 import CorrectionDialog from './components/dialogs/CorrectionDialog.vue'
+import TransactionDetailDialog from './components/dialogs/TransactionDetailDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -149,7 +156,8 @@ const operationType = ref<OperationType>('income')
 const dialogs = ref({
   operation: false,
   transfer: false,
-  correction: false
+  correction: false,
+  transactionDetail: false
 })
 const menu = ref({
   date: false
@@ -160,13 +168,18 @@ const filters = ref({
   dateTo: format(startOfToday(), 'yyyy-MM-dd'),
   type: null as OperationType | null
 })
+const selectedTransaction = ref<Transaction | null>(null)
 
 // Computed
 const accountId = computed(() => route.params.id as string)
 const account = computed(() => store.getAccountById(accountId.value))
 const canCorrect = computed(() => authStore.isAdmin)
 const filteredOperations = computed(() => {
-  return store.getAccountOperations(accountId.value)
+  // Устанавливаем selectedAccountId если он не установлен
+  if (store.state.selectedAccountId !== accountId.value) {
+    store.fetchTransactions(accountId.value)
+  }
+  return store.accountTransactions
 })
 
 const operationTypes = [
@@ -214,8 +227,8 @@ function showCorrectionDialog() {
 }
 
 function handleEditOperation(operation: Transaction) {
-  // TODO: Реализовать редактирование операции
-  console.log('Edit operation:', operation)
+  selectedTransaction.value = operation
+  dialogs.value.transactionDetail = true
 }
 
 function handleOperationSuccess() {
