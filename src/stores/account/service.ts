@@ -203,53 +203,43 @@ export class TransactionService extends MockBaseService<Transaction> {
   // ✅ ОБНОВЛЕНИЕ createTransaction с валидацией
   async createTransaction(data: CreateOperationDto): Promise<Transaction> {
     try {
-      // Валидация обязательной категории
-      if (data.type === 'expense' && !data.expenseCategory) {
-        throw new Error('Expense category is required for expense operations')
-      }
-
       DebugUtils.info(MODULE_NAME, 'Creating transaction', { data })
 
       const account = await accountService.getById(data.accountId)
-      if (!account) {
-        throw new Error('Account not found')
-      }
+      if (!account) throw new Error('Account not found')
 
-      // Проверяем достаточность средств для expense
+      // Простая проверка средств для expense
       if (data.type === 'expense' && account.balance < data.amount) {
         throw new Error('Insufficient funds')
       }
-
-      const balanceAfter =
-        data.type === 'income' ? account.balance + data.amount : account.balance - data.amount
 
       const transaction: Transaction = {
         id: generateId(),
         accountId: data.accountId,
         type: data.type,
         amount: data.amount,
-        balanceAfter,
+        // balanceAfter убрано! ✅
         description: data.description,
-        expenseCategory: data.expenseCategory!, // Теперь обязательное для expense
+        expenseCategory: data.expenseCategory,
         performedBy: data.performedBy,
         status: 'completed',
-
-        // Новые поля
         counteragentId: data.counteragentId,
         counteragentName: data.counteragentName,
         relatedOrderIds: data.relatedOrderIds,
         relatedPaymentId: data.relatedPaymentId,
-
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
 
+      // Обновляем только баланс аккаунта
+      const newBalance =
+        data.type === 'income' ? account.balance + data.amount : account.balance - data.amount
+
       await Promise.all([
         this.create(transaction),
-        accountService.updateBalance(data.accountId, balanceAfter)
+        accountService.updateBalance(data.accountId, newBalance)
       ])
 
-      DebugUtils.info(MODULE_NAME, 'Transaction created successfully')
       return transaction
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create transaction', { error })
@@ -272,53 +262,44 @@ export class TransactionService extends MockBaseService<Transaction> {
         throw new Error('Insufficient funds')
       }
 
-      const fromBalanceAfter = fromAccount.balance - data.amount
-      const toBalanceAfter = toAccount.balance + data.amount
+      const newFromBalance = fromAccount.balance - data.amount
+      const newToBalance = toAccount.balance + data.amount
 
-      // ✅ ИСПРАВЛЕНИЕ: Добавляем все обязательные поля
       const outgoingTransaction: Omit<Transaction, 'id'> = {
         accountId: data.fromAccountId,
         type: 'transfer',
-        amount: data.amount,
-        balanceAfter: fromBalanceAfter,
-        description: data.description,
-        expenseCategory: { type: 'daily', category: 'other' }, // ✅ ДОБАВЛЕНО: Обязательное поле
+        amount: -data.amount, // Отрицательная сумма для исходящего
+        description: `Transfer to ${toAccount.name}: ${data.description}`,
         performedBy: data.performedBy,
         status: 'completed',
         transferDetails: {
           fromAccountId: data.fromAccountId,
-          toAccountId: data.toAccountId,
-          fromBalanceAfter,
-          toBalanceAfter
+          toAccountId: data.toAccountId
         },
-        createdAt: new Date().toISOString(), // ✅ ДОБАВЛЕНО
-        updatedAt: new Date().toISOString() // ✅ ДОБАВЛЕНО
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
 
       const incomingTransaction: Omit<Transaction, 'id'> = {
         accountId: data.toAccountId,
         type: 'transfer',
-        amount: data.amount,
-        balanceAfter: toBalanceAfter,
-        description: data.description,
-        expenseCategory: { type: 'daily', category: 'other' }, // ✅ ДОБАВЛЕНО: Обязательное поле
+        amount: data.amount, // Положительная сумма для входящего
+        description: `Transfer from ${fromAccount.name}: ${data.description}`,
         performedBy: data.performedBy,
         status: 'completed',
         transferDetails: {
           fromAccountId: data.fromAccountId,
-          toAccountId: data.toAccountId,
-          fromBalanceAfter,
-          toBalanceAfter
+          toAccountId: data.toAccountId
         },
-        createdAt: new Date().toISOString(), // ✅ ДОБАВЛЕНО
-        updatedAt: new Date().toISOString() // ✅ ДОБАВЛЕНО
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
 
       await Promise.all([
         this.create(outgoingTransaction),
         this.create(incomingTransaction),
-        accountService.updateBalance(data.fromAccountId, fromBalanceAfter),
-        accountService.updateBalance(data.toAccountId, toBalanceAfter)
+        accountService.updateBalance(data.fromAccountId, newFromBalance),
+        accountService.updateBalance(data.toAccountId, newToBalance)
       ])
 
       DebugUtils.info(MODULE_NAME, 'Transfer completed successfully')
@@ -333,25 +314,20 @@ export class TransactionService extends MockBaseService<Transaction> {
       DebugUtils.info(MODULE_NAME, 'Creating correction', { data })
 
       const account = await accountService.getById(data.accountId)
-      if (!account) {
-        throw new Error('Account not found')
-      }
+      if (!account) throw new Error('Account not found')
 
       const correctionAmount = data.amount - account.balance
 
-      // ✅ ИСПРАВЛЕНИЕ: Добавляем все обязательные поля
       const transaction: Omit<Transaction, 'id'> = {
         accountId: data.accountId,
         type: 'correction',
-        amount: Math.abs(correctionAmount),
-        balanceAfter: data.amount,
+        amount: correctionAmount,
         description: data.description,
-        expenseCategory: { type: 'daily', category: 'other' }, // ✅ ДОБАВЛЕНО: Обязательное поле
         performedBy: data.performedBy,
         status: 'completed',
         isCorrection: true,
-        createdAt: new Date().toISOString(), // ✅ ДОБАВЛЕНО
-        updatedAt: new Date().toISOString() // ✅ ДОБАВЛЕНО
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
 
       await Promise.all([

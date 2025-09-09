@@ -56,15 +56,12 @@ export interface TransactionPerformer {
 export interface TransferDetails {
   fromAccountId: string
   toAccountId: string
-  fromBalanceAfter: number
-  toBalanceAfter: number
 }
 
 export interface Transaction extends BaseEntity {
   accountId: string
   type: OperationType
   amount: number
-  balanceAfter: number
   description: string
 
   // ✅ ИСПРАВЛЕНИЕ: Опциональное, но обязательное для expense в runtime

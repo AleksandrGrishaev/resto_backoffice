@@ -221,7 +221,7 @@ export const mockPendingPayments: PendingPayment[] = [
     autoSyncEnabled: true,
     paidAmount: 1500000,
     paidDate: '2025-08-31T16:00:00.000Z',
-    assignedToAccount: 'acc_1',
+    assignedToAccount: 'acc_2',
 
     createdBy: {
       type: 'user',

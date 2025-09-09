@@ -9,7 +9,7 @@ export const mockAccounts: Account[] = [
     name: 'Основная касса',
     type: 'cash',
     isActive: true,
-    balance: 1500000,
+    balance: 4000000,
     description: 'Наличные средства ресторана',
     lastTransactionDate: '2025-01-15T10:30:00.000Z',
     createdAt: '2025-01-01T00:00:00.000Z',
@@ -20,7 +20,7 @@ export const mockAccounts: Account[] = [
     name: 'BCA Main',
     type: 'bank',
     isActive: true,
-    balance: 25000000,
+    balance: 23800000,
     description: 'Основной банковский счет',
     lastTransactionDate: '2025-01-14T15:45:00.000Z',
     createdAt: '2025-01-01T00:00:00.000Z',
@@ -98,11 +98,107 @@ export const mockAccounts: Account[] = [
 
 export const mockTransactions: Transaction[] = [
   {
+    id: 'txn_revenue_september',
+    accountId: 'acc_1',
+    type: 'income',
+    amount: 15000000,
+    description: 'Выручка от продаж за август-сентябрь (накопленная)',
+    performedBy: { type: 'user', id: 'user_1', name: 'Admin' },
+    status: 'completed',
+    createdAt: '2025-08-31T23:59:00.000Z',
+    updatedAt: '2025-08-31T23:59:00.000Z'
+  },
+
+  // ✅ Транзакции для completed платежей
+  {
+    id: 'txn_payment_po_001',
+    accountId: 'acc_1',
+    type: 'expense',
+    amount: 810000,
+    description: 'Payment: Beef tenderloin for PO-001',
+    expenseCategory: { type: 'daily', category: 'product' },
+    performedBy: { type: 'user', id: 'user_1', name: 'Admin' },
+    status: 'completed',
+    counteragentId: 'sup-premium-meat-co',
+    counteragentName: 'Premium Meat Company',
+    relatedOrderIds: ['po-001'],
+    relatedPaymentId: 'payment_po_001_overpaid',
+    createdAt: '2025-09-01T10:30:00.000Z',
+    updatedAt: '2025-09-01T10:30:00.000Z'
+  },
+
+  {
+    id: 'txn_payment_po_002',
+    accountId: 'acc_1',
+    type: 'expense',
+    amount: 130000,
+    description: 'Payment: Fresh vegetables for PO-002',
+    expenseCategory: { type: 'daily', category: 'product' },
+    performedBy: { type: 'user', id: 'user_1', name: 'Admin' },
+    status: 'completed',
+    counteragentId: 'sup-fresh-veg-market',
+    counteragentName: 'Fresh Vegetable Market',
+    relatedOrderIds: ['po-002'],
+    relatedPaymentId: 'payment_po_002_exact',
+    createdAt: '2025-09-02T09:15:00.000Z',
+    updatedAt: '2025-09-02T09:15:00.000Z'
+  },
+
+  {
+    id: 'txn_payment_po_006',
+    accountId: 'acc_1',
+    type: 'expense',
+    amount: 160000,
+    description: 'Payment: Beverages for PO-0904-006 (adjusted after receipt)',
+    expenseCategory: { type: 'daily', category: 'product' },
+    performedBy: { type: 'user', id: 'user_1', name: 'Admin' },
+    status: 'completed',
+    counteragentId: 'sup-beverage-distribution',
+    counteragentName: 'Jakarta Beverage Distribution',
+    relatedOrderIds: ['po-1757014034857'],
+    relatedPaymentId: 'payment_po_006_adjusted',
+    createdAt: '2025-09-04T16:00:00.000Z',
+    updatedAt: '2025-09-04T16:00:00.000Z'
+  },
+
+  {
+    id: 'txn_payment_credit_test',
+    accountId: 'acc_2', // BCA Main
+    type: 'expense',
+    amount: 1200000,
+    description: 'Payment: Test order PO-CREDIT-001 (partial delivery)',
+    expenseCategory: { type: 'daily', category: 'product' },
+    performedBy: { type: 'user', id: 'user_1', name: 'Test Manager' },
+    status: 'completed',
+    counteragentId: 'sup-premium-meat-co',
+    counteragentName: 'Premium Meat Company',
+    relatedOrderIds: ['po-credit-test'],
+    relatedPaymentId: 'payment_credit_test',
+    createdAt: '2025-08-31T16:00:00.000Z',
+    updatedAt: '2025-08-31T16:00:00.000Z'
+  },
+
+  {
+    id: 'txn_payment_rent',
+    accountId: 'acc_1',
+    type: 'expense',
+    amount: 12000000,
+    description: 'Payment: Monthly restaurant rent - September 2025',
+    expenseCategory: { type: 'daily', category: 'rent' },
+    performedBy: { type: 'user', id: 'user_1', name: 'Admin' },
+    status: 'completed',
+    counteragentId: 'landlord-main',
+    counteragentName: 'Restaurant Space Rental',
+    relatedOrderIds: [],
+    relatedPaymentId: 'payment_rent_monthly',
+    createdAt: '2025-08-31T16:00:00.000Z',
+    updatedAt: '2025-08-31T16:00:00.000Z'
+  },
+  {
     id: 'txn_1',
     accountId: 'acc_1',
     type: 'income',
     amount: 500000,
-    balanceAfter: 1500000,
     description: 'Выручка от продаж за день',
     performedBy: {
       type: 'user',
@@ -118,7 +214,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_1',
     type: 'expense',
     amount: 150000,
-    balanceAfter: 1000000,
     description: 'Закупка продуктов',
     expenseCategory: {
       type: 'daily',
@@ -138,7 +233,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_2',
     type: 'income',
     amount: 5000000,
-    balanceAfter: 25000000,
     description: 'Поступление от инвестора',
     performedBy: {
       type: 'user',
@@ -154,7 +248,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_1',
     type: 'transfer',
     amount: -200000,
-    balanceAfter: 800000,
     description: 'Transfer to BCA Main: Пополнение банковского счета',
     performedBy: {
       type: 'user',
@@ -164,9 +257,7 @@ export const mockTransactions: Transaction[] = [
     status: 'completed',
     transferDetails: {
       fromAccountId: 'acc_1',
-      toAccountId: 'acc_2',
-      fromBalanceAfter: 800000,
-      toBalanceAfter: 20200000
+      toAccountId: 'acc_2'
     },
     createdAt: '2025-01-14T12:00:00.000Z',
     updatedAt: '2025-01-14T12:00:00.000Z'
@@ -176,7 +267,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_2',
     type: 'transfer',
     amount: 200000,
-    balanceAfter: 20200000,
     description: 'Transfer from Основная касса: Пополнение банковского счета',
     performedBy: {
       type: 'user',
@@ -186,9 +276,7 @@ export const mockTransactions: Transaction[] = [
     status: 'completed',
     transferDetails: {
       fromAccountId: 'acc_1',
-      toAccountId: 'acc_2',
-      fromBalanceAfter: 800000,
-      toBalanceAfter: 20200000
+      toAccountId: 'acc_2'
     },
     createdAt: '2025-01-14T12:00:00.000Z',
     updatedAt: '2025-01-14T12:00:00.000Z'
@@ -198,7 +286,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_3',
     type: 'expense',
     amount: 75000,
-    balanceAfter: 850000,
     description: 'Оплата коммунальных услуг',
     expenseCategory: {
       type: 'daily',
@@ -218,7 +305,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_4',
     type: 'expense',
     amount: 35000,
-    balanceAfter: 120000,
     description: 'Доставка еды через Gojek',
     expenseCategory: {
       type: 'daily',
@@ -238,7 +324,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_5',
     type: 'expense',
     amount: 50000,
-    balanceAfter: 95000,
     description: 'Транспортные расходы',
     expenseCategory: {
       type: 'daily',
@@ -258,7 +343,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_1',
     type: 'correction',
     amount: 50000,
-    balanceAfter: 1150000,
     description: 'Корректировка баланса после инвентаризации',
     performedBy: {
       type: 'user',
@@ -275,7 +359,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_2',
     type: 'expense',
     amount: 2500000,
-    balanceAfter: 17700000,
     description: 'Зарплата сотрудников',
     expenseCategory: {
       type: 'daily',
@@ -295,7 +378,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_3',
     type: 'income',
     amount: 200000,
-    balanceAfter: 925000,
     description: 'Возврат депозита поставщика',
     performedBy: {
       type: 'user',
@@ -311,7 +393,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_7',
     type: 'expense',
     amount: 100000,
-    balanceAfter: 500000,
     description: 'Мелкие хозяйственные расходы',
     expenseCategory: {
       type: 'daily',
@@ -331,7 +412,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_8',
     type: 'expense',
     amount: 300000,
-    balanceAfter: 3200000,
     description: 'Оплата услуг клининга',
     expenseCategory: {
       type: 'daily',
@@ -351,7 +431,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_2',
     type: 'expense',
     amount: 1800000,
-    balanceAfter: 15900000,
     description: 'Арендная плата за помещение',
     expenseCategory: {
       type: 'daily',
@@ -371,7 +450,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_1',
     type: 'income',
     amount: 650000,
-    balanceAfter: 1100000,
     description: 'Выручка от продаж',
     performedBy: {
       type: 'user',
@@ -387,7 +465,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_4',
     type: 'income',
     amount: 80000,
-    balanceAfter: 155000,
     description: 'Пополнение Gojek баланса',
     performedBy: {
       type: 'user',
@@ -403,7 +480,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_5',
     type: 'income',
     amount: 60000,
-    balanceAfter: 145000,
     description: 'Пополнение Grab баланса',
     performedBy: {
       type: 'user',
@@ -419,7 +495,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_8',
     type: 'income',
     amount: 1200000,
-    balanceAfter: 3500000,
     description: 'Поступление от корпоративного клиента',
     performedBy: {
       type: 'user',
@@ -435,7 +510,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_3',
     type: 'expense',
     amount: 250000,
-    balanceAfter: 725000,
     description: 'Покупка оборудования для кухни',
     expenseCategory: {
       type: 'daily',
@@ -455,7 +529,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_7',
     type: 'transfer',
     amount: -400000,
-    balanceAfter: 600000,
     description: 'Transfer to Основная касса: Пополнение основной кассы',
     performedBy: {
       type: 'user',
@@ -477,7 +550,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_1',
     type: 'transfer',
     amount: 400000,
-    balanceAfter: 450000,
     description: 'Transfer from Резервная касса: Пополнение основной кассы',
     performedBy: {
       type: 'user',
@@ -499,7 +571,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_2',
     type: 'expense',
     amount: 500000,
-    balanceAfter: 14700000,
     description: 'Оплата охранных услуг',
     expenseCategory: {
       type: 'daily',
@@ -519,7 +590,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_8',
     type: 'expense',
     amount: 180000,
-    balanceAfter: 2300000,
     description: 'Взнос в управляющую компанию поселка',
     expenseCategory: {
       type: 'daily',
@@ -539,7 +609,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_1',
     type: 'expense',
     amount: 85000,
-    balanceAfter: 50000,
     description: 'Торт Ayu на заказ',
     expenseCategory: {
       type: 'daily',
@@ -559,7 +628,6 @@ export const mockTransactions: Transaction[] = [
     accountId: 'acc_2',
     type: 'expense',
     amount: 750000,
-    balanceAfter: 15200000,
     description: 'Инвестиции в акции',
     expenseCategory: {
       type: 'investment',
@@ -707,7 +775,6 @@ export function generateMockTransaction(overrides: Partial<Transaction> = {}): T
     accountId: 'acc_1',
     type: randomType,
     amount: Math.floor(Math.random() * 1000000) + 10000,
-    balanceAfter: Math.floor(Math.random() * 5000000),
     description: 'Mock transaction',
     performedBy: {
       type: 'user',
@@ -768,8 +835,7 @@ export function generateMockTransactionsSet(
     for (let i = 0; i < transactionsPerAccount; i++) {
       transactions.push(
         generateMockTransaction({
-          accountId: account.id,
-          balanceAfter: account.balance
+          accountId: account.id
         })
       )
     }

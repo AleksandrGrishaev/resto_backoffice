@@ -65,10 +65,12 @@
         <v-progress-circular indeterminate />
         Loading transactions...
       </div>
-      <div v-else-if="filteredOperations.length === 0" class="no-data">No transactions found</div>
+      <div v-else-if="transactionsWithBalance.length === 0" class="no-data">
+        No transactions found
+      </div>
       <div v-else class="transactions-list">
         <div
-          v-for="transaction in filteredOperations"
+          v-for="transaction in transactionsWithBalance"
           :key="transaction.id"
           class="transaction-item"
           @click="handleEditOperation(transaction)"
@@ -174,12 +176,42 @@ const selectedTransaction = ref<Transaction | null>(null)
 const accountId = computed(() => route.params.id as string)
 const account = computed(() => store.getAccountById(accountId.value))
 const canCorrect = computed(() => authStore.isAdmin)
-const filteredOperations = computed(() => {
-  // Устанавливаем selectedAccountId если он не установлен
-  if (store.state.selectedAccountId !== accountId.value) {
-    store.fetchTransactions(accountId.value)
-  }
-  return store.accountTransactions
+const transactionsWithBalance = computed(() => {
+  const account = store.getAccountById(accountId.value)
+  if (!account) return []
+
+  // Получаем отфильтрованные транзакции
+  const transactions = store.accountTransactions
+
+  // Сортируем по дате (новые первые)
+  const sortedTransactions = [...transactions].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
+
+  // Вычисляем balanceAfter
+  let runningBalance = account.balance
+
+  return sortedTransactions
+    .map(transaction => {
+      const balanceAfter = runningBalance
+
+      // Применяем транзакцию обратно во времени
+      if (transaction.type === 'income') {
+        runningBalance -= transaction.amount
+      } else if (transaction.type === 'expense') {
+        runningBalance += transaction.amount
+      } else if (transaction.type === 'transfer') {
+        runningBalance -= transaction.amount // amount уже со знаком
+      } else if (transaction.type === 'correction') {
+        runningBalance -= transaction.amount
+      }
+
+      return {
+        ...transaction,
+        balanceAfter
+      }
+    })
+    .reverse() // Возвращаем в хронологическом порядке
 })
 
 const operationTypes = [

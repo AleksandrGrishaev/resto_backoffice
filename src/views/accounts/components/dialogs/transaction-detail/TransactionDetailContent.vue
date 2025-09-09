@@ -29,7 +29,8 @@
       </v-col>
       <v-col cols="6">
         <div class="text-subtitle-2 text-medium-emphasis">Balance After</div>
-        <div class="text-h6">{{ formatIDR(transaction.balanceAfter) }}</div>
+        <div class="text-h6">{{ formatIDR(transaction.balanceAfter || 0) }}</div>
+        <div class="text-caption text-medium-emphasis">Calculated dynamically</div>
       </v-col>
     </v-row>
 
