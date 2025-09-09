@@ -23,6 +23,7 @@ import {
   getUrgentPayments
 } from './paymentMock'
 import { DebugUtils, generateId } from '@/utils'
+import { mockAccountTransactions } from './accountBasedMock'
 
 const MODULE_NAME = 'AccountService'
 
@@ -196,8 +197,54 @@ export class AccountService extends MockBaseService<Account> {
 
 // ============ TRANSACTION SERVICE ============
 export class TransactionService extends MockBaseService<Transaction> {
+  private accountTransactions: Record<string, Transaction[]> = {}
+  private allTransactionsCache: Transaction[] | null = null
+  private cacheTimestamp: string | null = null
+
   constructor() {
-    super(mockTransactions)
+    super([]) // Пустой массив, так как используем раздельные массивы
+    this.accountTransactions = {}
+    this.accountTransactions = { ...mockAccountTransactions }
+  }
+  // ✅ ДОБАВИТЬ метод инициализации:
+  async initialize() {
+    if (Object.keys(this.accountTransactions).length === 0) {
+      const { mockAccountTransactions } = await import('./accountBasedMock')
+      this.accountTransactions = { ...mockAccountTransactions }
+    }
+  }
+
+  async getAccountTransactions(accountId: string): Promise<Transaction[]> {
+    await this.initialize()
+    return this.accountTransactions[accountId] || []
+  }
+
+  async getAllTransactions(): Promise<Transaction[]> {
+    await this.initialize()
+    if (!this.allTransactionsCache || this.isCacheStale()) {
+      this.rebuildAllTransactionsCache()
+    }
+    return [...this.allTransactionsCache!]
+  }
+
+  private rebuildAllTransactionsCache(): void {
+    const all: Transaction[] = []
+    Object.values(this.accountTransactions).forEach(accTxns => all.push(...accTxns))
+    this.allTransactionsCache = all.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    this.cacheTimestamp = new Date().toISOString()
+  }
+
+  private invalidateCache(): void {
+    this.allTransactionsCache = null
+    this.cacheTimestamp = null
+  }
+
+  private isCacheStale(): boolean {
+    if (!this.cacheTimestamp) return true
+    const cacheAge = Date.now() - new Date(this.cacheTimestamp).getTime()
+    return cacheAge > 5 * 60 * 1000 // 5 минут
   }
 
   // ✅ ОБНОВЛЕНИЕ createTransaction с валидацией
@@ -208,37 +255,54 @@ export class TransactionService extends MockBaseService<Transaction> {
       const account = await accountService.getById(data.accountId)
       if (!account) throw new Error('Account not found')
 
-      // Простая проверка средств для expense
+      // Проверка средств для expense
       if (data.type === 'expense' && account.balance < data.amount) {
         throw new Error('Insufficient funds')
       }
 
+      // Получаем текущие транзакции аккаунта
+      const accountTxns = this.accountTransactions[data.accountId] || []
+
+      // Рассчитываем новый баланс
+      const currentBalance = accountTxns.length > 0 ? accountTxns[0].balanceAfter : account.balance
+      let newBalance = currentBalance
+
+      switch (data.type) {
+        case 'income':
+          newBalance += data.amount
+          break
+        case 'expense':
+          newBalance -= data.amount
+          break
+        case 'transfer':
+          newBalance += data.amount
+          break // amount содержит знак
+        case 'correction':
+          newBalance += data.amount
+          break
+      }
+
+      // Создаем транзакцию с balanceAfter
       const transaction: Transaction = {
         id: generateId(),
-        accountId: data.accountId,
-        type: data.type,
-        amount: data.amount,
-        // balanceAfter убрано! ✅
-        description: data.description,
-        expenseCategory: data.expenseCategory,
-        performedBy: data.performedBy,
+        ...data,
+        balanceAfter: newBalance, // ✅ ДОБАВЛЯЕМ
         status: 'completed',
-        counteragentId: data.counteragentId,
-        counteragentName: data.counteragentName,
-        relatedOrderIds: data.relatedOrderIds,
-        relatedPaymentId: data.relatedPaymentId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
 
-      // Обновляем только баланс аккаунта
-      const newBalance =
-        data.type === 'income' ? account.balance + data.amount : account.balance - data.amount
+      // ✅ НОВОЕ: Добавляем в соответствующий массив
+      if (!this.accountTransactions[data.accountId]) {
+        this.accountTransactions[data.accountId] = []
+      }
+      this.accountTransactions[data.accountId].unshift(transaction) // В начало (новые первые)
 
-      await Promise.all([
-        this.create(transaction),
-        accountService.updateBalance(data.accountId, newBalance)
-      ])
+      // Обновляем баланс аккаунта
+      await accountService.updateBalance(data.accountId, newBalance)
+
+      // Инвалидируем кеш
+      this.invalidateCache()
 
       return transaction
     } catch (error) {
@@ -247,62 +311,70 @@ export class TransactionService extends MockBaseService<Transaction> {
     }
   }
 
-  async createTransfer(data: CreateTransferDto): Promise<void> {
+  async createTransfer(data: CreateTransferDto): Promise<Transaction[]> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Creating transfer', { data })
+      const transferId = generateId()
+      const timestamp = new Date().toISOString()
 
+      // Получаем аккаунты
       const fromAccount = await accountService.getById(data.fromAccountId)
       const toAccount = await accountService.getById(data.toAccountId)
 
-      if (!fromAccount || !toAccount) {
-        throw new Error('Account not found')
-      }
+      if (!fromAccount || !toAccount) throw new Error('Account not found')
+      if (fromAccount.balance < data.amount) throw new Error('Insufficient funds')
 
-      if (fromAccount.balance < data.amount) {
-        throw new Error('Insufficient funds')
-      }
+      // Получаем текущие транзакции для расчета балансов
+      const fromTxns = this.accountTransactions[data.fromAccountId] || []
+      const toTxns = this.accountTransactions[data.toAccountId] || []
 
-      const newFromBalance = fromAccount.balance - data.amount
-      const newToBalance = toAccount.balance + data.amount
+      const fromCurrentBalance =
+        fromTxns.length > 0 ? fromTxns[0].balanceAfter : fromAccount.balance
+      const toCurrentBalance = toTxns.length > 0 ? toTxns[0].balanceAfter : toAccount.balance
 
-      const outgoingTransaction: Omit<Transaction, 'id'> = {
+      // Создаем транзакции
+      const fromTransaction: Transaction = {
+        id: `${transferId}_from`,
         accountId: data.fromAccountId,
         type: 'transfer',
-        amount: -data.amount, // Отрицательная сумма для исходящего
+        amount: -data.amount,
+        balanceAfter: fromCurrentBalance - data.amount,
         description: `Transfer to ${toAccount.name}: ${data.description}`,
         performedBy: data.performedBy,
         status: 'completed',
-        transferDetails: {
-          fromAccountId: data.fromAccountId,
-          toAccountId: data.toAccountId
-        },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        transferDetails: { fromAccountId: data.fromAccountId, toAccountId: data.toAccountId },
+        createdAt: timestamp,
+        updatedAt: timestamp
       }
 
-      const incomingTransaction: Omit<Transaction, 'id'> = {
+      const toTransaction: Transaction = {
+        id: `${transferId}_to`,
         accountId: data.toAccountId,
         type: 'transfer',
-        amount: data.amount, // Положительная сумма для входящего
+        amount: data.amount,
+        balanceAfter: toCurrentBalance + data.amount,
         description: `Transfer from ${fromAccount.name}: ${data.description}`,
         performedBy: data.performedBy,
         status: 'completed',
-        transferDetails: {
-          fromAccountId: data.fromAccountId,
-          toAccountId: data.toAccountId
-        },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        transferDetails: { fromAccountId: data.fromAccountId, toAccountId: data.toAccountId },
+        createdAt: timestamp,
+        updatedAt: timestamp
       }
 
-      await Promise.all([
-        this.create(outgoingTransaction),
-        this.create(incomingTransaction),
-        accountService.updateBalance(data.fromAccountId, newFromBalance),
-        accountService.updateBalance(data.toAccountId, newToBalance)
-      ])
+      // Добавляем в массивы
+      if (!this.accountTransactions[data.fromAccountId])
+        this.accountTransactions[data.fromAccountId] = []
+      if (!this.accountTransactions[data.toAccountId])
+        this.accountTransactions[data.toAccountId] = []
 
-      DebugUtils.info(MODULE_NAME, 'Transfer completed successfully')
+      this.accountTransactions[data.fromAccountId].unshift(fromTransaction)
+      this.accountTransactions[data.toAccountId].unshift(toTransaction)
+
+      // Обновляем балансы аккаунтов
+      await accountService.updateBalance(data.fromAccountId, fromTransaction.balanceAfter)
+      await accountService.updateBalance(data.toAccountId, toTransaction.balanceAfter)
+
+      this.invalidateCache()
+      return [fromTransaction, toTransaction]
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create transfer', { error })
       throw error
@@ -316,12 +388,17 @@ export class TransactionService extends MockBaseService<Transaction> {
       const account = await accountService.getById(data.accountId)
       if (!account) throw new Error('Account not found')
 
-      const correctionAmount = data.amount - account.balance
+      // ✅ ИСПРАВИТЬ: Используем новую логику расчета
+      const accountTxns = this.accountTransactions[data.accountId] || []
+      const currentBalance = accountTxns.length > 0 ? accountTxns[0].balanceAfter : account.balance
+      const correctionAmount = data.amount - currentBalance
 
-      const transaction: Omit<Transaction, 'id'> = {
+      const transaction: Transaction = {
+        id: generateId(),
         accountId: data.accountId,
         type: 'correction',
         amount: correctionAmount,
+        balanceAfter: data.amount, // Целевой баланс
         description: data.description,
         performedBy: data.performedBy,
         status: 'completed',
@@ -330,75 +407,16 @@ export class TransactionService extends MockBaseService<Transaction> {
         updatedAt: new Date().toISOString()
       }
 
-      await Promise.all([
-        this.create(transaction),
-        accountService.updateBalance(data.accountId, data.amount)
-      ])
+      // ✅ ДОБАВИТЬ в правильный массив:
+      if (!this.accountTransactions[data.accountId]) {
+        this.accountTransactions[data.accountId] = []
+      }
+      this.accountTransactions[data.accountId].unshift(transaction)
 
-      DebugUtils.info(MODULE_NAME, 'Correction completed successfully')
+      await accountService.updateBalance(data.accountId, data.amount)
+      this.invalidateCache()
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create correction', { error })
-      throw error
-    }
-  }
-
-  async getAccountTransactions(
-    accountId: string,
-    filters?: TransactionFilters
-  ): Promise<Transaction[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Fetching account transactions', { accountId, filters })
-
-      let transactions = this.data.filter(t => t.accountId === accountId)
-
-      // Применяем фильтры
-      if (filters?.type) {
-        transactions = transactions.filter(t => t.type === filters.type)
-      }
-
-      if (filters?.dateFrom) {
-        transactions = transactions.filter(t => t.createdAt >= filters.dateFrom!)
-      }
-
-      if (filters?.dateTo) {
-        transactions = transactions.filter(t => t.createdAt <= filters.dateTo!)
-      }
-
-      if (filters?.category) {
-        transactions = transactions.filter(t => t.expenseCategory?.type === filters.category)
-      }
-
-      // Сортируем по дате создания (новые сначала)
-      transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-      DebugUtils.info(MODULE_NAME, 'Transactions fetched successfully', {
-        count: transactions.length
-      })
-
-      return Promise.resolve(transactions)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch transactions', { error })
-      throw error
-    }
-  }
-
-  // Дополнительные методы для работы с mock данными
-  async getAllTransactions(): Promise<Transaction[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Fetching all transactions')
-
-      // Возвращаем все транзакции для статистики
-      const transactions = [...this.data].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )
-
-      DebugUtils.info(MODULE_NAME, 'All transactions fetched successfully', {
-        count: transactions.length
-      })
-
-      return Promise.resolve(transactions)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch all transactions', { error })
       throw error
     }
   }
@@ -716,58 +734,7 @@ export async function getMockDataStats() {
 
 // Функция для добавления тестовых данных
 export async function addTestData(): Promise<void> {
-  // Добавляем тестовый аккаунт
-  const testAccount = await accountService.create({
-    name: 'Test Account',
-    type: 'cash',
-    isActive: true,
-    balance: 1000000,
-    description: 'Account for testing'
-  })
-
-  // Добавляем тестовые транзакции
-  await transactionService.createTransaction({
-    accountId: testAccount.id,
-    type: 'income',
-    amount: 500000,
-    description: 'Test income',
-    performedBy: {
-      type: 'user',
-      id: 'test_user',
-      name: 'Test User'
-    }
-  })
-
-  await transactionService.createTransaction({
-    accountId: testAccount.id,
-    type: 'expense',
-    amount: 200000,
-    description: 'Test expense',
-    expenseCategory: {
-      type: 'daily',
-      category: 'other'
-    },
-    performedBy: {
-      type: 'user',
-      id: 'test_user',
-      name: 'Test User'
-    }
-  })
-
-  // Добавляем тестовый платеж
-  await paymentService.createPayment({
-    counteragentId: 'test-counteragent',
-    counteragentName: 'Test Supplier',
-    amount: 300000,
-    description: 'Test payment',
-    priority: 'medium',
-    category: 'supplier',
-    createdBy: {
-      type: 'user',
-      id: 'test_user',
-      name: 'Test User'
-    }
-  })
-
-  DebugUtils.info(MODULE_NAME, 'Test data added successfully')
+  console.log('addTestData is disabled during refactoring')
+  // Временно отключаем во время рефакторинга
+  return
 }

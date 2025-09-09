@@ -64,6 +64,7 @@ export interface Transaction extends BaseEntity {
   amount: number
   description: string
 
+  balanceAfter: number
   // ✅ ИСПРАВЛЕНИЕ: Опциональное, но обязательное для expense в runtime
   expenseCategory?: ExpenseCategory // Опционально в типе, но проверяется в валидации
 
@@ -273,7 +274,9 @@ export interface LoadingState {
 
 export interface AccountStoreState {
   accounts: Account[]
-  transactions: Transaction[]
+  accountTransactions: Record<string, Transaction[]>
+  allTransactionsCache?: Transaction[]
+  cacheTimestamp?: string
   pendingPayments: PendingPayment[]
   filters: TransactionFilters
   paymentFilters: PaymentFilters
@@ -324,4 +327,28 @@ export interface UpdatePaymentAmountDto {
   reason: AmountChange['reason']
   notes?: string
   userId?: string
+}
+
+export interface CreateHistoricalTransactionDto extends CreateOperationDto {
+  createdAt: string
+  isHistoricalCorrection?: boolean
+}
+
+export interface BalanceValidationResult {
+  isValid: boolean
+  accountId: string
+  expectedBalance: number
+  actualBalance: number
+  discrepancy: number
+  affectedTransactionIds: string[]
+  message?: string
+}
+
+export interface BalanceRecalculationContext {
+  accountId: string
+  fromDate: string
+  affectedTransactionIds: string[]
+  recalculatedCount: number
+  updatedAccountBalance: number
+  processingTime?: number
 }

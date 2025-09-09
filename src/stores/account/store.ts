@@ -1,6 +1,6 @@
 // src/stores/account/store.ts
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, readonly } from 'vue'
 import { accountService, transactionService, paymentService } from './service'
 import { DebugUtils, generateId } from '@/utils'
 import type {
@@ -20,13 +20,18 @@ import type {
   LinkPaymentToOrderDto // ✅ ДОБАВИТЬ эту строку
 } from './types'
 
+// Mock
+import { mockAccountTransactions } from './accountBasedMock'
+
 const MODULE_NAME = 'AccountStore'
 
 export const useAccountStore = defineStore('account', () => {
   // ============ STATE ============
   const state = ref<AccountStoreState>({
     accounts: [],
-    transactions: [],
+    accountTransactions: {},
+    allTransactionsCache: undefined,
+    cacheTimestamp: undefined,
     pendingPayments: [],
     filters: {
       dateFrom: null,
@@ -55,6 +60,29 @@ export const useAccountStore = defineStore('account', () => {
     }
   })
 
+  // Computed
+  const getAccountTransactions = computed(() => (accountId: string) => {
+    const transactions = state.value.accountTransactions[accountId] || []
+
+    // Применяем фильтры
+    return transactions.filter(t => applyFilters(t, state.value.filters))
+  })
+
+  const getAllTransactions = computed(() => {
+    // Используем кеш если есть
+    if (state.value.allTransactionsCache) {
+      return state.value.allTransactionsCache
+    }
+
+    // Собираем все транзакции из раздельных массивов
+    const all: Transaction[] = []
+    Object.values(state.value.accountTransactions).forEach(accTxns => {
+      all.push(...accTxns)
+    })
+
+    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  })
+
   // ============ EXISTING GETTERS ============
   const activeAccounts = computed(() => state.value.accounts.filter(account => account.isActive))
 
@@ -62,56 +90,11 @@ export const useAccountStore = defineStore('account', () => {
     () => (id: string) => state.value.accounts.find(account => account.id === id)
   )
 
-  const getAccountOperations = computed(() => (accountId: string) => {
-    return state.value.transactions
-      .filter(t => t.accountId === accountId)
-      .filter(t => {
-        if (!state.value.filters.type) return true
-        return t.type === state.value.filters.type
-      })
-      .filter(t => {
-        if (!state.value.filters.dateFrom || !state.value.filters.dateTo) return true
-        return (
-          t.createdAt >= state.value.filters.dateFrom && t.createdAt <= state.value.filters.dateTo
-        )
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  })
-
   const totalBalance = computed(() =>
     state.value.accounts.reduce((sum, account) => sum + account.balance, 0)
   )
 
   const isLoading = computed(() => Object.values(state.value.loading).some(loading => loading))
-
-  // ✅ Computed для фильтрации вместо отдельных массивов
-  const accountTransactions = computed(() => {
-    if (!state.value.selectedAccountId) return []
-
-    return state.value.transactions
-      .filter(t => t.accountId === state.value.selectedAccountId)
-      .filter(t => applyFilters(t, state.value.filters))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  })
-
-  // Для общей статистики кафе
-  const allExpenses = computed(() => state.value.transactions.filter(t => t.type === 'expense'))
-
-  const supplierPayments = computed(() =>
-    state.value.transactions.filter(t => t.type === 'expense' && t.counteragentId)
-  )
-
-  const expensesByCategory = computed(() => {
-    const expenses = state.value.transactions.filter(t => t.type === 'expense')
-    return expenses.reduce(
-      (acc, transaction) => {
-        const category = transaction.expenseCategory.category
-        acc[category] = (acc[category] || 0) + transaction.amount
-        return acc
-      },
-      {} as Record<string, number>
-    )
-  })
 
   // ✅ ПОМОЩНИК для применения фильтров
   function applyFilters(transaction: Transaction, filters: TransactionFilters): boolean {
@@ -207,7 +190,8 @@ export const useAccountStore = defineStore('account', () => {
     return Date.now() - new Date(state.value.lastFetch.payments).getTime() > CACHE_DURATION
   }
 
-  // ============ ACCOUNT ACTIONS ============
+  // ============ ACCOUNT ACTIONS ===========
+
   async function fetchAccounts(force = false) {
     if (!force && !shouldRefetchAccounts()) {
       DebugUtils.info(MODULE_NAME, 'Using cached accounts data')
@@ -332,33 +316,40 @@ export const useAccountStore = defineStore('account', () => {
   }
 
   // ============ TRANSACTION ACTIONS ============
+
+  async function fetchAllAccountsTransactions() {
+    const activeAccounts = state.value.accounts.filter(acc => acc.isActive)
+
+    await Promise.all(activeAccounts.map(acc => fetchTransactions(acc.id)))
+  }
+
   async function createOperation(data: CreateOperationDto) {
     try {
       clearError()
       state.value.loading.operation = true
 
-      // ✅ ОБЯЗАТЕЛЬНАЯ ПРОВЕРКА категории для расходов
       if (data.type === 'expense' && !data.expenseCategory) {
         throw new Error('Expense category is required for expense operations')
       }
 
-      DebugUtils.info(MODULE_NAME, 'Creating operation', { data })
-
       const transaction = await transactionService.createTransaction(data)
 
-      // Оптимистическое обновление
-      state.value.transactions.unshift(transaction)
+      // ✅ ИСПРАВИТЬ: Добавляем в правильный массив
+      if (!state.value.accountTransactions[data.accountId]) {
+        state.value.accountTransactions[data.accountId] = []
+      }
+      state.value.accountTransactions[data.accountId].unshift(transaction)
 
-      // Обновляем баланс в кэше
+      // Инвалидируем кеш
+      state.value.allTransactionsCache = undefined
+      state.value.cacheTimestamp = undefined
+
+      // Обновляем баланс в кеше аккаунта
       const account = state.value.accounts.find(a => a.id === data.accountId)
       if (account) {
-        account.balance += data.type === 'income' ? data.amount : -data.amount
+        account.balance = transaction.balanceAfter
       }
 
-      // Фоновое обновление данных
-      fetchAccounts(true).catch(console.error)
-
-      DebugUtils.info(MODULE_NAME, 'Operation created successfully')
       return transaction
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create operation', { error })
@@ -373,17 +364,23 @@ export const useAccountStore = defineStore('account', () => {
     try {
       clearError()
       state.value.loading.transfer = true
-      DebugUtils.info(MODULE_NAME, 'Creating transfer', { data })
 
-      await transactionService.createTransfer(data)
-      await Promise.all([
-        fetchAccounts(true),
-        state.value.selectedAccountId
-          ? fetchTransactions(state.value.selectedAccountId)
-          : Promise.resolve()
-      ])
+      const [fromTx, toTx] = await transactionService.createTransfer(data)
 
-      DebugUtils.info(MODULE_NAME, 'Transfer created successfully')
+      // ✅ ДОБАВИТЬ: Обновляем в правильных массивах
+      if (!state.value.accountTransactions[data.fromAccountId]) {
+        state.value.accountTransactions[data.fromAccountId] = []
+      }
+      if (!state.value.accountTransactions[data.toAccountId]) {
+        state.value.accountTransactions[data.toAccountId] = []
+      }
+
+      state.value.accountTransactions[data.fromAccountId].unshift(fromTx)
+      state.value.accountTransactions[data.toAccountId].unshift(toTx)
+
+      // Инвалидируем кеш и обновляем аккаунты
+      state.value.allTransactionsCache = undefined
+      await fetchAccounts(true)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create transfer', { error })
       setError(error)
@@ -423,13 +420,12 @@ export const useAccountStore = defineStore('account', () => {
       state.value.loading.transactions = true
       state.value.selectedAccountId = accountId
 
-      // ✅ ИСПРАВЛЕНИЕ: НЕ очищаем transactions
-      // Загружаем все транзакции, если еще не загружены или нужно обновить
-      if (state.value.transactions.length === 0 || shouldRefetchTransactions()) {
-        state.value.transactions = await transactionService.getAllTransactions()
-      }
+      // ✅ НОВОЕ: Загружаем транзакции конкретного аккаунта
+      const transactions = await transactionService.getAccountTransactions(accountId)
 
-      // Computed accountTransactions автоматически обновится для выбранного аккаунта
+      // ✅ НОВОЕ: Сохраняем в соответствующий массив
+      state.value.accountTransactions[accountId] = transactions
+
       state.value.lastFetch.transactions[accountId] = new Date().toISOString()
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to fetch transactions', { error })
@@ -445,7 +441,11 @@ export const useAccountStore = defineStore('account', () => {
     try {
       clearError()
       state.value.loading.transactions = true
-      state.value.transactions = await transactionService.getAllTransactions()
+
+      // ✅ ИСПРАВИТЬ: Обновляем кеш, а не несуществующее поле
+      state.value.allTransactionsCache = await transactionService.getAllTransactions()
+      state.value.cacheTimestamp = new Date().toISOString()
+
       DebugUtils.info(MODULE_NAME, 'All transactions refreshed successfully')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to refresh all transactions', { error })
@@ -593,7 +593,9 @@ export const useAccountStore = defineStore('account', () => {
       await Promise.all([
         fetchAccounts(true),
         fetchPayments(true),
-        state.value.selectedAccountId ? refreshAllTransactions() : Promise.resolve()
+        state.value.selectedAccountId
+          ? fetchTransactions(state.value.selectedAccountId)
+          : Promise.resolve()
       ])
 
       DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
@@ -819,12 +821,15 @@ export const useAccountStore = defineStore('account', () => {
   // ============ RETURN ============
   return {
     // State
-    state,
+    state: readonly(state),
+
+    // Getters
+    accounts: computed(() => state.value.accounts),
+    getAccountById,
 
     // Existing getters
     activeAccounts,
-    getAccountById,
-    getAccountOperations,
+
     totalBalance,
     isLoading,
 
@@ -836,10 +841,8 @@ export const useAccountStore = defineStore('account', () => {
     totalPendingAmount,
     paymentStatistics,
     getPaymentsByAccount,
-    accountTransactions,
-    allExpenses,
-    supplierPayments,
-    expensesByCategory,
+    getAccountTransactions,
+    getAllTransactions,
 
     // Helper methods
     clearError,
@@ -856,6 +859,7 @@ export const useAccountStore = defineStore('account', () => {
     correctBalance,
     fetchTransactions,
     setFilters,
+    fetchAllAccountsTransactions,
 
     // Payment actions
     fetchPayments,
