@@ -66,7 +66,16 @@ export interface Transaction extends BaseEntity {
   amount: number
   balanceAfter: number
   description: string
-  expenseCategory?: ExpenseCategory
+
+  // ✅ ИСПРАВЛЕНИЕ: Опциональное, но обязательное для expense в runtime
+  expenseCategory?: ExpenseCategory // Опционально в типе, но проверяется в валидации
+
+  // ✅ НОВЫЕ ПОЛЯ для связей
+  counteragentId?: string // ID контрагента (для supplier payments)
+  counteragentName?: string // Кешированное имя контрагента
+  relatedOrderIds?: string[] // Минимальный список связанных заказов
+  relatedPaymentId?: string // ID связанного PendingPayment
+
   performedBy: TransactionPerformer
   status: 'completed' | 'failed'
   transferDetails?: TransferDetails
@@ -78,8 +87,14 @@ export interface CreateOperationDto {
   type: OperationType
   amount: number
   description: string
-  expenseCategory?: ExpenseCategory
+  expenseCategory?: ExpenseCategory // Опционально в типе, обязательно для expense в runtime
   performedBy: TransactionPerformer
+
+  // Новые опциональные поля
+  counteragentId?: string
+  counteragentName?: string
+  relatedOrderIds?: string[]
+  relatedPaymentId?: string
 }
 
 export interface CreateTransferDto {

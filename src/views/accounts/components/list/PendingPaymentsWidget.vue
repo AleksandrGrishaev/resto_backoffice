@@ -130,11 +130,9 @@ const loading = computed(() => accountStore.state.loading.payments)
 const paymentStatistics = computed(() => accountStore.paymentStatistics)
 
 const displayedPayments = computed(() => {
-  // Показываем только pending платежи, максимум 10
-  const pendingPayments = accountStore.pendingPayments
-  return pendingPayments.slice(0, 10)
+  // Показываем все pending платежи
+  return accountStore.pendingPayments
 })
-
 // Methods
 function getPaymentItemClass(payment: PendingPayment) {
   return {

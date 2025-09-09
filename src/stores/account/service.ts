@@ -22,7 +22,7 @@ import {
   getOverduePayments,
   getUrgentPayments
 } from './paymentMock'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, generateId } from '@/utils'
 
 const MODULE_NAME = 'AccountService'
 
@@ -200,8 +200,14 @@ export class TransactionService extends MockBaseService<Transaction> {
     super(mockTransactions)
   }
 
+  // ✅ ОБНОВЛЕНИЕ createTransaction с валидацией
   async createTransaction(data: CreateOperationDto): Promise<Transaction> {
     try {
+      // Валидация обязательной категории
+      if (data.type === 'expense' && !data.expenseCategory) {
+        throw new Error('Expense category is required for expense operations')
+      }
+
       DebugUtils.info(MODULE_NAME, 'Creating transaction', { data })
 
       const account = await accountService.getById(data.accountId)
@@ -209,36 +215,42 @@ export class TransactionService extends MockBaseService<Transaction> {
         throw new Error('Account not found')
       }
 
-      const newBalance =
-        data.type === 'income' ? account.balance + data.amount : account.balance - data.amount
-
-      if (data.type === 'expense' && newBalance < 0) {
+      // Проверяем достаточность средств для expense
+      if (data.type === 'expense' && account.balance < data.amount) {
         throw new Error('Insufficient funds')
       }
 
-      // Создаем базовую транзакцию
-      const transaction: Omit<Transaction, 'id'> = {
+      const balanceAfter =
+        data.type === 'income' ? account.balance + data.amount : account.balance - data.amount
+
+      const transaction: Transaction = {
+        id: generateId(),
         accountId: data.accountId,
         type: data.type,
         amount: data.amount,
-        balanceAfter: newBalance,
+        balanceAfter,
         description: data.description,
+        expenseCategory: data.expenseCategory!, // Теперь обязательное для expense
         performedBy: data.performedBy,
-        status: 'completed'
+        status: 'completed',
+
+        // Новые поля
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName,
+        relatedOrderIds: data.relatedOrderIds,
+        relatedPaymentId: data.relatedPaymentId,
+
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
 
-      // Добавляем expenseCategory только если он определен
-      if (data.type === 'expense' && data.expenseCategory) {
-        transaction.expenseCategory = data.expenseCategory
-      }
+      await Promise.all([
+        this.create(transaction),
+        accountService.updateBalance(data.accountId, balanceAfter)
+      ])
 
-      const createdTransaction = await this.create(transaction)
-      await accountService.updateBalance(data.accountId, newBalance)
-
-      DebugUtils.info(MODULE_NAME, 'Transaction created successfully', {
-        id: createdTransaction.id
-      })
-      return createdTransaction
+      DebugUtils.info(MODULE_NAME, 'Transaction created successfully')
+      return transaction
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create transaction', { error })
       throw error
@@ -249,13 +261,11 @@ export class TransactionService extends MockBaseService<Transaction> {
     try {
       DebugUtils.info(MODULE_NAME, 'Creating transfer', { data })
 
-      const [fromAccount, toAccount] = await Promise.all([
-        accountService.getById(data.fromAccountId),
-        accountService.getById(data.toAccountId)
-      ])
+      const fromAccount = await accountService.getById(data.fromAccountId)
+      const toAccount = await accountService.getById(data.toAccountId)
 
       if (!fromAccount || !toAccount) {
-        throw new Error('One or both accounts not found')
+        throw new Error('Account not found')
       }
 
       if (fromAccount.balance < data.amount) {
@@ -265,13 +275,14 @@ export class TransactionService extends MockBaseService<Transaction> {
       const fromBalanceAfter = fromAccount.balance - data.amount
       const toBalanceAfter = toAccount.balance + data.amount
 
-      // Создаем транзакции для обоих аккаунтов
+      // ✅ ИСПРАВЛЕНИЕ: Добавляем все обязательные поля
       const outgoingTransaction: Omit<Transaction, 'id'> = {
         accountId: data.fromAccountId,
         type: 'transfer',
-        amount: -data.amount,
+        amount: data.amount,
         balanceAfter: fromBalanceAfter,
-        description: `Transfer to ${toAccount.name}: ${data.description}`,
+        description: data.description,
+        expenseCategory: { type: 'daily', category: 'other' }, // ✅ ДОБАВЛЕНО: Обязательное поле
         performedBy: data.performedBy,
         status: 'completed',
         transferDetails: {
@@ -279,7 +290,9 @@ export class TransactionService extends MockBaseService<Transaction> {
           toAccountId: data.toAccountId,
           fromBalanceAfter,
           toBalanceAfter
-        }
+        },
+        createdAt: new Date().toISOString(), // ✅ ДОБАВЛЕНО
+        updatedAt: new Date().toISOString() // ✅ ДОБАВЛЕНО
       }
 
       const incomingTransaction: Omit<Transaction, 'id'> = {
@@ -287,7 +300,8 @@ export class TransactionService extends MockBaseService<Transaction> {
         type: 'transfer',
         amount: data.amount,
         balanceAfter: toBalanceAfter,
-        description: `Transfer from ${fromAccount.name}: ${data.description}`,
+        description: data.description,
+        expenseCategory: { type: 'daily', category: 'other' }, // ✅ ДОБАВЛЕНО: Обязательное поле
         performedBy: data.performedBy,
         status: 'completed',
         transferDetails: {
@@ -295,7 +309,9 @@ export class TransactionService extends MockBaseService<Transaction> {
           toAccountId: data.toAccountId,
           fromBalanceAfter,
           toBalanceAfter
-        }
+        },
+        createdAt: new Date().toISOString(), // ✅ ДОБАВЛЕНО
+        updatedAt: new Date().toISOString() // ✅ ДОБАВЛЕНО
       }
 
       await Promise.all([
@@ -323,15 +339,19 @@ export class TransactionService extends MockBaseService<Transaction> {
 
       const correctionAmount = data.amount - account.balance
 
+      // ✅ ИСПРАВЛЕНИЕ: Добавляем все обязательные поля
       const transaction: Omit<Transaction, 'id'> = {
         accountId: data.accountId,
         type: 'correction',
         amount: Math.abs(correctionAmount),
         balanceAfter: data.amount,
         description: data.description,
+        expenseCategory: { type: 'daily', category: 'other' }, // ✅ ДОБАВЛЕНО: Обязательное поле
         performedBy: data.performedBy,
         status: 'completed',
-        isCorrection: true
+        isCorrection: true,
+        createdAt: new Date().toISOString(), // ✅ ДОБАВЛЕНО
+        updatedAt: new Date().toISOString() // ✅ ДОБАВЛЕНО
       }
 
       await Promise.all([
@@ -388,7 +408,23 @@ export class TransactionService extends MockBaseService<Transaction> {
 
   // Дополнительные методы для работы с mock данными
   async getAllTransactions(): Promise<Transaction[]> {
-    return Promise.resolve([...this.data])
+    try {
+      DebugUtils.info(MODULE_NAME, 'Fetching all transactions')
+
+      // Возвращаем все транзакции для статистики
+      const transactions = [...this.data].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+
+      DebugUtils.info(MODULE_NAME, 'All transactions fetched successfully', {
+        count: transactions.length
+      })
+
+      return Promise.resolve(transactions)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch all transactions', { error })
+      throw error
+    }
   }
 
   async getTransactionsByDateRange(dateFrom: string, dateTo: string): Promise<Transaction[]> {
@@ -471,65 +507,62 @@ export class PaymentService extends MockBaseService<PendingPayment> {
     }
   }
 
-  async getPaymentsByPurchaseOrder(purchaseOrderId: string): Promise<PendingPayment[]> {
-    return mockPendingPayments.filter(payment => payment.purchaseOrderId === purchaseOrderId)
-  }
-
   async getPaymentById(paymentId: string): Promise<PendingPayment | null> {
     return await this.getById(paymentId)
   }
 
   async processPayment(data: ProcessPaymentDto): Promise<void> {
     try {
+      clearError()
+      state.value.loading.payments = true
       DebugUtils.info(MODULE_NAME, 'Processing payment', { data })
 
-      const payment = await this.getById(data.paymentId)
+      const payment = await paymentService.getById(data.paymentId)
       if (!payment) {
         throw new Error('Payment not found')
       }
 
-      const account = await accountService.getById(data.accountId)
-      if (!account) {
-        throw new Error('Account not found')
-      }
-
-      const actualAmount = data.actualAmount || payment.amount
-
-      if (account.balance < actualAmount) {
-        throw new Error('Insufficient funds')
-      }
-
-      // Обновляем статус платежа
-      await this.update(data.paymentId, {
-        status: 'processing',
-        assignedToAccount: data.accountId,
-        notes: data.notes || payment.notes
-      })
-
-      // Создаем транзакцию расхода
-      await transactionService.createTransaction({
+      // Создаем транзакцию expense с информацией о контрагенте
+      const transactionData: CreateOperationDto = {
         accountId: data.accountId,
         type: 'expense',
-        amount: actualAmount,
-        description: `Платеж: ${payment.description} (${payment.counteragentName})`,
+        amount: data.actualAmount || payment.amount,
+        description: `Payment: ${payment.description}`,
         expenseCategory: {
           type: 'daily',
           category: payment.category === 'supplier' ? 'product' : 'other'
         },
-        performedBy: data.performedBy
+        performedBy: data.performedBy,
+
+        // ✅ НОВЫЕ поля для связи с контрагентом
+        counteragentId: payment.counteragentId,
+        counteragentName: payment.counteragentName,
+        relatedOrderIds: payment.linkedOrders?.map(order => order.orderId) || [],
+        relatedPaymentId: payment.id
+      }
+
+      await transactionService.createTransaction(transactionData)
+
+      // Обновляем статус платежа
+      await paymentService.update(payment.id, {
+        status: 'completed',
+        assignedToAccount: data.accountId
       })
 
-      // Помечаем платеж как выполненный
-      await this.update(data.paymentId, {
-        status: 'completed'
-      })
+      // Обновляем локальные данные
+      await Promise.all([
+        fetchAccounts(true),
+        fetchPayments(true),
+        state.value.selectedAccountId ? refreshAllTransactions() : Promise.resolve()
+      ])
 
       DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
     } catch (error) {
-      // В случае ошибки возвращаем статус обратно
-      await this.update(data.paymentId, { status: 'failed' })
       DebugUtils.error(MODULE_NAME, 'Failed to process payment', { error })
+      setError(error)
       throw error
+    } finally {
+      state.value.loading.payments = false
     }
   }
 

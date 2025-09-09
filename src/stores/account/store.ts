@@ -5,6 +5,7 @@ import { accountService, transactionService, paymentService } from './service'
 import { DebugUtils, generateId } from '@/utils'
 import type {
   Account,
+  Transaction,
   PendingPayment,
   CreateOperationDto,
   CreateTransferDto,
@@ -82,6 +83,48 @@ export const useAccountStore = defineStore('account', () => {
   )
 
   const isLoading = computed(() => Object.values(state.value.loading).some(loading => loading))
+
+  // ✅ Computed для фильтрации вместо отдельных массивов
+  const accountTransactions = computed(() => {
+    if (!state.value.selectedAccountId) return []
+
+    return state.value.transactions
+      .filter(t => t.accountId === state.value.selectedAccountId)
+      .filter(t => applyFilters(t, state.value.filters))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  })
+
+  // Для общей статистики кафе
+  const allExpenses = computed(() => state.value.transactions.filter(t => t.type === 'expense'))
+
+  const supplierPayments = computed(() =>
+    state.value.transactions.filter(t => t.type === 'expense' && t.counteragentId)
+  )
+
+  const expensesByCategory = computed(() => {
+    const expenses = state.value.transactions.filter(t => t.type === 'expense')
+    return expenses.reduce(
+      (acc, transaction) => {
+        const category = transaction.expenseCategory.category
+        acc[category] = (acc[category] || 0) + transaction.amount
+        return acc
+      },
+      {} as Record<string, number>
+    )
+  })
+
+  // ✅ ПОМОЩНИК для применения фильтров
+  function applyFilters(transaction: Transaction, filters: TransactionFilters): boolean {
+    if (filters.type && transaction.type !== filters.type) return false
+
+    if (filters.dateFrom && transaction.createdAt < filters.dateFrom) return false
+
+    if (filters.dateTo && transaction.createdAt > filters.dateTo) return false
+
+    if (filters.category && transaction.expenseCategory?.type !== filters.category) return false
+
+    return true
+  }
 
   // ============ NEW PAYMENT GETTERS ============
   const pendingPayments = computed(() =>
@@ -293,6 +336,12 @@ export const useAccountStore = defineStore('account', () => {
     try {
       clearError()
       state.value.loading.operation = true
+
+      // ✅ ОБЯЗАТЕЛЬНАЯ ПРОВЕРКА категории для расходов
+      if (data.type === 'expense' && !data.expenseCategory) {
+        throw new Error('Expense category is required for expense operations')
+      }
+
       DebugUtils.info(MODULE_NAME, 'Creating operation', { data })
 
       const transaction = await transactionService.createTransaction(data)
@@ -374,13 +423,13 @@ export const useAccountStore = defineStore('account', () => {
       state.value.loading.transactions = true
       state.value.selectedAccountId = accountId
 
-      // Очищаем предыдущие транзакции при переходе на новый аккаунт
-      state.value.transactions = []
+      // ✅ ИСПРАВЛЕНИЕ: НЕ очищаем transactions
+      // Загружаем все транзакции, если еще не загружены или нужно обновить
+      if (state.value.transactions.length === 0 || shouldRefetchTransactions()) {
+        state.value.transactions = await transactionService.getAllTransactions()
+      }
 
-      state.value.transactions = await transactionService.getAccountTransactions(
-        accountId,
-        state.value.filters
-      )
+      // Computed accountTransactions автоматически обновится для выбранного аккаунта
       state.value.lastFetch.transactions[accountId] = new Date().toISOString()
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to fetch transactions', { error })
@@ -389,6 +438,28 @@ export const useAccountStore = defineStore('account', () => {
     } finally {
       state.value.loading.transactions = false
     }
+  }
+
+  // ✅ НОВЫЙ метод для принудительного обновления всех транзакций
+  async function refreshAllTransactions(): Promise<void> {
+    try {
+      clearError()
+      state.value.loading.transactions = true
+      state.value.transactions = await transactionService.getAllTransactions()
+      DebugUtils.info(MODULE_NAME, 'All transactions refreshed successfully')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to refresh all transactions', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.transactions = false
+    }
+  }
+
+  function shouldRefetchTransactions(): boolean {
+    // Логика определения необходимости обновления
+    // Пока просто обновляем всегда для простоты
+    return true
   }
 
   function setFilters(filters: TransactionFilters) {
@@ -480,27 +551,50 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
-  async function processPayment(data: ProcessPaymentDto) {
+  async function processPayment(data: ProcessPaymentDto): Promise<void> {
     try {
       clearError()
       state.value.loading.payments = true
       DebugUtils.info(MODULE_NAME, 'Processing payment', { data })
 
-      await paymentService.processPayment(data)
-
-      // Обновляем данные
-      await Promise.all([
-        fetchPayments(true),
-        fetchAccounts(true),
-        state.value.selectedAccountId
-          ? fetchTransactions(state.value.selectedAccountId)
-          : Promise.resolve()
-      ])
-
-      // ✅ ДОБАВИТЬ: Уведомляем о изменении статуса заказа
-      if (data.purchaseOrderId) {
-        await notifyOrderStatusChange(data.purchaseOrderId)
+      const payment = await paymentService.getById(data.paymentId)
+      if (!payment) {
+        throw new Error('Payment not found')
       }
+
+      // Создаем транзакцию expense с информацией о контрагенте
+      const transactionData: CreateOperationDto = {
+        accountId: data.accountId,
+        type: 'expense',
+        amount: data.actualAmount || payment.amount,
+        description: `Payment: ${payment.description}`,
+        expenseCategory: {
+          type: 'daily',
+          category: payment.category === 'supplier' ? 'product' : 'other'
+        },
+        performedBy: data.performedBy,
+
+        // ✅ НОВЫЕ поля для связи с контрагентом
+        counteragentId: payment.counteragentId,
+        counteragentName: payment.counteragentName,
+        relatedOrderIds: payment.linkedOrders?.map(order => order.orderId) || [],
+        relatedPaymentId: payment.id
+      }
+
+      await transactionService.createTransaction(transactionData)
+
+      // Обновляем статус платежа
+      await paymentService.update(payment.id, {
+        status: 'completed',
+        assignedToAccount: data.accountId
+      })
+
+      // Обновляем локальные данные
+      await Promise.all([
+        fetchAccounts(true),
+        fetchPayments(true),
+        state.value.selectedAccountId ? refreshAllTransactions() : Promise.resolve()
+      ])
 
       DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
     } catch (error) {
@@ -742,6 +836,10 @@ export const useAccountStore = defineStore('account', () => {
     totalPendingAmount,
     paymentStatistics,
     getPaymentsByAccount,
+    accountTransactions,
+    allExpenses,
+    supplierPayments,
+    expensesByCategory,
 
     // Helper methods
     clearError,
@@ -773,6 +871,8 @@ export const useAccountStore = defineStore('account', () => {
 
     // Other
     updatePaymentAmount,
-    getPaymentById
+    getPaymentById,
+    refreshAllTransactions,
+    applyFilters
   }
 })
