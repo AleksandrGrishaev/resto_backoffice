@@ -400,8 +400,7 @@ export function useReceipts() {
       // ✅ НОВОЕ: Синхронизируем платежи через useOrderPayments
       if (updateData.totalAmount) {
         try {
-          console.log(`Receipts: Starting payment auto-sync for order ${order.orderNumber}`)
-
+          console.log(`🔥 DEBUG: Starting payment sync for order ${order.orderNumber}`)
           const { useOrderPayments } = await import('./useOrderPayments')
           const { syncOrderPaymentsAfterReceipt } = useOrderPayments()
 

@@ -622,10 +622,16 @@ export const useAccountStore = defineStore('account', () => {
 
       await transactionService.createTransaction(transactionData)
 
+      // ✅ ИСПРАВЛЕНИЕ: Инициализируем usedAmount при оплате
+      const linkedAmount =
+        payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) ||
+        0
+
       // Обновляем статус платежа
       await paymentService.update(payment.id, {
         status: 'completed',
-        assignedToAccount: data.accountId
+        assignedToAccount: data.accountId,
+        usedAmount: linkedAmount // ✅ ДОБАВЛЕНО: инициализируем usedAmount
       })
 
       // Обновляем локальные данные
@@ -686,6 +692,33 @@ export const useAccountStore = defineStore('account', () => {
       DebugUtils.info(MODULE_NAME, 'Payment priority updated successfully')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update payment priority', { error })
+      setError(error)
+      throw error
+    }
+  }
+
+  // ✅ НОВЫЙ МЕТОД: Обновление usedAmount для completed платежей
+  async function updatePaymentUsedAmount(paymentId: string, usedAmount: number): Promise<void> {
+    try {
+      clearError()
+      DebugUtils.info(MODULE_NAME, 'Updating payment usedAmount', { paymentId, usedAmount })
+
+      // Обновляем в service
+      await paymentService.updatePaymentUsedAmount(paymentId, usedAmount)
+
+      // Оптимистическое обновление в state
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (payment) {
+        payment.usedAmount = usedAmount
+        payment.updatedAt = new Date().toISOString()
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Payment usedAmount updated successfully', {
+        paymentId,
+        usedAmount
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment usedAmount', { error })
       setError(error)
       throw error
     }
@@ -917,6 +950,7 @@ export const useAccountStore = defineStore('account', () => {
     getPaymentById,
     refreshAllTransactions,
     applyFilters,
+    updatePaymentUsedAmount,
 
     // init
     initializeStore

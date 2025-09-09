@@ -588,37 +588,10 @@ export function useOrderPayments() {
         return
       }
 
-      // ✅ ИСПРАВЛЕНИЕ: Находим основной счет через linkedOrders
-      const mainPayment = orderPayments.find(
-        p =>
-          p.status === 'pending' &&
-          p.autoSyncEnabled !== false &&
-          p.linkedOrders?.some(o => o.orderId === order.id && o.isActive)
-      )
+      const completedPayments = orderPayments.filter(p => p.status === 'completed')
 
-      if (!mainPayment) {
-        console.warn(
-          `OrderPayments: No main payment found for auto-sync for order ${order.orderNumber}`
-        )
-
-        // Если нет основного платежа с автосинхронизацией, используем первый pending
-        const fallbackPayment = orderPayments.find(p => p.status === 'pending')
-        if (fallbackPayment) {
-          console.log(`OrderPayments: Using fallback payment for sync:`, fallbackPayment.id)
-
-          // ✅ НОВОЕ: Обновляем usedAmount для completed платежей
-          if (fallbackPayment.status === 'completed') {
-            await updatePaymentUsedAmount(fallbackPayment, order)
-          }
-        }
-        return
-      }
-
-      // ✅ НОВОЕ: Для completed платежей обновляем usedAmount
-      for (const payment of orderPayments) {
-        if (payment.status === 'completed') {
-          await updatePaymentUsedAmount(payment, order)
-        }
+      for (const payment of completedPayments) {
+        await updatePaymentUsedAmount(payment, order)
       }
 
       console.log(`OrderPayments: Updated usedAmount for completed payments`)
@@ -630,6 +603,9 @@ export function useOrderPayments() {
 
   /**
    * ✅ НОВАЯ ФУНКЦИЯ: Обновляет usedAmount для completed платежей
+   */
+  /**
+   * ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ: Обновляет usedAmount для completed платежей
    */
   async function updatePaymentUsedAmount(
     payment: PendingPayment,
@@ -656,9 +632,11 @@ export function useOrderPayments() {
       // Если это единственная привязка, просто обновляем usedAmount
       const activeLinks = payment.linkedOrders?.filter(o => o.isActive) || []
 
+      let newUsedAmount: number
+
       if (activeLinks.length === 1) {
         // Простой случай: один платеж - один заказ
-        payment.usedAmount = actualDeliveredAmount
+        newUsedAmount = actualDeliveredAmount
       } else {
         // Сложный случай: один платеж на несколько заказов
         // Обновляем пропорционально
@@ -666,15 +644,18 @@ export function useOrderPayments() {
           .filter(o => o.orderId !== order.id)
           .reduce((sum, o) => sum + o.linkedAmount, 0)
 
-        payment.usedAmount = actualDeliveredAmount + otherLinkedAmount
+        newUsedAmount = actualDeliveredAmount + otherLinkedAmount
       }
 
-      payment.updatedAt = new Date().toISOString()
+      // ✅ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Обновляем через новый метод accountStore.updatePaymentUsedAmount
+      await accountStore.updatePaymentUsedAmount(payment.id, newUsedAmount)
 
       console.log(`OrderPayments: Updated usedAmount for payment ${payment.id}`, {
+        orderId: order.id,
         oldUsedAmount: payment.usedAmount,
-        newUsedAmount: actualDeliveredAmount,
-        availableAmount: payment.amount - payment.usedAmount
+        newUsedAmount,
+        availableAmount: payment.amount - newUsedAmount,
+        actualDeliveredAmount
       })
     } catch (error) {
       console.error(`OrderPayments: Failed to update payment usedAmount:`, error)
@@ -733,15 +714,18 @@ export function useOrderPayments() {
   function getAvailableAmount(payment: PendingPayment): number {
     if (!payment.linkedOrders) return 0 // Операционные платежи = 0
 
-    if (payment.status === 'completed') {
-      return payment.amount - (payment.usedAmount || 0)
-    }
-
     const linkedAmount = payment.linkedOrders
       .filter(o => o.isActive)
       .reduce((sum, o) => sum + o.linkedAmount, 0)
 
-    return payment.amount - linkedAmount
+    if (payment.status === 'completed') {
+      // ✅ НОВАЯ ЛОГИКА: Для completed платежей используем usedAmount
+      const usedAmount = payment.usedAmount || linkedAmount // fallback на linkedAmount
+      return payment.amount - usedAmount
+    } else {
+      // ✅ Для pending платежей: available = amount - linkedAmount (зарезервировано)
+      return payment.amount - linkedAmount
+    }
   }
 
   // =============================================

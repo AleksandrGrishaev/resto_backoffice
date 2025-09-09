@@ -459,6 +459,32 @@ export class PaymentService extends MockBaseService<PendingPayment> {
     }
   }
 
+  // ✅ НОВЫЙ МЕТОД: Обновление usedAmount для completed платежей
+  async updatePaymentUsedAmount(paymentId: string, usedAmount: number): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating payment usedAmount', { paymentId, usedAmount })
+
+      const payment = await this.getById(paymentId)
+      if (!payment) {
+        throw new Error('Payment not found')
+      }
+
+      // Обновляем usedAmount (без проверок статуса - это может быть нужно для completed платежей)
+      await this.update(paymentId, {
+        usedAmount,
+        updatedAt: new Date().toISOString()
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment usedAmount updated successfully', {
+        paymentId,
+        usedAmount
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment usedAmount', { error })
+      throw error
+    }
+  }
+
   async updatePaymentAmount(data: UpdatePaymentAmountDto): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating payment amount', { data })
