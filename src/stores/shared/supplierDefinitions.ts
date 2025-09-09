@@ -1097,7 +1097,7 @@ export function getSupplierStatistics() {
     totalRequests: CORE_PROCUREMENT_REQUESTS.length,
     pendingRequests: getRequestsByStatus('submitted').length,
     totalOrders: CORE_PURCHASE_ORDERS.length,
-    ordersAwaitingPayment: CORE_PURCHASE_ORDERS.filter(o => o.paymentStatus === 'pending').length,
+    ordersAwaitingPayment: CORE_PURCHASE_ORDERS.filter(o => o.billStatus === 'not_billed').length, // ✅ ИСПРАВЛЕНО
     ordersAwaitingDelivery: CORE_PURCHASE_ORDERS.filter(o =>
       ['sent', 'confirmed'].includes(o.status)
     ).length,

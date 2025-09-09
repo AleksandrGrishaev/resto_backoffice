@@ -279,6 +279,7 @@ export interface UpdateRequestData {
 export interface UpdateOrderData {
   status?: PurchaseOrder['status']
   billStatus?: PurchaseOrder['billStatus']
+  billId?: string // ✅ ДОБАВИТЬ поле billId
   expectedDeliveryDate?: string
   notes?: string
 }

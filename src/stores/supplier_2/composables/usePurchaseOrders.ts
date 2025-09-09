@@ -112,13 +112,21 @@ export function usePurchaseOrders() {
    * Получить статус счетов для заказа
    */
   function getBillStatus(order: PurchaseOrder): BillStatus {
-    // Если billStatus уже установлен, используем его
-    if (order.billStatus) {
-      return order.billStatus
+    // ✅ НОВАЯ ЛОГИКА: Пытаемся использовать кешированный статус, если он свежий
+    if (order.billStatus && order.billStatusCalculatedAt) {
+      const calculatedAt = new Date(order.billStatusCalculatedAt)
+      const now = new Date()
+      const ageMinutes = (now.getTime() - calculatedAt.getTime()) / (1000 * 60)
+
+      // Если статус рассчитан менее 5 минут назад, используем его
+      if (ageMinutes < 5) {
+        return order.billStatus
+      }
     }
 
-    // Иначе возвращаем дефолт (позже можно вызвать calculateBillStatus для точного расчета)
-    return 'not_billed'
+    // ✅ FALLBACK: Если нет свежего статуса, возвращаем дефолт
+    // В фоне будет запущен async пересчет через updateOrderBillStatus
+    return order.billStatus || 'not_billed'
   }
 
   /**
@@ -215,7 +223,7 @@ export function usePurchaseOrders() {
       const { useAccountStore } = await import('@/stores/account')
       const accountStore = useAccountStore()
 
-      // ✅ ДОБАВИТЬ: Проверка на инициализацию accountStore
+      // Проверяем инициализацию
       if (!accountStore.state.pendingPayments || accountStore.state.pendingPayments.length === 0) {
         console.warn(
           `AccountStore not initialized, fetching payments for order ${order.orderNumber}`
@@ -223,15 +231,25 @@ export function usePurchaseOrders() {
         await accountStore.fetchPayments()
       }
 
-      const bills = accountStore.state.pendingPayments.filter(
-        payment => payment.purchaseOrderId === order.id
-      )
+      // ✅ ИСПРАВЛЕНИЕ 1: Используем новый метод getPaymentsByOrder
+      const bills = await accountStore.getPaymentsByOrder(order.id)
 
       if (bills.length === 0) return 'not_billed'
 
+      // ✅ ИСПРАВЛЕНИЕ 2: Считаем правильно оплаченную сумму для этого заказа
       const totalPaid = bills
         .filter(bill => bill.status === 'completed')
-        .reduce((sum, bill) => sum + bill.amount, 0)
+        .reduce((sum, bill) => {
+          // Находим связь с текущим заказом
+          const link = bill.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+          return sum + (link?.linkedAmount || 0)
+        }, 0)
+
+      // ✅ ИСПРАВЛЕНИЕ 3: Считаем общую сумму выставленных счетов для этого заказа
+      const totalBilled = bills.reduce((sum, bill) => {
+        const link = bill.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+        return sum + (link?.linkedAmount || 0)
+      }, 0)
 
       // Проверка просроченных счетов
       const now = new Date()
@@ -239,15 +257,16 @@ export function usePurchaseOrders() {
         bill => bill.status === 'pending' && bill.dueDate && new Date(bill.dueDate) < now
       )
 
-      // ✅ ПРАВИЛЬНАЯ ЛОГИКА: сравниваем с суммой ЗАКАЗА, а не счетов
+      // ✅ ПРАВИЛЬНАЯ ЛОГИКА: Сравниваем с суммой ЗАКАЗА
       if (hasOverdueBills) return 'overdue'
+      if (totalBilled === 0) return 'not_billed'
       if (totalPaid === 0) return 'billed'
       if (totalPaid > order.totalAmount) return 'overpaid'
       if (totalPaid < order.totalAmount) return 'partially_paid'
       return 'fully_paid'
     } catch (error) {
       console.error('Failed to calculate bill status:', error)
-      // ✅ FALLBACK: возвращаем статус из заказа или дефолт
+      // Fallback
       return order.billStatus || 'not_billed'
     }
   }

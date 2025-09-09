@@ -511,12 +511,19 @@ function formatDate(dateString: string): string {
 }
 
 onMounted(async () => {
-  // Обновляем статусы для видимых заказов при загрузке
+  // ✅ УПРОЩЕННАЯ ЛОГИКА: Просто пересчитываем статусы для первых 5 заказов
   if (props.orders?.length) {
     try {
-      // Обновляем параллельно первые 10 заказов для производительности
-      const ordersToUpdate = props.orders.slice(0, 10)
-      await Promise.all(ordersToUpdate.map(order => updateOrderBillStatus(order.id)))
+      const ordersToUpdate = props.orders.slice(0, 5)
+      await Promise.all(
+        ordersToUpdate.map(async order => {
+          try {
+            await updateOrderBillStatus(order.id)
+          } catch (error) {
+            console.warn(`Failed to update bill status for ${order.orderNumber}:`, error)
+          }
+        })
+      )
     } catch (error) {
       console.warn('Failed to update bill statuses:', error)
     }

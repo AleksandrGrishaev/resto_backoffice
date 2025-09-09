@@ -818,10 +818,9 @@ class SupplierService {
       totalRequests: this.requests.length,
       pendingRequests: this.requests.filter(r => r.status === 'submitted').length,
       totalOrders: this.orders.length,
-      ordersAwaitingPayment: this.orders.filter(o => o.paymentStatus === 'pending').length,
+      ordersAwaitingPayment: this.orders.filter(o => o.billStatus === 'not_billed').length,
       ordersAwaitingDelivery: this.orders.filter(
-        // ❌ СТАРОЕ: o => ['sent', 'confirmed'].includes(o.status) && o.paymentStatus === 'paid'
-        o => o.status === 'sent' && o.paymentStatus === 'paid' // ✅ НОВОЕ
+        o => o.status === 'sent' && o.billStatus === 'fully_paid'
       ).length,
       totalReceipts: this.receipts.length,
       pendingReceipts: this.receipts.filter(r => r.status === 'draft').length,
