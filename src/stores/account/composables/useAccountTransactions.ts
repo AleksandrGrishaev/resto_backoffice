@@ -58,6 +58,10 @@ export function useAccountTransactions(
     const { page, limit, filters } = request
 
     try {
+      if (store.state.accounts.length === 0) {
+        await store.initializeStore()
+      }
+
       DebugUtils.info(MODULE_NAME, 'Fetching transactions', {
         page,
         limit,
