@@ -1,7 +1,6 @@
-// src/main.ts - ОБНОВЛЕННЫЙ с правильным импортом
+// src/main.ts - МИНИМАЛЬНАЯ инициализация (БЕЗ загрузки stores)
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { useAuthStore } from '@/stores/auth' // 🔄 ИЗМЕНЕН ИМПОРТ
 import router from '@/router'
 
 // Styles
@@ -16,50 +15,26 @@ import { vuetify } from '@/plugins/vuetify'
 import App from './App.vue'
 import { DebugUtils } from './utils'
 
-// App initializer
-import { useAppInitializer } from '@/core/appInitializer'
-
 const MODULE_NAME = 'Main'
 
-// ===== ИНИЦИАЛИЗАЦИЯ СЕРВИСОВ =====
-const initServices = async () => {
-  const authStore = useAuthStore()
-
-  // 🔄 УПРОЩЕНО: убираем initializeDefaultUsers, так как пользователи теперь в CoreUserService
-  DebugUtils.info(MODULE_NAME, '🔐 Auth store ready')
-}
-
-// ===== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ =====
-async function initializeApp() {
+// ===== МИНИМАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ =====
+function initializeApp() {
   try {
-    DebugUtils.info(MODULE_NAME, '🏁 Starting application bootstrap')
+    DebugUtils.info(MODULE_NAME, '🏁 Starting minimal application bootstrap')
 
     const app = createApp(App)
     const pinia = createPinia()
 
-    // Register plugins
+    // Регистрируем только базовые плагины
     app.use(pinia)
     app.use(router)
     app.use(vuetify)
 
-    // Initialize auth services first
-    await initServices()
-    DebugUtils.info(MODULE_NAME, '🔐 Auth services initialized')
-
-    // Initialize all stores with proper loading order
-    try {
-      const appInitializer = useAppInitializer()
-      await appInitializer.initialize()
-      DebugUtils.info(MODULE_NAME, '🗄️ All stores initialized')
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Some stores failed to initialize (non-critical)', { error })
-      // Продолжаем работу даже если stores не загрузились
-    }
-
-    // Mount application
+    // Монтируем приложение
     app.mount('#app')
 
-    DebugUtils.info(MODULE_NAME, '🎉 Application bootstrapped successfully')
+    DebugUtils.info(MODULE_NAME, '✅ Minimal application bootstrapped')
+    DebugUtils.info(MODULE_NAME, '📝 Note: Stores will be loaded after authentication')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, '💥 Failed to bootstrap application', { error })
 
@@ -79,5 +54,5 @@ async function initializeApp() {
   }
 }
 
-// Start the app
+// Start the app (синхронно!)
 initializeApp()

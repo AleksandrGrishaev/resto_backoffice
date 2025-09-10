@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import type { User, UserRole } from '@/types/auth'
 import { CoreUserService } from '@/core/users' // 🆕 НОВЫЙ ИМПОРТ
 import { DebugUtils } from '@/utils'
+import { AuthSessionService } from './services'
 
 const MODULE_NAME = 'AuthStore'
 
@@ -41,14 +42,27 @@ export const useAuthStore = defineStore('auth', () => {
 
       DebugUtils.info(MODULE_NAME, 'Login attempt', { pin: '***' })
 
-      // 🆕 ИСПОЛЬЗУЕМ CoreUserService вместо authService
-      const userData = CoreUserService.findByPin(pin)
+      // Проверяем блокировку безопасности
+      if (AuthSessionService.isSecurityLocked()) {
+        throw new Error('Слишком много неудачных попыток. Попробуйте позже.')
+      }
 
+      const userData = CoreUserService.findByPin(pin)
       if (!userData) {
+        // 🆕 Логируем неудачную попытку
+        AuthSessionService.logLoginAttempt({
+          timestamp: new Date().toISOString(),
+          userId: 'unknown',
+          pin: '***',
+          success: false,
+          appType: 'backoffice',
+          ip: window.location.hostname
+        })
+
         throw new Error('Неверный PIN код')
       }
 
-      // Создаем пользователя с ID (имитируем БД)
+      // Создаем пользователя с ID
       const user: User = {
         id: `user_${Date.now()}`,
         ...userData,
@@ -62,7 +76,20 @@ export const useAuthStore = defineStore('auth', () => {
       state.value.isAuthenticated = true
       state.value.lastLoginAt = user.lastLoginAt
 
-      DebugUtils.info(MODULE_NAME, 'Login successful', {
+      // 🆕 Сохраняем сессию в localStorage
+      AuthSessionService.saveSession(user, 'backoffice')
+
+      // 🆕 Логируем успешную попытку
+      AuthSessionService.logLoginAttempt({
+        timestamp: new Date().toISOString(),
+        userId: user.id,
+        pin: '***',
+        success: true,
+        appType: 'backoffice',
+        ip: window.location.hostname
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Login successful with session saved', {
         userId: user.id,
         roles: user.roles
       })
@@ -71,8 +98,9 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Ошибка авторизации'
       state.value.error = errorMessage
+
       DebugUtils.error(MODULE_NAME, 'Login failed', { error: errorMessage })
-      return false // Возвращаем false вместо throw для совместимости
+      return false
     } finally {
       state.value.isLoading = false
     }
@@ -81,9 +109,67 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try {
       DebugUtils.info(MODULE_NAME, 'Logging out', { userId: userId.value })
+
+      // 🆕 Очищаем сессию
+      AuthSessionService.clearSession()
+
       resetState()
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Проверка сессии (для совместимости с App.vue)
+   */
+  function checkSession(): boolean {
+    try {
+      // 🆕 Проверяем сохраненную сессию
+      const session = AuthSessionService.getSession()
+
+      if (session && session.user) {
+        // Восстанавливаем состояние из сессии
+        state.value.currentUser = session.user
+        state.value.isAuthenticated = true
+        state.value.lastLoginAt = session.user.lastLoginAt
+
+        DebugUtils.info(MODULE_NAME, 'Session restored from localStorage', {
+          userId: session.user.id,
+          roles: session.user.roles
+        })
+
+        return true
+      }
+
+      DebugUtils.debug(MODULE_NAME, 'No valid session found')
+      return false
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Session check failed', { error })
+      return false
+    }
+  }
+
+  // 5. ДОБАВИТЬ новый метод для получения статистики:
+  function getSessionInfo() {
+    return AuthSessionService.getSessionInfo()
+  }
+
+  /**
+   * Инициализация пользователей по умолчанию (для совместимости с appInitializer)
+   */
+  async function initializeDefaultUsers(): Promise<void> {
+    try {
+      const availableUsers = CoreUserService.getActiveUsers()
+      DebugUtils.info(MODULE_NAME, 'Default users initialized', {
+        count: availableUsers.length,
+        users: availableUsers.map(u => ({
+          name: u.name,
+          roles: u.roles
+        }))
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to initialize default users', { error })
       throw error
     }
   }
@@ -138,6 +224,9 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     getDefaultRoute,
     clearError,
-    resetState
+    resetState,
+    checkSession, // ✅ ДОБАВИТЬ
+    initializeDefaultUsers,
+    getSessionInfo
   }
 })

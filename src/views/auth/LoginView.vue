@@ -36,29 +36,6 @@
             >
               {{ error }}
             </v-alert>
-
-            <!-- Информация о тестовых пользователях (только в dev режиме) -->
-            <v-card v-if="showTestUsers" color="info" variant="tonal" class="mt-4 test-users-card">
-              <v-card-text class="pa-3">
-                <div class="text-subtitle-2 mb-2">
-                  <v-icon size="16" class="mr-1">mdi-information</v-icon>
-                  Тестовые пользователи:
-                </div>
-                <div class="test-users-list">
-                  <div v-for="user in testUsers" :key="user.pin" class="test-user-item">
-                    <v-chip
-                      size="small"
-                      color="info"
-                      variant="flat"
-                      class="mr-2 mb-1"
-                      @click="fillPin(user.pin)"
-                    >
-                      {{ user.pin }} - {{ user.role }}
-                    </v-chip>
-                  </div>
-                </div>
-              </v-card-text>
-            </v-card>
           </v-card-text>
         </v-card>
       </v-col>
@@ -76,13 +53,6 @@ import PinInput from '@/components/atoms/inputs/PinInput.vue'
 // ===== КОНСТАНТЫ =====
 
 const MODULE_NAME = 'LoginView'
-
-// Тестовые пользователи для разработки
-const testUsers = [
-  { pin: '1234', role: 'Админ → BackOffice' },
-  { pin: '2345', role: 'Менеджер → BackOffice' },
-  { pin: '3456', role: 'Кассир → POS' }
-]
 
 // ===== КОМПОЗИЦИЯ =====
 
