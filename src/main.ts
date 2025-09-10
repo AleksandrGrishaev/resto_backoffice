@@ -1,8 +1,7 @@
-// src/main.ts - Шаг 1: Добавляем инициализацию
-
+// src/main.ts - ОБНОВЛЕННЫЙ с правильным импортом
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth' // 🔄 ИЗМЕНЕН ИМПОРТ
 import router from '@/router'
 
 // Styles
@@ -17,18 +16,20 @@ import { vuetify } from '@/plugins/vuetify'
 import App from './App.vue'
 import { DebugUtils } from './utils'
 
-// 🆕 NEW: App initializer
+// App initializer
 import { useAppInitializer } from '@/core/appInitializer'
 
 const MODULE_NAME = 'Main'
 
-// Services initialization (existing)
+// ===== ИНИЦИАЛИЗАЦИЯ СЕРВИСОВ =====
 const initServices = async () => {
   const authStore = useAuthStore()
-  await authStore.initializeDefaultUsers?.()
+
+  // 🔄 УПРОЩЕНО: убираем initializeDefaultUsers, так как пользователи теперь в CoreUserService
+  DebugUtils.info(MODULE_NAME, '🔐 Auth store ready')
 }
 
-// App initialization with store loading
+// ===== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ =====
 async function initializeApp() {
   try {
     DebugUtils.info(MODULE_NAME, '🏁 Starting application bootstrap')
@@ -41,13 +42,19 @@ async function initializeApp() {
     app.use(router)
     app.use(vuetify)
 
-    // Initialize auth services first (existing)
+    // Initialize auth services first
     await initServices()
     DebugUtils.info(MODULE_NAME, '🔐 Auth services initialized')
 
-    // 🆕 NEW: Initialize all stores with proper loading order
-    const appInitializer = useAppInitializer()
-    await appInitializer.initialize()
+    // Initialize all stores with proper loading order
+    try {
+      const appInitializer = useAppInitializer()
+      await appInitializer.initialize()
+      DebugUtils.info(MODULE_NAME, '🗄️ All stores initialized')
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Some stores failed to initialize (non-critical)', { error })
+      // Продолжаем работу даже если stores не загрузились
+    }
 
     // Mount application
     app.mount('#app')
@@ -59,7 +66,7 @@ async function initializeApp() {
     // Simple error handling
     console.error('Application bootstrap failed:', error)
 
-    // TODO: Show error screen
+    // Show error screen
     document.body.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: Arial;">
         <div style="text-align: center;">
