@@ -468,3 +468,8 @@ export const usePosStore = defineStore('pos', () => {
     restoreShift
   }
 })
+
+export { usePosTablesStore } from './tables/tablesStore'
+export { usePosOrdersStore } from './orders/ordersStore'
+export { usePosPaymentsStore } from './payments/paymentsStore'
+export type * from './types'
