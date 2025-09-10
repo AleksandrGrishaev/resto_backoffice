@@ -26,7 +26,7 @@ import { useMenuStore } from '@/stores/menu'
 import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
 import { useSupplierStore } from '@/stores/supplier_2'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 
 const MODULE_NAME = 'DebugService'
 

@@ -84,7 +84,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 import { formatIDR } from '@/utils/currency'
 // ✅ ИСПРАВЛЕНО: Добавлен импорт formatDateTime
 import { formatDateTime } from '@/utils/formatter'

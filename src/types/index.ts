@@ -1,5 +1,5 @@
 // src/types/index.ts
-export * from './auth'
+export * from '../stores/auth/auth'
 export * from './bill'
 export * from './common'
 export * from './customer'

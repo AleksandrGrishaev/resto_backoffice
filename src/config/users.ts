@@ -1,5 +1,5 @@
 // src/config/users.ts
-import type { User, UserRole, AppType } from '@/types/auth'
+import type { User, UserRole, AppType } from '../stores/auth/auth'
 
 interface UserConfig extends Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'lastLoginAt'> {
   description?: string

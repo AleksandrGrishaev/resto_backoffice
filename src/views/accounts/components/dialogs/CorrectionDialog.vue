@@ -66,7 +66,7 @@
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 import { useDialogForm } from '@/composables/useDialogForm'
 import type { Account } from '@/stores/account'
 

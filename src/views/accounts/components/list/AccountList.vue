@@ -96,7 +96,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 import { useAccountStore } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
 import { formatDate } from '@/utils/formatter' // ✅ ДОБАВЛЕН импорт formatDate

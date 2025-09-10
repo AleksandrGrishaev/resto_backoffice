@@ -2,7 +2,7 @@
 import { BaseService } from '@/firebase/services/base.service'
 import { collection, getDocs, query, where, addDoc } from 'firebase/firestore'
 import { db } from '@/firebase/config'
-import type { User, LoginAttempt, AppType } from '@/types/auth'
+import type { User, LoginAttempt, AppType } from '../stores/auth/auth'
 import { DebugUtils } from '@/utils'
 import { TimeUtils } from '@/utils'
 import { DEFAULT_USERS, UserUtils } from '@/config/users'

@@ -1,7 +1,7 @@
 // src/services/session.service.ts
 import { DebugUtils } from '@/utils'
 import { TimeUtils } from '@/utils'
-import type { User, LoginAttempt } from '@/types/auth'
+import type { User, LoginAttempt } from '../stores/auth/auth'
 
 const MODULE_NAME = 'SessionService'
 

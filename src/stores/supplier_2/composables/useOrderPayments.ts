@@ -50,7 +50,7 @@ export function useOrderPayments() {
     const [{ useAccountStore }, { useSupplierStore }, { useAuthStore }] = await Promise.all([
       import('@/stores/account'),
       import('@/stores/supplier_2'),
-      import('@/stores/auth.store')
+      import('@/stores/auth')
     ])
 
     return {

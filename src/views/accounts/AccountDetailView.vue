@@ -265,7 +265,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 import { useAccountTransactions } from '@/stores/account/composables/useAccountTransactions'
 import type { Transaction, OperationType, ExpenseCategory } from '@/stores/account'
 import { EXPENSE_CATEGORIES } from '@/stores/account'

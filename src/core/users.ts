@@ -1,5 +1,5 @@
 // src/core/users.ts - НА ОСНОВЕ существующего config/users.ts
-import type { User, UserRole, AppType } from '@/types/auth'
+import type { User, UserRole, AppType } from '../stores/auth/auth'
 
 // ===== ИМПОРТ СУЩЕСТВУЮЩЕЙ КОНФИГУРАЦИИ =====
 import { ROLE_CONFIGS, DEFAULT_USERS, UserUtils } from '@/config/users'

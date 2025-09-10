@@ -1,5 +1,7 @@
-// src/stores/auth/types.ts
+// src/stores/auth/types.ts - ЕДИНЫЙ ИСТОЧНИК ПРАВДЫ для всех auth типов
 import { ComputedRef } from 'vue'
+
+// ===== БАЗОВЫЕ ТИПЫ =====
 
 export type AppType = 'backoffice' | 'cashier' | 'kitchen'
 export type UserRole = 'admin' | 'manager' | 'kitchen' | 'bar' | 'cashier'
@@ -23,6 +25,25 @@ export interface AuthState {
   isLoading: boolean
   error: string | null
   lastLoginAt: string | null
+}
+
+// ===== КОНФИГУРАЦИЯ ПОЛЬЗОВАТЕЛЕЙ (для совместимости с config/users.ts) =====
+
+/**
+ * Конфигурация пользователя для создания через config
+ */
+export interface UserConfig extends Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'lastLoginAt'> {
+  description?: string
+}
+
+/**
+ * Конфигурация роли (расширенная для системы ролей)
+ */
+export interface RoleConfig {
+  name: UserRole
+  description: string
+  permissions: string[]
+  defaultAccess: AppType[]
 }
 
 // ===== РЕЗУЛЬТАТЫ ОПЕРАЦИЙ =====
@@ -56,17 +77,6 @@ export interface RoleRestrictions {
   readOnlyFields: string[]
 }
 
-// ===== КОНФИГУРАЦИЯ РОЛЕЙ =====
-
-export interface RoleConfig {
-  name: UserRole
-  displayName: string
-  description: string
-  defaultRoute: string
-  permissions: UserPermissions
-  restrictions: RoleRestrictions
-}
-
 // ===== СЕССИЯ И ЛОГИРОВАНИЕ =====
 
 export interface UserSession {
@@ -89,11 +99,18 @@ export interface LoginAttempt {
 
 // ===== НАВИГАЦИЯ И РОУТИНГ =====
 
-export interface RoutePermissions {
-  requiresAuth: boolean
+export interface RouteAuthMeta {
+  requiresAuth?: boolean
   allowedRoles?: UserRole[]
   requiresEdit?: boolean
   requiresFinance?: boolean
+  title?: string
+  requiresDev?: boolean
+}
+
+// Расширяем vue-router
+declare module 'vue-router' {
+  interface RouteMeta extends RouteAuthMeta {}
 }
 
 export type NavigationGuardResult =
@@ -126,7 +143,7 @@ export const DEFAULT_ROUTES: Record<UserRole, string> = {
   bar: '/kitchen'
 }
 
-// ===== ВСПОМОГАТЕЛЬНЫЕ ТИПЫ =====
+// ===== ОШИБКИ И СОБЫТИЯ =====
 
 export type AuthError =
   | 'INVALID_PIN'
@@ -134,6 +151,7 @@ export type AuthError =
   | 'SESSION_EXPIRED'
   | 'INSUFFICIENT_PERMISSIONS'
   | 'NETWORK_ERROR'
+  | 'SECURITY_LOCKED'
   | 'UNKNOWN_ERROR'
 
 export type AuthEvent =
@@ -142,6 +160,7 @@ export type AuthEvent =
   | 'LOGOUT'
   | 'SESSION_EXPIRED'
   | 'PERMISSION_DENIED'
+  | 'SESSION_RESTORED'
 
 // ===== COMPOSABLE ТИПЫ =====
 
@@ -172,3 +191,122 @@ export interface UsePermissionsReturn {
   hasAnyRole: (roles: UserRole[]) => boolean
   canAccessRoute: (route: string) => boolean
 }
+
+// ===== УТИЛИТАРНЫЕ ТИПЫ =====
+
+/**
+ * Тип для проверки прав доступа
+ */
+export type PermissionChecker = (roles: UserRole[]) => boolean
+
+/**
+ * Тип для функций навигации
+ */
+export type NavigationHandler = (to: string, from?: string) => Promise<void> | void
+
+/**
+ * Результат валидации прав
+ */
+export interface PermissionValidationResult {
+  hasAccess: boolean
+  reason?: string
+  suggestedAction?: string
+}
+
+/**
+ * Информация о сессии
+ */
+export interface SessionInfo {
+  hasActiveSession: boolean
+  sessionAge?: number
+  lastActivity?: string
+  expiresIn?: number
+  userInfo?: {
+    id: string
+    name: string
+    roles: string[]
+  }
+}
+
+/**
+ * Статистика попыток входа
+ */
+export interface LoginStats {
+  totalAttempts: number
+  successfulAttempts: number
+  failedAttempts: number
+  lastSuccessfulLogin?: string
+  recentFailures: number
+}
+
+// ===== КОНСТАНТЫ ДЛЯ СЕРВИСОВ =====
+
+export const AUTH_STORAGE_KEYS = {
+  SESSION: 'kitchen_app_session',
+  LOGIN_ATTEMPTS: 'kitchen_app_login_attempts'
+} as const
+
+export const SESSION_CONFIG = {
+  DURATION: 24 * 60 * 60 * 1000, // 24 часа
+  MAX_LOGIN_ATTEMPTS: 10,
+  ATTEMPT_WINDOW: 60 * 60 * 1000 // 1 час
+} as const
+
+// ===== ТИПЫ ДЛЯ ROUTER GUARDS =====
+
+export interface RoutePermissions {
+  requiresAuth: boolean
+  allowedRoles?: UserRole[]
+  requiresEdit?: boolean
+  requiresFinance?: boolean
+}
+
+// ===== ТИПЫ ДЛЯ ВАЛИДАЦИИ =====
+
+export interface AuthValidationRule {
+  field: keyof User
+  required?: boolean
+  minLength?: number
+  maxLength?: number
+  pattern?: RegExp
+  custom?: (value: any) => boolean | string
+}
+
+export interface AuthValidationResult {
+  isValid: boolean
+  errors: Record<string, string[]>
+  warnings?: Record<string, string[]>
+}
+
+// ===== ТИПЫ ДЛЯ API (будущее) =====
+
+export interface AuthApiConfig {
+  baseUrl: string
+  endpoints: {
+    login: string
+    logout: string
+    refresh: string
+    profile: string
+  }
+  timeout: number
+}
+
+export interface AuthTokens {
+  accessToken: string
+  refreshToken?: string
+  tokenType: string
+  expiresIn: number
+  scope?: string
+}
+
+// ===== LEGACY SUPPORT (для миграции) =====
+
+/**
+ * @deprecated Используйте UserConfig
+ */
+export type LegacyUserConfig = UserConfig
+
+/**
+ * @deprecated Используйте RoleConfig
+ */
+export type LegacyRoleConfig = RoleConfig

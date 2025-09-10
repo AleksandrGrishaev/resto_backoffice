@@ -1,7 +1,7 @@
 // src/stores/auth/authStore.ts - ОБНОВЛЕННЫЙ существующий файл
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { User, UserRole } from '@/types/auth'
+import type { User, UserRole } from './auth'
 import { CoreUserService } from '@/core/users' // 🆕 НОВЫЙ ИМПОРТ
 import { DebugUtils } from '@/utils'
 import { AuthSessionService } from './services'

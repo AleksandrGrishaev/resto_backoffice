@@ -13,7 +13,7 @@ const MODULE_NAME = 'SupplierAccountIntegration'
 
 export class SupplierAccountIntegration {
   private _accountStore: ReturnType<typeof import('@/stores/account').useAccountStore> | null = null
-  private _authStore: ReturnType<typeof import('@/stores/auth.store').useAuthStore> | null = null
+  private _authStore: ReturnType<typeof import('@/stores/auth').useAuthStore> | null = null
 
   private async getAccountStore() {
     if (!this._accountStore) {
@@ -25,7 +25,7 @@ export class SupplierAccountIntegration {
 
   private async getAuthStore() {
     if (!this._authStore) {
-      const { useAuthStore } = await import('@/stores/auth.store')
+      const { useAuthStore } = await import('@/stores/auth')
       this._authStore = useAuthStore()
     }
     return this._authStore

@@ -34,7 +34,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccountStore } from '@/stores/account'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 import type { Account, OperationType } from '@/stores/account'
 
 // ✅ ИСПРАВЛЕНО: Импорты реальных компонентов

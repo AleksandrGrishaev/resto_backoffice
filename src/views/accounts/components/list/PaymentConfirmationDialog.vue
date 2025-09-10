@@ -147,7 +147,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useAccountStore } from '@/stores/account'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 import { formatIDR } from '@/utils/currency'
 import { formatDate } from '@/utils/formatter'
 

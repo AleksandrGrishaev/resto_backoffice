@@ -254,7 +254,7 @@ import type { ProcurementRequest, PurchaseOrder, Receipt } from '@/stores/suppli
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useAccountStore } from '@/stores/account'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth.store'
+import { useAuthStore } from '@/stores/auth'
 
 // Types
 import type { PendingPayment } from '@/stores/account/types'
