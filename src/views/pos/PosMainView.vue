@@ -21,7 +21,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import PosLayout from '@/layouts/PosLayout.vue'
-import TablesSidebar from './components/TablesSidebar.vue'
+import TablesSidebar from './tables/TablesSidebar.vue'
 import MenuSection from './components/MenuSection.vue'
 import OrderSection from './components/OrderSection.vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'

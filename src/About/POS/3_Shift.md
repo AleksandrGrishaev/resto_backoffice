@@ -1,10 +1,10 @@
-// src/stores/pos/shifts/types.ts - УПРОЩЕННАЯ СИСТЕМА ТИПОВ ДЛЯ СМЕН
+// src/stores/pos/shifts/types.ts - SHIFTS TYPES
 
 import type { BaseEntity, TransactionPerformer } from '@/types/common'
 import type { Account, Transaction } from '@/stores/account/types'
 
 // =============================================
-// ОСНОВНЫЕ ТИПЫ СМЕН
+// BASIC SHIFT TYPES
 // =============================================
 
 export type ShiftStatus = 'active' | 'completed' | 'cancelled' | 'suspended'
@@ -12,7 +12,7 @@ export type CashDiscrepancyType = 'shortage' | 'overage' | 'none'
 export type SyncStatus = 'synced' | 'pending' | 'failed' | 'offline'
 
 // =============================================
-// СПОСОБЫ ОПЛАТЫ (из PaymentSettingsView)
+// PAYMENT METHODS (from PaymentSettingsView)
 // =============================================
 
 export interface PaymentMethod {
@@ -20,74 +20,74 @@ id: string
 name: string
 type: 'cash' | 'card' | 'bank' | 'gojek' | 'grab' | 'qr'
 isActive: boolean
-accountId?: string // Связь с Account Store
+accountId?: string // Link to Account Store
 icon?: string
 sortOrder?: number
 }
 
 // =============================================
-// ГЛАВНАЯ СУЩНОСТЬ СМЕНЫ
+// MAIN SHIFT ENTITY
 // =============================================
 
 export interface PosShift extends BaseEntity {
-// Базовая информация
-shiftNumber: string // Номер смены (например: "SHIFT-001-2025-09-10")
+// Basic information
+shiftNumber: string // Shift number (e.g.: "SHIFT-001-2025-09-10")
 status: ShiftStatus
 
-// Кассир и время
+// Cashier and time
 cashierId: string
 cashierName: string
 startTime: string
 endTime?: string
-duration?: number // В минутах
+duration?: number // In minutes
 
-// Касса на начало
+// Starting cash
 startingCash: number
-startingCashVerified: boolean // Подтверждена ли начальная сумма
+startingCashVerified: boolean // Is starting amount verified
 
-// Касса на конец (заполняется при закрытии)
+// Ending cash (filled when closing)
 endingCash?: number
-expectedCash?: number // Ожидаемая сумма наличных
-cashDiscrepancy?: number // Разница (+ излишек, - недостача)
+expectedCash?: number // Expected cash amount
+cashDiscrepancy?: number // Difference (+ overage, - shortage)
 cashDiscrepancyType?: CashDiscrepancyType
 
-// Продажи и платежи
+// Sales and payments
 totalSales: number
 totalTransactions: number
-paymentMethods: PaymentMethodSummary[] // Массив способов оплаты
+paymentMethods: PaymentMethodSummary[] // Array of payment methods
 
-// Коррекции и объяснения
+// Corrections and explanations
 corrections: ShiftCorrection[]
 notes?: string
 
-// Интеграция с Account Store
+// Account Store integration
 accountBalances: ShiftAccountBalance[]
 
-// Sync информация для ВСЕЙ смены (не для каждого платежа)
+// Sync information for the entire shift
 syncStatus: SyncStatus
 lastSyncAt?: string
 pendingSync: boolean
 
-// Метаданные
+// Metadata
 deviceId?: string
 location?: string
 }
 
 // =============================================
-// УПРОЩЕННАЯ РАЗБИВКА ПЛАТЕЖЕЙ
+// SIMPLIFIED PAYMENT BREAKDOWN
 // =============================================
 
 export interface PaymentMethodSummary {
-methodId: string // ID способа оплаты
-methodName: string // Название (наличные, карта, etc.)
+methodId: string // Payment method ID
+methodName: string // Name (Cash, Card, etc.)
 methodType: PaymentMethod['type']
-count: number // Количество операций
-amount: number // Общая сумма
-percentage: number // Процент от общих продаж
+count: number // Number of operations
+amount: number // Total amount
+percentage: number // Percentage of total sales
 }
 
 // =============================================
-// УПРОЩЕННЫЕ КОРРЕКЦИИ
+// SIMPLIFIED CORRECTIONS
 // =============================================
 
 export interface ShiftCorrection extends BaseEntity {
@@ -98,16 +98,16 @@ reason: string
 description: string
 performedBy: TransactionPerformer
 
-// Связанные данные
+// Related data
 relatedOrderId?: string
 relatedPaymentId?: string
 
-// Влияние на отчетность
+// Impact on reporting
 affectsReporting: boolean
 }
 
 // =============================================
-// БАЛАНСЫ СЧЕТОВ НА НАЧАЛО/КОНЕЦ СМЕНЫ
+// ACCOUNT BALANCES AT SHIFT START/END
 // =============================================
 
 export interface ShiftAccountBalance {
@@ -115,40 +115,40 @@ accountId: string
 accountName: string
 accountType: Account['type']
 
-// Балансы
+// Balances
 startingBalance: number
 endingBalance?: number
 expectedBalance?: number
 actualBalance?: number
 
-// Движения за смену
+// Movements during shift
 totalIncome: number
 totalExpense: number
 transactionCount: number
 
-// Расхождения
+// Discrepancies
 discrepancy?: number
 discrepancyExplained: boolean
 discrepancyNotes?: string
 
-// Sync статус
+// Sync status
 lastSyncAt?: string
 syncStatus: SyncStatus
 }
 
 // =============================================
-// ИНТЕГРАЦИЯ С ACCOUNT STORE
+// ACCOUNT STORE INTEGRATION
 // =============================================
 
 export interface ShiftAccountIntegration {
-// Записи, которые нужно создать в Account Store
+// Records to create in Account Store
 pendingTransactions: ShiftTransaction[]
 
-// Сверка с Account Store
+// Account Store sync verification
 accountStoreSyncStatus: Record<string, SyncStatus>
 lastAccountStoreSync?: string
 
-// Конфликты при синхронизации
+// Sync conflicts
 syncConflicts: ShiftSyncConflict[]
 }
 
@@ -160,12 +160,12 @@ amount: number
 description: string
 performedBy: TransactionPerformer
 
-// POS специфичные поля
+// POS specific fields
 shiftId: string
 orderId?: string
 paymentId?: string
 
-// Sync информация
+// Sync information
 syncStatus: SyncStatus
 syncAttempts: number
 lastSyncAttempt?: string
@@ -185,28 +185,28 @@ resolvedBy?: TransactionPerformer
 }
 
 // =============================================
-// OFFLINE РЕЖИМ
+// OFFLINE MODE
 // =============================================
 
 export interface OfflineShiftData {
 shiftId: string
 
-// Данные для синхронизации
+// Data for synchronization
 unsyncedTransactions: ShiftTransaction[]
 unsyncedCorrections: ShiftCorrection[]
-unsyncedOrders: string[] // ID заказов для синхронизации
+unsyncedOrders: string[] // Order IDs for synchronization
 
-// Метаданные offline сессии
+// Offline session metadata
 offlineStartTime: string
 offlineEndTime?: string
 offlineDuration?: number
 
-// Конфликты при восстановлении
+// Conflicts during recovery
 conflicts: OfflineConflict[]
 
-// Размер данных
-dataSize: number // В байтах
-estimatedSyncTime?: number // Оценка времени синхронизации
+// Data size
+dataSize: number // In bytes
+estimatedSyncTime?: number // Sync time estimation
 }
 
 export interface OfflineConflict {
@@ -219,46 +219,46 @@ isResolved: boolean
 }
 
 // =============================================
-// ПРОСТОЙ ОТЧЕТ ПО СМЕНЕ
+// SIMPLE SHIFT REPORT
 // =============================================
 
 export interface ShiftReport {
 shift: PosShift
 
-// Базовые итоги
+// Basic totals
 summary: ShiftBasicSummary
 
-// Коррекции
+// Corrections
 corrections: ShiftCorrection[]
 
-// Статус интеграции
+// Integration status
 integrationStatus: ShiftIntegrationStatus
 }
 
 export interface ShiftBasicSummary {
-// Начало и конец смены
+// Shift start and end
 startTime: string
 endTime?: string
-duration?: number // В минутах
+duration?: number // In minutes
 
-// Базовая статистика
+// Basic statistics
 totalSales: number
 totalTransactions: number
 averageTransactionValue: number
 
-// По способам оплаты
+// By payment method
 cashSales: number
 cardSales: number
 digitalSales: number
 
-// Возвраты и отмены
+// Refunds and voids
 refunds: number
 voids: number
 
-// Чистая выручка
+// Net revenue
 netRevenue: number
 
-// Расхождения
+// Discrepancies
 totalDiscrepancies: number
 unexplainedDiscrepancies: number
 }
@@ -281,7 +281,7 @@ overallHealth: 'healthy' | 'warning' | 'error'
 }
 
 // =============================================
-// DTO ДЛЯ СОЗДАНИЯ И ОБНОВЛЕНИЯ
+// DTOs FOR CREATE AND UPDATE
 // =============================================
 
 export interface CreateShiftDto {
@@ -310,48 +310,58 @@ deviceId?: string
 }
 
 // =============================================
-// УТОЧНЕННАЯ АРХИТЕКТУРА ИНТЕГРАЦИИ
+// SERVICE RESPONSE TYPE
+// =============================================
+
+export interface ServiceResponse<T = void> {
+success: boolean
+data?: T
+error?: string
+}
+
+// =============================================
+// INTEGRATION ARCHITECTURE CLARIFICATION
 // =============================================
 
 /\*
-АРХИТЕКТУРА ИНТЕГРАЦИИ:
+INTEGRATION ARCHITECTURE:
 
-1. **WORKFLOW ПРОДАЖ**:
-   Продажа → POS Payment → Shift Transaction → Account Store
-   (цены берутся из локального кэша Menu Store, не из сети)
+1. **SALES WORKFLOW**:
+   Sale → POS Payment → Shift Transaction → Account Store
+   (prices taken from local Menu Store cache, not from network)
 
-2. **WORKFLOW ЗАКАЗОВ** (TODO для будущего):
-   Заказ → Кухня (напрямую, без смены)
-   Заказ → Статистика (возможно через смену, решим позже)
+2. **ORDERS WORKFLOW** (TODO for future):
+   Order → Kitchen (direct, bypassing shift)
+   Order → Statistics (possibly through shift, decide later)
 
-3. **OFFLINE ПОДДЕРЖКА**:
+3. **OFFLINE SUPPORT**:
 
-   - Все ФИНАНСОВЫЕ операции сохраняются в смене
-   - Заказы на кухню идут напрямую (если есть связь)
-   - При восстановлении связи - синхронизация ТОЛЬКО финансов
+   - All FINANCIAL operations saved in shift
+   - Kitchen orders go direct (if connection available)
+   - When connection restored - sync ONLY finances
 
-4. **ИНТЕГРАЦИЯ**:
+4. **INTEGRATION**:
 
-   - Shift Store → Account Store (создание Transaction)
-   - Shift Store → Inventory Store (списание товаров при продаже)
-   - Menu Store → локальный кэш (цены загружаются заранее)
+   - Shift Store → Account Store (create Transaction)
+   - Shift Store → Inventory Store (deduct items on sale)
+   - Menu Store → local cache (prices loaded in advance)
 
-5. **СТАТУС СИНХРОНИЗАЦИИ**:
+5. **SYNC STATUS**:
 
-   - Смена имеет общий syncStatus
-   - Каждая ShiftTransaction имеет свой syncStatus
-   - НЕ накапливаем, а синхронизируем и помечаем как synced
-   - Конфликты разрешаются через UI
+   - Shift has overall syncStatus
+   - Each ShiftTransaction has its own syncStatus
+   - DON'T accumulate, sync and mark as synced
+   - Conflicts resolved through UI
 
-6. **СПОСОБЫ ОПЛАТЫ**:
-   - Массив PaymentMethod из PaymentSettingsView
-   - Каждый способ связан с Account через accountId
-   - Динамическое добавление/удаление способов оплаты
+6. **PAYMENT METHODS**:
+   - PaymentMethod array from PaymentSettingsView
+   - Each method linked to Account via accountId
+   - Dynamic add/remove payment methods
 
 TODO:
 
-- Решить судьбу заказов (статистика vs прямая отправка)
-- Реализовать кэширование меню для offline
-- UI для разрешения конфликтов синхронизации
-- Интеграция с PaymentSettingsView для способов оплаты
+- Decide order fate (statistics vs direct dispatch)
+- Implement menu caching for offline
+- UI for sync conflict resolution
+- Integration with PaymentSettingsView for payment methods
   \*/
