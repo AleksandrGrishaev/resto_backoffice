@@ -130,33 +130,8 @@
 
                 <!-- Actions -->
                 <div class="bill-actions d-flex gap-1">
-                  <v-tooltip text="View Bill Details">
-                    <template #activator="{ props: tooltipProps }">
-                      <v-btn
-                        v-bind="tooltipProps"
-                        icon="mdi-eye"
-                        variant="text"
-                        size="small"
-                        color="info"
-                        @click="$emit('view-bill', bill.id)"
-                      />
-                    </template>
-                  </v-tooltip>
-
-                  <v-tooltip v-if="bill.status === 'pending'" text="Process Payment">
-                    <template #activator="{ props: tooltipProps }">
-                      <v-btn
-                        v-bind="tooltipProps"
-                        icon="mdi-credit-card-check"
-                        variant="text"
-                        size="small"
-                        color="success"
-                        @click="$emit('process-payment', bill.id)"
-                      />
-                    </template>
-                  </v-tooltip>
-
-                  <v-tooltip v-if="bill.status === 'pending'" text="Detach Bill">
+                  <!-- ✅ Unlink для completed переплат -->
+                  <v-tooltip v-if="canUnlinkOverpayment(bill)" text="Unlink Overpayment">
                     <template #activator="{ props: tooltipProps }">
                       <v-btn
                         v-bind="tooltipProps"
@@ -169,6 +144,33 @@
                     </template>
                   </v-tooltip>
 
+                  <!-- ✅ Process Payment для pending счетов -->
+                  <v-tooltip v-if="bill.status === 'pending'" text="Process Payment">
+                    <template #activator="{ props: tooltipProps }">
+                      <v-btn
+                        v-bind="tooltipProps"
+                        icon="mdi-credit-card"
+                        variant="text"
+                        size="small"
+                        color="success"
+                        @click="$emit('process-payment', bill.id)"
+                      />
+                    </template>
+                  </v-tooltip>
+
+                  <!-- ✅ Cancel для pending счетов (созданных для этого заказа) -->
+                  <v-tooltip v-if="canCancelBill(bill)" text="Cancel Bill">
+                    <template #activator="{ props: tooltipProps }">
+                      <v-btn
+                        v-bind="tooltipProps"
+                        icon="mdi-cancel"
+                        variant="text"
+                        size="small"
+                        color="error"
+                        @click="$emit('cancel-bill', bill.id)"
+                      />
+                    </template>
+                  </v-tooltip>
                   <!-- More Actions Menu -->
                   <v-menu>
                     <template #activator="{ props: menuProps }">
@@ -183,20 +185,10 @@
 
                     <v-list density="compact">
                       <v-list-item
-                        prepend-icon="mdi-pencil"
-                        title="Edit Amount"
-                        @click="$emit('edit-bill', bill.id)"
-                      />
-                      <v-list-item
                         v-if="bill.status === 'pending'"
                         prepend-icon="mdi-cancel"
                         title="Cancel Bill"
                         @click="$emit('cancel-bill', bill.id)"
-                      />
-                      <v-list-item
-                        prepend-icon="mdi-history"
-                        title="Show History"
-                        @click="toggleBillHistory(bill.id)"
                       />
                     </v-list>
                   </v-menu>
@@ -245,9 +237,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
 import type { PendingPayment } from '@/stores/account/types'
+import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 
 // =============================================
 // PROPS & EMITS
@@ -268,6 +261,7 @@ interface Emits {
   (e: 'detach-bill', billId: string): void
   (e: 'edit-bill', billId: string): void
   (e: 'cancel-bill', billId: string): void
+  (e: 'detach-bill', billId: string): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -276,6 +270,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<Emits>()
 
+const { getAvailableAmount } = useOrderPayments()
 // =============================================
 // LOCAL STATE
 // =============================================
@@ -283,22 +278,33 @@ defineEmits<Emits>()
 const showBillHistory = ref<Record<string, boolean>>({})
 
 // =============================================
-// COMPUTED PROPERTIES
-// =============================================
-
-const totalBilledAmount = computed(() =>
-  props.bills.reduce((sum, bill) => {
-    const link = bill.linkedOrders?.find(o => o.orderId === props.order.id && o.isActive)
-    return sum + (link?.linkedAmount || 0)
-  }, 0)
-)
-
-// =============================================
 // METHODS
 // =============================================
 
-function toggleBillHistory(billId: string) {
-  showBillHistory.value[billId] = !showBillHistory.value[billId]
+function canUnlinkOverpayment(bill: PendingPayment): boolean {
+  // Только completed счета (переплаты)
+  if (bill.status !== 'completed') return false
+
+  // Заказ НЕ в финальном статусе
+  if (props.order.status === 'delivered' || props.order.status === 'received') return false
+
+  // Счет был привязан через Attach (не создан для этого заказа)
+  if (bill.sourceOrderId === props.order.id) return false
+
+  return true
+}
+
+function canCancelBill(bill: PendingPayment): boolean {
+  // Только pending счета
+  if (bill.status !== 'pending') return false
+
+  // Заказ НЕ в финальном статусе
+  if (props.order.status === 'delivered' || props.order.status === 'received') return false
+
+  // Счет был создан для этого заказа (не attached)
+  if (bill.sourceOrderId !== props.order.id) return false
+
+  return true
 }
 
 function formatDate(date: string | Date): string {

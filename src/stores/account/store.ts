@@ -762,7 +762,7 @@ export const useAccountStore = defineStore('account', () => {
 
   // Payment link
   // ✅ НОВЫЙ метод: привязка платежа к заказу с указанием суммы
-  // ✅ ИСПРАВЛЕННАЯ версия с проверками
+
   async function linkPaymentToOrder(data: LinkPaymentToOrderDto): Promise<void> {
     try {
       clearError()
@@ -811,10 +811,29 @@ export const useAccountStore = defineStore('account', () => {
 
       payment.updatedAt = new Date().toISOString()
 
+      // ✅ НОВОЕ: Обновляем usedAmount для completed платежей
+      if (payment.status === 'completed') {
+        // Вычисляем общую сумму всех активных привязок после добавления новой
+        const totalLinkedAmount = payment.linkedOrders
+          .filter(o => o.isActive)
+          .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+        // Обновляем usedAmount
+        await updatePaymentUsedAmount(payment.id, totalLinkedAmount)
+
+        DebugUtils.info(MODULE_NAME, 'Updated usedAmount for completed payment', {
+          paymentId: payment.id,
+          oldUsedAmount: payment.usedAmount,
+          newUsedAmount: totalLinkedAmount,
+          availableAmount: payment.amount - totalLinkedAmount
+        })
+      }
+
       DebugUtils.info(MODULE_NAME, 'Payment linked to order successfully', {
         paymentId: data.paymentId,
         orderId: data.orderId,
-        linkedAmount: data.linkAmount
+        linkedAmount: data.linkAmount,
+        paymentStatus: payment.status
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to link payment to order', { error })
@@ -823,7 +842,7 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
   // ✅ НОВЫЙ метод: отвязка платежа от заказа
-  // ✅ ИСПРАВЛЕННАЯ версия с проверками
+
   async function unlinkPaymentFromOrder(paymentId: string, orderId: string): Promise<void> {
     try {
       clearError()
@@ -848,16 +867,39 @@ export const useAccountStore = defineStore('account', () => {
       }
 
       const link = payment.linkedOrders[linkIndex]
+      const unlinkedAmount = link.linkedAmount
 
       // Деактивируем привязку (сохраняем для истории)
       link.isActive = false
+      link.unlinkedAt = new Date().toISOString()
 
       payment.updatedAt = new Date().toISOString()
+
+      // ✅ НОВОЕ: Обновляем usedAmount для completed платежей после отвязки
+      if (payment.status === 'completed') {
+        // Пересчитываем usedAmount после отвязки (исключаем отвязанный заказ)
+        const remainingLinkedAmount = payment.linkedOrders
+          .filter(o => o.isActive)
+          .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+        // Обновляем usedAmount
+        await updatePaymentUsedAmount(payment.id, remainingLinkedAmount)
+
+        DebugUtils.info(MODULE_NAME, 'Updated usedAmount after unlinking', {
+          paymentId,
+          orderId,
+          unlinkedAmount,
+          oldUsedAmount: payment.usedAmount,
+          newUsedAmount: remainingLinkedAmount,
+          availableAmount: payment.amount - remainingLinkedAmount
+        })
+      }
 
       DebugUtils.info(MODULE_NAME, 'Payment unlinked from order successfully', {
         paymentId,
         orderId,
-        unlinkedAmount: link.linkedAmount
+        unlinkedAmount,
+        paymentStatus: payment.status
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to unlink payment from order', { error })

@@ -199,6 +199,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { PendingPayment, PurchaseOrder } from '@/stores/supplier_2/types'
+import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 
 // =============================================
 // PROPS & EMITS
@@ -232,6 +233,7 @@ const submitting = ref(false)
 // =============================================
 // COMPUTED
 // =============================================
+const { getAvailableAmount } = useOrderPayments()
 
 const isOpen = computed({
   get: () => props.modelValue,
@@ -264,19 +266,6 @@ const linkAmountWarning = computed(() => {
 // =============================================
 // METHODS
 // =============================================
-
-function getAvailableAmount(payment: PendingPayment): number {
-  if (!payment.linkedOrders) return 0
-
-  if (payment.status === 'completed') {
-    return payment.amount - (payment.usedAmount || 0)
-  }
-
-  const linkedAmount =
-    payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
-
-  return payment.amount - linkedAmount
-}
 
 function calculateLinkAmount(payment: PendingPayment): number {
   if (!props.order) return 0

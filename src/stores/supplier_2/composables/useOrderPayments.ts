@@ -4,7 +4,6 @@ import { reactive, computed, readonly, ref, watch } from 'vue'
 import { DebugUtils } from '@/utils'
 import type { PurchaseOrder } from '../types'
 import type { PendingPayment, CreatePaymentDto } from '@/stores/account'
-import type { UpdatePaymentAmountDto } from '@/stores/account/types'
 const MODULE_NAME = 'useOrderPayments'
 
 /**
@@ -771,12 +770,15 @@ export function useOrderPayments() {
       .reduce((sum, o) => sum + o.linkedAmount, 0)
 
     if (payment.status === 'completed') {
-      // ✅ НОВАЯ ЛОГИКА: Для completed платежей используем usedAmount
-      const usedAmount = payment.usedAmount || linkedAmount // fallback на linkedAmount
-      return payment.amount - usedAmount
+      // ✅ Для completed платежей: защита от рассинхронизации
+      const usedAmount = Math.max(payment.usedAmount || 0, linkedAmount)
+      const availableAmount = payment.amount - usedAmount
+
+      return Math.max(0, availableAmount) // Не может быть отрицательным
     } else {
-      // ✅ Для pending платежей: available = amount - linkedAmount (зарезервировано)
-      return payment.amount - linkedAmount
+      // ✅ Для pending платежей: available = amount - linkedAmount
+      const availableAmount = payment.amount - linkedAmount
+      return Math.max(0, availableAmount)
     }
   }
 
@@ -799,6 +801,7 @@ export function useOrderPayments() {
     // Utilities
     formatCurrency,
     getPaymentStatusColor,
+    getAvailableAmount,
 
     //Other
     syncOrderPaymentsAfterReceipt
