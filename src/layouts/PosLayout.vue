@@ -1,54 +1,80 @@
-<!-- src/layouts/PosLayout.vue - ПРАВИЛЬНЫЙ Layout для router -->
+<!-- src/layouts/PosLayout.vue -->
 <template>
-  <v-app theme="dark" class="pos-layout">
+  <v-app theme="dark" class="pos-app">
     <!-- Header -->
-    <v-app-bar app color="grey-darken-4" flat class="pos-header" height="64">
+    <v-app-bar app color="surface" elevation="1" class="pos-header" height="56">
       <v-app-bar-title class="pos-title">
-        <v-icon class="mr-2">mdi-cash-register</v-icon>
+        <v-icon start>mdi-cash-register</v-icon>
         Kitchen POS System
       </v-app-bar-title>
 
       <v-spacer />
 
       <!-- User Info -->
-      <div class="pos-user-section">
-        <v-chip color="success" variant="flat" size="large" class="mr-3">
+      <div class="pos-user-section d-flex align-center">
+        <v-chip color="success" variant="tonal" size="default" class="me-3">
           <v-icon start>mdi-account</v-icon>
           {{ currentUserName }}
         </v-chip>
 
         <!-- Connection Status -->
-        <v-chip :color="connectionStatus.color" variant="flat" size="small" class="mr-2">
-          <v-icon start :icon="connectionStatus.icon"></v-icon>
+        <v-chip :color="connectionStatus.color" variant="tonal" size="small" class="me-2">
+          <v-icon start :icon="connectionStatus.icon" size="16"></v-icon>
           {{ connectionStatus.text }}
         </v-chip>
+
+        <!-- Logout Button -->
+        <v-btn icon="mdi-logout" variant="text" size="small" title="Выход" @click="handleLogout" />
       </div>
     </v-app-bar>
 
-    <!-- Main Content - ROUTER VIEW -->
+    <!-- Main POS Layout -->
     <v-main class="pos-main">
-      <router-view />
+      <div class="pos-layout">
+        <!-- Tables sidebar -->
+        <div class="pos-sidebar" :style="{ width: sidebarWidth }">
+          <slot name="tables">
+            <!-- Fallback content if no tables slot -->
+            <div class="pa-4 text-center text-medium-emphasis">Tables sidebar</div>
+          </slot>
+        </div>
+
+        <!-- Main content area -->
+        <div class="pos-content">
+          <!-- Menu section -->
+          <div class="pos-menu">
+            <slot name="menu">
+              <!-- Fallback content if no menu slot -->
+              <div class="pa-4 text-center text-medium-emphasis">Menu section</div>
+            </slot>
+          </div>
+
+          <!-- Order section -->
+          <div class="pos-order">
+            <slot name="order">
+              <!-- Fallback content if no order slot -->
+              <div class="pa-4 text-center text-medium-emphasis">Order section</div>
+            </slot>
+          </div>
+        </div>
+      </div>
     </v-main>
 
-    <!-- Footer -->
-    <v-footer app color="grey-darken-4" class="pos-footer" height="56">
-      <div class="pos-footer-content">
-        <!-- Left section - shift stats -->
-        <div class="pos-footer-left">
-          <v-chip color="info" variant="tonal" size="small" class="mr-2">
-            <v-icon start>mdi-chart-line</v-icon>
-            Shift: {{ shiftInfo.ordersCount }} orders
-          </v-chip>
-        </div>
+    <!-- Footer with shift info -->
+    <v-footer app color="surface" class="pos-footer" height="48">
+      <div class="d-flex align-center w-100">
+        <!-- Shift stats -->
+        <v-chip color="info" variant="tonal" size="small">
+          <v-icon start size="16">mdi-chart-line</v-icon>
+          Смена: {{ shiftInfo.ordersCount }} заказов
+        </v-chip>
 
         <v-spacer />
 
-        <!-- Right section - time and date -->
-        <div class="pos-footer-right">
-          <div class="pos-datetime">
-            <div class="pos-time">{{ currentTime }}</div>
-            <div class="pos-date">{{ currentDate }}</div>
-          </div>
+        <!-- Current time -->
+        <div class="pos-datetime text-caption">
+          <span class="font-weight-bold me-2">{{ currentTime }}</span>
+          <span class="text-medium-emphasis">{{ currentDate }}</span>
         </div>
       </div>
     </v-footer>
@@ -57,9 +83,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useAuth } from '@/stores/auth/composables'
+import { useDisplay } from 'vuetify'
+import { useRouter } from 'vue-router'
 
-const { currentUser } = useAuth()
+// TODO: Интеграция с authStore
+// import { useAuth } from '@/stores/auth/composables'
+
+const { width } = useDisplay()
+const router = useRouter()
 
 // State
 const currentTime = ref('')
@@ -74,7 +105,13 @@ const shiftInfo = ref({
 const isOnline = ref(true)
 
 // Computed
-const currentUserName = computed(() => currentUser.value?.name || 'User')
+const sidebarWidth = computed(() => {
+  const calculatedWidth = Math.max(width.value * 0.08, 80)
+  return `${calculatedWidth}px`
+})
+
+// TODO: Заменить на реальные данные из authStore
+const currentUserName = computed(() => 'Кассир')
 
 const connectionStatus = computed(() => {
   if (isOnline.value) {
@@ -89,8 +126,7 @@ const updateDateTime = () => {
   const now = new Date()
   currentTime.value = now.toLocaleTimeString('ru-RU', {
     hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
+    minute: '2-digit'
   })
   currentDate.value = now.toLocaleDateString('ru-RU', {
     day: '2-digit',
@@ -99,8 +135,10 @@ const updateDateTime = () => {
   })
 }
 
-const checkConnection = () => {
-  isOnline.value = navigator.onLine
+const handleLogout = () => {
+  // TODO: Интеграция с authStore
+  console.log('Logout clicked')
+  router.push('/auth/login')
 }
 
 // Lifecycle
@@ -108,72 +146,104 @@ onMounted(() => {
   updateDateTime()
   timeInterval = setInterval(updateDateTime, 1000)
 
-  window.addEventListener('online', checkConnection)
-  window.addEventListener('offline', checkConnection)
+  // TODO: Подключить мониторинг сети
+  window.addEventListener('online', () => {
+    isOnline.value = true
+  })
+  window.addEventListener('offline', () => {
+    isOnline.value = false
+  })
 })
 
 onUnmounted(() => {
   if (timeInterval) {
     clearInterval(timeInterval)
   }
-
-  window.removeEventListener('online', checkConnection)
-  window.removeEventListener('offline', checkConnection)
+  window.removeEventListener('online', () => {
+    isOnline.value = true
+  })
+  window.removeEventListener('offline', () => {
+    isOnline.value = false
+  })
 })
 </script>
 
-<style lang="scss" scoped>
-.pos-layout {
-  background-color: #121212;
-  user-select: none;
+<style scoped>
+.pos-app {
+  height: 100vh;
+  overflow: hidden;
 }
 
 .pos-header {
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .pos-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: white;
-}
-
-.pos-user-section {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-size: 1.1rem !important;
+  font-weight: 500;
 }
 
 .pos-main {
-  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  padding: 0 !important;
+  height: calc(100vh - 56px - 48px); /* header + footer */
+}
+
+.pos-layout {
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.pos-sidebar {
+  flex: none;
+  background-color: rgb(var(--v-theme-surface));
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.pos-content {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+
+.pos-menu {
+  flex: 0 0 62%;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgb(var(--v-theme-background));
+}
+
+.pos-order {
+  flex: 0 0 38%;
+  overflow: hidden;
+  background-color: rgb(var(--v-theme-surface));
 }
 
 .pos-footer {
-  border-top: 2px solid rgba(255, 255, 255, 0.1);
-}
-
-.pos-footer-content {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 0 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .pos-datetime {
   text-align: right;
+}
 
-  .pos-time {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #fff;
-    line-height: 1.2;
-  }
+/* Scrollbar styling */
+.pos-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
 
-  .pos-date {
-    font-size: 0.9rem;
-    color: #b0b0b0;
-    line-height: 1.2;
-  }
+.pos-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pos-sidebar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.pos-sidebar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
 }
 </style>
