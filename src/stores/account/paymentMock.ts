@@ -12,7 +12,7 @@ export const mockPendingPayments: PendingPayment[] = [
   // =============================================
   {
     id: 'payment_po_001_overpaid',
-    counteragentId: 'sup-premium-meat-co', // ✅ Правильный ID
+    counteragentId: 'ca-premium-meat-co', // ✅ Правильный ID
     counteragentName: 'Premium Meat Company',
     amount: 900000,
     description: 'Payment for order PO-001 (beef tenderloin)',
@@ -194,7 +194,7 @@ export const mockPendingPayments: PendingPayment[] = [
   // =============================================
   {
     id: 'payment_credit_test',
-    counteragentId: 'sup-premium-meat-co', // ✅ Правильный ID
+    counteragentId: 'ca-premium-meat-co', // ✅ Правильный ID
     counteragentName: 'Premium Meat Company',
     amount: 1500000,
     description: 'Payment for order PO-CREDIT-001',

@@ -391,6 +391,7 @@ import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcu
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
 import type { SupplierBasket, UnassignedItem } from '@/stores/supplier_2/types'
+import { useCounteragentsStore } from '@/stores/counteragents'
 
 // =============================================
 // PROPS & EMITS
@@ -416,18 +417,12 @@ const emits = defineEmits<Emits>()
 // COMPOSABLES
 // =============================================
 
-const {
-  selectedRequestIds,
-  groupRequestsForOrders,
-  assignItemsToSupplier,
-  moveItemsToUnassigned,
-  clearSupplierBaskets,
-  formatCurrency
-} = useProcurementRequests()
+const { selectedRequestIds, formatCurrency } = useProcurementRequests()
 
 const { createOrderFromBasket: createOrderFromBasketAction } = usePurchaseOrders()
 
 const supplierStore = useSupplierStore()
+const counteragentsStore = useCounteragentsStore()
 
 // =============================================
 // LOCAL STATE
@@ -453,12 +448,15 @@ const newSupplier = ref({
   paymentTerms: 'Net 30'
 })
 
-const availableSuppliers = ref([
-  { id: 'ca-premium-meat-co', name: 'Premium Meat Company', paymentTerms: 'Net 15' },
-  { id: 'ca-fresh-veg-market', name: 'Fresh Vegetable Market', paymentTerms: 'Net 30' },
-  { id: 'ca-beverage-distribution', name: 'Jakarta Beverage Distribution', paymentTerms: 'Net 7' },
-  { id: 'ca-dairy-plus', name: 'Dairy Products Plus', paymentTerms: 'Net 14' }
-])
+const availableSuppliers = computed(() => {
+  return counteragentsStore.supplierCounterAgents
+    .filter(supplier => supplier.isActive)
+    .map(supplier => ({
+      id: supplier.id,
+      name: supplier.displayName || supplier.name,
+      paymentTerms: supplier.paymentTerms || 'on_delivery'
+    }))
+})
 
 // =============================================
 // COMPUTED

@@ -5,6 +5,7 @@ import { useProductsStore } from '@/stores/productsStore'
 import { useSupplierStorageIntegration } from './integrations/storageIntegration'
 import { getProductDefinition } from '@/stores/shared/productDefinitions'
 import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
+import { useCounteragentsStore } from '@/stores/counteragents'
 
 import { DebugUtils } from '@/utils'
 import type {
@@ -884,18 +885,38 @@ class SupplierService {
   }
 
   private async getSupplierName(supplierId: string): Promise<string> {
-    const supplierNames: Record<string, string> = {
-      'sup-premium-meat-co': 'Premium Meat Company',
-      'sup-fresh-veg-market': 'Fresh Vegetable Market',
-      'sup-beverage-distribution': 'Jakarta Beverage Distribution',
-      'sup-dairy-fresh': 'Dairy Products Plus',
-      'sup-spice-world': 'Jakarta Spices & Herbs',
-      'sup-specialty-foods': 'Specialty Foods Supply',
-      'sup-basic-supplies': 'Basic Supplies Co'
-    }
-    return supplierNames[supplierId] || 'Unknown Supplier'
-  }
+    try {
+      // Получаем counteragentsStore
+      const counteragentsStore = useCounteragentsStore()
 
+      // Ищем поставщика по ID
+      const supplier = counteragentsStore.getCounteragentById(supplierId)
+
+      if (supplier) {
+        // Возвращаем displayName если есть, иначе name
+        return supplier.displayName || supplier.name
+      }
+
+      // Если поставщик не найден, логируем предупреждение и возвращаем fallback
+      DebugUtils.warn(MODULE_NAME, 'Supplier not found in counteragentsStore', {
+        supplierId,
+        availableSuppliers: counteragentsStore.supplierCounterAgents.map(s => ({
+          id: s.id,
+          name: s.name
+        }))
+      })
+
+      return 'Unknown Supplier'
+    } catch (error) {
+      // В случае ошибки логируем и возвращаем fallback
+      DebugUtils.error(MODULE_NAME, 'Error getting supplier name from counteragentsStore', {
+        supplierId,
+        error
+      })
+
+      return 'Unknown Supplier'
+    }
+  }
   private getItemName(itemId: string): string {
     const product = getProductDefinition(itemId)
     if (product) {
