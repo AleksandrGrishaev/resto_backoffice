@@ -144,51 +144,87 @@ export const usePosStore = defineStore('pos', () => {
   /**
    * Инициализация POS системы
    */
+  // src/stores/pos/index.ts - Временная функция инициализации
+
+  /**
+   * ВРЕМЕННАЯ инициализация POS системы (для просмотра UI)
+   */
   async function initializePOS(): Promise<ServiceResponse<void>> {
     if (isInitialized.value) {
       return { success: true }
     }
 
     try {
+      console.log('🔍 Временная инициализация POS системы...')
       error.value = null
 
-      // Загружаем все данные параллельно
-      const [tablesResult, ordersResult, paymentsResult] = await Promise.all([
-        tablesStore.loadTables(),
-        ordersStore.loadOrders(),
-        paymentsStore.loadPayments()
-      ])
+      // Сбрасываем состояния загрузки
+      tablesStore.loading.list = false
+      ordersStore.loading.list = false
+      paymentsStore.loading.list = false
 
-      // Проверяем результаты
-      if (!tablesResult.success) {
-        throw new Error(`Failed to load tables: ${tablesResult.error}`)
-      }
-
-      if (!ordersResult.success) {
-        throw new Error(`Failed to load orders: ${ordersResult.error}`)
-      }
-
-      if (!paymentsResult.success) {
-        throw new Error(`Failed to load payments: ${paymentsResult.error}`)
-      }
-
-      // TODO: Инициализация интеграций
-      // await initializeIntegrations()
-
+      // Помечаем как инициализированную
       isInitialized.value = true
       lastSync.value = new Date().toISOString()
 
-      console.log('✅ POS система инициализирована успешно')
-
+      console.log('✅ POS система инициализирована (временно)')
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to initialize POS'
       error.value = errorMsg
       console.error('❌ Ошибка инициализации POS:', errorMsg)
-
       return { success: false, error: errorMsg }
     }
   }
+
+  // ЗАКОММЕНТИРОВАННАЯ ОРИГИНАЛЬНАЯ ФУНКЦИЯ:
+  /*
+async function initializePOS(): Promise<ServiceResponse<void>> {
+ if (isInitialized.value) {
+   return { success: true }
+ }
+
+ try {
+   error.value = null
+
+   // Загружаем все данные параллельно
+   const [tablesResult, ordersResult, paymentsResult] = await Promise.all([
+     tablesStore.loadTables(),
+     ordersStore.loadOrders(),
+     paymentsStore.loadPayments()
+   ])
+
+   // Проверяем результаты
+   if (!tablesResult.success) {
+     throw new Error(`Failed to load tables: ${tablesResult.error}`)
+   }
+
+   if (!ordersResult.success) {
+     throw new Error(`Failed to load orders: ${ordersResult.error}`)
+   }
+
+   if (!paymentsResult.success) {
+     throw new Error(`Failed to load payments: ${paymentsResult.error}`)
+   }
+
+   // TODO: Инициализация интеграций
+   // await initializeIntegrations()
+
+   isInitialized.value = true
+   lastSync.value = new Date().toISOString()
+
+   console.log('✅ POS система инициализирована успешно')
+
+   return { success: true }
+ } catch (err) {
+   const errorMsg = err instanceof Error ? err.message : 'Failed to initialize POS'
+   error.value = errorMsg
+   console.error('❌ Ошибка инициализации POS:', errorMsg)
+
+   return { success: false, error: errorMsg }
+ }
+}
+*/
 
   /**
    * Начать смену

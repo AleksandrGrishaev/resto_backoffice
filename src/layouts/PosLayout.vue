@@ -80,18 +80,18 @@
             </template>
 
             <v-list>
-              <v-list-item v-if="!posStore.currentShift" @click="startShift">
+              <v-list-item v-if="!shiftsStore.isShiftActive" @click="startShift">
                 <template #prepend>
                   <v-icon>mdi-play</v-icon>
                 </template>
-                <v-list-item-title>Начать смену</v-list-item-title>
+                <v-list-item-title>Start Shift</v-list-item-title>
               </v-list-item>
 
-              <v-list-item v-if="posStore.currentShift" @click="endShift">
+              <v-list-item v-if="shiftsStore.isShiftActive" @click="endShift">
                 <template #prepend>
                   <v-icon>mdi-stop</v-icon>
                 </template>
-                <v-list-item-title>Завершить смену</v-list-item-title>
+                <v-list-item-title>End Shift</v-list-item-title>
               </v-list-item>
 
               <v-list-item @click="syncData">
@@ -168,9 +168,8 @@
       </v-footer>
     </template>
 
-    <!-- Dialogs -->
-    <StartShiftDialog v-model="showStartShiftDialog" @started="handleShiftStarted" />
-    <EndShiftDialog v-model="showEndShiftDialog" @ended="handleShiftEnded" />
+    <StartShiftDialog v-model="showStartShiftDialog" @shift-started="handleShiftStarted" />
+    <EndShiftDialog v-model="showEndShiftDialog" @shift-ended="handleShiftEnded" />
   </v-app>
 </template>
 
@@ -180,13 +179,15 @@ import { useDisplay } from 'vuetify'
 import { useRouter } from 'vue-router'
 import { usePosStore } from '@/stores/pos'
 
-// TODO: Компоненты диалогов (создадим следующими)
-// import StartShiftDialog from '@/views/pos/dialogs/StartShiftDialog.vue'
-// import EndShiftDialog from '@/views/pos/dialogs/EndShiftDialog.vue'
+// SHIFT
+import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
+import StartShiftDialog from '@/views/pos/shifts/dialogs/StartShiftDialog.vue'
+import EndShiftDialog from '@/views/pos/shifts/dialogs/EndShiftDialog.vue'
 
 const { width } = useDisplay()
 const router = useRouter()
 const posStore = usePosStore()
+const shiftsStore = useShiftsStore()
 
 // State
 const currentTime = ref('')
@@ -246,6 +247,25 @@ const systemHealthText = computed(() => {
 const posOverview = computed(() => posStore.getPOSOverview())
 
 // Methods
+// Методы
+function startShift() {
+  showStartShiftDialog.value = true
+}
+
+function endShift() {
+  showEndShiftDialog.value = true
+}
+
+function handleShiftStarted(shiftData: any) {
+  console.log('Shift started:', shiftData)
+  // Обновить статус в header если нужно
+}
+
+function handleShiftEnded(shiftData: any) {
+  console.log('Shift ended:', shiftData)
+  // Обновить статус в header если нужно
+}
+
 const updateDateTime = () => {
   const now = new Date()
   currentTime.value = now.toLocaleTimeString('ru-RU', {
@@ -290,14 +310,6 @@ async function retryInitialization() {
   }
 }
 
-function startShift() {
-  showStartShiftDialog.value = true
-}
-
-function endShift() {
-  showEndShiftDialog.value = true
-}
-
 async function syncData() {
   try {
     await posStore.syncData()
@@ -311,16 +323,6 @@ function handleLogout() {
   // TODO: Интеграция с authStore
   console.log('Logout clicked')
   router.push('/auth/login')
-}
-
-function handleShiftStarted() {
-  showStartShiftDialog.value = false
-  console.log('✅ Смена начата')
-}
-
-function handleShiftEnded() {
-  showEndShiftDialog.value = false
-  console.log('✅ Смена завершена')
 }
 
 function formatShiftTime(startTime: string): string {

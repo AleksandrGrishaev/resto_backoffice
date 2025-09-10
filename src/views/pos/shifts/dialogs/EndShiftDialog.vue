@@ -1,0 +1,531 @@
+<!-- src/views/pos/shifts/dialogs/EndShiftDialog.vue -->
+<template>
+  <v-dialog
+    v-model="dialog"
+    max-width="700"
+    persistent
+    @update:model-value="$emit('update:modelValue', $event)"
+  >
+    <v-card>
+      <!-- Header -->
+      <v-card-title class="d-flex align-center justify-space-between">
+        <div class="d-flex align-center">
+          <v-icon icon="mdi-stop-circle" color="warning" class="me-3" />
+          <span>End Shift</span>
+        </div>
+
+        <v-chip v-if="currentShift" color="info" size="small">
+          {{ formatShiftDuration(currentShift.startTime) }} elapsed
+        </v-chip>
+      </v-card-title>
+
+      <v-divider />
+
+      <!-- Content -->
+      <v-card-text v-if="currentShift && shiftReport" class="pa-4">
+        <!-- Validation Warnings -->
+        <div v-if="validationWarnings.length > 0" class="mb-4">
+          <v-alert color="warning" variant="tonal">
+            <div class="font-weight-bold mb-2">Warnings before ending shift:</div>
+            <ul class="mb-0">
+              <li v-for="warning in validationWarnings" :key="warning">{{ warning }}</li>
+            </ul>
+          </v-alert>
+        </div>
+
+        <!-- Shift Summary -->
+        <div class="shift-summary mb-4">
+          <div class="text-subtitle-1 mb-3 d-flex align-center">
+            <v-icon icon="mdi-chart-line" class="me-2" />
+            Shift Performance
+          </div>
+
+          <v-row>
+            <v-col cols="4">
+              <v-card variant="outlined" class="pa-3 text-center">
+                <div class="text-h4 font-weight-bold text-primary">
+                  {{ shiftReport.summary.totalTransactions }}
+                </div>
+                <div class="text-caption text-medium-emphasis">Orders</div>
+              </v-card>
+            </v-col>
+
+            <v-col cols="4">
+              <v-card variant="outlined" class="pa-3 text-center">
+                <div class="text-h4 font-weight-bold text-success">
+                  {{ formatCurrency(shiftReport.summary.totalSales) }}
+                </div>
+                <div class="text-caption text-medium-emphasis">Total Sales</div>
+              </v-card>
+            </v-col>
+
+            <v-col cols="4">
+              <v-card variant="outlined" class="pa-3 text-center">
+                <div class="text-h4 font-weight-bold text-info">
+                  {{ formatCurrency(shiftReport.summary.averageTransactionValue) }}
+                </div>
+                <div class="text-caption text-medium-emphasis">Avg. Order</div>
+              </v-card>
+            </v-col>
+          </v-row>
+        </div>
+
+        <!-- Payment Methods Breakdown -->
+        <div class="payment-breakdown mb-4">
+          <div class="text-subtitle-1 mb-3 d-flex align-center">
+            <v-icon icon="mdi-cash-multiple" class="me-2" />
+            Payment Methods
+          </div>
+
+          <v-row>
+            <v-col v-for="method in topPaymentMethods" :key="method.methodId" cols="6">
+              <div class="payment-method-card pa-3 border rounded">
+                <div class="d-flex align-center justify-space-between">
+                  <div>
+                    <div class="font-weight-bold">{{ method.methodName }}</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ method.count }} transactions
+                    </div>
+                  </div>
+                  <div class="text-end">
+                    <div class="font-weight-bold">{{ formatCurrency(method.amount) }}</div>
+                    <div class="text-caption text-success">{{ method.percentage.toFixed(1) }}%</div>
+                  </div>
+                </div>
+              </div>
+            </v-col>
+          </v-row>
+        </div>
+
+        <!-- Cash Count Section -->
+        <div class="cash-count mb-4">
+          <div class="text-subtitle-1 mb-3 d-flex align-center">
+            <v-icon icon="mdi-cash-register" class="me-2" />
+            Cash Register Count
+          </div>
+
+          <v-row>
+            <v-col cols="6">
+              <v-card variant="outlined" class="pa-3">
+                <div class="text-subtitle-2 mb-2">Expected Cash</div>
+                <div class="text-h5 font-weight-bold">
+                  {{ formatCurrency(expectedCash) }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  Starting: {{ formatCurrency(currentShift.startingCash) }} + Sales:
+                  {{ formatCurrency(cashSales) }}
+                </div>
+              </v-card>
+            </v-col>
+
+            <v-col cols="6">
+              <v-text-field
+                v-model.number="form.endingCash"
+                label="Actual Cash Count"
+                variant="outlined"
+                type="number"
+                min="0"
+                step="1000"
+                prefix="Rp"
+                :rules="[rules.required, rules.nonNegative]"
+                :color="discrepancyColor"
+                persistent-hint
+                :hint="discrepancyHint"
+              />
+            </v-col>
+          </v-row>
+        </div>
+
+        <!-- Discrepancy Info -->
+        <div v-if="cashDiscrepancy !== 0" class="mb-4">
+          <v-alert :color="discrepancyColor" variant="tonal">
+            <div class="font-weight-bold">
+              {{ cashDiscrepancy > 0 ? 'Cash Overage' : 'Cash Shortage' }}
+            </div>
+            <div>
+              {{ cashDiscrepancy > 0 ? 'Extra' : 'Missing' }}:
+              {{ formatCurrency(Math.abs(cashDiscrepancy)) }}
+            </div>
+          </v-alert>
+        </div>
+
+        <!-- Corrections Section -->
+        <div v-if="form.corrections.length > 0" class="corrections mb-4">
+          <div class="text-subtitle-1 mb-3 d-flex align-center">
+            <v-icon icon="mdi-file-edit" class="me-2" />
+            Corrections & Adjustments
+          </div>
+
+          <div
+            v-for="(correction, index) in form.corrections"
+            :key="index"
+            class="correction-item pa-3 border rounded mb-2"
+          >
+            <div class="d-flex justify-space-between align-center">
+              <div>
+                <div class="font-weight-bold">
+                  {{ correction.type.replace('_', ' ').toUpperCase() }}
+                </div>
+                <div class="text-caption">{{ correction.description }}</div>
+              </div>
+              <div class="text-end">
+                <div class="font-weight-bold">{{ formatCurrency(correction.amount) }}</div>
+                <v-btn
+                  icon="mdi-delete"
+                  size="x-small"
+                  color="error"
+                  variant="text"
+                  @click="removeCorrection(index)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Correction -->
+        <div class="add-correction mb-4">
+          <v-btn
+            color="primary"
+            variant="outlined"
+            prepend-icon="mdi-plus"
+            @click="showAddCorrection = true"
+          >
+            Add Correction
+          </v-btn>
+        </div>
+
+        <!-- Final Notes -->
+        <div class="final-notes">
+          <v-textarea
+            v-model="form.notes"
+            label="End of Shift Notes"
+            variant="outlined"
+            rows="3"
+            hint="Any important notes about this shift"
+            persistent-hint
+          />
+        </div>
+      </v-card-text>
+
+      <!-- Actions -->
+      <v-card-actions class="pa-4">
+        <v-btn variant="outlined" :disabled="loading" @click="closeDialog">Cancel</v-btn>
+
+        <v-spacer />
+
+        <v-btn
+          color="warning"
+          size="large"
+          :loading="loading"
+          :disabled="!canEndShift"
+          @click="endShift"
+        >
+          <v-icon start>mdi-stop</v-icon>
+          End Shift
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+
+    <!-- Add Correction Dialog -->
+    <v-dialog v-model="showAddCorrection" max-width="400">
+      <v-card>
+        <v-card-title>Add Correction</v-card-title>
+        <v-card-text>
+          <v-select
+            v-model="newCorrection.type"
+            :items="correctionTypes"
+            label="Correction Type"
+            variant="outlined"
+            class="mb-3"
+          />
+
+          <v-text-field
+            v-model.number="newCorrection.amount"
+            label="Amount"
+            variant="outlined"
+            type="number"
+            prefix="Rp"
+            class="mb-3"
+          />
+
+          <v-textarea
+            v-model="newCorrection.description"
+            label="Description"
+            variant="outlined"
+            rows="3"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="showAddCorrection = false">Cancel</v-btn>
+          <v-btn color="primary" @click="addCorrection">Add</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </v-dialog>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
+import { useShiftsComposables } from '@/stores/pos/shifts/composables'
+import type { EndShiftDto, ShiftCorrection, TransactionPerformer } from '@/stores/pos/shifts/types'
+
+// Props
+interface Props {
+  modelValue: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  modelValue: false
+})
+
+// Emits
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  'shift-ended': [shiftData: any]
+}>()
+
+// Stores
+const shiftsStore = useShiftsStore()
+const {
+  formatShiftDuration,
+  formatCurrency,
+  canEndShift: checkCanEndShift,
+  getCashDiscrepancyColor,
+  getTopPaymentMethods
+} = useShiftsComposables()
+
+// State
+const dialog = ref(props.modelValue)
+const loading = ref(false)
+const showAddCorrection = ref(false)
+
+const form = ref<Omit<EndShiftDto, 'shiftId' | 'performedBy'>>({
+  endingCash: 0,
+  actualAccountBalances: {},
+  corrections: [],
+  notes: ''
+})
+
+const newCorrection = ref({
+  type: 'cash_adjustment' as ShiftCorrection['type'],
+  amount: 0,
+  description: '',
+  reason: ''
+})
+
+// Validation rules
+const rules = {
+  required: (value: any) => !!value || 'This field is required',
+  nonNegative: (value: number) => value >= 0 || 'Amount cannot be negative'
+}
+
+const correctionTypes = [
+  { title: 'Cash Adjustment', value: 'cash_adjustment' },
+  { title: 'Payment Correction', value: 'payment_correction' },
+  { title: 'Refund', value: 'refund' },
+  { title: 'Void', value: 'void' },
+  { title: 'Other', value: 'other' }
+]
+
+// Computed
+const currentShift = computed(() => shiftsStore.currentShift)
+
+const shiftReport = computed(() =>
+  currentShift.value ? shiftsStore.getShiftReport(currentShift.value.id) : null
+)
+
+const validationCheck = computed(() =>
+  checkCanEndShift(currentShift.value, shiftsStore.pendingSyncTransactions)
+)
+
+const validationWarnings = computed(() => validationCheck.value.warnings || [])
+
+const canEndShift = computed(() => validationCheck.value.canEnd && form.value.endingCash > 0)
+
+const cashSales = computed(() => {
+  if (!currentShift.value) return 0
+  const cashMethod = currentShift.value.paymentMethods.find(p => p.methodType === 'cash')
+  return cashMethod ? cashMethod.amount : 0
+})
+
+const expectedCash = computed(() => {
+  if (!currentShift.value) return 0
+  return currentShift.value.startingCash + cashSales.value
+})
+
+const cashDiscrepancy = computed(() => form.value.endingCash - expectedCash.value)
+
+const discrepancyColor = computed(() => getCashDiscrepancyColor(cashDiscrepancy.value))
+
+const discrepancyHint = computed(() => {
+  if (cashDiscrepancy.value === 0) return 'Perfect match!'
+  const type = cashDiscrepancy.value > 0 ? 'overage' : 'shortage'
+  return `${formatCurrency(Math.abs(cashDiscrepancy.value))} ${type}`
+})
+
+const topPaymentMethods = computed(() => {
+  if (!currentShift.value) return []
+  return getTopPaymentMethods(currentShift.value.paymentMethods, 4)
+})
+
+// Watchers
+watch(
+  () => props.modelValue,
+  newVal => {
+    dialog.value = newVal
+    if (newVal) {
+      initializeForm()
+    }
+  }
+)
+
+watch(dialog, newVal => {
+  emit('update:modelValue', newVal)
+})
+
+// Methods
+function initializeForm() {
+  if (!currentShift.value) return
+
+  // Set expected ending cash as default
+  form.value.endingCash = expectedCash.value
+  form.value.corrections = []
+  form.value.notes = ''
+
+  // Initialize account balances
+  form.value.actualAccountBalances = {}
+  currentShift.value.accountBalances.forEach(balance => {
+    form.value.actualAccountBalances[balance.accountId] =
+      balance.expectedBalance || balance.startingBalance
+  })
+}
+
+function closeDialog() {
+  dialog.value = false
+  loading.value = false
+}
+
+function addCorrection() {
+  if (!newCorrection.value.amount || !newCorrection.value.description) return
+
+  const performer: TransactionPerformer = {
+    type: 'user',
+    id: currentShift.value?.cashierId || 'unknown',
+    name: currentShift.value?.cashierName || 'Unknown'
+  }
+
+  const correction = {
+    type: newCorrection.value.type,
+    amount: newCorrection.value.amount,
+    reason: newCorrection.value.type.replace('_', ' '),
+    description: newCorrection.value.description,
+    performedBy: performer,
+    affectsReporting: true
+  }
+
+  form.value.corrections.push(correction)
+
+  // Reset form
+  newCorrection.value = {
+    type: 'cash_adjustment',
+    amount: 0,
+    description: '',
+    reason: ''
+  }
+
+  showAddCorrection.value = false
+}
+
+function removeCorrection(index: number) {
+  form.value.corrections.splice(index, 1)
+}
+
+async function endShift() {
+  if (!currentShift.value || !canEndShift.value) return
+
+  loading.value = true
+
+  try {
+    const performer: TransactionPerformer = {
+      type: 'user',
+      id: currentShift.value.cashierId,
+      name: currentShift.value.cashierName
+    }
+
+    const dto: EndShiftDto = {
+      shiftId: currentShift.value.id,
+      endingCash: form.value.endingCash,
+      actualAccountBalances: form.value.actualAccountBalances,
+      corrections: form.value.corrections,
+      notes: form.value.notes,
+      performedBy: performer
+    }
+
+    const result = await shiftsStore.endShift(dto)
+
+    if (result.success && result.data) {
+      const shiftData = {
+        shift: result.data,
+        endTime: new Date().toISOString(),
+        discrepancy: cashDiscrepancy.value
+      }
+
+      emit('shift-ended', shiftData)
+      closeDialog()
+      console.log('✅ Shift ended successfully:', result.data.shiftNumber)
+
+      // Show success message
+      // TODO: Add toast notification
+    } else {
+      console.error('❌ Failed to end shift:', result.error)
+      throw new Error(result.error || 'Failed to end shift')
+    }
+  } catch (error) {
+    console.error('❌ Error ending shift:', error)
+    // TODO: Show error dialog or toast
+  } finally {
+    loading.value = false
+  }
+}
+
+// Initialize
+onMounted(() => {
+  if (dialog.value) {
+    initializeForm()
+  }
+})
+</script>
+
+<style scoped>
+.v-card-title {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.shift-summary .v-card {
+  transition: all 0.2s ease;
+}
+
+.shift-summary .v-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.payment-method-card {
+  background-color: rgba(255, 255, 255, 0.02);
+  transition: all 0.2s ease;
+}
+
+.payment-method-card:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.correction-item {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.border {
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+</style>

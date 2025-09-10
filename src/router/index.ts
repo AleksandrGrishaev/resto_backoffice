@@ -57,24 +57,13 @@ const routes: RouteRecordRaw[] = [
   // ===== POS ROUTES =====
   {
     path: '/pos',
-    component: PosLayout, // ← LAYOUT для router
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'pos',
-        component: () => import('@/views/pos/PosMainView.vue'),
-        meta: {
-          allowedRoles: ['admin', 'cashier'],
-          title: 'POS система'
-        }
-      }
-      // Можно добавить больше POS маршрутов:
-      // {
-      //   path: 'orders',
-      //   component: () => import('@/views/pos/OrdersView.vue')
-      // }
-    ]
+    name: 'pos',
+    component: () => import('@/views/pos/PosMainView.vue'), // ✅ Прямо на компонент
+    meta: {
+      requiresAuth: true,
+      allowedRoles: ['admin', 'cashier'],
+      title: 'POS система'
+    }
   },
 
   // ===== BACKOFFICE ROUTES =====

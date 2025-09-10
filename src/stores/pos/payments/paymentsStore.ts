@@ -76,11 +76,11 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
   })
 
   const paymentsStats = computed(() => {
-    const todayPayments = todayPayments.value.filter(p => p.status === 'completed')
+    const todayPaymentsFiltered = todayPayments.value.filter(p => p.status === 'completed')
 
     const stats = {
-      todayTotal: todayPayments.reduce((sum, payment) => sum + payment.amount, 0),
-      todayCount: todayPayments.length,
+      todayTotal: todayPaymentsFiltered.reduce((sum, payment) => sum + payment.amount, 0),
+      todayCount: todayPaymentsFiltered.length,
       byMethod: {
         cash: { count: 0, amount: 0 },
         card: { count: 0, amount: 0 },
@@ -90,7 +90,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       averageTransaction: 0
     }
 
-    todayPayments.forEach(payment => {
+    todayPaymentsFiltered.forEach(payment => {
       stats.byMethod[payment.method].count += 1
       stats.byMethod[payment.method].amount += payment.amount
     })
