@@ -35,7 +35,7 @@ export function generateCounteragentsMockData(): Counteragent[] {
       description:
         'Premium meat products supplier. High quality beef, pork, poultry for restaurants.',
       paymentTerms: 'on_delivery',
-      currentBalance: -2500000, // долг поставщику
+      currentBalance: 390000, // долг поставщику
       creditLimit: 10000000, // 10 млн IDR
       leadTimeDays: 3,
       deliverySchedule: 'weekly',
@@ -68,7 +68,7 @@ export function generateCounteragentsMockData(): Counteragent[] {
       description:
         'Fresh vegetables and herbs daily from market. Potatoes, tomatoes, onions, garlic and other vegetables.',
       paymentTerms: 'after',
-      currentBalance: 0,
+      currentBalance: 10000,
       creditLimit: 5000000,
       leadTimeDays: 1,
       deliverySchedule: 'daily',
@@ -101,7 +101,7 @@ export function generateCounteragentsMockData(): Counteragent[] {
       productCategories: ['dairy'],
       description: 'Dairy products: milk, butter, cheese, cream for restaurants.',
       paymentTerms: 'on_delivery',
-      currentBalance: -850000,
+      currentBalance: 0,
       creditLimit: 7000000,
       leadTimeDays: 2,
       deliverySchedule: 'weekly',
@@ -134,7 +134,7 @@ export function generateCounteragentsMockData(): Counteragent[] {
       productCategories: ['beverages'],
       description: 'Beverage distributor: Bintang beer, Coca-Cola, mineral water and other drinks.',
       paymentTerms: 'prepaid',
-      currentBalance: 1200000, // предоплата
+      currentBalance: 0, // предоплата
       creditLimit: 15000000,
       leadTimeDays: 2,
       deliverySchedule: 'weekly',
@@ -168,7 +168,7 @@ export function generateCounteragentsMockData(): Counteragent[] {
       description:
         'Spices and seasonings for restaurants: salt, pepper, oregano, basil and other spices.',
       paymentTerms: 'after',
-      currentBalance: -450000,
+      currentBalance: 0,
       creditLimit: 3000000,
       leadTimeDays: 5,
       deliverySchedule: 'weekly',

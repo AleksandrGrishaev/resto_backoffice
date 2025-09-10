@@ -19,10 +19,23 @@
               </v-chip>
             </div>
 
-            <div class="balance-explanation">
-              <span class="text-caption" :class="`text-${balanceColor}`">
-                {{ balanceExplanation }}
-              </span>
+            <div class="balance-actions">
+              <div class="balance-explanation">
+                <span class="text-caption" :class="`text-${balanceColor}`">
+                  {{ balanceExplanation }}
+                </span>
+              </div>
+
+              <!-- NEW: Balance Correction Button -->
+              <v-btn
+                variant="outlined"
+                size="small"
+                color="primary"
+                prepend-icon="mdi-pencil"
+                @click="openBalanceCorrection"
+              >
+                Adjust Balance
+              </v-btn>
             </div>
           </div>
 
@@ -84,12 +97,15 @@
 
         <v-col cols="12" md="6">
           <v-chip-group v-model="selectedFilter" class="d-flex justify-end">
-            <v-chip value="all" size="small">All ({{ operations.length }})</v-chip>
-            <v-chip value="debt" size="small" color="error">
-              Debt ({{ debtOperations.length }})
+            <v-chip value="all" size="small">{{ filterLabels.all }}</v-chip>
+            <v-chip value="debt" size="small" color="warning">
+              {{ filterLabels.debt }}
             </v-chip>
             <v-chip value="payment" size="small" color="success">
-              Paid ({{ paymentOperations.length }})
+              {{ filterLabels.payment }}
+            </v-chip>
+            <v-chip value="correction" size="small" color="info">
+              {{ filterLabels.correction }}
             </v-chip>
           </v-chip-group>
         </v-col>
@@ -102,9 +118,7 @@
           :key="operation.id"
           variant="outlined"
           class="operation-card mb-2"
-          :class="{
-            'payment-operation': operation.type === 'payment'
-          }"
+          :class="getOperationCardClass(operation)"
         >
           <v-card-text class="pa-3">
             <div class="operation-header">
@@ -112,72 +126,60 @@
                 <div class="operation-description">
                   <v-icon
                     :icon="getOperationIcon(operation)"
-                    :color="getOperationColor(operation)"
-                    size="small"
+                    :color="getOperationIconColor(operation)"
+                    size="20"
                     class="me-2"
                   />
-                  {{ operation.description }}
 
-                  <!-- Индикаторы -->
-                  <v-chip
-                    v-if="operation.sourceOrderId"
-                    size="x-small"
-                    color="primary"
-                    variant="outlined"
-                    class="ml-2"
-                  >
-                    AUTO
-                  </v-chip>
+                  <span class="operation-title">{{ getOperationTitle(operation) }}</span>
 
                   <v-chip
-                    v-if="isOverdue(operation)"
                     size="x-small"
-                    color="error"
-                    variant="outlined"
-                    class="ml-2"
+                    variant="flat"
+                    :color="getStatusChipColor(operation)"
+                    class="ms-2"
                   >
-                    <v-icon icon="mdi-clock-alert" size="10" start />
-                    OVERDUE
+                    {{ getStatusText(operation) }}
                   </v-chip>
                 </div>
 
                 <div class="operation-meta">
-                  <v-chip :color="getStatusColor(operation.status)" size="x-small">
-                    {{ operation.status }}
-                  </v-chip>
-
-                  <span class="text-caption text-medium-emphasis ml-2">
+                  <span class="text-caption text-medium-emphasis">
                     {{ formatDate(operation.createdAt) }}
                   </span>
+                  <span class="text-caption operation-id">#{{ operation.id.slice(-8) }}</span>
 
-                  <span v-if="operation.invoiceNumber" class="text-caption ml-2">
-                    #{{ operation.invoiceNumber }}
-                  </span>
-
-                  <span v-if="operation.linkedOrders?.length" class="text-caption ml-2">
-                    → {{ operation.linkedOrders[0].orderNumber }}
+                  <!-- Показать причину для корректировок -->
+                  <span
+                    v-if="operation.isBalanceCorrection && operation.reason"
+                    class="text-caption reason-badge"
+                  >
+                    {{ getCorrectionReasonLabel(operation.reason) }}
                   </span>
                 </div>
               </div>
 
               <div class="operation-amount">
+                <div class="amount-display">
+                  <span class="amount-sign" :class="getAmountSignClass(operation)">
+                    {{ getAmountSign(operation) }}
+                  </span>
+                  <span class="amount-value">
+                    {{ formatCurrency(operation.amount) }}
+                  </span>
+                </div>
+
+                <!-- Дополнительная информация только для обычных платежей -->
                 <div
-                  class="amount-value"
-                  :class="{
-                    'text-error': operation.type === 'debt',
-                    'text-success': operation.type === 'payment'
-                  }"
+                  v-if="!operation.isBalanceCorrection && showAdditionalInfo(operation)"
+                  class="amount-details"
                 >
-                  {{ operation.type === 'debt' ? '-' : '+' }}{{ formatCurrency(operation.amount) }}
-                </div>
-
-                <!-- Дополнительная информация -->
-                <div v-if="operation.usedAmount && operation.usedAmount > 0" class="amount-used">
-                  Used: {{ formatCurrency(operation.usedAmount) }}
-                </div>
-
-                <div v-if="getAvailableAmount(operation) > 0" class="amount-available">
-                  Available: {{ formatCurrency(getAvailableAmount(operation)) }}
+                  <div v-if="operation.usedAmount && operation.usedAmount > 0" class="amount-used">
+                    Used: {{ formatCurrency(operation.usedAmount) }}
+                  </div>
+                  <div v-if="getAvailableAmount(operation) > 0" class="amount-available">
+                    Available: {{ formatCurrency(getAvailableAmount(operation)) }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -195,13 +197,23 @@
       </div>
     </div>
   </div>
+
+  <BalanceCorrectionDialog
+    v-model="showBalanceCorrectionDialog"
+    :counteragent="counteragent"
+    @success="onCorrectionSuccess"
+    @error="onCorrectionError"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import type { Counteragent } from '@/stores/counteragents'
+import { ref, computed, onMounted, watch } from 'vue'
+import type { Counteragent, BalanceHistoryEntry } from '@/stores/counteragents'
 import type { PendingPayment } from '@/stores/account/types'
+import { balanceCorrectionService } from '@/stores/counteragents/services/balanceCorrectionService'
+import { REASON_DESCRIPTIONS } from '@/stores/counteragents/types'
 import DateRangePicker from '@/components/molecules/DateRangePicker.vue'
+import BalanceCorrectionDialog from '../dialogs/BalanceCorrectionDialog.vue'
 
 interface Props {
   counteragent: Counteragent
@@ -209,8 +221,12 @@ interface Props {
 
 const props = defineProps<Props>()
 
-// State
+// =============================================
+// STATE
+// =============================================
+
 const operations = ref<PendingPayment[]>([])
+const balanceHistory = ref<BalanceHistoryEntry[]>([])
 const loading = ref<boolean | string>(false)
 const selectedFilter = ref('all')
 const dateRange = ref<{ dateFrom: string | null; dateTo: string | null }>({
@@ -218,69 +234,82 @@ const dateRange = ref<{ dateFrom: string | null; dateTo: string | null }>({
   dateTo: null
 })
 
-// Computed - операции по типам
+const showBalanceCorrectionDialog = ref(false)
 
-const paymentOperations = computed(() => operations.value.filter(op => op.status === 'completed'))
-
-// Фильтрация по дате и типу
-const filteredOperations = computed(() => {
-  let filtered = operations.value
-
-  // Фильтр по дате
-  if (dateRange.value.dateFrom || dateRange.value.dateTo) {
-    filtered = filtered.filter(op => {
-      const opDate = new Date(op.createdAt)
-      const fromDate = dateRange.value.dateFrom ? new Date(dateRange.value.dateFrom) : null
-      const toDate = dateRange.value.dateTo ? new Date(dateRange.value.dateTo) : null
-
-      if (fromDate && opDate < fromDate) return false
-      if (toDate && opDate > toDate) return false
-      return true
-    })
+// =============================================
+// COMPUTED - Объединенные операции
+// =============================================
+const getOperationCardClass = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) {
+    return operation.type === 'correction_increase' ? 'correction-increase' : 'correction-decrease'
   }
+  if (isOverdue(operation as PendingPayment)) return 'overdue-operation'
+  if (operation.type === 'debt') return 'debt-operation'
+  if (operation.type === 'payment') return 'payment-operation'
+  return ''
+}
 
-  // Фильтр по типу
-  switch (selectedFilter.value) {
-    case 'debt':
-      return filtered.filter(op => op.status === 'pending')
-    case 'payment':
-      return filtered.filter(op => op.status === 'completed')
-    case 'overdue':
-      return filtered.filter(op => isOverdue(op))
-    default:
-      return filtered
+const getOperationIcon = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) {
+    return operation.type === 'correction_increase' ? 'mdi-arrow-up-bold' : 'mdi-arrow-down-bold'
   }
-})
+  if (operation.type === 'debt') return 'mdi-minus-circle'
+  if (operation.type === 'payment') return 'mdi-plus-circle'
+  return 'mdi-circle'
+}
 
-// Computed - баланс
+const getOperationIconColor = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) {
+    return operation.type === 'correction_increase' ? 'success' : 'warning'
+  }
+  if (isOverdue(operation as PendingPayment)) return 'error'
+  if (operation.type === 'debt') return 'warning'
+  if (operation.type === 'payment') return 'success'
+  return 'default'
+}
 
-const debtOperations = computed(() => operations.value.filter(op => op.status === 'pending'))
+const getOperationTitle = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) {
+    const actionType = operation.type === 'correction_increase' ? 'increase' : 'decrease'
+    return `Balance ${actionType}: ${getCorrectionReasonLabel(operation.reason)}`
+  }
+  return operation.description || 'Payment operation'
+}
 
-const totalDebt = computed(() => {
-  return debtOperations.value.reduce((sum, op) => sum + (op.amount || 0), 0)
-})
+const getStatusChipColor = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) return 'info'
+  if (operation.status === 'completed') return 'success'
+  if (operation.status === 'pending') return 'warning'
+  return 'default'
+}
 
-const totalPaid = computed(() => {
-  if (!operations.value || operations.value.length === 0) return 0
-  return operations.value.reduce((sum, op) => sum + (op.amount || 0), 0)
-})
+const getStatusText = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) return 'ADJUSTMENT'
+  return operation.status?.toUpperCase() || 'UNKNOWN'
+}
 
-const availablePrepayment = computed(() => {
-  return paymentOperations.value.reduce((sum, op) => {
-    const used = op.usedAmount || 0
-    const available = op.amount - used
-    return sum + Math.max(0, available)
-  }, 0)
-})
+const getAmountSign = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) {
+    return operation.type === 'correction_increase' ? '+' : '-'
+  }
+  return operation.type === 'debt' ? '-' : '+'
+}
 
-const currentBalance = computed(() => {
-  const balance = props.counteragent.currentBalance
-  if (balance === undefined || balance === null) return 0
-  return balance
-})
+const getAmountSignClass = (operation: CombinedOperation): string => {
+  if (operation.isBalanceCorrection) {
+    return operation.type === 'correction_increase' ? 'sign-positive' : 'sign-negative'
+  }
+  return operation.type === 'debt' ? 'sign-negative' : 'sign-positive'
+}
+
+const showAdditionalInfo = (operation: CombinedOperation): boolean => {
+  return !operation.isBalanceCorrection && operation.status === 'completed'
+}
+
+const currentBalance = computed(() => props.counteragent.currentBalance || 0)
 
 const formattedBalance = computed(() => {
-  return formatCurrency(Math.abs(currentBalance.value || 0))
+  return formatCurrency(Math.abs(currentBalance.value))
 })
 
 const balanceColor = computed(() => {
@@ -301,25 +330,156 @@ const balanceExplanation = computed(() => {
   return 'Balanced - no debt or prepayment'
 })
 
-// Methods
+// Тип для объединенной операции
+type CombinedOperation = (PendingPayment | BalanceHistoryEntry) & {
+  isBalanceCorrection?: boolean
+  type?: string
+  status?: string
+}
+
+// Преобразуем историю баланса в формат операций для UI
+const historyAsOperations = computed((): CombinedOperation[] => {
+  return balanceHistory.value.map(entry => ({
+    ...entry,
+    isBalanceCorrection: true,
+    type: entry.amount > 0 ? 'correction_increase' : 'correction_decrease',
+    status: 'completed',
+    description: `Balance ${entry.amount > 0 ? 'increase' : 'decrease'}: ${REASON_DESCRIPTIONS[entry.reason]}`,
+    counteragentId: props.counteragent.id,
+    counteragentName: props.counteragent.name,
+    amount: Math.abs(entry.amount),
+    createdAt: entry.date,
+    updatedAt: entry.date
+  }))
+})
+
+// Объединяем операции и историю баланса
+const allOperations = computed((): CombinedOperation[] => {
+  const combined: CombinedOperation[] = [
+    // Обычные операции
+    ...operations.value.map(op => ({
+      ...op,
+      isBalanceCorrection: false,
+      type: op.status === 'pending' ? 'debt' : 'payment'
+    })),
+    // История баланса как операции
+    ...historyAsOperations.value
+  ]
+
+  // Сортируем по дате (новые сверху)
+  return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+})
+
+// Операции по типам (исключая корректировки)
+const paymentOperations = computed(() => operations.value.filter(op => op.status === 'completed'))
+
+const debtOperations = computed(() => operations.value.filter(op => op.status === 'pending'))
+
+const correctionOperations = computed(() => balanceHistory.value)
+
+// Фильтрованные операции
+const filteredOperations = computed(() => {
+  let filtered = allOperations.value
+
+  // Фильтр по дате
+  if (dateRange.value.dateFrom || dateRange.value.dateTo) {
+    filtered = filtered.filter(op => {
+      const opDate = new Date(op.createdAt)
+      const fromDate = dateRange.value.dateFrom ? new Date(dateRange.value.dateFrom) : null
+      const toDate = dateRange.value.dateTo ? new Date(dateRange.value.dateTo) : null
+
+      if (fromDate && opDate < fromDate) return false
+      if (toDate && opDate > toDate) return false
+      return true
+    })
+  }
+
+  // Фильтр по типу
+  switch (selectedFilter.value) {
+    case 'debt':
+      return filtered.filter(op => !op.isBalanceCorrection && op.status === 'pending')
+    case 'payment':
+      return filtered.filter(op => !op.isBalanceCorrection && op.status === 'completed')
+    case 'correction':
+      return filtered.filter(op => op.isBalanceCorrection)
+    case 'overdue':
+      return filtered.filter(op => !op.isBalanceCorrection && isOverdue(op as PendingPayment))
+    default:
+      return filtered
+  }
+})
+
+// Динамические расчеты баланса (БЕЗ корректировок, только реальные операции)
+const totalDebt = computed(() => {
+  return debtOperations.value.reduce((sum, op) => sum + (op.amount || 0), 0)
+})
+
+const totalPaid = computed(() => {
+  return paymentOperations.value.reduce((sum, op) => sum + (op.amount || 0), 0)
+})
+
+const availablePrepayment = computed(() => {
+  return paymentOperations.value.reduce((sum, op) => {
+    const used = op.usedAmount || 0
+    const available = op.amount - used
+    return sum + Math.max(0, available)
+  }, 0)
+})
+
+// Лейблы для фильтров
+const filterLabels = computed(() => {
+  return {
+    all: `All (${allOperations.value.length})`,
+    debt: `Debt (${debtOperations.value.length})`,
+    payment: `Paid (${paymentOperations.value.length})`,
+    correction: `Adjustments (${correctionOperations.value.length})`,
+    overdue: `Overdue (${operations.value.filter(op => isOverdue(op)).length})`
+  }
+})
+
+// =============================================
+// METHODS
+// =============================================
+const filterByDate = () => {
+  // Фильтрация происходит автоматически через computed
+  console.log('Date filter applied:', dateRange.value)
+}
+
+const getEmptyMessage = (): string => {
+  if (dateRange.value.dateFrom || dateRange.value.dateTo) {
+    return 'No operations found in selected date range'
+  }
+
+  const filter = selectedFilter.value
+  switch (filter) {
+    case 'debt':
+      return 'No pending debts'
+    case 'payment':
+      return 'No completed payments'
+    case 'correction':
+      return 'No balance adjustments'
+    case 'overdue':
+      return 'No overdue payments'
+    default:
+      return 'No payment operations found'
+  }
+}
 const loadOperations = async () => {
   loading.value = true
   try {
+    // Загружаем обычные операции
     const { useAccountStore } = await import('@/stores/account')
     const accountStore = useAccountStore()
 
     await accountStore.fetchPayments()
-
-    // Получаем ВСЕ платежи контрагента (и pending, и completed)
     const allPayments = await accountStore.getPaymentsByCounteragent(props.counteragent.id)
 
-    // Сортируем по дате (новые сверху) и добавляем тип
-    operations.value = allPayments
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .map(payment => ({
-        ...payment,
-        type: payment.status === 'pending' ? 'debt' : 'payment'
-      }))
+    operations.value = allPayments.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+
+    // Загружаем историю баланса напрямую из counteragent
+    balanceHistory.value = props.counteragent.balanceHistory || []
   } catch (error) {
     console.error('Failed to load operations:', error)
   } finally {
@@ -327,67 +487,66 @@ const loadOperations = async () => {
   }
 }
 
-const filterByDate = () => {
-  // Фильтрация происходит автоматически через computed
-  console.log('Date filter applied:', dateRange.value)
+// Методы для работы с операциями
+
+const getCorrectionReasonLabel = (reason?: string): string => {
+  if (!reason) return ''
+  return REASON_DESCRIPTIONS[reason as keyof typeof REASON_DESCRIPTIONS] || reason
 }
 
-const markAsPaid = async (operation: PendingPayment) => {
-  loading.value = operation.id
+// Методы корректировки баланса
+const openBalanceCorrection = () => {
+  showBalanceCorrectionDialog.value = true
+}
+
+const onCorrectionSuccess = async (result: any) => {
+  console.log('Balance correction successful:', result)
+
+  // Принудительно закрываем диалог
+  showBalanceCorrectionDialog.value = false
+
   try {
-    const { useAccountStore } = await import('@/stores/account')
-    const accountStore = useAccountStore()
+    // Получаем свежие данные контрагента из store
+    const { useCounteragentsStore } = await import('@/stores/counteragents')
+    const counteragentsStore = useCounteragentsStore()
 
-    await accountStore.updatePayment(operation.id, {
-      status: 'completed',
-      paidDate: new Date().toISOString(),
-      paidAmount: operation.amount
-    })
+    const updatedCounteragent = await counteragentsStore.getCounteragentById(props.counteragent.id)
 
-    await loadOperations()
+    if (updatedCounteragent) {
+      // Обновляем локальную историю баланса
+      balanceHistory.value = updatedCounteragent.balanceHistory || []
+
+      // ПРИНУДИТЕЛЬНО обновляем props.counteragent
+      Object.assign(props.counteragent, updatedCounteragent)
+
+      console.log('Balance history updated:', balanceHistory.value.length, 'entries')
+      console.log('New balance:', updatedCounteragent.currentBalance)
+    }
   } catch (error) {
-    console.error('Failed to mark payment as paid:', error)
-  } finally {
-    loading.value = false
+    console.error('Failed to refresh counteragent data:', error)
   }
+
+  // Обновляем операции
+  await loadOperations()
+
+  console.log(
+    `Balance updated: ${result.correctionAmount > 0 ? '+' : ''}${result.correctionAmount}`
+  )
 }
 
-const editPayment = (operation: PendingPayment) => {
-  // Открыть диалог редактирования
-  console.log('Edit payment:', operation.id)
+const onCorrectionError = (error: string) => {
+  console.error('Balance correction failed:', error)
 }
 
-const getAvailableAmount = (payment: PendingPayment): number => {
-  const usedAmount = payment.usedAmount || 0
-  return Math.max(0, payment.amount - usedAmount)
-}
-
+// Остальные методы остаются без изменений...
 const isOverdue = (payment: PendingPayment): boolean => {
   if (payment.status !== 'pending' || !payment.dueDate) return false
   return new Date(payment.dueDate) < new Date()
 }
 
-const getOperationIcon = (operation: any) => {
-  if (operation.type === 'debt') return 'mdi-minus-circle'
-  if (operation.type === 'payment') return 'mdi-plus-circle'
-  return 'mdi-circle'
-}
-
-const getOperationColor = (operation: any) => {
-  if (isOverdue(operation)) return 'error'
-  if (operation.type === 'debt') return 'warning'
-  if (operation.type === 'payment') return 'success'
-  return 'default'
-}
-
-const getStatusColor = (status: string) => {
-  const colors: Record<string, string> = {
-    pending: 'warning',
-    completed: 'success',
-    cancelled: 'grey',
-    failed: 'error'
-  }
-  return colors[status] || 'default'
+const getAvailableAmount = (payment: PendingPayment): number => {
+  const usedAmount = payment.usedAmount || 0
+  return Math.max(0, payment.amount - usedAmount)
 }
 
 const formatCurrency = (amount: number): string => {
@@ -407,30 +566,14 @@ const formatDate = (dateString: string): string => {
   })
 }
 
-const getEmptyMessage = (): string => {
-  if (dateRange.value.dateFrom || dateRange.value.dateTo) {
-    return 'No operations found in selected date range'
-  }
+// =============================================
+// LIFECYCLE
+// =============================================
 
-  const filter = selectedFilter.value
-  switch (filter) {
-    case 'debt':
-      return 'No pending debts'
-    case 'payment':
-      return 'No completed payments'
-    case 'overdue':
-      return 'No overdue payments'
-    default:
-      return 'No payment operations found'
-  }
-}
-
-// Lifecycle
 onMounted(() => {
   loadOperations()
 })
 </script>
-
 <style scoped>
 .payments-simple {
   min-height: 300px;
@@ -453,14 +596,26 @@ onMounted(() => {
 .balance-main {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 16px;
+  gap: 16px;
 }
 
 .balance-amount {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.balance-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.balance-explanation {
+  text-align: right;
 }
 
 .balance-label {
@@ -501,28 +656,42 @@ onMounted(() => {
 
 .operation-card {
   transition: all 0.2s ease;
-  border-left: 3px solid transparent;
+  border-left: 4px solid transparent;
+  position: relative;
 }
 
 .operation-card:hover {
-  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* Типы операций */
 .debt-operation {
-  border-left-color: rgb(var(--v-theme-warning));
-  background: rgba(var(--v-theme-warning), 0.02);
+  border-left-color: #ff9800;
+  background: rgba(255, 152, 0, 0.03);
 }
 
 .payment-operation {
-  border-left-color: rgb(var(--v-theme-success));
-  background: rgba(var(--v-theme-success), 0.02);
+  border-left-color: #4caf50;
+  background: rgba(76, 175, 80, 0.03);
+}
+
+.correction-increase {
+  border-left-color: #2196f3;
+  background: rgba(33, 150, 243, 0.03);
+}
+
+.correction-decrease {
+  border-left-color: #ff5722;
+  background: rgba(255, 87, 34, 0.03);
 }
 
 .overdue-operation {
-  border-left-color: rgb(var(--v-theme-error)) !important;
-  background: rgba(var(--v-theme-error), 0.05) !important;
+  border-left-color: #f44336 !important;
+  background: rgba(244, 67, 54, 0.05) !important;
 }
 
+/* Заголовок операции */
 .operation-header {
   display: flex;
   justify-content: space-between;
@@ -535,39 +704,86 @@ onMounted(() => {
 }
 
 .operation-description {
-  font-weight: 500;
-  margin-bottom: 4px;
   display: flex;
   align-items: center;
+  margin-bottom: 6px;
   flex-wrap: wrap;
+}
+
+.operation-title {
+  font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .operation-meta {
   display: flex;
   align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  gap: 8px;
 }
 
+.operation-id {
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.reason-badge {
+  background: rgba(33, 150, 243, 0.1);
+  color: #2196f3;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Сумма */
 .operation-amount {
   text-align: right;
-  min-width: 120px;
+  min-width: 140px;
+}
+
+.amount-display {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.amount-sign {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.sign-positive {
+  color: #4caf50;
+}
+
+.sign-negative {
+  color: #ff5722;
 }
 
 .amount-value {
-  font-weight: 600;
-  font-size: 1rem;
+  color: inherit;
+}
+
+.amount-details {
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .amount-used {
-  font-size: 0.75rem;
   color: #ff9800;
+  font-size: 0.75rem;
   margin-top: 2px;
 }
 
 .amount-available {
-  font-size: 0.75rem;
   color: #4caf50;
+  font-size: 0.75rem;
   margin-top: 2px;
 }
 
@@ -581,16 +797,20 @@ onMounted(() => {
   padding: 48px 24px;
 }
 
-/* Mobile */
+/* Mobile адаптация */
 @media (max-width: 768px) {
   .operation-header {
     flex-direction: column;
-    align-items: stretch;
     gap: 8px;
   }
 
   .operation-amount {
     text-align: left;
+    min-width: auto;
+  }
+
+  .amount-display {
+    justify-content: flex-start;
   }
 
   .breakdown-item {
@@ -600,7 +820,16 @@ onMounted(() => {
   .balance-main {
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: 12px;
+  }
+
+  .balance-actions {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .balance-explanation {
+    text-align: left;
   }
 }
 </style>

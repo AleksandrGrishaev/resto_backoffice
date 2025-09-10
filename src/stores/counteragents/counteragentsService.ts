@@ -122,31 +122,29 @@ export class CounteragentsService {
     try {
       DebugUtils.debug(MODULE_NAME, 'Creating counteragent', {
         name: data.name,
-        type: data.type,
-        categories: data.productCategories
+        type: data.type
       })
 
       const now = TimeUtils.getCurrentLocalISO()
-
       const newCounteragent: Counteragent = {
         id: generateId(),
         name: data.name,
         displayName: data.displayName,
         type: data.type,
-        contactPerson: data.contactPerson,
-        phone: data.phone,
-        email: data.email,
-        address: data.address,
-        website: data.website,
-        productCategories: data.productCategories,
         description: data.description,
-        paymentTerms: data.paymentTerms,
+        contactPerson: data.contactPerson,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        productCategories: data.productCategories || [],
+        paymentTerms: data.paymentTerms || 'on_delivery',
         isActive: data.isActive ?? true,
         isPreferred: data.isPreferred ?? false,
         tags: data.tags || [],
         notes: data.notes,
         creditLimit: data.creditLimit,
         currentBalance: 0,
+        balanceHistory: [], // НОВОЕ ПОЛЕ - инициализируем пустым массивом
         leadTimeDays: data.leadTimeDays || 3,
         deliverySchedule: data.deliverySchedule,
         minOrderAmount: data.minOrderAmount,
@@ -171,6 +169,22 @@ export class CounteragentsService {
     }
   }
 
+  async getBalanceHistory(id: string): Promise<BalanceHistoryEntry[]> {
+    try {
+      const counteragent = this.counteragents.find(ca => ca.id === id)
+      if (!counteragent) {
+        throw new Error(`Counteragent with id ${id} not found`)
+      }
+
+      return (counteragent.balanceHistory || []).sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get balance history', { error, id })
+      return []
+    }
+  }
+
   async updateCounteragent(id: string, data: Partial<Counteragent>): Promise<CounteragentResponse> {
     await delay(API_DELAY)
 
@@ -186,6 +200,8 @@ export class CounteragentsService {
       const updatedCounteragent = {
         ...this.counteragents[index],
         ...data,
+        // ВАЖНО: Убедиться что balanceHistory не затирается при обновлении других полей
+        balanceHistory: data.balanceHistory ?? this.counteragents[index].balanceHistory ?? [],
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
@@ -194,7 +210,8 @@ export class CounteragentsService {
       DebugUtils.info(MODULE_NAME, 'Counteragent updated successfully', {
         id,
         name: updatedCounteragent.name,
-        updatedFields: Object.keys(data)
+        updatedFields: Object.keys(data),
+        balanceHistoryLength: updatedCounteragent.balanceHistory.length
       })
 
       return { data: updatedCounteragent }

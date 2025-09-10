@@ -68,6 +68,7 @@ export interface Counteragent extends BaseEntity {
 
   // BALANCE
   currentBalance?: number
+  balanceHistory?: BalanceHistoryEntry[]
   lastBalanceUpdate?: string
 }
 
@@ -239,3 +240,66 @@ export const DELIVERY_SCHEDULES = {
   MONTHLY: 'monthly' as const,
   ON_DEMAND: 'on_demand' as const
 } as const
+
+// =============================================
+// БАЛАНСЫ
+// =============================================
+
+export interface BalanceHistoryEntry {
+  id: string // Для UI и идентификации
+  date: string
+  oldBalance: number
+  newBalance: number
+  amount: number // newBalance - oldBalance (для удобства)
+  reason: BalanceCorrectionReason
+  notes?: string
+  appliedBy?: string
+}
+
+export type BalanceCorrectionReason =
+  | 'historical_prepayment'
+  | 'historical_debt'
+  | 'unrecorded_transfer'
+  | 'manual_adjustment'
+  | 'system_migration'
+  | 'reconciliation'
+  | 'other'
+
+export const BALANCE_CORRECTION_REASONS = [
+  { title: 'Historical Prepayment', value: 'historical_prepayment' as const },
+  { title: 'Historical Debt', value: 'historical_debt' as const },
+  { title: 'Bank Transfer Not Recorded', value: 'unrecorded_transfer' as const },
+  { title: 'Manual Adjustment', value: 'manual_adjustment' as const },
+  { title: 'System Migration', value: 'system_migration' as const },
+  { title: 'Reconciliation', value: 'reconciliation' as const },
+  { title: 'Other', value: 'other' as const }
+]
+
+export const REASON_DESCRIPTIONS: Record<BalanceCorrectionReason, string> = {
+  historical_prepayment: 'Historical Prepayment',
+  historical_debt: 'Historical Debt',
+  unrecorded_transfer: 'Unrecorded Bank Transfer',
+  manual_adjustment: 'Manual Adjustment',
+  system_migration: 'System Migration',
+  reconciliation: 'Account Reconciliation',
+  other: 'Other Adjustment'
+}
+
+// DTO для создания корректировки
+export interface CreateBalanceCorrectionDto {
+  counteragentId: string
+  newBalance: number
+  reason: BalanceCorrectionReason
+  notes?: string
+  appliedBy?: string
+}
+
+// Результат корректировки
+export interface BalanceCorrectionResult {
+  success: boolean
+  oldBalance: number
+  newBalance: number
+  correctionAmount: number
+  historyEntry?: BalanceHistoryEntry
+  error?: string
+}
