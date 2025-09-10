@@ -5,6 +5,7 @@ import type { RouteRecordRaw } from 'vue-router'
 // ===== LAYOUTS =====
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import MainLayout from '@/layouts/MainLayout.vue'
+import PosLayout from '@/layouts/PosLayout.vue'
 
 // ===== AUTH VIEWS =====
 import LoginView from '@/views/auth/LoginView.vue'
@@ -56,13 +57,24 @@ const routes: RouteRecordRaw[] = [
   // ===== POS ROUTES =====
   {
     path: '/pos',
-    name: 'pos',
-    component: PosMainView,
-    meta: {
-      requiresAuth: true,
-      allowedRoles: ['admin', 'cashier'],
-      title: 'POS система'
-    }
+    component: PosLayout, // ← LAYOUT для router
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'pos',
+        component: () => import('@/views/pos/PosMainView.vue'),
+        meta: {
+          allowedRoles: ['admin', 'cashier'],
+          title: 'POS система'
+        }
+      }
+      // Можно добавить больше POS маршрутов:
+      // {
+      //   path: 'orders',
+      //   component: () => import('@/views/pos/OrdersView.vue')
+      // }
+    ]
   },
 
   // ===== BACKOFFICE ROUTES =====
