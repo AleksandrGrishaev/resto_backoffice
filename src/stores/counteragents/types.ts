@@ -45,7 +45,6 @@ export interface Counteragent extends BaseEntity {
   // Деловые условия
   paymentTerms: PaymentTerms
   creditLimit?: number
-  currentBalance?: number // + prepayment, - debt
 
   // ✅ НОВЫЕ ПОЛЯ: Условия поставки
   leadTimeDays: number // Время поставки в днях
@@ -66,6 +65,10 @@ export interface Counteragent extends BaseEntity {
   totalOrderValue?: number // в IDR
   lastOrderDate?: string
   averageDeliveryTime?: number // в днях
+
+  // BALANCE
+  currentBalance?: number
+  lastBalanceUpdate?: string
 }
 
 // =============================================

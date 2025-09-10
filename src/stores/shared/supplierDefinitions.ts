@@ -568,7 +568,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     supplierId: 'sup-premium-meat-co', // ✅ Тот же поставщик
     supplierName: 'Premium Meat Company',
     requestIds: ['req-use-credit'],
-    status: 'confirmed',
+    status: 'draft',
     billStatus: 'partially_paid', // частично оплачен кредитом
 
     totalAmount: 800000, // новый заказ на 800k

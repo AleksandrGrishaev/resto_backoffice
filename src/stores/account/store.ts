@@ -293,6 +293,8 @@ export const useAccountStore = defineStore('account', () => {
         payment.updatedAt = new Date().toISOString()
       }
 
+      // ❌ УБРАТЬ ВСЮ АВТОМАТИЗАЦИЮ ОТСЮДА - это не подходящая функция
+
       DebugUtils.info(MODULE_NAME, 'Payment amount updated successfully')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update payment amount', { error })
@@ -590,58 +592,39 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
-  async function processPayment(data: ProcessPaymentDto): Promise<void> {
+  async function processPayment(data: ProcessPaymentDto) {
     try {
       clearError()
       state.value.loading.payments = true
       DebugUtils.info(MODULE_NAME, 'Processing payment', { data })
 
-      const payment = await paymentService.getById(data.paymentId)
-      if (!payment) {
-        throw new Error('Payment not found')
-      }
+      await paymentService.processPayment(data)
 
-      // Создаем транзакцию expense с информацией о контрагенте
-      const transactionData: CreateOperationDto = {
-        accountId: data.accountId,
-        type: 'expense',
-        amount: data.actualAmount || payment.amount,
-        description: `Payment: ${payment.description}`,
-        expenseCategory: {
-          type: 'daily',
-          category: payment.category === 'supplier' ? 'product' : 'other'
-        },
-        performedBy: data.performedBy,
-
-        // ✅ НОВЫЕ поля для связи с контрагентом
-        counteragentId: payment.counteragentId,
-        counteragentName: payment.counteragentName,
-        relatedOrderIds: payment.linkedOrders?.map(order => order.orderId) || [],
-        relatedPaymentId: payment.id
-      }
-
-      await transactionService.createTransaction(transactionData)
-
-      // ✅ ИСПРАВЛЕНИЕ: Инициализируем usedAmount при оплате
-      const linkedAmount =
-        payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) ||
-        0
-
-      // Обновляем статус платежа
-      await paymentService.update(payment.id, {
-        status: 'completed',
-        assignedToAccount: data.accountId,
-        usedAmount: linkedAmount // ✅ ДОБАВЛЕНО: инициализируем usedAmount
-      })
-
-      // Обновляем локальные данные
+      // Обновляем локальное состояние
       await Promise.all([
-        fetchAccounts(true),
         fetchPayments(true),
         state.value.selectedAccountId
           ? fetchTransactions(state.value.selectedAccountId)
           : Promise.resolve()
       ])
+
+      // ✅ ДОБАВИТЬ АВТОМАТИЗАЦИЮ СЮДА:
+      try {
+        // Получаем обновленный платеж
+        const updatedPayment = state.value.pendingPayments.find(p => p.id === data.paymentId)
+
+        if (updatedPayment && updatedPayment.status === 'completed') {
+          const { AutomatedPayments } = await import(
+            '@/stores/counteragents/integrations/automatedPayments'
+          )
+
+          AutomatedPayments.onPaymentStatusChanged(updatedPayment, 'pending').catch(error => {
+            console.warn('Payment processing automation failed:', error)
+          })
+        }
+      } catch (error) {
+        console.warn('Failed to trigger payment processing automation:', error)
+      }
 
       DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
     } catch (error) {
@@ -932,6 +915,18 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  async function getPaymentsByCounteragent(counteragentId: string): Promise<PendingPayment[]> {
+    try {
+      await fetchPayments()
+      return state.value.pendingPayments.filter(
+        payment => payment.counteragentId === counteragentId
+      )
+    } catch (error) {
+      console.error('Failed to get payments by counteragent:', error)
+      return []
+    }
+  }
+
   // ============ RETURN ============
   return {
     // State
@@ -957,6 +952,7 @@ export const useAccountStore = defineStore('account', () => {
     getPaymentsByAccount,
     getAccountTransactions,
     getAllTransactions,
+    getPaymentsByCounteragent,
 
     // Helper methods
     clearError,

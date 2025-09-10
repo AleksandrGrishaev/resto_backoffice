@@ -725,9 +725,21 @@ export const useSupplierStore = defineStore('supplier', () => {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating order', { orderId: id })
 
+      // ✅ ПОЛУЧАЕМ ИСХОДНЫЙ ЗАКАЗ ДО ОБНОВЛЕНИЯ
+      const originalOrder = state.value.orders.find(o => o.id === id)
+      const previousStatus = originalOrder?.status
+
+      console.log('🔍 Checking automation trigger:', {
+        originalOrder: originalOrder?.status,
+        newStatus: data.status,
+        shouldTrigger: originalOrder && data.status && data.status !== originalOrder.status,
+        hasOriginalOrder: !!originalOrder,
+        hasNewStatus: !!data.status
+      })
+
       const updatedOrder = await supplierService.updateOrder(id, data)
 
-      // ✅ ИСПРАВЛЕНО: Используем иммутабельный подход, как в updateRequest
+      // Обновляем массив
       const index = state.value.orders.findIndex(o => o.id === id)
       if (index !== -1) {
         state.value.orders = [
@@ -751,6 +763,36 @@ export const useSupplierStore = defineStore('supplier', () => {
         billStatus: updatedOrder.billStatus,
         updatedInArray: index !== -1
       })
+
+      // ✅ АВТОМАТИЗАЦИЯ С СОХРАНЕННЫМ СТАТУСОМ
+      try {
+        console.log('🔧 Automation check with saved status:', {
+          hasPreviousStatus: !!previousStatus,
+          previousStatus,
+          newStatus: data.status,
+          condition: previousStatus && data.status && data.status !== previousStatus
+        })
+
+        if (previousStatus && data.status && data.status !== previousStatus) {
+          console.log('🚀 Starting automation import...')
+
+          const { AutomatedPayments } = await import(
+            '@/stores/counteragents/integrations/automatedPayments'
+          )
+
+          console.log('✅ Automation imported successfully, calling onOrderStatusChanged...')
+
+          AutomatedPayments.onOrderStatusChanged(updatedOrder, previousStatus).catch(error => {
+            console.warn('Order automation failed:', error)
+          })
+
+          console.log('🎯 Automation call completed')
+        } else {
+          console.log('❌ Automation condition not met')
+        }
+      } catch (error) {
+        console.warn('Failed to trigger order automation:', error)
+      }
 
       return updatedOrder
     } catch (error) {
