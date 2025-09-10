@@ -89,10 +89,12 @@ export function useOrderPayments() {
       }
     }
 
-    const totalBilled = bills.reduce((sum, bill) => {
-      const link = bill.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
-      return sum + (link?.linkedAmount || 0)
-    }, 0)
+    const totalBilled = bills
+      .filter(bill => bill.status !== 'cancelled') // ✅ ДОБАВИТЬ ФИЛЬТР
+      .reduce((sum, bill) => {
+        const link = bill.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+        return sum + (link?.linkedAmount || 0)
+      }, 0)
     const orderTotal = order.totalAmount
     const amountDifference = totalBilled - orderTotal
     const hasAmountMismatch = Math.abs(amountDifference) > 1
@@ -110,15 +112,23 @@ export function useOrderPayments() {
     const deliveredAmount = order.actualDeliveredAmount || 0
     const shortfallAmount = paidAmount - deliveredAmount
 
-    let paymentStatus: 'not_billed' | 'pending' | 'partial' | 'paid'
-    if (bills.length === 0) {
+    let paymentStatus: 'not_billed' | 'billed' | 'partially_paid' | 'fully_paid' | 'overpaid' =
+      'not_billed'
+
+    const activeBills = bills.filter(bill => bill.status !== 'cancelled') // ✅ ДОБАВИТЬ
+
+    if (activeBills.length === 0) {
       paymentStatus = 'not_billed'
-    } else if (paidAmount === 0) {
-      paymentStatus = 'pending'
-    } else if (paidAmount < totalBilled) {
-      paymentStatus = 'partial'
+    } else if (totalBilled === 0) {
+      paymentStatus = 'not_billed'
+    } else if (totalBilled > orderTotal) {
+      paymentStatus = 'overpaid'
+    } else if (totalBilled === orderTotal) {
+      paymentStatus = 'fully_paid'
+    } else if (totalBilled > 0) {
+      paymentStatus = 'partially_paid'
     } else {
-      paymentStatus = 'paid'
+      paymentStatus = 'billed'
     }
 
     return {

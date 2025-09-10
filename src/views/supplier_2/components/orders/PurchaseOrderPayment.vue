@@ -237,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
 import type { PendingPayment } from '@/stores/account/types'
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'

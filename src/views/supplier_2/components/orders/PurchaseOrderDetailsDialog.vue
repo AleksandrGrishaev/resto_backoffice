@@ -115,7 +115,8 @@
                 <v-col cols="6" md="3">
                   <div class="text-subtitle-2 mb-1">Bills Count</div>
                   <div class="text-body-1 font-weight-bold">
-                    {{ selectedOrderBills.length }}
+                    {{ activeBillsCount }}
+                    <!-- ✅ ИЗМЕНИТЬ с selectedOrderBills.length на activeBillsCount -->
                   </div>
                 </v-col>
               </v-row>
@@ -125,7 +126,7 @@
           <!-- Bills Management -->
           <PurchaseOrderPayment
             :order="order"
-            :bills="selectedOrderBills"
+            :bills="activeBills"
             :loading="paymentState.loading"
             @create-bill="handleCreateBill"
             @attach-bill="handleAttachBill"
@@ -426,6 +427,12 @@ const isOpen = computed({
   get: () => props.modelValue,
   set: value => emits('update:modelValue', value)
 })
+
+const activeBills = computed(() =>
+  selectedOrderBills.value.filter(bill => bill.status !== 'cancelled')
+)
+
+const activeBillsCount = computed(() => activeBills.value.length)
 
 // =============================================
 // TABLE CONFIGURATION
