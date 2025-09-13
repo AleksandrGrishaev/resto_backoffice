@@ -7,17 +7,17 @@
     :variant="isActive ? 'flat' : 'outlined'"
     @click="$emit('select', table)"
   >
-    <v-card-text class="pa-2 d-flex flex-column align-center justify-center text-center">
+    <v-card-text class="table-content">
       <!-- Table Icon -->
-      <v-icon :icon="getTableIcon()" size="24" :color="getIconColor()" class="mb-1" />
+      <v-icon :icon="getTableIcon()" size="20" :color="getIconColor()" class="table-icon" />
 
       <!-- Table Number -->
-      <div class="table-number text-subtitle-2 font-weight-bold">
+      <div class="table-number">
         {{ table.number }}
       </div>
 
       <!-- Status Indicator -->
-      <div v-if="isOccupied" class="status-dot mt-1" :class="{ 'status-dot--paid': isPaid }" />
+      <div v-if="isOccupied" class="status-dot" :class="{ 'status-dot--paid': isPaid }" />
     </v-card-text>
   </v-card>
 </template>
@@ -69,21 +69,21 @@ const getIconColor = () => {
 
 <style scoped>
 .table-item {
-  width: 80px;
-  height: 80px;
+  height: 60px; /* Уменьшено с 80px до 60px */
   cursor: pointer;
   transition: all 0.2s ease;
   border: 2px solid transparent;
+  border-radius: 6px;
 }
 
 .table-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px); /* Уменьшенный hover эффект */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .table-item--active {
   border-color: rgb(var(--v-theme-primary));
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 /* Status-specific styles */
@@ -103,26 +103,39 @@ const getIconColor = () => {
   border-color: rgba(33, 150, 243, 0.5);
 }
 
+.table-content {
+  padding: 8px 12px !important; /* Уменьшенный padding */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px; /* Уменьшенная высота контента */
+  gap: 8px;
+}
+
+.table-icon {
+  flex-shrink: 0;
+}
+
+.table-number {
+  font-size: 0.875rem; /* Уменьшенный размер шрифта */
+  font-weight: 600;
+  color: inherit;
+  line-height: 1;
+  flex: 1;
+  text-align: center;
+}
+
 /* Status dot */
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px; /* Уменьшено с 8px */
+  height: 6px;
   border-radius: 50%;
   background-color: rgb(var(--v-theme-warning));
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .status-dot--paid {
   background-color: rgb(var(--v-theme-success));
-}
-
-.table-number {
-  color: inherit;
-  line-height: 1;
-}
-
-/* Card text override */
-:deep(.v-card-text) {
-  min-height: 76px;
 }
 </style>

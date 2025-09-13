@@ -1,6 +1,6 @@
 <!-- src/layouts/PosLayout.vue -->
 <template>
-  <div class="pos-layout">
+  <div class="pos-layout" :style="cssVariables">
     <!-- Sidebar Section -->
     <div class="pos-sidebar">
       <slot name="sidebar" />
@@ -22,7 +22,9 @@
 </template>
 
 <script setup lang="ts">
-// Простой layout без логики - только структура
+import { usePosLayout } from '@/layouts/pos'
+
+const { cssVariables, checks } = usePosLayout()
 </script>
 
 <style scoped>
@@ -34,15 +36,16 @@
   background-color: var(--v-theme-background);
 }
 
-/* Sidebar Section - фиксированная ширина */
+/* Sidebar Section - адаптивная ширина через CSS переменные */
 .pos-sidebar {
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
+  width: var(--pos-sidebar-width, 80px);
+  min-width: var(--pos-sidebar-width, 80px);
+  max-width: var(--pos-sidebar-width, 80px);
   background-color: var(--v-theme-surface);
   border-right: 1px solid rgba(255, 255, 255, 0.12);
   overflow-y: auto;
   overflow-x: hidden;
+  flex-shrink: 0;
 }
 
 /* Main Content Area - остальное пространство */
@@ -50,29 +53,32 @@
   flex: 1;
   min-width: 0;
   display: flex;
+  gap: var(--pos-gap, 0);
 }
 
-/* Menu Section - 2/3 главной области */
+/* Menu Section - адаптивная ширина */
 .pos-menu {
-  flex: 2;
+  width: var(--pos-menu-width);
   min-width: 0;
   background-color: var(--v-theme-background);
   border-right: 1px solid rgba(255, 255, 255, 0.12);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
-/* Order Section - 1/3 главной области */
+/* Order Section - адаптивная ширина */
 .pos-order {
-  flex: 1;
-  min-width: 320px;
-  max-width: 400px;
+  width: var(--pos-order-width);
+  min-width: var(--pos-order-width);
+  max-width: var(--pos-order-width);
   background-color: var(--v-theme-surface);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
-/* Custom scrollbar for sidebar */
+/* Custom scrollbar для sidebar */
 .pos-sidebar::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 .pos-sidebar::-webkit-scrollbar-track {
@@ -81,37 +87,43 @@
 
 .pos-sidebar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .pos-sidebar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Responsive */
-@media (max-width: 1200px) {
+/* Responsive fallbacks (если CSS переменные не загружены) */
+@media (max-width: 768px) {
   .pos-sidebar {
-    width: 240px;
-    min-width: 240px;
-    max-width: 240px;
-  }
-
-  .pos-order {
-    min-width: 300px;
-    max-width: 350px;
+    width: 64px;
+    min-width: 64px;
+    max-width: 64px;
   }
 }
 
-@media (max-width: 992px) {
+@media (min-width: 768px) and (max-width: 1200px) {
   .pos-sidebar {
-    width: 200px;
-    min-width: 200px;
-    max-width: 200px;
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
   }
+}
 
-  .pos-order {
-    min-width: 280px;
-    max-width: 320px;
+@media (min-width: 1200px) and (max-width: 1600px) {
+  .pos-sidebar {
+    width: 100px;
+    min-width: 100px;
+    max-width: 100px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .pos-sidebar {
+    width: 120px;
+    min-width: 120px;
+    max-width: 120px;
   }
 }
 </style>

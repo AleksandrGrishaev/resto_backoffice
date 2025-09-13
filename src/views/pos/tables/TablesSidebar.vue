@@ -1,57 +1,64 @@
 <!-- src/views/pos/tables/TablesSidebar.vue -->
 <template>
   <div class="tables-sidebar">
-    <!-- New Order Button -->
-    <div class="new-order-section pa-3">
-      <v-btn color="primary" variant="flat" size="large" block @click="handleNewOrder">
-        <v-icon icon="mdi-plus" class="me-2" />
-        New Order
-      </v-btn>
+    <!-- New Order Button Section -->
+    <div class="new-order-section">
+      <v-btn
+        class="new-order-btn"
+        color="primary"
+        block
+        icon="mdi-plus"
+        height="44"
+        @click="handleNewOrder"
+      />
     </div>
 
-    <v-divider />
+    <div class="separator" />
 
-    <!-- Active Delivery/Takeaway Orders -->
-    <div v-if="activeDeliveryOrders.length > 0" class="delivery-orders-section">
-      <div class="section-title pa-3">
-        <span class="text-caption text-medium-emphasis">ACTIVE ORDERS</span>
-      </div>
-
-      <div class="delivery-orders pa-2">
-        <div class="orders-grid">
-          <div v-for="order in activeDeliveryOrders" :key="order.id" class="delivery-order-item">
+    <!-- Scrollable Content -->
+    <div class="scrollable-content">
+      <!-- Active Delivery/Takeaway Orders Section -->
+      <div v-if="activeDeliveryOrders.length > 0" class="orders-section">
+        <div class="section-title">Active Orders</div>
+        <div
+          class="orders-list"
+          :class="{ 'orders-list--scrollable': activeDeliveryOrders.length > 4 }"
+        >
+          <div
+            v-for="order in activeDeliveryOrders.slice(0, maxVisibleOrders)"
+            :key="order.id"
+            class="order-item"
+          >
             <v-card
               class="order-card"
               :color="activeOrder?.id === order.id ? 'primary' : undefined"
               :variant="activeOrder?.id === order.id ? 'flat' : 'outlined'"
               @click="handleSelect(order.id)"
             >
-              <v-card-text class="pa-2 text-center">
+              <v-card-text class="order-card-content">
                 <v-icon
                   :icon="order.type === 'delivery' ? 'mdi-bike-fast' : 'mdi-shopping'"
-                  size="20"
-                  class="mb-1"
+                  size="16"
                 />
-                <div class="text-caption font-weight-bold">
-                  {{ order.orderNumber }}
-                </div>
+                <span class="order-number">{{ order.orderNumber }}</span>
               </v-card-text>
             </v-card>
           </div>
+          <!-- Show scroll indicator if more than 4 orders -->
+          <div v-if="activeDeliveryOrders.length > maxVisibleOrders" class="scroll-indicator">
+            <v-icon icon="mdi-chevron-down" size="16" color="grey" />
+            <span class="text-caption">
+              +{{ activeDeliveryOrders.length - maxVisibleOrders }} more
+            </span>
+          </div>
         </div>
-      </div>
-    </div>
-
-    <v-divider v-if="activeDeliveryOrders.length > 0" />
-
-    <!-- Tables Section -->
-    <div class="tables-section flex-grow-1">
-      <div class="section-title pa-3">
-        <span class="text-caption text-medium-emphasis">TABLES</span>
+        <div class="separator" />
       </div>
 
-      <div class="tables pa-2">
-        <div class="tables-grid">
+      <!-- Tables Section -->
+      <div class="tables-section">
+        <div class="section-title">Tables</div>
+        <div class="tables-list">
           <TableItem
             v-for="table in tables"
             :key="table.id"
@@ -63,6 +70,11 @@
       </div>
     </div>
 
+    <!-- Navigation Menu Button -->
+    <div class="navigation-section">
+      <PosNavigationMenu />
+    </div>
+
     <!-- Order Type Dialog -->
     <OrderTypeDialog
       v-model="showNewOrderDialog"
@@ -70,7 +82,7 @@
       @select-dine-in="handleSelectDineIn"
     />
 
-    <!-- Simple Confirmation Dialog for unsaved changes -->
+    <!-- Unsaved Changes Dialog -->
     <v-dialog v-model="showUnsavedDialog" max-width="400">
       <v-card>
         <v-card-title class="text-h6">Unsaved Changes</v-card-title>
@@ -93,14 +105,31 @@ import type { OrderType } from '@/types/order'
 import { isTableOccupied, canCreateOrder, canSelectOrder } from '@/stores/pos/tables/types'
 import TableItem from './TableItem.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
+import PosNavigationMenu from '../components/PosNavigationMenu.vue'
 
 const MODULE_NAME = 'TablesSidebar'
+
+// Constants
+const maxVisibleOrders = 4
 
 // State
 const pendingAction = ref<(() => void) | null>(null)
 const showNewOrderDialog = ref(false)
 const showUnsavedDialog = ref(false)
 const waitingForTableSelection = ref(false)
+
+// Mock active order for demo
+const activeOrder = ref<{ id: string } | null>(null)
+
+// Mock active delivery orders for demo
+const activeDeliveryOrders = ref([
+  { id: 'order_1', orderNumber: 'D001', type: 'delivery' as OrderType },
+  { id: 'order_2', orderNumber: 'T002', type: 'takeaway' as OrderType },
+  { id: 'order_3', orderNumber: 'D003', type: 'delivery' as OrderType },
+  { id: 'order_4', orderNumber: 'T004', type: 'takeaway' as OrderType },
+  { id: 'order_5', orderNumber: 'D005', type: 'delivery' as OrderType },
+  { id: 'order_6', orderNumber: 'T006', type: 'takeaway' as OrderType }
+])
 
 // Mock tables data - TODO: заменить на реальные данные из store
 const tables = ref<Table[]>([
@@ -156,76 +185,36 @@ const tables = ref<Table[]>([
     updatedAt: '2024-01-01T00:00:00Z'
   },
   {
-    id: 'table_i1',
-    number: 'I1',
+    id: 'table_t6',
+    number: 'T6',
     status: 'free',
-    capacity: 2,
+    capacity: 4,
     floor: 1,
-    section: 'island',
+    section: 'main',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z'
   },
   {
-    id: 'table_i2',
-    number: 'I2',
-    status: 'occupied_paid',
+    id: 'table_t7',
+    number: 'T7',
+    status: 'free',
     capacity: 2,
     floor: 1,
-    section: 'island',
-    currentOrderId: 'order_mock_3',
+    section: 'main',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z'
   },
   {
-    id: 'table_i3',
-    number: 'I3',
+    id: 'table_t8',
+    number: 'T8',
     status: 'free',
-    capacity: 2,
+    capacity: 6,
     floor: 1,
-    section: 'island',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: 'table_i4',
-    number: 'I4',
-    status: 'free',
-    capacity: 2,
-    floor: 1,
-    section: 'island',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: 'table_i5',
-    number: 'I5',
-    status: 'free',
-    capacity: 2,
-    floor: 1,
-    section: 'island',
+    section: 'main',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z'
   }
 ])
-
-// Mock active order - TODO: заменить на реальные данные
-const activeOrder = ref(null)
-
-// Mock delivery orders - TODO: заменить на реальные данные
-const activeDeliveryOrders = computed(() => {
-  return [
-    {
-      id: 'order_delivery_1',
-      orderNumber: 'D001',
-      type: 'delivery' as OrderType
-    },
-    {
-      id: 'order_takeaway_1',
-      orderNumber: 'T001',
-      type: 'takeaway' as OrderType
-    }
-  ]
-})
 
 // Emits
 const emit = defineEmits<{
@@ -252,59 +241,38 @@ const handleNewOrder = () => {
   showNewOrderDialog.value = true
 }
 
-const createOrder = async (type: OrderType) => {
-  DebugUtils.debug(MODULE_NAME, 'Creating order', { type })
-
-  // For takeaway and delivery, create order immediately
-  console.log(`Creating ${type} order`)
-
-  // TODO: Интеграция с реальными stores
-  // const orderId = tablesStore.createOrder(type, 'delivery')
-  // await orderStore.initialize(orderId)
-
+const createOrder = (orderType: OrderType) => {
+  DebugUtils.debug(MODULE_NAME, 'Creating order', { orderType })
+  console.log(`Creating ${orderType} order`)
   showNewOrderDialog.value = false
-  emit('select', `mock_order_${type}_${Date.now()}`)
+  // TODO: Интеграция с реальными stores
 }
 
 const handleSelectDineIn = () => {
   DebugUtils.debug(MODULE_NAME, 'Dine-in selected, waiting for table selection')
   waitingForTableSelection.value = true
+  showNewOrderDialog.value = false
 }
 
 const handleTableSelect = async (table: Table) => {
-  DebugUtils.debug(MODULE_NAME, 'Table selected', {
-    tableId: table.id,
-    status: table.status,
-    currentOrderId: table.currentOrderId,
-    waitingForTableSelection: waitingForTableSelection.value
-  })
+  DebugUtils.debug(MODULE_NAME, 'Table selected', { tableId: table.id, status: table.status })
 
   const proceed = async () => {
-    if (canCreateOrder(table.status)) {
-      // Create new dine-in order for free table
-      DebugUtils.debug(MODULE_NAME, 'Creating new dine-in order for table', { tableId: table.id })
-
+    if (waitingForTableSelection.value) {
+      // Creating new dine-in order for this table
       console.log(`Creating dine-in order for table ${table.number}`)
-
-      // TODO: Интеграция с реальными stores
-      // const orderId = tablesStore.createOrder('dine-in', table.id)
-      // await orderStore.initialize(orderId)
-
       waitingForTableSelection.value = false
-      emit('select', `mock_order_dine_in_${table.id}`)
-    } else if (canSelectOrder(table.status) && table.currentOrderId) {
-      // Select existing order for occupied table
-      DebugUtils.debug(MODULE_NAME, 'Selecting existing order for table', {
-        tableId: table.id,
-        orderId: table.currentOrderId
-      })
+      return
+    }
 
-      console.log(`Selecting existing order ${table.currentOrderId} for table ${table.number}`)
-
-      await handleSelect(table.currentOrderId)
-      waitingForTableSelection.value = false
+    if (canSelectOrder(table.status) && table.currentOrderId) {
+      console.log(`Selecting existing order for table ${table.number}`)
+      activeOrder.value = { id: table.currentOrderId }
+      emit('select', table.currentOrderId)
+    } else if (canCreateOrder(table.status)) {
+      console.log(`Table ${table.number} is free, could create new order`)
     } else {
-      DebugUtils.debug(MODULE_NAME, 'Cannot interact with table in current status', {
+      DebugUtils.warn(MODULE_NAME, 'Cannot interact with table in current status', {
         tableId: table.id,
         status: table.status
       })
@@ -327,6 +295,7 @@ const handleTableSelect = async (table: Table) => {
 const handleSelect = async (orderId: string) => {
   DebugUtils.debug(MODULE_NAME, 'Order selected', { orderId })
   console.log(`Selecting order: ${orderId}`)
+  activeOrder.value = { id: orderId }
 
   // TODO: Интеграция с реальными stores
   emit('select', orderId)
@@ -360,48 +329,147 @@ onMounted(() => {
 
 <style scoped>
 .tables-sidebar {
-  height: 100%;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   background-color: var(--v-theme-surface);
   border-right: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+.new-order-section {
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.new-order-btn {
+  border-radius: 8px !important;
+  text-transform: none;
+  letter-spacing: 0.0125em;
+  font-size: 0.875rem;
+}
+
+.scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .section-title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.0625em;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 12px 8px 8px 8px;
   background-color: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.tables-grid,
-.orders-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 8px;
-  padding: 4px;
+.orders-section {
+  flex-shrink: 0;
 }
 
-.delivery-orders-section,
-.tables-section {
+.orders-list {
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px; /* Limit height for 4 items + scroll indicator */
+}
+
+.orders-list--scrollable {
   overflow-y: auto;
 }
 
-.tables-section {
-  flex-grow: 1;
+.order-item {
+  flex-shrink: 0;
 }
 
 .order-card {
-  width: 80px;
-  height: 80px;
+  height: 44px;
   cursor: pointer;
   transition: all 0.2s ease;
+  border-radius: 6px;
 }
 
 .order-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.table-item,
-.delivery-order-item {
-  min-height: 80px;
+.order-card-content {
+  padding: 8px 12px !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.order-number {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.scroll-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+}
+
+.tables-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tables-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.navigation-section {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.separator {
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.12);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+
+/* Стили для скроллбара */
+.tables-list::-webkit-scrollbar,
+.orders-list--scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tables-list::-webkit-scrollbar-track,
+.orders-list--scrollable::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+}
+
+.tables-list::-webkit-scrollbar-thumb,
+.orders-list--scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.tables-list::-webkit-scrollbar-thumb:hover,
+.orders-list--scrollable::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 </style>
