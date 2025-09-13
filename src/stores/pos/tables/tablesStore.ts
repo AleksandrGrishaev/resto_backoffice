@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { PosTable, TableFilters, ServiceResponse, TableStatus, TableSection } from '../types'
 import { TablesService } from './services'
-import { useTablesComposables } from './composables'
+import { useTables } from './composables/useTables'
 
 export const usePosTablesStore = defineStore('posTables', () => {
   // ===== STATE =====
@@ -288,14 +288,7 @@ export const usePosTablesStore = defineStore('posTables', () => {
   }
 
   // ===== COMPOSABLES =====
-  const {
-    canOccupyTable,
-    canFreeTable,
-    canReserveTable,
-    getTableDisplayName,
-    getTableStatusColor,
-    getTableStatusIcon
-  } = useTablesComposables()
+  const tablesComposables = useTables()
 
   return {
     // State
@@ -326,12 +319,7 @@ export const usePosTablesStore = defineStore('posTables', () => {
     clearFilters,
     clearError,
 
-    // Composables
-    canOccupyTable,
-    canFreeTable,
-    canReserveTable,
-    getTableDisplayName,
-    getTableStatusColor,
-    getTableStatusIcon
+    // Composables (destructured)
+    ...tablesComposables
   }
 })
