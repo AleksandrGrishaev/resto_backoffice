@@ -2,20 +2,354 @@
 @use 'sass:map';
 @use './variables' as *;
 
-// CSS переменные
-:root {
-  @each $name, $value in $color {
-    --color-#{$name}: #{$value};
-  }
-
-  @each $name, $value in $black {
-    --black-#{$name}: #{$value};
-  }
-}
-
-// Базовые стили
+// =============================================
+// БАЗОВЫЕ СТИЛИ
+// =============================================
 body {
   margin: 0;
   background: var(--black-primary);
   color: rgba(255, 255, 255, 0.87);
+  font-family: 'Roboto', sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+// =============================================
+// УТИЛИТАРНЫЕ КЛАССЫ
+// =============================================
+
+// Touch-friendly элементы
+.touch-target {
+  @include touch-target;
+}
+
+// Быстрые размеры для высоты
+.h-touch {
+  height: var(--touch-min);
+}
+.h-button {
+  height: var(--touch-button);
+}
+.h-card {
+  min-height: var(--touch-card);
+}
+.h-input {
+  height: var(--touch-input);
+}
+
+// Быстрые размеры для ширины
+.w-full {
+  width: 100%;
+}
+.w-auto {
+  width: auto;
+}
+
+// Адаптивные отступы (padding)
+.p-xs {
+  padding: var(--spacing-xs);
+}
+.p-sm {
+  padding: var(--spacing-sm);
+}
+.p-md {
+  padding: var(--spacing-md);
+}
+.p-lg {
+  padding: var(--spacing-lg);
+}
+.p-xl {
+  padding: var(--spacing-xl);
+}
+
+// Адаптивные отступы (margin)
+.m-xs {
+  margin: var(--spacing-xs);
+}
+.m-sm {
+  margin: var(--spacing-sm);
+}
+.m-md {
+  margin: var(--spacing-md);
+}
+.m-lg {
+  margin: var(--spacing-lg);
+}
+.m-xl {
+  margin: var(--spacing-xl);
+}
+
+// Margin-bottom для списков
+.mb-xs {
+  margin-bottom: var(--spacing-xs);
+}
+.mb-sm {
+  margin-bottom: var(--spacing-sm);
+}
+.mb-md {
+  margin-bottom: var(--spacing-md);
+}
+.mb-lg {
+  margin-bottom: var(--spacing-lg);
+}
+
+// Адаптивные размеры текста
+.text-xs {
+  font-size: var(--text-xs);
+}
+.text-sm {
+  font-size: var(--text-sm);
+}
+.text-base {
+  font-size: var(--text-base);
+}
+.text-lg {
+  font-size: var(--text-lg);
+}
+.text-xl {
+  font-size: var(--text-xl);
+}
+.text-2xl {
+  font-size: var(--text-2xl);
+}
+.text-3xl {
+  font-size: var(--text-3xl);
+}
+
+// Веса шрифта
+.font-light {
+  font-weight: 300;
+}
+.font-normal {
+  font-weight: 400;
+}
+.font-medium {
+  font-weight: 500;
+}
+.font-semibold {
+  font-weight: 600;
+}
+.font-bold {
+  font-weight: 700;
+}
+
+// Border radius
+.rounded-sm {
+  border-radius: var(--radius-sm);
+}
+.rounded-md {
+  border-radius: var(--radius-md);
+}
+.rounded-lg {
+  border-radius: var(--radius-lg);
+}
+.rounded-xl {
+  border-radius: var(--radius-xl);
+}
+.rounded-full {
+  border-radius: var(--radius-round);
+}
+
+// Flexbox утилиты
+.flex {
+  display: flex;
+}
+.flex-col {
+  flex-direction: column;
+}
+.flex-row {
+  flex-direction: row;
+}
+.flex-1 {
+  flex: 1;
+}
+.flex-auto {
+  flex: 1 1 auto;
+}
+.flex-none {
+  flex: none;
+}
+.flex-shrink-0 {
+  flex-shrink: 0;
+}
+.flex-grow {
+  flex-grow: 1;
+}
+
+// Justify content
+.justify-start {
+  justify-content: flex-start;
+}
+.justify-center {
+  justify-content: center;
+}
+.justify-end {
+  justify-content: flex-end;
+}
+.justify-between {
+  justify-content: space-between;
+}
+.justify-around {
+  justify-content: space-around;
+}
+
+// Align items
+.items-start {
+  align-items: flex-start;
+}
+.items-center {
+  align-items: center;
+}
+.items-end {
+  align-items: flex-end;
+}
+.items-stretch {
+  align-items: stretch;
+}
+
+// Gap
+.gap-xs {
+  gap: var(--spacing-xs);
+}
+.gap-sm {
+  gap: var(--spacing-sm);
+}
+.gap-md {
+  gap: var(--spacing-md);
+}
+.gap-lg {
+  gap: var(--spacing-lg);
+}
+
+// Overflow
+.overflow-hidden {
+  overflow: hidden;
+}
+.overflow-auto {
+  overflow: auto;
+}
+.overflow-y-auto {
+  overflow-y: auto;
+}
+.overflow-x-auto {
+  overflow-x: auto;
+}
+
+// Position
+.relative {
+  position: relative;
+}
+.absolute {
+  position: absolute;
+}
+.fixed {
+  position: fixed;
+}
+.sticky {
+  position: sticky;
+}
+
+// Прокрутка с кастомным скроллбаром
+.scrollable-content {
+  overflow-y: auto;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-sm);
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+  }
+}
+
+// =============================================
+// АНИМАЦИИ
+// =============================================
+
+// Стандартные переходы
+.transition {
+  transition: all 0.2s ease;
+}
+.transition-fast {
+  transition: all 0.15s ease;
+}
+.transition-slow {
+  transition: all 0.3s ease;
+}
+
+// Появление элементов
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+// Пульсация для загрузки
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.pulse {
+  animation: pulse 2s infinite;
+}
+
+// =============================================
+// RESPONSIVE УТИЛИТЫ
+// =============================================
+
+@include mobile-only {
+  .mobile-hidden {
+    display: none;
+  }
+  .mobile-full {
+    width: 100%;
+  }
+}
+
+@include tablet-up {
+  .tablet-hidden {
+    display: none;
+  }
+}
+
+@include desktop-up {
+  .desktop-hidden {
+    display: none;
+  }
+
+  // Десктоп специфичные размеры
+  .desktop-text-lg {
+    font-size: var(--text-lg);
+  }
+  .desktop-p-lg {
+    padding: var(--spacing-lg);
+  }
 }

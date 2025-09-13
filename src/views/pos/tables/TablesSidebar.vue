@@ -21,13 +21,9 @@
       <div v-if="deliveryOrders.length > 0" class="orders-section">
         <div class="section-title">Active Orders</div>
 
-        <div
-          class="orders-list"
-          :class="{ 'orders-list--scrollable': needsOrdersScroll }"
-          :style="ordersListStyles"
-        >
-          <!-- Visible Orders -->
-          <div v-for="order in visibleOrders" :key="order.id" class="order-item">
+        <div class="orders-list" :style="ordersListStyles">
+          <!-- Показываем ВСЕ заказы -->
+          <div v-for="order in allOrders" :key="order.id" class="order-item">
             <v-card
               class="order-card"
               :color="isOrderActive(order.id) ? 'primary' : undefined"
@@ -42,16 +38,7 @@
             </v-card>
           </div>
         </div>
-
-        <!-- Scroll indicator если есть скрытые заказы -->
-        <div v-if="hasHiddenOrders" class="scroll-indicator">
-          <v-icon icon="mdi-chevron-down" size="12" />
-          <span class="scroll-text">{{ hiddenOrdersText }}</span>
-        </div>
-
-        <div class="separator" />
       </div>
-
       <!-- Tables Section -->
       <div class="tables-section">
         <div class="section-title">Tables</div>
@@ -170,27 +157,17 @@ const selectedTableId = ref<string | null>(null)
 // COMPUTED PROPERTIES
 // =============================================
 
-// Orders list logic
-const visibleOrders = computed(() => deliveryOrders.value.slice(0, UI_CONSTANTS.MAX_VISIBLE_ORDERS))
+const allOrders = computed(() => deliveryOrders.value)
 
-const hasHiddenOrders = computed(
-  () => deliveryOrders.value.length > UI_CONSTANTS.MAX_VISIBLE_ORDERS
-)
-
-const hiddenOrdersCount = computed(() =>
-  Math.max(0, deliveryOrders.value.length - UI_CONSTANTS.MAX_VISIBLE_ORDERS)
-)
-
-const hiddenOrdersText = computed(() => `+${hiddenOrdersCount.value} more`)
-
-const needsOrdersScroll = computed(
-  () => deliveryOrders.value.length > UI_CONSTANTS.MAX_VISIBLE_ORDERS
-)
+const ordersListStyles = computed(() => {
+  const orderCount = deliveryOrders.value.length
+  const maxHeight = Math.min(orderCount * 48 + 16, 200) // 48px на заказ + padding, макс 200px
+  return {
+    maxHeight: `${maxHeight}px`
+  }
+})
 
 // UI Styles
-const ordersListStyles = computed(() => ({
-  maxHeight: `${UI_CONSTANTS.ORDERS_LIST_MAX_HEIGHT}px`
-}))
 
 const orderCardStyles = computed(() => ({
   height: `${UI_CONSTANTS.MIN_ORDER_CARD_HEIGHT}px`,
@@ -448,10 +425,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.orders-list--scrollable {
-  overflow-y: auto;
+  max-height: 200px; /* фиксированная высота */
+  overflow-y: auto; /* всегда скролл */
   overflow-x: hidden;
 }
 
@@ -540,33 +515,31 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* =============================================
-   SCROLLBARS
-   ============================================= */
+/* ===== SCROLLBARS ===== */
 
 .scrollable-content::-webkit-scrollbar,
-.orders-list--scrollable::-webkit-scrollbar,
-.tables-list::-webkit-scrollbar {
+   .orders-list::-webkit-scrollbar,  /* добавить */
+   .tables-list::-webkit-scrollbar {
   width: 4px;
 }
 
 .scrollable-content::-webkit-scrollbar-track,
-.orders-list--scrollable::-webkit-scrollbar-track,
-.tables-list::-webkit-scrollbar-track {
+   .orders-list::-webkit-scrollbar-track,  /* добавить */
+   .tables-list::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 2px;
 }
 
 .scrollable-content::-webkit-scrollbar-thumb,
-.orders-list--scrollable::-webkit-scrollbar-thumb,
-.tables-list::-webkit-scrollbar-thumb {
+   .orders-list::-webkit-scrollbar-thumb,  /* добавить */
+   .tables-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
 
 .scrollable-content::-webkit-scrollbar-thumb:hover,
-.orders-list--scrollable::-webkit-scrollbar-thumb:hover,
-.tables-list::-webkit-scrollbar-thumb:hover {
+   .orders-list::-webkit-scrollbar-thumb:hover,  /* добавить */
+   .tables-list::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 

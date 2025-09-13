@@ -1,7 +1,9 @@
 // src/styles/variables.scss
 @use 'sass:map';
 
-// Theme colors
+// =============================================
+// ЦВЕТОВАЯ СХЕМА (существующая)
+// =============================================
 $color: (
   'primary': #a395e9,
   'secondary': #bfb5f2,
@@ -17,7 +19,206 @@ $black: (
   'surface': #1a1a1e
 ) !default;
 
+// =============================================
+// 🆕 POS РАЗМЕРНАЯ СИСТЕМА
+// =============================================
+
+// Отступы и размеры (адаптивные с clamp)
+$spacing: (
+  'xs': clamp(4px, 0.5vw, 8px),
+  'sm': clamp(8px, 1vw, 12px),
+  'md': clamp(12px, 1.5vw, 16px),
+  'lg': clamp(16px, 2vw, 24px),
+  'xl': clamp(24px, 3vw, 32px)
+) !default;
+
+// Размеры текста (адаптивные)
+$font-size: (
+  'xs': clamp(10px, 1vw, 12px),
+  'sm': clamp(12px, 1.2vw, 14px),
+  'base': clamp(14px, 1.4vw, 16px),
+  'lg': clamp(16px, 1.6vw, 18px),
+  'xl': clamp(18px, 2vw, 22px),
+  '2xl': clamp(22px, 2.5vw, 28px),
+  '3xl': clamp(28px, 3vw, 36px)
+) !default;
+
+// Touch-friendly минимумы
+$touch: (
+  'min': 44px,
+  // Минимальный touch target
+  'button': 48px,
+  // Минимальная высота кнопок
+  'card': 64px,
+  // Минимальная высота карточек
+  'input': 56px // Минимальная высота inputs
+) !default;
+
+// POS Layout размеры
+$pos-layout: (
+  'sidebar-width': max(8vw, 80px),
+  // Ширина боковой панели
+  'sidebar-max-width': 200px,
+  // Максимальная ширина sidebar
+  'menu-flex': 62%,
+  // Процент ширины меню
+  'order-flex': 38%,
+  // Процент ширины заказов
+  'header-height': 60px,
+  // Высота заголовка (если будет)
+  'footer-height': 0px // Высота подвала
+) !default;
+
+// Брейкпоинты
+$breakpoints: (
+  'mobile': 768px,
+  'tablet': 1024px,
+  'desktop': 1440px,
+  'large': 1920px
+) !default;
+
+// Радиусы закругления
+$border-radius: (
+  'sm': 4px,
+  'md': 8px,
+  'lg': 12px,
+  'xl': 16px,
+  'round': 50%
+) !default;
+
+// Z-index слои
+$z-index: (
+  'dropdown': 1000,
+  'sticky': 1020,
+  'fixed': 1030,
+  'modal-backdrop': 1040,
+  'modal': 1050,
+  'popover': 1060,
+  'tooltip': 1070
+) !default;
+
+// =============================================
+// CSS ПЕРЕМЕННЫЕ (для использования в компонентах)
+// =============================================
+:root {
+  // Цвета
+  @each $name, $value in $color {
+    --color-#{$name}: #{$value};
+  }
+  @each $name, $value in $black {
+    --black-#{$name}: #{$value};
+  }
+
+  // Отступы
+  @each $name, $value in $spacing {
+    --spacing-#{$name}: #{$value};
+  }
+
+  // Размеры текста
+  @each $name, $value in $font-size {
+    --text-#{$name}: #{$value};
+  }
+
+  // Touch размеры
+  @each $name, $value in $touch {
+    --touch-#{$name}: #{$value};
+  }
+
+  // POS Layout
+  @each $name, $value in $pos-layout {
+    --pos-#{$name}: #{$value};
+  }
+
+  // Радиусы
+  @each $name, $value in $border-radius {
+    --radius-#{$name}: #{$value};
+  }
+
+  // Z-index
+  @each $name, $value in $z-index {
+    --z-#{$name}: #{$value};
+  }
+
+  // Брейкпоинты (для JavaScript)
+  @each $name, $value in $breakpoints {
+    --bp-#{$name}: #{$value};
+  }
+}
+
+// =============================================
+// SASS МИКСИНЫ для удобства
+// =============================================
+
+// Touch-friendly размеры
+@mixin touch-target {
+  min-height: map.get($touch, 'min');
+  min-width: map.get($touch, 'min');
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+@mixin button-base {
+  @include touch-target;
+  min-height: map.get($touch, 'button');
+  padding: map.get($spacing, 'sm') map.get($spacing, 'md');
+  border-radius: map.get($border-radius, 'md');
+  font-size: map.get($font-size, 'base');
+}
+
+@mixin card-base {
+  min-height: map.get($touch, 'card');
+  padding: map.get($spacing, 'md');
+  border-radius: map.get($border-radius, 'lg');
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+// Адаптивный текст
+@mixin responsive-text($size: 'base') {
+  font-size: map.get($font-size, $size);
+}
+
+// POS Layout миксин
+@mixin pos-sidebar {
+  width: map.get($pos-layout, 'sidebar-width');
+  max-width: map.get($pos-layout, 'sidebar-max-width');
+  flex-shrink: 0;
+  background: map.get($black, 'surface');
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+@mixin pos-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: map.get($color, 'background');
+}
+
+// Responsive миксины
+@mixin mobile-only {
+  @media (max-width: #{map.get($breakpoints, 'mobile') - 1px}) {
+    @content;
+  }
+}
+
+@mixin tablet-up {
+  @media (min-width: #{map.get($breakpoints, 'mobile')}) {
+    @content;
+  }
+}
+
+@mixin desktop-up {
+  @media (min-width: #{map.get($breakpoints, 'tablet')}) {
+    @content;
+  }
+}
+
+// =============================================
+// ЭКСПОРТЫ ДЛЯ JAVASCRIPT (существующие + новые)
+// =============================================
 :export {
+  // Цвета (существующие)
   colorPrimary: map.get($color, 'primary');
   colorSecondary: map.get($color, 'secondary');
   colorBackground: map.get($color, 'background');
@@ -27,4 +228,19 @@ $black: (
   colorWarning: map.get($color, 'warning');
   blackPrimary: map.get($black, 'primary');
   blackSurface: map.get($black, 'surface');
+
+  // Размеры (новые)
+  touchMin: map.get($touch, 'min');
+  touchButton: map.get($touch, 'button');
+  touchCard: map.get($touch, 'card');
+
+  // Брейкпоинты
+  bpMobile: map.get($breakpoints, 'mobile');
+  bpTablet: map.get($breakpoints, 'tablet');
+  bpDesktop: map.get($breakpoints, 'desktop');
+
+  // POS Layout
+  posSidebarWidth: map.get($pos-layout, 'sidebar-width');
+  posMenuFlex: map.get($pos-layout, 'menu-flex');
+  posOrderFlex: map.get($pos-layout, 'order-flex');
 }
