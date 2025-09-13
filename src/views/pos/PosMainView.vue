@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, provide } from 'vue'
+import { ref, computed, onMounted, provide, watch } from 'vue'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { DebugUtils } from '@/utils'
@@ -28,12 +28,16 @@ import PosLayout from '@/layouts/PosLayout.vue'
 import TablesSidebar from './tables/TablesSidebar.vue'
 import MenuSection from './menu/MenuSection.vue'
 import OrderSection from './order/OrderSection.vue'
+import { usePosStore } from '../../stores/pos'
+import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 
 const MODULE_NAME = 'PosMainView'
 
 // Stores
 const tablesStore = usePosTablesStore()
 const ordersStore = usePosOrdersStore()
+const posStore = usePosStore()
+const shiftsStore = useShiftsStore()
 
 // State
 const mockOrderItems = ref<
@@ -48,6 +52,8 @@ const mockOrderItems = ref<
 >([])
 
 // Computed
+const currentShift = computed(() => shiftsStore.currentShift)
+
 const hasActiveOrder = computed(() => {
   return (
     mockOrderItems.value.length > 0 || tablesStore.currentOrder || ordersStore.currentOrder !== null
@@ -193,4 +199,27 @@ provide('currentOrderSubtitle', currentOrderSubtitle)
 onMounted(() => {
   DebugUtils.debug(MODULE_NAME, 'PosMainView mounted')
 })
+
+// ToastNotification
+
+watch(
+  () => posStore.isOnline,
+  isOnline => {
+    if (!isOnline) {
+      // TODO: Toast notification "System is offline"
+      console.log('⚠️ System is offline')
+    }
+  }
+)
+
+watch(
+  () => currentShift.value,
+  shift => {
+    if (!shift) {
+      // TODO: Toast notification "No active shift - start shift to continue"
+      console.log('⚠️ No active shift - start shift to continue')
+    }
+  },
+  { immediate: true } // Проверить сразу при загрузке
+)
 </script>

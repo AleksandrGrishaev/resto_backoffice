@@ -6,8 +6,8 @@ export interface BaseEntity {
 }
 
 // ===== TABLE TYPES =====
-export type TableStatus = 'free' | 'occupied' | 'reserved' | 'cleaning'
-export type TableSection = 'main' | 'island' | 'terrace' | 'bar'
+export type TableStatus = 'free' | 'occupied' | 'reserved'
+export type TableSection = 'main'
 
 export interface PosTable extends BaseEntity {
   number: string
