@@ -1,108 +1,120 @@
 <!-- src/views/pos/menu/MenuSection.vue -->
 <template>
-  <div class="menu-section">
-    <!-- Category Tabs -->
-    <div class="category-tabs pa-3">
-      <v-btn-toggle
-        v-model="selectedCategoryIndex"
-        color="primary"
-        variant="outlined"
-        divided
-        mandatory
-      >
-        <v-btn
-          v-for="(category, index) in activeCategories"
-          :key="category.id"
-          :value="index"
-          size="large"
-          class="category-btn"
-        >
-          {{ category.name }}
+  <div class="menu-section h-100 d-flex flex-column">
+    <!-- Header with navigation -->
+    <div class="menu-header d-flex align-center pa-3 border-b">
+      <!-- Back button -->
+      <v-btn v-if="currentView !== 'categories'" icon variant="text" size="small" @click="goBack">
+        <v-icon>mdi-arrow-left</v-icon>
+      </v-btn>
+
+      <!-- Title -->
+      <div class="flex-grow-1">
+        <h3 class="text-h6 font-weight-medium">
+          {{ currentTitle }}
+        </h3>
+        <div v-if="currentSubtitle" class="text-caption text-medium-emphasis">
+          {{ currentSubtitle }}
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="header-actions">
+        <v-btn icon variant="text" size="small" :loading="loading" @click="refreshMenu">
+          <v-icon>mdi-refresh</v-icon>
         </v-btn>
-      </v-btn-toggle>
+      </div>
     </div>
 
-    <v-divider />
-
-    <!-- Menu Items Grid -->
-    <div class="menu-items pa-3">
-      <div v-if="loading" class="text-center pa-8">
-        <v-progress-circular indeterminate color="primary" />
-        <div class="mt-2 text-body-2">Loading menu...</div>
+    <!-- Content area -->
+    <div class="menu-content flex-grow-1 overflow-y-auto pa-3">
+      <!-- Loading state -->
+      <div v-if="loading && !hasData" class="d-flex justify-center align-center h-100">
+        <v-progress-circular indeterminate color="primary" size="48" />
       </div>
 
-      <div v-else-if="error" class="text-center pa-8">
-        <v-icon icon="mdi-alert-circle" size="48" color="error" class="mb-2" />
-        <div class="text-body-2 text-error">{{ error }}</div>
-        <v-btn variant="outlined" class="mt-2" @click="initializeMenu">Retry</v-btn>
+      <!-- Error state -->
+      <div
+        v-else-if="error"
+        class="d-flex flex-column justify-center align-center h-100 text-center"
+      >
+        <v-icon icon="mdi-alert-circle" size="48" class="text-error mb-2" />
+        <div class="text-h6 mb-2">Ошибка загрузки меню</div>
+        <div class="text-body-2 text-medium-emphasis mb-4">{{ error }}</div>
+        <v-btn color="primary" @click="initializeMenu">Попробовать снова</v-btn>
       </div>
 
-      <div v-else class="menu-grid">
-        <v-card
+      <!-- Categories view -->
+      <div v-else-if="currentView === 'categories'" class="categories-grid">
+        <div
+          v-if="!activeCategories.length"
+          class="d-flex flex-column justify-center align-center h-100 text-center"
+        >
+          <v-icon icon="mdi-folder-off" size="48" class="text-medium-emphasis mb-2" />
+          <div class="text-body-2 text-medium-emphasis">Нет доступных категорий</div>
+        </div>
+
+        <CategoryCard
+          v-for="category in activeCategories"
+          :key="category.id"
+          :category="category"
+          :items-count="getCategoryItemsCount(category.id)"
+          @select="selectCategory"
+        />
+      </div>
+
+      <!-- Items view -->
+      <div v-else-if="currentView === 'items'" class="items-grid">
+        <div
+          v-if="!currentCategoryItems.length"
+          class="d-flex flex-column justify-center align-center h-100 text-center"
+        >
+          <v-icon icon="mdi-food-off" size="48" class="text-medium-emphasis mb-2" />
+          <div class="text-body-2 text-medium-emphasis">Нет товаров в этой категории</div>
+        </div>
+
+        <MenuItemCard
           v-for="item in currentCategoryItems"
           :key="item.id"
-          class="menu-item-card"
-          :disabled="!item.isActive"
-          @click="handleItemClick(item)"
-        >
-          <v-card-text class="pa-3">
-            <div class="item-name text-subtitle-1 font-weight-bold mb-2">
-              {{ item.name }}
-            </div>
-
-            <div
-              v-if="item.description"
-              class="item-description text-caption text-medium-emphasis mb-2"
-            >
-              {{ item.description }}
-            </div>
-
-            <!-- Variants - показываем если больше одного варианта -->
-            <div v-if="item.variants.length > 1" class="variants mb-2">
-              <v-chip
-                v-for="variant in activeVariants(item)"
-                :key="variant.id"
-                size="small"
-                variant="outlined"
-                class="me-1 mb-1"
-                @click.stop="addToOrder(item, variant)"
-              >
-                {{ variant.name }} - {{ formatPrice(variant.price) }}
-              </v-chip>
-            </div>
-
-            <!-- Single variant price -->
-            <div
-              v-else-if="item.variants.length === 1"
-              class="item-price text-h6 font-weight-bold text-primary"
-            >
-              {{ formatPrice(item.variants[0].price) }}
-            </div>
-
-            <!-- No variants available -->
-            <div v-else class="text-caption text-error">No variants available</div>
-          </v-card-text>
-
-          <!-- Add Button Overlay for single variant items -->
-          <v-overlay
-            v-if="item.variants.length === 1"
-            :model-value="false"
-            contained
-            class="add-overlay"
-          >
-            <v-btn icon="mdi-plus" color="primary" size="large" />
-          </v-overlay>
-        </v-card>
+          :item="item"
+          :show-variant-chips="true"
+          @select-item="handleItemClick"
+          @select-variant="handleVariantSelect"
+        />
       </div>
-    </div>
 
-    <!-- Empty state -->
-    <div
-      v-if="!loading && !error && currentCategoryItems.length === 0"
-      class="empty-state pa-8 text-center"
-    >
-      <v-icon icon="mdi-food-off" size="48" class="text-medium-emphasis mb-2" />
-      <div class="text-body-2 text-medium-emphasis">No items in this category</div>
+      <!-- Variants view (если нужен отдельный вид для вариантов) -->
+      <div v-else-if="currentView === 'variants' && selectedItem" class="variants-view">
+        <div class="variants-header mb-4 pa-3 bg-surface-variant rounded">
+          <div class="text-h6">{{ selectedItem.name }}</div>
+          <div v-if="selectedItem.description" class="text-body-2 text-medium-emphasis mt-1">
+            {{ selectedItem.description }}
+          </div>
+        </div>
+
+        <div class="variants-grid">
+          <v-card
+            v-for="variant in selectedItemActiveVariants"
+            :key="variant.id"
+            class="variant-card pos-card"
+            :class="{ 'variant-disabled': !variant.isActive }"
+            elevation="2"
+            @click="handleVariantSelect(selectedItem, variant)"
+          >
+            <v-card-text class="pa-4">
+              <div class="d-flex justify-space-between align-center">
+                <div>
+                  <div class="text-subtitle-1 font-weight-medium">{{ variant.name }}</div>
+                  <div class="text-h6 text-primary font-weight-bold mt-1">
+                    {{ formatPrice(variant.price) }}
+                  </div>
+                </div>
+                <v-icon color="primary">mdi-plus</v-icon>
+              </div>
+            </v-card-text>
+          </v-card>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -110,7 +122,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu'
-import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
+import type { MenuItem, MenuItemVariant, Category } from '@/stores/menu/types'
+import CategoryCard from './components/CategoryCard.vue'
+import MenuItemCard from './components/MenuItemCard.vue'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'PosMenuSection'
@@ -119,20 +133,60 @@ const MODULE_NAME = 'PosMenuSection'
 const menuStore = useMenuStore()
 
 // State
-const selectedCategoryIndex = ref(0)
+type ViewMode = 'categories' | 'items' | 'variants'
+
+const currentView = ref<ViewMode>('categories')
+const selectedCategoryId = ref<string | null>(null)
+const selectedItem = ref<MenuItem | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 
 // Computed
 const activeCategories = computed(() => menuStore.activeCategories)
 
-const selectedCategory = computed(() => {
-  return activeCategories.value[selectedCategoryIndex.value] || null
+const selectedCategory = computed((): Category | null => {
+  if (!selectedCategoryId.value) return null
+  return activeCategories.value.find(cat => cat.id === selectedCategoryId.value) || null
 })
 
-const currentCategoryItems = computed(() => {
-  if (!selectedCategory.value) return []
-  return menuStore.getActiveItemsByCategory(selectedCategory.value.id)
+const currentCategoryItems = computed((): MenuItem[] => {
+  if (!selectedCategoryId.value) return []
+  return menuStore.getActiveItemsByCategory(selectedCategoryId.value)
+})
+
+const selectedItemActiveVariants = computed((): MenuItemVariant[] => {
+  if (!selectedItem.value) return []
+  return selectedItem.value.variants?.filter(v => v.isActive) || []
+})
+
+const hasData = computed(() => {
+  return activeCategories.value.length > 0 || currentCategoryItems.value.length > 0
+})
+
+const currentTitle = computed((): string => {
+  switch (currentView.value) {
+    case 'categories':
+      return 'Меню'
+    case 'items':
+      return selectedCategory.value?.name || 'Категория'
+    case 'variants':
+      return selectedItem.value?.name || 'Варианты'
+    default:
+      return 'Меню'
+  }
+})
+
+const currentSubtitle = computed((): string | null => {
+  switch (currentView.value) {
+    case 'categories':
+      return `${activeCategories.value.length} категорий`
+    case 'items':
+      return `${currentCategoryItems.value.length} товаров`
+    case 'variants':
+      return `${selectedItemActiveVariants.value.length} вариантов`
+    default:
+      return null
+  }
 })
 
 // Emits
@@ -141,10 +195,6 @@ const emit = defineEmits<{
 }>()
 
 // Methods
-const activeVariants = (item: MenuItem) => {
-  return item.variants.filter(variant => variant.isActive)
-}
-
 const formatPrice = (price: number): string => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -153,72 +203,106 @@ const formatPrice = (price: number): string => {
   }).format(price)
 }
 
-const handleItemClick = (item: MenuItem) => {
-  if (!item.isActive) return
+const getCategoryItemsCount = (categoryId: string): number => {
+  return menuStore.getActiveItemsByCategory(categoryId).length
+}
 
-  const activeVars = activeVariants(item)
+const selectCategory = (categoryId: string): void => {
+  console.log('📂 Navigating to category:', categoryId)
 
-  if (activeVars.length === 1) {
-    // Single variant - add directly
-    addToOrder(item, activeVars[0])
-  } else if (activeVars.length > 1) {
-    // Multiple variants - handled by chip clicks
-    DebugUtils.debug(MODULE_NAME, 'Item with multiple variants clicked', {
-      itemId: item.id,
-      variantsCount: activeVars.length
-    })
-  } else {
-    DebugUtils.warn(MODULE_NAME, 'Item clicked but no active variants', { itemId: item.id })
+  selectedCategoryId.value = categoryId
+  selectedItem.value = null
+  currentView.value = 'items'
+}
+
+const handleItemClick = (item: MenuItem): void => {
+  console.log('🍽️ Item clicked for variants selection:', {
+    itemId: item.id,
+    itemName: item.name,
+    variantsCount: item.variants?.filter(v => v.isActive).length || 0
+  })
+
+  selectedItem.value = item
+  currentView.value = 'variants'
+}
+
+const handleVariantSelect = (item: MenuItem, variant: MenuItemVariant): void => {
+  console.log('🎯 FINAL SELECTION - Adding to order:', {
+    item: {
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      categoryId: item.categoryId,
+      isActive: item.isActive
+    },
+    variant: {
+      id: variant.id,
+      name: variant.name,
+      price: variant.price,
+      isActive: variant.isActive
+    },
+    formattedPrice: formatPrice(variant.price),
+    timestamp: new Date().toISOString()
+  })
+
+  // TODO: Здесь будет интеграция с OrderStore
+  emit('add-item', item, variant)
+}
+
+const goBack = (): void => {
+  switch (currentView.value) {
+    case 'items':
+      console.log('📂 Going back to categories')
+      currentView.value = 'categories'
+      selectedCategoryId.value = null
+      break
+    case 'variants':
+      console.log('📂 Going back to items')
+      currentView.value = 'items'
+      selectedItem.value = null
+      break
   }
 }
 
-const addToOrder = (item: MenuItem, variant: MenuItemVariant) => {
-  if (!item.isActive || !variant.isActive) return
-
-  DebugUtils.debug(MODULE_NAME, 'Adding item to order', {
-    itemId: item.id,
-    itemName: item.name,
-    variantId: variant.id,
-    variantName: variant.name,
-    price: variant.price
-  })
-
-  emit('add-item', item, variant)
-
-  // TODO: Интеграция с OrderStore/BillStore
-  // После интеграции здесь будет:
-  // await billStore.addItem({
-  //   dishId: item.id,
-  //   variantId: variant.id,
-  //   quantity: 1,
-  //   price: variant.price,
-  //   status: 'pending'
-  // })
+const refreshMenu = async (): Promise<void> => {
+  console.log('🔄 Refreshing menu data')
+  await initializeMenu()
 }
 
-const initializeMenu = async () => {
+const initializeMenu = async (): Promise<void> => {
   try {
     loading.value = true
     error.value = null
 
     DebugUtils.debug(MODULE_NAME, 'Initializing menu')
 
-    // Load categories and menu items
-    await menuStore.loadActiveCategories()
-    await menuStore.loadActiveItems()
-
-    // Set first category as selected if available
-    if (activeCategories.value.length > 0) {
-      selectedCategoryIndex.value = 0
-    }
+    // Загружаем категории и товары из MenuStore
+    // Используем правильные методы из MenuStore
+    await menuStore.fetchCategories()
+    await menuStore.fetchMenuItems()
 
     DebugUtils.debug(MODULE_NAME, 'Menu initialized successfully', {
       categoriesCount: activeCategories.value.length,
-      selectedCategory: selectedCategory.value?.name
+      totalItems: menuStore.menuItems.length,
+      activeItems: menuStore.activeMenuItems.length
+    })
+
+    console.log('📋 Menu initialization complete:', {
+      categories: activeCategories.value.map(cat => ({
+        id: cat.id,
+        name: cat.name,
+        itemsCount: getCategoryItemsCount(cat.id),
+        isActive: cat.isActive
+      })),
+      totalActiveCategories: activeCategories.value.length,
+      totalActiveItems: menuStore.activeMenuItems.length
     })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to load menu'
-    DebugUtils.error(MODULE_NAME, 'Failed to initialize menu:', err)
+    const errorMessage = err instanceof Error ? err.message : 'Failed to load menu'
+    error.value = errorMessage
+
+    DebugUtils.error(MODULE_NAME, 'Menu initialization failed', { error: err })
+    console.error('❌ Menu initialization error:', errorMessage)
   } finally {
     loading.value = false
   }
@@ -226,136 +310,140 @@ const initializeMenu = async () => {
 
 // Lifecycle
 onMounted(() => {
-  DebugUtils.debug(MODULE_NAME, 'PosMenuSection mounted')
+  console.log('🚀 MenuSection mounted, initializing...')
   initializeMenu()
 })
 </script>
 
 <style scoped>
+/* =============================================
+   MAIN LAYOUT
+   ============================================= */
+
 .menu-section {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--v-theme-surface);
+  background: rgb(var(--v-theme-background));
 }
 
-.category-tabs {
-  flex-shrink: 0;
-  background-color: rgba(255, 255, 255, 0.02);
+.menu-header {
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  min-height: 64px;
 }
 
-.category-btn {
-  text-transform: none;
-  font-weight: 500;
+.menu-content {
+  background: rgb(var(--v-theme-background));
 }
 
-.menu-items {
-  flex: 1;
-  overflow-y: auto;
-}
+/* =============================================
+   GRID LAYOUTS
+   ============================================= */
 
-.menu-grid {
+.categories-grid,
+.items-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
+  gap: var(--spacing-md);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
-.menu-item-card {
+.variants-grid {
+  display: grid;
+  gap: var(--spacing-md);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* =============================================
+   VARIANT CARDS (for variants view)
+   ============================================= */
+
+.variant-card {
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s ease-in-out;
   border: 2px solid transparent;
-  position: relative;
-  min-height: 140px;
+  min-height: var(--touch-card);
 }
 
-.menu-item-card:hover {
+.variant-card:hover:not(.variant-disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 8px 16px rgba(var(--v-theme-primary), 0.15) !important;
 }
 
-.menu-item-card:active {
-  transform: translateY(0);
-}
-
-.menu-item-card[disabled] {
-  opacity: 0.5;
+.variant-card.variant-disabled {
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-.menu-item-card[disabled]:hover {
+.variant-card.variant-disabled:hover {
   transform: none;
-  box-shadow: none;
   border-color: transparent;
 }
 
-.item-name {
-  line-height: 1.2;
-  color: var(--v-theme-on-surface);
+/* =============================================
+   RESPONSIVE DESIGN
+   ============================================= */
+
+@media (max-width: 1200px) {
+  .categories-grid,
+  .items-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
 }
 
-.item-description {
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+@media (max-width: 768px) {
+  .menu-header {
+    padding: var(--spacing-sm) !important;
+    min-height: 56px;
+  }
+
+  .menu-content {
+    padding: var(--spacing-sm) !important;
+  }
+
+  .categories-grid,
+  .items-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--spacing-sm);
+  }
+
+  .variants-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+  }
 }
 
-.item-price {
-  color: rgb(var(--v-theme-primary));
+@media (max-width: 480px) {
+  .categories-grid,
+  .items-grid,
+  .variants-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.variants {
-  max-height: 80px;
-  overflow-y: auto;
+/* =============================================
+   UTILITIES
+   ============================================= */
+
+.border-b {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
-.variants::-webkit-scrollbar {
-  width: 4px;
+.bg-surface-variant {
+  background-color: rgb(var(--v-theme-surface-variant)) !important;
 }
 
-.variants::-webkit-scrollbar-track {
-  background: transparent;
+/* =============================================
+   LOADING AND ERROR STATES
+   ============================================= */
+
+.menu-content .v-progress-circular {
+  margin: auto;
 }
 
-.variants::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
+/* =============================================
+   HEADER ACTIONS
+   ============================================= */
 
-.add-overlay {
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.menu-item-card:hover .add-overlay {
-  opacity: 1;
-}
-
-.empty-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Custom scrollbar */
-.menu-items::-webkit-scrollbar {
-  width: 6px;
-}
-
-.menu-items::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.menu-items::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-}
-
-.menu-items::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+.header-actions .v-btn {
+  margin-left: var(--spacing-xs);
 }
 </style>
