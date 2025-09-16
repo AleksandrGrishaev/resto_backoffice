@@ -1,24 +1,21 @@
 <!-- src/components/molecules/navigation/ActionMenu.vue -->
-<!--
-  Action menu composition with dropdown and action buttons
-  - Combines MenuButton, BaseDropdown and ActionButton atoms
-  - Displays list of actions with icons and handles clicks
-  - Supports header and footer slots for custom content
--->
 <template>
-  <BaseDropdown v-model="isOpen">
-    <template #activator="{ props: dropdownProps }">
-      <MenuButton v-bind="dropdownProps" :loading="loading" @click="isOpen = !isOpen" />
+  <!-- Простое меню без оберток -->
+  <v-menu v-model="isOpen">
+    <template #activator="{ props }">
+      <v-btn v-bind="props" variant="text" class="menu-button">
+        <v-icon>mdi-menu</v-icon>
+      </v-btn>
     </template>
 
-    <div class="action-menu">
-      <!-- Header slot for custom content -->
+    <v-card class="action-menu" elevation="8">
+      <!-- Header -->
       <div v-if="$slots.header" class="action-menu__header">
         <slot name="header" />
       </div>
 
-      <!-- Actions list -->
-      <div class="action-menu__actions">
+      <!-- Actions -->
+      <div class="action-menu__content">
         <template v-for="section in sections" :key="section.title">
           <!-- Section title -->
           <div v-if="section.title" class="action-menu__section-title">
@@ -26,16 +23,20 @@
           </div>
 
           <!-- Section actions -->
-          <ActionButton
+          <v-btn
             v-for="action in section.actions"
             :key="action.id"
-            :icon="action.icon"
-            :label="action.label"
+            variant="text"
+            class="action-button"
             :loading="action.loading"
             :disabled="action.disabled"
-            :color="action.color"
             @click="handleActionClick(action.id)"
-          />
+          >
+            <template v-if="action.icon" #prepend>
+              <v-icon :color="getIconColor(action.color)">{{ action.icon }}</v-icon>
+            </template>
+            {{ action.label }}
+          </v-btn>
 
           <!-- Section divider -->
           <v-divider
@@ -44,26 +45,12 @@
           />
         </template>
       </div>
-
-      <!-- Footer slot for custom content -->
-      <div v-if="$slots.footer" class="action-menu__footer">
-        <slot name="footer" />
-      </div>
-    </div>
-  </BaseDropdown>
+    </v-card>
+  </v-menu>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-
-// Import atoms
-import MenuButton from '@/components/atoms/buttons/MenuButton.vue'
-import ActionButton from '@/components/atoms/buttons/ActionButton.vue'
-import BaseDropdown from '@/components/atoms/dropdowns/BaseDropdown.vue'
-
-// =============================================
-// TYPES & PROPS
-// =============================================
 
 interface ActionItem {
   id: string
@@ -88,44 +75,58 @@ withDefaults(defineProps<Props>(), {
   loading: false
 })
 
-// =============================================
-// EMITS
-// =============================================
-
 const emit = defineEmits<{
   action: [actionId: string]
 }>()
 
-// =============================================
-// STATE
-// =============================================
-
 const isOpen = ref(false)
-
-// =============================================
-// METHODS
-// =============================================
 
 const handleActionClick = (actionId: string) => {
   emit('action', actionId)
-  isOpen.value = false // Close menu after action
+  isOpen.value = false
+}
+
+const getIconColor = (color?: string) => {
+  const colors = {
+    success: 'success',
+    error: 'error',
+    warning: 'warning',
+    primary: 'primary'
+  }
+  return color ? colors[color as keyof typeof colors] : undefined
 }
 </script>
 
 <style scoped>
+.menu-button {
+  min-height: 44px;
+  min-width: 44px;
+  width: 100%;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.menu-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
 .action-menu {
   min-width: 240px;
   max-width: 280px;
+  background-color: var(--v-theme-surface);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
 }
 
 .action-menu__header {
-  padding: var(--spacing-md);
+  padding: 16px;
   background-color: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.action-menu__actions {
-  padding: var(--spacing-xs) 0;
+.action-menu__content {
+  padding: 8px 0;
 }
 
 .action-menu__section-title {
@@ -134,8 +135,8 @@ const handleActionClick = (actionId: string) => {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.5);
-  padding: var(--spacing-xs) var(--spacing-md);
-  margin-top: var(--spacing-xs);
+  padding: 8px 16px;
+  margin-top: 8px;
 }
 
 .action-menu__section-title:first-child {
@@ -143,22 +144,21 @@ const handleActionClick = (actionId: string) => {
 }
 
 .action-menu__divider {
-  margin: var(--spacing-xs) var(--spacing-md);
+  margin: 8px 16px;
   opacity: 0.12;
 }
 
-.action-menu__footer {
-  padding: var(--spacing-md);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+.action-button {
+  justify-content: flex-start;
+  min-height: 44px;
+  width: 100%;
+  text-transform: none;
+  font-weight: 400;
+  margin: 2px 8px;
+  border-radius: 6px;
 }
 
-/* Action button spacing within menu */
-.action-menu__actions :deep(.action-button) {
-  margin: 2px var(--spacing-sm);
-  border-radius: var(--radius-md);
-}
-
-.action-menu__actions :deep(.action-button:hover) {
+.action-button:hover {
   background-color: rgba(255, 255, 255, 0.08);
 }
 </style>
