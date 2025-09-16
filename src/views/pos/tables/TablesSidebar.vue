@@ -8,7 +8,8 @@
         color="primary"
         block
         icon="mdi-plus"
-        :height="UI_CONSTANTS.MIN_BUTTON_HEIGHT"
+        height="44"
+        :loading="loading.create"
         @click="handleNewOrder"
       />
     </div>
@@ -19,37 +20,33 @@
     <div class="scrollable-content">
       <!-- Active Delivery/Takeaway Orders Section -->
       <div v-if="deliveryOrders.length > 0" class="orders-section">
-        <div class="section-title">Active Orders</div>
+        <div class="section-title">Active Orders ({{ deliveryOrders.length }})</div>
 
         <div class="orders-list" :style="ordersListStyles">
-          <!-- Показываем ВСЕ заказы -->
-          <div v-for="order in allOrders" :key="order.id" class="order-item">
-            <v-card
-              class="order-card"
-              :color="isOrderActive(order.id) ? 'primary' : undefined"
-              :variant="isOrderActive(order.id) ? 'flat' : 'outlined'"
-              :style="orderCardStyles"
-              @click="handleOrderSelect(order.id)"
-            >
-              <v-card-text class="order-card-content">
-                <v-icon :icon="getOrderTypeIcon(order.type)" :size="UI_CONSTANTS.MIN_ICON_SIZE" />
-                <span class="order-number">{{ order.orderNumber }}</span>
-              </v-card-text>
-            </v-card>
-          </div>
+          <SidebarItem
+            v-for="order in deliveryOrders"
+            :key="order.id"
+            type="order"
+            :order="order"
+            :is-selected="isOrderSelected(order.id)"
+            @select="handleOrderSelect"
+          />
         </div>
       </div>
+
+      <div v-if="deliveryOrders.length > 0" class="separator" />
+
       <!-- Tables Section -->
       <div class="tables-section">
-        <div class="section-title">Tables</div>
+        <div class="section-title">Tables ({{ tables.length }})</div>
 
         <div class="tables-list">
-          <TableItem
+          <SidebarItem
             v-for="table in tables"
             :key="table.id"
+            type="table"
             :table="table"
-            :is-active="isTableSelected(table.id)"
-            :size="tableItemSize"
+            :is-selected="isTableSelected(table.id)"
             @select="handleTableSelect"
           />
         </div>
@@ -62,11 +59,7 @@
     </div>
 
     <!-- Order Type Dialog -->
-    <OrderTypeDialog
-      v-model="showNewOrderDialog"
-      @create-order="handleCreateOrder"
-      @select-dine-in="handleSelectDineIn"
-    />
+    <OrderTypeDialog v-model="showNewOrderDialog" @create="handleCreateOrder" />
 
     <!-- Unsaved Changes Dialog -->
     <v-dialog v-model="showUnsavedDialog" max-width="400">
@@ -85,245 +78,101 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { DebugUtils } from '@/utils'
-import type { PosTable } from '@/stores/pos/types'
-import type { OrderType } from '@/types/order'
-
-// Composables
-import { useTables } from '@/stores/pos/tables/composables/useTables'
-import { useOrders } from '@/stores/pos/orders/composables/useOrders'
-
-// Mock data
-import { createMockTables, getActiveDeliveryOrders } from '@/stores/pos/mocks/posMockData'
+import type { PosTable, PosOrder, OrderType } from '@/stores/pos/types'
 
 // Components
-import TableItem from './TableItem.vue'
+import SidebarItem from './components/SidebarItem.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import PosNavigationMenu from '../components/PosNavigationMenu.vue'
 
 const MODULE_NAME = 'TablesSidebar'
 
 // =============================================
-// CONSTANTS
+// STORES
 // =============================================
 
-const UI_CONSTANTS = {
-  MIN_BUTTON_HEIGHT: 44,
-  MIN_ICON_SIZE: 20,
-  MIN_ORDER_CARD_HEIGHT: 44,
-  MAX_VISIBLE_ORDERS: 4,
-  ORDERS_LIST_MAX_HEIGHT: 200 // 4 * 44px + gaps + padding
-} as const
+const tablesStore = usePosTablesStore()
+const ordersStore = usePosOrdersStore()
 
 // =============================================
-// PROPS & EMITS
+// EMITS
 // =============================================
 
 const emit = defineEmits<{
-  select: [id: string]
-  createOrder: [type: OrderType, data?: any]
-  dialogConfirm: []
-  dialogCancel: []
+  select: [orderId: string]
 }>()
-
-// =============================================
-// COMPOSABLES
-// =============================================
-
-const { handleTableSelect: handleTableSelectAction, isTableOccupied, canOccupyTable } = useTables()
-
-const {
-  getOrderTypeIcon,
-  isOrderActive,
-  handleOrderSelect: handleOrderSelectAction,
-  createDeliveryOrder,
-  createTakeawayOrder,
-  createDineInOrder,
-  selectedOrderId
-} = useOrders()
 
 // =============================================
 // STATE
 // =============================================
 
-const tables = ref<PosTable[]>(createMockTables())
-const deliveryOrders = ref(getActiveDeliveryOrders())
 const showNewOrderDialog = ref(false)
 const showUnsavedDialog = ref(false)
 const pendingAction = ref<(() => void) | null>(null)
-const selectedTableId = ref<string | null>(null)
+const loading = ref({
+  create: false,
+  tables: false,
+  orders: false
+})
 
 // =============================================
 // COMPUTED PROPERTIES
 // =============================================
 
-const allOrders = computed(() => deliveryOrders.value)
+/**
+ * Список столов из POS Tables Store
+ */
+const tables = computed((): PosTable[] => {
+  return tablesStore.tables
+})
 
+/**
+ * Активные заказы на доставку и самовывоз
+ */
+const deliveryOrders = computed((): PosOrder[] => {
+  return ordersStore.orders.filter(
+    order =>
+      ['takeaway', 'delivery'].includes(order.type) && !['cancelled', 'paid'].includes(order.status)
+  )
+})
+
+/**
+ * Проверка выбранного заказа
+ */
+const isOrderSelected = computed(() => (orderId: string): boolean => {
+  return ordersStore.currentOrderId === orderId
+})
+
+/**
+ * Проверка выбранного стола
+ */
+const isTableSelected = computed(() => (tableId: string): boolean => {
+  const currentOrder = ordersStore.currentOrder
+  return currentOrder?.tableId === tableId
+})
+
+/**
+ * Стили для списка заказов
+ */
 const ordersListStyles = computed(() => {
   const orderCount = deliveryOrders.value.length
-  const maxHeight = Math.min(orderCount * 48 + 16, 200) // 48px на заказ + padding, макс 200px
+  const maxHeight = Math.min(orderCount * 68 + 16, 200) // 68px на элемент + padding
   return {
     maxHeight: `${maxHeight}px`
   }
 })
 
-// UI Styles
-
-const orderCardStyles = computed(() => ({
-  height: `${UI_CONSTANTS.MIN_ORDER_CARD_HEIGHT}px`,
-  minHeight: `${UI_CONSTANTS.MIN_ORDER_CARD_HEIGHT}px`
-}))
-
-const tableItemSize = computed<'compact' | 'standard' | 'comfortable'>(() => {
-  // Определяем размер на основе количества столов или размера экрана
-  if (tables.value.length > 15) return 'compact'
-  if (tables.value.length > 10) return 'standard'
-  return 'comfortable'
-})
-
-// Selection state
-const isTableSelected = computed(() => (tableId: string) => selectedTableId.value === tableId)
-
 // =============================================
-// METHODS
+// METHODS - DIALOG HANDLING
 // =============================================
 
 /**
- * Проверить есть ли несохранённые изменения
+ * Обработка подтверждения диалога
  */
-function checkUnsavedChanges(): boolean {
-  // TODO: Интеграция с реальной проверкой
-  return false
-}
-
-/**
- * Показать диалог несохранённых изменений
- */
-async function showUnsavedChangesDialog(): Promise<boolean> {
-  return new Promise(resolve => {
-    const originalAction = pendingAction.value
-    pendingAction.value = () => resolve(true)
-
-    showUnsavedDialog.value = true
-
-    // Таймаут для отмены
-    setTimeout(() => {
-      if (pendingAction.value === originalAction) {
-        resolve(false)
-      }
-    }, 30000) // 30 секунд на решение
-  })
-}
-
-/**
- * Обработать создание нового заказа
- */
-async function handleNewOrder(): Promise<void> {
-  DebugUtils.debug(MODULE_NAME, 'New order button clicked')
-
-  if (checkUnsavedChanges()) {
-    const shouldContinue = await showUnsavedChangesDialog()
-    if (!shouldContinue) return
-  }
-
-  showNewOrderDialog.value = true
-}
-
-/**
- * Обработать выбор стола
- */
-async function handleTableSelect(tableId: string): Promise<void> {
-  DebugUtils.debug(MODULE_NAME, 'Table selected', { tableId })
-
-  const table = tables.value.find(t => t.id === tableId)
-  if (!table) return
-
-  await handleTableSelectAction(table, {
-    onSelect: id => {
-      selectedTableId.value = id
-      emit('select', id)
-    },
-    onError: error => {
-      console.error('Table selection error:', error)
-    },
-    checkUnsavedChanges,
-    showUnsavedDialog: showUnsavedChangesDialog
-  })
-}
-
-/**
- * Обработать выбор заказа
- */
-async function handleOrderSelect(orderId: string): Promise<void> {
-  DebugUtils.debug(MODULE_NAME, 'Order selected', { orderId })
-
-  await handleOrderSelectAction(orderId, {
-    onSelect: id => {
-      emit('select', id)
-    },
-    onError: error => {
-      console.error('Order selection error:', error)
-    },
-    checkUnsavedChanges,
-    showUnsavedDialog: showUnsavedChangesDialog
-  })
-}
-
-/**
- * Обработать создание заказа из диалога
- */
-async function handleCreateOrder(type: OrderType, data?: any): Promise<void> {
-  DebugUtils.debug(MODULE_NAME, 'Creating order', { type, data })
-
-  try {
-    switch (type) {
-      case 'delivery':
-        await createDeliveryOrder(data, {
-          onSuccess: orderId => {
-            showNewOrderDialog.value = false
-            emit('createOrder', type, { orderId, ...data })
-          },
-          onError: error => {
-            console.error('Delivery order creation error:', error)
-          }
-        })
-        break
-
-      case 'takeaway':
-        await createTakeawayOrder(data, {
-          onSuccess: orderId => {
-            showNewOrderDialog.value = false
-            emit('createOrder', type, { orderId, ...data })
-          },
-          onError: error => {
-            console.error('Takeaway order creation error:', error)
-          }
-        })
-        break
-
-      default:
-        console.warn('Unknown order type:', type)
-    }
-  } catch (error) {
-    console.error('Order creation error:', error)
-  }
-}
-
-/**
- * Обработать выбор dine-in (показать столы для выбора)
- */
-function handleSelectDineIn(): void {
-  DebugUtils.debug(MODULE_NAME, 'Dine-in selected, waiting for table selection')
-  showNewOrderDialog.value = false
-
-  // TODO: Показать индикатор ожидания выбора стола
-  // Можно добавить состояние waitingForTableSelection
-}
-
-/**
- * Обработать подтверждение диалога
- */
-function handleDialogConfirm(): void {
+const handleDialogConfirm = (): void => {
   DebugUtils.debug(MODULE_NAME, 'Dialog confirmed')
 
   if (pendingAction.value) {
@@ -332,29 +181,220 @@ function handleDialogConfirm(): void {
   }
 
   showUnsavedDialog.value = false
-  emit('dialogConfirm')
 }
 
 /**
- * Обработать отмену диалога
+ * Обработка отмены диалога
  */
-function handleDialogCancel(): void {
+const handleDialogCancel = (): void => {
   DebugUtils.debug(MODULE_NAME, 'Dialog cancelled')
 
   pendingAction.value = null
   showUnsavedDialog.value = false
-  emit('dialogCancel')
+}
+
+// =============================================
+// METHODS - ORDER CREATION
+// =============================================
+
+/**
+ * Показать диалог создания нового заказа
+ */
+const handleNewOrder = (): void => {
+  DebugUtils.debug(MODULE_NAME, 'New order button clicked')
+
+  // TODO: Проверка несохраненных изменений
+  // if (checkUnsavedChanges()) {
+  //   const shouldContinue = await showUnsavedChangesDialog()
+  //   if (!shouldContinue) return
+  // }
+
+  showNewOrderDialog.value = true
+}
+
+/**
+ * Создание заказа из диалога
+ */
+const handleCreateOrder = async (type: OrderType, data?: any): Promise<void> => {
+  try {
+    loading.value.create = true
+
+    DebugUtils.debug(MODULE_NAME, 'Creating new order', { type, data })
+
+    let result
+
+    if (type === 'dine_in') {
+      // Для dine-in нужно выбрать стол, закрываем диалог
+      showNewOrderDialog.value = false
+      DebugUtils.debug(MODULE_NAME, 'Dine-in order - user should select table')
+      return
+    } else {
+      // Создаем заказ на доставку или самовывоз
+      result = await ordersStore.createOrder(type, undefined, data?.customerName)
+    }
+
+    if (result.success && result.data) {
+      DebugUtils.debug(MODULE_NAME, 'Order created successfully', {
+        orderId: result.data.id,
+        type,
+        orderNumber: result.data.orderNumber
+      })
+
+      // Выбираем созданный заказ
+      emit('select', result.data.id)
+      showNewOrderDialog.value = false
+    } else {
+      throw new Error(result.error || 'Failed to create order')
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create order'
+    DebugUtils.error(MODULE_NAME, 'Error creating order', { error: message, type })
+    console.error('Failed to create order:', message)
+  } finally {
+    loading.value.create = false
+  }
+}
+
+// =============================================
+// METHODS - TABLE SELECTION
+// =============================================
+
+/**
+ * Выбор стола через SidebarItem
+ */
+const handleTableSelect = async (item: PosTable | PosOrder): Promise<void> => {
+  // Type guard для стола
+  if (!('number' in item)) {
+    DebugUtils.error(MODULE_NAME, 'Invalid table item received')
+    return
+  }
+
+  const table = item as PosTable
+
+  try {
+    DebugUtils.debug(MODULE_NAME, 'Table selected via SidebarItem', {
+      tableId: table.id,
+      tableNumber: table.number,
+      status: table.status,
+      hasCurrentOrder: !!table.currentOrderId
+    })
+
+    if (table.status === 'free') {
+      // Создаем новый заказ для свободного стола
+      const result = await ordersStore.createOrder('dine_in', table.id)
+
+      if (result.success && result.data) {
+        DebugUtils.debug(MODULE_NAME, 'New dine-in order created for table', {
+          orderId: result.data.id,
+          tableId: table.id,
+          orderNumber: result.data.orderNumber
+        })
+
+        emit('select', result.data.id)
+      } else {
+        throw new Error(result.error || 'Failed to create order for table')
+      }
+    } else if (
+      (table.status === 'occupied_unpaid' || table.status === 'occupied_paid') &&
+      table.currentOrderId
+    ) {
+      // Загружаем существующий заказ стола
+      DebugUtils.debug(MODULE_NAME, 'Loading existing order for occupied table', {
+        orderId: table.currentOrderId,
+        tableId: table.id
+      })
+
+      await ordersStore.setCurrentOrder(table.currentOrderId)
+      emit('select', table.currentOrderId)
+    } else {
+      DebugUtils.warn(MODULE_NAME, 'Table in unexpected state', {
+        tableId: table.id,
+        status: table.status,
+        currentOrderId: table.currentOrderId
+      })
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to select table'
+    DebugUtils.error(MODULE_NAME, 'Error selecting table', {
+      error: message,
+      tableId: table.id
+    })
+    console.error('Failed to select table:', message)
+  }
+}
+
+// =============================================
+// METHODS - ORDER SELECTION
+// =============================================
+
+/**
+ * Выбор заказа через SidebarItem
+ */
+const handleOrderSelect = async (item: PosTable | PosOrder): Promise<void> => {
+  // Type guard для заказа
+  if (!('orderNumber' in item)) {
+    DebugUtils.error(MODULE_NAME, 'Invalid order item received')
+    return
+  }
+
+  const order = item as PosOrder
+
+  try {
+    DebugUtils.debug(MODULE_NAME, 'Order selected via SidebarItem', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      type: order.type,
+      status: order.status
+    })
+
+    // Устанавливаем текущий заказ
+    await ordersStore.setCurrentOrder(order.id)
+
+    DebugUtils.debug(MODULE_NAME, 'Order set as current', {
+      orderId: order.id,
+      currentOrderId: ordersStore.currentOrderId
+    })
+
+    emit('select', order.id)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to select order'
+    DebugUtils.error(MODULE_NAME, 'Error selecting order', {
+      error: message,
+      orderId: order.id
+    })
+    console.error('Failed to select order:', message)
+  }
 }
 
 // =============================================
 // LIFECYCLE
 // =============================================
 
-onMounted(() => {
+onMounted(async () => {
   DebugUtils.debug(MODULE_NAME, 'TablesSidebar mounted', {
     tablesCount: tables.value.length,
     ordersCount: deliveryOrders.value.length
   })
+
+  // Инициализируем данные если нужно
+  try {
+    loading.value.tables = true
+    loading.value.orders = true
+
+    // Stores должны быть уже инициализированы в PosMainView
+    // Здесь просто логируем текущее состояние
+
+    DebugUtils.debug(MODULE_NAME, 'Data loaded', {
+      tablesLoaded: tables.value.length,
+      ordersLoaded: deliveryOrders.value.length,
+      currentOrder: ordersStore.currentOrder?.id
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load data', { error })
+  } finally {
+    loading.value.tables = false
+    loading.value.orders = false
+  }
 })
 </script>
 
@@ -417,7 +457,7 @@ onMounted(() => {
 }
 
 /* =============================================
-   ORDERS LIST
+   LISTS
    ============================================= */
 
 .orders-list {
@@ -425,61 +465,9 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 200px; /* фиксированная высота */
-  overflow-y: auto; /* всегда скролл */
+  overflow-y: auto;
   overflow-x: hidden;
 }
-
-.order-item {
-  flex-shrink: 0;
-}
-
-.order-card {
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 6px;
-}
-
-.order-card:hover:not(.order-card--active) {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.order-card-content {
-  padding: 8px 12px !important;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: inherit;
-}
-
-.order-number {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: inherit;
-}
-
-/* =============================================
-   SCROLL INDICATOR
-   ============================================= */
-
-.scroll-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 8px 4px 4px 4px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.scroll-text {
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-/* =============================================
-   TABLES LIST
-   ============================================= */
 
 .tables-list {
   flex: 1;
@@ -515,31 +503,33 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* ===== SCROLLBARS ===== */
+/* =============================================
+   SCROLLBARS
+   ============================================= */
 
 .scrollable-content::-webkit-scrollbar,
-   .orders-list::-webkit-scrollbar,  /* добавить */
-   .tables-list::-webkit-scrollbar {
+.orders-list::-webkit-scrollbar,
+.tables-list::-webkit-scrollbar {
   width: 4px;
 }
 
 .scrollable-content::-webkit-scrollbar-track,
-   .orders-list::-webkit-scrollbar-track,  /* добавить */
-   .tables-list::-webkit-scrollbar-track {
+.orders-list::-webkit-scrollbar-track,
+.tables-list::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 2px;
 }
 
 .scrollable-content::-webkit-scrollbar-thumb,
-   .orders-list::-webkit-scrollbar-thumb,  /* добавить */
-   .tables-list::-webkit-scrollbar-thumb {
+.orders-list::-webkit-scrollbar-thumb,
+.tables-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
 
 .scrollable-content::-webkit-scrollbar-thumb:hover,
-   .orders-list::-webkit-scrollbar-thumb:hover,  /* добавить */
-   .tables-list::-webkit-scrollbar-thumb:hover {
+.orders-list::-webkit-scrollbar-thumb:hover,
+.tables-list::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 
@@ -562,58 +552,20 @@ onMounted(() => {
     padding: 4px 6px;
     gap: 3px;
   }
-
-  .order-card-content {
-    padding: 6px 10px !important;
-    gap: 6px;
-  }
-
-  .order-number {
-    font-size: 0.8125rem;
-  }
 }
 
 /* =============================================
    ACCESSIBILITY
    ============================================= */
 
-.order-card:focus-visible,
 .new-order-btn:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: 2px;
 }
 
-/* Увеличиваем размер touch-области */
 @media (pointer: coarse) {
-  .order-card-content {
-    min-height: 44px;
-  }
-
   .new-order-btn {
     min-height: 48px !important;
-  }
-}
-
-/* =============================================
-   LOADING STATES
-   ============================================= */
-
-.order-card--loading {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.tables-list--loading {
-  opacity: 0.6;
-}
-
-/* =============================================
-   DARK MODE ADJUSTMENTS
-   ============================================= */
-
-@media (prefers-color-scheme: dark) {
-  .section-title {
-    background-color: rgba(255, 255, 255, 0.03);
   }
 }
 </style>

@@ -7,7 +7,7 @@ import { useTables } from './composables/useTables'
 
 export const usePosTablesStore = defineStore('posTables', () => {
   // ===== STATE =====
-  const tables = ref<PosTable[]>([])
+  const tables = ref<PosTable[]>(createInitialTables())
   const loading = ref({
     list: false,
     create: false,
@@ -79,7 +79,210 @@ export const usePosTablesStore = defineStore('posTables', () => {
   }))
 
   // ===== ACTIONS =====
+  /**
+   * Создание базовых столов для инициализации
+   */
+  function createInitialTables(): PosTable[] {
+    const now = new Date().toISOString()
 
+    return [
+      // Main Tables (T1-T8)
+      {
+        id: 'table_T1',
+        number: 'T1',
+        status: 'free',
+        capacity: 4,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_T2',
+        number: 'T2',
+        status: 'free',
+        capacity: 4,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_T3',
+        number: 'T3',
+        status: 'free',
+        capacity: 4,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_T4',
+        number: 'T4',
+        status: 'free',
+        capacity: 4,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_T5',
+        number: 'T5',
+        status: 'free',
+        capacity: 4,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_T6',
+        number: 'T6',
+        status: 'free',
+        capacity: 6,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_T7',
+        number: 'T7',
+        status: 'free',
+        capacity: 4,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_T8',
+        number: 'T8',
+        status: 'free',
+        capacity: 2,
+        floor: 1,
+        section: 'main',
+        createdAt: now,
+        updatedAt: now
+      },
+
+      // Island Tables (I1-I5)
+      {
+        id: 'table_I1',
+        number: 'I1',
+        status: 'free',
+        capacity: 6,
+        floor: 1,
+        section: 'island',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_I2',
+        number: 'I2',
+        status: 'free',
+        capacity: 6,
+        floor: 1,
+        section: 'island',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_I3',
+        number: 'I3',
+        status: 'free',
+        capacity: 6,
+        floor: 1,
+        section: 'island',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_I4',
+        number: 'I4',
+        status: 'free',
+        capacity: 6,
+        floor: 1,
+        section: 'island',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_I5',
+        number: 'I5',
+        status: 'free',
+        capacity: 6,
+        floor: 1,
+        section: 'island',
+        createdAt: now,
+        updatedAt: now
+      },
+
+      // Bar Tables (B1-B6)
+      {
+        id: 'table_B1',
+        number: 'B1',
+        status: 'free',
+        capacity: 2,
+        floor: 1,
+        section: 'bar',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_B2',
+        number: 'B2',
+        status: 'free',
+        capacity: 2,
+        floor: 1,
+        section: 'bar',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_B3',
+        number: 'B3',
+        status: 'free',
+        capacity: 2,
+        floor: 1,
+        section: 'bar',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_B4',
+        number: 'B4',
+        status: 'free',
+        capacity: 2,
+        floor: 1,
+        section: 'bar',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_B5',
+        number: 'B5',
+        status: 'free',
+        capacity: 2,
+        floor: 1,
+        section: 'bar',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'table_B6',
+        number: 'B6',
+        status: 'free',
+        capacity: 2,
+        floor: 1,
+        section: 'bar',
+        createdAt: now,
+        updatedAt: now
+      }
+    ]
+  }
   /**
    * Загрузить все столы
    */

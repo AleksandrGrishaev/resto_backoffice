@@ -6,7 +6,7 @@ export interface BaseEntity {
 }
 
 // ===== TABLE TYPES =====
-export type TableStatus = 'free' | 'occupied' | 'reserved'
+export type TableStatus = 'free' | 'occupied_unpaid' | 'occupied_paid' | 'reserved'
 export type TableSection = 'main'
 
 export interface PosTable extends BaseEntity {

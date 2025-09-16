@@ -25,21 +25,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { PosTable } from '@/stores/pos/types' // ИЗМЕНЕНИЕ 1
 
-interface Table {
-  id: string
-  number: string
-  status: 'free' | 'occupied_unpaid' | 'occupied_paid' | 'reserved'
-}
+// =============================================
+// PROPS & EMITS
+// =============================================
 
 interface Props {
-  table: Table
+  table: PosTable // ИЗМЕНЕНИЕ 2
   isActive?: boolean
 }
 
 interface Emits {
-  (e: 'click', table: Table): void
-  (e: 'select', tableId: string): void
+  (e: 'click', table: PosTable): void
+  (e: 'select', table: PosTable): void // ИЗМЕНЕНИЕ 3: передаем объект table
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -48,7 +47,11 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-// Конфигурация статусов
+// =============================================
+// COMPUTED PROPERTIES - ОСТАВЛЯЕМ ВАШУ ЛОГИКУ
+// =============================================
+
+// Конфигурация статусов ОСТАЕТСЯ без изменений
 const statusConfig = {
   free: {
     icon: 'mdi-check-circle',
@@ -72,17 +75,21 @@ const statusIcon = computed(() => statusConfig[props.table.status]?.icon || 'mdi
 
 const statusColor = computed(() => statusConfig[props.table.status]?.color || 'grey')
 
-// Обработчик клика с консоль логированием
+// =============================================
+// METHODS
+// =============================================
+
 const handleClick = () => {
-  console.log('🍽️ Стол выбран:', {
+  console.log('🍽️ Table selected:', {
     tableId: props.table.id,
     tableNumber: props.table.number,
     status: props.table.status,
+    currentOrderId: props.table.currentOrderId, // ИЗМЕНЕНИЕ 4: добавляем orderId
     timestamp: new Date().toLocaleTimeString()
   })
 
   emit('click', props.table)
-  emit('select', props.table.id)
+  emit('select', props.table) // ИЗМЕНЕНИЕ 5: передаем весь объект
 }
 </script>
 

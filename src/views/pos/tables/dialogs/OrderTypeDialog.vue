@@ -54,10 +54,10 @@
   </v-dialog>
 </template>
 
+<!-- src/views/pos/tables/dialogs/OrderTypeDialog.vue -->
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { OrderType } from '@/types/order'
-import { useOrders } from '@/stores/pos/orders/composables/useOrders'
+import type { OrderType } from '@/stores/pos/types' // ИЗМЕНЕНИЕ 1: Используем POS типы
 
 // =============================================
 // PROPS & EMITS
@@ -71,20 +71,15 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  'create-order': [type: OrderType]
+  create: [type: OrderType] // ИЗМЕНЕНИЕ 2: create вместо create-order
 }>()
-
-// =============================================
-// COMPOSABLES
-// =============================================
-
-const { loading } = useOrders()
 
 // =============================================
 // STATE
 // =============================================
 
 const selectedType = ref<OrderType | null>(null)
+const loading = ref(false) // ИЗМЕНЕНИЕ 3: Локальный loading вместо composable
 
 // =============================================
 // METHODS
@@ -95,14 +90,17 @@ const selectedType = ref<OrderType | null>(null)
  */
 async function handleOrderType(type: OrderType): Promise<void> {
   selectedType.value = type
+  loading.value = true // ИЗМЕНЕНИЕ 4: Устанавливаем локальный loading
 
   try {
-    // Просто эмитим тип заказа
-    emit('create-order', type)
+    // ИЗМЕНЕНИЕ 5: Эмитим правильное событие
+    emit('create', type)
     handleClose()
   } catch (error) {
     console.error('Order creation error:', error)
     selectedType.value = null
+  } finally {
+    loading.value = false
   }
 }
 
@@ -122,9 +120,12 @@ function handleClose(): void {
   // Сбросить состояние после закрытия анимации
   setTimeout(() => {
     selectedType.value = null
+    loading.value = false
   }, 300)
 }
 </script>
+
+<!-- Template остается БЕЗ ИЗМЕНЕНИЙ - он уже правильный -->
 
 <style scoped>
 /* =============================================
