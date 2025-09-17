@@ -7,6 +7,7 @@
       :active-bill-id="activeBillId"
       :selected-bills="selectedBills"
       :can-add-bill="canAddBill"
+      :order-type="order?.type || null"
       :show-selection-mode="true"
       @select-bill="handleSelectBill"
       @add-bill="handleAddBill"
