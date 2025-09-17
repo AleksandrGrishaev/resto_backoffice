@@ -38,6 +38,25 @@ export const vuetify = createVuetify({
     VListItem: {
       minHeight: 44,
       rounded: 'lg'
+    },
+    // ИСПРАВЛЕНИЯ ДЛЯ TOOLTIP И OVERLAY:
+    VTooltip: {
+      activator: 'parent',
+      location: 'top',
+      openDelay: 500,
+      closeDelay: 100,
+      transition: 'fade-transition',
+      offset: 4
+    },
+    VMenu: {
+      closeOnContentClick: true,
+      closeOnBack: true,
+      transition: 'scale-transition'
+    },
+    VOverlay: {
+      scrim: false, // УБИРАЕМ ЗАТЕМНЕНИЕ!
+      contained: true,
+      persistent: false
     }
   },
   theme: {

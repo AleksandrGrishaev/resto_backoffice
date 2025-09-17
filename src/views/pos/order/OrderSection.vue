@@ -67,7 +67,12 @@
     />
 
     <!-- Global Loading Overlay -->
-    <v-overlay v-model="loading.global" class="d-flex align-center justify-center" contained>
+    <v-overlay
+      v-model="loading.global"
+      class="d-flex align-center justify-center"
+      contained
+      :scrim="false"
+    >
       <div class="text-center">
         <v-progress-circular indeterminate color="primary" size="48" />
         <div class="text-h6 mt-3">{{ loadingMessage }}</div>
@@ -589,10 +594,13 @@ defineExpose({
    ============================================= */
 
 .v-overlay {
-  background: rgba(var(--v-theme-surface), 0.8);
-  backdrop-filter: blur(4px);
+  background: rgba(var(--v-theme-surface), 0.8) !important;
+  backdrop-filter: none !important; /* УБИРАЕМ BLUR */
 }
 
+.v-overlay .v-overlay__scrim {
+  display: none !important; /* УБИРАЕМ BACKDROP */
+}
 /* =============================================
    RESPONSIVE BEHAVIOR
    ============================================= */

@@ -321,6 +321,68 @@ body {
   animation: pulse 2s infinite;
 }
 
+/* =============================================
+   TOOLTIP & OVERLAY FIXES
+   ============================================= */
+
+/* Полностью убираем backdrop у tooltip */
+.v-overlay.v-tooltip > .v-overlay__scrim {
+  display: none !important;
+}
+
+/* Убираем backdrop у menu */
+.v-overlay.v-menu > .v-overlay__scrim {
+  display: none !important;
+}
+
+/* Стилизация tooltip */
+.v-tooltip .v-overlay__content {
+  background: rgba(0, 0, 0, 0.9) !important;
+  color: white !important;
+  font-size: 0.75rem !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: none !important;
+  max-width: 200px !important;
+}
+
+/* Исправляем OrderSection overlay */
+.order-section .v-overlay {
+  backdrop-filter: none !important;
+}
+
+.order-section .v-overlay .v-overlay__scrim {
+  display: none !important;
+}
+
+/* Menu стилизация */
+.v-menu .v-overlay__content {
+  background: var(--v-theme-surface) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Z-index hierarchy */
+.v-tooltip {
+  z-index: 2100 !important;
+}
+
+.v-menu {
+  z-index: 2000 !important;
+}
+
+.v-dialog {
+  z-index: 2200 !important;
+}
+
+/* Убираем анимации backdrop */
+.v-overlay-container .v-overlay__scrim {
+  transition: none !important;
+  animation: none !important;
+}
+
 // =============================================
 // RESPONSIVE УТИЛИТЫ
 // =============================================
