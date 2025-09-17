@@ -9,62 +9,73 @@
 
     <!-- Order Content -->
     <template v-if="currentOrder">
-      <!-- Order Info Header -->
-      <OrderInfo
-        :order="currentOrder"
-        :table-number="tableNumber"
-        :can-edit="canEditOrder"
-        @change-type="handleOrderTypeChange"
-        @change-table="handleTableChange"
-        @update-customer="handleCustomerUpdate"
-      />
+      <div class="order-layout">
+        <!-- Fixed Header Section -->
+        <div class="order-header">
+          <!-- Order Info Header -->
+          <OrderInfo
+            :order="currentOrder"
+            :table-number="tableNumber"
+            :can-edit="canEditOrder"
+            @change-type="handleOrderTypeChange"
+            @change-table="handleTableChange"
+            @update-customer="handleCustomerUpdate"
+          />
+        </div>
 
-      <!-- Bills Management -->
-      <BillsManager
-        :order="currentOrder"
-        :bills="bills"
-        :active-bill-id="activeBillId"
-        :can-add-bill="canAddBill"
-        :can-edit-items="canEditItems"
-        :has-unsaved-changes="hasUnsavedChanges"
-        @select-bill="handleSelectBill"
-        @add-bill="handleAddBill"
-        @rename-bill="handleRenameBill"
-        @remove-bill="handleRemoveBill"
-        @update-item-quantity="handleUpdateItemQuantity"
-        @modify-item="handleModifyItem"
-        @cancel-item="handleCancelItem"
-        @add-note="handleAddNote"
-        @send-to-kitchen="handleSendToKitchen"
-        @move-items="handleMoveItems"
-        @checkout="handleCheckout"
-      />
+        <!-- Scrollable Content Area -->
+        <div class="order-content">
+          <!-- Bills Management -->
+          <BillsManager
+            :order="currentOrder"
+            :bills="bills"
+            :active-bill-id="activeBillId"
+            :can-add-bill="canAddBill"
+            :can-edit-items="canEditItems"
+            :has-unsaved-changes="hasUnsavedChanges"
+            @select-bill="handleSelectBill"
+            @add-bill="handleAddBill"
+            @rename-bill="handleRenameBill"
+            @remove-bill="handleRemoveBill"
+            @update-item-quantity="handleUpdateItemQuantity"
+            @modify-item="handleModifyItem"
+            @cancel-item="handleCancelItem"
+            @add-note="handleAddNote"
+            @send-to-kitchen="handleSendToKitchen"
+            @move-items="handleMoveItems"
+            @checkout="handleCheckout"
+          />
+        </div>
 
-      <!-- Order Totals -->
-      <OrderTotals
-        :totals="orderTotals"
-        :bills-breakdown="billsBreakdown"
-        :order-stats="orderStats"
-        :active-bill-id="activeBillId"
-        :show-taxes="showTaxes"
-        :service-tax-rate="serviceTaxRate"
-        :government-tax-rate="governmentTaxRate"
-        :loading="loading.calculations"
-        :show-debug-info="debugMode"
-      />
+        <!-- Fixed Footer Section -->
+        <div class="order-footer">
+          <!-- Order Totals -->
+          <OrderTotals
+            :totals="orderTotals"
+            :bills-breakdown="billsBreakdown"
+            :order-stats="orderStats"
+            :active-bill-id="activeBillId"
+            :show-taxes="showTaxes"
+            :service-tax-rate="serviceTaxRate"
+            :government-tax-rate="governmentTaxRate"
+            :loading="loading.calculations"
+            :show-debug-info="debugMode"
+          />
 
-      <!-- Order Actions -->
-      <OrderActions
-        :order="currentOrder"
-        :bills="bills"
-        :active-bill="activeBill"
-        :has-unsaved-changes="hasUnsavedChanges"
-        @save="handleSave"
-        @send-to-kitchen="handleSendToKitchenFromActions"
-        @print="handlePrint"
-        @move="handleMoveFromActions"
-        @checkout="handleCheckoutFromActions"
-      />
+          <!-- Order Actions -->
+          <OrderActions
+            :order="currentOrder"
+            :bills="bills"
+            :active-bill="activeBill"
+            :has-unsaved-changes="hasUnsavedChanges"
+            @save="handleSave"
+            @send-to-kitchen="handleSendToKitchenFromActions"
+            @print="handlePrint"
+            @move="handleMoveFromActions"
+            @checkout="handleCheckoutFromActions"
+          />
+        </div>
+      </div>
     </template>
 
     <!-- Empty State -->
@@ -591,10 +602,43 @@ onMounted(() => {
 
 .order-section {
   position: relative;
-  height: 100%;
+  height: 100vh; /* Занимаем всю высоту viewport */
   background: rgb(var(--v-theme-background));
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* Предотвращаем scroll на уровне секции */
+}
+
+.order-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* =============================================
+   FIXED SECTIONS
+   ============================================= */
+
+.order-header {
+  flex-shrink: 0; /* Фиксированная высота */
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  z-index: 10;
+}
+
+.order-content {
+  flex: 1; /* Занимает все доступное пространство */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Контролируем overflow на уровне content */
+}
+
+.order-footer {
+  flex-shrink: 0; /* Фиксированная высота */
+  background: rgb(var(--v-theme-surface));
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  z-index: 10;
 }
 
 /* =============================================

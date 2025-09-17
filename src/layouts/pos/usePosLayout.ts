@@ -26,22 +26,28 @@ export const usePosLayout = () => {
   // Вычисляемые размеры
   const dimensions = computed((): ComputedDimensions => {
     const cfg = config.value.dimensions
-    const availableWidth = width.value - cfg.sidebar.width - cfg.spacing.gap * 2
+
+    // Доступная ширина = общая ширина - sidebar
+    const availableWidth = width.value - cfg.sidebar.width
+
+    // Ширина меню по соотношению
     const menuWidth = Math.floor(availableWidth * cfg.content.menuRatio)
-    const orderWidth = Math.min(
-      Math.max(availableWidth - menuWidth, cfg.content.orderMinWidth),
-      cfg.content.orderMaxWidth
-    )
+
+    // Order секция занимает оставшееся место (без фиксированной ширины)
+    const orderWidth = availableWidth - menuWidth
 
     return {
       sidebar: { width: cfg.sidebar.width },
       menu: { width: menuWidth },
       order: {
-        width: orderWidth,
+        width: orderWidth, // Динамическая ширина
         minWidth: cfg.content.orderMinWidth,
-        maxWidth: cfg.content.orderMaxWidth
+        maxWidth: Math.max(orderWidth, cfg.content.orderMaxWidth) // Не ограничиваем если места больше
       },
-      spacing: cfg.spacing,
+      spacing: {
+        ...cfg.spacing,
+        gap: 0 // Убираем gap
+      },
       components: cfg.components
     }
   })
@@ -53,7 +59,7 @@ export const usePosLayout = () => {
       '--pos-sidebar-width': `${dims.sidebar.width}px`,
       '--pos-menu-width': `${dims.menu.width}px`,
       '--pos-order-width': `${dims.order.width}px`,
-      '--pos-gap': `${dims.spacing.gap}px`,
+      '--pos-gap': `0px`,
       '--pos-padding': `${dims.spacing.padding}px`,
       '--pos-border-radius': `${dims.spacing.borderRadius}px`,
       '--pos-header-height': `${dims.components.headerHeight}px`,

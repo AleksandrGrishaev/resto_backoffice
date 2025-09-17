@@ -402,6 +402,8 @@ const handleCheckout = async (): Promise<void> => {
   padding: var(--spacing-md);
   flex: 1;
   overflow-y: auto;
+  max-height: calc(100vh - 400px); /* Ограничиваем высоту для scroll */
+  min-height: 200px;
 }
 
 /* =============================================
@@ -480,6 +482,16 @@ const handleCheckout = async (): Promise<void> => {
     order: -1;
     width: 100%;
     justify-content: center;
+  }
+
+  /* Обеспечиваем правильную работу scroll на мобильных */
+  .bills-manager {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .bill-content {
+    min-height: 0; /* Критично для мобильного flex */
   }
 }
 
