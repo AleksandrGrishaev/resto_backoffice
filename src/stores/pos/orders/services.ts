@@ -35,19 +35,48 @@ export class OrdersService {
     }
   }
 
+  async createOrder(
+    type: OrderType,
+    tableId?: string,
+    customerName?: string
+  ): Promise<ServiceResponse<PosOrder>>
   async createOrder(orderData: {
     type: OrderType
     tableId?: string
     customerName?: string
     waiterName?: string
-  }): Promise<ServiceResponse<PosOrder>> {
+  }): Promise<ServiceResponse<PosOrder>>
+  async createOrder(
+    typeOrData:
+      | OrderType
+      | {
+          type: OrderType
+          tableId?: string
+          customerName?: string
+          waiterName?: string
+        },
+    tableId?: string,
+    customerName?: string
+  ): Promise<ServiceResponse<PosOrder>> {
     try {
+      // Нормализуем входные данные
+      const orderData =
+        typeof typeOrData === 'string'
+          ? {
+              type: typeOrData,
+              tableId,
+              customerName
+            }
+          : typeOrData
+
+      console.log('🔧 OrdersService.createOrder called with:', orderData)
+
       const orderNumber = this.generateOrderNumber()
 
       const newOrder: PosOrder = {
         id: `order_${Date.now()}`,
         orderNumber,
-        type: orderData.type,
+        type: orderData.type, // ВАЖНО: правильно сохраняем тип
         status: 'draft',
         tableId: orderData.tableId,
         customerName: orderData.customerName,
@@ -61,6 +90,12 @@ export class OrdersService {
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
+      console.log('✅ Created order object:', {
+        id: newOrder.id,
+        type: newOrder.type,
+        orderNumber: newOrder.orderNumber
+      })
+
       // Создаем первый счет автоматически
       const firstBill = await this.createBillForOrder(newOrder.id, 'Основной счет')
       if (firstBill.success && firstBill.data) {
@@ -71,6 +106,8 @@ export class OrdersService {
       const orders = await this.getAllOrders()
       const ordersList = orders.success && orders.data ? orders.data : []
       ordersList.push(newOrder)
+
+      // ВАЖНО: сохраняем заказ с правильным типом
       localStorage.setItem(
         this.ORDERS_KEY,
         JSON.stringify(
@@ -81,8 +118,15 @@ export class OrdersService {
         )
       )
 
+      console.log('💾 Saved order to localStorage:', {
+        id: newOrder.id,
+        type: newOrder.type,
+        saved: true
+      })
+
       return { success: true, data: newOrder }
     } catch (error) {
+      console.error('❌ OrdersService.createOrder error:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create order'

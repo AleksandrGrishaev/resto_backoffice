@@ -333,6 +333,7 @@ watch(
     if (!shift) {
       DebugUtils.warn(MODULE_NAME, 'No active shift detected')
       console.log('⚠️ No active shift - start shift to continue')
+      // TODO: Показать toast notification
     } else {
       DebugUtils.debug(MODULE_NAME, 'Active shift detected', {
         shiftId: shift.id,
@@ -340,7 +341,7 @@ watch(
       })
     }
   },
-  { immediate: true }
+  { immediate: true } // Проверить сразу при загрузке
 )
 
 // Отслеживание статуса сети
@@ -350,6 +351,7 @@ watch(
     if (!isOnline) {
       DebugUtils.warn(MODULE_NAME, 'System went offline')
       console.log('⚠️ System is offline')
+      // TODO: Показать toast notification
     } else {
       DebugUtils.debug(MODULE_NAME, 'System is online')
     }

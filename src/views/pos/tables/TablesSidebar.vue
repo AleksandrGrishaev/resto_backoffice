@@ -134,12 +134,26 @@ const tables = computed((): PosTable[] => {
  * Сортируем по времени создания от старых к новым
  */
 const deliveryOrders = computed((): PosOrder[] => {
+  console.log('📋 Computing deliveryOrders:', {
+    totalOrders: ordersStore.orders.length,
+    orders: ordersStore.orders.map(o => ({ id: o.id, type: o.type, status: o.status }))
+  })
+
   return ordersStore.orders
-    .filter(
-      order =>
-        ['takeaway', 'delivery'].includes(order.type) &&
-        !['cancelled', 'paid'].includes(order.status)
-    )
+    .filter(order => {
+      const isDeliveryOrTakeaway = ['takeaway', 'delivery'].includes(order.type)
+      const isNotCompletedOrCancelled = !['cancelled', 'paid'].includes(order.status)
+
+      console.log(`📦 Order ${order.id}:`, {
+        type: order.type,
+        status: order.status,
+        isDeliveryOrTakeaway,
+        isNotCompletedOrCancelled,
+        willBeIncluded: isDeliveryOrTakeaway && isNotCompletedOrCancelled
+      })
+
+      return isDeliveryOrTakeaway && isNotCompletedOrCancelled
+    })
     .sort((a, b) => {
       // Сортируем по времени создания (старые первыми)
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -383,13 +397,28 @@ onMounted(async () => {
     ordersCount: deliveryOrders.value.length
   })
 
-  // Инициализируем данные если нужно
+  // Дополнительная отладка для диагностики
+  console.log('🔍 TablesSidebar Debug Info:', {
+    totalOrders: ordersStore.orders.length,
+    deliveryOrdersComputed: deliveryOrders.value.length,
+    allOrders: ordersStore.orders.map(o => ({
+      id: o.id,
+      type: o.type,
+      status: o.status,
+      orderNumber: o.orderNumber
+    })),
+    filteredDeliveryOrders: deliveryOrders.value.map(o => ({
+      id: o.id,
+      type: o.type,
+      status: o.status,
+      orderNumber: o.orderNumber
+    }))
+  })
+
+  // Stores должны быть уже инициализированы в PosMainView
   try {
     loading.value.tables = true
     loading.value.orders = true
-
-    // Stores должны быть уже инициализированы в PosMainView
-    // Здесь просто логируем текущее состояние
 
     DebugUtils.debug(MODULE_NAME, 'Data loaded', {
       tablesLoaded: tables.value.length,

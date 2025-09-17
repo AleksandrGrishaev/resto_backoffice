@@ -1,4 +1,4 @@
-<!-- src/components/pos/order/BillsTabs.vue -->
+<!-- ПРОШЛЫЙ ФАЙЛ -->
 <template>
   <div class="bills-tabs-wrapper">
     <!-- Rename Dialog -->

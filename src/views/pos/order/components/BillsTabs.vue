@@ -1,199 +1,162 @@
 <!-- src/views/pos/order/components/BillsTabs.vue -->
 <template>
-  <div class="bills-tabs">
-    <div class="tabs-container d-flex align-center">
-      <!-- Bills Tabs -->
-      <div class="tabs-list flex-grow-1 overflow-x-auto">
-        <div class="tabs-wrapper d-flex">
-          <v-btn
-            v-for="bill in bills"
-            :key="bill.id"
-            :color="bill.id === activeBillId ? 'primary' : 'surface-variant'"
-            :variant="bill.id === activeBillId ? 'flat' : 'text'"
-            class="bill-tab"
-            size="large"
-            :class="{
-              'bill-tab-active': bill.id === activeBillId,
-              'bill-tab-paid': bill.paymentStatus === 'paid',
-              'bill-tab-partial': bill.paymentStatus === 'partial'
-            }"
-            @click="selectBill(bill.id)"
-            @contextmenu.prevent="showBillMenu(bill, $event)"
-          >
-            <!-- Bill Icon -->
-            <v-icon start size="18" :icon="getBillIcon(bill)" />
-
-            <!-- Bill Name -->
-            <span class="bill-name">{{ bill.name }}</span>
-
-            <!-- Items Count Badge -->
-            <v-badge
-              v-if="bill.items.length > 0"
-              :content="bill.items.length"
-              :color="getBadgeColor(bill)"
-              inline
-              class="ml-2"
-            />
-
-            <!-- Payment Status Indicator -->
-            <v-icon
-              v-if="bill.paymentStatus !== 'unpaid'"
-              :color="getPaymentStatusColor(bill.paymentStatus)"
-              size="16"
-              class="ml-1"
-            >
-              {{ getPaymentStatusIcon(bill.paymentStatus) }}
-            </v-icon>
-
-            <!-- Close Button (только для dine-in заказов и при наличии нескольких счетов) -->
-            <v-btn
-              v-if="canRemoveBill && bills.length > 1 && allowMultipleBills"
-              icon
-              variant="text"
-              size="x-small"
-              class="bill-close-btn ml-1"
-              @click.stop="confirmRemoveBill(bill)"
-            >
-              <v-icon size="12">mdi-close</v-icon>
-            </v-btn>
-          </v-btn>
-        </div>
-      </div>
-
-      <!-- Add Bill Button (только для dine-in заказов) -->
-      <div v-if="canAddBill && allowMultipleBills" class="add-bill-section ml-2">
-        <v-btn
-          color="success"
-          variant="outlined"
-          size="large"
-          class="add-bill-btn"
-          :disabled="!canAddBill || bills.length >= maxBills"
-          @click="addNewBill"
-        >
-          <v-icon start>mdi-plus</v-icon>
-          Add Bill
-        </v-btn>
-      </div>
-
-      <!-- Bills Limitation Notice (для takeaway/delivery) -->
-      <div v-else-if="!allowMultipleBills" class="limitation-notice ml-2">
-        <v-chip size="small" variant="tonal" color="info" prepend-icon="mdi-information">
-          Single Bill Only
-        </v-chip>
-      </div>
-
-      <!-- Overflow Menu -->
-      <div class="bills-menu ml-2">
-        <v-menu location="bottom end">
-          <template #activator="{ props: menuProps }">
-            <v-btn icon variant="text" size="large" v-bind="menuProps">
-              <v-icon>mdi-dots-vertical</v-icon>
-            </v-btn>
-          </template>
-
-          <v-list density="compact">
-            <!-- Add Bill (для dine-in) -->
-            <v-list-item
-              v-if="canAddBill && allowMultipleBills"
-              prepend-icon="mdi-plus"
-              title="Add New Bill"
-              :disabled="bills.length >= maxBills"
-              @click="addNewBill"
-            />
-
-            <!-- Rename Bill -->
-            <v-list-item
-              v-if="activeBill"
-              prepend-icon="mdi-pencil"
-              title="Rename Bill"
-              @click="showRenameBillDialog = true"
-            />
-
-            <!-- Merge Bills (только для dine-in с несколькими счетами) -->
-            <v-list-item
-              v-if="canMergeBills && allowMultipleBills"
-              prepend-icon="mdi-call-merge"
-              title="Merge Bills"
-              @click="handleMergeBills"
-            />
-
-            <v-divider v-if="canRemoveBill || canMergeBills" />
-
-            <!-- Remove Bill (только для dine-in) -->
-            <v-list-item
-              v-if="canRemoveBill && bills.length > 1 && allowMultipleBills"
-              prepend-icon="mdi-delete"
-              title="Remove Current Bill"
-              :disabled="activeBill?.items.length > 0"
-              @click="confirmRemoveBill(activeBill)"
-            />
-          </v-list>
-        </v-menu>
-      </div>
-    </div>
-
-    <!-- Bills Count Info -->
-    <div v-if="bills.length > 1" class="bills-info text-center pa-1">
-      <v-chip size="x-small" variant="text" color="primary">
-        {{ bills.length }} bills • {{ totalItemsCount }} items
-      </v-chip>
-    </div>
-
-    <!-- Rename Bill Dialog -->
-    <v-dialog v-model="showRenameBillDialog" max-width="400">
+  <div class="bills-tabs-wrapper">
+    <!-- Rename Dialog -->
+    <v-dialog v-model="showRenameDialog" max-width="300">
       <v-card>
-        <v-card-title class="text-h6">Rename Bill</v-card-title>
+        <v-card-title class="text-h6">Rename</v-card-title>
         <v-card-text class="pt-4">
           <v-text-field
             v-model="newBillName"
             label="Bill Name"
             variant="outlined"
-            hide-details="auto"
+            hide-details
             autofocus
-            :rules="billNameRules"
-            @keyup.enter="confirmRenameBill"
+            @keyup.enter="confirmRename"
           />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="cancelRenameBill">Cancel</v-btn>
-          <v-btn color="primary" :disabled="!isValidBillName" @click="confirmRenameBill">
-            Rename
-          </v-btn>
+          <v-btn variant="text" @click="closeRenameDialog">Cancel</v-btn>
+          <v-btn color="primary" :disabled="!newBillName.trim()" @click="confirmRename">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Remove Bill Confirmation -->
-    <v-dialog v-model="showRemoveBillDialog" max-width="400">
+    <!-- Delete Dialog -->
+    <v-dialog v-model="showDeleteDialog" max-width="400">
       <v-card>
-        <v-card-title class="text-h6">Remove Bill</v-card-title>
+        <v-card-title class="text-h6">Delete</v-card-title>
         <v-card-text>
-          <div v-if="billToRemove?.items.length === 0">
-            Are you sure you want to remove "{{ billToRemove?.name }}"?
+          <div v-if="billToDelete?.items.length === 0">
+            Are you sure you want to delete this bill?
           </div>
           <div v-else class="text-error">
-            Cannot remove bill with items. Please move or remove all items first.
+            Cannot delete bill with items. Please remove all items first.
           </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="cancelRemoveBill">Cancel</v-btn>
-          <v-btn
-            v-if="billToRemove?.items.length === 0"
-            color="error"
-            @click="confirmRemoveBillAction"
-          >
-            Remove
+          <v-btn variant="text" @click="closeDeleteDialog">Cancel</v-btn>
+          <v-btn v-if="billToDelete?.items.length === 0" color="error" @click="confirmDelete">
+            Delete
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Bills Tabs -->
+    <v-tabs
+      v-model="activeTab"
+      density="compact"
+      color="primary"
+      align-tabs="start"
+      class="bills-tabs px-2"
+    >
+      <v-tab v-for="bill in bills" :key="bill.id" :value="bill.id" class="bill-tab">
+        <div class="d-flex align-center justify-space-between w-100">
+          <!-- Чекбокс для выбора счета -->
+          <v-checkbox
+            :model-value="isBillSelected?.(bill.id) || false"
+            density="compact"
+            hide-details
+            class="bill-checkbox mr-2"
+            @click.stop="toggleBillSelection?.(bill.id)"
+          />
+
+          <!-- Название счета -->
+          <span class="bill-name">{{ bill.name }}</span>
+
+          <!-- Правая секция с индикаторами -->
+          <div class="d-flex align-center gap-1">
+            <!-- Индикатор оплаты -->
+            <v-icon
+              v-if="bill.paymentStatus === 'paid'"
+              size="small"
+              color="success"
+              icon="mdi-check-circle"
+              class="payment-indicator"
+            >
+              <v-tooltip activator="parent" location="top">Bill Paid</v-tooltip>
+            </v-icon>
+            <v-icon
+              v-else-if="bill.paymentStatus === 'partial'"
+              size="small"
+              color="warning"
+              icon="mdi-clock-time-four"
+              class="payment-indicator"
+            >
+              <v-tooltip activator="parent" location="top">Partial Payment</v-tooltip>
+            </v-icon>
+            <v-icon
+              v-else-if="bill.items.length > 0"
+              size="small"
+              color="error"
+              icon="mdi-credit-card-off"
+              class="payment-indicator"
+            >
+              <v-tooltip activator="parent" location="top">Unpaid</v-tooltip>
+            </v-icon>
+
+            <!-- Индикатор новых позиций -->
+            <v-icon
+              v-if="hasNewItems(bill)"
+              size="small"
+              color="error"
+              icon="mdi-circle"
+              class="status-indicator"
+            >
+              <v-tooltip activator="parent" location="top">Has new items</v-tooltip>
+            </v-icon>
+
+            <!-- Меню действий -->
+            <v-menu location="bottom">
+              <template #activator="{ props }">
+                <v-btn
+                  icon="mdi-dots-vertical"
+                  variant="text"
+                  density="comfortable"
+                  size="small"
+                  v-bind="props"
+                  @click.stop
+                />
+              </template>
+
+              <v-list density="compact">
+                <v-list-item @click="openRenameDialog(bill)">
+                  <template #prepend>
+                    <v-icon size="small">mdi-pencil</v-icon>
+                  </template>
+                  <v-list-item-title>Rename</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item :disabled="bill.items.length > 0" @click="openDeleteDialog(bill)">
+                  <template #prepend>
+                    <v-icon size="small" color="error">mdi-delete</v-icon>
+                  </template>
+                  <v-list-item-title>Delete</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </div>
+        </div>
+      </v-tab>
+
+      <!-- Кнопка добавления нового счета -->
+      <v-btn
+        v-if="canAddBill && allowMultipleBills"
+        variant="text"
+        icon="mdi-plus"
+        size="small"
+        class="ml-2"
+        @click="emit('add-bill')"
+      />
+    </v-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { PosBill, OrderType } from '@/stores/pos/types'
 
 // Props
@@ -202,14 +165,12 @@ interface Props {
   activeBillId: string | null
   orderType: OrderType | null
   canAddBill?: boolean
-  canRemoveBill?: boolean
-  maxBills?: number
+  isBillSelected?: (billId: string) => boolean
+  toggleBillSelection?: (billId: string) => void
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  canAddBill: true,
-  canRemoveBill: true,
-  maxBills: 10
+  canAddBill: true
 })
 
 // Emits
@@ -218,245 +179,199 @@ const emit = defineEmits<{
   'add-bill': []
   'rename-bill': [billId: string, newName: string]
   'remove-bill': [billId: string]
-  'merge-bills': []
 }>()
 
-// State
-const showRenameBillDialog = ref(false)
-const showRemoveBillDialog = ref(false)
-const billToRemove = ref<PosBill | null>(null)
-const newBillName = ref('')
-
 // Computed
-const activeBill = computed((): PosBill | null => {
-  return props.bills.find(bill => bill.id === props.activeBillId) || null
-})
-
 const allowMultipleBills = computed((): boolean => {
-  // Только для dine-in заказов можно создавать несколько счетов
   return props.orderType === 'dine_in'
 })
 
-const canMergeBills = computed((): boolean => {
-  return props.bills.length > 1 && allowMultipleBills.value
-})
-
-const totalItemsCount = computed((): number => {
-  return props.bills.reduce((sum, bill) => sum + bill.items.length, 0)
-})
-
-const isValidBillName = computed((): boolean => {
-  const trimmed = newBillName.value.trim()
-  return (
-    trimmed.length > 0 &&
-    trimmed.length <= 20 &&
-    !props.bills.some(bill => bill.name === trimmed && bill.id !== props.activeBillId)
-  )
-})
-
-// Validation rules
-const billNameRules = [
-  (v: string) => !!v || 'Bill name is required',
-  (v: string) => v.length <= 20 || 'Bill name must be 20 characters or less',
-  (v: string) =>
-    !props.bills.some(bill => bill.name === v.trim() && bill.id !== props.activeBillId) ||
-    'Bill name already exists'
-]
+// Dialog states
+const showRenameDialog = ref(false)
+const showDeleteDialog = ref(false)
+const billToRename = ref<PosBill | null>(null)
+const billToDelete = ref<PosBill | null>(null)
+const newBillName = ref('')
+const activeTab = ref(props.activeBillId)
 
 // Methods
-const getBillIcon = (bill: PosBill): string => {
-  if (bill.paymentStatus === 'paid') return 'mdi-check-circle'
-  if (bill.paymentStatus === 'partial') return 'mdi-clock-time-four'
-  return bill.items.length > 0 ? 'mdi-receipt' : 'mdi-receipt-outline'
+const hasNewItems = (bill: PosBill): boolean => {
+  return bill.items.some(item => item.status === 'pending')
 }
 
-const getBadgeColor = (bill: PosBill): string => {
-  if (bill.paymentStatus === 'paid') return 'success'
-  if (bill.paymentStatus === 'partial') return 'warning'
-  return 'primary'
+// Rename methods
+const openRenameDialog = (bill: PosBill) => {
+  billToRename.value = bill
+  newBillName.value = bill.name
+  showRenameDialog.value = true
 }
 
-const getPaymentStatusColor = (status: string): string => {
-  switch (status) {
-    case 'paid':
-      return 'success'
-    case 'partial':
-      return 'warning'
-    default:
-      return 'grey'
-  }
-}
-
-const getPaymentStatusIcon = (status: string): string => {
-  switch (status) {
-    case 'paid':
-      return 'mdi-check'
-    case 'partial':
-      return 'mdi-clock-time-four'
-    default:
-      return 'mdi-help'
-  }
-}
-
-const selectBill = (billId: string): void => {
-  console.log('🧾 Select bill:', {
-    billId,
-    currentActive: props.activeBillId,
-    orderType: props.orderType
-  })
-  emit('select-bill', billId)
-}
-
-const addNewBill = (): void => {
-  if (!props.canAddBill || !allowMultipleBills.value || props.bills.length >= props.maxBills) {
-    console.warn('❌ Cannot add bill:', {
-      canAddBill: props.canAddBill,
-      allowMultipleBills: allowMultipleBills.value,
-      currentBillsCount: props.bills.length,
-      maxBills: props.maxBills,
-      orderType: props.orderType
-    })
-    return
-  }
-
-  console.log('➕ Add new bill:', {
-    orderType: props.orderType,
-    currentBillsCount: props.bills.length,
-    maxBills: props.maxBills
-  })
-
-  emit('add-bill')
-}
-
-const showBillMenu = (bill: PosBill, event: MouseEvent): void => {
-  console.log('📋 Show bill context menu:', {
-    billId: bill.id,
-    billName: bill.name,
-    orderType: props.orderType
-  })
-}
-
-const showRenameBillDialogAction = (): void => {
-  if (!activeBill.value) return
-
-  newBillName.value = activeBill.value.name
-  showRenameBillDialog.value = true
-}
-
-const cancelRenameBill = (): void => {
-  showRenameBillDialog.value = false
+const closeRenameDialog = () => {
+  showRenameDialog.value = false
+  billToRename.value = null
   newBillName.value = ''
 }
 
-const confirmRenameBill = (): void => {
-  if (!activeBill.value || !isValidBillName.value) return
+const confirmRename = () => {
+  if (!billToRename.value || !newBillName.value.trim()) return
 
-  const trimmedName = newBillName.value.trim()
-
-  console.log('✏️ Rename bill:', {
-    billId: activeBill.value.id,
-    oldName: activeBill.value.name,
-    newName: trimmedName,
-    orderType: props.orderType
-  })
-
-  emit('rename-bill', activeBill.value.id, trimmedName)
-  showRenameBillDialog.value = false
-  newBillName.value = ''
+  emit('rename-bill', billToRename.value.id, newBillName.value.trim())
+  closeRenameDialog()
 }
 
-const confirmRemoveBill = (bill: PosBill | null): void => {
-  if (!bill || !props.canRemoveBill || !allowMultipleBills.value) {
-    console.warn('❌ Cannot remove bill:', {
-      hasBill: !!bill,
-      canRemoveBill: props.canRemoveBill,
-      allowMultipleBills: allowMultipleBills.value,
-      orderType: props.orderType
-    })
-    return
+// Delete methods
+const openDeleteDialog = (bill: PosBill) => {
+  billToDelete.value = bill
+  showDeleteDialog.value = true
+}
+
+const closeDeleteDialog = () => {
+  showDeleteDialog.value = false
+  billToDelete.value = null
+}
+
+const confirmDelete = () => {
+  if (!billToDelete.value) return
+
+  emit('remove-bill', billToDelete.value.id)
+  closeDeleteDialog()
+}
+
+// Watchers
+watch(activeTab, newValue => {
+  if (newValue) {
+    emit('select-bill', newValue)
   }
+})
 
-  billToRemove.value = bill
-  showRemoveBillDialog.value = true
-}
-
-const cancelRemoveBill = (): void => {
-  showRemoveBillDialog.value = false
-  billToRemove.value = null
-}
-
-const confirmRemoveBillAction = (): void => {
-  if (!billToRemove.value) return
-
-  console.log('🗑️ Remove bill:', {
-    billId: billToRemove.value.id,
-    billName: billToRemove.value.name,
-    itemsCount: billToRemove.value.items.length,
-    orderType: props.orderType
-  })
-
-  emit('remove-bill', billToRemove.value.id)
-  showRemoveBillDialog.value = false
-  billToRemove.value = null
-}
-
-const handleMergeBills = (): void => {
-  if (!allowMultipleBills.value) {
-    console.warn('❌ Cannot merge bills - not allowed for this order type:', props.orderType)
-    return
+watch(
+  () => props.activeBillId,
+  newValue => {
+    activeTab.value = newValue
   }
-
-  console.log('🔗 Merge bills:', {
-    billsCount: props.bills.length,
-    orderType: props.orderType
-  })
-  emit('merge-bills')
-}
+)
 </script>
 
 <style scoped>
-/* Оставляем существующие стили + добавляем новые */
+.bills-tabs-wrapper {
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.12);
+  height: 48px;
+  overflow: hidden;
+}
 
-.limitation-notice {
+.bills-tabs {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.bills-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.bills-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bills-tabs::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.bills-tabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.bill-tab {
+  text-transform: none;
+  letter-spacing: normal;
+  min-width: 100px;
+  max-width: 160px;
+  padding: 0 8px;
+  height: 44px;
   flex-shrink: 0;
 }
 
-.bills-info {
-  background: rgba(var(--v-theme-primary), 0.05);
-  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
+.bill-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
-.bills-info .v-chip {
-  font-size: 0.7rem;
-}
-
-/* Скрыть кнопку закрытия для заказов не dine-in */
-.bill-tab:not(.allow-multiple) .bill-close-btn {
-  display: none;
-}
-
-/* Дополнительная индикация для заказов с одним счетом */
-.bills-tabs[data-single-bill='true'] .add-bill-btn {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-/* Добавить индикацию типа заказа */
-.bills-tabs::before {
-  content: attr(data-order-type);
-  position: absolute;
-  top: -20px;
-  right: 10px;
-  font-size: 0.6rem;
-  color: var(--v-theme-on-surface);
-  opacity: 0.5;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-@media (max-width: 768px) {
-  .limitation-notice {
-    display: none; /* Скрываем на мобильных */
+/* Touch-friendly для планшетов */
+@media (max-width: 1024px) {
+  .bills-tabs-wrapper {
+    height: 52px;
   }
+
+  .bill-tab {
+    min-width: 120px;
+    height: 48px;
+    padding: 0 12px;
+  }
+
+  .bill-name {
+    font-size: 1rem;
+  }
+
+  .gap-1 {
+    gap: 8px;
+  }
+
+  /* Увеличиваем размеры кнопок для touch */
+  :deep(.v-btn) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Увеличиваем чекбоксы */
+  .bill-checkbox :deep(.v-selection-control__wrapper) {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* Для мобильных устройств */
+@media (max-width: 768px) {
+  .bills-tabs-wrapper {
+    height: 56px;
+  }
+
+  .bill-tab {
+    min-width: 140px;
+    height: 52px;
+    padding: 0 16px;
+  }
+
+  .bill-name {
+    font-size: 1.1rem;
+  }
+}
+
+.gap-1 {
+  gap: 4px;
+}
+
+.bill-checkbox {
+  margin-right: 8px !important;
+}
+
+.payment-indicator {
+  opacity: 0.9;
+}
+
+.status-indicator {
+  opacity: 0.7;
+}
+
+/* Стили для режима выбора */
+:deep(.v-tab--selected) .bill-checkbox {
+  color: var(--v-theme-primary);
 }
 </style>
