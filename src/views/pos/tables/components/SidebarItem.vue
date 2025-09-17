@@ -1,20 +1,22 @@
 <!-- src/views/pos/tables/components/SidebarItem.vue -->
 <template>
-  <div :class="itemClasses" @click="handleClick">
-    <!-- Основная информация -->
+  <div class="sidebar-item" :class="itemClasses" @click="handleClick">
+    <!-- Icon Section -->
+    <div class="item-icon">
+      <v-icon :icon="displayIcon" :color="iconColor" size="24" />
+    </div>
+
+    <!-- Main Content -->
     <div class="item-main">
+      <!-- Main Number/Text -->
       <div class="item-number">{{ displayNumber }}</div>
-      <div v-if="showSubtitle" class="item-subtitle">{{ displaySubtitle }}</div>
     </div>
 
-    <!-- Статус иконка -->
-    <div class="status-icon">
-      <v-icon :icon="statusIcon" :color="statusColor" size="small" />
-    </div>
-
-    <!-- Индикатор времени для заказов -->
-    <div v-if="showTimeIndicator" class="time-indicator">
-      {{ displayTime }}
+    <!-- Status Badge (если нужен) -->
+    <div v-if="shouldShowStatusBadge" class="status-badge">
+      <v-chip :color="statusBadgeColor" size="x-small" variant="flat">
+        {{ statusBadgeText }}
+      </v-chip>
     </div>
   </div>
 </template>
@@ -24,150 +26,160 @@ import { computed } from 'vue'
 import type { PosTable, PosOrder, TableStatus, OrderStatus, OrderType } from '@/stores/pos/types'
 
 // =============================================
-// TYPES
+// PROPS & EMITS
 // =============================================
 
-type ItemType = 'table' | 'order'
-
 interface Props {
-  // Общие свойства
-  type: ItemType
-  isSelected?: boolean
-
-  // Для столов
+  type: 'table' | 'order'
   table?: PosTable
-
-  // Для заказов
   order?: PosOrder
+  isSelected?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isSelected: false
 })
 
-// =============================================
-// EMITS
-// =============================================
-
 const emit = defineEmits<{
-  select: [item: PosTable | PosOrder]
   click: [item: PosTable | PosOrder]
+  select: [item: PosTable | PosOrder]
 }>()
 
 // =============================================
-// COMPUTED - ОБЩИЕ СВОЙСТВА
+// COMPUTED PROPERTIES
 // =============================================
 
 /**
- * CSS классы элемента
+ * Является ли элемент заказом
  */
-const itemClasses = computed((): string[] => {
-  const classes = ['sidebar-item']
+const isOrder = computed((): boolean => {
+  return props.type === 'order'
+})
 
-  // Тип элемента
-  classes.push(`sidebar-item--${props.type}`)
+/**
+ * Является ли элемент столом
+ */
+const isTable = computed((): boolean => {
+  return props.type === 'table'
+})
 
-  // Состояние выбора
-  if (props.isSelected) {
-    classes.push('sidebar-item--selected')
+/**
+ * Основной номер для отображения
+ */
+const displayNumber = computed((): string => {
+  if (isTable.value && props.table) {
+    return props.table.number
   }
 
-  // Специфичные классы для типов
-  if (props.type === 'table' && props.table) {
-    const status = props.table.status
-    classes.push(`sidebar-item--${status.replace('_', '-')}`)
-  } else if (props.type === 'order' && props.order) {
-    const status = props.order.status
-    classes.push(`sidebar-item--order-${status}`)
-    classes.push(`sidebar-item--${props.order.type}`)
+  if (isOrder.value && props.order) {
+    // Для заказов показываем короткий номер или ID
+    const order = props.order
+
+    // Если есть orderNumber, извлекаем последние цифры
+    if (order.orderNumber) {
+      const match = order.orderNumber.match(/(\d+)$/)
+      if (match) {
+        return `#${match[1]}`
+      }
+      return order.orderNumber
+    }
+
+    // Иначе используем последние символы ID
+    return `#${order.id.slice(-4).toUpperCase()}`
+  }
+
+  return '?'
+})
+
+/**
+ * Иконка для отображения
+ */
+const displayIcon = computed((): string => {
+  if (isTable.value && props.table) {
+    return getTableStatusIcon(props.table.status)
+  }
+
+  if (isOrder.value && props.order) {
+    return getOrderTypeIcon(props.order.type)
+  }
+
+  return 'mdi-help'
+})
+
+/**
+ * Цвет иконки
+ */
+const iconColor = computed((): string | undefined => {
+  if (isTable.value && props.table) {
+    return getTableStatusColor(props.table.status)
+  }
+
+  if (isOrder.value && props.order) {
+    return getOrderTypeColor(props.order.type)
+  }
+
+  return undefined
+})
+
+/**
+ * CSS классы для элемента
+ */
+const itemClasses = computed((): Record<string, boolean> => {
+  const classes: Record<string, boolean> = {
+    'sidebar-item--selected': props.isSelected
+  }
+
+  if (isTable.value && props.table) {
+    classes['sidebar-item--table'] = true
+    classes[`sidebar-item--${props.table.status}`] = true
+  }
+
+  if (isOrder.value && props.order) {
+    classes['sidebar-item--order'] = true
+    classes[`sidebar-item--${props.order.type}`] = true
+    classes[`sidebar-item--order-${props.order.status}`] = true
   }
 
   return classes
 })
 
 /**
- * Отображаемый номер/название
+ * Нужно ли показывать статусный бейдж
  */
-const displayNumber = computed((): string => {
-  if (props.type === 'table' && props.table) {
-    return props.table.number
-  } else if (props.type === 'order' && props.order) {
-    return props.order.orderNumber
+const shouldShowStatusBadge = computed((): boolean => {
+  if (isOrder.value && props.order) {
+    // Показываем статус если заказ готовится или готов
+    return ['preparing', 'ready'].includes(props.order.status)
   }
-  return '?'
+  return false
 })
 
 /**
- * Подзаголовок
+ * Цвет статусного бейджа
  */
-const displaySubtitle = computed((): string => {
-  if (props.type === 'table' && props.table) {
-    return `${props.table.capacity} мест`
-  } else if (props.type === 'order' && props.order) {
-    return getOrderTypeText(props.order.type)
-  }
-  return ''
-})
-
-/**
- * Показывать ли подзаголовок
- */
-const showSubtitle = computed((): boolean => {
-  return !!displaySubtitle.value
-})
-
-/**
- * Показывать ли индикатор времени
- */
-const showTimeIndicator = computed((): boolean => {
-  return props.type === 'order' && !!props.order
-})
-
-/**
- * Отображаемое время
- */
-const displayTime = computed((): string => {
-  if (props.type === 'order' && props.order) {
-    const date = new Date(props.order.createdAt)
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
-  }
-  return ''
-})
-
-// =============================================
-// COMPUTED - СТАТУСЫ
-// =============================================
-
-/**
- * Иконка статуса
- */
-const statusIcon = computed((): string => {
-  if (props.type === 'table' && props.table) {
-    return getTableStatusIcon(props.table.status)
-  } else if (props.type === 'order' && props.order) {
-    return getOrderStatusIcon(props.order.status)
-  }
-  return 'mdi-help'
-})
-
-/**
- * Цвет статуса
- */
-const statusColor = computed((): string => {
-  if (props.type === 'table' && props.table) {
-    return getTableStatusColor(props.table.status)
-  } else if (props.type === 'order' && props.order) {
+const statusBadgeColor = computed((): string => {
+  if (isOrder.value && props.order) {
     return getOrderStatusColor(props.order.status)
   }
   return 'grey'
 })
 
+/**
+ * Текст статусного бейджа
+ */
+const statusBadgeText = computed((): string => {
+  if (isOrder.value && props.order) {
+    const statusTexts = {
+      preparing: 'Готовится',
+      ready: 'Готов'
+    }
+    return statusTexts[props.order.status as keyof typeof statusTexts] || ''
+  }
+  return ''
+})
+
 // =============================================
-// UTILITY FUNCTIONS
+// HELPER FUNCTIONS
 // =============================================
 
 /**
@@ -175,12 +187,12 @@ const statusColor = computed((): string => {
  */
 function getTableStatusIcon(status: TableStatus): string {
   const icons = {
-    free: 'mdi-check-circle',
-    occupied_unpaid: 'mdi-account-multiple',
-    occupied_paid: 'mdi-cash',
-    reserved: 'mdi-calendar-clock'
+    free: 'mdi-table',
+    occupied_unpaid: 'mdi-table-chair',
+    occupied_paid: 'mdi-table-check',
+    reserved: 'mdi-table-clock'
   }
-  return icons[status] || 'mdi-help'
+  return icons[status] || 'mdi-table'
 }
 
 /**
@@ -191,25 +203,33 @@ function getTableStatusColor(status: TableStatus): string {
     free: 'success',
     occupied_unpaid: 'warning',
     occupied_paid: 'primary',
-    reserved: 'secondary'
+    reserved: 'info'
   }
   return colors[status] || 'grey'
 }
 
 /**
- * Получить иконку статуса заказа
+ * Получить иконку типа заказа
  */
-function getOrderStatusIcon(status: OrderStatus): string {
+function getOrderTypeIcon(type: OrderType): string {
   const icons = {
-    draft: 'mdi-clock-outline',
-    confirmed: 'mdi-check',
-    preparing: 'mdi-chef-hat',
-    ready: 'mdi-bell',
-    served: 'mdi-silverware',
-    paid: 'mdi-cash',
-    cancelled: 'mdi-cancel'
+    dine_in: 'mdi-table-chair',
+    takeaway: 'mdi-shopping',
+    delivery: 'mdi-bike-fast'
   }
-  return icons[status] || 'mdi-help'
+  return icons[type] || 'mdi-help'
+}
+
+/**
+ * Получить цвет типа заказа
+ */
+function getOrderTypeColor(type: OrderType): string {
+  const colors = {
+    dine_in: 'primary',
+    takeaway: 'warning',
+    delivery: 'info'
+  }
+  return colors[type] || 'grey'
 }
 
 /**
@@ -295,7 +315,7 @@ const handleClick = (): void => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xs, 4px);
+  gap: 2px;
   position: relative;
 }
 
@@ -377,59 +397,38 @@ const handleClick = (): void => {
    CONTENT STYLES
    ============================================= */
 
+.item-icon {
+  flex-shrink: 0;
+}
+
 .item-main {
   text-align: center;
-  z-index: 1;
+  flex: 1;
+  min-height: 0;
 }
 
 .item-number {
-  font-size: var(--text-lg, 1.125rem);
+  font-size: 0.875rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
   line-height: 1.2;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .item-subtitle {
-  font-size: var(--text-xs, 0.75rem);
-  color: rgba(255, 255, 255, 0.7);
-  line-height: 1;
-  margin-top: 2px;
-}
-
-.status-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(4px);
-}
-
-.time-indicator {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  font-size: var(--text-xs, 0.75rem);
+  font-size: 0.7rem;
+  font-weight: 400;
+  line-height: 1.2;
   color: rgba(255, 255, 255, 0.6);
-  background: rgba(0, 0, 0, 0.4);
-  padding: 2px 4px;
-  border-radius: 4px;
-  backdrop-filter: blur(4px);
+  margin-top: 2px;
+  white-space: pre-line;
+  text-align: center;
 }
 
-/* =============================================
-   SELECTED STATE OVERRIDES
-   ============================================= */
-
-.sidebar-item--selected .item-number {
-  color: var(--color-primary, #a395e9);
-}
-
-.sidebar-item--selected .status-icon {
-  background: rgba(163, 149, 233, 0.3);
-  border: 1px solid var(--color-primary, #a395e9);
+.status-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
 }
 
 /* =============================================
@@ -447,26 +446,31 @@ const handleClick = (): void => {
 }
 
 /* =============================================
-   RESPONSIVE
+   RESPONSIVE ADJUSTMENTS
    ============================================= */
+
+@media (max-width: 1200px) {
+  .item-number {
+    font-size: 0.8rem;
+  }
+
+  .item-subtitle {
+    font-size: 0.65rem;
+  }
+}
 
 @media (max-width: 768px) {
   .sidebar-item {
-    min-height: 56px;
+    min-height: var(--touch-button, 48px);
     padding: 6px;
   }
 
   .item-number {
-    font-size: var(--text-base, 1rem);
+    font-size: 0.75rem;
   }
 
   .item-subtitle {
-    font-size: 0.6875rem;
-  }
-
-  .status-icon {
-    width: 20px;
-    height: 20px;
+    font-size: 0.6rem;
   }
 }
 </style>

@@ -131,12 +131,19 @@ const tables = computed((): PosTable[] => {
 
 /**
  * Активные заказы на доставку и самовывоз
+ * Сортируем по времени создания от старых к новым
  */
 const deliveryOrders = computed((): PosOrder[] => {
-  return ordersStore.orders.filter(
-    order =>
-      ['takeaway', 'delivery'].includes(order.type) && !['cancelled', 'paid'].includes(order.status)
-  )
+  return ordersStore.orders
+    .filter(
+      order =>
+        ['takeaway', 'delivery'].includes(order.type) &&
+        !['cancelled', 'paid'].includes(order.status)
+    )
+    .sort((a, b) => {
+      // Сортируем по времени создания (старые первыми)
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    })
 })
 
 /**
@@ -159,7 +166,7 @@ const isTableSelected = computed(() => (tableId: string): boolean => {
  */
 const ordersListStyles = computed(() => {
   const orderCount = deliveryOrders.value.length
-  const maxHeight = Math.min(orderCount * 68 + 16, 200) // 68px на элемент + padding
+  const maxHeight = Math.min(orderCount * 72 + 16, 220) // 72px на элемент + padding
   return {
     maxHeight: `${maxHeight}px`
   }
@@ -248,7 +255,11 @@ const handleCreateOrder = async (type: OrderType, data?: any): Promise<void> => 
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create order'
-    DebugUtils.error(MODULE_NAME, 'Error creating order', { error: message, type })
+    DebugUtils.error(MODULE_NAME, 'Error creating order', {
+      error: message,
+      type,
+      data
+    })
     console.error('Failed to create order:', message)
   } finally {
     loading.value.create = false
@@ -276,15 +287,15 @@ const handleTableSelect = async (item: PosTable | PosOrder): Promise<void> => {
       tableId: table.id,
       tableNumber: table.number,
       status: table.status,
-      hasCurrentOrder: !!table.currentOrderId
+      currentOrderId: table.currentOrderId
     })
 
     if (table.status === 'free') {
-      // Создаем новый заказ для свободного стола
+      // Создаем новый заказ для стола
       const result = await ordersStore.createOrder('dine_in', table.id)
 
       if (result.success && result.data) {
-        DebugUtils.debug(MODULE_NAME, 'New dine-in order created for table', {
+        DebugUtils.debug(MODULE_NAME, 'New table order created', {
           orderId: result.data.id,
           tableId: table.id,
           orderNumber: result.data.orderNumber
@@ -292,14 +303,11 @@ const handleTableSelect = async (item: PosTable | PosOrder): Promise<void> => {
 
         emit('select', result.data.id)
       } else {
-        throw new Error(result.error || 'Failed to create order for table')
+        throw new Error(result.error || 'Failed to create table order')
       }
-    } else if (
-      (table.status === 'occupied_unpaid' || table.status === 'occupied_paid') &&
-      table.currentOrderId
-    ) {
-      // Загружаем существующий заказ стола
-      DebugUtils.debug(MODULE_NAME, 'Loading existing order for occupied table', {
+    } else if (table.currentOrderId) {
+      // Выбираем существующий заказ стола
+      DebugUtils.debug(MODULE_NAME, 'Selecting existing table order', {
         orderId: table.currentOrderId,
         tableId: table.id
       })
@@ -307,10 +315,9 @@ const handleTableSelect = async (item: PosTable | PosOrder): Promise<void> => {
       await ordersStore.setCurrentOrder(table.currentOrderId)
       emit('select', table.currentOrderId)
     } else {
-      DebugUtils.warn(MODULE_NAME, 'Table in unexpected state', {
+      DebugUtils.warn(MODULE_NAME, 'Table has no current order but is not free', {
         tableId: table.id,
-        status: table.status,
-        currentOrderId: table.currentOrderId
+        status: table.status
       })
     }
   } catch (error) {
@@ -347,8 +354,8 @@ const handleOrderSelect = async (item: PosTable | PosOrder): Promise<void> => {
       status: order.status
     })
 
-    // Устанавливаем текущий заказ
-    await ordersStore.setCurrentOrder(order.id)
+    // Используем правильный метод из store
+    ordersStore.selectOrder(order.id)
 
     DebugUtils.debug(MODULE_NAME, 'Order set as current', {
       orderId: order.id,
@@ -498,53 +505,19 @@ onMounted(async () => {
 
 .separator {
   height: 1px;
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.08);
   margin: 0 8px;
   flex-shrink: 0;
-}
-
-/* =============================================
-   SCROLLBARS
-   ============================================= */
-
-.scrollable-content::-webkit-scrollbar,
-.orders-list::-webkit-scrollbar,
-.tables-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.scrollable-content::-webkit-scrollbar-track,
-.orders-list::-webkit-scrollbar-track,
-.tables-list::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 2px;
-}
-
-.scrollable-content::-webkit-scrollbar-thumb,
-.orders-list::-webkit-scrollbar-thumb,
-.tables-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
-
-.scrollable-content::-webkit-scrollbar-thumb:hover,
-.orders-list::-webkit-scrollbar-thumb:hover,
-.tables-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
 }
 
 /* =============================================
    RESPONSIVE DESIGN
    ============================================= */
 
-@media (max-width: 768px) {
-  .new-order-section {
-    padding: 6px;
-  }
-
+@media (max-width: 1200px) {
   .section-title {
+    font-size: 0.7rem;
     padding: 10px 6px 6px 6px;
-    font-size: 0.6875rem;
   }
 
   .orders-list,
@@ -554,18 +527,20 @@ onMounted(async () => {
   }
 }
 
-/* =============================================
-   ACCESSIBILITY
-   ============================================= */
+@media (max-width: 768px) {
+  .new-order-section {
+    padding: 6px;
+  }
 
-.new-order-btn:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary));
-  outline-offset: 2px;
-}
+  .section-title {
+    font-size: 0.65rem;
+    padding: 8px 6px 6px 6px;
+  }
 
-@media (pointer: coarse) {
-  .new-order-btn {
-    min-height: 48px !important;
+  .orders-list,
+  .tables-list {
+    padding: 4px 6px;
+    gap: 2px;
   }
 }
 </style>
