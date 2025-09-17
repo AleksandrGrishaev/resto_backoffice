@@ -3,10 +3,13 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import router from '@/router'
 
-// Styles
-import '@/styles/main.scss'
+// ✅ ПРАВИЛЬНЫЙ ПОРЯДОК ЗАГРУЗКИ СТИЛЕЙ:
+// 1. Сначала Vuetify стили
 import 'vuetify/styles'
 import '@mdi/font/css/materialdesignicons.css'
+
+// 2. Потом наши кастомные стили (они переопределят Vuetify)
+import '@/styles/main.scss'
 
 // Plugins
 import { vuetify } from '@/plugins/vuetify'

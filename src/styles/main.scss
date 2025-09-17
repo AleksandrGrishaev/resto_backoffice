@@ -322,20 +322,22 @@ body {
 }
 
 /* =============================================
-   TOOLTIP & OVERLAY FIXES
+   ИСПРАВЛЕНИЯ OVERLAY И TOOLTIP
    ============================================= */
 
-/* Полностью убираем backdrop у tooltip */
-.v-overlay.v-tooltip > .v-overlay__scrim {
+/* 1. Глобально убираем scrim у всех overlay */
+.v-overlay .v-overlay__scrim {
   display: none !important;
 }
 
-/* Убираем backdrop у menu */
-.v-overlay.v-menu > .v-overlay__scrim {
-  display: none !important;
+/* 2. Убираем backdrop-filter */
+.v-overlay,
+.v-overlay__content {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-/* Стилизация tooltip */
+/* 3. Tooltip стили */
 .v-tooltip .v-overlay__content {
   background: rgba(0, 0, 0, 0.9) !important;
   color: white !important;
@@ -343,46 +345,48 @@ body {
   padding: 4px 8px !important;
   border-radius: 4px !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  backdrop-filter: none !important;
   max-width: 200px !important;
 }
 
-/* Исправляем OrderSection overlay */
-.order-section .v-overlay {
-  backdrop-filter: none !important;
-}
-
-.order-section .v-overlay .v-overlay__scrim {
-  display: none !important;
-}
-
-/* Menu стилизация */
+/* 4. Menu стили */
 .v-menu .v-overlay__content {
-  background: var(--v-theme-surface) !important;
+  background: rgb(var(--v-theme-surface)) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 8px !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* Z-index hierarchy */
+/* 5. OrderSection loading overlay */
+.order-section .loading-overlay {
+  background: rgba(var(--v-theme-surface), 0.85) !important;
+}
+
+.order-section .loading-overlay .v-overlay__content {
+  background: rgba(var(--v-theme-surface), 0.95) !important;
+  border-radius: 12px !important;
+  padding: 24px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 6. Z-index для правильного наложения */
 .v-tooltip {
   z-index: 2100 !important;
 }
-
 .v-menu {
   z-index: 2000 !important;
 }
-
 .v-dialog {
   z-index: 2200 !important;
 }
+.v-snackbar {
+  z-index: 2300 !important;
+}
 
-/* Убираем анимации backdrop */
+/* 7. Убираем анимации backdrop */
 .v-overlay-container .v-overlay__scrim {
   transition: none !important;
   animation: none !important;
 }
-
 // =============================================
 // RESPONSIVE УТИЛИТЫ
 // =============================================

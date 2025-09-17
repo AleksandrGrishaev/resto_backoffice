@@ -46,17 +46,27 @@ export const vuetify = createVuetify({
       openDelay: 500,
       closeDelay: 100,
       transition: 'fade-transition',
-      offset: 4
+      offset: 4,
+      // ✅ КЛЮЧЕВЫЕ ИСПРАВЛЕНИЯ:
+      scrim: false,
+      contained: false
     },
     VMenu: {
       closeOnContentClick: true,
       closeOnBack: true,
-      transition: 'scale-transition'
+      transition: 'scale-transition',
+      // ✅ УБИРАЕМ ЗАТЕМНЕНИЕ У MENU:
+      scrim: false,
+      contained: false
     },
     VOverlay: {
-      scrim: false, // УБИРАЕМ ЗАТЕМНЕНИЕ!
+      scrim: false, // ✅ УБИРАЕМ ЗАТЕМНЕНИЕ!
       contained: true,
       persistent: false
+    },
+    VSnackbar: {
+      // ✅ УБИРАЕМ ЗАТЕМНЕНИЕ У SNACKBAR:
+      scrim: false
     }
   },
   theme: {

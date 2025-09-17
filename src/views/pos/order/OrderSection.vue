@@ -69,9 +69,10 @@
     <!-- Global Loading Overlay -->
     <v-overlay
       v-model="loading.global"
-      class="d-flex align-center justify-center"
-      contained
+      class="d-flex align-center justify-center loading-overlay"
       :scrim="false"
+      contained
+      persistent
     >
       <div class="text-center">
         <v-progress-circular indeterminate color="primary" size="48" />
@@ -80,7 +81,13 @@
     </v-overlay>
 
     <!-- Error Snackbar -->
-    <v-snackbar v-model="error.show" :color="error.type" :timeout="error.timeout" location="top">
+    <v-snackbar
+      v-model="error.show"
+      :color="error.type"
+      :timeout="error.timeout"
+      location="top"
+      :scrim="false"
+    >
       {{ error.message }}
       <template #actions>
         <v-btn color="white" variant="text" @click="clearError">Close</v-btn>
@@ -88,7 +95,13 @@
     </v-snackbar>
 
     <!-- Success Snackbar -->
-    <v-snackbar v-model="success.show" color="success" :timeout="success.timeout" location="top">
+    <v-snackbar
+      v-model="success.show"
+      color="success"
+      :timeout="success.timeout"
+      location="top"
+      :scrim="false"
+    >
       {{ success.message }}
     </v-snackbar>
   </div>
