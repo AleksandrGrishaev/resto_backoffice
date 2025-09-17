@@ -1,95 +1,98 @@
 <!-- src/views/pos/order/OrderSection.vue -->
 <template>
-  <div class="order-section h-100 d-flex flex-column">
-    <!-- Order Info Header -->
-    <OrderInfo
-      :order="currentOrder"
-      :table-number="tableNumber"
-      :can-edit="canEditOrder"
-      @edit="handleEditOrder"
-    />
+  <div class="order-section">
+    <!-- Loading Overlay -->
+    <div v-if="loading.global" class="loading-overlay">
+      <v-progress-circular indeterminate size="48" />
+      <div class="text-body-1 mt-2">{{ loadingMessage }}</div>
+    </div>
 
-    <!-- Bills Manager (Main Content) -->
-    <BillsManager
-      class="flex-grow-1"
-      :order="currentOrder"
-      :bills="bills"
-      :active-bill-id="activeBillId"
-      :can-add-bill="canAddBill"
-      :can-remove-bill="canRemoveBill"
-      :can-edit-items="canEditItems"
-      :can-cancel-items="canCancelItems"
-      @select-bill="handleSelectBill"
-      @add-bill="handleAddBill"
-      @rename-bill="handleRenameBill"
-      @remove-bill="handleRemoveBill"
-      @merge-bills="handleMergeBills"
-      @update-item-quantity="handleUpdateItemQuantity"
-      @edit-item="handleEditItem"
-      @item-discount="handleItemDiscount"
-      @item-add-note="handleItemAddNote"
-      @move-item="handleMoveItem"
-      @remove-item="handleRemoveItem"
-      @cancel-item="handleCancelItem"
-      @bulk-move="handleBulkMove"
-      @bulk-remove="handleBulkRemove"
-      @send-to-kitchen="handleSendToKitchen"
-    />
+    <!-- Order Content -->
+    <template v-if="currentOrder">
+      <!-- Order Info Header -->
+      <OrderInfo
+        :order="currentOrder"
+        :table-number="tableNumber"
+        :can-edit="canEditOrder"
+        @change-type="handleOrderTypeChange"
+        @change-table="handleTableChange"
+        @update-customer="handleCustomerUpdate"
+      />
 
-    <!-- Order Totals -->
-    <OrderTotals
-      :bills="bills"
-      :active-bill-id="activeBillId"
-      :show-taxes="showTaxes"
-      :service-tax-rate="serviceTaxRate"
-      :government-tax-rate="governmentTaxRate"
-      :loading="loading.calculations"
-      :show-debug-info="debugMode"
-    />
+      <!-- Bills Management -->
+      <BillsManager
+        :order="currentOrder"
+        :bills="bills"
+        :active-bill-id="activeBillId"
+        :can-add-bill="canAddBill"
+        :can-edit-items="canEditItems"
+        :has-unsaved-changes="hasUnsavedChanges"
+        @select-bill="handleSelectBill"
+        @add-bill="handleAddBill"
+        @rename-bill="handleRenameBill"
+        @remove-bill="handleRemoveBill"
+        @update-item-quantity="handleUpdateItemQuantity"
+        @modify-item="handleModifyItem"
+        @cancel-item="handleCancelItem"
+        @add-note="handleAddNote"
+        @send-to-kitchen="handleSendToKitchen"
+        @move-items="handleMoveItems"
+        @checkout="handleCheckout"
+      />
 
-    <!-- Order Actions -->
-    <OrderActions
-      :order="currentOrder"
-      :bills="bills"
-      :active-bill="activeBill"
-      :selected-items="selectedItems"
-      :has-unsaved-changes="hasUnsavedChanges"
-      :show-quick-actions="showQuickActions"
-      @save="handleSave"
-      @send-to-kitchen="handleSendToKitchenFromActions"
-      @print="handlePrint"
-      @move="handleMoveFromActions"
-      @checkout="handleCheckout"
-      @duplicate="handleDuplicate"
-      @split="handleSplit"
-      @merge="handleMergeFromActions"
-      @cancel="handleCancelOrder"
-    />
+      <!-- Order Totals -->
+      <OrderTotals
+        :totals="orderTotals"
+        :bills-breakdown="billsBreakdown"
+        :order-stats="orderStats"
+        :active-bill-id="activeBillId"
+        :show-taxes="showTaxes"
+        :service-tax-rate="serviceTaxRate"
+        :government-tax-rate="governmentTaxRate"
+        :loading="loading.calculations"
+        :show-debug-info="debugMode"
+      />
 
-    <!-- Global Loading Overlay -->
-    <v-overlay
-      v-model="loading.global"
-      class="d-flex align-center justify-center loading-overlay"
-      :scrim="false"
-      contained
-      persistent
-    >
+      <!-- Order Actions -->
+      <OrderActions
+        :order="currentOrder"
+        :bills="bills"
+        :active-bill="activeBill"
+        :has-unsaved-changes="hasUnsavedChanges"
+        @save="handleSave"
+        @send-to-kitchen="handleSendToKitchenFromActions"
+        @print="handlePrint"
+        @move="handleMoveFromActions"
+        @checkout="handleCheckoutFromActions"
+      />
+    </template>
+
+    <!-- Empty State -->
+    <div v-else class="empty-state pa-8">
       <div class="text-center">
-        <v-progress-circular indeterminate color="primary" size="48" />
-        <div class="text-h6 mt-3">{{ loadingMessage }}</div>
+        <v-icon size="64" color="grey-darken-2" class="mb-4">mdi-receipt-text-outline</v-icon>
+        <div class="text-h6 text-grey-darken-1 mb-2">No Order Selected</div>
+        <div class="text-body-2 text-grey-darken-1 mb-4">
+          Select a table or create a new order to get started
+        </div>
+        <v-btn color="primary" variant="flat" @click="handleCreateOrder">
+          <v-icon start>mdi-plus</v-icon>
+          Create New Order
+        </v-btn>
       </div>
-    </v-overlay>
+    </div>
 
-    <!-- Custom Notifications - БЕЗ overlay эффектов -->
+    <!-- Error Notification -->
     <AppNotification
       :show="error.show"
       :message="error.message"
-      :type="error.type === 'warning' ? 'warning' : 'error'"
+      :type="error.type === 'error' ? 'error' : 'warning'"
       location="top"
       :timeout="error.timeout"
       @close="clearError"
     />
 
+    <!-- Success Notification -->
     <AppNotification
       :show="success.show"
       :message="success.message"
@@ -106,6 +109,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { useMenuStore } from '@/stores/menu'
+import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
 import type { PosOrder, PosBill, PosBillItem, OrderType } from '@/stores/pos/types'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 import AppNotification from '@/components/atoms/feedback/AppNotification.vue'
@@ -128,7 +132,6 @@ interface Props {
   showTaxes?: boolean
   serviceTaxRate?: number
   governmentTaxRate?: number
-  showQuickActions?: boolean
   debugMode?: boolean
 }
 
@@ -136,12 +139,10 @@ const props = withDefaults(defineProps<Props>(), {
   showTaxes: true,
   serviceTaxRate: 5,
   governmentTaxRate: 10,
-  showQuickActions: true,
   debugMode: false
 })
 
 // State
-const selectedItems = ref<string[]>([])
 const loading = ref({
   global: false,
   calculations: false,
@@ -159,6 +160,7 @@ const success = ref({
   message: '',
   timeout: 3000
 })
+const hasUnsavedChanges = ref(false)
 
 // Computed - Main Data
 const currentOrder = computed((): PosOrder | null => {
@@ -183,6 +185,44 @@ const tableNumber = computed((): string | null => {
   return table?.number || null
 })
 
+// Order Calculations - using composable
+const calculations = useOrderCalculations(() => bills.value, {
+  serviceTaxRate: props.serviceTaxRate,
+  governmentTaxRate: props.governmentTaxRate,
+  includeServiceTax: props.showTaxes,
+  includeGovernmentTax: props.showTaxes
+})
+
+// Computed - Formatted data for OrderTotals
+const orderTotals = computed(() => ({
+  subtotal: calculations.subtotal.value,
+  itemDiscounts: calculations.itemDiscounts.value,
+  billDiscounts: calculations.billDiscounts.value,
+  totalDiscounts: calculations.totalDiscounts.value,
+  discountedSubtotal: calculations.discountedSubtotal.value,
+  serviceTax: calculations.serviceTax.value,
+  governmentTax: calculations.governmentTax.value,
+  finalTotal: calculations.finalTotal.value,
+  paidAmount: calculations.paidAmount.value,
+  remainingAmount: calculations.remainingAmount.value
+}))
+
+const billsBreakdown = computed(() => {
+  return (
+    calculations.billsBreakdown.value?.map(breakdown => ({
+      id: breakdown.id,
+      name: breakdown.name,
+      itemsCount: breakdown.itemsCount,
+      subtotal: breakdown.subtotal || 0,
+      totalDiscounts: breakdown.totalDiscounts || 0,
+      finalTotal: breakdown.finalTotal || 0,
+      paymentStatus: breakdown.paymentStatus || 'unpaid'
+    })) || []
+  )
+})
+
+const orderStats = computed(() => calculations.orderStats?.value)
+
 // Computed - Capabilities
 const canEditOrder = computed((): boolean => {
   return !!currentOrder.value && currentOrder.value.status !== 'cancelled'
@@ -197,97 +237,120 @@ const canRemoveBill = computed((): boolean => {
 })
 
 const canEditItems = computed((): boolean => {
-  return !!activeBill.value && activeBill.value.paymentStatus === 'unpaid'
+  return !!currentOrder.value && currentOrder.value.status !== 'paid'
 })
 
-const canCancelItems = computed((): boolean => {
-  return canEditItems.value
-})
-
-const hasUnsavedChanges = computed((): boolean => {
-  // TODO: Implement unsaved changes detection
-  return false
-})
-
-// Methods - Error Handling
-const showError = (message: string, type: 'error' | 'warning' = 'error'): void => {
-  error.value = {
-    show: true,
-    message,
-    type,
-    timeout: type === 'error' ? 5000 : 3000
-  }
+// Methods - Notifications
+const showSuccess = (message: string): void => {
+  success.value = { show: true, message, timeout: 3000 }
+  setTimeout(() => {
+    success.value.show = false
+  }, 3000)
 }
 
-const showSuccess = (message: string): void => {
-  success.value = {
-    show: true,
-    message,
-    timeout: 3000
-  }
+const showError = (message: string, type: 'error' | 'warning' = 'error'): void => {
+  error.value = { show: true, message, type, timeout: 5000 }
 }
 
 const clearError = (): void => {
   error.value.show = false
 }
 
-const setLoading = (key: keyof typeof loading.value, value: boolean, message?: string): void => {
-  loading.value[key] = value
-  if (message) loadingMessage.value = message
+// Methods - Order Management
+const handleCreateOrder = async (): Promise<void> => {
+  try {
+    loading.value.global = true
+    loadingMessage.value = 'Creating new order...'
+
+    // TODO: Implement order creation logic
+    showSuccess('New order created successfully')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to create order'
+    showError(message)
+  } finally {
+    loading.value.global = false
+  }
 }
 
-// Methods - Order Management
-const handleEditOrder = (order: PosOrder): void => {
-  console.log('🔧 Order Section - Edit order:', {
-    orderId: order.id,
-    orderType: order.type,
-    status: order.status
-  })
+const handleOrderTypeChange = async (newType: OrderType): Promise<void> => {
+  if (!currentOrder.value) return
 
-  // TODO: Open order type editor dialog
-  showSuccess(`Order editing opened for ${order.orderNumber}`)
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Changing order type...'
+
+    // TODO: Implement order type change logic
+    showSuccess(`Order type changed to ${newType}`)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to change order type'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+  }
+}
+
+const handleTableChange = async (newTableId: string): Promise<void> => {
+  if (!currentOrder.value) return
+
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Moving order to new table...'
+
+    // TODO: Implement table change logic
+    showSuccess('Order moved to new table')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to move order'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+  }
+}
+
+const handleCustomerUpdate = async (customerInfo: any): Promise<void> => {
+  if (!currentOrder.value) return
+
+  try {
+    // TODO: Implement customer update logic
+    showSuccess('Customer information updated')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to update customer'
+    showError(message)
+  }
 }
 
 // Methods - Bills Management
-const handleSelectBill = async (billId: string): Promise<void> => {
-  try {
-    console.log('🧾 Order Section - Select bill:', { billId })
-
-    await ordersStore.selectBill(billId)
-    selectedItems.value = [] // Clear selection when switching bills
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to select bill'
-    showError(message)
-  }
+const handleSelectBill = (billId: string): void => {
+  ordersStore.selectBill(billId)
 }
 
 const handleAddBill = async (): Promise<void> => {
   if (!currentOrder.value) return
 
   try {
-    setLoading('actions', true, 'Creating new bill...')
-    console.log('➕ Order Section - Add bill to order:', currentOrder.value.id)
+    loading.value.actions = true
+    loadingMessage.value = 'Adding new bill...'
 
-    const billName = `Bill ${bills.value.length + 1}`
-    await ordersStore.addBillToOrder(currentOrder.value.id, billName)
+    const result = await ordersStore.addBillToOrder(currentOrder.value.id, 'New Bill')
 
-    showSuccess(`${billName} created successfully`)
+    if (result.success) {
+      showSuccess('New bill added successfully')
+      hasUnsavedChanges.value = true
+    } else {
+      throw new Error(result.error || 'Failed to add bill')
+    }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to create bill'
+    const message = err instanceof Error ? err.message : 'Failed to add bill'
     showError(message)
   } finally {
-    setLoading('actions', false)
+    loading.value.actions = false
   }
 }
 
 const handleRenameBill = async (billId: string, newName: string): Promise<void> => {
   try {
-    console.log('✏️ Order Section - Rename bill:', { billId, newName })
-
-    // TODO: Implement bill rename in store
-    // await ordersStore.renameBill(billId, newName)
-
-    showSuccess(`Bill renamed to "${newName}"`)
+    // TODO: Implement bill rename logic
+    showSuccess('Bill renamed successfully')
+    hasUnsavedChanges.value = true
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to rename bill'
     showError(message)
@@ -295,295 +358,229 @@ const handleRenameBill = async (billId: string, newName: string): Promise<void> 
 }
 
 const handleRemoveBill = async (billId: string): Promise<void> => {
+  if (!canRemoveBill.value) return
+
   try {
-    setLoading('actions', true, 'Removing bill...')
-    console.log('🗑️ Order Section - Remove bill:', { billId })
-
-    // TODO: Implement bill removal in store
-    // await ordersStore.removeBill(billId)
-
+    // TODO: Implement bill removal logic
     showSuccess('Bill removed successfully')
+    hasUnsavedChanges.value = true
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to remove bill'
     showError(message)
-  } finally {
-    setLoading('actions', false)
-  }
-}
-
-const handleMergeBills = async (): Promise<void> => {
-  try {
-    setLoading('actions', true, 'Merging bills...')
-    console.log('🔗 Order Section - Merge bills')
-
-    // TODO: Implement bill merging in store
-    // await ordersStore.mergeBills(currentOrder.value.id)
-
-    showSuccess('Bills merged successfully')
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to merge bills'
-    showError(message)
-  } finally {
-    setLoading('actions', false)
   }
 }
 
 // Methods - Items Management
 const handleUpdateItemQuantity = async (itemId: string, quantity: number): Promise<void> => {
-  if (!activeBillId.value) return
+  if (!currentOrder.value || !activeBillId.value) return
 
   try {
-    console.log('📊 Order Section - Update item quantity:', { itemId, quantity })
+    const result = await ordersStore.updateItemQuantity(
+      currentOrder.value.id,
+      activeBillId.value,
+      itemId,
+      quantity
+    )
 
-    await ordersStore.updateItemQuantity(activeBillId.value, itemId, quantity)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to update quantity'
-    showError(message)
-  }
-}
+    if (result.success) {
+      showSuccess('Item quantity updated')
+      hasUnsavedChanges.value = true
 
-const handleEditItem = (item: PosBillItem): void => {
-  console.log('✏️ Order Section - Edit item:', {
-    itemId: item.id,
-    itemName: item.menuItemName
-  })
-
-  // TODO: Open item editor dialog
-  showSuccess(`Editing ${item.menuItemName}`)
-}
-
-const handleItemDiscount = (item: PosBillItem): void => {
-  console.log('💰 Order Section - Item discount:', {
-    itemId: item.id,
-    itemName: item.menuItemName
-  })
-
-  // TODO: Open discount dialog
-  showSuccess(`Discount options for ${item.menuItemName}`)
-}
-
-const handleItemAddNote = (item: PosBillItem): void => {
-  console.log('📝 Order Section - Add note:', {
-    itemId: item.id,
-    itemName: item.menuItemName
-  })
-
-  // TODO: Open note dialog
-  showSuccess(`Note added to ${item.menuItemName}`)
-}
-
-const handleMoveItem = (item: PosBillItem): void => {
-  console.log('↗️ Order Section - Move item:', {
-    itemId: item.id,
-    itemName: item.menuItemName
-  })
-
-  // TODO: Open move item dialog
-  showSuccess(`Move options for ${item.menuItemName}`)
-}
-
-const handleRemoveItem = async (item: PosBillItem): Promise<void> => {
-  if (!activeBillId.value) return
-
-  try {
-    console.log('🗑️ Order Section - Remove item:', {
-      itemId: item.id,
-      itemName: item.menuItemName
-    })
-
-    await ordersStore.removeItemFromBill(activeBillId.value, item.id)
-    showSuccess(`${item.menuItemName} removed`)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to remove item'
-    showError(message)
-  }
-}
-
-const handleCancelItem = (item: PosBillItem): void => {
-  console.log('❌ Order Section - Cancel item:', {
-    itemId: item.id,
-    itemName: item.menuItemName
-  })
-
-  // TODO: Implement item cancellation
-  showSuccess(`${item.menuItemName} cancelled`)
-}
-
-const handleBulkMove = (itemIds: string[]): void => {
-  console.log('↗️ Order Section - Bulk move items:', { itemIds })
-
-  // TODO: Open bulk move dialog
-  showSuccess(`Moving ${itemIds.length} items`)
-}
-
-const handleBulkRemove = async (itemIds: string[]): Promise<void> => {
-  if (!activeBillId.value) return
-
-  try {
-    setLoading('actions', true, 'Removing items...')
-
-    for (const itemId of itemIds) {
-      await ordersStore.removeItemFromBill(activeBillId.value, itemId)
+      // Пересчитываем итоги заказа
+      await ordersStore.recalculateOrderTotals(currentOrder.value.id)
+    } else {
+      throw new Error(result.error || 'Failed to update quantity')
     }
-
-    showSuccess(`${itemIds.length} items removed`)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to remove items'
+    const message = err instanceof Error ? err.message : 'Failed to update item quantity'
     showError(message)
-  } finally {
-    setLoading('actions', false)
   }
 }
 
-const handleSendToKitchen = async (billId: string): Promise<void> => {
+const handleModifyItem = async (itemId: string): Promise<void> => {
   try {
-    setLoading('actions', true, 'Sending to kitchen...')
-    console.log('🍳 Order Section - Send bill to kitchen:', { billId })
-
-    await ordersStore.sendOrderToKitchen(currentOrder.value?.id || '')
-    showSuccess('Order sent to kitchen')
+    // TODO: Implement item modification dialog
+    console.log('🔧 Modify item:', itemId)
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to send to kitchen'
+    const message = err instanceof Error ? err.message : 'Failed to modify item'
     showError(message)
-  } finally {
-    setLoading('actions', false)
+  }
+}
+
+const handleCancelItem = async (itemId: string): Promise<void> => {
+  if (!currentOrder.value || !activeBillId.value) return
+
+  try {
+    const result = await ordersStore.removeItemFromBill(
+      currentOrder.value.id,
+      activeBillId.value,
+      itemId
+    )
+
+    if (result.success) {
+      showSuccess('Item cancelled successfully')
+      hasUnsavedChanges.value = true
+
+      // Пересчитываем итоги заказа
+      await ordersStore.recalculateOrderTotals(currentOrder.value.id)
+    } else {
+      throw new Error(result.error || 'Failed to cancel item')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to cancel item'
+    showError(message)
+  }
+}
+
+const handleAddNote = async (itemId: string): Promise<void> => {
+  try {
+    // TODO: Implement add note dialog
+    console.log('📝 Add note to item:', itemId)
+    showSuccess('Note dialog opened')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to add note'
+    showError(message)
   }
 }
 
 // Methods - Actions
 const handleSave = async (): Promise<void> => {
-  try {
-    setLoading('actions', true, 'Saving order...')
-    console.log('💾 Order Section - Save order')
+  if (!currentOrder.value) return
 
-    // TODO: Implement order saving
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Saving order...'
+
+    // TODO: Implement save logic
     showSuccess('Order saved successfully')
+    hasUnsavedChanges.value = false
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save order'
     showError(message)
   } finally {
-    setLoading('actions', false)
+    loading.value.actions = false
+  }
+}
+
+const handleSendToKitchen = async (itemIds: string[]): Promise<void> => {
+  if (!currentOrder.value) return
+
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Sending to kitchen...'
+
+    const result = await ordersStore.sendOrderToKitchen(currentOrder.value.id, itemIds)
+
+    if (result.success) {
+      showSuccess(`${itemIds.length} items sent to kitchen`)
+      hasUnsavedChanges.value = true
+    } else {
+      throw new Error(result.error || 'Failed to send to kitchen')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to send to kitchen'
+    showError(message)
+  } finally {
+    loading.value.actions = false
   }
 }
 
 const handleSendToKitchenFromActions = async (): Promise<void> => {
-  if (!activeBillId.value) return
-  await handleSendToKitchen(activeBillId.value)
+  // Send all new items from active bill or selected items
+  const itemIds = ordersStore.selectedItemIds
+
+  if (itemIds.length > 0) {
+    await handleSendToKitchen(itemIds)
+  } else if (activeBill.value) {
+    // Send all new items from active bill
+    const newItems = activeBill.value.items.filter(item => item.status === 'pending')
+    if (newItems.length > 0) {
+      await handleSendToKitchen(newItems.map(item => item.id))
+    }
+  }
 }
 
-const handlePrint = (): void => {
-  console.log('🖨️ Order Section - Print order')
-  showSuccess('Print dialog opened')
+const handleMoveItems = (itemIds: string[], sourceBillId: string): void => {
+  console.log('📦 Move items action:', {
+    itemIds,
+    sourceBillId,
+    count: itemIds.length
+  })
+
+  // TODO: Implement move dialog
+  showSuccess(`Moving ${itemIds.length} items`)
 }
 
 const handleMoveFromActions = (): void => {
-  console.log('↗️ Order Section - Move from actions')
-  showSuccess('Move dialog opened')
-}
+  const selectedCount = ordersStore.selectedItemsCount
 
-const handleCheckout = async (itemIds: string[], amount: number): Promise<void> => {
-  try {
-    console.log('💳 Order Section - Checkout:', { itemIds, amount })
-    showSuccess(`Checkout for ${amount} initiated`)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to start checkout'
-    showError(message)
-  }
-}
-
-const handleDuplicate = (): void => {
-  console.log('📄 Order Section - Duplicate bill')
-  showSuccess('Bill duplicated')
-}
-
-const handleSplit = (): void => {
-  console.log('✂️ Order Section - Split bill')
-  showSuccess('Bill split options opened')
-}
-
-const handleMergeFromActions = async (): Promise<void> => {
-  await handleMergeBills()
-}
-
-const handleCancelOrder = (): void => {
-  console.log('❌ Order Section - Cancel order')
-  showSuccess('Order cancellation initiated')
-}
-
-// Integration with MenuSection - Handle add item event
-const handleAddItemFromMenu = async (item: MenuItem, variant: MenuItemVariant): Promise<void> => {
-  if (!currentOrder.value) {
-    showError('No active order. Please select a table first.')
+  if (selectedCount === 0) {
+    showError('Please select items to move', 'warning')
     return
   }
 
-  if (!activeBillId.value) {
-    // Create first bill if none exists
-    await handleAddBill()
-  }
-
-  try {
-    setLoading('actions', true, 'Adding item to bill...')
-
-    const itemData = {
-      menuItemId: item.id,
-      menuItemName: item.name,
-      variantId: variant.id,
-      variantName: variant.name,
-      quantity: 1,
-      unitPrice: variant.price,
-      totalPrice: variant.price,
-      status: 'active' as const,
-      kitchenNotes: '',
-      discounts: [],
-      modifications: []
-    }
-
-    await ordersStore.addItemToBill(activeBillId.value!, itemData)
-
-    console.log('🍽️ Order Section - Item added from menu:', {
-      orderId: currentOrder.value.id,
-      billId: activeBillId.value,
-      item: itemData
-    })
-
-    showSuccess(`${item.name} added to ${activeBill.value?.name || 'bill'}`)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to add item'
-    showError(message)
-  } finally {
-    setLoading('actions', false)
+  if (activeBillId.value) {
+    handleMoveItems(ordersStore.selectedItemIds, activeBillId.value)
   }
 }
 
-// Lifecycle
-onMounted(() => {
-  console.log('🚀 Order Section mounted')
+const handlePrint = (): void => {
+  if (!currentOrder.value) return
 
-  // Listen for menu item selections from MenuSection
-  // This would typically be handled by a parent component or event bus
-})
+  console.log('🖨️ Print bill action')
 
-// Watch for order changes
+  // TODO: Implement print functionality
+  showSuccess('Bill sent to printer')
+}
+
+const handleCheckout = (itemIds: string[], billId: string): void => {
+  console.log('💳 Checkout action:', {
+    itemIds,
+    billId,
+    amount: orderTotals.value.finalTotal,
+    itemCount: itemIds.length
+  })
+
+  // TODO: Implement checkout flow
+  showSuccess(
+    `Checkout initiated for ${itemIds.length > 0 ? itemIds.length + ' items' : 'all items'}`
+  )
+}
+
+const handleCheckoutFromActions = (itemIds: string[], amount: number): void => {
+  if (activeBillId.value) {
+    handleCheckout(itemIds, activeBillId.value)
+  }
+}
+
+// Watchers
 watch(
-  currentOrder,
-  (newOrder, oldOrder) => {
-    if (newOrder?.id !== oldOrder?.id) {
-      console.log('📋 Order Section - Current order changed:', {
-        oldOrderId: oldOrder?.id,
-        newOrderId: newOrder?.id
-      })
-
-      // Clear selections when order changes
-      selectedItems.value = []
+  () => currentOrder.value?.id,
+  (newOrderId, oldOrderId) => {
+    if (newOrderId !== oldOrderId) {
+      // При смене заказа сбрасываем состояние
+      hasUnsavedChanges.value = false
+      ordersStore.clearSelection()
     }
-  },
-  { deep: true }
+  }
 )
 
-// Expose method for parent component to add items
-defineExpose({
-  handleAddItemFromMenu
+watch(
+  () => activeBill.value?.items.length,
+  (newLength, oldLength) => {
+    if (newLength !== undefined && oldLength !== undefined && newLength !== oldLength) {
+      // При изменении количества элементов проверяем наличие несохраненных изменений
+      hasUnsavedChanges.value =
+        activeBill.value?.items.some(item => item.status === 'pending') || false
+    }
+  }
+)
+
+// Lifecycle
+onMounted(() => {
+  if (props.debugMode) {
+    console.log('🔍 OrderSection mounted in debug mode')
+  }
 })
 </script>
 
@@ -593,52 +590,115 @@ defineExpose({
    ============================================= */
 
 .order-section {
-  background: rgb(var(--v-theme-background));
   position: relative;
+  height: 100%;
+  background: rgb(var(--v-theme-background));
+  display: flex;
+  flex-direction: column;
 }
 
 /* =============================================
    LOADING OVERLAY
    ============================================= */
 
-.v-overlay {
-  background: rgba(var(--v-theme-surface), 0.8) !important;
-  backdrop-filter: none !important; /* УБИРАЕМ BLUR */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(var(--v-theme-surface), 0.8);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
-.v-overlay .v-overlay__scrim {
-  display: none !important; /* УБИРАЕМ BACKDROP */
-}
 /* =============================================
-   RESPONSIVE BEHAVIOR
+   EMPTY STATE
+   ============================================= */
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+/* =============================================
+   RESPONSIVE DESIGN
    ============================================= */
 
 @media (max-width: 768px) {
   .order-section {
-    font-size: 0.9rem;
+    padding: 0;
+  }
+
+  .empty-state {
+    padding: var(--spacing-lg);
+    min-height: 300px;
   }
 }
 
 /* =============================================
-   COMPONENT SPACING
+   ANIMATIONS
    ============================================= */
 
-.order-section > * + * {
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.04);
+.order-section {
+  animation: fadeIn 0.3s ease;
+}
+
+.loading-overlay {
+  animation: fadeIn 0.2s ease;
+}
+
+.empty-state {
+  animation: slideUp 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =============================================
-   ACCESSIBILITY
+   FOCUS MANAGEMENT
    ============================================= */
 
 .order-section:focus-within {
   outline: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-    animation: none !important;
+/* =============================================
+   PRINT STYLES
+   ============================================= */
+
+@media print {
+  .order-section {
+    background: white;
+  }
+
+  .loading-overlay,
+  .empty-state {
+    display: none;
   }
 }
 </style>

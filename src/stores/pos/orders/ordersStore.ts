@@ -20,6 +20,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   const orders = ref<PosOrder[]>([])
   const currentOrderId = ref<string | null>(null)
   const activeBillId = ref<string | null>(null)
+
+  // 🆕 SELECTION STATE
+  const selectedItems = ref<Set<string>>(new Set())
+  const selectedBills = ref<Set<string>>(new Set())
+
   const loading = ref({
     list: false,
     create: false,
@@ -92,6 +97,22 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         : 0
   }))
 
+  // 🆕 SELECTION COMPUTED
+  const isFullBillSelected = computed(() => {
+    return activeBillId.value ? selectedBills.value.has(activeBillId.value) : false
+  })
+
+  const selectedItemIds = computed(() => {
+    if (isFullBillSelected.value && activeBill.value) {
+      return activeBill.value.items.map(item => item.id)
+    }
+    return Array.from(selectedItems.value)
+  })
+
+  const selectedItemsCount = computed(() => selectedItems.value.size)
+  const selectedBillsCount = computed(() => selectedBills.value.size)
+  const hasSelection = computed(() => selectedItems.value.size > 0 || selectedBills.value.size > 0)
+
   // ===== ACTIONS =====
 
   /**
@@ -162,9 +183,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Выбрать текущий заказ
+   * Выбрать текущий заказ - ОБНОВЛЕНО
    */
   function selectOrder(orderId: string): void {
+    // Очищаем selection при смене заказа
+    clearSelection()
+
     console.log('📋 OrdersStore - Selecting order:', { orderId })
 
     currentOrderId.value = orderId
@@ -190,10 +214,98 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Выбрать активный счет
+   * Выбрать активный счет - ОБНОВЛЕНО
    */
   function selectBill(billId: string): void {
+    // Очищаем selection при смене счета
+    clearSelection()
+
     activeBillId.value = billId
+  }
+
+  // 🆕 SELECTION ACTIONS
+
+  /**
+   * Выбрать/снять выбор элемента
+   */
+  function toggleItemSelection(itemId: string): void {
+    if (selectedItems.value.has(itemId)) {
+      selectedItems.value.delete(itemId)
+    } else {
+      selectedItems.value.add(itemId)
+    }
+
+    // Автоматически выбираем счет если выбраны все его элементы
+    if (activeBill.value && activeBillId.value) {
+      const billItemIds = activeBill.value.items.map(item => item.id)
+      const selectedBillItems = billItemIds.filter(id => selectedItems.value.has(id))
+
+      if (selectedBillItems.length === billItemIds.length && billItemIds.length > 0) {
+        selectedBills.value.add(activeBillId.value)
+      } else {
+        selectedBills.value.delete(activeBillId.value)
+      }
+    }
+  }
+
+  /**
+   * Выбрать/снять выбор счета
+   */
+  function toggleBillSelection(billId: string): void {
+    if (!currentOrder.value) return
+
+    const bill = currentOrder.value.bills.find(b => b.id === billId)
+    if (!bill) return
+
+    if (selectedBills.value.has(billId)) {
+      // Снимаем выделение со счета и всех его позиций
+      selectedBills.value.delete(billId)
+      bill.items.forEach(item => {
+        selectedItems.value.delete(item.id)
+      })
+    } else {
+      // Выделяем счет и все его позиции
+      selectedBills.value.add(billId)
+      bill.items.forEach(item => {
+        selectedItems.value.add(item.id)
+      })
+    }
+  }
+
+  /**
+   * Проверить, выбран ли элемент
+   */
+  function isItemSelected(itemId: string): boolean {
+    return selectedItems.value.has(itemId)
+  }
+
+  /**
+   * Проверить, выбран ли счет
+   */
+  function isBillSelected(billId: string): boolean {
+    return selectedBills.value.has(billId)
+  }
+
+  /**
+   * Очистить все выделения
+   */
+  function clearSelection(): void {
+    selectedItems.value.clear()
+    selectedBills.value.clear()
+  }
+
+  /**
+   * Выбрать все элементы в активном счете
+   */
+  function selectAllItemsInActiveBill(): void {
+    if (activeBill.value) {
+      activeBill.value.items.forEach(item => {
+        selectedItems.value.add(item.id)
+      })
+      if (activeBillId.value) {
+        selectedBills.value.add(activeBillId.value)
+      }
+    }
   }
 
   /**
@@ -302,7 +414,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Удалить товар из счета
+   * Удалить товар из счета - ОБНОВЛЕНО
    */
   async function removeItemFromBill(
     orderId: string,
@@ -322,6 +434,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
             )
             if (itemIndex !== -1) {
               orders.value[orderIndex].bills[billIndex].items.splice(itemIndex, 1)
+
+              // Убираем элемент из selection если он был выбран
+              if (selectedItems.value.has(itemId)) {
+                selectedItems.value.delete(itemId)
+              }
+
               await recalculateOrderTotals(orderId)
             }
           }
@@ -337,11 +455,18 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Отправить заказ на кухню
+   * Отправить заказ на кухню - ОБНОВЛЕНО для поддержки конкретных элементов
    */
-  async function sendOrderToKitchen(orderId: string): Promise<ServiceResponse<PosOrder>> {
+  async function sendOrderToKitchen(
+    orderId: string,
+    itemIds?: string[]
+  ): Promise<ServiceResponse<PosOrder>> {
     try {
-      const response = await ordersService.sendOrderToKitchen(orderId)
+      // Если itemIds не указаны, отправляем весь заказ
+      const response =
+        itemIds && itemIds.length > 0
+          ? await ordersService.sendItemsToKitchen(orderId, itemIds)
+          : await ordersService.sendOrderToKitchen(orderId)
 
       if (response.success && response.data) {
         const orderIndex = orders.value.findIndex(o => o.id === orderId)
@@ -379,6 +504,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           if (currentOrderId.value === orderId) {
             currentOrderId.value = null
             activeBillId.value = null
+            clearSelection()
           }
         }
       }
@@ -477,6 +603,10 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     error,
     filters,
 
+    // 🆕 Selection State
+    selectedItems,
+    selectedBills,
+
     // Computed
     currentOrder,
     activeBill,
@@ -484,6 +614,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     todayOrders,
     filteredOrders,
     ordersStats,
+
+    // 🆕 Selection Computed
+    isFullBillSelected,
+    selectedItemIds,
+    selectedItemsCount,
+    selectedBillsCount,
+    hasSelection,
 
     // Actions
     loadOrders,
@@ -500,6 +637,14 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     setFilters,
     clearFilters,
     clearError,
+
+    // 🆕 Selection Actions
+    toggleItemSelection,
+    toggleBillSelection,
+    isItemSelected,
+    isBillSelected,
+    clearSelection,
+    selectAllItemsInActiveBill,
 
     // Composables
     canAddItemToOrder,

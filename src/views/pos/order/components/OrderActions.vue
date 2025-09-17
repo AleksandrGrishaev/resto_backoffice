@@ -55,6 +55,9 @@
         >
           <v-icon start>mdi-chef-hat</v-icon>
           Send to Kitchen
+          <template v-if="ordersStore.selectedItemsCount > 0">
+            ({{ ordersStore.selectedItemsCount }})
+          </template>
         </v-btn>
       </div>
 
@@ -82,6 +85,9 @@
         >
           <v-icon start>mdi-arrow-right</v-icon>
           Move Items
+          <template v-if="ordersStore.selectedItemsCount > 0">
+            ({{ ordersStore.selectedItemsCount }})
+          </template>
         </v-btn>
       </div>
 
@@ -100,14 +106,8 @@
             </div>
           </div>
 
-          <div
-            v-if="selectedItemsCount > 0"
-            class="checkout-details text-caption text-medium-emphasis"
-          >
-            {{ selectedItemsCount }} items selected
-          </div>
-          <div v-else class="checkout-details text-caption text-medium-emphasis">
-            {{ totalItemsCount }} items total
+          <div class="checkout-details text-caption text-medium-emphasis">
+            {{ checkoutDetailsText }}
           </div>
         </div>
 
@@ -128,53 +128,6 @@
           </span>
         </v-btn>
       </div>
-
-      <!-- Quick Actions (collapsed by default) -->
-      <div v-if="showQuickActions" class="quick-actions mt-3">
-        <v-divider class="mb-3" />
-
-        <div class="quick-actions-header d-flex align-center justify-space-between mb-2">
-          <div class="text-caption text-medium-emphasis font-weight-medium">QUICK ACTIONS</div>
-          <v-btn icon variant="text" size="x-small" @click="toggleQuickActions">
-            <v-icon>{{ quickActionsExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
-          </v-btn>
-        </div>
-
-        <v-expand-transition>
-          <div v-show="quickActionsExpanded" class="quick-actions-content d-flex flex-wrap gap-1">
-            <v-btn
-              size="small"
-              variant="outlined"
-              :disabled="!canDuplicate"
-              @click="handleDuplicate"
-            >
-              <v-icon start size="16">mdi-content-duplicate</v-icon>
-              Duplicate
-            </v-btn>
-
-            <v-btn size="small" variant="outlined" :disabled="!canSplit" @click="handleSplit">
-              <v-icon start size="16">mdi-call-split</v-icon>
-              Split Bill
-            </v-btn>
-
-            <v-btn size="small" variant="outlined" :disabled="!canMerge" @click="handleMerge">
-              <v-icon start size="16">mdi-call-merge</v-icon>
-              Merge Bills
-            </v-btn>
-
-            <v-btn
-              size="small"
-              variant="outlined"
-              color="error"
-              :disabled="!canCancel"
-              @click="handleCancel"
-            >
-              <v-icon start size="16">mdi-cancel</v-icon>
-              Cancel Order
-            </v-btn>
-          </div>
-        </v-expand-transition>
-      </div>
     </div>
   </div>
 </template>
@@ -182,21 +135,21 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { PosOrder, PosBill } from '@/stores/pos/types'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+
+// Store
+const ordersStore = usePosOrdersStore()
 
 // Props
 interface Props {
   order: PosOrder | null
   bills: PosBill[]
   activeBill: PosBill | null
-  selectedItems?: string[]
   hasUnsavedChanges?: boolean
-  showQuickActions?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  selectedItems: () => [],
-  hasUnsavedChanges: false,
-  showQuickActions: false
+  hasUnsavedChanges: false
 })
 
 // Emits
@@ -206,10 +159,6 @@ const emit = defineEmits<{
   print: []
   move: []
   checkout: [items: string[], amount: number]
-  duplicate: []
-  split: []
-  merge: []
-  cancel: []
 }>()
 
 // State
@@ -218,7 +167,6 @@ const successMessage = ref<string | null>(null)
 const saving = ref(false)
 const sendingToKitchen = ref(false)
 const processing = ref(false)
-const quickActionsExpanded = ref(false)
 
 // Computed - Action Availability
 const canSave = computed((): boolean => {
@@ -227,7 +175,13 @@ const canSave = computed((): boolean => {
 
 const canSendToKitchen = computed((): boolean => {
   if (!props.order || !props.activeBill) return false
-  return props.activeBill.items.some(item => item.status === 'active')
+
+  // Можем отправить если есть активные элементы и что-то выбрано ИЛИ есть новые элементы
+  const hasActiveItems = props.activeBill.items.some(item => item.status === 'active')
+  const hasSelection = ordersStore.hasSelection
+  const hasNewItems = props.activeBill.items.some(item => item.status === 'pending')
+
+  return hasActiveItems && (hasSelection || hasNewItems)
 })
 
 const canPrint = computed((): boolean => {
@@ -235,7 +189,7 @@ const canPrint = computed((): boolean => {
 })
 
 const canMove = computed((): boolean => {
-  return props.selectedItems.length > 0 || (props.activeBill?.items.length || 0) > 0
+  return ordersStore.hasSelection
 })
 
 const canCheckout = computed((): boolean => {
@@ -245,29 +199,9 @@ const canCheckout = computed((): boolean => {
   return hasItems && hasUnpaidBills
 })
 
-const canDuplicate = computed((): boolean => {
-  return !!props.activeBill && props.activeBill.items.length > 0
-})
-
-const canSplit = computed((): boolean => {
-  return !!props.activeBill && props.activeBill.items.length > 1
-})
-
-const canMerge = computed((): boolean => {
-  return props.bills.length > 1
-})
-
-const canCancel = computed((): boolean => {
-  return !!props.order && props.order.status !== 'cancelled'
-})
-
 // Computed - Checkout Section
 const showCheckout = computed((): boolean => {
   return !!props.order && props.bills.some(bill => bill.items.length > 0)
-})
-
-const selectedItemsCount = computed((): number => {
-  return props.selectedItems.length
 })
 
 const totalItemsCount = computed((): number => {
@@ -275,35 +209,42 @@ const totalItemsCount = computed((): number => {
 })
 
 const checkoutAmount = computed((): number => {
-  if (props.selectedItems.length > 0) {
-    // Calculate amount for selected items
+  if (ordersStore.selectedItemsCount > 0) {
+    // Рассчитать сумму выбранных элементов
     return props.bills.reduce((sum, bill) => {
       return (
         sum +
         bill.items.reduce((billSum, item) => {
-          return props.selectedItems.includes(item.id) ? billSum + item.totalPrice : billSum
+          return ordersStore.isItemSelected(item.id) ? billSum + item.totalPrice : billSum
         }, 0)
       )
     }, 0)
   }
 
-  // Calculate total amount for all unpaid bills
+  // Рассчитать общую сумму всех неоплаченных счетов
   return props.bills.reduce((sum, bill) => {
     return bill.paymentStatus === 'paid' ? sum : sum + bill.total
   }, 0)
 })
 
 const checkoutLabel = computed((): string => {
-  return props.selectedItems.length > 0 ? 'Selected Items' : 'Total Amount'
+  return ordersStore.selectedItemsCount > 0 ? 'Selected Items' : 'Total Amount'
+})
+
+const checkoutDetailsText = computed((): string => {
+  if (ordersStore.selectedItemsCount > 0) {
+    return `${ordersStore.selectedItemsCount} items selected`
+  }
+  return `${totalItemsCount.value} items total`
 })
 
 const checkoutButtonText = computed((): string => {
-  return props.selectedItems.length > 0 ? 'Checkout Selected' : 'Checkout All'
+  return ordersStore.selectedItemsCount > 0 ? 'Checkout Selected' : 'Checkout All'
 })
 
 const checkoutSummaryClass = computed((): string => {
   const baseClass = 'bg-success-lighten-5'
-  return props.selectedItems.length > 0 ? `${baseClass} border-success` : baseClass
+  return ordersStore.selectedItemsCount > 0 ? `${baseClass} border-success` : baseClass
 })
 
 // Methods
@@ -332,10 +273,6 @@ const showSuccess = (message: string): void => {
 
 const showError = (message: string): void => {
   errorMessage.value = message
-}
-
-const toggleQuickActions = (): void => {
-  quickActionsExpanded.value = !quickActionsExpanded.value
 }
 
 // Action Handlers
@@ -372,11 +309,14 @@ const handleSendToKitchen = async (): Promise<void> => {
     console.log('🍳 Send to kitchen action:', {
       orderId: props.order?.id,
       activeBillId: props.activeBill?.id,
-      itemsCount: props.activeBill?.items.length
+      selectedItemsCount: ordersStore.selectedItemsCount
     })
 
     emit('send-to-kitchen')
     showSuccess('Order sent to kitchen')
+
+    // Очищаем selection после отправки на кухню
+    ordersStore.clearSelection()
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send to kitchen'
     showError(message)
@@ -396,7 +336,7 @@ const handlePrint = (): void => {
 
 const handleMove = (): void => {
   console.log('↗️ Move items action:', {
-    selectedItems: props.selectedItems,
+    selectedItemsCount: ordersStore.selectedItemsCount,
     activeBillId: props.activeBill?.id
   })
 
@@ -412,37 +352,19 @@ const handleCheckout = async (): Promise<void> => {
 
     console.log('💳 Checkout action:', {
       orderId: props.order?.id,
-      selectedItems: props.selectedItems,
+      selectedItemsCount: ordersStore.selectedItemsCount,
       checkoutAmount: checkoutAmount.value
     })
 
-    emit('checkout', props.selectedItems, checkoutAmount.value)
+    // Передаем выбранные элементы или пустой массив (что означает "все")
+    const selectedItems = ordersStore.selectedItemIds
+    emit('checkout', selectedItems, checkoutAmount.value)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to process checkout'
     showError(message)
   } finally {
     processing.value = false
   }
-}
-
-const handleDuplicate = (): void => {
-  console.log('📄 Duplicate action:', { activeBillId: props.activeBill?.id })
-  emit('duplicate')
-}
-
-const handleSplit = (): void => {
-  console.log('✂️ Split bill action:', { activeBillId: props.activeBill?.id })
-  emit('split')
-}
-
-const handleMerge = (): void => {
-  console.log('🔗 Merge bills action:', { billsCount: props.bills.length })
-  emit('merge')
-}
-
-const handleCancel = (): void => {
-  console.log('❌ Cancel order action:', { orderId: props.order?.id })
-  emit('cancel')
 }
 </script>
 
@@ -513,25 +435,6 @@ const handleCancel = (): void => {
 }
 
 /* =============================================
-   QUICK ACTIONS
-   ============================================= */
-
-.quick-actions {
-  background: rgba(var(--v-theme-on-surface), 0.02);
-  border-radius: var(--v-border-radius-md);
-  padding: var(--spacing-sm);
-  margin: 0 calc(-1 * var(--spacing-xs));
-}
-
-.quick-actions-header {
-  user-select: none;
-}
-
-.quick-actions-content {
-  gap: var(--spacing-xs);
-}
-
-/* =============================================
    ALERTS
    ============================================= */
 
@@ -559,16 +462,6 @@ const handleCancel = (): void => {
 
   .checkout-btn {
     min-height: 48px;
-  }
-}
-
-@media (max-width: 480px) {
-  .quick-actions-content {
-    flex-direction: column;
-  }
-
-  .quick-actions-content .v-btn {
-    justify-content: flex-start;
   }
 }
 
@@ -631,5 +524,19 @@ const handleCancel = (): void => {
 .save-btn.v-btn--variant-outlined {
   border-color: rgba(var(--v-theme-on-surface), 0.2);
   color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+/* =============================================
+   SELECTION INDICATORS
+   ============================================= */
+
+.v-btn .text-caption {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.checkout-details {
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 </style>

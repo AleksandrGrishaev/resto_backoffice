@@ -246,6 +246,53 @@ export class OrdersService {
     }
   }
 
+  async sendItemsToKitchen(orderId: string, itemIds: string[]): Promise<ServiceResponse<PosOrder>> {
+    try {
+      const orders = await this.getAllOrders()
+      if (!orders.success || !orders.data) {
+        throw new Error('Failed to load orders')
+      }
+
+      const orderIndex = orders.data.findIndex(o => o.id === orderId)
+      if (orderIndex === -1) {
+        throw new Error('Order not found')
+      }
+
+      const updatedOrder: PosOrder = {
+        ...orders.data[orderIndex],
+        status: 'confirmed',
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // Обновить статус только выбранных товаров
+      for (const bill of updatedOrder.bills) {
+        for (const item of bill.items) {
+          if (itemIds.includes(item.id) && item.status === 'active') {
+            item.sentToKitchenAt = TimeUtils.getCurrentLocalISO()
+          }
+        }
+      }
+
+      orders.data[orderIndex] = updatedOrder
+      localStorage.setItem(
+        this.ORDERS_KEY,
+        JSON.stringify(
+          orders.data.map(o => ({
+            ...o,
+            bills: []
+          }))
+        )
+      )
+
+      return { success: true, data: updatedOrder }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send items to kitchen'
+      }
+    }
+  }
+
   async sendOrderToKitchen(orderId: string): Promise<ServiceResponse<PosOrder>> {
     try {
       const orders = await this.getAllOrders()

@@ -14,13 +14,13 @@
         <div class="total-line d-flex justify-space-between align-center mb-2">
           <div class="total-label text-body-2">Subtotal</div>
           <div class="total-value text-body-2 font-weight-medium">
-            {{ calculations.formatPrice(calculations.subtotal.value) }}
+            {{ formatPrice(totals.subtotal) }}
           </div>
         </div>
 
         <!-- Item Discounts (if any) -->
         <div
-          v-if="calculations.itemDiscounts.value > 0"
+          v-if="totals.itemDiscounts > 0"
           class="total-line d-flex justify-space-between align-center mb-2"
         >
           <div class="total-label text-body-2 text-success">
@@ -28,13 +28,13 @@
             Item Discounts
           </div>
           <div class="total-value text-body-2 font-weight-medium text-success">
-            -{{ calculations.formatPrice(calculations.itemDiscounts.value) }}
+            -{{ formatPrice(totals.itemDiscounts) }}
           </div>
         </div>
 
         <!-- Bill Discounts (if any) -->
         <div
-          v-if="calculations.billDiscounts.value > 0"
+          v-if="totals.billDiscounts > 0"
           class="total-line d-flex justify-space-between align-center mb-2"
         >
           <div class="total-label text-body-2 text-success">
@@ -42,18 +42,18 @@
             Bill Discounts
           </div>
           <div class="total-value text-body-2 font-weight-medium text-success">
-            -{{ calculations.formatPrice(calculations.billDiscounts.value) }}
+            -{{ formatPrice(totals.billDiscounts) }}
           </div>
         </div>
 
         <!-- Discounted Subtotal (if there are discounts) -->
         <div
-          v-if="calculations.totalDiscounts.value > 0"
+          v-if="totals.totalDiscounts > 0"
           class="total-line d-flex justify-space-between align-center mb-2 discounted-subtotal"
         >
           <div class="total-label text-body-2 font-weight-medium">Discounted Subtotal</div>
           <div class="total-value text-body-2 font-weight-medium">
-            {{ calculations.formatPrice(calculations.discountedSubtotal.value) }}
+            {{ formatPrice(totals.discountedSubtotal) }}
           </div>
         </div>
 
@@ -64,7 +64,7 @@
         <div v-if="showTaxes" class="total-line d-flex justify-space-between align-center mb-2">
           <div class="total-label text-body-2">Service Tax ({{ serviceTaxRate }}%)</div>
           <div class="total-value text-body-2 font-weight-medium">
-            {{ calculations.formatPrice(calculations.serviceTax.value) }}
+            {{ formatPrice(totals.serviceTax) }}
           </div>
         </div>
 
@@ -72,7 +72,7 @@
         <div v-if="showTaxes" class="total-line d-flex justify-space-between align-center mb-2">
           <div class="total-label text-body-2">Government Tax ({{ governmentTaxRate }}%)</div>
           <div class="total-value text-body-2 font-weight-medium">
-            {{ calculations.formatPrice(calculations.governmentTax.value) }}
+            {{ formatPrice(totals.governmentTax) }}
           </div>
         </div>
 
@@ -81,12 +81,12 @@
         <div class="total-line d-flex justify-space-between align-center final-total">
           <div class="total-label text-h6 font-weight-bold">Total</div>
           <div class="total-value text-h6 font-weight-bold text-primary">
-            {{ calculations.formatPrice(calculations.finalTotal.value) }}
+            {{ formatPrice(totals.finalTotal) }}
           </div>
         </div>
 
         <!-- Payment Status (if any payments made) -->
-        <div v-if="calculations.paidAmount.value > 0" class="payment-status mt-3">
+        <div v-if="totals.paidAmount > 0" class="payment-status mt-3">
           <v-divider class="mb-2" />
 
           <div class="payment-line d-flex justify-space-between align-center mb-1">
@@ -95,7 +95,7 @@
               Paid Amount
             </div>
             <div class="payment-value text-body-2 font-weight-medium text-success">
-              {{ calculations.formatPrice(calculations.paidAmount.value) }}
+              {{ formatPrice(totals.paidAmount) }}
             </div>
           </div>
 
@@ -105,18 +105,18 @@
               Remaining
             </div>
             <div class="payment-value text-body-2 font-weight-medium text-warning">
-              {{ calculations.formatPrice(calculations.remainingAmount.value) }}
+              {{ formatPrice(totals.remainingAmount) }}
             </div>
           </div>
         </div>
 
         <!-- Bills Breakdown (if multiple bills) -->
-        <div v-if="bills.length > 1" class="bills-breakdown mt-3">
+        <div v-if="billsBreakdown && billsBreakdown.length > 1" class="bills-breakdown mt-3">
           <v-divider class="mb-2" />
 
           <div class="breakdown-header d-flex align-center justify-space-between mb-2">
             <div class="text-caption text-medium-emphasis font-weight-medium">
-              BILLS BREAKDOWN ({{ bills.length }})
+              BILLS BREAKDOWN ({{ billsBreakdown.length }})
             </div>
             <v-btn icon variant="text" size="x-small" @click="toggleBreakdownDetails">
               <v-icon>{{ showBreakdownDetails ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
@@ -126,7 +126,7 @@
           <v-expand-transition>
             <div v-show="showBreakdownDetails" class="breakdown-content">
               <div
-                v-for="billBreakdown in calculations.billsBreakdown.value"
+                v-for="billBreakdown in billsBreakdown"
                 :key="billBreakdown.id"
                 class="bill-line d-flex justify-space-between align-center mb-1 pa-2 rounded"
                 :class="{ 'bill-line-active': billBreakdown.id === activeBillId }"
@@ -138,26 +138,22 @@
                   <div class="bill-details text-caption text-medium-emphasis">
                     {{ billBreakdown.itemsCount }} items
                     <span v-if="billBreakdown.totalDiscounts && billBreakdown.totalDiscounts > 0">
-                      • {{ calculations.formatPrice(billBreakdown.totalDiscounts) }} discount
+                      • {{ formatPrice(billBreakdown.totalDiscounts) }} discount
                     </span>
                   </div>
                 </div>
 
                 <div class="bill-total-info text-right">
                   <div class="bill-total text-body-2 font-weight-medium">
-                    {{ calculations.formatPrice(billBreakdown.finalTotal || 0) }}
+                    {{ formatPrice(billBreakdown.finalTotal || 0) }}
                   </div>
                   <v-chip
                     v-if="billBreakdown.paymentStatus !== 'unpaid'"
-                    :color="
-                      calculations.getPaymentStatusColor(billBreakdown.paymentStatus || 'unpaid')
-                    "
+                    :color="getPaymentStatusColor(billBreakdown.paymentStatus || 'unpaid')"
                     size="x-small"
                     variant="flat"
                   >
-                    {{
-                      calculations.getPaymentStatusLabel(billBreakdown.paymentStatus || 'unpaid')
-                    }}
+                    {{ getPaymentStatusLabel(billBreakdown.paymentStatus || 'unpaid') }}
                   </v-chip>
                 </div>
               </div>
@@ -166,24 +162,19 @@
         </div>
 
         <!-- Order Statistics (debug mode) -->
-        <div v-if="showDebugInfo" class="debug-info mt-3">
+        <div v-if="showDebugInfo && orderStats" class="debug-info mt-3">
           <v-divider class="mb-2" />
           <div class="debug-header text-caption text-medium-emphasis font-weight-medium mb-2">
             DEBUG INFO
           </div>
 
           <div class="debug-stats text-caption">
-            <div>Total Items: {{ calculations.orderStats.value.totalItems }}</div>
-            <div>Active Items: {{ calculations.orderStats.value.activeItems }}</div>
-            <div>Cancelled Items: {{ calculations.orderStats.value.cancelledItems }}</div>
-            <div>
-              Avg Item Price:
-              {{ calculations.formatPrice(calculations.orderStats.value.averageItemPrice) }}
-            </div>
-            <div>
-              Discount %: {{ calculations.orderStats.value.discountPercentage.toFixed(1) }}%
-            </div>
-            <div>Tax %: {{ calculations.orderStats.value.taxPercentage.toFixed(1) }}%</div>
+            <div>Total Items: {{ orderStats.totalItems }}</div>
+            <div>Active Items: {{ orderStats.activeItems }}</div>
+            <div>Cancelled Items: {{ orderStats.cancelledItems }}</div>
+            <div>Avg Item Price: {{ formatPrice(orderStats.averageItemPrice) }}</div>
+            <div>Discount %: {{ orderStats.discountPercentage.toFixed(1) }}%</div>
+            <div>Tax %: {{ orderStats.taxPercentage.toFixed(1) }}%</div>
           </div>
         </div>
       </div>
@@ -192,13 +183,50 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import type { PosBill } from '@/stores/pos/types'
-import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
+import { ref } from 'vue'
+import { formatIDR } from '@/utils/currency'
+
+// Alias для удобства
+const formatPrice = formatIDR
+
+// Types
+interface OrderTotals {
+  subtotal: number
+  itemDiscounts: number
+  billDiscounts: number
+  totalDiscounts: number
+  discountedSubtotal: number
+  serviceTax: number
+  governmentTax: number
+  finalTotal: number
+  paidAmount: number
+  remainingAmount: number
+}
+
+interface BillBreakdown {
+  id: string
+  name: string
+  itemsCount: number
+  subtotal: number
+  totalDiscounts: number
+  finalTotal: number
+  paymentStatus: 'paid' | 'partial' | 'unpaid'
+}
+
+interface OrderStats {
+  totalItems: number
+  activeItems: number
+  cancelledItems: number
+  averageItemPrice: number
+  discountPercentage: number
+  taxPercentage: number
+}
 
 // Props
 interface Props {
-  bills: PosBill[]
+  totals: OrderTotals
+  billsBreakdown?: BillBreakdown[]
+  orderStats?: OrderStats
   activeBillId?: string | null
   showTaxes?: boolean
   serviceTaxRate?: number
@@ -208,6 +236,19 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  totals: () => ({
+    subtotal: 0,
+    itemDiscounts: 0,
+    billDiscounts: 0,
+    totalDiscounts: 0,
+    discountedSubtotal: 0,
+    serviceTax: 0,
+    governmentTax: 0,
+    finalTotal: 0,
+    paidAmount: 0,
+    remainingAmount: 0
+  }),
+  billsBreakdown: () => [],
   activeBillId: null,
   showTaxes: true,
   serviceTaxRate: 5,
@@ -219,29 +260,36 @@ const props = withDefaults(defineProps<Props>(), {
 // Local state
 const showBreakdownDetails = ref(false)
 
-// Use calculations composable with all the power
-const calculations = useOrderCalculations(() => props.bills, {
-  serviceTaxRate: props.serviceTaxRate,
-  governmentTaxRate: props.governmentTaxRate,
-  includeServiceTax: props.showTaxes,
-  includeGovernmentTax: props.showTaxes
-})
-
 // Methods
 const toggleBreakdownDetails = (): void => {
   showBreakdownDetails.value = !showBreakdownDetails.value
 }
 
-// Watch for changes and log detailed breakdown
-watch(
-  () => [props.bills, calculations.finalTotal.value],
-  () => {
-    if (props.bills.length > 0) {
-      console.log('📊 OrderTotals - Detailed calculations:', calculations.getCalculationBreakdown())
-    }
-  },
-  { deep: true }
-)
+const getPaymentStatusColor = (status: 'paid' | 'partial' | 'unpaid'): string => {
+  switch (status) {
+    case 'paid':
+      return 'success'
+    case 'partial':
+      return 'warning'
+    case 'unpaid':
+      return 'error'
+    default:
+      return 'grey'
+  }
+}
+
+const getPaymentStatusLabel = (status: 'paid' | 'partial' | 'unpaid'): string => {
+  switch (status) {
+    case 'paid':
+      return 'Paid'
+    case 'partial':
+      return 'Partial'
+    case 'unpaid':
+      return 'Unpaid'
+    default:
+      return 'Unknown'
+  }
+}
 </script>
 
 <style scoped>
