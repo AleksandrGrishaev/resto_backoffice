@@ -126,31 +126,28 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     tableId?: string,
     customerName?: string
   ): Promise<ServiceResponse<PosOrder>> {
-    loading.value.create = true
-    error.value = null
-
     try {
-      const orderData = {
-        type,
-        tableId,
-        customerName,
-        waiterName: 'Current User' // TODO: Получать из authStore
-      }
+      loading.value.create = true
+      error.value = null
 
-      const response = await ordersService.createOrder(orderData)
+      const response = await ordersService.createOrder(type, tableId, customerName)
 
       if (response.success && response.data) {
-        orders.value.push(response.data)
-        currentOrderId.value = response.data.id
+        orders.value.unshift(response.data)
 
-        // Автоматически создаем первый счет и делаем его активным
-        if (response.data.bills.length > 0) {
-          activeBillId.value = response.data.bills[0].id
-        }
+        // Автоматически выбираем новый заказ
+        selectOrder(response.data.id)
 
-        // Если заказ за столом, обновить статус стола
-        if (tableId && type === 'dine_in') {
-          await tablesStore.occupyTable(tableId, response.data.id)
+        // Автоматически создаем первый счет если нужно
+        if (response.data.bills.length === 0) {
+          const billName =
+            type === 'dine_in' ? 'Bill 1' : type === 'takeaway' ? 'Takeaway Bill' : 'Delivery Bill'
+
+          const billResult = await addBillToOrder(response.data.id, billName)
+
+          if (billResult.success) {
+            console.log('✅ Auto-created first bill for new order')
+          }
         }
       }
 
@@ -168,12 +165,27 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * Выбрать текущий заказ
    */
   function selectOrder(orderId: string): void {
+    console.log('📋 OrdersStore - Selecting order:', { orderId })
+
     currentOrderId.value = orderId
     const order = orders.value.find(o => o.id === orderId)
+
     if (order && order.bills.length > 0) {
-      // Выбираем первый активный счет
+      // Выбираем первый активный счет автоматически
       const activeBill = order.bills.find(b => b.status === 'active')
-      activeBillId.value = activeBill?.id || order.bills[0].id
+      const targetBillId = activeBill?.id || order.bills[0].id
+
+      activeBillId.value = targetBillId
+
+      console.log('✅ OrdersStore - Auto-selected first bill:', {
+        orderId,
+        billId: targetBillId,
+        billsCount: order.bills.length
+      })
+    } else {
+      // Если нет счетов, очищаем активный счет
+      activeBillId.value = null
+      console.log('⚠️ OrdersStore - No bills in order, cleared active bill')
     }
   }
 

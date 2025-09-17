@@ -40,13 +40,13 @@ export const usePosStore = defineStore('pos', () => {
   const paymentsStore = usePosPaymentsStore()
 
   // ===== COMPUTED =====
-  const isReady = computed(
-    () =>
-      isInitialized.value &&
-      !tablesStore.loading.list &&
-      !ordersStore.loading.list &&
-      !paymentsStore.loading.list
-  )
+  const isReady = computed(() => {
+    return isInitialized.value
+    // Убрать проверки loading.list так как их нет в stores:
+    // && !tablesStore.loading.list    // ❌ УБРАТЬ
+    // && !ordersStore.loading.list    // ❌ УБРАТЬ
+    // && !paymentsStore.loading.list  // ❌ УБРАТЬ
+  })
 
   const dailyStats = computed((): DailySalesStats | null => {
     if (!isInitialized.value) return null
@@ -155,19 +155,26 @@ export const usePosStore = defineStore('pos', () => {
     }
 
     try {
-      console.log('🔍 Временная инициализация POS системы...')
+      console.log('🔍 Инициализация POS системы...')
       error.value = null
 
-      // Сбрасываем состояния загрузки
-      tablesStore.loading.list = false
-      ordersStore.loading.list = false
-      paymentsStore.loading.list = false
+      // НЕ трогаем loading.list - просто убираем эти строки
+      // tablesStore.loading.list = false  // ❌ УБРАТЬ
+      // ordersStore.loading.list = false  // ❌ УБРАТЬ
+      // paymentsStore.loading.list = false // ❌ УБРАТЬ
+
+      // Вместо этого просто инициализируем систему
+      console.log('✅ Stores доступны:', {
+        tables: !!tablesStore,
+        orders: !!ordersStore,
+        payments: !!paymentsStore
+      })
 
       // Помечаем как инициализированную
       isInitialized.value = true
       lastSync.value = new Date().toISOString()
 
-      console.log('✅ POS система инициализирована (временно)')
+      console.log('✅ POS система инициализирована')
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to initialize POS'
@@ -176,6 +183,8 @@ export const usePosStore = defineStore('pos', () => {
       return { success: false, error: errorMsg }
     }
   }
+
+  // Также исправить computed isReady:
 
   // ЗАКОММЕНТИРОВАННАЯ ОРИГИНАЛЬНАЯ ФУНКЦИЯ:
   /*

@@ -8,22 +8,27 @@
 
     <!-- Menu Section -->
     <template #menu>
-      <MenuSection @add-item="handleAddItem" />
+      <MenuSection @add-item="handleAddItemToOrder" />
     </template>
 
     <!-- Order Section -->
     <template #order>
-      <OrderSection />
+      <OrderSection
+        ref="orderSectionRef"
+        :current-order="currentOrder"
+        @order-changed="handleOrderChanged"
+      />
     </template>
   </PosLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, provide, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { DebugUtils } from '@/utils'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
+import type { PosOrder } from '@/stores/pos/types'
 import PosLayout from '@/layouts/PosLayout.vue'
 import TablesSidebar from './tables/TablesSidebar.vue'
 import MenuSection from './menu/MenuSection.vue'
@@ -33,66 +38,81 @@ import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 
 const MODULE_NAME = 'PosMainView'
 
-// Stores
+// =============================================
+// STORES
+// =============================================
+
 const tablesStore = usePosTablesStore()
 const ordersStore = usePosOrdersStore()
 const posStore = usePosStore()
 const shiftsStore = useShiftsStore()
 
-// State
-const mockOrderItems = ref<
-  Array<{
-    id: string
-    name: string
-    variant?: string
-    quantity: number
-    price: number
-    notes?: string
-  }>
->([])
+// =============================================
+// REFS
+// =============================================
 
-// Computed
+const orderSectionRef = ref<InstanceType<typeof OrderSection> | null>(null)
+
+// =============================================
+// COMPUTED PROPERTIES
+// =============================================
+
+/**
+ * Текущий активный заказ
+ */
+const currentOrder = computed(() => ordersStore.currentOrder)
+
+/**
+ * Активный счет текущего заказа
+ */
+const activeBill = computed(() => ordersStore.activeBill)
+
+/**
+ * Текущая смена
+ */
 const currentShift = computed(() => shiftsStore.currentShift)
 
+/**
+ * Есть ли активный заказ
+ */
 const hasActiveOrder = computed(() => {
-  return (
-    mockOrderItems.value.length > 0 || tablesStore.currentOrder || ordersStore.currentOrder !== null
-  )
+  return !!currentOrder.value
 })
 
+/**
+ * Заголовок текущего заказа
+ */
 const currentOrderTitle = computed(() => {
-  const activeOrder = ordersStore.currentOrder
-  if (activeOrder) {
-    return `Table Order`
+  if (!currentOrder.value) return 'No Order Selected'
+
+  switch (currentOrder.value.type) {
+    case 'dine_in':
+      const table = tablesStore.tables.find(t => t.id === currentOrder.value?.tableId)
+      return table ? `Table ${table.number}` : 'Table Order'
+    case 'takeaway':
+      return 'Takeaway Order'
+    case 'delivery':
+      return 'Delivery Order'
+    default:
+      return 'Order'
   }
-  return 'No Order Selected'
 })
 
+/**
+ * Подзаголовок текущего заказа
+ */
 const currentOrderSubtitle = computed(() => {
-  const activeOrder = ordersStore.currentOrder
-  if (activeOrder) {
-    return `Order #${activeOrder.orderNumber || 'Unknown'}`
-  }
-  return 'Select a table or create a new order'
+  if (!currentOrder.value) return 'Select a table or create a new order'
+  return `Order #${currentOrder.value.orderNumber || 'Unknown'}`
 })
 
-const subtotal = computed(() => {
-  return mockOrderItems.value.reduce((sum, item) => sum + item.price * item.quantity, 0)
-})
+// =============================================
+// METHODS
+// =============================================
 
-const serviceTax = computed(() => {
-  return subtotal.value * 0.05
-})
-
-const governmentTax = computed(() => {
-  return subtotal.value * 0.1
-})
-
-const total = computed(() => {
-  return subtotal.value + serviceTax.value + governmentTax.value
-})
-
-// Methods
+/**
+ * Форматирование цены
+ */
 const formatPrice = (price: number): string => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -101,125 +121,242 @@ const formatPrice = (price: number): string => {
   }).format(price)
 }
 
-const handleOrderSelect = (orderId: string) => {
-  DebugUtils.debug(MODULE_NAME, 'Order selected', { orderId })
-  // TODO: Загрузить данные заказа
-}
+/**
+ * Обработка выбора заказа из TablesSidebar
+ */
+const handleOrderSelect = async (orderId: string): Promise<void> => {
+  try {
+    DebugUtils.debug(MODULE_NAME, 'Order selected from sidebar', { orderId })
 
-const handleAddItem = (item: MenuItem, variant: MenuItemVariant) => {
-  DebugUtils.debug(MODULE_NAME, 'Adding item to order', {
-    itemId: item.id,
-    itemName: item.name,
-    variantId: variant.id,
-    variantName: variant.name,
-    price: variant.price
-  })
+    // Выбираем заказ в store
+    ordersStore.selectOrder(orderId)
 
-  // Проверяем, есть ли уже такая позиция
-  const existingItemIndex = mockOrderItems.value.findIndex(
-    orderItem => orderItem.id === item.id && orderItem.variant === variant.name
-  )
-
-  if (existingItemIndex >= 0) {
-    // Увеличиваем количество существующей позиции
-    mockOrderItems.value[existingItemIndex].quantity += 1
-  } else {
-    // Добавляем новую позицию
-    mockOrderItems.value.push({
-      id: `${item.id}-${variant.id}`,
-      name: item.name,
-      variant: variant.name,
-      quantity: 1,
-      price: variant.price
+    DebugUtils.debug(MODULE_NAME, 'Order selected successfully', {
+      orderId,
+      currentOrderId: ordersStore.currentOrderId,
+      activeBillId: ordersStore.activeBillId
     })
-  }
-
-  // TODO: Интеграция с реальными stores
-  // await billStore.addItem({
-  //   dishId: item.id,
-  //   variantId: variant.id,
-  //   quantity: 1,
-  //   price: variant.price,
-  //   status: 'pending'
-  // })
-}
-
-const incrementItem = (index: number) => {
-  if (mockOrderItems.value[index]) {
-    mockOrderItems.value[index].quantity += 1
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to select order'
+    DebugUtils.error(MODULE_NAME, 'Error selecting order', { error: message, orderId })
+    console.error('Failed to select order:', message)
   }
 }
 
-const decrementItem = (index: number) => {
-  if (mockOrderItems.value[index]) {
-    if (mockOrderItems.value[index].quantity > 1) {
-      mockOrderItems.value[index].quantity -= 1
-    } else {
-      // Удаляем позицию если количество становится 0
-      mockOrderItems.value.splice(index, 1)
+/**
+ * Обработка изменений в заказе
+ */
+const handleOrderChanged = (order: PosOrder): void => {
+  DebugUtils.debug(MODULE_NAME, 'Order changed', {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    billsCount: order.bills.length
+  })
+}
+
+/**
+ * Получить название счета по типу заказа
+ */
+const getBillNameForOrderType = (orderType: string): string => {
+  switch (orderType) {
+    case 'dine_in':
+      return 'Bill 1'
+    case 'takeaway':
+      return 'Takeaway Bill'
+    case 'delivery':
+      return 'Delivery Bill'
+    default:
+      return 'Bill'
+  }
+}
+
+/**
+ * Обработка добавления товара из MenuSection
+ */
+const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): Promise<void> => {
+  try {
+    DebugUtils.debug(MODULE_NAME, 'Adding item to order from menu', {
+      itemId: item.id,
+      itemName: item.name,
+      variantId: variant.id,
+      variantName: variant.name,
+      price: variant.price,
+      hasCurrentOrder: !!currentOrder.value,
+      currentOrderId: currentOrder.value?.id,
+      hasActiveBill: !!activeBill.value,
+      activeBillId: activeBill.value?.id
+    })
+
+    // Проверяем есть ли активный заказ
+    if (!currentOrder.value) {
+      console.error('❌ No active order. Please select a table first.')
+      alert('No active order. Please select a table first.')
+      return
     }
+
+    console.log('🔍 Current order found:', {
+      id: currentOrder.value.id,
+      type: currentOrder.value.type,
+      billsCount: currentOrder.value.bills?.length || 0
+    })
+
+    // Проверяем есть ли активный счет
+    if (!activeBill.value) {
+      DebugUtils.debug(MODULE_NAME, 'No active bill, creating first bill')
+
+      // Создаем первый счет если его нет
+      const billName = getBillNameForOrderType(currentOrder.value.type)
+      console.log('🧾 Creating first bill:', billName)
+
+      const result = await ordersStore.addBillToOrder(currentOrder.value.id, billName)
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create bill')
+      }
+
+      console.log('✅ Bill created successfully')
+    }
+
+    // Получаем активный счет после возможного создания
+    const targetBillId = activeBill.value?.id || ordersStore.activeBillId
+    if (!targetBillId) {
+      throw new Error('No active bill available after creation')
+    }
+
+    console.log('🎯 Target bill ID:', targetBillId)
+
+    // Создаем объект PosMenuItem из MenuItem
+    const posMenuItem = {
+      id: item.id,
+      name: item.name,
+      categoryId: item.categoryId,
+      categoryName: item.categoryName || '',
+      price: variant.price,
+      isAvailable: item.isActive,
+      stockQuantity: undefined,
+      preparationTime: undefined,
+      description: item.description,
+      imageUrl: item.imageUrl,
+      variants: item.variants?.map(v => ({
+        id: v.id,
+        name: v.name,
+        price: v.price,
+        isAvailable: v.isActive
+      })),
+      modifications: []
+    }
+
+    console.log('📦 Adding POS menu item:', posMenuItem)
+
+    // ИСПРАВЛЕННЫЙ ВЫЗОВ: используем правильную сигнатуру метода
+    const addResult = await ordersStore.addItemToBill(
+      currentOrder.value.id, // orderId
+      targetBillId, // billId
+      posMenuItem, // menuItem: PosMenuItem
+      1, // quantity
+      [] // modifications
+    )
+
+    if (!addResult.success) {
+      throw new Error(addResult.error || 'Failed to add item to bill')
+    }
+
+    DebugUtils.debug(MODULE_NAME, 'Item added to order successfully', {
+      itemName: item.name,
+      billId: targetBillId,
+      billName: activeBill.value?.name
+    })
+
+    // Показываем уведомление об успехе
+    console.log(`✅ ${item.name} added to ${activeBill.value?.name || 'order'}`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to add item to order'
+    DebugUtils.error(MODULE_NAME, 'Error adding item to order', {
+      error: message,
+      itemId: item.id,
+      itemName: item.name,
+      hasCurrentOrder: !!currentOrder.value,
+      currentOrderId: currentOrder.value?.id
+    })
+    console.error('Failed to add item to order:', message)
+
+    // Показываем уведомление об ошибке
+    alert(`Error: ${message}`)
   }
 }
 
-const handleSaveBill = () => {
-  DebugUtils.debug(MODULE_NAME, 'Saving bill')
-  console.log('Save bill clicked')
-  // TODO: Сохранение заказа
-}
+// =============================================
+// LIFECYCLE
+// =============================================
 
-const handlePrintBill = () => {
-  DebugUtils.debug(MODULE_NAME, 'Printing bill')
-  console.log('Print bill clicked')
-  // TODO: Печать чека
-}
-
-const handleCheckout = () => {
-  DebugUtils.debug(MODULE_NAME, 'Checkout clicked')
-  console.log('Checkout clicked - total:', total.value)
-  // TODO: Переход к оплате
-}
-
-// Provide data and methods to child components
-provide('mockOrderItems', mockOrderItems)
-provide('incrementItem', incrementItem)
-provide('decrementItem', decrementItem)
-provide('handleSaveBill', handleSaveBill)
-provide('handlePrintBill', handlePrintBill)
-provide('handleCheckout', handleCheckout)
-provide('formatPrice', formatPrice)
-provide('subtotal', subtotal)
-provide('serviceTax', serviceTax)
-provide('governmentTax', governmentTax)
-provide('total', total)
-provide('hasActiveOrder', hasActiveOrder)
-provide('currentOrderTitle', currentOrderTitle)
-provide('currentOrderSubtitle', currentOrderSubtitle)
-
-// Lifecycle
-onMounted(() => {
+onMounted(async () => {
   DebugUtils.debug(MODULE_NAME, 'PosMainView mounted')
+
+  // Инициализируем POS систему
+  try {
+    const result = await posStore.initializePOS()
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to initialize POS')
+    }
+
+    DebugUtils.debug(MODULE_NAME, 'POS system initialized successfully')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to initialize POS system', { error })
+    console.error('POS initialization failed:', error)
+  }
 })
 
-// ToastNotification
+// =============================================
+// WATCHERS
+// =============================================
 
+// Отслеживание изменений текущего заказа
+watch(
+  currentOrder,
+  (newOrder, oldOrder) => {
+    if (newOrder?.id !== oldOrder?.id) {
+      DebugUtils.debug(MODULE_NAME, 'Current order changed', {
+        oldOrderId: oldOrder?.id,
+        newOrderId: newOrder?.id,
+        newOrderType: newOrder?.type,
+        billsCount: newOrder?.bills.length || 0
+      })
+    }
+  },
+  { deep: true }
+)
+
+// Отслеживание статуса смены
+watch(
+  currentShift,
+  shift => {
+    if (!shift) {
+      DebugUtils.warn(MODULE_NAME, 'No active shift detected')
+      console.log('⚠️ No active shift - start shift to continue')
+    } else {
+      DebugUtils.debug(MODULE_NAME, 'Active shift detected', {
+        shiftId: shift.id,
+        cashierName: shift.cashierName
+      })
+    }
+  },
+  { immediate: true }
+)
+
+// Отслеживание статуса сети
 watch(
   () => posStore.isOnline,
   isOnline => {
     if (!isOnline) {
-      // TODO: Toast notification "System is offline"
+      DebugUtils.warn(MODULE_NAME, 'System went offline')
       console.log('⚠️ System is offline')
+    } else {
+      DebugUtils.debug(MODULE_NAME, 'System is online')
     }
   }
 )
-
-watch(
-  () => currentShift.value,
-  shift => {
-    if (!shift) {
-      // TODO: Toast notification "No active shift - start shift to continue"
-      console.log('⚠️ No active shift - start shift to continue')
-    }
-  },
-  { immediate: true } // Проверить сразу при загрузке
-)
 </script>
+
+<style scoped>
+/* Стили обрабатываются PosLayout */
+</style>

@@ -45,9 +45,9 @@
               {{ getPaymentStatusIcon(bill.paymentStatus) }}
             </v-icon>
 
-            <!-- Close Button (for additional bills) -->
+            <!-- Close Button (только для dine-in заказов и при наличии нескольких счетов) -->
             <v-btn
-              v-if="canRemoveBill && bills.length > 1"
+              v-if="canRemoveBill && bills.length > 1 && allowMultipleBills"
               icon
               variant="text"
               size="x-small"
@@ -60,14 +60,14 @@
         </div>
       </div>
 
-      <!-- Add Bill Button -->
-      <div v-if="canAddBill" class="add-bill-section ml-2">
+      <!-- Add Bill Button (только для dine-in заказов) -->
+      <div v-if="canAddBill && allowMultipleBills" class="add-bill-section ml-2">
         <v-btn
           color="success"
           variant="outlined"
           size="large"
           class="add-bill-btn"
-          :disabled="!canAddBill"
+          :disabled="!canAddBill || bills.length >= maxBills"
           @click="addNewBill"
         >
           <v-icon start>mdi-plus</v-icon>
@@ -75,7 +75,14 @@
         </v-btn>
       </div>
 
-      <!-- Overflow Menu (for small screens) -->
+      <!-- Bills Limitation Notice (для takeaway/delivery) -->
+      <div v-else-if="!allowMultipleBills" class="limitation-notice ml-2">
+        <v-chip size="small" variant="tonal" color="info" prepend-icon="mdi-information">
+          Single Bill Only
+        </v-chip>
+      </div>
+
+      <!-- Overflow Menu -->
       <div class="bills-menu ml-2">
         <v-menu location="bottom end">
           <template #activator="{ props: menuProps }">
@@ -85,27 +92,36 @@
           </template>
 
           <v-list density="compact">
+            <!-- Add Bill (для dine-in) -->
             <v-list-item
-              v-if="canAddBill"
+              v-if="canAddBill && allowMultipleBills"
               prepend-icon="mdi-plus"
               title="Add New Bill"
+              :disabled="bills.length >= maxBills"
               @click="addNewBill"
             />
+
+            <!-- Rename Bill -->
             <v-list-item
               v-if="activeBill"
               prepend-icon="mdi-pencil"
               title="Rename Bill"
               @click="showRenameBillDialog = true"
             />
+
+            <!-- Merge Bills (только для dine-in с несколькими счетами) -->
             <v-list-item
-              v-if="canMergeBills"
+              v-if="canMergeBills && allowMultipleBills"
               prepend-icon="mdi-call-merge"
               title="Merge Bills"
               @click="handleMergeBills"
             />
-            <v-divider />
+
+            <v-divider v-if="canRemoveBill || canMergeBills" />
+
+            <!-- Remove Bill (только для dine-in) -->
             <v-list-item
-              v-if="canRemoveBill && bills.length > 1"
+              v-if="canRemoveBill && bills.length > 1 && allowMultipleBills"
               prepend-icon="mdi-delete"
               title="Remove Current Bill"
               :disabled="activeBill?.items.length > 0"
@@ -114,6 +130,13 @@
           </v-list>
         </v-menu>
       </div>
+    </div>
+
+    <!-- Bills Count Info -->
+    <div v-if="bills.length > 1" class="bills-info text-center pa-1">
+      <v-chip size="x-small" variant="text" color="primary">
+        {{ bills.length }} bills • {{ totalItemsCount }} items
+      </v-chip>
     </div>
 
     <!-- Rename Bill Dialog -->
@@ -171,12 +194,13 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { PosBill } from '@/stores/pos/types'
+import type { PosBill, OrderType } from '@/stores/pos/types'
 
 // Props
 interface Props {
   bills: PosBill[]
   activeBillId: string | null
+  orderType: OrderType | null
   canAddBill?: boolean
   canRemoveBill?: boolean
   maxBills?: number
@@ -208,8 +232,17 @@ const activeBill = computed((): PosBill | null => {
   return props.bills.find(bill => bill.id === props.activeBillId) || null
 })
 
+const allowMultipleBills = computed((): boolean => {
+  // Только для dine-in заказов можно создавать несколько счетов
+  return props.orderType === 'dine_in'
+})
+
 const canMergeBills = computed((): boolean => {
-  return props.bills.length > 1
+  return props.bills.length > 1 && allowMultipleBills.value
+})
+
+const totalItemsCount = computed((): number => {
+  return props.bills.reduce((sum, bill) => sum + bill.items.length, 0)
 })
 
 const isValidBillName = computed((): boolean => {
@@ -266,14 +299,28 @@ const getPaymentStatusIcon = (status: string): string => {
 }
 
 const selectBill = (billId: string): void => {
-  console.log('🧾 Select bill:', { billId, currentActive: props.activeBillId })
+  console.log('🧾 Select bill:', {
+    billId,
+    currentActive: props.activeBillId,
+    orderType: props.orderType
+  })
   emit('select-bill', billId)
 }
 
 const addNewBill = (): void => {
-  if (!props.canAddBill || props.bills.length >= props.maxBills) return
+  if (!props.canAddBill || !allowMultipleBills.value || props.bills.length >= props.maxBills) {
+    console.warn('❌ Cannot add bill:', {
+      canAddBill: props.canAddBill,
+      allowMultipleBills: allowMultipleBills.value,
+      currentBillsCount: props.bills.length,
+      maxBills: props.maxBills,
+      orderType: props.orderType
+    })
+    return
+  }
 
   console.log('➕ Add new bill:', {
+    orderType: props.orderType,
     currentBillsCount: props.bills.length,
     maxBills: props.maxBills
   })
@@ -282,8 +329,11 @@ const addNewBill = (): void => {
 }
 
 const showBillMenu = (bill: PosBill, event: MouseEvent): void => {
-  console.log('📋 Show bill context menu:', { billId: bill.id, billName: bill.name })
-  // Right-click context menu - could implement custom context menu here
+  console.log('📋 Show bill context menu:', {
+    billId: bill.id,
+    billName: bill.name,
+    orderType: props.orderType
+  })
 }
 
 const showRenameBillDialogAction = (): void => {
@@ -306,7 +356,8 @@ const confirmRenameBill = (): void => {
   console.log('✏️ Rename bill:', {
     billId: activeBill.value.id,
     oldName: activeBill.value.name,
-    newName: trimmedName
+    newName: trimmedName,
+    orderType: props.orderType
   })
 
   emit('rename-bill', activeBill.value.id, trimmedName)
@@ -315,7 +366,15 @@ const confirmRenameBill = (): void => {
 }
 
 const confirmRemoveBill = (bill: PosBill | null): void => {
-  if (!bill || !props.canRemoveBill) return
+  if (!bill || !props.canRemoveBill || !allowMultipleBills.value) {
+    console.warn('❌ Cannot remove bill:', {
+      hasBill: !!bill,
+      canRemoveBill: props.canRemoveBill,
+      allowMultipleBills: allowMultipleBills.value,
+      orderType: props.orderType
+    })
+    return
+  }
 
   billToRemove.value = bill
   showRemoveBillDialog.value = true
@@ -332,7 +391,8 @@ const confirmRemoveBillAction = (): void => {
   console.log('🗑️ Remove bill:', {
     billId: billToRemove.value.id,
     billName: billToRemove.value.name,
-    itemsCount: billToRemove.value.items.length
+    itemsCount: billToRemove.value.items.length,
+    orderType: props.orderType
   })
 
   emit('remove-bill', billToRemove.value.id)
@@ -341,235 +401,62 @@ const confirmRemoveBillAction = (): void => {
 }
 
 const handleMergeBills = (): void => {
-  console.log('🔗 Merge bills:', { billsCount: props.bills.length })
+  if (!allowMultipleBills.value) {
+    console.warn('❌ Cannot merge bills - not allowed for this order type:', props.orderType)
+    return
+  }
+
+  console.log('🔗 Merge bills:', {
+    billsCount: props.bills.length,
+    orderType: props.orderType
+  })
   emit('merge-bills')
 }
 </script>
 
 <style scoped>
-/* =============================================
-   BILLS TABS LAYOUT
-   ============================================= */
+/* Оставляем существующие стили + добавляем новые */
 
-.bills-tabs {
-  background: rgb(var(--v-theme-surface));
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  padding: var(--spacing-sm) var(--spacing-md);
+.limitation-notice {
+  flex-shrink: 0;
 }
 
-.tabs-container {
-  min-height: 48px;
+.bills-info {
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
 }
 
-.tabs-list {
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+.bills-info .v-chip {
+  font-size: 0.7rem;
 }
 
-.tabs-list::-webkit-scrollbar {
+/* Скрыть кнопку закрытия для заказов не dine-in */
+.bill-tab:not(.allow-multiple) .bill-close-btn {
   display: none;
 }
 
-.tabs-wrapper {
-  gap: var(--spacing-xs);
-  min-width: max-content;
+/* Дополнительная индикация для заказов с одним счетом */
+.bills-tabs[data-single-bill='true'] .add-bill-btn {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
-/* =============================================
-   BILL TAB STYLES
-   ============================================= */
-
-.bill-tab {
-  min-height: 40px;
-  border-radius: var(--v-border-radius-lg);
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
+/* Добавить индикацию типа заказа */
+.bills-tabs::before {
+  content: attr(data-order-type);
+  position: absolute;
+  top: -20px;
+  right: 10px;
+  font-size: 0.6rem;
+  color: var(--v-theme-on-surface);
+  opacity: 0.5;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
-
-.bill-tab:not(.bill-tab-active) {
-  opacity: 0.8;
-}
-
-.bill-tab-active {
-  box-shadow: 0 2px 8px rgba(var(--v-theme-primary), 0.3);
-}
-
-.bill-tab-paid {
-  border: 1px solid rgb(var(--v-theme-success));
-  background: rgba(var(--v-theme-success), 0.1);
-}
-
-.bill-tab-partial {
-  border: 1px solid rgb(var(--v-theme-warning));
-  background: rgba(var(--v-theme-warning), 0.1);
-}
-
-.bill-name {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bill-close-btn {
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.bill-tab:hover .bill-close-btn {
-  opacity: 1;
-}
-
-/* =============================================
-   ADD BILL SECTION
-   ============================================= */
-
-.add-bill-btn {
-  border-radius: var(--v-border-radius-lg);
-  white-space: nowrap;
-}
-
-.add-bill-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(var(--v-theme-success), 0.3);
-}
-
-/* =============================================
-   BILLS MENU
-   ============================================= */
-
-.bills-menu .v-btn {
-  border-radius: var(--v-border-radius-lg);
-}
-
-/* =============================================
-   RESPONSIVE DESIGN
-   ============================================= */
 
 @media (max-width: 768px) {
-  .bills-tabs {
-    padding: var(--spacing-xs) var(--spacing-sm);
+  .limitation-notice {
+    display: none; /* Скрываем на мобильных */
   }
-
-  .bill-tab {
-    min-height: 36px;
-    font-size: 0.875rem;
-  }
-
-  .bill-name {
-    max-width: 80px;
-  }
-
-  .add-bill-btn {
-    min-width: 90px;
-  }
-
-  .add-bill-btn .v-icon {
-    margin-right: 4px !important;
-  }
-}
-
-@media (max-width: 480px) {
-  .tabs-container {
-    flex-direction: column;
-    gap: var(--spacing-xs);
-    align-items: stretch;
-  }
-
-  .add-bill-section {
-    margin-left: 0 !important;
-  }
-
-  .bills-menu {
-    align-self: flex-end;
-    position: absolute;
-    right: var(--spacing-sm);
-    top: var(--spacing-xs);
-  }
-}
-
-/* =============================================
-   SCROLL INDICATORS
-   ============================================= */
-
-.tabs-list {
-  position: relative;
-}
-
-.tabs-list::before,
-.tabs-list::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 20px;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.tabs-list::before {
-  left: 0;
-  background: linear-gradient(
-    to right,
-    rgb(var(--v-theme-surface)),
-    rgba(var(--v-theme-surface), 0)
-  );
-}
-
-.tabs-list::after {
-  right: 0;
-  background: linear-gradient(
-    to left,
-    rgb(var(--v-theme-surface)),
-    rgba(var(--v-theme-surface), 0)
-  );
-}
-
-.tabs-list.scrollable-left::before,
-.tabs-list.scrollable-right::after {
-  opacity: 1;
-}
-
-/* =============================================
-   DIALOG CUSTOMIZATIONS
-   ============================================= */
-
-.v-dialog .v-card {
-  border-radius: var(--v-border-radius-lg);
-}
-
-.v-dialog .v-card-title {
-  background: rgba(var(--v-theme-primary), 0.05);
-}
-
-/* =============================================
-   ANIMATIONS
-   ============================================= */
-
-.bill-tab {
-  animation: slideInFromBottom 0.3s ease;
-}
-
-@keyframes slideInFromBottom {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.add-bill-btn {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.add-bill-btn:active {
-  transform: scale(0.95);
 }
 </style>

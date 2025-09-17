@@ -5,6 +5,7 @@
     <BillsTabs
       :bills="bills"
       :active-bill-id="activeBillId"
+      :order-type="orderType"
       :can-add-bill="canAddBill"
       :can-remove-bill="canRemoveBill"
       :max-bills="maxBills"
@@ -210,6 +211,7 @@ import BillItem from './BillItem.vue'
 
 // Props
 interface Props {
+  order?: PosOrder | null
   bills: PosBill[]
   activeBillId: string | null
   canAddBill?: boolean
@@ -220,6 +222,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  order: null,
   canAddBill: true,
   canRemoveBill: true,
   canEditItems: true,
@@ -262,6 +265,11 @@ const isAllItemsSelected = computed((): boolean => {
 
 const isSomeItemsSelected = computed((): boolean => {
   return selectedItems.value.size > 0 && !isAllItemsSelected.value
+})
+
+// Computed для orderType
+const orderType = computed(() => {
+  return props.order?.type || null
 })
 
 // Methods

@@ -12,6 +12,7 @@
     <!-- Bills Manager (Main Content) -->
     <BillsManager
       class="flex-grow-1"
+      :order="currentOrder"
       :bills="bills"
       :active-bill-id="activeBillId"
       :can-add-bill="canAddBill"
