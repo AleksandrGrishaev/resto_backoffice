@@ -57,11 +57,14 @@
         <div class="d-flex align-center justify-space-between w-100">
           <!-- Чекбокс для выбора счета -->
           <v-checkbox
-            :model-value="isBillSelected?.(bill.id) || false"
+            v-if="showSelectionMode"
+            :model-value="selectedBills.has(bill.id)"
             density="compact"
             hide-details
+            color="primary"
             class="bill-checkbox mr-2"
-            @click.stop="toggleBillSelection?.(bill.id)"
+            @click.stop
+            @update:model-value="handleBillSelection(bill.id)"
           />
 
           <!-- Название счета -->
@@ -165,12 +168,16 @@ interface Props {
   activeBillId: string | null
   orderType: OrderType | null
   canAddBill?: boolean
+  selectedBills?: Set<string> // Добавить это
+  showSelectionMode?: boolean // Добавить это (опционально)
   isBillSelected?: (billId: string) => boolean
   toggleBillSelection?: (billId: string) => void
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  canAddBill: true
+  canAddBill: true,
+  selectedBills: () => new Set(),
+  showSelectionMode: true
 })
 
 // Emits
@@ -179,6 +186,7 @@ const emit = defineEmits<{
   'add-bill': []
   'rename-bill': [billId: string, newName: string]
   'remove-bill': [billId: string]
+  'toggle-bill-selection': [billId: string] // Добавить это
 }>()
 
 // Computed
@@ -195,6 +203,11 @@ const newBillName = ref('')
 const activeTab = ref(props.activeBillId)
 
 // Methods
+
+const handleBillSelection = (billId: string): void => {
+  emit('toggle-bill-selection', billId)
+}
+
 const hasNewItems = (bill: PosBill): boolean => {
   return bill.items.some(item => item.status === 'pending')
 }

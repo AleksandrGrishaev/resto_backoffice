@@ -1,340 +1,188 @@
 <!-- src/views/pos/order/components/BillItem.vue -->
 <template>
-  <v-card
-    class="bill-item pos-card"
-    :class="{
-      'item-selected': isSelected,
-      'item-cancelled': item.status === 'cancelled'
-    }"
-    variant="outlined"
-  >
-    <v-card-text class="item-content pa-3">
-      <div class="d-flex align-center">
-        <!-- Selection Checkbox -->
-        <div v-if="selectable" class="item-select mr-3">
-          <v-checkbox
-            :model-value="isSelected"
-            density="compact"
-            hide-details
-            @update:model-value="handleSelect"
-          />
+  <div :class="['bill-item', { 'item-selected': isSelected }]">
+    <div class="item-content d-flex align-center pa-3">
+      <!-- Selection Checkbox -->
+      <v-checkbox
+        v-if="showCheckbox"
+        :model-value="isSelected"
+        density="compact"
+        hide-details
+        color="primary"
+        class="item-checkbox mr-3"
+        @update:model-value="handleSelect"
+      />
+
+      <!-- Item Details -->
+      <div class="item-details flex-grow-1 min-w-0">
+        <div class="item-name text-subtitle-1 font-weight-medium mb-1">
+          {{ item.menuItemName }}
         </div>
 
-        <!-- Item Details -->
-        <div class="item-details flex-grow-1">
-          <div class="item-header d-flex align-center justify-space-between mb-1">
-            <div class="item-name">
-              <div class="text-subtitle-2 font-weight-medium">
-                {{ item.menuItemName }}
-              </div>
-              <div v-if="item.variantName" class="text-caption text-medium-emphasis">
-                {{ item.variantName }}
-              </div>
-            </div>
-
-            <!-- Status Badge -->
-            <v-chip v-if="item.status === 'cancelled'" size="x-small" color="error" variant="flat">
-              Cancelled
-            </v-chip>
-          </div>
-
-          <!-- Kitchen Notes -->
-          <div v-if="item.kitchenNotes" class="item-notes mb-2">
-            <v-chip size="small" variant="tonal" color="info" prepend-icon="mdi-note-text">
-              {{ item.kitchenNotes }}
-            </v-chip>
-          </div>
-
-          <!-- Modifications -->
-          <div v-if="item.modifications?.length" class="item-modifications mb-2">
-            <div class="modifications-list d-flex flex-wrap gap-1">
-              <v-chip
-                v-for="mod in item.modifications"
-                :key="mod.id"
-                size="x-small"
-                variant="outlined"
-                color="primary"
-              >
-                {{ mod.name }}
-                <span v-if="mod.price > 0" class="ml-1">+{{ formatPrice(mod.price) }}</span>
-              </v-chip>
-            </div>
-          </div>
-
-          <!-- Discounts -->
-          <div v-if="hasDiscounts" class="item-discounts mb-2">
-            <div class="discounts-list d-flex flex-wrap gap-1">
-              <v-chip
-                v-for="discount in item.discounts"
-                :key="discount.id"
-                size="x-small"
-                variant="tonal"
-                color="success"
-                prepend-icon="mdi-percent"
-              >
-                {{ discount.reason }}: {{ discount.value
-                }}{{ discount.type === 'percentage' ? '%' : '' }}
-              </v-chip>
-            </div>
-          </div>
+        <div class="item-variant text-body-2 text-medium-emphasis">
+          {{ item.variantName }}
+          {{ item.quantity > 1 ? ` x ${item.quantity}` : ' x 1' }}
         </div>
 
-        <!-- Quantity & Price Controls -->
-        <div class="item-controls ml-3 d-flex align-center">
-          <!-- Quantity Controls -->
-          <div class="quantity-controls d-flex align-center mr-3">
-            <v-btn
-              icon
-              variant="text"
-              size="small"
-              :disabled="item.status === 'cancelled' || item.quantity <= 1"
-              @click="decrementQuantity"
-            >
-              <v-icon>mdi-minus</v-icon>
-            </v-btn>
+        <!-- Item Notes (если есть) -->
+        <div v-if="item.kitchenNotes" class="item-notes text-caption text-warning mt-1">
+          <v-icon size="12" class="mr-1">mdi-note-text</v-icon>
+          {{ item.kitchenNotes }}
+        </div>
 
-            <div class="quantity-display mx-2 text-center" style="min-width: 40px">
-              <div class="text-subtitle-2 font-weight-bold">
-                {{ item.quantity }}
-              </div>
-              <div class="text-caption text-medium-emphasis">qty</div>
-            </div>
+        <!-- Item Modifications (если есть) -->
+        <div
+          v-if="item.modifications && item.modifications.length > 0"
+          class="item-modifications mt-1"
+        >
+          <v-chip
+            v-for="mod in item.modifications"
+            :key="mod.id"
+            size="x-small"
+            variant="outlined"
+            color="info"
+            class="mr-1 mb-1"
+          >
+            {{ mod.name }}
+          </v-chip>
+        </div>
 
-            <v-btn
-              icon
-              variant="text"
-              size="small"
-              :disabled="item.status === 'cancelled'"
-              @click="incrementQuantity"
-            >
-              <v-icon>mdi-plus</v-icon>
-            </v-btn>
-          </div>
-
-          <!-- Price Display -->
-          <div class="price-display text-right" style="min-width: 80px">
-            <div class="text-subtitle-2 font-weight-bold">
-              {{ formatPrice(displayPrice) }}
-            </div>
-            <div v-if="hasDiscounts" class="text-caption text-medium-emphasis line-through">
-              {{ formatPrice(item.totalPrice) }}
-            </div>
-          </div>
-
-          <!-- Action Menu -->
-          <div class="item-actions ml-2">
-            <v-menu location="bottom end">
-              <template #activator="{ props: menuProps }">
-                <v-btn icon variant="text" size="small" v-bind="menuProps">
-                  <v-icon>mdi-dots-vertical</v-icon>
-                </v-btn>
-              </template>
-
-              <v-list density="compact">
-                <v-list-item
-                  prepend-icon="mdi-pencil"
-                  title="Edit Item"
-                  :disabled="item.status === 'cancelled'"
-                  @click="handleEdit"
-                />
-                <v-list-item
-                  prepend-icon="mdi-percent"
-                  title="Add Discount"
-                  :disabled="item.status === 'cancelled'"
-                  @click="handleDiscount"
-                />
-                <v-list-item
-                  prepend-icon="mdi-note-plus"
-                  title="Add Note"
-                  :disabled="item.status === 'cancelled'"
-                  @click="handleAddNote"
-                />
-                <v-divider />
-                <v-list-item
-                  prepend-icon="mdi-arrow-right"
-                  title="Move to Bill"
-                  :disabled="item.status === 'cancelled'"
-                  @click="handleMove"
-                />
-                <v-divider />
-                <v-list-item
-                  prepend-icon="mdi-delete"
-                  title="Remove Item"
-                  :disabled="item.status === 'cancelled'"
-                  @click="handleRemove"
-                />
-                <v-list-item
-                  v-if="canCancel"
-                  prepend-icon="mdi-cancel"
-                  title="Cancel Item"
-                  @click="handleCancel"
-                />
-              </v-list>
-            </v-menu>
-          </div>
+        <!-- Item Status -->
+        <div v-if="showStatus" class="item-status mt-1">
+          <v-chip :color="getStatusColor(item.status)" size="x-small" variant="flat">
+            <v-icon start size="12">{{ getStatusIcon(item.status) }}</v-icon>
+            {{ getStatusLabel(item.status) }}
+          </v-chip>
         </div>
       </div>
-    </v-card-text>
-  </v-card>
+
+      <!-- Quantity Controls -->
+      <div class="quantity-controls d-flex align-center mr-4">
+        <v-btn
+          icon
+          variant="text"
+          size="small"
+          :disabled="item.quantity <= 1"
+          @click="handleQuantityChange(item.quantity - 1)"
+        >
+          <v-icon size="16">mdi-minus</v-icon>
+        </v-btn>
+
+        <div class="quantity-display mx-2 text-center" style="min-width: 40px">
+          <span class="text-subtitle-2 font-weight-medium">{{ item.quantity }}</span>
+        </div>
+
+        <v-btn icon variant="text" size="small" @click="handleQuantityChange(item.quantity + 1)">
+          <v-icon size="16">mdi-plus</v-icon>
+        </v-btn>
+      </div>
+
+      <!-- Price Display -->
+      <div class="price-display text-right" style="min-width: 80px">
+        <div class="unit-price text-caption text-medium-emphasis">
+          {{ formatPrice(item.unitPrice) }} each
+        </div>
+        <div class="total-price text-subtitle-1 font-weight-bold">
+          {{ formatPrice(item.totalPrice) }}
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { PosBillItem } from '@/stores/pos/types'
+import type { PosBillItem, ItemStatus } from '@/stores/pos/types'
+import { formatIDR } from '@/utils/currency'
+
+// Alias для удобства
+const formatPrice = formatIDR
 
 // Props
 interface Props {
   item: PosBillItem
   isSelected?: boolean
-  selectable?: boolean
-  canEdit?: boolean
-  canCancel?: boolean
+  showCheckbox?: boolean
+  showStatus?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   isSelected: false,
-  selectable: false,
-  canEdit: true,
-  canCancel: true
+  showCheckbox: true,
+  showStatus: false
 })
 
 // Emits
 const emit = defineEmits<{
   select: [selected: boolean]
   'update-quantity': [itemId: string, quantity: number]
-  edit: [item: PosBillItem]
-  discount: [item: PosBillItem]
-  'add-note': [item: PosBillItem]
-  move: [item: PosBillItem]
-  remove: [item: PosBillItem]
-  cancel: [item: PosBillItem]
 }>()
 
-// Computed
-const hasDiscounts = computed((): boolean => {
-  return props.item.discounts && props.item.discounts.length > 0
-})
-
-const displayPrice = computed((): number => {
-  if (!hasDiscounts.value) return props.item.totalPrice
-
-  // Calculate price after discounts
-  let discountedPrice = props.item.totalPrice
-
-  props.item.discounts?.forEach(discount => {
-    if (discount.type === 'percentage') {
-      discountedPrice -= discountedPrice * (discount.value / 100)
-    } else {
-      discountedPrice -= discount.value
-    }
-  })
-
-  return Math.max(0, discountedPrice)
-})
-
-const canCancel = computed((): boolean => {
-  return props.canCancel && props.item.status === 'active'
-})
-
 // Methods
-const formatPrice = (price: number): string => {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0
-  }).format(price)
-}
-
 const handleSelect = (selected: boolean): void => {
-  console.log('📋 Item selection changed:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName,
-    selected
-  })
-
   emit('select', selected)
 }
 
-const incrementQuantity = (): void => {
-  const newQuantity = props.item.quantity + 1
-
-  console.log('➕ Increment quantity:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName,
-    oldQuantity: props.item.quantity,
-    newQuantity
-  })
-
-  emit('update-quantity', props.item.id, newQuantity)
+const handleQuantityChange = (newQuantity: number): void => {
+  if (newQuantity > 0) {
+    emit('update-quantity', props.item.id, newQuantity)
+  }
 }
 
-const decrementQuantity = (): void => {
-  if (props.item.quantity <= 1) return
-
-  const newQuantity = props.item.quantity - 1
-
-  console.log('➖ Decrement quantity:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName,
-    oldQuantity: props.item.quantity,
-    newQuantity
-  })
-
-  emit('update-quantity', props.item.id, newQuantity)
+const getStatusColor = (status: ItemStatus): string => {
+  switch (status) {
+    case 'pending':
+      return 'warning'
+    case 'sent_to_kitchen':
+      return 'info'
+    case 'preparing':
+      return 'info'
+    case 'ready':
+      return 'success'
+    case 'served':
+      return 'success'
+    case 'cancelled':
+      return 'error'
+    default:
+      return 'grey'
+  }
 }
 
-const handleEdit = (): void => {
-  console.log('✏️ Edit item:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName
-  })
-
-  emit('edit', props.item)
+const getStatusIcon = (status: ItemStatus): string => {
+  switch (status) {
+    case 'pending':
+      return 'mdi-clock-outline'
+    case 'sent_to_kitchen':
+      return 'mdi-chef-hat'
+    case 'preparing':
+      return 'mdi-food'
+    case 'ready':
+      return 'mdi-check-circle'
+    case 'served':
+      return 'mdi-check-all'
+    case 'cancelled':
+      return 'mdi-cancel'
+    default:
+      return 'mdi-help'
+  }
 }
 
-const handleDiscount = (): void => {
-  console.log('💰 Add discount:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName
-  })
-
-  emit('discount', props.item)
-}
-
-const handleAddNote = (): void => {
-  console.log('📝 Add note:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName
-  })
-
-  emit('add-note', props.item)
-}
-
-const handleMove = (): void => {
-  console.log('↗️ Move item:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName
-  })
-
-  emit('move', props.item)
-}
-
-const handleRemove = (): void => {
-  console.log('🗑️ Remove item:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName
-  })
-
-  emit('remove', props.item)
-}
-
-const handleCancel = (): void => {
-  console.log('❌ Cancel item:', {
-    itemId: props.item.id,
-    itemName: props.item.menuItemName
-  })
-
-  emit('cancel', props.item)
+const getStatusLabel = (status: ItemStatus): string => {
+  switch (status) {
+    case 'pending':
+      return 'New'
+    case 'sent_to_kitchen':
+      return 'Sent'
+    case 'preparing':
+      return 'Cooking'
+    case 'ready':
+      return 'Ready'
+    case 'served':
+      return 'Served'
+    case 'cancelled':
+      return 'Cancelled'
+    default:
+      return 'Unknown'
+  }
 }
 </script>
 
@@ -344,9 +192,17 @@ const handleCancel = (): void => {
    ============================================= */
 
 .bill-item {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 8px;
+  margin-bottom: var(--spacing-xs);
+  background: rgb(var(--v-theme-surface));
   transition: all 0.2s ease;
-  margin-bottom: var(--spacing-sm);
-  border-width: 1px;
+  cursor: pointer;
+}
+
+.bill-item:hover {
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  background: rgba(var(--v-theme-primary), 0.02);
 }
 
 .bill-item.item-selected {
@@ -354,14 +210,26 @@ const handleCancel = (): void => {
   background: rgba(var(--v-theme-primary), 0.04);
 }
 
-.bill-item.item-cancelled {
-  opacity: 0.6;
-  background: rgba(var(--v-theme-error), 0.04);
-  border-color: rgba(var(--v-theme-error), 0.2);
+.item-content {
+  align-items: flex-start;
+  padding: 12px;
 }
 
-.item-content {
-  padding: var(--spacing-md) !important;
+/* =============================================
+   CHECKBOX STYLING
+   ============================================= */
+
+.item-checkbox {
+  flex-shrink: 0;
+  margin-top: -4px; /* Выравниваем с текстом */
+}
+
+.item-checkbox :deep(.v-selection-control) {
+  min-height: auto;
+}
+
+.item-checkbox :deep(.v-selection-control__wrapper) {
+  height: 20px;
 }
 
 /* =============================================
@@ -369,25 +237,33 @@ const handleCancel = (): void => {
    ============================================= */
 
 .item-details {
-  min-width: 0; /* Allow content to shrink */
+  min-width: 0;
+  flex: 1;
 }
 
 .item-name {
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.item-variant {
   line-height: 1.2;
 }
 
 .item-notes {
-  margin-top: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  line-height: 1.2;
 }
 
-.item-modifications,
-.item-discounts {
-  margin-top: var(--spacing-xs);
+.item-modifications {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.modifications-list,
-.discounts-list {
-  gap: var(--spacing-xs);
+.item-status {
+  margin-top: 4px;
 }
 
 /* =============================================
@@ -395,9 +271,10 @@ const handleCancel = (): void => {
    ============================================= */
 
 .quantity-controls {
+  flex-shrink: 0;
   background: rgba(var(--v-theme-surface-variant), 0.5);
-  border-radius: var(--v-border-radius-lg);
-  padding: var(--spacing-xs);
+  border-radius: 20px;
+  padding: 2px;
 }
 
 .quantity-display {
@@ -409,11 +286,18 @@ const handleCancel = (): void => {
    ============================================= */
 
 .price-display {
-  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  text-align: right;
 }
 
-.line-through {
-  text-decoration: line-through;
+.unit-price {
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+
+.total-price {
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 /* =============================================
@@ -422,86 +306,55 @@ const handleCancel = (): void => {
 
 @media (max-width: 768px) {
   .item-content {
-    padding: var(--spacing-sm) !important;
-  }
-
-  .item-controls {
+    padding: 8px;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: stretch;
     gap: var(--spacing-xs);
   }
 
-  .quantity-controls {
-    order: 2;
+  .quantity-controls,
+  .price-display {
+    align-self: flex-end;
+    margin: 0;
   }
 
-  .price-display {
+  .quantity-controls {
     order: 1;
   }
 
-  .item-actions {
-    order: 3;
-    margin-left: 0;
-  }
-}
-
-@media (max-width: 480px) {
-  .item-content .d-flex {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--spacing-sm);
-  }
-
-  .item-select {
-    margin-right: 0 !important;
-    align-self: flex-start;
-  }
-
-  .item-controls {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
+  .price-display {
+    order: 2;
   }
 }
 
 /* =============================================
-   HOVER EFFECTS
+   ACCESSIBILITY
    ============================================= */
 
-@media (hover: hover) {
-  .bill-item:hover:not(.item-cancelled) {
-    box-shadow: 0 2px 8px rgba(var(--v-theme-on-surface), 0.08);
-    transform: translateY(-1px);
-  }
-
-  .bill-item.item-selected:hover {
-    box-shadow: 0 2px 8px rgba(var(--v-theme-primary), 0.2);
-  }
+.bill-item:focus-within {
+  outline: 2px solid rgba(var(--v-theme-primary), 0.5);
+  outline-offset: 2px;
 }
 
 /* =============================================
-   LOADING STATE
+   ANIMATIONS
    ============================================= */
 
-.bill-item.loading {
-  opacity: 0.7;
-  pointer-events: none;
+.bill-item {
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
 }
 
-.bill-item.loading .item-content {
-  position: relative;
+.item-checkbox :deep(.v-selection-control__input) {
+  transition: all 0.2s ease;
 }
 
-.bill-item.loading .item-content::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(var(--v-theme-surface), 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.quantity-controls .v-btn {
+  transition: all 0.15s ease;
+}
+
+.quantity-controls .v-btn:hover:not(:disabled) {
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 </style>

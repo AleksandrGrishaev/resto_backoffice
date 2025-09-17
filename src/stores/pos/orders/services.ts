@@ -97,7 +97,7 @@ export class OrdersService {
       })
 
       // Создаем первый счет автоматически
-      const firstBill = await this.createBillForOrder(newOrder.id, 'Основной счет')
+      const firstBill = await this.createBillForOrder(newOrder.id, 'Bill 1')
       if (firstBill.success && firstBill.data) {
         newOrder.bills = [firstBill.data]
       }
