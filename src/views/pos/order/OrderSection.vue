@@ -80,30 +80,24 @@
       </div>
     </v-overlay>
 
-    <!-- Error Snackbar -->
-    <v-snackbar
-      v-model="error.show"
-      :color="error.type"
+    <!-- Custom Notifications - БЕЗ overlay эффектов -->
+    <AppNotification
+      :show="error.show"
+      :message="error.message"
+      :type="error.type === 'warning' ? 'warning' : 'error'"
+      location="top"
       :timeout="error.timeout"
-      location="top"
-      :scrim="false"
-    >
-      {{ error.message }}
-      <template #actions>
-        <v-btn color="white" variant="text" @click="clearError">Close</v-btn>
-      </template>
-    </v-snackbar>
+      @close="clearError"
+    />
 
-    <!-- Success Snackbar -->
-    <v-snackbar
-      v-model="success.show"
-      color="success"
-      :timeout="success.timeout"
+    <AppNotification
+      :show="success.show"
+      :message="success.message"
+      type="success"
       location="top"
-      :scrim="false"
-    >
-      {{ success.message }}
-    </v-snackbar>
+      :timeout="success.timeout"
+      @close="success.show = false"
+    />
   </div>
 </template>
 
@@ -114,6 +108,7 @@ import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { useMenuStore } from '@/stores/menu'
 import type { PosOrder, PosBill, PosBillItem, OrderType } from '@/stores/pos/types'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
+import AppNotification from '@/components/atoms/feedback/AppNotification.vue'
 
 // Import components
 import OrderInfo from './components/OrderInfo.vue'

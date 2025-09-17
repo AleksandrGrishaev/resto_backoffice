@@ -65,8 +65,9 @@ export const vuetify = createVuetify({
       persistent: false
     },
     VSnackbar: {
-      // ✅ УБИРАЕМ ЗАТЕМНЕНИЕ У SNACKBAR:
-      scrim: false
+      scrim: false,
+      contained: false,
+      persistent: false
     }
   },
   theme: {

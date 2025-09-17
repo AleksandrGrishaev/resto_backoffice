@@ -322,6 +322,53 @@ body {
 }
 
 /* =============================================
+   ИСПРАВЛЕНИЕ V-SNACKBAR OVERLAY
+   Добавить в конец src/styles/main.scss
+   ============================================= */
+
+/* ПРИНУДИТЕЛЬНОЕ ОТКЛЮЧЕНИЕ SNACKBAR SCRIM */
+.v-snackbar.v-overlay .v-overlay__scrim,
+.v-snackbar .v-overlay__scrim,
+.v-overlay.v-snackbar .v-overlay__scrim {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ОТКЛЮЧЕНИЕ BACKDROP-FILTER У SNACKBAR */
+.v-snackbar,
+.v-snackbar.v-overlay,
+.v-snackbar .v-overlay,
+.v-snackbar .v-overlay__content,
+.v-overlay.v-snackbar {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* УБИРАЕМ ВСЕ АНИМАЦИИ SCRIM У SNACKBAR */
+.v-snackbar .v-overlay__scrim,
+.v-snackbar.v-overlay .v-overlay__scrim {
+  transition: none !important;
+  animation: none !important;
+  transform: none !important;
+}
+
+/* ДОПОЛНИТЕЛЬНАЯ БЕЗОПАСНОСТЬ ДЛЯ ВСЕХ ВОЗМОЖНЫХ КОМБИНАЦИЙ */
+[class*='v-snackbar'] .v-overlay__scrim,
+[class*='snackbar'] .v-overlay__scrim {
+  display: none !important;
+}
+
+/* Z-INDEX ДЛЯ SNACKBAR */
+.v-snackbar {
+  z-index: 2300 !important;
+}
+
+/* =============================================
    ИСПРАВЛЕНИЯ OVERLAY И TOOLTIP
    ============================================= */
 
