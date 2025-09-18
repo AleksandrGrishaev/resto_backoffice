@@ -52,14 +52,11 @@
           <!-- Order Totals -->
           <OrderTotals
             :totals="orderTotals"
-            :bills-breakdown="billsBreakdown"
-            :order-stats="orderStats"
-            :active-bill-id="activeBillId"
-            :show-taxes="showTaxes"
-            :service-tax-rate="serviceTaxRate"
-            :government-tax-rate="governmentTaxRate"
-            :loading="loading.calculations"
-            :show-debug-info="debugMode"
+            :has-selection="calculations.hasSelection.value"
+            :selected-items-count="calculations.selectedItemsCount.value"
+            :show-taxes="true"
+            :service-tax-rate="5"
+            :government-tax-rate="10"
           />
 
           <!-- Order Actions -->
@@ -197,25 +194,22 @@ const tableNumber = computed((): string | null => {
 })
 
 // Order Calculations - using composable
-const calculations = useOrderCalculations(() => bills.value, {
-  serviceTaxRate: props.serviceTaxRate,
-  governmentTaxRate: props.governmentTaxRate,
-  includeServiceTax: props.showTaxes,
-  includeGovernmentTax: props.showTaxes
+const calculations = useOrderCalculations(() => currentOrder.value?.bills || [], {
+  serviceTaxRate: 5,
+  governmentTaxRate: 10,
+  includeServiceTax: true,
+  includeGovernmentTax: true,
+  selectedItemIds: () => ordersStore.selectedItemIds,
+  activeBillId: () => ordersStore.activeBillId
 })
 
 // Computed - Formatted data for OrderTotals
 const orderTotals = computed(() => ({
   subtotal: calculations.subtotal.value,
-  itemDiscounts: calculations.itemDiscounts.value,
-  billDiscounts: calculations.billDiscounts.value,
   totalDiscounts: calculations.totalDiscounts.value,
-  discountedSubtotal: calculations.discountedSubtotal.value,
   serviceTax: calculations.serviceTax.value,
   governmentTax: calculations.governmentTax.value,
-  finalTotal: calculations.finalTotal.value,
-  paidAmount: calculations.paidAmount.value,
-  remainingAmount: calculations.remainingAmount.value
+  finalTotal: calculations.finalTotal.value
 }))
 
 const billsBreakdown = computed(() => {

@@ -1,10 +1,10 @@
-// src/views/pos/order/composables/useOrderCalculations.ts
-import { computed } from 'vue'
+// src/stores/pos/orders/composables/useOrderCalculations.ts
+import { computed, type Ref } from 'vue'
 import type { PosBill, PosBillItem, PosItemDiscount } from '@/stores/pos/types'
 
 /**
- * Composable for order calculations
- * Handles complex multi-bill calculations with discounts and taxes
+ * Composable for order calculations with selection support
+ * Calculates only selected items if any are selected, otherwise calculates all items
  */
 export function useOrderCalculations(
   bills: PosBill[] | (() => PosBill[]),
@@ -13,57 +13,113 @@ export function useOrderCalculations(
     governmentTaxRate?: number
     includeServiceTax?: boolean
     includeGovernmentTax?: boolean
+    selectedItemIds?: Ref<string[]> | (() => string[])
+    activeBillId?: Ref<string | null> | (() => string | null)
   } = {}
 ) {
   const {
     serviceTaxRate = 5,
     governmentTaxRate = 10,
     includeServiceTax = true,
-    includeGovernmentTax = true
+    includeGovernmentTax = true,
+    selectedItemIds,
+    activeBillId
   } = options
 
-  // Normalize bills to reactive getter
+  // Normalize inputs to reactive getters
   const getBills = typeof bills === 'function' ? bills : () => bills
+  const getSelectedItemIds = selectedItemIds
+    ? typeof selectedItemIds === 'function'
+      ? selectedItemIds
+      : () => selectedItemIds.value
+    : () => []
+  const getActiveBillId = activeBillId
+    ? typeof activeBillId === 'function'
+      ? activeBillId
+      : () => activeBillId.value
+    : () => null
+
+  // =============================================
+  // ITEM FILTERING LOGIC
+  // =============================================
+
+  /**
+   * Get items to calculate based on selection
+   * If items are selected -> calculate only selected items
+   * If no items selected -> calculate ALL items from ALL bills (entire order)
+   */
+  const getItemsToCalculate = computed((): PosBillItem[] => {
+    const selectedIds = getSelectedItemIds()
+    const allBills = getBills()
+
+    // If items are selected, return only selected items
+    if (selectedIds.length > 0) {
+      const allItems = allBills.flatMap(bill => bill.items)
+      return allItems.filter(item => selectedIds.includes(item.id) && item.status !== 'cancelled')
+    }
+
+    // If no items selected, return ALL items from ALL bills (entire order)
+    return allBills.flatMap(bill => bill.items.filter(item => item.status !== 'cancelled'))
+  })
 
   // =============================================
   // BASIC CALCULATIONS
   // =============================================
 
   /**
-   * Calculate subtotal for all active items across all bills
+   * Calculate subtotal for selected/active items
    */
   const subtotal = computed((): number => {
-    return getBills().reduce((sum, bill) => {
-      return (
-        sum +
-        bill.items.reduce((billSum, item) => {
-          if (item.status === 'cancelled') return billSum
-          return billSum + item.totalPrice
-        }, 0)
-      )
+    return getItemsToCalculate.value.reduce((sum, item) => {
+      return sum + item.totalPrice
     }, 0)
   })
 
   /**
-   * Calculate total item-level discounts
+   * Calculate total item-level discounts for selected/active items
    */
   const itemDiscounts = computed((): number => {
-    return getBills().reduce((sum, bill) => {
-      return (
-        sum +
-        bill.items.reduce((billSum, item) => {
-          if (item.status === 'cancelled') return billSum
-          return billSum + calculateItemDiscounts(item)
-        }, 0)
-      )
+    return getItemsToCalculate.value.reduce((sum, item) => {
+      return sum + calculateItemDiscounts(item)
     }, 0)
   })
 
   /**
-   * Calculate total bill-level discounts
+   * Calculate bill-level discounts (proportional for selected items)
    */
   const billDiscounts = computed((): number => {
-    return getBills().reduce((sum, bill) => sum + (bill.discountAmount || 0), 0)
+    const selectedIds = getSelectedItemIds()
+    const allBills = getBills()
+
+    // If no items selected, include all bill discounts
+    if (selectedIds.length === 0) {
+      const activeId = getActiveBillId()
+      if (activeId) {
+        const activeBill = allBills.find(bill => bill.id === activeId)
+        return activeBill?.discountAmount || 0
+      }
+      return allBills.reduce((sum, bill) => sum + (bill.discountAmount || 0), 0)
+    }
+
+    // If items are selected, calculate proportional bill discounts
+    let totalBillDiscounts = 0
+
+    for (const bill of allBills) {
+      const billItems = bill.items.filter(item => item.status !== 'cancelled')
+      const selectedBillItems = billItems.filter(item => selectedIds.includes(item.id))
+
+      if (selectedBillItems.length > 0 && bill.discountAmount) {
+        const billSubtotal = billItems.reduce((sum, item) => sum + item.totalPrice, 0)
+        const selectedSubtotal = selectedBillItems.reduce((sum, item) => sum + item.totalPrice, 0)
+
+        if (billSubtotal > 0) {
+          const proportion = selectedSubtotal / billSubtotal
+          totalBillDiscounts += bill.discountAmount * proportion
+        }
+      }
+    }
+
+    return totalBillDiscounts
   })
 
   /**
@@ -115,96 +171,58 @@ export function useOrderCalculations(
   })
 
   // =============================================
-  // PAYMENT CALCULATIONS
+  // SELECTION INFO
   // =============================================
 
   /**
-   * Calculate total paid amount across all bills
+   * Check if any items are selected
    */
-  const paidAmount = computed((): number => {
-    return getBills().reduce((sum, bill) => sum + (bill.paidAmount || 0), 0)
+  const hasSelection = computed((): boolean => {
+    return getSelectedItemIds().length > 0
   })
 
   /**
-   * Calculate remaining amount to be paid
+   * Get count of selected items
    */
-  const remainingAmount = computed((): number => {
-    return Math.max(0, finalTotal.value - paidAmount.value)
+  const selectedItemsCount = computed((): number => {
+    return getSelectedItemIds().length
   })
 
   /**
-   * Check if order is fully paid
+   * Get calculation scope info
    */
-  const isFullyPaid = computed((): boolean => {
-    return remainingAmount.value === 0
-  })
+  const calculationScope = computed(() => {
+    const selectedIds = getSelectedItemIds()
+    const activeId = getActiveBillId()
 
-  /**
-   * Check if order has partial payment
-   */
-  const hasPartialPayment = computed((): boolean => {
-    return paidAmount.value > 0 && !isFullyPaid.value
-  })
+    if (selectedIds.length > 0) {
+      return {
+        type: 'selected' as const,
+        itemsCount: selectedIds.length,
+        description: `${selectedIds.length} selected items`
+      }
+    }
 
-  // =============================================
-  // BILL-SPECIFIC CALCULATIONS
-  // =============================================
+    if (activeId) {
+      const activeBill = getBills().find(bill => bill.id === activeId)
+      const activeItemsCount =
+        activeBill?.items.filter(item => item.status !== 'cancelled').length || 0
+      return {
+        type: 'bill' as const,
+        itemsCount: activeItemsCount,
+        description: `All items from ${activeBill?.name || 'current bill'}`
+      }
+    }
 
-  /**
-   * Calculate totals for a specific bill
-   */
-  function calculateBillTotals(billId: string) {
-    const bill = getBills().find(b => b.id === billId)
-    if (!bill) return null
-
-    const billSubtotal = bill.items.reduce((sum, item) => {
-      if (item.status === 'cancelled') return sum
-      return sum + item.totalPrice
-    }, 0)
-
-    const billItemDiscounts = bill.items.reduce((sum, item) => {
-      if (item.status === 'cancelled') return sum
-      return sum + calculateItemDiscounts(item)
-    }, 0)
-
-    const billDiscountAmount = bill.discountAmount || 0
-    const billTotalDiscounts = billItemDiscounts + billDiscountAmount
-    const billDiscountedSubtotal = Math.max(0, billSubtotal - billTotalDiscounts)
-
-    // Calculate bill's share of taxes (proportional)
-    const taxRatio = finalTotal.value > 0 ? billDiscountedSubtotal / discountedSubtotal.value : 0
-    const billServiceTax = serviceTax.value * taxRatio
-    const billGovernmentTax = governmentTax.value * taxRatio
-    const billTotalTaxes = billServiceTax + billGovernmentTax
-
-    const billFinalTotal = billDiscountedSubtotal + billTotalTaxes
+    const allItemsCount = getBills().flatMap(bill =>
+      bill.items.filter(item => item.status !== 'cancelled')
+    ).length
 
     return {
-      subtotal: billSubtotal,
-      itemDiscounts: billItemDiscounts,
-      billDiscounts: billDiscountAmount,
-      totalDiscounts: billTotalDiscounts,
-      discountedSubtotal: billDiscountedSubtotal,
-      serviceTax: billServiceTax,
-      governmentTax: billGovernmentTax,
-      totalTaxes: billTotalTaxes,
-      finalTotal: billFinalTotal,
-      paidAmount: bill.paidAmount || 0,
-      remainingAmount: Math.max(0, billFinalTotal - (bill.paidAmount || 0))
+      type: 'order' as const,
+      itemsCount: allItemsCount,
+      description: 'All items from order'
     }
-  }
-
-  /**
-   * Get breakdown of all bills with calculations
-   */
-  const billsBreakdown = computed(() => {
-    return getBills().map(bill => ({
-      id: bill.id,
-      name: bill.name,
-      itemsCount: bill.items.filter(item => item.status !== 'cancelled').length,
-      paymentStatus: bill.paymentStatus,
-      ...calculateBillTotals(bill.id)
-    }))
   })
 
   // =============================================
@@ -245,90 +263,41 @@ export function useOrderCalculations(
     }).format(price)
   }
 
-  /**
-   * Get payment status color
-   */
-  function getPaymentStatusColor(status: string): string {
-    switch (status) {
-      case 'paid':
-        return 'success'
-      case 'partial':
-        return 'warning'
-      default:
-        return 'grey'
-    }
-  }
-
-  /**
-   * Get payment status label
-   */
-  function getPaymentStatusLabel(status: string): string {
-    switch (status) {
-      case 'paid':
-        return 'PAID'
-      case 'partial':
-        return 'PARTIAL'
-      default:
-        return 'UNPAID'
-    }
-  }
-
   // =============================================
-  // VALIDATION FUNCTIONS
+  // PAYMENT CALCULATIONS (Legacy - for full order)
   // =============================================
 
   /**
-   * Validate discount application
+   * Calculate total paid amount across all bills
    */
-  function canApplyDiscount(
-    discountValue: number,
-    discountType: 'percentage' | 'fixed',
-    currentPrice: number
-  ): { canApply: boolean; reason?: string } {
-    if (discountValue <= 0) {
-      return { canApply: false, reason: 'Discount value must be positive' }
-    }
-
-    if (discountType === 'percentage' && discountValue > 100) {
-      return { canApply: false, reason: 'Percentage discount cannot exceed 100%' }
-    }
-
-    if (discountType === 'fixed' && discountValue > currentPrice) {
-      return { canApply: false, reason: 'Fixed discount cannot exceed item price' }
-    }
-
-    return { canApply: true }
-  }
+  const paidAmount = computed((): number => {
+    return getBills().reduce((sum, bill) => sum + (bill.paidAmount || 0), 0)
+  })
 
   /**
-   * Calculate suggested tip amounts
+   * Calculate remaining amount to be paid
    */
-  function calculateTipSuggestions(baseAmount: number = finalTotal.value): number[] {
-    const suggestions = [10, 15, 20] // percentages
-    return suggestions.map(percentage => baseAmount * (percentage / 100))
-  }
+  const remainingAmount = computed((): number => {
+    return Math.max(0, finalTotal.value - paidAmount.value)
+  })
 
   // =============================================
   // STATISTICS
   // =============================================
 
   /**
-   * Get order statistics
+   * Get calculation statistics
    */
-  const orderStats = computed(() => {
-    const bills = getBills()
-    const allItems = bills.flatMap(bill => bill.items)
-    const activeItems = allItems.filter(item => item.status !== 'cancelled')
+  const calculationStats = computed(() => {
+    const items = getItemsToCalculate.value
 
     return {
-      totalBills: bills.length,
-      totalItems: allItems.length,
-      activeItems: activeItems.length,
-      cancelledItems: allItems.length - activeItems.length,
-      averageItemPrice: activeItems.length > 0 ? subtotal.value / activeItems.length : 0,
+      itemsCount: items.length,
+      averageItemPrice: items.length > 0 ? subtotal.value / items.length : 0,
       discountPercentage: subtotal.value > 0 ? (totalDiscounts.value / subtotal.value) * 100 : 0,
       taxPercentage:
-        discountedSubtotal.value > 0 ? (totalTaxes.value / discountedSubtotal.value) * 100 : 0
+        discountedSubtotal.value > 0 ? (totalTaxes.value / discountedSubtotal.value) * 100 : 0,
+      scope: calculationScope.value
     }
   })
 
@@ -341,21 +310,26 @@ export function useOrderCalculations(
    */
   function getCalculationBreakdown() {
     return {
-      subtotal: subtotal.value,
-      itemDiscounts: itemDiscounts.value,
-      billDiscounts: billDiscounts.value,
-      totalDiscounts: totalDiscounts.value,
-      discountedSubtotal: discountedSubtotal.value,
-      serviceTax: serviceTax.value,
-      governmentTax: governmentTax.value,
-      totalTaxes: totalTaxes.value,
-      finalTotal: finalTotal.value,
-      paidAmount: paidAmount.value,
-      remainingAmount: remainingAmount.value,
-      isFullyPaid: isFullyPaid.value,
-      hasPartialPayment: hasPartialPayment.value,
-      stats: orderStats.value,
-      bills: billsBreakdown.value
+      scope: calculationScope.value,
+      items: getItemsToCalculate.value.map(item => ({
+        id: item.id,
+        name: item.menuItemName,
+        price: item.totalPrice,
+        discounts: calculateItemDiscounts(item),
+        finalPrice: calculateItemFinalPrice(item)
+      })),
+      calculations: {
+        subtotal: subtotal.value,
+        itemDiscounts: itemDiscounts.value,
+        billDiscounts: billDiscounts.value,
+        totalDiscounts: totalDiscounts.value,
+        discountedSubtotal: discountedSubtotal.value,
+        serviceTax: serviceTax.value,
+        governmentTax: governmentTax.value,
+        totalTaxes: totalTaxes.value,
+        finalTotal: finalTotal.value
+      },
+      stats: calculationStats.value
     }
   }
 
@@ -377,29 +351,22 @@ export function useOrderCalculations(
     totalTaxes,
     finalTotal,
 
-    // Payment calculations
+    // Selection info
+    hasSelection,
+    selectedItemsCount,
+    calculationScope,
+
+    // Payment (legacy - full order)
     paidAmount,
     remainingAmount,
-    isFullyPaid,
-    hasPartialPayment,
-
-    // Bill-specific
-    billsBreakdown,
-    calculateBillTotals,
 
     // Utilities
     calculateItemDiscounts,
     calculateItemFinalPrice,
     formatPrice,
-    getPaymentStatusColor,
-    getPaymentStatusLabel,
-
-    // Validation
-    canApplyDiscount,
-    calculateTipSuggestions,
 
     // Statistics
-    orderStats,
+    calculationStats,
 
     // Debug
     getCalculationBreakdown
