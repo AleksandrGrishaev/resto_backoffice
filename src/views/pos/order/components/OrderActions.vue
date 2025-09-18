@@ -26,107 +26,63 @@
         {{ successMessage }}
       </v-alert>
 
-      <!-- Primary Actions Row -->
-      <div class="primary-actions d-flex gap-2 mb-3">
-        <!-- Save Bill Button -->
-        <v-btn
-          :color="hasUnsavedChanges ? 'primary' : 'surface-variant'"
+      <!-- Action Buttons Row -->
+      <div class="action-buttons d-flex gap-3">
+        <!-- Save Button -->
+        <BaseButton
           :variant="hasUnsavedChanges ? 'flat' : 'outlined'"
+          :color="hasUnsavedChanges ? 'primary' : undefined"
           size="large"
-          class="flex-grow-1 save-btn"
+          class="flex-grow-1"
           :disabled="!canSave"
           :loading="saving"
+          start-icon="mdi-content-save"
           @click="handleSave"
         >
-          <v-icon start>{{ hasUnsavedChanges ? 'mdi-content-save' : 'mdi-check' }}</v-icon>
           Save Bill
           <span v-if="hasUnsavedChanges" class="unsaved-indicator">*</span>
-        </v-btn>
-
-        <!-- Send to Kitchen Button -->
-        <v-btn
-          color="warning"
-          variant="flat"
-          size="large"
-          class="flex-grow-1"
-          :disabled="!canSendToKitchen"
-          :loading="sendingToKitchen"
-          @click="handleSendToKitchen"
-        >
-          <v-icon start>mdi-chef-hat</v-icon>
-          Send to Kitchen
-          <template v-if="ordersStore.selectedItemsCount > 0">
-            ({{ ordersStore.selectedItemsCount }})
-          </template>
-        </v-btn>
-      </div>
-
-      <!-- Secondary Actions Row -->
-      <div class="secondary-actions d-flex gap-2 mb-3">
-        <!-- Print Bill Button -->
-        <v-btn
-          variant="outlined"
-          size="large"
-          class="flex-grow-1"
-          :disabled="!canPrint"
-          @click="handlePrint"
-        >
-          <v-icon start>mdi-printer</v-icon>
-          Print Bill
-        </v-btn>
-
-        <!-- Move Items Button -->
-        <v-btn
-          variant="outlined"
-          size="large"
-          class="flex-grow-1"
-          :disabled="!canMove"
-          @click="handleMove"
-        >
-          <v-icon start>mdi-arrow-right</v-icon>
-          Move Items
-          <template v-if="ordersStore.selectedItemsCount > 0">
-            ({{ ordersStore.selectedItemsCount }})
-          </template>
-        </v-btn>
-      </div>
-
-      <!-- Checkout Section -->
-      <div v-if="showCheckout" class="checkout-section">
-        <v-divider class="mb-3" />
-
-        <!-- Checkout Summary -->
-        <div class="checkout-summary mb-3 pa-3 rounded" :class="checkoutSummaryClass">
-          <div class="d-flex justify-space-between align-center mb-2">
-            <div class="checkout-label text-subtitle-2 font-weight-medium">
-              {{ checkoutLabel }}
-            </div>
-            <div class="checkout-amount text-h6 font-weight-bold">
-              {{ formatPrice(checkoutAmount) }}
-            </div>
-          </div>
-
-          <div class="checkout-details text-caption text-medium-emphasis">
-            {{ checkoutDetailsText }}
-          </div>
-        </div>
+        </BaseButton>
 
         <!-- Checkout Button -->
-        <v-btn
+        <BaseButton
           color="success"
           variant="flat"
-          size="x-large"
-          block
-          class="checkout-btn"
+          size="large"
+          class="flex-grow-1"
           :disabled="!canCheckout"
           :loading="processing"
+          start-icon="mdi-credit-card"
           @click="handleCheckout"
         >
-          <v-icon start size="24">mdi-credit-card</v-icon>
-          <span class="text-h6">
-            {{ checkoutButtonText }}
-          </span>
-        </v-btn>
+          Checkout
+          <template v-if="ordersStore.selectedItemsCount > 0">
+            ({{ ordersStore.selectedItemsCount }})
+          </template>
+        </BaseButton>
+
+        <!-- Move Items Button -->
+        <BaseButton
+          variant="outlined"
+          size="large"
+          :disabled="!canMove"
+          icon="mdi-arrow-right"
+          @click="handleMove"
+        />
+      </div>
+
+      <!-- Checkout Summary (only when items selected) -->
+      <div
+        v-if="ordersStore.selectedItemsCount > 0"
+        class="checkout-summary mt-3 pa-3 rounded bg-success-lighten-5 border-success"
+      >
+        <div class="d-flex justify-space-between align-center">
+          <div class="text-subtitle-2 font-weight-medium">
+            Selected Items ({{ ordersStore.selectedItemsCount }})
+          </div>
+          <div class="text-h6 font-weight-bold text-success">
+            {{ formatPrice(selectedItemsAmount) }}
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -136,6 +92,7 @@
 import { ref, computed } from 'vue'
 import type { PosOrder, PosBill } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import BaseButton from '@/components/atoms/buttons/BaseButton.vue'
 
 // Store
 const ordersStore = usePosOrdersStore()
@@ -155,8 +112,6 @@ const props = withDefaults(defineProps<Props>(), {
 // Emits
 const emit = defineEmits<{
   save: []
-  'send-to-kitchen': []
-  print: []
   move: []
   checkout: [items: string[], amount: number]
 }>()
@@ -165,27 +120,11 @@ const emit = defineEmits<{
 const errorMessage = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 const saving = ref(false)
-const sendingToKitchen = ref(false)
 const processing = ref(false)
 
 // Computed - Action Availability
 const canSave = computed((): boolean => {
   return !!props.order && props.hasUnsavedChanges
-})
-
-const canSendToKitchen = computed((): boolean => {
-  if (!props.order || !props.activeBill) return false
-
-  // Можем отправить если есть активные элементы и что-то выбрано ИЛИ есть новые элементы
-  const hasActiveItems = props.activeBill.items.some(item => item.status === 'active')
-  const hasSelection = ordersStore.hasSelection
-  const hasNewItems = props.activeBill.items.some(item => item.status === 'pending')
-
-  return hasActiveItems && (hasSelection || hasNewItems)
-})
-
-const canPrint = computed((): boolean => {
-  return !!props.order && props.bills.some(bill => bill.items.length > 0)
 })
 
 const canMove = computed((): boolean => {
@@ -199,52 +138,29 @@ const canCheckout = computed((): boolean => {
   return hasItems && hasUnpaidBills
 })
 
-// Computed - Checkout Section
-const showCheckout = computed((): boolean => {
-  return !!props.order && props.bills.some(bill => bill.items.length > 0)
-})
+// Computed - Amounts
+const selectedItemsAmount = computed((): number => {
+  if (ordersStore.selectedItemsCount === 0) return 0
 
-const totalItemsCount = computed((): number => {
-  return props.bills.reduce((sum, bill) => sum + bill.items.length, 0)
+  return props.bills.reduce((sum, bill) => {
+    return (
+      sum +
+      bill.items.reduce((billSum, item) => {
+        return ordersStore.isItemSelected(item.id) ? billSum + item.totalPrice : billSum
+      }, 0)
+    )
+  }, 0)
 })
 
 const checkoutAmount = computed((): number => {
   if (ordersStore.selectedItemsCount > 0) {
-    // Рассчитать сумму выбранных элементов
-    return props.bills.reduce((sum, bill) => {
-      return (
-        sum +
-        bill.items.reduce((billSum, item) => {
-          return ordersStore.isItemSelected(item.id) ? billSum + item.totalPrice : billSum
-        }, 0)
-      )
-    }, 0)
+    return selectedItemsAmount.value
   }
 
-  // Рассчитать общую сумму всех неоплаченных счетов
+  // Calculate total amount of all unpaid bills
   return props.bills.reduce((sum, bill) => {
     return bill.paymentStatus === 'paid' ? sum : sum + bill.total
   }, 0)
-})
-
-const checkoutLabel = computed((): string => {
-  return ordersStore.selectedItemsCount > 0 ? 'Selected Items' : 'Total Amount'
-})
-
-const checkoutDetailsText = computed((): string => {
-  if (ordersStore.selectedItemsCount > 0) {
-    return `${ordersStore.selectedItemsCount} items selected`
-  }
-  return `${totalItemsCount.value} items total`
-})
-
-const checkoutButtonText = computed((): string => {
-  return ordersStore.selectedItemsCount > 0 ? 'Checkout Selected' : 'Checkout All'
-})
-
-const checkoutSummaryClass = computed((): string => {
-  const baseClass = 'bg-success-lighten-5'
-  return ordersStore.selectedItemsCount > 0 ? `${baseClass} border-success` : baseClass
 })
 
 // Methods
@@ -282,13 +198,6 @@ const handleSave = async (): Promise<void> => {
   try {
     saving.value = true
     clearError()
-
-    console.log('💾 Save bill action:', {
-      orderId: props.order?.id,
-      billsCount: props.bills.length,
-      hasUnsavedChanges: props.hasUnsavedChanges
-    })
-
     emit('save')
     showSuccess('Bill saved successfully')
   } catch (error) {
@@ -299,47 +208,8 @@ const handleSave = async (): Promise<void> => {
   }
 }
 
-const handleSendToKitchen = async (): Promise<void> => {
-  if (!canSendToKitchen.value) return
-
-  try {
-    sendingToKitchen.value = true
-    clearError()
-
-    console.log('🍳 Send to kitchen action:', {
-      orderId: props.order?.id,
-      activeBillId: props.activeBill?.id,
-      selectedItemsCount: ordersStore.selectedItemsCount
-    })
-
-    emit('send-to-kitchen')
-    showSuccess('Order sent to kitchen')
-
-    // Очищаем selection после отправки на кухню
-    ordersStore.clearSelection()
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to send to kitchen'
-    showError(message)
-  } finally {
-    sendingToKitchen.value = false
-  }
-}
-
-const handlePrint = (): void => {
-  console.log('🖨️ Print bill action:', {
-    orderId: props.order?.id,
-    billsCount: props.bills.length
-  })
-
-  emit('print')
-}
-
 const handleMove = (): void => {
-  console.log('↗️ Move items action:', {
-    selectedItemsCount: ordersStore.selectedItemsCount,
-    activeBillId: props.activeBill?.id
-  })
-
+  if (!canMove.value) return
   emit('move')
 }
 
@@ -350,13 +220,6 @@ const handleCheckout = async (): Promise<void> => {
     processing.value = true
     clearError()
 
-    console.log('💳 Checkout action:', {
-      orderId: props.order?.id,
-      selectedItemsCount: ordersStore.selectedItemsCount,
-      checkoutAmount: checkoutAmount.value
-    })
-
-    // Передаем выбранные элементы или пустой массив (что означает "все")
     const selectedItems = ordersStore.selectedItemIds
     emit('checkout', selectedItems, checkoutAmount.value)
   } catch (error) {
@@ -369,10 +232,6 @@ const handleCheckout = async (): Promise<void> => {
 </script>
 
 <style scoped>
-/* =============================================
-   ORDER ACTIONS LAYOUT
-   ============================================= */
-
 .order-actions {
   background: rgb(var(--v-theme-surface));
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
@@ -382,18 +241,8 @@ const handleCheckout = async (): Promise<void> => {
   padding: var(--spacing-md);
 }
 
-/* =============================================
-   ACTION BUTTONS
-   ============================================= */
-
-.primary-actions,
-.secondary-actions {
+.action-buttons {
   gap: var(--spacing-sm);
-}
-
-.save-btn {
-  position: relative;
-  transition: all 0.3s ease;
 }
 
 .unsaved-indicator {
@@ -402,141 +251,22 @@ const handleCheckout = async (): Promise<void> => {
   margin-left: var(--spacing-xs);
 }
 
-.checkout-btn {
-  min-height: 56px;
-  border-radius: var(--v-border-radius-lg);
-  box-shadow: 0 4px 12px rgba(var(--v-theme-success), 0.3);
-}
-
-.checkout-btn:hover {
-  box-shadow: 0 6px 16px rgba(var(--v-theme-success), 0.4);
-  transform: translateY(-2px);
-}
-
-/* =============================================
-   CHECKOUT SECTION
-   ============================================= */
-
-.checkout-section {
-  background: rgba(var(--v-theme-success), 0.02);
-  border-radius: var(--v-border-radius-lg);
-  padding: var(--spacing-md);
-  margin: 0 calc(-1 * var(--spacing-sm));
-}
-
 .checkout-summary {
   border: 1px solid rgba(var(--v-theme-success), 0.2);
   background: rgba(var(--v-theme-success), 0.05);
 }
-
-.checkout-amount {
-  font-variant-numeric: tabular-nums;
-  color: rgb(var(--v-theme-success));
-}
-
-/* =============================================
-   ALERTS
-   ============================================= */
-
-.v-alert {
-  border-radius: var(--v-border-radius-md);
-}
-
-/* =============================================
-   RESPONSIVE DESIGN
-   ============================================= */
 
 @media (max-width: 768px) {
   .actions-content {
     padding: var(--spacing-sm);
   }
 
-  .primary-actions,
-  .secondary-actions {
+  .action-buttons {
     flex-direction: column;
   }
 
-  .checkout-section {
-    padding: var(--spacing-sm);
+  .action-buttons .flex-grow-1 {
+    flex-grow: 0;
   }
-
-  .checkout-btn {
-    min-height: 48px;
-  }
-}
-
-/* =============================================
-   LOADING STATES
-   ============================================= */
-
-.order-actions.loading {
-  opacity: 0.8;
-  pointer-events: none;
-}
-
-.v-btn:disabled {
-  opacity: 0.4;
-}
-
-.v-btn.v-btn--loading {
-  opacity: 0.8;
-}
-
-/* =============================================
-   ANIMATIONS
-   ============================================= */
-
-.order-actions {
-  transition: all 0.3s ease;
-}
-
-.v-btn {
-  transition: all 0.2s ease;
-}
-
-.checkout-summary {
-  transition: all 0.3s ease;
-}
-
-.checkout-summary:hover {
-  border-color: rgb(var(--v-theme-success));
-  background: rgba(var(--v-theme-success), 0.08);
-}
-
-/* =============================================
-   FOCUS STATES
-   ============================================= */
-
-.v-btn:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary));
-  outline-offset: 2px;
-}
-
-/* =============================================
-   STATUS INDICATORS
-   ============================================= */
-
-.save-btn.v-btn--variant-flat {
-  background: rgb(var(--v-theme-primary)) !important;
-  color: rgb(var(--v-theme-on-primary)) !important;
-}
-
-.save-btn.v-btn--variant-outlined {
-  border-color: rgba(var(--v-theme-on-surface), 0.2);
-  color: rgba(var(--v-theme-on-surface), 0.6);
-}
-
-/* =============================================
-   SELECTION INDICATORS
-   ============================================= */
-
-.v-btn .text-caption {
-  font-size: 0.75rem;
-  opacity: 0.8;
-}
-
-.checkout-details {
-  font-size: 0.75rem;
-  line-height: 1.2;
 }
 </style>
