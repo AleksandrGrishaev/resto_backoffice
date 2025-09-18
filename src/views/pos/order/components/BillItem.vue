@@ -1,49 +1,3 @@
-/* ============================================= TABLET-OPTIMIZED CLEAN DESIGN
-============================================= */ .bill-items { display: flex; flex-direction:
-column; gap: 8px; } .item-group { background: transparent; } /*
-============================================= GROUP HEADER - CLICKABLE
-============================================= */ .group-header { display: flex; align-items: center;
-padding: 16px 12px; background: rgba(var(--v-theme-on-surface), 0.02); border-radius: 8px; gap:
-16px; min-height: 64px; cursor: pointer; transition: background-color 0.2s ease; }
-.group-header:hover { background: rgba(var(--v-theme-on-surface), 0.04); } .group-info { flex: 1;
-min-width: 0; } .group-actions { display: flex; align-items: center; gap: 12px; } .item-name {
-font-weight: 600; font-size: 1rem; color: rgb(var(--v-theme-on-surface)); line-height: 1.2; }
-.group-details-line { display: flex; align-items: center; gap: 8px; margin-top: 4px; } .variant-name
-{ font-size: 0.875rem; color: rgb(var(--v-theme-on-surface-variant)); } .mod-chip { font-size:
-0.75rem; color: rgb(var(--v-theme-info)); background: rgba(var(--v-theme-info), 0.1); padding: 2px
-6px; border-radius: 4px; font-weight: 500; } .count-badge { background: rgba(var(--v-theme-primary),
-0.15); color: rgb(var(--v-theme-primary)); padding: 4px 8px; border-radius: 12px; font-size:
-0.875rem; font-weight: 600; min-width: 32px; text-align: center; } .group-price { font-weight: 600;
-font-size: 1rem; color: rgb(var(--v-theme-on-surface)); min-width: 80px; text-align: right; } /*
-============================================= SINGLE ITEM - TWO LINES
-============================================= */ .single-item { display: flex; align-items:
-flex-start; padding: 16px 12px; gap: 16px; min-height: 64px; border-radius: 8px; background:
-rgba(var(--v-theme-on-surface), 0.02); transition: background-color 0.2s ease; } .single-item:hover
-{ background: rgba(var(--v-theme-primary), 0.04); } .single-item.selected { background:
-rgba(var(--v-theme-primary), 0.08); } .item-info { flex: 1; min-width: 0; } .item-name-line {
-font-weight: 600; font-size: 1rem; color: rgb(var(--v-theme-on-surface)); line-height: 1.2;
-margin-bottom: 4px; } .item-name-line .variant-name { color: rgb(var(--v-theme-on-surface-variant));
-font-weight: 500; margin-left: 4px; } .item-details-line { display: flex; align-items: center; gap:
-8px; flex-wrap: wrap; } .notes-inline { display: flex; align-items: center; gap: 4px; } .note-text {
-font-size: 0.8125rem; color: rgb(var(--v-theme-warning)); font-style: italic; } /*
-============================================= ITEMS LIST - NO BORDERS
-============================================= */ .items-list { padding: 0 8px 8px 8px; margin-top:
-4px; } .item-row { display: flex; align-items: center; padding: 12px 8px; gap: 12px; min-height:
-48px; border-radius: 4px; transition: background-color 0.2s ease; margin-bottom: 2px; }
-.item-row:hover { background: rgba(var(--v-theme-primary), 0.04); } .item-row.selected { background:
-rgba(var(--v-theme-primary), 0.08); } .item-number { font-size: 0.875rem; color:
-rgb(var(--v-theme-on-surface-variant)); min-width: 28px; font-weight: 600; } .spacer { flex: 1; }
-.item-price { font-size: 1rem; font-weight: 600; color: rgb(var(--v-theme-on-surface)); min-width:
-80px; text-align: right; } /* ============================================= STATUS CHIP
-============================================= */ .status-chip { height: 24px !important; font-size:
-0.75rem !important; flex-shrink: 0; } /* ============================================= VUETIFY
-OVERRIDES FOR TABLET ============================================= */ :deep(.v-selection-control) {
-min-height: auto !important; } :deep(.v-selection-control__wrapper) { height: 24px !important; }
-:deep(.v-selection-control__input) { width: 24px !important; height: 24px !important; } .v-btn {
-min-width: 40px !important; height: 40px !important; } /*
-============================================= RESPONSIVE ADJUSTMENTS
-============================================= */ @media (max-width: 768px) { .group-header {
-padding: 12px
 <!-- src/views/pos/order/components/BillItem.vue -->
 <template>
   <div class="bill-items">
@@ -63,16 +17,27 @@ padding: 12px
           />
 
           <div class="group-info">
-            <div class="item-name">{{ group.menuItemName }}</div>
-            <div class="group-details-line">
-              <span class="count-badge">{{ group.items.length }}</span>
-              <div v-if="group.variantName" class="variant-name">{{ group.variantName }}</div>
-              <span v-for="mod in group.modifications" :key="mod" class="mod-chip">+{{ mod }}</span>
+            <!-- Первая строка: только название -->
+            <div class="item-name-full">
+              {{ group.menuItemName }}
+              <span v-if="group.variantName" class="variant-name-inline">
+                {{ group.variantName }}
+              </span>
+            </div>
+
+            <!-- Вторая строка: счетчик, модификации и цена -->
+            <div class="group-meta-line">
+              <div class="group-badges">
+                <span class="count-badge">{{ group.items.length }}</span>
+                <span v-for="mod in group.modifications" :key="mod" class="mod-chip">
+                  +{{ mod }}
+                </span>
+              </div>
+              <span class="group-price-inline">{{ formatPrice(group.totalPrice) }}</span>
             </div>
           </div>
 
           <div class="group-actions">
-            <span class="group-price">{{ formatPrice(group.totalPrice) }}</span>
             <v-btn
               icon
               size="default"
@@ -162,35 +127,37 @@ padding: 12px
         />
 
         <div class="item-info">
-          <!-- First Line: Name + Variant -->
-          <div class="item-name-line">
+          <!-- Первая строка: только название -->
+          <div class="item-name-single">
             {{ group.menuItemName }}
-            <span v-if="group.variantName" class="variant-name">{{ group.variantName }}</span>
+            <span v-if="group.variantName" class="variant-name-inline">
+              {{ group.variantName }}
+            </span>
           </div>
 
-          <!-- Second Line: Status + Modifications + Notes -->
-          <div class="item-details-line">
-            <v-chip
-              :color="getStatusColor(group.items[0].status)"
-              size="small"
-              variant="flat"
-              class="status-chip"
-            >
-              {{ getStatusLabel(group.items[0].status) }}
-            </v-chip>
+          <!-- Вторая строка: статус, модификации, заметки и цена -->
+          <div class="item-meta-line">
+            <div class="item-badges">
+              <v-chip
+                :color="getStatusColor(group.items[0].status)"
+                size="small"
+                variant="flat"
+                class="status-chip"
+              >
+                {{ getStatusLabel(group.items[0].status) }}
+              </v-chip>
 
-            <span v-for="mod in group.modifications" :key="mod" class="mod-chip">+{{ mod }}</span>
+              <span v-for="mod in group.modifications" :key="mod" class="mod-chip">+{{ mod }}</span>
 
-            <div v-if="group.items[0].kitchenNotes" class="notes-inline">
-              <v-icon size="14" color="warning">mdi-note-text</v-icon>
-              <span class="note-text">{{ group.items[0].kitchenNotes }}</span>
+              <div v-if="group.items[0].kitchenNotes" class="notes-inline">
+                <v-icon size="14" color="warning">mdi-note-text</v-icon>
+                <span class="note-text">{{ group.items[0].kitchenNotes }}</span>
+              </div>
             </div>
+
+            <span class="item-price-inline">{{ formatPrice(group.items[0].totalPrice) }}</span>
           </div>
         </div>
-
-        <div class="spacer"></div>
-
-        <span class="item-price">{{ formatPrice(group.items[0].totalPrice) }}</span>
 
         <!-- Single Item Actions Menu -->
         <v-menu location="bottom end">
@@ -273,6 +240,7 @@ const groupedItems = computed(() => {
           .join('-')
       : 'no-mods'
 
+    // Включаем variantId в ключ группировки для разделения модификаций
     const key = `${item.menuItemId}-${item.variantId || 'default'}-${modificationsKey}`
 
     if (!groups.has(key)) {
@@ -399,7 +367,7 @@ const getStatusLabel = (status: ItemStatus): string => {
 }
 
 /* =============================================
-   GROUP HEADER - LARGER FOR TABLET
+   GROUP HEADER - TWO LINES LAYOUT
    ============================================= */
 
 .group-header {
@@ -410,6 +378,12 @@ const getStatusLabel = (status: ItemStatus): string => {
   border-radius: 8px;
   gap: 16px;
   min-height: 64px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.group-header:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .group-info {
@@ -417,30 +391,122 @@ const getStatusLabel = (status: ItemStatus): string => {
   min-width: 0;
 }
 
-.group-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.item-name {
+.item-name-full {
   font-weight: 600;
   font-size: 1rem;
   color: rgb(var(--v-theme-on-surface));
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
-.variant-name {
+.group-meta-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.group-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.group-price-inline {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgb(var(--v-theme-on-surface));
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* =============================================
+   SINGLE ITEM - TWO LINES LAYOUT
+   ============================================= */
+
+.single-item {
+  display: flex;
+  align-items: center;
+  padding: 16px 12px;
+  gap: 16px;
+  min-height: 64px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  transition: background-color 0.2s ease;
+}
+
+.single-item:hover {
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+
+.single-item.selected {
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name-single {
+  font-weight: 600;
+  font-size: 1rem;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.item-meta-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-price-inline {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgb(var(--v-theme-on-surface));
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* =============================================
+   SHARED STYLES
+   ============================================= */
+
+.variant-name-inline {
   font-size: 0.875rem;
   color: rgb(var(--v-theme-on-surface-variant));
-  margin-top: 2px;
-}
-
-.modifications {
-  margin-top: 4px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 .mod-chip {
@@ -463,12 +529,26 @@ const getStatusLabel = (status: ItemStatus): string => {
   text-align: center;
 }
 
-.group-price {
-  font-weight: 600;
-  font-size: 1rem;
-  color: rgb(var(--v-theme-on-surface));
-  min-width: 80px;
-  text-align: right;
+.status-chip {
+  height: 24px !important;
+  font-size: 0.75rem !important;
+  flex-shrink: 0;
+}
+
+.notes-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.note-text {
+  font-size: 0.8125rem;
+  color: rgb(var(--v-theme-warning));
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
 }
 
 /* =============================================
@@ -504,47 +584,6 @@ const getStatusLabel = (status: ItemStatus): string => {
   color: rgb(var(--v-theme-on-surface-variant));
   min-width: 28px;
   font-weight: 600;
-}
-
-/* =============================================
-   SINGLE ITEM - LARGER
-   ============================================= */
-
-.single-item {
-  display: flex;
-  align-items: center;
-  padding: 16px 12px;
-  gap: 16px;
-  min-height: 64px;
-  border-radius: 8px;
-  background: rgba(var(--v-theme-on-surface), 0.02);
-  transition: background-color 0.2s ease;
-}
-
-.single-item:hover {
-  background: rgba(var(--v-theme-primary), 0.04);
-}
-
-.single-item.selected {
-  background: rgba(var(--v-theme-primary), 0.08);
-}
-
-.item-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.item-notes {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.note-text {
-  font-size: 0.8125rem;
-  color: rgb(var(--v-theme-warning));
-  font-style: italic;
 }
 
 .spacer {
@@ -604,6 +643,20 @@ const getStatusLabel = (status: ItemStatus): string => {
   .item-row {
     padding: 10px 6px;
     min-height: 44px;
+  }
+
+  .group-badges,
+  .item-badges {
+    gap: 4px;
+  }
+
+  .mod-chip {
+    font-size: 0.7rem;
+    padding: 1px 4px;
+  }
+
+  .note-text {
+    max-width: 80px;
   }
 }
 </style>
