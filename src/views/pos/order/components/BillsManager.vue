@@ -31,19 +31,12 @@
       <!-- Items List -->
       <div v-else class="items-list">
         <BillItem
-          v-for="item in activeBill.items"
-          :key="item.id"
-          :item="item"
-          :selected="ordersStore.isItemSelected(item.id)"
-          :can-modify="canEditItems"
-          :show-checkbox="true"
-          :show-status="true"
-          :show-actions="true"
+          :items="activeBill.items.filter(item => item.status !== 'cancelled')"
+          :is-item-selected="ordersStore.isItemSelected"
           @select="handleItemSelect"
-          @update-quantity="handleUpdateQuantity"
-          @modify="handleModifyItem"
           @cancel="handleCancelItem"
           @add-note="handleAddNote"
+          @add-one-more="handleAddOneMore"
         />
       </div>
     </div>
@@ -106,6 +99,7 @@ const emit = defineEmits<{
   'modify-item': [itemId: string]
   'cancel-item': [itemId: string]
   'add-note': [itemId: string]
+  'add-item': [itemData: any] // Добавить эту строку
 }>()
 
 // Computed
@@ -131,6 +125,27 @@ const handleToggleBillSelection = (billId: string): void => {
     isSelected: ordersStore.isBillSelected(billId),
     selectedItemsCount: ordersStore.selectedItemsCount,
     selectedBillsCount: ordersStore.selectedBillsCount
+  })
+}
+const handleSelectAll = (selected: boolean): void => {
+  if (!activeBill.value) return
+
+  activeBill.value.items
+    .filter(item => item.status !== 'cancelled')
+    .forEach(item => {
+      if (selected) {
+        ordersStore.selectedItems.add(item.id)
+      } else {
+        ordersStore.selectedItems.delete(item.id)
+      }
+    })
+}
+const handleAddOneMore = (group: any): void => {
+  // Добавляем еще одну позицию того же типа
+  emit('add-item', {
+    menuItemId: group.menuItemId,
+    variantId: group.variantId,
+    unitPrice: group.items[0].unitPrice
   })
 }
 
