@@ -115,7 +115,28 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   const hasSelection = computed(() => selectedItems.value.size > 0 || selectedBills.value.size > 0)
 
   // ===== ACTIONS =====
+  async function saveAndNotifyOrder(
+    orderId: string,
+    tableNumber?: string
+  ): Promise<ServiceResponse<{ order: PosOrder; notificationsSent: boolean }>> {
+    try {
+      const response = await ordersService.saveAndNotifyOrder(orderId, tableNumber)
 
+      if (response.success && response.data) {
+        // Обновляем заказ в store
+        const orderIndex = orders.value.findIndex(o => o.id === orderId)
+        if (orderIndex !== -1) {
+          orders.value[orderIndex] = response.data.order
+        }
+      }
+
+      return response
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to save and notify'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
   /**
    * Загрузить все заказы
    */
@@ -534,7 +555,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       let billDiscountAmount = 0
 
       bill.items.forEach(item => {
-        if (item.status === 'active') {
+        if (['draft', 'waiting', 'cooking', 'ready', 'served'].includes(item.status)) {
           billSubtotal += item.totalPrice
           billDiscountAmount += item.discounts.reduce((sum, discount) => {
             return (
@@ -637,6 +658,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     setFilters,
     clearFilters,
     clearError,
+    saveAndNotifyOrder,
 
     // 🆕 Selection Actions
     toggleItemSelection,

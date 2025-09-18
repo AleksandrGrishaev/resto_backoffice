@@ -13,11 +13,14 @@ export interface Category extends BaseEntity {
   sortOrder: number
 }
 
+export type Department = 'kitchen' | 'bar'
+
 export interface MenuItem extends BaseEntity {
   categoryId: string
   name: string // "Стейк с гарниром", "Пиво Bintang"
   description?: string
   type: 'food' | 'beverage'
+  department: Department // добавить это поле
   isActive: boolean
   variants: MenuItemVariant[]
   sortOrder: number
@@ -74,6 +77,7 @@ export interface CreateMenuItemDto {
   name: string
   description?: string
   type: 'food' | 'beverage'
+  department: Department
   variants: CreateMenuItemVariantDto[]
   sortOrder?: number
   preparationTime?: number
@@ -94,6 +98,7 @@ export interface CreateMenuItemVariantDto {
 export interface UpdateMenuItemDto extends Partial<CreateMenuItemDto> {
   isActive?: boolean
   variants?: MenuItemVariant[] // полная замена вариантов при обновлении
+  department: Department
 }
 
 // =============================================
@@ -125,6 +130,7 @@ export const DEFAULT_MENU_ITEM: Omit<MenuItem, 'id' | 'createdAt' | 'updatedAt'>
   description: '',
   isActive: true,
   type: 'food',
+  department: 'kitchen',
   variants: [],
   sortOrder: 0,
   preparationTime: 0,
@@ -138,6 +144,22 @@ export const DEFAULT_VARIANT: Omit<MenuItemVariant, 'id'> = {
   isActive: true,
   sortOrder: 0,
   composition: []
+}
+
+// Добавить новые константы после MENU_ITEM_TYPES:
+export const DEPARTMENTS = {
+  KITCHEN: 'kitchen',
+  BAR: 'bar'
+} as const
+
+export const DEPARTMENT_LABELS: Record<Department, string> = {
+  kitchen: 'Kitchen',
+  bar: 'Bar'
+}
+
+export const DEFAULT_DEPARTMENTS: Record<'food' | 'beverage', Department> = {
+  food: 'kitchen',
+  beverage: 'bar'
 }
 
 export const MENU_ITEM_TYPES = {

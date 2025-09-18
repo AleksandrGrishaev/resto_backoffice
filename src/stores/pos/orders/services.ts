@@ -9,6 +9,7 @@ import type {
 } from '../types'
 import type { MenuItemVariant } from '@/stores/menu'
 import { TimeUtils } from '@/utils'
+import { departmentNotificationService } from '../service/DepartmentNotificationService'
 
 export class OrdersService {
   private readonly ORDERS_KEY = 'pos_orders'
@@ -32,6 +33,134 @@ export class OrdersService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load orders'
+      }
+    }
+  }
+
+  /**
+   * Сохранить заказ и отправить уведомления в отделы
+   */
+  async saveAndNotifyOrder(
+    orderId: string,
+    tableNumber?: string
+  ): Promise<
+    ServiceResponse<{
+      order: PosOrder
+      notificationsSent: boolean
+    }>
+  > {
+    try {
+      // 1. Загружаем текущий заказ
+      const orders = await this.getAllOrders()
+      if (!orders.success || !orders.data) {
+        throw new Error('Failed to load orders')
+      }
+
+      const order = orders.data.find(o => o.id === orderId)
+      if (!order) {
+        throw new Error('Order not found')
+      }
+
+      // 2. Находим новые позиции (status: 'draft')
+      const newItems: PosBillItem[] = []
+      order.bills.forEach(bill => {
+        bill.items.forEach(item => {
+          if (item.status === 'draft') {
+            newItems.push(item)
+          }
+        })
+      })
+
+      console.log('💾 Saving order with new items:', {
+        orderId,
+        newItemsCount: newItems.length
+      })
+
+      // 3. Отправляем уведомления в отделы если есть новые позиции
+      let notificationsSent = false
+      if (newItems.length > 0) {
+        const notificationResult = await departmentNotificationService.distributeAndNotify(
+          order,
+          newItems,
+          tableNumber
+        )
+
+        if (notificationResult.success) {
+          // 4. Обновляем статусы позиций на 'waiting'
+          order.bills.forEach(bill => {
+            bill.items.forEach(item => {
+              if (item.status === 'draft') {
+                item.status = 'waiting'
+                item.sentToKitchenAt = new Date().toISOString()
+              }
+            })
+          })
+          notificationsSent = true
+        }
+      }
+
+      // 5. Сохраняем обновленный заказ
+      const orderIndex = orders.data.findIndex(o => o.id === orderId)
+      if (orderIndex !== -1) {
+        orders.data[orderIndex] = {
+          ...order,
+          updatedAt: new Date().toISOString()
+        }
+
+        localStorage.setItem(
+          this.ORDERS_KEY,
+          JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
+        )
+
+        // Сохраняем bills отдельно
+        for (const bill of order.bills) {
+          const allItems = this.getAllStoredItems()
+          const filteredItems = allItems.filter(item => item.billId !== bill.id)
+          filteredItems.push(...bill.items)
+          localStorage.setItem(this.ITEMS_KEY, JSON.stringify(filteredItems))
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          order,
+          notificationsSent
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save order'
+      }
+    }
+  }
+
+  /**
+   * Обновить статус позиций
+   */
+  async updateItemsStatus(
+    itemIds: string[],
+    newStatus: 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const allItems = this.getAllStoredItems()
+
+      itemIds.forEach(itemId => {
+        const itemIndex = allItems.findIndex(item => item.id === itemId)
+        if (itemIndex !== -1) {
+          allItems[itemIndex].status = newStatus
+          allItems[itemIndex].updatedAt = new Date().toISOString()
+        }
+      })
+
+      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update items status'
       }
     }
   }
@@ -150,35 +279,41 @@ export class OrdersService {
     orderId: string,
     billId: string,
     menuItem: PosMenuItem,
-    selectedVariant: MenuItemVariant, // ДОБАВИТЬ ПАРАМЕТР
+    selectedVariant: MenuItemVariant,
     quantity: number,
     modifications: any[]
   ): Promise<ServiceResponse<PosBillItem>> {
     try {
+      // Сначала рассчитываем цену модификаций
+      const modificationPrice = modifications.reduce((sum, mod) => sum + mod.price, 0)
+
+      // Правильная цена = цена варианта + модификации
+      const finalUnitPrice = selectedVariant.price + modificationPrice
+      const finalTotalPrice = finalUnitPrice * quantity
+
       const newItem: PosBillItem = {
         id: `item_${Date.now()}`,
         billId,
         menuItemId: menuItem.id,
         menuItemName: menuItem.name,
-        variantId: selectedVariant.id, // ДОБАВИТЬ
-        variantName: selectedVariant.name, // ДОБАВИТЬ
+        variantId: selectedVariant.id,
+        variantName: selectedVariant.name,
         quantity,
-        unitPrice: selectedVariant.price, // ИСПОЛЬЗОВАТЬ ЦЕНУ ВАРИАНТА
-        totalPrice: selectedVariant.price * quantity,
+        unitPrice: finalUnitPrice, // ИСПРАВЛЕНО: включает модификации
+        totalPrice: finalTotalPrice, // ИСПРАВЛЕНО: правильная итоговая цена
         discounts: [],
         modifications: modifications.map(mod => ({
           id: mod.id,
           name: mod.name,
           price: mod.price
         })),
-        status: 'active',
+        status: 'draft', // Статус остается правильным
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      // Добавляем модификации к цене
-      const modificationPrice = modifications.reduce((sum, mod) => sum + mod.price, 0)
-      newItem.totalPrice = (menuItem.price + modificationPrice) * quantity
+      // УБИРАЕМ эту строку - она перезаписывала правильную цену:
+      // newItem.totalPrice = (menuItem.price + modificationPrice) * quantity
 
       // Сохраняем товар
       const items = await this.getItemsByBillId(billId)
@@ -271,7 +406,7 @@ export class OrdersService {
       // Обновить статус только выбранных товаров
       for (const bill of updatedOrder.bills) {
         for (const item of bill.items) {
-          if (itemIds.includes(item.id) && item.status === 'active') {
+          if (itemIds.includes(item.id) && item.status === 'draft') {
             item.sentToKitchenAt = TimeUtils.getCurrentLocalISO()
           }
         }
@@ -318,7 +453,7 @@ export class OrdersService {
       // Обновить статус всех товаров в заказе
       for (const bill of updatedOrder.bills) {
         for (const item of bill.items) {
-          if (item.status === 'active') {
+          if (item.status === 'draft') {
             item.sentToKitchenAt = TimeUtils.getCurrentLocalISO()
           }
         }
@@ -391,7 +526,7 @@ export class OrdersService {
       billNumber: this.generateBillNumber(),
       orderId,
       name: billName,
-      status: 'active',
+      status: 'draft',
       items: [],
       subtotal: 0,
       discountAmount: 0,

@@ -50,7 +50,7 @@ export interface PosOrder extends BaseEntity {
 }
 
 // ===== BILL TYPES =====
-export type BillStatus = 'active' | 'closed' | 'cancelled'
+export type BillStatus = 'draft' | 'active' | 'closed' | 'cancelled'
 
 export interface PosBill extends BaseEntity {
   billNumber: string
@@ -78,7 +78,7 @@ export interface PosBillItem extends BaseEntity {
   totalPrice: number
   discounts: PosItemDiscount[]
   modifications: PosItemModification[]
-  status: 'active' | 'cancelled'
+  status: 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled' // заменить это поле
   kitchenNotes?: string
   sentToKitchenAt?: string
   preparedAt?: string

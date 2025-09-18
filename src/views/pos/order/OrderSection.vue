@@ -168,6 +168,7 @@ const success = ref({
   message: '',
   timeout: 3000
 })
+
 const hasUnsavedChanges = ref(false)
 
 // Computed - Main Data
@@ -456,14 +457,32 @@ const handleSave = async (): Promise<void> => {
     loading.value.actions = true
     loadingMessage.value = 'Saving order...'
 
-    // TODO: Implement save logic
-    showSuccess('Order saved successfully')
-    hasUnsavedChanges.value = false
+    // ИСПРАВИТЬ - переименовать переменную:
+    const currentTableNumber = tableNumber.value
+
+    const result = await ordersStore.saveAndNotifyOrder(currentOrder.value.id, currentTableNumber)
+
+    if (result.success && result.data) {
+      const { order, notificationsSent } = result.data
+
+      if (notificationsSent) {
+        showSuccess('Order saved and sent to kitchen/bar')
+      } else {
+        showSuccess('Order saved successfully')
+      }
+
+      hasUnsavedChanges.value = false // теперь будет работать
+
+      await ordersStore.recalculateOrderTotals(currentOrder.value.id)
+    } else {
+      throw new Error(result.error || 'Failed to save order')
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save order'
     showError(message)
   } finally {
     loading.value.actions = false
+    loadingMessage.value = ''
   }
 }
 
@@ -498,7 +517,7 @@ const handleSendToKitchenFromActions = async (): Promise<void> => {
     await handleSendToKitchen(itemIds)
   } else if (activeBill.value) {
     // Send all new items from active bill
-    const newItems = activeBill.value.items.filter(item => item.status === 'pending')
+    const newItems = activeBill.value.items.filter(item => item.status === 'draft')
     if (newItems.length > 0) {
       await handleSendToKitchen(newItems.map(item => item.id))
     }
@@ -579,6 +598,19 @@ watch(
         activeBill.value?.items.some(item => item.status === 'pending') || false
     }
   }
+)
+
+watch(
+  () => currentOrder.value?.bills,
+  bills => {
+    if (!bills) {
+      hasUnsavedChanges.value = false
+      return
+    }
+
+    hasUnsavedChanges.value = bills.some(bill => bill.items.some(item => item.status === 'draft'))
+  },
+  { deep: true, immediate: true }
 )
 
 // Lifecycle
