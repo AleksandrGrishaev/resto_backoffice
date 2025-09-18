@@ -22,19 +22,92 @@ export interface PosTable extends BaseEntity {
 
 // ===== ORDER TYPES =====
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery'
+
 export type OrderStatus =
   | 'draft'
-  | 'confirmed'
-  | 'preparing'
+  | 'waiting'
+  | 'cooking'
   | 'ready'
   | 'served'
-  | 'paid'
+  | 'collected'
+  | 'delivered'
   | 'cancelled'
+export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded'
+
+export type ItemStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+export type ItemPaymentStatus = 'unpaid' | 'paid' | 'refunded'
+
+// ДОБАВИТЬ: Типы статусов для разных типов заказов
+export type DineInStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+export type TakeawayStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'collected' | 'cancelled'
+export type DeliveryStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'delivered' | 'cancelled'
+
+// ДОБАВИТЬ: Правила переходов статусов
+export interface StatusTransition {
+  from: OrderStatus
+  to: OrderStatus[]
+  orderTypes: OrderType[]
+}
+
+// ДОБАВИТЬ: Конфигурация статусов для каждого типа заказа
+export interface OrderTypeStatusConfig {
+  allowedStatuses: OrderStatus[]
+  finalStatus: OrderStatus // served | collected | delivered
+  transitions: Record<OrderStatus, OrderStatus[]>
+}
+
+// ДОБАВИТЬ: Маппинг типов заказов к конфигурации статусов
+// ДОБАВИТЬ: Маппинг типов заказов к конфигурации статусов
+export const ORDER_TYPE_STATUS_CONFIG: Record<OrderType, OrderTypeStatusConfig> = {
+  dine_in: {
+    allowedStatuses: ['draft', 'waiting', 'cooking', 'ready', 'served', 'cancelled'],
+    finalStatus: 'served',
+    transitions: {
+      draft: ['waiting', 'cancelled'],
+      waiting: ['cooking', 'cancelled'],
+      cooking: ['ready', 'cancelled'],
+      ready: ['served', 'cancelled'],
+      served: ['cancelled'],
+      collected: [], // Неиспользуемый статус
+      delivered: [], // Неиспользуемый статус
+      cancelled: []
+    }
+  },
+  takeaway: {
+    allowedStatuses: ['draft', 'waiting', 'cooking', 'ready', 'collected', 'cancelled'],
+    finalStatus: 'collected',
+    transitions: {
+      draft: ['waiting', 'cancelled'],
+      waiting: ['cooking', 'cancelled'],
+      cooking: ['ready', 'cancelled'],
+      ready: ['collected', 'cancelled'],
+      served: [], // Неиспользуемый статус
+      collected: ['cancelled'],
+      delivered: [], // Неиспользуемый статус
+      cancelled: []
+    }
+  },
+  delivery: {
+    allowedStatuses: ['draft', 'waiting', 'cooking', 'ready', 'delivered', 'cancelled'],
+    finalStatus: 'delivered',
+    transitions: {
+      draft: ['waiting', 'cancelled'],
+      waiting: ['cooking', 'cancelled'],
+      cooking: ['ready', 'cancelled'],
+      ready: ['delivered', 'cancelled'],
+      served: [], // Неиспользуемый статус
+      collected: [], // Неиспользуемый статус
+      delivered: ['cancelled'],
+      cancelled: []
+    }
+  }
+}
 
 export interface PosOrder extends BaseEntity {
   orderNumber: string
   type: OrderType
   status: OrderStatus
+  paymentStatus: OrderPaymentStatus
   tableId?: string
   customerId?: string
   customerName?: string
@@ -78,7 +151,8 @@ export interface PosBillItem extends BaseEntity {
   totalPrice: number
   discounts: PosItemDiscount[]
   modifications: PosItemModification[]
-  status: 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled' // заменить это поле
+  status: ItemStatus
+  paymentStatus: ItemPaymentStatus
   kitchenNotes?: string
   sentToKitchenAt?: string
   preparedAt?: string

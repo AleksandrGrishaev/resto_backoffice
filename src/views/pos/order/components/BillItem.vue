@@ -73,8 +73,16 @@
 
               <span class="item-number">#{{ index + 1 }}</span>
 
-              <v-chip :color="getStatusColor(item.status)" size="small" variant="flat">
-                {{ getStatusLabel(item.status) }}
+              <v-chip :color="getItemStatusColor(item.status)" size="small" variant="flat">
+                {{ getItemStatusText(item.status) }}
+              </v-chip>
+
+              <v-chip
+                :color="getItemPaymentStatusColor(item.paymentStatus || 'unpaid')"
+                size="small"
+                variant="flat"
+              >
+                {{ getItemPaymentStatusText(item.paymentStatus || 'unpaid') }}
               </v-chip>
 
               <div v-if="item.kitchenNotes" class="notes-inline">
@@ -139,12 +147,21 @@
           <div class="item-meta-line">
             <div class="item-badges">
               <v-chip
-                :color="getStatusColor(group.items[0].status)"
+                :color="getItemStatusColor(group.items[0].status)"
                 size="small"
                 variant="flat"
                 class="status-chip"
               >
-                {{ getStatusLabel(group.items[0].status) }}
+                {{ getItemStatusText(group.items[0].status) }}
+              </v-chip>
+
+              <v-chip
+                :color="getItemPaymentStatusColor(group.items[0].paymentStatus)"
+                size="small"
+                variant="flat"
+                class="payment-chip"
+              >
+                {{ getItemPaymentStatusText(group.items[0].paymentStatus) }}
               </v-chip>
 
               <span v-for="mod in group.modifications" :key="mod" class="mod-chip">+{{ mod }}</span>
@@ -191,9 +208,18 @@
 </template>
 
 <script setup lang="ts">
-import type { PosBillItem, ItemStatus } from '@/stores/pos/types'
+import type { PosBillItem, ItemStatus, ItemPaymentStatus } from '@/stores/pos/types'
 import { formatIDR } from '@/utils/currency'
 import { computed, ref } from 'vue'
+import { useOrdersComposables } from '@/stores/pos/orders/composables'
+
+// Получить функции из composables:
+const {
+  getItemStatusColor,
+  getItemStatusText,
+  getItemPaymentStatusColor,
+  getItemPaymentStatusText
+} = useOrdersComposables()
 
 const formatPrice = formatIDR
 
@@ -311,44 +337,6 @@ const handleAddNote = (itemId: string): void => {
 const handleAddOneMore = (group: GroupedBillItems): void => {
   emit('add-one-more', group)
 }
-
-const getStatusColor = (status: ItemStatus): string => {
-  switch (status) {
-    case 'pending':
-      return 'orange'
-    case 'sent_to_kitchen':
-      return 'blue'
-    case 'preparing':
-      return 'purple'
-    case 'ready':
-      return 'green'
-    case 'served':
-      return 'success'
-    case 'cancelled':
-      return 'error'
-    default:
-      return 'grey'
-  }
-}
-
-const getStatusLabel = (status: ItemStatus): string => {
-  switch (status) {
-    case 'pending':
-      return 'New'
-    case 'sent_to_kitchen':
-      return 'Sent'
-    case 'preparing':
-      return 'Cooking'
-    case 'ready':
-      return 'Ready'
-    case 'served':
-      return 'Served'
-    case 'cancelled':
-      return 'Cancelled'
-    default:
-      return 'Active'
-  }
-}
 </script>
 
 <style scoped>
@@ -446,6 +434,18 @@ const getStatusLabel = (status: ItemStatus): string => {
   border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.02);
   transition: background-color 0.2s ease;
+}
+
+.status-chip,
+.payment-chip {
+  height: 24px !important;
+  font-size: 0.75rem !important;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.payment-chip {
+  margin-left: 4px;
 }
 
 .single-item:hover {

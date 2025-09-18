@@ -5,7 +5,9 @@ import type {
   PosBillItem,
   ServiceResponse,
   OrderType,
-  PosMenuItem
+  PosMenuItem,
+  OrderPaymentStatus,
+  ItemPaymentStatus
 } from '../types'
 import type { MenuItemVariant } from '@/stores/menu'
 import { TimeUtils } from '@/utils'
@@ -95,17 +97,24 @@ export class OrdersService {
               }
             })
           })
+
+          // ДОБАВИТЬ: Обновляем статус заказа на 'waiting'
+          if (order.status === 'draft') {
+            order.status = 'waiting'
+            console.log(`📊 Order status updated: draft → waiting`)
+          }
+
           notificationsSent = true
         }
       }
 
-      // 5. Сохраняем обновленный заказ
+      // 5. Обновляем timestamp заказа
+      order.updatedAt = new Date().toISOString()
+
+      // 6. Сохраняем обновленный заказ
       const orderIndex = orders.data.findIndex(o => o.id === orderId)
       if (orderIndex !== -1) {
-        orders.data[orderIndex] = {
-          ...order,
-          updatedAt: new Date().toISOString()
-        }
+        orders.data[orderIndex] = order
 
         localStorage.setItem(
           this.ORDERS_KEY,
@@ -208,6 +217,7 @@ export class OrdersService {
         orderNumber,
         type: orderData.type, // ВАЖНО: правильно сохраняем тип
         status: 'draft',
+        paymentStatus: 'unpaid',
         tableId: orderData.tableId,
         customerName: orderData.customerName,
         waiterName: orderData.waiterName,
@@ -308,6 +318,7 @@ export class OrdersService {
           price: mod.price
         })),
         status: 'draft', // Статус остается правильным
+        paymentStatus: 'unpaid',
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -399,7 +410,7 @@ export class OrdersService {
 
       const updatedOrder: PosOrder = {
         ...orders.data[orderIndex],
-        status: 'confirmed',
+        status: 'waiting',
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
@@ -446,7 +457,7 @@ export class OrdersService {
 
       const updatedOrder: PosOrder = {
         ...orders.data[orderIndex],
-        status: 'confirmed',
+        status: 'waiting',
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
@@ -493,7 +504,8 @@ export class OrdersService {
 
       const updatedOrder: PosOrder = {
         ...orders.data[orderIndex],
-        status: 'paid',
+        status: 'served', // статус готовности
+        paymentStatus: 'paid',
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
@@ -546,6 +558,75 @@ export class OrdersService {
     return { success: true, data: newBill }
   }
 
+  // STATUS
+
+  /**
+   * Обновить статус оплаты позиций
+   */
+  async updateItemsPaymentStatus(
+    itemIds: string[],
+    newPaymentStatus: ItemPaymentStatus
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const allItems = this.getAllStoredItems()
+
+      itemIds.forEach(itemId => {
+        const itemIndex = allItems.findIndex(item => item.id === itemId)
+        if (itemIndex !== -1) {
+          allItems[itemIndex].paymentStatus = newPaymentStatus
+          allItems[itemIndex].updatedAt = new Date().toISOString()
+        }
+      })
+
+      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update items payment status'
+      }
+    }
+  }
+
+  /**
+   * Обновить статус оплаты заказа
+   */
+  async updateOrderPaymentStatus(
+    orderId: string,
+    newPaymentStatus: OrderPaymentStatus
+  ): Promise<ServiceResponse<PosOrder>> {
+    try {
+      const orders = await this.getAllOrders()
+      if (!orders.success || !orders.data) {
+        throw new Error('Failed to load orders')
+      }
+
+      const orderIndex = orders.data.findIndex(o => o.id === orderId)
+      if (orderIndex === -1) {
+        throw new Error('Order not found')
+      }
+
+      const updatedOrder: PosOrder = {
+        ...orders.data[orderIndex],
+        paymentStatus: newPaymentStatus,
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      orders.data[orderIndex] = updatedOrder
+      localStorage.setItem(
+        this.ORDERS_KEY,
+        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
+      )
+
+      return { success: true, data: updatedOrder }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update order payment status'
+      }
+    }
+  }
   private async getBillsByOrderId(orderId: string): Promise<PosBill[]> {
     const allBills = this.getAllStoredBills()
     const orderBills = allBills.filter(bill => bill.orderId === orderId)

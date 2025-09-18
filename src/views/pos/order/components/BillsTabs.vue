@@ -55,7 +55,7 @@
               <!-- New Items Badge -->
               <v-badge
                 v-if="hasNewItems(bill)"
-                :content="bill.items.filter(item => item.status === 'pending').length"
+                :content="bill.items.filter(item => item.status === 'draft').length"
                 color="warning"
                 inline
                 class="new-items-badge"
@@ -65,6 +65,7 @@
 
               <!-- Payment Status -->
               <v-icon
+                v-if="hasItemsInBill(bill)"
                 :color="getPaymentStatusColor(bill.paymentStatus)"
                 size="14"
                 class="payment-status-icon"
@@ -177,6 +178,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { PosBill, OrderType } from '@/stores/pos/types'
+import { useOrdersComposables } from '@/stores/pos/orders/composables'
+
+const { getOrderPaymentStatusColor, getOrderPaymentStatusText } = useOrdersComposables()
 
 interface Props {
   bills: PosBill[]
@@ -228,15 +232,12 @@ const hasNewItems = (bill: PosBill): boolean => {
   return bill.items.some(item => item.status === 'pending')
 }
 
+const hasItemsInBill = (bill: PosBill): boolean => {
+  return bill.items.some(item => !['cancelled'].includes(item.status))
+}
+
 const getPaymentStatusColor = (status: 'paid' | 'partial' | 'unpaid'): string => {
-  switch (status) {
-    case 'paid':
-      return 'success'
-    case 'partial':
-      return 'warning'
-    default:
-      return 'grey'
-  }
+  return getOrderPaymentStatusColor(status as any)
 }
 
 const getPaymentStatusIcon = (status: 'paid' | 'partial' | 'unpaid'): string => {
@@ -249,7 +250,6 @@ const getPaymentStatusIcon = (status: 'paid' | 'partial' | 'unpaid'): string => 
       return 'mdi-circle-outline'
   }
 }
-
 // Rename methods
 const openRenameDialog = (bill: PosBill) => {
   billToRename.value = bill
@@ -307,7 +307,7 @@ const getSelectionText = (bill: PosBill): string => {
   }
 }
 
-const getSelectionVariant = (bill: PosBill): string => {
+const getSelectionVariant = (bill: PosBill): 'flat' | 'outlined' => {
   const selectedItems = getSelectedItemsCount(bill)
   return selectedItems === 0 ? 'outlined' : 'flat'
 }

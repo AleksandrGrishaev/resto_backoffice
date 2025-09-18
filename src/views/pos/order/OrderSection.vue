@@ -243,7 +243,11 @@ const canRemoveBill = computed((): boolean => {
 })
 
 const canEditItems = computed((): boolean => {
-  return !!currentOrder.value && currentOrder.value.status !== 'paid'
+  return (
+    !!currentOrder.value &&
+    currentOrder.value.status !== 'cancelled' &&
+    currentOrder.value.paymentStatus !== 'paid'
+  )
 })
 
 // Methods - Notifications
@@ -595,7 +599,7 @@ watch(
     if (newLength !== undefined && oldLength !== undefined && newLength !== oldLength) {
       // При изменении количества элементов проверяем наличие несохраненных изменений
       hasUnsavedChanges.value =
-        activeBill.value?.items.some(item => item.status === 'pending') || false
+        activeBill.value?.items.some(item => item.status === 'draft') || false
     }
   }
 )

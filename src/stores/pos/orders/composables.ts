@@ -1,20 +1,32 @@
 // src/stores/pos/orders/composables.ts
 import { computed } from 'vue'
-import type { PosOrder, PosBill, PosBillItem, OrderStatus, OrderType } from '../types'
-
+import type {
+  PosOrder,
+  PosBill,
+  PosBillItem,
+  OrderStatus,
+  OrderType,
+  OrderPaymentStatus,
+  ItemPaymentStatus
+} from '../types'
+import { ORDER_TYPE_STATUS_CONFIG } from '../types'
 export function useOrdersComposables() {
   /**
    * Проверить можно ли добавить товар в заказ
    */
   function canAddItemToOrder(order: PosOrder): boolean {
-    return ['draft', 'confirmed'].includes(order.status)
+    // ИЗМЕНЕНО: заменили 'confirmed' → 'waiting'
+    return ['draft', 'waiting'].includes(order.status)
   }
 
   /**
    * Проверить можно ли отправить заказ на кухню
    */
   function canSendToKitchen(order: PosOrder): boolean {
-    const hasItems = order.bills.some(bill => bill.items.some(item => item.status === 'active'))
+    // ИЗМЕНЕНО: убрали проверку 'active', используем все статусы кроме отмененных
+    const hasItems = order.bills.some(bill =>
+      bill.items.some(item => !['cancelled'].includes(item.status))
+    )
     return order.status === 'draft' && hasItems
   }
 
@@ -22,10 +34,23 @@ export function useOrdersComposables() {
    * Проверить можно ли закрыть заказ
    */
   function canCloseOrder(order: PosOrder): boolean {
+    const hasItems = order.bills.some(bill =>
+      bill.items.some(item => !['cancelled'].includes(item.status))
+    )
+
+    // Если нет позиций - можно закрыть без проверки оплаты
+    if (!hasItems) return true
+
+    // Проверяем что заказ в финальном статусе для его типа
+    const finalStatus = getFinalStatusForOrderType(order.type)
+    const isInFinalStatus = order.status === finalStatus
+
+    // Проверяем что все счета оплачены
     const allBillsPaid = order.bills.every(
       bill => bill.paymentStatus === 'paid' || bill.status === 'cancelled'
     )
-    return ['confirmed', 'preparing', 'ready', 'served'].includes(order.status) && allBillsPaid
+
+    return isInFinalStatus && allBillsPaid
   }
 
   /**
@@ -46,51 +71,175 @@ export function useOrdersComposables() {
   }
 
   /**
-   * Получить цвет статуса заказа
+   * Получить цвет статуса готовности заказа
    */
   function getOrderStatusColor(status: OrderStatus): string {
     const colors = {
       draft: 'grey',
-      confirmed: 'info',
-      preparing: 'warning',
+      waiting: 'info',
+      cooking: 'warning',
       ready: 'success',
       served: 'primary',
-      paid: 'green',
+      collected: 'primary', // ДОБАВЛЕНО
+      delivered: 'success', // ДОБАВЛЕНО
       cancelled: 'error'
     }
     return colors[status] || 'grey'
   }
 
   /**
-   * Получить иконку статуса заказа
+   * Получить иконку статуса готовности заказа
    */
   function getOrderStatusIcon(status: OrderStatus): string {
     const icons = {
       draft: 'mdi-file-outline',
-      confirmed: 'mdi-check-circle-outline',
-      preparing: 'mdi-chef-hat',
+      waiting: 'mdi-clock-outline',
+      cooking: 'mdi-chef-hat',
       ready: 'mdi-bell-ring',
       served: 'mdi-silverware-fork-knife',
-      paid: 'mdi-cash-check',
+      collected: 'mdi-shopping-outline', // ДОБАВЛЕНО
+      delivered: 'mdi-truck-delivery', // ДОБАВЛЕНО
       cancelled: 'mdi-cancel'
     }
     return icons[status] || 'mdi-help-circle'
   }
 
   /**
-   * Получить описание статуса заказа
+   * Получить описание статуса готовности заказа
    */
-  function getOrderStatusText(status: OrderStatus): string {
-    const texts = {
-      draft: 'Черновик',
-      confirmed: 'Подтвержден',
-      preparing: 'Готовится',
-      ready: 'Готов',
-      served: 'Подан',
-      paid: 'Оплачен',
-      cancelled: 'Отменен'
+  function getOrderStatusText(status: OrderStatus, orderType?: OrderType): string {
+    // Базовые тексты
+    const baseTexts = {
+      draft: 'Draft',
+      waiting: 'Waiting',
+      cooking: 'Cooking',
+      ready: 'Ready',
+      served: 'Served',
+      collected: 'Collected', // ДОБАВЛЕНО
+      delivered: 'Delivered', // ДОБАВЛЕНО
+      cancelled: 'Cancelled'
     }
-    return texts[status] || 'Неизвестно'
+
+    // Если есть тип заказа, используем специфичные тексты
+    if (orderType) {
+      const config = ORDER_TYPE_STATUS_CONFIG[orderType]
+      if (status === config.finalStatus) {
+        const finalTexts = {
+          dine_in: 'Served',
+          takeaway: 'Collected',
+          delivery: 'Delivered'
+        }
+        return finalTexts[orderType] || baseTexts[status]
+      }
+    }
+
+    return baseTexts[status] || 'Unknown'
+  }
+
+  /**
+   * Получить цвет статуса оплаты заказа
+   */
+  function getOrderPaymentStatusColor(status: OrderPaymentStatus): string {
+    const colors = {
+      unpaid: 'warning',
+      partial: 'info',
+      paid: 'success',
+      refunded: 'error'
+    }
+    return colors[status] || 'grey'
+  }
+
+  /**
+   * Получить текст статуса оплаты заказа
+   */
+  function getOrderPaymentStatusText(status: OrderPaymentStatus): string {
+    const texts = {
+      unpaid: 'Unpaid',
+      partial: 'Partial',
+      paid: 'Paid',
+      refunded: 'Refunded'
+    }
+    return texts[status] || 'Unknown'
+  }
+
+  /**
+   * Получить цвет статуса готовности позиции
+   */
+  function getItemStatusColor(
+    status: 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+  ): string {
+    const colors = {
+      draft: 'orange',
+      waiting: 'info', // синий
+      cooking: 'purple', // фиолетовый
+      ready: 'success', // зеленый
+      served: 'primary', // основной цвет
+      cancelled: 'error' // красный
+    }
+    return colors[status] || 'grey'
+  }
+
+  /**
+   * Получить текст статуса готовности позиции
+   */
+  function getItemStatusText(
+    status: 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+  ): string {
+    const texts = {
+      draft: 'Draft',
+      waiting: 'Waiting',
+      cooking: 'Cooking',
+      ready: 'Ready',
+      served: 'Served',
+      cancelled: 'Cancelled'
+    }
+    return texts[status] || 'Unknown'
+  }
+
+  /**
+   * Получить цвет статуса оплаты позиции
+   */
+  function getItemPaymentStatusColor(status: ItemPaymentStatus): string {
+    const colors = {
+      unpaid: 'warning', // желтый/оранжевый
+      paid: 'success', // зеленый
+      refunded: 'error' // красный
+    }
+    return colors[status] || 'grey'
+  }
+
+  /**
+   * Получить текст статуса оплаты позиции
+   */
+  function getItemPaymentStatusText(status: ItemPaymentStatus): string {
+    const texts = {
+      unpaid: 'Unpaid',
+      paid: 'Paid',
+      refunded: 'Refunded'
+    }
+    return texts[status] || 'Unknown'
+  }
+
+  /**
+   * Получить комбинированный статус заказа (готовность + оплата)
+   */
+  function getCombinedOrderStatus(order: PosOrder): string {
+    const readinessText = getOrderStatusText(order.status)
+    const paymentText = getOrderPaymentStatusText(order.paymentStatus)
+
+    if (order.status === 'served' && order.paymentStatus === 'paid') {
+      return 'Served & Paid' // Идеальное состояние
+    }
+
+    if (order.status === 'ready' && order.paymentStatus === 'unpaid') {
+      return 'Ready - Awaiting Payment'
+    }
+
+    if (order.status === 'cooking' && order.paymentStatus === 'paid') {
+      return 'Cooking - Prepaid'
+    }
+
+    return `${readinessText} - ${paymentText}`
   }
 
   /**
@@ -117,7 +266,8 @@ export function useOrdersComposables() {
    */
   function getOrderItemsCount(order: PosOrder): number {
     return order.bills.reduce(
-      (total, bill) => total + bill.items.filter(item => item.status === 'active').length,
+      (total, bill) =>
+        total + bill.items.filter(item => !['cancelled'].includes(item.status)).length,
       0
     )
   }
@@ -130,7 +280,7 @@ export function useOrdersComposables() {
       (total, bill) =>
         total +
         bill.items
-          .filter(item => item.status === 'active')
+          .filter(item => !['cancelled'].includes(item.status))
           .reduce((sum, item) => sum + item.quantity, 0),
       0
     )
@@ -140,7 +290,7 @@ export function useOrdersComposables() {
    * Проверить есть ли в заказе неоплаченные счета
    */
   function hasUnpaidBills(order: PosOrder): boolean {
-    return order.bills.some(bill => bill.status === 'active' && bill.paymentStatus !== 'paid')
+    return order.bills.some(bill => bill.status !== 'cancelled' && bill.paymentStatus !== 'paid')
   }
 
   /**
@@ -158,19 +308,95 @@ export function useOrdersComposables() {
     return Math.round((paidAmount / totalAmount) * 100)
   }
 
+  /**
+   * НОВАЯ: Получить валидные переходы статусов для заказа
+   */
+  function getValidStatusTransitions(
+    currentStatus: OrderStatus,
+    orderType: OrderType
+  ): OrderStatus[] {
+    const config = ORDER_TYPE_STATUS_CONFIG[orderType]
+    return config?.transitions[currentStatus] || []
+  }
+
+  /**
+   * НОВАЯ: Проверить возможность перехода статуса
+   */
+  function canTransitionTo(
+    fromStatus: OrderStatus,
+    toStatus: OrderStatus,
+    orderType: OrderType
+  ): boolean {
+    const validTransitions = getValidStatusTransitions(fromStatus, orderType)
+    return validTransitions.includes(toStatus)
+  }
+
+  /**
+   * НОВАЯ: Получить финальный статус для типа заказа
+   */
+  function getFinalStatusForOrderType(orderType: OrderType): OrderStatus {
+    return ORDER_TYPE_STATUS_CONFIG[orderType]?.finalStatus || 'served'
+  }
+
+  /**
+   * НОВАЯ: Проверить является ли статус финальным для данного типа заказа
+   */
+  function isFinalStatus(status: OrderStatus, orderType: OrderType): boolean {
+    return status === getFinalStatusForOrderType(orderType)
+  }
+
+  /**
+   * НОВАЯ: Получить следующий логичный статус
+   */
+  function getNextLogicalStatus(
+    currentStatus: OrderStatus,
+    orderType: OrderType
+  ): OrderStatus | null {
+    const transitions = getValidStatusTransitions(currentStatus, orderType)
+    // Возвращаем первый доступный переход (обычно это следующий по порядку)
+    return transitions.find(s => s !== 'cancelled') || null
+  }
+
   return {
+    // Основные проверки возможностей
     canAddItemToOrder,
     canSendToKitchen,
     canCloseOrder,
+
+    // Отображение заказа
     getOrderDisplayName,
-    getOrderStatusColor,
-    getOrderStatusIcon,
-    getOrderStatusText,
     getOrderTypeIcon,
     formatOrderTotal,
     getOrderItemsCount,
     getOrderQuantityCount,
     hasUnpaidBills,
-    getPaymentProgress
+    getPaymentProgress,
+
+    // Статусы готовности заказа (ОБНОВЛЕНО)
+    getOrderStatusColor,
+    getOrderStatusIcon,
+    getOrderStatusText,
+
+    // Статусы оплаты заказа
+    getOrderPaymentStatusColor,
+    getOrderPaymentStatusText,
+
+    // Статусы готовности позиции
+    getItemStatusColor,
+    getItemStatusText,
+
+    // Статусы оплаты позиции
+    getItemPaymentStatusColor,
+    getItemPaymentStatusText,
+
+    // Комбинированные статусы
+    getCombinedOrderStatus,
+
+    // НОВЫЕ: Функции переходов статусов
+    getValidStatusTransitions,
+    canTransitionTo,
+    getFinalStatusForOrderType,
+    isFinalStatus,
+    getNextLogicalStatus
   }
 }

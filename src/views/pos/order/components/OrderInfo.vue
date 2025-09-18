@@ -20,10 +20,21 @@
 
       <!-- Actions -->
       <div class="order-actions d-flex align-center">
-        <!-- Order Status Chip -->
-        <v-chip :color="statusColor" variant="flat" size="small" class="mr-2">
-          <v-icon start size="16">{{ statusIcon }}</v-icon>
-          {{ statusLabel }}
+        <!-- Order Readiness Status Chip -->
+        <v-chip :color="readinessStatusColor" variant="flat" size="small" class="mr-1">
+          <v-icon start size="16">{{ readinessStatusIcon }}</v-icon>
+          {{ readinessStatusLabel }}
+        </v-chip>
+
+        <!-- Order Payment Status Chip - ТОЛЬКО если есть позиции -->
+        <v-chip
+          v-if="hasItemsInOrder"
+          :color="paymentStatusColor"
+          variant="flat"
+          size="small"
+          class="mr-2"
+        >
+          {{ paymentStatusLabel }}
         </v-chip>
 
         <!-- Edit Button -->
@@ -38,7 +49,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PosOrder, OrderType, OrderStatus } from '@/stores/pos/types'
+import type { PosOrder } from '@/stores/pos/types'
+import { useOrdersComposables } from '@/stores/pos/orders/composables'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+
+const ordersStore = usePosOrdersStore()
+
+// Получить функции из composables:
+const {
+  getOrderStatusColor,
+  getOrderStatusIcon,
+  getOrderStatusText,
+  getOrderPaymentStatusColor,
+  getOrderPaymentStatusText
+} = useOrdersComposables()
 
 // Props
 interface Props {
@@ -57,6 +81,12 @@ const emit = defineEmits<{
 }>()
 
 // Computed - Order Type
+
+const hasItemsInOrder = computed((): boolean => {
+  if (!props.order) return false
+  return ordersStore.hasItemsInOrder(props.order)
+})
+
 const orderTypeIcon = computed((): string => {
   if (!props.order) return 'mdi-help'
 
@@ -116,85 +146,44 @@ const orderSubtitle = computed((): string => {
   }
 })
 
-// Computed - Order Status
-const statusColor = computed((): string => {
+// Computed - Order Readiness Status (новая система статусов)
+const readinessStatusColor = computed((): string => {
   if (!props.order) return 'grey'
-
-  switch (props.order.status) {
-    case 'draft':
-      return 'grey'
-    case 'confirmed':
-      return 'info'
-    case 'preparing':
-      return 'warning'
-    case 'ready':
-      return 'success'
-    case 'served':
-      return 'primary'
-    case 'paid':
-      return 'success'
-    case 'cancelled':
-      return 'error'
-    default:
-      return 'grey'
-  }
+  return getOrderStatusColor(props.order.status)
 })
 
-const statusIcon = computed((): string => {
+const readinessStatusIcon = computed((): string => {
   if (!props.order) return 'mdi-help'
-
-  switch (props.order.status) {
-    case 'draft':
-      return 'mdi-file-edit'
-    case 'confirmed':
-      return 'mdi-check-circle'
-    case 'preparing':
-      return 'mdi-chef-hat'
-    case 'ready':
-      return 'mdi-bell'
-    case 'served':
-      return 'mdi-silverware'
-    case 'paid':
-      return 'mdi-cash'
-    case 'cancelled':
-      return 'mdi-cancel'
-    default:
-      return 'mdi-help'
-  }
+  return getOrderStatusIcon(props.order.status)
 })
 
-const statusLabel = computed((): string => {
+const readinessStatusLabel = computed((): string => {
   if (!props.order) return 'No Status'
+  return getOrderStatusText(props.order.status, props.order.type) // Передаем тип заказа
+})
 
-  switch (props.order.status) {
-    case 'draft':
-      return 'Draft'
-    case 'confirmed':
-      return 'Confirmed'
-    case 'preparing':
-      return 'Preparing'
-    case 'ready':
-      return 'Ready'
-    case 'served':
-      return 'Served'
-    case 'paid':
-      return 'Paid'
-    case 'cancelled':
-      return 'Cancelled'
-    default:
-      return 'Unknown'
-  }
+// Computed - Order Payment Status (новое)
+const paymentStatusColor = computed((): string => {
+  if (!props.order) return 'grey'
+  return getOrderPaymentStatusColor(props.order.paymentStatus || 'unpaid')
+})
+
+const paymentStatusLabel = computed((): string => {
+  if (!props.order) return 'Unpaid'
+  return getOrderPaymentStatusText(props.order.paymentStatus || 'unpaid')
 })
 
 // Methods
 const handleEdit = (): void => {
   if (!props.order || !props.canEdit) return
 
-  console.log('🔧 Edit order clicked:', {
+  console.log('Edit order clicked:', {
     orderId: props.order.id,
     orderNumber: props.order.orderNumber,
     type: props.order.type,
-    status: props.order.status
+    status: props.order.status,
+    paymentStatus: props.order.paymentStatus,
+    hasItems: hasItemsInOrder.value
   })
 
   emit('edit', props.order)
@@ -244,7 +233,7 @@ const handleEdit = (): void => {
 }
 
 /* =============================================
-   ORDER ACTIONS
+   ORDER ACTIONS - DUAL STATUS CHIPS
    ============================================= */
 
 .order-actions {
@@ -257,6 +246,15 @@ const handleEdit = (): void => {
 
 .order-actions .v-btn {
   margin-left: var(--spacing-xs);
+}
+
+/* Специальные стили для двух чипов */
+.order-actions .v-chip:first-of-type {
+  margin-right: 4px;
+}
+
+.order-actions .v-chip:nth-of-type(2) {
+  margin-right: 8px;
 }
 
 /* =============================================
@@ -296,6 +294,16 @@ const handleEdit = (): void => {
   .order-actions {
     align-self: flex-end;
   }
+
+  /* На мобильных устройствах можно стекировать чипы */
+  .order-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .order-actions .v-chip {
+    margin: 0;
+  }
 }
 
 /* =============================================
@@ -332,5 +340,29 @@ const handleEdit = (): void => {
   .order-info:hover {
     background: rgba(var(--v-theme-on-surface), 0.02);
   }
+}
+
+/* =============================================
+   STATUS CHIP VISUAL ENHANCEMENTS
+   ============================================= */
+
+/* Готовность чип */
+.order-actions .v-chip:first-of-type {
+  position: relative;
+}
+
+/* Оплата чип */
+.order-actions .v-chip:nth-of-type(2) {
+  position: relative;
+}
+
+/* Индикаторы успешного состояния */
+.order-actions .v-chip.v-chip--variant-flat[style*='success'] {
+  box-shadow: 0 0 0 1px rgba(var(--v-theme-success), 0.2);
+}
+
+/* Индикаторы ожидания */
+.order-actions .v-chip.v-chip--variant-flat[style*='warning'] {
+  box-shadow: 0 0 0 1px rgba(var(--v-theme-warning), 0.2);
 }
 </style>
