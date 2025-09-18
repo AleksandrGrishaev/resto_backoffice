@@ -25,7 +25,8 @@
             @click.stop="handleBillSelection(bill.id)"
           >
             <v-checkbox
-              :model-value="isBillSelected?.(bill.id) || false"
+              :model-value="getBillCheckboxState(bill.id).checked"
+              :indeterminate="getBillCheckboxState(bill.id).indeterminate"
               density="compact"
               hide-details
               class="bill-checkbox"
@@ -42,8 +43,13 @@
             <!-- Bill Status Indicators -->
             <div class="bill-indicators">
               <!-- Items Count -->
-              <v-chip size="x-small" variant="outlined" color="primary" class="items-count-chip">
-                {{ bill.items.filter(item => item.status !== 'cancelled').length }}
+              <v-chip
+                size="x-small"
+                :variant="getSelectionVariant(bill)"
+                :color="getSelectionColor(bill)"
+                class="selection-chip"
+              >
+                {{ getSelectionText(bill) }}
               </v-chip>
 
               <!-- New Items Badge -->
@@ -180,13 +186,15 @@ interface Props {
   canEditBill?: boolean
   showSelectionMode?: boolean
   isBillSelected?: (billId: string) => boolean
+  isItemSelected?: (itemId: string) => boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   canAddBill: true,
   canEditBill: true,
   showSelectionMode: true,
-  isBillSelected: () => false
+  isBillSelected: () => false,
+  isItemSelected: () => false
 })
 
 // Emits
@@ -278,6 +286,55 @@ const confirmDelete = () => {
 
   emit('remove-bill', billToDelete.value.id)
   closeDeleteDialog()
+}
+
+// Добавить после существующих методов
+const getSelectedItemsCount = (bill: PosBill): number => {
+  return bill.items.filter(item => item.status !== 'cancelled' && props.isItemSelected?.(item.id))
+    .length
+}
+
+const getSelectionText = (bill: PosBill): string => {
+  const totalItems = bill.items.filter(item => item.status !== 'cancelled').length
+  const selectedItems = getSelectedItemsCount(bill)
+
+  if (selectedItems === 0) {
+    return totalItems.toString()
+  } else if (selectedItems === totalItems) {
+    return totalItems.toString()
+  } else {
+    return `${selectedItems}/${totalItems}`
+  }
+}
+
+const getSelectionVariant = (bill: PosBill): string => {
+  const selectedItems = getSelectedItemsCount(bill)
+  return selectedItems === 0 ? 'outlined' : 'flat'
+}
+
+const getSelectionColor = (bill: PosBill): string => {
+  const selectedItems = getSelectedItemsCount(bill)
+  const totalItems = bill.items.filter(item => item.status !== 'cancelled').length
+
+  if (selectedItems === 0) return 'primary'
+  if (selectedItems === totalItems) return 'success'
+  return 'warning'
+}
+
+const getBillCheckboxState = (billId: string) => {
+  const bill = props.bills.find(b => b.id === billId)
+  if (!bill) return { checked: false, indeterminate: false }
+
+  const totalItems = bill.items.filter(item => item.status !== 'cancelled').length
+  const selectedItems = getSelectedItemsCount(bill)
+
+  if (selectedItems === 0) {
+    return { checked: false, indeterminate: false }
+  } else if (selectedItems === totalItems) {
+    return { checked: true, indeterminate: false }
+  } else {
+    return { checked: false, indeterminate: true }
+  }
 }
 
 // Watchers
@@ -380,9 +437,33 @@ watch(
   gap: 6px;
 }
 
-.items-count-chip {
+.selection-chip {
   height: 20px !important;
   font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  transition: all 0.2s ease;
+}
+
+.selection-chip.v-chip--variant-flat {
+  animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+.bill-checkbox :deep(.v-selection-control__input) {
+  transition: all 0.2s ease;
+}
+
+.bill-checkbox :deep(.v-selection-control__input[aria-checked='mixed']) {
+  color: rgb(var(--v-theme-warning));
+}
+
+@keyframes subtle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 
 .new-items-badge :deep(.v-badge__badge) {

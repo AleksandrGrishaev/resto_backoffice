@@ -217,9 +217,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * Выбрать активный счет - ОБНОВЛЕНО
    */
   function selectBill(billId: string): void {
-    // Очищаем selection при смене счета
-    clearSelection()
-
     activeBillId.value = billId
   }
 

@@ -364,7 +364,7 @@ All selection logic is centralized in `ordersStore` to eliminate duplication and
 
 1. **Item → Bill**: If all items in a bill are selected, the bill becomes selected
 2. **Bill → Items**: If a bill is selected, all its items are selected
-3. **Clear on Change**: Selection clears when switching orders or bills
+3. **Clear on Change**: Selection clears when switching orders
 4. **Persistent**: Selection persists during actions within same order/bill
 
 ### UI Selection Indicators

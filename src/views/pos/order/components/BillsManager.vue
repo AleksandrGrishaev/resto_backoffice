@@ -9,6 +9,7 @@
       :can-add-bill="canAddBill"
       :show-selection-mode="true"
       :is-bill-selected="ordersStore.isBillSelected"
+      :is-item-selected="ordersStore.isItemSelected"
       @select-bill="handleSelectBill"
       @add-bill="handleAddBill"
       @toggle-bill-selection="handleToggleBillSelection"
