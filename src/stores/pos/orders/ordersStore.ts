@@ -11,6 +11,7 @@ import type {
   OrderStatus,
   PosMenuItem
 } from '../types'
+import type { MenuItemVariant } from '@/stores/menu'
 import { OrdersService } from './services'
 import { useOrdersComposables } from './composables'
 import { usePosTablesStore } from '../tables/tablesStore'
@@ -338,6 +339,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     orderId: string,
     billId: string,
     menuItem: PosMenuItem,
+    selectedVariant: MenuItemVariant,
     quantity: number = 1,
     modifications: any[] = []
   ): Promise<ServiceResponse<PosBillItem>> {
@@ -346,6 +348,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         orderId,
         billId,
         menuItem,
+        selectedVariant,
         quantity,
         modifications
       )

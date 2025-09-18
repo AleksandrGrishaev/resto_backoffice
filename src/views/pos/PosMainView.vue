@@ -252,7 +252,8 @@ const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): P
     const addResult = await ordersStore.addItemToBill(
       currentOrder.value.id, // orderId
       targetBillId, // billId
-      posMenuItem, // menuItem: PosMenuItem
+      posMenuItem,
+      variant, // menuItem: PosMenuItem
       1, // quantity
       [] // modifications
     )

@@ -71,7 +71,6 @@
             :key="variant.id"
             size="x-small"
             variant="outlined"
-            @click.stop="handleVariantClick(variant)"
           >
             {{ variant.name }}
           </v-chip>
@@ -105,8 +104,21 @@
           </span>
         </div>
 
-        <v-icon :color="canSelect ? 'primary' : 'disabled'" size="20">
-          {{ activevariants.length === 1 ? 'mdi-plus' : 'mdi-chevron-right' }}
+        <!-- Показываем кнопку Add только для одного варианта -->
+        <v-btn
+          v-if="activevariants.length === 1 && canSelect"
+          size="small"
+          color="primary"
+          variant="flat"
+          @click.stop="handleAddSingle"
+        >
+          <v-icon size="16">mdi-plus</v-icon>
+          Добавить
+        </v-btn>
+
+        <!-- Для множественных вариантов - только иконка навигации -->
+        <v-icon v-else :color="canSelect ? 'primary' : 'disabled'" size="20">
+          {{ activevariants.length > 1 ? 'mdi-chevron-right' : 'mdi-help' }}
         </v-icon>
       </div>
     </div>
@@ -129,8 +141,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  'select-item': [item: MenuItem, variant?: MenuItemVariant]
-  'select-variant': [item: MenuItem, variant: MenuItemVariant]
+  'add-item': [item: MenuItem, variant: MenuItemVariant] // Для прямого добавления
+  'select-item': [item: MenuItem] // Для навигации к вариантам
 }>()
 
 // Computed
@@ -163,65 +175,24 @@ const formatPrice = (price: number): string => {
 
 const handleItemClick = (): void => {
   if (!canSelect.value) {
-    console.log('🚫 Item cannot be selected:', {
-      itemName: props.item.name,
-      isActive: props.item.isActive,
-      variantsCount: activevariants.value.length
-    })
     return
   }
 
+  // Для одного варианта - добавляем сразу
   if (activevariants.value.length === 1) {
-    // Single variant - add directly
-    const variant = activevariants.value[0]
-    console.log('🍽️ Item selected (single variant):', {
-      item: {
-        id: props.item.id,
-        name: props.item.name,
-        type: props.item.type
-      },
-      variant: {
-        id: variant.id,
-        name: variant.name,
-        price: variant.price
-      }
-    })
-
-    emit('select-variant', props.item, variant)
-  } else if (activevariants.value.length > 1) {
-    // Multiple variants - show selection
-    console.log('🍽️ Item clicked (multiple variants):', {
-      item: {
-        id: props.item.id,
-        name: props.item.name,
-        type: props.item.type
-      },
-      availableVariants: activevariants.value.map(v => ({
-        id: v.id,
-        name: v.name,
-        price: v.price
-      }))
-    })
-
+    handleAddSingle()
+  }
+  // Для нескольких вариантов - переходим к выбору
+  else if (activevariants.value.length > 1) {
     emit('select-item', props.item)
   }
 }
 
-const handleVariantClick = (variant: MenuItemVariant): void => {
-  console.log('🎯 Variant selected directly:', {
-    item: {
-      id: props.item.id,
-      name: props.item.name,
-      type: props.item.type
-    },
-    variant: {
-      id: variant.id,
-      name: variant.name,
-      price: variant.price
-    }
-  })
-
-  emit('select-variant', props.item, variant)
+const handleAddSingle = (): void => {
+  if (activevariants.value.length === 1 && canSelect.value) {
+    const variant = activevariants.value[0]
+    emit('add-item', props.item, variant)
+  }
 }
 </script>
 

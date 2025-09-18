@@ -7,6 +7,7 @@ import type {
   OrderType,
   PosMenuItem
 } from '../types'
+import type { MenuItemVariant } from '@/stores/menu'
 import { TimeUtils } from '@/utils'
 
 export class OrdersService {
@@ -149,6 +150,7 @@ export class OrdersService {
     orderId: string,
     billId: string,
     menuItem: PosMenuItem,
+    selectedVariant: MenuItemVariant, // ДОБАВИТЬ ПАРАМЕТР
     quantity: number,
     modifications: any[]
   ): Promise<ServiceResponse<PosBillItem>> {
@@ -158,9 +160,11 @@ export class OrdersService {
         billId,
         menuItemId: menuItem.id,
         menuItemName: menuItem.name,
+        variantId: selectedVariant.id, // ДОБАВИТЬ
+        variantName: selectedVariant.name, // ДОБАВИТЬ
         quantity,
-        unitPrice: menuItem.price,
-        totalPrice: menuItem.price * quantity,
+        unitPrice: selectedVariant.price, // ИСПОЛЬЗОВАТЬ ЦЕНУ ВАРИАНТА
+        totalPrice: selectedVariant.price * quantity,
         discounts: [],
         modifications: modifications.map(mod => ({
           id: mod.id,
