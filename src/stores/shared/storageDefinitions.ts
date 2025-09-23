@@ -1,7 +1,7 @@
 // src/stores/shared/storageDefinitions.ts
 // FIXED: Use whole numbers for all physical quantities
 
-import { TimeUtils } from '@/utils'
+import { DebugUtils, TimeUtils } from '@/utils'
 import { CORE_PRODUCTS, getProductDefinition } from './productDefinitions'
 import type {
   StorageBatch,
@@ -528,8 +528,6 @@ export function regenerateStorageData(): CoreStorageWorkflow {
  * ✅ Генерирует полные данные склада в базовых единицах (ЦЕЛЫЕ ЧИСЛА)
  */
 function generateStorageWorkflowData(): CoreStorageWorkflow {
-  console.log('🏭 Generating storage data with TRANSIT BATCHES...')
-
   const balances: StorageBalance[] = []
   const allBatches: StorageBatch[] = []
 
@@ -561,7 +559,7 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
   // Генерируем операции
   const operations = generateStorageOperations()
 
-  console.log(`✅ Storage data generated with TRANSIT BATCHES:`, {
+  DebugUtils.debug(MODULE_NAME, `✅ Storage data generated with TRANSIT BATCHES:`, {
     balances: balances.length,
     activeBatches: allBatches.filter(b => b.status === 'active').length,
     transitBatches: allBatches.filter(b => b.status === 'in_transit').length,

@@ -397,24 +397,3 @@ export function useDebugFormatting() {
     estimateDataSize
   }
 }
-
-// =============================================
-// DEV HELPERS
-// =============================================
-
-if (import.meta.env.DEV) {
-  setTimeout(() => {
-    window.__DEBUG_FORMATTING_SIMPLIFIED__ = () => {
-      console.log('=== useDebugFormatting composable (simplified) ===')
-      console.log('Available for formatting debug data without history functions')
-
-      const formatting = useDebugFormatting()
-      console.log('Debug formatting instance:', formatting)
-
-      return formatting
-    }
-
-    console.log('\n💡 useDebugFormatting (simplified) loaded! Try:')
-    console.log('  • window.__DEBUG_FORMATTING_SIMPLIFIED__()')
-  }, 1000)
-}

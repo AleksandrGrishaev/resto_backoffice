@@ -296,25 +296,3 @@ export function useDebugStores() {
     clearError
   }
 }
-
-// =============================================
-// DEV HELPERS
-// =============================================
-
-if (import.meta.env.DEV) {
-  // Expose debug functions globally for development
-  setTimeout(() => {
-    window.__USE_DEBUG_STORES_SIMPLIFIED__ = () => {
-      console.log('=== useDebugStores composable (simplified) ===')
-      console.log('Available for testing debug stores functionality without history')
-
-      const debugStores = useDebugStores()
-      console.log('Debug stores instance:', debugStores)
-
-      return debugStores
-    }
-
-    console.log('\n💡 useDebugStores (simplified) loaded! Try:')
-    console.log('  • window.__USE_DEBUG_STORES_SIMPLIFIED__()')
-  }, 1000)
-}

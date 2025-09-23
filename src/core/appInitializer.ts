@@ -75,6 +75,8 @@ export class AppInitializer {
       DebugUtils.error(MODULE_NAME, '❌ App initialization failed', { error })
       throw error
     }
+
+    this.showInitializationSummary()
   }
 
   // ===== 🆕 НОВЫЕ МЕТОДЫ: ОПРЕДЕЛЕНИЕ ТИПА ИНИЦИАЛИЗАЦИИ =====
@@ -115,29 +117,29 @@ export class AppInitializer {
   private async loadProducts(): Promise<void> {
     const productStore = useProductsStore()
 
-    DebugUtils.debug(MODULE_NAME, '🛍️ Loading products...', {
+    DebugUtils.store(MODULE_NAME, 'Loading products...', {
       useMock: this.config.useMockData
     })
 
     try {
       await productStore.loadProducts(this.config.useMockData)
 
-      DebugUtils.info(MODULE_NAME, '✅ Products loaded successfully', {
+      DebugUtils.info(MODULE_NAME, 'Products loaded successfully', {
         count: productStore.products.length,
         sellable: productStore.sellableProducts.length,
-        rawMaterials: productStore.rawMaterials.length,
-        stats: productStore.statistics
+        rawMaterials: productStore.rawMaterials.length
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to load products', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to load products', { error })
       throw new Error(`Products loading failed: ${error}`)
     }
   }
 
+  // 2. В методе loadCounterAgents() заменить DebugUtils.debug на DebugUtils.store:
   private async loadCounterAgents(): Promise<void> {
     const counteragentsStore = useCounteragentsStore()
 
-    DebugUtils.debug(MODULE_NAME, '🏪 Loading counteragents...', {
+    DebugUtils.store(MODULE_NAME, 'Loading counteragents...', {
       useMock: this.config.useMockData
     })
 
@@ -146,21 +148,22 @@ export class AppInitializer {
         await counteragentsStore.initialize()
       }
 
-      DebugUtils.info(MODULE_NAME, '✅ Counteragents loaded successfully', {
+      DebugUtils.info(MODULE_NAME, 'Counteragents loaded successfully', {
         total: counteragentsStore.counteragents.length,
         suppliers: counteragentsStore.supplierCounterAgents.length,
         active: counteragentsStore.activeCounterAgents.length
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to load counteragents', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to load counteragents', { error })
       throw new Error(`Counteragents loading failed: ${error}`)
     }
   }
 
+  // 3. В методе loadRecipes() заменить DebugUtils.debug на DebugUtils.store:
   private async loadRecipes(): Promise<void> {
     const recipesStore = useRecipesStore()
 
-    DebugUtils.debug(MODULE_NAME, '👨‍🍳 Loading recipes and preparations...', {
+    DebugUtils.store(MODULE_NAME, 'Loading recipes and preparations...', {
       useMock: this.config.useMockData
     })
 
@@ -169,13 +172,13 @@ export class AppInitializer {
         await recipesStore.initialize()
       }
 
-      DebugUtils.info(MODULE_NAME, '✅ Recipes loaded successfully', {
+      DebugUtils.store(MODULE_NAME, 'Recipes loaded successfully', {
         recipes: recipesStore.recipes.length,
         preparations: recipesStore.preparations.length,
         categories: recipesStore.categories.length
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to load recipes', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to load recipes', { error })
       throw new Error(`Recipes loading failed: ${error}`)
     }
   }
@@ -203,7 +206,7 @@ export class AppInitializer {
         await menuStore.initialize()
       }
 
-      DebugUtils.debug(MODULE_NAME, '📄 Menu loaded', {
+      DebugUtils.store(MODULE_NAME, '📄 Menu loaded', {
         items: menuStore.state?.value?.menuItems?.length || 0,
         categories: menuStore.state?.value?.categories?.length || 0
       })
@@ -237,7 +240,7 @@ export class AppInitializer {
         await storageStore.fetchBalances()
       }
 
-      DebugUtils.debug(MODULE_NAME, '📦 Storage loaded', {
+      DebugUtils.store(MODULE_NAME, '📦 Storage loaded', {
         balances: storageStore.state?.value?.balances?.length || 0
       })
     } catch (error) {
@@ -253,7 +256,7 @@ export class AppInitializer {
         await preparationStore.initialize()
       }
 
-      DebugUtils.debug(MODULE_NAME, '🧑‍🍳 Preparations loaded', {
+      DebugUtils.store(MODULE_NAME, '🧑‍🍳 Preparations loaded', {
         preparations: preparationStore.state?.value?.preparations?.length || 0
       })
     } catch (error) {
@@ -269,7 +272,7 @@ export class AppInitializer {
         await supplierStore.initialize()
       }
 
-      DebugUtils.debug(MODULE_NAME, '🚚 Suppliers loaded', {
+      DebugUtils.store(MODULE_NAME, '🚚 Suppliers loaded', {
         requests: supplierStore.state?.value?.requests?.length || 0,
         orders: supplierStore.state?.value?.orders?.length || 0
       })
@@ -346,6 +349,59 @@ export class AppInitializer {
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ Integration tests failed', { error })
       // Тесты не критичны в development
+    }
+  }
+
+  /**
+   * Показать сводку инициализации
+   */
+  private showInitializationSummary(): void {
+    const authStore = useAuthStore()
+    const userRoles = authStore.userRoles
+
+    // Информация об устройстве и среде
+    const deviceInfo = {
+      platform: this.platform.platform.value,
+      online: this.platform.isOnline.value,
+      userRole: userRoles.join(', '),
+      debugMode: ENV.debugEnabled,
+      mockData: ENV.useMockData,
+      offlineEnabled: ENV.enableOffline
+    }
+
+    // Статус stores
+    const storesStatus: any = {}
+
+    if (this.shouldInitializeBackoffice(userRoles)) {
+      storesStatus.products = this.getStoreStatus(
+        () => useProductsStore().products?.length,
+        'items'
+      )
+      storesStatus.counteragents = this.getStoreStatus(
+        () => useCounteragentsStore().counteragents?.length,
+        'items'
+      )
+      storesStatus.recipes = this.getStoreStatus(() => useRecipesStore().recipes?.length, 'items')
+    }
+
+    if (this.shouldInitializePOS(userRoles)) {
+      storesStatus.pos = usePosStore().isInitialized ? 'Ready' : 'Failed'
+    }
+
+    // Выводим сводки
+    DebugUtils.deviceInfo(deviceInfo)
+    DebugUtils.summary('Initialization Summary', storesStatus)
+  }
+
+  /**
+   * Получить статус store
+   */
+  private getStoreStatus(getter: () => number | undefined, unit: string): string {
+    try {
+      const count = getter()
+      return count !== undefined && count > 0 ? `${count} ${unit}` : 'Empty'
+    } catch {
+      return 'Failed'
     }
   }
 
@@ -437,63 +493,4 @@ export function useAppInitializer(): AppInitializer {
     appInitializer = createAppInitializer()
   }
   return appInitializer
-}
-
-// ===== DEV HELPERS =====
-
-if (import.meta.env.DEV) {
-  setTimeout(() => {
-    window.__APP_INITIALIZER__ = {
-      async reinitialize(newConfig?: Partial<InitializationConfig>) {
-        const initializer = useAppInitializer()
-        if (newConfig) {
-          await initializer.reinitialize(newConfig)
-        } else {
-          await initializer.initialize()
-        }
-        console.log('App reinitialized with role-based loading')
-      },
-
-      getStatus() {
-        const initializer = useAppInitializer()
-        const status = initializer.getInitializationStatus()
-        console.table(status.stores.backoffice)
-        console.table(status.stores.pos)
-        console.log('Full status:', status)
-        return status
-      },
-
-      async validateIntegration() {
-        const initializer = useAppInitializer()
-        const isValid = await initializer.validateIntegration()
-        console.log('Integration validation:', isValid ? '✅ PASSED' : '❌ FAILED')
-        return isValid
-      },
-
-      async testPOSInit() {
-        const posStore = usePosStore()
-        console.log('Testing POS initialization...')
-        const result = await posStore.initializePOS()
-        console.log('POS init result:', result)
-        return result
-      },
-
-      async testBackofficeInit() {
-        console.log('Testing Backoffice initialization...')
-        const testInitializer = new AppInitializer({
-          useMockData: true,
-          enableDebug: true,
-          runIntegrationTests: false,
-          userRoles: ['admin', 'manager']
-        })
-        await testInitializer.initialize()
-        return testInitializer.getInitializationStatus()
-      }
-    }
-
-    console.log('\n💡 Enhanced App Initializer loaded! Try:')
-    console.log('  • window.__APP_INITIALIZER__.getStatus()')
-    console.log('  • window.__APP_INITIALIZER__.testPOSInit()')
-    console.log('  • window.__APP_INITIALIZER__.testBackofficeInit()')
-  }, 2000)
 }

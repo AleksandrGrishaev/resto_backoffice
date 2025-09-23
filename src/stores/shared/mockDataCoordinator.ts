@@ -667,14 +667,4 @@ if (import.meta.env.DEV) {
 
     return storageData
   }
-
-  setTimeout(() => {
-    console.log('\n🎯 UPDATED Mock Data Coordinator loaded!')
-    console.log('🔧 Now using storageDefinitions.ts for storage data')
-    console.log('📏 All data in BASE UNITS (gram/ml/piece)')
-    console.log('\nAvailable commands:')
-    console.log('• window.__VALIDATE_STORE_INTEGRATION__()')
-    console.log('• window.__TEST_STORAGE_INTEGRATION__()')
-    console.log('• window.__TEST_BASE_UNITS_STORAGE__() - verify base units')
-  }, 100)
 }

@@ -45,7 +45,7 @@ export class CategoryService {
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
         .sort((a, b) => a.name.localeCompare(b.name))
 
-      DebugUtils.info(MODULE_NAME, 'All categories loaded', { count: result.length })
+      DebugUtils.debug(MODULE_NAME, 'All categories loaded', { count: result.length })
       return result
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting sorted categories:', error)
@@ -217,7 +217,7 @@ export class MenuItemService {
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
         .sort((a, b) => a.name.localeCompare(b.name))
 
-      DebugUtils.info(MODULE_NAME, 'All items loaded', { count: result.length })
+      DebugUtils.debug(MODULE_NAME, 'All items loaded', { count: result.length })
       return result
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting sorted items:', error)
