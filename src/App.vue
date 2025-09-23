@@ -53,14 +53,19 @@ async function loadStoresAfterAuth() {
     loadingDetail.value = 'Инициализация хранилищ данных'
 
     DebugUtils.info(MODULE_NAME, '🗄️ Starting stores initialization after auth')
-
+    DebugUtils.info(MODULE_NAME, '👤 User authenticated', {
+      userId: authStore.currentUser?.id,
+      roles: authStore.userRoles,
+      redirectTo: router.currentRoute.value.path
+    })
     const appInitializer = useAppInitializer()
 
     // Показываем прогресс
     loadingDetail.value = 'Загрузка продуктов и рецептов...'
     await new Promise(resolve => setTimeout(resolve, 500)) // Небольшая задержка для UX
 
-    await appInitializer.initialize()
+    const userRoles = authStore.userRoles
+    await appInitializer.initialize(userRoles)
 
     storesLoaded.value = true
 
@@ -88,8 +93,8 @@ async function loadStoresAfterAuth() {
 watch(
   () => authStore.isAuthenticated,
   async isAuthenticated => {
-    if (isAuthenticated && !storesLoaded.value) {
-      DebugUtils.info(MODULE_NAME, '🔐 User authenticated, loading stores')
+    if (isAuthenticated && !isLoadingStores.value && !storesLoaded.value) {
+      // Принудительно инициализируем через appInitializer для ВСЕХ ролей
       await loadStoresAfterAuth()
     }
   },

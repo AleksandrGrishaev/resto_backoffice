@@ -2,6 +2,7 @@
 
 export type PlatformType = 'web' | 'mobile'
 export type StorageType = 'localStorage' | 'capacitor' | 'api'
+export type DebugLevel = 'silent' | 'standard' | 'verbose'
 
 interface EnvironmentConfig {
   // App
@@ -33,6 +34,18 @@ interface EnvironmentConfig {
   debugStores: boolean
   debugRouting: boolean
   debugPersistence: boolean
+
+  // Debug control (новые поля из ENV)
+  debugLevel: DebugLevel
+  showStoreDetails: boolean
+  showInitSummary: boolean
+  showDeviceInfo: boolean
+  useBlacklist: boolean
+
+  // Capacitor features (из .env.mobile)
+  enablePushNotifications: boolean
+  enableCamera: boolean
+  enableBiometricAuth: boolean
 
   // POS specific
   pos: {
@@ -96,6 +109,17 @@ function createEnvironmentConfig(): EnvironmentConfig {
     debugRouting: import.meta.env.VITE_DEBUG_ROUTING === 'true',
     debugPersistence: import.meta.env.VITE_DEBUG_PERSISTENCE === 'true',
 
+    // Debug control
+    debugLevel: (import.meta.env.VITE_DEBUG_LEVEL as DebugLevel) || 'standard',
+    showStoreDetails: import.meta.env.VITE_SHOW_STORE_DETAILS !== 'false',
+    showInitSummary: import.meta.env.VITE_SHOW_INIT_SUMMARY !== 'false',
+    showDeviceInfo: import.meta.env.VITE_SHOW_DEVICE_INFO !== 'false',
+    useBlacklist: import.meta.env.VITE_USE_BLACKLIST !== 'false',
+
+    // Mobile features
+    enablePushNotifications: import.meta.env.VITE_ENABLE_PUSH_NOTIFICATIONS === 'true',
+    enableCamera: import.meta.env.VITE_ENABLE_CAMERA === 'true',
+    enableBiometricAuth: import.meta.env.VITE_ENABLE_BIOMETRIC_AUTH === 'true',
     // POS specific
     pos: {
       offlineFirst: import.meta.env.VITE_POS_OFFLINE_FIRST === 'true',

@@ -1,4 +1,5 @@
 // src/utils/debugger.ts
+import { ENV, type DebugLevel } from '@/config/environment'
 
 // =============================================
 // TYPES & INTERFACES
@@ -111,34 +112,42 @@ export class DebugUtils {
 
   private static getCurrentUserRole(): string[] {
     try {
-      const authStore = (window as any).useAuthStore?.()
-      return authStore?.userRoles || []
-    } catch {
-      if (window.location.pathname.startsWith('/pos')) {
-        return ['cashier']
+      // Пытаемся получить роли из Pinia store
+      if (typeof window !== 'undefined' && (window as any).__pinia) {
+        const stores = (window as any).__pinia.state.value
+        if (stores.auth && stores.auth.currentUser?.roles) {
+          return stores.auth.currentUser.roles
+        }
       }
+
+      // Fallback - определяем по URL
+      if (typeof window !== 'undefined') {
+        if (window.location.pathname.startsWith('/pos')) {
+          return ['cashier']
+        }
+      }
+
+      return ['admin'] // По умолчанию
+    } catch {
       return ['admin']
     }
   }
 
   // Environment flags
   private static get showStoreDetails(): boolean {
-    const flag = import.meta.env.VITE_SHOW_STORE_DETAILS
-    return flag === undefined ? true : flag === 'true'
+    return ENV.showStoreDetails
   }
 
   private static get showInitSummary(): boolean {
-    const flag = import.meta.env.VITE_SHOW_INIT_SUMMARY
-    return flag === undefined ? true : flag === 'true'
+    return ENV.showInitSummary
   }
 
   private static get showDeviceInfo(): boolean {
-    const flag = import.meta.env.VITE_SHOW_DEVICE_INFO
-    return flag === undefined ? true : flag === 'true'
+    return ENV.showDeviceInfo
   }
 
-  private static get debugLevel(): 'silent' | 'standard' | 'verbose' {
-    return import.meta.env.VITE_DEBUG_LEVEL || 'standard'
+  private static get debugLevel(): DebugLevel {
+    return ENV.debugLevel
   }
 
   private static get useBlacklist(): boolean {
@@ -152,14 +161,12 @@ export class DebugUtils {
 
   private static shouldLog(level: LogLevel, module?: string): boolean {
     // Проверяем blacklist только если флаг включен
-    if (this.useBlacklist) {
-      if (module && this.activeModuleBlacklist.includes(module)) {
-        return false
-      }
+    if (ENV.useBlacklist && module && this.activeModuleBlacklist.includes(module)) {
+      return false
+    }
 
-      if (level === 'debug' && module && this.activeDebugBlacklist.includes(module)) {
-        return false
-      }
+    if (level === 'debug' && module && this.activeDebugBlacklist.includes(module)) {
+      return false
     }
 
     if (!this.isDev) return level === 'error'

@@ -27,36 +27,46 @@ export interface InitializationConfig {
   runIntegrationTests: boolean
   userRoles?: string[] // 🆕 НОВОЕ ПОЛЕ
 }
+interface InitializationSummary {
+  timestamp: string
+  platform: string
+  userRoles: string[]
+  storesLoaded: number
+  totalTime: number
+}
 
 export class AppInitializer {
   private config: InitializationConfig
   private tests: AppInitializerTests
   private platform = usePlatform()
+  private startTime: number = 0
 
   constructor(config: InitializationConfig) {
     this.config = config
     this.tests = new AppInitializerTests(config)
   }
 
-  async initialize(): Promise<void> {
+  async initialize(userRoles?: string[]): Promise<InitializationSummary> {
+    this.startTime = Date.now()
+
     try {
       DebugUtils.info(MODULE_NAME, '🚀 Starting app initialization', {
         useMockData: this.config.useMockData,
         enableDebug: this.config.enableDebug,
         runIntegrationTests: this.config.runIntegrationTests,
-        userRoles: this.config.userRoles,
+        userRoles: userRoles,
         platform: this.platform.platform.value
       })
 
-      // 🆕 НОВАЯ ЛОГИКА: Определяем что инициализировать на основе ролей
-      const authStore = useAuthStore()
-      const userRoles = this.config.userRoles || authStore.userRoles
+      // Роли передаются явно из App.vue или берем из конфига
+      const finalUserRoles = userRoles || this.config.userRoles || []
+      DebugUtils.info(MODULE_NAME, '👤 Initializing for user roles', { roles: finalUserRoles })
 
-      if (this.shouldInitializeBackoffice(userRoles)) {
+      if (this.shouldInitializeBackoffice(finalUserRoles)) {
         await this.initializeBackofficeStores()
       }
 
-      if (this.shouldInitializePOS(userRoles)) {
+      if (this.shouldInitializePOS(finalUserRoles)) {
         await this.initializePOSStores()
       }
 
@@ -71,14 +81,46 @@ export class AppInitializer {
       }
 
       DebugUtils.info(MODULE_NAME, '✅ App initialization completed successfully')
+
+      const summary = this.createInitializationSummary(finalUserRoles)
+      this.showInitializationSummary()
+      return summary
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ App initialization failed', { error })
       throw error
     }
-
-    this.showInitializationSummary()
   }
 
+  private createInitializationSummary(userRoles: string[]): InitializationSummary {
+    return {
+      timestamp: new Date().toISOString(),
+      platform: this.platform.platform.value,
+      userRoles: userRoles,
+      storesLoaded: this.getLoadedStoresCount(userRoles),
+      totalTime: Date.now() - this.startTime
+    }
+  }
+
+  private getLoadedStoresCount(userRoles: string[]): number {
+    let count = 0
+
+    if (this.shouldInitializeBackoffice(userRoles)) {
+      if (useProductsStore().products?.length) count++
+      if (useRecipesStore().recipes?.length) count++
+      if (useCounteragentsStore().counteragents?.length) count++
+      if (useMenuStore().state?.value?.menuItems?.length) count++
+      if (useAccountStore().state?.value?.accounts?.length) count++
+      if (useStorageStore().state?.value?.balances?.length) count++
+      if (usePreparationStore().state?.value?.preparations?.length) count++
+      if (useSupplierStore().state?.value?.requests?.length) count++
+    }
+
+    if (this.shouldInitializePOS(userRoles)) {
+      if (usePosStore().isInitialized) count++
+    }
+
+    return count
+  }
   // ===== 🆕 НОВЫЕ МЕТОДЫ: ОПРЕДЕЛЕНИЕ ТИПА ИНИЦИАЛИЗАЦИИ =====
 
   private shouldInitializeBackoffice(userRoles: string[]): boolean {
@@ -332,19 +374,12 @@ export class AppInitializer {
     try {
       DebugUtils.info(MODULE_NAME, '🧪 Running integration tests...')
 
-      const testResults = await this.tests.runAllTests()
+      const success = await this.tests.runAllIntegrationTests()
 
-      DebugUtils.info(MODULE_NAME, '✅ Integration tests completed', {
-        totalTests: testResults.totalTests,
-        passed: testResults.passed,
-        failed: testResults.failed,
-        duration: testResults.duration
-      })
-
-      if (testResults.failed > 0) {
-        DebugUtils.warn(MODULE_NAME, '⚠️ Some integration tests failed', {
-          failedTests: testResults.results.filter(r => !r.success)
-        })
+      if (success) {
+        DebugUtils.info(MODULE_NAME, '✅ Integration tests passed')
+      } else {
+        DebugUtils.warn(MODULE_NAME, '⚠️ Some integration tests failed')
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ Integration tests failed', { error })
@@ -462,6 +497,13 @@ export class AppInitializer {
  * Создать конфигурацию AppInitializer на основе environment
  */
 function createAppInitializer(): AppInitializer {
+  console.log('🔍 DIRECT LOG: createAppInitializer called', {
+    ENV_debugEnabled: ENV.debugEnabled,
+    ENV_debugLevel: ENV.debugLevel,
+    ENV_useMockData: ENV.useMockData,
+    import_meta_DEV: import.meta.env.DEV
+  })
+
   const config: InitializationConfig = {
     useMockData: ENV.useMockData,
     enableDebug: ENV.debugEnabled,

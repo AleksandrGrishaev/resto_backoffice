@@ -26,7 +26,9 @@ export class AppInitializerTests {
   // =============================================
   // MAIN TEST RUNNER
   // =============================================
-
+  async validateIntegration(): Promise<boolean> {
+    return await this.runAllIntegrationTests()
+  }
   /**
    * Запустить все тесты интеграции
    */
