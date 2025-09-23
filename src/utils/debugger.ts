@@ -39,7 +39,8 @@ export class DebugUtils {
     'CounteragentsStore',
     'SupplierStore',
     'PreparationStore',
-    'AccountStore'
+    'AccountStore',
+    'SupplierService'
   ]
 
   // Получить текущие активные blacklist'ы

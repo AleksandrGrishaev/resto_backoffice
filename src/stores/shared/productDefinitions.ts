@@ -1,7 +1,8 @@
 // src/stores/shared/productDefinitions.ts - ИСПРАВЛЕННЫЕ определения
-
+import { DebugUtils } from '@/utils'
 import type { ProductCategory } from '@/stores/productsStore/types'
 
+const MODULE_NAME = 'productDefinition'
 // ✅ ИСПРАВЛЕННАЯ структура с базовыми единицами
 export interface CoreProductDefinition {
   // Basic info
@@ -665,8 +666,8 @@ export function demonstrateCostCalculation(): void {
 if (import.meta.env.DEV) {
   const validation = validateAllProducts()
   if (!validation.isValid) {
-    console.error('❌ Product definitions validation failed:', validation.errors)
+    DebugUtils.debug(MODULE_NAME, '❌ Product definitions validation failed:')
   } else {
-    console.log('✅ All product definitions are valid')
+    DebugUtils.debug(MODULE_NAME, '✅ All product definitions are valid')
   }
 }
