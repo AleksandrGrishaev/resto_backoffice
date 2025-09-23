@@ -1,7 +1,12 @@
 // src/utils/debugger.ts
+
+// =============================================
+// TYPES & INTERFACES
+// =============================================
+
 type LogLevel = 'info' | 'warn' | 'error' | 'debug'
-// Определяем тип для данных лога
 type LogData = unknown
+
 interface LogMessage {
   timestamp: string
   level: LogLevel
@@ -10,7 +15,47 @@ interface LogMessage {
   data?: LogData
 }
 
+interface BlacklistState {
+  base: string[]
+  debug: string[]
+  backoffice: string[]
+  pos: string[]
+  currentRole: string[]
+  activeForCurrentRole: string[]
+}
+
+interface ModuleStatus {
+  module: string
+  blocked: boolean
+  debugBlocked: boolean
+  reason: string
+}
+
+interface LogStats {
+  total: number
+  byLevel: Record<LogLevel, number>
+  byModule: Record<string, number>
+  timeRange: { first: string; last: string } | null
+}
+
+interface DebugEnvironmentFlags {
+  showStoreDetails: boolean
+  showInitSummary: boolean
+  showDeviceInfo: boolean
+  debugLevel: 'silent' | 'standard' | 'verbose'
+  useBlacklist: boolean
+  isDev: boolean
+}
+
+// =============================================
+// MAIN DEBUG CLASS
+// =============================================
+
 export class DebugUtils {
+  // =============================================
+  // PRIVATE PROPERTIES
+  // =============================================
+
   private static isDev = import.meta.env.MODE === 'development'
   private static logs: LogMessage[] = []
   private static maxLogs = 1000
@@ -43,17 +88,17 @@ export class DebugUtils {
     'SupplierService'
   ]
 
-  // Получить текущие активные blacklist'ы
+  // =============================================
+  // PRIVATE GETTERS
+  // =============================================
+
   private static get activeModuleBlacklist(): string[] {
     const userRole = this.getCurrentUserRole()
-
     let roleSpecificBlacklist: string[] = []
 
     if (userRole.includes('admin') || userRole.includes('manager')) {
-      // Для backoffice ролей скрываем POS модули
       roleSpecificBlacklist = this.posBlacklist
     } else if (userRole.includes('cashier')) {
-      // Для POS ролей скрываем backoffice модули
       roleSpecificBlacklist = this.backofficeBlacklist
     }
 
@@ -61,26 +106,22 @@ export class DebugUtils {
   }
 
   private static get activeDebugBlacklist(): string[] {
-    // Debug blacklist может быть тоже адаптивным
     return [...this.baseDebugBlacklist]
   }
 
-  // Получить роль пользователя
   private static getCurrentUserRole(): string[] {
     try {
-      // Получаем роли из auth store если доступен
       const authStore = (window as any).useAuthStore?.()
       return authStore?.userRoles || []
     } catch {
-      // Fallback - пытаемся определить по URL
       if (window.location.pathname.startsWith('/pos')) {
         return ['cashier']
       }
-      return ['admin'] // По умолчанию
+      return ['admin']
     }
   }
 
-  // Флаги из environment
+  // Environment flags
   private static get showStoreDetails(): boolean {
     const flag = import.meta.env.VITE_SHOW_STORE_DETAILS
     return flag === undefined ? true : flag === 'true'
@@ -100,19 +141,27 @@ export class DebugUtils {
     return import.meta.env.VITE_DEBUG_LEVEL || 'standard'
   }
 
-  // Обновленная проверка shouldLog
+  private static get useBlacklist(): boolean {
+    const flag = import.meta.env.VITE_USE_BLACKLIST
+    return flag === undefined ? true : flag === 'true'
+  }
+
+  // =============================================
+  // CORE LOGGING LOGIC
+  // =============================================
+
   private static shouldLog(level: LogLevel, module?: string): boolean {
-    // Проверка адаптивного blacklist модуля
-    if (module && this.activeModuleBlacklist.includes(module)) {
-      return false
+    // Проверяем blacklist только если флаг включен
+    if (this.useBlacklist) {
+      if (module && this.activeModuleBlacklist.includes(module)) {
+        return false
+      }
+
+      if (level === 'debug' && module && this.activeDebugBlacklist.includes(module)) {
+        return false
+      }
     }
 
-    // Проверка адаптивного debug blacklist
-    if (level === 'debug' && module && this.activeDebugBlacklist.includes(module)) {
-      return false
-    }
-
-    // Остальная логика без изменений
     if (!this.isDev) return level === 'error'
 
     const debugLevel = this.debugLevel
@@ -121,56 +170,9 @@ export class DebugUtils {
     return true
   }
 
-  // Утилиты для управления role-based blacklists
-  static getCurrentBlacklists(): {
-    role: string[]
-    active: string[]
-    base: string[]
-    debug: string[]
-  } {
-    return {
-      role: this.getCurrentUserRole(),
-      active: this.activeModuleBlacklist,
-      base: this.baseModuleBlacklist,
-      debug: this.activeDebugBlacklist
-    }
-  }
-
-  static addToRoleBlacklist(module: string, role: 'backoffice' | 'pos'): void {
-    if (role === 'backoffice') {
-      if (!this.backofficeBlacklist.includes(module)) {
-        this.backofficeBlacklist.push(module)
-        console.log(`Added "${module}" to backoffice blacklist`)
-      }
-    } else {
-      if (!this.posBlacklist.includes(module)) {
-        this.posBlacklist.push(module)
-        console.log(`Added "${module}" to POS blacklist`)
-      }
-    }
-  }
-
-  static removeFromRoleBlacklist(module: string, role: 'backoffice' | 'pos'): void {
-    if (role === 'backoffice') {
-      const index = this.backofficeBlacklist.indexOf(module)
-      if (index > -1) {
-        this.backofficeBlacklist.splice(index, 1)
-        console.log(`Removed "${module}" from backoffice blacklist`)
-      }
-    } else {
-      const index = this.posBlacklist.indexOf(module)
-      if (index > -1) {
-        this.posBlacklist.splice(index, 1)
-        console.log(`Removed "${module}" from POS blacklist`)
-      }
-    }
-  }
-
-  // 🔄 ИЗМЕНИТЬ log метод - передать module в shouldLog
   static log(level: LogLevel, module: string, message: string, data?: LogData) {
     if (!this.shouldLog(level, module)) return
 
-    // остальной код без изменений
     const logMessage: LogMessage = {
       timestamp: this.getTimestamp(),
       level,
@@ -218,6 +220,10 @@ export class DebugUtils {
     }
   }
 
+  // =============================================
+  // PUBLIC LOGGING METHODS
+  // =============================================
+
   static info(module: string, message: string, data?: LogData) {
     this.log('info', module, message, data)
   }
@@ -234,7 +240,9 @@ export class DebugUtils {
     this.log('debug', module, message, data)
   }
 
-  // НОВЫЕ МЕТОДЫ с флагами
+  // =============================================
+  // SPECIAL LOGGING METHODS
+  // =============================================
 
   /**
    * Логи stores - только если включена детализация
@@ -267,87 +275,219 @@ export class DebugUtils {
     }
   }
 
-  // Существующие методы без изменений
-  static getLogs(): LogMessage[] {
-    return [...this.logs]
-  }
+  // =============================================
+  // BLACKLIST MANAGEMENT
+  // =============================================
 
-  static clearLogs() {
-    this.logs = []
-  }
-
-  static async saveLogs() {
-    if (!this.isDev) return
-    const blob = new Blob([JSON.stringify(this.logs, null, 2)], {
-      type: 'application/json'
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `logs_${this.getTimestamp()}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  // 🆕 ДОБАВИТЬ утилиты для управления blacklist
-  /**
-   * Добавить модуль в полный blacklist
-   */
-  static blacklistModule(module: string): void {
-    if (!this.moduleBlacklist.includes(module)) {
-      this.moduleBlacklist.push(module)
-      console.log(`📵 Module "${module}" added to blacklist`)
+  static addToBaseBlacklist(module: string): void {
+    if (!this.baseModuleBlacklist.includes(module)) {
+      this.baseModuleBlacklist.push(module)
+      console.log(`📵 Module "${module}" added to base blacklist`)
     }
   }
 
-  /**
-   * Убрать модуль из полного blacklist
-   */
-  static whitelistModule(module: string): void {
-    const index = this.moduleBlacklist.indexOf(module)
+  static removeFromBaseBlacklist(module: string): void {
+    const index = this.baseModuleBlacklist.indexOf(module)
     if (index > -1) {
-      this.moduleBlacklist.splice(index, 1)
-      console.log(`✅ Module "${module}" removed from blacklist`)
+      this.baseModuleBlacklist.splice(index, 1)
+      console.log(`✅ Module "${module}" removed from base blacklist`)
     }
   }
 
-  /**
-   * Добавить модуль в debug-only blacklist
-   */
-  static blacklistDebugModule(module: string): void {
-    if (!this.moduleDebugBlacklist.includes(module)) {
-      this.moduleDebugBlacklist.push(module)
+  static addToDebugBlacklist(module: string): void {
+    if (!this.baseDebugBlacklist.includes(module)) {
+      this.baseDebugBlacklist.push(module)
       console.log(`🔇 Module "${module}" debug logs disabled`)
     }
   }
 
-  /**
-   * Убрать модуль из debug-only blacklist
-   */
-  static whitelistDebugModule(module: string): void {
-    const index = this.moduleDebugBlacklist.indexOf(module)
+  static removeFromDebugBlacklist(module: string): void {
+    const index = this.baseDebugBlacklist.indexOf(module)
     if (index > -1) {
-      this.moduleDebugBlacklist.splice(index, 1)
+      this.baseDebugBlacklist.splice(index, 1)
       console.log(`🔊 Module "${module}" debug logs enabled`)
     }
   }
 
-  /**
-   * Показать текущие blacklists
-   */
-  static getBlacklists(): { full: string[]; debugOnly: string[] } {
-    return {
-      full: [...this.moduleBlacklist],
-      debugOnly: [...this.moduleDebugBlacklist]
+  static addToRoleBlacklist(module: string, role: 'backoffice' | 'pos'): void {
+    if (role === 'backoffice') {
+      if (!this.backofficeBlacklist.includes(module)) {
+        this.backofficeBlacklist.push(module)
+        console.log(`📵 Module "${module}" added to backoffice blacklist`)
+      }
+    } else {
+      if (!this.posBlacklist.includes(module)) {
+        this.posBlacklist.push(module)
+        console.log(`📵 Module "${module}" added to POS blacklist`)
+      }
     }
   }
 
-  /**
-   * Очистить все blacklists
-   */
-  static clearBlacklists(): void {
-    this.moduleBlacklist = []
-    this.moduleDebugBlacklist = []
-    console.log('🧹 All blacklists cleared')
+  static removeFromRoleBlacklist(module: string, role: 'backoffice' | 'pos'): void {
+    if (role === 'backoffice') {
+      const index = this.backofficeBlacklist.indexOf(module)
+      if (index > -1) {
+        this.backofficeBlacklist.splice(index, 1)
+        console.log(`✅ Module "${module}" removed from backoffice blacklist`)
+      }
+    } else {
+      const index = this.posBlacklist.indexOf(module)
+      if (index > -1) {
+        this.posBlacklist.splice(index, 1)
+        console.log(`✅ Module "${module}" removed from POS blacklist`)
+      }
+    }
+  }
+
+  // =============================================
+  // INFORMATION METHODS
+  // =============================================
+
+  static getAllBlacklists(): BlacklistState {
+    return {
+      base: [...this.baseModuleBlacklist],
+      debug: [...this.baseDebugBlacklist],
+      backoffice: [...this.backofficeBlacklist],
+      pos: [...this.posBlacklist],
+      currentRole: this.getCurrentUserRole(),
+      activeForCurrentRole: this.activeModuleBlacklist
+    }
+  }
+
+  static getModuleStatus(module: string): ModuleStatus {
+    const activeBlacklist = this.activeModuleBlacklist
+    const debugBlacklist = this.activeDebugBlacklist
+
+    const blocked = activeBlacklist.includes(module)
+    const debugBlocked = debugBlacklist.includes(module)
+
+    let reason = 'allowed'
+    if (blocked) {
+      if (this.baseModuleBlacklist.includes(module)) {
+        reason = 'base blacklist'
+      } else if (
+        this.getCurrentUserRole().includes('admin') &&
+        this.posBlacklist.includes(module)
+      ) {
+        reason = 'POS blacklist (admin role)'
+      } else if (
+        this.getCurrentUserRole().includes('cashier') &&
+        this.backofficeBlacklist.includes(module)
+      ) {
+        reason = 'backoffice blacklist (cashier role)'
+      }
+    } else if (debugBlocked) {
+      reason = 'debug only blacklist'
+    }
+
+    return { module, blocked, debugBlocked, reason }
+  }
+
+  static getEnvironmentFlags(): DebugEnvironmentFlags {
+    return {
+      showStoreDetails: this.showStoreDetails,
+      showInitSummary: this.showInitSummary,
+      showDeviceInfo: this.showDeviceInfo,
+      debugLevel: this.debugLevel,
+      useBlacklist: this.useBlacklist,
+      isDev: this.isDev
+    }
+  }
+
+  // =============================================
+  // LOG MANAGEMENT
+  // =============================================
+
+  static getLogs(): LogMessage[] {
+    return [...this.logs]
+  }
+
+  static clearLogs(): void {
+    this.logs = []
+    console.log('🧹 Logs cleared')
+  }
+
+  static async saveLogs(): Promise<void> {
+    if (!this.isDev) {
+      console.warn('Log saving is only available in development mode')
+      return
+    }
+
+    try {
+      const blob = new Blob([JSON.stringify(this.logs, null, 2)], {
+        type: 'application/json'
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `logs_${this.getTimestamp().replace(/[:.]/g, '-')}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      console.log('📄 Logs saved to file')
+    } catch (error) {
+      console.error('Failed to save logs:', error)
+    }
+  }
+
+  static getLogStats(): LogStats {
+    const byLevel: Record<LogLevel, number> = {
+      info: 0,
+      warn: 0,
+      error: 0,
+      debug: 0
+    }
+    const byModule: Record<string, number> = {}
+
+    this.logs.forEach(log => {
+      byLevel[log.level]++
+      byModule[log.module] = (byModule[log.module] || 0) + 1
+    })
+
+    const timeRange =
+      this.logs.length > 0
+        ? {
+            first: this.logs[0].timestamp,
+            last: this.logs[this.logs.length - 1].timestamp
+          }
+        : null
+
+    return {
+      total: this.logs.length,
+      byLevel,
+      byModule,
+      timeRange
+    }
+  }
+
+  // =============================================
+  // RESET METHODS
+  // =============================================
+
+  static clearCustomBlacklists(): void {
+    this.baseModuleBlacklist.splice(0)
+    this.baseDebugBlacklist.splice(0)
+    console.log('🧹 Custom blacklists cleared (role-specific settings remain)')
+  }
+
+  static resetToDefaults(): void {
+    this.baseModuleBlacklist.splice(
+      0,
+      this.baseModuleBlacklist.length,
+      'DebugService',
+      'DebugStore',
+      'MockDataCoordinator'
+    )
+    this.baseDebugBlacklist.splice(
+      0,
+      this.baseDebugBlacklist.length,
+      'MenuService',
+      'StorageDefinitions'
+    )
+
+    this.logs = []
+
+    console.log('🔄 DebugUtils reset to default settings')
   }
 }
