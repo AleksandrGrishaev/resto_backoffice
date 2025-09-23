@@ -1,4 +1,4 @@
-// src/core/appInitializer.ts - CLEANED: Убраны все импорты и инициализация истории
+// src/core/appInitializer.ts - ОБНОВЛЕННЫЙ с поддержкой POS и ролевой инициализации
 
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
@@ -9,8 +9,15 @@ import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { useDebugStore } from '@/stores/debug'
+
+// 🆕 POS STORES
+import { usePosStore } from '@/stores/pos'
+import { useAuthStore } from '@/stores/auth'
+
 import { AppInitializerTests } from './appInitializerTests'
 import { DebugUtils } from '@/utils'
+import { usePlatform } from '@/composables/usePlatform'
+import { ENV } from '@/config/environment'
 
 const MODULE_NAME = 'AppInitializer'
 
@@ -18,11 +25,13 @@ export interface InitializationConfig {
   useMockData: boolean
   enableDebug: boolean
   runIntegrationTests: boolean
+  userRoles?: string[] // 🆕 НОВОЕ ПОЛЕ
 }
 
 export class AppInitializer {
   private config: InitializationConfig
   private tests: AppInitializerTests
+  private platform = usePlatform()
 
   constructor(config: InitializationConfig) {
     this.config = config
@@ -34,21 +43,29 @@ export class AppInitializer {
       DebugUtils.info(MODULE_NAME, '🚀 Starting app initialization', {
         useMockData: this.config.useMockData,
         enableDebug: this.config.enableDebug,
-        runIntegrationTests: this.config.runIntegrationTests
+        runIntegrationTests: this.config.runIntegrationTests,
+        userRoles: this.config.userRoles,
+        platform: this.platform.platform.value
       })
 
-      // Phase 1: Core catalogs (sequential - recipes depend on products)
-      await this.loadCoreCatalogs()
+      // 🆕 НОВАЯ ЛОГИКА: Определяем что инициализировать на основе ролей
+      const authStore = useAuthStore()
+      const userRoles = this.config.userRoles || authStore.userRoles
 
-      // Phase 2: Integrated stores (storage, menu, accounts, suppliers)
-      await this.loadIntegratedStores()
+      if (this.shouldInitializeBackoffice(userRoles)) {
+        await this.initializeBackofficeStores()
+      }
 
-      // Phase 3: Debug system (if enabled)
+      if (this.shouldInitializePOS(userRoles)) {
+        await this.initializePOSStores()
+      }
+
+      // Debug system (если включен)
       if (this.config.enableDebug) {
         await this.initializeDebugSystem()
       }
 
-      // Phase 4: Integration tests (if enabled and in dev mode)
+      // Integration tests (если включены)
       if (this.config.runIntegrationTests && import.meta.env.DEV) {
         await this.runIntegrationTests()
       }
@@ -60,9 +77,29 @@ export class AppInitializer {
     }
   }
 
-  // =============================================
-  // PHASE 1: CORE CATALOGS
-  // =============================================
+  // ===== 🆕 НОВЫЕ МЕТОДЫ: ОПРЕДЕЛЕНИЕ ТИПА ИНИЦИАЛИЗАЦИИ =====
+
+  private shouldInitializeBackoffice(userRoles: string[]): boolean {
+    return userRoles.some(role => ['admin', 'manager'].includes(role))
+  }
+
+  private shouldInitializePOS(userRoles: string[]): boolean {
+    return userRoles.some(role => ['admin', 'cashier'].includes(role))
+  }
+
+  // ===== BACKOFFICE INITIALIZATION =====
+
+  private async initializeBackofficeStores(): Promise<void> {
+    DebugUtils.info(MODULE_NAME, '🏢 Initializing Backoffice stores...')
+
+    // Phase 1: Core catalogs (sequential - recipes depend on products)
+    await this.loadCoreCatalogs()
+
+    // Phase 2: Integrated stores (storage, menu, accounts, suppliers)
+    await this.loadIntegratedStores()
+
+    DebugUtils.info(MODULE_NAME, '✅ Backoffice stores initialized')
+  }
 
   private async loadCoreCatalogs(): Promise<void> {
     DebugUtils.info(MODULE_NAME, '📋 Loading core catalogs...')
@@ -105,7 +142,6 @@ export class AppInitializer {
     })
 
     try {
-      // Инициализируем counteragents store
       if (counteragentsStore.initialize) {
         await counteragentsStore.initialize()
       }
@@ -129,15 +165,14 @@ export class AppInitializer {
     })
 
     try {
-      // Инициализируем Recipe Store с полной интеграцией
-      await recipesStore.initialize()
+      if (recipesStore.initialize) {
+        await recipesStore.initialize()
+      }
 
-      DebugUtils.info(MODULE_NAME, '✅ Recipes and preparations loaded successfully', {
-        preparations: recipesStore.activePreparations.length,
-        recipes: recipesStore.activeRecipes.length,
-        units: recipesStore.units.length,
-        statistics: recipesStore.statistics,
-        integration: 'Product Store integration active'
+      DebugUtils.info(MODULE_NAME, '✅ Recipes loaded successfully', {
+        recipes: recipesStore.recipes.length,
+        preparations: recipesStore.preparations.length,
+        categories: recipesStore.categories.length
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ Failed to load recipes', { error })
@@ -145,39 +180,19 @@ export class AppInitializer {
     }
   }
 
-  // =============================================
-  // PHASE 2: INTEGRATED STORES
-  // =============================================
-
   private async loadIntegratedStores(): Promise<void> {
     DebugUtils.info(MODULE_NAME, '🔗 Loading integrated stores...')
 
-    // Загружаем stores которые не критичны для основной работы
-    await Promise.allSettled([
-      this.loadAccounts(),
+    // Параллельная загрузка независимых stores
+    await Promise.all([
       this.loadMenu(),
+      this.loadAccounts(),
       this.loadStorage(),
       this.loadPreparations(),
       this.loadSuppliers()
     ])
 
-    DebugUtils.info(MODULE_NAME, '✅ Integrated stores loaded')
-  }
-
-  private async loadAccounts(): Promise<void> {
-    try {
-      const accountStore = useAccountStore()
-
-      if (accountStore.fetchAccounts) {
-        await accountStore.fetchAccounts()
-      }
-
-      DebugUtils.debug(MODULE_NAME, '💰 Accounts loaded', {
-        accounts: accountStore.state?.value?.accounts?.length || 0
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load accounts (non-critical)', { error })
-    }
+    DebugUtils.info(MODULE_NAME, '✅ Integrated stores loaded successfully')
   }
 
   private async loadMenu(): Promise<void> {
@@ -188,12 +203,29 @@ export class AppInitializer {
         await menuStore.initialize()
       }
 
-      DebugUtils.debug(MODULE_NAME, '🍽️ Menu loaded', {
-        categories: menuStore.categories?.value?.length || 0,
-        menuItems: menuStore.menuItems?.value?.length || 0
+      DebugUtils.debug(MODULE_NAME, '📄 Menu loaded', {
+        items: menuStore.state?.value?.menuItems?.length || 0,
+        categories: menuStore.state?.value?.categories?.length || 0
       })
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Failed to load menu (non-critical)', { error })
+    }
+  }
+
+  private async loadAccounts(): Promise<void> {
+    try {
+      const accountStore = useAccountStore()
+
+      if (accountStore.initialize) {
+        await accountStore.initialize()
+      }
+
+      DebugUtils.debug(MODULE_NAME, '💰 Accounts loaded', {
+        accounts: accountStore.state?.value?.accounts?.length || 0,
+        transactions: accountStore.state?.value?.transactions?.length || 0
+      })
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to load accounts (non-critical)', { error })
     }
   }
 
@@ -246,13 +278,37 @@ export class AppInitializer {
     }
   }
 
-  // =============================================
-  // PHASE 3: DEBUG SYSTEM (simplified - no history)
-  // =============================================
+  // ===== 🆕 POS INITIALIZATION =====
+
+  private async initializePOSStores(): Promise<void> {
+    DebugUtils.info(MODULE_NAME, '🏪 Initializing POS stores...')
+
+    try {
+      const posStore = usePosStore()
+
+      // Вызываем упрощенную инициализацию POS
+      const result = await posStore.initializePOS()
+
+      if (!result.success) {
+        throw new Error(result.error || 'POS initialization failed')
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ POS stores initialized successfully', {
+        isReady: posStore.isReady,
+        isOnline: posStore.isOnline
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '❌ Failed to initialize POS stores', { error })
+      // POS инициализация критична для кассиров
+      throw error
+    }
+  }
+
+  // ===== DEBUG SYSTEM =====
 
   private async initializeDebugSystem(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, '🐛 Initializing debug system (simplified)...')
+      DebugUtils.info(MODULE_NAME, '🐛 Initializing debug system...')
 
       const debugStore = useDebugStore()
       await debugStore.initialize()
@@ -267,171 +323,104 @@ export class AppInitializer {
     }
   }
 
-  // =============================================
-  // PHASE 4: INTEGRATION TESTS
-  // =============================================
+  // ===== INTEGRATION TESTS =====
 
   private async runIntegrationTests(): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, '🧪 Running integration tests...')
 
-      const testResults = await this.tests.runAllIntegrationTests()
+      const testResults = await this.tests.runAllTests()
 
-      if (testResults) {
-        DebugUtils.info(MODULE_NAME, '✅ All integration tests passed')
-
-        // Запускаем дополнительные тесты
-        await this.tests.testProductRecipeIntegration()
-        await this.tests.testProductCounteragentIntegration()
-        await this.tests.testLoadingPerformance()
-      } else {
-        DebugUtils.warn(MODULE_NAME, '⚠️ Some integration tests failed')
-      }
-
-      // Генерируем итоговый отчет
-      const report = this.tests.generateIntegrationReport()
-      DebugUtils.info(MODULE_NAME, 'Integration report generated', {
-        summary: report.summary
+      DebugUtils.info(MODULE_NAME, '✅ Integration tests completed', {
+        totalTests: testResults.totalTests,
+        passed: testResults.passed,
+        failed: testResults.failed,
+        duration: testResults.duration
       })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Integration tests failed', { error })
-      // Тесты не критичны, не прерываем инициализацию
-    }
-  }
 
-  // =============================================
-  // VALIDATION HELPERS
-  // =============================================
-
-  /**
-   * Валидация что интеграция Product ↔ Recipe работает
-   */
-  private async validateProductRecipeIntegration(): Promise<void> {
-    try {
-      const recipesStore = useRecipesStore()
-      const preparations = recipesStore.activePreparations
-
-      if (preparations.length === 0) {
-        DebugUtils.warn(MODULE_NAME, 'No active preparations found for integration validation')
-        return
+      if (testResults.failed > 0) {
+        DebugUtils.warn(MODULE_NAME, '⚠️ Some integration tests failed', {
+          failedTests: testResults.results.filter(r => !r.success)
+        })
       }
-
-      // Пробуем рассчитать стоимость первого полуфабриката
-      const testPreparation = preparations[0]
-      const cost = await recipesStore.calculatePreparationCost(testPreparation.id)
-
-      DebugUtils.info(MODULE_NAME, '✅ Product ↔ Recipe integration validated', {
-        testPreparation: testPreparation.name,
-        calculatedCost: cost.totalCost.toFixed(2),
-        costPerUnit: cost.costPerOutputUnit.toFixed(2),
-        components: cost.componentCosts.length
-      })
     } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Product ↔ Recipe integration validation failed', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
-      // Не прерываем инициализацию, просто предупреждаем
+      DebugUtils.error(MODULE_NAME, '❌ Integration tests failed', { error })
+      // Тесты не критичны в development
     }
   }
 
-  /**
-   * Проверка доступности всех критических stores
-   */
-  private validateCriticalStores(): void {
-    const productStore = useProductsStore()
-    const recipesStore = useRecipesStore()
+  // ===== PUBLIC UTILITIES =====
 
-    const criticalStoresStatus = {
-      products: (productStore.products?.length || 0) > 0,
-      recipes:
-        (recipesStore.activePreparations?.length || 0) > 0 ||
-        (recipesStore.activeRecipes?.length || 0) > 0
+  async reinitialize(newConfig?: Partial<InitializationConfig>): Promise<void> {
+    if (newConfig) {
+      this.config = { ...this.config, ...newConfig }
     }
-
-    const failedStores = Object.entries(criticalStoresStatus)
-      .filter(([_, isLoaded]) => !isLoaded)
-      .map(([storeName, _]) => storeName)
-
-    if (failedStores.length > 0) {
-      throw new Error(`Critical stores failed to load: ${failedStores.join(', ')}`)
-    }
-
-    DebugUtils.debug(MODULE_NAME, '✅ Critical stores validation passed', criticalStoresStatus)
-  }
-
-  // =============================================
-  // PUBLIC METHODS
-  // =============================================
-
-  /**
-   * Получить статус инициализации
-   */
-  getInitializationStatus(): Record<string, any> {
-    try {
-      return this.tests.generateIntegrationReport()
-    } catch (error) {
-      return {
-        error: 'Failed to generate status',
-        timestamp: new Date().toISOString()
-      }
-    }
-  }
-
-  /**
-   * Переинициализация с новой конфигурацией
-   */
-  async reinitialize(newConfig: Partial<InitializationConfig>): Promise<void> {
-    this.config = { ...this.config, ...newConfig }
-    this.tests = new AppInitializerTests(this.config)
-
-    DebugUtils.info(MODULE_NAME, 'Reinitializing with new config', this.config)
     await this.initialize()
   }
 
-  /**
-   * Валидация интеграции между stores
-   */
-  async validateIntegration(): Promise<boolean> {
-    try {
-      this.validateCriticalStores()
-      await this.validateProductRecipeIntegration()
-      return true
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Integration validation failed', { error })
-      return false
+  getInitializationStatus() {
+    // Возвращаем статус инициализированных stores
+    const backofficeStores = {
+      products: !!useProductsStore().products?.length,
+      recipes: !!useRecipesStore().recipes?.length,
+      counteragents: !!useCounteragentsStore().counteragents?.length,
+      menu: !!useMenuStore().state?.value?.menuItems?.length,
+      accounts: !!useAccountStore().state?.value?.accounts?.length,
+      storage: !!useStorageStore().state?.value?.balances?.length,
+      preparations: !!usePreparationStore().state?.value?.preparations?.length,
+      suppliers: !!useSupplierStore().state?.value?.requests?.length
+    }
+
+    const posStores = {
+      pos: !!usePosStore().isInitialized
+    }
+
+    const debugStores = {
+      debug: !!useDebugStore().storesSortedByPriority?.length
+    }
+
+    return {
+      config: this.config,
+      platform: this.platform.platform.value,
+      stores: {
+        backoffice: backofficeStores,
+        pos: posStores,
+        debug: debugStores
+      },
+      summary: {
+        backofficeLoaded: Object.values(backofficeStores).filter(Boolean).length,
+        posLoaded: Object.values(posStores).filter(Boolean).length,
+        debugLoaded: Object.values(debugStores).filter(Boolean).length
+      }
     }
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+  async validateIntegration(): Promise<boolean> {
+    return await this.tests.validateIntegration()
   }
 }
 
-// =============================================
-// FACTORY FUNCTION (упрощенный)
-// =============================================
+// ===== FACTORY FUNCTIONS =====
 
-export function createAppInitializer(): AppInitializer {
+/**
+ * Создать конфигурацию AppInitializer на основе environment
+ */
+function createAppInitializer(): AppInitializer {
   const config: InitializationConfig = {
-    // Проверяем несколько способов определения mock режима
-    useMockData:
-      import.meta.env.DEV ||
-      import.meta.env.VITE_USE_MOCK === 'true' ||
-      !import.meta.env.VITE_FIREBASE_PROJECT_ID, // Если нет Firebase config, используем mock
-
-    // Debug включен только в dev режиме
-    enableDebug: import.meta.env.DEV,
-
-    // Integration tests только в dev режиме
-    runIntegrationTests: import.meta.env.DEV
+    useMockData: ENV.useMockData,
+    enableDebug: ENV.debugEnabled,
+    runIntegrationTests: ENV.debugEnabled && import.meta.env.DEV
   }
 
-  DebugUtils.info(MODULE_NAME, '⚙️ Creating app initializer (simplified)', {
+  DebugUtils.debug(MODULE_NAME, 'Creating AppInitializer with config', {
     config,
     env: {
-      isDev: import.meta.env.DEV,
-      hasFirebase: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      useMockEnv: import.meta.env.VITE_USE_MOCK,
+      platform: ENV.platform,
+      useMockData: ENV.useMockData,
+      enableOffline: ENV.enableOffline,
+      debugEnabled: ENV.debugEnabled,
+      useFirebase: ENV.useFirebase,
+      useMockEnv: import.meta.env.VITE_USE_MOCK_DATA,
       mode: import.meta.env.MODE
     }
   })
@@ -439,9 +428,7 @@ export function createAppInitializer(): AppInitializer {
   return new AppInitializer(config)
 }
 
-// =============================================
-// GLOBAL INSTANCE
-// =============================================
+// ===== GLOBAL INSTANCE =====
 
 let appInitializer: AppInitializer | null = null
 
@@ -452,12 +439,9 @@ export function useAppInitializer(): AppInitializer {
   return appInitializer
 }
 
-// =============================================
-// DEV HELPERS
-// =============================================
+// ===== DEV HELPERS =====
 
 if (import.meta.env.DEV) {
-  // Добавляем глобальные функции для отладки
   setTimeout(() => {
     window.__APP_INITIALIZER__ = {
       async reinitialize(newConfig?: Partial<InitializationConfig>) {
@@ -467,13 +451,14 @@ if (import.meta.env.DEV) {
         } else {
           await initializer.initialize()
         }
-        console.log('App reinitialized (without history)')
+        console.log('App reinitialized with role-based loading')
       },
 
       getStatus() {
         const initializer = useAppInitializer()
         const status = initializer.getInitializationStatus()
-        console.table(status.stores)
+        console.table(status.stores.backoffice)
+        console.table(status.stores.pos)
         console.log('Full status:', status)
         return status
       },
@@ -485,23 +470,30 @@ if (import.meta.env.DEV) {
         return isValid
       },
 
-      async testWithConfig(config: Partial<InitializationConfig>) {
-        console.log('Testing with config:', config)
+      async testPOSInit() {
+        const posStore = usePosStore()
+        console.log('Testing POS initialization...')
+        const result = await posStore.initializePOS()
+        console.log('POS init result:', result)
+        return result
+      },
+
+      async testBackofficeInit() {
+        console.log('Testing Backoffice initialization...')
         const testInitializer = new AppInitializer({
           useMockData: true,
           enableDebug: true,
-          runIntegrationTests: true,
-          ...config
+          runIntegrationTests: false,
+          userRoles: ['admin', 'manager']
         })
         await testInitializer.initialize()
         return testInitializer.getInitializationStatus()
       }
     }
 
-    console.log('\n💡 App Initializer (simplified) loaded! Try:')
+    console.log('\n💡 Enhanced App Initializer loaded! Try:')
     console.log('  • window.__APP_INITIALIZER__.getStatus()')
-    console.log('  • window.__APP_INITIALIZER__.reinitialize()')
-    console.log('  • window.__APP_INITIALIZER__.validateIntegration()')
-    console.log('  • window.__APP_INITIALIZER__.testWithConfig({ useMockData: false })')
+    console.log('  • window.__APP_INITIALIZER__.testPOSInit()')
+    console.log('  • window.__APP_INITIALIZER__.testBackofficeInit()')
   }, 2000)
 }

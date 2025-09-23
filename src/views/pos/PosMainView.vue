@@ -1,31 +1,92 @@
-<!-- src/views/pos/PosMainView.vue -->
+<!-- src/views/pos/PosMainView.vue - ПЕРЕРАБОТАННЫЙ с Loading/Error состояниями -->
 <template>
-  <PosLayout>
-    <!-- Sidebar: Tables and Orders -->
-    <template #sidebar>
-      <TablesSidebar @select="handleOrderSelect" />
-    </template>
+  <div class="pos-main-container">
+    <!-- Loading состояние -->
+    <div v-if="showLoadingState" class="pos-loading">
+      <v-container fluid class="fill-height">
+        <v-row justify="center" align="center">
+          <v-col cols="12" class="text-center">
+            <v-progress-circular indeterminate size="64" color="primary" />
+            <h3 class="mt-4">Инициализация POS системы...</h3>
+            <p class="text-medium-emphasis">Подготовка рабочего места кассира</p>
+          </v-col>
+        </v-row>
+      </v-container>
+    </div>
 
-    <!-- Menu Section -->
-    <template #menu>
-      <MenuSection @add-item="handleAddItemToOrder" />
-    </template>
+    <!-- Error состояние -->
+    <div v-else-if="showErrorState" class="pos-error">
+      <v-container fluid class="fill-height">
+        <v-row justify="center" align="center">
+          <v-col cols="12" sm="6" class="text-center">
+            <v-icon size="64" color="error" class="mb-4">mdi-cash-register</v-icon>
+            <h3 class="mb-4">Проблема с POS системой</h3>
+            <p class="text-medium-emphasis mb-6">
+              {{ initError }}
+            </p>
 
-    <!-- Order Section -->
-    <template #order>
-      <OrderSection
-        ref="orderSectionRef"
-        :current-order="currentOrder"
-        @order-changed="handleOrderChanged"
-      />
-    </template>
-  </PosLayout>
+            <div class="d-flex gap-4 justify-center">
+              <v-btn
+                color="primary"
+                variant="outlined"
+                :loading="isLoading"
+                @click="retryInitialization"
+              >
+                Попробовать снова
+              </v-btn>
+
+              <v-btn v-if="authStore.isAdmin" color="secondary" variant="text" to="/menu">
+                Перейти в админ панель
+              </v-btn>
+            </div>
+          </v-col>
+        </v-row>
+      </v-container>
+    </div>
+
+    <!-- Основной POS интерфейс -->
+    <PosLayout v-else-if="showMainInterface">
+      <!-- Sidebar: Tables and Orders -->
+      <template #sidebar>
+        <TablesSidebar @select="handleOrderSelect" />
+      </template>
+
+      <!-- Menu Section -->
+      <template #menu>
+        <MenuSection @add-item="handleAddItemToOrder" />
+      </template>
+
+      <!-- Order Section -->
+      <template #order>
+        <OrderSection
+          ref="orderSectionRef"
+          :current-order="currentOrder"
+          @order-changed="handleOrderChanged"
+        />
+      </template>
+    </PosLayout>
+
+    <!-- Fallback состояние -->
+    <div v-else class="pos-fallback">
+      <v-container fluid class="fill-height">
+        <v-row justify="center" align="center">
+          <v-col cols="12" class="text-center">
+            <v-progress-circular indeterminate size="32" />
+            <p class="mt-2">Подготовка POS системы...</p>
+          </v-col>
+        </v-row>
+      </v-container>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { usePosStore } from '@/stores/pos'
+import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
+import { useAuthStore } from '@/stores/auth' // 🆕 ДОБАВЛЕН
 import { DebugUtils } from '@/utils'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 import type { PosOrder } from '@/stores/pos/types'
@@ -33,8 +94,6 @@ import PosLayout from '@/layouts/PosLayout.vue'
 import TablesSidebar from './tables/TablesSidebar.vue'
 import MenuSection from './menu/MenuSection.vue'
 import OrderSection from './order/OrderSection.vue'
-import { usePosStore } from '../../stores/pos'
-import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 
 const MODULE_NAME = 'PosMainView'
 
@@ -46,6 +105,7 @@ const tablesStore = usePosTablesStore()
 const ordersStore = usePosOrdersStore()
 const posStore = usePosStore()
 const shiftsStore = useShiftsStore()
+const authStore = useAuthStore() // 🆕 ДОБАВЛЕН
 
 // =============================================
 // REFS
@@ -53,10 +113,46 @@ const shiftsStore = useShiftsStore()
 
 const orderSectionRef = ref<InstanceType<typeof OrderSection> | null>(null)
 
+// 🆕 НОВЫЕ STATE для инициализации
+const isLoading = ref(false)
+const initError = ref<string | null>(null)
+const isInitialized = ref(false)
+
 // =============================================
 // COMPUTED PROPERTIES
 // =============================================
 
+// 🆕 НОВЫЕ COMPUTED для состояний
+/**
+ * Может ли пользователь использовать POS систему
+ */
+const canUsePOS = computed(() => {
+  const roles = authStore.userRoles
+  return roles.includes('admin') || roles.includes('cashier')
+})
+
+/**
+ * Показать ли состояние ошибки
+ */
+const showErrorState = computed(() => {
+  return initError.value || !canUsePOS.value
+})
+
+/**
+ * Показать ли состояние загрузки
+ */
+const showLoadingState = computed(() => {
+  return isLoading.value && !initError.value
+})
+
+/**
+ * Показать ли основной интерфейс
+ */
+const showMainInterface = computed(() => {
+  return isInitialized.value && !showErrorState.value && !showLoadingState.value
+})
+
+// СУЩЕСТВУЮЩИЕ COMPUTED (сохранены без изменений)
 /**
  * Текущий активный заказ
  */
@@ -109,6 +205,49 @@ const currentOrderSubtitle = computed(() => {
 // =============================================
 // METHODS
 // =============================================
+
+// 🆕 НОВЫЙ МЕТОД: Инициализация POS системы
+/**
+ * Инициализация POS системы с проверками и обработкой ошибок
+ */
+const initializePOS = async (): Promise<void> => {
+  if (!canUsePOS.value) {
+    initError.value = 'У вас нет прав доступа к POS системе'
+    return
+  }
+
+  try {
+    isLoading.value = true
+    initError.value = null
+
+    DebugUtils.debug(MODULE_NAME, 'Starting POS initialization...')
+
+    const result = await posStore.initializePOS()
+
+    if (!result.success) {
+      throw new Error(result.error || 'Не удалось инициализировать POS систему')
+    }
+
+    isInitialized.value = true
+    DebugUtils.debug(MODULE_NAME, 'POS system initialized successfully')
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка'
+    initError.value = errorMessage
+    DebugUtils.error(MODULE_NAME, 'POS initialization failed', { error: errorMessage })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 🆕 НОВЫЙ МЕТОД: Повторная попытка инициализации
+/**
+ * Повторная попытка инициализации POS системы
+ */
+const retryInitialization = (): void => {
+  initializePOS()
+}
+
+// СУЩЕСТВУЮЩИЕ МЕТОДЫ (сохранены без изменений)
 
 /**
  * Форматирование цены
@@ -290,25 +429,15 @@ const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): P
 // LIFECYCLE
 // =============================================
 
-onMounted(async () => {
+onMounted(() => {
   DebugUtils.debug(MODULE_NAME, 'PosMainView mounted')
 
-  // Инициализируем POS систему
-  try {
-    const result = await posStore.initializePOS()
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to initialize POS')
-    }
-
-    DebugUtils.debug(MODULE_NAME, 'POS system initialized successfully')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to initialize POS system', { error })
-    console.error('POS initialization failed:', error)
-  }
+  // 🔄 ИЗМЕНЕНО: Вызываем новый метод инициализации
+  initializePOS()
 })
 
 // =============================================
-// WATCHERS
+// WATCHERS (сохранены без изменений)
 // =============================================
 
 // Отслеживание изменений текущего заказа
@@ -360,6 +489,28 @@ watch(
 )
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+.pos-main-container {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.pos-loading,
+.pos-error,
+.pos-fallback {
+  height: 100vh;
+}
+
+.pos-error {
+  .v-icon {
+    opacity: 0.6;
+  }
+}
+
+// Обеспечиваем что POS интерфейс занимает всю высоту
+:deep(.pos-layout) {
+  height: 100vh;
+}
+
 /* Стили обрабатываются PosLayout */
 </style>
