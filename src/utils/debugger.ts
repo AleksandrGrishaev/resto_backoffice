@@ -479,8 +479,7 @@ export class DebugUtils {
       0,
       this.baseModuleBlacklist.length,
       'DebugService',
-      'DebugStore',
-      'MockDataCoordinator'
+      'DebugStore'
     )
     this.baseDebugBlacklist.splice(
       0,

@@ -235,8 +235,7 @@ export class MockDataCoordinator {
           purchasePrice: productDef.purchaseCost,
           purchaseUnit: productDef.purchaseUnit as MeasurementUnit,
           purchaseQuantity: productDef.purchaseToBaseRatio,
-          effectiveDate: TimeUtils.getDateDaysAgo(30),
-
+          effectiveDate: TimeUtils.subtractDays(now, 30),
           sourceType: 'manual_update',
           createdAt: now,
           updatedAt: now
