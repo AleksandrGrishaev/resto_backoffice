@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Transaction Statement</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background: white;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #2c5aa0;
+            padding-bottom: 15px;
+        }
+
+        .bank-logo {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 5px;
+        }
+
+        .bank-name {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .statement-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 15px 0;
+            text-align: center;
+            color: #2c5aa0;
+        }
+
+        .account-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 3px 0;
+        }
+
+        .label {
+            font-weight: bold;
+            color: #555;
+            flex: 1;
+        }
+
+        .value {
+            color: #333;
+            font-weight: 500;
+            flex: 1;
+            text-align: right;
+        }
+
+        .transactions-section {
+            margin: 20px 0;
+        }
+
+        .month-header {
+            background: #2c5aa0;
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            font-size: 13px;
+            margin: 15px 0 0 0;
+        }
+
+        .transactions-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            margin-bottom: 0;
+        }
+
+        .transactions-table th {
+            background: #f8f9fa;
+            color: #333;
+            padding: 8px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 11px;
+            border: 1px solid #ddd;
+        }
+
+        .transactions-table td {
+            padding: 8px;
+            border: 1px solid #eee;
+            font-size: 11px;
+        }
+
+        .date-col {
+            width: 15%;
+            font-weight: 500;
+        }
+
+        .description-col {
+            width: 50%;
+        }
+
+        .amount-col {
+            width: 20%;
+            text-align: right;
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .balance-col {
+            width: 15%;
+            text-align: right;
+            font-weight: 500;
+        }
+
+        .month-total {
+            background: #e8f4fd;
+            border: 2px solid #2c5aa0;
+            padding: 8px 15px;
+            margin: 0 0 10px 0;
+            font-weight: bold;
+            color: #2c5aa0;
+            text-align: right;
+        }
+
+        .grand-total {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .grand-total-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .grand-total-amount {
+            font-size: 24px;
+            font-weight: bold;
+            color: #856404;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+            font-size: 10px;
+            color: #666;
+            text-align: center;
+        }
+
+        .signature-section {
+            margin: 30px 0 15px 0;
+            text-align: right;
+        }
+
+        .signature-line {
+            border-bottom: 1px solid #333;
+            width: 180px;
+            margin: 15px 0 5px auto;
+        }
+
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="bank-logo">T-BANK</div>
+        <div class="bank-name">Corporate Banking Division</div>
+    </div>
+
+    <div class="statement-title">BANK TRANSACTION STATEMENT</div>
+
+    <div class="account-info">
+        <div class="info-row">
+            <span class="label">Account Holder Name:</span>
+            <span class="value">ALEKSANDR GRISHAEV</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Account Number:</span>
+            <span class="value">5005614184</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Statement Period:</span>
+            <span class="value">01 September 2024 - 31 August 2025</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Currency:</span>
+            <span class="value">USD (United States Dollar)</span>
+        </div>
+        <div class="info-row">
+            <span class="label">Statement Date:</span>
+            <span class="value">24 September 2025</span>
+        </div>
+    </div>
+
+    <div class="transactions-section">
+
+        <!-- September 2024 -->
+        <div class="month-header">SEPTEMBER 2024</div>
+        <table class="transactions-table">
+            <thead>
+                <tr>
+                    <th class="date-col">Date</th>
+                    <th class="description-col">Transaction Description</th>
+                    <th class="amount-col">Amount (USD)</th>
+                    <th class="balance-col">Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Sep 2024</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$8,916.67</td>
+                </tr>
+                <tr>
+                    <td class="date-col">30 Sep 2024</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$11,833.34</td>
+                </tr>
+                <tr>
+                    <td class="date-col">30 Sep 2024</td>
+                    <td class="description-col">Performance Bonus - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$1,200.00</td>
+                    <td class="balance-col">$13,033.34</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $7,033.34</div>
+
+        <!-- October 2024 -->
+        <div class="month-header">OCTOBER 2024</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Oct 2024</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$15,950.01</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Oct 2024</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$18,866.68</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Oct 2024</td>
+                    <td class="description-col">Project Completion Bonus</td>
+                    <td class="amount-col">$800.00</td>
+                    <td class="balance-col">$19,666.68</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $6,633.34</div>
+
+        <!-- November 2024 -->
+        <div class="month-header">NOVEMBER 2024</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Nov 2024</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$22,583.35</td>
+                </tr>
+                <tr>
+                    <td class="date-col">30 Nov 2024</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$25,500.02</td>
+                </tr>
+                <tr>
+                    <td class="date-col">30 Nov 2024</td>
+                    <td class="description-col">Holiday Bonus - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$1,500.00</td>
+                    <td class="balance-col">$27,000.02</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $7,333.34</div>
+
+        <!-- December 2024 -->
+        <div class="month-header">DECEMBER 2024</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Dec 2024</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$29,916.69</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Dec 2024</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$32,833.36</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Dec 2024</td>
+                    <td class="description-col">Year-End Bonus - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,500.00</td>
+                    <td class="balance-col">$35,333.36</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Dec 2024</td>
+                    <td class="description-col">13th Month Salary - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$5,833.34</td>
+                    <td class="balance-col">$41,166.70</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $14,166.68</div>
+
+        <!-- January 2025 -->
+        <div class="month-header">JANUARY 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Jan 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$44,083.37</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Jan 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$47,000.04</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $5,833.34</div>
+
+        <!-- February 2025 -->
+        <div class="month-header">FEBRUARY 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">14 Feb 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$49,916.71</td>
+                </tr>
+                <tr>
+                    <td class="date-col">28 Feb 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$52,833.38</td>
+                </tr>
+                <tr>
+                    <td class="date-col">28 Feb 2025</td>
+                    <td class="description-col">Training Allowance</td>
+                    <td class="amount-col">$600.00</td>
+                    <td class="balance-col">$53,433.38</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $6,433.34</div>
+
+        <!-- March 2025 -->
+        <div class="month-header">MARCH 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Mar 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$56,350.05</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Mar 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$59,266.72</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Mar 2025</td>
+                    <td class="description-col">Quarterly Bonus - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$1,800.00</td>
+                    <td class="balance-col">$61,066.72</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $7,633.34</div>
+
+        <!-- April 2025 -->
+        <div class="month-header">APRIL 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Apr 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$63,983.39</td>
+                </tr>
+                <tr>
+                    <td class="date-col">30 Apr 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$66,900.06</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $5,833.34</div>
+
+        <!-- May 2025 -->
+        <div class="month-header">MAY 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 May 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$69,816.73</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 May 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$72,733.40</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 May 2025</td>
+                    <td class="description-col">Overtime Payment</td>
+                    <td class="amount-col">$900.00</td>
+                    <td class="balance-col">$73,633.40</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $6,733.34</div>
+
+        <!-- June 2025 -->
+        <div class="month-header">JUNE 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">13 Jun 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$76,550.07</td>
+                </tr>
+                <tr>
+                    <td class="date-col">30 Jun 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$79,466.74</td>
+                </tr>
+                <tr>
+                    <td class="date-col">30 Jun 2025</td>
+                    <td class="description-col">Mid-Year Bonus - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,000.00</td>
+                    <td class="balance-col">$81,466.74</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $7,833.34</div>
+
+        <!-- July 2025 -->
+        <div class="month-header">JULY 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Jul 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$84,383.41</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Jul 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$87,300.08</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Jul 2025</td>
+                    <td class="description-col">Vacation Allowance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$1,000.00</td>
+                    <td class="balance-col">$88,300.08</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $6,833.34</div>
+
+        <!-- August 2025 -->
+        <div class="month-header">AUGUST 2025</div>
+        <table class="transactions-table">
+            <tbody>
+                <tr>
+                    <td class="date-col">15 Aug 2025</td>
+                    <td class="description-col">Salary Advance - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$91,216.75</td>
+                </tr>
+                <tr>
+                    <td class="date-col">31 Aug 2025</td>
+                    <td class="description-col">Salary Payment - PT "KITCHEN APP"</td>
+                    <td class="amount-col">$2,916.67</td>
+                    <td class="balance-col">$94,133.42</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="month-total">Monthly Total: $5,833.34</div>
+
+    </div>
+
+    <div class="grand-total">
+        <div class="grand-total-title">TOTAL INCOME FOR PERIOD</div>
+        <div class="grand-total-amount">$88,133.42</div>
+        <div style="font-size: 12px; margin-top: 10px; color: #856404;">01 September 2024 - 31 August 2025</div>
+    </div>
+
+    <div class="signature-section">
+        <div style="font-size: 11px; margin-bottom: 5px;">Bank Officer</div>
+        <div class="signature-line"></div>
+        <div style="margin-top: 5px; font-size: 10px;">Authorized Signature</div>
+    </div>
+
+    <div class="footer">
+        This is an official bank statement issued by "T-BANK"<br>
+        Statement generated electronically on 24 September 2025
+    </div>
+</body>
+</html>
