@@ -27,11 +27,17 @@ export interface RequestItem {
   id: string
   itemId: string // relation to Product from ProductsStore
   itemName: string // cached name
-  requestedQuantity: number
-  unit: string
-  estimatedPrice?: number // ✅ ДОБАВИТЬ
-  priority?: 'normal' | 'urgent' // ✅ ДОБАВИТЬ
-  category?: string // ✅ ДОБАВИТЬ
+  requestedQuantity: number // ✅ ВСЕГДА в базовых единицах
+  unit: string // ✅ ВСЕГДА базовая единица продукта
+
+  // ✅ НОВЫЕ ПОЛЯ для упаковок (опционально в заявках)
+  packageId?: string // ID выбранной упаковки
+  packageName?: string // Название упаковки для отображения
+  packageQuantity?: number // Количество упаковок для UI
+
+  estimatedPrice?: number
+  priority?: 'normal' | 'urgent'
+  category?: string
   notes?: string
 }
 
@@ -98,16 +104,26 @@ export interface OrderItem {
   id: string
   itemId: string // relation to Product
   itemName: string
-  orderedQuantity: number
-  receivedQuantity?: number // filled during receipt
-  unit: string
-  pricePerUnit: number // auto-filled from Storage operations history
-  totalPrice: number // calculated automatically
+
+  // ✅ КОЛИЧЕСТВА всегда в базовых единицах для расчетов
+  orderedQuantity: number // в базовых единицах
+  receivedQuantity?: number // в базовых единицах
+  unit: string // базовая единица продукта
+
+  // ✅ НОВЫЕ ПОЛЯ для упаковок (ОБЯЗАТЕЛЬНО в заказах)
+  packageId: string // ОБЯЗАТЕЛЬНО - ID упаковки для заказа
+  packageName: string // Название упаковки
+  packageQuantity: number // Количество упаковок
+  packageUnit: string // Единица упаковки (kg, liter, pack и т.д.)
+
+  // ЦЕНЫ
+  pricePerUnit: number // цена за базовую единицу (для совместимости)
+  packagePrice: number // ✅ НОВОЕ - цена за упаковку
+  totalPrice: number // общая стоимость
 
   // Price information
-  isEstimatedPrice: boolean // true if price taken from history
-  lastPriceDate?: string // when was the last price
-
+  isEstimatedPrice: boolean
+  lastPriceDate?: string
   status: 'ordered' | 'received' | 'cancelled'
 }
 
@@ -136,12 +152,23 @@ export interface ReceiptItem {
   itemId: string
   itemName: string
 
-  orderedQuantity: number
-  receivedQuantity: number
+  // ✅ КОЛИЧЕСТВА в базовых единицах
+  orderedQuantity: number // в базовых единицах
+  receivedQuantity: number // в базовых единицах
+  unit: string // базовая единица
 
-  // Price update during receipt
-  orderedPrice: number // from order
-  actualPrice?: number // actual price on receipt
+  // ✅ УПАКОВКА
+  packageId: string // ID упаковки
+  packageName: string // Название упаковки
+  orderedPackageQuantity: number // Заказано упаковок
+  receivedPackageQuantity: number // Получено упаковок
+  packageUnit: string // Единица упаковки
+
+  // ✅ ЦЕНЫ
+  orderedPrice: number // цена за упаковку из заказа
+  actualPrice?: number // фактическая цена за упаковку
+  orderedBaseCost: number // цена за базовую единицу из заказа
+  actualBaseCost?: number // фактическая цена за базовую единицу
 
   notes?: string
 }
@@ -193,18 +220,23 @@ export type BillStatus =
 export interface OrderSuggestion {
   itemId: string
   itemName: string
-  currentStock: number
+  currentStock: number // в базовых единицах
   minStock: number
-  suggestedQuantity: number
+  suggestedQuantity: number // в базовых единицах
   urgency: 'low' | 'medium' | 'high'
   reason: 'below_minimum' | 'out_of_stock'
-  estimatedPrice: number // automatically from Storage operations
-  lastPriceDate?: string
 
-  // ✅ РАСШИРЕННЫЕ ПОЛЯ для полного учета запасов:
-  transitStock?: number // Количество в пути (уже созданные transit batches)
-  pendingOrderStock?: number // ✅ НОВОЕ: Количество в заказах (draft + sent без transit)
-  effectiveStock?: number // Общий доступный запас (склад + транзит + заказы)
+  // ✅ ЦЕНЫ И УПАКОВКИ
+  estimatedBaseCost: number // цена за базовую единицу
+  recommendedPackageId?: string // рекомендуемая упаковка
+  recommendedPackageName?: string
+  recommendedPackageQuantity?: number // количество упаковок
+  estimatedPackagePrice?: number // цена за упаковку
+
+  lastPriceDate?: string
+  transitStock?: number
+  pendingOrderStock?: number
+  effectiveStock?: number
   nearestDelivery?: string
 }
 
@@ -220,18 +252,25 @@ export interface SupplierBasket {
 export interface UnassignedItem {
   itemId: string
   itemName: string
-  category: string // Product.category for filtering
-  totalQuantity: number
-  unit: string
-  estimatedPrice: number // from Storage operations history
+  category: string
+  totalQuantity: number // в базовых единицах
+  unit: string // базовая единица
+
+  // ✅ УПАКОВКА
+  recommendedPackageId?: string
+  recommendedPackageName?: string
+  estimatedPackagePrice?: number
+  estimatedBaseCost: number
 
   // Sources from different requests
-  sources: {
+  sources: Array<{
     requestId: string
     requestNumber: string
     department: 'kitchen' | 'bar'
-    quantity: number
-  }[]
+    quantity: number // в базовых единицах
+    packageId?: string
+    packageQuantity?: number
+  }>
 }
 
 // =============================================
@@ -249,24 +288,31 @@ export interface CreateRequestData {
 export interface CreateOrderData {
   supplierId: string
   requestIds: string[]
-  items: {
-    itemId: string
-    quantity: number
-    pricePerUnit: number // auto-filled from history
-  }[]
+  items: CreateOrderItemData[]
   expectedDeliveryDate?: string
   notes?: string
+}
+export interface CreateOrderItemData {
+  itemId: string
+  quantity: number // в базовых единицах
+  packageId: string // ОБЯЗАТЕЛЬНО - выбранная упаковка
+  pricePerUnit?: number // цена за базовую единицу (для совместимости)
+  packagePrice?: number // цена за упаковку
 }
 
 export interface CreateReceiptData {
   purchaseOrderId: string
   receivedBy: string
-  items: {
-    orderItemId: string
-    receivedQuantity: number
-    actualPrice?: number // updated price
-    notes?: string
-  }[]
+  items: CreateReceiptItemData[]
+  notes?: string
+}
+
+export interface CreateReceiptItemData {
+  orderItemId: string
+  receivedQuantity: number // в базовых единицах
+  receivedPackageQuantity?: number // количество полученных упаковок
+  actualPackagePrice?: number // фактическая цена за упаковку
+  packageId?: string // ID упаковки (можно изменить при приемке)
   notes?: string
 }
 
@@ -343,14 +389,14 @@ export interface CreateBillInAccountStore {
 export interface CreateStorageReceipt {
   department: 'kitchen' | 'bar'
   responsiblePerson: string
-  items: {
+  items: Array<{
     itemId: string
-    quantity: number
-    costPerUnit: number // actualPrice or orderedPrice
+    quantity: number // в базовых единицах
+    costPerUnit: number // цена за базовую единицу
     notes?: string
-  }[]
-  sourceType: 'purchase' // BatchSourceType
-  purchaseOrderId: string // for relation
+  }>
+  sourceType: 'purchase'
+  purchaseOrderId: string
 }
 
 // =============================================

@@ -336,6 +336,50 @@
           </v-row>
         </div>
 
+        <!-- Упаковки продукта -->
+        <div v-if="product.packageOptions?.length" class="pa-6">
+          <h3 class="text-h6 mb-4">Упаковки</h3>
+
+          <v-row>
+            <v-col v-for="pkg in product.packageOptions" :key="pkg.id" cols="12" md="6">
+              <v-card
+                variant="outlined"
+                :color="pkg.id === product.recommendedPackageId ? 'primary' : undefined"
+              >
+                <v-card-text>
+                  <div class="d-flex justify-space-between align-center mb-2">
+                    <strong>{{ pkg.packageName }}</strong>
+                    <v-chip
+                      v-if="pkg.id === product.recommendedPackageId"
+                      size="small"
+                      color="success"
+                      variant="tonal"
+                    >
+                      Рекомендуемая
+                    </v-chip>
+                  </div>
+
+                  <div class="text-body-2">
+                    {{ pkg.packageSize }} {{ product.baseUnit }}
+                    <span v-if="pkg.brandName">• {{ pkg.brandName }}</span>
+                  </div>
+
+                  <div class="text-body-2 mt-1">
+                    <span v-if="pkg.packagePrice">
+                      {{ formatCurrency(pkg.packagePrice) }} за упаковку •
+                    </span>
+                    {{ formatCurrency(pkg.baseCostPerUnit) }}/{{ product.baseUnit }}
+                  </div>
+
+                  <div v-if="pkg.notes" class="text-caption text-grey-darken-2 mt-1">
+                    {{ pkg.notes }}
+                  </div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+        </div>
+
         <!-- 🆕 Enhanced Analytics Sections -->
         <v-divider />
         <div class="pa-6">

@@ -62,13 +62,9 @@ export class DebugUtils {
   private static maxLogs = 1000
 
   // Базовые blacklist'ы (всегда применяются)
-  private static baseModuleBlacklist: string[] = [
-    'DebugService',
-    'DebugStore',
-    'MockDataCoordinator'
-  ]
+  private static baseModuleBlacklist: string[] = ['DebugService', 'DebugStore']
 
-  private static baseDebugBlacklist: string[] = ['MenuService', 'StorageDefinitions']
+  private static baseDebugBlacklist: string[] = ['MenuService']
 
   // Blacklist'ы специфичные для ролей
   private static backofficeBlacklist: string[] = [
