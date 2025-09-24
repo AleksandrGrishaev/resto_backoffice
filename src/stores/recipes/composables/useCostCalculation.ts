@@ -1,4 +1,4 @@
-// src/stores/recipes/composables/useCostCalculation.ts - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ версия
+// src/stores/recipes/composables/useCostCalculation.ts - ОПТИМИЗИРОВАННОЕ логирование
 
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
@@ -42,7 +42,8 @@ export function useCostCalculation() {
   ): void {
     getProductCallback = getProduct
     getPreparationCostCallback = getPreparationCost
-    DebugUtils.info(MODULE_NAME, 'Integration callbacks set for cost calculation')
+    // ✅ МИНИМАЛЬНЫЙ ЛОГ: Только важная информация
+    DebugUtils.debug(MODULE_NAME, 'Integration callbacks configured')
   }
 
   /**
@@ -56,7 +57,8 @@ export function useCostCalculation() {
       preparationCosts.value.clear()
       recipeCosts.value.clear()
 
-      DebugUtils.info(MODULE_NAME, '✅ Cost calculations initialized')
+      // ✅ КРАТКИЙ ЛОГ: Без эмодзи и лишних слов
+      DebugUtils.debug(MODULE_NAME, 'Cost calculations initialized')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize cost calculations'
       error.value = message
@@ -68,27 +70,19 @@ export function useCostCalculation() {
   }
 
   // =============================================
-  // ✅ ИСПРАВЛЕННЫЕ УТИЛИТЫ КОНВЕРТАЦИИ
+  // УТИЛИТЫ КОНВЕРТАЦИИ (без изменений)
   // =============================================
 
-  /**
-   * ✅ ИСПРАВЛЕНО: Конвертирует количество в граммы или мл (базовые единицы)
-   */
   function convertToBaseUnits(value: number, unit: string): number {
     const conversions: Record<string, number> = {
-      // Вес -> граммы
       gram: 1,
       g: 1,
       kg: 1000,
       kilogram: 1000,
-
-      // Объем -> миллилитры
       ml: 1,
       milliliter: 1,
       liter: 1000,
       l: 1000,
-
-      // Штучные -> штуки
       piece: 1,
       pack: 1,
       item: 1
@@ -96,16 +90,14 @@ export function useCostCalculation() {
 
     const factor = conversions[unit.toLowerCase()]
     if (factor === undefined) {
-      DebugUtils.warn(MODULE_NAME, `Unknown unit: ${unit}, using as-is`)
+      // ✅ ТОЛЬКО WARNING для неизвестных единиц
+      DebugUtils.warn(MODULE_NAME, `Unknown unit: ${unit}`)
       return value
     }
 
     return value * factor
   }
 
-  /**
-   * ✅ ИСПРАВЛЕНО: Проверяет совместимость единиц измерения
-   */
   function areUnitsCompatible(unit1: string, unit2: string): boolean {
     const weightUnits = ['gram', 'g', 'kg', 'kilogram']
     const volumeUnits = ['ml', 'milliliter', 'liter', 'l']
@@ -122,18 +114,12 @@ export function useCostCalculation() {
     return getUnitType(unit1) === getUnitType(unit2)
   }
 
-  /**
-   * ✅ НОВАЯ ФУНКЦИЯ: Получает базовую единицу для продукта
-   */
   function getBaseUnitForProduct(product: ProductForRecipe): string {
-    // ✅ ИСПРАВЛЕНО: Проверяем наличие baseUnit в продукте
     if (product.baseUnit) {
       return product.baseUnit
     }
 
-    // ✅ ИСПРАВЛЕНО: Если нет baseUnit, определяем по старому полю unit
     if ((product as any).unit) {
-      // Конвертируем старые единицы в базовые
       switch ((product as any).unit) {
         case 'kg':
           return 'gram'
@@ -147,95 +133,77 @@ export function useCostCalculation() {
         case 'ml':
           return 'ml'
         default:
-          return 'gram' // По умолчанию граммы
+          return 'gram'
       }
     }
 
-    // ✅ ИСПРАВЛЕНО: Fallback - определяем по категории
     const category = product.category?.toLowerCase() || ''
-
     if (['meat', 'vegetables', 'spices', 'cereals', 'dairy'].includes(category)) {
       return 'gram'
     }
-
     if (['beverages'].includes(category) || product.name.toLowerCase().includes('oil')) {
       return 'ml'
     }
-
-    // По умолчанию граммы
     return 'gram'
   }
 
-  /**
-   * ✅ НОВАЯ ФУНКЦИЯ: Получает цену за базовую единицу
-   */
   function getBaseCostPerUnit(product: ProductForRecipe): number {
-    // ✅ Если есть новое поле baseCostPerUnit, используем его
     if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
       return product.baseCostPerUnit
     }
 
-    // ✅ Fallback - конвертируем из старого формата
     if ((product as any).costPerUnit && (product as any).unit) {
       const baseUnit = getBaseUnitForProduct(product)
       const oldUnit = (product as any).unit
       const oldCost = (product as any).costPerUnit
 
-      // Если старая единица = базовой, просто возвращаем цену
       if (oldUnit === baseUnit) {
         return oldCost
       }
 
-      // Конвертируем цену в базовую единицу
       if (oldUnit === 'kg' && baseUnit === 'gram') {
-        return oldCost / 1000 // IDR/кг -> IDR/г
+        return oldCost / 1000
       }
 
       if (oldUnit === 'liter' && baseUnit === 'ml') {
-        return oldCost / 1000 // IDR/л -> IDR/мл
+        return oldCost / 1000
       }
 
-      // Для остальных случаев возвращаем как есть
       return oldCost
     }
 
-    // ✅ ИСПРАВЛЕНО: Если нет никаких данных о цене
-    DebugUtils.warn(MODULE_NAME, `No cost data for product: ${product.name}`)
+    // ✅ ТОЛЬКО WARNING для отсутствующих данных
+    DebugUtils.warn(MODULE_NAME, `No cost data: ${product.name}`)
     return 0
   }
 
   // =============================================
-  // ✅ ИСПРАВЛЕННЫЙ РАСЧЕТ СТОИМОСТИ ПОЛУФАБРИКАТОВ
+  // ✅ ОПТИМИЗИРОВАННЫЙ РАСЧЕТ ПОЛУФАБРИКАТОВ
   // =============================================
 
-  /**
-   * ✅ ИСПРАВЛЕНО: Рассчитывает планируемую стоимость полуфабриката
-   */
   async function calculatePreparationCost(
     preparation: Preparation
   ): Promise<CostCalculationResult> {
     if (!getProductCallback) {
-      return {
-        success: false,
-        error: 'Product provider not available'
-      }
+      return { success: false, error: 'Product provider not available' }
     }
 
     try {
-      DebugUtils.info(MODULE_NAME, `🧮 Calculating preparation cost: ${preparation.name}`)
+      // ✅ ТОЛЬКО DEBUG: Не засоряем консоль при массовых расчетах
+      DebugUtils.debug(MODULE_NAME, `Calculating preparation: ${preparation.name}`)
 
       if (!preparation.recipe || preparation.recipe.length === 0) {
-        return {
-          success: false,
-          error: 'Preparation has no recipe ingredients'
-        }
+        return { success: false, error: 'Preparation has no recipe ingredients' }
       }
 
       let totalCost = 0
       const componentCosts: ComponentPlanCost[] = []
       const missingProducts: string[] = []
+      const inactiveProducts: string[] = []
+      const zeroCostProducts: string[] = []
+      const incompatibleUnits: string[] = []
 
-      // Рассчитываем стоимость каждого ингредиента
+      // ✅ ГРУППОВОЙ СБОР ОШИБОК: Не логируем каждую проблему отдельно
       for (const ingredient of preparation.recipe) {
         const product = await getProductCallback(ingredient.id)
 
@@ -245,48 +213,30 @@ export function useCostCalculation() {
         }
 
         if (!product.isActive) {
-          DebugUtils.warn(MODULE_NAME, `Product ${product.name} is inactive`)
+          inactiveProducts.push(product.name)
           continue
         }
 
-        // ✅ ИСПРАВЛЕНО: Получаем базовую единицу и цену
         const baseUnit = getBaseUnitForProduct(product)
         const baseCostPerUnit = getBaseCostPerUnit(product)
 
         if (baseCostPerUnit === 0) {
-          DebugUtils.warn(MODULE_NAME, `Product ${product.name} has no cost data`)
+          zeroCostProducts.push(product.name)
           continue
         }
 
-        // ✅ ИСПРАВЛЕНО: Проверяем совместимость единиц
         if (!areUnitsCompatible(ingredient.unit, baseUnit)) {
-          DebugUtils.warn(
-            MODULE_NAME,
-            `Unit mismatch: ingredient ${ingredient.unit} vs product base unit ${baseUnit} for ${product.name}`
-          )
-          // Не прерываем расчет, просто пропускаем этот ингредиент
+          incompatibleUnits.push(`${product.name} (${ingredient.unit} → ${baseUnit})`)
           continue
         }
 
-        // ✅ ИСПРАВЛЕНО: Конвертируем количество ингредиента в базовые единицы
         const ingredientQuantityInBaseUnits = convertToBaseUnits(
           ingredient.quantity,
           ingredient.unit
         )
 
-        // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем baseCostPerUnit (цена за грамм/мл/штуку)
         const ingredientTotalCost = ingredientQuantityInBaseUnits * baseCostPerUnit
         totalCost += ingredientTotalCost
-
-        DebugUtils.debug(MODULE_NAME, `✅ Fixed ingredient cost calculation:`, {
-          productName: product.name,
-          ingredientQuantity: ingredient.quantity,
-          ingredientUnit: ingredient.unit,
-          baseUnit: baseUnit,
-          baseQuantity: ingredientQuantityInBaseUnits,
-          baseCostPerUnit: baseCostPerUnit,
-          totalCost: ingredientTotalCost
-        })
 
         componentCosts.push({
           componentId: ingredient.id,
@@ -296,15 +246,26 @@ export function useCostCalculation() {
           unit: ingredient.unit,
           planUnitCost: baseCostPerUnit,
           totalPlanCost: ingredientTotalCost,
-          percentage: 0 // будет рассчитано позже
+          percentage: 0
         })
       }
 
+      // ✅ ГРУППОВЫЕ ПРЕДУПРЕЖДЕНИЯ: Один лог вместо множества
       if (missingProducts.length > 0) {
-        return {
-          success: false,
-          error: `Missing products: ${missingProducts.join(', ')}`
-        }
+        DebugUtils.warn(MODULE_NAME, `Missing products in ${preparation.name}:`, missingProducts)
+      }
+      if (inactiveProducts.length > 0) {
+        DebugUtils.warn(MODULE_NAME, `Inactive products in ${preparation.name}:`, inactiveProducts)
+      }
+      if (zeroCostProducts.length > 0) {
+        DebugUtils.warn(MODULE_NAME, `Zero cost products in ${preparation.name}:`, zeroCostProducts)
+      }
+      if (incompatibleUnits.length > 0) {
+        DebugUtils.warn(MODULE_NAME, `Unit mismatches in ${preparation.name}:`, incompatibleUnits)
+      }
+
+      if (missingProducts.length > 0) {
+        return { success: false, error: `Missing products: ${missingProducts.join(', ')}` }
       }
 
       if (totalCost === 0) {
@@ -328,24 +289,21 @@ export function useCostCalculation() {
         costPerOutputUnit,
         componentCosts,
         calculatedAt: new Date(),
-        note: 'Based on current supplier prices (fixed calculation)'
+        note: 'Based on current supplier prices'
       }
 
-      // Сохраняем в кэш
       preparationCosts.value.set(preparation.id, result)
 
-      DebugUtils.info(MODULE_NAME, `✅ Fixed preparation cost calculated: ${preparation.name}`, {
-        totalCost: totalCost.toFixed(2),
-        costPerUnit: costPerOutputUnit.toFixed(2),
-        components: componentCosts.length
-      })
+      // ✅ ТОЛЬКО УСПЕШНЫЕ РЕЗУЛЬТАТЫ: Краткий финальный лог
+      DebugUtils.debug(
+        MODULE_NAME,
+        `Preparation cost: ${preparation.name} = ${totalCost.toFixed(0)} (${componentCosts.length} components)`
+      )
 
-      return {
-        success: true,
-        cost: result
-      }
+      return { success: true, cost: result }
     } catch (err) {
-      DebugUtils.error(MODULE_NAME, `❌ Error calculating preparation cost: ${preparation.name}`, {
+      // ✅ ТОЛЬКО ОШИБКИ логируются как ERROR
+      DebugUtils.error(MODULE_NAME, `Failed to calculate preparation cost: ${preparation.name}`, {
         err
       })
       return {
@@ -356,42 +314,35 @@ export function useCostCalculation() {
   }
 
   // =============================================
-  // ✅ ИСПРАВЛЕННЫЙ РАСЧЕТ СТОИМОСТИ РЕЦЕПТОВ
+  // ✅ ОПТИМИЗИРОВАННЫЙ РАСЧЕТ РЕЦЕПТОВ
   // =============================================
 
-  /**
-   * ✅ ИСПРАВЛЕНО: Рассчитывает планируемую стоимость рецепта
-   */
   async function calculateRecipeCost(recipe: Recipe): Promise<CostCalculationResult> {
     if (!getProductCallback || !getPreparationCostCallback) {
-      return {
-        success: false,
-        error: 'Integration callbacks not available'
-      }
+      return { success: false, error: 'Integration callbacks not available' }
     }
 
     try {
-      DebugUtils.info(MODULE_NAME, `🧮 Calculating recipe cost: ${recipe.name}`)
+      DebugUtils.debug(MODULE_NAME, `Calculating recipe: ${recipe.name}`)
 
       if (!recipe.components || recipe.components.length === 0) {
-        return {
-          success: false,
-          error: 'Recipe has no components'
-        }
+        return { success: false, error: 'Recipe has no components' }
       }
 
       let totalCost = 0
       const componentCosts: ComponentPlanCost[] = []
       const missingItems: string[] = []
+      const inactiveProducts: string[] = []
+      const zeroCostItems: string[] = []
+      const incompatibleUnits: string[] = []
 
-      // Обрабатываем каждый компонент рецепта
+      // ✅ ГРУППОВОЙ СБОР ОШИБОК для рецептов
       for (const component of recipe.components) {
         let componentCost = 0
         let componentName = ''
         let unitCost = 0
 
         if (component.componentType === 'product') {
-          // Получаем стоимость продукта
           const product = await getProductCallback(component.componentId)
 
           if (!product) {
@@ -400,51 +351,32 @@ export function useCostCalculation() {
           }
 
           if (!product.isActive) {
-            DebugUtils.warn(MODULE_NAME, `Product ${product.name} is inactive`)
+            inactiveProducts.push(product.name)
             continue
           }
 
           componentName = product.name
-
-          // ✅ ИСПРАВЛЕНО: Получаем базовую единицу и цену
           const baseUnit = getBaseUnitForProduct(product)
           const baseCostPerUnit = getBaseCostPerUnit(product)
 
           if (baseCostPerUnit === 0) {
-            DebugUtils.warn(MODULE_NAME, `Product ${product.name} has no cost data`)
+            zeroCostItems.push(product.name)
             continue
           }
 
-          // ✅ ИСПРАВЛЕНО: Проверяем совместимость единиц
           if (!areUnitsCompatible(component.unit, baseUnit)) {
-            DebugUtils.warn(
-              MODULE_NAME,
-              `Unit mismatch: component ${component.unit} vs product base unit ${baseUnit} for ${product.name}`
-            )
+            incompatibleUnits.push(`${product.name} (${component.unit} → ${baseUnit})`)
             continue
           }
 
-          // ✅ ИСПРАВЛЕНО: Конвертируем количество компонента в базовые единицы
           const componentQuantityInBaseUnits = convertToBaseUnits(
             component.quantity,
             component.unit
           )
 
-          // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем baseCostPerUnit
           componentCost = componentQuantityInBaseUnits * baseCostPerUnit
           unitCost = baseCostPerUnit
-
-          DebugUtils.debug(MODULE_NAME, `✅ Fixed recipe component cost:`, {
-            productName: product.name,
-            componentQuantity: component.quantity,
-            componentUnit: component.unit,
-            baseUnit: baseUnit,
-            baseQuantity: componentQuantityInBaseUnits,
-            baseCostPerUnit: baseCostPerUnit,
-            totalCost: componentCost
-          })
         } else if (component.componentType === 'preparation') {
-          // Получаем стоимость полуфабриката
           const preparationCost = await getPreparationCostCallback(component.componentId)
 
           if (!preparationCost) {
@@ -453,18 +385,8 @@ export function useCostCalculation() {
           }
 
           componentName = `Preparation (${component.componentId})`
-
-          // ✅ ИСПРАВЛЕНО: Простая пропорциональная стоимость
-          // Количество компонента * стоимость за единицу полуфабриката
           componentCost = preparationCost.costPerOutputUnit * component.quantity
           unitCost = preparationCost.costPerOutputUnit
-
-          DebugUtils.debug(MODULE_NAME, `✅ Fixed recipe preparation cost:`, {
-            preparationId: component.componentId,
-            componentQuantity: component.quantity,
-            costPerUnit: preparationCost.costPerOutputUnit,
-            totalCost: componentCost
-          })
         }
 
         totalCost += componentCost
@@ -477,15 +399,26 @@ export function useCostCalculation() {
           unit: component.unit,
           planUnitCost: unitCost,
           totalPlanCost: componentCost,
-          percentage: 0 // будет рассчитано позже
+          percentage: 0
         })
       }
 
+      // ✅ ГРУППОВЫЕ ПРЕДУПРЕЖДЕНИЯ для рецептов
       if (missingItems.length > 0) {
-        return {
-          success: false,
-          error: `Missing items: ${missingItems.join(', ')}`
-        }
+        DebugUtils.warn(MODULE_NAME, `Missing items in ${recipe.name}:`, missingItems)
+      }
+      if (inactiveProducts.length > 0) {
+        DebugUtils.warn(MODULE_NAME, `Inactive products in ${recipe.name}:`, inactiveProducts)
+      }
+      if (zeroCostItems.length > 0) {
+        DebugUtils.warn(MODULE_NAME, `Zero cost items in ${recipe.name}:`, zeroCostItems)
+      }
+      if (incompatibleUnits.length > 0) {
+        DebugUtils.warn(MODULE_NAME, `Unit mismatches in ${recipe.name}:`, incompatibleUnits)
+      }
+
+      if (missingItems.length > 0) {
+        return { success: false, error: `Missing items: ${missingItems.join(', ')}` }
       }
 
       if (totalCost === 0) {
@@ -509,24 +442,20 @@ export function useCostCalculation() {
         costPerPortion,
         componentCosts,
         calculatedAt: new Date(),
-        note: 'Based on current supplier prices + plan preparation costs (fixed calculation)'
+        note: 'Based on current supplier prices + plan preparation costs'
       }
 
-      // Сохраняем в кэш
       recipeCosts.value.set(recipe.id, result)
 
-      DebugUtils.info(MODULE_NAME, `✅ Fixed recipe cost calculated: ${recipe.name}`, {
-        totalCost: totalCost.toFixed(2),
-        costPerPortion: costPerPortion.toFixed(2),
-        components: componentCosts.length
-      })
+      // ✅ КРАТКИЙ ФИНАЛЬНЫЙ ЛОГ
+      DebugUtils.debug(
+        MODULE_NAME,
+        `Recipe cost: ${recipe.name} = ${totalCost.toFixed(0)} per portion: ${costPerPortion.toFixed(0)} (${componentCosts.length} components)`
+      )
 
-      return {
-        success: true,
-        cost: result
-      }
+      return { success: true, cost: result }
     } catch (err) {
-      DebugUtils.error(MODULE_NAME, `❌ Error calculating recipe cost: ${recipe.name}`, { err })
+      DebugUtils.error(MODULE_NAME, `Failed to calculate recipe cost: ${recipe.name}`, { err })
       return {
         success: false,
         error: err instanceof Error ? err.message : 'Unknown error'
@@ -535,38 +464,8 @@ export function useCostCalculation() {
   }
 
   // =============================================
-  // ОСТАЛЬНЫЕ ФУНКЦИИ
+  // ✅ ОПТИМИЗИРОВАННЫЕ МАССОВЫЕ ОПЕРАЦИИ
   // =============================================
-
-  async function calculatePreparationCostById(
-    preparationId: string,
-    getPreparation: (id: string) => Preparation | null
-  ): Promise<CostCalculationResult> {
-    const preparation = getPreparation(preparationId)
-    if (!preparation) {
-      return {
-        success: false,
-        error: 'Preparation not found'
-      }
-    }
-
-    return calculatePreparationCost(preparation)
-  }
-
-  async function calculateRecipeCostById(
-    recipeId: string,
-    getRecipe: (id: string) => Recipe | null
-  ): Promise<CostCalculationResult> {
-    const recipe = getRecipe(recipeId)
-    if (!recipe) {
-      return {
-        success: false,
-        error: 'Recipe not found'
-      }
-    }
-
-    return calculateRecipeCost(recipe)
-  }
 
   async function recalculateAllPreparationCosts(
     getPreparations: () => Preparation[]
@@ -578,7 +477,8 @@ export function useCostCalculation() {
       const preparations = getPreparations().filter(p => p.isActive)
       const results = { success: 0, failed: 0, errors: [] as string[] }
 
-      DebugUtils.info(MODULE_NAME, `🔄 Recalculating ${preparations.length} preparation costs...`)
+      // ✅ ОДИН ЛОГ ДЛЯ НАЧАЛА
+      DebugUtils.info(MODULE_NAME, `Recalculating ${preparations.length} preparation costs...`)
 
       for (const preparation of preparations) {
         const result = await calculatePreparationCost(preparation)
@@ -590,7 +490,16 @@ export function useCostCalculation() {
         }
       }
 
-      DebugUtils.info(MODULE_NAME, `✅ Preparation cost recalculation complete`, results)
+      // ✅ ФИНАЛЬНЫЙ СВОДНЫЙ ЛОГ
+      DebugUtils.info(
+        MODULE_NAME,
+        `Preparation costs recalculated: ${results.success} success, ${results.failed} failed`
+      )
+
+      if (results.failed > 0) {
+        DebugUtils.warn(MODULE_NAME, 'Failed calculations:', results.errors)
+      }
+
       return results
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to recalculate preparation costs'
@@ -612,7 +521,8 @@ export function useCostCalculation() {
       const recipes = getRecipes().filter(r => r.isActive)
       const results = { success: 0, failed: 0, errors: [] as string[] }
 
-      DebugUtils.info(MODULE_NAME, `🔄 Recalculating ${recipes.length} recipe costs...`)
+      // ✅ ОДИН ЛОГ ДЛЯ НАЧАЛА
+      DebugUtils.info(MODULE_NAME, `Recalculating ${recipes.length} recipe costs...`)
 
       for (const recipe of recipes) {
         const result = await calculateRecipeCost(recipe)
@@ -624,7 +534,16 @@ export function useCostCalculation() {
         }
       }
 
-      DebugUtils.info(MODULE_NAME, `✅ Recipe cost recalculation complete`, results)
+      // ✅ ФИНАЛЬНЫЙ СВОДНЫЙ ЛОГ
+      DebugUtils.info(
+        MODULE_NAME,
+        `Recipe costs recalculated: ${results.success} success, ${results.failed} failed`
+      )
+
+      if (results.failed > 0) {
+        DebugUtils.warn(MODULE_NAME, 'Failed calculations:', results.errors)
+      }
+
       return results
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to recalculate recipe costs'
@@ -634,6 +553,32 @@ export function useCostCalculation() {
     } finally {
       loading.value = false
     }
+  }
+
+  // =============================================
+  // ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений)
+  // =============================================
+
+  async function calculatePreparationCostById(
+    preparationId: string,
+    getPreparation: (id: string) => Preparation | null
+  ): Promise<CostCalculationResult> {
+    const preparation = getPreparation(preparationId)
+    if (!preparation) {
+      return { success: false, error: 'Preparation not found' }
+    }
+    return calculatePreparationCost(preparation)
+  }
+
+  async function calculateRecipeCostById(
+    recipeId: string,
+    getRecipe: (id: string) => Recipe | null
+  ): Promise<CostCalculationResult> {
+    const recipe = getRecipe(recipeId)
+    if (!recipe) {
+      return { success: false, error: 'Recipe not found' }
+    }
+    return calculateRecipeCost(recipe)
   }
 
   async function recalculateAllCosts(
@@ -656,7 +601,8 @@ export function useCostCalculation() {
         }
       }
 
-      DebugUtils.info(MODULE_NAME, `✅ All ${type} costs recalculated`)
+      // ✅ ФИНАЛЬНЫЙ ЛОГ ГРУППЫ
+      DebugUtils.info(MODULE_NAME, `All ${type} costs recalculated`)
     } finally {
       loading.value = false
     }
@@ -685,7 +631,7 @@ export function useCostCalculation() {
   function clearAllCalculations(): void {
     preparationCosts.value.clear()
     recipeCosts.value.clear()
-    DebugUtils.info(MODULE_NAME, 'All cost calculations cleared')
+    DebugUtils.debug(MODULE_NAME, 'All calculations cleared')
   }
 
   const costCalculationsStats = computed(() => ({

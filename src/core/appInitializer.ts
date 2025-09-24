@@ -278,12 +278,18 @@ export class AppInitializer {
     try {
       const storageStore = useStorageStore()
 
-      if (storageStore.fetchBalances) {
+      // ✅ ИСПРАВЛЕНИЕ: Вызываем initialize() вместо fetchBalances()
+      if (!storageStore.initialized) {
+        await storageStore.initialize()
+      } else {
+        // Если уже инициализирован, просто обновляем данные
         await storageStore.fetchBalances()
       }
 
       DebugUtils.store(MODULE_NAME, '📦 Storage loaded', {
-        balances: storageStore.state?.value?.balances?.length || 0
+        balances: storageStore.state.balances.length,
+        batches: storageStore.state.batches.length,
+        ready: storageStore.isReady
       })
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Failed to load storage (non-critical)', { error })

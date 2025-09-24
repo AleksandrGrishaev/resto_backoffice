@@ -228,39 +228,59 @@ export const useStorageStore = defineStore('storage', () => {
   // ===========================
 
   async function initialize() {
+    // ===== ЗАЩИТА ОТ ПОВТОРНЫХ ВЫЗОВОВ =====
     if (initialized.value) {
-      DebugUtils.info(MODULE_NAME, 'Pinia store already initialized, skipping')
+      DebugUtils.debug(MODULE_NAME, 'Storage store already initialized, skipping')
+      return
+    }
+
+    // ===== ЗАЩИТА ОТ ОДНОВРЕМЕННЫХ ВЫЗОВОВ =====
+    if (state.value.loading.balances) {
+      DebugUtils.debug(MODULE_NAME, 'Storage store initialization already in progress')
       return
     }
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Initializing Pinia storage store')
+      DebugUtils.info(MODULE_NAME, 'Initializing storage store...')
 
+      // Устанавливаем флаг загрузки
       state.value.loading.balances = true
       state.value.error = null
 
+      // Проверяем зависимости - productsStore должен быть загружен
       const productsStore = useProductsStore()
       if (productsStore.products.length === 0) {
+        DebugUtils.debug(MODULE_NAME, 'Products store not loaded, loading first...')
         await productsStore.loadProducts(true)
       }
 
+      // Инициализируем сервисный слой
+      DebugUtils.debug(MODULE_NAME, 'Initializing storage service...')
       await storageService.initialize()
+
+      // Загружаем данные параллельно
+      DebugUtils.debug(MODULE_NAME, 'Loading storage data...')
       await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
 
+      // Помечаем как инициализированный
       initialized.value = true
 
       DebugUtils.info(MODULE_NAME, 'Storage store initialized successfully', {
         balances: state.value.balances.length,
         batches: state.value.batches.length,
         operations: state.value.operations.length,
-        inventories: state.value.inventories.length
+        inventories: state.value.inventories.length,
+        isReady: true
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to initialize storage store'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
+
+      // НЕ устанавливаем initialized = true при ошибке
       throw error
     } finally {
+      // Всегда снимаем флаг загрузки
       state.value.loading.balances = false
     }
   }
@@ -802,6 +822,8 @@ export const useStorageStore = defineStore('storage', () => {
     // State
     state: state,
     initialized: readonly(initialized),
+    isReady: computed(() => initialized.value && !state.value.loading.balances),
+    hasData: computed(() => state.value.balances.length > 0),
 
     // Existing computed
     filteredBalances,
@@ -876,38 +898,10 @@ export const useStorageStore = defineStore('storage', () => {
 })
 
 // ===========================
-// DEV HELPERS
+// DEV HELPERS - ТОЛЬКО ССЫЛКИ
 // ===========================
 
 if (import.meta.env.DEV) {
   ;(window as any).__STORAGE_STORE__ = { useStorageStore }
-  ;(window as any).__TEST_PINIA_STORAGE_STORE__ = async () => {
-    console.log('=== PINIA STORAGE STORE TEST ===')
-
-    try {
-      const store = useStorageStore()
-      await store.initialize()
-
-      console.log('Store initialized successfully')
-      console.log(`Balances: ${store.state.balances.length}`)
-      console.log(`Batches: ${store.state.batches.length}`)
-      console.log(`Operations: ${store.state.operations.length}`)
-
-      // Тест departmentBalances
-      const kitchenBalances = store.departmentBalances('kitchen')
-      console.log(`Kitchen balances: ${kitchenBalances.length}`)
-
-      return store
-    } catch (error) {
-      console.error('Test failed:', error)
-      throw error
-    }
-  }
-
-  setTimeout(() => {
-    console.log('\nPINIA Storage Store ready!')
-    console.log('Single initialization protection enabled')
-    console.log('Runtime data preservation active')
-    console.log('\nCommand: window.__TEST_PINIA_STORAGE_STORE__()')
-  }, 100)
+  // Убираем всё остальное
 }

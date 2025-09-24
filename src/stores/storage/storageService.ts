@@ -203,7 +203,7 @@ export class StorageService {
   async getBalances(department?: StorageDepartment): Promise<StorageBalance[]> {
     try {
       if (!this.initialized) {
-        await this.initialize()
+        throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
       if (this.balances.length === 0) {
@@ -238,7 +238,7 @@ export class StorageService {
   async getBatches(department?: StorageDepartment): Promise<StorageBatch[]> {
     try {
       if (!this.initialized) {
-        await this.initialize()
+        throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
       let batches = [...this.batches]
@@ -260,7 +260,7 @@ export class StorageService {
   async getAllBatches(department?: StorageDepartment): Promise<StorageBatch[]> {
     try {
       if (!this.initialized) {
-        await this.initialize()
+        throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
       let batches = [...this.batches]
@@ -281,7 +281,7 @@ export class StorageService {
   async getOperations(department?: StorageDepartment): Promise<StorageOperation[]> {
     try {
       if (!this.initialized) {
-        await this.initialize()
+        throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
       let operations = [...this.operations]
@@ -1266,7 +1266,7 @@ export class StorageService {
   async getInventories(department?: StorageDepartment): Promise<InventoryDocument[]> {
     try {
       if (!this.initialized) {
-        await this.initialize()
+        throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
       let inventories = [...this.inventories]

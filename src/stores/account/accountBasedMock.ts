@@ -465,14 +465,24 @@ export class AccountBasedMockService {
   }
 }
 
-// ============ АВТОМАТИЧЕСКАЯ ВАЛИДАЦИЯ ПРИ ИМПОРТЕ ============
+// ============ ВАЛИДАЦИЯ ПО ТРЕБОВАНИЮ ============
 
-if (import.meta.env.DEV) {
+export function validateMockData(): { isValid: boolean; errors: string[] } {
   const validation = AccountBasedMockService.validateAllAccountBalances()
-  if (!validation.isValid) {
-    console.error('❌ Mock data validation failed:')
-    validation.errors.forEach(error => console.error('  -', error))
-  } else {
-    console.log('✅ Mock data validation passed: all balances are consistent')
+
+  if (import.meta.env.DEV) {
+    if (!validation.isValid) {
+      console.error('❌ Mock data validation failed:')
+      validation.errors.forEach(error => console.error('  -', error))
+    } else {
+      console.log('✅ Mock data validation passed: all balances are consistent')
+    }
   }
+
+  return validation
+}
+
+// Экспортируем для использования в тестах или при необходимости
+if (import.meta.env.DEV) {
+  ;(window as any).__VALIDATE_ACCOUNT_MOCK__ = validateMockData
 }
