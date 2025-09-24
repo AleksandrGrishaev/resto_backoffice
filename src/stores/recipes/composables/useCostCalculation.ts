@@ -396,6 +396,208 @@ export function useCostCalculation() {
     }
   }
 
+  // ДОБАВИТЬ эти функции в useCostCalculation.ts после существующих утилит:
+
+  // =============================================
+  // ✅ НОВЫЕ УТИЛИТЫ ДЛЯ РАБОТЫ С УПАКОВКАМИ
+  // =============================================
+
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Расчет количества упаковок для заказа
+   */
+  function calculatePackageForOrder(
+    productId: string,
+    requiredBaseQuantity: number,
+    getProductsStore: () => any,
+    preferredPackageId?: string
+  ): {
+    recommendedPackage: any
+    packagesToOrder: number
+    totalCost: number
+    actualQuantity: number
+    surplus: number
+  } | null {
+    try {
+      const productsStore = getProductsStore()
+
+      const calculation = productsStore.calculatePackageQuantity(
+        productId,
+        requiredBaseQuantity,
+        preferredPackageId
+      )
+
+      const totalCost = calculation.packageOption.packagePrice
+        ? calculation.suggestedPackages * calculation.packageOption.packagePrice
+        : calculation.actualBaseQuantity * calculation.packageOption.baseCostPerUnit
+
+      return {
+        recommendedPackage: calculation.packageOption,
+        packagesToOrder: calculation.suggestedPackages,
+        totalCost,
+        actualQuantity: calculation.actualBaseQuantity,
+        surplus: calculation.difference
+      }
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, `Failed to calculate package for order: ${productId}`, { error })
+      return null
+    }
+  }
+
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Получение лучшей цены среди упаковок
+   */
+  function getBestPackagePrice(
+    productId: string,
+    getProductsStore: () => any
+  ): {
+    baseCostPerUnit: number
+    bestPackage: any | null
+    savings?: number
+  } {
+    try {
+      const productsStore = getProductsStore()
+      const product = productsStore.getProductById(productId)
+
+      if (!product || !product.packageOptions.length) {
+        return { baseCostPerUnit: 0, bestPackage: null }
+      }
+
+      // Ищем упаковку с минимальной стоимостью за базовую единицу
+      const activePackages = product.packageOptions.filter((pkg: any) => pkg.isActive)
+
+      if (activePackages.length === 0) {
+        return { baseCostPerUnit: 0, bestPackage: null }
+      }
+
+      const bestPackage = activePackages.reduce((best: any, current: any) => {
+        return current.baseCostPerUnit < best.baseCostPerUnit ? current : best
+      })
+
+      let savings = 0
+      if (activePackages.length > 1) {
+        const worstPackage = activePackages.reduce((worst: any, current: any) => {
+          return current.baseCostPerUnit > worst.baseCostPerUnit ? current : worst
+        })
+
+        if (bestPackage.id !== worstPackage.id) {
+          savings =
+            ((worstPackage.baseCostPerUnit - bestPackage.baseCostPerUnit) /
+              worstPackage.baseCostPerUnit) *
+            100
+        }
+      }
+
+      return {
+        baseCostPerUnit: bestPackage.baseCostPerUnit,
+        bestPackage,
+        savings: savings > 0 ? savings : undefined
+      }
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, `Failed to get best package price: ${productId}`, { error })
+      return { baseCostPerUnit: 0, bestPackage: null }
+    }
+  }
+
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Форматирование информации об упаковке для UI
+   */
+  function formatPackageInfo(packageOption: any): string {
+    if (!packageOption) return ''
+
+    const brandInfo = packageOption.brandName ? ` ${packageOption.brandName}` : ''
+    const priceInfo = packageOption.packagePrice
+      ? ` (${Math.round(packageOption.packagePrice)} IDR)`
+      : ''
+
+    return `${packageOption.packageName}${brandInfo}${priceInfo}`
+  }
+
+  /**
+   * ✅ НОВАЯ ФУНКЦИЯ: Получение всех упаковок продукта для выбора
+   */
+  function getPackageOptionsForProduct(
+    productId: string,
+    getProductsStore: () => any
+  ): Array<{
+    id: string
+    name: string
+    displayName: string
+    baseCostPerUnit: number
+    packagePrice?: number
+    isRecommended: boolean
+  }> {
+    try {
+      const productsStore = getProductsStore()
+      const product = productsStore.getProductById(productId)
+
+      if (!product || !product.packageOptions) return []
+
+      return product.packageOptions
+        .filter((pkg: any) => pkg.isActive)
+        .map((pkg: any) => ({
+          id: pkg.id,
+          name: pkg.packageName,
+          displayName: formatPackageInfo(pkg),
+          baseCostPerUnit: pkg.baseCostPerUnit,
+          packagePrice: pkg.packagePrice,
+          isRecommended: pkg.id === product.recommendedPackageId
+        }))
+        .sort((a, b) => {
+          // Рекомендуемая упаковка первой
+          if (a.isRecommended && !b.isRecommended) return -1
+          if (!a.isRecommended && b.isRecommended) return 1
+          // Затем по цене за базовую единицу
+          return a.baseCostPerUnit - b.baseCostPerUnit
+        })
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, `Failed to get package options: ${productId}`, { error })
+      return []
+    }
+  }
+
+  // =============================================
+  // ✅ ОБНОВЛЕННАЯ ФУНКЦИЯ РАСЧЕТА С УПАКОВКАМИ
+  // =============================================
+
+  /**
+   * ✅ ОБНОВЛЕНО: Расчет стоимости с информацией об упаковках
+   */
+  function calculateCostWithPackageInfo(
+    quantity: number,
+    product: ProductForRecipe,
+    getProductsStore?: () => any
+  ): {
+    baseCost: number
+    packageInfo?: {
+      bestPackage: any
+      savings?: number
+      alternativePackages: number
+    }
+  } {
+    const baseCost = calculateDirectCost(quantity, product)
+
+    if (!getProductsStore) {
+      return { baseCost }
+    }
+
+    try {
+      const packagePrice = getBestPackagePrice(product.id, getProductsStore)
+      const packageOptions = getPackageOptionsForProduct(product.id, getProductsStore)
+
+      return {
+        baseCost,
+        packageInfo: {
+          bestPackage: packagePrice.bestPackage,
+          savings: packagePrice.savings,
+          alternativePackages: packageOptions.length - 1
+        }
+      }
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, `Failed to get package info for cost calculation`, { error })
+      return { baseCost }
+    }
+  }
+
   // =============================================
   // ОСТАЛЬНЫЕ ФУНКЦИИ
   // =============================================
@@ -537,6 +739,13 @@ export function useCostCalculation() {
     getBaseUnitForProduct,
     getBaseCostPerUnit,
     clearError,
-    clearAllCalculations
+    clearAllCalculations,
+
+    // НОВЫЕ функции для упаковок
+    calculatePackageForOrder,
+    getBestPackagePrice,
+    formatPackageInfo,
+    getPackageOptionsForProduct,
+    calculateCostWithPackageInfo
   }
 }

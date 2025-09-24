@@ -1,9 +1,21 @@
 // src/stores/productsStore/productsStore.ts - ОБНОВЛЕННАЯ интеграция
 
 import { defineStore } from 'pinia'
-import type { ProductsState, Product, CreateProductData, UpdateProductData } from './types'
+import type {
+  ProductsState,
+  Product,
+  CreateProductData,
+  UpdateProductData,
+  PackageOption,
+  CreatePackageOptionDto,
+  UpdatePackageOptionDto,
+  BaseUnit,
+  ProductForSupplier,
+  ProductForMenu
+} from './types'
 import { DebugUtils } from '@/utils'
 import type { ProductForRecipe } from '@/stores/recipes/types'
+import type { MeasurementUnit } from '@/types/measurementUnits'
 
 const MODULE_NAME = 'ProductsStore'
 
@@ -108,28 +120,58 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        DebugUtils.info(MODULE_NAME, 'Creating product', { data, mockMode: this.useMockMode })
+        const now = new Date().toISOString()
+
+        // ✅ Сначала создаем базовую упаковку
+        const basePackage: PackageOption = {
+          id: `pkg-base-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          productId: '', // Будет установлен после создания продукта
+          packageName: this.getDefaultPackageName(data.baseUnit),
+          packageSize: this.getDefaultPackageSize(data.baseUnit),
+          packageUnit: this.getDefaultPackageUnit(data.baseUnit),
+          packagePrice: data.baseCostPerUnit * this.getDefaultPackageSize(data.baseUnit),
+          baseCostPerUnit: data.baseCostPerUnit,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now
+        }
 
         let newProduct: Product
 
         if (this.useMockMode) {
-          // ✅ ОБНОВЛЕНО: Создаем продукт с правильной структурой базовых единиц
-          const now = new Date().toISOString()
+          const productId = `prod-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+          // Устанавливаем правильный productId в упаковке
+          basePackage.productId = productId
+
           newProduct = {
-            id: `prod-${Date.now()}`,
+            id: productId,
             ...data,
             isActive: data.isActive ?? true,
             canBeSold: data.canBeSold ?? false,
+            packageOptions: [basePackage], // ✅ Добавляем базовую упаковку
+            recommendedPackageId: basePackage.id,
             createdAt: now,
             updatedAt: now
           } as Product
         } else {
           const { productsService } = await import('./productsService')
           newProduct = await productsService.createProduct(data)
+
+          // В реальном сервисе тоже нужно будет создавать базовую упаковку
+          basePackage.productId = newProduct.id
+          newProduct.packageOptions = [basePackage]
+          newProduct.recommendedPackageId = basePackage.id
         }
 
         this.products.push(newProduct)
-        DebugUtils.info(MODULE_NAME, 'Product created', { id: newProduct.id })
+
+        DebugUtils.info(MODULE_NAME, 'Product created with base package', {
+          id: newProduct.id,
+          basePackageId: basePackage.id,
+          packageName: basePackage.packageName
+        })
+
         return newProduct
       } catch (error) {
         DebugUtils.error(MODULE_NAME, 'Error creating product', { error, data })
@@ -137,6 +179,40 @@ export const useProductsStore = defineStore('products', {
         throw error
       } finally {
         this.loading = false
+      }
+    },
+
+    // Вспомогательные методы для создания базовых упаковок
+    getDefaultPackageName(baseUnit: BaseUnit): string {
+      switch (baseUnit) {
+        case 'gram':
+          return 'Килограмм'
+        case 'ml':
+          return 'Литр'
+        case 'piece':
+          return 'Штука'
+      }
+    },
+
+    getDefaultPackageSize(baseUnit: BaseUnit): number {
+      switch (baseUnit) {
+        case 'gram':
+          return 1000
+        case 'ml':
+          return 1000
+        case 'piece':
+          return 1
+      }
+    },
+
+    getDefaultPackageUnit(baseUnit: BaseUnit): MeasurementUnit {
+      switch (baseUnit) {
+        case 'gram':
+          return 'kg'
+        case 'ml':
+          return 'liter'
+        case 'piece':
+          return 'piece'
       }
     },
 
@@ -186,27 +262,176 @@ export const useProductsStore = defineStore('products', {
         return null
       }
 
-      // ✅ ПРОВЕРЯЕМ: Есть ли у продукта новая структура с базовыми единицами?
-      const hasBaseUnits =
-        (product as any).baseUnit && (product as any).baseCostPerUnit !== undefined
-
-      if (hasBaseUnits) {
-        // ✅ НОВАЯ СТРУКТУРА: Продукт уже имеет правильные базовые единицы
-        return {
-          id: product.id,
-          name: product.name,
-          nameEn: (product as any).nameEn || product.name,
-          baseUnit: (product as any).baseUnit,
-          baseCostPerUnit: (product as any).baseCostPerUnit,
-          category: product.category,
-          isActive: product.isActive
-        }
-      } else {
-        // ✅ МИГРАЦИЯ: Преобразуем старую структуру в новую
-        DebugUtils.warn(MODULE_NAME, `Product ${productId} uses old structure, migrating...`)
-
-        return this.migrateOldProductToNew(product)
+      // ✅ Используем новую структуру с базовыми единицами
+      return {
+        id: product.id,
+        name: product.name,
+        nameEn: product.nameEn || product.name,
+        baseUnit: product.baseUnit, // Всегда базовая единица
+        baseCostPerUnit: product.baseCostPerUnit, // Цена за базовую единицу
+        category: product.category,
+        isActive: product.isActive,
+        // Deprecated поля для совместимости (если нужны)
+        unit: product.baseUnit as MeasurementUnit,
+        costPerUnit: product.baseCostPerUnit
       }
+    },
+
+    /**
+     * ✅ ОБНОВЛЕНО: Получает продукт в формате для Menu Store
+     */
+    getProductForMenu(productId: string): ProductForMenu | null {
+      const product = this.getProductById(productId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, `Product not found: ${productId}`)
+        return null
+      }
+
+      return {
+        id: product.id,
+        name: product.name,
+        nameEn: product.nameEn || product.name,
+        canBeSold: product.canBeSold,
+        currentCostPerUnit: product.baseCostPerUnit, // Цена за базовую единицу
+        unit: product.baseUnit as MeasurementUnit // Базовая единица
+      }
+    },
+
+    /**
+     * ✅ ОБНОВЛЕНО: Получает продукт в формате для Supplier Store с упаковками
+     */
+    getProductForSupplier(productId: string): ProductForSupplier | null {
+      const product = this.getProductById(productId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, `Product not found: ${productId}`)
+        return null
+      }
+
+      // Получаем рекомендуемую упаковку для расчета заказа
+      const recommendedPackage = this.getRecommendedPackage(productId)
+
+      return {
+        id: product.id,
+        name: product.name,
+        nameEn: product.nameEn || product.name,
+        currentCostPerUnit: product.baseCostPerUnit, // Цена за базовую единицу
+        recommendedOrderQuantity: 0, // Будет рассчитано в Supplier Store
+        urgencyLevel: 'medium', // Будет рассчитано в Storage Store
+        primarySupplierId: product.primarySupplierId,
+        leadTimeDays: product.leadTimeDays,
+
+        // ✅ НОВЫЕ ПОЛЯ для работы с упаковками
+        baseUnit: product.baseUnit,
+        recommendedPackage: recommendedPackage || undefined,
+        packageOptions: product.packageOptions
+      }
+    },
+
+    /**
+     * ✅ ОБНОВЛЕННЫЙ МЕТОД: Обновить baseCostPerUnit продукта
+     */
+    async updateProductCost(productId: string, newBaseCost: number): Promise<void> {
+      try {
+        const product = this.getProductById(productId)
+        if (!product) {
+          throw new Error('Product not found')
+        }
+
+        // Обновляем базовую стоимость продукта
+        const productIndex = this.products.findIndex(p => p.id === productId)
+        if (productIndex !== -1) {
+          this.products[productIndex].baseCostPerUnit = newBaseCost
+          this.products[productIndex].updatedAt = new Date().toISOString()
+
+          // Обновляем стоимость в рекомендуемой упаковке
+          if (product.recommendedPackageId) {
+            const packageIndex = this.products[productIndex].packageOptions.findIndex(
+              pkg => pkg.id === product.recommendedPackageId
+            )
+            if (packageIndex !== -1) {
+              this.products[productIndex].packageOptions[packageIndex].baseCostPerUnit = newBaseCost
+              this.products[productIndex].packageOptions[packageIndex].updatedAt =
+                new Date().toISOString()
+            }
+          }
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Product cost updated', { productId, newBaseCost })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Error updating product cost', { error })
+        throw error
+      }
+    },
+
+    /**
+     * ✅ НОВЫЙ МЕТОД: Получает информацию о продукте для заказов
+     */
+    getProductForOrder(productId: string): {
+      product: Product
+      recommendedPackage: PackageOption
+      baseUnit: BaseUnit
+      baseCostPerUnit: number
+    } | null {
+      const product = this.getProductById(productId)
+      if (!product) return null
+
+      const recommendedPackage = this.getRecommendedPackage(productId)
+      if (!recommendedPackage) {
+        DebugUtils.warn(MODULE_NAME, `No package options for product: ${productId}`)
+        return null
+      }
+
+      return {
+        product,
+        recommendedPackage,
+        baseUnit: product.baseUnit,
+        baseCostPerUnit: product.baseCostPerUnit
+      }
+    },
+
+    /**
+     * ✅ НОВЫЙ МЕТОД: Получает все упаковки с лучшими ценами
+     */
+    getBestPricePackages(): Array<{
+      productId: string
+      productName: string
+      bestPackage: PackageOption
+      savings: number // сколько экономим в процентах
+    }> {
+      return this.products
+        .map(product => {
+          if (product.packageOptions.length < 2) return null
+
+          const packages = product.packageOptions.filter(pkg => pkg.isActive)
+          const bestPackage = packages.reduce((best, current) =>
+            current.baseCostPerUnit < best.baseCostPerUnit ? current : best
+          )
+          const worstPackage = packages.reduce((worst, current) =>
+            current.baseCostPerUnit > worst.baseCostPerUnit ? current : worst
+          )
+
+          if (bestPackage.id === worstPackage.id) return null
+
+          const savings =
+            ((worstPackage.baseCostPerUnit - bestPackage.baseCostPerUnit) /
+              worstPackage.baseCostPerUnit) *
+            100
+
+          return {
+            productId: product.id,
+            productName: product.name,
+            bestPackage,
+            savings
+          }
+        })
+        .filter(Boolean) as Array<{
+        productId: string
+        productName: string
+        bestPackage: PackageOption
+        savings: number
+      }>
     },
 
     /**
@@ -326,29 +551,23 @@ export const useProductsStore = defineStore('products', {
         return
       }
 
-      // ✅ ОБНОВЛЕНО: Обновляем цену в зависимости от структуры продукта
-      const hasBaseUnits =
-        (product as any).baseUnit && (product as any).baseCostPerUnit !== undefined
+      // ✅ УПРОЩЕНО: У нас теперь только новая структура
+      await this.updateProduct({
+        id: productId,
+        baseCostPerUnit: newPrice // Цена уже в базовых единицах
+      })
 
-      if (hasBaseUnits) {
-        // ✅ НОВАЯ СТРУКТУРА: Обновляем baseCostPerUnit
-        await this.updateProduct({
-          id: productId,
-          baseCostPerUnit: newPrice, // Цена уже в базовых единицах
-          purchaseCost: newPrice * ((product as any).purchaseToBaseRatio || 1) // Пересчитываем цену закупки
-        })
-      } else {
-        // ✅ СТАРАЯ СТРУКТУРА: Обновляем costPerUnit
-        await this.updateProduct({
-          id: productId,
-          costPerUnit: newPrice,
-          currentCostPerUnit: newPrice
-        })
-      }
+      // ✅ УПРОЩЕНО: Логируем для отладки вместо callback
+      DebugUtils.info(MODULE_NAME, 'Product price updated - recipes may need recalculation', {
+        productId,
+        productName: product.name,
+        newBaseCostPerUnit: newPrice,
+        baseUnit: product.baseUnit
+      })
 
-      // Уведомляем Recipe Store о необходимости пересчета
-      if (window.__RECIPE_STORE_PRICE_CHANGE_CALLBACK__) {
-        await window.__RECIPE_STORE_PRICE_CHANGE_CALLBACK__(productId)
+      // В dev режиме выводим в консоль для удобства отладки
+      if (import.meta.env.DEV) {
+        console.log(`🔄 Recipe costs may need recalculation for product: ${product.name}`)
       }
     },
 
@@ -404,6 +623,288 @@ export const useProductsStore = defineStore('products', {
 
     clearError(): void {
       this.error = null
+    },
+
+    // =============================================
+    // ✅ НОВЫЕ МЕТОДЫ ДЛЯ УПАКОВОК
+    // =============================================
+
+    /**
+     * Создать новую упаковку для продукта
+     */
+    async addPackageOption(data: CreatePackageOptionDto): Promise<PackageOption> {
+      try {
+        this.loading = true
+        this.error = null
+
+        // Валидация продукта
+        const product = this.getProductById(data.productId)
+        if (!product) {
+          throw new Error('Product not found')
+        }
+
+        const now = new Date().toISOString()
+        const newPackage: PackageOption = {
+          id: `pkg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          ...data,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now
+        }
+
+        if (!this.useMockMode) {
+          const { productsService } = await import('./productsService')
+          await productsService.addPackageOption(newPackage)
+        }
+
+        // Добавляем упаковку к продукту
+        const productIndex = this.products.findIndex(p => p.id === data.productId)
+        if (productIndex !== -1) {
+          this.products[productIndex].packageOptions.push(newPackage)
+          this.products[productIndex].updatedAt = now
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Package option created', {
+          packageId: newPackage.id,
+          productId: data.productId
+        })
+
+        return newPackage
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Error creating package option', { error, data })
+        this.error = 'Failed to create package option'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    /**
+     * Обновить упаковку
+     */
+    async updatePackageOption(data: UpdatePackageOptionDto): Promise<void> {
+      try {
+        this.loading = true
+        this.error = null
+
+        if (!this.useMockMode) {
+          const { productsService } = await import('./productsService')
+          await productsService.updatePackageOption(data)
+        }
+
+        // Обновляем упаковку в продукте
+        const product = this.products.find(p => p.packageOptions.some(pkg => pkg.id === data.id))
+
+        if (product) {
+          const packageIndex = product.packageOptions.findIndex(pkg => pkg.id === data.id)
+          if (packageIndex !== -1) {
+            product.packageOptions[packageIndex] = {
+              ...product.packageOptions[packageIndex],
+              ...data,
+              updatedAt: new Date().toISOString()
+            }
+            product.updatedAt = new Date().toISOString()
+          }
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Package option updated', { packageId: data.id })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Error updating package option', { error, data })
+        this.error = 'Failed to update package option'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    /**
+     * Удалить упаковку
+     */
+    async deletePackageOption(productId: string, packageId: string): Promise<void> {
+      try {
+        this.loading = true
+        this.error = null
+
+        if (!this.useMockMode) {
+          const { productsService } = await import('./productsService')
+          await productsService.deletePackageOption(packageId)
+        }
+
+        // Удаляем упаковку из продукта
+        const product = this.products.find(p => p.id === productId)
+        if (product) {
+          product.packageOptions = product.packageOptions.filter(pkg => pkg.id !== packageId)
+
+          // Если удаляемая упаковка была рекомендуемой, сбрасываем рекомендацию
+          if (product.recommendedPackageId === packageId) {
+            product.recommendedPackageId = product.packageOptions[0]?.id
+          }
+
+          product.updatedAt = new Date().toISOString()
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Package option deleted', { packageId, productId })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Error deleting package option', { error, packageId })
+        this.error = 'Failed to delete package option'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    /**
+     * Установить рекомендуемую упаковку
+     */
+    async setRecommendedPackage(productId: string, packageId: string): Promise<void> {
+      try {
+        const product = this.getProductById(productId)
+        if (!product) {
+          throw new Error('Product not found')
+        }
+
+        const packageExists = product.packageOptions.some(pkg => pkg.id === packageId)
+        if (!packageExists) {
+          throw new Error('Package option not found')
+        }
+
+        if (!this.useMockMode) {
+          const { productsService } = await import('./productsService')
+          await productsService.setRecommendedPackage(productId, packageId)
+        }
+
+        // Обновляем рекомендуемую упаковку
+        const productIndex = this.products.findIndex(p => p.id === productId)
+        if (productIndex !== -1) {
+          this.products[productIndex].recommendedPackageId = packageId
+          this.products[productIndex].updatedAt = new Date().toISOString()
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Recommended package set', { productId, packageId })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Error setting recommended package', { error })
+        throw error
+      }
+    },
+
+    /**
+     * Получить рекомендуемую упаковку
+     */
+    getRecommendedPackage(productId: string): PackageOption | null {
+      const product = this.getProductById(productId)
+      if (!product || !product.recommendedPackageId) {
+        return product?.packageOptions[0] || null
+      }
+
+      return product.packageOptions.find(pkg => pkg.id === product.recommendedPackageId) || null
+    },
+
+    /**
+     * Рассчитать количество упаковок для заданного базового количества
+     */
+    calculatePackageQuantity(
+      productId: string,
+      baseQuantity: number,
+      packageId?: string
+    ): {
+      packageOption: PackageOption
+      exactPackages: number // 2.5 упаковок
+      suggestedPackages: number // 3 упаковки (округленно)
+      actualBaseQuantity: number // 3000г (фактически получится)
+      difference: number // +500г (разница с требуемым)
+    } {
+      const product = this.getProductById(productId)
+      if (!product) {
+        throw new Error('Product not found')
+      }
+
+      let packageOption: PackageOption
+      if (packageId) {
+        packageOption =
+          product.packageOptions.find(pkg => pkg.id === packageId) || product.packageOptions[0]
+      } else {
+        packageOption = this.getRecommendedPackage(productId) || product.packageOptions[0]
+      }
+
+      if (!packageOption) {
+        throw new Error('No package options available')
+      }
+
+      const exactPackages = baseQuantity / packageOption.packageSize
+      const suggestedPackages = Math.ceil(exactPackages)
+      const actualBaseQuantity = suggestedPackages * packageOption.packageSize
+      const difference = actualBaseQuantity - baseQuantity
+
+      return {
+        packageOption,
+        exactPackages: Math.round(exactPackages * 100) / 100,
+        suggestedPackages,
+        actualBaseQuantity,
+        difference
+      }
+    },
+
+    /**
+     * Автоматически обновить цену упаковки на основе фактической приемки
+     */
+    async updatePackageCostFromReceipt(packageId: string, actualPrice: number): Promise<void> {
+      try {
+        // Находим продукт с данной упаковкой
+        const product = this.products.find(p => p.packageOptions.some(pkg => pkg.id === packageId))
+
+        if (!product) {
+          throw new Error('Package not found')
+        }
+
+        const packageOption = product.packageOptions.find(pkg => pkg.id === packageId)
+        if (!packageOption) {
+          throw new Error('Package option not found')
+        }
+
+        // Рассчитываем новую базовую стоимость
+        const newBaseCostPerUnit = actualPrice / packageOption.packageSize
+
+        // Обновляем упаковку
+        await this.updatePackageOption({
+          id: packageId,
+          packagePrice: actualPrice,
+          baseCostPerUnit: newBaseCostPerUnit
+        })
+
+        // Устанавливаем эту упаковку как рекомендуемую
+        await this.setRecommendedPackage(product.id, packageId)
+
+        DebugUtils.info(MODULE_NAME, 'Package cost updated from receipt', {
+          packageId,
+          actualPrice,
+          newBaseCostPerUnit,
+          productId: product.id
+        })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Error updating package cost from receipt', { error })
+        throw error
+      }
+    },
+
+    /**
+     * Получить упаковку по ID
+     */
+    getPackageById(packageId: string): PackageOption | null {
+      for (const product of this.products) {
+        const packageOption = product.packageOptions.find(pkg => pkg.id === packageId)
+        if (packageOption) return packageOption
+      }
+      return null
+    },
+
+    /**
+     * Получить все активные упаковки продукта
+     */
+    getActivePackages(productId: string): PackageOption[] {
+      const product = this.getProductById(productId)
+      if (!product) return []
+
+      return product.packageOptions.filter(pkg => pkg.isActive)
     },
 
     // =============================================

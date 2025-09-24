@@ -8,7 +8,7 @@ export type OperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType = 'purchase' | 'correction' | 'opening_balance' | 'inventory_adjustment'
 
 // ✅ ИЗМЕНЕНО: Добавлен статус 'in_transit'
-export type BatchStatus = 'active' | 'expired' | 'consumed' | 'in_transit' | 'in_transit'
+export type BatchStatus = 'active' | 'expired' | 'consumed' | 'in_transit'
 
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 export type WriteOffReason = 'expired' | 'spoiled' | 'other' | 'education' | 'test'

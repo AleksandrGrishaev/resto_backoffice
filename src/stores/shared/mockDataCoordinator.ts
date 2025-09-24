@@ -8,7 +8,7 @@ import {
 } from './productDefinitions'
 import { getSupplierWorkflowData } from './supplierDefinitions'
 import { getStorageWorkflowData } from './storageDefinitions'
-import type { Product, ProductPriceHistory } from '@/stores/productsStore/types'
+import type { Product, ProductPriceHistory, PackageOption } from '@/stores/productsStore/types'
 import type { Counteragent } from '@/stores/counteragents/types'
 import type {
   ProcurementRequest,
@@ -67,19 +67,71 @@ export class MockDataCoordinator {
     const validation = validateAllProducts()
 
     if (!validation.isValid) {
-      DebugUtils.error(MODULE_NAME, 'Product definitions validation failed:', {
+      DebugUtils.error(MODULE_NAME, 'Product definitions validation failed', {
         errors: validation.errors,
-        invalidProducts: validation.invalidProducts
+        warnings: validation.warnings
       })
-
-      console.error('=== PRODUCT DEFINITIONS VALIDATION ERRORS ===')
-      validation.errors.forEach(error => console.error('❌', error))
-
-      if (validation.warnings.length > 0) {
-        console.warn('=== WARNINGS ===')
-        validation.warnings.forEach(warning => console.warn('⚠️', warning))
-      }
+      throw new Error('Invalid product definitions found')
     }
+
+    DebugUtils.info(MODULE_NAME, 'Product definitions validated', {
+      validProducts: validation.validProducts,
+      warnings: validation.warnings.length
+    })
+  }
+
+  /**
+   * ✅ НОВЫЙ МЕТОД: Валидация интеграции с системой упаковок
+   */
+  private validatePackageIntegration(
+    products: Product[],
+    errors: string[],
+    warnings: string[]
+  ): void {
+    let totalPackages = 0
+    let productsWithMultiplePackages = 0
+
+    products.forEach(product => {
+      totalPackages += product.packageOptions.length
+
+      if (product.packageOptions.length > 1) {
+        productsWithMultiplePackages++
+      }
+
+      // Проверяем что у каждого продукта есть хотя бы одна упаковка
+      if (product.packageOptions.length === 0) {
+        errors.push(`Product ${product.name} has no package options`)
+        return
+      }
+
+      // Проверяем что recommendedPackageId существует
+      if (product.recommendedPackageId) {
+        const exists = product.packageOptions.some(pkg => pkg.id === product.recommendedPackageId)
+        if (!exists) {
+          errors.push(`Product ${product.name} has invalid recommendedPackageId`)
+        }
+      } else {
+        warnings.push(`Product ${product.name} has no recommended package`)
+      }
+
+      // Проверяем качество данных упаковок
+      product.packageOptions.forEach(pkg => {
+        if (!pkg.packageName || pkg.packageName.trim().length === 0) {
+          errors.push(`Product ${product.name}: package ${pkg.id} has empty name`)
+        }
+
+        if (!pkg.packageUnit) {
+          errors.push(`Product ${product.name}: package ${pkg.id} has no packageUnit`)
+        }
+      })
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Package integration validated', {
+      totalProducts: products.length,
+      totalPackages,
+      productsWithMultiplePackages,
+      averagePackagesPerProduct: (totalPackages / products.length).toFixed(1)
+    })
   }
 
   private validateStorageIntegration(): void {
@@ -109,55 +161,91 @@ export class MockDataCoordinator {
 
   private generateProductsStoreData() {
     try {
-      DebugUtils.info(MODULE_NAME, 'Converting product definitions to store format...')
+      DebugUtils.info(
+        MODULE_NAME,
+        'Converting product definitions to store format with PackageOptions...'
+      )
 
-      const products: Product[] = CORE_PRODUCTS.map(productDef => ({
-        id: productDef.id,
-        name: productDef.name,
-        nameEn: productDef.nameEn,
-        description: this.generateProductDescription(productDef),
-        category: productDef.category,
+      const products: Product[] = []
+      const priceHistory: ProductPriceHistory[] = []
+      const now = TimeUtils.getCurrentLocalISO()
 
-        // ✅ СОВМЕСТИМОСТЬ: Старые поля для обратной совместимости
-        unit: this.mapBaseUnitToLegacy(productDef.baseUnit),
-        costPerUnit: productDef.purchaseCost, // Цена за единицу закупки
+      CORE_PRODUCTS.forEach((productDef, index) => {
+        // ✅ СОЗДАЕМ БАЗОВУЮ УПАКОВКУ из определения продукта
+        const basePackage: PackageOption = {
+          id: `pkg-${productDef.id}-base`,
+          productId: productDef.id,
+          packageName: this.getPackageNameFromDefinition(productDef),
+          packageSize: productDef.purchaseToBaseRatio,
+          packageUnit: productDef.purchaseUnit as MeasurementUnit,
+          packagePrice: productDef.purchaseCost,
+          baseCostPerUnit: productDef.baseCostPerUnit,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now
+        }
 
-        // ✅ НОВЫЕ ПОЛЯ: Базовые единицы для расчетов
-        baseUnit: productDef.baseUnit,
-        baseCostPerUnit: productDef.baseCostPerUnit,
+        // ✅ СОЗДАЕМ ПРОДУКТ с новой структурой (БЕЗ legacy полей)
+        const product: Product = {
+          id: productDef.id,
+          name: productDef.name,
+          nameEn: productDef.nameEn,
+          description: this.generateProductDescription(productDef),
+          category: productDef.category,
 
-        // ✅ ЗАКУПОЧНЫЕ ЕДИНИЦЫ
-        purchaseUnit: productDef.purchaseUnit,
-        purchaseToBaseRatio: productDef.purchaseToBaseRatio,
-        purchaseCost: productDef.purchaseCost,
+          // ✅ ТОЛЬКО базовые единицы (без legacy)
+          baseUnit: productDef.baseUnit,
+          baseCostPerUnit: productDef.baseCostPerUnit,
 
-        // Business logic
-        canBeSold: productDef.canBeSold,
-        isActive: true,
-        tags: this.generateTags(productDef),
+          // ✅ УПАКОВКИ
+          packageOptions: [basePackage],
+          recommendedPackageId: basePackage.id,
 
-        // Supply chain info
-        minStock: this.calculateMinStock(productDef),
-        maxStock: this.calculateMaxStock(productDef),
-        leadTimeDays: productDef.leadTimeDays,
-        primarySupplierId: productDef.primarySupplierId,
+          // Остальные поля
+          yieldPercentage: productDef.yieldPercentage,
+          canBeSold: productDef.canBeSold,
+          isActive: true,
+          shelfLife: productDef.shelfLifeDays,
+          leadTimeDays: productDef.leadTimeDays,
+          primarySupplierId: productDef.primarySupplierId,
 
-        // Shelf life and yield
-        shelfLifeDays: productDef.shelfLifeDays,
-        yieldPercentage: productDef.yieldPercentage,
+          // Storage
+          minStock: this.calculateMinStock(productDef),
+          maxStock: this.calculateMaxStock(productDef),
+          storageConditions: this.getStorageConditions(productDef.category),
+          tags: this.generateTags(productDef),
 
-        // Storage
-        storageConditions: this.getStorageConditions(productDef.category),
+          createdAt: now,
+          updatedAt: now
+        }
 
-        // Metadata
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }))
+        // ✅ ДОБАВЛЯЕМ ДОПОЛНИТЕЛЬНЫЕ УПАКОВКИ для разнообразия
+        const additionalPackages = this.generateAdditionalPackages(productDef, now)
+        product.packageOptions.push(...additionalPackages)
 
-      const priceHistory: ProductPriceHistory[] = this.generatePriceHistory(products)
+        products.push(product)
 
-      DebugUtils.info(MODULE_NAME, 'Products store data generated', {
+        // История цен
+        const priceHistoryItem: ProductPriceHistory = {
+          id: `ph-${productDef.id}-1`,
+          productId: productDef.id,
+          pricePerUnit: productDef.baseCostPerUnit, // legacy поле
+          basePricePerUnit: productDef.baseCostPerUnit,
+          purchasePrice: productDef.purchaseCost,
+          purchaseUnit: productDef.purchaseUnit as MeasurementUnit,
+          purchaseQuantity: productDef.purchaseToBaseRatio,
+          effectiveDate: TimeUtils.subtractDays(now, 30),
+          sourceType: 'manual_update',
+          createdAt: now,
+          updatedAt: now
+        }
+
+        priceHistory.push(priceHistoryItem)
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Products store data generated with PackageOptions', {
         products: products.length,
+        totalPackages: products.reduce((sum, p) => sum + p.packageOptions.length, 0),
         priceHistory: priceHistory.length,
         unitSystem: 'BASE_UNITS (gram/ml/piece)'
       })
@@ -167,6 +255,90 @@ export class MockDataCoordinator {
       DebugUtils.error(MODULE_NAME, 'Failed to generate products store data', { error })
       return { products: [], priceHistory: [] }
     }
+  }
+
+  /**
+   * ✅ НОВЫЙ МЕТОД: Генерирует название упаковки из определения
+   */
+  private getPackageNameFromDefinition(definition: CoreProductDefinition): string {
+    const { purchaseUnit, purchaseToBaseRatio } = definition
+
+    switch (purchaseUnit) {
+      case 'kg':
+        return purchaseToBaseRatio === 1000 ? 'Килограмм' : `${purchaseToBaseRatio / 1000} кг`
+      case 'liter':
+        return purchaseToBaseRatio === 1000 ? 'Литр' : `${purchaseToBaseRatio / 1000} л`
+      case 'piece':
+        return 'Штука'
+      case 'pack':
+        return `Пачка ${purchaseToBaseRatio}${definition.baseUnit === 'gram' ? 'г' : 'мл'}`
+      default:
+        return `${purchaseUnit} (${purchaseToBaseRatio} ${definition.baseUnit})`
+    }
+  }
+
+  /**
+   * ✅ НОВЫЙ МЕТОД: Создает дополнительные упаковки для разнообразия
+   */
+  private generateAdditionalPackages(
+    definition: CoreProductDefinition,
+    now: string
+  ): PackageOption[] {
+    const additional: PackageOption[] = []
+
+    // Для мяса добавляем упаковки разных размеров
+    if (definition.category === 'meat' && definition.id === 'prod-beef-steak') {
+      additional.push({
+        id: `pkg-${definition.id}-500g`,
+        productId: definition.id,
+        packageName: 'Пачка 500г Local',
+        packageSize: 500,
+        packageUnit: 'pack',
+        brandName: 'Local',
+        packagePrice: 90000, // немного дешевле за грамм
+        baseCostPerUnit: 180, // 90000 / 500
+        isActive: true,
+        notes: 'Местный поставщик',
+        createdAt: now,
+        updatedAt: now
+      })
+    }
+
+    // Для овощей добавляем оптовые упаковки
+    if (definition.category === 'vegetables' && definition.id === 'prod-potato') {
+      additional.push({
+        id: `pkg-${definition.id}-5kg`,
+        productId: definition.id,
+        packageName: 'Мешок 5кг',
+        packageSize: 5000,
+        packageUnit: 'pack',
+        packagePrice: 35000, // 7 IDR/г вместо 8 IDR/г
+        baseCostPerUnit: 7,
+        isActive: true,
+        notes: 'Оптовая цена',
+        createdAt: now,
+        updatedAt: now
+      })
+    }
+
+    // Для напитков добавляем упаковки по 24 штуки
+    if (definition.category === 'beverages' && definition.id === 'prod-beer-bintang-330') {
+      additional.push({
+        id: `pkg-${definition.id}-24pack`,
+        productId: definition.id,
+        packageName: 'Упаковка 24шт',
+        packageSize: 24,
+        packageUnit: 'pack',
+        packagePrice: 280000, // 11,667 IDR/шт вместо 12,000 IDR/шт
+        baseCostPerUnit: 11667,
+        isActive: true,
+        notes: 'Оптовая упаковка',
+        createdAt: now,
+        updatedAt: now
+      })
+    }
+
+    return additional
   }
 
   private mapBaseUnitToLegacy(baseUnit: string): string {
@@ -217,45 +389,25 @@ export class MockDataCoordinator {
 
   private loadSupplierStoreData() {
     try {
-      DebugUtils.info(MODULE_NAME, 'Loading supplier store data...')
-
-      const supplierData = getSupplierWorkflowData()
-
-      // ✅ ИСПРАВЛЕНИЕ: НЕ загружаем статичные suggestions
-      // Они будут генерироваться динамически из Storage данных
-      return {
-        requests: supplierData.requests,
-        orders: supplierData.orders,
-        receipts: supplierData.receipts,
-        suggestions: [] // ← ПУСТОЙ МАССИВ! Генерируются динамически
-      }
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load supplier store data', { error })
-      return {
-        requests: [],
-        orders: [],
-        receipts: [],
-        suggestions: [] // ← ПУСТОЙ даже при ошибке
-      }
-    }
-  }
-
-  private loadSupplierStoreData() {
-    try {
       DebugUtils.info(MODULE_NAME, 'Loading supplier store data from supplierDefinitions...')
 
-      // ✅ Используем предопределенные данные с правильными базовыми единицами
       const supplierData = getSupplierWorkflowData()
 
       DebugUtils.info(MODULE_NAME, 'Supplier store data loaded successfully', {
         requests: supplierData.requests.length,
         orders: supplierData.orders.length,
         receipts: supplierData.receipts.length,
-        suggestions: supplierData.suggestions.length,
+        suggestions: 0, // suggestions генерируются динамически
         unitSystem: 'BASE_UNITS (gram/ml/piece)'
       })
 
-      return supplierData
+      // ✅ НЕ загружаем статичные suggestions - они генерируются динамически
+      return {
+        requests: supplierData.requests,
+        orders: supplierData.orders,
+        receipts: supplierData.receipts,
+        suggestions: [] // ← ПУСТОЙ МАССИВ! Генерируются динамически из Storage данных
+      }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load supplier store data', { error })
       return {
@@ -438,22 +590,22 @@ export class MockDataCoordinator {
       const suppliers = this.getSupplierStoreData()
       const storage = this.getStorageStoreData()
 
-      // Валидация связей продуктов-поставщиков
+      // Существующие валидации
       this.validateProductSupplierLinks(
         products.products,
         counteragents.suppliers,
         errors,
         warnings
       )
-
-      // Валидация данных склада
       this.validateStorageData(storage, products.products, errors, warnings)
-
-      // Валидация единиц измерения
       this.validateUnitsConsistency(products.products, storage, errors, warnings)
+
+      // ✅ НОВАЯ ВАЛИДАЦИЯ: Проверяем интеграцию упаковок
+      this.validatePackageIntegration(products.products, errors, warnings)
 
       const summary = {
         products: products.products.length,
+        totalPackages: products.products.reduce((sum, p) => sum + p.packageOptions.length, 0),
         suppliers: counteragents.suppliers.length,
         storageBalances: storage.balances.length,
         storageBatches: storage.batches.length,
@@ -536,9 +688,8 @@ export class MockDataCoordinator {
     errors: string[],
     warnings: string[]
   ): void {
-    // ✅ КРИТИЧНО: Проверяем что все данные в базовых единицах
-
     products.forEach(product => {
+      // Проверяем базовые поля
       if (!product.baseUnit) {
         errors.push(`Product ${product.name} missing baseUnit`)
         return
@@ -549,19 +700,44 @@ export class MockDataCoordinator {
         return
       }
 
-      // Проверяем корректность расчета базовой цены
-      if (product.purchaseCost && product.purchaseToBaseRatio) {
-        const expectedBaseCost = product.purchaseCost / product.purchaseToBaseRatio
-        const actualBaseCost = product.baseCostPerUnit
+      // ✅ НОВАЯ ПРОВЕРКА: Проверяем упаковки
+      if (!product.packageOptions || product.packageOptions.length === 0) {
+        errors.push(`Product ${product.name} has no package options`)
+        return
+      }
 
-        if (Math.abs(expectedBaseCost - actualBaseCost) > 1) {
-          warnings.push(
-            `Price calculation mismatch for ${product.name}: ` +
-              `expected ${expectedBaseCost} IDR/${product.baseUnit}, ` +
-              `got ${actualBaseCost} IDR/${product.baseUnit}`
-          )
+      // Проверяем что рекомендуемая упаковка существует
+      if (product.recommendedPackageId) {
+        const exists = product.packageOptions.some(pkg => pkg.id === product.recommendedPackageId)
+        if (!exists) {
+          errors.push(`Product ${product.name} has invalid recommendedPackageId`)
         }
       }
+
+      // Проверяем цены в упаковках
+      product.packageOptions.forEach(pkg => {
+        if (pkg.packageSize <= 0) {
+          errors.push(`Product ${product.name}, package ${pkg.packageName}: invalid packageSize`)
+        }
+
+        if (pkg.baseCostPerUnit <= 0) {
+          errors.push(
+            `Product ${product.name}, package ${pkg.packageName}: invalid baseCostPerUnit`
+          )
+        }
+
+        // Проверяем соответствие цен
+        if (pkg.packagePrice && pkg.packageSize > 0) {
+          const calculatedBaseCost = pkg.packagePrice / pkg.packageSize
+          if (Math.abs(calculatedBaseCost - pkg.baseCostPerUnit) > 1) {
+            warnings.push(
+              `Product ${product.name}, package ${pkg.packageName}: ` +
+                `price mismatch - expected ${calculatedBaseCost.toFixed(2)}, ` +
+                `got ${pkg.baseCostPerUnit} IDR/${product.baseUnit}`
+            )
+          }
+        }
+      })
     })
 
     // Проверяем что все балансы в базовых единицах

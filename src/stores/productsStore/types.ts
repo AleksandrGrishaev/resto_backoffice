@@ -1,4 +1,4 @@
-// src/stores/productsStore/types.ts - ОБНОВЛЕННАЯ СОВМЕСТИМАЯ версия
+// src/stores/productsStore/types.ts - ОБНОВЛЕННАЯ версия с PackageOption
 
 import type { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
@@ -14,45 +14,80 @@ export type ProductCategory =
   | 'beverages'
   | 'other'
 
-// 🆕 НОВЫЙ: Базовые единицы для расчетов
 export type BaseUnit = 'gram' | 'ml' | 'piece'
 
-// ✅ РАСШИРЕННЫЙ: Product с поддержкой базовых единиц И совместимостью
+// ✅ НОВЫЙ ИНТЕРФЕЙС: PackageOption
+export interface PackageOption {
+  id: string
+  productId: string
+
+  // ОПИСАНИЕ УПАКОВКИ
+  packageName: string // "Пачка 100г", "Бутылка 1л", "Коробка 24шт"
+  packageSize: number // Количество базовых единиц в упаковке
+  packageUnit: MeasurementUnit // Единица упаковки ('pack', 'bottle', 'box')
+  brandName?: string // "Anchor", "Local Brand"
+
+  // ЦЕНЫ (могут быть пустыми при создании)
+  packagePrice?: number // Цена за упаковку (IDR)
+  baseCostPerUnit: number // Эталонная цена за базовую единицу (IDR)
+
+  // МЕТАДАННЫЕ
+  isActive: boolean
+  notes?: string // "Самая выгодная", "Только оптом"
+  createdAt: string
+  updatedAt: string
+}
+
+// ✅ ОБНОВЛЕННЫЙ: Product без legacy полей
 export interface Product extends BaseEntity {
   name: string
   description?: string
   category: ProductCategory
   yieldPercentage: number
   isActive: boolean
-
-  // ✅ ФЛАГ для простой продажи (существующий)
   canBeSold: boolean
 
-  // ✅ СТАРЫЕ ПОЛЯ (для совместимости)
-  unit: MeasurementUnit
-  costPerUnit: number
+  // ✅ ОСНОВНЫЕ ПОЛЯ (остаются)
+  baseUnit: BaseUnit // 'gram' | 'ml' | 'piece'
+  baseCostPerUnit: number // Цена за базовую единицу для расчетов
 
-  // 🆕 НОВЫЕ ПОЛЯ (базовые единицы для правильных расчетов)
-  baseUnit?: BaseUnit // gram, ml, или piece
-  baseCostPerUnit?: number // Цена за базовую единицу в IDR
-
-  // 🆕 ЕДИНИЦЫ ЗАКУПКИ (для удобства ввода)
-  purchaseUnit?: MeasurementUnit // Как покупаем (кг, литр, упаковка)
-  purchaseToBaseRatio?: number // Коэффициент: 1 purchaseUnit = X baseUnit
-  currentPurchasePrice?: number // Текущая цена за purchaseUnit в IDR
+  // ✅ НОВЫЕ ПОЛЯ
+  packageOptions: PackageOption[] // Варианты упаковки
+  recommendedPackageId?: string // ID последней заказанной упаковки
 
   // Дополнительные поля для управления складом
   storageConditions?: string
   shelfLife?: number
   minStock?: number
   maxStock?: number
-
-  // 🆕 Enhanced fields
   nameEn?: string
   leadTimeDays?: number
   primarySupplierId?: string
   tags?: string[]
-  currentCostPerUnit?: number
+}
+
+// ✅ НОВЫЕ DTO для CRUD операций с упаковками
+export interface CreatePackageOptionDto {
+  productId: string
+  packageName: string
+  packageSize: number
+  packageUnit: MeasurementUnit
+  brandName?: string
+  packagePrice?: number
+  baseCostPerUnit: number
+  notes?: string
+}
+
+export interface UpdatePackageOptionDto {
+  id: string
+  packageName?: string
+  packageSize?: number
+  packageUnit?: MeasurementUnit
+  brandName?: string
+  packagePrice?: number
+  baseCostPerUnit?: number
+  isActive?: boolean
+  notes?: string
 }
 
 // ✅ СУЩЕСТВУЮЩИЙ: ProductsState (без изменений)
@@ -74,12 +109,12 @@ export interface ProductsState {
   }
 }
 
-// ✅ ОБНОВЛЕННЫЙ: CreateProductData с поддержкой базовых единиц
+// ✅ ОБНОВЛЕННЫЙ: CreateProductData без legacy полей
 export interface CreateProductData {
   name: string
   category: ProductCategory
-  unit: MeasurementUnit // Старое поле (обязательно)
-  costPerUnit: number // Старое поле (обязательно)
+  baseUnit: BaseUnit // Обязательно
+  baseCostPerUnit: number // Обязательно
   yieldPercentage: number
   description?: string
   isActive?: boolean
@@ -87,19 +122,16 @@ export interface CreateProductData {
   storageConditions?: string
   shelfLife?: number
   minStock?: number
-
-  // 🆕 НОВЫЕ ПОЛЯ (опциональные для постепенной миграции)
-  baseUnit?: BaseUnit
-  baseCostPerUnit?: number
-  purchaseUnit?: MeasurementUnit
-  purchaseToBaseRatio?: number
-  currentPurchasePrice?: number
-
-  // Enhanced fields
   nameEn?: string
   leadTimeDays?: number
   primarySupplierId?: string
   tags?: string[]
+
+  // Автоматически создается базовая упаковка
+}
+
+export interface UpdateProductData extends Partial<CreateProductData> {
+  id: string
 }
 
 export interface UpdateProductData extends Partial<CreateProductData> {
