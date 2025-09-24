@@ -5,7 +5,6 @@ import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
-import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
 import { DebugUtils } from '@/utils'
 import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
 
@@ -514,6 +513,7 @@ export const useStorageStore = defineStore('storage', () => {
       for (const item of orderData) {
         if (!item.itemId || !item.quantity || item.quantity <= 0) continue
 
+        const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
         const productDef = mockDataCoordinator.getProductDefinition(item.itemId)
         if (!productDef) continue
 
@@ -693,14 +693,26 @@ export const useStorageStore = defineStore('storage', () => {
     return product?.name || 'Unknown Product'
   }
 
-  function getItemUnit(itemId: string): string {
-    const productDef = mockDataCoordinator.getProductDefinition(itemId)
-    return productDef?.baseUnit || 'piece'
+  async function getItemUnit(itemId: string): Promise<string> {
+    try {
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+      const productDef = mockDataCoordinator.getProductDefinition(itemId)
+      return productDef?.baseUnit || 'piece'
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to get item unit', { itemId, error })
+      return 'piece'
+    }
   }
 
-  function getItemCostPerUnit(itemId: string): number {
-    const productDef = mockDataCoordinator.getProductDefinition(itemId)
-    return productDef?.baseCostPerUnit || 0
+  async function getItemCostPerUnit(itemId: string): Promise<number> {
+    try {
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+      const productDef = mockDataCoordinator.getProductDefinition(itemId)
+      return productDef?.baseCostPerUnit || 0
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to get item cost', { itemId, error })
+      return 0
+    }
   }
 
   function getItemBatches(itemId: string, department: StorageDepartment): StorageBatch[] {

@@ -4,7 +4,6 @@ import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { useSupplierStorageIntegration } from './integrations/storageIntegration'
 import { getProductDefinition } from '@/stores/shared/productDefinitions'
-import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
 import { useCounteragentsStore } from '@/stores/counteragents'
 
 import { DebugUtils } from '@/utils'
@@ -32,17 +31,15 @@ class SupplierService {
   private receipts: Receipt[] = []
   private storageIntegration = useSupplierStorageIntegration()
 
-  constructor() {
-    // Initialize with coordinator data
-    this.loadDataFromCoordinator()
-  }
+  constructor() {}
 
   // =============================================
   // LOAD DATA FROM COORDINATOR
   // =============================================
 
-  private loadDataFromCoordinator(): void {
+  async loadDataFromCoordinator(): void {
     try {
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
       const supplierData = mockDataCoordinator.getSupplierStoreData()
 
       this.requests = [...supplierData.requests]
@@ -917,8 +914,9 @@ class SupplierService {
       return 'Unknown Supplier'
     }
   }
-  private getItemName(itemId: string): string {
-    const product = getProductDefinition(itemId)
+  private async getItemName(itemId: string): Promise<string> {
+    const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+    const product = mockDataCoordinator.getProductDefinition(itemId)
     if (product) {
       return product.name
     }
@@ -944,8 +942,9 @@ class SupplierService {
     return itemNames[itemId] || 'Unknown Item'
   }
 
-  private getItemUnit(itemId: string): string {
-    const product = getProductDefinition(itemId)
+  private async getItemUnit(itemId: string): string {
+    const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+    const product = mockDataCoordinator.getProductDefinition(itemId)
     if (product) {
       return product.baseUnit
     }

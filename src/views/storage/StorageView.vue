@@ -590,7 +590,7 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
 // ✅ FIXED: Proper initialization lifecycle
 onMounted(async () => {
   try {
-    DebugUtils.info(MODULE_NAME, 'StorageView mounted')
+    DebugUtils.debug(MODULE_NAME, 'StorageView mounted')
     await nextTick()
 
     // Store уже инициализирован в AppInitializer

@@ -3,7 +3,6 @@
 
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useProductsStore } from '@/stores/productsStore'
-import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
 
 import type {
   StorageBatch,
@@ -38,9 +37,10 @@ export class StorageService {
   // HELPER METHODS (используют базовые единицы)
   // ===========================
 
-  private getProductInfo(productId: string) {
+  private async getProductInfo(productId: string) {
     try {
-      // ✅ ИЗМЕНЕНО: Используем MockDataCoordinator для получения данных продукта
+      // ✅ ИСПРАВЛЕНО: Правильный динамический импорт
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
       const productDef = mockDataCoordinator.getProductDefinition(productId)
       const productsStore = useProductsStore()
       const product = productsStore.products.find(p => p.id === productId)
@@ -49,7 +49,7 @@ export class StorageService {
         DebugUtils.warn(MODULE_NAME, 'Product not found', { productId })
         return {
           name: productId,
-          unit: 'gram', // ✅ По умолчанию базовая единица
+          unit: 'gram',
           baseUnit: 'gram' as const,
           costPerUnit: 0,
           baseCostPerUnit: 0,
@@ -60,10 +60,10 @@ export class StorageService {
 
       return {
         name: product.name,
-        unit: product.unit, // Старая единица для совместимости
-        baseUnit: productDef.baseUnit, // ✅ Базовая единица для расчетов
-        costPerUnit: product.costPerUnit, // Старая цена
-        baseCostPerUnit: productDef.baseCostPerUnit, // ✅ Цена за базовую единицу
+        unit: product.unit,
+        baseUnit: productDef.baseUnit,
+        costPerUnit: product.costPerUnit,
+        baseCostPerUnit: productDef.baseCostPerUnit,
         minStock: product.minStock || 0,
         shelfLife: productDef.shelfLifeDays || 7
       }
@@ -99,8 +99,8 @@ export class StorageService {
         await productsStore.loadProducts(true)
       }
 
-      // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Загружаем данные с сохранением runtime
-      this.loadDataFromCoordinator()
+      // ✅ ИСПРАВЛЕНО: Ждем загрузку данных
+      await this.loadDataFromCoordinator()
 
       // Пересчитываем балансы на основе всех данных (базовых + runtime)
       await this.recalculateAllBalances()
@@ -122,10 +122,12 @@ export class StorageService {
   }
 
   // ✅ НОВЫЙ МЕТОД: Загрузка данных из координатора
-  private loadDataFromCoordinator(): void {
+  private async loadDataFromCoordinator(): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Loading data from coordinator with runtime preservation')
 
+      // ✅ ИСПРАВЛЕНО: Правильный динамический импорт
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
       const storageData = mockDataCoordinator.getStorageStoreData()
 
       // СОХРАНЯЕМ существующие runtime данные (transit batches)
@@ -180,8 +182,8 @@ export class StorageService {
     DebugUtils.info(MODULE_NAME, 'Force reinitializing storage service', { preserveRuntimeData })
 
     if (preserveRuntimeData) {
-      // Обычная реинициализация с сохранением runtime данных
-      this.loadDataFromCoordinator()
+      // ✅ ИСПРАВЛЕНО: Ждем загрузку данных
+      await this.loadDataFromCoordinator()
       await this.recalculateAllBalances()
     } else {
       // Полная реинициализация (потеря runtime данных)
@@ -311,6 +313,9 @@ export class StorageService {
       // Группируем батчи по продуктам и департаментам
       const groupedBatches = this.groupBatchesByProductAndDepartment()
 
+      // ✅ ИСПРАВЛЕНО: Получаем координатор один раз
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+
       for (const [key, batches] of groupedBatches.entries()) {
         const [itemId, department] = key.split('|')
         const product = productsStore.products.find(p => p.id === itemId)
@@ -321,7 +326,8 @@ export class StorageService {
           continue
         }
 
-        const balance = this.calculateBalanceFromBatches(
+        // ✅ ИСПРАВЛЕНО: Ждем результат
+        const balance = await this.calculateBalanceFromBatches(
           itemId,
           department as StorageDepartment,
           batches,
@@ -373,14 +379,30 @@ export class StorageService {
 
   // И дополнительно исправить метод calculateBalanceFromBatches():
 
-  private calculateBalanceFromBatches(
+  private async calculateBalanceFromBatches(
     itemId: string,
     department: StorageDepartment,
     batches: StorageBatch[],
     product: any,
-    productDef: any
-  ): StorageBalance | null {
+    productDef?: any
+  ): Promise<StorageBalance | null> {
     try {
+      // ✅ ИСПРАВЛЕНО: Если productDef не передан, получаем его
+      if (!productDef) {
+        const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+        productDef = mockDataCoordinator.getProductDefinition(itemId)
+      }
+
+      if (!productDef) {
+        DebugUtils.warn(MODULE_NAME, 'No product definition found', { itemId })
+        return this.createZeroBalance(itemId, department, product, {
+          baseUnit: 'gram',
+          baseCostPerUnit: 0,
+          minStock: 0,
+          dailyConsumption: 0
+        })
+      }
+
       // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Берем ТОЛЬКО активные батчи с количеством > 0
       const activeBatches = batches.filter(
         batch => batch.status === 'active' && batch.isActive === true && batch.currentQuantity > 0
@@ -414,7 +436,7 @@ export class StorageService {
         itemType: 'product',
         itemName: product.name,
         department,
-        totalQuantity, // ← ТОЛЬКО активные батчи (0 для помидоров)
+        totalQuantity, // ← ТОЛЬКО активные батчи
         unit: productDef.baseUnit,
         totalValue,
         averageCost,
@@ -427,7 +449,7 @@ export class StorageService {
           sortedDates[sortedDates.length - 1]?.toISOString() || TimeUtils.getCurrentLocalISO(),
         hasExpired,
         hasNearExpiry,
-        belowMinStock: totalQuantity === 0 ? true : belowMinStock, // Zero stock = below min
+        belowMinStock: totalQuantity === 0 ? true : belowMinStock,
         averageDailyUsage: productDef.dailyConsumption || 0,
         daysOfStockRemaining:
           totalQuantity > 0 && productDef.dailyConsumption
@@ -502,7 +524,7 @@ export class StorageService {
       let totalValue = 0
 
       for (const item of data.items) {
-        const productInfo = this.getProductInfo(item.itemId)
+        const productInfo = await this.getProductInfo(item.itemId)
 
         // ✅ ИСПОЛЬЗУЕМ БАЗОВЫЕ ЕДИНИЦЫ
         const quantityInBaseUnits = item.quantity // Предполагаем что уже в базовых единицах
@@ -592,7 +614,7 @@ export class StorageService {
       let totalValue = 0
 
       for (const item of data.items) {
-        const productInfo = this.getProductInfo(item.itemId)
+        const productInfo = await this.getProductInfo(item.itemId)
 
         // ✅ РАСЧЕТ В БАЗОВЫХ ЕДИНИЦАХ
         const quantityInBaseUnits = item.quantity // Предполагаем уже в базовых единицах
@@ -695,7 +717,7 @@ export class StorageService {
       let totalValue = 0
 
       for (const item of data.items) {
-        const productInfo = this.getProductInfo(item.itemId)
+        const productInfo = await this.getProductInfo(item.itemId)
 
         // ✅ РАБОТАЕМ В БАЗОВЫХ ЕДИНИЦАХ
         const quantityInBaseUnits = item.quantity

@@ -5,7 +5,6 @@ import { ref, computed } from 'vue'
 import { supplierService } from './supplierService'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
-import { mockDataCoordinator } from '@/stores/shared/mockDataCoordinator'
 import { DebugUtils, TimeUtils } from '@/utils'
 
 import type {
@@ -247,23 +246,29 @@ export const useSupplierStore = defineStore('supplier', () => {
       DebugUtils.info(MODULE_NAME, 'Store already initialized')
       return
     }
+
     const startTime = Date.now()
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Initializing supplier store from mockDataCoordinator...')
-
+      DebugUtils.info(
+        MODULE_NAME,
+        'Initializing supplier store with dynamic coordinator loading...'
+      )
       integrationState.value.integrationErrors = []
 
-      // Step 1: Load data from coordinator (БЕЗ suggestions)
+      // Step 1: Динамически загружаем данные из координатора
       await loadDataFromCoordinator()
 
-      // Step 2: Ensure dependent stores are ready
+      // Step 2: Инициализируем supplierService с данными координатора
+      await supplierService.loadDataFromCoordinator()
+
+      // Step 3: Обеспечиваем готовность зависимых stores
       await ensureDependentStoresReady()
 
-      // Step 3: ✅ НОВОЕ: Сразу генерируем suggestions из Storage данных
+      // Step 4: Генерируем suggestions из Storage данных
       try {
         DebugUtils.info(MODULE_NAME, 'Generating initial suggestions from Storage data...')
-        await refreshSuggestions() // Генерируем для всех департаментов
+        await refreshSuggestions()
         DebugUtils.info(MODULE_NAME, 'Initial suggestions generated successfully', {
           total: state.value.orderSuggestions.length
         })
@@ -271,16 +276,15 @@ export const useSupplierStore = defineStore('supplier', () => {
         DebugUtils.warn(MODULE_NAME, 'Failed to generate initial suggestions', {
           error: suggestionsError
         })
-        // Оставляем suggestions пустыми, не загружаем mock данные
         state.value.orderSuggestions = []
       }
 
-      // Step 4: Validate integration health
+      // Step 5: Валидируем здоровье интеграции
       validateIntegrationHealth()
 
-      // Step 5: Mark as successfully initialized
+      // Step 6: Отмечаем как успешно инициализированный
       integrationState.value.isInitialized = true
-      integrationState.value.useMockData = false // ← Теперь всегда false для suggestions
+      integrationState.value.useMockData = false
 
       const initTime = Date.now() - startTime
 
@@ -290,7 +294,7 @@ export const useSupplierStore = defineStore('supplier', () => {
         requests: state.value.requests.length,
         orders: state.value.orders.length,
         receipts: state.value.receipts.length,
-        dataSource: 'dynamic_storage_only' // ← Новый источник данных
+        dataSource: 'dynamic_coordinator_loading'
       })
     } catch (error) {
       const errorMessage = `Initialization failed: ${error}`
@@ -299,8 +303,6 @@ export const useSupplierStore = defineStore('supplier', () => {
       integrationState.value.integrationErrors.push(errorMessage)
       integrationState.value.integrationHealth = 'critical'
       integrationState.value.isInitialized = true
-
-      // При ошибке suggestions остаются пустыми
       state.value.orderSuggestions = []
 
       DebugUtils.warn(MODULE_NAME, 'Supplier store initialized with errors - no suggestions loaded')
@@ -314,12 +316,12 @@ export const useSupplierStore = defineStore('supplier', () => {
     try {
       DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator...')
 
-      // Проверить, что координатор существует
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+
       if (!mockDataCoordinator) {
         throw new Error('mockDataCoordinator is not available')
       }
 
-      // Получить данные с проверкой
       const supplierData = mockDataCoordinator.getSupplierStoreData()
 
       if (!supplierData) {
