@@ -108,6 +108,10 @@
       :product="selectedProduct"
       :loading="operationLoading"
       @save="handleProductSave"
+      @add-package="handleAddPackage"
+      @update-package="handleUpdatePackage"
+      @delete-package="handleDeletePackage"
+      @set-recommended="handleSetRecommended"
     />
 
     <product-details-dialog v-model="dialogs.details" :product="selectedProduct" />
@@ -130,7 +134,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
-import type { Product, CreateProductData, UpdateProductData } from '@/stores/productsStore'
+import type {
+  Product,
+  CreateProductData,
+  UpdateProductData,
+  CreatePackageOptionDto,
+  UpdatePackageOptionDto
+} from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 
 // Original components
@@ -222,26 +232,127 @@ const toggleProductActive = async (product: Product): Promise<void> => {
   }
 }
 
-const handleProductSave = async (data: CreateProductData | UpdateProductData): Promise<void> => {
+const handleProductSave = async (
+  data: CreateProductData | UpdateProductData,
+  packages: any[]
+): Promise<void> => {
   try {
     operationLoading.value = true
 
     if ('id' in data) {
+      // Edit mode - update product
       await store.updateProduct(data)
-      showNotification('Продукт успешно обновлен', 'success')
+
+      // Update packages for existing product
+      for (const pkg of packages) {
+        if (pkg.id && !pkg.tempId) {
+          // Existing package - update
+          await store.updatePackageOption(pkg)
+        } else if (pkg.tempId) {
+          // New package for existing product
+          const { tempId, ...packageData } = pkg
+          await store.addPackageOption({
+            ...packageData,
+            productId: data.id
+          })
+        }
+      }
+
+      showNotification('Product updated successfully', 'success')
       DebugUtils.info(MODULE_NAME, 'Product updated', { id: data.id })
     } else {
+      // Create mode - create product first
       const newProduct = await store.createProduct(data)
-      showNotification('Продукт успешно создан', 'success')
+
+      // Then add additional packages (default package is auto-created in store)
+      for (const pkg of packages) {
+        const packageData = {
+          packageName: pkg.packageName,
+          packageSize: pkg.packageSize,
+          packageUnit: pkg.packageUnit,
+          brandName: pkg.brandName,
+          packagePrice: pkg.packagePrice,
+          baseCostPerUnit: pkg.baseCostPerUnit,
+          notes: pkg.notes,
+          isActive: pkg.isActive
+        }
+
+        await store.addPackageOption({
+          ...packageData,
+          productId: newProduct.id
+        })
+      }
+
+      showNotification('Product created successfully', 'success')
       DebugUtils.info(MODULE_NAME, 'Product created', { id: newProduct.id })
     }
 
     dialogs.value.product = false
     selectedProduct.value = null
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Ошибка при сохранении продукта'
+    const errorMessage = err instanceof Error ? err.message : 'Error saving product'
     showNotification(errorMessage, 'error')
     DebugUtils.error(MODULE_NAME, 'Error saving product', { error: err, data })
+  } finally {
+    operationLoading.value = false
+  }
+}
+
+const handleAddPackage = async (data: CreatePackageOptionDto): Promise<void> => {
+  try {
+    operationLoading.value = true
+    await store.addPackageOption(data)
+    showNotification('Package added successfully', 'success')
+    DebugUtils.info(MODULE_NAME, 'Package added', { productId: data.productId })
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Error adding package'
+    showNotification(errorMessage, 'error')
+    DebugUtils.error(MODULE_NAME, 'Error adding package', { error: err })
+  } finally {
+    operationLoading.value = false
+  }
+}
+
+const handleUpdatePackage = async (data: UpdatePackageOptionDto): Promise<void> => {
+  try {
+    operationLoading.value = true
+    await store.updatePackageOption(data)
+    showNotification('Package updated successfully', 'success')
+    DebugUtils.info(MODULE_NAME, 'Package updated', { packageId: data.id })
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Error updating package'
+    showNotification(errorMessage, 'error')
+    DebugUtils.error(MODULE_NAME, 'Error updating package', { error: err })
+  } finally {
+    operationLoading.value = false
+  }
+}
+
+const handleDeletePackage = async (productId: string, packageId: string): Promise<void> => {
+  try {
+    operationLoading.value = true
+    await store.deletePackageOption(productId, packageId)
+    showNotification('Package deleted successfully', 'success')
+    DebugUtils.info(MODULE_NAME, 'Package deleted', { productId, packageId })
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Error deleting package'
+    showNotification(errorMessage, 'error')
+    DebugUtils.error(MODULE_NAME, 'Error deleting package', { error: err })
+  } finally {
+    operationLoading.value = false
+  }
+}
+
+const handleSetRecommended = async (productId: string, packageId: string): Promise<void> => {
+  try {
+    operationLoading.value = true
+    await store.setRecommendedPackage(productId, packageId)
+    showNotification('Recommended package set successfully', 'success')
+    DebugUtils.info(MODULE_NAME, 'Recommended package set', { productId, packageId })
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Error setting recommended package'
+    showNotification(errorMessage, 'error')
+    DebugUtils.error(MODULE_NAME, 'Error setting recommended package', { error: err })
   } finally {
     operationLoading.value = false
   }

@@ -369,17 +369,23 @@ body {
 }
 
 /* =============================================
-   ИСПРАВЛЕНИЯ OVERLAY И TOOLTIP
+   ИСПРАВЛЕНИЯ OVERLAY, TOOLTIP И Z-INDEX
    ============================================= */
 
-/* 1. Глобально убираем scrim у всех overlay */
-.v-overlay .v-overlay__scrim {
+/* 1. Scrim - убираем везде кроме диалогов */
+.v-overlay:not(.v-dialog) .v-overlay__scrim {
   display: none !important;
+  opacity: 0 !important;
+}
+
+.v-dialog .v-overlay__scrim {
+  display: block !important;
+  background: rgba(0, 0, 0, 0.6) !important;
 }
 
 /* 2. Убираем backdrop-filter */
-.v-overlay,
-.v-overlay__content {
+.v-overlay:not(.v-dialog),
+.v-overlay:not(.v-dialog) .v-overlay__content {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -403,36 +409,59 @@ body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* 5. OrderSection loading overlay */
-.order-section .loading-overlay {
-  background: rgba(var(--v-theme-surface), 0.85) !important;
+/* 5. Z-INDEX ИЕРАРХИЯ */
+/* Селекты и меню - ВЫСШИЙ ПРИОРИТЕТ */
+.v-menu,
+.v-select__menu,
+.v-autocomplete__menu,
+.v-overlay-container {
+  z-index: 9999 !important;
 }
 
-.order-section .loading-overlay .v-overlay__content {
-  background: rgba(var(--v-theme-surface), 0.95) !important;
-  border-radius: 12px !important;
-  padding: 24px !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+.v-menu .v-overlay__content,
+.v-select__content,
+.v-autocomplete__content,
+.v-select-menu-content,
+.v-autocomplete-menu-content {
+  z-index: 9999 !important;
 }
 
-/* 6. Z-index для правильного наложения */
-.v-tooltip {
-  z-index: 2100 !important;
+/* Tooltip */
+.v-tooltip,
+.v-tooltip .v-overlay__content {
+  z-index: 10000 !important;
 }
-.v-menu {
-  z-index: 2000 !important;
-}
+
+/* Диалоги */
 .v-dialog {
-  z-index: 2200 !important;
-}
-.v-snackbar {
-  z-index: 2300 !important;
+  z-index: 2400 !important;
 }
 
-/* 7. Убираем анимации backdrop */
+.v-dialog .v-overlay__scrim {
+  z-index: 2399 !important;
+}
+
+.v-dialog .v-overlay__content {
+  z-index: 2400 !important;
+}
+
+/* Snackbar */
+.v-snackbar {
+  z-index: 10100 !important;
+}
+
+/* 6. Убираем анимации backdrop */
 .v-overlay-container .v-overlay__scrim {
   transition: none !important;
   animation: none !important;
+}
+
+/* 7. КРИТИЧНО: Убираем scrim у селектов внутри диалогов */
+.v-dialog .v-select .v-overlay__scrim,
+.v-dialog .v-autocomplete .v-overlay__scrim,
+.v-dialog .v-menu .v-overlay__scrim {
+  display: none !important;
+  opacity: 0 !important;
 }
 // =============================================
 // RESPONSIVE УТИЛИТЫ

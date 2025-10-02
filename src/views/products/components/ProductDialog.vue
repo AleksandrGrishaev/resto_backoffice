@@ -1,80 +1,76 @@
 <!-- src/views/products/components/ProductDialog.vue -->
 <template>
-  <v-dialog v-model="localModelValue" max-width="600px" persistent scrollable>
+  <v-dialog v-model="localModelValue" max-width="800px" persistent scrollable>
     <v-card>
-      <!-- Заголовок -->
+      <!-- Header -->
       <v-card-title class="d-flex align-center">
         <v-icon start color="primary">
           {{ isEdit ? 'mdi-pencil' : 'mdi-plus' }}
         </v-icon>
-        <span>{{ isEdit ? 'Редактировать продукт' : 'Новый продукт' }}</span>
+        <span>{{ isEdit ? 'Edit Product' : 'New Product' }}</span>
         <v-spacer />
         <v-btn icon="mdi-close" variant="text" size="small" @click="closeDialog" />
       </v-card-title>
 
       <v-divider />
 
-      <!-- Форма -->
+      <!-- Form -->
       <v-card-text class="pa-6">
         <v-form ref="formRef" v-model="formValid">
           <v-row>
-            <!-- Название продукта -->
+            <!-- Product Name -->
             <v-col cols="12">
               <v-text-field
                 v-model="formData.name"
-                label="Название продукта *"
+                label="Product Name *"
                 variant="outlined"
                 :rules="nameRules"
-                :error-messages="fieldErrors.name"
                 prepend-inner-icon="mdi-food"
                 counter="100"
                 maxlength="100"
-                placeholder="Введите название продукта"
-                @input="clearFieldError('name')"
+                placeholder="Enter product name"
               />
             </v-col>
 
-            <!-- Категория и единица измерения -->
+            <!-- Category and Base Unit -->
             <v-col cols="12" md="6">
               <v-select
                 v-model="formData.category"
                 :items="categoryOptions"
-                label="Категория *"
+                label="Category *"
                 variant="outlined"
                 :rules="categoryRules"
-                :error-messages="fieldErrors.category"
                 prepend-inner-icon="mdi-tag"
-                @update:model-value="clearFieldError('category')"
+                attach
               />
             </v-col>
 
             <v-col cols="12" md="6">
               <v-select
-                v-model="formData.unit"
-                :items="unitOptions"
-                label="Единица измерения *"
+                v-model="formData.baseUnit"
+                :items="baseUnitOptions"
+                label="Base Unit *"
                 variant="outlined"
-                :rules="unitRules"
-                :error-messages="fieldErrors.unit"
+                :rules="baseUnitRules"
                 prepend-inner-icon="mdi-scale"
-                @update:model-value="clearFieldError('unit')"
+                :hint="getBaseUnitHint()"
+                persistent-hint
+                attach
               />
             </v-col>
 
-            <!-- Себестоимость за единицу -->
+            <!-- Base Cost Per Unit -->
             <v-col cols="12" md="6">
               <v-text-field
-                v-model.number="formData.costPerUnit"
-                label="Себестоимость за единицу *"
+                v-model.number="formData.baseCostPerUnit"
+                label="Base Cost Per Unit *"
                 variant="outlined"
                 type="number"
                 :rules="costRules"
-                :error-messages="fieldErrors.costPerUnit"
                 prepend-inner-icon="mdi-currency-usd"
                 suffix="IDR"
                 min="0"
                 step="1"
-                @input="clearFieldError('costPerUnit')"
               >
                 <template #append-inner>
                   <v-tooltip location="top">
@@ -84,30 +80,28 @@
                       </v-icon>
                     </template>
                     <div>
-                      Закупочная цена за {{ getSelectedUnitName() }}
+                      Purchase price per {{ getBaseUnitName() }}
                       <br />
-                      (только себестоимость, цена продажи устанавливается в меню)
+                      (cost only, selling price is set in menu)
                     </div>
                   </v-tooltip>
                 </template>
               </v-text-field>
             </v-col>
 
-            <!-- Процент выхода -->
+            <!-- Yield Percentage -->
             <v-col cols="12" md="6">
               <v-text-field
                 v-model.number="formData.yieldPercentage"
-                label="Процент выхода *"
+                label="Yield Percentage *"
                 variant="outlined"
                 type="number"
                 :rules="yieldRules"
-                :error-messages="fieldErrors.yieldPercentage"
                 prepend-inner-icon="mdi-percent"
                 suffix="%"
                 min="1"
                 max="100"
                 step="0.1"
-                @input="clearFieldError('yieldPercentage')"
               >
                 <template #append-inner>
                   <v-tooltip location="top">
@@ -117,89 +111,107 @@
                       </v-icon>
                     </template>
                     <div>
-                      Процент готового продукта после обработки
+                      Percentage of finished product after processing
                       <br />
-                      (учитывает отходы при очистке, нарезке и т.д.)
+                      (accounts for waste during cleaning, cutting, etc.)
                     </div>
                   </v-tooltip>
                 </template>
               </v-text-field>
             </v-col>
 
-            <!-- Активность -->
-            <v-col cols="12" class="d-flex align-center">
+            <!-- Can Be Sold Switch -->
+            <v-col cols="12" md="6" class="d-flex align-center">
+              <v-switch
+                v-model="formData.canBeSold"
+                label="Can Be Sold"
+                color="primary"
+                hide-details
+              />
+              <v-tooltip location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <v-icon v-bind="tooltipProps" color="info" size="small" class="ml-2">
+                    mdi-help-circle
+                  </v-icon>
+                </template>
+                <div>Enable if this product can be sold directly to customers</div>
+              </v-tooltip>
+            </v-col>
+
+            <!-- Active Switch -->
+            <v-col cols="12" md="6" class="d-flex align-center">
               <v-switch
                 v-model="formData.isActive"
-                label="Активен"
+                label="Active"
                 color="success"
                 :prepend-icon="formData.isActive ? 'mdi-check-circle' : 'mdi-pause-circle'"
                 hide-details
               />
             </v-col>
 
-            <!-- Описание -->
+            <!-- Description -->
             <v-col cols="12">
               <v-textarea
                 v-model="formData.description"
-                label="Описание"
+                label="Description"
                 variant="outlined"
                 rows="3"
                 counter="500"
                 maxlength="500"
                 prepend-inner-icon="mdi-text"
-                placeholder="Описание продукта (необязательно)"
+                placeholder="Product description (optional)"
               />
             </v-col>
 
-            <!-- Расширенные настройки -->
+            <!-- Advanced Settings -->
             <v-col cols="12">
               <v-expansion-panels variant="accordion">
                 <v-expansion-panel>
                   <v-expansion-panel-title>
                     <v-icon start>mdi-cog</v-icon>
-                    Дополнительные параметры
+                    Additional Parameters
                   </v-expansion-panel-title>
                   <v-expansion-panel-text>
                     <v-row>
-                      <!-- Условия хранения -->
+                      <!-- Storage Conditions -->
                       <v-col cols="12">
                         <v-text-field
                           v-model="formData.storageConditions"
-                          label="Условия хранения"
+                          label="Storage Conditions"
                           variant="outlined"
                           prepend-inner-icon="mdi-thermometer"
-                          placeholder="Например: Холодильник +2°C до +4°C"
+                          placeholder="E.g.: Refrigerator +2°C to +4°C"
                           counter="200"
                           maxlength="200"
                         />
                       </v-col>
 
-                      <!-- Срок годности -->
+                      <!-- Shelf Life -->
                       <v-col cols="12" md="6">
                         <v-text-field
                           v-model.number="formData.shelfLife"
-                          label="Срок годности"
+                          label="Shelf Life"
                           variant="outlined"
                           type="number"
                           prepend-inner-icon="mdi-calendar-clock"
-                          suffix="дней"
+                          suffix="days"
                           min="1"
-                          placeholder="Количество дней"
+                          placeholder="Number of days"
                         />
                       </v-col>
 
-                      <!-- Минимальный остаток -->
+                      <!-- Minimum Stock -->
                       <v-col cols="12" md="6">
                         <v-text-field
                           v-model.number="formData.minStock"
-                          label="Минимальный остаток"
+                          label="Minimum Stock"
                           variant="outlined"
                           type="number"
                           prepend-inner-icon="mdi-package-down"
-                          :suffix="getSelectedUnitName()"
+                          :suffix="getBaseUnitName()"
                           min="0"
                           step="0.1"
-                          placeholder="Для уведомлений"
+                          placeholder="For notifications"
                         />
                       </v-col>
                     </v-row>
@@ -207,15 +219,115 @@
                 </v-expansion-panel>
               </v-expansion-panels>
             </v-col>
+
+            <!-- Package Options Section (for both create and edit) -->
+            <v-col cols="12">
+              <v-divider class="my-4" />
+
+              <!-- Info alert for new products -->
+              <v-alert v-if="!isEdit" type="info" variant="tonal" density="compact" class="mb-4">
+                <v-icon start>mdi-information</v-icon>
+                A default package will be created automatically. You can add more packages now or
+                after creating the product.
+              </v-alert>
+
+              <!-- Local packages list -->
+              <div class="packages-section">
+                <div class="d-flex justify-space-between align-center mb-3">
+                  <h4>Packages</h4>
+                  <v-btn
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    @click="openPackageDialog()"
+                  >
+                    <v-icon start>mdi-plus</v-icon>
+                    Add Package
+                  </v-btn>
+                </div>
+
+                <div v-if="!localPackageOptions.length" class="text-center text-grey py-4">
+                  No additional packages. A default package will be created.
+                </div>
+
+                <div v-else>
+                  <v-card
+                    v-for="(pkg, index) in localPackageOptions"
+                    :key="pkg.tempId || pkg.id"
+                    class="mb-2"
+                    variant="outlined"
+                    :color="index === 0 ? 'primary' : undefined"
+                  >
+                    <v-card-text class="py-2">
+                      <div class="d-flex justify-space-between align-center">
+                        <div class="flex-grow-1">
+                          <div class="d-flex align-center gap-2">
+                            <strong>{{ pkg.packageName }}</strong>
+                            <v-chip
+                              v-if="pkg.brandName"
+                              size="x-small"
+                              color="info"
+                              variant="tonal"
+                            >
+                              {{ pkg.brandName }}
+                            </v-chip>
+                            <v-chip
+                              v-if="index === 0"
+                              size="x-small"
+                              color="success"
+                              variant="tonal"
+                            >
+                              Default
+                            </v-chip>
+                          </div>
+
+                          <div class="text-body-2 text-grey-darken-1 mt-1">
+                            {{ pkg.packageSize }} {{ getBaseUnitName() }}
+                            <span v-if="pkg.packagePrice">
+                              • {{ formatPrice(pkg.packagePrice) }} per package
+                            </span>
+                            • {{ formatPrice(pkg.baseCostPerUnit) }}/{{ getBaseUnitName() }}
+                          </div>
+
+                          <div v-if="pkg.notes" class="text-caption text-grey-darken-2 mt-1">
+                            {{ pkg.notes }}
+                          </div>
+                        </div>
+
+                        <div class="d-flex align-center gap-1">
+                          <v-btn
+                            size="x-small"
+                            variant="text"
+                            color="primary"
+                            @click="openPackageDialog(pkg, index)"
+                          >
+                            <v-icon>mdi-pencil</v-icon>
+                          </v-btn>
+
+                          <v-btn
+                            size="x-small"
+                            variant="text"
+                            color="error"
+                            @click="deleteLocalPackage(index)"
+                          >
+                            <v-icon>mdi-delete</v-icon>
+                          </v-btn>
+                        </div>
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                </div>
+              </div>
+            </v-col>
           </v-row>
         </v-form>
       </v-card-text>
 
-      <!-- Действия -->
+      <!-- Actions -->
       <v-divider />
       <v-card-actions class="px-6 py-4">
         <v-spacer />
-        <v-btn variant="text" @click="closeDialog">Отмена</v-btn>
+        <v-btn variant="text" @click="closeDialog">Cancel</v-btn>
         <v-btn
           color="primary"
           variant="elevated"
@@ -223,10 +335,20 @@
           :disabled="!formValid"
           @click="saveProduct"
         >
-          {{ isEdit ? 'Сохранить' : 'Создать' }}
+          {{ isEdit ? 'Save' : 'Create' }}
         </v-btn>
       </v-card-actions>
     </v-card>
+
+    <!-- Package Dialog -->
+    <PackageOptionDialog
+      v-model="packageDialogOpen"
+      :product-id="'temp'"
+      :base-unit="getBaseUnitName()"
+      :package="editingPackage"
+      :loading="false"
+      @save="handleSaveLocalPackage"
+    />
   </v-dialog>
 </template>
 
@@ -236,12 +358,15 @@ import type {
   Product,
   CreateProductData,
   UpdateProductData,
-  ProductCategory
-} from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
-import type { MeasurementUnit } from '@/types/measurementUnits'
-import { useProductUnits } from '@/composables/useMeasurementUnits'
+  ProductCategory,
+  BaseUnit,
+  PackageOption,
+  CreatePackageOptionDto,
+  UpdatePackageOptionDto
+} from '@/stores/productsStore/types'
+import { PRODUCT_CATEGORIES } from '@/stores/productsStore/types'
 import { DebugUtils } from '@/utils'
+import PackageOptionDialog from './package/PackageOptionDialog.vue'
 
 const MODULE_NAME = 'ProductDialog'
 
@@ -260,19 +385,29 @@ const props = withDefaults(defineProps<Props>(), {
 // Emits
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
-  (e: 'save', data: CreateProductData | UpdateProductData): void
+  (e: 'save', data: CreateProductData | UpdateProductData, packages: LocalPackage[]): void
 }
 
 const emit = defineEmits<Emits>()
 
-// Composables
-const { unitOptions: productUnitOptions, validateUnit } = useProductUnits()
+// Local package type (with temporary ID)
+interface LocalPackage extends Omit<PackageOption, 'id' | 'productId' | 'createdAt' | 'updatedAt'> {
+  id?: string
+  tempId?: string
+  productId?: string
+  createdAt?: string
+  updatedAt?: string
+}
 
 // Refs
 const formRef = ref()
 const formValid = ref(false)
+const packageDialogOpen = ref(false)
+const editingPackage = ref<PackageOption | undefined>(undefined)
+const editingPackageIndex = ref<number | null>(null)
+const localPackageOptions = ref<LocalPackage[]>([])
 
-// Состояние
+// Computed
 const localModelValue = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value)
@@ -280,13 +415,14 @@ const localModelValue = computed({
 
 const isEdit = computed(() => !!props.product?.id)
 
-// Данные формы
+// Form Data
 const formData = ref<CreateProductData & { id?: string }>({
   name: '',
   category: 'other' as ProductCategory,
-  unit: 'kg' as MeasurementUnit,
-  costPerUnit: 0,
+  baseUnit: 'gram' as BaseUnit,
+  baseCostPerUnit: 0,
   yieldPercentage: 100,
+  canBeSold: false,
   isActive: true,
   description: '',
   storageConditions: '',
@@ -294,16 +430,7 @@ const formData = ref<CreateProductData & { id?: string }>({
   minStock: undefined
 })
 
-// Ошибки полей
-const fieldErrors = ref<Record<string, string[]>>({
-  name: [],
-  category: [],
-  unit: [],
-  costPerUnit: [],
-  yieldPercentage: []
-})
-
-// Опции для селектов
+// Options
 const categoryOptions = computed(() =>
   Object.entries(PRODUCT_CATEGORIES).map(([value, title]) => ({
     title,
@@ -311,92 +438,112 @@ const categoryOptions = computed(() =>
   }))
 )
 
-const unitOptions = computed(() => productUnitOptions.value)
+const baseUnitOptions = computed(() => [
+  { title: 'Grams (for solid products)', value: 'gram' },
+  { title: 'Milliliters (for liquids)', value: 'ml' },
+  { title: 'Pieces (for countable items)', value: 'piece' }
+])
 
-// Правила валидации
+// Validation Rules
 const nameRules = [
-  (v: string) => !!v || 'Название обязательно для заполнения',
-  (v: string) => v.length <= 100 || 'Название не должно превышать 100 символов',
-  (v: string) => v.trim().length >= 2 || 'Название должно содержать минимум 2 символа'
+  (v: string) => !!v || 'Name is required',
+  (v: string) => v.length <= 100 || 'Name must not exceed 100 characters',
+  (v: string) => v.trim().length >= 2 || 'Name must contain at least 2 characters'
 ]
 
-const categoryRules = [(v: string) => !!v || 'Категория обязательна для выбора']
-
-const unitRules = [
-  (v: string) => !!v || 'Единица измерения обязательна для выбора',
-  (v: string) => {
-    const validation = validateUnit(v as MeasurementUnit)
-    return validation.valid || validation.error || 'Недопустимая единица измерения'
-  }
-]
+const categoryRules = [(v: string) => !!v || 'Category is required']
+const baseUnitRules = [(v: string) => !!v || 'Base unit is required']
 
 const costRules = [
-  (v: number) => (v !== null && v !== undefined) || 'Себестоимость обязательна',
-  (v: number) => v >= 0 || 'Себестоимость не может быть отрицательной',
-  (v: number) => v <= 999999999 || 'Слишком большое значение'
+  (v: number) => (v !== null && v !== undefined) || 'Cost is required',
+  (v: number) => v >= 0 || 'Cost cannot be negative',
+  (v: number) => v <= 999999999 || 'Value too large'
 ]
 
 const yieldRules = [
-  (v: number) => (v !== null && v !== undefined) || 'Процент выхода обязателен',
-  (v: number) => v >= 1 || 'Процент выхода должен быть больше 0',
-  (v: number) => v <= 100 || 'Процент выхода не может превышать 100%'
+  (v: number) => (v !== null && v !== undefined) || 'Yield percentage is required',
+  (v: number) => v >= 1 || 'Yield percentage must be greater than 0',
+  (v: number) => v <= 100 || 'Yield percentage cannot exceed 100%'
 ]
 
-// Методы
+// Methods
 const resetForm = (): void => {
   formData.value = {
     name: '',
     category: 'other',
-    unit: 'kg',
-    costPerUnit: 0,
+    baseUnit: 'gram',
+    baseCostPerUnit: 0,
     yieldPercentage: 100,
+    canBeSold: false,
     isActive: true,
     description: '',
     storageConditions: '',
     shelfLife: undefined,
     minStock: undefined
   }
+  localPackageOptions.value = []
 }
 
-const getSelectedUnitName = (): string => {
-  const selectedOption = unitOptions.value.find(option => option.value === formData.value.unit)
-  return selectedOption?.title || formData.value.unit
+const getBaseUnitName = (): string => {
+  const baseUnitNames = {
+    gram: 'gram',
+    ml: 'ml',
+    piece: 'piece'
+  }
+  return baseUnitNames[formData.value.baseUnit] || formData.value.baseUnit
 }
 
-// Отслеживание изменений props.product
+const getBaseUnitHint = (): string => {
+  const hints = {
+    gram: 'For solid products (meat, vegetables, spices)',
+    ml: 'For liquid products (oil, milk, sauces)',
+    piece: 'For countable items (bottles, cans, eggs)'
+  }
+  return hints[formData.value.baseUnit] || ''
+}
+
+const formatPrice = (price: number): string => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(price)
+}
+
+// Watch product changes
 watch(
   () => props.product,
   newProduct => {
     if (newProduct) {
-      // Заполняем форму данными продукта
       formData.value = {
         id: newProduct.id,
         name: newProduct.name,
         category: newProduct.category,
-        unit: newProduct.unit,
-        costPerUnit: newProduct.costPerUnit,
+        baseUnit: newProduct.baseUnit,
+        baseCostPerUnit: newProduct.baseCostPerUnit,
         yieldPercentage: newProduct.yieldPercentage,
+        canBeSold: newProduct.canBeSold,
         isActive: newProduct.isActive,
         description: newProduct.description || '',
         storageConditions: newProduct.storageConditions || '',
         shelfLife: newProduct.shelfLife,
         minStock: newProduct.minStock
       }
+      localPackageOptions.value = (newProduct.packageOptions || []).map(pkg => ({ ...pkg }))
     } else {
-      // Сброс формы для нового продукта
       resetForm()
     }
   },
   { immediate: true }
 )
 
-// Отслеживание открытия диалога
+// Watch dialog open
 watch(
   () => props.modelValue,
   isOpen => {
     if (isOpen) {
       nextTick(() => {
-        clearAllErrors()
         if (formRef.value) {
           formRef.value.resetValidation()
         }
@@ -404,18 +551,6 @@ watch(
     }
   }
 )
-
-const clearFieldError = (field: string): void => {
-  if (fieldErrors.value[field]) {
-    fieldErrors.value[field] = []
-  }
-}
-
-const clearAllErrors = (): void => {
-  Object.keys(fieldErrors.value).forEach(field => {
-    fieldErrors.value[field] = []
-  })
-}
 
 const closeDialog = (): void => {
   emit('update:modelValue', false)
@@ -434,10 +569,8 @@ const saveProduct = async (): Promise<void> => {
 
     DebugUtils.info(MODULE_NAME, 'Saving product', { isEdit: isEdit.value })
 
-    // Подготовка данных
     const { id, ...productData } = formData.value
 
-    // Очистка необязательных полей
     const cleanData = {
       ...productData,
       description: productData.description?.trim() || undefined,
@@ -446,19 +579,66 @@ const saveProduct = async (): Promise<void> => {
       minStock: productData.minStock || undefined
     }
 
+    // Pass packages along with product data
     if (isEdit.value && id) {
-      // Обновление существующего продукта
-      emit('save', { id, ...cleanData } as UpdateProductData)
+      emit('save', { id, ...cleanData } as UpdateProductData, localPackageOptions.value)
     } else {
-      // Создание нового продукта
-      emit('save', cleanData as CreateProductData)
+      emit('save', cleanData as CreateProductData, localPackageOptions.value)
     }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Error saving product', { error })
   }
 }
+
+// Local Package Management
+const openPackageDialog = (pkg?: LocalPackage, index?: number): void => {
+  editingPackage.value = pkg as PackageOption | undefined
+  editingPackageIndex.value = index !== undefined ? index : null
+  packageDialogOpen.value = true
+}
+
+const handleSaveLocalPackage = (data: CreatePackageOptionDto | UpdatePackageOptionDto): void => {
+  if (editingPackageIndex.value !== null) {
+    // Edit existing package
+    localPackageOptions.value[editingPackageIndex.value] = {
+      ...localPackageOptions.value[editingPackageIndex.value],
+      ...data
+    }
+  } else {
+    // Add new package
+    const newPackage: LocalPackage = {
+      ...data,
+      tempId: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      isActive: true
+    }
+    localPackageOptions.value.push(newPackage)
+  }
+
+  packageDialogOpen.value = false
+  editingPackage.value = undefined
+  editingPackageIndex.value = null
+}
+
+const deleteLocalPackage = (index: number): void => {
+  localPackageOptions.value.splice(index, 1)
+}
 </script>
 
 <style scoped>
-/* Дополнительные стили при необходимости */
+.packages-section {
+  min-height: 150px;
+}
+
+/* Fix z-index for selects inside dialog */
+:deep(.v-overlay-container) {
+  z-index: 9999 !important;
+}
+
+:deep(.v-select__content) {
+  z-index: 9999 !important;
+}
+
+:deep(.v-menu__content) {
+  z-index: 9999 !important;
+}
 </style>

@@ -14,13 +14,26 @@ export const vuetify = createVuetify({
     sets: { mdi }
   },
   defaults: {
-    // Ключи должны точно соответствовать названиям компонентов
     VBtn: {
       variant: 'elevated',
       height: 44
     },
     VTextField: {
       variant: 'outlined'
+    },
+    VSelect: {
+      variant: 'outlined',
+      menuProps: {
+        zIndex: 9999,
+        contentClass: 'v-select-menu-content'
+      }
+    },
+    VAutocomplete: {
+      variant: 'outlined',
+      menuProps: {
+        zIndex: 9999,
+        contentClass: 'v-autocomplete-menu-content'
+      }
     },
     VCard: {
       elevation: 0
@@ -31,15 +44,10 @@ export const vuetify = createVuetify({
     VFooter: {
       height: 44
     },
-    VList: {
-      // Для списка лучше задавать настройки через пропсы в компоненте
-      // так как они могут варьироваться
-    },
     VListItem: {
       minHeight: 44,
       rounded: 'lg'
     },
-    // ИСПРАВЛЕНИЯ ДЛЯ TOOLTIP И OVERLAY:
     VTooltip: {
       activator: 'parent',
       location: 'top',
@@ -47,7 +55,6 @@ export const vuetify = createVuetify({
       closeDelay: 100,
       transition: 'fade-transition',
       offset: 4,
-      // ✅ КЛЮЧЕВЫЕ ИСПРАВЛЕНИЯ:
       scrim: false,
       contained: false
     },
@@ -55,19 +62,25 @@ export const vuetify = createVuetify({
       closeOnContentClick: true,
       closeOnBack: true,
       transition: 'scale-transition',
-      // ✅ УБИРАЕМ ЗАТЕМНЕНИЕ У MENU:
       scrim: false,
-      contained: false
+      contained: false,
+      zIndex: 9999
+    },
+    VDialog: {
+      scrim: true,
+      persistent: false,
+      zIndex: 2400
     },
     VOverlay: {
-      scrim: false, // ✅ УБИРАЕМ ЗАТЕМНЕНИЕ!
+      scrim: false,
       contained: true,
       persistent: false
     },
     VSnackbar: {
       scrim: false,
       contained: false,
-      persistent: false
+      persistent: false,
+      zIndex: 9999
     }
   },
   theme: {
