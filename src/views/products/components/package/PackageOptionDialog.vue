@@ -149,6 +149,7 @@ interface Props {
   baseUnit: string
   package?: PackageOption
   loading?: boolean
+  productBaseCost?: number
 }
 
 interface Emits {
@@ -156,7 +157,9 @@ interface Emits {
   (e: 'save', data: CreatePackageOptionDto | UpdatePackageOptionDto): void
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  productBaseCost: 0
+})
 const emit = defineEmits<Emits>()
 
 const formRef = ref()
@@ -298,9 +301,9 @@ async function handleSave() {
   const valid = await formRef.value?.validate()
   if (!valid?.valid) return
 
-  // Use calculated values if original values are empty
   const finalPackagePrice = formData.value.packagePrice || calculatedPackagePrice.value || undefined
-  const finalBaseCostPerUnit = formData.value.baseCostPerUnit || calculatedBaseCost.value || 0
+  const finalBaseCostPerUnit =
+    formData.value.baseCostPerUnit || calculatedBaseCost.value || props.productBaseCost
 
   const saveData = {
     productId: props.productId,

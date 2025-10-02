@@ -719,13 +719,24 @@ class SupplierService {
       return []
     }
 
+    // ✅ Импортируем productsStore в начале метода
+    const { useProductsStore } = await import('@/stores/productsStore')
+    const productsStore = useProductsStore()
+
     const unassignedItems: UnassignedItem[] = []
 
     for (const request of requests) {
       console.log(`Processing request ${request.requestNumber} (${request.status})`)
 
       for (const item of request.items) {
-        // Check how much is already ordered
+        // ✅ ПОЛУЧАЕМ ПРОДУКТ ДЛЯ БАЗОВЫХ ДАННЫХ
+        const product = productsStore.getProductById(item.itemId)
+
+        if (!product) {
+          console.warn(`Product not found: ${item.itemId}, skipping item`)
+          continue
+        }
+
         const orderedQuantity = this.getOrderedQuantityForItem(request.id, item.itemId)
         const remainingQuantity = item.requestedQuantity - orderedQuantity
 
@@ -742,24 +753,33 @@ class SupplierService {
               requestId: request.id,
               requestNumber: request.requestNumber,
               department: request.department,
-              quantity: remainingQuantity
+              quantity: remainingQuantity,
+              packageId: item.packageId,
+              packageQuantity: item.packageQuantity
             })
           } else {
-            const estimatedPrice = await this.getEstimatedPrice(item.itemId)
-
             unassignedItems.push({
               itemId: item.itemId,
               itemName: item.itemName,
-              category: this.getItemCategory(item.itemId),
+              category: product.category, // ✅ Из продукта
               totalQuantity: remainingQuantity,
-              unit: item.unit,
-              estimatedPrice: estimatedPrice,
+
+              // ✅ КРИТИЧНО: Заполняем из продукта
+              unit: product.baseUnit,
+              estimatedBaseCost: product.baseCostPerUnit,
+
+              // Рекомендованная упаковка из request
+              recommendedPackageId: item.packageId,
+              recommendedPackageName: item.packageName,
+
               sources: [
                 {
                   requestId: request.id,
                   requestNumber: request.requestNumber,
                   department: request.department,
-                  quantity: remainingQuantity
+                  quantity: remainingQuantity,
+                  packageId: item.packageId,
+                  packageQuantity: item.packageQuantity
                 }
               ]
             })
@@ -776,8 +796,9 @@ class SupplierService {
         supplierName: 'Unassigned',
         items: unassignedItems,
         totalItems: unassignedItems.length,
+        // ✅ Считаем по baseCostPerUnit
         estimatedTotal: unassignedItems.reduce(
-          (sum, item) => sum + item.totalQuantity * item.estimatedPrice,
+          (sum, item) => sum + item.totalQuantity * item.estimatedBaseCost,
           0
         )
       }
@@ -953,54 +974,6 @@ class SupplierService {
       return 'piece'
     if (itemId.includes('oil') || itemId.includes('milk')) return 'ml'
     return 'gram'
-  }
-
-  private getItemCategory(itemId: string): string {
-    const product = getProductDefinition(itemId)
-    if (product) {
-      return product.category
-    }
-
-    if (itemId.includes('beef') || itemId.includes('chicken')) return 'meat'
-    if (
-      itemId.includes('potato') ||
-      itemId.includes('garlic') ||
-      itemId.includes('tomato') ||
-      itemId.includes('onion')
-    )
-      return 'vegetables'
-    if (itemId.includes('beer') || itemId.includes('cola') || itemId.includes('water'))
-      return 'beverages'
-    if (itemId.includes('butter') || itemId.includes('milk')) return 'dairy'
-    if (
-      itemId.includes('salt') ||
-      itemId.includes('pepper') ||
-      itemId.includes('oregano') ||
-      itemId.includes('basil')
-    )
-      return 'spices'
-    return 'other'
-  }
-
-  private async getEstimatedPrice(itemId: string): Promise<number> {
-    // Try to get price from storage first
-    try {
-      const latestPrices = await this.getLatestPrices([itemId])
-      if (latestPrices[itemId]) {
-        return latestPrices[itemId]
-      }
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Could not get price from storage', { itemId })
-    }
-
-    // Get price from product definition
-    const productDef = getProductDefinition(itemId)
-    if (productDef) {
-      return productDef.baseCostPerUnit // Return base cost per unit
-    }
-
-    DebugUtils.warn(MODULE_NAME, 'No price found for item', { itemId })
-    return 0
   }
 }
 

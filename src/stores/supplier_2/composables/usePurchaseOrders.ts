@@ -473,17 +473,24 @@ export function usePurchaseOrders() {
     try {
       console.log(`PurchaseOrders: Creating order from basket for ${basket.supplierName}`)
 
-      // Get unique request IDs for this basket
+      const itemsWithoutPackages = basket.items.filter(item => !item.packageId)
+      if (itemsWithoutPackages.length > 0) {
+        throw new Error(
+          `Cannot create order: ${itemsWithoutPackages.length} items missing package selection. ` +
+            `Please select packages for all items before creating order.`
+        )
+      }
+
       const requestIds = getUniqueRequestIds(basket)
 
-      // Prepare order data
       const orderData: CreateOrderData = {
         supplierId: basket.supplierId,
         requestIds,
         items: basket.items.map(item => ({
           itemId: item.itemId,
           quantity: item.totalQuantity,
-          pricePerUnit: item.estimatedPrice
+          packageId: item.packageId!, // ✅ ИЗМЕНИТЬ: добавить !
+          pricePerUnit: item.estimatedBaseCost // ✅ ИЗМЕНИТЬ
         })),
         notes: `Order created from ${requestIds.length} procurement request(s)`
       }

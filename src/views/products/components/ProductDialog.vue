@@ -346,6 +346,7 @@
       :product-id="'temp'"
       :base-unit="getBaseUnitName()"
       :package="editingPackage"
+      :product-base-cost="formData.baseCostPerUnit"
       :loading="false"
       @save="handleSaveLocalPackage"
     />

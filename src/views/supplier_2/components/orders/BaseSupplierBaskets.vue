@@ -90,240 +90,26 @@
 
         <!-- Content -->
         <div v-else-if="hasUnassignedItems || completedBaskets > 0" class="pa-4">
-          <!-- Unassigned Items -->
+          <!-- Unassigned Items Widget -->
           <div v-if="hasUnassignedItems" class="mb-6">
-            <div class="d-flex align-center justify-space-between mb-3">
-              <div class="text-h6 font-weight-bold">
-                🔄 Unassigned Items ({{ unassignedBasket.items.length }})
-              </div>
-
-              <div class="d-flex gap-2">
-                <v-select
-                  v-model="selectedCategory"
-                  :items="categoryOptions"
-                  label="Filter by category"
-                  variant="outlined"
-                  density="compact"
-                  style="width: 200px"
-                  @update:model-value="filterByCategory"
-                />
-
-                <v-btn
-                  v-if="selectedUnassignedItems.length > 0"
-                  color="primary"
-                  size="small"
-                  @click="selectAllUnassigned"
-                >
-                  Select All ({{ filteredUnassignedItems.length }})
-                </v-btn>
-
-                <v-btn
-                  v-if="selectedUnassignedItems.length > 0"
-                  color="warning"
-                  size="small"
-                  @click="clearAllSelections"
-                >
-                  Clear Selection
-                </v-btn>
-              </div>
-            </div>
-
-            <v-card variant="outlined">
-              <v-card-text class="pa-3">
-                <v-row>
-                  <v-col
-                    v-for="item in filteredUnassignedItems"
-                    :key="item.itemId"
-                    cols="12"
-                    md="6"
-                    lg="3"
-                  >
-                    <v-card
-                      variant="outlined"
-                      class="pa-2 cursor-pointer"
-                      :class="{ 'border-primary': selectedUnassignedItems.includes(item.itemId) }"
-                      @click="toggleUnassignedItem(item.itemId)"
-                    >
-                      <!-- Header: Name and Quantity -->
-                      <div class="d-flex justify-space-between align-center mb-2">
-                        <div class="flex-grow-1">
-                          <div class="font-weight-bold text-body-2 mb-1">{{ item.itemName }}</div>
-
-                          <!-- Quantity - more prominent -->
-                          <v-chip
-                            size="small"
-                            color="primary"
-                            variant="flat"
-                            class="font-weight-bold"
-                          >
-                            {{ item.totalQuantity }} {{ item.unit }}
-                          </v-chip>
-                        </div>
-
-                        <!-- Checkbox -->
-                        <v-checkbox
-                          :model-value="selectedUnassignedItems.includes(item.itemId)"
-                          hide-details
-                          density="compact"
-                          @click.stop
-                          @update:model-value="toggleUnassignedItem(item.itemId)"
-                        />
-                      </div>
-
-                      <!-- Department Sources - compact -->
-                      <div class="mb-2">
-                        <div class="d-flex flex-wrap gap-1">
-                          <v-chip
-                            v-for="source in item.sources"
-                            :key="source.requestId"
-                            size="x-small"
-                            :color="getDepartmentColor(source.department)"
-                            variant="tonal"
-                            class="px-2"
-                          >
-                            <v-icon
-                              :icon="getDepartmentIcon(source.department)"
-                              size="10"
-                              class="mr-1"
-                            />
-                            {{ source.quantity }}
-                          </v-chip>
-                        </div>
-                      </div>
-
-                      <!-- Price -->
-                      <div class="text-right">
-                        <div class="text-body-2 font-weight-bold text-success">
-                          {{ formatCurrency(item.estimatedPrice * item.totalQuantity) }}
-                        </div>
-                      </div>
-                    </v-card>
-                  </v-col>
-                </v-row>
-
-                <!-- Bulk Assignment Actions -->
-                <div v-if="selectedUnassignedItems.length > 0" class="mt-4 pa-3 bg-surface rounded">
-                  <div class="text-subtitle-2 mb-3">
-                    Assign {{ selectedUnassignedItems.length }} selected item(s) to supplier:
-                  </div>
-                  <div class="d-flex flex-wrap gap-2">
-                    <v-btn
-                      v-for="supplier in availableSuppliers"
-                      :key="supplier.id"
-                      color="primary"
-                      size="small"
-                      variant="outlined"
-                      @click="assignToSupplier(supplier.id, supplier.name)"
-                    >
-                      {{ supplier.name }}
-                    </v-btn>
-                  </div>
-                </div>
-              </v-card-text>
-            </v-card>
+            <UnassignedItemsWidget
+              :items="unassignedBasket?.items || []"
+              :suppliers="availableSuppliers"
+              @assign-to-supplier="handleAssignToSupplier"
+            />
           </div>
 
-          <!-- Supplier Baskets - Only show suppliers with items -->
+          <!-- Supplier Baskets Widget -->
           <div v-if="completedBaskets > 0">
-            <div class="d-flex align-center justify-space-between mb-3">
-              <div class="text-h6 font-weight-bold">
-                🏪 Supplier Baskets ({{ completedBaskets }})
-              </div>
-
-              <v-btn
-                color="success"
-                size="small"
-                prepend-icon="mdi-plus"
-                @click="showNewSupplierDialog = true"
-              >
-                Add Supplier
-              </v-btn>
-            </div>
-
-            <v-row>
-              <v-col
-                v-for="basket in supplierBaskets.filter(b => b.items.length > 0)"
-                :key="basket.supplierId"
-                cols="12"
-                lg="6"
-              >
-                <v-card variant="outlined" class="h-100">
-                  <!-- Supplier Header -->
-                  <v-card-title class="pa-3 bg-surface">
-                    <div class="d-flex align-center justify-space-between">
-                      <div>
-                        <div class="text-subtitle-1 font-weight-bold">
-                          {{ basket.supplierName }}
-                        </div>
-                        <div class="text-body-2 text-medium-emphasis">
-                          {{ basket.totalItems }} items •
-                          {{ formatCurrency(basket.estimatedTotal) }}
-                        </div>
-                      </div>
-
-                      <v-btn
-                        color="primary"
-                        size="small"
-                        :disabled="basket.items.length === 0 || isLoading"
-                        :loading="isLoading"
-                        @click="createOrderFromBasket(basket)"
-                      >
-                        Create Order
-                      </v-btn>
-                    </div>
-                  </v-card-title>
-
-                  <v-divider />
-
-                  <!-- Items -->
-                  <v-card-text class="pa-3">
-                    <div
-                      v-for="item in basket.items"
-                      :key="item.itemId"
-                      class="d-flex align-center justify-space-between py-2 border-b"
-                    >
-                      <div class="flex-grow-1">
-                        <div class="font-weight-bold text-body-2">{{ item.itemName }}</div>
-                        <div class="text-caption text-medium-emphasis">
-                          {{ item.totalQuantity }} {{ item.unit }}
-                        </div>
-
-                        <!-- Sources -->
-                        <div class="d-flex flex-wrap gap-1 mt-1">
-                          <v-chip
-                            v-for="source in item.sources"
-                            :key="source.requestId"
-                            size="x-small"
-                            :color="getDepartmentColor(source.department)"
-                            variant="tonal"
-                          >
-                            {{ source.requestNumber }}: {{ source.quantity }}
-                          </v-chip>
-                        </div>
-                      </div>
-
-                      <div class="text-right ml-2">
-                        <div class="text-body-2 font-weight-bold">
-                          {{ formatCurrency(item.estimatedPrice * item.totalQuantity) }}
-                        </div>
-
-                        <v-btn
-                          icon="mdi-arrow-left"
-                          size="x-small"
-                          variant="text"
-                          color="warning"
-                          @click="moveItemToUnassigned(item.itemId, basket.supplierId)"
-                        >
-                          <v-tooltip activator="parent" location="top">
-                            Move to unassigned
-                          </v-tooltip>
-                        </v-btn>
-                      </div>
-                    </div>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
+            <SupplierBasketsWidget
+              :baskets="supplierBaskets"
+              @create-order="createOrderFromBasket"
+              @move-to-unassigned="handleMoveToUnassigned"
+              @add-supplier="showNewSupplierDialog = true"
+              @package-selected="handlePackageSelected"
+              @package-id-updated="handlePackageIdUpdated"
+              @items-initialized="updateBasketTotals"
+            />
           </div>
         </div>
 
@@ -390,8 +176,11 @@ import { ref, computed, watch } from 'vue'
 import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcurementRequests'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
-import type { SupplierBasket, UnassignedItem } from '@/stores/supplier_2/types'
 import { useCounteragentsStore } from '@/stores/counteragents'
+import { useProductsStore } from '@/stores/productsStore'
+import type { SupplierBasket } from '@/stores/supplier_2/types'
+import UnassignedItemsWidget from './basket/UnassignedItemsWidget.vue'
+import SupplierBasketsWidget from './basket/SupplierBasketsWidget.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -404,10 +193,10 @@ interface Props {
 
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
-  (e: 'success', message: string): void // Для уведомлений, НЕ закрывает диалог
+  (e: 'success', message: string): void
   (e: 'error', message: string): void
-  (e: 'order-created', orderIds: string[]): void // Для создания заказов
-  (e: 'orders-completed'): void // НОВЫЙ: для закрытия диалога после всех заказов
+  (e: 'order-created', orderIds: string[]): void
+  (e: 'orders-completed'): void
 }
 
 const props = defineProps<Props>()
@@ -418,11 +207,10 @@ const emits = defineEmits<Emits>()
 // =============================================
 
 const { selectedRequestIds, formatCurrency } = useProcurementRequests()
-
 const { createOrderFromBasket: createOrderFromBasketAction } = usePurchaseOrders()
-
 const supplierStore = useSupplierStore()
 const counteragentsStore = useCounteragentsStore()
+const productsStore = useProductsStore()
 
 // =============================================
 // LOCAL STATE
@@ -436,10 +224,7 @@ const isOpen = computed({
 const isLoading = ref(false)
 const showRequestDetails = ref(false)
 const showNewSupplierDialog = ref(false)
-const selectedCategory = ref('all')
-const selectedUnassignedItems = ref<string[]>([])
 
-// Mock data - вернул оригинальную структуру
 const supplierBaskets = ref<SupplierBasket[]>([])
 const unassignedBasket = ref<SupplierBasket | null>(null)
 
@@ -463,7 +248,6 @@ const availableSuppliers = computed(() => {
 // =============================================
 
 const selectedRequests = computed(() => {
-  // Mock requests data
   return [
     {
       id: 'req-001',
@@ -480,16 +264,6 @@ const selectedRequests = computed(() => {
       items: []
     }
   ].filter(req => props.requestIds.includes(req.id))
-})
-
-const filteredUnassignedItems = computed(() => {
-  if (!unassignedBasket.value) return []
-
-  if (selectedCategory.value === 'all') {
-    return unassignedBasket.value.items
-  }
-
-  return unassignedBasket.value.items.filter(item => item.category === selectedCategory.value)
 })
 
 const totalItems = computed(() => {
@@ -512,30 +286,10 @@ const completedBaskets = computed(() => {
   return supplierBaskets.value.filter(basket => basket.items.length > 0).length
 })
 
-const categoryOptions = [
-  { title: 'All Categories', value: 'all' },
-  { title: 'Meat', value: 'meat' },
-  { title: 'Vegetables', value: 'vegetables' },
-  { title: 'Beverages', value: 'beverages' },
-  { title: 'Dairy', value: 'dairy' }
-]
-
 // =============================================
-// WATCHERS - исправил логику загрузки
+// WATCHERS
 // =============================================
 
-watch(
-  () => props.requestIds,
-  newRequestIds => {
-    if (newRequestIds && newRequestIds.length > 0) {
-      console.log('RequestIds changed:', newRequestIds)
-      // НЕ вызываем refreshBaskets здесь автоматически
-    }
-  },
-  { immediate: true }
-)
-
-// ИСПРАВЛЕНИЕ: добавил watch на открытие диалога
 watch(isOpen, newValue => {
   if (newValue && props.requestIds.length > 0) {
     console.log('Dialog opened, refreshing baskets for:', props.requestIds)
@@ -544,7 +298,7 @@ watch(isOpen, newValue => {
 })
 
 // =============================================
-// METHODS - восстановил оригинальную логику
+// METHODS
 // =============================================
 
 async function refreshBaskets() {
@@ -553,8 +307,6 @@ async function refreshBaskets() {
 
     console.log('Refreshing baskets for request IDs:', props.requestIds)
 
-    // ✅ ИСПРАВЛЕНИЕ: Ищем заявки со статусом 'submitted'
-    // Они могут содержать частично заказанные товары
     const submittedRequests = supplierStore.state.requests.filter(
       req => props.requestIds.includes(req.id) && req.status === 'submitted'
     )
@@ -564,7 +316,6 @@ async function refreshBaskets() {
     if (submittedRequests.length === 0) {
       console.log('No submitted requests found for IDs:', props.requestIds)
 
-      // ✅ НОВАЯ ЛОГИКА: Проверяем, есть ли заявки с другими статусами
       const allRequests = supplierStore.state.requests.filter(req =>
         props.requestIds.includes(req.id)
       )
@@ -580,7 +331,6 @@ async function refreshBaskets() {
 
         console.log('All requests status breakdown:', statusCounts)
 
-        // Если все заявки converted/approved - показываем сообщение
         emits(
           'error',
           `All selected requests are already processed: ${Object.entries(statusCounts)
@@ -596,25 +346,12 @@ async function refreshBaskets() {
       return
     }
 
-    // Создаем корзины только для submitted заявок
     await supplierStore.createSupplierBaskets(submittedRequests.map(req => req.id))
 
-    // Копируем данные из store
     const storeBaskets = supplierStore.state.supplierBaskets || []
 
-    // Разделяем на assigned и unassigned
     unassignedBasket.value = storeBaskets.find(basket => basket.supplierId === null) || null
     supplierBaskets.value = storeBaskets.filter(basket => basket.supplierId !== null)
-
-    // ✅ ВАЖНО: Фильтруем только товары, которые НЕ были заказаны
-    if (unassignedBasket.value) {
-      const originalItemCount = unassignedBasket.value.items.length
-
-      // Здесь нужна логика исключения уже заказанных товаров
-      // Пока что показываем все товары из submitted заявок
-
-      console.log(`Unassigned basket: ${unassignedBasket.value.items.length} items`)
-    }
 
     console.log('Baskets refreshed with real data:', {
       requests: submittedRequests.length,
@@ -630,67 +367,14 @@ async function refreshBaskets() {
   }
 }
 
-function getItemCategory(itemId: string): string {
-  if (itemId.includes('beef') || itemId.includes('steak')) return 'meat'
-  if (
-    itemId.includes('potato') ||
-    itemId.includes('tomato') ||
-    itemId.includes('garlic') ||
-    itemId.includes('onion')
-  )
-    return 'vegetables'
-  if (itemId.includes('beer') || itemId.includes('cola') || itemId.includes('water'))
-    return 'beverages'
-  if (itemId.includes('butter') || itemId.includes('milk')) return 'dairy'
-  return 'other'
-}
+function handleAssignToSupplier(supplierId: string, supplierName: string, itemIds: string[]) {
+  console.log('handleAssignToSupplier:', { supplierId, supplierName, itemIds })
 
-function getDefaultPrice(itemId: string): number {
-  // Fallback prices if estimatedPrice is 0
-  const defaultPrices: Record<string, number> = {
-    'prod-beef-steak': 180000,
-    'prod-potato': 8000,
-    'prod-garlic': 25000,
-    'prod-beer-bintang-330': 12000,
-    'prod-cola-330': 8000,
-    'prod-tomato': 12000,
-    'prod-onion': 6000
-  }
-  return defaultPrices[itemId] || 1000
-}
-
-function toggleUnassignedItem(itemId: string) {
-  const index = selectedUnassignedItems.value.indexOf(itemId)
-  if (index > -1) {
-    selectedUnassignedItems.value.splice(index, 1)
-  } else {
-    selectedUnassignedItems.value.push(itemId)
-  }
-}
-
-function selectAllUnassigned() {
-  if (!unassignedBasket.value) return
-  selectedUnassignedItems.value = filteredUnassignedItems.value.map(item => item.itemId)
-}
-
-function clearAllSelections() {
-  selectedUnassignedItems.value = []
-}
-
-// ИСПРАВЛЕНО: правильная логика назначения без закрытия диалога
-function assignToSupplier(supplierId: string, supplierName: string) {
-  console.log('assignToSupplier called:', {
-    supplierId,
-    supplierName,
-    selectedItems: selectedUnassignedItems.value.length
-  })
-
-  if (selectedUnassignedItems.value.length === 0 || !unassignedBasket.value) {
-    console.log('No items selected or no unassigned basket')
+  if (itemIds.length === 0 || !unassignedBasket.value) {
+    console.log('No items or no unassigned basket')
     return
   }
 
-  // Find supplier basket
   let supplierBasket = supplierBaskets.value.find(b => b.supplierId === supplierId)
   if (!supplierBasket) {
     supplierBasket = {
@@ -704,38 +388,65 @@ function assignToSupplier(supplierId: string, supplierName: string) {
     console.log('Created new supplier basket for:', supplierName)
   }
 
-  // Move selected items
-  const itemsToMove = selectedUnassignedItems.value.slice()
-  console.log('Moving items:', itemsToMove)
-
-  itemsToMove.forEach(itemId => {
+  itemIds.forEach(itemId => {
     const itemIndex = unassignedBasket.value!.items.findIndex(item => item.itemId === itemId)
     if (itemIndex > -1) {
       const item = unassignedBasket.value!.items.splice(itemIndex, 1)[0]
+
+      // ✅ Если есть рекомендованная упаковка - инициализируем полностью
+      if (item.recommendedPackageId && !item.packageId) {
+        const pkg = productsStore.getPackageById(item.recommendedPackageId)
+        if (pkg) {
+          item.packageId = item.recommendedPackageId
+          item.packageName = item.recommendedPackageName
+          item.packageQuantity = Math.ceil(item.totalQuantity / pkg.packageSize)
+
+          const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
+          item.estimatedPackagePrice = packagePrice
+
+          console.log('Auto-initialized package:', {
+            item: item.itemName,
+            package: pkg.packageName,
+            quantity: item.packageQuantity,
+            price: item.estimatedPackagePrice
+          })
+        }
+      }
+
+      // ✅ Если уже есть packageId но нет данных - заполняем
+      if (item.packageId && !item.packageQuantity) {
+        const pkg = productsStore.getPackageById(item.packageId)
+        if (pkg) {
+          item.packageQuantity = Math.ceil(item.totalQuantity / pkg.packageSize)
+          const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
+          item.estimatedPackagePrice = packagePrice
+        }
+      }
+
       supplierBasket!.items.push(item)
       console.log('Moved item:', item.itemName, 'to', supplierName)
     }
   })
 
-  // Recalculate totals
   updateBasketTotals()
 
-  // Clear selection
-  selectedUnassignedItems.value = []
-
-  console.log('Assignment completed. Items in supplier basket:', supplierBasket.items.length)
-
-  // ВАЖНО: НЕ эмитим 'order-created' или другие события которые могут закрыть диалог
-  emits('success', `${itemsToMove.length} item(s) assigned to ${supplierName}`)
+  emits('success', `${itemIds.length} item(s) assigned to ${supplierName}`)
 }
 
-function moveItemToUnassigned(itemId: string, supplierId: string) {
+function handleMoveToUnassigned(itemId: string, supplierId: string) {
   const supplierBasket = supplierBaskets.value.find(b => b.supplierId === supplierId)
   if (!supplierBasket || !unassignedBasket.value) return
 
   const itemIndex = supplierBasket.items.findIndex(item => item.itemId === itemId)
   if (itemIndex > -1) {
     const item = supplierBasket.items.splice(itemIndex, 1)[0]
+
+    // ✅ Сохраняем выбранную упаковку в рекомендованную при возврате
+    if (item.packageId) {
+      item.recommendedPackageId = item.packageId
+      item.recommendedPackageName = item.packageName
+    }
+
     unassignedBasket.value.items.push(item)
   }
 
@@ -743,24 +454,125 @@ function moveItemToUnassigned(itemId: string, supplierId: string) {
   emits('success', 'Item moved to unassigned')
 }
 
-function updateBasketTotals() {
-  // Update unassigned basket
-  if (unassignedBasket.value) {
-    unassignedBasket.value.totalItems = unassignedBasket.value.items.length
-    unassignedBasket.value.estimatedTotal = unassignedBasket.value.items.reduce(
-      (sum, item) => sum + item.estimatedPrice * item.totalQuantity,
-      0
-    )
+function handlePackageSelected(
+  supplierId: string,
+  itemId: string,
+  data: {
+    packageId: string
+    packageQuantity: number
+    resultingBaseQuantity: number
+    totalCost: number
+  }
+) {
+  const basket = supplierBaskets.value.find(b => b.supplierId === supplierId)
+  if (!basket) return
+
+  const item = basket.items.find(i => i.itemId === itemId)
+  if (!item) return
+
+  const pkg = productsStore.getPackageById(data.packageId)
+  if (pkg) {
+    item.packageId = pkg.id
+    item.packageName = pkg.packageName
+    item.packageQuantity = data.packageQuantity
+
+    // ✅ Используем totalCost из события или рассчитываем
+    item.estimatedPackagePrice = data.totalCost / data.packageQuantity
+
+    console.log('Package selected:', {
+      item: item.itemName,
+      package: pkg.packageName,
+      quantity: data.packageQuantity,
+      pricePerPackage: item.estimatedPackagePrice,
+      total: data.totalCost
+    })
   }
 
-  // Update supplier baskets
+  updateBasketTotals()
+}
+
+function handlePackageIdUpdated(supplierId: string, itemId: string, packageId: string | undefined) {
+  const basket = supplierBaskets.value.find(b => b.supplierId === supplierId)
+  if (!basket) return
+
+  const item = basket.items.find(i => i.itemId === itemId)
+  if (!item) return
+
+  if (!packageId) {
+    item.packageId = undefined
+    item.packageName = undefined
+    item.packageQuantity = undefined
+    item.estimatedPackagePrice = undefined
+    return
+  }
+
+  const pkg = productsStore.getPackageById(packageId)
+  if (pkg) {
+    item.packageId = pkg.id
+    item.packageName = pkg.packageName
+    item.estimatedPackagePrice = pkg.estimatedPrice
+  }
+
+  updateBasketTotals()
+}
+
+function updateBasketTotals() {
+  console.log('=== UPDATE BASKET TOTALS ===')
+
+  // Unassigned - по базовой стоимости
+  if (unassignedBasket.value) {
+    unassignedBasket.value.totalItems = unassignedBasket.value.items.length
+    unassignedBasket.value.estimatedTotal = unassignedBasket.value.items.reduce((sum, item) => {
+      const cost = (item.estimatedBaseCost || 0) * item.totalQuantity
+      console.log(`  Unassigned: ${item.itemName} = ${cost}`)
+      return sum + cost
+    }, 0)
+    console.log(`📦 Unassigned Total: ${unassignedBasket.value.estimatedTotal}`)
+  }
+
+  // Supplier baskets - по упаковкам
   supplierBaskets.value.forEach(basket => {
     basket.totalItems = basket.items.length
-    basket.estimatedTotal = basket.items.reduce(
-      (sum, item) => sum + item.estimatedPrice * item.totalQuantity,
-      0
-    )
+
+    console.log(`\n🏪 ${basket.supplierName}:`)
+
+    basket.estimatedTotal = basket.items.reduce((sum, item) => {
+      let itemCost = 0
+
+      // Если есть полные данные об упаковке
+      if (item.packageId && item.packageQuantity && item.estimatedPackagePrice) {
+        itemCost = item.estimatedPackagePrice * item.packageQuantity
+        console.log(
+          `  ✅ ${item.itemName}: ${item.packageQuantity} × ${item.estimatedPackagePrice} = ${itemCost}`
+        )
+      }
+      // Если есть packageId но нет цены - пробуем получить из store
+      else if (item.packageId && item.packageQuantity) {
+        const pkg = productsStore.getPackageById(item.packageId)
+        if (pkg) {
+          const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
+          itemCost = packagePrice * item.packageQuantity
+          console.log(
+            `  📦 ${item.itemName}: ${item.packageQuantity} × ${packagePrice} = ${itemCost} (from store)`
+          )
+        } else {
+          itemCost = (item.estimatedBaseCost || 0) * item.totalQuantity
+          console.log(`  ⚠️ ${item.itemName}: package not found, using base = ${itemCost}`)
+        }
+      }
+      // Fallback на базовую стоимость
+      else {
+        itemCost = (item.estimatedBaseCost || 0) * item.totalQuantity
+        console.log(`  ⚠️ ${item.itemName}: no package, using base = ${itemCost}`)
+      }
+
+      return sum + itemCost
+    }, 0)
+
+    console.log(`  💰 ${basket.supplierName} Total: ${basket.estimatedTotal}`)
   })
+
+  console.log('=== END UPDATE ===\n')
 }
 
 async function createOrderFromBasket(basket: SupplierBasket) {
@@ -775,7 +587,6 @@ async function createOrderFromBasket(basket: SupplierBasket) {
     const newOrder = await createOrderFromBasketAction(basket)
     emits('success', `Order ${newOrder.orderNumber} created for ${basket.supplierName}`)
 
-    // Remove items from basket after creating order
     basket.items = []
     updateBasketTotals()
   } catch (error: any) {
@@ -801,12 +612,8 @@ async function createAllOrders() {
     for (const basket of readyBaskets) {
       const order = await createOrderFromBasketAction(basket)
       createdOrderIds.push(order.id)
-
-      // ИСПРАВЛЕНИЕ: НЕ очищаем корзину, оставляем товары для визуализации
-      // basket.items = []
     }
 
-    // ИСПРАВЛЕНИЕ: Показываем сколько товаров осталось неназначенными
     const unassignedCount = unassignedBasket.value?.items.length || 0
     let message = `${createdOrderIds.length} orders created successfully`
 
@@ -816,12 +623,10 @@ async function createAllOrders() {
 
     emits('success', message)
 
-    // ИСПРАВЛЕНИЕ: Не закрываем диалог автоматически, если есть неназначенные товары
     if (unassignedCount === 0) {
       emits('orders-completed')
       emits('order-created', createdOrderIds)
     } else {
-      // Просто уведомляем о созданных заказах, но диалог остается открытым
       emits('order-created', createdOrderIds)
     }
   } catch (error: any) {
@@ -841,7 +646,6 @@ function addNewSupplier() {
 
   availableSuppliers.value.push(supplier)
 
-  // Add empty basket for new supplier
   supplierBaskets.value.push({
     supplierId: supplier.id,
     supplierName: supplier.name,
@@ -855,23 +659,16 @@ function addNewSupplier() {
   emits('success', `Supplier ${supplier.name} added`)
 }
 
-function filterByCategory() {
-  selectedUnassignedItems.value = []
-}
-
 function closeDialog() {
   isOpen.value = false
 
   setTimeout(() => {
-    selectedCategory.value = 'all'
-    selectedUnassignedItems.value = []
     showRequestDetails.value = false
     supplierBaskets.value = []
     unassignedBasket.value = null
   }, 300)
 }
 
-// Helper functions
 function getDepartmentColor(department: string) {
   return department === 'kitchen' ? 'orange' : 'purple'
 }

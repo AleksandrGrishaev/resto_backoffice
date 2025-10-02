@@ -257,6 +257,10 @@ export interface UnassignedItem {
   unit: string // базовая единица
 
   // ✅ УПАКОВКА
+
+  packageId?: string
+  packageName?: string
+  packageQuantity?: number
   recommendedPackageId?: string
   recommendedPackageName?: string
   estimatedPackagePrice?: number

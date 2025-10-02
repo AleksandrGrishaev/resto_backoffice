@@ -1,5 +1,7 @@
+<!-- src/views/supplier_2/components/shared/PackageSelector.vue -->
 <template>
-  <div class="package-selector">
+  <!-- Vertical Layout -->
+  <div v-if="layout === 'vertical'" class="package-selector-vertical">
     <!-- Loading State -->
     <v-skeleton-loader v-if="loading" type="list-item-two-line" />
 
@@ -71,18 +73,20 @@
               </div>
             </div>
 
-            <div v-if="pkg.packagePrice" class="mt-2">
+            <div v-if="pkg.packagePrice || pkg.baseCostPerUnit" class="mt-2">
               <div class="d-flex justify-space-between">
                 <span class="text-caption text-medium-emphasis">Price per package:</span>
                 <span class="text-caption font-weight-medium">
-                  {{ formatCurrency(pkg.packagePrice) }}
+                  {{ formatCurrency(getPackagePrice(pkg)) }}
                 </span>
               </div>
               <div class="d-flex justify-space-between">
                 <span class="text-caption text-medium-emphasis">Total:</span>
                 <span class="text-body-2 font-weight-bold">
                   {{
-                    formatCurrency(pkg.packagePrice * getPackageCalculation(pkg).suggestedPackages)
+                    formatCurrency(
+                      getPackagePrice(pkg) * getPackageCalculation(pkg).suggestedPackages
+                    )
                   }}
                 </span>
               </div>
@@ -131,6 +135,89 @@
       <div class="text-caption">Please add packages in product management first.</div>
     </v-alert>
   </div>
+
+  <!-- Horizontal Layout -->
+  <div v-else class="package-selector-horizontal">
+    <!-- Loading State -->
+    <div v-if="loading" class="d-flex align-center gap-3">
+      <v-skeleton-loader type="chip" class="flex-grow-1" />
+      <v-skeleton-loader type="chip" width="80" />
+      <v-skeleton-loader type="chip" width="100" />
+    </div>
+
+    <!-- Error State -->
+    <v-alert v-else-if="error" type="error" variant="tonal" density="compact">
+      {{ error }}
+    </v-alert>
+
+    <!-- Main Content -->
+    <div v-else-if="availablePackages.length > 0" class="d-flex align-center gap-3">
+      <!-- Package dropdown -->
+      <v-select
+        :model-value="internalSelectedPackageId"
+        :items="packageOptions"
+        item-title="displayName"
+        item-value="id"
+        label="Package"
+        variant="outlined"
+        density="compact"
+        hide-details
+        class="flex-grow-1"
+        style="min-width: 200px; max-width: 350px"
+        @update:model-value="selectPackage"
+      >
+        <template #item="{ props: itemProps, item }">
+          <v-list-item v-bind="itemProps">
+            <template #prepend>
+              <v-icon size="20">{{ getPackageIcon(item.raw) }}</v-icon>
+            </template>
+            <v-list-item-title>{{ item.raw.packageName }}</v-list-item-title>
+            <v-list-item-subtitle>
+              {{ item.raw.packageSize }} {{ getBaseUnitLabel() }}
+              <span v-if="item.raw.packagePrice" class="text-success">
+                • {{ formatCurrency(item.raw.packagePrice) }}
+              </span>
+            </v-list-item-subtitle>
+          </v-list-item>
+        </template>
+      </v-select>
+
+      <!-- Selected package info -->
+      <div v-if="selectedPackage" class="d-flex align-center gap-4">
+        <div class="text-center">
+          <div class="text-caption text-medium-emphasis">Quantity</div>
+          <div class="text-body-1 font-weight-bold">{{ calculatedQuantity }} pkg</div>
+        </div>
+
+        <div class="text-center">
+          <div class="text-caption text-medium-emphasis">Total</div>
+          <div class="text-body-1 font-weight-bold text-success">
+            {{ formatCurrency(totalCost) }}
+          </div>
+        </div>
+
+        <v-chip
+          v-if="selectedPackage.id === recommendedPackageId"
+          color="info"
+          size="small"
+          variant="tonal"
+        >
+          Recommended
+        </v-chip>
+
+        <!-- Warning if no price -->
+        <v-tooltip v-if="!selectedPackage.packagePrice" location="top">
+          <template #activator="{ props: tooltipProps }">
+            <v-icon v-bind="tooltipProps" color="warning" size="20">mdi-alert-circle</v-icon>
+          </template>
+          <span>Price calculated from base cost</span>
+        </v-tooltip>
+      </div>
+    </div>
+
+    <!-- No Packages Available -->
+    <v-alert v-else type="warning" variant="tonal" density="compact">No packages available</v-alert>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -147,7 +234,7 @@ interface Props {
   requiredBaseQuantity: number
   selectedPackageId?: string
   mode: 'optional' | 'required' | 'change'
-  allowQuantityEdit?: boolean
+  layout?: 'vertical' | 'horizontal'
 }
 
 interface Emits {
@@ -164,7 +251,7 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  allowQuantityEdit: false
+  layout: 'vertical'
 })
 
 const emits = defineEmits<Emits>()
@@ -200,9 +287,40 @@ const recommendedPackageId = computed((): string | undefined => {
   return productInfo.value?.recommendedPackageId
 })
 
+const packageOptions = computed(() => {
+  return availablePackages.value.map(pkg => ({
+    ...pkg,
+    displayName: pkg.brandName ? `${pkg.packageName} (${pkg.brandName})` : pkg.packageName
+  }))
+})
+
+const selectedPackage = computed(() => {
+  if (!internalSelectedPackageId.value) return null
+  return availablePackages.value.find(p => p.id === internalSelectedPackageId.value) || null
+})
+
+const calculatedQuantity = computed(() => {
+  if (!selectedPackage.value) return 0
+  const calc = getPackageCalculation(selectedPackage.value)
+  return calc.suggestedPackages
+})
+
+const totalCost = computed(() => {
+  if (!selectedPackage.value) return 0
+  const packagePrice = getPackagePrice(selectedPackage.value)
+  return packagePrice * calculatedQuantity.value
+})
+
 // =============================================
 // METHODS
 // =============================================
+
+function getPackagePrice(pkg: PackageOption): number {
+  if (pkg.packagePrice && pkg.packagePrice > 0) {
+    return pkg.packagePrice
+  }
+  return pkg.baseCostPerUnit * pkg.packageSize
+}
 
 function selectPackage(packageId: string) {
   internalSelectedPackageId.value = packageId
@@ -218,9 +336,11 @@ function emitPackageSelected(packageId: string) {
       packageId
     )
 
-    const totalCost = calculation.packageOption.packagePrice
-      ? calculation.packageOption.packagePrice * calculation.suggestedPackages
-      : 0
+    const pkg = availablePackages.value.find(p => p.id === packageId)
+    if (!pkg) return
+
+    const packagePrice = getPackagePrice(pkg)
+    const totalCost = packagePrice * calculation.suggestedPackages
 
     emits('package-selected', {
       packageId: packageId,
@@ -245,7 +365,8 @@ function getPackageCalculation(pkg: PackageOption) {
       exactPackages: 0,
       suggestedPackages: 0,
       actualBaseQuantity: 0,
-      difference: 0
+      difference: 0,
+      packageOption: pkg
     }
   }
 }
@@ -306,23 +427,20 @@ function initializeSelector() {
       return
     }
 
-    // ✅ ИСПРАВЛЕНИЕ: Только устанавливаем selected, НЕ эмитим событие
+    // Устанавливаем selected package если не задан
     if (!props.selectedPackageId) {
       if (recommendedPackageId.value) {
         internalSelectedPackageId.value = recommendedPackageId.value
         emits('update:selectedPackageId', recommendedPackageId.value)
-        // ❌ УБРАТЬ: emitPackageSelected(recommendedPackageId.value)
       } else {
         const firstPackage = availablePackages.value[0]
         if (firstPackage) {
           internalSelectedPackageId.value = firstPackage.id
           emits('update:selectedPackageId', firstPackage.id)
-          // ❌ УБРАТЬ: emitPackageSelected(firstPackage.id)
         }
       }
     } else {
       internalSelectedPackageId.value = props.selectedPackageId
-      // ❌ УБРАТЬ: emitPackageSelected(props.selectedPackageId)
     }
   } catch (err) {
     console.error('Failed to initialize package selector:', err)
@@ -371,7 +489,19 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.package-selector {
+.package-selector-horizontal {
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 2px solid rgb(var(--v-theme-surface-variant));
+  background-color: rgb(var(--v-theme-surface));
+  transition: all 0.3s;
+
+  &:has(select:focus) {
+    border-color: rgb(var(--v-theme-primary));
+  }
+}
+
+.package-selector-vertical {
   .packages-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
