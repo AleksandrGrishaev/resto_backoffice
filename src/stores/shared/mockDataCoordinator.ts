@@ -171,19 +171,39 @@ export class MockDataCoordinator {
       const priceHistory: ProductPriceHistory[] = []
       const now = TimeUtils.getCurrentLocalISO()
 
-      CORE_PRODUCTS.forEach((productDef, index) => {
-        // ✅ СОЗДАЕМ БАЗОВУЮ УПАКОВКУ из определения продукта
+      CORE_PRODUCTS.forEach(productDef => {
+        const packages: PackageOption[] = []
+
+        // ✅ 1. ВСЕГДА создаем БАЗОВУЮ упаковку (1г/1мл/1шт)
         const basePackage: PackageOption = {
           id: `pkg-${productDef.id}-base`,
           productId: productDef.id,
-          packageName: this.getPackageNameFromDefinition(productDef),
-          packageSize: productDef.purchaseToBaseRatio,
-          packageUnit: productDef.purchaseUnit as MeasurementUnit,
-          packagePrice: productDef.purchaseCost,
+          packageName: this.getBasePackageName(productDef.baseUnit),
+          packageSize: 1, // ВСЕГДА 1!
+          packageUnit: productDef.baseUnit as MeasurementUnit,
+          packagePrice: productDef.baseCostPerUnit,
           baseCostPerUnit: productDef.baseCostPerUnit,
           isActive: true,
           createdAt: now,
           updatedAt: now
+        }
+        packages.push(basePackage)
+
+        // ✅ 2. Создаем упаковку из purchaseUnit (если она отличается от базовой)
+        if (productDef.purchaseToBaseRatio !== 1) {
+          const purchasePackage: PackageOption = {
+            id: `pkg-${productDef.id}-purchase`,
+            productId: productDef.id,
+            packageName: this.getPackageNameFromDefinition(productDef),
+            packageSize: productDef.purchaseToBaseRatio,
+            packageUnit: productDef.purchaseUnit as MeasurementUnit,
+            packagePrice: productDef.purchaseCost,
+            baseCostPerUnit: productDef.baseCostPerUnit,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now
+          }
+          packages.push(purchasePackage)
         }
 
         // ✅ СОЗДАЕМ ПРОДУКТ с новой структурой (БЕЗ legacy полей)
@@ -257,6 +277,18 @@ export class MockDataCoordinator {
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to generate products store data', { error })
       return { products: [], priceHistory: [] }
+    }
+  }
+
+  // ✅ НОВЫЙ метод для названий базовых упаковок
+  private getBasePackageName(baseUnit: 'gram' | 'ml' | 'piece'): string {
+    switch (baseUnit) {
+      case 'gram':
+        return 'Грамм (базовая)'
+      case 'ml':
+        return 'Миллилитр (базовая)'
+      case 'piece':
+        return 'Штука (базовая)'
     }
   }
 

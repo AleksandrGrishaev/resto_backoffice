@@ -1,0 +1,404 @@
+<template>
+  <div class="package-selector">
+    <!-- Loading State -->
+    <v-skeleton-loader v-if="loading" type="list-item-two-line" />
+
+    <!-- Error State -->
+    <v-alert v-else-if="error" type="error" variant="tonal" density="compact">
+      {{ error }}
+    </v-alert>
+
+    <!-- Package Options as Cards -->
+    <div v-else-if="availablePackages.length > 0">
+      <div class="text-subtitle-2 font-weight-bold mb-2">Package Selection</div>
+      <div class="text-caption text-medium-emphasis mb-3">
+        Required: {{ formatQuantity(requiredBaseQuantity) }} {{ getBaseUnitLabel() }}
+      </div>
+
+      <div class="packages-grid">
+        <v-card
+          v-for="pkg in availablePackages"
+          :key="pkg.id"
+          :variant="internalSelectedPackageId === pkg.id ? 'tonal' : 'outlined'"
+          :color="internalSelectedPackageId === pkg.id ? 'primary' : undefined"
+          class="package-card"
+          :class="{ 'package-card--selected': internalSelectedPackageId === pkg.id }"
+          @click="selectPackage(pkg.id)"
+        >
+          <v-card-text class="pa-3">
+            <div class="d-flex align-center justify-space-between mb-2">
+              <div class="d-flex align-center gap-2">
+                <v-avatar
+                  :color="internalSelectedPackageId === pkg.id ? 'primary' : 'grey-lighten-2'"
+                  size="32"
+                >
+                  <v-icon
+                    :color="internalSelectedPackageId === pkg.id ? 'white' : 'grey'"
+                    size="20"
+                  >
+                    {{ getPackageIcon(pkg) }}
+                  </v-icon>
+                </v-avatar>
+
+                <div>
+                  <div class="text-subtitle-2 font-weight-bold">{{ pkg.packageName }}</div>
+                  <div v-if="pkg.brandName" class="text-caption text-medium-emphasis">
+                    {{ pkg.brandName }}
+                  </div>
+                </div>
+              </div>
+
+              <v-icon v-if="internalSelectedPackageId === pkg.id" color="primary" size="20">
+                mdi-check-circle
+              </v-icon>
+            </div>
+
+            <v-divider class="my-2" />
+
+            <div class="d-flex justify-space-between align-center">
+              <div>
+                <div class="text-caption text-medium-emphasis">Package size</div>
+                <div class="text-body-2 font-weight-medium">
+                  {{ pkg.packageSize }} {{ getBaseUnitLabel() }}
+                </div>
+              </div>
+
+              <div class="text-right">
+                <div class="text-caption text-medium-emphasis">Quantity</div>
+                <div class="text-body-1 font-weight-bold text-primary">
+                  {{ getPackageCalculation(pkg).suggestedPackages }} pkg
+                </div>
+              </div>
+            </div>
+
+            <div v-if="pkg.packagePrice" class="mt-2">
+              <div class="d-flex justify-space-between">
+                <span class="text-caption text-medium-emphasis">Price per package:</span>
+                <span class="text-caption font-weight-medium">
+                  {{ formatCurrency(pkg.packagePrice) }}
+                </span>
+              </div>
+              <div class="d-flex justify-space-between">
+                <span class="text-caption text-medium-emphasis">Total:</span>
+                <span class="text-body-2 font-weight-bold">
+                  {{
+                    formatCurrency(pkg.packagePrice * getPackageCalculation(pkg).suggestedPackages)
+                  }}
+                </span>
+              </div>
+            </div>
+
+            <v-chip
+              v-if="pkg.id === recommendedPackageId"
+              size="x-small"
+              color="success"
+              variant="flat"
+              class="mt-2"
+            >
+              Recommended
+            </v-chip>
+          </v-card-text>
+        </v-card>
+      </div>
+
+      <!-- Mode-specific hints -->
+      <v-alert
+        v-if="mode === 'optional'"
+        type="info"
+        variant="tonal"
+        density="compact"
+        class="mt-3"
+      >
+        <div class="text-caption">
+          Package selection is optional. Selected package helps with ordering later.
+        </div>
+      </v-alert>
+
+      <v-alert
+        v-if="mode === 'required' && !internalSelectedPackageId"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mt-3"
+      >
+        <div class="text-caption">Please select a package before proceeding with the order.</div>
+      </v-alert>
+    </div>
+
+    <!-- No Packages Available -->
+    <v-alert v-else type="warning" variant="tonal" density="compact">
+      <div class="text-body-2">No packages available for this product.</div>
+      <div class="text-caption">Please add packages in product management first.</div>
+    </v-alert>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import { useProductsStore } from '@/stores/productsStore'
+import type { PackageOption, Product } from '@/stores/productsStore/types'
+
+// =============================================
+// PROPS & EMITS
+// =============================================
+
+interface Props {
+  productId: string
+  requiredBaseQuantity: number
+  selectedPackageId?: string
+  mode: 'optional' | 'required' | 'change'
+  allowQuantityEdit?: boolean
+}
+
+interface Emits {
+  (
+    e: 'package-selected',
+    value: {
+      packageId: string
+      packageQuantity: number
+      resultingBaseQuantity: number
+      totalCost: number
+    }
+  ): void
+  (e: 'update:selectedPackageId', value: string | undefined): void
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  allowQuantityEdit: false
+})
+
+const emits = defineEmits<Emits>()
+
+// =============================================
+// STORES
+// =============================================
+
+const productsStore = useProductsStore()
+
+// =============================================
+// LOCAL STATE
+// =============================================
+
+const loading = ref(false)
+const error = ref<string | null>(null)
+const internalSelectedPackageId = ref<string | undefined>(props.selectedPackageId)
+
+// =============================================
+// COMPUTED
+// =============================================
+
+const productInfo = computed((): Product | null => {
+  return productsStore.getProductById(props.productId)
+})
+
+const availablePackages = computed((): PackageOption[] => {
+  if (!productInfo.value) return []
+  return productsStore.getActivePackages(props.productId)
+})
+
+const recommendedPackageId = computed((): string | undefined => {
+  return productInfo.value?.recommendedPackageId
+})
+
+// =============================================
+// METHODS
+// =============================================
+
+function selectPackage(packageId: string) {
+  internalSelectedPackageId.value = packageId
+  emits('update:selectedPackageId', packageId)
+  emitPackageSelected(packageId)
+}
+
+function emitPackageSelected(packageId: string) {
+  try {
+    const calculation = productsStore.calculatePackageQuantity(
+      props.productId,
+      props.requiredBaseQuantity,
+      packageId
+    )
+
+    const totalCost = calculation.packageOption.packagePrice
+      ? calculation.packageOption.packagePrice * calculation.suggestedPackages
+      : 0
+
+    emits('package-selected', {
+      packageId: packageId,
+      packageQuantity: calculation.suggestedPackages,
+      resultingBaseQuantity: calculation.actualBaseQuantity,
+      totalCost
+    })
+  } catch (err) {
+    console.error('Failed to calculate package quantity:', err)
+  }
+}
+
+function getPackageCalculation(pkg: PackageOption) {
+  try {
+    return productsStore.calculatePackageQuantity(
+      props.productId,
+      props.requiredBaseQuantity,
+      pkg.id
+    )
+  } catch (err) {
+    return {
+      exactPackages: 0,
+      suggestedPackages: 0,
+      actualBaseQuantity: 0,
+      difference: 0
+    }
+  }
+}
+
+function getPackageIcon(pkg: PackageOption): string {
+  const unitIcons: Record<string, string> = {
+    pack: 'mdi-package-variant',
+    box: 'mdi-package',
+    bottle: 'mdi-bottle-wine',
+    can: 'mdi-can',
+    bag: 'mdi-shopping',
+    kg: 'mdi-weight-kilogram',
+    liter: 'mdi-water',
+    piece: 'mdi-numeric-1-box'
+  }
+  return unitIcons[pkg.packageUnit] || 'mdi-package-variant'
+}
+
+function getBaseUnitLabel(): string {
+  if (!productInfo.value) return ''
+
+  const labels: Record<string, string> = {
+    gram: 'g',
+    ml: 'ml',
+    piece: 'pc'
+  }
+
+  return labels[productInfo.value.baseUnit] || productInfo.value.baseUnit
+}
+
+function formatQuantity(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(value)
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(amount)
+}
+
+function initializeSelector() {
+  loading.value = true
+  error.value = null
+
+  try {
+    if (!productInfo.value) {
+      error.value = 'Product not found'
+      return
+    }
+
+    if (availablePackages.value.length === 0) {
+      error.value = 'No packages available'
+      return
+    }
+
+    // ✅ ИСПРАВЛЕНИЕ: Только устанавливаем selected, НЕ эмитим событие
+    if (!props.selectedPackageId) {
+      if (recommendedPackageId.value) {
+        internalSelectedPackageId.value = recommendedPackageId.value
+        emits('update:selectedPackageId', recommendedPackageId.value)
+        // ❌ УБРАТЬ: emitPackageSelected(recommendedPackageId.value)
+      } else {
+        const firstPackage = availablePackages.value[0]
+        if (firstPackage) {
+          internalSelectedPackageId.value = firstPackage.id
+          emits('update:selectedPackageId', firstPackage.id)
+          // ❌ УБРАТЬ: emitPackageSelected(firstPackage.id)
+        }
+      }
+    } else {
+      internalSelectedPackageId.value = props.selectedPackageId
+      // ❌ УБРАТЬ: emitPackageSelected(props.selectedPackageId)
+    }
+  } catch (err) {
+    console.error('Failed to initialize package selector:', err)
+    error.value = 'Failed to load package options'
+  } finally {
+    loading.value = false
+  }
+}
+
+// =============================================
+// WATCHERS
+// =============================================
+
+watch(
+  () => props.productId,
+  () => {
+    initializeSelector()
+  }
+)
+
+watch(
+  () => props.requiredBaseQuantity,
+  () => {
+    if (internalSelectedPackageId.value) {
+      emitPackageSelected(internalSelectedPackageId.value)
+    }
+  }
+)
+
+watch(
+  () => props.selectedPackageId,
+  newValue => {
+    if (newValue !== internalSelectedPackageId.value) {
+      internalSelectedPackageId.value = newValue
+    }
+  }
+)
+
+// =============================================
+// LIFECYCLE
+// =============================================
+
+onMounted(() => {
+  initializeSelector()
+})
+</script>
+
+<style scoped lang="scss">
+.package-selector {
+  .packages-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  .package-card {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-width: 2px;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    &--selected {
+      border-color: rgb(var(--v-theme-primary));
+    }
+  }
+
+  .text-medium-emphasis {
+    opacity: 0.7;
+  }
+
+  .gap-2 {
+    gap: 8px;
+  }
+}
+</style>

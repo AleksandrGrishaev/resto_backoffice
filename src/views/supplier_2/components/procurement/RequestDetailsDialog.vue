@@ -1,4 +1,5 @@
 <!-- src/views/supplier_2/components/procurement/RequestDetailsDialog.vue -->
+<!-- ✅ UPDATED: Added package information display -->
 <template>
   <v-dialog v-model="isOpen" max-width="1000px" scrollable>
     <v-card v-if="request">
@@ -61,14 +62,23 @@
                   <tr v-for="item in request.items" :key="item.id" :class="getItemRowClass(item)">
                     <td>
                       <div class="d-flex align-center justify-space-between">
-                        <div>
+                        <div style="flex: 1">
                           <div
                             class="text-body-2 font-weight-medium"
                             :class="getItemTextClass(item)"
                           >
                             {{ item.itemName }}
                           </div>
-                          <div v-if="item.notes" class="text-caption text-warning">
+
+                          <!-- ✅ NEW: Package Info -->
+                          <div v-if="getPackageInfo(item)" class="package-chip mt-1">
+                            <v-icon size="12" class="mr-1">mdi-package-variant</v-icon>
+                            <span class="text-caption">
+                              {{ getPackageInfo(item)?.display }}
+                            </span>
+                          </div>
+
+                          <div v-if="item.notes" class="text-caption text-warning mt-1">
                             {{ item.notes }}
                           </div>
                         </div>
@@ -225,10 +235,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { formatQuantityWithUnit } from '@/utils/quantityFormatter'
-import type { ProcurementRequest, PurchaseOrder } from '@/stores/supplier_2/types'
+import type { ProcurementRequest, PurchaseOrder, RequestItem } from '@/stores/supplier_2/types'
 import type { Product } from '@/stores/productsStore/types'
 
 // =============================================
@@ -269,17 +279,55 @@ const isOpen = computed({
 // PRODUCT & FORMATTING HELPERS
 // =============================================
 
-/**
- * Получает продукт по itemId
- */
 function getProduct(itemId: string): Product | null {
   return productsStore.products.find(p => p.id === itemId) || null
 }
 
 /**
- * Форматирует количество с единицами (используем готовую утилиту)
- * Все количества уже в базовых единицах
+ * ✅ NEW: Get package information for display
  */
+function getPackageInfo(item: RequestItem): { display: string } | null {
+  const product = getProduct(item.itemId)
+  if (!product) return null
+
+  // If package selected, show it
+  if (item.packageId && item.packageName) {
+    const pkg = productsStore.getPackageById(item.packageId)
+    if (pkg) {
+      const calculation = productsStore.calculatePackageQuantity(
+        item.itemId,
+        item.requestedQuantity,
+        pkg.id
+      )
+      return {
+        display: `${calculation.suggestedPackages} × ${pkg.packageName}`
+      }
+    }
+  }
+
+  // ✅ ИСПРАВЛЕНИЕ: Проверяем, есть ли базовая упаковка в packageOptions
+  const basePackage = product.packageOptions.find(pkg => pkg.packageSize === 1)
+  if (basePackage) {
+    return {
+      display: `${item.requestedQuantity} × ${basePackage.packageName}`
+    }
+  }
+
+  // Если нет базовой упаковки, показываем просто количество
+  return {
+    display: `${item.requestedQuantity} ${getUnitLabel(product.baseUnit)}`
+  }
+}
+
+function getUnitLabel(baseUnit: string): string {
+  const labels: Record<string, string> = {
+    gram: 'g',
+    ml: 'ml',
+    piece: 'pc'
+  }
+  return labels[baseUnit] || baseUnit
+}
+
 function formatQuantity(quantity: number, itemId: string): string {
   const product = getProduct(itemId)
   if (!product) return `${quantity}`
@@ -287,9 +335,6 @@ function formatQuantity(quantity: number, itemId: string): string {
   return formatQuantityWithUnit(quantity, product)
 }
 
-/**
- * Получает цену за базовую единицу
- */
 function getBaseCostPerUnit(itemId: string): number {
   const product = getProduct(itemId)
 
@@ -298,12 +343,10 @@ function getBaseCostPerUnit(itemId: string): number {
     throw new Error(`Product not found: ${itemId}`)
   }
 
-  // Только baseCostPerUnit, никаких fallback
   if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
     return product.baseCostPerUnit
   }
 
-  // Если нет baseCostPerUnit - это ошибка в данных
   console.error(`RequestDetailsDialog: No baseCostPerUnit for ${itemId}`, {
     product: {
       id: product.id,
@@ -316,26 +359,17 @@ function getBaseCostPerUnit(itemId: string): number {
   throw new Error(`No baseCostPerUnit for product: ${product.name}`)
 }
 
-/**
- * Рассчитывает общую стоимость элемента заявки
- * requestedQuantity уже в базовых единицах
- * estimatedPrice - цена за базовую единицу
- */
 function calculateItemTotal(item: any): number {
   const baseCostPerUnit = item.estimatedPrice || getBaseCostPerUnit(item.itemId)
   return item.requestedQuantity * baseCostPerUnit
 }
 
-/**
- * Форматирует цену за единицу для элемента заявки
- */
 function formatItemPrice(item: any): string {
   const product = getProduct(item.itemId)
   const baseCostPerUnit = item.estimatedPrice || getBaseCostPerUnit(item.itemId)
 
   if (!product) return formatCurrency(baseCostPerUnit) + '/unit'
 
-  // Показываем цену в удобных единицах
   if (product.baseUnit === 'gram') {
     return formatCurrency(baseCostPerUnit * 1000) + '/kg'
   } else if (product.baseUnit === 'ml') {
@@ -345,16 +379,11 @@ function formatItemPrice(item: any): string {
   }
 }
 
-/**
- * Форматирует цену элемента заказа
- */
 function formatOrderItemPrice(orderItem: any): string {
   const product = getProduct(orderItem.itemId)
-  // orderItem.pricePerUnit уже в базовых единицах
 
   if (!product) return formatCurrency(orderItem.pricePerUnit) + '/unit'
 
-  // Показываем цену в удобных единицах
   if (product.baseUnit === 'gram') {
     return formatCurrency(orderItem.pricePerUnit * 1000) + '/kg'
   } else if (product.baseUnit === 'ml') {
@@ -368,9 +397,6 @@ function formatOrderItemPrice(orderItem: any): string {
 // ORDER ANALYSIS METHODS
 // =============================================
 
-/**
- * Получает все заказанные товары сгруппированные по заказам
- */
 function getOrderedItems() {
   if (!props.request) return []
 
@@ -399,9 +425,6 @@ function getOrderedItems() {
     .filter(orderGroup => orderGroup.items.length > 0)
 }
 
-/**
- * Подсчитывает общую стоимость заказанных товаров
- */
 function getOrderedTotal() {
   return getOrderedItems().reduce((total, orderGroup) => {
     return (
@@ -413,9 +436,6 @@ function getOrderedTotal() {
   }, 0)
 }
 
-/**
- * Подсчитывает оставшуюся стоимость незаказанных товаров
- */
 function getRemainingValue() {
   if (!props.request) return 0
 
@@ -425,24 +445,15 @@ function getRemainingValue() {
   return Math.max(0, requestedTotal - orderedTotal)
 }
 
-/**
- * Проверяет заказан ли товар
- */
 function isItemOrdered(item: any): boolean {
   return getOrderedQuantityForItem(item) > 0
 }
 
-/**
- * Проверяет частично ли заказан товар
- */
 function isItemPartiallyOrdered(item: any): boolean {
   const orderedQty = getOrderedQuantityForItem(item)
   return orderedQty > 0 && orderedQty < item.requestedQuantity
 }
 
-/**
- * Получает заказанное количество для товара (в базовых единицах)
- */
 function getOrderedQuantityForItem(item: any): number {
   return getOrderedItems().reduce((total, orderGroup) => {
     const orderItem = orderGroup.items.find(oi => oi.itemId === item.itemId)
@@ -450,9 +461,6 @@ function getOrderedQuantityForItem(item: any): number {
   }, 0)
 }
 
-/**
- * Получает CSS класс для строки товара
- */
 function getItemRowClass(item: any): string {
   if (isItemOrdered(item)) {
     return 'ordered-item'
@@ -460,9 +468,6 @@ function getItemRowClass(item: any): string {
   return ''
 }
 
-/**
- * Получает CSS класс для текста товара
- */
 function getItemTextClass(item: any): string {
   if (isItemOrdered(item)) {
     return 'text-muted'
@@ -470,9 +475,6 @@ function getItemTextClass(item: any): string {
   return ''
 }
 
-/**
- * Проверяет есть ли незаказанные товары
- */
 function hasUnorderedItems() {
   if (!props.request) return false
 
@@ -482,9 +484,6 @@ function hasUnorderedItems() {
   })
 }
 
-/**
- * Подсчитывает количество заказанных товаров
- */
 function getOrderedItemsCount() {
   if (!props.request) return 0
 
@@ -495,9 +494,6 @@ function getOrderedItemsCount() {
   }).length
 }
 
-/**
- * Расчет общей стоимости заявки
- */
 function calculateEstimatedTotal(request: ProcurementRequest): number {
   return request.items.reduce((sum, item) => {
     return sum + calculateItemTotal(item)
@@ -606,5 +602,17 @@ function getDepartmentIcon(department: string): string {
 
 .bg-surface {
   background-color: rgb(var(--v-theme-surface-variant), 0.5);
+}
+
+/* ✅ NEW: Package chip styling */
+.package-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background-color: rgb(var(--v-theme-success), 0.1);
+  border: 1px solid rgb(var(--v-theme-success), 0.3);
+  border-radius: 4px;
+  color: rgb(var(--v-theme-success));
+  font-size: 0.7rem;
 }
 </style>
