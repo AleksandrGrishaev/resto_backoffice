@@ -6,15 +6,15 @@
   >
     <v-card>
       <v-card-title>
-        {{ isEditing ? 'Редактировать упаковку' : 'Добавить упаковку' }}
+        {{ isEditing ? 'Edit Package' : 'Add Package' }}
       </v-card-title>
 
       <v-card-text>
         <v-form ref="formRef" v-model="formValid">
           <v-text-field
             v-model="formData.packageName"
-            label="Название упаковки"
-            placeholder="Килограмм, Пачка 500г, Упаковка 24шт"
+            label="Package Name *"
+            placeholder="Kilogram, Pack 500g, Box 24pcs"
             :rules="[rules.required]"
             variant="outlined"
             density="comfortable"
@@ -24,7 +24,7 @@
           <div class="d-flex gap-3 mb-3">
             <v-text-field
               v-model.number="formData.packageSize"
-              label="Размер упаковки"
+              label="Package Size *"
               :suffix="baseUnit"
               :rules="[rules.required, rules.positive]"
               type="number"
@@ -35,7 +35,7 @@
 
             <v-select
               v-model="formData.packageUnit"
-              label="Единица упаковки"
+              label="Package Unit *"
               :items="packageUnitOptions"
               item-value="value"
               item-title="text"
@@ -48,60 +48,67 @@
 
           <v-text-field
             v-model="formData.brandName"
-            label="Бренд (опционально)"
+            label="Brand (optional)"
             placeholder="Anchor, Local Brand"
             variant="outlined"
             density="comfortable"
             class="mb-3"
           />
 
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            <div class="text-caption">
+              Prices are optional and can be updated after the first delivery
+            </div>
+          </v-alert>
+
           <v-text-field
             v-model.number="formData.packagePrice"
-            label="Цена за упаковку (опционально)"
+            label="Price per Package (optional)"
             suffix="IDR"
             type="number"
             variant="outlined"
             density="comfortable"
             class="mb-3"
-            hint="Если не указана, будет рассчитана автоматически"
+            hint="Leave empty if unknown, will be calculated automatically"
             persistent-hint
           />
 
           <v-text-field
             v-model.number="formData.baseCostPerUnit"
-            :label="`Цена за ${baseUnit}`"
+            :label="`Price per ${baseUnit} (optional)`"
             suffix="IDR"
-            :rules="[rules.required, rules.positive]"
             type="number"
             variant="outlined"
             density="comfortable"
             class="mb-3"
+            hint="Leave empty if unknown, will be updated from actual deliveries"
+            persistent-hint
           />
 
           <v-textarea
             v-model="formData.notes"
-            label="Примечания (опционально)"
-            placeholder="Оптовая цена, Только для больших заказов"
+            label="Notes (optional)"
+            placeholder="Wholesale price, Bulk orders only"
             variant="outlined"
             density="comfortable"
             rows="2"
             class="mb-3"
           />
 
-          <v-switch v-model="formData.isActive" label="Активна" color="primary" class="mb-3" />
+          <v-switch v-model="formData.isActive" label="Active" color="primary" class="mb-3" />
 
-          <!-- Расчетная информация -->
-          <v-card variant="tonal" color="info" class="mb-3">
+          <!-- Calculation Information -->
+          <v-card v-if="hasCalculations" variant="tonal" color="info" class="mb-3">
             <v-card-text class="py-2">
               <div class="text-body-2">
-                <strong>Расчеты:</strong>
+                <strong>Calculations:</strong>
                 <br />
                 <span v-if="calculatedPackagePrice">
-                  Автоматическая цена упаковки: {{ formatPrice(calculatedPackagePrice) }}
+                  Calculated package price: {{ formatPrice(calculatedPackagePrice) }}
                   <br />
                 </span>
-                <span v-if="formData.packagePrice && calculatedBaseCost">
-                  Цена за {{ baseUnit }} (из цены упаковки): {{ formatPrice(calculatedBaseCost) }}
+                <span v-if="calculatedBaseCost">
+                  Calculated price per {{ baseUnit }}: {{ formatPrice(calculatedBaseCost) }}
                   <br />
                 </span>
               </div>
@@ -112,7 +119,7 @@
 
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" @click="$emit('update:model-value', false)">Отмена</v-btn>
+        <v-btn variant="text" @click="$emit('update:model-value', false)">Cancel</v-btn>
         <v-btn
           color="primary"
           variant="flat"
@@ -120,7 +127,7 @@
           :loading="loading"
           @click="handleSave"
         >
-          {{ isEditing ? 'Сохранить' : 'Добавить' }}
+          {{ isEditing ? 'Save' : 'Add' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -140,7 +147,7 @@ interface Props {
   modelValue: boolean
   productId: string
   baseUnit: string
-  package?: PackageOption // Для редактирования
+  package?: PackageOption
   loading?: boolean
 }
 
@@ -157,79 +164,91 @@ const formValid = ref(false)
 
 const isEditing = computed(() => !!props.package)
 
-// Форма данных
+// Form data
 const formData = ref({
   packageName: '',
   packageSize: 1,
   packageUnit: 'kg' as MeasurementUnit,
   brandName: '',
   packagePrice: null as number | null,
-  baseCostPerUnit: 0,
+  baseCostPerUnit: null as number | null,
   notes: '',
   isActive: true
 })
 
-// Опции для единиц упаковки
+// Package unit options
 const packageUnitOptions = computed(() => {
   const baseUnitType = props.baseUnit
   if (baseUnitType === 'gram') {
     return [
-      { value: 'kg', text: 'Килограмм' },
-      { value: 'pack', text: 'Упаковка' }
+      { value: 'kg', text: 'Kilogram' },
+      { value: 'pack', text: 'Pack' }
     ]
   } else if (baseUnitType === 'ml') {
     return [
-      { value: 'liter', text: 'Литр' },
-      { value: 'pack', text: 'Упаковка' }
+      { value: 'liter', text: 'Liter' },
+      { value: 'pack', text: 'Pack' }
     ]
   } else {
     return [
-      { value: 'piece', text: 'Штука' },
-      { value: 'pack', text: 'Упаковка' }
+      { value: 'piece', text: 'Piece' },
+      { value: 'pack', text: 'Pack' }
     ]
   }
 })
 
-// Правила валидации
+// Validation rules
 const rules = {
-  required: (value: any) => !!value || 'Поле обязательно',
-  positive: (value: number) => (value && value > 0) || 'Значение должно быть больше 0'
+  required: (value: any) => !!value || 'Field is required',
+  positive: (value: number) => (value && value > 0) || 'Value must be greater than 0'
 }
 
-// Расчетные значения
+// Calculated values
 const calculatedPackagePrice = computed(() => {
-  if (formData.value.baseCostPerUnit && formData.value.packageSize) {
+  if (
+    formData.value.baseCostPerUnit &&
+    formData.value.packageSize &&
+    !formData.value.packagePrice
+  ) {
     return formData.value.baseCostPerUnit * formData.value.packageSize
   }
   return null
 })
 
 const calculatedBaseCost = computed(() => {
-  if (formData.value.packagePrice && formData.value.packageSize) {
+  if (
+    formData.value.packagePrice &&
+    formData.value.packageSize &&
+    !formData.value.baseCostPerUnit
+  ) {
     return formData.value.packagePrice / formData.value.packageSize
   }
   return null
 })
 
-// Загрузка данных при открытии диалога
+const hasCalculations = computed(() => {
+  return calculatedPackagePrice.value !== null || calculatedBaseCost.value !== null
+})
+
+// Load data when dialog opens
 watch(
   () => props.modelValue,
   newValue => {
     if (newValue) {
       if (props.package) {
-        // Редактирование
+        // Editing
         formData.value = {
           packageName: props.package.packageName,
           packageSize: props.package.packageSize,
           packageUnit: props.package.packageUnit,
           brandName: props.package.brandName || '',
           packagePrice: props.package.packagePrice || null,
-          baseCostPerUnit: props.package.baseCostPerUnit,
+          baseCostPerUnit: props.package.baseCostPerUnit || null,
           notes: props.package.notes || '',
           isActive: props.package.isActive
         }
       } else {
-        // Создание новой
+        // Creating new
         resetForm()
       }
 
@@ -247,7 +266,7 @@ function resetForm() {
     packageUnit: getDefaultPackageUnit(),
     brandName: '',
     packagePrice: null,
-    baseCostPerUnit: 0,
+    baseCostPerUnit: null,
     notes: '',
     isActive: true
   }
@@ -279,14 +298,18 @@ async function handleSave() {
   const valid = await formRef.value?.validate()
   if (!valid?.valid) return
 
+  // Use calculated values if original values are empty
+  const finalPackagePrice = formData.value.packagePrice || calculatedPackagePrice.value || undefined
+  const finalBaseCostPerUnit = formData.value.baseCostPerUnit || calculatedBaseCost.value || 0
+
   const saveData = {
     productId: props.productId,
     packageName: formData.value.packageName,
     packageSize: formData.value.packageSize,
     packageUnit: formData.value.packageUnit,
     brandName: formData.value.brandName || undefined,
-    packagePrice: formData.value.packagePrice || undefined,
-    baseCostPerUnit: formData.value.baseCostPerUnit,
+    packagePrice: finalPackagePrice,
+    baseCostPerUnit: finalBaseCostPerUnit,
     notes: formData.value.notes || undefined,
     ...(isEditing.value && {
       id: props.package!.id,
