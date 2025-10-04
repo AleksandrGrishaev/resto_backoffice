@@ -20,7 +20,8 @@ import type {
   UpdateReceiptData,
   SupplierBasket,
   UnassignedItem,
-  Department
+  Department,
+  OrderItem
 } from './types'
 
 const MODULE_NAME = 'SupplierService'
@@ -148,6 +149,9 @@ class SupplierService {
   async createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
     await this.delay(300)
 
+    // ✅ ПОЛУЧАЕМ ДОСТУП К STORES
+    const productsStore = useProductsStore()
+
     // Get latest prices from storage if available
     const itemIds = data.items.map(item => item.itemId)
     const latestPrices: Record<string, number> = {}
@@ -157,9 +161,33 @@ class SupplierService {
       if (storageStore && storageStore.getBalance) {
         for (const itemId of itemIds) {
           try {
-            const balance = storageStore.getBalance(itemId)
-            if (balance && balance.currentPrice) {
-              latestPrices[itemId] = balance.currentPrice
+            // ✅ ИСПРАВЛЕНИЕ: пробуем получить баланс из обоих департаментов
+            let latestCost: number | null = null
+
+            // Пробуем кухню
+            try {
+              const kitchenBalance = storageStore.getBalance(itemId, 'kitchen')
+              if (kitchenBalance && kitchenBalance.latestCost > 0) {
+                latestCost = kitchenBalance.latestCost
+              }
+            } catch {
+              // Ignore kitchen errors
+            }
+
+            // Если не нашли на кухне, пробуем бар
+            if (!latestCost) {
+              try {
+                const barBalance = storageStore.getBalance(itemId, 'bar')
+                if (barBalance && barBalance.latestCost > 0) {
+                  latestCost = barBalance.latestCost
+                }
+              } catch {
+                // Ignore bar errors
+              }
+            }
+
+            if (latestCost) {
+              latestPrices[itemId] = latestCost
             }
           } catch (error) {
             // Ignore individual item errors
@@ -172,6 +200,57 @@ class SupplierService {
       })
     }
 
+    // ✅ СОЗДАЕМ ITEMS С ПОЛЯМИ УПАКОВОК
+    const orderItems: OrderItem[] = []
+
+    for (const item of data.items) {
+      // Получаем информацию об упаковке
+      const pkg = productsStore.getPackageById(item.packageId)
+
+      if (!pkg) {
+        throw new Error(`Package ${item.packageId} not found for item ${item.itemId}`)
+      }
+
+      // Получаем продукт для базовой информации
+      const product = productsStore.products.find(p => p.id === item.itemId)
+      if (!product) {
+        throw new Error(`Product ${item.itemId} not found`)
+      }
+
+      // Рассчитываем упаковки
+      const packageQuantity = Math.ceil(item.quantity / pkg.packageSize)
+      const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
+      const pricePerUnit = latestPrices[item.itemId] || pkg.baseCostPerUnit
+      const totalPrice = packageQuantity * packagePrice
+
+      orderItems.push({
+        id: `po-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        itemId: item.itemId,
+        itemName: product.name,
+
+        // Количества
+        orderedQuantity: item.quantity, // В базовых единицах
+        unit: product.baseUnit, // Базовая единица
+
+        // ✅ ПОЛЯ УПАКОВКИ
+        packageId: pkg.id,
+        packageName: pkg.packageName,
+        packageQuantity,
+        packageUnit: pkg.packageUnit,
+
+        // ✅ ЦЕНЫ
+        pricePerUnit,
+        packagePrice,
+        totalPrice,
+
+        // Метаданные
+        isEstimatedPrice: !latestPrices[item.itemId],
+        lastPriceDate: latestPrices[item.itemId] ? new Date().toISOString() : undefined,
+        status: 'ordered'
+      })
+    }
+
+    // Создаем заказ
     const newOrder: PurchaseOrder = {
       id: `po-${Date.now()}`,
       orderNumber: this.generateOrderNumber(),
@@ -179,31 +258,18 @@ class SupplierService {
       supplierName: await this.getSupplierName(data.supplierId),
       orderDate: new Date().toISOString(),
       expectedDeliveryDate: data.expectedDeliveryDate,
-      items: data.items.map(item => {
-        const unitPrice = latestPrices[item.itemId] || item.pricePerUnit
 
-        return {
-          id: `po-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          itemId: item.itemId,
-          itemName: this.getItemName(item.itemId),
-          orderedQuantity: item.quantity,
-          unit: this.getItemUnit(item.itemId),
-          pricePerUnit: unitPrice,
-          totalPrice: item.quantity * unitPrice,
-          isEstimatedPrice: !latestPrices[item.itemId],
-          lastPriceDate: latestPrices[item.itemId] ? new Date().toISOString() : undefined,
-          status: 'ordered'
-        }
-      }),
-      totalAmount: data.items.reduce((sum, item) => {
-        const unitPrice = latestPrices[item.itemId] || item.pricePerUnit
-        return sum + item.quantity * unitPrice
-      }, 0),
-      isEstimatedTotal: !data.items.every(item => latestPrices[item.itemId]),
+      items: orderItems,
+
+      totalAmount: orderItems.reduce((sum, item) => sum + item.totalPrice, 0),
+      isEstimatedTotal: orderItems.some(item => item.isEstimatedPrice),
+
       status: 'draft',
-      paymentStatus: 'pending',
+      billStatus: 'not_billed', // ✅ ИЗМЕНЕНО с paymentStatus
+
       requestIds: data.requestIds || [],
       notes: data.notes,
+
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -221,11 +287,12 @@ class SupplierService {
       })
     }
 
-    DebugUtils.info(MODULE_NAME, 'Purchase order created', {
+    DebugUtils.info(MODULE_NAME, 'Purchase order created with packages', {
       orderId: newOrder.id,
       supplierId: data.supplierId,
       itemCount: newOrder.items.length,
       totalAmount: newOrder.totalAmount,
+      totalPackages: orderItems.reduce((sum, item) => sum + item.packageQuantity, 0),
       usedLatestPrices: Object.keys(latestPrices).length > 0,
       requestIds: data.requestIds
     })
