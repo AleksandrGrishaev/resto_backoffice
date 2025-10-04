@@ -613,22 +613,10 @@ onMounted(async () => {
     DebugUtils.debug(MODULE_NAME, 'StorageView mounted')
     await nextTick()
 
-    // ✅ Дождаться полной инициализации
-    if (!storageStore.initialized) {
-      await storageStore.initialize()
-    }
-
-    // ✅ Убедиться что балансы загружены
-    if (storageStore.state.balances.length === 0) {
-      await storageStore.fetchBalances()
-    }
-
+    // Store уже инициализирован в AppInitializer
     isViewReady.value = true
 
-    DebugUtils.info(MODULE_NAME, 'StorageView ready', {
-      balances: storageStore.state.balances.length,
-      department: selectedDepartment.value
-    })
+    DebugUtils.info(MODULE_NAME, 'StorageView ready')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to prepare view', { error })
     handleOperationError('Failed to prepare storage view')
