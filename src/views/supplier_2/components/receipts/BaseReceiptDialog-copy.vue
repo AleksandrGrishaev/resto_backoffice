@@ -1,4 +1,4 @@
-<!-- src/views/supplier_2/components/receipts/BaseReceiptDialog.vue - UPDATED WITH WIDGET -->
+<!-- src/views/supplier_2/components/receipts/BaseReceiptDialog.vue - ИСПРАВЛЕННАЯ ВЕРСИЯ -->
 <template>
   <v-dialog v-model="isOpen" max-width="1400px" persistent>
     <v-card v-if="props.order" class="receipt-dialog">
@@ -84,40 +84,190 @@
               <v-icon icon="mdi-alert-triangle" color="warning" class="mr-2" />
               <div>
                 <div class="text-subtitle-2 font-weight-bold text-warning">
-                  Discrepancies Detected
+                  {{ discrepantItemsCount }} Discrepancies Detected
                 </div>
                 <div class="text-body-2">
-                  Check items table for quantity and price discrepancies
+                  {{ quantityDiscrepancyCount }} quantity, {{ priceDiscrepancyCount }} price
+                  discrepancies
                 </div>
               </div>
             </div>
-            <v-chip :color="financialImpact >= 0 ? 'error' : 'success'" variant="flat" size="large">
+            <v-chip :color="financialImpact >= 0 ? 'success' : 'error'" variant="flat" size="large">
               {{ formatFinancialImpact() }}
             </v-chip>
           </div>
         </div>
 
-        <!-- Items Widget -->
+        <!-- Items Table -->
         <div class="pa-4">
-          <EditableReceiptItemsWidget
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div class="text-subtitle-1 font-weight-bold">
+              Receipt Items ({{ receiptForm.items.length }})
+            </div>
+
+            <div class="d-flex gap-2">
+              <v-btn
+                color="info"
+                variant="outlined"
+                size="small"
+                prepend-icon="mdi-auto-fix"
+                :disabled="isCompleted"
+                @click="autoFillFromOrder"
+              >
+                Auto Fill from Order
+              </v-btn>
+
+              <v-btn
+                color="warning"
+                variant="outlined"
+                size="small"
+                prepend-icon="mdi-backup-restore"
+                :disabled="isCompleted"
+                @click="resetToOriginal"
+              >
+                Reset to Original
+              </v-btn>
+            </div>
+          </div>
+
+          <v-data-table
+            :headers="itemHeaders"
             :items="receiptForm.items"
-            :is-completed="isCompleted"
-            @item-changed="handleItemChanged"
-            @auto-fill="autoFillFromOrder"
-          />
+            :loading="isLoading"
+            density="compact"
+            :items-per-page="-1"
+            hide-default-footer
+            class="receipt-items-table"
+          >
+            <!-- Item Name with Order Info -->
+            <template #[`item.itemInfo`]="{ item }">
+              <div>
+                <div class="text-subtitle-2 font-weight-bold">{{ item.itemName }}</div>
+                <div class="text-caption text-medium-emphasis">
+                  Order: {{ item.orderedQuantity }} {{ getItemUnit(item) }} @
+                  {{ formatCurrency(item.orderedPrice) }}
+                </div>
+              </div>
+            </template>
+
+            <!-- Received Quantity Input -->
+            <template #[`item.receivedQuantity`]="{ item }">
+              <v-text-field
+                v-model.number="item.receivedQuantity"
+                type="number"
+                step="0.001"
+                min="0"
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+                :disabled="isCompleted"
+                :class="{
+                  'qty-discrepancy': hasItemQuantityDiscrepancy(item)
+                }"
+                @blur="updateItemCalculations(item)"
+              />
+            </template>
+
+            <!-- Actual Price Input -->
+            <template #[`item.actualPrice`]="{ item }">
+              <v-text-field
+                v-model.number="item.actualPrice"
+                type="number"
+                step="0.01"
+                min="0"
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+                :disabled="isCompleted"
+                :placeholder="formatCurrency(item.orderedPrice)"
+                :class="{
+                  'price-discrepancy': hasItemPriceDiscrepancy(item)
+                }"
+                @blur="updateItemCalculations(item)"
+              />
+            </template>
+
+            <!-- Line Total -->
+            <template #[`item.lineTotal`]="{ item }">
+              <div class="text-end">
+                <div class="font-weight-bold">{{ formatCurrency(calculateLineTotal(item)) }}</div>
+                <div
+                  v-if="hasItemDiscrepancy(item)"
+                  class="text-caption"
+                  :class="getLineTotalDiffClass(item)"
+                >
+                  {{ formatLineTotalDiff(item) }}
+                </div>
+              </div>
+            </template>
+
+            <!-- Status -->
+            <template #[`item.status`]="{ item }">
+              <v-chip
+                size="small"
+                :color="getItemStatusColor(item)"
+                :variant="hasItemDiscrepancy(item) ? 'flat' : 'tonal'"
+              >
+                <v-icon v-if="hasItemDiscrepancy(item)" start :icon="getItemStatusIcon(item)" />
+                {{ getItemStatusText(item) }}
+              </v-chip>
+            </template>
+
+            <!-- Notes Input -->
+            <template #[`item.notes`]="{ item }">
+              <v-text-field
+                v-model="item.notes"
+                placeholder="Add notes..."
+                variant="outlined"
+                density="compact"
+                hide-details="auto"
+                :disabled="isCompleted"
+              />
+            </template>
+          </v-data-table>
         </div>
 
-        <!-- Notes -->
+        <!-- Summary -->
         <div class="pa-4 bg-surface border-t">
-          <v-textarea
-            v-model="receiptForm.notes"
-            label="Receipt Notes"
-            placeholder="Add any additional notes about this receipt..."
-            variant="outlined"
-            density="compact"
-            rows="3"
-            :disabled="isCompleted"
-          />
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-textarea
+                v-model="receiptForm.notes"
+                label="Receipt Notes"
+                placeholder="Add any additional notes about this receipt..."
+                variant="outlined"
+                density="compact"
+                rows="3"
+                :disabled="isCompleted"
+              />
+            </v-col>
+
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 font-weight-bold mb-3">Receipt Summary</div>
+              <div class="d-flex justify-space-between mb-2">
+                <span>Items processed:</span>
+                <span class="font-weight-bold">{{ receiptForm.items.length }}</span>
+              </div>
+              <div class="d-flex justify-space-between mb-2">
+                <span>Original total:</span>
+                <span>{{ formatCurrency(props.order.totalAmount) }}</span>
+              </div>
+              <div class="d-flex justify-space-between mb-2">
+                <span>Actual total:</span>
+                <span class="font-weight-bold">{{ formatCurrency(calculatedActualTotal) }}</span>
+              </div>
+              <v-divider class="my-2" />
+              <div class="d-flex justify-space-between">
+                <span class="font-weight-bold">Financial impact:</span>
+                <span
+                  class="font-weight-bold"
+                  :class="financialImpact >= 0 ? 'text-success' : 'text-error'"
+                >
+                  {{ formatFinancialImpact() }}
+                </span>
+              </div>
+            </v-col>
+          </v-row>
         </div>
       </div>
 
@@ -125,7 +275,7 @@
       <v-card-actions class="pa-4 bg-surface border-t">
         <div v-if="hasDiscrepancies" class="d-flex align-center mr-4">
           <v-icon icon="mdi-alert-triangle" color="warning" size="20" class="mr-2" />
-          <span class="text-body-2 text-warning">Discrepancies detected</span>
+          <span class="text-body-2 text-warning">{{ discrepantItemsCount }} discrepancies</span>
         </div>
 
         <v-spacer />
@@ -172,7 +322,8 @@
           <div v-if="hasDiscrepancies" class="mb-4">
             <v-alert type="warning" variant="tonal">
               <v-alert-title>Discrepancies Detected</v-alert-title>
-              You have items with quantity or price discrepancies. Financial impact:
+              You have {{ discrepantItemsCount }} items with quantity or price discrepancies.
+              Financial impact:
               <strong>{{ formatFinancialImpact() }}</strong>
             </v-alert>
           </div>
@@ -215,16 +366,13 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProductsStore } from '@/stores/productsStore'
 import { TimeUtils } from '@/utils/time'
-import { DebugUtils } from '@/utils'
+
 import type {
   PurchaseOrder,
   Receipt,
   ReceiptItem,
   CreateReceiptData
 } from '@/stores/supplier_2/types'
-import EditableReceiptItemsWidget from './receipt-edit/EditableReceiptItemsWidget.vue'
-
-const MODULE_NAME = 'BaseReceiptDialog'
 
 // =============================================
 // PROPS & EMITS
@@ -273,16 +421,14 @@ const isSaving = ref(false)
 const isCompleting = ref(false)
 const showConfirmDialog = ref(false)
 
+// ✅ ИСПРАВЛЕНО: Правильная структура формы
 interface ReceiptFormItem extends ReceiptItem {
   unit?: string
-  packageId?: string
-  receivedPackageQuantity?: number
-  actualPackagePrice?: number
 }
 
 const receiptForm = ref({
   receivedBy: 'Warehouse Manager',
-  deliveryDate: TimeUtils.formatForHTMLInput(),
+  deliveryDate: TimeUtils.formatForHTMLInput(), // ✅ ИСПРАВЛЕНО
   notes: '',
   items: [] as ReceiptFormItem[]
 })
@@ -314,6 +460,26 @@ const hasDiscrepancies = computed(() => {
   return receiptForm.value.items?.some(item => hasItemDiscrepancy(item)) || false
 })
 
+const hasQuantityDiscrepancies = computed(() => {
+  return receiptForm.value.items?.some(item => hasItemQuantityDiscrepancy(item)) || false
+})
+
+const hasPriceDiscrepancies = computed(() => {
+  return receiptForm.value.items?.some(item => hasItemPriceDiscrepancy(item)) || false
+})
+
+const quantityDiscrepancyCount = computed(() => {
+  return receiptForm.value.items?.filter(item => hasItemQuantityDiscrepancy(item)).length || 0
+})
+
+const priceDiscrepancyCount = computed(() => {
+  return receiptForm.value.items?.filter(item => hasItemPriceDiscrepancy(item)).length || 0
+})
+
+const discrepantItemsCount = computed(() => {
+  return receiptForm.value.items?.filter(item => hasItemDiscrepancy(item)).length || 0
+})
+
 const canSave = computed(() => {
   return (
     receiptForm.value.receivedBy &&
@@ -333,13 +499,26 @@ const canComplete = computed(() => {
 })
 
 // =============================================
+// TABLE CONFIGURATION
+// =============================================
+
+const itemHeaders = [
+  { title: 'Item', key: 'itemInfo', sortable: false, width: '200px' },
+  { title: 'Received Qty', key: 'receivedQuantity', sortable: false, width: '120px' },
+  { title: 'Actual Price', key: 'actualPrice', sortable: false, width: '120px' },
+  { title: 'Line Total', key: 'lineTotal', sortable: false, width: '140px', align: 'end' },
+  { title: 'Status', key: 'status', sortable: false, width: '140px' },
+  { title: 'Notes', key: 'notes', sortable: false, width: '200px' }
+]
+
+// =============================================
 // METHODS - Initialization
 // =============================================
 
 async function initializeReceipt() {
   if (!props.order) return
 
-  DebugUtils.info(MODULE_NAME, 'Initializing receipt', {
+  console.log('BaseReceiptDialog: Initializing receipt', {
     orderId: props.order.id,
     isEditMode: isEditMode.value
   })
@@ -347,23 +526,21 @@ async function initializeReceipt() {
   isLoading.value = true
   try {
     if (isEditMode.value && props.receipt) {
-      DebugUtils.info(MODULE_NAME, 'Loading existing receipt for editing', {
-        receiptId: props.receipt.id
-      })
+      // Режим редактирования - загружаем существующий receipt
+      console.log('BaseReceiptDialog: Loading existing receipt for editing', props.receipt.id)
       currentReceipt.value = props.receipt
       setupReceiptForm()
     } else {
-      DebugUtils.info(MODULE_NAME, 'Creating new receipt from order', {
-        orderId: props.order.id
-      })
+      // Режим создания - создаем новый receipt
+      console.log('BaseReceiptDialog: Creating new receipt from order', props.order.id)
 
       const createData: CreateReceiptData = {
         purchaseOrderId: props.order.id,
         receivedBy: receiptForm.value.receivedBy,
         items: props.order.items.map(orderItem => ({
           orderItemId: orderItem.id,
-          receivedQuantity: orderItem.orderedQuantity,
-          actualPrice: undefined,
+          receivedQuantity: orderItem.orderedQuantity, // Предзаполняем заказанным количеством
+          actualPrice: undefined, // Оставляем пустым - будет использоваться orderedPrice
           notes: ''
         }))
       }
@@ -373,12 +550,12 @@ async function initializeReceipt() {
       setupReceiptForm()
     }
 
-    DebugUtils.info(MODULE_NAME, 'Receipt initialized successfully', {
+    console.log('BaseReceiptDialog: Receipt initialized successfully', {
       receiptId: currentReceipt.value?.id,
       itemsCount: receiptForm.value.items.length
     })
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to initialize receipt', { error })
+    console.error('BaseReceiptDialog: Failed to initialize receipt', error)
     emits('error', `Failed to initialize receipt: ${error}`)
     closeDialog()
   } finally {
@@ -389,32 +566,33 @@ async function initializeReceipt() {
 function setupReceiptForm() {
   if (!currentReceipt.value || !props.order) return
 
-  DebugUtils.info(MODULE_NAME, 'Setting up form with receipt data', {
+  console.log('BaseReceiptDialog: Setting up form with receipt data', {
     receiptId: currentReceipt.value.id,
     itemsCount: currentReceipt.value.items.length
   })
 
+  // Заполняем основную информацию с проверками типов
   receiptForm.value.receivedBy = currentReceipt.value.receivedBy || 'Warehouse Manager'
+  // ✅ ИСПРАВЛЕНО: Убираем дублирование логики
   receiptForm.value.deliveryDate = TimeUtils.formatForHTMLInput(currentReceipt.value.deliveryDate)
   receiptForm.value.notes = currentReceipt.value.notes || ''
 
+  // Заполняем items
   receiptForm.value.items = currentReceipt.value.items.map(receiptItem => {
     const orderItem = props.order!.items.find(oi => oi.id === receiptItem.orderItemId)
 
     return {
       ...receiptItem,
       unit: orderItem?.unit || getItemUnit(receiptItem.itemId),
-      packageId: orderItem?.packageId,
-      actualPrice: receiptItem.actualPrice || undefined,
-      actualPackagePrice: undefined,
-      receivedPackageQuantity: undefined
+      actualPrice: receiptItem.actualPrice || undefined
     } as ReceiptFormItem
   })
 
-  DebugUtils.debug(MODULE_NAME, 'Form setup complete', {
+  console.log('BaseReceiptDialog: Form setup complete', {
     itemsCount: receiptForm.value.items.length,
     receivedBy: receiptForm.value.receivedBy,
-    deliveryDate: receiptForm.value.deliveryDate
+    deliveryDate: receiptForm.value.deliveryDate, // ✅ ДОБАВЛЕНО для отладки
+    hasDiscrepancies: hasDiscrepancies.value
   })
 }
 
@@ -422,33 +600,22 @@ function setupReceiptForm() {
 // METHODS - Actions
 // =============================================
 
-function handleItemChanged(item: ReceiptFormItem, index: number) {
-  if (!receiptForm.value.items) return
-
-  receiptForm.value.items[index] = { ...item }
-
-  DebugUtils.debug(MODULE_NAME, 'Receipt item updated', {
-    itemName: item.itemName,
-    receivedQuantity: item.receivedQuantity,
-    actualPrice: item.actualPrice
-  })
-}
-
 async function saveReceipt() {
   if (!currentReceipt.value || !canSave.value) return
 
-  DebugUtils.info(MODULE_NAME, 'Saving receipt', { receiptId: currentReceipt.value.id })
+  console.log('BaseReceiptDialog: Saving receipt', currentReceipt.value.id)
 
   isSaving.value = true
   try {
     const updateData = {
       notes: receiptForm.value.notes
+      // TODO: Обновить items если изменились
     }
 
     await updateReceipt(currentReceipt.value.id, updateData)
-    emits('success', 'Receipt saved successfully')
+    emits('success', `Receipt saved successfully`)
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to save receipt', { error })
+    console.error('BaseReceiptDialog: Failed to save receipt', error)
     emits('error', `Failed to save receipt: ${error}`)
   } finally {
     isSaving.value = false
@@ -458,7 +625,7 @@ async function saveReceipt() {
 async function confirmComplete() {
   if (!currentReceipt.value || !canComplete.value) return
 
-  DebugUtils.info(MODULE_NAME, 'Completing receipt', {
+  console.log('BaseReceiptDialog: Completing receipt', {
     receiptId: currentReceipt.value.id,
     hasDiscrepancies: hasDiscrepancies.value,
     financialImpact: financialImpact.value
@@ -466,10 +633,12 @@ async function confirmComplete() {
 
   isCompleting.value = true
   try {
+    // Обновляем текущий receipt с данными из формы перед завершением
     currentReceipt.value.receivedBy = receiptForm.value.receivedBy
     currentReceipt.value.deliveryDate = receiptForm.value.deliveryDate
     currentReceipt.value.notes = receiptForm.value.notes
 
+    // Обновляем items с актуальными данными
     receiptForm.value.items.forEach(formItem => {
       const receiptItem = currentReceipt.value!.items.find(ri => ri.id === formItem.id)
       if (receiptItem) {
@@ -484,7 +653,7 @@ async function confirmComplete() {
       receiptForm.value.notes
     )
 
-    DebugUtils.info(MODULE_NAME, 'Receipt completed successfully', {
+    console.log('BaseReceiptDialog: Receipt completed successfully', {
       receiptId: completedReceipt.id,
       receiptNumber: completedReceipt.receiptNumber,
       storageOperationId: completedReceipt.storageOperationId
@@ -498,7 +667,7 @@ async function confirmComplete() {
     showConfirmDialog.value = false
     closeDialog()
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to complete receipt', { error })
+    console.error('BaseReceiptDialog: Failed to complete receipt', error)
     emits('error', `Failed to complete receipt: ${error}`)
   } finally {
     isCompleting.value = false
@@ -508,24 +677,34 @@ async function confirmComplete() {
 function autoFillFromOrder() {
   if (!props.order || isCompleted.value) return
 
-  DebugUtils.info(MODULE_NAME, 'Auto-filling quantities from order')
+  console.log('BaseReceiptDialog: Auto-filling quantities from order')
 
   receiptForm.value.items.forEach(item => {
     const orderItem = props.order!.items.find(oi => oi.id === item.orderItemId)
     if (orderItem) {
       item.receivedQuantity = orderItem.orderedQuantity
-      item.actualPrice = undefined
-      item.actualPackagePrice = undefined
-      item.receivedPackageQuantity = undefined
+      item.actualPrice = undefined // Очищаем, чтобы использовался orderedPrice
     }
   })
 
-  DebugUtils.info(MODULE_NAME, 'Auto-fill completed')
+  console.log('BaseReceiptDialog: Auto-fill completed')
+}
+
+function resetToOriginal() {
+  if (!props.order || !currentReceipt.value || isCompleted.value) return
+
+  console.log('BaseReceiptDialog: Resetting form to original values')
+
+  // Возвращаем к исходным значениям receipt
+  setupReceiptForm()
+
+  console.log('BaseReceiptDialog: Reset completed')
 }
 
 function closeDialog() {
-  DebugUtils.info(MODULE_NAME, 'Closing dialog')
+  console.log('BaseReceiptDialog: Closing dialog')
 
+  // Очищаем состояние
   currentReceipt.value = null
   receiptForm.value.items = []
   showConfirmDialog.value = false
@@ -545,10 +724,77 @@ function calculateLineTotal(item: ReceiptFormItem): number {
   return item.receivedQuantity * price
 }
 
+function updateItemCalculations(item: ReceiptFormItem) {
+  // Можно добавить дополнительную логику пересчета
+  console.log('BaseReceiptDialog: Item calculations updated', {
+    itemId: item.itemId,
+    receivedQuantity: item.receivedQuantity,
+    actualPrice: item.actualPrice,
+    lineTotal: calculateLineTotal(item)
+  })
+}
+
+// =============================================
+// METHODS - Discrepancy Analysis
+// =============================================
+
 function hasItemDiscrepancy(item: ReceiptFormItem): boolean {
-  const qtyDiff = Math.abs(item.receivedQuantity - item.orderedQuantity)
-  const priceDiff = item.actualPrice ? Math.abs(item.actualPrice - item.orderedPrice) : 0
-  return qtyDiff > 0.001 || priceDiff > 0.01
+  return hasItemQuantityDiscrepancy(item) || hasItemPriceDiscrepancy(item)
+}
+
+function hasItemQuantityDiscrepancy(item: ReceiptFormItem): boolean {
+  const diff = Math.abs(item.receivedQuantity - item.orderedQuantity)
+  return diff > 0.001 // Учитываем погрешности с плавающей точкой
+}
+
+function hasItemPriceDiscrepancy(item: ReceiptFormItem): boolean {
+  if (!item.actualPrice) return false
+  const diff = Math.abs(item.actualPrice - item.orderedPrice)
+  return diff > 0.01 // Учитываем погрешности в копейках
+}
+
+function getItemStatusColor(item: ReceiptFormItem): string {
+  if (!hasItemDiscrepancy(item)) return 'success'
+  if (hasItemQuantityDiscrepancy(item) && hasItemPriceDiscrepancy(item)) return 'error'
+  if (hasItemQuantityDiscrepancy(item)) return 'warning'
+  if (hasItemPriceDiscrepancy(item)) return 'info'
+  return 'success'
+}
+
+function getItemStatusIcon(item: ReceiptFormItem): string {
+  if (hasItemQuantityDiscrepancy(item) && hasItemPriceDiscrepancy(item)) {
+    return 'mdi-alert-circle'
+  }
+  if (hasItemQuantityDiscrepancy(item)) return 'mdi-scale'
+  if (hasItemPriceDiscrepancy(item)) return 'mdi-currency-usd'
+  return 'mdi-check'
+}
+
+function getItemStatusText(item: ReceiptFormItem): string {
+  if (hasItemQuantityDiscrepancy(item) && hasItemPriceDiscrepancy(item)) {
+    return 'Qty & Price'
+  }
+  if (hasItemQuantityDiscrepancy(item)) return 'Quantity'
+  if (hasItemPriceDiscrepancy(item)) return 'Price'
+  return 'OK'
+}
+
+function formatLineTotalDiff(item: ReceiptFormItem): string {
+  const originalTotal = item.orderedQuantity * item.orderedPrice
+  const actualTotal = calculateLineTotal(item)
+  const diff = actualTotal - originalTotal
+
+  const sign = diff >= 0 ? '+' : ''
+  return `${sign}${formatCurrency(diff)}`
+}
+
+function getLineTotalDiffClass(item: ReceiptFormItem): string {
+  const originalTotal = item.orderedQuantity * item.orderedPrice
+  const actualTotal = calculateLineTotal(item)
+  const diff = actualTotal - originalTotal
+
+  if (Math.abs(diff) < 0.01) return 'text-success'
+  return diff > 0 ? 'text-error' : 'text-success'
 }
 
 // =============================================
@@ -556,6 +802,7 @@ function hasItemDiscrepancy(item: ReceiptFormItem): boolean {
 // =============================================
 
 function getItemUnit(itemId: string | any): string {
+  // Проверяем что itemId это строка
   const id = typeof itemId === 'string' ? itemId : itemId?.itemId || ''
 
   if (id.includes('beer') || id.includes('cola')) return 'piece'
@@ -581,7 +828,7 @@ function formatDate(dateString?: string): string {
       minute: '2-digit'
     })
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Error formatting date', { error })
+    console.error('BaseReceiptDialog: Error formatting date', error)
     return 'Invalid date'
   }
 }
@@ -590,12 +837,14 @@ function formatDate(dateString?: string): string {
 // WATCHERS
 // =============================================
 
+// ✅ ИСПРАВЛЕНО: Правильная инициализация при открытии диалога
 watch(
   () => [props.modelValue, props.order],
   async ([isOpen, order]) => {
-    DebugUtils.debug(MODULE_NAME, 'Dialog state changed', { isOpen, orderId: order?.id })
+    console.log('BaseReceiptDialog: Dialog state changed', { isOpen, orderId: order?.id })
 
     if (isOpen && order && !isLoading.value) {
+      // Небольшая задержка чтобы DOM обновился
       await nextTick()
       await initializeReceipt()
     }
@@ -603,10 +852,11 @@ watch(
   { immediate: true }
 )
 
+// Следим за изменениями в receipt prop
 watch(
   () => props.receipt,
   newReceipt => {
-    DebugUtils.debug(MODULE_NAME, 'Receipt prop changed', { receiptId: newReceipt?.id })
+    console.log('BaseReceiptDialog: Receipt prop changed', { receiptId: newReceipt?.id })
 
     if (newReceipt && props.modelValue) {
       currentReceipt.value = newReceipt
@@ -620,12 +870,13 @@ watch(
 // =============================================
 
 onMounted(() => {
-  DebugUtils.info(MODULE_NAME, 'Component mounted', {
+  console.log('BaseReceiptDialog: Component mounted', {
     isOpen: props.modelValue,
     orderId: props.order?.id,
     receiptId: props.receipt?.id
   })
 
+  // Если диалог уже открыт при монтировании, инициализируем
   if (props.modelValue && props.order) {
     nextTick(() => {
       initializeReceipt()
@@ -649,6 +900,14 @@ onMounted(() => {
   border-top: 1px solid rgb(var(--v-theme-surface-variant));
 }
 
+.border {
+  border: 1px solid rgb(var(--v-theme-surface-variant));
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
 .gap-4 {
   gap: 16px;
 }
@@ -657,17 +916,112 @@ onMounted(() => {
   opacity: 0.7;
 }
 
+// Receipt items table styling
+.receipt-items-table {
+  .v-data-table__th,
+  .v-data-table__td {
+    border-bottom: 1px solid rgb(var(--v-theme-surface-variant));
+    padding: 8px 12px;
+  }
+
+  .v-data-table__th {
+    background-color: rgb(var(--v-theme-surface-variant), 0.3);
+    font-weight: 600;
+  }
+}
+
+// Discrepancy highlighting
+.qty-discrepancy {
+  :deep(.v-field) {
+    border-left: 3px solid rgb(var(--v-theme-warning));
+  }
+}
+
+.price-discrepancy {
+  :deep(.v-field) {
+    border-left: 3px solid rgb(var(--v-theme-error));
+  }
+}
+
+// Financial impact colors
+.text-error {
+  color: rgb(var(--v-theme-error)) !important;
+}
+
+.text-success {
+  color: rgb(var(--v-theme-success)) !important;
+}
+
+.text-warning {
+  color: rgb(var(--v-theme-warning)) !important;
+}
+
+.text-info {
+  color: rgb(var(--v-theme-info)) !important;
+}
+
+// Summary cards
 .bg-warning-lighten-5 {
   background-color: rgb(var(--v-theme-warning), 0.1) !important;
 }
 
-.bg-surface {
-  background-color: rgba(var(--v-theme-surface-variant), 0.3);
+// Animations
+.v-chip {
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+.v-text-field.qty-discrepancy,
+.v-text-field.price-discrepancy {
+  animation: highlightDiscrepancy 0.5s ease-out;
+}
+
+@keyframes highlightDiscrepancy {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+// Loading states
+.v-skeleton-loader {
+  border-radius: 8px;
+}
+
+// Responsive adjustments
+@media (max-width: 1200px) {
+  .receipt-items-table {
+    .v-data-table__th,
+    .v-data-table__td {
+      padding: 6px 8px;
+      font-size: 0.875rem;
+    }
+  }
 }
 
 @media (max-width: 768px) {
+  .receipt-items-table {
+    .v-data-table__th,
+    .v-data-table__td {
+      padding: 4px 6px;
+      font-size: 0.8rem;
+    }
+  }
+
   .gap-4 {
     gap: 8px;
+  }
+
+  .v-row {
+    margin: 0;
   }
 }
 </style>
