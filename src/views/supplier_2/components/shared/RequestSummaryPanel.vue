@@ -193,7 +193,7 @@
 import { ref, computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import type { RequestItem } from '@/stores/supplier_2/types'
-import PackageSelector from './PackageSelector.vue'
+import PackageSelector from './package/PackageSelector.vue'
 
 // =============================================
 // PROPS & EMITS

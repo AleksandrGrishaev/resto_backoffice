@@ -1,4 +1,4 @@
-<!-- src/views/supplier_2/components/shared/PackageSelector.vue -->
+<!-- src/views/supplier_2/components/shared/package/PackageSelector.vue -->
 <template>
   <!-- Vertical Layout -->
   <div v-if="layout === 'vertical'" class="package-selector-vertical">
@@ -105,6 +105,18 @@
         </v-card>
       </div>
 
+      <!-- Add New Package Button -->
+      <v-btn
+        v-if="allowAddPackage"
+        variant="outlined"
+        color="primary"
+        prepend-icon="mdi-plus"
+        class="mt-3 w-100"
+        @click="showAddPackageDialog = true"
+      >
+        Add New Package
+      </v-btn>
+
       <!-- Mode-specific hints -->
       <v-alert
         v-if="mode === 'optional'"
@@ -130,10 +142,22 @@
     </div>
 
     <!-- No Packages Available -->
-    <v-alert v-else type="warning" variant="tonal" density="compact">
+    <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-3">
       <div class="text-body-2">No packages available for this product.</div>
-      <div class="text-caption">Please add packages in product management first.</div>
+      <div class="text-caption">Add a package to continue.</div>
     </v-alert>
+
+    <!-- Add Package Button when no packages exist -->
+    <v-btn
+      v-if="availablePackages.length === 0 && allowAddPackage"
+      variant="flat"
+      color="primary"
+      prepend-icon="mdi-plus"
+      class="w-100"
+      @click="showAddPackageDialog = true"
+    >
+      Add First Package
+    </v-btn>
   </div>
 
   <!-- Horizontal Layout -->
@@ -213,18 +237,55 @@
           <span>Price calculated from base cost</span>
         </v-tooltip>
       </div>
+
+      <!-- Add Package Button (horizontal) -->
+      <v-btn
+        v-if="allowAddPackage"
+        variant="outlined"
+        color="primary"
+        icon="mdi-plus"
+        size="small"
+        @click="showAddPackageDialog = true"
+      >
+        <v-icon>mdi-plus</v-icon>
+        <v-tooltip activator="parent" location="top">Add New Package</v-tooltip>
+      </v-btn>
     </div>
 
-    <!-- No Packages Available -->
-    <v-alert v-else type="warning" variant="tonal" density="compact">No packages available</v-alert>
+    <!-- No Packages Available (horizontal) -->
+    <div v-else class="d-flex align-center gap-2">
+      <v-alert type="warning" variant="tonal" density="compact" class="flex-grow-1">
+        No packages available
+      </v-alert>
+      <v-btn
+        v-if="allowAddPackage"
+        variant="flat"
+        color="primary"
+        prepend-icon="mdi-plus"
+        @click="showAddPackageDialog = true"
+      >
+        Add Package
+      </v-btn>
+    </div>
   </div>
+
+  <!-- Quick Add Package Dialog -->
+  <PackageOptionDialog
+    v-model="showAddPackageDialog"
+    :product-id="productId"
+    :base-unit="productForDialog?.baseUnit || 'gram'"
+    :loading="packageDialogLoading"
+    :product-base-cost="productForDialog?.baseCostPerUnit || 0"
+    @save="handlePackageSaved"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
+import { formatIDR } from '@/utils/currency'
 import type { PackageOption, Product } from '@/stores/productsStore/types'
-
+import PackageOptionDialog from '@/views/products/components/package/PackageOptionDialog.vue'
 // =============================================
 // PROPS & EMITS
 // =============================================
@@ -235,6 +296,7 @@ interface Props {
   selectedPackageId?: string
   mode: 'optional' | 'required' | 'change'
   layout?: 'vertical' | 'horizontal'
+  allowAddPackage?: boolean
 }
 
 interface Emits {
@@ -251,7 +313,9 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  layout: 'vertical'
+  layout: 'vertical',
+  allowAddPackage: true,
+  selectedPackageId: undefined
 })
 
 const emits = defineEmits<Emits>()
@@ -269,7 +333,11 @@ const productsStore = useProductsStore()
 const loading = ref(false)
 const error = ref<string | null>(null)
 const internalSelectedPackageId = ref<string | undefined>(props.selectedPackageId)
-
+const showAddPackageDialog = ref(false)
+const packageDialogLoading = ref(false)
+const productForDialog = computed(() => {
+  return productInfo.value
+})
 // =============================================
 // COMPUTED
 // =============================================
@@ -405,11 +473,22 @@ function formatQuantity(value: number): string {
 }
 
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0
-  }).format(amount)
+  return formatIDR(amount)
+}
+
+async function handlePackageSaved(packageData: any) {
+  packageDialogLoading.value = true
+  try {
+    const newPackage = await productsStore.addPackageOption(packageData)
+
+    // Автоматически выбрать новую упаковку
+    selectPackage(newPackage.id)
+    showAddPackageDialog.value = false
+  } catch (error) {
+    console.error('Failed to create package:', error)
+  } finally {
+    packageDialogLoading.value = false
+  }
 }
 
 function initializeSelector() {
@@ -422,25 +501,23 @@ function initializeSelector() {
       return
     }
 
-    if (availablePackages.value.length === 0) {
-      error.value = 'No packages available'
-      return
-    }
-
-    // Устанавливаем selected package если не задан
-    if (!props.selectedPackageId) {
-      if (recommendedPackageId.value) {
-        internalSelectedPackageId.value = recommendedPackageId.value
-        emits('update:selectedPackageId', recommendedPackageId.value)
-      } else {
-        const firstPackage = availablePackages.value[0]
-        if (firstPackage) {
-          internalSelectedPackageId.value = firstPackage.id
-          emits('update:selectedPackageId', firstPackage.id)
+    // Если есть упаковки
+    if (availablePackages.value.length > 0) {
+      // Устанавливаем selected package если не задан
+      if (!props.selectedPackageId) {
+        if (recommendedPackageId.value) {
+          internalSelectedPackageId.value = recommendedPackageId.value
+          emits('update:selectedPackageId', recommendedPackageId.value)
+        } else {
+          const firstPackage = availablePackages.value[0]
+          if (firstPackage) {
+            internalSelectedPackageId.value = firstPackage.id
+            emits('update:selectedPackageId', firstPackage.id)
+          }
         }
+      } else {
+        internalSelectedPackageId.value = props.selectedPackageId
       }
-    } else {
-      internalSelectedPackageId.value = props.selectedPackageId
     }
   } catch (err) {
     console.error('Failed to initialize package selector:', err)

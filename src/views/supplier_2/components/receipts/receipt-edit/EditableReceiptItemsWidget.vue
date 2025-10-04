@@ -76,14 +76,6 @@
         </div>
       </template>
 
-      <!-- Ordered Quantity - READ ONLY -->
-      <template #[`item.orderedQuantity`]="{ item }">
-        <div class="text-right">
-          <div class="text-body-2 text-medium-emphasis">{{ item.orderedQuantity }}</div>
-          <div class="text-caption text-medium-emphasis">{{ item.unit }}</div>
-        </div>
-      </template>
-
       <!-- Received Packages - EDITABLE -->
       <template #[`item.receivedPackages`]="{ item }">
         <div class="text-right">
@@ -125,22 +117,22 @@
         </div>
       </template>
 
-      <!-- Actual Price per Package - EDITABLE -->
+      <!-- Actual Price per Package - EDITABLE with IDR formatting -->
       <template #[`item.actualPackagePrice`]="{ item }">
         <div class="text-right">
           <v-text-field
             v-if="!isCompleted"
-            :model-value="getActualPackagePrice(item)"
-            type="number"
-            min="0"
-            step="100"
+            :model-value="getFormattedPrice(item)"
+            type="text"
             variant="outlined"
             density="compact"
             hide-details
-            style="width: 120px"
-            :placeholder="formatCurrency(getOrderedPackagePrice(item))"
+            style="width: 150px"
+            prefix="Rp"
+            :placeholder="formatPriceForInput(getOrderedPackagePrice(item))"
             :class="{ 'price-discrepancy': hasPriceDiscrepancy(item) }"
-            @update:model-value="updateActualPackagePrice(item, $event)"
+            @update:model-value="updateFormattedPrice(item, $event)"
+            @blur="validateAndUpdatePrice(item)"
           />
           <div v-else>
             <div class="text-body-2 font-weight-medium">
@@ -280,8 +272,9 @@
 import { ref, computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
+import { formatIDR, parseIDR } from '@/utils/currency'
 import type { ReceiptItem } from '@/stores/supplier_2/types'
-import PackageSelector from '../../shared/PackageSelector.vue'
+import PackageSelector from '../../shared/package/PackageSelector.vue'
 
 const MODULE_NAME = 'EditableReceiptItemsWidget'
 
@@ -319,6 +312,9 @@ const showPackageSelectorDialog = ref(false)
 const selectedItemForPackageChange = ref<ReceiptItem | null>(null)
 const selectedItemIndex = ref(-1)
 
+// Formatted price inputs (for display in text fields with Rp prefix)
+const formattedPrices = ref<Map<string, string>>(new Map())
+
 // =============================================
 // TABLE CONFIGURATION
 // =============================================
@@ -335,13 +331,6 @@ const headers = computed(() => [
     key: 'package',
     sortable: false,
     width: '150px'
-  },
-  {
-    title: 'Ordered',
-    key: 'orderedQuantity',
-    sortable: false,
-    width: '100px',
-    align: 'end' as const
   },
   {
     title: 'Recv. Pkgs',
@@ -361,7 +350,7 @@ const headers = computed(() => [
     title: 'Price/Package',
     key: 'actualPackagePrice',
     sortable: false,
-    width: '140px',
+    width: '160px',
     align: 'end' as const
   },
   {
@@ -503,6 +492,43 @@ function getActualPricePerUnit(item: ReceiptItem): number {
 }
 
 // =============================================
+// PRICE FORMATTING METHODS
+// =============================================
+
+function getFormattedPrice(item: ReceiptItem): string {
+  const key = item.id
+  if (formattedPrices.value.has(key)) {
+    return formattedPrices.value.get(key)!
+  }
+  return formatPriceForInput(getActualPackagePrice(item))
+}
+
+function formatPriceForInput(price: number): string {
+  if (!price || price === 0) return ''
+  return new Intl.NumberFormat('id-ID').format(price)
+}
+
+function updateFormattedPrice(item: ReceiptItem, value: string) {
+  formattedPrices.value.set(item.id, value)
+}
+
+function validateAndUpdatePrice(item: ReceiptItem) {
+  const formattedValue = formattedPrices.value.get(item.id) || ''
+  const parsed = parseIDR(`Rp ${formattedValue}`)
+
+  if (parsed > 0) {
+    updateActualPackagePrice(item, parsed)
+  }
+
+  // Update formatted value to reflect actual stored price
+  formattedPrices.value.set(item.id, formatPriceForInput(getActualPackagePrice(item)))
+}
+
+function formatCurrency(amount: number): string {
+  return formatIDR(amount)
+}
+
+// =============================================
 // EDITING METHODS
 // =============================================
 
@@ -527,7 +553,7 @@ function updateReceivedPackages(item: ReceiptItem, value: string | number) {
 }
 
 function updateActualPackagePrice(item: ReceiptItem, value: string | number) {
-  const newPrice = Number(value)
+  const newPrice = typeof value === 'string' ? parseIDR(value) : Number(value)
   if (newPrice < 0) return
 
   const packageSize = getPackageSize(item)
@@ -701,15 +727,6 @@ function formatFinancialImpact(): string {
   const sign = impact >= 0 ? '+' : ''
   return `${sign}${formatCurrency(Math.abs(impact))}`
 }
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-}
 </script>
 
 <style scoped>
@@ -740,6 +757,12 @@ function formatCurrency(amount: number): string {
       text-align: right;
       padding-right: 8px;
     }
+  }
+
+  /* Price input field styling */
+  :deep(.v-field__prefix) {
+    padding-right: 4px;
+    color: rgba(var(--v-theme-on-surface), 0.6);
   }
 
   /* Discrepancy highlighting */

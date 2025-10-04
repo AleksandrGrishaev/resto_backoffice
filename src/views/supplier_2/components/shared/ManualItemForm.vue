@@ -141,7 +141,7 @@
 import { ref, computed, watch } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import type { Product } from '@/stores/productsStore/types'
-import PackageSelector from './PackageSelector.vue'
+import PackageSelector from './package/PackageSelector.vue'
 
 // =============================================
 // PROPS & EMITS

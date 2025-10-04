@@ -106,7 +106,7 @@
 import { onMounted } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import type { SupplierBasket, UnassignedItem } from '@/stores/supplier_2/types'
-import PackageSelector from '../../shared/PackageSelector.vue'
+import PackageSelector from '../../shared/package/PackageSelector.vue'
 
 interface Props {
   baskets: SupplierBasket[]
