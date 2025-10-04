@@ -40,7 +40,7 @@
       </div>
 
       <!-- Amount Comparison (only if there are discrepancies) -->
-      <div v-if="order.hasReceiptDiscrepancies" class="border rounded pa-2 bg-surface-variant">
+      <div v-if="order.hasReceiptDiscrepancies" class="border rounded pa-2">
         <div class="d-flex justify-space-between text-body-2 mb-1">
           <span>Original amount:</span>
           <span>{{ formatCurrency(order.originalTotalAmount) }}</span>

@@ -241,6 +241,9 @@ import { ref, computed } from 'vue'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
 import type { PendingPayment } from '@/stores/account/types'
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
+import { DebugUtils } from '@/utils'
+
+const MODULE_NAME = 'PurchaseOrderPayment'
 
 // =============================================
 // PROPS & EMITS
@@ -350,7 +353,8 @@ function getBillStatusText(status: string): string {
 }
 
 function getLinkedAmountForOrder(payment: PendingPayment, orderId: string): number {
-  console.log(`DEBUG getLinkedAmountForOrder for payment ${payment.id}:`, {
+  DebugUtils.debug(MODULE_NAME, 'Getting linked amount for order', {
+    paymentId: payment.id,
     orderId,
     linkedOrders: payment.linkedOrders,
     hasLinkedOrders: !!payment.linkedOrders,
@@ -360,7 +364,12 @@ function getLinkedAmountForOrder(payment: PendingPayment, orderId: string): numb
   const link = payment.linkedOrders?.find(o => o.orderId === orderId && o.isActive)
   const result = link?.linkedAmount || 0
 
-  console.log(`DEBUG result for ${payment.id}:`, result, 'link found:', !!link)
+  DebugUtils.debug(MODULE_NAME, 'Linked amount result', {
+    paymentId: payment.id,
+    result,
+    linkFound: !!link
+  })
+
   return result
 }
 </script>

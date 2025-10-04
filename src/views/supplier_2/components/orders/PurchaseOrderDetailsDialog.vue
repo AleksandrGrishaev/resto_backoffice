@@ -249,7 +249,7 @@ import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOr
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
 import OrderItemsWidget from './order/OrderItemsWidget.vue'
-import OrderReceiptWidget from './OrderReceiptWidget.vue'
+import OrderReceiptWidget from './order/OrderReceiptWidget.vue'
 import AttachBillDialog from './order/AttachBillDialog.vue'
 import PurchaseOrderPayment from './order/PurchaseOrderPayment.vue'
 
