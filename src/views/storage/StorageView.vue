@@ -282,13 +282,16 @@ const isLoading = computed(() => {
 
 // ✅ FIXED: Safe access to store data
 const allProductBalances = computed(() => {
-  if (!isStoreReady.value || !storageStore.filteredBalances) {
+  if (!isStoreReady.value || !storageStore.state?.balances) {
     return []
   }
 
   try {
-    return storageStore.filteredBalances // ✅ Без .value - это уже computed
-      .filter(b => b && b.itemType === 'product' && b.department === selectedDepartment.value)
+    const filtered = storageStore.state.balances.filter(
+      b => b && b.itemType === 'product' && b.department === selectedDepartment.value
+    )
+
+    return filtered
   } catch (error) {
     console.warn('Error filtering product balances:', error)
     return []
@@ -375,7 +378,7 @@ const displayProductBalances = computed(() => {
 
   if (showZeroStock.value) {
     // When filter is active, show products with zero OR negative stock
-    return all
+    const filtered = all
       .filter(b => b.totalQuantity <= 0)
       .sort((a, b) => {
         // First: Negative stock items (more critical)
@@ -391,6 +394,8 @@ const displayProductBalances = computed(() => {
         // Finally by name
         return a.itemName.localeCompare(b.itemName)
       })
+
+    return filtered
   }
 
   // Default view - show ALL products with proper grouping
@@ -419,8 +424,23 @@ const displayProductBalances = computed(() => {
       return a.itemName.localeCompare(b.itemName)
     })
 
-  // Positive stock first, then negative stock (critical items visible)
-  return [...withPositiveStock, ...withNegativeStock]
+  // ✅ ДОБАВЬТЕ ZERO STOCK В DEFAULT VIEW!
+  const withZeroStock = all
+    .filter(b => b.totalQuantity === 0)
+    .sort((a, b) => {
+      const categoryA = getProductCategoryForSorting(a.itemId)
+      const categoryB = getProductCategoryForSorting(b.itemId)
+
+      const categoryCompare = categoryA.localeCompare(categoryB)
+      if (categoryCompare !== 0) return categoryCompare
+
+      return a.itemName.localeCompare(b.itemName)
+    })
+
+  // ✅ ИСПРАВЛЕНО: Positive stock first, then negative, then ZERO
+  const result = [...withPositiveStock, ...withNegativeStock, ...withZeroStock]
+
+  return result
 })
 
 // Methods
@@ -593,10 +613,22 @@ onMounted(async () => {
     DebugUtils.debug(MODULE_NAME, 'StorageView mounted')
     await nextTick()
 
-    // Store уже инициализирован в AppInitializer
+    // ✅ Дождаться полной инициализации
+    if (!storageStore.initialized) {
+      await storageStore.initialize()
+    }
+
+    // ✅ Убедиться что балансы загружены
+    if (storageStore.state.balances.length === 0) {
+      await storageStore.fetchBalances()
+    }
+
     isViewReady.value = true
 
-    DebugUtils.info(MODULE_NAME, 'StorageView ready')
+    DebugUtils.info(MODULE_NAME, 'StorageView ready', {
+      balances: storageStore.state.balances.length,
+      department: selectedDepartment.value
+    })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to prepare view', { error })
     handleOperationError('Failed to prepare storage view')

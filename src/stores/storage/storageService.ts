@@ -310,12 +310,13 @@ export class StorageService {
       const productsStore = useProductsStore()
       const newBalances: StorageBalance[] = []
 
-      // Группируем батчи по продуктам и департаментам
+      // Группируем батчи по продуктам и департаментам (только с остатками)
       const groupedBatches = this.groupBatchesByProductAndDepartment()
 
       // ✅ ИСПРАВЛЕНО: Получаем координатор один раз
       const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
 
+      // ✅ НОВОЕ: Создаем балансы для продуктов С остатками
       for (const [key, batches] of groupedBatches.entries()) {
         const [itemId, department] = key.split('|')
         const product = productsStore.products.find(p => p.id === itemId)
@@ -326,7 +327,6 @@ export class StorageService {
           continue
         }
 
-        // ✅ ИСПРАВЛЕНО: Ждем результат
         const balance = await this.calculateBalanceFromBatches(
           itemId,
           department as StorageDepartment,
@@ -340,10 +340,46 @@ export class StorageService {
         }
       }
 
+      // ✅ НОВОЕ: Создаем ZERO балансы для всех остальных продуктов
+      const departments: StorageDepartment[] = ['kitchen', 'bar']
+
+      for (const department of departments) {
+        for (const product of productsStore.products) {
+          // Проверяем, нужен ли этот продукт в этом департаменте
+          const shouldHaveBalance =
+            (department === 'kitchen' && !product.canBeSold) ||
+            (department === 'bar' && product.canBeSold)
+
+          if (!shouldHaveBalance) continue
+
+          // Проверяем, есть ли уже баланс для этого продукта
+          const hasBalance = newBalances.some(
+            b => b.itemId === product.id && b.department === department
+          )
+
+          if (!hasBalance) {
+            // Создаем zero balance
+            const productDef = mockDataCoordinator.getProductDefinition(product.id)
+            if (productDef) {
+              const zeroBalance = this.createZeroBalance(
+                product.id,
+                department,
+                product,
+                productDef
+              )
+              newBalances.push(zeroBalance)
+            }
+          }
+        }
+      }
+
       this.balances = newBalances
 
       DebugUtils.info(MODULE_NAME, 'Balance recalculation completed', {
         balances: this.balances.length,
+        withStock: newBalances.filter(b => b.totalQuantity > 0).length,
+        zeroStock: newBalances.filter(b => b.totalQuantity === 0).length,
+        negativeStock: newBalances.filter(b => b.totalQuantity < 0).length,
         unitSystem: 'BASE_UNITS (gram/ml/piece)'
       })
     } catch (error) {
