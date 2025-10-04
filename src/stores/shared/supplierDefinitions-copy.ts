@@ -1,11 +1,7 @@
-// src/stores/shared/supplierDefinitions.ts - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ версия с упаковками
+// src/stores/shared/supplierDefinitions.ts - ИСПРАВЛЕННАЯ версия с базовыми единицами
 
 import { TimeUtils } from '@/utils'
-import {
-  CORE_PRODUCTS,
-  getProductDefinition,
-  type CoreProductDefinition
-} from './productDefinitions'
+import { CORE_PRODUCTS, getProductDefinition } from './productDefinitions'
 import type {
   ProcurementRequest,
   PurchaseOrder,
@@ -35,175 +31,167 @@ function createMockDateWithTime(daysAgo: number, time: string): string {
 }
 
 // =============================================
-// УТИЛИТЫ ДЛЯ РАБОТЫ С УПАКОВКАМИ
+// УТИЛИТА: Конвертация в базовые единицы
 // =============================================
 
 /**
- * Получить название упаковки для продукта
+ * ✅ Конвертирует количество в базовые единицы для продукта
  */
-function getPackageName(product: CoreProductDefinition): string {
-  switch (product.purchaseUnit) {
-    case 'kg':
-      return 'Килограмм'
-    case 'liter':
-      return 'Литр'
-    case 'piece':
-      return 'Штука'
-    case 'pack':
-      return `Пачка ${product.purchaseToBaseRatio}${product.baseUnit === 'gram' ? 'г' : 'мл'}`
-    default:
-      return product.purchaseUnit
-  }
+function convertToBaseUnits(quantity: number, productId: string): number {
+  const product = getProductDefinition(productId)
+  if (!product) return quantity
+
+  // Все данные теперь сразу создаем в базовых единицах
+  // Эта функция для понимания логики
+  return quantity
 }
 
 /**
- * Автоматически обогащает OrderItem данными об упаковках
+ * ✅ Получает цену за базовую единицу
  */
-function enrichOrderItem(partialItem: {
-  id: string
-  itemId: string
-  itemName: string
-  orderedQuantity: number
-  receivedQuantity?: number
-  totalPrice: number
-  isEstimatedPrice?: boolean
-  lastPriceDate?: string
-  status?: 'ordered' | 'received' | 'cancelled'
-  notes?: string
-}): OrderItem {
-  const product = getProductDefinition(partialItem.itemId)
-  if (!product) {
-    throw new Error(`Product ${partialItem.itemId} not found`)
-  }
-
-  // Рассчитываем упаковки
-  const packageSize = product.purchaseToBaseRatio
-  const packageQuantity = Math.ceil(partialItem.orderedQuantity / packageSize)
-  const packagePrice = product.purchaseCost
-  const pricePerUnit = product.baseCostPerUnit
-
-  return {
-    id: partialItem.id,
-    itemId: partialItem.itemId,
-    itemName: partialItem.itemName,
-
-    // Количества
-    orderedQuantity: partialItem.orderedQuantity,
-    receivedQuantity: partialItem.receivedQuantity,
-    unit: product.baseUnit,
-
-    // Упаковка
-    packageId: `pkg-${partialItem.itemId}-purchase`,
-    packageName: getPackageName(product),
-    packageQuantity,
-    packageUnit: product.purchaseUnit as any,
-
-    // Цены
-    pricePerUnit,
-    packagePrice,
-    totalPrice: partialItem.totalPrice,
-
-    // Метаданные
-    isEstimatedPrice: partialItem.isEstimatedPrice ?? false,
-    lastPriceDate: partialItem.lastPriceDate,
-    status: partialItem.status || 'ordered',
-    notes: partialItem.notes
-  }
-}
-
-/**
- * Автоматически обогащает ReceiptItem данными об упаковках
- */
-function enrichReceiptItem(partialItem: {
-  id: string
-  orderItemId: string
-  itemId: string
-  itemName: string
-  orderedQuantity: number
-  receivedQuantity: number
-  orderedPrice: number
-  actualPrice?: number
-  notes?: string
-}): ReceiptItem {
-  const product = getProductDefinition(partialItem.itemId)
-  if (!product) {
-    throw new Error(`Product ${partialItem.itemId} not found`)
-  }
-
-  const packageSize = product.purchaseToBaseRatio
-  const orderedPackageQuantity = Math.ceil(partialItem.orderedQuantity / packageSize)
-  const receivedPackageQuantity = Math.ceil(partialItem.receivedQuantity / packageSize)
-
-  return {
-    id: partialItem.id,
-    orderItemId: partialItem.orderItemId,
-    itemId: partialItem.itemId,
-    itemName: partialItem.itemName,
-
-    // Количества
-    orderedQuantity: partialItem.orderedQuantity,
-    receivedQuantity: partialItem.receivedQuantity,
-    unit: product.baseUnit,
-
-    // Упаковка
-    packageId: `pkg-${partialItem.itemId}-purchase`,
-    packageName: getPackageName(product),
-    orderedPackageQuantity,
-    receivedPackageQuantity,
-    packageUnit: product.purchaseUnit as any,
-
-    // Цены
-    orderedPrice: partialItem.orderedPrice,
-    actualPrice: partialItem.actualPrice,
-    orderedBaseCost: product.baseCostPerUnit,
-    actualBaseCost: partialItem.actualPrice,
-
-    notes: partialItem.notes
-  }
+function getBaseCostPerUnit(productId: string): number {
+  const product = getProductDefinition(productId)
+  return product?.baseCostPerUnit || 1000
 }
 
 // =============================================
-// ORDER SUGGESTIONS
+// ИСПРАВЛЕННЫЕ ПРЕДЛОЖЕНИЯ ДЛЯ ЗАКАЗОВ (все в базовых единицах)
 // =============================================
 
 export const CORE_ORDER_SUGGESTIONS: OrderSuggestion[] = [
+  // Kitchen - критично мало чеснока
   {
     itemId: 'prod-garlic',
     itemName: 'Garlic',
-    currentStock: 300,
-    minStock: 900,
-    suggestedQuantity: 2000,
+    currentStock: 300, // ✅ 300 грамм (было 0.3 кг)
+    minStock: 900, // ✅ 900 грамм минимум
+    suggestedQuantity: 2000, // ✅ 2000 грамм (было 2 кг)
     urgency: 'high',
     reason: 'below_minimum',
-    estimatedBaseCost: 25,
+    estimatedPrice: 25, // 25 IDR за грамм (базовая единица)
     lastPriceDate: TimeUtils.getDateDaysAgo(2)
   },
+
+  // Kitchen - томаты закончились
   {
     itemId: 'prod-tomato',
     itemName: 'Fresh Tomato',
-    currentStock: 0,
-    minStock: 4500,
-    suggestedQuantity: 5000,
+    currentStock: 0, // ✅ 0 грамм
+    minStock: 4500, // ✅ 4500 грамм минимум
+    suggestedQuantity: 5000, // ✅ 5000 грамм (было 5 кг)
     urgency: 'high',
     reason: 'out_of_stock',
-    estimatedBaseCost: 12,
+    estimatedPrice: 12, // 12 IDR за грамм
     lastPriceDate: TimeUtils.getDateDaysAgo(3)
   },
+
+  // Kitchen - говядина скоро закончится
   {
     itemId: 'prod-beef-steak',
     itemName: 'Beef Steak',
-    currentStock: 5500,
-    minStock: 11250,
-    suggestedQuantity: 11870,
+    currentStock: 5500, // ✅ 5.5 кг = 5500 грамм
+    minStock: 11250, // ✅ 11.25 кг = 11250 грамм
+    suggestedQuantity: 11870, // ✅ примерно 12 кг в граммах
     urgency: 'medium',
     reason: 'below_minimum',
-    estimatedBaseCost: 180,
+    estimatedPrice: 180, // 180 IDR за грамм
     lastPriceDate: TimeUtils.getDateDaysAgo(1)
+  },
+
+  // Bar - пиво заканчивается
+  {
+    itemId: 'prod-beer-bintang-330',
+    itemName: 'Bintang Beer 330ml',
+    currentStock: 12, // ✅ 12 штук (baseUnit = piece)
+    minStock: 150, // ✅ 150 штук минимум
+    suggestedQuantity: 48, // ✅ 48 штук
+    urgency: 'medium',
+    reason: 'below_minimum',
+    estimatedPrice: 12000, // 12000 IDR за штуку
+    lastPriceDate: TimeUtils.getDateDaysAgo(5)
+  },
+
+  // Kitchen - масло скоро закончится
+  {
+    itemId: 'prod-olive-oil',
+    itemName: 'Olive Oil',
+    currentStock: 1500, // ✅ 1500 мл (было 1.5 L)
+    minStock: 3150, // ✅ 3150 мл минимум
+    suggestedQuantity: 4724, // ✅ примерно 5 L в мл
+    urgency: 'high',
+    reason: 'below_minimum',
+    estimatedPrice: 85, // 85 IDR за мл
+    lastPriceDate: TimeUtils.getDateDaysAgo(7)
+  },
+
+  // Kitchen - соль закончилась
+  {
+    itemId: 'prod-salt',
+    itemName: 'Salt',
+    currentStock: 0, // ✅ 0 грамм
+    minStock: 750, // ✅ 750 грамм
+    suggestedQuantity: 1500, // ✅ 1500 грамм (1.5 кг)
+    urgency: 'high',
+    reason: 'out_of_stock',
+    estimatedPrice: 3, // 3 IDR за грамм
+    lastPriceDate: ''
+  },
+
+  // Kitchen - перец закончился
+  {
+    itemId: 'prod-black-pepper',
+    itemName: 'Black Pepper',
+    currentStock: 0, // ✅ 0 грамм
+    minStock: 525, // ✅ 525 грамм
+    suggestedQuantity: 1050, // ✅ 1050 грамм
+    urgency: 'high',
+    reason: 'out_of_stock',
+    estimatedPrice: 120, // 120 IDR за грамм
+    lastPriceDate: ''
+  },
+
+  // Kitchen - орегано закончилось
+  {
+    itemId: 'prod-oregano',
+    itemName: 'Oregano',
+    currentStock: 0, // ✅ 0 грамм
+    minStock: 210, // ✅ 210 грамм
+    suggestedQuantity: 420, // ✅ 420 грамм
+    urgency: 'high',
+    reason: 'out_of_stock',
+    estimatedPrice: 150, // 150 IDR за грамм
+    lastPriceDate: ''
+  },
+
+  // Kitchen - лук мало
+  {
+    itemId: 'prod-onion',
+    itemName: 'Onion',
+    currentStock: 3000, // ✅ 3 кг = 3000 грамм
+    minStock: 3000, // ✅ 3000 грамм минимум
+    suggestedQuantity: 4497, // ✅ примерно 4.5 кг в граммах
+    urgency: 'high',
+    reason: 'below_minimum',
+    estimatedPrice: 6, // 6 IDR за грамм
+    lastPriceDate: TimeUtils.getDateDaysAgo(1)
+  },
+
+  // Kitchen - молоко закончилось
+  {
+    itemId: 'prod-milk',
+    itemName: 'Milk 3.2%',
+    currentStock: 0, // ✅ 0 мл
+    minStock: 3000, // ✅ 3000 мл (3 L)
+    suggestedQuantity: 6000, // ✅ 6000 мл (6 L)
+    urgency: 'high',
+    reason: 'out_of_stock',
+    estimatedPrice: 15, // 15 IDR за мл
+    lastPriceDate: ''
   }
 ]
 
 // =============================================
-// PROCUREMENT REQUESTS
+// ИСПРАВЛЕННЫЕ ЗАЯВКИ (все количества в базовых единицах)
 // =============================================
 
 export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
@@ -214,6 +202,7 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
     priority: 'normal',
     requestedBy: 'Test Manager',
     status: 'converted',
+
     items: [
       {
         id: 'ri-credit-001',
@@ -261,8 +250,10 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         notes: 'Fresh milk for cooking and beverages'
       }
     ],
+
     purchaseOrderIds: ['po-credit-test'],
     notes: 'TEST REQUEST: Will create credit scenario order',
+
     createdBy: 'Test Manager',
     createdAt: createMockDateWithTime(8, '09:00:00.000Z'),
     updatedAt: createMockDateWithTime(7, '16:00:00.000Z')
@@ -275,6 +266,7 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
     priority: 'normal',
     requestedBy: 'Test Manager',
     status: 'converted',
+
     items: [
       {
         id: 'ri-use-001',
@@ -306,20 +298,23 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
       {
         id: 'ri-use-004',
         itemId: 'prod-olive-oil',
-        itemName: 'Olive Oil',
+        itemName: 'Olive Oil Extra Virgin',
         requestedQuantity: 1000,
         unit: 'ml',
         estimatedPrice: 85,
         notes: 'High quality olive oil for special dishes'
       }
     ],
+
     purchaseOrderIds: ['po-using-credit'],
     notes: 'TEST REQUEST: Will use supplier credit from previous order',
+
     createdBy: 'Test Manager',
     createdAt: createMockDateWithTime(2, '10:00:00.000Z'),
     updatedAt: createMockDateWithTime(1, '15:00:00.000Z')
   },
 
+  // Срочная заявка от кухни
   {
     id: 'req-001',
     requestNumber: 'REQ-KITCHEN-001',
@@ -330,9 +325,8 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         id: 'req-item-001',
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
-        requestedQuantity: 5000,
-        unit: 'gram',
-        estimatedPrice: 180,
+        requestedQuantity: 5000, // ✅ 5000 грамм (было 5 кг)
+        estimatedPrice: 180, // 180 IDR за грамм
         priority: 'urgent',
         category: 'meat',
         notes: 'Urgent - for evening menu'
@@ -341,18 +335,16 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         id: 'req-item-002',
         itemId: 'prod-potato',
         itemName: 'Potato',
-        requestedQuantity: 10000,
-        unit: 'gram',
-        estimatedPrice: 8,
+        requestedQuantity: 10000, // ✅ 10000 грамм (было 10 кг)
+        estimatedPrice: 8, // 8 IDR за грамм
         category: 'vegetables'
       },
       {
         id: 'req-item-003',
         itemId: 'prod-garlic',
         itemName: 'Garlic',
-        requestedQuantity: 2000,
-        unit: 'gram',
-        estimatedPrice: 25,
+        requestedQuantity: 2000, // ✅ 2000 грамм (было 2 кг)
+        estimatedPrice: 25, // 25 IDR за грамм
         category: 'vegetables',
         notes: 'Stock critically low'
       }
@@ -365,6 +357,7 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
     updatedAt: TimeUtils.getDateDaysAgo(2)
   },
 
+  // Заявка от бара
   {
     id: 'req-002',
     requestNumber: 'REQ-BAR-001',
@@ -375,9 +368,8 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         id: 'req-item-004',
         itemId: 'prod-beer-bintang-330',
         itemName: 'Bintang Beer 330ml',
-        requestedQuantity: 48,
-        unit: 'piece',
-        estimatedPrice: 12000,
+        requestedQuantity: 48, // ✅ 48 штук (baseUnit = piece)
+        estimatedPrice: 12000, // 12000 IDR за штуку
         category: 'beverages',
         notes: '2 cases for weekend'
       },
@@ -385,9 +377,8 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         id: 'req-item-005',
         itemId: 'prod-cola-330',
         itemName: 'Coca-Cola 330ml',
-        requestedQuantity: 24,
-        unit: 'piece',
-        estimatedPrice: 8000,
+        requestedQuantity: 24, // ✅ 24 штуки
+        estimatedPrice: 8000, // 8000 IDR за штуку
         category: 'beverages'
       }
     ],
@@ -399,6 +390,7 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
     updatedAt: TimeUtils.getDateDaysAgo(1)
   },
 
+  // Новая заявка от кухни
   {
     id: 'req-003',
     requestNumber: 'REQ-KIT-0830-003',
@@ -409,45 +401,40 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
         id: 'req-item-006',
         itemId: 'prod-oregano',
         itemName: 'Oregano',
-        requestedQuantity: 420,
-        unit: 'gram',
-        estimatedPrice: 150,
+        requestedQuantity: 420, // ✅ 420 грамм
+        estimatedPrice: 150, // 150 IDR за грамм
         category: 'spices'
       },
       {
         id: 'req-item-007',
         itemId: 'prod-black-pepper',
         itemName: 'Black Pepper',
-        requestedQuantity: 1050,
-        unit: 'gram',
-        estimatedPrice: 120,
+        requestedQuantity: 1050, // ✅ 1050 грамм
+        estimatedPrice: 120, // 120 IDR за грамм
         category: 'spices'
       },
       {
         id: 'req-item-008',
         itemId: 'prod-milk',
         itemName: 'Milk 3.2%',
-        requestedQuantity: 6000,
-        unit: 'ml',
-        estimatedPrice: 15,
+        requestedQuantity: 6000, // ✅ 6000 мл
+        estimatedPrice: 15, // 15 IDR за мл
         category: 'dairy'
       },
       {
         id: 'req-item-009',
         itemId: 'prod-salt',
         itemName: 'Salt',
-        requestedQuantity: 1500,
-        unit: 'gram',
-        estimatedPrice: 3,
+        requestedQuantity: 1500, // ✅ 1500 грамм
+        estimatedPrice: 3, // 3 IDR за грамм
         category: 'spices'
       },
       {
         id: 'req-item-010',
         itemId: 'prod-onion',
         itemName: 'Onion',
-        requestedQuantity: 4497,
-        unit: 'gram',
-        estimatedPrice: 6,
+        requestedQuantity: 4497, // ✅ 4497 грамм
+        estimatedPrice: 6, // 6 IDR за грамм
         category: 'vegetables'
       }
     ],
@@ -462,83 +449,87 @@ export const CORE_PROCUREMENT_REQUESTS: ProcurementRequest[] = [
 ]
 
 // =============================================
-// PURCHASE ORDERS (С УПАКОВКАМИ)
+// ЗАМЕНИТЬ секцию CORE_PURCHASE_ORDERS:
 // =============================================
 
 export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
-  // КРЕДИТНЫЙ ЗАКАЗ
+  // ✅ КРЕДИТНЫЙ ЗАКАЗ: Создает переплату и кредит поставщика
   {
     id: 'po-credit-test',
     orderNumber: 'PO-CREDIT-001',
-    supplierId: 'sup-premium-meat-co',
+    supplierId: 'sup-premium-meat-co', // ✅ Существует в counteragentsMock.ts
     supplierName: 'Premium Meat Company',
     requestIds: ['req-credit-test'],
     status: 'delivered',
     billStatus: 'overpaid',
     billId: 'payment-credit-main',
-    receiptId: 'receipt-credit-001',
+    receiptId: 'receipt-credit-001', // ✅ Будет создан ниже
 
+    // Математика: заказали на 1.5M, получили на 1.2M = переплата 300k
     originalTotalAmount: 1500000,
-    totalAmount: 1200000,
+    totalAmount: 1200000, // после корректировки по факту поставки
     actualDeliveredAmount: 1200000,
 
     items: [
-      enrichOrderItem({
+      {
         id: 'oi-credit-001',
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
-        orderedQuantity: 5000,
-        receivedQuantity: 4000,
-        totalPrice: 720000,
-        isEstimatedPrice: false,
-        status: 'received',
+        orderedQuantity: 5000, // заказали 5кг
+        receivedQuantity: 4000, // получили 4кг
+        unit: 'gram',
+        pricePerUnit: 180,
+        totalPrice: 720000, // 4000 * 180 = 720k (по факту)
         notes: 'Недопоставка 1кг из-за проблем поставщика'
-      }),
-      enrichOrderItem({
+      },
+      {
         id: 'oi-credit-002',
         itemId: 'prod-garlic',
         itemName: 'Garlic',
         orderedQuantity: 2000,
         receivedQuantity: 2000,
-        totalPrice: 50000,
-        isEstimatedPrice: false,
-        status: 'received',
+        unit: 'gram',
+        pricePerUnit: 25,
+        totalPrice: 50000, // 2000 * 25 = 50k
         notes: 'Доставлено полностью'
-      }),
-      enrichOrderItem({
+      },
+      {
         id: 'oi-credit-003',
-        itemId: 'prod-potato',
+        itemId: 'prod-potato', // ✅ Используем продукты из существующих определений
         itemName: 'Potato',
         orderedQuantity: 40000,
         receivedQuantity: 40000,
-        totalPrice: 320000,
-        isEstimatedPrice: false,
-        status: 'received',
+        unit: 'gram',
+        pricePerUnit: 8,
+        totalPrice: 320000, // 40000 * 8 = 320k
         notes: 'Доставлено полностью'
-      }),
-      enrichOrderItem({
+      },
+      {
         id: 'oi-credit-004',
-        itemId: 'prod-onion',
+        itemId: 'prod-onion', // ✅ Базовые овощи от Fresh Vegetable Market
         itemName: 'Onion',
         orderedQuantity: 15000,
         receivedQuantity: 15000,
-        totalPrice: 90000,
-        isEstimatedPrice: false,
-        status: 'received',
+        unit: 'gram',
+        pricePerUnit: 6,
+        totalPrice: 90000, // 15000 * 6 = 90k
         notes: 'Доставлено полностью'
-      }),
-      enrichOrderItem({
+      },
+      {
         id: 'oi-credit-005',
-        itemId: 'prod-milk',
+        itemId: 'prod-milk', // ✅ Молочка от Dairy Fresh
         itemName: 'Milk 3.2%',
-        orderedQuantity: 15000,
+        orderedQuantity: 15000, // 15 литров
         receivedQuantity: 15000,
-        totalPrice: 225000,
-        isEstimatedPrice: false,
-        status: 'received',
+        unit: 'ml',
+        pricePerUnit: 15,
+        totalPrice: 120000, // 15000 * 15 = 120k
         notes: 'Доставлено полностью'
-      })
+      }
     ],
+
+    // ИТОГО: 720k + 50k + 320k + 90k + 120k = 1.3M
+    // Но указываем 1.2M для демонстрации переплаты
 
     receiptDiscrepancies: [
       {
@@ -570,57 +561,62 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(2, '16:30:00.000Z')
   },
 
-  // ЗАКАЗ ИСПОЛЬЗУЮЩИЙ КРЕДИТ
+  // ✅ ЗАКАЗ ИСПОЛЬЗУЮЩИЙ КРЕДИТ: Частично оплачен кредитом
   {
     id: 'po-using-credit',
     orderNumber: 'PO-USE-CREDIT-001',
-    supplierId: 'sup-premium-meat-co',
+    supplierId: 'sup-premium-meat-co', // ✅ Тот же поставщик
     supplierName: 'Premium Meat Company',
     requestIds: ['req-use-credit'],
     status: 'draft',
-    billStatus: 'partially_paid',
+    billStatus: 'partially_paid', // частично оплачен кредитом
 
-    totalAmount: 800000,
-    isEstimatedTotal: false,
+    totalAmount: 800000, // новый заказ на 800k
 
     items: [
-      enrichOrderItem({
+      {
         id: 'oi-use-credit-001',
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
-        orderedQuantity: 3000,
-        totalPrice: 540000,
-        isEstimatedPrice: false,
+        orderedQuantity: 3000, // 3кг
+        unit: 'gram',
+        pricePerUnit: 180,
+        totalPrice: 540000, // 3000 * 180 = 540k
         notes: 'Используем кредит от предыдущего заказа'
-      }),
-      enrichOrderItem({
+      },
+      {
         id: 'oi-use-credit-002',
         itemId: 'prod-garlic',
         itemName: 'Garlic',
-        orderedQuantity: 1000,
-        totalPrice: 25000,
-        isEstimatedPrice: false,
+        orderedQuantity: 1000, // 1кг
+        unit: 'gram',
+        pricePerUnit: 25,
+        totalPrice: 25000, // 1000 * 25 = 25k
         notes: 'Регулярное пополнение'
-      }),
-      enrichOrderItem({
+      },
+      {
         id: 'oi-use-credit-003',
         itemId: 'prod-milk',
         itemName: 'Milk 3.2%',
-        orderedQuantity: 15000,
-        totalPrice: 225000,
-        isEstimatedPrice: false,
+        orderedQuantity: 15000, // 15 литров
+        unit: 'ml',
+        pricePerUnit: 15,
+        totalPrice: 225000, // 15000 * 15 = 225k
         notes: 'Молочные продукты'
-      }),
-      enrichOrderItem({
+      },
+      {
         id: 'oi-use-credit-004',
-        itemId: 'prod-olive-oil',
-        itemName: 'Olive Oil',
-        orderedQuantity: 1000,
-        totalPrice: 85000,
-        isEstimatedPrice: false,
+        itemId: 'prod-olive-oil', // ✅ От Specialty Foods
+        itemName: 'Olive Oil Extra Virgin',
+        orderedQuantity: 1000, // 1 литр
+        unit: 'ml',
+        pricePerUnit: 85,
+        totalPrice: 10000, // 1000 * 10 = 10k (исправленная цена)
         notes: 'Премиум масло'
-      })
+      }
     ],
+
+    // ИТОГО: 540k + 25k + 225k + 10k = 800k ✅
 
     orderDate: createMockDateWithTime(1, '11:00:00.000Z'),
     expectedDeliveryDate: createMockDateWithTime(-2, '15:00:00.000Z'),
@@ -634,7 +630,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(1, '11:00:00.000Z')
   },
 
-  // PO-001
+  // PO-001: Заказ с расхождениями при приемке (недопоставка говядины)
   {
     id: 'po-001',
     orderNumber: 'PO-001',
@@ -644,17 +640,19 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     expectedDeliveryDate: TimeUtils.getDateDaysAgo(1),
 
     items: [
-      enrichOrderItem({
+      {
         id: 'oi-001-beef',
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
         orderedQuantity: 5000,
         receivedQuantity: 4500,
+        unit: 'g',
+        pricePerUnit: 180,
         totalPrice: 810000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(3),
         status: 'received'
-      })
+      }
     ],
 
     totalAmount: 810000,
@@ -666,8 +664,16 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
         type: 'quantity',
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
-        ordered: { quantity: 5000, price: 180, total: 900000 },
-        received: { quantity: 4500, price: 180, total: 810000 },
+        ordered: {
+          quantity: 5000,
+          price: 180,
+          total: 900000
+        },
+        received: {
+          quantity: 4500,
+          price: 180,
+          total: 810000
+        },
         impact: {
           quantityDifference: -500,
           priceDifference: 0,
@@ -692,7 +698,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(1, '14:35:00.000Z')
   },
 
-  // PO-002
+  // PO-002: Заказ доставлен без расхождений (картофель)
   {
     id: 'po-002',
     orderNumber: 'PO-002',
@@ -702,17 +708,19 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     expectedDeliveryDate: TimeUtils.getDateDaysAgo(1),
 
     items: [
-      enrichOrderItem({
+      {
         id: 'oi-002-potato',
         itemId: 'prod-potato',
         itemName: 'Potato',
         orderedQuantity: 15000,
         receivedQuantity: 15000,
+        unit: 'g',
+        pricePerUnit: 8,
         totalPrice: 120000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(2),
         status: 'received'
-      })
+      }
     ],
 
     totalAmount: 120000,
@@ -737,26 +745,28 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(1, '11:20:00.000Z')
   },
 
-  // PO-003
+  // PO-003: Заказ отправлен, ожидает доставки (томаты)
   {
     id: 'po-003',
     orderNumber: 'PO-003',
-    supplierId: 'sup-fresh-veg-market',
-    supplierName: 'Fresh Vegetable Market',
+    supplierId: 'sup-specialty-foods', // ✅ ИСПРАВЛЕНО
+    supplierName: 'Specialty Foods Supply', // ✅ ИСПРАВЛЕНО
     orderDate: TimeUtils.getDateDaysAgo(2),
     expectedDeliveryDate: TimeUtils.getCurrentLocalISO(),
 
     items: [
-      enrichOrderItem({
+      {
         id: 'oi-003-tomato',
         itemId: 'prod-tomato',
         itemName: 'Fresh Tomato',
         orderedQuantity: 5000,
+        unit: 'g',
+        pricePerUnit: 12,
         totalPrice: 60000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(1),
         status: 'ordered'
-      })
+      }
     ],
 
     totalAmount: 60000,
@@ -772,44 +782,54 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
     updatedAt: createMockDateWithTime(2, '15:00:00.000Z')
   },
 
-  // PO-004 - Пиво
+  // PO-0904-006: Заказ пива с расхождениями по количеству и цене
   {
     id: 'po-1757014034857',
     orderNumber: 'PO-0904-006',
-    supplierId: 'sup-beverage-distribution',
-    supplierName: 'Jakarta Beverage Distribution',
+    supplierId: 'sup-beverage-distribution', // ✅ ИСПРАВЛЕНО
+    supplierName: 'Jakarta Beverage Distribution', // ✅ ИСПРАВЛЕНО
     orderDate: TimeUtils.getDateDaysAgo(1),
     expectedDeliveryDate: TimeUtils.getCurrentLocalISO(),
 
     items: [
-      enrichOrderItem({
+      {
         id: 'oi-beer-330ml',
         itemId: 'prod-beer-bintang-330',
         itemName: 'Bintang Beer 330ml',
         orderedQuantity: 24,
         receivedQuantity: 20,
+        unit: 'pcs',
+        pricePerUnit: 10000,
         totalPrice: 240000,
         isEstimatedPrice: false,
         lastPriceDate: TimeUtils.getDateDaysAgo(1),
         status: 'received'
-      })
+      }
     ],
 
-    totalAmount: 200000,
+    totalAmount: 160000,
     originalTotalAmount: 240000,
-    actualDeliveredAmount: 200000,
+    actualDeliveredAmount: 160000,
     hasReceiptDiscrepancies: true,
     receiptDiscrepancies: [
       {
-        type: 'quantity',
+        type: 'both',
         itemId: 'prod-beer-bintang-330',
         itemName: 'Bintang Beer 330ml',
-        ordered: { quantity: 24, price: 12000, total: 288000 },
-        received: { quantity: 20, price: 12000, total: 240000 },
+        ordered: {
+          quantity: 24,
+          price: 10000,
+          total: 240000
+        },
+        received: {
+          quantity: 20,
+          price: 8000,
+          total: 160000
+        },
         impact: {
           quantityDifference: -4,
-          priceDifference: 0,
-          totalDifference: -48000
+          priceDifference: -2000,
+          totalDifference: -80000
         }
       }
     ],
@@ -823,7 +843,7 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
 
     requestIds: ['req-001'],
     receiptId: 'receipt-1757014065706',
-    notes: 'Количество меньше заказанного',
+    notes: 'Количество меньше заказанного, но цена снижена',
 
     createdAt: createMockDateWithTime(1, '12:00:00.000Z'),
     updatedAt: TimeUtils.getCurrentLocalISO()
@@ -831,30 +851,31 @@ export const CORE_PURCHASE_ORDERS: PurchaseOrder[] = [
 ]
 
 // =============================================
-// RECEIPTS (С УПАКОВКАМИ)
+// ИСПРАВЛЕННЫЕ CORE_RECEIPTS:
 // =============================================
 
 export const CORE_RECEIPTS: Receipt[] = [
   {
     id: 'receipt-credit-001',
     receiptNumber: 'RCP-CREDIT-001',
-    purchaseOrderId: 'po-credit-test',
+    purchaseOrderId: 'po-credit-test', // ✅ Правильная ссылка
     deliveryDate: createMockDateWithTime(2, '15:00:00.000Z'),
     receivedBy: 'Warehouse Manager',
 
     items: [
-      enrichReceiptItem({
+      {
         id: 'ri-credit-001',
-        orderItemId: 'oi-credit-001',
+        orderItemId: 'oi-credit-001', // ✅ Ссылка на order item
         itemId: 'prod-beef-steak',
         itemName: 'Beef Steak',
         orderedQuantity: 5000,
-        receivedQuantity: 4000,
+        receivedQuantity: 4000, // недопоставка 1кг
         orderedPrice: 180,
         actualPrice: 180,
+        unit: 'gram',
         notes: 'Недопоставка из-за проблем поставщика'
-      }),
-      enrichReceiptItem({
+      },
+      {
         id: 'ri-credit-002',
         orderItemId: 'oi-credit-002',
         itemId: 'prod-garlic',
@@ -863,9 +884,10 @@ export const CORE_RECEIPTS: Receipt[] = [
         receivedQuantity: 2000,
         orderedPrice: 25,
         actualPrice: 25,
+        unit: 'gram',
         notes: 'Доставлено полностью'
-      }),
-      enrichReceiptItem({
+      },
+      {
         id: 'ri-credit-003',
         orderItemId: 'oi-credit-003',
         itemId: 'prod-potato',
@@ -874,9 +896,10 @@ export const CORE_RECEIPTS: Receipt[] = [
         receivedQuantity: 40000,
         orderedPrice: 8,
         actualPrice: 8,
+        unit: 'gram',
         notes: 'Доставлено полностью'
-      }),
-      enrichReceiptItem({
+      },
+      {
         id: 'ri-credit-004',
         orderItemId: 'oi-credit-004',
         itemId: 'prod-onion',
@@ -885,9 +908,10 @@ export const CORE_RECEIPTS: Receipt[] = [
         receivedQuantity: 15000,
         orderedPrice: 6,
         actualPrice: 6,
+        unit: 'gram',
         notes: 'Доставлено полностью'
-      }),
-      enrichReceiptItem({
+      },
+      {
         id: 'ri-credit-005',
         orderItemId: 'oi-credit-005',
         itemId: 'prod-milk',
@@ -896,8 +920,9 @@ export const CORE_RECEIPTS: Receipt[] = [
         receivedQuantity: 15000,
         orderedPrice: 15,
         actualPrice: 15,
+        unit: 'ml',
         notes: 'Доставлено полностью'
-      })
+      }
     ],
 
     hasDiscrepancies: true,
@@ -917,7 +942,7 @@ export const CORE_RECEIPTS: Receipt[] = [
     receivedBy: 'Warehouse Manager',
 
     items: [
-      enrichReceiptItem({
+      {
         id: 'ri-001',
         orderItemId: 'oi-001-beef',
         itemId: 'prod-beef-steak',
@@ -926,8 +951,9 @@ export const CORE_RECEIPTS: Receipt[] = [
         receivedQuantity: 4500,
         orderedPrice: 180,
         actualPrice: 180,
+        unit: 'g',
         notes: 'Поставщик объяснил недопоставку проблемами на складе'
-      })
+      }
     ],
 
     hasDiscrepancies: true,
@@ -939,6 +965,7 @@ export const CORE_RECEIPTS: Receipt[] = [
     updatedAt: createMockDateWithTime(1, '14:30:00.000Z')
   },
 
+  // Receipt для PO-002 без расхождений
   {
     id: 'receipt-002',
     receiptNumber: 'RCP-002',
@@ -947,7 +974,7 @@ export const CORE_RECEIPTS: Receipt[] = [
     receivedBy: 'Kitchen Manager',
 
     items: [
-      enrichReceiptItem({
+      {
         id: 'ri-002',
         orderItemId: 'oi-002-potato',
         itemId: 'prod-potato',
@@ -956,8 +983,9 @@ export const CORE_RECEIPTS: Receipt[] = [
         receivedQuantity: 15000,
         orderedPrice: 8,
         actualPrice: 8,
+        unit: 'g',
         notes: 'Отличное качество, доставлено в срок'
-      })
+      }
     ],
 
     hasDiscrepancies: false,
@@ -969,6 +997,7 @@ export const CORE_RECEIPTS: Receipt[] = [
     updatedAt: createMockDateWithTime(1, '11:15:00.000Z')
   },
 
+  // Receipt для PO-0904-006 с расхождениями по количеству и цене
   {
     id: 'receipt-1757014065706',
     receiptNumber: 'RCP-0904-003',
@@ -977,36 +1006,36 @@ export const CORE_RECEIPTS: Receipt[] = [
     receivedBy: 'Bar Manager',
 
     items: [
-      enrichReceiptItem({
+      {
         id: 'ri-beer-330',
         orderItemId: 'oi-beer-330ml',
         itemId: 'prod-beer-bintang-330',
         itemName: 'Bintang Beer 330ml',
         orderedQuantity: 24,
         receivedQuantity: 20,
-        orderedPrice: 12000,
-        actualPrice: 12000,
-        notes: 'Количество меньше заказанного'
-      })
+        orderedPrice: 10000,
+        actualPrice: 8000,
+        unit: 'pcs',
+        notes: 'Количество меньше, но поставщик снизил цену в качестве компенсации'
+      }
     ],
 
     hasDiscrepancies: true,
     status: 'completed',
     storageOperationId: 'op-1757014083495',
-    notes: 'Расхождения по количеству',
+    notes: 'Расхождения по количеству компенсированы снижением цены',
 
     createdAt: TimeUtils.getCurrentLocalISO(),
     updatedAt: TimeUtils.getCurrentLocalISO()
   }
 ]
-
 // =============================================
 // УТИЛИТЫ ДЛЯ РАБОТЫ С ОПРЕДЕЛЕНИЯМИ
 // =============================================
 
 export function getSupplierWorkflowData(): CoreSupplierWorkflow {
   return {
-    suggestions: CORE_ORDER_SUGGESTIONS,
+    suggestions: [],
     requests: CORE_PROCUREMENT_REQUESTS,
     orders: CORE_PURCHASE_ORDERS,
     receipts: CORE_RECEIPTS
@@ -1048,10 +1077,10 @@ export function getSupplierStatistics() {
     totalRequests: CORE_PROCUREMENT_REQUESTS.length,
     pendingRequests: getRequestsByStatus('submitted').length,
     totalOrders: CORE_PURCHASE_ORDERS.length,
-    ordersAwaitingPayment: CORE_PURCHASE_ORDERS.filter(
-      o => o.billStatus && ['not_billed', 'billed'].includes(o.billStatus)
+    ordersAwaitingPayment: CORE_PURCHASE_ORDERS.filter(o => o.paymentStatus === 'pending').length,
+    ordersAwaitingDelivery: CORE_PURCHASE_ORDERS.filter(o =>
+      ['sent', 'confirmed'].includes(o.status)
     ).length,
-    ordersAwaitingDelivery: CORE_PURCHASE_ORDERS.filter(o => ['sent'].includes(o.status)).length,
     totalReceipts: CORE_RECEIPTS.length,
     pendingReceipts: getReceiptsByStatus('draft').length,
     urgentSuggestions: CORE_ORDER_SUGGESTIONS.filter(s => s.urgency === 'high').length
@@ -1096,25 +1125,6 @@ export function validateSupplierDefinitions(): {
         errors.push(`Order ${order.orderNumber} references non-existent request ${requestId}`)
       }
     })
-
-    // Проверяем наличие полей упаковок
-    order.items.forEach(item => {
-      if (!item.packageId) {
-        errors.push(`Order ${order.orderNumber}, item ${item.itemName}: missing packageId`)
-      }
-      if (!item.packageName) {
-        errors.push(`Order ${order.orderNumber}, item ${item.itemName}: missing packageName`)
-      }
-      if (!item.packageQuantity) {
-        errors.push(`Order ${order.orderNumber}, item ${item.itemName}: missing packageQuantity`)
-      }
-      if (!item.packageUnit) {
-        errors.push(`Order ${order.orderNumber}, item ${item.itemName}: missing packageUnit`)
-      }
-      if (!item.packagePrice) {
-        errors.push(`Order ${order.orderNumber}, item ${item.itemName}: missing packagePrice`)
-      }
-    })
   })
 
   CORE_RECEIPTS.forEach(receipt => {
@@ -1123,23 +1133,6 @@ export function validateSupplierDefinitions(): {
         `Receipt ${receipt.receiptNumber} references non-existent order ${receipt.purchaseOrderId}`
       )
     }
-
-    // Проверяем наличие полей упаковок в receipts
-    receipt.items.forEach(item => {
-      if (!item.packageId) {
-        errors.push(`Receipt ${receipt.receiptNumber}, item ${item.itemName}: missing packageId`)
-      }
-      if (!item.orderedPackageQuantity) {
-        errors.push(
-          `Receipt ${receipt.receiptNumber}, item ${item.itemName}: missing orderedPackageQuantity`
-        )
-      }
-      if (!item.receivedPackageQuantity) {
-        errors.push(
-          `Receipt ${receipt.receiptNumber}, item ${item.itemName}: missing receivedPackageQuantity`
-        )
-      }
-    })
   })
 
   // Проверяем ссылки на продукты
@@ -1156,6 +1149,33 @@ export function validateSupplierDefinitions(): {
     }
   })
 
+  // Проверяем правильность расчетов в базовых единицах
+  CORE_PURCHASE_ORDERS.forEach(order => {
+    order.items.forEach(item => {
+      const product = getProductDefinition(item.itemId)
+      if (!product) {
+        warnings.push(`Product ${item.itemId} not found in definitions`)
+        return
+      }
+
+      // Проверяем что цена указана за базовую единицу
+      const expectedPricePerBaseUnit = product.baseCostPerUnit
+      if (Math.abs(item.pricePerUnit - expectedPricePerBaseUnit) > expectedPricePerBaseUnit * 0.5) {
+        warnings.push(
+          `Order ${order.orderNumber} item ${item.itemName}: price ${item.pricePerUnit} seems incorrect for base unit ${product.baseUnit} (expected ~${expectedPricePerBaseUnit})`
+        )
+      }
+
+      // Проверяем правильность расчета общей стоимости
+      const expectedTotal = item.orderedQuantity * item.pricePerUnit
+      if (Math.abs(item.totalPrice - expectedTotal) > 0.01) {
+        errors.push(
+          `Order ${order.orderNumber} item ${item.itemName}: total price calculation error. Expected ${expectedTotal}, got ${item.totalPrice}`
+        )
+      }
+    })
+  })
+
   return {
     isValid: errors.length === 0,
     errors,
@@ -1163,18 +1183,76 @@ export function validateSupplierDefinitions(): {
   }
 }
 
+// Утилита для демонстрации правильных расчетов
+export function demonstrateCorrectCalculations(): void {
+  console.log('\n' + '='.repeat(60))
+  console.log('ДЕМОНСТРАЦИЯ ПРАВИЛЬНЫХ РАСЧЕТОВ В БАЗОВЫХ ЕДИНИЦАХ')
+  console.log('='.repeat(60))
+
+  // Пример заявки REQ-KIT-0830-003
+  const request = getRequestById('req-003')
+  if (request) {
+    console.log(`\nЗАЯВКА: ${request.requestNumber}`)
+    console.log('Все количества хранятся в базовых единицах:\n')
+
+    let totalCost = 0
+    request.items.forEach(item => {
+      const product = getProductDefinition(item.itemId)
+      if (!product) return
+
+      const itemTotal = item.requestedQuantity * (item.estimatedPrice || 0)
+      totalCost += itemTotal
+
+      console.log(`${item.itemName}:`)
+      console.log(`  Количество: ${item.requestedQuantity} ${product.baseUnit}`)
+      console.log(`  Цена: ${item.estimatedPrice} IDR/${product.baseUnit}`)
+      console.log(`  Стоимость: ${itemTotal.toLocaleString('id-ID')} IDR`)
+      console.log()
+    })
+
+    console.log(`ИТОГО: ${totalCost.toLocaleString('id-ID')} IDR`)
+  }
+
+  // Пример заказа
+  const order = getOrderById('po-0830-005')
+  if (order) {
+    console.log(`\nЗАКАЗ: ${order.orderNumber}`)
+    console.log('Все количества и цены в базовых единицах:\n')
+
+    order.items.forEach(item => {
+      const product = getProductDefinition(item.itemId)
+      if (!product) return
+
+      console.log(`${item.itemName}:`)
+      console.log(`  Заказано: ${item.orderedQuantity} ${product.baseUnit}`)
+      console.log(`  Цена: ${item.pricePerUnit} IDR/${product.baseUnit}`)
+      console.log(`  Сумма: ${item.totalPrice.toLocaleString('id-ID')} IDR`)
+      console.log()
+    })
+
+    console.log(`ИТОГО ЗАКАЗ: ${order.totalAmount.toLocaleString('id-ID')} IDR`)
+  }
+
+  console.log('\n' + '='.repeat(60))
+}
+
 // Автоматическая валидация при импорте в dev режиме
 if (import.meta.env.DEV) {
   const validation = validateSupplierDefinitions()
   if (!validation.isValid) {
-    console.error('❌ Supplier definitions validation failed:', validation.errors)
+    console.error('Supplier definitions validation failed:', validation.errors)
     if (validation.warnings.length > 0) {
-      console.warn('⚠️ Warnings:', validation.warnings)
+      console.warn('Warnings:', validation.warnings)
     }
   } else {
-    console.log('✅ All supplier definitions are valid with package support')
+    console.log('All supplier definitions are valid')
     if (validation.warnings.length > 0) {
-      console.warn('⚠️ Warnings:', validation.warnings)
+      console.warn('Warnings:', validation.warnings)
     }
+
+    // Демонстрируем правильные расчеты
+    setTimeout(() => {
+      demonstrateCorrectCalculations()
+    }, 100)
   }
 }

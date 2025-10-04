@@ -1,6 +1,6 @@
 <!-- src/views/supplier_2/components/orders/PurchaseOrderDetailsDialog.vue -->
 <template>
-  <v-dialog v-model="isOpen" max-width="1200px">
+  <v-dialog v-model="isOpen" max-width="1200px" scrollable>
     <v-card v-if="order">
       <v-card-title class="d-flex align-center justify-space-between pa-4 bg-primary text-white">
         <div>
@@ -73,57 +73,6 @@
 
         <!-- Payment Management Section -->
         <div class="pa-4 border-b">
-          <div class="text-subtitle-1 font-weight-bold mb-4">
-            <v-icon icon="mdi-credit-card-outline" class="mr-2" />
-            Payment Management
-          </div>
-
-          <!-- Payment Status Summary -->
-          <div class="mb-4">
-            <v-card variant="outlined" class="pa-3">
-              <v-row>
-                <v-col cols="6" md="3">
-                  <div class="text-subtitle-2 mb-1">Payment Status</div>
-                  <v-chip
-                    size="small"
-                    :color="getPaymentStatusColor(paymentCalculations.paymentStatus)"
-                    variant="flat"
-                  >
-                    {{ getPaymentStatusText(paymentCalculations.paymentStatus) }}
-                  </v-chip>
-                </v-col>
-
-                <v-col cols="6" md="3">
-                  <div class="text-subtitle-2 mb-1">Total Billed</div>
-                  <div class="text-body-1 font-weight-bold">
-                    {{ formatCurrency(paymentCalculations.totalBilled) }}
-                  </div>
-                </v-col>
-
-                <v-col cols="6" md="3">
-                  <div class="text-subtitle-2 mb-1">Amount Difference</div>
-                  <div
-                    class="text-body-1 font-weight-bold"
-                    :class="paymentCalculations.amountDifferenceClass"
-                  >
-                    {{ formatCurrency(Math.abs(paymentCalculations.amountDifference)) }}
-                    <span v-if="paymentCalculations.amountDifference > 0">(Over)</span>
-                    <span v-else-if="paymentCalculations.amountDifference < 0">(Under)</span>
-                  </div>
-                </v-col>
-
-                <v-col cols="6" md="3">
-                  <div class="text-subtitle-2 mb-1">Bills Count</div>
-                  <div class="text-body-1 font-weight-bold">
-                    {{ activeBillsCount }}
-                    <!-- ✅ ИЗМЕНИТЬ с selectedOrderBills.length на activeBillsCount -->
-                  </div>
-                </v-col>
-              </v-row>
-            </v-card>
-          </div>
-
-          <!-- Bills Management -->
           <PurchaseOrderPayment
             :order="order"
             :bills="activeBills"
@@ -142,51 +91,9 @@
           <OrderReceiptWidget :order="order" />
         </div>
 
-        <!-- Items List -->
-        <div class="pa-4">
-          <div class="text-subtitle-1 font-weight-bold mb-3">
-            Order Items ({{ order.items.length }})
-          </div>
-
-          <v-data-table
-            :headers="itemHeaders"
-            :items="order.items"
-            density="compact"
-            :items-per-page="-1"
-            hide-default-footer
-          >
-            <template #[`item.pricePerUnit`]="{ item }">
-              <div class="text-right">
-                {{ formatCurrency(item.pricePerUnit) }}
-                <div v-if="item.isEstimatedPrice" class="text-caption text-warning">Est.</div>
-                <div v-if="item.lastPriceDate" class="text-caption text-medium-emphasis">
-                  ({{ formatDate(item.lastPriceDate || '') }})
-                </div>
-              </div>
-            </template>
-
-            <template #[`item.totalPrice`]="{ item }">
-              <div class="text-right font-weight-bold">
-                {{ formatCurrency(item.totalPrice) }}
-              </div>
-            </template>
-
-            <template #[`item.status`]="{ item }">
-              <v-chip size="x-small" :color="getItemStatusColor(item.status)" variant="tonal">
-                {{ item.status }}
-              </v-chip>
-            </template>
-          </v-data-table>
-
-          <!-- Order Total -->
-          <div class="d-flex justify-end mt-4 pa-3 bg-surface rounded">
-            <div>
-              <div class="text-body-2 text-medium-emphasis mb-1">Order Total:</div>
-              <div class="text-h6 font-weight-bold">
-                {{ formatCurrency(order.totalAmount) }}
-              </div>
-            </div>
-          </div>
+        <!-- Items List - NEW WIDGET -->
+        <div class="pa-4 border-b">
+          <OrderItemsWidget :items="order.items" />
         </div>
       </v-card-text>
 
@@ -267,7 +174,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- ✅ ДОБАВИТЬ вместо старого диалога -->
+    <!-- Attach Bill Dialog -->
     <AttachBillDialog
       v-model="showAttachBillDialog"
       :order="order"
@@ -341,9 +248,10 @@ import { ref, computed, watch } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
+import OrderItemsWidget from './order/OrderItemsWidget.vue'
 import OrderReceiptWidget from './OrderReceiptWidget.vue'
-import AttachBillDialog from './AttachBillDialog.vue'
-import PurchaseOrderPayment from './PurchaseOrderPayment.vue'
+import AttachBillDialog from './order/AttachBillDialog.vue'
+import PurchaseOrderPayment from './order/PurchaseOrderPayment.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -362,15 +270,6 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
-const showAttachBillDialog = ref(false)
-
-defineOptions({
-  components: {
-    OrderReceiptWidget,
-    AttachBillDialog,
-    PurchaseOrderPayment
-  }
-})
 
 // =============================================
 // COMPOSABLES
@@ -392,10 +291,9 @@ const {
 // LOCAL STATE
 // =============================================
 
-// Dialog states
+const showAttachBillDialog = ref(false)
 const showCreateBillDialog = ref(false)
 
-// Form states
 const createBillForm = ref({
   valid: false,
   amount: 0,
@@ -420,7 +318,7 @@ const priorityOptions = [
 ]
 
 // =============================================
-// COMPUTED PROPERTIES
+// COMPUTED
 // =============================================
 
 const isOpen = computed({
@@ -432,33 +330,14 @@ const activeBills = computed(() =>
   selectedOrderBills.value.filter(bill => bill.status !== 'cancelled')
 )
 
-const activeBillsCount = computed(() => activeBills.value.length)
-
 // =============================================
-// TABLE CONFIGURATION
-// =============================================
-
-const itemHeaders = [
-  { title: 'Item', key: 'itemName', sortable: false },
-  { title: 'Qty Ordered', key: 'orderedQuantity', sortable: false, width: '100px', align: 'end' },
-  { title: 'Qty Received', key: 'receivedQuantity', sortable: false, width: '100px', align: 'end' },
-  { title: 'Unit', key: 'unit', sortable: false, width: '80px' },
-  { title: 'Price/Unit', key: 'pricePerUnit', sortable: false, width: '120px', align: 'end' },
-  { title: 'Total', key: 'totalPrice', sortable: false, width: '120px', align: 'end' },
-  { title: 'Status', key: 'status', sortable: false, width: '100px' }
-]
-
-// =============================================
-// PAYMENT MANAGEMENT METHODS
+// METHODS
 // =============================================
 
 async function handleCreateBill() {
   if (!props.order) return
-
-  // Set default values
   createBillForm.value.amount = props.order.totalAmount
   createBillForm.value.description = `Payment for order ${props.order.orderNumber}`
-
   showCreateBillDialog.value = true
 }
 
@@ -473,8 +352,6 @@ async function handleCreateBillSubmit() {
     })
 
     showCreateBillDialog.value = false
-
-    // Reset form
     createBillForm.value.amount = 0
     createBillForm.value.priority = 'medium'
     createBillForm.value.description = ''
@@ -486,6 +363,7 @@ async function handleCreateBillSubmit() {
 function handleAttachBill() {
   showAttachBillDialog.value = true
 }
+
 async function handleDetachBill(billId: string) {
   try {
     await actions.detachBill(billId)
@@ -499,7 +377,6 @@ async function onAttachBill(billId: string) {
     await actions.attachBill(billId)
   } catch (error) {
     console.error('Failed to attach bill:', error)
-    // Можно добавить toast уведомление об ошибке
   }
 }
 
@@ -510,10 +387,6 @@ async function handleCancelBill(billId: string) {
     console.error('Failed to cancel bill:', error)
   }
 }
-
-// =============================================
-// ORDER ACTIONS
-// =============================================
 
 function sendOrder(order: PurchaseOrder) {
   emits('send-order', order)
@@ -529,9 +402,14 @@ function canStartReceipt(order: PurchaseOrder): boolean {
   return canReceiveOrder(order) && isReadyForReceipt(order)
 }
 
-// =============================================
-// HELPER FUNCTIONS
-// =============================================
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('id-ID', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 function getStatusText(status: string): string {
   const statusMap: Record<string, string> = {
@@ -543,58 +421,14 @@ function getStatusText(status: string): string {
   return statusMap[status] || status
 }
 
-function getPaymentStatusText(status: string): string {
-  const statusMap: Record<string, string> = {
-    not_billed: 'Not Billed',
-    pending: 'Pending Payment',
-    partial: 'Partially Paid',
-    paid: 'Fully Paid'
-  }
-  return statusMap[status] || status
-}
-
-function getBillStatusText(status: string): string {
-  const statusMap: Record<string, string> = {
-    pending: 'Pending',
-    processing: 'Processing',
-    completed: 'Completed',
-    failed: 'Failed',
-    cancelled: 'Cancelled'
-  }
-  return statusMap[status] || status
-}
-
-function getItemStatusColor(status: string): string {
-  const colorMap: Record<string, string> = {
-    ordered: 'blue',
-    received: 'green',
-    cancelled: 'red'
-  }
-  return colorMap[status] || 'grey'
-}
-
 function getRequestNumber(requestId: string): string {
   return `REQ-${requestId.slice(-3)}`
-}
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('id-ID', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-function isOverdue(dateString: string): boolean {
-  return new Date(dateString) < new Date()
 }
 
 // =============================================
 // WATCHERS
 // =============================================
 
-// Автоматически выбираем заказ при открытии диалога
 watch(
   () => [props.order, props.modelValue],
   async ([newOrder, isDialogOpen]) => {
@@ -608,43 +442,12 @@ watch(
 )
 </script>
 
-<style lang="scss" scoped>
+<style scoped>
 .border-b {
-  border-bottom: 1px solid rgb(var(--v-theme-surface-variant));
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
 }
 
 .border-t {
-  border-top: 1px solid rgb(var(--v-theme-surface-variant));
-}
-
-.text-medium-emphasis {
-  opacity: 0.7;
-}
-
-.v-chip {
-  transition: all 0.2s ease;
-
-  &:hover {
-    transform: scale(1.05);
-  }
-}
-
-@media (max-width: 768px) {
-  .v-data-table {
-    :deep(.v-data-table__th),
-    :deep(.v-data-table__td) {
-      padding: 8px 4px;
-      font-size: 0.8rem;
-    }
-  }
-
-  .payment-summary .v-row {
-    text-align: center;
-  }
-
-  .d-flex.gap-3 {
-    flex-direction: column;
-    gap: 12px;
-  }
+  border-top: 1px solid rgba(var(--v-border-color), 0.12);
 }
 </style>
