@@ -518,6 +518,17 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.correction = true
       const batchIds: string[] = []
 
+      DebugUtils.info(MODULE_NAME, 'createTransitBatches called', {
+        itemsCount: orderData.length,
+        orderId: orderData[0]?.purchaseOrderId,
+        items: orderData.map(i => ({
+          itemId: i.itemId,
+          quantity: i.quantity,
+          unit: i.unit,
+          purchaseOrderId: i.purchaseOrderId
+        }))
+      })
+
       // Защита от дубликатов
       if (orderData.length > 0) {
         const existingBatches = state.value.batches.filter(
@@ -525,22 +536,45 @@ export const useStorageStore = defineStore('storage', () => {
             batch.purchaseOrderId === orderData[0].purchaseOrderId && batch.status === 'in_transit'
         )
 
+        DebugUtils.debug(MODULE_NAME, 'Checking for duplicate transit batches', {
+          orderId: orderData[0].purchaseOrderId,
+          existingCount: existingBatches.length,
+          existingBatchIds: existingBatches.map(b => b.id),
+          totalBatchesInState: state.value.batches.length
+        })
+
         if (existingBatches.length > 0) {
+          DebugUtils.warn(
+            MODULE_NAME,
+            'Transit batches already exist for order, returning existing',
+            {
+              orderId: orderData[0].purchaseOrderId,
+              existingCount: existingBatches.length
+            }
+          )
           return existingBatches.map(b => b.id)
         }
       }
 
       for (const item of orderData) {
-        if (!item.itemId || !item.quantity || item.quantity <= 0) continue
+        if (!item.itemId || !item.quantity || item.quantity <= 0) {
+          DebugUtils.warn(MODULE_NAME, 'Invalid item data for transit batch', { item })
+          continue
+        }
 
-        const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-        const productDef = mockDataCoordinator.getProductDefinition(item.itemId)
-        if (!productDef) continue
+        // Получаем продукт из productsStore
+        const product = productsStore.getProductById(item.itemId)
+        if (!product) {
+          DebugUtils.warn(MODULE_NAME, 'Product not found for transit batch', {
+            itemId: item.itemId
+          })
+          continue
+        }
 
         // Конвертация в базовые единицы
         let unitType: 'weight' | 'volume' | 'piece' = 'piece'
-        if (productDef.baseUnit === 'gram') unitType = 'weight'
-        else if (productDef.baseUnit === 'ml') unitType = 'volume'
+        if (product.baseUnit === 'gram') unitType = 'weight'
+        else if (product.baseUnit === 'ml') unitType = 'volume'
 
         const conversionResult = convertToBaseUnits(item.quantity, item.unit, unitType)
         const quantityInBaseUnits = conversionResult.success
@@ -583,19 +617,45 @@ export const useStorageStore = defineStore('storage', () => {
 
         state.value.batches.unshift(batch)
         batchIds.push(batchId)
+
+        DebugUtils.debug(MODULE_NAME, 'Transit batch created and added to state', {
+          batchId,
+          itemId: item.itemId,
+          productName: product.name,
+          purchaseOrderId: item.purchaseOrderId,
+          quantity: quantityInBaseUnits,
+          unit: baseUnit,
+          status: batch.status,
+          isActive: batch.isActive,
+          totalBatchesNow: state.value.batches.length,
+          transitBatchesNow: state.value.batches.filter(b => b.status === 'in_transit').length,
+          activeBatchesNow: state.value.batches.filter(b => b.status === 'active').length
+        })
       }
+
+      DebugUtils.info(MODULE_NAME, 'Transit batches created successfully', {
+        totalBatches: batchIds.length,
+        orderId: orderData[0]?.purchaseOrderId,
+        batchIds,
+        finalStateStats: {
+          totalBatches: state.value.batches.length,
+          transitBatches: state.value.batches.filter(b => b.status === 'in_transit').length,
+          activeBatches: state.value.batches.filter(b => b.status === 'active').length
+        }
+      })
 
       return batchIds
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create transit batches'
       state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
+      DebugUtils.error(MODULE_NAME, message, { error, orderData })
       throw error
     } finally {
       state.value.loading.correction = false
     }
   }
 
+  // storageStore.ts
   async function convertTransitBatchesToActive(
     purchaseOrderId: string,
     receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
@@ -607,41 +667,40 @@ export const useStorageStore = defineStore('storage', () => {
         batch => batch.purchaseOrderId === purchaseOrderId && batch.status === 'in_transit'
       )
 
-      for (const receiptItem of receiptItems) {
-        const transitBatch = transitBatches.find(batch => batch.itemId === receiptItem.itemId)
+      if (transitBatches.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No transit batches found for order', { purchaseOrderId })
+        return
+      }
 
-        if (!transitBatch) continue
+      // ✅ КРИТИЧНО: Удаляем из БАЗЫ ДАННЫХ
+      for (const transitBatch of transitBatches) {
+        try {
+          await storageService.deleteBatch(transitBatch.id)
 
-        const receivedQuantityInBase = receiptItem.receivedQuantity
-        const originalQuantity = transitBatch.initialQuantity
-        const actualPrice = receiptItem.actualPrice || transitBatch.costPerUnit
-
-        transitBatch.status = 'active'
-        transitBatch.isActive = true
-        transitBatch.currentQuantity = receivedQuantityInBase
-        transitBatch.initialQuantity = receivedQuantityInBase
-        transitBatch.actualDeliveryDate = new Date().toISOString()
-        transitBatch.updatedAt = new Date().toISOString()
-
-        if (actualPrice !== transitBatch.costPerUnit) {
-          const oldPrice = transitBatch.costPerUnit
-          transitBatch.costPerUnit = actualPrice
-          transitBatch.totalValue = receivedQuantityInBase * actualPrice
-          transitBatch.notes += ` | Price updated: ${oldPrice.toFixed(2)} → ${actualPrice.toFixed(2)}`
-        } else {
-          transitBatch.totalValue = receivedQuantityInBase * actualPrice
+          DebugUtils.debug(MODULE_NAME, 'Transit batch deleted from database', {
+            batchId: transitBatch.id,
+            itemId: transitBatch.itemId
+          })
+        } catch (deleteError) {
+          DebugUtils.error(MODULE_NAME, 'Failed to delete transit batch from database', {
+            batchId: transitBatch.id,
+            error: deleteError
+          })
         }
 
-        if (receivedQuantityInBase !== originalQuantity) {
-          if (receivedQuantityInBase < originalQuantity) {
-            transitBatch.notes += ` | Partial delivery: ${receivedQuantityInBase}/${originalQuantity}`
-          } else {
-            transitBatch.notes += ` | Excess delivery: ${receivedQuantityInBase}/${originalQuantity}`
-          }
+        // Удаляем из state (для немедленного обновления UI)
+        const index = state.value.batches.indexOf(transitBatch)
+        if (index !== -1) {
+          state.value.batches.splice(index, 1)
         }
       }
 
-      await fetchBalances()
+      DebugUtils.info(MODULE_NAME, 'Transit batches removed from database and state', {
+        purchaseOrderId,
+        removedCount: transitBatches.length,
+        totalBatchesAfter: state.value.batches.length,
+        transitBatchesAfter: state.value.batches.filter(b => b.status === 'in_transit').length
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to convert transit batches', { error })
       throw error
@@ -715,20 +774,31 @@ export const useStorageStore = defineStore('storage', () => {
 
   async function getItemUnit(itemId: string): Promise<string> {
     try {
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-      const productDef = mockDataCoordinator.getProductDefinition(itemId)
-      return productDef?.baseUnit || 'piece'
+      // ✅ ИСПРАВЛЕНО: Используем productsStore
+      const product = productsStore.getProductById(itemId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, 'Product not found, using default unit', { itemId })
+        return 'piece'
+      }
+
+      return product.baseUnit || 'piece'
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Failed to get item unit', { itemId, error })
       return 'piece'
     }
   }
-
   async function getItemCostPerUnit(itemId: string): Promise<number> {
     try {
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-      const productDef = mockDataCoordinator.getProductDefinition(itemId)
-      return productDef?.baseCostPerUnit || 0
+      // ✅ ИСПРАВЛЕНО: Используем productsStore
+      const product = productsStore.getProductById(itemId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, 'Product not found, using zero cost', { itemId })
+        return 0
+      }
+
+      return product.baseCostPerUnit || 0
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Failed to get item cost', { itemId, error })
       return 0

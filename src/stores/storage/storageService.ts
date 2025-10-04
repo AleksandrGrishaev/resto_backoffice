@@ -355,14 +355,11 @@ export class StorageService {
   private groupBatchesByProductAndDepartment(): Map<string, StorageBatch[]> {
     const grouped = new Map<string, StorageBatch[]>()
 
-    // ❌ БЫЛО (неправильно - исключало транзитные):
-    // this.batches
-    //   .filter(batch => batch.status === 'active' && batch.currentQuantity > 0)
-
-    // ✅ ИСПРАВЛЕНО (правильно - только активные, исключаем consumed/expired):
+    // ✅ ИСПРАВЛЕНО: Убрали проверку isActive
     this.batches
       .filter(
-        batch => batch.status === 'active' && batch.currentQuantity > 0 && batch.isActive === true
+        batch => batch.status === 'active' && batch.currentQuantity > 0
+        // ← УБРАЛИ: && batch.isActive === true
       )
       .forEach(batch => {
         const key = `${batch.itemId}|${batch.department}`
@@ -387,14 +384,11 @@ export class StorageService {
     productDef?: any
   ): Promise<StorageBalance | null> {
     try {
-      // ✅ ИСПРАВЛЕНО: Если productDef не передан, получаем его
-      if (!productDef) {
-        const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-        productDef = mockDataCoordinator.getProductDefinition(itemId)
-      }
+      // ✅ ИСПРАВЛЕНО: Используем product напрямую, productDef больше не нужен
+      const productInfo = productDef || product
 
-      if (!productDef) {
-        DebugUtils.warn(MODULE_NAME, 'No product definition found', { itemId })
+      if (!productInfo) {
+        DebugUtils.warn(MODULE_NAME, 'No product info found', { itemId })
         return this.createZeroBalance(itemId, department, product, {
           baseUnit: 'gram',
           baseCostPerUnit: 0,
@@ -409,14 +403,14 @@ export class StorageService {
       )
 
       if (activeBatches.length === 0) {
-        return this.createZeroBalance(itemId, department, product, productDef)
+        return this.createZeroBalance(itemId, department, product, productInfo)
       }
 
       // ✅ Расчеты ТОЛЬКО по активным батчам
       const totalQuantity = activeBatches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
       const totalValue = activeBatches.reduce((sum, batch) => sum + batch.totalValue, 0)
       const averageCost =
-        totalQuantity > 0 ? Math.round(totalValue / totalQuantity) : productDef.baseCostPerUnit
+        totalQuantity > 0 ? Math.round(totalValue / totalQuantity) : productInfo.baseCostPerUnit
 
       const hasExpired = activeBatches.some(batch => {
         if (!batch.expiryDate) return false
@@ -424,7 +418,7 @@ export class StorageService {
       })
 
       const hasNearExpiry = this.checkNearExpiry(activeBatches)
-      const belowMinStock = totalQuantity < (productDef.minStock || 0)
+      const belowMinStock = totalQuantity < (productInfo.minStock || 0)
 
       // Find oldest and newest batch dates FROM ACTIVE BATCHES ONLY
       const sortedDates = activeBatches
@@ -437,11 +431,11 @@ export class StorageService {
         itemName: product.name,
         department,
         totalQuantity, // ← ТОЛЬКО активные батчи
-        unit: productDef.baseUnit,
+        unit: productInfo.baseUnit,
         totalValue,
         averageCost,
         latestCost:
-          activeBatches[activeBatches.length - 1]?.costPerUnit || productDef.baseCostPerUnit,
+          activeBatches[activeBatches.length - 1]?.costPerUnit || productInfo.baseCostPerUnit,
         costTrend: 'stable',
         batches: activeBatches, // ← ТОЛЬКО активные батчи в массиве!
         oldestBatchDate: sortedDates[0]?.toISOString() || TimeUtils.getCurrentLocalISO(),
@@ -450,10 +444,10 @@ export class StorageService {
         hasExpired,
         hasNearExpiry,
         belowMinStock: totalQuantity === 0 ? true : belowMinStock,
-        averageDailyUsage: productDef.dailyConsumption || 0,
+        averageDailyUsage: productInfo.dailyConsumption || 0,
         daysOfStockRemaining:
-          totalQuantity > 0 && productDef.dailyConsumption
-            ? Math.floor(totalQuantity / productDef.dailyConsumption)
+          totalQuantity > 0 && productInfo.dailyConsumption
+            ? Math.floor(totalQuantity / productInfo.dailyConsumption)
             : 0,
         lastCalculated: TimeUtils.getCurrentLocalISO(),
         id: `balance-${itemId}-${department}`,
@@ -554,6 +548,18 @@ export class StorageService {
         }
 
         this.batches.push(newBatch)
+        // ✅ ДОБАВИТЬ ЛОГ ДЛЯ ОТЛАДКИ:
+        DebugUtils.debug(MODULE_NAME, '🔥 Batch added to storageService.batches', {
+          batchId: newBatch.id,
+          itemId: newBatch.itemId,
+          itemName: productInfo.name,
+          status: newBatch.status,
+          isActive: newBatch.isActive,
+          currentQuantity: newBatch.currentQuantity,
+          totalBatchesInService: this.batches.length,
+          activeBatchesInService: this.batches.filter(b => b.status === 'active').length,
+          transitBatchesInService: this.batches.filter(b => b.status === 'in_transit').length
+        })
 
         operationItems.push({
           id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -893,7 +899,12 @@ export class StorageService {
 
   private async recalculateBalancesForDepartment(department: StorageDepartment): Promise<void> {
     try {
-      DebugUtils.debug(MODULE_NAME, 'Recalculating balances for department', { department })
+      DebugUtils.info(MODULE_NAME, 'Recalculating balances for department', {
+        department,
+        currentBalances: this.balances.filter(b => b.department === department).length,
+        totalBatches: this.batches.length,
+        departmentBatches: this.batches.filter(b => b.department === department).length
+      })
 
       // Удаляем старые балансы для этого департамента
       this.balances = this.balances.filter(b => b.department !== department)
@@ -902,33 +913,86 @@ export class StorageService {
       const departmentBatches = this.batches.filter(b => b.department === department)
       const productIds = [...new Set(departmentBatches.map(b => b.itemId))]
 
+      DebugUtils.debug(MODULE_NAME, 'Products to recalculate', {
+        department,
+        productCount: productIds.length,
+        productIds,
+        batchesByProduct: productIds.map(id => ({
+          productId: id,
+          batchCount: departmentBatches.filter(b => b.itemId === id).length
+        }))
+      })
+
+      const productsStore = useProductsStore()
+
       for (const productId of productIds) {
         const productBatches = departmentBatches.filter(b => b.itemId === productId)
-        const productsStore = useProductsStore()
         const product = productsStore.products.find(p => p.id === productId)
-        const productDef = mockDataCoordinator.getProductDefinition(productId)
 
-        if (product && productDef) {
-          const balance = this.calculateBalanceFromBatches(
+        DebugUtils.debug(MODULE_NAME, 'Processing product for balance calculation', {
+          productId,
+          productName: product?.name || 'NOT FOUND',
+          hasProduct: !!product,
+          batchesCount: productBatches.length,
+          batchDetails: productBatches.map(b => ({
+            batchId: b.id,
+            status: b.status,
+            isActive: b.isActive,
+            quantity: b.currentQuantity
+          }))
+        })
+
+        if (product) {
+          const balance = await this.calculateBalanceFromBatches(
             productId,
             department,
             productBatches,
             product,
-            productDef
+            product
           )
 
           if (balance) {
             this.balances.push(balance)
+            DebugUtils.debug(MODULE_NAME, 'Balance created successfully', {
+              itemId: balance.itemId,
+              itemName: balance.itemName,
+              totalQuantity: balance.totalQuantity,
+              batchesUsed: balance.batches.length
+            })
+          } else {
+            DebugUtils.warn(MODULE_NAME, 'Balance calculation returned null', {
+              productId,
+              productName: product.name,
+              batchesCount: productBatches.length,
+              batchStatuses: productBatches.map(b => b.status)
+            })
           }
+        } else {
+          DebugUtils.warn(MODULE_NAME, 'Product not found for balance calculation', {
+            productId,
+            department,
+            batchesCount: productBatches.length
+          })
         }
       }
 
-      DebugUtils.debug(MODULE_NAME, 'Department balances recalculated', {
+      DebugUtils.info(MODULE_NAME, 'Department balances recalculated', {
         department,
-        balances: this.balances.filter(b => b.department === department).length
+        newBalances: this.balances.filter(b => b.department === department).length,
+        balanceDetails: this.balances
+          .filter(b => b.department === department)
+          .map(b => ({
+            itemId: b.itemId,
+            itemName: b.itemName,
+            quantity: b.totalQuantity,
+            batchesCount: b.batches.length
+          }))
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to recalculate department balances', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to recalculate department balances', {
+        error,
+        department
+      })
       throw error
     }
   }
@@ -1057,6 +1121,39 @@ export class StorageService {
       return correctionOperations
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to finalize inventory', { error })
+      throw error
+    }
+  }
+
+  async deleteBatch(batchId: string): Promise<void> {
+    try {
+      DebugUtils.debug(MODULE_NAME, 'Deleting batch', { batchId })
+
+      // Удаляем из массива batches
+      const index = this.batches.findIndex(b => b.id === batchId)
+      if (index !== -1) {
+        const deletedBatch = this.batches.splice(index, 1)[0]
+
+        DebugUtils.info(MODULE_NAME, 'Batch removed from service', {
+          batchId,
+          itemId: deletedBatch.itemId,
+          status: deletedBatch.status,
+          remainingBatches: this.batches.length,
+          activeBatches: this.batches.filter(b => b.status === 'active').length,
+          transitBatches: this.batches.filter(b => b.status === 'in_transit').length
+        })
+      } else {
+        DebugUtils.warn(MODULE_NAME, 'Batch not found in service', {
+          batchId,
+          totalBatches: this.batches.length
+        })
+      }
+
+      // ✅ ВАЖНО: Пересчитываем балансы после удаления
+      // Это обновит состояние без необходимости сохранения в "базу"
+      // т.к. данные хранятся в памяти
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete batch', { batchId, error })
       throw error
     }
   }

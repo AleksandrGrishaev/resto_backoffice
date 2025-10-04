@@ -398,23 +398,58 @@ function setupReceiptForm() {
   receiptForm.value.deliveryDate = TimeUtils.formatForHTMLInput(currentReceipt.value.deliveryDate)
   receiptForm.value.notes = currentReceipt.value.notes || ''
 
+  // ✅ ИСПРАВЛЕНО: Заполняем все поля упаковок из OrderItem и ReceiptItem
   receiptForm.value.items = currentReceipt.value.items.map(receiptItem => {
     const orderItem = props.order!.items.find(oi => oi.id === receiptItem.orderItemId)
 
+    if (!orderItem) {
+      DebugUtils.warn(MODULE_NAME, 'Order item not found for receipt item', {
+        receiptItemId: receiptItem.id,
+        orderItemId: receiptItem.orderItemId
+      })
+    }
+
     return {
       ...receiptItem,
+
+      // Базовые поля (уже были)
       unit: orderItem?.unit || getItemUnit(receiptItem.itemId),
-      packageId: orderItem?.packageId,
-      actualPrice: receiptItem.actualPrice || undefined,
-      actualPackagePrice: undefined,
-      receivedPackageQuantity: undefined
+
+      // ✅ НОВОЕ: Поля упаковок из OrderItem
+      packageId: receiptItem.packageId || orderItem?.packageId || '',
+      packageName: receiptItem.packageName || orderItem?.packageName || '',
+      packageUnit: receiptItem.packageUnit || orderItem?.packageUnit || '',
+
+      // ✅ НОВОЕ: Количества упаковок
+      orderedPackageQuantity: receiptItem.orderedPackageQuantity || orderItem?.packageQuantity || 0,
+      receivedPackageQuantity:
+        receiptItem.receivedPackageQuantity ||
+        (receiptItem.receivedPackageQuantity !== undefined
+          ? receiptItem.receivedPackageQuantity
+          : orderItem?.packageQuantity || 0),
+
+      // ✅ НОВОЕ: Цены упаковок
+      orderedPrice: receiptItem.orderedPrice || orderItem?.packagePrice || 0,
+      actualPrice: receiptItem.actualPrice,
+      actualPackagePrice: receiptItem.actualPrice, // actualPrice = цена за упаковку
+
+      // ✅ НОВОЕ: Базовые цены (для расчетов)
+      orderedBaseCost: receiptItem.orderedBaseCost || orderItem?.pricePerUnit || 0,
+      actualBaseCost: receiptItem.actualBaseCost
     } as ReceiptFormItem
   })
 
-  DebugUtils.debug(MODULE_NAME, 'Form setup complete', {
+  DebugUtils.debug(MODULE_NAME, 'Form setup complete with package data', {
     itemsCount: receiptForm.value.items.length,
-    receivedBy: receiptForm.value.receivedBy,
-    deliveryDate: receiptForm.value.deliveryDate
+    sampleItem: receiptForm.value.items[0]
+      ? {
+          itemName: receiptForm.value.items[0].itemName,
+          packageId: receiptForm.value.items[0].packageId,
+          packageName: receiptForm.value.items[0].packageName,
+          orderedPackages: receiptForm.value.items[0].orderedPackageQuantity,
+          receivedPackages: receiptForm.value.items[0].receivedPackageQuantity
+        }
+      : null
   })
 }
 
@@ -470,12 +505,27 @@ async function confirmComplete() {
     currentReceipt.value.deliveryDate = receiptForm.value.deliveryDate
     currentReceipt.value.notes = receiptForm.value.notes
 
+    // ✅ ИСПРАВЛЕНО: Копируем ВСЕ поля включая упаковки
     receiptForm.value.items.forEach(formItem => {
       const receiptItem = currentReceipt.value!.items.find(ri => ri.id === formItem.id)
       if (receiptItem) {
+        // Базовые поля
         receiptItem.receivedQuantity = formItem.receivedQuantity
-        receiptItem.actualPrice = formItem.actualPrice
         receiptItem.notes = formItem.notes
+
+        // ✅ НОВОЕ: Поля упаковок
+        receiptItem.packageId = formItem.packageId
+        receiptItem.packageName = formItem.packageName
+        receiptItem.packageUnit = formItem.packageUnit
+        receiptItem.receivedPackageQuantity = formItem.receivedPackageQuantity
+
+        // ✅ НОВОЕ: Цены (actualPrice в ReceiptItem = цена за упаковку)
+        receiptItem.actualPrice = formItem.actualPackagePrice || formItem.actualPrice
+        receiptItem.actualBaseCost =
+          formItem.actualBaseCost ||
+          (formItem.actualPackagePrice && formItem.packageId
+            ? calculateBaseCostFromPackagePrice(formItem)
+            : undefined)
       }
     })
 
@@ -503,6 +553,15 @@ async function confirmComplete() {
   } finally {
     isCompleting.value = false
   }
+}
+
+function calculateBaseCostFromPackagePrice(item: ReceiptFormItem): number | undefined {
+  if (!item.actualPackagePrice || !item.packageId) return undefined
+
+  const pkg = productsStore.getPackageById(item.packageId)
+  if (!pkg) return undefined
+
+  return item.actualPackagePrice / pkg.packageSize
 }
 
 function autoFillFromOrder() {

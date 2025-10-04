@@ -129,53 +129,61 @@ export function useReceipts() {
   /**
    * Start receipt process for an order with validation
    */
-  async function startReceipt(purchaseOrderId: string, receivedBy: string): Promise<Receipt> {
+  async function startReceipt(
+    purchaseOrderId: string,
+    createData: CreateReceiptData
+  ): Promise<Receipt> {
     try {
       const order = supplierStore.state.orders.find(o => o.id === purchaseOrderId)
       if (!order) {
         throw new Error(`Order with id ${purchaseOrderId} not found`)
       }
 
-      // ✅ ИСПРАВЛЕННАЯ проверка статуса
       if (!canStartReceipt(order)) {
-        throw new Error(
-          `Order is not ready for receipt. Current status: ${order.status}. Required status: sent.` // ✅ НОВОЕ
-        )
+        throw new Error(`Order is not ready for receipt. Current status: ${order.status}`)
       }
 
       DebugUtils.info(MODULE_NAME, 'Starting receipt for order', {
         orderId: purchaseOrderId,
         orderNumber: order.orderNumber,
-        status: order.status,
         itemsCount: order.items.length
       })
 
-      const createData: CreateReceiptData = {
-        purchaseOrderId,
-        receivedBy,
-        items: order.items.map(orderItem => ({
-          orderItemId: orderItem.id,
-          receivedQuantity: orderItem.orderedQuantity, // Default to ordered quantity
-          actualPrice: orderItem.pricePerUnit, // Default to ordered price
-          notes: ''
-        })),
-        notes: `Receipt started for order ${order.orderNumber}`
+      // ✅ ИСПРАВЛЕНО: Создаем receipt с полными данными упаковок
+      const enrichedCreateData: CreateReceiptData = {
+        ...createData,
+        items: order.items.map(orderItem => {
+          const inputItem = createData.items.find(i => i.orderItemId === orderItem.id)
+
+          return {
+            orderItemId: orderItem.id,
+
+            // Количества из заказа по умолчанию
+            receivedQuantity: inputItem?.receivedQuantity || orderItem.orderedQuantity,
+            receivedPackageQuantity:
+              inputItem?.receivedPackageQuantity || orderItem.packageQuantity,
+
+            // ✅ НОВОЕ: Данные упаковки из заказа
+            packageId: inputItem?.packageId || orderItem.packageId,
+
+            // Цены из заказа по умолчанию
+            actualPackagePrice: inputItem?.actualPackagePrice, // undefined = использовать заказанную
+
+            notes: inputItem?.notes || ''
+          }
+        })
       }
 
-      const newReceipt = await supplierStore.createReceipt(createData)
+      const newReceipt = await supplierStore.createReceipt(enrichedCreateData)
 
-      DebugUtils.info(MODULE_NAME, 'Receipt started successfully', {
+      DebugUtils.info(MODULE_NAME, 'Receipt started successfully with package data', {
         receiptId: newReceipt.id,
-        receiptNumber: newReceipt.receiptNumber,
-        status: newReceipt.status
+        receiptNumber: newReceipt.receiptNumber
       })
 
       return newReceipt
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error starting receipt', {
-        purchaseOrderId,
-        error
-      })
+      DebugUtils.error(MODULE_NAME, 'Error starting receipt', { purchaseOrderId, error })
       throw error
     }
   }
@@ -213,13 +221,11 @@ export function useReceipts() {
     try {
       console.log(`Receipts: Completing receipt ${receiptId}`)
 
-      // Находим приемку и связанный заказ
       const receipt = receipts.value.find(r => r.id === receiptId)
       if (!receipt) {
         throw new Error(`Receipt not found: ${receiptId}`)
       }
 
-      // ✅ ПРОВЕРЯЕМ СТАТУС ДО НАЧАЛА ОПЕРАЦИЙ
       if (!canEditReceipt(receipt)) {
         throw new Error(`Receipt cannot be edited in current status: ${receipt.status}`)
       }
@@ -229,7 +235,15 @@ export function useReceipts() {
         throw new Error(`Order not found for receipt: ${receipt.purchaseOrderId}`)
       }
 
-      // ✅ КОНВЕРТИРУЕМ ТРАНЗИТНЫЕ BATCH-И В АКТИВНЫЕ
+      // Логируем состояние ДО конвертации
+      DebugUtils.info(MODULE_NAME, '📊 Storage state BEFORE conversion', {
+        storageStoreBatches: storageStore.state.batches.length,
+        storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
+        storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
+          .length
+      })
+
+      // ✅ ШАГ 1: УДАЛЯЕМ ТРАНЗИТНЫЕ BATCH-И (БЕЗ fetchBalances внутри!)
       try {
         const receiptItems = receipt.items.map(item => ({
           itemId: item.itemId,
@@ -237,18 +251,37 @@ export function useReceipts() {
           actualPrice: item.actualPrice
         }))
 
-        await plannedDeliveryIntegration.convertTransitBatchesOnReceipt(order.id, receiptItems)
-        console.log(
-          `Receipts: Transit batches converted to active for receipt ${receipt.receiptNumber}`
+        await plannedDeliveryIntegration.convertTransitBatchesOnReceipt(
+          receipt.purchaseOrderId,
+          receipt.items
         )
+
+        // Логируем состояние ПОСЛЕ удаления transit batches
+        DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER transit removal', {
+          storageStoreBatches: storageStore.state.batches.length,
+          storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
+          storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
+            .length
+        })
+
+        console.log(`Receipts: Transit batches removed for receipt ${receipt.receiptNumber}`)
       } catch (transitError) {
-        console.warn('Receipts: Failed to convert transit batches:', transitError)
+        console.warn('Receipts: Failed to remove transit batches:', transitError)
       }
 
-      // ✅ СОЗДАЕМ STORAGE OPERATION
+      // ✅ ШАГ 2: СОЗДАЕМ STORAGE OPERATION (это добавит новый active batch)
       let operationId: string | undefined
       try {
         operationId = await storageIntegration.createReceiptOperation(receipt, order)
+
+        // Логируем состояние ПОСЛЕ создания операции
+        DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER operation created', {
+          storageStoreBatches: storageStore.state.batches.length,
+          storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
+          storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
+            .length
+        })
+
         console.log(
           `Receipts: Storage operation created for receipt ${receipt.receiptNumber}, operationId: ${operationId}`
         )
@@ -257,14 +290,32 @@ export function useReceipts() {
         throw storageError
       }
 
-      // ✅ ЗАВЕРШАЕМ ПРИЕМКУ
+      // ✅ ШАГ 3: ОБНОВЛЯЕМ BALANCES (теперь данные корректные)
+      try {
+        const department = receipt.department || 'kitchen'
+        await storageStore.fetchBalances(department)
+
+        DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER balances refresh', {
+          storageStoreBatches: storageStore.state.batches.length,
+          storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
+          storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
+            .length,
+          department
+        })
+
+        console.log(`Receipts: Balances refreshed for department ${department}`)
+      } catch (balanceError) {
+        console.warn('Receipts: Failed to refresh balances:', balanceError)
+      }
+
+      // ✅ ШАГ 4: ЗАВЕРШАЕМ ПРИЕМКУ
       const completedReceipt = await updateReceipt(receiptId, {
         status: 'completed',
         completedDate: new Date().toISOString(),
         storageOperationId: operationId
       })
 
-      // ✅ НОВОЕ: ОБНОВЛЯЕМ ЗАКАЗ С ИНФОРМАЦИЕЙ О ПРИЕМКЕ
+      // ✅ ШАГ 5: ОБНОВЛЯЕМ ЗАКАЗ
       await updateOrderAfterReceiptCompletion(completedReceipt, order, receipt.receivedBy)
 
       console.log(`Receipts: Receipt ${receipt.receiptNumber} completed successfully`)

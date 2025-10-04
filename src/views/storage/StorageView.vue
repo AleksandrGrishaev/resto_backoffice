@@ -128,7 +128,7 @@
         </div>
         <storage-stock-table
           v-else
-          :balances="allProductBalances"
+          :balances="displayProductBalances"
           :loading="isLoading"
           :show-zero-stock="showZeroStock"
           :storage-store="storageStore"

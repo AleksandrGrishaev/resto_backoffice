@@ -576,94 +576,138 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
 /**
  * ✅ Генерирует тестовые транзитные batch-и
  */
+/**
+ * ✅ Генерирует тестовые транзитные batch-и с ПРАВИЛЬНЫМИ purchaseOrderId
+ */
 function generateTransitTestBatches(): StorageBatch[] {
   const transitBatches: StorageBatch[] = []
   const now = new Date()
 
-  // Transit batch 1: Помидоры (доставка через 3 дня)
+  // ============================================
+  // PO-USING-CREDIT (4 позиции)
+  // ============================================
   const futureDelivery = new Date(now)
-  futureDelivery.setDate(now.getDate() + 3)
+  futureDelivery.setDate(now.getDate() - 1)
 
   transitBatches.push({
-    id: 'transit-batch-test-1',
-    batchNumber: 'TRN-250831-001',
-    itemId: 'prod-tomato',
+    id: 'transit-batch-po-using-credit-beef',
+    batchNumber: 'TRN-USE-CREDIT-001',
+    itemId: 'prod-beef-steak',
     itemType: 'product',
     department: 'kitchen',
-    initialQuantity: 5000, // 5кг в граммах
-    currentQuantity: 5000,
+    initialQuantity: 3000,
+    currentQuantity: 3000,
     unit: 'gram',
-    costPerUnit: 25, // 25 IDR за грамм
-    totalValue: 125000, // 5000 * 25
+    costPerUnit: 180,
+    totalValue: 540000,
     receiptDate: futureDelivery.toISOString(),
     sourceType: 'purchase',
     status: 'in_transit',
-    isActive: false, // ← Важно: неактивен до получения
-
-    // Новые поля для транзита
-    purchaseOrderId: 'test-po-001',
-    supplierId: 'supplier-fresh-veg',
-    supplierName: 'Fresh Vegetables Ltd',
+    isActive: false,
+    purchaseOrderId: 'po-using-credit',
+    supplierId: 'sup-premium-meat-co',
+    supplierName: 'Premium Meat Company',
     plannedDeliveryDate: futureDelivery.toISOString(),
-    notes: 'Тестовый транзитный batch - прибытие через 3 дня',
-
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString()
+    notes: 'Transit batch для заказа использующего кредит',
+    createdAt: futureDelivery.toISOString(),
+    updatedAt: futureDelivery.toISOString()
   })
 
-  // Transit batch 2: Лук (просроченная доставка)
-  const pastDelivery = new Date(now)
-  pastDelivery.setDate(now.getDate() - 2)
-
   transitBatches.push({
-    id: 'transit-batch-test-2',
-    batchNumber: 'TRN-250829-001',
-    itemId: 'prod-onion',
+    id: 'transit-batch-po-using-credit-garlic',
+    batchNumber: 'TRN-USE-CREDIT-002',
+    itemId: 'prod-garlic',
     itemType: 'product',
     department: 'kitchen',
-    initialQuantity: 3000, // 3кг в граммах
-    currentQuantity: 3000,
+    initialQuantity: 1000,
+    currentQuantity: 1000,
     unit: 'gram',
-    costPerUnit: 15, // 15 IDR за грамм
-    totalValue: 45000, // 3000 * 15
-    receiptDate: pastDelivery.toISOString(),
+    costPerUnit: 25,
+    totalValue: 25000,
+    receiptDate: futureDelivery.toISOString(),
     sourceType: 'purchase',
     status: 'in_transit',
     isActive: false,
-
-    purchaseOrderId: 'test-po-002',
-    supplierId: 'supplier-fresh-veg',
-    supplierName: 'Fresh Vegetables Ltd',
-    plannedDeliveryDate: pastDelivery.toISOString(), // Просроченная доставка!
-    notes: 'Тестовый транзитный batch - ПРОСРОЧЕНО на 2 дня',
-
-    createdAt: pastDelivery.toISOString(),
-    updatedAt: pastDelivery.toISOString()
+    purchaseOrderId: 'po-using-credit',
+    supplierId: 'sup-premium-meat-co',
+    supplierName: 'Premium Meat Company',
+    plannedDeliveryDate: futureDelivery.toISOString(),
+    notes: 'Transit batch для заказа использующего кредит',
+    createdAt: futureDelivery.toISOString(),
+    updatedAt: futureDelivery.toISOString()
   })
 
-  // Transit batch 3: Мука (доставка сегодня)
   transitBatches.push({
-    id: 'transit-batch-test-3',
-    batchNumber: 'TRN-250831-002',
-    itemId: 'prod-flour',
+    id: 'transit-batch-po-using-credit-milk',
+    batchNumber: 'TRN-USE-CREDIT-003',
+    itemId: 'prod-milk',
     itemType: 'product',
     department: 'kitchen',
-    initialQuantity: 10000, // 10кг в граммах
-    currentQuantity: 10000,
-    unit: 'gram',
-    costPerUnit: 8, // 8 IDR за грамм
-    totalValue: 80000, // 10000 * 8
-    receiptDate: now.toISOString(),
+    initialQuantity: 15000,
+    currentQuantity: 15000,
+    unit: 'ml',
+    costPerUnit: 15,
+    totalValue: 225000,
+    receiptDate: futureDelivery.toISOString(),
     sourceType: 'purchase',
     status: 'in_transit',
     isActive: false,
+    purchaseOrderId: 'po-using-credit',
+    supplierId: 'sup-premium-meat-co',
+    supplierName: 'Premium Meat Company',
+    plannedDeliveryDate: futureDelivery.toISOString(),
+    notes: 'Transit batch для заказа использующего кредит',
+    createdAt: futureDelivery.toISOString(),
+    updatedAt: futureDelivery.toISOString()
+  })
 
-    purchaseOrderId: 'test-po-003',
-    supplierId: 'supplier-dry-goods',
-    supplierName: 'Dry Goods Wholesale',
-    plannedDeliveryDate: now.toISOString(), // Доставка сегодня
-    notes: 'Тестовый транзитный batch - прибытие сегодня',
+  transitBatches.push({
+    id: 'transit-batch-po-using-credit-oil',
+    batchNumber: 'TRN-USE-CREDIT-004',
+    itemId: 'prod-olive-oil',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 1000,
+    currentQuantity: 1000,
+    unit: 'ml',
+    costPerUnit: 85,
+    totalValue: 85000,
+    receiptDate: futureDelivery.toISOString(),
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false,
+    purchaseOrderId: 'po-using-credit',
+    supplierId: 'sup-premium-meat-co',
+    supplierName: 'Premium Meat Company',
+    plannedDeliveryDate: futureDelivery.toISOString(),
+    notes: 'Transit batch для заказа использующего кредит',
+    createdAt: futureDelivery.toISOString(),
+    updatedAt: futureDelivery.toISOString()
+  })
 
+  // ============================================
+  // PO-003 (1 позиция - Tomato)
+  // ============================================
+  transitBatches.push({
+    id: 'transit-batch-po-003-tomato',
+    batchNumber: 'TRN-PO003-001',
+    itemId: 'prod-tomato',
+    itemType: 'product',
+    department: 'kitchen',
+    initialQuantity: 5000,
+    currentQuantity: 5000,
+    unit: 'gram',
+    costPerUnit: 12,
+    totalValue: 60000,
+    receiptDate: now.toISOString(), // Доставка сегодня
+    sourceType: 'purchase',
+    status: 'in_transit',
+    isActive: false,
+    purchaseOrderId: 'po-003',
+    supplierId: 'sup-fresh-veg-market',
+    supplierName: 'Fresh Vegetable Market',
+    plannedDeliveryDate: now.toISOString(),
+    notes: 'Transit batch для PO-003 - ожидается доставка сегодня',
     createdAt: now.toISOString(),
     updatedAt: now.toISOString()
   })
