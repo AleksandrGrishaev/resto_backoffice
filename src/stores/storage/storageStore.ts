@@ -296,13 +296,19 @@ export const useStorageStore = defineStore('storage', () => {
       ])
 
       state.value.balances = balances
-      state.value.batches = batches
+
+      // ✅ ИСПРАВЛЕНО: Сохраняем transit batches при обновлении
+      const existingTransitBatches = state.value.batches.filter(b => b.status === 'in_transit')
+
+      // ✅ Объединяем новые active batches + существующие transit batches
+      const activeBatches = batches.filter(b => b.status === 'active')
+      state.value.batches = [...activeBatches, ...existingTransitBatches]
 
       DebugUtils.debug(MODULE_NAME, 'Balances and batches fetched', {
         balances: balances.length,
-        batches: batches.length,
-        activeBatches: batches.filter(b => b.status === 'active').length,
-        transitBatches: batches.filter(b => b.status === 'in_transit').length,
+        activeBatches: activeBatches.length,
+        transitBatches: existingTransitBatches.length,
+        totalBatches: state.value.batches.length,
         department: department || 'all'
       })
     } catch (error) {
@@ -655,7 +661,6 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  // storageStore.ts
   async function convertTransitBatchesToActive(
     purchaseOrderId: string,
     receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
