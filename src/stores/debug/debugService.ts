@@ -468,8 +468,13 @@ class DebugService {
 
   private extractStorageState(storeInstance: any): Record<string, any> {
     const storeState = storeInstance.state?.value || storeInstance.state || {}
+
     return {
-      batches: this.serializeArray(storeState.batches || []),
+      // ✅ НОВОЕ: Раздельные массивы batches
+      activeBatches: this.serializeArray(storeState.activeBatches || []),
+      transitBatches: this.serializeArray(storeState.transitBatches || []),
+
+      // Остальное без изменений
       operations: this.serializeArray(storeState.operations || []),
       balances: this.serializeArray(storeState.balances || []),
       inventories: this.serializeArray(storeState.inventories || []),

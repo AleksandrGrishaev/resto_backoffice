@@ -251,20 +251,17 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.balances = true
       state.value.error = null
 
-      // ✅ ВРЕМЕННОЕ РЕШЕНИЕ - динамический импорт
-      const { storageService: service } = await import('./storageService')
+      // ✅ ИСПРАВЛЕНО: Используем статический импорт (уже есть в начале файла)
+      // import { storageService } from './storageService'
 
-      await service.initialize()
+      await storageService.initialize()
 
-      // Проверяем что методы доступны
-      console.log('getActiveBatches type:', typeof service.getActiveBatches)
-      console.log('getTransitBatches type:', typeof service.getTransitBatches)
-
-      const balances = await service.getBalances()
-      const activeBatches = await service.getActiveBatches()
-      const transitBatches = await service.getTransitBatches()
-      const operations = await service.getOperations()
-      const inventories = await service.getInventories()
+      // Load data from service
+      const balances = await storageService.getBalances()
+      const activeBatches = await storageService.getActiveBatches()
+      const transitBatches = await storageService.getTransitBatches()
+      const operations = await storageService.getOperations()
+      const inventories = await storageService.getInventories()
 
       // Update state
       state.value.balances = balances
@@ -273,13 +270,16 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.operations = operations
       state.value.inventories = inventories
 
+      // Load transit batches into service
       transitBatchService.load(transitBatches)
 
       initialized.value = true
 
       DebugUtils.info(MODULE_NAME, 'Storage store initialized successfully', {
         activeBatches: activeBatches.length,
-        transitBatches: transitBatches.length
+        transitBatches: transitBatches.length,
+        operations: operations.length,
+        balances: balances.length
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to initialize storage store'
