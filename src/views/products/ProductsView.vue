@@ -177,7 +177,8 @@ const useMockMode = computed(() => store.useMockMode)
 const storeFilters = computed(() => ({
   category: store.filters.category,
   isActive: store.filters.isActive,
-  search: store.filters.search
+  search: store.filters.search,
+  department: store.filters.department // ✅ ДОБАВИТЬ
 }))
 
 // Original methods

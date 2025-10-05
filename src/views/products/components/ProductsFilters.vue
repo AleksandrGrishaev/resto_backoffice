@@ -135,6 +135,7 @@
               @click:close="clearDepartmentFilter"
             >
               {{ getDepartmentLabel(localFilters.department) }}
+              <!-- ✅ Динамическое значение -->
             </v-chip>
           </div>
         </v-col>
@@ -222,7 +223,7 @@ const hasActiveFilters = computed(() => {
     localFilters.value.search !== '' ||
     localFilters.value.category !== 'all' ||
     localFilters.value.isActive !== 'all' ||
-    (localFilters.value.department !== 'all' && localFilters.value.department !== undefined) // ✅ ИЗМЕНИТЬ
+    localFilters.value.department !== 'all'
   )
 })
 
@@ -234,7 +235,7 @@ watch(
       category: newFilters.category,
       isActive: newFilters.isActive,
       search: newFilters.search,
-      department: newFilters.department || 'all' // ✅ ДОБАВИТЬ fallback
+      department: newFilters.department
     }
   },
   { deep: true, immediate: true }
