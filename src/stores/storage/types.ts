@@ -262,7 +262,8 @@ export interface QuickWriteOffItem {
 }
 
 export interface StorageState {
-  batches: StorageBatch[]
+  activeBatches: StorageBatch[] // ✅ CHANGED: was "batches"
+  transitBatches: StorageBatch[] // ✅ NEW
   operations: StorageOperation[]
   balances: StorageBalance[]
   inventories: InventoryDocument[]

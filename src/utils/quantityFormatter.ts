@@ -1,5 +1,6 @@
 // src/utils/quantityFormatter.ts
-// Утилита для правильного форматирования количеств с единицами измерения
+// УСТАРЕВШИЙ ФАЙЛ, не использовать.
+// ИСПОЛЬЗОВАТЬ КОМПОСЕБЛЗ import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
 
 import type { Product } from '@/stores/productsStore/types'
 

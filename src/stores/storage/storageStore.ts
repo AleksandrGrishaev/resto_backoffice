@@ -7,6 +7,7 @@ import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
+import { transitBatchService } from './transitBatchService'
 
 import type {
   StorageState,
@@ -36,7 +37,8 @@ export const useStorageStore = defineStore('storage', () => {
   // ===========================
 
   const state = ref<StorageState>({
-    batches: [],
+    activeBatches: [], // ✅ Only active batches
+    transitBatches: [], // ✅ Only transit batches
     operations: [],
     balances: [],
     inventories: [],
@@ -74,6 +76,21 @@ export const useStorageStore = defineStore('storage', () => {
   // ===========================
   // COMPUTED PROPERTIES
   // ===========================
+
+  /**
+   * All batches (active + transit) for backward compatibility
+   */
+  const allBatches = computed(() => [...state.value.activeBatches, ...state.value.transitBatches])
+
+  /**
+   * Direct access to transit batches
+   */
+  const transitBatches = computed(() => state.value.transitBatches)
+
+  /**
+   * Active batches only
+   */
+  const activeBatches = computed(() => state.value.activeBatches)
 
   const filteredBalances = computed(() => {
     let balances = [...state.value.balances]
@@ -161,10 +178,6 @@ export const useStorageStore = defineStore('storage', () => {
     }
   })
 
-  const transitBatches = computed(() => {
-    return state.value.batches.filter(batch => batch.status === 'in_transit')
-  })
-
   const balancesWithTransit = computed((): StorageBalanceWithTransit[] => {
     const transit = transitBatches.value
 
@@ -228,59 +241,52 @@ export const useStorageStore = defineStore('storage', () => {
   // ===========================
 
   async function initialize() {
-    // ===== ЗАЩИТА ОТ ПОВТОРНЫХ ВЫЗОВОВ =====
-    if (initialized.value) {
-      DebugUtils.debug(MODULE_NAME, 'Storage store already initialized, skipping')
-      return
-    }
-
-    // ===== ЗАЩИТА ОТ ОДНОВРЕМЕННЫХ ВЫЗОВОВ =====
-    if (state.value.loading.balances) {
-      DebugUtils.debug(MODULE_NAME, 'Storage store initialization already in progress')
-      return
-    }
-
     try {
-      DebugUtils.info(MODULE_NAME, 'Initializing storage store...')
+      if (initialized.value) {
+        DebugUtils.debug(MODULE_NAME, 'Storage store already initialized')
+        return
+      }
 
-      // Устанавливаем флаг загрузки
+      DebugUtils.info(MODULE_NAME, 'Initializing storage store...')
       state.value.loading.balances = true
       state.value.error = null
 
-      // Проверяем зависимости - productsStore должен быть загружен
-      const productsStore = useProductsStore()
-      if (productsStore.products.length === 0) {
-        DebugUtils.debug(MODULE_NAME, 'Products store not loaded, loading first...')
-        await productsStore.loadProducts(true)
-      }
+      // ✅ ВРЕМЕННОЕ РЕШЕНИЕ - динамический импорт
+      const { storageService: service } = await import('./storageService')
 
-      // Инициализируем сервисный слой
-      DebugUtils.debug(MODULE_NAME, 'Initializing storage service...')
-      await storageService.initialize()
+      await service.initialize()
 
-      // Загружаем данные параллельно
-      DebugUtils.debug(MODULE_NAME, 'Loading storage data...')
-      await Promise.all([fetchBalances(), fetchOperations(), fetchInventories()])
+      // Проверяем что методы доступны
+      console.log('getActiveBatches type:', typeof service.getActiveBatches)
+      console.log('getTransitBatches type:', typeof service.getTransitBatches)
 
-      // Помечаем как инициализированный
+      const balances = await service.getBalances()
+      const activeBatches = await service.getActiveBatches()
+      const transitBatches = await service.getTransitBatches()
+      const operations = await service.getOperations()
+      const inventories = await service.getInventories()
+
+      // Update state
+      state.value.balances = balances
+      state.value.activeBatches = activeBatches
+      state.value.transitBatches = transitBatches
+      state.value.operations = operations
+      state.value.inventories = inventories
+
+      transitBatchService.load(transitBatches)
+
       initialized.value = true
 
       DebugUtils.info(MODULE_NAME, 'Storage store initialized successfully', {
-        balances: state.value.balances.length,
-        batches: state.value.batches.length,
-        operations: state.value.operations.length,
-        inventories: state.value.inventories.length,
-        isReady: true
+        activeBatches: activeBatches.length,
+        transitBatches: transitBatches.length
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to initialize storage store'
       state.value.error = message
       DebugUtils.error(MODULE_NAME, message, { error })
-
-      // НЕ устанавливаем initialized = true при ошибке
       throw error
     } finally {
-      // Всегда снимаем флаг загрузки
       state.value.loading.balances = false
     }
   }
@@ -290,25 +296,20 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.balances = true
       state.value.error = null
 
-      const [balances, batches] = await Promise.all([
+      const [balances, activeBatches, transitBatches] = await Promise.all([
         storageService.getBalances(department),
-        storageService.getAllBatches(department)
+        storageService.getActiveBatches(department), // ✅ CHANGED
+        storageService.getTransitBatches(department) // ✅ NEW
       ])
 
       state.value.balances = balances
-
-      // ✅ ИСПРАВЛЕНО: Сохраняем transit batches при обновлении
-      const existingTransitBatches = state.value.batches.filter(b => b.status === 'in_transit')
-
-      // ✅ Объединяем новые active batches + существующие transit batches
-      const activeBatches = batches.filter(b => b.status === 'active')
-      state.value.batches = [...activeBatches, ...existingTransitBatches]
+      state.value.activeBatches = activeBatches // ✅ CHANGED
+      state.value.transitBatches = transitBatches // ✅ NEW
 
       DebugUtils.debug(MODULE_NAME, 'Balances and batches fetched', {
         balances: balances.length,
         activeBatches: activeBatches.length,
-        transitBatches: existingTransitBatches.length,
-        totalBatches: state.value.batches.length,
+        transitBatches: transitBatches.length,
         department: department || 'all'
       })
     } catch (error) {
@@ -503,233 +504,100 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   // ===========================
-  // TRANSIT BATCH OPERATIONS
+  // BATCH METHODS
   // ===========================
 
-  async function createTransitBatches(
-    orderData: Array<{
-      itemId: string
-      quantity: number
-      unit: string
-      estimatedCostPerUnit: number
-      department: StorageDepartment
-      purchaseOrderId: string
-      supplierId: string
-      supplierName: string
-      plannedDeliveryDate: string
-      notes?: string
-    }>
-  ): Promise<string[]> {
+  /**
+   * Create transit batches from order
+   */
+  async function createTransitBatches(orderData: CreateTransitBatchData[]): Promise<string[]> {
     try {
       state.value.loading.correction = true
-      const batchIds: string[] = []
 
-      DebugUtils.info(MODULE_NAME, 'createTransitBatches called', {
-        itemsCount: orderData.length,
-        orderId: orderData[0]?.purchaseOrderId,
-        items: orderData.map(i => ({
-          itemId: i.itemId,
-          quantity: i.quantity,
-          unit: i.unit,
-          purchaseOrderId: i.purchaseOrderId
-        }))
+      DebugUtils.info(MODULE_NAME, 'Creating transit batches', {
+        itemsCount: orderData.length
       })
 
-      // Защита от дубликатов
-      if (orderData.length > 0) {
-        const existingBatches = state.value.batches.filter(
-          batch =>
-            batch.purchaseOrderId === orderData[0].purchaseOrderId && batch.status === 'in_transit'
-        )
-
-        DebugUtils.debug(MODULE_NAME, 'Checking for duplicate transit batches', {
-          orderId: orderData[0].purchaseOrderId,
-          existingCount: existingBatches.length,
-          existingBatchIds: existingBatches.map(b => b.id),
-          totalBatchesInState: state.value.batches.length
-        })
-
-        if (existingBatches.length > 0) {
-          DebugUtils.warn(
-            MODULE_NAME,
-            'Transit batches already exist for order, returning existing',
-            {
-              orderId: orderData[0].purchaseOrderId,
-              existingCount: existingBatches.length
-            }
-          )
-          return existingBatches.map(b => b.id)
-        }
+      // Extract order ID (all items should have same orderId)
+      const orderId = orderData[0]?.purchaseOrderId
+      if (!orderId) {
+        throw new Error('Order ID is required')
       }
 
-      for (const item of orderData) {
-        if (!item.itemId || !item.quantity || item.quantity <= 0) {
-          DebugUtils.warn(MODULE_NAME, 'Invalid item data for transit batch', { item })
-          continue
-        }
+      // Delegate to service
+      const batches = await transitBatchService.createFromOrder(orderId, orderData)
 
-        // Получаем продукт из productsStore
-        const product = productsStore.getProductById(item.itemId)
-        if (!product) {
-          DebugUtils.warn(MODULE_NAME, 'Product not found for transit batch', {
-            itemId: item.itemId
-          })
-          continue
-        }
+      // Add to state
+      state.value.transitBatches.push(...batches)
 
-        // Конвертация в базовые единицы
-        let unitType: 'weight' | 'volume' | 'piece' = 'piece'
-        if (product.baseUnit === 'gram') unitType = 'weight'
-        else if (product.baseUnit === 'ml') unitType = 'volume'
-
-        const conversionResult = convertToBaseUnits(item.quantity, item.unit, unitType)
-        const quantityInBaseUnits = conversionResult.success
-          ? conversionResult.value!
-          : item.quantity
-        const baseUnit = conversionResult.success ? conversionResult.baseUnit! : item.unit
-
-        let costPerUnitInBase = item.estimatedCostPerUnit
-        if (conversionResult.success && item.unit !== baseUnit) {
-          const conversionFactor = item.quantity / quantityInBaseUnits
-          costPerUnitInBase = item.estimatedCostPerUnit * conversionFactor
-        }
-
-        const batchId = `transit-batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        const batchNumber = generateTransitBatchNumber()
-
-        const batch: StorageBatch = {
-          id: batchId,
-          batchNumber,
-          itemId: item.itemId,
-          itemType: 'product',
-          department: item.department,
-          initialQuantity: quantityInBaseUnits,
-          currentQuantity: quantityInBaseUnits,
-          unit: baseUnit,
-          costPerUnit: costPerUnitInBase,
-          totalValue: quantityInBaseUnits * costPerUnitInBase,
-          receiptDate: item.plannedDeliveryDate,
-          sourceType: 'purchase',
-          status: 'in_transit',
-          isActive: false,
-          purchaseOrderId: item.purchaseOrderId,
-          supplierId: item.supplierId,
-          supplierName: item.supplierName,
-          plannedDeliveryDate: item.plannedDeliveryDate,
-          notes: item.notes || `Transit batch from order`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-
-        state.value.batches.unshift(batch)
-        batchIds.push(batchId)
-
-        DebugUtils.debug(MODULE_NAME, 'Transit batch created and added to state', {
-          batchId,
-          itemId: item.itemId,
-          productName: product.name,
-          purchaseOrderId: item.purchaseOrderId,
-          quantity: quantityInBaseUnits,
-          unit: baseUnit,
-          status: batch.status,
-          isActive: batch.isActive,
-          totalBatchesNow: state.value.batches.length,
-          transitBatchesNow: state.value.batches.filter(b => b.status === 'in_transit').length,
-          activeBatchesNow: state.value.batches.filter(b => b.status === 'active').length
-        })
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Transit batches created successfully', {
-        totalBatches: batchIds.length,
-        orderId: orderData[0]?.purchaseOrderId,
-        batchIds,
-        finalStateStats: {
-          totalBatches: state.value.batches.length,
-          transitBatches: state.value.batches.filter(b => b.status === 'in_transit').length,
-          activeBatches: state.value.batches.filter(b => b.status === 'active').length
-        }
+      DebugUtils.info(MODULE_NAME, 'Transit batches created', {
+        count: batches.length,
+        batchIds: batches.map(b => b.id)
       })
 
-      return batchIds
+      return batches.map(b => b.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create transit batches'
       state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error, orderData })
+      DebugUtils.error(MODULE_NAME, message, { error })
       throw error
     } finally {
       state.value.loading.correction = false
     }
   }
 
-  // storageStore.ts
+  /**
+   * Convert transit batches to active on receipt
+   */
   async function convertTransitBatchesToActive(
-    purchaseOrderId: string,
-    receiptItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
+    orderId: string,
+    receivedItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
   ): Promise<void> {
     try {
-      state.value.loading.correction = true
+      DebugUtils.info(MODULE_NAME, 'Converting transit batches to active', {
+        orderId,
+        itemsCount: receivedItems.length
+      })
 
-      const transitBatches = state.value.batches.filter(
-        batch => batch.purchaseOrderId === purchaseOrderId && batch.status === 'in_transit'
+      // Delegate to service
+      const activeBatches = await transitBatchService.convertToActive(orderId, receivedItems)
+
+      // Remove from transit state
+      state.value.transitBatches = state.value.transitBatches.filter(
+        b => b.purchaseOrderId !== orderId
       )
 
-      if (transitBatches.length === 0) {
-        DebugUtils.warn(MODULE_NAME, 'No transit batches found for order', { purchaseOrderId })
-        return
-      }
+      // Add to active state
+      state.value.activeBatches.push(...activeBatches)
 
-      // ✅ КРИТИЧНО: Удаляем из БАЗЫ ДАННЫХ
-      for (const transitBatch of transitBatches) {
-        try {
-          await storageService.deleteBatch(transitBatch.id)
-
-          DebugUtils.debug(MODULE_NAME, 'Transit batch deleted from database', {
-            batchId: transitBatch.id,
-            itemId: transitBatch.itemId
-          })
-        } catch (deleteError) {
-          DebugUtils.error(MODULE_NAME, 'Failed to delete transit batch from database', {
-            batchId: transitBatch.id,
-            error: deleteError
-          })
-        }
-
-        // Удаляем из state (для немедленного обновления UI)
-        const index = state.value.batches.indexOf(transitBatch)
-        if (index !== -1) {
-          state.value.batches.splice(index, 1)
-        }
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Transit batches removed from database and state', {
-        purchaseOrderId,
-        removedCount: transitBatches.length,
-        totalBatchesAfter: state.value.batches.length,
-        transitBatchesAfter: state.value.batches.filter(b => b.status === 'in_transit').length
+      DebugUtils.info(MODULE_NAME, 'Transit batches converted successfully', {
+        orderId,
+        convertedCount: activeBatches.length
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to convert transit batches', { error })
       throw error
-    } finally {
-      state.value.loading.correction = false
     }
   }
 
+  /**
+   * Remove transit batches on order cancellation
+   */
   async function removeTransitBatchesOnOrderCancel(orderId: string): Promise<void> {
     try {
-      const transitBatchesToRemove = state.value.batches.filter(
-        batch => batch.purchaseOrderId === orderId && batch.status === 'in_transit'
+      DebugUtils.info(MODULE_NAME, 'Removing transit batches', { orderId })
+
+      // Delegate to service
+      const removedCount = transitBatchService.removeByOrder(orderId)
+
+      // Update state
+      state.value.transitBatches = state.value.transitBatches.filter(
+        b => b.purchaseOrderId !== orderId
       )
 
-      if (transitBatchesToRemove.length === 0) return
-
-      state.value.batches = state.value.batches.filter(
-        batch => !(batch.purchaseOrderId === orderId && batch.status === 'in_transit')
-      )
-
-      DebugUtils.info(MODULE_NAME, 'Transit batches removed successfully', {
+      DebugUtils.info(MODULE_NAME, 'Transit batches removed', {
         orderId,
-        removedCount: transitBatchesToRemove.length
+        removedCount
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to remove transit batches', { error })
@@ -737,40 +605,48 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  function generateTransitBatchNumber(): string {
-    const date = new Date()
-    const dateStr = date.toISOString().slice(2, 10).replace(/-/g, '')
-    const timeStr =
-      date.getHours().toString().padStart(2, '0') + date.getMinutes().toString().padStart(2, '0')
-    const sequence = state.value.batches.filter(b => b.status === 'in_transit').length + 1
-    return `TRN-${dateStr}-${timeStr}-${sequence.toString().padStart(3, '0')}`
+  /**
+   * Get transit batches by order
+   */
+  function getTransitBatchesByOrder(orderId: string): StorageBatch[] {
+    return transitBatchService.findByOrder(orderId)
   }
 
-  function getTransitBatchesByOrder(purchaseOrderId: string): StorageBatch[] {
-    return transitBatches.value.filter(batch => batch.purchaseOrderId === purchaseOrderId)
-  }
-
-  // ===========================
-  // HELPER METHODS
-  // ===========================
-
+  /**
+   * Get transit batches for specific item
+   */
   function getTransitBatchesForItem(itemId: string, department: StorageDepartment): StorageBatch[] {
-    return transitBatches.value.filter(
-      batch => batch.itemId === itemId && batch.department === department
-    )
+    return transitBatchService.findByItem(itemId, department)
   }
 
+  /**
+   * Check if transit delivery is overdue
+   */
   function isTransitDeliveryOverdue(plannedDate?: string): boolean {
     if (!plannedDate) return false
     return new Date(plannedDate) < new Date()
   }
 
+  /**
+   * Check if transit delivery is today
+   */
   function isTransitDeliveryToday(plannedDate?: string): boolean {
     if (!plannedDate) return false
     const deliveryDate = new Date(plannedDate)
     const today = new Date()
     return deliveryDate.toDateString() === today.toDateString()
   }
+
+  /**
+   * Get transit batch statistics
+   */
+  function getTransitBatchStatistics() {
+    return transitBatchService.getStatistics()
+  }
+
+  // ===========================
+  // HELPER METHODS
+  // ===========================
 
   function getItemName(itemId: string): string {
     const productsStore = useProductsStore()
@@ -794,6 +670,7 @@ export const useStorageStore = defineStore('storage', () => {
       return 'piece'
     }
   }
+
   async function getItemCostPerUnit(itemId: string): Promise<number> {
     try {
       // ✅ ИСПРАВЛЕНО: Используем productsStore
@@ -812,13 +689,16 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   function getItemBatches(itemId: string, department: StorageDepartment): StorageBatch[] {
-    return state.value.batches.filter(
+    return state.value.activeBatches.filter(
       b => b.itemId === itemId && b.department === department && b.status === 'active'
     )
   }
 
   function getBatchById(batchId: string): StorageBatch | undefined {
-    return state.value.batches.find(b => b.id === batchId)
+    return (
+      state.value.activeBatches.find(b => b.id === batchId) ||
+      state.value.transitBatches.find(b => b.id === batchId)
+    )
   }
 
   function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
@@ -900,6 +780,8 @@ export const useStorageStore = defineStore('storage', () => {
     initialized: readonly(initialized),
     isReady: computed(() => initialized.value && !state.value.loading.balances),
     hasData: computed(() => state.value.balances.length > 0),
+    allBatches,
+    activeBatches,
 
     // Existing computed
     filteredBalances,
@@ -941,17 +823,15 @@ export const useStorageStore = defineStore('storage', () => {
     getItemBatches,
     getBatchById,
 
-    // Существующие helper-ы для транзита
-    getTransitBatchesForItem,
-    isTransitDeliveryOverdue,
-    isTransitDeliveryToday,
-
-    // Новые методы для транзита
+    // ✅ NEW: Transit batch actions
     createTransitBatches,
     convertTransitBatchesToActive,
     removeTransitBatchesOnOrderCancel,
-    generateTransitBatchNumber,
     getTransitBatchesByOrder,
+    getTransitBatchesForItem,
+    isTransitDeliveryOverdue,
+    isTransitDeliveryToday,
+    getTransitBatchStatistics,
 
     // Filter actions
     setDepartmentFilter,

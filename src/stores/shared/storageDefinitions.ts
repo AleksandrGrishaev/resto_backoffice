@@ -574,10 +574,7 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
 }
 
 /**
- * ✅ Генерирует тестовые транзитные batch-и
- */
-/**
- * ✅ Генерирует тестовые транзитные batch-и с ПРАВИЛЬНЫМИ purchaseOrderId
+ * ✅ ОБНОВЛЕНО: Генерирует тестовые транзитные batch-и с НОВЫМ форматом ID
  */
 function generateTransitTestBatches(): StorageBatch[] {
   const transitBatches: StorageBatch[] = []
@@ -589,9 +586,18 @@ function generateTransitTestBatches(): StorageBatch[] {
   const futureDelivery = new Date(now)
   futureDelivery.setDate(now.getDate() - 1)
 
+  // Helper для генерации правильного batch number
+  const generateTransitBatchNumber = (orderId: string, index: number): string => {
+    const date = new Date()
+    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
+    const orderPrefix = orderId.replace('po-', '').replace(/-/g, '').substring(0, 12).toUpperCase()
+    return `TRN-${dateStr}-${orderPrefix}-${index.toString().padStart(2, '0')}`
+  }
+
   transitBatches.push({
-    id: 'transit-batch-po-using-credit-beef',
-    batchNumber: 'TRN-USE-CREDIT-001',
+    // ✅ НОВЫЙ ФОРМАТ: transit-{orderId}-{itemId}-{index}
+    id: 'transit-po-using-credit-prod-beef-steak-0',
+    batchNumber: generateTransitBatchNumber('po-using-credit', 0),
     itemId: 'prod-beef-steak',
     itemType: 'product',
     department: 'kitchen',
@@ -614,8 +620,8 @@ function generateTransitTestBatches(): StorageBatch[] {
   })
 
   transitBatches.push({
-    id: 'transit-batch-po-using-credit-garlic',
-    batchNumber: 'TRN-USE-CREDIT-002',
+    id: 'transit-po-using-credit-prod-garlic-1',
+    batchNumber: generateTransitBatchNumber('po-using-credit', 1),
     itemId: 'prod-garlic',
     itemType: 'product',
     department: 'kitchen',
@@ -638,8 +644,8 @@ function generateTransitTestBatches(): StorageBatch[] {
   })
 
   transitBatches.push({
-    id: 'transit-batch-po-using-credit-milk',
-    batchNumber: 'TRN-USE-CREDIT-003',
+    id: 'transit-po-using-credit-prod-milk-2',
+    batchNumber: generateTransitBatchNumber('po-using-credit', 2),
     itemId: 'prod-milk',
     itemType: 'product',
     department: 'kitchen',
@@ -662,8 +668,8 @@ function generateTransitTestBatches(): StorageBatch[] {
   })
 
   transitBatches.push({
-    id: 'transit-batch-po-using-credit-oil',
-    batchNumber: 'TRN-USE-CREDIT-004',
+    id: 'transit-po-using-credit-prod-olive-oil-3',
+    batchNumber: generateTransitBatchNumber('po-using-credit', 3),
     itemId: 'prod-olive-oil',
     itemType: 'product',
     department: 'kitchen',
@@ -689,8 +695,8 @@ function generateTransitTestBatches(): StorageBatch[] {
   // PO-003 (1 позиция - Tomato)
   // ============================================
   transitBatches.push({
-    id: 'transit-batch-po-003-tomato',
-    batchNumber: 'TRN-PO003-001',
+    id: 'transit-po-003-prod-tomato-0',
+    batchNumber: generateTransitBatchNumber('po-003', 0),
     itemId: 'prod-tomato',
     itemType: 'product',
     department: 'kitchen',
@@ -699,7 +705,7 @@ function generateTransitTestBatches(): StorageBatch[] {
     unit: 'gram',
     costPerUnit: 12,
     totalValue: 60000,
-    receiptDate: now.toISOString(), // Доставка сегодня
+    receiptDate: now.toISOString(),
     sourceType: 'purchase',
     status: 'in_transit',
     isActive: false,
