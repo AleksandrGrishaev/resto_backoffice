@@ -390,10 +390,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 import type { StorageBalance, StorageDepartment } from '@/stores/storage'
+import { DebugUtils } from '@/utils/debugger'
+
+const MODULE_NAME = 'StorageStockTable'
 
 // Components
 import ItemDetailsDialog from './ItemDetailsDialog.vue'
@@ -529,51 +532,73 @@ const categoryOptions = computed(() => {
 })
 
 // ===========================
+// DEPARTMENT-FILTERED TRANSIT BATCHES
+// ===========================
+
+const departmentTransitBatches = computed(() => {
+  if (!props.storageStore?.transitBatches) {
+    DebugUtils.debug(MODULE_NAME, 'No transit batches available in store')
+    return []
+  }
+
+  const currentDepartment = props.department
+
+  const filtered = props.storageStore.transitBatches.filter(
+    (batch: any) => batch.department === currentDepartment
+  )
+
+  DebugUtils.debug(MODULE_NAME, 'Filtered transit batches', {
+    department: currentDepartment,
+    totalBatches: props.storageStore.transitBatches.length,
+    filteredCount: filtered.length,
+    batchIds: filtered.map((b: any) => b.id)
+  })
+
+  return filtered
+})
+
+// ===========================
 // ТРАНЗИТНЫЕ BATCH-И МЕТОДЫ
 // ===========================
 
 function hasTransitForItem(item: StorageBalance): boolean {
-  if (!props.storageStore?.transitBatches) return false // ✅ убрать .value
-
-  return props.storageStore.transitBatches.some(
-    // ✅ убрать .value
-    (batch: any) => batch.itemId === item.itemId && batch.department === item.department
-  )
+  return departmentTransitBatches.value.some((batch: any) => batch.itemId === item.itemId)
 }
 
 function getTransitQuantity(item: StorageBalance): number {
-  if (!props.storageStore?.transitBatches) return 0 // ✅ убрать .value
+  if (!departmentTransitBatches.value.length) return 0
 
-  return props.storageStore.transitBatches // ✅ убрать .value
-    .filter((batch: any) => batch.itemId === item.itemId && batch.department === item.department)
+  return departmentTransitBatches.value
+    .filter((batch: any) => batch.itemId === item.itemId)
     .reduce((sum: number, batch: any) => sum + batch.currentQuantity, 0)
 }
 
 function getTransitStatusColor(item: StorageBalance): string {
-  if (!props.storageStore?.transitBatches) return 'grey'
-
-  const transitBatches = props.storageStore.transitBatches.filter(
-    (batch: any) => batch.itemId === item.itemId && batch.department === item.department
+  const transitBatches = departmentTransitBatches.value.filter(
+    (batch: any) => batch.itemId === item.itemId
   )
 
   if (transitBatches.length === 0) return 'grey'
 
-  // Проверяем есть ли просроченные
-  const hasOverdue = transitBatches.some(
-    (batch: any) => batch.plannedDeliveryDate && new Date(batch.plannedDeliveryDate) < new Date()
-  )
+  // Check if any batch is overdue
+  const now = new Date()
+  const hasOverdue = transitBatches.some((batch: any) => {
+    if (!batch.plannedDeliveryDate) return false
+    return new Date(batch.plannedDeliveryDate) < now
+  })
+
   if (hasOverdue) return 'error'
 
-  // Проверяем есть ли доставки сегодня
+  // Check if any batch delivers today
   const hasToday = transitBatches.some((batch: any) => {
     if (!batch.plannedDeliveryDate) return false
     const deliveryDate = new Date(batch.plannedDeliveryDate)
-    const today = new Date()
-    return deliveryDate.toDateString() === today.toDateString()
+    return deliveryDate.toDateString() === now.toDateString()
   })
+
   if (hasToday) return 'warning'
 
-  return 'orange'
+  return 'orange' // Future delivery
 }
 
 function getTransitStatusIcon(item: StorageBalance): string {
@@ -589,30 +614,53 @@ function getTransitStatusIcon(item: StorageBalance): string {
 }
 
 function getTransitStatusText(item: StorageBalance): string {
-  if (!props.storageStore?.transitBatches) return ''
-
-  const transitBatches = props.storageStore.transitBatches.filter(
-    (batch: any) => batch.itemId === item.itemId && batch.department === item.department
+  const transitBatches = departmentTransitBatches.value.filter(
+    (batch: any) => batch.itemId === item.itemId
   )
 
-  if (transitBatches.length === 0) return ''
+  if (transitBatches.length === 0) return 'No transit'
 
   const now = new Date()
-  const hasOverdue = transitBatches.some(
-    (batch: any) => batch.plannedDeliveryDate && new Date(batch.plannedDeliveryDate) < now
-  )
 
-  if (hasOverdue) return 'Overdue'
+  // Check for overdue
+  const overdueBatch = transitBatches.find((batch: any) => {
+    if (!batch.plannedDeliveryDate) return false
+    return new Date(batch.plannedDeliveryDate) < now
+  })
 
-  const hasToday = transitBatches.some((batch: any) => {
+  if (overdueBatch) {
+    const daysOverdue = Math.floor(
+      (now.getTime() - new Date(overdueBatch.plannedDeliveryDate).getTime()) / (1000 * 60 * 60 * 24)
+    )
+    return `Overdue ${daysOverdue}d`
+  }
+
+  // Check for today
+  const todayBatch = transitBatches.find((batch: any) => {
     if (!batch.plannedDeliveryDate) return false
     const deliveryDate = new Date(batch.plannedDeliveryDate)
     return deliveryDate.toDateString() === now.toDateString()
   })
 
-  if (hasToday) return 'Today'
+  if (todayBatch) {
+    return 'Arriving today'
+  }
 
-  return `${transitBatches.length} shipment${transitBatches.length !== 1 ? 's' : ''}`
+  // Find nearest delivery
+  const sortedBatches = [...transitBatches]
+    .filter((batch: any) => batch.plannedDeliveryDate)
+    .sort(
+      (a: any, b: any) =>
+        new Date(a.plannedDeliveryDate).getTime() - new Date(b.plannedDeliveryDate).getTime()
+    )
+
+  if (sortedBatches.length > 0) {
+    const nearestDate = new Date(sortedBatches[0].plannedDeliveryDate)
+    const daysUntil = Math.ceil((nearestDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return `In ${daysUntil}d`
+  }
+
+  return `${transitBatches.length} batch${transitBatches.length > 1 ? 'es' : ''}`
 }
 
 function getTransitQuantityClass(item: StorageBalance): string {
