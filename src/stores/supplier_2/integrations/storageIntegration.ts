@@ -1,15 +1,11 @@
 // src/stores/supplier_2/integrations/storageIntegration.ts
-// ✅ ИСПРАВЛЕННАЯ ВЕРСИЯ: Учитывает draft и sent заказы в recommendations
+// ✅ FINAL VERSION: All TypeScript errors fixed
 
 import { DebugUtils } from '@/utils'
 import type { Receipt, PurchaseOrder, ReceiptItem, OrderSuggestion } from '../types'
 import type { CreateReceiptData, StorageDepartment } from '@/stores/storage/types'
 
 const MODULE_NAME = 'SupplierStorageIntegration'
-
-// =============================================
-// STORAGE INTEGRATION SERVICE
-// =============================================
 
 export class SupplierStorageIntegration {
   private _storageStore: ReturnType<typeof import('@/stores/storage').useStorageStore> | null = null
@@ -43,10 +39,6 @@ export class SupplierStorageIntegration {
     return this._supplierStore
   }
 
-  // =============================================
-  // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ: Учитывает все заказы
-  // =============================================
-
   async getSuggestionsFromStock(department?: StorageDepartment): Promise<OrderSuggestion[]> {
     try {
       DebugUtils.info(MODULE_NAME, 'Generating suggestions from storage with all order statuses', {
@@ -57,7 +49,6 @@ export class SupplierStorageIntegration {
       const productsStore = await this.getProductsStore()
       const supplierStore = await this.getSupplierStore()
 
-      // Получаем базовые балансы с транзитом
       const balancesWithTransit = storageStore.balancesWithTransit
 
       if (!balancesWithTransit || balancesWithTransit.length === 0) {
@@ -65,7 +56,6 @@ export class SupplierStorageIntegration {
         return []
       }
 
-      // ✅ НОВОЕ: Получаем все активные заказы (draft + sent без транзитных batch-ей)
       const pendingOrderQuantities = await this.calculatePendingOrderQuantities(department)
 
       DebugUtils.debug(MODULE_NAME, 'Pending order quantities calculated', {
@@ -76,20 +66,16 @@ export class SupplierStorageIntegration {
       const suggestions: OrderSuggestion[] = []
 
       for (const balance of balancesWithTransit) {
-        // Фильтр по департаменту если указан
         if (department && balance.department !== department) {
           continue
         }
 
-        // Находим продукт
         const product = productsStore.products.find(p => p.id === balance.itemId)
         if (!product || !product.isActive) {
           continue
         }
 
         const minStock = product.minStock || 0
-
-        // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Учитываем ВСЕ заказанные товары
         const pendingQuantity = pendingOrderQuantities[balance.itemId] || 0
         const effectiveStock = balance.totalWithTransit + pendingQuantity
 
@@ -103,7 +89,6 @@ export class SupplierStorageIntegration {
           minStock: minStock
         })
 
-        // Проверяем нужно ли заказывать
         if (effectiveStock <= minStock) {
           const suggestedQuantity = Math.max(minStock * 2 - effectiveStock, minStock)
 
@@ -111,34 +96,29 @@ export class SupplierStorageIntegration {
             itemId: balance.itemId,
             itemName: balance.itemName,
             currentStock: balance.totalQuantity,
-
-            // ✅ РАСШИРЕННЫЕ ПОЛЯ:
             transitStock: balance.transitQuantity,
-            pendingOrderStock: pendingQuantity, // НОВОЕ ПОЛЕ
+            pendingOrderStock: pendingQuantity,
             effectiveStock: effectiveStock,
             nearestDelivery: balance.nearestDelivery,
-
             minStock,
             suggestedQuantity,
             urgency:
               effectiveStock <= 0 ? 'high' : effectiveStock <= minStock * 0.5 ? 'medium' : 'low',
-            reason: effectiveStock <= 0 ? 'out_of_stock' : 'below_minimum',
-            estimatedPrice: balance.latestCost
+            reason: effectiveStock <= 0 ? 'out_of_stock' : 'below_minimum'
+            // ✅ FIX 1: Removed estimatedPrice (not in OrderSuggestion type)
           })
         }
       }
 
-      // Сортируем по важности
       suggestions.sort((a, b) => {
         const urgencyOrder = { high: 3, medium: 2, low: 1 }
         const aUrgency = urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 0
         const bUrgency = urgencyOrder[b.urgency as keyof typeof urgencyOrder] || 0
 
         if (aUrgency !== bUrgency) {
-          return bUrgency - aUrgency // Высокий приоритет первым
+          return bUrgency - aUrgency
         }
 
-        // При одинаковом приоритете - по эффективному запасу (меньше = важнее)
         return (a.effectiveStock || 0) - (b.effectiveStock || 0)
       })
 
@@ -161,10 +141,6 @@ export class SupplierStorageIntegration {
     }
   }
 
-  // =============================================
-  // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ: Учитывает requests + orders
-  // =============================================
-
   private async calculatePendingOrderQuantities(
     department?: StorageDepartment
   ): Promise<Record<string, number>> {
@@ -172,14 +148,10 @@ export class SupplierStorageIntegration {
       const supplierStore = await this.getSupplierStore()
       const pendingQuantities: Record<string, number> = {}
 
-      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Учитываем И requests И orders
-
-      // 1. Submitted requests (еще не конвертированы в orders)
       const submittedRequests = supplierStore.state.requests.filter(
         req => req.status === 'submitted'
       )
 
-      // 2. Draft и sent orders
       const pendingOrders = supplierStore.state.orders.filter(order =>
         ['draft', 'sent'].includes(order.status)
       )
@@ -187,22 +159,10 @@ export class SupplierStorageIntegration {
       DebugUtils.debug(MODULE_NAME, 'Found pending items in requests and orders', {
         submittedRequests: submittedRequests.length,
         draftOrders: pendingOrders.filter(o => o.status === 'draft').length,
-        sentOrders: pendingOrders.filter(o => o.status === 'sent').length,
-        requestsDetail: submittedRequests.map(r => ({
-          id: r.id,
-          status: r.status,
-          items: r.items.map(i => ({ itemId: i.itemId, quantity: i.requestedQuantity }))
-        })),
-        ordersDetail: pendingOrders.map(o => ({
-          id: o.id,
-          status: o.status,
-          items: o.items.map(i => ({ itemId: i.itemId, quantity: i.quantity }))
-        }))
+        sentOrders: pendingOrders.filter(o => o.status === 'sent').length
       })
 
-      // Обрабатываем submitted requests
       for (const request of submittedRequests) {
-        // Фильтр по департаменту
         if (department && request.department !== department) {
           continue
         }
@@ -215,29 +175,11 @@ export class SupplierStorageIntegration {
         }
       }
 
-      // Обрабатываем pending orders
       for (const order of pendingOrders) {
-        DebugUtils.debug(MODULE_NAME, 'Processing pending order', {
-          orderId: order.id,
-          status: order.status,
-          department: department,
-          items: order.items.map(i => ({
-            itemId: i.itemId,
-            orderedQuantity: i.orderedQuantity,
-            quantity: i.quantity
-          }))
-        })
-
-        // Фильтр по департаменту для заказа
         if (department && !this.isOrderForDepartment(order, department)) {
-          DebugUtils.debug(MODULE_NAME, 'Order filtered out by department', {
-            orderId: order.id,
-            requiredDepartment: department
-          })
           continue
         }
 
-        // ✅ СПЕЦИАЛЬНАЯ ЛОГИКА: для sent заказов проверяем есть ли уже transit batch
         if (order.status === 'sent') {
           const hasTransitBatches = await this.orderHasTransitBatches(order.id)
           if (hasTransitBatches) {
@@ -248,30 +190,15 @@ export class SupplierStorageIntegration {
           }
         }
 
-        // Суммируем количества по товарам в orders
         for (const item of order.items) {
           if (!pendingQuantities[item.itemId]) {
             pendingQuantities[item.itemId] = 0
           }
-          // ✅ ИСПРАВЛЕНИЕ: Используем правильное поле для количества
-          const quantity = item.orderedQuantity || item.quantity || 0
+          // ✅ FIX 2: Use only orderedQuantity (quantity doesn't exist on OrderItem)
+          const quantity = item.orderedQuantity || 0
           pendingQuantities[item.itemId] += quantity
-
-          DebugUtils.debug(MODULE_NAME, 'Added order item to pending quantities', {
-            itemId: item.itemId,
-            orderedQuantity: item.orderedQuantity,
-            quantity: item.quantity,
-            usedQuantity: quantity,
-            totalPendingForItem: pendingQuantities[item.itemId],
-            orderId: order.id
-          })
         }
       }
-
-      DebugUtils.debug(MODULE_NAME, 'Final pending quantities calculated', {
-        pendingQuantities,
-        totalItems: Object.keys(pendingQuantities).length
-      })
 
       return pendingQuantities
     } catch (error) {
@@ -283,33 +210,26 @@ export class SupplierStorageIntegration {
     }
   }
 
-  // =============================================
-  // ✅ НОВЫЕ HELPER ФУНКЦИИ
-  // =============================================
-
-  private isOrderForDepartment(order: PurchaseOrder, department: StorageDepartment): boolean {
-    // Определяем департамент заказа по товарам
+  private isOrderForDepartment(
+    order: PurchaseOrder,
+    department: StorageDepartment | 'all'
+  ): boolean {
     const hasBeverages = order.items.some(item => this.isBeverageProduct(item.itemId, ''))
     const orderDepartment = hasBeverages ? 'bar' : 'kitchen'
-
     return department === 'all' || orderDepartment === department
   }
 
   private async orderHasTransitBatches(orderId: string): Promise<boolean> {
     try {
       const storageStore = await this.getStorageStore()
-      const transitBatches = storageStore.transitBatches.value
-
+      // ✅ FIX 3: Removed .value (transitBatches is already computed)
+      const transitBatches = storageStore.transitBatches
       return transitBatches.some(batch => batch.purchaseOrderId === orderId)
     } catch (error) {
       DebugUtils.debug(MODULE_NAME, 'Could not check transit batches for order', { orderId, error })
       return false
     }
   }
-
-  // =============================================
-  // СУЩЕСТВУЮЩИЕ ФУНКЦИИ (без изменений)
-  // =============================================
 
   async createReceiptOperation(receipt: Receipt, order: PurchaseOrder): Promise<string> {
     try {
@@ -336,11 +256,9 @@ export class SupplierStorageIntegration {
         notes: this.buildStorageNotes(receipt, order)
       }
 
-      // ✅ ИСПРАВЛЕНО: Используем правильный метод createReceipt вместо createReceiptOperation
       const operation = await storageStore.createReceipt(storageData)
       const operationId = operation.id
 
-      // Инвалидируем кэш suggestions после создания операции
       this.invalidateCache()
 
       DebugUtils.info(MODULE_NAME, 'Storage operation created successfully', {
@@ -381,9 +299,7 @@ export class SupplierStorageIntegration {
         }
       }
 
-      // Инвалидируем кэш после обновления цен
       this.invalidateCache()
-
       DebugUtils.info(MODULE_NAME, 'Product prices updated successfully')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update product prices', { error })
@@ -398,7 +314,12 @@ export class SupplierStorageIntegration {
 
       for (const itemId of itemIds) {
         try {
-          const balance = storageStore.getBalance(itemId)
+          // ✅ FIX 4: Added department parameter (try both departments)
+          const kitchenBalance = storageStore.getBalance(itemId, 'kitchen')
+          const barBalance = storageStore.getBalance(itemId, 'bar')
+
+          const balance = kitchenBalance || barBalance
+
           if (balance && balance.latestCost) {
             prices[itemId] = balance.latestCost
           }
@@ -414,18 +335,9 @@ export class SupplierStorageIntegration {
     }
   }
 
-  // =============================================
-  // ИНВАЛИДАЦИЯ КЭША
-  // =============================================
-
   invalidateCache(): void {
-    // suggestionsCache = null // Раскомментировать если есть кэш
     DebugUtils.debug(MODULE_NAME, 'Suggestions cache invalidated')
   }
-
-  // =============================================
-  // ПРИВАТНЫЕ HELPER ФУНКЦИИ
-  // =============================================
 
   private getDepartmentFromOrder(order: PurchaseOrder): StorageDepartment {
     const hasBeverages = order.items.some(item => this.isBeverageProduct(item.itemId, ''))
@@ -433,12 +345,10 @@ export class SupplierStorageIntegration {
   }
 
   private isBeverageProduct(itemId: string, category?: string): boolean {
-    // Проверка по категории (основной способ)
     if (category === 'beverages' || category === 'drinks') {
       return true
     }
 
-    // Проверка по ID (для совместимости со старыми данными)
     return (
       itemId.includes('beer') ||
       itemId.includes('cola') ||
@@ -461,6 +371,7 @@ export class SupplierStorageIntegration {
 
       storageItems.push({
         itemId: receiptItem.itemId,
+        itemType: 'product' as const, // ✅ FIX 5: Added required itemType field
         quantity: receiptItem.receivedQuantity,
         costPerUnit: actualPrice,
         notes: this.buildItemNotes(receiptItem, orderItem),
@@ -551,10 +462,6 @@ export class SupplierStorageIntegration {
   }
 }
 
-// =============================================
-// COMPOSABLE EXPORT
-// =============================================
-
 let integrationInstance: SupplierStorageIntegration | null = null
 
 export function useSupplierStorageIntegration() {
@@ -568,7 +475,6 @@ export function useSupplierStorageIntegration() {
 
     updateProductPrices: (receipt: Receipt) => integrationInstance!.updateProductPrices(receipt),
 
-    // ✅ ОБНОВЛЕННАЯ ФУНКЦИЯ: Теперь учитывает все заказы
     getSuggestionsFromStock: (department?: StorageDepartment) =>
       integrationInstance!.getSuggestionsFromStock(department),
 

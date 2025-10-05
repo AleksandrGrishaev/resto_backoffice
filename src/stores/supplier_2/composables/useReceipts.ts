@@ -17,7 +17,6 @@ import type {
 } from '../types'
 import type { PendingPayment } from '@/stores/account/types'
 
-import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 import { useSupplierStorageIntegration } from '../integrations/storageIntegration'
 
 const MODULE_NAME = 'Receipts'
@@ -27,7 +26,6 @@ export function useReceipts() {
   const storageStore = useStorageStore()
   const productsStore = useProductsStore()
   const storageIntegration = useSupplierStorageIntegration() // ✅ ДОБАВИТЬ ЭТУ СТРОКУ
-  const plannedDeliveryIntegration = usePlannedDeliveryIntegration()
 
   // =============================================
   // STATE
@@ -237,10 +235,8 @@ export function useReceipts() {
 
       // Логируем состояние ДО конвертации
       DebugUtils.info(MODULE_NAME, '📊 Storage state BEFORE conversion', {
-        storageStoreBatches: storageStore.state.batches.length,
-        storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
-        storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
-          .length
+        activeBatches: storageStore.state.activeBatches.length,
+        transitBatches: storageStore.state.transitBatches.length
       })
 
       // ✅ ШАГ 1: УДАЛЯЕМ ТРАНЗИТНЫЕ BATCH-И (БЕЗ fetchBalances внутри!)
@@ -251,22 +247,16 @@ export function useReceipts() {
           actualPrice: item.actualPrice
         }))
 
-        await plannedDeliveryIntegration.convertTransitBatchesOnReceipt(
-          receipt.purchaseOrderId,
-          receipt.items
-        )
+        await storageStore.convertTransitBatchesToActive(receipt.purchaseOrderId, receiptItems)
 
-        // Логируем состояние ПОСЛЕ удаления transit batches
-        DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER transit removal', {
-          storageStoreBatches: storageStore.state.batches.length,
-          storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
-          storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
-            .length
+        DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER transit conversion', {
+          activeBatches: storageStore.state.activeBatches.length,
+          transitBatches: storageStore.state.transitBatches.length
         })
 
-        console.log(`Receipts: Transit batches removed for receipt ${receipt.receiptNumber}`)
+        console.log(`Receipts: Transit batches converted for receipt ${receipt.receiptNumber}`)
       } catch (transitError) {
-        console.warn('Receipts: Failed to remove transit batches:', transitError)
+        console.warn('Receipts: Failed to convert transit batches:', transitError)
       }
 
       // ✅ ШАГ 2: СОЗДАЕМ STORAGE OPERATION (это добавит новый active batch)
@@ -276,10 +266,8 @@ export function useReceipts() {
 
         // Логируем состояние ПОСЛЕ создания операции
         DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER operation created', {
-          storageStoreBatches: storageStore.state.batches.length,
-          storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
-          storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
-            .length
+          storageStoreActiveBatches: storageStore.state.activeBatches.length,
+          storageStoreTransitBatches: storageStore.state.transitBatches.length
         })
 
         console.log(

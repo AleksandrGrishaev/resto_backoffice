@@ -13,9 +13,9 @@ import type {
   BillStatus // ДОБАВИТЬ
 } from '../types'
 import { BILL_STATUSES, getBillStatusColor } from '../types'
-import { usePlannedDeliveryIntegration } from '@/stores/supplier_2/integrations/plannedDeliveryIntegration'
 import { DebugUtils } from '@/utils'
-
+import { useStorageStore } from '@/stores/storage/storageStore'
+import { StorageDepartment } from '@/stores/storage'
 const MODULE_NAME = 'usePurchaseOrders'
 
 // =============================================
@@ -28,7 +28,7 @@ export function usePurchaseOrders() {
   // =============================================
 
   const supplierStore = useSupplierStore()
-  const plannedDeliveryIntegration = usePlannedDeliveryIntegration()
+  const storageStore = useStorageStore()
 
   // =============================================
   // STATE
@@ -186,20 +186,11 @@ export function usePurchaseOrders() {
       console.log('PurchaseOrders: Creating order', data)
       const newOrder = await supplierStore.createOrder(data)
 
-      // ✅ ОСТАВЛЯЕМ: Создаем планируемую поставку в StorageStore
-      try {
-        await plannedDeliveryIntegration.createPlannedDelivery(newOrder)
-        console.log(`PurchaseOrders: Planned delivery created for order ${newOrder.orderNumber}`)
-      } catch (error) {
-        console.warn('PurchaseOrders: Failed to create planned delivery (non-critical):', error)
-        // Не прерываем создание заказа из-за ошибки интеграции
-      }
-
-      // ❌ УБИРАЕМ: await createBillInAccountStore(newOrder)
-      // Теперь счета создаются только вручную через UI
+      // ✅ НЕ создаем transit batches при создании draft заказа
+      // Они будут созданы при отправке (sendOrder)
 
       console.log(`PurchaseOrders: Created order ${newOrder.orderNumber}`)
-      console.log(`PurchaseOrders: Bill can be created manually via UI`)
+      console.log(`PurchaseOrders: Transit batches will be created when order is sent`)
       return newOrder
     } catch (error) {
       console.error('PurchaseOrders: Error creating order:', error)
@@ -645,14 +636,31 @@ export function usePurchaseOrders() {
 
       // ✅ НОВОЕ: Создаем транзитные batch-и при отправке заказа
       try {
-        const batchIds = await plannedDeliveryIntegration.createTransitBatchesFromOrder(sentOrder)
+        const department = getDepartmentFromOrder(sentOrder)
+
+        const transitBatchData = sentOrder.items.map(item => ({
+          itemId: item.itemId,
+          itemName: item.itemName,
+          quantity: item.orderedQuantity,
+          unit: item.unit,
+          estimatedCostPerUnit: item.pricePerUnit,
+          department,
+          purchaseOrderId: sentOrder.id,
+          supplierId: sentOrder.supplierId,
+          supplierName: sentOrder.supplierName,
+          plannedDeliveryDate:
+            sentOrder.expectedDeliveryDate || calculateDefaultDeliveryDate(sentOrder),
+          notes: `Transit batch from order ${sentOrder.orderNumber}`
+        }))
+
+        const batchIds = await storageStore.createTransitBatches(transitBatchData)
+
         console.log(`PurchaseOrders: Transit batches created successfully`, {
           orderId: sentOrder.id,
           batchesCreated: batchIds.length,
           batchIds
         })
       } catch (transitError) {
-        // НЕ останавливаем отправку заказа из-за ошибки создания batch-ей
         console.warn(
           'PurchaseOrders: Failed to create transit batches (order sent successfully):',
           transitError
@@ -700,10 +708,8 @@ export function usePurchaseOrders() {
 
       // ✅ НОВОЕ: Удаляем транзитные batch-и при отмене заказа
       try {
-        await plannedDeliveryIntegration.removeTransitBatchesOnOrderCancel(id)
-        console.log(
-          `PurchaseOrders: Transit batches removed for cancelled order ${cancelledOrder.orderNumber}`
-        )
+        await storageStore.removeTransitBatchesOnOrderCancel(id)
+        console.log(`PurchaseOrders: Transit batches removed for cancelled order`)
       } catch (transitError) {
         // НЕ критично, если не удалось удалить batch-и
         console.warn(
@@ -720,6 +726,24 @@ export function usePurchaseOrders() {
       console.error('PurchaseOrders: Error cancelling order:', error)
       throw error
     }
+  }
+
+  /**
+   * Определяет департамент из заказа
+   */
+  function getDepartmentFromOrder(order: PurchaseOrder): StorageDepartment {
+    // TODO: Можно улучшить логику определения департамента
+    return 'kitchen'
+  }
+
+  /**
+   * Вычисляет дату поставки по умолчанию (через 5 дней)
+   */
+  function calculateDefaultDeliveryDate(order: PurchaseOrder): string {
+    const orderDate = new Date(order.orderDate)
+    const deliveryDate = new Date(orderDate)
+    deliveryDate.setDate(deliveryDate.getDate() + 5)
+    return deliveryDate.toISOString()
   }
 
   // =============================================
