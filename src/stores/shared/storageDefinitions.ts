@@ -10,7 +10,7 @@ import type {
   StorageDepartment,
   BatchAllocation
 } from '@/stores/storage/types'
-
+import { type CoreProductDefinition } from './productDefinitions'
 const MODULE_NAME = 'StorageDefinitions'
 
 // =============================================
@@ -247,13 +247,8 @@ function shouldProductBeInDepartment(productId: string, department: StorageDepar
   const product = getProductDefinition(productId)
   if (!product) return false
 
-  // Напитки только в баре
-  if (product.category === 'beverages') {
-    return department === 'bar'
-  }
-
-  // Все остальное в кухне
-  return department === 'kitchen'
+  // ✅ НОВАЯ ЛОГИКА: проверяем usedInDepartments
+  return product.usedInDepartments.includes(department)
 }
 
 /**
@@ -531,46 +526,27 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
   const balances: StorageBalance[] = []
   const allBatches: StorageBatch[] = []
 
-  // Генерируем обычные балансы и батчи для всех продуктов
+  // ✅ ИСПРАВЛЕНО: Генерируем для всех департаментов где продукт используется
   CORE_PRODUCTS.forEach(product => {
-    // Kitchen balance (все кроме напитков)
-    if (product.category !== 'beverages') {
-      const kitchenBalance = generateProductBalance(product.id, 'kitchen')
-      if (kitchenBalance) {
-        balances.push(kitchenBalance)
-        allBatches.push(...kitchenBalance.batches)
-      }
-    }
+    const departments: StorageDepartment[] = ['kitchen', 'bar']
 
-    // Bar balance (только напитки)
-    if (product.category === 'beverages') {
-      const barBalance = generateProductBalance(product.id, 'bar')
-      if (barBalance) {
-        balances.push(barBalance)
-        allBatches.push(...barBalance.batches)
+    departments.forEach(dept => {
+      if (product.usedInDepartments.includes(dept)) {
+        const balance = generateProductBalance(product.id, dept)
+        if (balance) {
+          balances.push(balance)
+          allBatches.push(...balance.batches)
+        }
       }
-    }
+    })
   })
 
-  // ✅ НОВОЕ: Добавляем транзитные batch-и для тестирования
   const transitBatches = generateTransitTestBatches()
   allBatches.push(...transitBatches)
 
-  // Генерируем операции
   const operations = generateStorageOperations()
 
-  DebugUtils.debug(MODULE_NAME, `✅ Storage data generated with TRANSIT BATCHES:`, {
-    balances: balances.length,
-    activeBatches: allBatches.filter(b => b.status === 'active').length,
-    transitBatches: allBatches.filter(b => b.status === 'in_transit').length,
-    operations: operations.length
-  })
-
-  return {
-    balances,
-    batches: allBatches,
-    operations
-  }
+  return { balances, batches: allBatches, operations }
 }
 
 /**

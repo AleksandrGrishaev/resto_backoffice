@@ -228,6 +228,8 @@ class SupplierService {
         itemId: item.itemId,
         itemName: product.name,
 
+        department: item.department, // ✅ СОХРАНИТЬ DEPARTMENT
+
         // Количества
         orderedQuantity: item.quantity, // В базовых единицах
         unit: product.baseUnit, // Базовая единица

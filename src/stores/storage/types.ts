@@ -18,7 +18,6 @@ export interface StorageBatch extends BaseEntity {
   batchNumber: string
   itemId: string
   itemType: 'product'
-  department: StorageDepartment
   initialQuantity: number
   currentQuantity: number
   unit: string
@@ -144,7 +143,6 @@ export interface CreateTransitBatchData {
   quantity: number
   unit: string
   estimatedCostPerUnit: number
-  department: StorageDepartment
   purchaseOrderId: string
   supplierId: string
   supplierName: string

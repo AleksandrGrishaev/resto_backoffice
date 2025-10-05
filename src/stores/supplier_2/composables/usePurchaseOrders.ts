@@ -12,6 +12,7 @@ import type {
   OrderStatus,
   BillStatus // ДОБАВИТЬ
 } from '../types'
+import type { Department } from '@/stores/productsStore/types'
 import { BILL_STATUSES, getBillStatusColor } from '../types'
 import { DebugUtils } from '@/utils'
 import { useStorageStore } from '@/stores/storage/storageStore'
@@ -477,12 +478,18 @@ export function usePurchaseOrders() {
       const orderData: CreateOrderData = {
         supplierId: basket.supplierId,
         requestIds,
-        items: basket.items.map(item => ({
-          itemId: item.itemId,
-          quantity: item.totalQuantity,
-          packageId: item.packageId!, // ✅ ИЗМЕНИТЬ: добавить !
-          pricePerUnit: item.estimatedBaseCost // ✅ ИЗМЕНИТЬ
-        })),
+        items: basket.items.map(item => {
+          // ✅ НОВОЕ: Определяем department из sources
+          const department = determineDepartmentForOrderItem(item)
+
+          return {
+            itemId: item.itemId,
+            quantity: item.totalQuantity,
+            packageId: item.packageId!,
+            department, // ✅ ДОБАВИТЬ
+            pricePerUnit: item.estimatedBaseCost
+          }
+        }),
         notes: `Order created from ${requestIds.length} procurement request(s)`
       }
 
@@ -503,6 +510,43 @@ export function usePurchaseOrders() {
       console.error('PurchaseOrders: Error creating order from basket:', error)
       throw error
     }
+  }
+
+  // ✅ НОВАЯ ФУНКЦИЯ: Определение департамента для OrderItem
+  function determineDepartmentForOrderItem(item: UnassignedItem): 'kitchen' | 'bar' {
+    // Стратегия 1: Если все sources из одного департамента → используем его
+    const departments = item.sources.map(s => s.department)
+    const uniqueDepartments = [...new Set(departments)]
+
+    if (uniqueDepartments.length === 1) {
+      return uniqueDepartments[0]
+    }
+
+    // Стратегия 2: Если смешанные → берем департамент с наибольшим количеством
+    const departmentQuantities = item.sources.reduce(
+      (acc, source) => {
+        acc[source.department] = (acc[source.department] || 0) + source.quantity
+        return acc
+      },
+      {} as Record<Department, number> // ✅ Используем тип
+    )
+
+    const maxDepartment = Object.entries(departmentQuantities).sort(
+      ([, a], [, b]) => b - a
+    )[0][0] as 'kitchen' | 'bar'
+
+    // ⚠️ Логируем warning для смешанных департаментов
+    console.warn(
+      `[OrderItem] Product "${item.itemName}" has mixed departments. ` +
+        `Using "${maxDepartment}" (largest quantity).`,
+      {
+        product: item.itemName,
+        departments: departmentQuantities,
+        chosen: maxDepartment
+      }
+    )
+
+    return maxDepartment
   }
 
   /**
@@ -644,6 +688,7 @@ export function usePurchaseOrders() {
           quantity: item.orderedQuantity,
           unit: item.unit,
           estimatedCostPerUnit: item.pricePerUnit,
+          department: item.department,
           department,
           purchaseOrderId: sentOrder.id,
           supplierId: sentOrder.supplierId,

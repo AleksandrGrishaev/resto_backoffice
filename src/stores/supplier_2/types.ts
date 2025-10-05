@@ -1,6 +1,7 @@
 // src/stores/supplier_2/types.ts
 
 import type { BaseEntity } from '@/types/common'
+import type { Department } from '@/stores/productsStore/types'
 
 // =============================================
 // CORE WORKFLOW TYPES - Core entities
@@ -9,7 +10,7 @@ import type { BaseEntity } from '@/types/common'
 // 1. Procurement request (from department)
 export interface ProcurementRequest extends BaseEntity {
   requestNumber: string // "REQ-KITCHEN-001"
-  department: 'kitchen' | 'bar'
+  department: Department
   requestedBy: string
 
   items: RequestItem[]
@@ -74,7 +75,6 @@ export interface PurchaseOrder extends BaseEntity {
   receiptCompletedBy?: string // Кто завершил приемку
 
   // ✅ УСТАРЕВШИЕ ПОЛЯ (для обратной совместимости)
-  actualDeliveredAmount?: number // Фактическая стоимость доставленного
   hasShortfall?: boolean // Есть недопоставка
   shortfallAmount?: number // Сумма недопоставки
 }
@@ -300,6 +300,7 @@ export interface CreateOrderItemData {
   itemId: string
   quantity: number // в базовых единицах
   packageId: string // ОБЯЗАТЕЛЬНО - выбранная упаковка
+  department: Department
   pricePerUnit?: number // цена за базовую единицу (для совместимости)
   packagePrice?: number // цена за упаковку
 }
