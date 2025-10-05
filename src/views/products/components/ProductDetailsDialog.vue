@@ -38,6 +38,17 @@
                 <v-chip :color="getCategoryColor(product.category)" variant="tonal">
                   {{ getCategoryLabel(product.category) }}
                 </v-chip>
+                <v-chip
+                  v-for="dept in product.usedInDepartments"
+                  :key="dept"
+                  :color="getDepartmentColor(dept)"
+                  :prepend-icon="getDepartmentIcon(dept)"
+                  variant="tonal"
+                  size="small"
+                >
+                  {{ dept === 'kitchen' ? 'Kitchen' : 'Bar' }}
+                </v-chip>
+
                 <v-chip :color="product.canBeSold ? 'success' : 'orange'" variant="outlined">
                   {{ product.canBeSold ? 'Для продажи' : 'Сырье' }}
                 </v-chip>
@@ -472,7 +483,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { Product } from '@/stores/productsStore'
+import type { Product, Department } from '@/stores/productsStore/types'
 import type { StockRecommendation } from '@/stores/productsStore/types'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
@@ -626,6 +637,15 @@ const formatDateTime = (dateString: string): string => {
 const calculateEffectiveCost = (): number => {
   if (!props.product) return 0
   return props.product.costPerUnit / (props.product.yieldPercentage / 100)
+}
+
+// ✅ ADD: Department helper functions
+const getDepartmentColor = (dept: Department): string => {
+  return dept === 'kitchen' ? 'success' : 'primary'
+}
+
+const getDepartmentIcon = (dept: Department): string => {
+  return dept === 'kitchen' ? 'mdi-silverware-fork-knife' : 'mdi-coffee'
 }
 </script>
 

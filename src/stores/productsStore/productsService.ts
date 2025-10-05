@@ -84,12 +84,18 @@ export class ProductsService extends BaseService<Product> {
     try {
       DebugUtils.info(MODULE_NAME, 'Creating product', { data })
 
+      // ✅ ADD VALIDATION
+      if (!data.usedInDepartments || data.usedInDepartments.length === 0) {
+        throw new Error('Product must be used in at least one department')
+      }
+
       const now = TimeUtils.getCurrentLocalISO()
       const productData: Omit<Product, 'id'> = {
         ...data,
         packageOptions: [],
         isActive: data.isActive ?? true,
-        canBeSold: data.canBeSold ?? false, // ✅ ДОБАВИТЬ эту строку
+        canBeSold: data.canBeSold ?? false,
+        usedInDepartments: data.usedInDepartments, // ✅ ADD THIS
         createdAt: now,
         updatedAt: now
       }
@@ -109,6 +115,11 @@ export class ProductsService extends BaseService<Product> {
   async updateProduct(data: UpdateProductData): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating product', { data })
+
+      // ✅ ADD VALIDATION if usedInDepartments is being updated
+      if (data.usedInDepartments !== undefined && data.usedInDepartments.length === 0) {
+        throw new Error('Product must be used in at least one department')
+      }
 
       const { id, ...updateData } = data
       const updatedData = {
