@@ -32,6 +32,36 @@
               />
             </v-col>
 
+            <!-- ✅ ДОБАВИТЬ: Department Selection -->
+
+            <v-col cols="12" md="6">
+              <v-select
+                v-model="formData.usedInDepartments"
+                :items="departmentOptions"
+                label="Used in Departments *"
+                multiple
+                chips
+                closable-chips
+                variant="outlined"
+                density="comfortable"
+                :rules="[v => (v && v.length > 0) || 'Select at least one department']"
+                hint="Select where this product is used"
+                persistent-hint
+                class="mb-4"
+              >
+                <template #chip="{ item, props }">
+                  <v-chip
+                    v-bind="props"
+                    :color="getDepartmentColor(item.value)"
+                    :prepend-icon="getDepartmentIcon(item.value)"
+                    size="small"
+                  >
+                    {{ item.title }}
+                  </v-chip>
+                </template>
+              </v-select>
+            </v-col>
+
             <!-- Category and Base Unit -->
             <v-col cols="12" md="6">
               <v-select
@@ -363,7 +393,8 @@ import type {
   BaseUnit,
   PackageOption,
   CreatePackageOptionDto,
-  UpdatePackageOptionDto
+  UpdatePackageOptionDto,
+  Department
 } from '@/stores/productsStore/types'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore/types'
 import { DebugUtils } from '@/utils'
@@ -407,7 +438,10 @@ const packageDialogOpen = ref(false)
 const editingPackage = ref<PackageOption | undefined>(undefined)
 const editingPackageIndex = ref<number | null>(null)
 const localPackageOptions = ref<LocalPackage[]>([])
-
+const departmentOptions = [
+  { value: 'kitchen' as Department, title: 'Kitchen' },
+  { value: 'bar' as Department, title: 'Bar' }
+]
 // Computed
 const localModelValue = computed({
   get: () => props.modelValue,
@@ -423,6 +457,7 @@ const formData = ref<CreateProductData & { id?: string }>({
   baseUnit: 'gram' as BaseUnit,
   baseCostPerUnit: 0,
   yieldPercentage: 100,
+  usedInDepartments: ['kitchen'],
   canBeSold: false,
   isActive: true,
   description: '',
@@ -475,6 +510,7 @@ const resetForm = (): void => {
     baseUnit: 'gram',
     baseCostPerUnit: 0,
     yieldPercentage: 100,
+    usedInDepartments: ['kitchen'],
     canBeSold: false,
     isActive: true,
     description: '',
@@ -524,6 +560,7 @@ watch(
         baseUnit: newProduct.baseUnit,
         baseCostPerUnit: newProduct.baseCostPerUnit,
         yieldPercentage: newProduct.yieldPercentage,
+        usedInDepartments: newProduct.usedInDepartments || ['kitchen'], // ✅ ДОБАВИТЬ
         canBeSold: newProduct.canBeSold,
         isActive: newProduct.isActive,
         description: newProduct.description || '',
@@ -622,6 +659,15 @@ const handleSaveLocalPackage = (data: CreatePackageOptionDto | UpdatePackageOpti
 
 const deleteLocalPackage = (index: number): void => {
   localPackageOptions.value.splice(index, 1)
+}
+
+// ✅ ДОБАВИТЬ: Helper functions
+function getDepartmentColor(dept: Department): string {
+  return dept === 'kitchen' ? 'success' : 'primary'
+}
+
+function getDepartmentIcon(dept: Department): string {
+  return dept === 'kitchen' ? 'mdi-silverware-fork-knife' : 'mdi-coffee'
 }
 </script>
 

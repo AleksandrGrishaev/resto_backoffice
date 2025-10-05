@@ -1,6 +1,6 @@
 // src/stores/shared/productDefinitions.ts - ИСПРАВЛЕННЫЕ определения
 import { DebugUtils } from '@/utils'
-import type { ProductCategory } from '@/stores/productsStore/types'
+import type { ProductCategory, Department } from '@/stores/productsStore/types'
 
 const MODULE_NAME = 'productDefinition'
 // ✅ ИСПРАВЛЕННАЯ структура с базовыми единицами
@@ -14,6 +14,9 @@ export interface CoreProductDefinition {
   // ✅ НОВАЯ СТРУКТУРА: Базовые единицы для расчетов
   baseUnit: 'gram' | 'ml' | 'piece' // Единица для расчета себестоимости
   baseCostPerUnit: number // Цена за грамм/мл/штуку в IDR
+
+  // ✅ NEW: Department Attribution
+  usedInDepartments: Department[]
 
   // ✅ НОВАЯ СТРУКТУРА: Единицы закупки
   purchaseUnit: string // Как покупаем (кг, литр, упаковка)
@@ -50,6 +53,9 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     baseUnit: 'gram',
     baseCostPerUnit: 180, // 180 IDR за грамм
 
+    // ✅ NEW: Department Attribution
+    usedInDepartments: ['kitchen'],
+
     // ✅ Единицы закупки
     purchaseUnit: 'kg',
     purchaseToBaseRatio: 1000, // 1 кг = 1000 грамм
@@ -73,6 +79,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Potato',
     nameEn: 'Potato',
     category: 'vegetables',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 8, // 8 IDR за грамм
@@ -96,6 +103,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Fresh Tomato',
     nameEn: 'Fresh Tomato',
     category: 'vegetables',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 12, // 12 IDR за грамм
@@ -119,6 +127,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Onion',
     nameEn: 'Onion',
     category: 'vegetables',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 6, // 6 IDR за грамм
@@ -142,6 +151,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Garlic',
     nameEn: 'Garlic',
     category: 'vegetables',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 25, // 25 IDR за грамм
@@ -168,6 +178,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Olive Oil',
     nameEn: 'Olive Oil',
     category: 'other',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'ml',
     baseCostPerUnit: 85, // 85 IDR за мл
@@ -191,6 +202,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Milk 3.2%',
     nameEn: 'Milk 3.2%',
     category: 'dairy',
+    usedInDepartments: ['kitchen', 'bar'],
 
     baseUnit: 'ml',
     baseCostPerUnit: 15, // 15 IDR за мл
@@ -217,6 +229,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Butter',
     nameEn: 'Butter',
     category: 'dairy',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 45, // 45 IDR за грамм
@@ -243,6 +256,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Salt',
     nameEn: 'Salt',
     category: 'spices',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 3, // 3 IDR за грамм
@@ -266,6 +280,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Black Pepper',
     nameEn: 'Black Pepper',
     category: 'spices',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 120, // 120 IDR за грамм
@@ -289,6 +304,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Oregano',
     nameEn: 'Oregano',
     category: 'spices',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 150, // 150 IDR за грамм
@@ -312,6 +328,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Fresh Basil',
     nameEn: 'Fresh Basil',
     category: 'spices',
+    usedInDepartments: ['kitchen'],
 
     baseUnit: 'gram',
     baseCostPerUnit: 100, // 100 IDR за грамм (приблизительно)
@@ -338,6 +355,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Bintang Beer 330ml',
     nameEn: 'Bintang Beer 330ml',
     category: 'beverages',
+    usedInDepartments: ['bar'],
 
     baseUnit: 'piece',
     baseCostPerUnit: 12000, // 12,000 IDR за штуку
@@ -361,6 +379,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Bintang Beer 500ml',
     nameEn: 'Bintang Beer 500ml',
     category: 'beverages',
+    usedInDepartments: ['bar'],
 
     baseUnit: 'piece',
     baseCostPerUnit: 18000, // 18,000 IDR за штуку
@@ -384,6 +403,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Coca-Cola 330ml',
     nameEn: 'Coca-Cola 330ml',
     category: 'beverages',
+    usedInDepartments: ['bar'],
 
     baseUnit: 'piece',
     baseCostPerUnit: 8000, // 8,000 IDR за штуку
@@ -407,6 +427,7 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     name: 'Mineral Water 500ml',
     nameEn: 'Mineral Water 500ml',
     category: 'beverages',
+    usedInDepartments: ['bar'],
 
     baseUnit: 'piece',
     baseCostPerUnit: 3000, // 3,000 IDR за штуку

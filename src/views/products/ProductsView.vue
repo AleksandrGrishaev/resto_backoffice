@@ -379,6 +379,8 @@ const testStockRecommendations = async (): Promise<void> => {
 
 // Original filter methods
 const updateFilters = (newFilters: typeof storeFilters.value): void => {
+  console.log('📥 ProductsView: received filters', newFilters) // ✅ ДОБАВИТЬ
+  console.log('🏪 ProductsView: calling store.updateFilters', newFilters) // ✅ ДОБАВИТЬ
   store.updateFilters(newFilters)
   DebugUtils.debug(MODULE_NAME, 'Filters updated', { filters: newFilters })
 }

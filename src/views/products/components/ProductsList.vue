@@ -37,6 +37,22 @@
           </v-chip>
         </template>
 
+        <!-- ✅ ДОБАВИТЬ: Departments column -->
+        <template #[`item.usedInDepartments`]="{ item }">
+          <div class="d-flex gap-1">
+            <v-chip
+              v-for="dept in item.usedInDepartments"
+              :key="dept"
+              size="small"
+              :color="getDepartmentColor(dept)"
+              :prepend-icon="getDepartmentIcon(dept)"
+              variant="tonal"
+            >
+              {{ getDepartmentLabel(dept) }}
+            </v-chip>
+          </div>
+        </template>
+
         <!-- Единица измерения -->
         <template #[`item.unit`]="{ item }">
           <v-chip size="small" variant="outlined">
@@ -117,7 +133,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Product } from '@/stores/productsStore'
+import type { Product, Department } from '@/stores/productsStore'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 import { getUnitShortName } from '@/types/measurementUnits'
 
@@ -152,6 +168,13 @@ const tableHeaders = computed(() => [
     key: 'category',
     align: 'center' as const,
     sortable: true,
+    width: '15%'
+  },
+  {
+    title: 'Departments',
+    key: 'usedInDepartments',
+    align: 'start' as const,
+    sortable: false,
     width: '15%'
   },
   {
@@ -248,6 +271,19 @@ const getYieldColor = (percentage: number | undefined | null): string => {
   if (percentage >= 90) return 'success'
   if (percentage >= 75) return 'warning'
   return 'error'
+}
+
+// ✅ ДОБАВИТЬ эти функции
+const getDepartmentColor = (dept: Department): string => {
+  return dept === 'kitchen' ? 'success' : 'primary'
+}
+
+const getDepartmentIcon = (dept: Department): string => {
+  return dept === 'kitchen' ? 'mdi-silverware-fork-knife' : 'mdi-coffee'
+}
+
+const getDepartmentLabel = (dept: Department): string => {
+  return dept === 'kitchen' ? 'Kitchen' : 'Bar'
 }
 </script>
 

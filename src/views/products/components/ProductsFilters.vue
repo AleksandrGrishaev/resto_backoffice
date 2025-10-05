@@ -37,6 +37,23 @@
           </v-select>
         </v-col>
 
+        <!-- Department Filter -->
+        <v-col cols="12" sm="6" md="2">
+          <v-select
+            v-model="localFilters.department"
+            :items="departmentOptions"
+            label="Department"
+            variant="outlined"
+            density="compact"
+            hide-details
+            @update:model-value="updateFilters"
+          >
+            <template #prepend-inner>
+              <v-icon :icon="getDepartmentIcon(localFilters.department)" size="small" />
+            </template>
+          </v-select>
+        </v-col>
+
         <!-- Статус активности -->
         <v-col cols="12" md="2">
           <v-select
@@ -108,6 +125,17 @@
             >
               {{ getStatusLabel(localFilters.isActive) }}
             </v-chip>
+
+            <v-chip
+              v-if="localFilters.department !== 'all'"
+              size="small"
+              color="primary"
+              variant="outlined"
+              closable
+              @click:close="clearDepartmentFilter"
+            >
+              {{ getDepartmentLabel(localFilters.department) }}
+            </v-chip>
           </div>
         </v-col>
       </v-row>
@@ -117,7 +145,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { ProductCategory } from '@/stores/productsStore'
+import type { ProductCategory, Department } from '@/stores/productsStore'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 
@@ -128,6 +156,7 @@ type SimpleFilters = {
   category: ProductCategory | 'all'
   isActive: boolean | 'all'
   search: string
+  department: Department | 'all' // ✅ ДОБАВИТЬ
 }
 
 // Props
@@ -152,7 +181,8 @@ const emit = defineEmits<Emits>()
 const localFilters = ref<SimpleFilters>({
   category: 'all',
   isActive: 'all',
-  search: ''
+  search: '',
+  department: 'all' // ✅ ДОБАВИТЬ
 })
 
 // Debounced update for search
@@ -163,6 +193,13 @@ const debouncedUpdate = () => {
     updateFilters()
   }, 300)
 }
+
+// ✅ ДОБАВИТЬ: Department options
+const departmentOptions = computed(() => [
+  { title: 'All Departments', value: 'all' },
+  { title: 'Kitchen', value: 'kitchen' },
+  { title: 'Bar', value: 'bar' }
+])
 
 // Опции для селектов
 const categoryOptions = computed(() => [
@@ -184,7 +221,8 @@ const hasActiveFilters = computed(() => {
   return (
     localFilters.value.search !== '' ||
     localFilters.value.category !== 'all' ||
-    localFilters.value.isActive !== 'all'
+    localFilters.value.isActive !== 'all' ||
+    (localFilters.value.department !== 'all' && localFilters.value.department !== undefined) // ✅ ИЗМЕНИТЬ
   )
 })
 
@@ -195,7 +233,8 @@ watch(
     localFilters.value = {
       category: newFilters.category,
       isActive: newFilters.isActive,
-      search: newFilters.search
+      search: newFilters.search,
+      department: newFilters.department || 'all' // ✅ ДОБАВИТЬ fallback
     }
   },
   { deep: true, immediate: true }
@@ -203,6 +242,7 @@ watch(
 
 // Методы
 const updateFilters = (): void => {
+  console.log('📤 ProductsFilters: emitting filters', { ...localFilters.value }) // ✅ ДОБАВИТЬ
   emit('update:filters', { ...localFilters.value })
   DebugUtils.debug(MODULE_NAME, 'Filters updated', { filters: localFilters.value })
 }
@@ -211,10 +251,23 @@ const resetFilters = (): void => {
   localFilters.value = {
     category: 'all',
     isActive: 'all',
-    search: ''
+    search: '',
+    department: 'all'
   }
   emit('reset')
   DebugUtils.debug(MODULE_NAME, 'Filters reset')
+}
+
+// ✅ ДОБАВИТЬ
+const clearDepartmentFilter = (): void => {
+  localFilters.value.department = 'all'
+  updateFilters()
+}
+
+// ✅ ДОБАВИТЬ
+const getDepartmentLabel = (department: Department | 'all'): string => {
+  if (department === 'all') return 'All Departments'
+  return department === 'kitchen' ? 'Kitchen' : 'Bar'
 }
 
 // Методы очистки отдельных фильтров
@@ -242,6 +295,13 @@ const getCategoryLabel = (category: ProductCategory | 'all'): string => {
 const getStatusLabel = (status: boolean | 'all'): string => {
   if (status === 'all') return 'Все'
   return status ? 'Активные' : 'Неактивные'
+}
+
+// ✅ ДОБАВИТЬ helper для иконок
+const getDepartmentIcon = (dept: Department | 'all'): string => {
+  if (dept === 'kitchen') return 'mdi-silverware-fork-knife'
+  if (dept === 'bar') return 'mdi-coffee'
+  return 'mdi-filter-outline'
 }
 </script>
 

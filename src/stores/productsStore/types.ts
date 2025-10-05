@@ -3,6 +3,9 @@
 import type { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 
+// ✅ NEW: Department Type
+export type Department = 'kitchen' | 'bar'
+
 export type ProductCategory =
   | 'meat'
   | 'vegetables'
@@ -44,6 +47,8 @@ export interface Product extends BaseEntity {
   description?: string
   category: ProductCategory
   yieldPercentage: number
+  usedInDepartments: Department[] // ['kitchen'] | ['bar'] | ['kitchen', 'bar']
+
   isActive: boolean
   canBeSold: boolean
 
@@ -104,6 +109,7 @@ export interface ProductsState {
     isActive: boolean | 'all'
     canBeSold: boolean | 'all'
     search: string
+    department: Department | 'all'
     needsReorder: boolean
     urgencyLevel: 'low' | 'medium' | 'high' | 'critical' | 'all'
   }
@@ -116,6 +122,8 @@ export interface CreateProductData {
   baseUnit: BaseUnit // Обязательно
   baseCostPerUnit: number // Обязательно
   yieldPercentage: number
+  usedInDepartments: Department[] // REQUIRED
+
   description?: string
   isActive?: boolean
   canBeSold?: boolean
@@ -291,6 +299,9 @@ export interface ProductForSupplier {
   urgencyLevel: StockRecommendation['urgencyLevel']
   primarySupplierId?: string
   leadTimeDays?: number
+  baseUnit: BaseUnit
+  recommendedPackage?: PackageOption
+  packageOptions: PackageOption[]
 }
 
 export interface ProductForMenu {
@@ -309,87 +320,32 @@ export interface ProductStockInfo {
   lastUpdated: string
 }
 
+export const DEFAULT_PRODUCT: Omit<Product, 'id' | 'createdAt' | 'updatedAt'> = {
+  name: '',
+  description: '',
+  category: 'other',
+  yieldPercentage: 100,
+  usedInDepartments: ['kitchen'], // ✅ DEFAULT
+  isActive: true,
+  canBeSold: true,
+  baseUnit: 'gram',
+  baseCostPerUnit: 0,
+  packageOptions: [],
+  recommendedPackageId: undefined,
+  storageConditions: '',
+  shelfLife: undefined,
+  minStock: 0,
+  maxStock: undefined,
+  nameEn: '',
+  leadTimeDays: 1,
+  primarySupplierId: undefined,
+  tags: []
+}
+
 // ===== UTILITY FUNCTIONS =====
 
 /**
- * ✅ НОВАЯ ФУНКЦИЯ: Проверяет, есть ли у продукта новая структура с базовыми единицами
- */
-export function hasBaseUnitsStructure(product: Product): boolean {
-  return !!(product.baseUnit && product.baseCostPerUnit !== undefined)
-}
-
-/**
- * ✅ НОВАЯ ФУНКЦИЯ: Получает базовую единицу для продукта (определяет автоматически если нет)
- */
-export function getProductBaseUnit(product: Product): BaseUnit {
-  // Если есть baseUnit, используем его
-  if (product.baseUnit) {
-    return product.baseUnit
-  }
-
-  // Иначе определяем по категории и названию
-  const category = product.category.toLowerCase()
-  const name = product.name.toLowerCase()
-
-  if (['meat', 'vegetables', 'spices', 'cereals'].includes(category)) {
-    return 'gram'
-  }
-
-  if (category === 'dairy' && name.includes('milk')) {
-    return 'ml'
-  }
-
-  if (category === 'beverages') {
-    return 'piece'
-  }
-
-  if (name.includes('oil') || name.includes('liquid')) {
-    return 'ml'
-  }
-
-  // По умолчанию граммы
-  return 'gram'
-}
-
-/**
- * ✅ НОВАЯ ФУНКЦИЯ: Получает стоимость за базовую единицу (рассчитывает если нет)
- */
-export function getProductBaseCost(product: Product): number {
-  // Если есть baseCostPerUnit, используем его
-  if (product.baseCostPerUnit !== undefined) {
-    return product.baseCostPerUnit
-  }
-
-  // Иначе рассчитываем из старых данных
-  const baseUnit = getProductBaseUnit(product)
-  let baseCost = product.costPerUnit
-
-  // Конвертируем из крупных единиц в базовые
-  if (baseUnit === 'gram' && product.unit === 'kg') {
-    baseCost = product.costPerUnit / 1000 // IDR/кг -> IDR/г
-  } else if (baseUnit === 'ml' && product.unit === 'liter') {
-    baseCost = product.costPerUnit / 1000 // IDR/л -> IDR/мл
-  }
-
-  return baseCost
-}
-
-/**
- * ✅ НОВАЯ ФУНКЦИЯ: Создает расширенный продукт из обычного
- */
-export function enhanceProduct(product: Product): Product & {
-  baseUnit: BaseUnit
-  baseCostPerUnit: number
-} {
-  return {
-    ...product,
-    baseUnit: getProductBaseUnit(product),
-    baseCostPerUnit: getProductBaseCost(product)
-  }
-}
-
-/**
- * ✅ НОВАЯ ФУНКЦИЯ: Конвертирует количество в базовые единицы
+ * Конвертирует количество в базовые единицы
  */
 export function convertToBaseUnits(
   quantity: number,
@@ -405,6 +361,8 @@ export function convertToBaseUnits(
     // Объем
     ml: { ml: 1 },
     liter: { ml: 1000 },
+    tsp: { ml: 5 }, // ✅ ДОБАВИТЬ
+    tbsp: { ml: 15 }, // ✅ ДОБАВИТЬ
 
     // Штучные
     piece: { piece: 1 },

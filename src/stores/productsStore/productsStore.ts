@@ -11,7 +11,8 @@ import type {
   UpdatePackageOptionDto,
   BaseUnit,
   ProductForSupplier,
-  ProductForMenu
+  ProductForMenu,
+  Department
 } from './types'
 import { DebugUtils } from '@/utils'
 import type { ProductForRecipe } from '@/stores/recipes/types'
@@ -31,6 +32,7 @@ export const useProductsStore = defineStore('products', {
       isActive: 'all',
       canBeSold: 'all',
       search: '',
+      department: 'all',
       needsReorder: false,
       urgencyLevel: 'all'
     }
@@ -48,7 +50,11 @@ export const useProductsStore = defineStore('products', {
       if (state.filters.isActive !== 'all') {
         filtered = filtered.filter(product => product.isActive === state.filters.isActive)
       }
-
+      if (state.filters.department !== 'all') {
+        filtered = filtered.filter(product =>
+          product.usedInDepartments.includes(state.filters.department as Department)
+        )
+      }
       if (state.filters.search) {
         const searchTerm = state.filters.search.toLowerCase()
         filtered = filtered.filter(
@@ -316,16 +322,14 @@ export const useProductsStore = defineStore('products', {
         id: product.id,
         name: product.name,
         nameEn: product.nameEn || product.name,
-        currentCostPerUnit: product.baseCostPerUnit, // Цена за базовую единицу
-        recommendedOrderQuantity: 0, // Будет рассчитано в Supplier Store
-        urgencyLevel: 'medium', // Будет рассчитано в Storage Store
+        currentCostPerUnit: product.baseCostPerUnit,
+        recommendedOrderQuantity: 0,
+        urgencyLevel: 'medium',
         primarySupplierId: product.primarySupplierId,
         leadTimeDays: product.leadTimeDays,
-
-        // ✅ НОВЫЕ ПОЛЯ для работы с упаковками
         baseUnit: product.baseUnit,
         recommendedPackage: recommendedPackage || undefined,
-        packageOptions: product.packageOptions
+        packageOptions: product.packageOptions || [] // ✅ ИСПРАВЛЕНО: добавлен fallback
       }
     },
 
@@ -600,7 +604,10 @@ export const useProductsStore = defineStore('products', {
     },
 
     updateFilters(filters: Partial<typeof this.filters>): void {
+      console.log('🏬 Store: updating filters', filters) // ✅ ДОБАВИТЬ
+      console.log('🏬 Store: old filters', { ...this.filters }) // ✅ ДОБАВИТЬ
       this.filters = { ...this.filters, ...filters }
+      console.log('🏬 Store: new filters', { ...this.filters }) // ✅ ДОБАВИТЬ
       DebugUtils.debug(MODULE_NAME, 'Filters updated', { filters: this.filters })
     },
 
@@ -610,6 +617,7 @@ export const useProductsStore = defineStore('products', {
         isActive: 'all',
         canBeSold: 'all',
         search: '',
+        department: 'all',
         needsReorder: false,
         urgencyLevel: 'all'
       }
@@ -915,32 +923,38 @@ export const useProductsStore = defineStore('products', {
       if (!import.meta.env.DEV) return
 
       window.__PRODUCT_STORE_DEBUG__ = () => {
-        console.log('=== ENHANCED PRODUCT STORE DEBUG ===')
-        console.log('Products:', this.products.length)
+        DebugUtils.debug(MODULE_NAME, '=== ENHANCED PRODUCT STORE DEBUG ===')
+        DebugUtils.debug(MODULE_NAME, 'Products:', this.products.length)
 
         // Анализируем структуру продуктов
         const withBaseUnits = this.products.filter(p => (p as any).baseUnit).length
         const withoutBaseUnits = this.products.length - withBaseUnits
 
-        console.log('Products with base units:', withBaseUnits)
-        console.log('Products without base units (need migration):', withoutBaseUnits)
+        DebugUtils.debug(MODULE_NAME, 'Products with base units:', withBaseUnits)
+        DebugUtils.debug(
+          MODULE_NAME,
+          'Products without base units (need migration):',
+          withoutBaseUnits
+        )
 
         // Показываем примеры расчетов
         const sampleProduct = this.products[0]
         if (sampleProduct) {
-          console.log('\nSample product for Recipe Store:')
-          console.log(this.getProductForRecipe(sampleProduct.id))
+          DebugUtils.debug(
+            MODULE_NAME,
+            'Sample product for Recipe Store:',
+            this.getProductForRecipe(sampleProduct.id)
+          )
         }
 
         return this
       }
 
       window.__TEST_COST_CALCULATION__ = () => {
-        console.log('🧪 Testing cost calculation with current products...')
+        DebugUtils.debug(MODULE_NAME, '🧪 Testing cost calculation with current products...')
 
-        // Тестируем расчет для салатной заправки
-        console.log('\n📝 RECIPE: Salad Dressing')
-        console.log('Ingredients:')
+        DebugUtils.debug(MODULE_NAME, '📝 RECIPE: Salad Dressing')
+        DebugUtils.debug(MODULE_NAME, 'Ingredients:')
 
         const oliveOil = this.getProductForRecipe('prod-olive-oil')
         const garlic = this.getProductForRecipe('prod-garlic')
@@ -950,28 +964,40 @@ export const useProductsStore = defineStore('products', {
         if (oliveOil && garlic && salt && pepper) {
           // Оливковое масло: 120 мл
           const oilCost = 120 * oliveOil.baseCostPerUnit
-          console.log(`• Olive Oil: 120 мл × ${oliveOil.baseCostPerUnit} IDR/мл = ${oilCost} IDR`)
+          DebugUtils.debug(
+            MODULE_NAME,
+            `• Olive Oil: 120 мл × ${oliveOil.baseCostPerUnit} IDR/мл = ${oilCost} IDR`
+          )
 
           // Чеснок: 10 г
           const garlicCost = 10 * garlic.baseCostPerUnit
-          console.log(`• Garlic: 10 г × ${garlic.baseCostPerUnit} IDR/г = ${garlicCost} IDR`)
+          DebugUtils.debug(
+            MODULE_NAME,
+            `• Garlic: 10 г × ${garlic.baseCostPerUnit} IDR/г = ${garlicCost} IDR`
+          )
 
           // Соль: 3 г
           const saltCost = 3 * salt.baseCostPerUnit
-          console.log(`• Salt: 3 г × ${salt.baseCostPerUnit} IDR/г = ${saltCost} IDR`)
+          DebugUtils.debug(
+            MODULE_NAME,
+            `• Salt: 3 г × ${salt.baseCostPerUnit} IDR/г = ${saltCost} IDR`
+          )
 
           // Перец: 1 г
           const pepperCost = 1 * pepper.baseCostPerUnit
-          console.log(`• Black Pepper: 1 г × ${pepper.baseCostPerUnit} IDR/г = ${pepperCost} IDR`)
+          DebugUtils.debug(
+            MODULE_NAME,
+            `• Black Pepper: 1 г × ${pepper.baseCostPerUnit} IDR/г = ${pepperCost} IDR`
+          )
 
           const totalCost = oilCost + garlicCost + saltCost + pepperCost
           const costPerMl = totalCost / 130 // 130 мл выход
 
-          console.log(`\n📊 TOTAL: ${totalCost} IDR`)
-          console.log(`💰 Cost per ml: ${costPerMl.toFixed(2)} IDR/мл`)
-          console.log('\n✅ This should match the Recipe Store calculation!')
+          DebugUtils.debug(MODULE_NAME, `📊 TOTAL: ${totalCost} IDR`)
+          DebugUtils.debug(MODULE_NAME, `💰 Cost per ml: ${costPerMl.toFixed(2)} IDR/мл`)
+          DebugUtils.debug(MODULE_NAME, '✅ This should match the Recipe Store calculation!')
         } else {
-          console.log('❌ Some products not found for test calculation')
+          DebugUtils.debug(MODULE_NAME, '❌ Some products not found for test calculation')
         }
 
         return {
@@ -982,11 +1008,9 @@ export const useProductsStore = defineStore('products', {
         }
       }
 
-      setTimeout(() => {
-        console.log('🔍 Enhanced Product Store loaded! Try:')
-        console.log('  • window.__PRODUCT_STORE_DEBUG__()')
-        console.log('  • window.__TEST_COST_CALCULATION__()')
-      }, 100)
+      DebugUtils.debug(MODULE_NAME, '🔍 Enhanced Product Store loaded! Try:')
+      DebugUtils.debug(MODULE_NAME, '  • window.__PRODUCT_STORE_DEBUG__()')
+      DebugUtils.debug(MODULE_NAME, '  • window.__TEST_COST_CALCULATION__()')
     }
   }
 })

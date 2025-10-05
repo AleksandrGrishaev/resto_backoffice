@@ -229,6 +229,7 @@ export class MockDataCoordinator {
           shelfLife: productDef.shelfLifeDays,
           leadTimeDays: productDef.leadTimeDays,
           primarySupplierId: productDef.primarySupplierId,
+          usedInDepartments: productDef.usedInDepartments,
 
           // Storage
           minStock: this.calculateMinStock(productDef),
