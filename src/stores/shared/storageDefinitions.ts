@@ -122,7 +122,6 @@ function generateProductBatches(
       batchNumber: generateBatchNumber(productId, receiptDate),
       itemId: productId,
       itemType: 'product',
-      department,
       initialQuantity: batchQuantity, // ✅ Целое число
       currentQuantity: batchQuantity, // ✅ Целое число
       unit: product.baseUnit, // ✅ Базовая единица (gram/ml/piece)
@@ -576,7 +575,6 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-using-credit', 0),
     itemId: 'prod-beef-steak',
     itemType: 'product',
-    department: 'kitchen',
     initialQuantity: 3000,
     currentQuantity: 3000,
     unit: 'gram',
@@ -600,7 +598,6 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-using-credit', 1),
     itemId: 'prod-garlic',
     itemType: 'product',
-    department: 'kitchen',
     initialQuantity: 1000,
     currentQuantity: 1000,
     unit: 'gram',
@@ -624,7 +621,6 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-using-credit', 2),
     itemId: 'prod-milk',
     itemType: 'product',
-    department: 'kitchen',
     initialQuantity: 15000,
     currentQuantity: 15000,
     unit: 'ml',
@@ -648,7 +644,6 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-using-credit', 3),
     itemId: 'prod-olive-oil',
     itemType: 'product',
-    department: 'kitchen',
     initialQuantity: 1000,
     currentQuantity: 1000,
     unit: 'ml',
@@ -675,7 +670,6 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-003', 0),
     itemId: 'prod-tomato',
     itemType: 'product',
-    department: 'kitchen',
     initialQuantity: 5000,
     currentQuantity: 5000,
     unit: 'gram',

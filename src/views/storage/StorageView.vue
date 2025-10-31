@@ -287,9 +287,16 @@ const allProductBalances = computed(() => {
   }
 
   try {
-    const filtered = storageStore.state.balances.filter(
-      b => b && b.itemType === 'product' && b.department === selectedDepartment.value
-    )
+    // ✅ НОВАЯ ЛОГИКА: фильтруем по Product.usedInDepartments
+    const filtered = storageStore.state.balances.filter(b => {
+      if (!b || b.itemType !== 'product') return false
+
+      const product = productsStore.products?.find(p => p.id === b.itemId)
+      if (!product) return false
+
+      // Показываем если продукт используется в выбранном департаменте
+      return product.usedInDepartments.includes(selectedDepartment.value)
+    })
 
     return filtered
   } catch (error) {

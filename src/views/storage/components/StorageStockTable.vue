@@ -537,21 +537,15 @@ const categoryOptions = computed(() => {
 
 const departmentTransitBatches = computed(() => {
   if (!props.storageStore?.transitBatches) {
-    DebugUtils.debug(MODULE_NAME, 'No transit batches available in store')
     return []
   }
 
-  const currentDepartment = props.department
+  // ✅ НОВАЯ ЛОГИКА: фильтруем по Product.usedInDepartments
+  const filtered = props.storageStore.transitBatches.filter((batch: any) => {
+    const product = productsStore.products?.find(p => p.id === batch.itemId)
+    if (!product) return false
 
-  const filtered = props.storageStore.transitBatches.filter(
-    (batch: any) => batch.department === currentDepartment
-  )
-
-  DebugUtils.debug(MODULE_NAME, 'Filtered transit batches', {
-    department: currentDepartment,
-    totalBatches: props.storageStore.transitBatches.length,
-    filteredCount: filtered.length,
-    batchIds: filtered.map((b: any) => b.id)
+    return product.usedInDepartments.includes(props.department)
   })
 
   return filtered

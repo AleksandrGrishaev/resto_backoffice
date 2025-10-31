@@ -472,81 +472,31 @@ export function usePurchaseOrders() {
             `Please select packages for all items before creating order.`
         )
       }
-
       const requestIds = getUniqueRequestIds(basket)
 
       const orderData: CreateOrderData = {
         supplierId: basket.supplierId,
         requestIds,
-        items: basket.items.map(item => {
-          // ✅ НОВОЕ: Определяем department из sources
-          const department = determineDepartmentForOrderItem(item)
-
-          return {
-            itemId: item.itemId,
-            quantity: item.totalQuantity,
-            packageId: item.packageId!,
-            department, // ✅ ДОБАВИТЬ
-            pricePerUnit: item.estimatedBaseCost
-          }
-        }),
+        items: basket.items.map(item => ({
+          itemId: item.itemId,
+          quantity: item.totalQuantity,
+          packageId: item.packageId!,
+          // ❌ УДАЛИТЬ: department
+          pricePerUnit: item.estimatedBaseCost
+        })),
         notes: `Order created from ${requestIds.length} procurement request(s)`
       }
 
       const newOrder = await supplierStore.createOrder(orderData)
 
-      // ИСПРАВЛЕНИЕ 1: Убираем товары из рекомендаций после создания заказа
       removeItemsFromSuggestions(basket.items)
-
-      // ИСПРАВЛЕНИЕ 2: Проверяем - нужно ли обновлять статус заявок
       await updateRequestsStatusConditionally(requestIds, basket.items)
-
-      // ❌ УБИРАЕМ автоматическое создание счета
-      console.log(`PurchaseOrders: Order created successfully`, newOrder.orderNumber)
-      console.log(`PurchaseOrders: Payment can be managed via UI after order creation`)
 
       return newOrder
     } catch (error) {
       console.error('PurchaseOrders: Error creating order from basket:', error)
       throw error
     }
-  }
-
-  // ✅ НОВАЯ ФУНКЦИЯ: Определение департамента для OrderItem
-  function determineDepartmentForOrderItem(item: UnassignedItem): 'kitchen' | 'bar' {
-    // Стратегия 1: Если все sources из одного департамента → используем его
-    const departments = item.sources.map(s => s.department)
-    const uniqueDepartments = [...new Set(departments)]
-
-    if (uniqueDepartments.length === 1) {
-      return uniqueDepartments[0]
-    }
-
-    // Стратегия 2: Если смешанные → берем департамент с наибольшим количеством
-    const departmentQuantities = item.sources.reduce(
-      (acc, source) => {
-        acc[source.department] = (acc[source.department] || 0) + source.quantity
-        return acc
-      },
-      {} as Record<Department, number> // ✅ Используем тип
-    )
-
-    const maxDepartment = Object.entries(departmentQuantities).sort(
-      ([, a], [, b]) => b - a
-    )[0][0] as 'kitchen' | 'bar'
-
-    // ⚠️ Логируем warning для смешанных департаментов
-    console.warn(
-      `[OrderItem] Product "${item.itemName}" has mixed departments. ` +
-        `Using "${maxDepartment}" (largest quantity).`,
-      {
-        product: item.itemName,
-        departments: departmentQuantities,
-        chosen: maxDepartment
-      }
-    )
-
-    return maxDepartment
   }
 
   /**
@@ -670,26 +620,20 @@ export function usePurchaseOrders() {
    */
   async function sendOrder(id: string): Promise<PurchaseOrder> {
     try {
-      console.log(`PurchaseOrders: Sending order ${id}`)
-
-      // Отправляем заказ
       const sentOrder = await updateOrder(id, {
         status: 'sent',
         sentDate: new Date().toISOString()
       })
 
-      // ✅ НОВОЕ: Создаем транзитные batch-и при отправке заказа
+      // ✅ УПРОЩЕННАЯ ВЕРСИЯ: без department
       try {
-        const department = getDepartmentFromOrder(sentOrder)
-
         const transitBatchData = sentOrder.items.map(item => ({
           itemId: item.itemId,
           itemName: item.itemName,
           quantity: item.orderedQuantity,
           unit: item.unit,
           estimatedCostPerUnit: item.pricePerUnit,
-          department: item.department,
-          department,
+          // ❌ УДАЛИТЬ: department
           purchaseOrderId: sentOrder.id,
           supplierId: sentOrder.supplierId,
           supplierName: sentOrder.supplierName,

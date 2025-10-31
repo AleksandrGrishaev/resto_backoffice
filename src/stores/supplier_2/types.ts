@@ -300,7 +300,6 @@ export interface CreateOrderItemData {
   itemId: string
   quantity: number // в базовых единицах
   packageId: string // ОБЯЗАТЕЛЬНО - выбранная упаковка
-  department: Department
   pricePerUnit?: number // цена за базовую единицу (для совместимости)
   packagePrice?: number // цена за упаковку
 }
