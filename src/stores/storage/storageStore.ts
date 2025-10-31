@@ -6,23 +6,24 @@ import { ref, computed, readonly } from 'vue'
 import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
-import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
 import { transitBatchService } from './transitBatchService'
 
+import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
 import type {
-  StorageState,
+  CreateTransitBatchData,
   StorageBatch,
-  StorageOperation,
   StorageBalance,
   StorageBalanceWithTransit,
-  StorageDepartment,
-  InventoryDocument,
+  StorageOperation,
+  StorageState,
   CreateReceiptData,
   CreateWriteOffData,
   CreateCorrectionData,
   CreateInventoryData,
+  InventoryDocument,
   InventoryItem,
-  CreateTransitBatchData
+  WriteOffStatistics,
+  Warehouse // ✅ ДОБАВЛЕНО
 } from './types'
 
 const MODULE_NAME = 'StorageStore'
@@ -53,7 +54,7 @@ export const useStorageStore = defineStore('storage', () => {
     error: null,
 
     filters: {
-      department: 'all',
+      department: 'all' as Department | 'all',
       operationType: undefined,
       showExpired: false,
       showBelowMinStock: false,
@@ -94,10 +95,6 @@ export const useStorageStore = defineStore('storage', () => {
 
   const filteredBalances = computed(() => {
     let balances = [...state.value.balances]
-
-    if (state.value.filters.department !== 'all') {
-      balances = balances.filter(b => b.department === state.value.filters.department)
-    }
 
     if (state.value.filters.search) {
       const search = state.value.filters.search.toLowerCase()
@@ -171,20 +168,25 @@ export const useStorageStore = defineStore('storage', () => {
 
   // ✅ ИСПРАВЛЕНО: departmentBalances как computed функция
   const departmentBalances = computed(() => {
-    return (department: StorageDepartment) => {
-      return state.value.balances.filter(
-        b => b && b.itemType === 'product' && b.department === department
-      )
+    return (department: Department) => {
+      const productsStore = useProductsStore()
+
+      return state.value.balances.filter(balance => {
+        const product = productsStore.products.find(p => p.id === balance.itemId)
+        if (!product) return false
+
+        return product.usedInDepartments.includes(department)
+      })
     }
   })
 
+  // ✅ ПОЛНАЯ ЗАМЕНА balancesWithTransit
   const balancesWithTransit = computed((): StorageBalanceWithTransit[] => {
     const transit = transitBatches.value
 
     return state.value.balances.map(balance => {
-      const itemTransitBatches = transit.filter(
-        batch => batch.itemId === balance.itemId && batch.department === balance.department
-      )
+      // ✅ ИСПРАВЛЕНО: фильтруем только по itemId (БЕЗ department)
+      const itemTransitBatches = transit.filter(batch => batch.itemId === balance.itemId)
 
       const transitQuantity = itemTransitBatches.reduce(
         (sum, batch) => sum + batch.currentQuantity,
@@ -291,20 +293,20 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  async function fetchBalances(department?: StorageDepartment) {
+  async function fetchBalances(department?: Department) {
     try {
       state.value.loading.balances = true
       state.value.error = null
 
       const [balances, activeBatches, transitBatches] = await Promise.all([
-        storageService.getBalances(),
-        storageService.getActiveBatches(), // ✅ CHANGED
-        storageService.getTransitBatches() // ✅ NEW
+        storageService.getBalances(), // ✅ Без параметра department
+        storageService.getActiveBatches(),
+        storageService.getTransitBatches()
       ])
 
       state.value.balances = balances
-      state.value.activeBatches = activeBatches // ✅ CHANGED
-      state.value.transitBatches = transitBatches // ✅ NEW
+      state.value.activeBatches = activeBatches
+      state.value.transitBatches = transitBatches
 
       DebugUtils.debug(MODULE_NAME, 'Balances and batches fetched', {
         balances: balances.length,
@@ -322,7 +324,7 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  async function fetchOperations(department?: StorageDepartment) {
+  async function fetchOperations(department?: Department) {
     try {
       state.value.loading.operations = true
       state.value.error = null
@@ -344,7 +346,7 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  async function fetchInventories(department?: StorageDepartment) {
+  async function fetchInventories(department?: Department) {
     try {
       state.value.loading.inventory = true
       state.value.error = null
@@ -631,8 +633,9 @@ export const useStorageStore = defineStore('storage', () => {
   /**
    * Get transit batches for specific item
    */
-  function getTransitBatchesForItem(itemId: string, department: StorageDepartment): StorageBatch[] {
-    return transitBatchService.findByItem(itemId, department)
+  function getTransitBatchesForItem(itemId: string): StorageBatch[] {
+    // ✅ ИСПРАВЛЕНО: убрали department параметр
+    return transitBatchService.findByItem(itemId)
   }
 
   /**
@@ -670,10 +673,9 @@ export const useStorageStore = defineStore('storage', () => {
     return product?.name || 'Unknown Product'
   }
 
-  async function getItemUnit(itemId: string): Promise<string> {
+  function getItemUnit(itemId: string): string {
     try {
-      // ✅ ИСПРАВЛЕНО: Используем productsStore
-      const product = productsStore.getProductById(itemId)
+      const product = productsStore.products.find(p => p.id === itemId)
 
       if (!product) {
         DebugUtils.warn(MODULE_NAME, 'Product not found, using default unit', { itemId })
@@ -687,10 +689,9 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  async function getItemCostPerUnit(itemId: string): Promise<number> {
+  function getItemCostPerUnit(itemId: string): number {
     try {
-      // ✅ ИСПРАВЛЕНО: Используем productsStore
-      const product = productsStore.getProductById(itemId)
+      const product = productsStore.products.find(p => p.id === itemId)
 
       if (!product) {
         DebugUtils.warn(MODULE_NAME, 'Product not found, using zero cost', { itemId })
@@ -704,10 +705,23 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  function getItemBatches(itemId: string, department: StorageDepartment): StorageBatch[] {
-    return state.value.activeBatches.filter(
-      b => b.itemId === itemId && b.department === department && b.status === 'active'
-    )
+  // Warehouse
+
+  function getWarehouse(id: string): Warehouse | undefined {
+    return storageService.getWarehouse(id)
+  }
+
+  function getDefaultWarehouse(): Warehouse {
+    return storageService.getDefaultWarehouse()
+  }
+
+  function getAllWarehouses(): Warehouse[] {
+    return storageService.getAllWarehouses()
+  }
+
+  function getItemBatches(itemId: string, department: Department): StorageBatch[] {
+    // ✅ ИСПРАВЛЕНО: возвращаем все батчи продукта (БЕЗ фильтра по department)
+    return state.value.activeBatches.filter(b => b.itemId === itemId && b.status === 'active')
   }
 
   function getBatchById(batchId: string): StorageBatch | undefined {
@@ -717,7 +731,11 @@ export const useStorageStore = defineStore('storage', () => {
     )
   }
 
-  function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
+  async function getWriteOffStatistics(
+    department?: Department | 'all',
+    dateFrom?: string,
+    dateTo?: string
+  ): Promise<WriteOffStatistics> {
     return storageService.getWriteOffStatistics(department, dateFrom, dateTo)
   }
 
@@ -725,7 +743,7 @@ export const useStorageStore = defineStore('storage', () => {
   // FILTER ACTIONS
   // ===========================
 
-  function setDepartmentFilter(department: StorageDepartment | 'all') {
+  function setDepartmentFilter(department: Department | 'all') {
     state.value.filters.department = department
   }
 
@@ -768,12 +786,6 @@ export const useStorageStore = defineStore('storage', () => {
 
   function clearError() {
     state.value.error = null
-  }
-
-  function getBalance(itemId: string, department: StorageDepartment) {
-    return state.value.balances.find(
-      b => b.itemId === itemId && b.itemType === 'product' && b.department === department
-    )
   }
 
   function getOperation(operationId: string) {
@@ -839,7 +851,7 @@ export const useStorageStore = defineStore('storage', () => {
     getItemBatches,
     getBatchById,
 
-    // ✅ NEW: Transit batch actions
+    // ✅ Transit batch actions
     createTransitBatches,
     convertTransitBatchesToActive,
     removeTransitBatchesOnOrderCancel,
@@ -860,9 +872,14 @@ export const useStorageStore = defineStore('storage', () => {
 
     // Utilities
     clearError,
-    getBalance,
+    // ❌ УДАЛЕНО: getBalance (метода нет в коде)
     getOperation,
     getInventory,
+
+    // ✅ ДОБАВЛЕНО: Warehouse methods
+    getWarehouse,
+    getDefaultWarehouse,
+    getAllWarehouses,
 
     // External stores
     productsStore
