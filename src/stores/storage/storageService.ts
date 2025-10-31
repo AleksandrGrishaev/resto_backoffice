@@ -4,11 +4,12 @@
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useProductsStore } from '@/stores/productsStore'
 
+import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
 import type {
   StorageBatch,
   StorageOperation,
+  StorageOperationItem,
   StorageBalance,
-  StorageDepartment,
   CreateReceiptData,
   CreateWriteOffData,
   CreateCorrectionData,
@@ -16,20 +17,27 @@ import type {
   InventoryDocument,
   InventoryItem,
   BatchAllocation,
-  WriteOffStatistics
+  WriteOffStatistics,
+  Warehouse
 } from './types'
 
-import { doesWriteOffAffectKPI } from './types'
+import { doesWriteOffAffectKPI, DEFAULT_WAREHOUSE } from './types'
 
 const MODULE_NAME = 'StorageService'
 
 export class StorageService {
-  private activeBatches: StorageBatch[] = [] // ✅ NEW
-  private transitBatches: StorageBatch[] = [] // ✅ NEW
+  private warehouses: Warehouse[] = [] // ✅ ДОБАВЛЕНО
+  private activeBatches: StorageBatch[] = []
+  private transitBatches: StorageBatch[] = []
   private operations: StorageOperation[] = []
   private balances: StorageBalance[] = []
   private inventories: InventoryDocument[] = []
   private initialized: boolean = false
+
+  constructor() {
+    // ✅ ДОБАВИТЬ инициализацию warehouse
+    this.warehouses = [DEFAULT_WAREHOUSE]
+  }
 
   isInitialized(): boolean {
     return this.initialized
@@ -80,30 +88,42 @@ export class StorageService {
   // ===========================
   // INITIALIZATION - ИСПОЛЬЗУЕТ MockDataCoordinator
   // ===========================
-
+  // ✅ ПОЛНАЯ ЗАМЕНА метода initialize
   async initialize(): Promise<void> {
+    if (this.initialized) {
+      DebugUtils.debug(MODULE_NAME, 'StorageService already initialized')
+      return
+    }
+
     try {
-      if (this.initialized) {
-        DebugUtils.debug(MODULE_NAME, 'StorageService already initialized')
-        return
-      }
+      DebugUtils.info(MODULE_NAME, 'Initializing StorageService with BASE UNITS...')
 
-      DebugUtils.info(MODULE_NAME, 'Initializing StorageService...')
+      // ✅ Import and load mock data
+      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
+      const storageData = mockDataCoordinator.getStorageStoreData()
 
-      await this.loadDataFromCoordinator()
+      this.activeBatches = storageData.batches
+      this.operations = storageData.operations
+      this.balances = storageData.balances
+
+      // ✅ Initialize warehouses (already done in constructor)
+      DebugUtils.info(MODULE_NAME, 'Warehouses initialized', {
+        count: this.warehouses.length,
+        defaultWarehouse: this.getDefaultWarehouse().name
+      })
+
+      await this.recalculateAllBalances()
 
       this.initialized = true
 
       DebugUtils.info(MODULE_NAME, 'StorageService initialized successfully', {
-        activeBatches: this.activeBatches.length, // ✅ CHANGED
-        transitBatches: this.transitBatches.length, // ✅ NEW
+        activeBatches: this.activeBatches.length,
         operations: this.operations.length,
         balances: this.balances.length,
-        inventories: this.inventories.length,
-        unitSystem: 'BASE_UNITS (gram/ml/piece)'
+        warehouses: this.warehouses.length
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to initialize storage service', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to initialize StorageService', { error })
       throw error
     }
   }
@@ -182,40 +202,29 @@ export class StorageService {
   // BASIC OPERATIONS
   // ===========================
 
-  async getBalances(department?: StorageDepartment | 'all'): Promise<StorageBalance[]> {
-    try {
-      if (!this.initialized) {
-        throw new Error('StorageService not initialized. Call initialize() first.')
-      }
-
-      if (this.balances.length === 0) {
-        await this.recalculateAllBalances()
-      }
-
-      let balances = [...this.balances]
-
-      if (department && department !== 'all') {
-        balances = balances.filter(b => b.department === department)
-      }
-
-      return balances
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch balances', { error })
-      throw error
+  async getBalances(): Promise<StorageBalance[]> {
+    // ❌ УДАЛЁН параметр department
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
     }
+
+    if (this.balances.length === 0) {
+      await this.recalculateAllBalances()
+    }
+
+    return [...this.balances] // Возвращаем ВСЕ balances без фильтрации
   }
 
-  async getTransitBatches(department?: StorageDepartment | 'all'): Promise<StorageBatch[]> {
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getTransitBatches
+  async getTransitBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
     try {
       if (!this.initialized) {
         throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
-      let batches = [...this.transitBatches]
-
-      if (department && department !== 'all') {
-        batches = batches.filter(b => b.department === department)
-      }
+      // ✅ ИЗМЕНЕНО: Возвращаем ВСЕ transit батчи (без фильтра по department)
+      // Фильтрация будет в UI через Product.usedInDepartments
+      const batches = [...this.transitBatches]
 
       // Sort by planned delivery date
       return batches.sort((a, b) => {
@@ -229,29 +238,16 @@ export class StorageService {
     }
   }
 
-  async getBalance(itemId: string, department: StorageDepartment): Promise<StorageBalance | null> {
-    try {
-      const balance = this.balances.find(
-        b => b.itemId === itemId && b.itemType === 'product' && b.department === department
-      )
-      return balance || null
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get balance', { error, itemId })
-      throw error
-    }
-  }
-
-  async getActiveBatches(department?: StorageDepartment | 'all'): Promise<StorageBatch[]> {
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getActiveBatches
+  async getActiveBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
     try {
       if (!this.initialized) {
         throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
-      let batches = [...this.activeBatches]
-
-      if (department && department !== 'all') {
-        batches = batches.filter(b => b.department === department)
-      }
+      // ✅ ИЗМЕНЕНО: Возвращаем ВСЕ active батчи (без фильтра по department)
+      // Фильтрация будет в UI через Product.usedInDepartments
+      const batches = [...this.activeBatches]
 
       return batches.sort(
         (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
@@ -262,18 +258,16 @@ export class StorageService {
     }
   }
 
-  async getAllBatches(department?: StorageDepartment): Promise<StorageBatch[]> {
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getAllBatches
+  async getAllBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
     try {
       if (!this.initialized) {
         throw new Error('StorageService not initialized. Call initialize() first.')
       }
 
+      // ✅ ИЗМЕНЕНО: Возвращаем ВСЕ батчи (без фильтра по department)
       // Combine active and transit batches
-      let batches = [...this.activeBatches, ...this.transitBatches]
-
-      if (department && department !== 'all') {
-        batches = batches.filter(b => b.department === department)
-      }
+      const batches = [...this.activeBatches, ...this.transitBatches]
 
       return batches.sort(
         (a, b) => new Date(b.receiptDate).getTime() - new Date(a.receiptDate).getTime()
@@ -284,55 +278,141 @@ export class StorageService {
     }
   }
 
-  async getOperations(department?: StorageDepartment | 'all'): Promise<StorageOperation[]> {
-    try {
-      if (!this.initialized) {
-        throw new Error('StorageService not initialized. Call initialize() first.')
-      }
-
-      let operations = [...this.operations]
-
-      if (department && department !== 'all') {
-        operations = operations.filter(op => op.department === department)
-      }
-
-      return operations.sort(
-        (a, b) => new Date(b.operationDate).getTime() - new Date(a.operationDate).getTime()
-      )
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get operations', { error })
-      throw error
+  async getOperations(department?: Department | 'all'): Promise<StorageOperation[]> {
+    // ✅ Параметр остаётся, но тип изменён на Department
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
     }
+
+    if (!department || department === 'all') {
+      return [...this.operations]
+    }
+
+    return this.operations.filter(op => op.department === department)
   }
 
   // ===========================
   // BALANCE CALCULATION - ОБНОВЛЕНО ДЛЯ БАЗОВЫХ ЕДИНИЦ
   // ===========================
 
-  async recalculateAllBalances(): Promise<void> {
+  // ✅ ПОЛНАЯ ЗАМЕНА метода recalculateAllBalances
+  private async recalculateAllBalances(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Recalculating all balances in BASE UNITS...')
+      DebugUtils.debug(MODULE_NAME, 'Recalculating all balances...')
 
+      const balanceMap = new Map<string, StorageBalance>()
       const productsStore = useProductsStore()
-      const newBalances: StorageBalance[] = []
 
-      // BEFORE: Group all batches
-      // const groupedBatches = this.groupBatchesByProductAndDepartment()
+      // ✅ НОВОЕ: Сначала создаём балансы для ВСЕХ продуктов (даже без батчей)
+      for (const product of productsStore.products) {
+        const productInfo = await this.getProductInfo(product.id)
+        if (!productInfo) continue
 
-      // AFTER: Group only ACTIVE batches (transit batches don't count as stock)
-      const groupedBatches = this.groupActiveBatchesByProductAndDepartment()
+        const key = product.id // Один баланс на продукт
 
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-
-      for (const [key, batches] of Object.entries(groupedBatches)) {
-        // ... rest of the logic stays the same
+        balanceMap.set(key, {
+          itemId: product.id,
+          itemType: 'product',
+          itemName: productInfo.name,
+          totalQuantity: 0, // ✅ Начинаем с 0
+          unit: productInfo.baseUnit,
+          totalValue: 0,
+          averageCost: productInfo.baseCostPerUnit,
+          latestCost: productInfo.baseCostPerUnit,
+          costTrend: 'stable',
+          batches: [],
+          oldestBatchDate: TimeUtils.getCurrentLocalISO(),
+          newestBatchDate: TimeUtils.getCurrentLocalISO(),
+          hasExpired: false,
+          hasNearExpiry: false,
+          belowMinStock: false,
+          lastCalculated: TimeUtils.getCurrentLocalISO()
+        })
       }
 
-      this.balances = newBalances
+      // ✅ ЗАТЕМ добавляем данные из активных батчей
+      for (const batch of this.activeBatches) {
+        if (!batch.isActive || batch.status !== 'active') continue
 
-      DebugUtils.info(MODULE_NAME, 'Balances recalculated', {
-        balancesCount: newBalances.length,
-        totalValue: newBalances.reduce((sum, b) => sum + b.totalValue, 0)
+        const key = batch.itemId
+
+        if (!balanceMap.has(key)) {
+          // Продукт не найден в products store - пропускаем
+          continue
+        }
+
+        const balance = balanceMap.get(key)!
+        balance.batches.push(batch)
+        balance.totalQuantity += batch.currentQuantity
+        balance.totalValue += batch.totalValue
+
+        // Update dates
+        if (new Date(batch.receiptDate) < new Date(balance.oldestBatchDate)) {
+          balance.oldestBatchDate = batch.receiptDate
+        }
+        if (new Date(batch.receiptDate) > new Date(balance.newestBatchDate)) {
+          balance.newestBatchDate = batch.receiptDate
+        }
+      }
+
+      // Calculate averages and trends
+      for (const balance of balanceMap.values()) {
+        if (balance.totalQuantity > 0) {
+          balance.averageCost = balance.totalValue / balance.totalQuantity
+        }
+
+        if (balance.batches.length > 0) {
+          balance.batches.sort(
+            (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
+          )
+          balance.latestCost = balance.batches[balance.batches.length - 1].costPerUnit
+
+          if (balance.batches.length > 1) {
+            const oldestCost = balance.batches[0].costPerUnit
+            const diff = balance.latestCost - oldestCost
+            const threshold = oldestCost * 0.05
+
+            if (diff > threshold) {
+              balance.costTrend = 'up'
+            } else if (diff < -threshold) {
+              balance.costTrend = 'down'
+            } else {
+              balance.costTrend = 'stable'
+            }
+          }
+        }
+
+        // Check expiry
+        const now = new Date()
+        const warningDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+        for (const batch of balance.batches) {
+          if (batch.expiryDate) {
+            const expiryDate = new Date(batch.expiryDate)
+            if (expiryDate < now) {
+              balance.hasExpired = true
+            } else if (expiryDate < warningDate) {
+              balance.hasNearExpiry = true
+            }
+          }
+        }
+
+        // ✅ Check low stock (including zero and negative)
+        const productInfo = await this.getProductInfo(balance.itemId)
+        if (productInfo.minStock && balance.totalQuantity <= productInfo.minStock) {
+          balance.belowMinStock = true
+        }
+      }
+
+      this.balances = Array.from(balanceMap.values())
+
+      DebugUtils.debug(MODULE_NAME, 'Balances recalculated', {
+        totalBalances: this.balances.length,
+        withStock: this.balances.filter(b => b.totalQuantity > 0).length,
+        zeroStock: this.balances.filter(b => b.totalQuantity === 0).length,
+        negativeStock: this.balances.filter(b => b.totalQuantity < 0).length,
+        totalQuantity: this.balances.reduce((sum, b) => sum + b.totalQuantity, 0),
+        totalValue: this.balances.reduce((sum, b) => sum + b.totalValue, 0)
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to recalculate balances', { error })
@@ -340,171 +420,32 @@ export class StorageService {
     }
   }
 
-  /**
-   * Group ACTIVE batches by product and department
-   */
-  private groupActiveBatchesByProductAndDepartment(): Record<string, StorageBatch[]> {
-    const grouped: Record<string, StorageBatch[]> = {}
-
-    for (const batch of this.activeBatches) {
-      // Only include active batches with stock
-      if (batch.status === 'active' && batch.currentQuantity > 0) {
-        const key = `${batch.itemId}-${batch.department}`
-        if (!grouped[key]) {
-          grouped[key] = []
-        }
-        grouped[key].push(batch)
-      }
-    }
-
-    return grouped
-  }
-
-  // И дополнительно исправить метод calculateBalanceFromBatches():
-
-  private async calculateBalanceFromBatches(
-    itemId: string,
-    department: StorageDepartment,
-    batches: StorageBatch[],
-    product: any,
-    productDef?: any
-  ): Promise<StorageBalance | null> {
-    try {
-      // ✅ ИСПРАВЛЕНО: Используем product напрямую, productDef больше не нужен
-      const productInfo = productDef || product
-
-      if (!productInfo) {
-        DebugUtils.warn(MODULE_NAME, 'No product info found', { itemId })
-        return this.createZeroBalance(itemId, department, product, {
-          baseUnit: 'gram',
-          baseCostPerUnit: 0,
-          minStock: 0,
-          dailyConsumption: 0
-        })
-      }
-
-      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Берем ТОЛЬКО активные батчи с количеством > 0
-      const activeBatches = batches.filter(
-        batch => batch.status === 'active' && batch.isActive === true && batch.currentQuantity > 0
-      )
-
-      if (activeBatches.length === 0) {
-        return this.createZeroBalance(itemId, department, product, productInfo)
-      }
-
-      // ✅ Расчеты ТОЛЬКО по активным батчам
-      const totalQuantity = activeBatches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
-      const totalValue = activeBatches.reduce((sum, batch) => sum + batch.totalValue, 0)
-      const averageCost =
-        totalQuantity > 0 ? Math.round(totalValue / totalQuantity) : productInfo.baseCostPerUnit
-
-      const hasExpired = activeBatches.some(batch => {
-        if (!batch.expiryDate) return false
-        return new Date(batch.expiryDate) < new Date()
-      })
-
-      const hasNearExpiry = this.checkNearExpiry(activeBatches)
-      const belowMinStock = totalQuantity < (productInfo.minStock || 0)
-
-      // Find oldest and newest batch dates FROM ACTIVE BATCHES ONLY
-      const sortedDates = activeBatches
-        .map(b => new Date(b.receiptDate))
-        .sort((a, b) => a.getTime() - b.getTime())
-
-      return {
-        itemId,
-        itemType: 'product',
-        itemName: product.name,
-        department,
-        totalQuantity, // ← ТОЛЬКО активные батчи
-        unit: productInfo.baseUnit,
-        totalValue,
-        averageCost,
-        latestCost:
-          activeBatches[activeBatches.length - 1]?.costPerUnit || productInfo.baseCostPerUnit,
-        costTrend: 'stable',
-        batches: activeBatches, // ← ТОЛЬКО активные батчи в массиве!
-        oldestBatchDate: sortedDates[0]?.toISOString() || TimeUtils.getCurrentLocalISO(),
-        newestBatchDate:
-          sortedDates[sortedDates.length - 1]?.toISOString() || TimeUtils.getCurrentLocalISO(),
-        hasExpired,
-        hasNearExpiry,
-        belowMinStock: totalQuantity === 0 ? true : belowMinStock,
-        averageDailyUsage: productInfo.dailyConsumption || 0,
-        daysOfStockRemaining:
-          totalQuantity > 0 && productInfo.dailyConsumption
-            ? Math.floor(totalQuantity / productInfo.dailyConsumption)
-            : 0,
-        lastCalculated: TimeUtils.getCurrentLocalISO(),
-        id: `balance-${itemId}-${department}`,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to calculate balance', { error, itemId, department })
-      return null
-    }
-  }
-
-  private createZeroBalance(
-    itemId: string,
-    department: StorageDepartment,
-    product: any,
-    productDef: any
-  ): StorageBalance {
-    return {
-      itemId,
-      itemType: 'product',
-      itemName: product.name,
-      department,
-      totalQuantity: 0, // ✅ В базовых единицах
-      unit: productDef.baseUnit, // ✅ Базовая единица
-      totalValue: 0,
-      averageCost: productDef.baseCostPerUnit,
-      latestCost: productDef.baseCostPerUnit,
-      costTrend: 'stable',
-      batches: [],
-      oldestBatchDate: TimeUtils.getCurrentLocalISO(),
-      newestBatchDate: TimeUtils.getCurrentLocalISO(),
-      hasExpired: false,
-      hasNearExpiry: false,
-      belowMinStock: true, // Нулевой остаток всегда ниже минимума
-      averageDailyUsage: productDef.dailyConsumption,
-      daysOfStockRemaining: 0,
-      lastCalculated: TimeUtils.getCurrentLocalISO(),
-      id: `balance-${itemId}-${department}`,
-      createdAt: TimeUtils.getCurrentLocalISO(),
-      updatedAt: TimeUtils.getCurrentLocalISO()
-    }
-  }
-
-  private checkNearExpiry(batches: StorageBatch[]): boolean {
-    const now = new Date()
-    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
-
-    return batches.some(batch => {
-      if (!batch.expiryDate) return false
-      const expiryDate = new Date(batch.expiryDate)
-      return expiryDate <= threeDaysFromNow && expiryDate > now
-    })
-  }
-
   // ===========================
   // CRUD OPERATIONS - ОБНОВЛЕНЫ ДЛЯ БАЗОВЫХ ЕДИНИЦ
   // ===========================
 
+  // ✅ ПОЛНАЯ ЗАМЕНА метода createReceipt
   async createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
+    }
+
     try {
-      DebugUtils.info(MODULE_NAME, 'Creating receipt operation in BASE UNITS', {
+      DebugUtils.info(MODULE_NAME, 'Creating receipt', {
         department: data.department,
-        items: data.items.length
+        itemCount: data.items.length,
+        sourceType: data.sourceType
       })
 
-      const operationItems = []
+      const operationItems: StorageOperationItem[] = []
       let totalValue = 0
+      const defaultWarehouse = this.getDefaultWarehouse() // ✅ ДОБАВЛЕНО
 
       for (const item of data.items) {
         const productInfo = await this.getProductInfo(item.itemId)
+        if (!productInfo) {
+          throw new Error(`Product not found: ${item.itemId}`)
+        }
 
         const quantityInBaseUnits = item.quantity
         const costPerBaseUnit = item.costPerUnit
@@ -515,7 +456,7 @@ export class StorageService {
           batchNumber: this.generateBatchNumber(item.itemId),
           itemId: item.itemId,
           itemType: 'product',
-          department: data.department,
+          warehouseId: defaultWarehouse.id, // ✅ ИЗМЕНЕНО: используем warehouseId вместо department
           initialQuantity: quantityInBaseUnits,
           currentQuantity: quantityInBaseUnits,
           unit: productInfo.baseUnit,
@@ -531,7 +472,6 @@ export class StorageService {
           updatedAt: TimeUtils.getCurrentLocalISO()
         }
 
-        // ✅ ИСПРАВЛЕНО: добавляем в activeBatches вместо batches
         this.activeBatches.push(newBatch)
 
         DebugUtils.debug(MODULE_NAME, 'Batch added to activeBatches', {
@@ -539,6 +479,7 @@ export class StorageService {
           itemId: newBatch.itemId,
           itemName: productInfo.name,
           quantity: newBatch.currentQuantity,
+          warehouseId: newBatch.warehouseId, // ✅ ДОБАВЛЕНО в лог
           totalActiveBatches: this.activeBatches.length
         })
 
@@ -563,7 +504,7 @@ export class StorageService {
         operationType: 'receipt',
         documentNumber: `RC-${String(Date.now()).slice(-6)}`,
         operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department,
+        department: data.department, // ✅ Сохраняем для отчётности
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
@@ -574,11 +515,13 @@ export class StorageService {
       }
 
       this.operations.unshift(operation)
-      await this.recalculateBalancesForDepartment(data.department)
+      await this.recalculateAllBalances() // ✅ ИЗМЕНЕНО: пересчитываем все балансы
 
       DebugUtils.info(MODULE_NAME, 'Receipt created successfully', {
         operationId: operation.id,
-        totalValue
+        itemCount: operation.items.length,
+        totalValue,
+        warehouse: defaultWarehouse.name
       })
 
       return operation
@@ -588,7 +531,12 @@ export class StorageService {
     }
   }
 
+  // ✅ ПОЛНАЯ ЗАМЕНА метода createWriteOff
   async createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
+    }
+
     try {
       DebugUtils.info(MODULE_NAME, 'Creating write-off operation in BASE UNITS', {
         department: data.department,
@@ -603,15 +551,11 @@ export class StorageService {
         const productInfo = await this.getProductInfo(item.itemId)
 
         // ✅ РАСЧЕТ В БАЗОВЫХ ЕДИНИЦАХ
-        const quantityInBaseUnits = item.quantity // Предполагаем уже в базовых единицах
+        const quantityInBaseUnits = item.quantity
 
-        // Находим батчи для списания (FIFO)
+        // ✅ ИЗМЕНЕНО: Находим батчи для списания (FIFO) БЕЗ фильтра по department
         const availableBatches = this.activeBatches
-          .filter(
-            b =>
-              b.itemId === item.itemId && b.department === data.department && b.currentQuantity > 0
-          )
-
+          .filter(b => b.itemId === item.itemId && b.currentQuantity > 0)
           .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
 
         const allocations = this.calculateFifoAllocation(availableBatches, quantityInBaseUnits)
@@ -641,8 +585,8 @@ export class StorageService {
           itemId: item.itemId,
           itemType: 'product' as const,
           itemName: productInfo.name,
-          quantity: quantityInBaseUnits, // ✅ В базовых единицах
-          unit: productInfo.baseUnit, // ✅ Базовая единица
+          quantity: quantityInBaseUnits,
+          unit: productInfo.baseUnit,
           batchAllocations: allocations,
           totalCost,
           notes: item.notes
@@ -656,7 +600,7 @@ export class StorageService {
         operationType: 'write_off',
         documentNumber: `WO-${String(Date.now()).slice(-6)}`,
         operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department,
+        department: data.department, // ✅ Сохраняем для отчётности
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
@@ -672,7 +616,7 @@ export class StorageService {
       }
 
       this.operations.unshift(operation)
-      await this.recalculateBalancesForDepartment(data.department)
+      await this.recalculateAllBalances() // ✅ ИЗМЕНЕНО: пересчитываем все балансы
 
       DebugUtils.info(MODULE_NAME, 'Write-off operation created successfully', {
         operationId: operation.id,
@@ -689,7 +633,12 @@ export class StorageService {
     }
   }
 
+  // ✅ ПОЛНАЯ ЗАМЕНА метода createCorrection
   async createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
+    }
+
     try {
       DebugUtils.info(MODULE_NAME, 'Creating correction operation in BASE UNITS', {
         department: data.department,
@@ -699,6 +648,7 @@ export class StorageService {
 
       const operationItems = []
       let totalValue = 0
+      const defaultWarehouse = this.getDefaultWarehouse() // ✅ ДОБАВЛЕНО
 
       for (const item of data.items) {
         const productInfo = await this.getProductInfo(item.itemId)
@@ -717,11 +667,11 @@ export class StorageService {
             batchNumber: this.generateBatchNumber(item.itemId),
             itemId: item.itemId,
             itemType: 'product',
-            department: data.department,
+            warehouseId: defaultWarehouse.id, // ✅ ИЗМЕНЕНО: используем warehouseId
             initialQuantity: quantityInBaseUnits,
             currentQuantity: quantityInBaseUnits,
-            unit: productInfo.baseUnit, // ✅ Базовая единица
-            costPerUnit: productInfo.baseCostPerUnit, // ✅ Цена за базовую единицу
+            unit: productInfo.baseUnit,
+            costPerUnit: productInfo.baseCostPerUnit,
             totalValue: quantityInBaseUnits * productInfo.baseCostPerUnit,
             receiptDate: TimeUtils.getCurrentLocalISO(),
             sourceType: 'correction',
@@ -736,13 +686,9 @@ export class StorageService {
           totalCost = newBatch.totalValue
         } else {
           // Списание - используем FIFO
+          // ✅ ИЗМЕНЕНО: фильтруем только по itemId (БЕЗ department)
           const availableBatches = this.activeBatches
-            .filter(
-              b =>
-                b.itemId === item.itemId &&
-                b.department === data.department &&
-                b.currentQuantity > 0
-            )
+            .filter(b => b.itemId === item.itemId && b.currentQuantity > 0)
             .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
 
           allocations = this.calculateFifoAllocation(
@@ -776,8 +722,8 @@ export class StorageService {
           itemId: item.itemId,
           itemType: 'product' as const,
           itemName: productInfo.name,
-          quantity: quantityInBaseUnits, // ✅ В базовых единицах (может быть отрицательным)
-          unit: productInfo.baseUnit, // ✅ Базовая единица
+          quantity: quantityInBaseUnits,
+          unit: productInfo.baseUnit,
           batchAllocations: allocations,
           totalCost,
           notes: item.notes
@@ -791,7 +737,7 @@ export class StorageService {
         operationType: 'correction',
         documentNumber: `CR-${String(Date.now()).slice(-6)}`,
         operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department,
+        department: data.department, // ✅ Сохраняем для отчётности
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
@@ -803,7 +749,7 @@ export class StorageService {
       }
 
       this.operations.unshift(operation)
-      await this.recalculateBalancesForDepartment(data.department)
+      await this.recalculateAllBalances() // ✅ ИЗМЕНЕНО: пересчитываем все балансы
 
       DebugUtils.info(MODULE_NAME, 'Correction operation created successfully', {
         operationId: operation.id,
@@ -871,67 +817,50 @@ export class StorageService {
   }
 
   // ===========================
-  // BALANCE RECALCULATION
+  // WAREHOUSE METHODS
   // ===========================
 
-  private async recalculateBalancesForDepartment(department: StorageDepartment): Promise<void> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Recalculating balances for department', { department })
+  getDefaultWarehouse(): Warehouse {
+    return this.warehouses.find(w => w.isActive) || this.warehouses[0]
+  }
 
-      this.balances = this.balances.filter(b => b.department !== department)
+  getWarehouse(id: string): Warehouse | undefined {
+    return this.warehouses.find(w => w.id === id)
+  }
 
-      // ✅ ИСПРАВЛЕНО: используем activeBatches
-      const departmentBatches = this.activeBatches.filter(b => b.department === department)
-      const productIds = [...new Set(departmentBatches.map(b => b.itemId))]
-
-      const productsStore = useProductsStore()
-
-      for (const productId of productIds) {
-        const productBatches = departmentBatches.filter(b => b.itemId === productId)
-        const product = productsStore.products.find(p => p.id === productId)
-
-        if (product) {
-          const balance = await this.calculateBalanceFromBatches(
-            productId,
-            department,
-            productBatches,
-            product,
-            product
-          )
-
-          if (balance) {
-            this.balances.push(balance)
-          }
-        }
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Department balances recalculated', {
-        department,
-        newBalances: this.balances.filter(b => b.department === department).length
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to recalculate department balances', { error })
-      throw error
-    }
+  getAllWarehouses(): Warehouse[] {
+    return this.warehouses.filter(w => w.isActive)
   }
 
   // ===========================
   // INVENTORY OPERATIONS
   // ===========================
 
+  // ✅ ПОЛНАЯ ЗАМЕНА метода startInventory
   async startInventory(data: CreateInventoryData): Promise<InventoryDocument> {
-    try {
-      const balances = await this.getBalances(data.department)
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
+    }
 
-      const inventoryItems: InventoryItem[] = balances.map(balance => ({
+    try {
+      DebugUtils.info(MODULE_NAME, 'Starting inventory', {
+        department: data.department,
+        responsiblePerson: data.responsiblePerson
+      })
+
+      // ✅ ИЗМЕНЕНО: получаем ВСЕ balances (без фильтрации по department)
+      const allBalances = await this.getBalances()
+
+      // Создаём items для ВСЕХ продуктов
+      const inventoryItems: InventoryItem[] = allBalances.map(balance => ({
         id: `inv-item-${balance.itemId}`,
         itemId: balance.itemId,
         itemType: 'product',
         itemName: balance.itemName,
-        systemQuantity: balance.totalQuantity, // ✅ В базовых единицах
-        actualQuantity: balance.totalQuantity, // Пользователь будет корректировать
+        systemQuantity: balance.totalQuantity,
+        actualQuantity: balance.totalQuantity,
         difference: 0,
-        unit: balance.unit, // ✅ Базовая единица
+        unit: balance.unit,
         averageCost: balance.averageCost,
         valueDifference: 0,
         confirmed: false
@@ -941,7 +870,7 @@ export class StorageService {
         id: `inv-${Date.now()}`,
         documentNumber: `IV-${String(Date.now()).slice(-6)}`,
         inventoryDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department,
+        department: data.department, // ✅ Сохраняем для отчётности (кто делал)
         itemType: 'product',
         responsiblePerson: data.responsiblePerson,
         items: inventoryItems,
@@ -957,8 +886,8 @@ export class StorageService {
 
       DebugUtils.info(MODULE_NAME, 'Inventory started', {
         inventoryId: inventory.id,
-        department: data.department,
-        items: inventoryItems.length
+        totalItems: inventoryItems.length,
+        department: data.department
       })
 
       return inventory
@@ -1082,122 +1011,104 @@ export class StorageService {
   // WRITE-OFF STATISTICS
   // ===========================
 
-  getWriteOffStatistics(
-    department?: StorageDepartment | 'all',
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getWriteOffStatistics
+  async getWriteOffStatistics(
+    department?: Department | 'all', // ✅ Тип изменён
     dateFrom?: string,
     dateTo?: string
-  ): WriteOffStatistics {
-    try {
-      const writeOffOperations = this.operations.filter(op => {
-        if (op.operationType !== 'write_off') return false
-        if (department && department !== 'all' && op.department !== department) return false
+  ): Promise<WriteOffStatistics> {
+    const writeOffOps = this.operations.filter(op => {
+      if (op.operationType !== 'write_off') return false
+      if (department && department !== 'all' && op.department !== department) return false
 
-        if (dateFrom || dateTo) {
-          const opDate = new Date(op.operationDate)
-          if (dateFrom && opDate < new Date(dateFrom)) return false
-          if (dateTo && opDate > new Date(dateTo)) return false
+      if (dateFrom || dateTo) {
+        const opDate = new Date(op.operationDate)
+        if (dateFrom && opDate < new Date(dateFrom)) return false
+        if (dateTo && opDate > new Date(dateTo)) return false
+      }
+
+      return true
+    })
+
+    // ... остальная часть метода остаётся без изменений
+    const stats: WriteOffStatistics = {
+      total: { count: 0, value: 0 },
+      kpiAffecting: {
+        count: 0,
+        value: 0,
+        reasons: {
+          expired: { count: 0, value: 0 },
+          spoiled: { count: 0, value: 0 },
+          other: { count: 0, value: 0 }
         }
+      },
+      nonKpiAffecting: {
+        count: 0,
+        value: 0,
+        reasons: {
+          education: { count: 0, value: 0 },
+          test: { count: 0, value: 0 }
+        }
+      },
+      byDepartment: {
+        kitchen: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 },
+        bar: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 }
+      }
+    }
 
-        return true
-      })
+    for (const op of writeOffOps) {
+      const value = op.totalValue || 0
+      const reason = op.writeOffDetails?.reason
+      const affectsKPI = reason ? doesWriteOffAffectKPI(reason) : false
 
-      const stats: WriteOffStatistics = {
-        total: { count: 0, value: 0 },
-        kpiAffecting: {
-          count: 0,
-          value: 0,
-          reasons: {
-            expired: { count: 0, value: 0 },
-            spoiled: { count: 0, value: 0 },
-            other: { count: 0, value: 0 }
-          }
-        },
-        nonKpiAffecting: {
-          count: 0,
-          value: 0,
-          reasons: {
-            education: { count: 0, value: 0 },
-            test: { count: 0, value: 0 }
-          }
-        },
-        byDepartment: {
-          kitchen: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 },
-          bar: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 }
+      stats.total.count++
+      stats.total.value += value
+
+      if (affectsKPI) {
+        stats.kpiAffecting.count++
+        stats.kpiAffecting.value += value
+
+        if (reason === 'expired') {
+          stats.kpiAffecting.reasons.expired.count++
+          stats.kpiAffecting.reasons.expired.value += value
+        } else if (reason === 'spoiled') {
+          stats.kpiAffecting.reasons.spoiled.count++
+          stats.kpiAffecting.reasons.spoiled.value += value
+        } else {
+          stats.kpiAffecting.reasons.other.count++
+          stats.kpiAffecting.reasons.other.value += value
+        }
+      } else {
+        stats.nonKpiAffecting.count++
+        stats.nonKpiAffecting.value += value
+
+        if (reason === 'education') {
+          stats.nonKpiAffecting.reasons.education.count++
+          stats.nonKpiAffecting.reasons.education.value += value
+        } else if (reason === 'test') {
+          stats.nonKpiAffecting.reasons.test.count++
+          stats.nonKpiAffecting.reasons.test.value += value
         }
       }
 
-      writeOffOperations.forEach(op => {
-        const value = op.totalValue || 0
-        const affectsKPI = op.writeOffDetails?.affectsKPI || false
-        const reason = op.writeOffDetails?.reason || 'other'
-
-        // Общая статистика
-        stats.total.count++
-        stats.total.value += value
-
-        // По влиянию на KPI
+      if (op.department === 'kitchen') {
+        stats.byDepartment.kitchen.total += value
         if (affectsKPI) {
-          stats.kpiAffecting.count++
-          stats.kpiAffecting.value += value
-
-          if (['expired', 'spoiled'].includes(reason)) {
-            stats.kpiAffecting.reasons[reason as 'expired' | 'spoiled'].count++
-            stats.kpiAffecting.reasons[reason as 'expired' | 'spoiled'].value += value
-          } else {
-            stats.kpiAffecting.reasons.other.count++
-            stats.kpiAffecting.reasons.other.value += value
-          }
+          stats.byDepartment.kitchen.kpiAffecting += value
         } else {
-          stats.nonKpiAffecting.count++
-          stats.nonKpiAffecting.value += value
-
-          if (['education', 'test'].includes(reason)) {
-            stats.nonKpiAffecting.reasons[reason as 'education' | 'test'].count++
-            stats.nonKpiAffecting.reasons[reason as 'education' | 'test'].value += value
-          }
+          stats.byDepartment.kitchen.nonKpiAffecting += value
         }
-
-        // По департаментам
-        const dept = op.department
-        if (stats.byDepartment[dept]) {
-          stats.byDepartment[dept].total += value
-          if (affectsKPI) {
-            stats.byDepartment[dept].kpiAffecting += value
-          } else {
-            stats.byDepartment[dept].nonKpiAffecting += value
-          }
-        }
-      })
-
-      return stats
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off statistics', { error })
-      // Возвращаем пустую статистику при ошибке
-      return {
-        total: { count: 0, value: 0 },
-        kpiAffecting: {
-          count: 0,
-          value: 0,
-          reasons: {
-            expired: { count: 0, value: 0 },
-            spoiled: { count: 0, value: 0 },
-            other: { count: 0, value: 0 }
-          }
-        },
-        nonKpiAffecting: {
-          count: 0,
-          value: 0,
-          reasons: {
-            education: { count: 0, value: 0 },
-            test: { count: 0, value: 0 }
-          }
-        },
-        byDepartment: {
-          kitchen: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 },
-          bar: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 }
+      } else if (op.department === 'bar') {
+        stats.byDepartment.bar.total += value
+        if (affectsKPI) {
+          stats.byDepartment.bar.kpiAffecting += value
+        } else {
+          stats.byDepartment.bar.nonKpiAffecting += value
         }
       }
     }
+
+    return stats
   }
 
   /**
@@ -1301,25 +1212,17 @@ export class StorageService {
   // INVENTORY OPERATIONS
   // ===========================
 
-  async getInventories(department?: StorageDepartment | 'all'): Promise<InventoryDocument[]> {
-    try {
-      if (!this.initialized) {
-        throw new Error('StorageService not initialized. Call initialize() first.')
-      }
-
-      let inventories = [...this.inventories]
-
-      if (department && department !== 'all') {
-        inventories = inventories.filter(inv => inv.department === department)
-      }
-
-      return inventories.sort(
-        (a, b) => new Date(b.inventoryDate).getTime() - new Date(a.inventoryDate).getTime()
-      )
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get inventories', { error })
-      throw error
+  async getInventories(department?: Department | 'all'): Promise<InventoryDocument[]> {
+    // ✅ Тип изменён на Department
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
     }
+
+    if (!department || department === 'all') {
+      return [...this.inventories]
+    }
+
+    return this.inventories.filter(inv => inv.department === department)
   }
 
   async getInventory(inventoryId: string): Promise<InventoryDocument | null> {

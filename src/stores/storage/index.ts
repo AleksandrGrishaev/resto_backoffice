@@ -2,7 +2,6 @@
 
 // Export all types
 export type {
-  StorageDepartment,
   StorageItemType,
   OperationType,
   WriteOffReason,
@@ -27,11 +26,15 @@ export type {
   StorageState,
   QuickWriteOffItem,
   WriteOffStatistics,
+  Warehouse,
   WRITE_OFF_CLASSIFICATION,
   WRITE_OFF_REASON_OPTIONS,
   doesWriteOffAffectKPI,
   getWriteOffReasonInfo
 } from './types'
+
+// ✅ Экспорт константы DEFAULT_WAREHOUSE
+export { DEFAULT_WAREHOUSE } from './types'
 
 // Export service
 export { storageService } from './storageService'
@@ -41,3 +44,4 @@ export { useStorageStore } from './storageStore'
 
 // ✅ Export specialized composables
 export { useWriteOff } from './composables/useWriteOff'
+export { useInventory } from './composables/useInventory'

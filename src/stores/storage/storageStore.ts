@@ -484,14 +484,30 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      const inventory = await storageService.finalizeInventory(inventoryId)
+      // ✅ ИСПРАВЛЕНО: finalizeInventory возвращает массив corrections, а не inventory
+      const correctionOperations = await storageService.finalizeInventory(inventoryId)
+
+      // Получаем обновлённую инвентаризацию из service
+      const inventory = await storageService.getInventory(inventoryId)
+
+      if (!inventory) {
+        throw new Error(`Inventory ${inventoryId} not found after finalization`)
+      }
+
       const index = state.value.inventories.findIndex(inv => inv.id === inventoryId)
 
       if (index !== -1) {
         state.value.inventories[index] = inventory
       }
 
+      // Добавляем corrections в operations
+      if (correctionOperations.length > 0) {
+        state.value.operations.unshift(...correctionOperations)
+      }
+
+      // ✅ Обновляем балансы конкретного департамента
       await fetchBalances(inventory.department)
+
       return inventory
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to finalize inventory'

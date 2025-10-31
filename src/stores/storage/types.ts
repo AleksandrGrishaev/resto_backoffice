@@ -1,8 +1,8 @@
 // src/stores/storage/types.ts - ДОБАВЛЕНЫ ТИПЫ ДЛЯ ТРАНЗИТНЫХ BATCH-ЕЙ
 
 import { BaseEntity } from '@/types/common'
+import type { Department } from '@/stores/productsStore/types'
 
-export type StorageDepartment = 'kitchen' | 'bar'
 export type StorageItemType = 'product'
 export type OperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType = 'purchase' | 'correction' | 'opening_balance' | 'inventory_adjustment'
@@ -13,11 +13,22 @@ export type BatchStatus = 'active' | 'expired' | 'consumed' | 'in_transit'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 export type WriteOffReason = 'expired' | 'spoiled' | 'other' | 'education' | 'test'
 
+export interface Warehouse extends BaseEntity {
+  id: string
+  name: string
+  code: string
+  isActive: boolean
+}
+
 // ✅ РАСШИРЕН: StorageBatch с полями для транзита
 export interface StorageBatch extends BaseEntity {
   batchNumber: string
   itemId: string
   itemType: 'product'
+
+  // ❌ УДАЛЕНО: department: StorageDepartment
+  warehouseId: string // ✅ НОВОЕ ПОЛЕ
+
   initialQuantity: number
   currentQuantity: number
   unit: string
@@ -26,16 +37,16 @@ export interface StorageBatch extends BaseEntity {
   receiptDate: string
   expiryDate?: string
   sourceType: BatchSourceType
-  notes?: string
   status: BatchStatus
   isActive: boolean
+  notes?: string
 
-  // ✅ НОВЫЕ ПОЛЯ для транзитных batch-ей
-  purchaseOrderId?: string // Связь с заказом поставщику
-  supplierId?: string // ID поставщика
-  supplierName?: string // Название поставщика
-  plannedDeliveryDate?: string // Ожидаемая дата доставки
-  actualDeliveryDate?: string // Фактическая дата доставки (заполняется при конвертации)
+  // Transit fields (остаются без изменений)
+  purchaseOrderId?: string
+  supplierId?: string
+  supplierName?: string
+  plannedDeliveryDate?: string
+  actualDeliveryDate?: string
 }
 
 // Остальные существующие интерфейсы остаются без изменений...
@@ -65,7 +76,7 @@ export interface StorageOperation extends BaseEntity {
   operationType: OperationType
   documentNumber: string
   operationDate: string
-  department: StorageDepartment
+  department: Department
   responsiblePerson: string
   items: StorageOperationItem[]
   totalValue?: number
@@ -123,7 +134,7 @@ export interface StorageBalanceWithTransit extends StorageBalance {
 export interface InventoryDocument extends BaseEntity {
   documentNumber: string
   inventoryDate: string
-  department: StorageDepartment
+  department: Department
   itemType: 'product'
   responsiblePerson: string
   items: InventoryItem[]
@@ -167,7 +178,7 @@ export interface InventoryItem {
 
 // DTOs
 export interface CreateReceiptData {
-  department: StorageDepartment
+  department: Department
   responsiblePerson: string
   items: ReceiptItem[]
   sourceType: BatchSourceType
@@ -184,7 +195,7 @@ export interface ReceiptItem {
 }
 
 export interface CreateCorrectionData {
-  department: StorageDepartment
+  department: Department
   responsiblePerson: string
   items: CorrectionItem[]
   correctionDetails: {
@@ -204,7 +215,7 @@ export interface CorrectionItem {
 }
 
 export interface CreateWriteOffData {
-  department: StorageDepartment
+  department: Department
   responsiblePerson: string
   reason: WriteOffReason
   items: WriteOffItem[]
@@ -219,7 +230,7 @@ export interface WriteOffItem {
 }
 
 export interface CreateInventoryData {
-  department: StorageDepartment
+  department: Department
   responsiblePerson: string
 }
 
@@ -275,7 +286,7 @@ export interface StorageState {
   error: string | null
 
   filters: {
-    department: StorageDepartment | 'all'
+    department: Department | 'all'
     operationType?: OperationType
     showExpired: boolean
     showBelowMinStock: boolean
@@ -292,6 +303,15 @@ export interface StorageState {
     enableQuickWriteOff: boolean
   }
 }
+
+export const DEFAULT_WAREHOUSE: Warehouse = {
+  id: 'warehouse-winter',
+  name: 'Winter',
+  code: 'WINTER-MAIN',
+  isActive: true,
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z'
+} as const
 
 // ✅ ДОБАВЛЕНЫ: Write-off Helper Functions и Constants
 export const WRITE_OFF_CLASSIFICATION = {
