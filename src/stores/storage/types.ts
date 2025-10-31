@@ -92,7 +92,6 @@ export interface StorageBalance {
   itemId: string
   itemType: 'product'
   itemName: string
-  department: StorageDepartment
   totalQuantity: number
   unit: string
   totalValue: number

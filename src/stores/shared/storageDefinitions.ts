@@ -163,31 +163,35 @@ function generateBatchNumber(productId: string, receiptDate: string): string {
 /**
  * ✅ Генерирует баланс для продукта в определенном департаменте (ЦЕЛЫЕ ЧИСЛА)
  */
-function generateProductBalance(
-  productId: string,
-  department: StorageDepartment
-): StorageBalance | null {
+function generateProductBalance(productId: string): StorageBalance | null {
   const product = getProductDefinition(productId)
   if (!product) return null
-
-  // Определяем нужно ли этому продукту быть в этом департаменте
-  if (!shouldProductBeInDepartment(productId, department)) {
-    return null
-  }
 
   // Вычисляем текущий остаток на основе конфигурации
   const targetStock = calculateTargetStock(product)
 
-  // Генерируем батчи для достижения целевого остатка
-  const batches = generateProductBatches(productId, department, targetStock)
+  // ✅ ИЗМЕНЕНО: Генерируем батчи БЕЗ привязки к department
+  // Батчи генерируются для каждого департамента где используется продукт
+  const allBatches: StorageBatch[] = []
+
+  product.usedInDepartments.forEach(dept => {
+    // Распределяем целевой запас между департаментами
+    const deptRatio = 1 / product.usedInDepartments.length
+    const deptTargetStock = Math.round(targetStock * deptRatio)
+
+    if (deptTargetStock > 0) {
+      const deptBatches = generateProductBatches(productId, dept, deptTargetStock)
+      allBatches.push(...deptBatches)
+    }
+  })
 
   // Вычисляем общие показатели (все в целых числах)
-  const totalQuantity = batches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
-  const totalValue = batches.reduce((sum, batch) => sum + batch.totalValue, 0)
+  const totalQuantity = allBatches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
+  const totalValue = allBatches.reduce((sum, batch) => sum + batch.totalValue, 0)
   const averageCost = totalQuantity > 0 ? totalValue / totalQuantity : product.baseCostPerUnit
 
   // Находим даты
-  const sortedBatches = batches.sort(
+  const sortedBatches = allBatches.sort(
     (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
   )
 
@@ -196,8 +200,8 @@ function generateProductBalance(
     sortedBatches[sortedBatches.length - 1]?.receiptDate || TimeUtils.getCurrentLocalISO()
 
   // Проверки состояния
-  const hasExpired = batches.some(b => b.status === 'expired')
-  const hasNearExpiry = batches.some(b => {
+  const hasExpired = allBatches.some(b => b.status === 'expired')
+  const hasNearExpiry = allBatches.some(b => {
     if (!b.expiryDate) return false
     const daysToExpiry = Math.ceil(
       (new Date(b.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
@@ -216,14 +220,14 @@ function generateProductBalance(
     itemId: productId,
     itemType: 'product',
     itemName: product.name,
-    department,
+    // ❌ УДАЛЕНО: department - больше нет привязки к департаменту!
     totalQuantity, // ✅ Уже целое число
     unit: product.baseUnit, // ✅ Базовая единица
     totalValue: Math.round(totalValue),
     averageCost: Math.round(averageCost * 1000) / 1000, // Точность до 3 знаков для цены
     latestCost: product.baseCostPerUnit, // ✅ Цена за базовую единицу
     costTrend: 'stable', // Упрощенно для мока
-    batches,
+    batches: allBatches,
     oldestBatchDate,
     newestBatchDate,
     hasExpired,
@@ -232,22 +236,8 @@ function generateProductBalance(
     averageDailyUsage: Math.round(product.dailyConsumption), // ✅ Целое число
     daysOfStockRemaining:
       totalQuantity > 0 ? Math.floor(totalQuantity / product.dailyConsumption) : 0,
-    lastCalculated: TimeUtils.getCurrentLocalISO(),
-    id: `balance-${productId}-${department}`,
-    createdAt: TimeUtils.getCurrentLocalISO(),
-    updatedAt: TimeUtils.getCurrentLocalISO()
+    lastCalculated: TimeUtils.getCurrentLocalISO()
   }
-}
-
-/**
- * ✅ Определяет должен ли продукт быть в департаменте
- */
-function shouldProductBeInDepartment(productId: string, department: StorageDepartment): boolean {
-  const product = getProductDefinition(productId)
-  if (!product) return false
-
-  // ✅ НОВАЯ ЛОГИКА: проверяем usedInDepartments
-  return product.usedInDepartments.includes(department)
 }
 
 /**
@@ -313,8 +303,8 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
   const departments: StorageDepartment[] = ['kitchen', 'bar']
   const department = departments[Math.floor(Math.random() * departments.length)]
 
-  // Выбираем продукты для этого департамента
-  const availableProducts = CORE_PRODUCTS.filter(p => shouldProductBeInDepartment(p.id, department))
+  // ✅ ИСПРАВЛЕНО: Выбираем продукты которые используются в этом департаменте
+  const availableProducts = CORE_PRODUCTS.filter(p => p.usedInDepartments.includes(department))
 
   if (availableProducts.length === 0) return null
 
@@ -346,7 +336,7 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
     operationType,
     documentNumber: generateDocumentNumber(operationType, operationDate, index),
     operationDate,
-    department,
+    department, // ✅ ПРАВИЛЬНО: операция привязана к департаменту (кто совершил)
     responsiblePerson: getRandomResponsiblePerson(),
     items,
     totalValue,
@@ -366,8 +356,7 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
 
   if (operationType === 'correction') {
     operation.correctionDetails = {
-      reason: getRandomCorrectionReason(),
-      notes: 'Inventory adjustment'
+      reason: getRandomCorrectionReason()
     }
   }
 
@@ -525,25 +514,30 @@ function generateStorageWorkflowData(): CoreStorageWorkflow {
   const balances: StorageBalance[] = []
   const allBatches: StorageBatch[] = []
 
-  // ✅ ИСПРАВЛЕНО: Генерируем для всех департаментов где продукт используется
+  // ✅ ИЗМЕНЕНО: Генерируем ОДИН баланс на продукт (без деления по департаментам)
   CORE_PRODUCTS.forEach(product => {
-    const departments: StorageDepartment[] = ['kitchen', 'bar']
-
-    departments.forEach(dept => {
-      if (product.usedInDepartments.includes(dept)) {
-        const balance = generateProductBalance(product.id, dept)
-        if (balance) {
-          balances.push(balance)
-          allBatches.push(...balance.batches)
-        }
-      }
-    })
+    const balance = generateProductBalance(product.id)
+    if (balance) {
+      balances.push(balance)
+      allBatches.push(...balance.batches)
+    }
   })
 
+  // Добавляем тестовые транзитные batch-и
   const transitBatches = generateTransitTestBatches()
   allBatches.push(...transitBatches)
 
+  // Генерируем операции
   const operations = generateStorageOperations()
+
+  DebugUtils.info(MODULE_NAME, 'Storage workflow data generated', {
+    totalProducts: CORE_PRODUCTS.length,
+    balances: balances.length,
+    activeBatches: allBatches.filter(b => b.status === 'active').length,
+    transitBatches: allBatches.filter(b => b.status === 'in_transit').length,
+    operations: operations.length,
+    concept: 'SINGLE WAREHOUSE with UI-level department filtering'
+  })
 
   return { balances, batches: allBatches, operations }
 }
@@ -808,7 +802,6 @@ export function demonstrateStorageCalculations(): void {
     const product = getProductDefinition(balance.itemId)
     if (!product) return
 
-    console.log(`\n📦 ${balance.itemName} (${balance.department})`)
     console.log(`   Stock: ${balance.totalQuantity} ${balance.unit} (WHOLE NUMBER BASE UNIT)`)
     console.log(`   Cost: ${balance.latestCost} IDR/${balance.unit}`)
     console.log(`   Total Value: ${balance.totalValue} IDR`)

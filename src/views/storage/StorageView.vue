@@ -605,12 +605,8 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
     if (storageStore.setDepartmentFilter) {
       storageStore.setDepartmentFilter(newDepartment)
     }
-
-    // ✅ Легкое обновление без полной загрузки
-    await refreshCurrentData()
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to switch department', { error })
-    handleOperationError(`Failed to load data for ${newDepartment} department`)
   }
 })
 

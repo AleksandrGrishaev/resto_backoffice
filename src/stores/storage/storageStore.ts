@@ -297,9 +297,9 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.error = null
 
       const [balances, activeBatches, transitBatches] = await Promise.all([
-        storageService.getBalances(department),
-        storageService.getActiveBatches(department), // ✅ CHANGED
-        storageService.getTransitBatches(department) // ✅ NEW
+        storageService.getBalances(),
+        storageService.getActiveBatches(), // ✅ CHANGED
+        storageService.getTransitBatches() // ✅ NEW
       ])
 
       state.value.balances = balances
