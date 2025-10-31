@@ -193,6 +193,26 @@
           </div>
         </template>
 
+        <!-- ✅ НОВАЯ КОЛОНКА: Used In Departments -->
+        <template #[`item.departments`]="{ item }">
+          <div class="d-flex gap-1">
+            <v-chip
+              v-for="dept in getProductDepartments(item.itemId)"
+              :key="dept"
+              size="x-small"
+              :color="dept === 'kitchen' ? 'orange' : 'blue'"
+              variant="tonal"
+            >
+              <v-icon
+                :icon="dept === 'kitchen' ? 'mdi-silverware-fork-knife' : 'mdi-coffee'"
+                size="12"
+                class="mr-1"
+              />
+              {{ dept === 'kitchen' ? 'Kitchen' : 'Bar' }}
+            </v-chip>
+          </div>
+        </template>
+
         <!-- Stock Column -->
         <template #[`item.stock`]="{ item }">
           <div class="d-flex align-center">
@@ -405,14 +425,15 @@ import ItemDetailsDialog from './ItemDetailsDialog.vue'
 interface Props {
   balances: StorageBalance[]
   loading: boolean
-  department: StorageDepartment
+  department?: StorageDepartment // ✅ ИЗМЕНЕНО: сделать optional
   showZeroStock?: boolean
-  storageStore: any // ✅ ДОБАВЛЕНО: передаем storageStore для транзитных данных
+  storageStore: any
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
-  showZeroStock: false
+  showZeroStock: false,
+  department: undefined // ✅ ДОБАВЛЕНО: default undefined для 'all'
 })
 
 // Emits
@@ -437,16 +458,33 @@ const filters = ref({
 })
 
 // Computed
-const headers = computed(() => [
-  { title: 'Product', key: 'itemName', sortable: false, width: '200px' },
-  { title: 'Category', key: 'category', sortable: false, width: '150px' },
-  { title: 'Stock', key: 'stock', sortable: false, width: '200px' },
-  { title: 'In Transit', key: 'transit', sortable: false, width: '180px' }, // ✅ НОВАЯ КОЛОНКА
-  { title: 'Cost', key: 'cost', sortable: false, width: '180px' },
-  { title: 'Total Value', key: 'totalValue', sortable: false, width: '150px' },
-  { title: 'Status', key: 'status', sortable: false, width: '120px' },
-  { title: 'Actions', key: 'actions', sortable: false, width: '60px' }
-])
+const headers = computed(() => {
+  const baseHeaders = [
+    { title: 'Product', key: 'itemName', sortable: false, width: '200px' },
+    { title: 'Category', key: 'category', sortable: false, width: '150px' }
+  ]
+
+  // ✅ НОВОЕ: добавляем колонку "Used In" только для вкладки All
+  if (!props.department) {
+    baseHeaders.push({
+      title: 'Used In',
+      key: 'departments',
+      sortable: false,
+      width: '120px'
+    })
+  }
+
+  baseHeaders.push(
+    { title: 'Stock', key: 'stock', sortable: false, width: '200px' },
+    { title: 'In Transit', key: 'transit', sortable: false, width: '180px' },
+    { title: 'Cost', key: 'cost', sortable: false, width: '180px' },
+    { title: 'Total Value', key: 'totalValue', sortable: false, width: '150px' },
+    { title: 'Status', key: 'status', sortable: false, width: '120px' },
+    { title: 'Actions', key: 'actions', sortable: false, width: '60px' }
+  )
+
+  return baseHeaders
+})
 
 // ✅ FIXED: Custom sorting to show out of stock items last (including negative stock)
 const customSort = (items: StorageBalance[], sortBy: any[]) => {
@@ -540,12 +578,17 @@ const departmentTransitBatches = computed(() => {
     return []
   }
 
-  // ✅ НОВАЯ ЛОГИКА: фильтруем по Product.usedInDepartments
+  // ✅ ИЗМЕНЕНО: если department не указан - показываем все
+  if (!props.department) {
+    return props.storageStore.transitBatches
+  }
+
+  // Фильтруем по Product.usedInDepartments
   const filtered = props.storageStore.transitBatches.filter((batch: any) => {
     const product = productsStore.products?.find(p => p.id === batch.itemId)
     if (!product) return false
 
-    return product.usedInDepartments.includes(props.department)
+    return product.usedInDepartments.includes(props.department!)
   })
 
   return filtered
@@ -604,6 +647,16 @@ function getTransitStatusIcon(item: StorageBalance): string {
       return 'mdi-clock-alert'
     default:
       return 'mdi-truck-delivery'
+  }
+}
+
+function getProductDepartments(productId: string): ('kitchen' | 'bar')[] {
+  try {
+    const product = productsStore.products.find(p => p.id === productId)
+    return product?.usedInDepartments || []
+  } catch (error) {
+    console.warn('Error getting product departments:', error)
+    return []
   }
 }
 

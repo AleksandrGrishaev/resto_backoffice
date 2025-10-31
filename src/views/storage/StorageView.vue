@@ -15,6 +15,7 @@
       </div>
       <div class="d-flex gap-2">
         <v-btn
+          v-if="selectedDepartment !== 'all'"
           color="primary"
           variant="outlined"
           prepend-icon="mdi-clipboard-list"
@@ -24,11 +25,22 @@
           Count Inventory
         </v-btn>
         <writeoff-widget
-          v-if="selectedDepartment"
+          v-if="selectedDepartment !== 'all'"
           :department="selectedDepartment"
           @success="handleWriteOffSuccess"
           @refresh-needed="refreshCurrentData"
         />
+
+        <!-- ✅ НОВОЕ: Сообщение когда выбрано All -->
+        <v-alert
+          v-if="selectedDepartment === 'all'"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mb-0"
+        >
+          Select Kitchen or Bar tab to perform inventory operations
+        </v-alert>
       </div>
     </div>
 
@@ -47,6 +59,15 @@
 
     <!-- Department Tabs -->
     <v-tabs v-model="selectedDepartment" class="mb-4" color="primary">
+      <!-- ✅ НОВАЯ ВКЛАДКА: All -->
+      <v-tab value="all">
+        <v-icon icon="mdi-warehouse" class="mr-2" />
+        All Products
+        <v-chip v-if="allItemCount > 0" size="small" class="ml-2" variant="tonal">
+          {{ allItemCount }}
+        </v-chip>
+      </v-tab>
+
       <v-tab value="kitchen">
         <v-icon icon="mdi-silverware-fork-knife" class="mr-2" />
         Kitchen
@@ -54,6 +75,7 @@
           {{ kitchenItemCount }}
         </v-chip>
       </v-tab>
+
       <v-tab value="bar">
         <v-icon icon="mdi-coffee" class="mr-2" />
         Bar
@@ -65,7 +87,7 @@
 
     <!-- Alerts Banner -->
     <storage-alerts
-      v-if="isStoreReady"
+      v-if="isStoreReady && selectedDepartment !== 'all'"
       :alerts="enhancedAlertCounts"
       :department="selectedDepartment"
       class="mb-4"
@@ -132,7 +154,7 @@
           :loading="isLoading"
           :show-zero-stock="showZeroStock"
           :storage-store="storageStore"
-          :department="selectedDepartment"
+          :department="selectedDepartment === 'all' ? undefined : selectedDepartment"
           @write-off="handleWriteOffFromBalance"
           @toggle-zero-stock="toggleZeroStockFilter"
         />
@@ -251,7 +273,7 @@ const productsStore = useProductsStore()
 const writeOff = useWriteOff()
 
 // State
-const selectedDepartment = ref<StorageDepartment>('kitchen')
+const selectedDepartment = ref<StorageDepartment | 'all'>('all')
 const selectedTab = ref('products')
 const showInventoryDialog = ref(false)
 const showSuccessSnackbar = ref(false)
@@ -287,7 +309,14 @@ const allProductBalances = computed(() => {
   }
 
   try {
-    // ✅ НОВАЯ ЛОГИКА: фильтруем по Product.usedInDepartments
+    // ✅ НОВАЯ ЛОГИКА: если выбрано 'all' - показываем всё
+    if (selectedDepartment.value === 'all') {
+      return storageStore.state.balances.filter(b => {
+        return b && b.itemType === 'product'
+      })
+    }
+
+    // ✅ Фильтрация по департаменту: показываем продукты которые используются в выбранном департаменте
     const filtered = storageStore.state.balances.filter(b => {
       if (!b || b.itemType !== 'product') return false
 
@@ -295,7 +324,7 @@ const allProductBalances = computed(() => {
       if (!product) return false
 
       // Показываем если продукт используется в выбранном департаменте
-      return product.usedInDepartments.includes(selectedDepartment.value)
+      return product.usedInDepartments.includes(selectedDepartment.value as StorageDepartment)
     })
 
     return filtered
@@ -305,21 +334,73 @@ const allProductBalances = computed(() => {
   }
 })
 
-const recentInventories = computed(() => {
-  if (!isStoreReady.value || !storageStore.state?.inventories) {
-    return []
+// ✅ НОВЫЙ computed: подсчёт всех продуктов
+const allItemCount = computed(() => {
+  if (!isStoreReady.value) return 0
+
+  try {
+    return storageStore.state.balances.filter(b => b && b.itemType === 'product').length
+  } catch (error) {
+    return 0
   }
-  return storageStore.state.inventories // ✅ без .value
-    .filter(inv => inv && inv.department === selectedDepartment.value)
-    .slice(0, 20)
 })
+
+const kitchenItemCount = computed(() => {
+  if (!isStoreReady.value) return 0
+
+  try {
+    return storageStore.state.balances.filter(b => {
+      if (!b || b.itemType !== 'product') return false
+      const product = productsStore.products?.find(p => p.id === b.itemId)
+      return product?.usedInDepartments.includes('kitchen')
+    }).length
+  } catch (error) {
+    return 0
+  }
+})
+
+const barItemCount = computed(() => {
+  if (!isStoreReady.value) return 0
+
+  try {
+    return storageStore.state.balances.filter(b => {
+      if (!b || b.itemType !== 'product') return false
+      const product = productsStore.products?.find(p => p.id === b.itemId)
+      return product?.usedInDepartments.includes('bar')
+    }).length
+  } catch (error) {
+    return 0
+  }
+})
+
 const recentOperations = computed(() => {
   if (!isStoreReady.value || !storageStore.state?.operations) {
     return []
   }
-  return storageStore.state.operations // ✅ без .value
-    .filter(op => op && op.department === selectedDepartment.value)
-    .slice(0, 20)
+
+  // ✅ ИЗМЕНЕНО: фильтруем только если НЕ 'all'
+  let operations = storageStore.state.operations
+
+  if (selectedDepartment.value !== 'all') {
+    operations = operations.filter(op => op && op.department === selectedDepartment.value)
+  }
+
+  return operations.slice(0, 20)
+})
+
+const recentInventories = computed(() => {
+  if (!isStoreReady.value || !storageStore.state?.inventories) {
+    return []
+  }
+
+  // ✅ ИЗМЕНЕНО: фильтруем только если НЕ 'all'
+  let inventories = storageStore.state.inventories
+
+  if (selectedDepartment.value !== 'all') {
+    inventories = inventories.filter(inv => inv && inv.department === selectedDepartment.value)
+  }
+
+  return inventories.slice(0, 20)
 })
 
 // ✅ FIXED: Proper computed property access
@@ -343,27 +424,6 @@ const alertCounts = computed(() => {
 const enhancedAlertCounts = computed(() => {
   return {
     ...alertCounts.value
-  }
-})
-
-// ✅ FIXED: Department counts with proper safety checks
-const kitchenItemCount = computed(() => {
-  if (!isStoreReady.value) return 0
-
-  try {
-    return allProductBalances.value.filter(b => b.department === 'kitchen').length
-  } catch (error) {
-    return 0
-  }
-})
-
-const barItemCount = computed(() => {
-  if (!isStoreReady.value) return 0
-
-  try {
-    return allProductBalances.value.filter(b => b.department === 'bar').length
-  } catch (error) {
-    return 0
   }
 })
 
