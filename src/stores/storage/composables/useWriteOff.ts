@@ -3,9 +3,10 @@ import { ref, computed } from 'vue'
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useStorageStore } from '../storageStore'
 import { useProductsStore } from '@/stores/productsStore'
+import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
+
 import type {
   WriteOffReason,
-  StorageDepartment,
   StorageOperation,
   WriteOffStatistics,
   QuickWriteOffItem,
@@ -38,7 +39,7 @@ export function useWriteOff() {
     itemId: string,
     quantity: number,
     reason: WriteOffReason,
-    department: StorageDepartment,
+    department: Department,
     responsiblePerson: string,
     notes?: string
   ): Promise<StorageOperation> {
@@ -100,7 +101,7 @@ export function useWriteOff() {
    */
   async function writeOffMultipleProducts(
     items: QuickWriteOffItem[],
-    department: StorageDepartment,
+    department: Department,
     responsiblePerson: string,
     reason: WriteOffReason,
     notes?: string
@@ -160,7 +161,7 @@ export function useWriteOff() {
    * Quick write-off for expired products in department
    */
   async function writeOffExpiredProducts(
-    department: StorageDepartment,
+    department: Department,
     responsiblePerson: string,
     notes?: string
   ): Promise<StorageOperation | null> {
@@ -263,9 +264,10 @@ export function useWriteOff() {
   /**
    * Get available products for write-off in department
    */
-  function getAvailableProductsForWriteOff(department: StorageDepartment): QuickWriteOffItem[] {
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getAvailableProductsForWriteOff
+  function getAvailableProductsForWriteOff(department: Department): QuickWriteOffItem[] {
     try {
-      // ✅ Filter by Product.usedInDepartments
+      // ✅ Фильтруем balances через Product.usedInDepartments
       const balances = storageStore.state.balances.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
         if (!product) return false
@@ -293,27 +295,40 @@ export function useWriteOff() {
   /**
    * Get products that need attention (expired, near expiry, spoiled)
    */
-  function getProductsNeedingAttention(department: StorageDepartment) {
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getProductsNeedingAttention
+  function getProductsNeedingAttention(department: Department): QuickWriteOffItem[] {
     try {
-      // ✅ Filter by Product.usedInDepartments
+      // ✅ Фильтруем через Product.usedInDepartments
       const balances = storageStore.state.balances.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
         if (!product) return false
         return product.usedInDepartments.includes(department)
       })
 
-      return {
-        expired: balances.filter(b => b.hasExpired),
-        nearExpiry: balances.filter(b => b.hasNearExpiry && !b.hasExpired),
-        lowStock: balances.filter(b => b.belowMinStock)
-      }
+      return balances
+        .filter(balance => balance.hasExpired || balance.hasNearExpiry || balance.totalQuantity > 0)
+        .map(balance => ({
+          itemId: balance.itemId,
+          itemName: balance.itemName,
+          currentQuantity: balance.totalQuantity,
+          unit: balance.unit,
+          writeOffQuantity: balance.totalQuantity,
+          reason: balance.hasExpired ? 'expired' : ('spoiled' as WriteOffReason),
+          notes: balance.hasExpired ? 'Expired' : 'Needs attention',
+          hasExpired: balance.hasExpired,
+          hasNearExpiry: balance.hasNearExpiry
+        }))
+        .sort((a, b) => {
+          // Expired first, then near expiry
+          if (a.hasExpired && !b.hasExpired) return -1
+          if (!a.hasExpired && b.hasExpired) return 1
+          if (a.hasNearExpiry && !b.hasNearExpiry) return -1
+          if (!a.hasNearExpiry && b.hasNearExpiry) return 1
+          return a.itemName.localeCompare(b.itemName)
+        })
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to get products needing attention', { err })
-      return {
-        expired: [],
-        nearExpiry: [],
-        lowStock: []
-      }
+      return []
     }
   }
 
@@ -323,13 +338,12 @@ export function useWriteOff() {
   function calculateWriteOffCost(
     itemId: string,
     quantity: number,
-    department: StorageDepartment
+    department: Department // ✅ Тип изменён
   ): number {
     try {
-      // ИСПРАВЛЕНИЕ: Вместо несуществующего calculateCorrectionCost
-      // используем логику расчета стоимости через балансы и батчи
+      // ✅ НОВАЯ ЛОГИКА: Получаем баланс продукта (БЕЗ department параметра)
+      const balance = storageStore.state.balances.find(b => b.itemId === itemId)
 
-      const balance = storageStore.getBalance(itemId, department)
       if (!balance || !balance.batches || balance.batches.length === 0) {
         DebugUtils.warn(MODULE_NAME, 'No balance or batches found for cost calculation', {
           itemId,
@@ -339,7 +353,17 @@ export function useWriteOff() {
         return 0
       }
 
-      // Получаем активные батчи, отсортированные по FIFO (первый пришел - первый ушел)
+      // ✅ Проверяем, что продукт используется в департаменте
+      const product = productsStore.products.find(p => p.id === itemId)
+      if (!product || !product.usedInDepartments.includes(department)) {
+        DebugUtils.warn(MODULE_NAME, 'Product not used in department', {
+          itemId,
+          department
+        })
+        return 0
+      }
+
+      // Получаем активные батчи, отсортированные по FIFO
       const availableBatches = balance.batches
         .filter(batch => batch.currentQuantity > 0)
         .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
@@ -394,9 +418,9 @@ export function useWriteOff() {
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off cost', { err })
 
-      // Критический fallback: используем среднюю стоимость из баланса
+      // ✅ ИСПРАВЛЕННЫЙ fallback: используем баланс из state
       try {
-        const balance = storageStore.getBalance(itemId, department)
+        const balance = storageStore.state.balances.find(b => b.itemId === itemId)
         const fallbackCost = (balance?.averageCost || 0) * quantity
 
         DebugUtils.warn(MODULE_NAME, 'Using fallback cost calculation', {
@@ -414,32 +438,50 @@ export function useWriteOff() {
     }
   }
 
-  /**
-   * Check if sufficient stock for write-off
-   */
+  // ✅ ПОЛНАЯ ЗАМЕНА метода checkStockAvailability
   function checkStockAvailability(
     itemId: string,
-    quantity: number,
-    department: StorageDepartment
+    requiredQuantity: number,
+    department: Department // ✅ Тип изменён
   ): { available: boolean; currentStock: number; shortage: number } {
     try {
-      const balance = storageStore.getBalance(itemId, department)
+      // ✅ Получаем баланс продукта (без department)
+      const balance = storageStore.state.balances.find(b => b.itemId === itemId)
 
       if (!balance) {
-        return { available: false, currentStock: 0, shortage: quantity }
+        return {
+          available: false,
+          currentStock: 0,
+          shortage: requiredQuantity
+        }
+      }
+
+      // ✅ Проверяем, что продукт используется в департаменте
+      const product = productsStore.products.find(p => p.id === itemId)
+      if (!product || !product.usedInDepartments.includes(department)) {
+        return {
+          available: false,
+          currentStock: 0,
+          shortage: requiredQuantity
+        }
       }
 
       const currentStock = balance.totalQuantity
-      const shortage = Math.max(0, quantity - currentStock)
+      const available = currentStock >= requiredQuantity
+      const shortage = available ? 0 : requiredQuantity - currentStock
 
       return {
-        available: shortage === 0,
+        available,
         currentStock,
         shortage
       }
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to check stock availability', { err })
-      return { available: false, currentStock: 0, shortage: quantity }
+      return {
+        available: false,
+        currentStock: 0,
+        shortage: requiredQuantity
+      }
     }
   }
 
@@ -450,39 +492,34 @@ export function useWriteOff() {
   /**
    * Get write-off statistics for department and period
    */
-  function getWriteOffStatistics(
-    department?: StorageDepartment,
-    dateFrom?: string,
-    dateTo?: string
-  ): WriteOffStatistics {
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getWriteOffStatistics
+  async function getWriteOffStatistics(
+    department: Department | 'all' = 'all', // ✅ Тип изменён
+    period: 'week' | 'month' | 'quarter' | 'year' = 'month'
+  ): Promise<WriteOffStatistics> {
     try {
-      return storageStore.getWriteOffStatistics(department, dateFrom, dateTo)
+      const now = new Date()
+      let dateFrom: string
+
+      switch (period) {
+        case 'week':
+          dateFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+          break
+        case 'month':
+          dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+          break
+        case 'quarter':
+          dateFrom = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString()
+          break
+        case 'year':
+          dateFrom = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString()
+          break
+      }
+
+      return await storageStore.getWriteOffStatistics(department, dateFrom)
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to get write-off statistics', { err })
-      return {
-        total: { count: 0, value: 0 },
-        kpiAffecting: {
-          count: 0,
-          value: 0,
-          reasons: {
-            expired: { count: 0, value: 0 },
-            spoiled: { count: 0, value: 0 },
-            other: { count: 0, value: 0 }
-          }
-        },
-        nonKpiAffecting: {
-          count: 0,
-          value: 0,
-          reasons: {
-            education: { count: 0, value: 0 },
-            test: { count: 0, value: 0 }
-          }
-        },
-        byDepartment: {
-          kitchen: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 },
-          bar: { total: 0, kpiAffecting: 0, nonKpiAffecting: 0 }
-        }
-      }
+      throw err
     }
   }
 
