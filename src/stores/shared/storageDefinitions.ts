@@ -3,13 +3,15 @@
 
 import { DebugUtils, TimeUtils } from '@/utils'
 import { CORE_PRODUCTS, getProductDefinition } from './productDefinitions'
+
+import type { Department } from '@/stores/productsStore/types'
 import type {
   StorageBatch,
   StorageOperation,
   StorageBalance,
-  StorageDepartment,
   BatchAllocation
 } from '@/stores/storage/types'
+import { DEFAULT_WAREHOUSE } from '@/stores/storage/types' // ✅ ДОБАВЛЕНО
 import { type CoreProductDefinition } from './productDefinitions'
 const MODULE_NAME = 'StorageDefinitions'
 
@@ -78,14 +80,13 @@ function calculateTotalValue(quantity: number, costPerUnit: number): number {
  */
 function generateProductBatches(
   productId: string,
-  department: StorageDepartment,
-  targetTotalQuantity: number
+  targetTotalQuantity: number // ✅ Убран параметр department
 ): StorageBatch[] {
   const product = getProductDefinition(productId)
   if (!product) return []
 
   const batches: StorageBatch[] = []
-  let remainingQuantity = Math.round(targetTotalQuantity) // ✅ Start with whole number
+  let remainingQuantity = Math.round(targetTotalQuantity)
 
   // Создаем 1-3 батча для достижения целевого количества
   const batchCount = Math.min(3, Math.ceil(Math.random() * 2) + 1)
@@ -99,11 +100,10 @@ function generateProductBatches(
     } else {
       const ratio = 0.3 + Math.random() * 0.4
       batchQuantity = Math.min(remainingQuantity, Math.round(remainingQuantity * ratio))
-      // Ensure at least 1 unit per batch
       batchQuantity = Math.max(1, batchQuantity)
     }
 
-    const daysAgo = Math.floor(Math.random() * 14) // Батчи за последние 2 недели
+    const daysAgo = Math.floor(Math.random() * 14)
     const receiptDate = TimeUtils.getDateDaysAgo(daysAgo)
 
     // Срок годности зависит от типа продукта
@@ -118,14 +118,15 @@ function generateProductBatches(
     }
 
     batches.push({
-      id: `batch-${productId}-${department}-${i + 1}`,
+      id: `batch-${productId}-${i + 1}`, // ✅ БЕЗ department в ID
       batchNumber: generateBatchNumber(productId, receiptDate),
       itemId: productId,
       itemType: 'product',
-      initialQuantity: batchQuantity, // ✅ Целое число
-      currentQuantity: batchQuantity, // ✅ Целое число
-      unit: product.baseUnit, // ✅ Базовая единица (gram/ml/piece)
-      costPerUnit: product.baseCostPerUnit, // ✅ Цена за базовую единицу
+      warehouseId: DEFAULT_WAREHOUSE.id, // ✅ ДОБАВЛЕНО warehouseId
+      initialQuantity: batchQuantity,
+      currentQuantity: batchQuantity,
+      unit: product.baseUnit,
+      costPerUnit: product.baseCostPerUnit,
       totalValue: calculateTotalValue(batchQuantity, product.baseCostPerUnit),
       receiptDate,
       expiryDate,
@@ -170,28 +171,16 @@ function generateProductBalance(productId: string): StorageBalance | null {
   // Вычисляем текущий остаток на основе конфигурации
   const targetStock = calculateTargetStock(product)
 
-  // ✅ ИЗМЕНЕНО: Генерируем батчи БЕЗ привязки к department
-  // Батчи генерируются для каждого департамента где используется продукт
-  const allBatches: StorageBatch[] = []
-
-  product.usedInDepartments.forEach(dept => {
-    // Распределяем целевой запас между департаментами
-    const deptRatio = 1 / product.usedInDepartments.length
-    const deptTargetStock = Math.round(targetStock * deptRatio)
-
-    if (deptTargetStock > 0) {
-      const deptBatches = generateProductBatches(productId, dept, deptTargetStock)
-      allBatches.push(...deptBatches)
-    }
-  })
+  // ✅ Генерируем батчи БЕЗ привязки к department
+  const batches = generateProductBatches(productId, targetStock)
 
   // Вычисляем общие показатели (все в целых числах)
-  const totalQuantity = allBatches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
-  const totalValue = allBatches.reduce((sum, batch) => sum + batch.totalValue, 0)
+  const totalQuantity = batches.reduce((sum, batch) => sum + batch.currentQuantity, 0)
+  const totalValue = batches.reduce((sum, batch) => sum + batch.totalValue, 0)
   const averageCost = totalQuantity > 0 ? totalValue / totalQuantity : product.baseCostPerUnit
 
   // Находим даты
-  const sortedBatches = allBatches.sort(
+  const sortedBatches = batches.sort(
     (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
   )
 
@@ -200,8 +189,8 @@ function generateProductBalance(productId: string): StorageBalance | null {
     sortedBatches[sortedBatches.length - 1]?.receiptDate || TimeUtils.getCurrentLocalISO()
 
   // Проверки состояния
-  const hasExpired = allBatches.some(b => b.status === 'expired')
-  const hasNearExpiry = allBatches.some(b => {
+  const hasExpired = batches.some(b => b.status === 'expired')
+  const hasNearExpiry = batches.some(b => {
     if (!b.expiryDate) return false
     const daysToExpiry = Math.ceil(
       (new Date(b.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
@@ -220,20 +209,20 @@ function generateProductBalance(productId: string): StorageBalance | null {
     itemId: productId,
     itemType: 'product',
     itemName: product.name,
-    // ❌ УДАЛЕНО: department - больше нет привязки к департаменту!
-    totalQuantity, // ✅ Уже целое число
-    unit: product.baseUnit, // ✅ Базовая единица
+    // ❌ УДАЛЕНО: department
+    totalQuantity,
+    unit: product.baseUnit,
     totalValue: Math.round(totalValue),
-    averageCost: Math.round(averageCost * 1000) / 1000, // Точность до 3 знаков для цены
-    latestCost: product.baseCostPerUnit, // ✅ Цена за базовую единицу
-    costTrend: 'stable', // Упрощенно для мока
-    batches: allBatches,
+    averageCost: Math.round(averageCost * 1000) / 1000,
+    latestCost: product.baseCostPerUnit,
+    costTrend: 'stable',
+    batches: batches,
     oldestBatchDate,
     newestBatchDate,
     hasExpired,
     hasNearExpiry,
     belowMinStock,
-    averageDailyUsage: Math.round(product.dailyConsumption), // ✅ Целое число
+    averageDailyUsage: Math.round(product.dailyConsumption),
     daysOfStockRemaining:
       totalQuantity > 0 ? Math.floor(totalQuantity / product.dailyConsumption) : 0,
     lastCalculated: TimeUtils.getCurrentLocalISO()
@@ -300,17 +289,17 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
   const operationTypes = ['receipt', 'correction', 'write_off'] as const
   const operationType = operationTypes[Math.floor(Math.random() * operationTypes.length)]
 
-  const departments: StorageDepartment[] = ['kitchen', 'bar']
+  const departments: Department[] = ['kitchen', 'bar'] // ✅ Тип изменён
   const department = departments[Math.floor(Math.random() * departments.length)]
 
-  // ✅ ИСПРАВЛЕНО: Выбираем продукты которые используются в этом департаменте
+  // Выбираем продукты которые используются в этом департаменте
   const availableProducts = CORE_PRODUCTS.filter(p => p.usedInDepartments.includes(department))
 
   if (availableProducts.length === 0) return null
 
   const selectedProducts = availableProducts
     .sort(() => Math.random() - 0.5)
-    .slice(0, Math.floor(Math.random() * 3) + 1) // 1-3 продукта
+    .slice(0, Math.floor(Math.random() * 3) + 1)
 
   const items = selectedProducts.map((product, itemIndex) => {
     const quantity = generateReasonableQuantity(product)
@@ -321,8 +310,8 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
       itemId: product.id,
       itemType: 'product' as const,
       itemName: product.name,
-      quantity, // ✅ Уже целое число
-      unit: product.baseUnit, // ✅ Базовая единица
+      quantity,
+      unit: product.baseUnit,
       batchAllocations,
       totalCost: calculateTotalValue(quantity, product.baseCostPerUnit),
       averageCostPerUnit: product.baseCostPerUnit
@@ -336,7 +325,7 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
     operationType,
     documentNumber: generateDocumentNumber(operationType, operationDate, index),
     operationDate,
-    department, // ✅ ПРАВИЛЬНО: операция привязана к департаменту (кто совершил)
+    department, // ✅ Операция привязана к департаменту (кто совершил)
     responsiblePerson: getRandomResponsiblePerson(),
     items,
     totalValue,
@@ -349,7 +338,7 @@ function generateRandomOperation(operationDate: string, index: number): StorageO
   if (operationType === 'write_off') {
     operation.writeOffDetails = {
       reason: getRandomWriteOffReason(),
-      affectsKPI: Math.random() > 0.7, // 30% операций влияют на KPI
+      affectsKPI: Math.random() > 0.7,
       notes: 'Generated for testing'
     }
   }
@@ -549,13 +538,9 @@ function generateTransitTestBatches(): StorageBatch[] {
   const transitBatches: StorageBatch[] = []
   const now = new Date()
 
-  // ============================================
-  // PO-USING-CREDIT (4 позиции)
-  // ============================================
   const futureDelivery = new Date(now)
   futureDelivery.setDate(now.getDate() - 1)
 
-  // Helper для генерации правильного batch number
   const generateTransitBatchNumber = (orderId: string, index: number): string => {
     const date = new Date()
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
@@ -563,12 +548,13 @@ function generateTransitTestBatches(): StorageBatch[] {
     return `TRN-${dateStr}-${orderPrefix}-${index.toString().padStart(2, '0')}`
   }
 
+  // PO-USING-CREDIT (4 позиции)
   transitBatches.push({
-    // ✅ НОВЫЙ ФОРМАТ: transit-{orderId}-{itemId}-{index}
     id: 'transit-po-using-credit-prod-beef-steak-0',
     batchNumber: generateTransitBatchNumber('po-using-credit', 0),
     itemId: 'prod-beef-steak',
     itemType: 'product',
+    warehouseId: DEFAULT_WAREHOUSE.id, // ✅ ДОБАВЛЕНО
     initialQuantity: 3000,
     currentQuantity: 3000,
     unit: 'gram',
@@ -592,6 +578,7 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-using-credit', 1),
     itemId: 'prod-garlic',
     itemType: 'product',
+    warehouseId: DEFAULT_WAREHOUSE.id, // ✅ ДОБАВЛЕНО
     initialQuantity: 1000,
     currentQuantity: 1000,
     unit: 'gram',
@@ -615,6 +602,7 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-using-credit', 2),
     itemId: 'prod-milk',
     itemType: 'product',
+    warehouseId: DEFAULT_WAREHOUSE.id, // ✅ ДОБАВЛЕНО
     initialQuantity: 15000,
     currentQuantity: 15000,
     unit: 'ml',
@@ -638,6 +626,7 @@ function generateTransitTestBatches(): StorageBatch[] {
     batchNumber: generateTransitBatchNumber('po-using-credit', 3),
     itemId: 'prod-olive-oil',
     itemType: 'product',
+    warehouseId: DEFAULT_WAREHOUSE.id, // ✅ ДОБАВЛЕНО
     initialQuantity: 1000,
     currentQuantity: 1000,
     unit: 'ml',
@@ -656,14 +645,13 @@ function generateTransitTestBatches(): StorageBatch[] {
     updatedAt: futureDelivery.toISOString()
   })
 
-  // ============================================
   // PO-003 (1 позиция - Tomato)
-  // ============================================
   transitBatches.push({
     id: 'transit-po-003-prod-tomato-0',
     batchNumber: generateTransitBatchNumber('po-003', 0),
     itemId: 'prod-tomato',
     itemType: 'product',
+    warehouseId: DEFAULT_WAREHOUSE.id, // ✅ ДОБАВЛЕНО
     initialQuantity: 5000,
     currentQuantity: 5000,
     unit: 'gram',

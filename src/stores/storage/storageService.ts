@@ -8,7 +8,6 @@ import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВ
 import type {
   StorageBatch,
   StorageOperation,
-  StorageOperationItem,
   StorageBalance,
   CreateReceiptData,
   CreateWriteOffData,
@@ -102,7 +101,10 @@ export class StorageService {
       const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
       const storageData = mockDataCoordinator.getStorageStoreData()
 
-      this.activeBatches = storageData.batches
+      // ✅ ИСПРАВЛЕНО: Разделяем батчи на active и transit
+      this.activeBatches = storageData.batches.filter(b => b.status === 'active')
+      this.transitBatches = storageData.batches.filter(b => b.status === 'in_transit')
+
       this.operations = storageData.operations
       this.balances = storageData.balances
 
@@ -116,11 +118,20 @@ export class StorageService {
 
       this.initialized = true
 
-      DebugUtils.info(MODULE_NAME, 'StorageService initialized successfully', {
+      DebugUtils.info(MODULE_NAME, 'Storage service initialized', {
         activeBatches: this.activeBatches.length,
+        transitBatches: this.transitBatches.length,
+        // ✅ Детали transit батчей
+        transitBatchDetails: this.transitBatches.map(b => ({
+          id: b.id,
+          itemId: b.itemId,
+          status: b.status,
+          quantity: b.currentQuantity,
+          purchaseOrderId: b.purchaseOrderId
+        })),
         operations: this.operations.length,
-        balances: this.balances.length,
-        warehouses: this.warehouses.length
+        inventories: this.inventories.length,
+        balances: this.balances.length
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to initialize StorageService', { error })
