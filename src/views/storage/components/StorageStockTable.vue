@@ -195,7 +195,7 @@
 
         <!-- ✅ НОВАЯ КОЛОНКА: Used In Departments -->
         <template #[`item.departments`]="{ item }">
-          <div class="d-flex gap-1">
+          <div class="d-flex flex-column gap-2">
             <v-chip
               v-for="dept in getProductDepartments(item.itemId)"
               :key="dept"
@@ -470,7 +470,7 @@ const headers = computed(() => {
       title: 'Used In',
       key: 'departments',
       sortable: false,
-      width: '120px'
+      width: '60px'
     })
   }
 

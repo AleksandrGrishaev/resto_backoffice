@@ -370,31 +370,57 @@ const isDev = computed(() => {
 // ✅ FIXED: Get ALL balances including zero and negative stock
 const allAvailableBalances = computed(() => {
   debugLog('allAvailableBalances computed called', {
-    hasStorageState: !!storageStore.state?.value,
+    hasStorageState: !!storageStore.state,
     hasBalances: !!storageStore.state?.balances,
     balancesLength: storageStore.state?.balances?.length,
+    hasProducts: !!productsStore.products,
+    productsLength: productsStore.products?.length,
     department: props.department
   })
 
-  if (!storageStore.state.balances) {
-    debugLog('allAvailableBalances: no balances available')
+  // Check both stores are ready
+  if (!storageStore.state?.balances || !productsStore.products) {
+    debugLog('allAvailableBalances: stores not ready', {
+      hasBalances: !!storageStore.state?.balances,
+      hasProducts: !!productsStore.products
+    })
     return []
   }
 
-  try {
-    const filtered = storageStore.state.balances.filter(
-      b => b && b.department === props.department && b.itemType === 'product'
-    )
-    debugLog('allAvailableBalances: filtered result', {
-      originalLength: storageStore.state.balances.length,
-      filteredLength: filtered.length,
-      firstBalance: filtered[0]
-    })
-    return filtered
-  } catch (error) {
-    debugLog('allAvailableBalances: error filtering', { error })
+  if (storageStore.state.balances.length === 0) {
+    debugLog('allAvailableBalances: no balances')
     return []
   }
+
+  // Filter by Product.usedInDepartments (NOT by balance.department)
+  const filtered = storageStore.state.balances.filter(balance => {
+    // Only products
+    if (balance.itemType && balance.itemType !== 'product') {
+      return false
+    }
+
+    // Find product definition
+    const product = productsStore.products.find(p => p.id === balance.itemId)
+
+    if (!product) {
+      debugLog('Product not found for balance', {
+        itemId: balance.itemId,
+        itemName: balance.itemName
+      })
+      return false
+    }
+
+    // Check if product is used in this department
+    return product.usedInDepartments.includes(props.department)
+  })
+
+  debugLog('allAvailableBalances result', {
+    totalBalances: storageStore.state.balances.length,
+    filteredCount: filtered.length,
+    department: props.department
+  })
+
+  return filtered
 })
 
 // Get available categories from products in inventory

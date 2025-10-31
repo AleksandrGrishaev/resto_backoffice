@@ -170,17 +170,21 @@ export function useWriteOff() {
 
       DebugUtils.info(MODULE_NAME, 'Writing off expired products', { department })
 
-      // Get expired products
-      const expiredBalances = storageStore.filteredBalances.filter(
-        balance => balance.department === department && balance.hasExpired
-      )
+      // ✅ Filter by Product.usedInDepartments
+      const expiredBalances = storageStore.state.balances.filter(balance => {
+        if (!balance.hasExpired) return false
+
+        const product = productsStore.products.find(p => p.id === balance.itemId)
+        if (!product) return false
+
+        return product.usedInDepartments.includes(department)
+      })
 
       if (expiredBalances.length === 0) {
         DebugUtils.info(MODULE_NAME, 'No expired products found', { department })
         return null
       }
 
-      // Create write-off items for all expired stock
       const writeOffData: CreateWriteOffData = {
         department,
         responsiblePerson,
@@ -188,7 +192,7 @@ export function useWriteOff() {
         items: expiredBalances.map(balance => ({
           itemId: balance.itemId,
           itemType: 'product' as const,
-          quantity: balance.totalQuantity, // Write off all expired stock
+          quantity: balance.totalQuantity,
           notes: `Auto write-off: expired on ${balance.batches.find(b => b.expiryDate)?.expiryDate || 'unknown date'}`
         })),
         notes: notes || 'Automatic write-off of expired products'
@@ -261,7 +265,12 @@ export function useWriteOff() {
    */
   function getAvailableProductsForWriteOff(department: StorageDepartment): QuickWriteOffItem[] {
     try {
-      const balances = storageStore.departmentBalances(department)
+      // ✅ Filter by Product.usedInDepartments
+      const balances = storageStore.state.balances.filter(balance => {
+        const product = productsStore.products.find(p => p.id === balance.itemId)
+        if (!product) return false
+        return product.usedInDepartments.includes(department)
+      })
 
       return balances
         .filter(balance => balance.totalQuantity > 0)
@@ -270,7 +279,7 @@ export function useWriteOff() {
           itemName: balance.itemName,
           currentQuantity: balance.totalQuantity,
           unit: balance.unit,
-          writeOffQuantity: 0, // User will set this
+          writeOffQuantity: 0,
           reason: 'other' as WriteOffReason,
           notes: ''
         }))
@@ -286,7 +295,12 @@ export function useWriteOff() {
    */
   function getProductsNeedingAttention(department: StorageDepartment) {
     try {
-      const balances = storageStore.departmentBalances(department)
+      // ✅ Filter by Product.usedInDepartments
+      const balances = storageStore.state.balances.filter(balance => {
+        const product = productsStore.products.find(p => p.id === balance.itemId)
+        if (!product) return false
+        return product.usedInDepartments.includes(department)
+      })
 
       return {
         expired: balances.filter(b => b.hasExpired),
