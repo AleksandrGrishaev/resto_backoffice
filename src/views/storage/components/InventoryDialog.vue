@@ -302,12 +302,9 @@
 import { ref, computed, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
-import type {
-  StorageDepartment,
-  CreateInventoryData,
-  InventoryItem,
-  InventoryDocument
-} from '@/stores/storage'
+import { useInventory } from '@/stores/storage' // ✅ ДОБАВЛЕНО
+import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
+import type { CreateInventoryData, InventoryItem, InventoryDocument } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
 import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 
@@ -316,10 +313,13 @@ import InventoryItemRow from './InventoryItemRow.vue'
 
 const MODULE_NAME = 'InventoryDialog'
 
-// Props
+// ===========================
+// PROPS
+// ===========================
+
 interface Props {
   modelValue: boolean
-  department: StorageDepartment
+  department: Department // ✅ Тип изменён
   existingInventory?: InventoryDocument | null
 }
 
@@ -327,18 +327,28 @@ const props = withDefaults(defineProps<Props>(), {
   existingInventory: null
 })
 
-// Emits
+// ===========================
+// EMITS
+// ===========================
+
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   success: [message: string]
   error: [message: string]
 }>()
 
-// Stores
+// ===========================
+// STORES & COMPOSABLES
+// ===========================
+
 const storageStore = useStorageStore()
 const productsStore = useProductsStore()
+const inventory = useInventory() // ✅ ДОБАВЛЕНО
 
-// State
+// ===========================
+// STATE
+// ===========================
+
 const form = ref()
 const isFormValid = ref(false)
 const loading = ref(false)
@@ -349,7 +359,7 @@ const inventoryItems = ref<InventoryItem[]>([])
 const currentInventory = ref<InventoryDocument | null>(null)
 const showDebugInfo = ref(false)
 
-const debugLog = (message, data = {}) => {
+const debugLog = (message: string, data = {}) => {
   console.log(`[InventoryDialog] ${message}`, {
     ...data,
     timestamp: new Date().toISOString(),
@@ -362,68 +372,33 @@ const debugLog = (message, data = {}) => {
   })
 }
 
-// Dev mode check
+// ===========================
+// COMPUTED - Store Status
+// ===========================
+
 const isDev = computed(() => {
   return process.env.NODE_ENV === 'development' || import.meta.env?.DEV
 })
 
-// ✅ FIXED: Get ALL balances including zero and negative stock
+// ===========================
+// COMPUTED - Filtered Balances через inventory composable
+// ===========================
+
+// ✅ НОВОЕ: Получаем balances через inventory composable
 const allAvailableBalances = computed(() => {
   debugLog('allAvailableBalances computed called', {
-    hasStorageState: !!storageStore.state,
-    hasBalances: !!storageStore.state?.balances,
-    balancesLength: storageStore.state?.balances?.length,
-    hasProducts: !!productsStore.products,
-    productsLength: productsStore.products?.length,
-    department: props.department
+    department: props.department,
+    balancesLength: inventory.filteredBalances.value.length
   })
 
-  // Check both stores are ready
-  if (!storageStore.state?.balances || !productsStore.products) {
-    debugLog('allAvailableBalances: stores not ready', {
-      hasBalances: !!storageStore.state?.balances,
-      hasProducts: !!productsStore.products
-    })
-    return []
-  }
-
-  if (storageStore.state.balances.length === 0) {
-    debugLog('allAvailableBalances: no balances')
-    return []
-  }
-
-  // Filter by Product.usedInDepartments (NOT by balance.department)
-  const filtered = storageStore.state.balances.filter(balance => {
-    // Only products
-    if (balance.itemType && balance.itemType !== 'product') {
-      return false
-    }
-
-    // Find product definition
-    const product = productsStore.products.find(p => p.id === balance.itemId)
-
-    if (!product) {
-      debugLog('Product not found for balance', {
-        itemId: balance.itemId,
-        itemName: balance.itemName
-      })
-      return false
-    }
-
-    // Check if product is used in this department
-    return product.usedInDepartments.includes(props.department)
-  })
-
-  debugLog('allAvailableBalances result', {
-    totalBalances: storageStore.state.balances.length,
-    filteredCount: filtered.length,
-    department: props.department
-  })
-
-  return filtered
+  // Получаем отфильтрованные balances (БЕЗ side effect)
+  return inventory.filteredBalances.value
 })
 
-// Get available categories from products in inventory
+// ===========================
+// COMPUTED - Categories
+// ===========================
+
 const availableCategories = computed(() => {
   try {
     const categories = new Set<string>()
@@ -442,7 +417,6 @@ const availableCategories = computed(() => {
   }
 })
 
-// Categories with counts for filter dropdown
 const categoriesWithCount = computed(() => {
   const categoryMap = new Map<string, { count: number; name: string }>()
 
@@ -458,7 +432,6 @@ const categoriesWithCount = computed(() => {
       categoryMap.get(category)!.count++
     })
 
-    // Build dropdown items
     const result = [
       {
         title: `All Products (${inventoryItems.value.length})`,
@@ -466,7 +439,6 @@ const categoriesWithCount = computed(() => {
       }
     ]
 
-    // Add categories sorted by name
     Array.from(categoryMap.entries())
       .sort(([, a], [, b]) => a.name.localeCompare(b.name))
       .forEach(([categoryKey, categoryData]) => {
@@ -483,14 +455,16 @@ const categoriesWithCount = computed(() => {
   }
 })
 
-// ✅ ИСПРАВЛЕНО: Добавлена защита от undefined
+// ===========================
+// COMPUTED - Summary & Stats
+// ===========================
+
 const stockSummary = computed(() => {
   debugLog('stockSummary computed called', {
     inventoryItems: inventoryItems.value,
     hasInventoryItems: !!inventoryItems.value
   })
 
-  // Защита от undefined с логированием
   if (!inventoryItems.value) {
     debugLog('stockSummary: inventoryItems.value is null/undefined')
     return { total: 0, withStock: 0, zeroStock: 0, negativeStock: 0 }
@@ -504,11 +478,6 @@ const stockSummary = computed(() => {
     return { total: 0, withStock: 0, zeroStock: 0, negativeStock: 0 }
   }
 
-  debugLog('stockSummary: processing array', {
-    length: inventoryItems.value.length,
-    firstItem: inventoryItems.value[0]
-  })
-
   const total = inventoryItems.value.length
   const withStock = inventoryItems.value.filter(item => item.systemQuantity > 0).length
   const zeroStock = inventoryItems.value.filter(item => item.systemQuantity === 0).length
@@ -520,9 +489,7 @@ const stockSummary = computed(() => {
   return result
 })
 
-// ✅ ИСПРАВЛЕНО: Защита от undefined в sectionsWithItems
 const sectionsWithItems = computed(() => {
-  // Проверяем, что inventoryItems.value существует и является массивом
   if (!inventoryItems.value || !Array.isArray(inventoryItems.value)) {
     return []
   }
@@ -557,11 +524,9 @@ const sectionsWithItems = computed(() => {
       items = items.filter(item => item.systemQuantity === 0)
       break
     default:
-      // show all
       break
   }
 
-  // If filtering, return single section
   if (filterType.value !== 'all') {
     return [
       {
@@ -574,7 +539,6 @@ const sectionsWithItems = computed(() => {
     ]
   }
 
-  // Return sections grouped by stock status
   return [
     {
       key: 'withStock',
@@ -600,7 +564,6 @@ const sectionsWithItems = computed(() => {
   ].filter(section => section.items.length > 0)
 })
 
-// ✅ ИСПРАВЛЕНО: Защита от undefined в других computed свойствах
 const totalItems = computed(() => {
   return inventoryItems.value?.length || 0
 })
@@ -619,7 +582,6 @@ const filteredItems = computed(() => {
 
   let items = [...inventoryItems.value]
 
-  // Apply category filter
   if (categoryFilter.value !== 'all') {
     items = items.filter(item => {
       try {
@@ -632,7 +594,6 @@ const filteredItems = computed(() => {
     })
   }
 
-  // Apply status filter
   switch (filterType.value) {
     case 'discrepancy':
       items = items.filter(item => Math.abs(item.difference) > 0.01)
@@ -647,21 +608,11 @@ const filteredItems = computed(() => {
       items = items.filter(item => item.systemQuantity === 0)
       break
     default:
-      // show all
       break
   }
 
   return items
 })
-
-// Helper for determining if item has been counted
-function hasItemBeenCounted(item: InventoryItem): boolean {
-  return (
-    !!item.countedBy ||
-    Math.abs(item.actualQuantity - item.systemQuantity) > 0.001 ||
-    item.confirmed === true
-  )
-}
 
 const progressPercentage = computed(() =>
   totalItems.value > 0 ? (countedItems.value / totalItems.value) * 100 : 0
@@ -706,8 +657,11 @@ const canFinalize = computed(() => {
   return hasChanges.value && totalItems.value > 0
 })
 
-// Methods
-function formatDepartment(dept: StorageDepartment): string {
+// ===========================
+// METHODS - Helpers
+// ===========================
+
+function formatDepartment(dept: Department): string {
   return dept === 'kitchen' ? 'Kitchen' : 'Bar'
 }
 
@@ -726,6 +680,14 @@ function getItemIndex(itemId: string): number {
 function clearAllFilters() {
   categoryFilter.value = 'all'
   filterType.value = 'all'
+}
+
+function hasItemBeenCounted(item: InventoryItem): boolean {
+  return (
+    !!item.countedBy ||
+    Math.abs(item.actualQuantity - item.systemQuantity) > 0.001 ||
+    item.confirmed === true
+  )
 }
 
 function updateInventoryItem(updatedItem: InventoryItem) {
@@ -748,23 +710,18 @@ function updateInventoryItem(updatedItem: InventoryItem) {
   }
 }
 
-// ✅ FIXED: Initialize inventory items with ALL balances (including zero/negative stock)
+// ===========================
+// METHODS - Initialization
+// ===========================
+
 function initializeInventoryItems() {
   debugLog('initializeInventoryItems called', {
     department: props.department,
-    hasStorageStore: !!storageStore,
-    hasStorageState: !!storageStore.state,
     balancesAvailable: allAvailableBalances.value?.length || 0
   })
 
   try {
     const balances = allAvailableBalances.value
-
-    debugLog('initializeInventoryItems: got balances', {
-      balances: balances,
-      balancesLength: balances?.length,
-      balancesType: typeof balances
-    })
 
     if (!balances || !Array.isArray(balances)) {
       debugLog('initializeInventoryItems: invalid balances')
@@ -774,38 +731,28 @@ function initializeInventoryItems() {
 
     if (balances.length === 0) {
       debugLog('initializeInventoryItems: no balances for department', {
-        department: props.department,
-        allBalances: storageStore.state?.balances?.length || 0
+        department: props.department
       })
       inventoryItems.value = []
       return
     }
 
-    const newItems = balances.map((balance, index) => {
-      debugLog(`Processing balance ${index}`, { balance })
+    const newItems = balances.map(balance => ({
+      id: `inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      itemId: balance.itemId,
+      itemType: balance.itemType,
+      itemName: balance.itemName,
+      systemQuantity: balance.totalQuantity,
+      actualQuantity: balance.totalQuantity,
+      difference: 0,
+      unit: balance.unit,
+      averageCost: balance.averageCost,
+      valueDifference: 0,
+      notes: '',
+      countedBy: '',
+      confirmed: false
+    }))
 
-      return {
-        id: `inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        itemId: balance.itemId,
-        itemType: balance.itemType,
-        itemName: balance.itemName,
-        systemQuantity: balance.totalQuantity,
-        actualQuantity: balance.totalQuantity,
-        difference: 0,
-        unit: balance.unit,
-        averageCost: balance.averageCost,
-        valueDifference: 0,
-        notes: '',
-        countedBy: ''
-      }
-    })
-
-    debugLog('initializeInventoryItems: setting inventoryItems', {
-      newItemsLength: newItems.length,
-      firstItem: newItems[0]
-    })
-
-    // Сначала логируем ПЕРЕД присвоением
     debugLog('BEFORE setting inventoryItems.value', {
       oldValue: inventoryItems.value,
       newValue: newItems
@@ -813,7 +760,6 @@ function initializeInventoryItems() {
 
     inventoryItems.value = newItems
 
-    // Затем логируем AFTER присвоения
     debugLog('AFTER setting inventoryItems.value', {
       currentValue: inventoryItems.value,
       isArray: Array.isArray(inventoryItems.value),
@@ -862,6 +808,10 @@ function loadExistingInventory() {
   }
 }
 
+// ===========================
+// METHODS - Actions
+// ===========================
+
 async function handleSaveDraft() {
   if (!canSaveDraft.value) return
 
@@ -874,27 +824,24 @@ async function handleSaveDraft() {
       totalItems: totalItems.value
     })
 
+    // ✅ ИЗМЕНЕНО: Используем inventory composable
     if (!currentInventory.value) {
       const inventoryData: CreateInventoryData = {
         department: props.department,
         responsiblePerson: responsiblePerson.value
       }
 
-      currentInventory.value = await storageStore.startInventory(inventoryData)
+      currentInventory.value = await inventory.startInventory(inventoryData)
       DebugUtils.info(MODULE_NAME, 'New inventory created', {
         inventoryId: currentInventory.value.id
       })
     }
 
-    if (storageStore.updateInventory) {
-      const updatedInventory = await storageStore.updateInventory(
-        currentInventory.value.id,
-        inventoryItems.value
-      )
-      currentInventory.value = updatedInventory
-    } else {
-      DebugUtils.warn(MODULE_NAME, 'updateInventory method not available in store')
-    }
+    const updatedInventory = await inventory.updateInventory(
+      currentInventory.value.id,
+      inventoryItems.value
+    )
+    currentInventory.value = updatedInventory
 
     DebugUtils.info(MODULE_NAME, 'Inventory draft saved successfully', {
       inventoryId: currentInventory.value.id,
@@ -928,22 +875,18 @@ async function handleFinalize() {
       allItemsCounted: isComplete.value
     })
 
+    // ✅ ИЗМЕНЕНО: Используем inventory composable
     if (!currentInventory.value) {
       const inventoryData: CreateInventoryData = {
         department: props.department,
         responsiblePerson: responsiblePerson.value
       }
 
-      currentInventory.value = await storageStore.startInventory(inventoryData)
+      currentInventory.value = await inventory.startInventory(inventoryData)
     }
 
-    if (storageStore.updateInventory) {
-      await storageStore.updateInventory(currentInventory.value.id, inventoryItems.value)
-    }
-
-    if (storageStore.finalizeInventory) {
-      await storageStore.finalizeInventory(currentInventory.value.id)
-    }
+    await inventory.updateInventory(currentInventory.value.id, inventoryItems.value)
+    await inventory.finalizeInventory(currentInventory.value.id)
 
     DebugUtils.info(MODULE_NAME, 'Inventory finalized successfully', {
       inventoryId: currentInventory.value.id,
@@ -984,32 +927,23 @@ function resetForm() {
   }
 }
 
-// Initialize stores when component mounts
-async function initializeStores() {
-  try {
-    // Load products store if not loaded
-    if (productsStore.products.length === 0) {
-      await productsStore.loadProducts(true) // use mock data
-    }
+// ===========================
+// WATCHERS
+// ===========================
 
-    DebugUtils.info(MODULE_NAME, 'Stores initialized', {
-      productsCount: productsStore.products.length
-    })
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to initialize stores', { error })
-  }
-}
+watch(
+  () => props.department,
+  newDept => {
+    inventory.selectedDepartment.value = newDept
+  },
+  { immediate: true }
+)
 
-// Watch for dialog open
 watch(
   () => props.modelValue,
   async isOpen => {
     if (isOpen) {
       try {
-        // Initialize stores before loading data
-        await initializeStores()
-
-        // Проверяем готовность stores перед инициализацией
         if (!storageStore.initialized || !productsStore.products) {
           console.warn('Stores not ready yet')
           return
@@ -1029,7 +963,6 @@ watch(
   { immediate: true }
 )
 
-// Watch for existing inventory changes
 watch(
   () => props.existingInventory,
   newInventory => {
