@@ -280,14 +280,13 @@ export function useReceipts() {
 
       // ✅ ШАГ 3: ОБНОВЛЯЕМ BALANCES (теперь данные корректные)
       try {
-        const department = receipt.department || 'kitchen'
+        const department = getDepartmentFromOrder(order)
         await storageStore.fetchBalances(department)
 
         DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER balances refresh', {
-          storageStoreBatches: storageStore.state.batches.length,
-          storageStoreActive: storageStore.state.batches.filter(b => b.status === 'active').length,
-          storageStoreTransit: storageStore.state.batches.filter(b => b.status === 'in_transit')
-            .length,
+          activeBatches: storageStore.state.activeBatches.length, // ✅ Правильное поле
+          transitBatches: storageStore.state.transitBatches.length, // ✅ Правильное поле
+          balances: storageStore.state.balances.length,
           department
         })
 
@@ -299,9 +298,12 @@ export function useReceipts() {
       // ✅ ШАГ 4: ЗАВЕРШАЕМ ПРИЕМКУ
       const completedReceipt = await updateReceipt(receiptId, {
         status: 'completed',
-        completedDate: new Date().toISOString(),
-        storageOperationId: operationId
+        notes: receipt.notes
       })
+
+      if (operationId) {
+        completedReceipt.storageOperationId = operationId
+      }
 
       // ✅ ШАГ 5: ОБНОВЛЯЕМ ЗАКАЗ
       await updateOrderAfterReceiptCompletion(completedReceipt, order, receipt.receivedBy)

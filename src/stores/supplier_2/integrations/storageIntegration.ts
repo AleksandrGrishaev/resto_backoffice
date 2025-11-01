@@ -66,8 +66,12 @@ export class SupplierStorageIntegration {
       const suggestions: OrderSuggestion[] = []
 
       for (const balance of balancesWithTransit) {
-        if (department && balance.department !== department) {
-          continue
+        // ✅ Фильтруем через Product.usedInDepartments
+        if (department) {
+          const product = productsStore.products.find(p => p.id === balance.itemId)
+          if (!product || !product.usedInDepartments.includes(department)) {
+            continue
+          }
         }
 
         const product = productsStore.products.find(p => p.id === balance.itemId)
@@ -314,11 +318,8 @@ export class SupplierStorageIntegration {
 
       for (const itemId of itemIds) {
         try {
-          // ✅ FIX 4: Added department parameter (try both departments)
-          const kitchenBalance = storageStore.getBalance(itemId, 'kitchen')
-          const barBalance = storageStore.getBalance(itemId, 'bar')
-
-          const balance = kitchenBalance || barBalance
+          // ✅ Теперь один баланс на продукт
+          const balance = storageStore.state.balances.find(b => b.itemId === itemId)
 
           if (balance && balance.latestCost) {
             prices[itemId] = balance.latestCost
