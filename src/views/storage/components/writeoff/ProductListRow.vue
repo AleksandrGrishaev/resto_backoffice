@@ -56,7 +56,7 @@
 import { computed } from 'vue'
 import { useStorageStore } from '@/stores/storage'
 import { formatIDR } from '@/utils/currency'
-import type { StorageDepartment } from '@/stores/storage/types'
+import type { Department } from '@/stores/productsStore/types'
 
 interface Product {
   id: string
@@ -68,7 +68,7 @@ interface Product {
 
 interface Props {
   product: Product
-  department: StorageDepartment
+  department: Department
   isSelected?: boolean
 }
 
@@ -85,7 +85,8 @@ const storageStore = useStorageStore()
 
 // Computed
 const productBalance = computed(() => {
-  return storageStore.getBalance(props.product.id, props.department)
+  // ✅ НОВАЯ ЛОГИКА: getBalance без department параметра
+  return storageStore.state.balances.find(b => b.itemId === props.product.id) || null
 })
 
 const productStock = computed(() => {

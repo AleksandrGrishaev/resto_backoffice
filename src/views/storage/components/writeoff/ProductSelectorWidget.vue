@@ -43,16 +43,12 @@
     <!-- Department Badge -->
     <div class="department-badge mb-3">
       <v-chip
-        :color="department === 'kitchen' ? 'success' : 'primary'"
+        :color="writeOff.getDepartmentColor(department)"
         variant="tonal"
         size="large"
-        :prepend-icon="department === 'kitchen' ? 'mdi-silverware-fork-knife' : 'mdi-coffee'"
+        :prepend-icon="writeOff.getDepartmentIcon(department)"
       >
-        {{
-          department === 'kitchen'
-            ? '🍳 Kitchen Department - Raw Materials Only'
-            : '🍺 Bar Department - Beverages Only'
-        }}
+        {{ writeOff.getDepartmentName(department) }} Department
       </v-chip>
     </div>
 
@@ -290,7 +286,8 @@ import { formatIDR } from '@/utils/currency'
 import { DebugUtils } from '@/utils'
 import ProductListRow from './ProductListRow.vue'
 import WriteOffQuantityDialog from './WriteOffQuantityDialog.vue'
-import type { StorageDepartment } from '@/stores/storage/types'
+import type { Department } from '@/stores/productsStore/types'
+import { useWriteOff } from '@/stores/storage'
 
 const MODULE_NAME = 'ProductSelectorWidget'
 
@@ -303,7 +300,7 @@ interface Product {
 }
 
 interface Props {
-  department: StorageDepartment
+  department: Department
   canSelect?: boolean
   multiSelect?: boolean
   showSelectionSummary?: boolean
@@ -324,6 +321,7 @@ const emit = defineEmits<{
 // Stores
 const storageStore = useStorageStore()
 const productsStore = useProductsStore()
+const writeOff = useWriteOff()
 
 // State
 const searchTerm = ref('')
@@ -354,40 +352,13 @@ const statusFilterOptions = [
 
 const availableProducts = computed(() => {
   try {
-    if (!productsStore?.products || productsStore.products.length === 0) {
-      return []
-    }
-
-    let departmentProducts: any[] = []
-
-    if (props.department === 'kitchen') {
-      departmentProducts = productsStore.products.filter(
-        product =>
-          product.isActive &&
-          !product.canBeSold &&
-          [
-            'meat',
-            'vegetables',
-            'dairy',
-            'spices',
-            'cereals',
-            'fruits',
-            'seafood',
-            'other'
-          ].includes(product.category)
-      )
-    } else if (props.department === 'bar') {
-      departmentProducts = productsStore.products.filter(
-        product => product.isActive && product.canBeSold && ['beverages'].includes(product.category)
-      )
-    }
-
-    return departmentProducts.map(product => ({
-      id: product.id,
-      name: product.name,
-      unit: product.unit,
-      category: product.category,
-      isActive: product.isActive
+    // ✅ НОВАЯ ЛОГИКА: Используем writeOff.availableProducts
+    return writeOff.availableProducts.value.map(item => ({
+      id: item.itemId,
+      name: item.itemName,
+      unit: item.unit,
+      category: productsStore.products.find(p => p.id === item.itemId)?.category || 'other',
+      isActive: true
     }))
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to compute available products', { error })
@@ -409,12 +380,12 @@ const categoryOptions = computed(() => {
 // ГЛАВНОЕ ИСПРАВЛЕНИЕ: безопасное получение балансов
 const productBalances = computed(() => {
   try {
-    if (!storageStore?.initialized || typeof storageStore.departmentBalances !== 'function') {
-      return []
-    }
-
-    const balances = storageStore.departmentBalances(props.department)
-    return Array.isArray(balances) ? balances : []
+    // ✅ НОВАЯ ЛОГИКА: Фильтруем через Product.usedInDepartments
+    return storageStore.state.balances.filter(balance => {
+      const product = productsStore.products.find(p => p.id === balance.itemId)
+      if (!product) return false
+      return product.usedInDepartments.includes(props.department)
+    })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to get department balances', { error })
     return []
@@ -509,10 +480,19 @@ const sortedDisplayedProducts = computed(() => {
 })
 
 const expiredProducts = computed(() => {
-  return availableProducts.value.filter(product => {
-    const balance = productBalances.value?.find(b => b?.itemId === product.id)
-    return balance?.hasExpired || false
-  })
+  try {
+    // ✅ ИСПОЛЬЗУЕМ composable
+    return writeOff.expiredProducts.value.map(item => ({
+      id: item.itemId,
+      name: item.itemName,
+      unit: item.unit,
+      category: productsStore.products.find(p => p.id === item.itemId)?.category || 'other',
+      isActive: true
+    }))
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to get expired products', { error })
+    return []
+  }
 })
 
 const expiringProducts = computed(() => {
@@ -545,12 +525,12 @@ const hasFilters = computed(() => {
 // ИСПРАВЛЕНИЕ isLoading - безопасная проверка состояния
 const isLoading = computed(() => {
   try {
-    // ✅ ИСПРАВИТЬ доступ к Pinia store:
-    const storeLoading = storageStore?.state?.loading?.balances || false // без .value
-    const productsLoading = productsStore?.loading || false
+    const storeLoading = storageStore.state.loading.balances
+    const productsLoading = productsStore.loading
     const notInitialized = !isInitialized.value
+    const composableLoading = writeOff.loading.value // ✅ ДОБАВИТЬ
 
-    return storeLoading || productsLoading || notInitialized
+    return storeLoading || productsLoading || notInitialized || composableLoading
   } catch (error) {
     DebugUtils.warn(MODULE_NAME, 'Error checking loading state', { error })
     return true
@@ -732,13 +712,13 @@ function getEmptyStateMessage(): string {
 // LIFECYCLE - ИСПРАВЛЕНА ИНИЦИАЛИЗАЦИЯ
 // =============================================
 
-async function initializeForDepartment(department: StorageDepartment) {
+async function initializeForDepartment(department: Department) {
+  // ✅ Изменён тип
   try {
-    DebugUtils.info(MODULE_NAME, 'Store state check', {
+    DebugUtils.info(MODULE_NAME, 'Initializing product selector', {
+      department,
       hasStorageStore: !!storageStore,
-      storeInitialized: storageStore?.initialized,
-      storeState: !!storageStore?.state,
-      storeBalances: storageStore?.state?.balances?.length || 0
+      storeInitialized: storageStore?.initialized
     })
 
     // ✅ Store уже инициализирован глобально
@@ -751,9 +731,10 @@ async function initializeForDepartment(department: StorageDepartment) {
       return
     }
 
-    // ✅ Только ожидаем готовности данных, не перезагружаем
-    await nextTick()
+    // ✅ Sync composable department
+    writeOff.selectedDepartment.value = department
 
+    await nextTick()
     isInitialized.value = true
 
     DebugUtils.info(MODULE_NAME, 'ProductSelector ready', {
@@ -762,19 +743,15 @@ async function initializeForDepartment(department: StorageDepartment) {
       productBalances: productBalances.value.length
     })
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to prepare ProductSelector', { error, department })
+    DebugUtils.error(MODULE_NAME, 'Failed to initialize ProductSelector', { error, department })
   }
 }
 watch(
   () => props.department,
-  async (newDepartment, oldDepartment) => {
-    if (newDepartment === oldDepartment) return
-
-    clearSelection()
-    clearAllFilters()
-    isInitialized.value = false
-    await initializeForDepartment(newDepartment)
-  }
+  dept => {
+    writeOff.selectedDepartment.value = dept
+  },
+  { immediate: true }
 )
 
 onMounted(async () => {

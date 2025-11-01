@@ -40,12 +40,12 @@
 import { ref } from 'vue'
 import { DebugUtils } from '@/utils'
 import WriteoffDialog from './WriteoffDialog.vue'
-import type { StorageDepartment } from '@/stores/storage/types'
+import type { Department } from '@/stores/productsStore/types'
 
 const MODULE_NAME = 'WriteOffWidget'
 
 interface Props {
-  department: StorageDepartment
+  department: Department
 }
 
 const props = defineProps<Props>()

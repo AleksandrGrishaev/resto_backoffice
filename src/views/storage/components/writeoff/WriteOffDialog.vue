@@ -5,7 +5,7 @@
     max-width="1200"
     persistent
     scrollable
-    @update:model-value="$emit('update:modelValue', $event)"
+    @update:model-value="$emit('update:model-value', $event)"
   >
     <v-card>
       <!-- Header -->
@@ -33,7 +33,29 @@
                 variant="outlined"
                 density="comfortable"
                 :rules="[rules.required]"
-              />
+              >
+                <!-- ✅ ДОБАВИТЬ: Иконки в dropdown -->
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template #prepend>
+                      <v-icon :icon="item.raw.icon" :color="item.raw.color" />
+                    </template>
+                  </v-list-item>
+                </template>
+
+                <!-- ✅ ДОБАВИТЬ: Иконка в выбранном значении -->
+                <template #selection="{ item }">
+                  <div class="d-flex align-center">
+                    <v-icon
+                      :icon="item.raw.icon"
+                      :color="item.raw.color"
+                      size="small"
+                      class="mr-2"
+                    />
+                    <span>{{ item.raw.title }}</span>
+                  </div>
+                </template>
+              </v-select>
             </v-col>
             <v-col cols="12" md="6">
               <v-text-field
@@ -265,12 +287,13 @@ import { useStorageStore } from '@/stores/storage'
 import { formatIDR } from '@/utils/currency'
 import { DebugUtils } from '@/utils'
 import ProductSelectorWidget from './ProductSelectorWidget.vue'
-import type { WriteOffReason, StorageDepartment, QuickWriteOffItem } from '@/stores/storage/types'
+import type { Department } from '@/stores/productsStore/types' // ✅ ИЗМЕНИТЬ
+import type { WriteOffReason, QuickWriteOffItem } from '@/stores/storage/types'
 
 const MODULE_NAME = 'WriteOffDialog'
 
 interface WriteOffFormData {
-  department: StorageDepartment
+  department: Department // ✅ ИЗМЕНИТЬ
   responsiblePerson: string
   reason: WriteOffReason
   items: Array<{
@@ -283,7 +306,7 @@ interface WriteOffFormData {
 
 interface Props {
   modelValue: boolean
-  department?: StorageDepartment
+  department?: Department // ✅ ИЗМЕНИТЬ
   preselectedProducts?: QuickWriteOffItem[]
 }
 
@@ -317,9 +340,23 @@ const formData = ref<WriteOffFormData>({
 
 // Computed
 const departmentOptions = computed(() => [
-  { title: 'Kitchen', value: 'kitchen' },
-  { title: 'Bar', value: 'bar' }
+  {
+    title: 'Kitchen',
+    value: 'kitchen' as Department, // ✅ Явно указываем тип
+    icon: 'mdi-silverware-fork-knife',
+    color: 'success'
+  },
+  {
+    title: 'Bar',
+    value: 'bar' as Department, // ✅ Явно указываем тип
+    icon: 'mdi-coffee',
+    color: 'info'
+  }
 ])
+
+const availableProducts = computed(() => {
+  return writeOff.availableProducts.value
+})
 
 const writeOffReasonOptions = computed(() => writeOff.writeOffReasonOptions.value)
 
@@ -413,7 +450,7 @@ function refreshProducts() {
 
 // Helper methods
 function getProductStock(productId: string): number {
-  const balance = storageStore.getBalance(productId, formData.value.department)
+  const balance = storageStore.state.balances.find(b => b.itemId === productId)
   return balance?.totalQuantity || 0
 }
 
@@ -426,7 +463,7 @@ function getProductName(productId: string): string {
 }
 
 function getProductStatusIcon(productId: string): string {
-  const balance = storageStore.getBalance(productId, formData.value.department)
+  const balance = storageStore.state.balances.find(b => b.itemId === productId)
 
   if (!balance || balance.totalQuantity === 0) return 'mdi-package-variant-closed'
   if (balance.hasExpired) return 'mdi-alert-circle'
@@ -436,7 +473,7 @@ function getProductStatusIcon(productId: string): string {
 }
 
 function getProductStatusColor(productId: string): string {
-  const balance = storageStore.getBalance(productId, formData.value.department)
+  const balance = storageStore.state.balances.find(b => b.itemId === productId)
 
   if (!balance || balance.totalQuantity === 0) return 'grey'
   if (balance.hasExpired) return 'error'
@@ -532,9 +569,10 @@ watch(
 // Watch department changes
 watch(
   () => formData.value.department,
-  () => {
-    formData.value.items = []
-  }
+  dept => {
+    writeOff.selectedDepartment.value = dept
+  },
+  { immediate: true }
 )
 </script>
 

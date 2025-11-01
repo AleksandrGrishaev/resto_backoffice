@@ -1,16 +1,19 @@
-// src/stores/storage/composables/useWriteOff.ts - UPDATED WITH FILTERING
+// src/stores/storage/composables/useWriteOff.ts - COMPLETE WRITE-OFF COMPOSABLE
 import { ref, computed } from 'vue'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, TimeUtils } from '@/utils'
 import { useStorageStore } from '../storageStore'
 import { useProductsStore } from '@/stores/productsStore'
-import type { Department } from '@/stores/productsStore/types'
+import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
 
 import type {
   WriteOffReason,
   StorageOperation,
   WriteOffStatistics,
   QuickWriteOffItem,
-  CreateWriteOffData
+  CreateWriteOffData,
+  WriteOffItem,
+  StorageOperationItem,
+  BatchAllocation
 } from '../types'
 import { doesWriteOffAffectKPI, WRITE_OFF_REASON_OPTIONS, getWriteOffReasonInfo } from '../types'
 
@@ -24,130 +27,6 @@ export function useWriteOff() {
   // Local state
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const selectedDepartment = ref<Department | 'all'>('all') // ✅ ДОБАВЛЕНО
-
-  // ===========================
-  // COMPUTED - Filtered Products
-  // ===========================
-
-  /**
-   * ✅ НОВОЕ: Available products filtered by department
-   */
-  const availableProducts = computed((): QuickWriteOffItem[] => {
-    try {
-      const dept = selectedDepartment.value
-
-      return storageStore.state.balances
-        .filter(balance => {
-          // Only with stock
-          if (balance.totalQuantity <= 0) return false
-
-          // Filter by department through Product
-          if (dept !== 'all') {
-            const product = productsStore.products.find(p => p.id === balance.itemId)
-            if (!product) return false
-            return product.usedInDepartments.includes(dept as Department)
-          }
-
-          return true
-        })
-        .map(balance => ({
-          itemId: balance.itemId,
-          itemName: balance.itemName,
-          currentQuantity: balance.totalQuantity,
-          unit: balance.unit,
-          writeOffQuantity: 0,
-          reason: 'other' as WriteOffReason,
-          notes: ''
-        }))
-        .sort((a, b) => a.itemName.localeCompare(b.itemName))
-    } catch (err) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get available products', { err })
-      return []
-    }
-  })
-
-  /**
-   * ✅ НОВОЕ: Expired products filtered by department
-   */
-  const expiredProducts = computed((): QuickWriteOffItem[] => {
-    try {
-      const dept = selectedDepartment.value
-
-      return storageStore.state.balances
-        .filter(balance => {
-          if (!balance.hasExpired) return false
-
-          if (dept !== 'all') {
-            const product = productsStore.products.find(p => p.id === balance.itemId)
-            if (!product) return false
-            return product.usedInDepartments.includes(dept as Department)
-          }
-
-          return true
-        })
-        .map(balance => ({
-          itemId: balance.itemId,
-          itemName: balance.itemName,
-          currentQuantity: balance.totalQuantity,
-          unit: balance.unit,
-          writeOffQuantity: balance.totalQuantity,
-          reason: 'expired' as WriteOffReason,
-          notes: 'Automatic write-off of expired products',
-          hasExpired: true
-        }))
-        .sort((a, b) => a.itemName.localeCompare(b.itemName))
-    } catch (err) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get expired products', { err })
-      return []
-    }
-  })
-
-  /**
-   * ✅ НОВОЕ: Products needing attention (expired + near expiry)
-   */
-  const productsNeedingAttention = computed((): QuickWriteOffItem[] => {
-    try {
-      const dept = selectedDepartment.value
-
-      return storageStore.state.balances
-        .filter(balance => {
-          if (!balance.hasExpired && !balance.hasNearExpiry) return false
-
-          if (dept !== 'all') {
-            const product = productsStore.products.find(p => p.id === balance.itemId)
-            if (!product) return false
-            return product.usedInDepartments.includes(dept as Department)
-          }
-
-          return true
-        })
-        .map(balance => ({
-          itemId: balance.itemId,
-          itemName: balance.itemName,
-          currentQuantity: balance.totalQuantity,
-          unit: balance.unit,
-          writeOffQuantity: balance.totalQuantity,
-          reason: balance.hasExpired
-            ? ('expired' as WriteOffReason)
-            : ('spoiled' as WriteOffReason),
-          notes: balance.hasExpired ? 'Expired' : 'Near expiry - needs attention',
-          hasExpired: balance.hasExpired,
-          hasNearExpiry: balance.hasNearExpiry
-        }))
-        .sort((a, b) => {
-          // Expired first, then near expiry
-          if (a.hasExpired && !b.hasExpired) return -1
-          if (!a.hasExpired && b.hasExpired) return 1
-          if (a.hasNearExpiry && !b.hasNearExpiry) return -1
-          if (!a.hasNearExpiry && b.hasNearExpiry) return 1
-          return a.itemName.localeCompare(b.itemName)
-        })
-    } catch (err) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get products needing attention', { err })
-      return []
-    }
-  })
 
   // ===========================
   // WRITE-OFF OPERATIONS
@@ -292,7 +171,7 @@ export function useWriteOff() {
 
       DebugUtils.info(MODULE_NAME, 'Writing off expired products', { department })
 
-      // Filter by Product.usedInDepartments
+      // ✅ Filter by Product.usedInDepartments
       const expiredBalances = storageStore.state.balances.filter(balance => {
         if (!balance.hasExpired) return false
 
@@ -343,7 +222,7 @@ export function useWriteOff() {
   // ===========================
 
   /**
-   * Core function to create write-off operation
+   * Core function to create write-off operation (replaces storageService.createWriteOff)
    */
   async function createWriteOffOperation(data: CreateWriteOffData): Promise<StorageOperation> {
     try {
@@ -353,6 +232,14 @@ export function useWriteOff() {
         itemCount: data.items.length
       })
 
+      // ✅ ЕДИНСТВЕННАЯ ЛОГИКА: делегируем в storageStore
+      // storageStore.createWriteOff уже:
+      // - Рассчитывает FIFO allocation
+      // - Создает operationItems
+      // - Обновляет батчи
+      // - Создает StorageOperation
+      // - Сохраняет в state
+      // - Синхронизирует балансы
       const operation = await storageStore.createWriteOff(data)
 
       DebugUtils.info(MODULE_NAME, 'Write-off operation completed successfully', {
@@ -371,14 +258,16 @@ export function useWriteOff() {
   }
 
   // ===========================
-  // HELPER FUNCTIONS
+  // WRITE-OFF HELPERS
   // ===========================
 
   /**
-   * Get available products for write-off in department (legacy method)
+   * Get available products for write-off in department
    */
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getAvailableProductsForWriteOff
   function getAvailableProductsForWriteOff(department: Department): QuickWriteOffItem[] {
     try {
+      // ✅ Фильтруем balances через Product.usedInDepartments
       const balances = storageStore.state.balances.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
         if (!product) return false
@@ -404,10 +293,12 @@ export function useWriteOff() {
   }
 
   /**
-   * Get products that need attention (legacy method)
+   * Get products that need attention (expired, near expiry, spoiled)
    */
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getProductsNeedingAttention
   function getProductsNeedingAttention(department: Department): QuickWriteOffItem[] {
     try {
+      // ✅ Фильтруем через Product.usedInDepartments
       const balances = storageStore.state.balances.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
         if (!product) return false
@@ -428,6 +319,7 @@ export function useWriteOff() {
           hasNearExpiry: balance.hasNearExpiry
         }))
         .sort((a, b) => {
+          // Expired first, then near expiry
           if (a.hasExpired && !b.hasExpired) return -1
           if (!a.hasExpired && b.hasExpired) return 1
           if (a.hasNearExpiry && !b.hasNearExpiry) return -1
@@ -443,8 +335,13 @@ export function useWriteOff() {
   /**
    * Calculate write-off cost before executing
    */
-  function calculateWriteOffCost(itemId: string, quantity: number, department: Department): number {
+  function calculateWriteOffCost(
+    itemId: string,
+    quantity: number,
+    department: Department // ✅ Тип изменён
+  ): number {
     try {
+      // ✅ НОВАЯ ЛОГИКА: Получаем баланс продукта (БЕЗ department параметра)
       const balance = storageStore.state.balances.find(b => b.itemId === itemId)
 
       if (!balance || !balance.batches || balance.batches.length === 0) {
@@ -456,7 +353,7 @@ export function useWriteOff() {
         return 0
       }
 
-      // Check product is used in department
+      // ✅ Проверяем, что продукт используется в департаменте
       const product = productsStore.products.find(p => p.id === itemId)
       if (!product || !product.usedInDepartments.includes(department)) {
         DebugUtils.warn(MODULE_NAME, 'Product not used in department', {
@@ -466,7 +363,7 @@ export function useWriteOff() {
         return 0
       }
 
-      // Get active batches sorted by FIFO
+      // Получаем активные батчи, отсортированные по FIFO
       const availableBatches = balance.batches
         .filter(batch => batch.currentQuantity > 0)
         .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
@@ -479,7 +376,7 @@ export function useWriteOff() {
         return 0
       }
 
-      // Calculate cost using FIFO principle
+      // Рассчитываем стоимость по FIFO принципу
       let remainingQuantity = quantity
       let totalCost = 0
 
@@ -491,6 +388,15 @@ export function useWriteOff() {
 
         totalCost += batchCost
         remainingQuantity -= allocationQuantity
+
+        DebugUtils.debug(MODULE_NAME, 'Batch allocation for cost calculation', {
+          batchId: batch.id,
+          batchQuantity: batch.currentQuantity,
+          allocationQuantity,
+          costPerUnit: batch.costPerUnit,
+          batchCost,
+          remainingQuantity
+        })
       }
 
       if (remainingQuantity > 0) {
@@ -501,10 +407,18 @@ export function useWriteOff() {
         })
       }
 
-      return Math.round(totalCost * 100) / 100
+      DebugUtils.debug(MODULE_NAME, 'Write-off cost calculated', {
+        itemId,
+        quantity,
+        totalCost,
+        averageCostPerUnit: totalCost / (quantity - remainingQuantity || 1)
+      })
+
+      return Math.round(totalCost * 100) / 100 // Округляем до центов
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off cost', { err })
 
+      // ✅ ИСПРАВЛЕННЫЙ fallback: используем баланс из state
       try {
         const balance = storageStore.state.balances.find(b => b.itemId === itemId)
         const fallbackCost = (balance?.averageCost || 0) * quantity
@@ -524,15 +438,14 @@ export function useWriteOff() {
     }
   }
 
-  /**
-   * Check stock availability
-   */
+  // ✅ ПОЛНАЯ ЗАМЕНА метода checkStockAvailability
   function checkStockAvailability(
     itemId: string,
     requiredQuantity: number,
-    department: Department
+    department: Department // ✅ Тип изменён
   ): { available: boolean; currentStock: number; shortage: number } {
     try {
+      // ✅ Получаем баланс продукта (без department)
       const balance = storageStore.state.balances.find(b => b.itemId === itemId)
 
       if (!balance) {
@@ -543,7 +456,7 @@ export function useWriteOff() {
         }
       }
 
-      // Check product is used in department
+      // ✅ Проверяем, что продукт используется в департаменте
       const product = productsStore.products.find(p => p.id === itemId)
       if (!product || !product.usedInDepartments.includes(department)) {
         return {
@@ -573,14 +486,15 @@ export function useWriteOff() {
   }
 
   // ===========================
-  // STATISTICS
+  // WRITE-OFF STATISTICS
   // ===========================
 
   /**
    * Get write-off statistics for department and period
    */
+  // ✅ ПОЛНАЯ ЗАМЕНА метода getWriteOffStatistics
   async function getWriteOffStatistics(
-    department: Department | 'all' = 'all',
+    department: Department | 'all' = 'all', // ✅ Тип изменён
     period: 'week' | 'month' | 'quarter' | 'year' = 'month'
   ): Promise<WriteOffStatistics> {
     try {
@@ -638,53 +552,19 @@ export function useWriteOff() {
   }
 
   // ===========================
-  // UI UTILITIES
+  // UTILITY FUNCTIONS
   // ===========================
 
   /**
-   * Get write-off reason options for UI
+   * Get write-off reason options for UI (from types.ts)
    */
-  const writeOffReasonOptions = computed(() => {
-    return WRITE_OFF_REASON_OPTIONS.map(option => ({
-      ...option,
-      subtitle: option.affectsKPI ? 'Affects KPI metrics' : 'Does not affect KPI'
-    }))
-  })
+  const writeOffReasonOptions = computed(() => WRITE_OFF_REASON_OPTIONS)
 
   /**
-   * Get display info for write-off reason
+   * Get display info for write-off reason (from types.ts)
    */
   function getReasonInfo(reason: WriteOffReason) {
     return getWriteOffReasonInfo(reason)
-  }
-
-  /**
-   * ✅ НОВОЕ: Check if product is used in department
-   */
-  function isProductUsedInDepartment(productId: string, department: Department): boolean {
-    const product = productsStore.products.find(p => p.id === productId)
-    return product?.usedInDepartments.includes(department) ?? false
-  }
-
-  /**
-   * ✅ НОВОЕ: Get department display name
-   */
-  function getDepartmentName(department: Department): string {
-    return department === 'kitchen' ? 'Kitchen' : 'Bar'
-  }
-
-  /**
-   * ✅ НОВОЕ: Get department color
-   */
-  function getDepartmentColor(department: Department): string {
-    return department === 'kitchen' ? 'success' : 'info'
-  }
-
-  /**
-   * ✅ НОВОЕ: Get department icon
-   */
-  function getDepartmentIcon(department: Department): string {
-    return department === 'kitchen' ? 'mdi-silverware-fork-knife' : 'mdi-coffee'
   }
 
   /**
@@ -692,6 +572,47 @@ export function useWriteOff() {
    */
   function clearError() {
     error.value = null
+  }
+
+  // ===========================
+  // HELPER FUNCTIONS
+  // ===========================
+
+  /**
+   * Get product information
+   */
+  function getProductInfo(productId: string) {
+    try {
+      const product = productsStore.products.find(p => p.id === productId)
+
+      if (!product) {
+        DebugUtils.warn(MODULE_NAME, 'Product not found', { productId })
+        return {
+          name: productId,
+          unit: 'kg',
+          costPerUnit: 0,
+          minStock: 0,
+          shelfLife: 7
+        }
+      }
+
+      return {
+        name: product.name,
+        unit: product.unit,
+        costPerUnit: product.costPerUnit,
+        minStock: product.minStock || 0,
+        shelfLife: product.shelfLife || 7
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting product info', { error, productId })
+      return {
+        name: productId,
+        unit: 'kg',
+        costPerUnit: 0,
+        minStock: 0,
+        shelfLife: 7
+      }
+    }
   }
 
   // ===========================
@@ -714,19 +635,13 @@ export function useWriteOff() {
     loading: isLoading,
     error,
     hasError,
-    selectedDepartment, // ✅ ДОБАВЛЕНО
-
-    // Computed - Filtered Data
-    availableProducts, // ✅ ДОБАВЛЕНО
-    expiredProducts, // ✅ ДОБАВЛЕНО
-    productsNeedingAttention, // ✅ ДОБАВЛЕНО
 
     // Write-off operations
     writeOffProduct,
     writeOffMultipleProducts,
     writeOffExpiredProducts,
 
-    // Helpers (legacy methods)
+    // Helpers
     getAvailableProductsForWriteOff,
     getProductsNeedingAttention,
     calculateWriteOffCost,
@@ -742,12 +657,6 @@ export function useWriteOff() {
     // UI utilities
     writeOffReasonOptions,
     getReasonInfo,
-    clearError,
-
-    // Department helpers (✅ ДОБАВЛЕНО)
-    isProductUsedInDepartment,
-    getDepartmentName,
-    getDepartmentColor,
-    getDepartmentIcon
+    clearError
   }
 }

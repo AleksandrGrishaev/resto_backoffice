@@ -4,7 +4,7 @@
     :model-value="modelValue"
     max-width="500"
     persistent
-    @update:model-value="$emit('update:modelValue', $event)"
+    @update:model-value="$emit('update:model-value', $event)"
   >
     <v-card>
       <v-card-title class="d-flex align-center">
@@ -199,8 +199,8 @@ import { ref, computed, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
 import { formatIDR } from '@/utils/currency'
 import { DebugUtils } from '@/utils'
-import type { StorageDepartment } from '@/stores/storage/types'
-import { useWriteOff } from '../../../../stores/storage'
+import type { Department } from '@/stores/productsStore/types' // ✅ ИЗМЕНИТЬ
+import { useWriteOff } from '@/stores/storage'
 const MODULE_NAME = 'WriteOffQuantityDialog'
 
 interface Product {
@@ -214,7 +214,7 @@ interface Product {
 interface Props {
   modelValue: boolean
   product: Product | null
-  department: StorageDepartment
+  department: Department
 }
 
 const props = defineProps<Props>()
@@ -237,8 +237,9 @@ const quantityError = ref('')
 // ✅ FIXED: Better computed properties with null safety
 const productBalance = computed(() => {
   try {
-    if (!props.product || !storageStore?.getBalance) return null
-    return storageStore.getBalance(props.product.id, props.department)
+    if (!props.product) return null
+    // ✅ ИСПРАВЛЕНО: getBalance без department параметра
+    return storageStore.state.balances.find(b => b.itemId === props.product!.id) || null
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to get product balance', { error })
     return null
@@ -255,13 +256,13 @@ const productUnit = computed(() => {
 
 const averageUnitCost = computed(() => {
   try {
-    // Сначала пробуем получить из баланса
+    // Получаем из баланса
     if (productBalance.value?.averageCost) {
       return productBalance.value.averageCost
     }
 
-    // Fallback: получаем из storageStore
-    if (props.product && storageStore?.getItemCostPerUnit) {
+    // ✅ Fallback: используем storageStore.getItemCostPerUnit
+    if (props.product) {
       return storageStore.getItemCostPerUnit(props.product.id)
     }
 
