@@ -226,8 +226,14 @@ const newBillName = ref('')
 const activeTab = computed({
   get: () => props.activeBillId,
   set: (value: string | null) => {
+    // КРИТИЧЕСКИ ВАЖНО: проверяем что value принадлежит текущим bills
+    // v-tabs может пытаться установить старое значение от предыдущего заказа!
     if (value) {
-      emit('select-bill', value)
+      const billExists = props.bills.some(b => b.id === value)
+      if (billExists) {
+        emit('select-bill', value)
+      }
+      // Молча игнорируем невалидные billId - это нормальное поведение при переключении заказов
     }
   }
 })

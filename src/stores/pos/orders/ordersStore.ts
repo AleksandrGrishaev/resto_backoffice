@@ -242,7 +242,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     } else {
       // Если нет счетов, очищаем активный счет
       activeBillId.value = null
-      console.log('⚠️ OrdersStore - No bills in order, cleared active bill')
     }
   }
 

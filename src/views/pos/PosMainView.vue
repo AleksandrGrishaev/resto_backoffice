@@ -48,7 +48,7 @@
     <PosLayout v-else-if="showMainInterface">
       <!-- Sidebar: Tables and Orders -->
       <template #sidebar>
-        <TablesSidebar @select="handleOrderSelect" />
+        <TablesSidebar :has-unsaved-changes="hasUnsavedChanges" @select="handleOrderSelect" />
       </template>
 
       <!-- Menu Section -->
@@ -162,6 +162,14 @@ const currentOrder = computed(() => ordersStore.currentOrder)
  * Активный счет текущего заказа
  */
 const activeBill = computed(() => ordersStore.activeBill)
+
+/**
+ * Есть ли несохраненные изменения в текущем заказе
+ */
+const hasUnsavedChanges = computed(() => {
+  if (!currentOrder.value?.bills) return false
+  return currentOrder.value.bills.some(bill => bill.items.some(item => item.status === 'draft'))
+})
 
 /**
  * Текущая смена

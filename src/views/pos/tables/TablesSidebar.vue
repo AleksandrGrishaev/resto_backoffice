@@ -64,12 +64,17 @@
     <!-- Unsaved Changes Dialog -->
     <v-dialog v-model="showUnsavedDialog" max-width="400">
       <v-card>
-        <v-card-title class="text-h6">Несохранённые изменения</v-card-title>
-        <v-card-text>У вас есть несохранённые изменения. Продолжить без сохранения?</v-card-text>
+        <v-card-title class="text-h6">Unsaved Changes</v-card-title>
+        <v-card-text>
+          You have unsaved changes in the current order. If you continue, these changes will be
+          lost. Do you want to continue without saving?
+        </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="handleDialogCancel">Отмена</v-btn>
-          <v-btn color="primary" @click="handleDialogConfirm">Продолжить</v-btn>
+          <v-btn variant="text" @click="handleDialogCancel">Cancel</v-btn>
+          <v-btn color="warning" variant="flat" @click="handleDialogConfirm">
+            Continue Without Saving
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -89,6 +94,18 @@ import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import PosNavigationMenu from '../components/PosNavigationMenu.vue'
 
 const MODULE_NAME = 'TablesSidebar'
+
+// =============================================
+// PROPS
+// =============================================
+
+interface Props {
+  hasUnsavedChanges?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  hasUnsavedChanges: false
+})
 
 // =============================================
 // STORES
@@ -224,11 +241,17 @@ const handleDialogCancel = (): void => {
 const handleNewOrder = (): void => {
   DebugUtils.debug(MODULE_NAME, 'New order button clicked')
 
-  // TODO: Проверка несохраненных изменений
-  // if (checkUnsavedChanges()) {
-  //   const shouldContinue = await showUnsavedChangesDialog()
-  //   if (!shouldContinue) return
-  // }
+  // Проверка несохраненных изменений перед созданием нового заказа
+  if (props.hasUnsavedChanges) {
+    DebugUtils.debug(MODULE_NAME, 'Unsaved changes detected, showing confirmation dialog')
+
+    // Сохраняем действие для выполнения после подтверждения
+    pendingAction.value = () => {
+      showNewOrderDialog.value = true
+    }
+    showUnsavedDialog.value = true
+    return
+  }
 
   showNewOrderDialog.value = true
 }
@@ -296,6 +319,24 @@ const handleTableSelect = async (item: PosTable | PosOrder): Promise<void> => {
 
   const table = item as PosTable
 
+  // Проверка несохраненных изменений перед переключением
+  if (props.hasUnsavedChanges && table.currentOrderId !== ordersStore.currentOrderId) {
+    DebugUtils.debug(MODULE_NAME, 'Unsaved changes detected, showing confirmation dialog')
+
+    // Сохраняем действие для выполнения после подтверждения
+    pendingAction.value = () => performTableSelect(table)
+    showUnsavedDialog.value = true
+    return
+  }
+
+  // Если нет несохраненных изменений, выполняем выбор сразу
+  await performTableSelect(table)
+}
+
+/**
+ * Выполнить выбор стола (внутренняя функция)
+ */
+const performTableSelect = async (table: PosTable): Promise<void> => {
   try {
     DebugUtils.debug(MODULE_NAME, 'Table selected via SidebarItem', {
       tableId: table.id,
@@ -360,6 +401,24 @@ const handleOrderSelect = async (item: PosTable | PosOrder): Promise<void> => {
 
   const order = item as PosOrder
 
+  // Проверка несохраненных изменений перед переключением
+  if (props.hasUnsavedChanges && order.id !== ordersStore.currentOrderId) {
+    DebugUtils.debug(MODULE_NAME, 'Unsaved changes detected, showing confirmation dialog')
+
+    // Сохраняем действие для выполнения после подтверждения
+    pendingAction.value = () => performOrderSelect(order)
+    showUnsavedDialog.value = true
+    return
+  }
+
+  // Если нет несохраненных изменений, выполняем выбор сразу
+  await performOrderSelect(order)
+}
+
+/**
+ * Выполнить выбор заказа (внутренняя функция)
+ */
+const performOrderSelect = async (order: PosOrder): Promise<void> => {
   try {
     DebugUtils.debug(MODULE_NAME, 'Order selected via SidebarItem', {
       orderId: order.id,
