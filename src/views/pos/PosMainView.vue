@@ -339,9 +339,9 @@ const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): P
       billsCount: currentOrder.value.bills?.length || 0
     })
 
-    // Проверяем есть ли активный счет
-    if (!activeBill.value) {
-      DebugUtils.debug(MODULE_NAME, 'No active bill, creating first bill')
+    // ИСПРАВЛЕНО: проверяем наличие счетов в заказе, а не activeBill
+    if (!currentOrder.value.bills || currentOrder.value.bills.length === 0) {
+      DebugUtils.debug(MODULE_NAME, 'No bills in order, creating first bill')
 
       // Создаем первый счет если его нет
       const billName = getBillNameForOrderType(currentOrder.value.type)
@@ -354,6 +354,10 @@ const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): P
       }
 
       console.log('✅ Bill created successfully')
+    } else if (!activeBill.value) {
+      // Если счета есть, но activeBillId не установлен, выбираем первый счет
+      DebugUtils.debug(MODULE_NAME, 'Bills exist but no active bill, selecting first bill')
+      ordersStore.selectBill(currentOrder.value.bills[0].id)
     }
 
     // Получаем активный счет после возможного создания

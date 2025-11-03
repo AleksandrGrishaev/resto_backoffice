@@ -1,6 +1,14 @@
 // src/stores/pos/orders/composables/useOrderCalculations.ts
 import { computed, type Ref } from 'vue'
-import type { PosBill, PosBillItem, PosItemDiscount } from '@/stores/pos/types'
+import type {
+  PosBill,
+  PosBillItem,
+  PosItemDiscount,
+  PosOrder,
+  OrderStatus,
+  OrderType,
+  OrderPaymentStatus
+} from '@/stores/pos/types'
 
 /**
  * Composable for order calculations with selection support
@@ -371,4 +379,160 @@ export function useOrderCalculations(
     // Debug
     getCalculationBreakdown
   }
+}
+
+// =============================================
+// ORDER-LEVEL CALCULATIONS (for ordersStore)
+// =============================================
+
+/**
+ * Пересчитать totals для заказа (модифицирует order in-place)
+ * Переносится из ordersStore
+ */
+export function recalculateOrderTotals(order: PosOrder): void {
+  let totalAmount = 0
+  let discountAmount = 0
+
+  // Пересчитать каждый счет
+  order.bills.forEach(bill => {
+    let billSubtotal = 0
+    let billDiscountAmount = 0
+
+    bill.items.forEach(item => {
+      if (item.status === 'cancelled') return
+
+      // Subtotal позиции (цена * количество)
+      const itemSubtotal = item.totalPrice
+      billSubtotal += itemSubtotal
+
+      // Скидки на позицию
+      if (item.discounts && item.discounts.length > 0) {
+        const itemDiscounts = item.discounts.reduce((sum, discount) => {
+          if (discount.type === 'percentage') {
+            return sum + itemSubtotal * (discount.value / 100)
+          } else {
+            return sum + discount.value
+          }
+        }, 0)
+        billDiscountAmount += itemDiscounts
+      }
+    })
+
+    // Скидка на весь счет
+    if (bill.discountAmount) {
+      billDiscountAmount += bill.discountAmount
+    }
+
+    // Обновляем суммы счета
+    bill.subtotal = billSubtotal
+    bill.discountAmount = billDiscountAmount
+    bill.total = Math.max(0, billSubtotal - billDiscountAmount)
+
+    // Добавляем к общей сумме заказа (только активные счета)
+    if (bill.status !== 'cancelled') {
+      totalAmount += bill.total
+      discountAmount += billDiscountAmount
+    }
+  })
+
+  // Обновляем суммы заказа
+  order.subtotal = order.bills
+    .filter(b => b.status !== 'cancelled')
+    .reduce((sum, b) => sum + b.subtotal, 0)
+  order.discountAmount = discountAmount
+  order.taxAmount = 0 // TODO: Add tax calculation if needed
+  order.finalAmount = totalAmount
+
+  // Пересчитать payment status
+  const calculateOrderPaymentStatus = (bills: PosBill[]): OrderPaymentStatus => {
+    const activeBills = bills.filter(bill => bill.status !== 'cancelled')
+
+    if (activeBills.length === 0) return 'unpaid'
+
+    const paidBills = activeBills.filter(bill => bill.paymentStatus === 'paid')
+    const partialBills = activeBills.filter(bill => bill.paymentStatus === 'partial')
+
+    if (paidBills.length === activeBills.length) return 'paid'
+    if (paidBills.length > 0 || partialBills.length > 0) return 'partial'
+
+    return 'unpaid'
+  }
+
+  const newPaymentStatus = calculateOrderPaymentStatus(order.bills)
+  if (order.paymentStatus !== newPaymentStatus) {
+    order.paymentStatus = newPaymentStatus
+  }
+
+  // Пересчитать order status
+  const newStatus = calculateOrderStatus(order)
+  if (order.status !== newStatus) {
+    order.status = newStatus
+  }
+}
+
+/**
+ * Определить статус заказа на основе статусов позиций
+ * Переносится из ordersStore
+ */
+export function calculateOrderStatus(order: PosOrder): OrderStatus {
+  const allItems = order.bills.flatMap(bill =>
+    bill.items.filter(item => item.status !== 'cancelled')
+  )
+
+  // Если нет позиций - заказ в draft
+  if (allItems.length === 0) {
+    return 'draft'
+  }
+
+  // Определяем статус на основе типа заказа и статусов позиций
+  return determineStatusByOrderType(order.type, allItems)
+}
+
+/**
+ * Определить статус заказа по типу и статусам позиций
+ * Переносится из ordersStore
+ */
+export function determineStatusByOrderType(
+  orderType: OrderType,
+  items: PosBillItem[]
+): OrderStatus {
+  const hasAnyDraft = items.some(item => item.status === 'draft')
+  const hasAnyCooking = items.some(item => item.status === 'cooking')
+  const hasAnyWaiting = items.some(item => item.status === 'waiting')
+
+  // Финальный статус зависит от типа заказа
+  const getFinalStatus = (orderType: OrderType): OrderStatus => {
+    switch (orderType) {
+      case 'dine_in':
+        return 'served'
+      case 'takeaway':
+        return 'collected'
+      case 'delivery':
+        return 'delivered'
+      default:
+        return 'served'
+    }
+  }
+
+  const finalStatus = getFinalStatus(orderType)
+  const allInFinalStatus = items.every(item => {
+    // Маппинг item status → order status
+    const itemStatusMap: Record<string, OrderStatus> = {
+      served: finalStatus
+    }
+    return itemStatusMap[item.status] === finalStatus
+  })
+
+  const allReady = items.every(item =>
+    ['ready', 'served', 'collected', 'delivered'].includes(item.status)
+  )
+
+  // Логика определения статуса:
+  if (hasAnyDraft) return 'draft'
+  if (hasAnyWaiting) return 'waiting'
+  if (hasAnyCooking) return 'cooking'
+  if (allReady && !allInFinalStatus) return 'ready'
+  if (allInFinalStatus) return finalStatus
+
+  return 'draft'
 }

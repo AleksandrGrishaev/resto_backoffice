@@ -10,6 +10,15 @@ import type {
   ItemPaymentStatus
 } from '../types'
 import { ORDER_TYPE_STATUS_CONFIG } from '../types'
+
+// ===== EXPORTS =====
+export { useOrderSelection } from './composables/useOrderSelection'
+export {
+  recalculateOrderTotals,
+  calculateOrderStatus,
+  determineStatusByOrderType
+} from './composables/useOrderCalculations'
+
 export function useOrdersComposables() {
   /**
    * Проверить можно ли добавить товар в заказ

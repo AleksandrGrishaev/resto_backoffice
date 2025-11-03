@@ -176,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import type { PosBill, OrderType } from '@/stores/pos/types'
 import { useOrdersComposables } from '@/stores/pos/orders/composables'
 
@@ -221,7 +221,16 @@ const showDeleteDialog = ref(false)
 const billToRename = ref<PosBill | null>(null)
 const billToDelete = ref<PosBill | null>(null)
 const newBillName = ref('')
-const activeTab = ref(props.activeBillId)
+
+// ИСПРАВЛЕНО: используем computed вместо ref для двусторонней синхронизации
+const activeTab = computed({
+  get: () => props.activeBillId,
+  set: (value: string | null) => {
+    if (value) {
+      emit('select-bill', value)
+    }
+  }
+})
 
 // Methods
 const handleBillSelection = (billId: string): void => {
@@ -337,19 +346,7 @@ const getBillCheckboxState = (billId: string) => {
   }
 }
 
-// Watchers
-watch(activeTab, newValue => {
-  if (newValue) {
-    emit('select-bill', newValue)
-  }
-})
-
-watch(
-  () => props.activeBillId,
-  newValue => {
-    activeTab.value = newValue
-  }
-)
+// Watchers больше не нужны - computed с getter/setter обрабатывает синхронизацию автоматически
 </script>
 
 <style scoped>

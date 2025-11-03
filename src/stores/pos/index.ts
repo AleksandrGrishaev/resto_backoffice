@@ -146,10 +146,17 @@ export const usePosStore = defineStore('pos', () => {
         throw new Error('POS stores not available')
       }
 
-      // TODO: В будущем здесь будет более сложная инициализация
-      // - Загрузка кэшированного меню
-      // - Восстановление незавершенных заказов
-      // - Проверка связи с кухней
+      // Загружаем данные из localStorage
+      platform.debugLog('POS', '📦 Loading tables from storage...')
+      await tablesStore.loadTables()
+
+      platform.debugLog('POS', '📦 Loading orders from storage...')
+      await ordersStore.loadOrders()
+
+      platform.debugLog('POS', '✅ Data loaded successfully', {
+        tablesCount: tablesStore.tables.length,
+        ordersCount: ordersStore.orders.length
+      })
 
       // Пока просто помечаем как инициализированную
       isInitialized.value = true

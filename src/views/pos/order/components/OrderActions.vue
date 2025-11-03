@@ -55,8 +55,8 @@
           @click="handleCheckout"
         >
           Checkout
-          <template v-if="ordersStore.selectedItemsCount > 0">
-            ({{ ordersStore.selectedItemsCount }})
+          <template v-if="selection.selectedItemsCount.value > 0">
+            ({{ selection.selectedItemsCount.value }})
           </template>
         </BaseButton>
 
@@ -72,12 +72,12 @@
 
       <!-- Checkout Summary (only when items selected) -->
       <div
-        v-if="ordersStore.selectedItemsCount > 0"
+        v-if="selection.selectedItemsCount.value > 0"
         class="checkout-summary mt-3 pa-3 rounded bg-success-lighten-5 border-success"
       >
         <div class="d-flex justify-space-between align-center">
           <div class="text-subtitle-2 font-weight-medium">
-            Selected Items ({{ ordersStore.selectedItemsCount }})
+            Selected Items ({{ selection.selectedItemsCount.value }})
           </div>
           <div class="text-h6 font-weight-bold text-success">
             {{ formatPrice(selectedItemsAmount) }}
@@ -92,10 +92,14 @@
 import { ref, computed } from 'vue'
 import type { PosOrder, PosBill } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useOrderSelection } from '@/stores/pos/orders/composables'
 import BaseButton from '@/components/atoms/buttons/BaseButton.vue'
 
 // Store
 const ordersStore = usePosOrdersStore()
+
+// Selection (from composable)
+const selection = useOrderSelection()
 
 // Props
 interface Props {
@@ -128,7 +132,7 @@ const canSave = computed((): boolean => {
 })
 
 const canMove = computed((): boolean => {
-  return ordersStore.hasSelection
+  return selection.hasSelection.value
 })
 
 const canCheckout = computed((): boolean => {
@@ -140,20 +144,20 @@ const canCheckout = computed((): boolean => {
 
 // Computed - Amounts
 const selectedItemsAmount = computed((): number => {
-  if (ordersStore.selectedItemsCount === 0) return 0
+  if (selection.selectedItemsCount.value === 0) return 0
 
   return props.bills.reduce((sum, bill) => {
     return (
       sum +
       bill.items.reduce((billSum, item) => {
-        return ordersStore.isItemSelected(item.id) ? billSum + item.totalPrice : billSum
+        return selection.isItemSelected(item.id) ? billSum + item.totalPrice : billSum
       }, 0)
     )
   }, 0)
 })
 
 const checkoutAmount = computed((): number => {
-  if (ordersStore.selectedItemsCount > 0) {
+  if (selection.selectedItemsCount.value > 0) {
     return selectedItemsAmount.value
   }
 
@@ -220,7 +224,7 @@ const handleCheckout = async (): Promise<void> => {
     processing.value = true
     clearError()
 
-    const selectedItems = ordersStore.selectedItemIds
+    const selectedItems = selection.selectedItemIds.value
     emit('checkout', selectedItems, checkoutAmount.value)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to process checkout'

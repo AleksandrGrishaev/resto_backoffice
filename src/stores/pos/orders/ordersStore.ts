@@ -13,7 +13,12 @@ import type {
 } from '../types'
 import type { MenuItemVariant } from '@/stores/menu'
 import { OrdersService } from './services'
-import { useOrdersComposables } from './composables'
+import {
+  useOrdersComposables,
+  recalculateOrderTotals as recalcOrderTotals,
+  calculateOrderStatus as calcOrderStatus,
+  determineStatusByOrderType as determineStatus
+} from './composables'
 import { usePosTablesStore } from '../tables/tablesStore'
 
 export const usePosOrdersStore = defineStore('posOrders', () => {
@@ -21,10 +26,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   const orders = ref<PosOrder[]>([])
   const currentOrderId = ref<string | null>(null)
   const activeBillId = ref<string | null>(null)
-
-  // 🆕 SELECTION STATE
-  const selectedItems = ref<Set<string>>(new Set())
-  const selectedBills = ref<Set<string>>(new Set())
 
   const loading = ref({
     list: false,
@@ -103,22 +104,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         : 0
   }))
 
-  // 🆕 SELECTION COMPUTED
-  const isFullBillSelected = computed(() => {
-    return activeBillId.value ? selectedBills.value.has(activeBillId.value) : false
-  })
-
-  const selectedItemIds = computed(() => {
-    if (isFullBillSelected.value && activeBill.value) {
-      return activeBill.value.items.map(item => item.id)
-    }
-    return Array.from(selectedItems.value)
-  })
-
-  const selectedItemsCount = computed(() => selectedItems.value.size)
-  const selectedBillsCount = computed(() => selectedBills.value.size)
-  const hasSelection = computed(() => selectedItems.value.size > 0 || selectedBills.value.size > 0)
-
   // ===== ACTIONS =====
   async function saveAndNotifyOrder(
     orderId: string,
@@ -188,6 +173,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         orders.value.unshift(response.data)
 
+        // Если это заказ для стола, обновляем статус стола на 'occupied'
+        if (type === 'dine_in' && tableId) {
+          await tablesStore.occupyTable(tableId, response.data.id)
+          console.log('✅ Table occupied:', { tableId, orderId: response.data.id })
+        }
+
         // Автоматически выбираем новый заказ
         selectOrder(response.data.id)
 
@@ -231,9 +222,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * Выбрать текущий заказ - ОБНОВЛЕНО
    */
   function selectOrder(orderId: string): void {
-    // Очищаем selection при смене заказа
-    clearSelection()
-
     console.log('📋 OrdersStore - Selecting order:', { orderId })
 
     currentOrderId.value = orderId
@@ -265,91 +253,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     activeBillId.value = billId
   }
 
-  // 🆕 SELECTION ACTIONS
-
-  /**
-   * Выбрать/снять выбор элемента
-   */
-  function toggleItemSelection(itemId: string): void {
-    if (selectedItems.value.has(itemId)) {
-      selectedItems.value.delete(itemId)
-    } else {
-      selectedItems.value.add(itemId)
-    }
-
-    // Автоматически выбираем счет если выбраны все его элементы
-    if (activeBill.value && activeBillId.value) {
-      const billItemIds = activeBill.value.items.map(item => item.id)
-      const selectedBillItems = billItemIds.filter(id => selectedItems.value.has(id))
-
-      if (selectedBillItems.length === billItemIds.length && billItemIds.length > 0) {
-        selectedBills.value.add(activeBillId.value)
-      } else {
-        selectedBills.value.delete(activeBillId.value)
-      }
-    }
-  }
-
-  /**
-   * Выбрать/снять выбор счета
-   */
-  function toggleBillSelection(billId: string): void {
-    if (!currentOrder.value) return
-
-    const bill = currentOrder.value.bills.find(b => b.id === billId)
-    if (!bill) return
-
-    if (selectedBills.value.has(billId)) {
-      // Снимаем выделение со счета и всех его позиций
-      selectedBills.value.delete(billId)
-      bill.items.forEach(item => {
-        selectedItems.value.delete(item.id)
-      })
-    } else {
-      // Выделяем счет и все его позиции
-      selectedBills.value.add(billId)
-      bill.items.forEach(item => {
-        selectedItems.value.add(item.id)
-      })
-    }
-  }
-
-  /**
-   * Проверить, выбран ли элемент
-   */
-  function isItemSelected(itemId: string): boolean {
-    return selectedItems.value.has(itemId)
-  }
-
-  /**
-   * Проверить, выбран ли счет
-   */
-  function isBillSelected(billId: string): boolean {
-    return selectedBills.value.has(billId)
-  }
-
-  /**
-   * Очистить все выделения
-   */
-  function clearSelection(): void {
-    selectedItems.value.clear()
-    selectedBills.value.clear()
-  }
-
-  /**
-   * Выбрать все элементы в активном счете
-   */
-  function selectAllItemsInActiveBill(): void {
-    if (activeBill.value) {
-      activeBill.value.items.forEach(item => {
-        selectedItems.value.add(item.id)
-      })
-      if (activeBillId.value) {
-        selectedBills.value.add(activeBillId.value)
-      }
-    }
-  }
-
   /**
    * Добавить новый счет к заказу
    */
@@ -375,77 +278,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       return { success: false, error: errorMsg }
     }
   }
-  /**
-   * Обновить статус оплаты позиций
-   */
-  async function updateItemsPaymentStatus(
-    itemIds: string[],
-    newPaymentStatus: 'unpaid' | 'paid' | 'refunded'
-  ): Promise<ServiceResponse<void>> {
-    try {
-      const response = await ordersService.updateItemsPaymentStatus(itemIds, newPaymentStatus)
 
-      if (response.success) {
-        // Обновляем статусы в store
-        orders.value.forEach(order => {
-          order.bills.forEach(bill => {
-            bill.items.forEach(item => {
-              if (itemIds.includes(item.id)) {
-                ;(item as any).paymentStatus = newPaymentStatus
-              }
-            })
-          })
-        })
-
-        // Пересчитываем статусы заказов
-        const orderIds = new Set<string>()
-        orders.value.forEach(order => {
-          order.bills.forEach(bill => {
-            bill.items.forEach(item => {
-              if (itemIds.includes(item.id)) {
-                orderIds.add(order.id)
-              }
-            })
-          })
-        })
-
-        for (const orderId of orderIds) {
-          await recalculateOrderTotals(orderId)
-        }
-      }
-
-      return response
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to update payment status'
-      error.value = errorMsg
-      return { success: false, error: errorMsg }
-    }
-  }
-
-  /**
-   * Обновить статус оплаты заказа
-   */
-  async function updateOrderPaymentStatus(
-    orderId: string,
-    newPaymentStatus: 'unpaid' | 'partial' | 'paid' | 'refunded'
-  ): Promise<ServiceResponse<PosOrder>> {
-    try {
-      const response = await ordersService.updateOrderPaymentStatus(orderId, newPaymentStatus)
-
-      if (response.success && response.data) {
-        const orderIndex = orders.value.findIndex(o => o.id === orderId)
-        if (orderIndex !== -1) {
-          orders.value[orderIndex] = response.data
-        }
-      }
-
-      return response
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to update order payment status'
-      error.value = errorMsg
-      return { success: false, error: errorMsg }
-    }
-  }
   /**
    * Добавить товар в счет
    */
@@ -553,11 +386,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
             if (itemIndex !== -1) {
               orders.value[orderIndex].bills[billIndex].items.splice(itemIndex, 1)
 
-              // Убираем элемент из selection если он был выбран
-              if (selectedItems.value.has(itemId)) {
-                selectedItems.value.delete(itemId)
-              }
-
               await recalculateOrderTotals(orderId)
             }
           }
@@ -622,7 +450,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           if (currentOrderId.value === orderId) {
             currentOrderId.value = null
             activeBillId.value = null
-            clearSelection()
           }
         }
       }
@@ -636,132 +463,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Пересчитать суммы заказа
+   * Пересчитать суммы заказа (wrapper для composable)
    */
   async function recalculateOrderTotals(orderId: string): Promise<void> {
-    const orderIndex = orders.value.findIndex(o => o.id === orderId)
-    if (orderIndex === -1) return
+    const order = orders.value.find(o => o.id === orderId)
+    if (!order) return
 
-    const order = orders.value[orderIndex]
-    let totalAmount = 0
-    let discountAmount = 0
-
-    // Пересчитать каждый счет
-    order.bills.forEach(bill => {
-      let billSubtotal = 0
-      let billDiscountAmount = 0
-
-      bill.items.forEach(item => {
-        // ИЗМЕНЕНО: убрали 'active', используем новые статусы
-        if (!['cancelled'].includes(item.status)) {
-          billSubtotal += item.totalPrice
-          billDiscountAmount += item.discounts.reduce((sum, discount) => {
-            return (
-              sum +
-              (discount.type === 'percentage'
-                ? item.totalPrice * (discount.value / 100)
-                : discount.value)
-            )
-          }, 0)
-        }
-      })
-
-      bill.subtotal = billSubtotal
-      bill.discountAmount = billDiscountAmount
-      bill.total = billSubtotal - billDiscountAmount
-
-      totalAmount += bill.subtotal
-      discountAmount += bill.discountAmount
-    })
-
-    // ДОБАВИТЬ: вычисление paymentStatus заказа
-    const calculateOrderPaymentStatus = (
-      bills: PosBill[]
-    ): 'unpaid' | 'partial' | 'paid' | 'refunded' => {
-      const activeBills = bills.filter(bill => bill.status !== 'cancelled')
-      if (activeBills.length === 0) return 'unpaid'
-
-      const paidBills = activeBills.filter(bill => bill.paymentStatus === 'paid')
-      const partialBills = activeBills.filter(bill => bill.paymentStatus === 'partial')
-
-      if (paidBills.length === activeBills.length) return 'paid'
-      if (paidBills.length > 0 || partialBills.length > 0) return 'partial'
-      return 'unpaid'
-    }
-
-    // Обновить общие суммы заказа
-    order.totalAmount = totalAmount
-    order.discountAmount = discountAmount
-    order.taxAmount = Math.round((totalAmount - discountAmount) * 0.1) // 10% налог
-    order.finalAmount = totalAmount - discountAmount + order.taxAmount
-
-    // НОВОЕ: устанавливаем paymentStatus заказа
-    order.paymentStatus = calculateOrderPaymentStatus(order.bills)
-
-    // НОВОЕ: автоматически пересчитываем статус готовности заказа
-    const previousStatus = order.status
-    const newStatus = calculateOrderStatus(order)
-
-    if (previousStatus !== newStatus) {
-      console.log(`Order status auto-updated: ${previousStatus} → ${newStatus}`, {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        orderType: order.type
-      })
-      order.status = newStatus
-    }
+    // Используем composable версию
+    recalcOrderTotals(order)
 
     // Обновляем timestamp
     order.updatedAt = new Date().toISOString()
-  }
-
-  /**
-   * Calculate order status based on item states and order type
-   */
-  function calculateOrderStatus(order: PosOrder): OrderStatus {
-    const allItems = order.bills.flatMap(bill =>
-      bill.items.filter(item => !['cancelled'].includes(item.status))
-    )
-
-    if (allItems.length === 0) return 'draft'
-
-    return determineStatusByOrderType(order.type, allItems)
-  }
-
-  /**
-   * Determine status based on order type and item states
-   */
-  function determineStatusByOrderType(orderType: OrderType, items: PosBillItem[]): OrderStatus {
-    const hasAnyDraft = items.some(item => item.status === 'draft')
-    const hasAnyCooking = items.some(item => item.status === 'cooking')
-    const hasAnyWaiting = items.some(item => item.status === 'waiting')
-
-    // Определяем финальный статус в зависимости от типа заказа
-    const getFinalStatus = (orderType: OrderType): OrderStatus => {
-      if (orderType === 'takeaway') return 'collected'
-      if (orderType === 'delivery') return 'delivered'
-      return 'served'
-    }
-
-    const finalStatus = getFinalStatus(orderType)
-    const allInFinalStatus = items.every(item => {
-      if (orderType === 'takeaway') return item.status === 'collected'
-      if (orderType === 'delivery') return item.status === 'delivered'
-      return item.status === 'served'
-    })
-
-    const allReady = items.every(item =>
-      ['ready', 'served', 'collected', 'delivered'].includes(item.status)
-    )
-
-    // Логика определения статуса
-    if (hasAnyDraft) return 'draft' // Есть несохраненные позиции
-    if (hasAnyCooking) return 'cooking' // Что-то готовится
-    if (hasAnyWaiting) return 'waiting' // Что-то ожидает приготовления
-    if (allInFinalStatus) return finalStatus // Все в финальном статусе
-    if (allReady) return 'ready' // Все готово к выдаче
-
-    return 'cooking' // Смешанное состояние - показываем "готовится"
   }
 
   /**
@@ -819,10 +531,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     error,
     filters,
 
-    // Selection State
-    selectedItems,
-    selectedBills,
-
     // Computed
     currentOrder,
     activeBill,
@@ -830,13 +538,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     todayOrders,
     filteredOrders,
     ordersStats,
-
-    // Selection Computed
-    isFullBillSelected,
-    selectedItemIds,
-    selectedItemsCount,
-    selectedBillsCount,
-    hasSelection,
 
     // Actions
     loadOrders,
@@ -855,21 +556,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     clearError,
     saveAndNotifyOrder,
 
-    // Selection Actions
-    toggleItemSelection,
-    toggleBillSelection,
-    isItemSelected,
-    isBillSelected,
-    clearSelection,
-    selectAllItemsInActiveBill,
-
-    // Payment Status Methods
-    updateItemsPaymentStatus,
-    updateOrderPaymentStatus,
-
-    // НОВЫЕ: Status Calculation Functions
-    calculateOrderStatus,
-    determineStatusByOrderType,
+    // Utility Functions
     hasItemsInOrder,
     hasItemsInBill,
 

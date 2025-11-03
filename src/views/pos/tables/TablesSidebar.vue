@@ -326,7 +326,7 @@ const handleTableSelect = async (item: PosTable | PosOrder): Promise<void> => {
         tableId: table.id
       })
 
-      await ordersStore.setCurrentOrder(table.currentOrderId)
+      ordersStore.selectOrder(table.currentOrderId)
       emit('select', table.currentOrderId)
     } else {
       DebugUtils.warn(MODULE_NAME, 'Table has no current order but is not free', {

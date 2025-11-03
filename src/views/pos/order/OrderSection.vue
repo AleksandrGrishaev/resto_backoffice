@@ -118,6 +118,7 @@ import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { useMenuStore } from '@/stores/menu'
 import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
+import { useOrderSelection } from '@/stores/pos/orders/composables'
 import type { PosOrder, PosBill, PosBillItem, OrderType } from '@/stores/pos/types'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 import AppNotification from '@/components/atoms/feedback/AppNotification.vue'
@@ -134,6 +135,9 @@ const MODULE_NAME = 'OrderSection'
 const ordersStore = usePosOrdersStore()
 const tablesStore = usePosTablesStore()
 const menuStore = useMenuStore()
+
+// Selection (from composable)
+const selection = useOrderSelection()
 
 // Props
 interface Props {
@@ -200,7 +204,7 @@ const calculations = useOrderCalculations(() => currentOrder.value?.bills || [],
   governmentTaxRate: 10,
   includeServiceTax: true,
   includeGovernmentTax: true,
-  selectedItemIds: () => ordersStore.selectedItemIds,
+  selectedItemIds: () => selection.selectedItemIds.value,
   activeBillId: () => ordersStore.activeBillId
 })
 
@@ -515,7 +519,7 @@ const handleSendToKitchen = async (itemIds: string[]): Promise<void> => {
 
 const handleSendToKitchenFromActions = async (): Promise<void> => {
   // Send all new items from active bill or selected items
-  const itemIds = ordersStore.selectedItemIds
+  const itemIds = selection.selectedItemIds.value
 
   if (itemIds.length > 0) {
     await handleSendToKitchen(itemIds)
@@ -540,7 +544,7 @@ const handleMoveItems = (itemIds: string[], sourceBillId: string): void => {
 }
 
 const handleMoveFromActions = (): void => {
-  const selectedCount = ordersStore.selectedItemsCount
+  const selectedCount = selection.selectedItemsCount.value
 
   if (selectedCount === 0) {
     showError('Please select items to move', 'warning')
@@ -548,7 +552,7 @@ const handleMoveFromActions = (): void => {
   }
 
   if (activeBillId.value) {
-    handleMoveItems(ordersStore.selectedItemIds, activeBillId.value)
+    handleMoveItems(selection.selectedItemIds.value, activeBillId.value)
   }
 }
 
@@ -588,7 +592,7 @@ watch(
     if (newOrderId !== oldOrderId) {
       // При смене заказа сбрасываем состояние
       hasUnsavedChanges.value = false
-      ordersStore.clearSelection()
+      selection.clearSelection()
     }
   }
 )
