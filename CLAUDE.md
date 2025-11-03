@@ -4,7 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kitchen App Backoffice - Vue 3 + TypeScript application for restaurant management with dual-mode operation (Backoffice for admin/manager, POS for cashiers). Built with Vite, Vuetify 3, Pinia, and Firebase.
+Kitchen App - **единое приложение** с множественными интерфейсами и режимами работы для управления рестораном.
+
+**Архитектурный подход: Single Repository + Role-based UI**
+
+Один код → множественные варианты развертывания:
+
+- **Backoffice** (админ/менеджер): Online-first, полный функционал управления
+- **POS** (кассиры/официанты): Offline-first, критические операции продаж
+- **Deployment**: Web app (браузер) + Mobile app (Capacitor)
 
 **Tech Stack:**
 
@@ -15,6 +23,7 @@ Kitchen App Backoffice - Vue 3 + TypeScript application for restaurant managemen
 - Vue Router 4
 - Firebase 12+ (authentication, data persistence)
 - Vite 5+ (build tool)
+- Capacitor (mobile deployment)
 
 ## Development Commands
 
@@ -99,6 +108,27 @@ The codebase uses a **Repository pattern** for data persistence (`src/repositori
 - `IRepository.ts` - Repository interface contract
 - `LocalStorageRepository.ts` - localStorage implementation
 - `ServiceResponse.ts` - Standardized response wrapper
+
+**Two architectural approaches:**
+
+1. **Backoffice (Store + Service)**: Online-first, simple pattern
+
+   ```
+   UI Components → Pinia Store → Service Layer → API/localStorage
+   ```
+
+   - Easy development and debugging
+   - Synchronous operations with async interfaces
+   - Easy transition from localStorage to API
+
+2. **POS (Store + Repository + Sync)**: Offline-first, complex pattern
+   ```
+   UI Components → Pinia Store → Repository Interface → Local/API Repository + Sync Service
+   ```
+   - Instant UI response
+   - Automatic background synchronization
+   - Conflict resolution strategies
+   - Critical for operations without internet
 
 Repositories abstract storage operations (Firebase, localStorage, API) from business logic.
 
@@ -243,17 +273,132 @@ if (ENV.useMockData) {
 }
 ```
 
-## POS System Notes
+## POS System Architecture
 
-The POS module (`src/stores/pos/`) is a complex subsystem with:
+The POS (Point of Sale) system is a complex subsystem with parallel Store and View layers.
 
-- Table management (dine-in orders)
-- Order processing (with real-time updates)
-- Payment handling (multiple payment types)
-- Shift management (opening/closing shifts)
-- Offline-first capability (when enabled)
+### POS Store Layer
 
-POS routes bypass the MainLayout and render directly for performance.
+Location: `src/stores/pos/`
+
+```
+pos/
+├── index.ts              # Main POS coordinator (posStore)
+│                         # - Initialization via initializePOS()
+│                         # - Shift management (startShift, endShift)
+│                         # - Network status monitoring
+│                         # - Server synchronization
+├── types.ts              # Common POS types and interfaces
+├── core/                 # Core POS business logic
+│   └── posSystem.ts      # System-level operations
+├── orders/               # Order management
+│   ├── ordersStore.ts    # Main orders state and actions
+│   ├── services.ts       # Order persistence services
+│   ├── composables.ts    # Composable exports
+│   └── composables/
+│       ├── useOrders.ts            # Order operations logic
+│       └── useOrderCalculations.ts # Order calculations (totals, tax, etc.)
+├── tables/               # Table management
+│   ├── tablesStore.ts    # Table state (occupied, available, reserved)
+│   ├── services.ts       # Table persistence services
+│   ├── types.ts          # Table-specific types
+│   └── composables/
+│       └── useTables.ts  # Table operations logic
+├── payments/             # Payment processing
+│   ├── paymentsStore.ts  # Payment state and actions
+│   ├── services.ts       # Payment persistence services
+│   └── composables.ts    # Payment composables
+├── shifts/               # Shift management
+│   ├── shiftsStore.ts    # Shift state (current, history)
+│   ├── types.ts          # Shift-specific types
+│   └── mock.ts           # Mock shift data
+├── service/              # Service modules
+│   └── DepartmentNotificationService.ts  # Kitchen notifications
+└── mocks/                # Mock data for development/testing
+    └── posMockData.ts
+```
+
+**Key Store Patterns:**
+
+- Each module follows: `store.ts` + `services.ts` + `composables/` + `types.ts`
+- `index.ts` (posStore) acts as coordinator, not data store
+- Composables extract reusable logic (useOrders, useTables, useOrderCalculations)
+- Services handle persistence (localStorage, API, Firebase)
+
+### POS View Layer
+
+Location: `src/views/pos/`
+
+```
+pos/
+├── PosMainView.vue       # Main POS interface entry point
+│                         # - Initialization & error handling
+│                         # - Coordinates Tables + Menu + Order sections
+│                         # - Uses PosLayout (full-screen, no MainLayout)
+├── tables/               # Table management UI
+│   ├── TablesSidebar.vue # Sidebar with table/order list
+│   ├── TableItem.vue     # Individual table display
+│   ├── OrderItem.vue     # Order item in sidebar
+│   ├── components/       # Table-specific components
+│   │   └── SidebarItem.vue
+│   └── dialogs/          # Table-related dialogs
+│       └── OrderTypeDialog.vue
+├── order/                # Order processing UI
+│   ├── OrderSection.vue  # Main order display section
+│   ├── components/       # Order components
+│   │   ├── BillsManager.vue    # Multiple bills management
+│   │   ├── BillsTabs.vue       # Bill tabs navigation
+│   │   ├── BillItem.vue        # Individual bill item
+│   │   ├── OrderActions.vue    # Action buttons
+│   │   ├── OrderTotals.vue     # Order totals display
+│   │   └── OrderInfo.vue       # Order metadata
+│   └── dialogs/          # Order-related dialogs
+│       ├── CheckoutDialog.vue        # Payment checkout
+│       ├── BillDiscountDialog.vue    # Discount application
+│       ├── BillItemEditDialog.vue    # Edit item in bill
+│       ├── BillItemCancelDialog.vue  # Cancel item
+│       ├── MoveItemsDialog.vue       # Move items between bills
+│       ├── BulkActionsDialog.vue     # Bulk operations
+│       └── OrderTypeDialog.vue       # Change order type
+├── menu/                 # Menu selection UI
+│   ├── MenuSection.vue   # Main menu display section
+│   └── components/       # Menu-specific components
+├── shifts/               # Shift management UI
+│   └── dialogs/          # Shift-related dialogs
+├── components/           # Shared POS components
+└── Common/               # Common utility components
+```
+
+**Key View Patterns:**
+
+- View structure mirrors store structure (orders/, tables/, payments/, etc.)
+- Each section has main component + components/ + dialogs/
+- `PosMainView.vue` is the single entry point for all POS operations
+- **IMPORTANT**: POS views bypass MainLayout for performance (render directly)
+- Components communicate via events and store mutations
+
+### POS Initialization Flow
+
+1. **Router**: User navigates to `/pos` route
+2. **PosMainView.vue**:
+   - Checks user permissions (`canUsePOS` - admin/cashier roles)
+   - Shows loading state
+   - Calls `posStore.initializePOS()`
+3. **posStore.initializePOS()**:
+   - Verifies child stores are available (tables, orders, payments)
+   - Sets up network monitoring
+   - Restores active shift from localStorage
+   - Marks system as initialized
+4. **PosMainView.vue**: Shows main interface (Tables + Menu + Order sections)
+
+### POS Key Features
+
+- **Table management**: Track occupied, available, and reserved tables (dine-in orders)
+- **Order processing**: Real-time order updates, multiple bills per order
+- **Payment handling**: Multiple payment types (cash, card, QR)
+- **Shift management**: Opening/closing shifts with reports
+- **Offline-first capability**: Works without internet (when enabled)
+- **Network resilience**: Auto-sync when connection restored
 
 ## Testing
 
@@ -267,3 +412,97 @@ Vite config (`vite.config.ts`):
 - Manual chunk splitting (vuetify, vendor, icons)
 - Terser minification with console/debugger removal in production
 - Source maps disabled in production
+
+### Deployment Modes
+
+**Build scripts:**
+
+```bash
+pnpm build:web      # Web deployment (browser)
+pnpm build:mobile   # Mobile deployment (Capacitor) + sync
+pnpm ios            # Run iOS app
+pnpm android        # Run Android app
+```
+
+**Environment files:**
+
+- `.env.web` - Web mode (online-first, API enabled)
+- `.env.mobile` - Mobile mode (offline-first, local storage)
+- `.env.development` - Development config
+- `.env.production` - Production config
+
+## Persistence Strategies
+
+### Adaptive Persistence Layer
+
+The app uses role-based persistence strategies via `usePersistence()` composable:
+
+**Online-first (Backoffice roles):**
+
+```
+API Request → Success: Update Local Cache
+           → Failure: Show Error + Use Cache if available
+```
+
+**Offline-first (POS roles):**
+
+```
+Local Storage → Always works (instant UI)
+             → Queue for Sync → Background API calls
+```
+
+**Hybrid (Shared data):**
+
+```
+Check Online → Online: API + Update Cache
+            → Offline: Use Cache + Queue updates
+```
+
+### Platform Detection
+
+Use `usePlatform()` composable to adapt logic:
+
+```typescript
+import { usePlatform } from '@/composables/usePlatform'
+
+const { isMobile, isWeb, platform, offlineEnabled } = usePlatform()
+
+// Conditional initialization
+if (isMobile.value && offlineEnabled) {
+  await initializeOfflineSync()
+}
+```
+
+## User Roles
+
+```typescript
+type UserRole = 'admin' | 'manager' | 'cashier' | 'waiter' | 'kitchen'
+```
+
+**Role behaviors:**
+
+- **admin/manager**: Backoffice access, online-first, full functionality
+- **cashier/waiter**: POS access, offline-first (mobile), critical operations only
+- **kitchen**: Kitchen display system (future)
+
+**Mixed roles**: Users with multiple roles load both Backoffice and POS stores
+
+## ServiceResponse Pattern
+
+All persistence operations return standardized responses:
+
+```typescript
+interface ServiceResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  metadata?: {
+    timestamp: string
+    source: 'local' | 'api' | 'cache'
+    version?: string
+    platform?: 'web' | 'mobile'
+  }
+}
+```
+
+This enables consistent error handling and debugging across all stores.
