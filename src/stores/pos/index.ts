@@ -153,9 +153,13 @@ export const usePosStore = defineStore('pos', () => {
       platform.debugLog('POS', '📦 Loading orders from storage...')
       await ordersStore.loadOrders()
 
+      platform.debugLog('POS', '📦 Loading payments from storage...')
+      await paymentsStore.initialize()
+
       platform.debugLog('POS', '✅ Data loaded successfully', {
         tablesCount: tablesStore.tables.length,
-        ordersCount: ordersStore.orders.length
+        ordersCount: ordersStore.orders.length,
+        paymentsCount: paymentsStore.payments.length
       })
 
       // Пока просто помечаем как инициализированную

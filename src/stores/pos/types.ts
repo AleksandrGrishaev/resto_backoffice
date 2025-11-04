@@ -120,6 +120,10 @@ export interface PosOrder extends BaseEntity {
   notes?: string
   estimatedReadyTime?: string
   actualReadyTime?: string
+
+  // Payment references (Sprint 1: Payment Architecture)
+  paymentIds: string[] // Links to PosPayment records
+  paidAmount: number // Computed from payments
 }
 
 // ===== BILL TYPES =====
@@ -156,6 +160,9 @@ export interface PosBillItem extends BaseEntity {
   kitchenNotes?: string
   sentToKitchenAt?: string
   preparedAt?: string
+
+  // Payment link (Sprint 1: Payment Architecture)
+  paidByPaymentIds?: string[] // Links to payments that paid this item
 }
 
 export interface PosItemDiscount {
@@ -174,24 +181,47 @@ export interface PosItemModification {
 }
 
 // ===== PAYMENT TYPES =====
-export type PaymentMethod = 'cash' | 'card' | 'qr' | 'mixed'
+export type PaymentMethod = 'cash' | 'card' | 'qr'
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded'
 
 export interface PosPayment extends BaseEntity {
-  paymentNumber: string
-  orderId: string
-  billIds: string[]
+  // Identity
+  paymentNumber: string // PAY-20251104-123456
+
+  // Financial Data
   method: PaymentMethod
   status: PaymentStatus
-  amount: number
-  receivedAmount?: number
-  changeAmount?: number
-  cardTransactionId?: string
-  receiptPrinted: boolean
-  processedBy: string
-  processedAt: string
+  amount: number // Positive for payment, negative for refund
+
+  // Cash handling
+  receivedAmount?: number // For cash payments
+  changeAmount?: number // Change returned
+
+  // Links to operational data
+  orderId: string // Which order
+  billIds: string[] // Which bills
+  itemIds: string[] // Which items (for partial payments)
+
+  // Refund data
   refundedAt?: string
   refundReason?: string
+  refundedBy?: string
+  originalPaymentId?: string // If this is a refund
+
+  // Reconciliation (for cash counting)
+  processedBy: string // Cashier/waiter name
+  processedAt: string // ISO datetime
+  shiftId?: string // For shift reports
+  reconciledAt?: string // When money counted
+  reconciledBy?: string // Who verified
+
+  // Receipt
+  receiptPrinted: boolean
+  receiptNumber?: string
+
+  // Sync status (for future backend sync)
+  syncedAt?: string
+  syncStatus?: 'pending' | 'synced' | 'failed'
 }
 
 export interface PaymentSplit {
@@ -287,7 +317,6 @@ export interface DailySalesStats {
     cash: number
     card: number
     qr: number
-    mixed: number
   }
   orderTypes: {
     dine_in: number

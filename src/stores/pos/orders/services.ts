@@ -226,6 +226,8 @@ export class OrdersService {
         discountAmount: 0,
         taxAmount: 0,
         finalAmount: 0,
+        paymentIds: [], // Payment Architecture
+        paidAmount: 0, // Payment Architecture
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -525,6 +527,61 @@ export class OrdersService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to close order'
+      }
+    }
+  }
+
+  /**
+   * Update order in storage (simple update without notifications)
+   * Used by payment system to update order payment status
+   */
+  async updateOrder(order: PosOrder): Promise<ServiceResponse<PosOrder>> {
+    try {
+      // Update order timestamp
+      order.updatedAt = TimeUtils.getCurrentLocalISO()
+
+      // Load all orders
+      const allOrders = await this.getAllOrders()
+      if (!allOrders.success || !allOrders.data) {
+        throw new Error('Failed to load orders')
+      }
+
+      // Find and update order
+      const orderIndex = allOrders.data.findIndex(o => o.id === order.id)
+      if (orderIndex === -1) {
+        throw new Error('Order not found')
+      }
+
+      allOrders.data[orderIndex] = order
+
+      // Save orders (without bills)
+      localStorage.setItem(
+        this.ORDERS_KEY,
+        JSON.stringify(allOrders.data.map(o => ({ ...o, bills: [] })))
+      )
+
+      // Save bills and items
+      for (const bill of order.bills) {
+        // Update bill in storage
+        const allBills = this.getAllStoredBills()
+        const billIndex = allBills.findIndex(b => b.id === bill.id)
+        if (billIndex !== -1) {
+          allBills[billIndex] = bill
+          localStorage.setItem(this.BILLS_KEY, JSON.stringify(allBills))
+        }
+
+        // Update items
+        const allItems = this.getAllStoredItems()
+        const filteredItems = allItems.filter(item => item.billId !== bill.id)
+        filteredItems.push(...bill.items)
+        localStorage.setItem(this.ITEMS_KEY, JSON.stringify(filteredItems))
+      }
+
+      return { success: true, data: order }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update order'
       }
     }
   }

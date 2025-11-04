@@ -142,6 +142,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       const response = await ordersService.getAllOrders()
 
       if (response.success && response.data) {
+        // Initialize payment fields for existing orders
+        response.data.forEach(order => {
+          if (!order.paymentIds) order.paymentIds = []
+          if (order.paidAmount === undefined) order.paidAmount = 0
+        })
+
         orders.value = response.data
       }
 
@@ -461,6 +467,30 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Update order in storage
+   * Used by payment system to persist order changes
+   */
+  async function updateOrder(order: PosOrder): Promise<ServiceResponse<PosOrder>> {
+    try {
+      const response = await ordersService.updateOrder(order)
+
+      if (response.success && response.data) {
+        // Update order in store
+        const orderIndex = orders.value.findIndex(o => o.id === order.id)
+        if (orderIndex !== -1) {
+          orders.value[orderIndex] = response.data
+        }
+      }
+
+      return response
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update order'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Пересчитать суммы заказа (wrapper для composable)
    */
   async function recalculateOrderTotals(orderId: string): Promise<void> {
@@ -759,6 +789,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     removeItemFromBill,
     sendOrderToKitchen,
     closeOrder,
+    updateOrder,
     recalculateOrderTotals,
     setFilters,
     clearFilters,

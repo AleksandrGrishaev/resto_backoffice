@@ -1,562 +1,410 @@
 // src/stores/pos/payments/paymentsStore.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type {
-  PosPayment,
-  PaymentFilters,
-  ServiceResponse,
-  PaymentMethod,
-  PaymentStatus,
-  PaymentSplit,
-  PosBill
-} from '../types'
 import { PaymentsService } from './services'
-import { usePaymentsComposables } from './composables'
-import { usePosOrdersStore } from '../orders/ordersStore'
-import { useAccountStore } from '@/stores/account'
+import type { PosPayment, ServiceResponse, PaymentMethod } from '../types'
 
 export const usePosPaymentsStore = defineStore('posPayments', () => {
   // ===== STATE =====
   const payments = ref<PosPayment[]>([])
-  const loading = ref({
-    list: false,
-    process: false,
-    refund: false
-  })
+  const loading = ref(false)
   const error = ref<string | null>(null)
-  const filters = ref<PaymentFilters>({})
-
-  // Payment processing state
-  const processingPayment = ref<{
-    orderId: string
-    billIds: string[]
-    amount: number
-    splits: PaymentSplit[]
-  } | null>(null)
+  const initialized = ref(false)
 
   // ===== SERVICES =====
   const paymentsService = new PaymentsService()
-  const ordersStore = usePosOrdersStore()
-  const accountStore = useAccountStore()
 
   // ===== COMPUTED =====
   const todayPayments = computed(() => {
     const today = new Date().toISOString().split('T')[0]
-    return payments.value.filter(payment => payment.createdAt.startsWith(today))
+    return payments.value.filter(p => p.processedAt.startsWith(today))
   })
 
-  const filteredPayments = computed(() => {
-    let result = [...payments.value]
-
-    if (filters.value.method) {
-      result = result.filter(payment => payment.method === filters.value.method)
-    }
-
-    if (filters.value.status) {
-      result = result.filter(payment => payment.status === filters.value.status)
-    }
-
-    if (filters.value.dateFrom) {
-      result = result.filter(payment => payment.createdAt >= filters.value.dateFrom!)
-    }
-
-    if (filters.value.dateTo) {
-      result = result.filter(payment => payment.createdAt <= filters.value.dateTo!)
-    }
-
-    if (filters.value.amountFrom) {
-      result = result.filter(payment => payment.amount >= filters.value.amountFrom!)
-    }
-
-    if (filters.value.amountTo) {
-      result = result.filter(payment => payment.amount <= filters.value.amountTo!)
-    }
-
-    return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const completedPayments = computed(() => {
+    return payments.value.filter(p => p.status === 'completed')
   })
 
-  const paymentsStats = computed(() => {
-    const todayPaymentsFiltered = todayPayments.value.filter(p => p.status === 'completed')
-
-    const stats = {
-      todayTotal: todayPaymentsFiltered.reduce((sum, payment) => sum + payment.amount, 0),
-      todayCount: todayPaymentsFiltered.length,
-      byMethod: {
-        cash: { count: 0, amount: 0 },
-        card: { count: 0, amount: 0 },
-        qr: { count: 0, amount: 0 },
-        mixed: { count: 0, amount: 0 }
-      },
-      averageTransaction: 0
-    }
-
-    todayPaymentsFiltered.forEach(payment => {
-      stats.byMethod[payment.method].count += 1
-      stats.byMethod[payment.method].amount += payment.amount
-    })
-
-    stats.averageTransaction = stats.todayCount > 0 ? stats.todayTotal / stats.todayCount : 0
-
-    return stats
+  const totalRevenue = computed(() => {
+    return completedPayments.value.reduce((sum, p) => sum + p.amount, 0)
   })
 
-  // ===== ACTIONS =====
+  // ===== INITIALIZATION =====
 
   /**
-   * Загрузить все платежи
+   * Initialize payments store
+   * Loads all payments from storage
    */
-  async function loadPayments(): Promise<ServiceResponse<PosPayment[]>> {
-    loading.value.list = true
+  async function initialize(): Promise<ServiceResponse<void>> {
+    if (initialized.value) {
+      return { success: true }
+    }
+
+    loading.value = true
     error.value = null
 
     try {
-      const response = await paymentsService.getAllPayments()
+      console.log('💳 [paymentsStore] Initializing...')
 
-      if (response.success && response.data) {
-        payments.value = response.data
+      // Load all payments from storage
+      const result = await paymentsService.getAllPayments()
+
+      if (result.success && result.data) {
+        payments.value = result.data
+        console.log(`💳 Loaded ${payments.value.length} payments from storage`)
+      } else {
+        throw new Error(result.error || 'Failed to load payments')
       }
 
-      return response
+      initialized.value = true
+      return { success: true }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load payments'
-      error.value = errorMsg
-      return { success: false, error: errorMsg }
+      const message = err instanceof Error ? err.message : 'Failed to initialize payments'
+      error.value = message
+      console.error('❌ [paymentsStore] Initialization failed:', message)
+      return { success: false, error: message }
     } finally {
-      loading.value.list = false
+      loading.value = false
     }
   }
 
-  /**
-   * Начать процесс оплаты
-   */
-  function startPaymentProcess(orderId: string, billIds: string[], amount: number): void {
-    processingPayment.value = {
-      orderId,
-      billIds,
-      amount,
-      splits: []
-    }
-  }
+  // ===== ACTIONS (POS Operations) =====
 
   /**
-   * Добавить способ оплаты к текущему платежу
-   */
-  function addPaymentSplit(method: PaymentMethod, amount: number): void {
-    if (!processingPayment.value) return
-
-    processingPayment.value.splits.push({ method, amount })
-  }
-
-  /**
-   * Удалить способ оплаты из текущего платежа
-   */
-  function removePaymentSplit(index: number): void {
-    if (!processingPayment.value) return
-
-    processingPayment.value.splits.splice(index, 1)
-  }
-
-  /**
-   * Очистить процесс оплаты
-   */
-  function clearPaymentProcess(): void {
-    processingPayment.value = null
-  }
-
-  /**
-   * Обработать простую оплату (один способ)
+   * Process payment (POS only)
+   * 1. Save payment to storage
+   * 2. Link to order/items
+   * 3. Update item payment status
    */
   async function processSimplePayment(
     orderId: string,
     billIds: string[],
+    itemIds: string[],
     method: PaymentMethod,
     amount: number,
-    receivedAmount?: number,
-    itemIds?: string[] // НОВОЕ: опциональный список оплачиваемых items
+    receivedAmount?: number
   ): Promise<ServiceResponse<PosPayment>> {
-    loading.value.process = true
-    error.value = null
+    loading.value = true
 
     try {
+      // 1. Create payment
       const paymentData = {
         orderId,
         billIds,
+        itemIds,
         method,
         amount,
         receivedAmount,
-        processedBy: 'Current User' // TODO: Получать из authStore
+        processedBy: 'Current User' // TODO: Get from authStore
       }
 
-      const response = await paymentsService.processPayment(paymentData)
+      const result = await paymentsService.processPayment(paymentData)
 
-      if (response.success && response.data) {
-        payments.value.push(response.data)
-
-        // Обновить статус оплаты позиций и пересчитать статус счетов
-        await updateItemsAndBillsPaymentStatus(orderId, billIds, itemIds)
-
-        // Записать в финансы
-        await recordFinancialTransaction(response.data)
-
-        // Если все счета заказа оплачены, закрыть заказ
-        await checkAndCloseOrder(orderId)
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Payment processing failed')
       }
 
-      return response
+      const payment = result.data
+
+      // 2. Add to in-memory store
+      payments.value.push(payment)
+
+      // 3. Link payment to order and items
+      await linkPaymentToOrder(orderId, payment.id, itemIds)
+
+      console.log('💳 Payment processed:', payment.paymentNumber)
+      return { success: true, data: payment }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to process payment'
-      error.value = errorMsg
-      return { success: false, error: errorMsg }
+      const message = err instanceof Error ? err.message : 'Payment processing failed'
+      error.value = message
+      return { success: false, error: message }
     } finally {
-      loading.value.process = false
+      loading.value = false
     }
   }
 
   /**
-   * Обработать составную оплату (несколько способов)
+   * Process refund (POS only)
+   * Customer returns item, cashier issues refund
    */
-  async function processMultiplePayment(
-    orderId: string,
-    billIds: string[],
-    splits: PaymentSplit[]
-  ): Promise<ServiceResponse<PosPayment[]>> {
-    loading.value.process = true
-    error.value = null
-
-    try {
-      const responses: PosPayment[] = []
-
-      // Обрабатываем каждый способ оплаты отдельно
-      for (const split of splits) {
-        const paymentData = {
-          orderId,
-          billIds,
-          method: split.method,
-          amount: split.amount,
-          processedBy: 'Current User' // TODO: Получать из authStore
-        }
-
-        const response = await paymentsService.processPayment(paymentData)
-
-        if (response.success && response.data) {
-          payments.value.push(response.data)
-          responses.push(response.data)
-
-          // Записать в финансы
-          await recordFinancialTransaction(response.data)
-        } else {
-          throw new Error(response.error || 'Payment processing failed')
-        }
-      }
-
-      // Обновить статус оплаты счетов
-      await updateBillsPaymentStatus(billIds, 'paid')
-
-      // Если все счета заказа оплачены, закрыть заказ
-      await checkAndCloseOrder(orderId)
-
-      return {
-        success: true,
-        data: responses
-      }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to process multiple payment'
-      error.value = errorMsg
-      return { success: false, error: errorMsg }
-    } finally {
-      loading.value.process = false
-    }
-  }
-
-  /**
-   * Возврат платежа
-   */
-  async function refundPayment(
-    paymentId: string,
+  async function processRefund(
+    originalPaymentId: string,
     reason: string,
     amount?: number
   ): Promise<ServiceResponse<PosPayment>> {
-    loading.value.refund = true
-    error.value = null
-
     try {
-      const response = await paymentsService.refundPayment(paymentId, reason, amount)
-
-      if (response.success && response.data) {
-        const paymentIndex = payments.value.findIndex(p => p.id === paymentId)
-        if (paymentIndex !== -1) {
-          payments.value[paymentIndex] = response.data
-        }
-
-        // Записать возврат в финансы
-        await recordRefundTransaction(response.data, amount || response.data.amount)
+      // Find original payment
+      const originalPayment = payments.value.find(p => p.id === originalPaymentId)
+      if (!originalPayment) {
+        throw new Error('Original payment not found')
       }
 
-      return response
+      if (originalPayment.status !== 'completed') {
+        throw new Error('Can only refund completed payments')
+      }
+
+      // Process refund via service
+      const result = await paymentsService.refundPayment(originalPaymentId, reason, amount)
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Refund processing failed')
+      }
+
+      const refundPayment = result.data
+
+      // Add refund to store
+      payments.value.push(refundPayment)
+
+      // Update original payment
+      const originalIndex = payments.value.findIndex(p => p.id === originalPaymentId)
+      if (originalIndex !== -1) {
+        payments.value[originalIndex].status = 'refunded'
+      }
+
+      // Update items: paid → refunded
+      await unlinkPaymentFromOrder(
+        originalPayment.orderId,
+        originalPaymentId,
+        originalPayment.itemIds
+      )
+
+      console.log('💳 Refund processed:', refundPayment.paymentNumber)
+      return { success: true, data: refundPayment }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to refund payment'
-      error.value = errorMsg
-      return { success: false, error: errorMsg }
-    } finally {
-      loading.value.refund = false
+      const message = err instanceof Error ? err.message : 'Refund failed'
+      error.value = message
+      return { success: false, error: message }
     }
   }
 
   /**
-   * Печать чека
+   * Print receipt (POS only)
    */
   async function printReceipt(paymentId: string): Promise<ServiceResponse<void>> {
     try {
       const payment = payments.value.find(p => p.id === paymentId)
       if (!payment) {
-        return { success: false, error: 'Payment not found' }
+        throw new Error('Payment not found')
       }
 
-      const response = await paymentsService.printReceipt(payment)
+      const result = await paymentsService.printReceipt(payment)
 
-      if (response.success) {
-        // Обновить статус печати чека
-        const paymentIndex = payments.value.findIndex(p => p.id === paymentId)
-        if (paymentIndex !== -1) {
-          payments.value[paymentIndex].receiptPrinted = true
-        }
+      if (result.success) {
+        // Mark as printed
+        payment.receiptPrinted = true
+        await paymentsService.updatePayment(payment)
       }
 
-      return response
+      return result
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to print receipt'
-      return { success: false, error: errorMsg }
+      const message = err instanceof Error ? err.message : 'Failed to print receipt'
+      return { success: false, error: message }
+    }
+  }
+
+  // ===== QUERIES (Read Operations - Both POS and Backoffice) =====
+
+  /**
+   * Get payments for specific order
+   */
+  function getOrderPayments(orderId: string): PosPayment[] {
+    return payments.value.filter(p => p.orderId === orderId)
+  }
+
+  /**
+   * Get payments by date range
+   */
+  function getPaymentsByDateRange(startDate: string, endDate: string): PosPayment[] {
+    return payments.value.filter(p => p.processedAt >= startDate && p.processedAt <= endDate)
+  }
+
+  /**
+   * Get payment statistics
+   * Used by backoffice analytics
+   */
+  function getPaymentStats(dateRange?: { start: string; end: string }) {
+    let paymentsToAnalyze = completedPayments.value
+
+    if (dateRange) {
+      paymentsToAnalyze = paymentsToAnalyze.filter(
+        p => p.processedAt >= dateRange.start && p.processedAt <= dateRange.end
+      )
+    }
+
+    const byMethod = {
+      cash: { count: 0, amount: 0 },
+      card: { count: 0, amount: 0 },
+      qr: { count: 0, amount: 0 }
+    }
+
+    paymentsToAnalyze.forEach(p => {
+      byMethod[p.method].count++
+      byMethod[p.method].amount += p.amount
+    })
+
+    const refunds = payments.value.filter(p => p.status === 'refunded')
+    const refundedAmount = refunds.reduce((sum, p) => sum + Math.abs(p.amount), 0)
+
+    return {
+      totalRevenue: paymentsToAnalyze.reduce((sum, p) => sum + p.amount, 0),
+      totalCount: paymentsToAnalyze.length,
+      byMethod,
+      refundedCount: refunds.length,
+      refundedAmount,
+      averageTransaction:
+        paymentsToAnalyze.length > 0
+          ? paymentsToAnalyze.reduce((sum, p) => sum + p.amount, 0) / paymentsToAnalyze.length
+          : 0
     }
   }
 
   /**
-   * Обновить статус оплаты позиций и пересчитать статус счетов
+   * Get cashier performance (Backoffice analytics)
    */
-  async function updateItemsAndBillsPaymentStatus(
+  function getCashierPerformance(cashierName: string, dateRange: { start: string; end: string }) {
+    const cashierPayments = completedPayments.value.filter(
+      p =>
+        p.processedBy === cashierName &&
+        p.processedAt >= dateRange.start &&
+        p.processedAt <= dateRange.end
+    )
+
+    return {
+      totalTransactions: cashierPayments.length,
+      totalAmount: cashierPayments.reduce((sum, p) => sum + p.amount, 0),
+      byMethod: {
+        cash: cashierPayments.filter(p => p.method === 'cash').length,
+        card: cashierPayments.filter(p => p.method === 'card').length,
+        qr: cashierPayments.filter(p => p.method === 'qr').length
+      }
+    }
+  }
+
+  /**
+   * Get payments for specific shift
+   */
+  function getShiftPayments(shiftId: string): PosPayment[] {
+    return payments.value.filter(p => p.shiftId === shiftId)
+  }
+
+  // ===== HELPERS =====
+
+  /**
+   * Link payment to order and items
+   */
+  async function linkPaymentToOrder(
     orderId: string,
-    billIds: string[],
-    itemIds?: string[]
+    paymentId: string,
+    itemIds: string[]
   ): Promise<void> {
+    // Import ordersStore dynamically to avoid circular dependency
+    const { usePosOrdersStore } = await import('../orders/ordersStore')
+    const ordersStore = usePosOrdersStore()
+
     const order = ordersStore.orders.find(o => o.id === orderId)
     if (!order) return
 
-    console.log('💳 [paymentsStore] Updating payment status:', {
-      orderId,
-      billIds,
-      itemIds: itemIds || 'all items'
-    })
+    // Add payment reference to order
+    if (!order.paymentIds) order.paymentIds = []
+    order.paymentIds.push(paymentId)
 
-    const paidItemIds: string[] = []
+    // Update paidAmount
+    order.paidAmount =
+      (order.paidAmount || 0) + payments.value.find(p => p.id === paymentId)!.amount
 
-    // Обновить paymentStatus для оплаченных items
+    // Link items to payment and mark as paid
     for (const bill of order.bills) {
-      if (!billIds.includes(bill.id)) continue
-
       for (const item of bill.items) {
-        // Если указаны конкретные items - помечаем только их
-        // Если itemIds не указаны - помечаем все items в этих bills
-        if (!itemIds || itemIds.includes(item.id)) {
-          if (item.paymentStatus !== 'paid' && item.status !== 'cancelled') {
-            item.paymentStatus = 'paid'
-            paidItemIds.push(item.id)
-            console.log('💳 Item marked as paid:', item.id)
+        if (itemIds.includes(item.id)) {
+          item.paymentStatus = 'paid'
+          if (!item.paidByPaymentIds) item.paidByPaymentIds = []
+          item.paidByPaymentIds.push(paymentId)
+        }
+      }
+
+      // Recalculate bill payment status
+      const activeItems = bill.items.filter(i => i.status !== 'cancelled')
+      const paidItems = activeItems.filter(i => i.paymentStatus === 'paid')
+
+      if (paidItems.length === 0) {
+        bill.paymentStatus = 'unpaid'
+      } else if (paidItems.length === activeItems.length) {
+        bill.paymentStatus = 'paid'
+      } else {
+        bill.paymentStatus = 'partial'
+      }
+    }
+
+    // Save order
+    await ordersStore.updateOrder(order)
+  }
+
+  /**
+   * Unlink payment from order (for refunds)
+   */
+  async function unlinkPaymentFromOrder(
+    orderId: string,
+    paymentId: string,
+    itemIds: string[]
+  ): Promise<void> {
+    const { usePosOrdersStore } = await import('../orders/ordersStore')
+    const ordersStore = usePosOrdersStore()
+
+    const order = ordersStore.orders.find(o => o.id === orderId)
+    if (!order) return
+
+    // Update items: paid → refunded
+    for (const bill of order.bills) {
+      for (const item of bill.items) {
+        if (itemIds.includes(item.id)) {
+          item.paymentStatus = 'refunded'
+          // Remove payment ID from paidByPaymentIds
+          if (item.paidByPaymentIds) {
+            item.paidByPaymentIds = item.paidByPaymentIds.filter(id => id !== paymentId)
           }
         }
       }
 
-      // Пересчитать статус счета на основе статусов всех items
-      const billPaymentStatus = calculateBillPaymentStatus(bill)
-      bill.paymentStatus = billPaymentStatus
+      // Recalculate bill payment status
+      const activeItems = bill.items.filter(i => i.status !== 'cancelled')
+      const paidItems = activeItems.filter(i => i.paymentStatus === 'paid')
 
-      console.log('💳 Bill status updated:', {
-        billId: bill.id,
-        paymentStatus: billPaymentStatus,
-        totalItems: bill.items.length,
-        paidItems: bill.items.filter(i => i.paymentStatus === 'paid').length
-      })
-    }
-
-    // Автоматически снять выделение с оплаченных позиций
-    if (paidItemIds.length > 0) {
-      console.log('🔍 [paymentsStore] Auto-deselecting paid items:', paidItemIds)
-      paidItemIds.forEach(itemId => {
-        ordersStore.deselectItem(itemId)
-      })
-    }
-
-    // Пересчитать заказ (автоматически обновит статус стола)
-    await ordersStore.recalculateOrderTotals(orderId)
-  }
-
-  /**
-   * Вычислить статус оплаты счета на основе статусов позиций
-   */
-  function calculateBillPaymentStatus(bill: PosBill): 'unpaid' | 'partial' | 'paid' {
-    const activeItems = bill.items.filter(item => item.status !== 'cancelled')
-
-    if (activeItems.length === 0) return 'unpaid'
-
-    const paidItems = activeItems.filter(item => item.paymentStatus === 'paid')
-
-    if (paidItems.length === 0) return 'unpaid'
-    if (paidItems.length === activeItems.length) return 'paid'
-    return 'partial'
-  }
-
-  /**
-   * Обновить статус оплаты счетов (LEGACY - используется в multiple payment)
-   */
-  async function updateBillsPaymentStatus(
-    billIds: string[],
-    paymentStatus: 'unpaid' | 'partial' | 'paid'
-  ): Promise<void> {
-    // Обновить статус оплаты счетов и пересчитать заказ
-    const updatedOrderIds = new Set<string>()
-
-    for (const billId of billIds) {
-      // Найти заказ с этим счетом и обновить его
-      const order = ordersStore.orders.find(o => o.bills.some(b => b.id === billId))
-
-      if (order) {
-        const bill = order.bills.find(b => b.id === billId)
-        if (bill) {
-          bill.paymentStatus = paymentStatus
-          updatedOrderIds.add(order.id)
-        }
+      if (paidItems.length === 0) {
+        bill.paymentStatus = 'unpaid'
+      } else if (paidItems.length === activeItems.length) {
+        bill.paymentStatus = 'paid'
+      } else {
+        bill.paymentStatus = 'partial'
       }
     }
 
-    // Пересчитать все затронутые заказы (автоматически обновит статус стола)
-    for (const orderId of updatedOrderIds) {
-      await ordersStore.recalculateOrderTotals(orderId)
-    }
+    await ordersStore.updateOrder(order)
   }
-
-  /**
-   * Записать финансовую транзакцию
-   */
-  async function recordFinancialTransaction(payment: PosPayment): Promise<void> {
-    try {
-      // TODO: Интеграция с accountStore для записи транзакции
-      // Пока просто логируем
-      console.log('Recording financial transaction:', {
-        amount: payment.amount,
-        method: payment.method,
-        paymentId: payment.id
-      })
-
-      // В будущем здесь будет:
-      // await accountStore.createTransaction({
-      //   type: 'income',
-      //   amount: payment.amount,
-      //   source: 'pos_payment',
-      //   reference: payment.id,
-      //   method: payment.method
-      // })
-    } catch (err) {
-      console.error('Failed to record financial transaction:', err)
-    }
-  }
-
-  /**
-   * Записать возврат в финансы
-   */
-  async function recordRefundTransaction(payment: PosPayment, refundAmount: number): Promise<void> {
-    try {
-      // TODO: Интеграция с accountStore для записи возврата
-      console.log('Recording refund transaction:', {
-        amount: refundAmount,
-        method: payment.method,
-        originalPaymentId: payment.id
-      })
-    } catch (err) {
-      console.error('Failed to record refund transaction:', err)
-    }
-  }
-
-  /**
-   * Проверить и закрыть заказ если все счета оплачены
-   */
-  async function checkAndCloseOrder(orderId: string): Promise<void> {
-    const order = ordersStore.orders.find(o => o.id === orderId)
-    if (!order) return
-
-    // Проверить все ли счета оплачены
-    const allBillsPaid = order.bills.every(
-      bill => bill.paymentStatus === 'paid' || bill.status === 'cancelled'
-    )
-
-    if (allBillsPaid) {
-      await ordersStore.closeOrder(orderId)
-    }
-  }
-
-  /**
-   * Установить фильтры
-   */
-  function setFilters(newFilters: Partial<PaymentFilters>): void {
-    filters.value = { ...filters.value, ...newFilters }
-  }
-
-  /**
-   * Очистить фильтры
-   */
-  function clearFilters(): void {
-    filters.value = {}
-  }
-
-  /**
-   * Очистить ошибки
-   */
-  function clearError(): void {
-    error.value = null
-  }
-
-  // ===== COMPOSABLES =====
-  const {
-    canProcessPayment,
-    canRefundPayment,
-    calculateChange,
-    formatPaymentAmount,
-    getPaymentMethodIcon,
-    getPaymentMethodName,
-    getPaymentStatusColor
-  } = usePaymentsComposables()
 
   return {
     // State
     payments,
     loading,
     error,
-    filters,
-    processingPayment,
+    initialized,
 
     // Computed
     todayPayments,
-    filteredPayments,
-    paymentsStats,
+    completedPayments,
+    totalRevenue,
 
-    // Actions
-    loadPayments,
-    startPaymentProcess,
-    addPaymentSplit,
-    removePaymentSplit,
-    clearPaymentProcess,
+    // Initialization
+    initialize,
+
+    // POS Operations (Write)
     processSimplePayment,
-    processMultiplePayment,
-    refundPayment,
+    processRefund,
     printReceipt,
-    setFilters,
-    clearFilters,
-    clearError,
 
-    // Composables
-    canProcessPayment,
-    canRefundPayment,
-    calculateChange,
-    formatPaymentAmount,
-    getPaymentMethodIcon,
-    getPaymentMethodName,
-    getPaymentStatusColor
+    // Queries (Read - Both POS and Backoffice)
+    getOrderPayments,
+    getPaymentsByDateRange,
+    getPaymentStats,
+    getCashierPerformance,
+    getShiftPayments
   }
 })
