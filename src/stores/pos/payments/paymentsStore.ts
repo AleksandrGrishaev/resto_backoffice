@@ -335,7 +335,9 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     billIds: string[],
     paymentStatus: 'unpaid' | 'partial' | 'paid'
   ): Promise<void> {
-    // TODO: Интеграция с ordersStore для обновления статуса счетов
+    // Обновить статус оплаты счетов и пересчитать заказ
+    const updatedOrderIds = new Set<string>()
+
     for (const billId of billIds) {
       // Найти заказ с этим счетом и обновить его
       const order = ordersStore.orders.find(o => o.bills.some(b => b.id === billId))
@@ -344,8 +346,14 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         const bill = order.bills.find(b => b.id === billId)
         if (bill) {
           bill.paymentStatus = paymentStatus
+          updatedOrderIds.add(order.id)
         }
       }
+    }
+
+    // Пересчитать все затронутые заказы (автоматически обновит статус стола)
+    for (const orderId of updatedOrderIds) {
+      await ordersStore.recalculateOrderTotals(orderId)
     }
   }
 

@@ -173,12 +173,6 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         orders.value.unshift(response.data)
 
-        // Если это заказ для стола, обновляем статус стола на 'occupied'
-        if (type === 'dine_in' && tableId) {
-          await tablesStore.occupyTable(tableId, response.data.id)
-          console.log('✅ Table occupied:', { tableId, orderId: response.data.id })
-        }
-
         // Автоматически выбираем новый заказ
         selectOrder(response.data.id)
 
@@ -305,7 +299,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
           if (billIndex !== -1) {
             orders.value[orderIndex].bills[billIndex].items.push(response.data)
-            // Пересчитать суммы заказа
+            // Пересчитать суммы заказа (автоматически обновит статус стола)
             await recalculateOrderTotals(orderId)
           }
         }
@@ -385,6 +379,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
             if (itemIndex !== -1) {
               orders.value[orderIndex].bills[billIndex].items.splice(itemIndex, 1)
 
+              // Пересчитать суммы заказа (автоматически обновит статус стола)
               await recalculateOrderTotals(orderId)
             }
           }
@@ -473,6 +468,10 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
     // Обновляем timestamp
     order.updatedAt = new Date().toISOString()
+
+    // Автоматически управлять статусом стола после пересчета
+    // (ловит изменения paymentStatus и order.status)
+    await updateTableStatusForOrder(orderId)
   }
 
   /**
@@ -487,6 +486,44 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   function hasItemsInBill(bill: PosBill): boolean {
     return bill.items.some(item => !['cancelled'].includes(item.status))
+  }
+
+  /**
+   * Автоматическое управление статусом стола на основе состояния заказа
+   *
+   * Логика:
+   * 1. Если есть активные items → стол 'occupied'
+   * 2. Если нет items → стол 'free'
+   * 3. Если заказ 'served' И 'paid' → стол 'free' (гости ушли)
+   */
+  async function updateTableStatusForOrder(orderId: string): Promise<void> {
+    const order = orders.value.find(o => o.id === orderId)
+
+    // Обрабатываем только dine-in заказы со столами
+    if (!order || order.type !== 'dine_in' || !order.tableId) {
+      return
+    }
+
+    const hasItems = hasItemsInOrder(order)
+    const isServed = order.status === 'served'
+    const isPaid = order.paymentStatus === 'paid'
+
+    // Автоматическое освобождение стола
+    if (!hasItems || (isServed && isPaid)) {
+      await tablesStore.freeTable(order.tableId)
+      console.log('✅ Table auto-freed:', {
+        tableId: order.tableId,
+        orderId,
+        reason: !hasItems ? 'no items' : 'served & paid'
+      })
+      return
+    }
+
+    // Автоматическое занятие стола (если есть items)
+    if (hasItems) {
+      await tablesStore.occupyTable(order.tableId, orderId)
+      console.log('✅ Table auto-occupied:', { tableId: order.tableId, orderId })
+    }
   }
 
   /**
@@ -558,6 +595,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     // Utility Functions
     hasItemsInOrder,
     hasItemsInBill,
+    updateTableStatusForOrder,
 
     // Composables (существующие)
     canAddItemToOrder,

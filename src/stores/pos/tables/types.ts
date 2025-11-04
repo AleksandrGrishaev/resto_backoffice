@@ -14,7 +14,7 @@ export interface Table extends BaseEntity {
   notes?: string
 }
 
-export type TableStatus = 'free' | 'occupied_unpaid' | 'occupied_paid' | 'reserved'
+export type TableStatus = 'free' | 'occupied' | 'reserved'
 
 // Данные стола для заказа
 export interface TableOrderData {
@@ -40,24 +40,18 @@ export interface TableConfig {
 // Утилиты для работы с статусами столов
 export const TABLE_STATUS_COLORS = {
   free: 'success',
-  occupied_unpaid: 'warning',
-  occupied_paid: 'success',
+  occupied: 'warning',
   reserved: 'info'
 } as const
 
 export const TABLE_STATUS_ICONS = {
   free: 'mdi-table',
-  occupied_unpaid: 'mdi-table-chair',
-  occupied_paid: 'mdi-table-chair',
+  occupied: 'mdi-table-chair',
   reserved: 'mdi-table-clock'
 } as const
 
 export function isTableOccupied(status: TableStatus): boolean {
-  return status === 'occupied_unpaid' || status === 'occupied_paid'
-}
-
-export function isTablePaid(status: TableStatus): boolean {
-  return status === 'occupied_paid'
+  return status === 'occupied'
 }
 
 export function canCreateOrder(status: TableStatus): boolean {
@@ -65,5 +59,5 @@ export function canCreateOrder(status: TableStatus): boolean {
 }
 
 export function canSelectOrder(status: TableStatus): boolean {
-  return status === 'occupied_unpaid' || status === 'occupied_paid'
+  return status === 'occupied'
 }

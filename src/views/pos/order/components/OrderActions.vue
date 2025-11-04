@@ -224,8 +224,20 @@ const handleCheckout = async (): Promise<void> => {
     processing.value = true
     clearError()
 
-    const selectedItems = selection.selectedItemIds.value
-    emit('checkout', selectedItems, checkoutAmount.value)
+    // Если есть выбранные items - используем их
+    // Если нет - собираем ВСЕ items из непоплаченных счетов
+    let itemsToCheckout = selection.selectedItemIds.value
+
+    if (itemsToCheckout.length === 0) {
+      // Собрать все items из unpaid bills
+      itemsToCheckout = props.bills
+        .filter(bill => bill.paymentStatus !== 'paid')
+        .flatMap(bill =>
+          bill.items.filter(item => item.status !== 'cancelled').map(item => item.id)
+        )
+    }
+
+    emit('checkout', itemsToCheckout, checkoutAmount.value)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to process checkout'
     showError(message)

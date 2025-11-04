@@ -109,6 +109,18 @@
       :timeout="success.timeout"
       @close="success.show = false"
     />
+
+    <!-- Payment Dialog -->
+    <PaymentDialog
+      v-model="showPaymentDialog"
+      :amount="paymentDialogData.amount"
+      :discount="paymentDialogData.discount"
+      :tax="paymentDialogData.tax"
+      :bill-ids="paymentDialogData.billIds"
+      :order-id="paymentDialogData.orderId"
+      @confirm="handlePaymentConfirm"
+      @cancel="handlePaymentCancel"
+    />
   </div>
 </template>
 
@@ -116,6 +128,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
+import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useMenuStore } from '@/stores/menu'
 import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
 import { useOrderSelection } from '@/stores/pos/orders/composables'
@@ -128,12 +141,14 @@ import OrderInfo from './components/OrderInfo.vue'
 import BillsManager from './components/BillsManager.vue'
 import OrderTotals from './components/OrderTotals.vue'
 import OrderActions from './components/OrderActions.vue'
+import PaymentDialog from '../payment/PaymentDialog.vue'
 
 const MODULE_NAME = 'OrderSection'
 
 // Stores
 const ordersStore = usePosOrdersStore()
 const tablesStore = usePosTablesStore()
+const paymentsStore = usePosPaymentsStore()
 const menuStore = useMenuStore()
 
 // Selection (from composable)
@@ -174,6 +189,17 @@ const success = ref({
 })
 
 const hasUnsavedChanges = ref(false)
+
+// Payment Dialog State
+const showPaymentDialog = ref(false)
+const paymentDialogData = ref({
+  amount: 0,
+  discount: 0,
+  tax: 0,
+  billIds: [] as string[],
+  orderId: '',
+  itemIds: [] as string[]
+})
 
 // Computed - Main Data
 const currentOrder = computed((): PosOrder | null => {
@@ -565,18 +591,117 @@ const handlePrint = (): void => {
   showSuccess('Bill sent to printer')
 }
 
-const handleCheckout = (itemIds: string[], billId: string): void => {
-  console.log('💳 Checkout action:', {
-    itemIds,
-    billId,
-    amount: orderTotals.value.finalTotal,
-    itemCount: itemIds.length
-  })
+const handleCheckout = async (itemIds: string[], billId: string): Promise<void> => {
+  try {
+    if (!currentOrder.value) {
+      showError('No active order')
+      return
+    }
 
-  // TODO: Implement checkout flow
-  showSuccess(
-    `Checkout initiated for ${itemIds.length > 0 ? itemIds.length + ' items' : 'all items'}`
-  )
+    console.log('💳 Checkout action:', {
+      itemIds,
+      billId,
+      amount: orderTotals.value.finalTotal,
+      itemCount: itemIds.length
+    })
+
+    // Найти bills которые нужно оплатить на основе itemIds
+    const billIds: string[] = []
+    if (itemIds.length > 0) {
+      // Оплата выбранных items - найти их bills
+      for (const bill of currentOrder.value.bills) {
+        const hasSelectedItems = bill.items.some(item => itemIds.includes(item.id))
+        if (hasSelectedItems && !billIds.includes(bill.id)) {
+          billIds.push(bill.id)
+        }
+      }
+    } else {
+      // Оплата всех непоплаченных счетов
+      billIds.push(
+        ...currentOrder.value.bills
+          .filter(bill => bill.paymentStatus !== 'paid')
+          .map(bill => bill.id)
+      )
+    }
+
+    if (billIds.length === 0) {
+      showError('No bills to checkout')
+      return
+    }
+
+    // Открыть Payment Dialog с правильными данными
+    paymentDialogData.value = {
+      amount: orderTotals.value.subtotal,
+      discount: orderTotals.value.totalDiscounts,
+      tax: orderTotals.value.totalTaxes,
+      billIds,
+      orderId: currentOrder.value.id,
+      itemIds
+    }
+
+    showPaymentDialog.value = true
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to prepare checkout'
+    showError(message)
+  }
+}
+
+const handlePaymentConfirm = async (paymentData: {
+  method: 'cash' | 'card' | 'qr'
+  amount: number
+  receivedAmount?: number
+  change?: number
+}): Promise<void> => {
+  try {
+    if (!currentOrder.value) {
+      showError('No active order')
+      return
+    }
+
+    loading.value.actions = true
+    loadingMessage.value = 'Processing payment...'
+
+    console.log('💰 Payment confirmed:', {
+      ...paymentData,
+      billIds: paymentDialogData.value.billIds,
+      orderId: paymentDialogData.value.orderId
+    })
+
+    // Обработать оплату через paymentsStore
+    const result = await paymentsStore.processSimplePayment(
+      paymentDialogData.value.orderId,
+      paymentDialogData.value.billIds,
+      paymentData.method,
+      paymentData.amount,
+      paymentData.receivedAmount
+    )
+
+    if (result.success) {
+      showSuccess(
+        `Payment successful! ${paymentDialogData.value.billIds.length} bill(s) paid. ${
+          paymentData.change ? `Change: Rp ${paymentData.change.toLocaleString('id-ID')}` : ''
+        }`
+      )
+
+      // Очистить выбор после успешной оплаты
+      selection.clearSelection()
+
+      // Закрыть диалог
+      showPaymentDialog.value = false
+    } else {
+      showError(result.error || 'Payment failed')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to process payment'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+  }
+}
+
+const handlePaymentCancel = (): void => {
+  showPaymentDialog.value = false
+  console.log('💳 Payment cancelled by user')
 }
 
 const handleCheckoutFromActions = (itemIds: string[], amount: number): void => {

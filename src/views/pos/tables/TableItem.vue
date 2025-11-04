@@ -4,10 +4,10 @@
     :class="[
       'table-item',
       {
-        'table-item--free': table.status === 'free',
-        'table-item--occupied-unpaid': table.status === 'occupied_unpaid',
-        'table-item--occupied-paid': table.status === 'occupied_paid',
-        'table-item--reserved': table.status === 'reserved',
+        'table-item--free': displayStatus === 'free',
+        'table-item--occupied-unpaid': displayStatus === 'occupied_unpaid',
+        'table-item--occupied-paid': displayStatus === 'occupied_paid',
+        'table-item--reserved': displayStatus === 'reserved',
         'table-item--active': isActive
       }
     ]"
@@ -25,20 +25,27 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PosTable } from '@/stores/pos/types' // ИЗМЕНЕНИЕ 1
+import type { PosTable } from '@/stores/pos/types'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+
+// =============================================
+// STORES
+// =============================================
+
+const ordersStore = usePosOrdersStore()
 
 // =============================================
 // PROPS & EMITS
 // =============================================
 
 interface Props {
-  table: PosTable // ИЗМЕНЕНИЕ 2
+  table: PosTable
   isActive?: boolean
 }
 
 interface Emits {
   (e: 'click', table: PosTable): void
-  (e: 'select', table: PosTable): void // ИЗМЕНЕНИЕ 3: передаем объект table
+  (e: 'select', table: PosTable): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -48,10 +55,38 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>()
 
 // =============================================
-// COMPUTED PROPERTIES - ОСТАВЛЯЕМ ВАШУ ЛОГИКУ
+// COMPUTED PROPERTIES
 // =============================================
 
-// Конфигурация статусов ОСТАЕТСЯ без изменений
+/**
+ * Вычисляемый UI статус на основе физического статуса стола и состояния заказа
+ * - free: стол свободен
+ * - occupied_unpaid: стол занят, заказ не оплачен
+ * - occupied_paid: стол занят, заказ оплачен (гости еще сидят)
+ * - reserved: стол зарезервирован
+ */
+const displayStatus = computed((): 'free' | 'occupied_unpaid' | 'occupied_paid' | 'reserved' => {
+  if (props.table.status === 'free') return 'free'
+  if (props.table.status === 'reserved') return 'reserved'
+
+  // Для occupied смотрим на статус оплаты заказа
+  if (props.table.status === 'occupied' && props.table.currentOrderId) {
+    const order = ordersStore.orders.find(o => o.id === props.table.currentOrderId)
+
+    // Если заказ оплачен - показываем зеленый (occupied_paid)
+    if (order?.paymentStatus === 'paid') {
+      return 'occupied_paid'
+    }
+
+    // Иначе - желтый (occupied_unpaid)
+    return 'occupied_unpaid'
+  }
+
+  // Fallback - если occupied но нет заказа (не должно происходить)
+  return 'free'
+})
+
+// Конфигурация статусов для UI
 const statusConfig = {
   free: {
     icon: 'mdi-check-circle',
@@ -71,9 +106,9 @@ const statusConfig = {
   }
 }
 
-const statusIcon = computed(() => statusConfig[props.table.status]?.icon || 'mdi-help')
+const statusIcon = computed(() => statusConfig[displayStatus.value]?.icon || 'mdi-help')
 
-const statusColor = computed(() => statusConfig[props.table.status]?.color || 'grey')
+const statusColor = computed(() => statusConfig[displayStatus.value]?.color || 'grey')
 
 // =============================================
 // METHODS
