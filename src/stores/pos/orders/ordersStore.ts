@@ -27,6 +27,10 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   const currentOrderId = ref<string | null>(null)
   const activeBillId = ref<string | null>(null)
 
+  // Selection state (SHARED ACROSS ALL COMPONENTS)
+  const selectedItems = ref<Set<string>>(new Set())
+  const selectedBills = ref<Set<string>>(new Set())
+
   const loading = ref({
     list: false,
     create: false,
@@ -547,6 +551,167 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     error.value = null
   }
 
+  // ===== SELECTION METHODS =====
+
+  /**
+   * Computed: количество выбранных позиций
+   */
+  const selectedItemsCount = computed(() => selectedItems.value.size)
+
+  /**
+   * Computed: количество выбранных счетов
+   */
+  const selectedBillsCount = computed(() => selectedBills.value.size)
+
+  /**
+   * Computed: есть ли выбранные элементы
+   */
+  const hasSelection = computed(() => selectedItems.value.size > 0 || selectedBills.value.size > 0)
+
+  /**
+   * Computed: ID выбранных позиций (массив)
+   */
+  const selectedItemIds = computed(() => Array.from(selectedItems.value))
+
+  /**
+   * Проверить выбрана ли позиция
+   */
+  function isItemSelected(itemId: string): boolean {
+    return selectedItems.value.has(itemId)
+  }
+
+  /**
+   * Проверить выбран ли счет (все его позиции выбраны)
+   */
+  function isBillSelected(bill: PosBill): boolean {
+    if (bill.items.length === 0) return false
+    return bill.items.every(item => selectedItems.value.has(item.id))
+  }
+
+  /**
+   * Установить выбор позиции (с явным значением)
+   */
+  function setItemSelection(itemId: string, selected: boolean): void {
+    const wasSelected = selectedItems.value.has(itemId)
+
+    if (selected) {
+      selectedItems.value.add(itemId)
+    } else {
+      selectedItems.value.delete(itemId)
+    }
+
+    // Force reactivity update
+    selectedItems.value = new Set(selectedItems.value)
+
+    // Debug log
+    if (wasSelected !== selected) {
+      console.log('🔍 [ordersStore] Item selection changed:', {
+        itemId,
+        wasSelected,
+        nowSelected: selected,
+        totalSelected: selectedItems.value.size
+      })
+    }
+  }
+
+  /**
+   * Toggle выбор позиции (item)
+   */
+  function toggleItemSelection(itemId: string): void {
+    if (selectedItems.value.has(itemId)) {
+      selectedItems.value.delete(itemId)
+    } else {
+      selectedItems.value.add(itemId)
+    }
+
+    // Force reactivity update
+    selectedItems.value = new Set(selectedItems.value)
+  }
+
+  /**
+   * Toggle выбор счета (bill)
+   */
+  function toggleBillSelection(bill: PosBill): void {
+    const billItemIds = bill.items.map(item => item.id)
+    const isBillSelected = billItemIds.every(id => selectedItems.value.has(id))
+
+    console.log('🔍 [ordersStore] Bill selection toggled:', {
+      billId: bill.id,
+      billName: bill.name,
+      itemsInBill: billItemIds.length,
+      wasBillSelected: isBillSelected,
+      action: isBillSelected ? 'deselecting all' : 'selecting all'
+    })
+
+    if (isBillSelected) {
+      // Снимаем выбор со всех items
+      billItemIds.forEach(id => selectedItems.value.delete(id))
+      selectedBills.value.delete(bill.id)
+    } else {
+      // Выбираем все items
+      billItemIds.forEach(id => selectedItems.value.add(id))
+      selectedBills.value.add(bill.id)
+    }
+
+    // Force reactivity update
+    selectedItems.value = new Set(selectedItems.value)
+    selectedBills.value = new Set(selectedBills.value)
+
+    console.log('🔍 [ordersStore] After bill toggle:', {
+      totalSelectedItems: selectedItems.value.size,
+      selectedItemIds: Array.from(selectedItems.value)
+    })
+  }
+
+  /**
+   * Очистить выбор (items и bills)
+   */
+  function clearSelection(): void {
+    selectedItems.value.clear()
+    selectedBills.value.clear()
+
+    // Force reactivity update
+    selectedItems.value = new Set(selectedItems.value)
+    selectedBills.value = new Set(selectedBills.value)
+  }
+
+  /**
+   * Выбрать все позиции активного счета
+   */
+  function selectAllItemsInBill(bill: PosBill | null): void {
+    if (!bill) return
+
+    bill.items.forEach(item => {
+      selectedItems.value.add(item.id)
+    })
+
+    selectedBills.value.add(bill.id)
+
+    // Force reactivity update
+    selectedItems.value = new Set(selectedItems.value)
+    selectedBills.value = new Set(selectedBills.value)
+  }
+
+  /**
+   * Снять выбор с позиции (если удалена из заказа)
+   */
+  function deselectItem(itemId: string): void {
+    selectedItems.value.delete(itemId)
+
+    // Force reactivity update
+    selectedItems.value = new Set(selectedItems.value)
+  }
+
+  /**
+   * Снять выбор со счета (если удален из заказа)
+   */
+  function deselectBill(billId: string): void {
+    selectedBills.value.delete(billId)
+
+    // Force reactivity update
+    selectedBills.value = new Set(selectedBills.value)
+  }
+
   // ===== COMPOSABLES =====
   const {
     canAddItemToOrder,
@@ -575,6 +740,14 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     filteredOrders,
     ordersStats,
 
+    // Selection State
+    selectedItems,
+    selectedBills,
+    selectedItemsCount,
+    selectedBillsCount,
+    hasSelection,
+    selectedItemIds,
+
     // Actions
     loadOrders,
     createOrder,
@@ -591,6 +764,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     clearFilters,
     clearError,
     saveAndNotifyOrder,
+
+    // Selection Actions
+    isItemSelected,
+    isBillSelected,
+    setItemSelection,
+    toggleItemSelection,
+    toggleBillSelection,
+    clearSelection,
+    selectAllItemsInBill,
+    deselectItem,
+    deselectBill,
 
     // Utility Functions
     hasItemsInOrder,

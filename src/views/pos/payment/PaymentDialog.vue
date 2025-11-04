@@ -28,9 +28,14 @@
             <span class="text-success">-{{ formatPrice(discount) }}</span>
           </div>
 
-          <div v-if="tax > 0" class="summary-row">
-            <span class="text-medium-emphasis">Tax:</span>
-            <span>{{ formatPrice(tax) }}</span>
+          <div v-if="serviceTax > 0" class="summary-row">
+            <span class="text-medium-emphasis">Service Tax (5%):</span>
+            <span>{{ formatPrice(serviceTax) }}</span>
+          </div>
+
+          <div v-if="governmentTax > 0" class="summary-row">
+            <span class="text-medium-emphasis">Government Tax (10%):</span>
+            <span>{{ formatPrice(governmentTax) }}</span>
           </div>
 
           <v-divider class="my-3" />
@@ -40,6 +45,9 @@
             <span class="text-primary">{{ formatPrice(totalAmount) }}</span>
           </div>
         </div>
+
+        <!-- Items List (if provided) -->
+        <PaymentItemsList v-if="items.length > 0" :items="items" class="mb-4" />
 
         <!-- Payment Method Selection -->
         <div class="payment-method mb-4">
@@ -173,21 +181,27 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import type { PosBillItem } from '@/stores/pos/types'
+import PaymentItemsList from './widgets/PaymentItemsList.vue'
 
 interface Props {
   modelValue: boolean
   amount: number
   discount?: number
-  tax?: number
+  serviceTax?: number
+  governmentTax?: number
   billIds?: string[]
   orderId?: string
+  items?: PosBillItem[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
   discount: 0,
-  tax: 0,
+  serviceTax: 0,
+  governmentTax: 0,
   billIds: () => [],
-  orderId: ''
+  orderId: '',
+  items: () => []
 })
 
 interface PaymentData {
@@ -210,7 +224,7 @@ const processing = ref(false)
 
 // Computed
 const totalAmount = computed(() => {
-  return props.amount - props.discount + props.tax
+  return props.amount - props.discount + props.serviceTax + props.governmentTax
 })
 
 const change = computed(() => {

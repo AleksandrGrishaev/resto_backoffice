@@ -8,8 +8,8 @@
       :order-type="order?.type || 'dine_in'"
       :can-add-bill="canAddBill"
       :show-selection-mode="true"
-      :is-bill-selected="selection.isBillSelected"
-      :is-item-selected="selection.isItemSelected"
+      :is-bill-selected="ordersStore.isBillSelected"
+      :is-item-selected="ordersStore.isItemSelected"
       @select-bill="handleSelectBill"
       @add-bill="handleAddBill"
       @toggle-bill-selection="handleToggleBillSelection"
@@ -32,7 +32,7 @@
       <div v-else class="items-list">
         <BillItem
           :items="activeBill.items.filter(item => item.status !== 'cancelled')"
-          :is-item-selected="selection.isItemSelected"
+          :is-item-selected="ordersStore.isItemSelected"
           @select="handleItemSelect"
           @cancel="handleCancelItem"
           @add-note="handleAddNote"
@@ -63,7 +63,6 @@ import { ref, computed } from 'vue'
 import type { PosOrder, PosBill, PosBillItem } from '@/stores/pos/types'
 import { formatIDR, DebugUtils } from '@/utils'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
-import { useOrderSelection } from '@/stores/pos/orders/composables'
 
 // Components
 import BillsTabs from './BillsTabs.vue'
@@ -73,9 +72,6 @@ const MODULE_NAME = 'BillsManager'
 
 // Store
 const ordersStore = usePosOrdersStore()
-
-// Selection (from composable)
-const selection = useOrderSelection()
 
 // Props
 interface Props {
@@ -125,28 +121,27 @@ const handleToggleBillSelection = (billId: string): void => {
   const bill = props.bills.find(b => b.id === billId)
   if (!bill) return
 
-  selection.toggleBillSelection(bill)
+  ordersStore.toggleBillSelection(bill)
 
   DebugUtils.debug(MODULE_NAME, 'Bill selection toggled', {
     billId,
-    isSelected: selection.isBillSelected(bill),
-    selectedItemsCount: selection.selectedItemsCount,
-    selectedBillsCount: selection.selectedBillsCount
+    isSelected: ordersStore.isBillSelected(bill),
+    selectedItemsCount: ordersStore.selectedItemsCount,
+    selectedBillsCount: ordersStore.selectedBillsCount
   })
 }
 const handleSelectAll = (selected: boolean): void => {
   if (!activeBill.value) return
 
   if (selected) {
-    selection.selectAllItemsInBill(activeBill.value)
+    ordersStore.selectAllItemsInBill(activeBill.value)
   } else {
     // Deselect all items in active bill
     activeBill.value.items
       .filter(item => item.status !== 'cancelled')
       .forEach(item => {
-        if (selection.isItemSelected(item.id)) {
-          selection.toggleItemSelection(item.id)
-        }
+        // ИСПРАВЛЕНО: используем setItemSelection вместо toggleItemSelection
+        ordersStore.setItemSelection(item.id, false)
       })
   }
 }
@@ -169,12 +164,13 @@ const handleRemoveBill = (billId: string): void => {
 
 // Methods - Item Management
 const handleItemSelect = (itemId: string, selected: boolean): void => {
-  selection.toggleItemSelection(itemId)
+  // ИСПРАВЛЕНО: используем setItemSelection с явным значением вместо toggle
+  ordersStore.setItemSelection(itemId, selected)
 
   DebugUtils.debug(MODULE_NAME, 'Item selection changed', {
     itemId,
-    selected: selection.isItemSelected(itemId),
-    selectedItemsCount: selection.selectedItemsCount
+    selected: ordersStore.isItemSelected(itemId),
+    selectedItemsCount: ordersStore.selectedItemsCount
   })
 }
 

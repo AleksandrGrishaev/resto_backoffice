@@ -115,9 +115,11 @@
       v-model="showPaymentDialog"
       :amount="paymentDialogData.amount"
       :discount="paymentDialogData.discount"
-      :tax="paymentDialogData.tax"
+      :service-tax="paymentDialogData.serviceTax"
+      :government-tax="paymentDialogData.governmentTax"
       :bill-ids="paymentDialogData.billIds"
       :order-id="paymentDialogData.orderId"
+      :items="paymentDialogData.items"
       @confirm="handlePaymentConfirm"
       @cancel="handlePaymentCancel"
     />
@@ -131,7 +133,6 @@ import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useMenuStore } from '@/stores/menu'
 import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
-import { useOrderSelection } from '@/stores/pos/orders/composables'
 import type { PosOrder, PosBill, PosBillItem, OrderType } from '@/stores/pos/types'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 import AppNotification from '@/components/atoms/feedback/AppNotification.vue'
@@ -150,9 +151,6 @@ const ordersStore = usePosOrdersStore()
 const tablesStore = usePosTablesStore()
 const paymentsStore = usePosPaymentsStore()
 const menuStore = useMenuStore()
-
-// Selection (from composable)
-const selection = useOrderSelection()
 
 // Props
 interface Props {
@@ -195,10 +193,12 @@ const showPaymentDialog = ref(false)
 const paymentDialogData = ref({
   amount: 0,
   discount: 0,
-  tax: 0,
+  serviceTax: 0,
+  governmentTax: 0,
   billIds: [] as string[],
   orderId: '',
-  itemIds: [] as string[]
+  itemIds: [] as string[],
+  items: [] as PosBillItem[]
 })
 
 // Computed - Main Data
@@ -230,7 +230,7 @@ const calculations = useOrderCalculations(() => currentOrder.value?.bills || [],
   governmentTaxRate: 10,
   includeServiceTax: true,
   includeGovernmentTax: true,
-  selectedItemIds: () => selection.selectedItemIds.value,
+  selectedItemIds: () => ordersStore.selectedItemIds,
   activeBillId: () => ordersStore.activeBillId
 })
 
@@ -545,7 +545,7 @@ const handleSendToKitchen = async (itemIds: string[]): Promise<void> => {
 
 const handleSendToKitchenFromActions = async (): Promise<void> => {
   // Send all new items from active bill or selected items
-  const itemIds = selection.selectedItemIds.value
+  const itemIds = ordersStore.selectedItemIds
 
   if (itemIds.length > 0) {
     await handleSendToKitchen(itemIds)
@@ -570,7 +570,7 @@ const handleMoveItems = (itemIds: string[], sourceBillId: string): void => {
 }
 
 const handleMoveFromActions = (): void => {
-  const selectedCount = selection.selectedItemsCount.value
+  const selectedCount = ordersStore.selectedItemsCount
 
   if (selectedCount === 0) {
     showError('Please select items to move', 'warning')
@@ -578,7 +578,7 @@ const handleMoveFromActions = (): void => {
   }
 
   if (activeBillId.value) {
-    handleMoveItems(selection.selectedItemIds.value, activeBillId.value)
+    handleMoveItems(ordersStore.selectedItemIds, activeBillId.value)
   }
 }
 
@@ -598,11 +598,18 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
       return
     }
 
-    console.log('💳 Checkout action:', {
+    console.log('💳 [OrderSection] Checkout action received:', {
       itemIds,
       billId,
       amount: orderTotals.value.finalTotal,
       itemCount: itemIds.length
+    })
+
+    console.log('🔍 [OrderSection] Current selection state:', {
+      hasSelection: ordersStore.hasSelection,
+      selectedItemsCount: ordersStore.selectedItemsCount,
+      selectedItemIds: ordersStore.selectedItemIds,
+      calculationScope: calculations.calculationScope.value
     })
 
     // Найти bills которые нужно оплатить на основе itemIds
@@ -629,14 +636,71 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
       return
     }
 
+    // Собрать items по itemIds для отображения в dialog
+    const itemsToShow: PosBillItem[] = []
+    for (const bill of currentOrder.value.bills) {
+      for (const item of bill.items) {
+        if (itemIds.includes(item.id) && item.status !== 'cancelled') {
+          itemsToShow.push(item)
+        }
+      }
+    }
+
+    // Пересчитать суммы ТОЛЬКО для unpaid items (itemsToShow)
+    // Это важно, потому что itemIds уже отфильтрованы от paid items в OrderActions
+    const checkoutSubtotal = itemsToShow.reduce((sum, item) => sum + item.totalPrice, 0)
+
+    // Пропорциональный расчет скидок счетов для выбранных items
+    let checkoutDiscount = 0
+    for (const billId of billIds) {
+      const bill = currentOrder.value.bills.find(b => b.id === billId)
+      if (!bill || !bill.discountAmount) continue
+
+      // Найти items из этого счета, которые оплачиваются
+      const billItemsToCheckout = itemsToShow.filter(item =>
+        bill.items.some(billItem => billItem.id === item.id)
+      )
+
+      if (billItemsToCheckout.length === 0) continue
+
+      // Рассчитать пропорцию: сумма оплачиваемых items / общая сумма счета
+      const billTotal = bill.items
+        .filter(item => item.status !== 'cancelled')
+        .reduce((sum, item) => sum + item.totalPrice, 0)
+
+      const checkoutBillTotal = billItemsToCheckout.reduce((sum, item) => sum + item.totalPrice, 0)
+
+      if (billTotal > 0) {
+        const proportion = checkoutBillTotal / billTotal
+        checkoutDiscount += bill.discountAmount * proportion
+      }
+    }
+
+    const discountedAmount = checkoutSubtotal - checkoutDiscount
+    const checkoutServiceTax = discountedAmount * 0.05
+    const checkoutGovernmentTax = discountedAmount * 0.1
+
+    console.log('💳 [OrderSection] Checkout amounts recalculated for unpaid items only:', {
+      itemsCount: itemsToShow.length,
+      itemIds: itemIds,
+      billIds: billIds,
+      subtotal: checkoutSubtotal,
+      discount: checkoutDiscount,
+      serviceTax: checkoutServiceTax,
+      governmentTax: checkoutGovernmentTax,
+      total: discountedAmount + checkoutServiceTax + checkoutGovernmentTax
+    })
+
     // Открыть Payment Dialog с правильными данными
     paymentDialogData.value = {
-      amount: orderTotals.value.subtotal,
-      discount: orderTotals.value.totalDiscounts,
-      tax: orderTotals.value.totalTaxes,
+      amount: checkoutSubtotal,
+      discount: checkoutDiscount,
+      serviceTax: checkoutServiceTax,
+      governmentTax: checkoutGovernmentTax,
       billIds,
       orderId: currentOrder.value.id,
-      itemIds
+      itemIds,
+      items: itemsToShow
     }
 
     showPaymentDialog.value = true
@@ -673,7 +737,8 @@ const handlePaymentConfirm = async (paymentData: {
       paymentDialogData.value.billIds,
       paymentData.method,
       paymentData.amount,
-      paymentData.receivedAmount
+      paymentData.receivedAmount,
+      paymentDialogData.value.itemIds // НОВОЕ: передаем itemIds для частичной оплаты
     )
 
     if (result.success) {
@@ -684,7 +749,7 @@ const handlePaymentConfirm = async (paymentData: {
       )
 
       // Очистить выбор после успешной оплаты
-      selection.clearSelection()
+      ordersStore.clearSelection()
 
       // Закрыть диалог
       showPaymentDialog.value = false
@@ -717,7 +782,7 @@ watch(
     if (newOrderId !== oldOrderId) {
       // При смене заказа сбрасываем состояние
       hasUnsavedChanges.value = false
-      selection.clearSelection()
+      ordersStore.clearSelection()
     }
   }
 )

@@ -171,7 +171,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     billIds: string[],
     method: PaymentMethod,
     amount: number,
-    receivedAmount?: number
+    receivedAmount?: number,
+    itemIds?: string[] // НОВОЕ: опциональный список оплачиваемых items
   ): Promise<ServiceResponse<PosPayment>> {
     loading.value.process = true
     error.value = null
@@ -191,8 +192,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       if (response.success && response.data) {
         payments.value.push(response.data)
 
-        // Обновить статус оплаты счетов
-        await updateBillsPaymentStatus(billIds, 'paid')
+        // Обновить статус оплаты позиций и пересчитать статус счетов
+        await updateItemsAndBillsPaymentStatus(orderId, billIds, itemIds)
 
         // Записать в финансы
         await recordFinancialTransaction(response.data)
@@ -329,7 +330,81 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
   }
 
   /**
-   * Обновить статус оплаты счетов
+   * Обновить статус оплаты позиций и пересчитать статус счетов
+   */
+  async function updateItemsAndBillsPaymentStatus(
+    orderId: string,
+    billIds: string[],
+    itemIds?: string[]
+  ): Promise<void> {
+    const order = ordersStore.orders.find(o => o.id === orderId)
+    if (!order) return
+
+    console.log('💳 [paymentsStore] Updating payment status:', {
+      orderId,
+      billIds,
+      itemIds: itemIds || 'all items'
+    })
+
+    const paidItemIds: string[] = []
+
+    // Обновить paymentStatus для оплаченных items
+    for (const bill of order.bills) {
+      if (!billIds.includes(bill.id)) continue
+
+      for (const item of bill.items) {
+        // Если указаны конкретные items - помечаем только их
+        // Если itemIds не указаны - помечаем все items в этих bills
+        if (!itemIds || itemIds.includes(item.id)) {
+          if (item.paymentStatus !== 'paid' && item.status !== 'cancelled') {
+            item.paymentStatus = 'paid'
+            paidItemIds.push(item.id)
+            console.log('💳 Item marked as paid:', item.id)
+          }
+        }
+      }
+
+      // Пересчитать статус счета на основе статусов всех items
+      const billPaymentStatus = calculateBillPaymentStatus(bill)
+      bill.paymentStatus = billPaymentStatus
+
+      console.log('💳 Bill status updated:', {
+        billId: bill.id,
+        paymentStatus: billPaymentStatus,
+        totalItems: bill.items.length,
+        paidItems: bill.items.filter(i => i.paymentStatus === 'paid').length
+      })
+    }
+
+    // Автоматически снять выделение с оплаченных позиций
+    if (paidItemIds.length > 0) {
+      console.log('🔍 [paymentsStore] Auto-deselecting paid items:', paidItemIds)
+      paidItemIds.forEach(itemId => {
+        ordersStore.deselectItem(itemId)
+      })
+    }
+
+    // Пересчитать заказ (автоматически обновит статус стола)
+    await ordersStore.recalculateOrderTotals(orderId)
+  }
+
+  /**
+   * Вычислить статус оплаты счета на основе статусов позиций
+   */
+  function calculateBillPaymentStatus(bill: PosBill): 'unpaid' | 'partial' | 'paid' {
+    const activeItems = bill.items.filter(item => item.status !== 'cancelled')
+
+    if (activeItems.length === 0) return 'unpaid'
+
+    const paidItems = activeItems.filter(item => item.paymentStatus === 'paid')
+
+    if (paidItems.length === 0) return 'unpaid'
+    if (paidItems.length === activeItems.length) return 'paid'
+    return 'partial'
+  }
+
+  /**
+   * Обновить статус оплаты счетов (LEGACY - используется в multiple payment)
    */
   async function updateBillsPaymentStatus(
     billIds: string[],

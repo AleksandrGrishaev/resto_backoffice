@@ -55,8 +55,8 @@
           @click="handleCheckout"
         >
           Checkout
-          <template v-if="selection.selectedItemsCount.value > 0">
-            ({{ selection.selectedItemsCount.value }})
+          <template v-if="ordersStore.selectedItemsCount > 0">
+            ({{ ordersStore.selectedItemsCount }})
           </template>
         </BaseButton>
 
@@ -72,12 +72,12 @@
 
       <!-- Checkout Summary (only when items selected) -->
       <div
-        v-if="selection.selectedItemsCount.value > 0"
+        v-if="ordersStore.selectedItemsCount > 0"
         class="checkout-summary mt-3 pa-3 rounded bg-success-lighten-5 border-success"
       >
         <div class="d-flex justify-space-between align-center">
           <div class="text-subtitle-2 font-weight-medium">
-            Selected Items ({{ selection.selectedItemsCount.value }})
+            Selected Items ({{ ordersStore.selectedItemsCount }})
           </div>
           <div class="text-h6 font-weight-bold text-success">
             {{ formatPrice(selectedItemsAmount) }}
@@ -92,14 +92,10 @@
 import { ref, computed } from 'vue'
 import type { PosOrder, PosBill } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
-import { useOrderSelection } from '@/stores/pos/orders/composables'
 import BaseButton from '@/components/atoms/buttons/BaseButton.vue'
 
 // Store
 const ordersStore = usePosOrdersStore()
-
-// Selection (from composable)
-const selection = useOrderSelection()
 
 // Props
 interface Props {
@@ -132,7 +128,7 @@ const canSave = computed((): boolean => {
 })
 
 const canMove = computed((): boolean => {
-  return selection.hasSelection.value
+  return ordersStore.hasSelection
 })
 
 const canCheckout = computed((): boolean => {
@@ -144,20 +140,20 @@ const canCheckout = computed((): boolean => {
 
 // Computed - Amounts
 const selectedItemsAmount = computed((): number => {
-  if (selection.selectedItemsCount.value === 0) return 0
+  if (ordersStore.selectedItemsCount === 0) return 0
 
   return props.bills.reduce((sum, bill) => {
     return (
       sum +
       bill.items.reduce((billSum, item) => {
-        return selection.isItemSelected(item.id) ? billSum + item.totalPrice : billSum
+        return ordersStore.isItemSelected(item.id) ? billSum + item.totalPrice : billSum
       }, 0)
     )
   }, 0)
 })
 
 const checkoutAmount = computed((): number => {
-  if (selection.selectedItemsCount.value > 0) {
+  if (ordersStore.selectedItemsCount > 0) {
     return selectedItemsAmount.value
   }
 
@@ -224,17 +220,59 @@ const handleCheckout = async (): Promise<void> => {
     processing.value = true
     clearError()
 
-    // Если есть выбранные items - используем их
-    // Если нет - собираем ВСЕ items из непоплаченных счетов
-    let itemsToCheckout = selection.selectedItemIds.value
+    console.log('🔍 [OrderActions] Checkout started:', {
+      hasSelection: ordersStore.hasSelection,
+      selectedItemsCount: ordersStore.selectedItemsCount,
+      selectedItemIds: ordersStore.selectedItemIds,
+      selectedBillsCount: ordersStore.selectedBillsCount
+    })
+
+    // Если есть выбранные items - используем их (но только unpaid)
+    // Если нет - собираем ВСЕ unpaid items из непоплаченных счетов
+    let itemsToCheckout = ordersStore.selectedItemIds
 
     if (itemsToCheckout.length === 0) {
-      // Собрать все items из unpaid bills
+      // Собрать все unpaid items из unpaid bills
       itemsToCheckout = props.bills
         .filter(bill => bill.paymentStatus !== 'paid')
         .flatMap(bill =>
-          bill.items.filter(item => item.status !== 'cancelled').map(item => item.id)
+          bill.items
+            .filter(item => item.status !== 'cancelled' && item.paymentStatus !== 'paid')
+            .map(item => item.id)
         )
+      console.log('🔍 [OrderActions] No selection, using all unpaid items:', itemsToCheckout)
+    } else {
+      // НОВОЕ: фильтруем только unpaid items из выбранных
+      const unpaidItems = itemsToCheckout.filter(itemId => {
+        // Найти item во всех bills
+        for (const bill of props.bills) {
+          const item = bill.items.find(i => i.id === itemId)
+          if (item) {
+            return item.paymentStatus !== 'paid' && item.status !== 'cancelled'
+          }
+        }
+        return false
+      })
+
+      if (unpaidItems.length === 0) {
+        showError('All selected items are already paid')
+        processing.value = false
+        return
+      }
+
+      if (unpaidItems.length < itemsToCheckout.length) {
+        const skippedCount = itemsToCheckout.length - unpaidItems.length
+        console.log(`⚠️ [OrderActions] Skipped ${skippedCount} already paid items from selection`)
+      }
+
+      itemsToCheckout = unpaidItems
+      console.log('🔍 [OrderActions] Using selected unpaid items:', itemsToCheckout)
+    }
+
+    if (itemsToCheckout.length === 0) {
+      showError('No unpaid items to checkout')
+      processing.value = false
+      return
     }
 
     emit('checkout', itemsToCheckout, checkoutAmount.value)

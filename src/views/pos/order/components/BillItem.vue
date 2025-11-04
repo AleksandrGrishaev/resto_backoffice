@@ -10,6 +10,7 @@
           <v-checkbox
             :model-value="areAllGroupItemsSelected(group)"
             :indeterminate="areSomeGroupItemsSelected(group) && !areAllGroupItemsSelected(group)"
+            :disabled="areAllGroupItemsPaid(group)"
             density="comfortable"
             hide-details
             @click.stop
@@ -62,10 +63,14 @@
               v-for="(item, index) in group.items"
               :key="item.id"
               class="item-row"
-              :class="{ selected: isItemSelected(item.id) }"
+              :class="{
+                selected: isItemSelected(item.id),
+                'item-paid': item.paymentStatus === 'paid'
+              }"
             >
               <v-checkbox
                 :model-value="isItemSelected(item.id)"
+                :disabled="item.paymentStatus === 'paid'"
                 density="comfortable"
                 hide-details
                 @update:model-value="val => handleSelect(item.id, val)"
@@ -126,9 +131,17 @@
       </div>
 
       <!-- Single Item -->
-      <div v-else class="single-item" :class="{ selected: isItemSelected(group.items[0].id) }">
+      <div
+        v-else
+        class="single-item"
+        :class="{
+          selected: isItemSelected(group.items[0].id),
+          'item-paid': group.items[0].paymentStatus === 'paid'
+        }"
+      >
         <v-checkbox
           :model-value="isItemSelected(group.items[0].id)"
+          :disabled="group.items[0].paymentStatus === 'paid'"
           density="comfortable"
           hide-details
           @update:model-value="val => handleSelect(group.items[0].id, val)"
@@ -295,11 +308,17 @@ const groupedItems = computed(() => {
 
 // Group selection logic
 const areAllGroupItemsSelected = (group: GroupedBillItems): boolean => {
-  return group.items.every(item => props.isItemSelected(item.id))
+  const unpaidItems = group.items.filter(item => item.paymentStatus !== 'paid')
+  if (unpaidItems.length === 0) return false
+  return unpaidItems.every(item => props.isItemSelected(item.id))
 }
 
 const areSomeGroupItemsSelected = (group: GroupedBillItems): boolean => {
   return group.items.some(item => props.isItemSelected(item.id))
+}
+
+const areAllGroupItemsPaid = (group: GroupedBillItems): boolean => {
+  return group.items.every(item => item.paymentStatus === 'paid')
 }
 
 // Expand/collapse logic
@@ -321,8 +340,11 @@ const handleSelect = (itemId: string, selected: boolean): void => {
 }
 
 const handleSelectGroup = (group: GroupedBillItems, selected: boolean): void => {
+  // Выбираем/снимаем выбор только с unpaid items
   group.items.forEach(item => {
-    emit('select', item.id, selected)
+    if (item.paymentStatus !== 'paid') {
+      emit('select', item.id, selected)
+    }
   })
 }
 
@@ -623,6 +645,28 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
 .v-btn {
   min-width: 40px !important;
   height: 40px !important;
+}
+
+/* =============================================
+   PAID ITEMS VISUAL INDICATOR
+   ============================================= */
+
+.item-paid {
+  opacity: 0.6;
+  background: rgba(var(--v-theme-success), 0.05) !important;
+  border-left: 3px solid rgba(var(--v-theme-success), 0.3);
+}
+
+.item-paid:hover {
+  background: rgba(var(--v-theme-success), 0.08) !important;
+}
+
+.item-paid :deep(.v-checkbox) {
+  opacity: 0.5;
+}
+
+.item-paid :deep(.v-selection-control--disabled) {
+  opacity: 0.4;
 }
 
 /* =============================================

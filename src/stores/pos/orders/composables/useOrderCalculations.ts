@@ -428,6 +428,19 @@ export function recalculateOrderTotals(order: PosOrder): void {
     bill.discountAmount = billDiscountAmount
     bill.total = Math.max(0, billSubtotal - billDiscountAmount)
 
+    // Пересчитать статус оплаты счета на основе статусов позиций
+    const activeItems = bill.items.filter(item => item.status !== 'cancelled')
+    if (activeItems.length > 0) {
+      const paidItems = activeItems.filter(item => item.paymentStatus === 'paid')
+      if (paidItems.length === 0) {
+        bill.paymentStatus = 'unpaid'
+      } else if (paidItems.length === activeItems.length) {
+        bill.paymentStatus = 'paid'
+      } else {
+        bill.paymentStatus = 'partial'
+      }
+    }
+
     // Добавляем к общей сумме заказа (только активные счета)
     if (bill.status !== 'cancelled') {
       totalAmount += bill.total

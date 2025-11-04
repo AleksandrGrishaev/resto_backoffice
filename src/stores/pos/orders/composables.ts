@@ -12,7 +12,7 @@ import type {
 import { ORDER_TYPE_STATUS_CONFIG } from '../types'
 
 // ===== EXPORTS =====
-export { useOrderSelection } from './composables/useOrderSelection'
+// NOTE: useOrderSelection has been removed - selection state is now in ordersStore
 export {
   recalculateOrderTotals,
   calculateOrderStatus,
