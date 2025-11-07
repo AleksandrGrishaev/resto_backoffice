@@ -78,6 +78,61 @@
       <!-- Accounts with active accounts -->
       <navigation-accounts />
 
+      <!-- Sales Section (Sprint 2) -->
+      <v-list-group value="sales" class="mb-2">
+        <template #activator="{ props }">
+          <v-list-item
+            v-bind="props"
+            prepend-icon="mdi-cash-multiple"
+            color="primary"
+            :active-color="variables.colorPrimary"
+          >
+            <template #title>
+              <span>Sales</span>
+            </template>
+          </v-list-item>
+        </template>
+
+        <!-- Sales Analytics -->
+        <v-list-item
+          to="/sales/analytics"
+          prepend-icon="mdi-chart-line"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Analytics</span>
+          </template>
+        </v-list-item>
+
+        <!-- Sales Transactions -->
+        <v-list-item
+          to="/sales/transactions"
+          prepend-icon="mdi-receipt-text"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Transactions</span>
+          </template>
+        </v-list-item>
+
+        <!-- Write-off History -->
+        <v-list-item
+          to="/inventory/write-offs"
+          prepend-icon="mdi-file-document-remove"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Write-off History</span>
+          </template>
+        </v-list-item>
+      </v-list-group>
+
       <!-- Catalogs Section -->
       <v-list-group value="catalogs" class="mb-2">
         <template #activator="{ props }">

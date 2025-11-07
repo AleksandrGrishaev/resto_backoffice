@@ -191,6 +191,48 @@ const routes: RouteRecordRaw[] = [
           allowedRoles: ['admin']
         }
       },
+      // === Sales Analytics (Sprint 2) ===
+      {
+        path: 'sales',
+        meta: {
+          allowedRoles: ['admin', 'manager']
+        },
+        children: [
+          {
+            path: 'analytics',
+            name: 'sales-analytics',
+            component: () => import('@/views/backoffice/sales/SalesAnalyticsView.vue'),
+            meta: {
+              title: 'Sales Analytics'
+            }
+          },
+          {
+            path: 'transactions',
+            name: 'sales-transactions',
+            component: () => import('@/views/backoffice/sales/SalesTransactionsView.vue'),
+            meta: {
+              title: 'Sales Transactions'
+            }
+          }
+        ]
+      },
+      // === Inventory Write-offs (Sprint 2) ===
+      {
+        path: 'inventory',
+        meta: {
+          allowedRoles: ['admin', 'manager']
+        },
+        children: [
+          {
+            path: 'write-offs',
+            name: 'write-off-history',
+            component: () => import('@/views/backoffice/inventory/WriteOffHistoryView.vue'),
+            meta: {
+              title: 'Write-off History'
+            }
+          }
+        ]
+      },
       // === Debug маршруты (только для разработки) ===
       ...(import.meta.env.DEV
         ? [
