@@ -109,6 +109,7 @@ import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import type { MenuItem, CreateMenuItemDto, MenuItemVariant } from '@/types/menu'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import MenuItemVariantComponent from './MenuItemVariant.vue'
+import { ENV } from '@/config/environment'
 
 const MODULE_NAME = 'MenuItemDialog'
 
@@ -212,7 +213,7 @@ const dishOptions = computed(() => {
   return options.sort((a, b) => a.name.localeCompare(b.name))
 })
 
-// Опции для продуктов
+// Опции для продуктов (только с canBeSold = true)
 const productOptions = computed(() => {
   const options: Array<{
     id: string
@@ -224,15 +225,17 @@ const productOptions = computed(() => {
 
   try {
     const activeProducts = productsStore.activeProducts || []
-    activeProducts.forEach(product => {
-      options.push({
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        unit: product.unit,
-        costPerUnit: product.costPerUnit
+    activeProducts
+      .filter(product => product.canBeSold) // ✅ Только продукты на прямую продажу
+      .forEach(product => {
+        options.push({
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          unit: product.baseUnit, // ✅ Используем baseUnit вместо unit
+          costPerUnit: product.baseCostPerUnit // ✅ Используем baseCostPerUnit вместо costPerUnit
+        })
       })
-    })
   } catch (error) {
     console.warn('Error building product options:', error)
   }
@@ -416,8 +419,8 @@ onMounted(async () => {
   try {
     console.log('MenuItemDialog: Initializing stores...')
 
-    // Загружаем продукты в mock режиме
-    await productsStore.loadProducts(true)
+    // Загружаем продукты (используем ENV.useMockData)
+    await productsStore.loadProducts(ENV.useMockData)
     console.log('MenuItemDialog: Products loaded:', productsStore.products?.length)
 
     // Инициализируем recipes store
