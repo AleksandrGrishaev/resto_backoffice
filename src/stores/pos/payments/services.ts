@@ -83,6 +83,7 @@ export class PaymentsService {
     amount: number
     receivedAmount?: number
     processedBy: string
+    shiftId?: string // 🆕 Add shiftId parameter
   }): Promise<ServiceResponse<PosPayment>> {
     try {
       const paymentNumber = this.generatePaymentNumber()
@@ -102,6 +103,7 @@ export class PaymentsService {
           : undefined,
         receiptPrinted: false,
         processedBy: paymentData.processedBy,
+        shiftId: paymentData.shiftId, // 🆕 Add shiftId to payment
         processedAt: TimeUtils.getCurrentLocalISO(),
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
@@ -136,7 +138,8 @@ export class PaymentsService {
   async refundPayment(
     paymentId: string,
     reason: string,
-    amount?: number
+    amount?: number,
+    refundedBy?: string
   ): Promise<ServiceResponse<PosPayment>> {
     try {
       const allPayments = await this.getAllPayments()
@@ -166,9 +169,11 @@ export class PaymentsService {
         status: 'refunded',
         amount: -refundAmount, // Negative!
         processedBy: originalPayment.processedBy,
+        shiftId: originalPayment.shiftId, // 🆕 Copy shiftId from original payment
         processedAt: TimeUtils.getCurrentLocalISO(),
         refundedAt: TimeUtils.getCurrentLocalISO(),
         refundReason: reason,
+        refundedBy: refundedBy || originalPayment.processedBy, // 🆕 Who performed refund
         originalPaymentId: paymentId,
         receiptPrinted: false,
         createdAt: TimeUtils.getCurrentLocalISO(),

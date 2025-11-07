@@ -56,6 +56,7 @@ export const POS_STATUS_LABELS = {
 export const POS_ACTIONS = {
   START_SHIFT: 'start_shift',
   END_SHIFT: 'end_shift',
+  VIEW_SHIFT: 'view_shift',
   NEW_ORDER: 'new_order',
   SYNC_DATA: 'sync_data',
   LOGOUT: 'logout'

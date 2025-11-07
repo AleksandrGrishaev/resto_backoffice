@@ -22,6 +22,10 @@
         </ActionMenu>
       </NotificationBadge>
     </div>
+
+    <!-- Shift Management Dialogs -->
+    <StartShiftDialog v-model="showStartShiftDialog" @shift-started="handleShiftStarted" />
+    <EndShiftDialog v-model="showEndShiftDialog" @shift-ended="handleShiftEnded" />
   </div>
 </template>
 
@@ -35,6 +39,10 @@ import StatusBar from '@/components/molecules/navigation/StatusBar.vue'
 import ActionMenu from '@/components/molecules/navigation/ActionMenu.vue'
 import StatusChip from '@/components/atoms/indicators/StatusChip.vue'
 import NotificationBadge from '../../../components/atoms/indicators/NotificationBadge.vue'
+
+// Import shift dialogs
+import StartShiftDialog from '@/views/pos/shifts/dialogs/StartShiftDialog.vue'
+import EndShiftDialog from '@/views/pos/shifts/dialogs/EndShiftDialog.vue'
 
 // Import stores
 import { usePosStore } from '@/stores/pos'
@@ -73,6 +81,10 @@ const authStore = useAuthStore()
 const loading = ref(false)
 const syncing = ref(false)
 const currentTime = ref('')
+
+// Dialog states
+const showStartShiftDialog = ref(false)
+const showEndShiftDialog = ref(false)
 
 // Time update interval
 let timeInterval: NodeJS.Timeout | null = null
@@ -137,6 +149,15 @@ const menuSections = computed(() => [
   {
     title: 'SHIFT',
     actions: [
+      // View Shift Management - Always available
+      {
+        id: POS_ACTIONS.VIEW_SHIFT,
+        icon: 'mdi-cash-register',
+        label: 'Shift Management',
+        disabled: loading.value,
+        color: 'primary' as const
+      },
+      // Start Shift (only when no shift)
       ...(currentShift.value
         ? []
         : [
@@ -148,6 +169,7 @@ const menuSections = computed(() => [
               color: 'success' as const
             }
           ]),
+      // End Shift (only when shift is active)
       ...(currentShift.value
         ? [
             {
@@ -208,11 +230,15 @@ const handleAction = async (actionId: string) => {
   try {
     switch (actionId) {
       case POS_ACTIONS.START_SHIFT:
-        await handleStartShift()
+        handleStartShift()
         break
 
       case POS_ACTIONS.END_SHIFT:
-        await handleEndShift()
+        handleEndShift()
+        break
+
+      case POS_ACTIONS.VIEW_SHIFT:
+        handleViewShift()
         break
 
       case POS_ACTIONS.NEW_ORDER:
@@ -235,50 +261,29 @@ const handleAction = async (actionId: string) => {
   }
 }
 
-const handleStartShift = async () => {
-  loading.value = true
-
-  try {
-    const user = authStore.currentUser
-    if (!user) throw new Error('No authenticated user')
-
-    // TODO: Open start shift dialog for cash amount input
-    // For now, start with 0 cash
-    await shiftsStore.startShift(user.id, user.name, 0)
-
-    DebugUtils.info(MODULE_NAME, 'Shift started successfully')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to start shift', error)
-  } finally {
-    loading.value = false
-  }
+const handleStartShift = () => {
+  DebugUtils.debug(MODULE_NAME, 'Opening start shift dialog')
+  showStartShiftDialog.value = true
 }
 
-const handleEndShift = async () => {
-  loading.value = true
+const handleEndShift = () => {
+  DebugUtils.debug(MODULE_NAME, 'Opening end shift dialog')
+  showEndShiftDialog.value = true
+}
 
-  try {
-    if (!currentShift.value) return
+const handleViewShift = () => {
+  DebugUtils.debug(MODULE_NAME, 'Navigating to shift management view')
+  router.push('/pos/shift-management')
+}
 
-    // TODO: Open end shift dialog for cash count and corrections
-    // For now, end with basic data
-    await shiftsStore.endShift(currentShift.value.id, {
-      endingCash: 0,
-      actualAccountBalances: {},
-      corrections: [],
-      performedBy: {
-        id: authStore.currentUser?.id || '',
-        name: authStore.currentUser?.name || '',
-        role: 'cashier'
-      }
-    })
+const handleShiftStarted = (data: { shift: unknown; startTime: string }) => {
+  DebugUtils.info(MODULE_NAME, 'Shift started successfully', { shift: data.shift })
+  showStartShiftDialog.value = false
+}
 
-    DebugUtils.info(MODULE_NAME, 'Shift ended successfully')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to end shift', error)
-  } finally {
-    loading.value = false
-  }
+const handleShiftEnded = (data: { shift: unknown; endTime: string; discrepancy?: number }) => {
+  DebugUtils.info(MODULE_NAME, 'Shift ended successfully', { shift: data.shift })
+  showEndShiftDialog.value = false
 }
 
 const handleNewOrder = () => {

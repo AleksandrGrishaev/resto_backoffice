@@ -735,10 +735,10 @@ const handlePaymentConfirm = async (paymentData: {
     const result = await paymentsStore.processSimplePayment(
       paymentDialogData.value.orderId,
       paymentDialogData.value.billIds,
-      paymentData.method,
-      paymentData.amount,
-      paymentData.receivedAmount,
-      paymentDialogData.value.itemIds // НОВОЕ: передаем itemIds для частичной оплаты
+      paymentDialogData.value.itemIds, // 3. itemIds для частичной оплаты
+      paymentData.method, // 4. method ('cash', 'card', 'qr')
+      paymentData.amount, // 5. amount
+      paymentData.receivedAmount // 6. receivedAmount (опционально)
     )
 
     if (result.success) {

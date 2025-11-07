@@ -436,6 +436,11 @@ export function recalculateOrderTotals(order: PosOrder): void {
         bill.paymentStatus = 'unpaid'
       } else if (paidItems.length === activeItems.length) {
         bill.paymentStatus = 'paid'
+
+        // 🆕 Автоматически закрываем счет при полной оплате
+        if (bill.status === 'draft' || bill.status === 'active') {
+          bill.status = 'closed'
+        }
       } else {
         bill.paymentStatus = 'partial'
       }
@@ -449,9 +454,7 @@ export function recalculateOrderTotals(order: PosOrder): void {
   })
 
   // Обновляем суммы заказа
-  order.subtotal = order.bills
-    .filter(b => b.status !== 'cancelled')
-    .reduce((sum, b) => sum + b.subtotal, 0)
+  order.totalAmount = totalAmount
   order.discountAmount = discountAmount
   order.taxAmount = 0 // TODO: Add tax calculation if needed
   order.finalAmount = totalAmount

@@ -74,6 +74,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
    * 1. Save payment to storage
    * 2. Link to order/items
    * 3. Update item payment status
+   * 4. Add shiftId from current shift
    */
   async function processSimplePayment(
     orderId: string,
@@ -86,7 +87,17 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     loading.value = true
 
     try {
-      // 1. Create payment
+      // Get current shift from shiftsStore
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+      const currentShift = shiftsStore.currentShift
+
+      // Warn if no active shift
+      if (!currentShift) {
+        console.warn('⚠️ [paymentsStore] Processing payment without active shift')
+      }
+
+      // 1. Create payment with shiftId
       const paymentData = {
         orderId,
         billIds,
@@ -94,7 +105,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         method,
         amount,
         receivedAmount,
-        processedBy: 'Current User' // TODO: Get from authStore
+        processedBy: 'Current User', // TODO: Get from authStore
+        shiftId: currentShift?.id // 🆕 Add shiftId from current shift
       }
 
       const result = await paymentsService.processPayment(paymentData)
@@ -111,7 +123,23 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       // 3. Link payment to order and items
       await linkPaymentToOrder(orderId, payment.id, itemIds)
 
-      console.log('💳 Payment processed:', payment.paymentNumber)
+      // 4. Add transaction to shift (if shift exists)
+      if (currentShift && payment.shiftId) {
+        await shiftsStore.addShiftTransaction(
+          orderId,
+          payment.id,
+          'account_cash', // TODO: Get accountId from payment method
+          amount,
+          `Payment ${payment.paymentNumber} - ${method}`
+        )
+      }
+
+      console.log('💳 Payment processed:', payment.paymentNumber, {
+        shiftId: payment.shiftId,
+        amount,
+        method
+      })
+
       return { success: true, data: payment }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Payment processing failed'
@@ -142,8 +170,18 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         throw new Error('Can only refund completed payments')
       }
 
+      // Get current user for refundedBy field
+      const { useAuthStore } = await import('@/stores/auth')
+      const authStore = useAuthStore()
+      const refundedBy = authStore.currentUser?.name || 'Unknown'
+
       // Process refund via service
-      const result = await paymentsService.refundPayment(originalPaymentId, reason, amount)
+      const result = await paymentsService.refundPayment(
+        originalPaymentId,
+        reason,
+        amount,
+        refundedBy
+      )
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Refund processing failed')
@@ -160,6 +198,20 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         payments.value[originalIndex].status = 'refunded'
       }
 
+      // Add refund transaction to shift (if shift exists)
+      if (refundPayment.shiftId) {
+        const { useShiftsStore } = await import('../shifts/shiftsStore')
+        const shiftsStore = useShiftsStore()
+
+        await shiftsStore.addShiftTransaction(
+          originalPayment.orderId,
+          refundPayment.id,
+          'account_cash', // TODO: Get accountId from payment method
+          refundPayment.amount, // Negative amount
+          `Refund ${refundPayment.paymentNumber} - ${refundPayment.method}`
+        )
+      }
+
       // Update items: paid → refunded
       await unlinkPaymentFromOrder(
         originalPayment.orderId,
@@ -167,7 +219,11 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         originalPayment.itemIds
       )
 
-      console.log('💳 Refund processed:', refundPayment.paymentNumber)
+      console.log('💳 Refund processed:', refundPayment.paymentNumber, {
+        shiftId: refundPayment.shiftId,
+        amount: refundPayment.amount,
+        method: refundPayment.method
+      })
       return { success: true, data: refundPayment }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Refund failed'
@@ -199,6 +255,17 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       const message = err instanceof Error ? err.message : 'Failed to print receipt'
       return { success: false, error: message }
     }
+  }
+
+  /**
+   * Create refund (alias for processRefund)
+   * More intuitive API for UI components
+   */
+  async function createRefund(
+    paymentId: string,
+    reason: string
+  ): Promise<ServiceResponse<PosPayment>> {
+    return await processRefund(paymentId, reason)
   }
 
   // ===== QUERIES (Read Operations - Both POS and Backoffice) =====
@@ -329,13 +396,24 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         bill.paymentStatus = 'unpaid'
       } else if (paidItems.length === activeItems.length) {
         bill.paymentStatus = 'paid'
+
+        // 🆕 Автоматически закрываем счет при полной оплате
+        if (bill.status === 'draft' || bill.status === 'active') {
+          bill.status = 'closed'
+        }
       } else {
         bill.paymentStatus = 'partial'
       }
     }
 
-    // Save order
-    await ordersStore.updateOrder(order)
+    // 🆕 Recalculate order totals and statuses (includes order.paymentStatus)
+    await ordersStore.recalculateOrderTotals(orderId)
+
+    console.log('💳 Order payment status updated:', {
+      orderId,
+      orderPaymentStatus: order.paymentStatus,
+      billsPaymentStatus: order.bills.map(b => ({ id: b.id, status: b.paymentStatus }))
+    })
   }
 
   /**
@@ -372,12 +450,24 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         bill.paymentStatus = 'unpaid'
       } else if (paidItems.length === activeItems.length) {
         bill.paymentStatus = 'paid'
+
+        // 🆕 Автоматически закрываем счет при полной оплате
+        if (bill.status === 'draft' || bill.status === 'active') {
+          bill.status = 'closed'
+        }
       } else {
         bill.paymentStatus = 'partial'
       }
     }
 
-    await ordersStore.updateOrder(order)
+    // 🆕 Recalculate order totals and statuses (includes order.paymentStatus)
+    await ordersStore.recalculateOrderTotals(orderId)
+
+    console.log('💳 Order payment status updated after refund:', {
+      orderId,
+      orderPaymentStatus: order.paymentStatus,
+      billsPaymentStatus: order.bills.map(b => ({ id: b.id, status: b.paymentStatus }))
+    })
   }
 
   return {
@@ -398,6 +488,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     // POS Operations (Write)
     processSimplePayment,
     processRefund,
+    createRefund,
     printReceipt,
 
     // Queries (Read - Both POS and Backoffice)

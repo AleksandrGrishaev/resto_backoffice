@@ -249,11 +249,22 @@ async function processPayment() {
   try {
     const billIds = billsToPay.value.map(bill => bill.id)
 
+    // 🆕 Collect all item IDs from bills being paid
+    const itemIds: string[] = []
+    for (const bill of billsToPay.value) {
+      for (const item of bill.items) {
+        if (item.status !== 'cancelled') {
+          itemIds.push(item.id)
+        }
+      }
+    }
+
     let result
     if (selectedPaymentMethod.value === 'cash') {
       result = await paymentsStore.processSimplePayment(
         order.value.id,
         billIds,
+        itemIds, // 🆕 Add itemIds parameter
         'cash',
         totalAmount.value,
         receivedAmount.value
@@ -262,6 +273,7 @@ async function processPayment() {
       result = await paymentsStore.processSimplePayment(
         order.value.id,
         billIds,
+        itemIds, // 🆕 Add itemIds parameter
         selectedPaymentMethod.value,
         totalAmount.value
       )

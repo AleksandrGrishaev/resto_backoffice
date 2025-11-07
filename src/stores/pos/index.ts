@@ -8,6 +8,7 @@ import { usePlatform } from '@/composables/usePlatform'
 import { usePosTablesStore } from './tables/tablesStore'
 import { usePosOrdersStore } from './orders/ordersStore'
 import { usePosPaymentsStore } from './payments/paymentsStore'
+import { useShiftsStore } from './shifts/shiftsStore'
 
 // Types (упрощенные)
 interface DailySalesStats {
@@ -70,6 +71,7 @@ export const usePosStore = defineStore('pos', () => {
   const tablesStore = usePosTablesStore()
   const ordersStore = usePosOrdersStore()
   const paymentsStore = usePosPaymentsStore()
+  const shiftsStore = useShiftsStore()
 
   // ===== COMPUTED =====
 
@@ -140,7 +142,7 @@ export const usePosStore = defineStore('pos', () => {
       error.value = null
 
       // Простая проверка что stores доступны
-      const storesAvailable = !!(tablesStore && ordersStore && paymentsStore)
+      const storesAvailable = !!(tablesStore && ordersStore && paymentsStore && shiftsStore)
 
       if (!storesAvailable) {
         throw new Error('POS stores not available')
@@ -156,10 +158,15 @@ export const usePosStore = defineStore('pos', () => {
       platform.debugLog('POS', '📦 Loading payments from storage...')
       await paymentsStore.initialize()
 
+      platform.debugLog('POS', '📦 Loading shifts from storage...')
+      await shiftsStore.loadShifts()
+
       platform.debugLog('POS', '✅ Data loaded successfully', {
         tablesCount: tablesStore.tables.length,
         ordersCount: ordersStore.orders.length,
-        paymentsCount: paymentsStore.payments.length
+        paymentsCount: paymentsStore.payments.length,
+        shiftsCount: shiftsStore.shifts.length,
+        currentShift: shiftsStore.currentShift?.shiftNumber || 'None'
       })
 
       // Пока просто помечаем как инициализированную

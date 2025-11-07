@@ -58,11 +58,21 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/pos',
     name: 'pos',
-    component: () => import('@/views/pos/PosMainView.vue'), // ✅ Прямо на компонент
+    component: () => import('@/views/pos/PosMainView.vue'),
     meta: {
       requiresAuth: true,
       allowedRoles: ['admin', 'cashier'],
       title: 'POS система'
+    }
+  },
+  {
+    path: '/pos/shift-management',
+    name: 'pos-shift-management',
+    component: () => import('@/views/pos/shifts/ShiftManagementView.vue'),
+    meta: {
+      requiresAuth: true,
+      allowedRoles: ['admin', 'cashier'],
+      title: 'Shift Management'
     }
   },
 
