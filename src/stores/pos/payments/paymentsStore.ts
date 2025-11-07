@@ -134,6 +134,47 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         )
       }
 
+      // 5. 🆕 Record sales transaction (Sprint 2)
+      try {
+        const { useSalesStore } = await import('@/stores/sales')
+        const { useOrdersStore } = await import('../orders/ordersStore')
+
+        const salesStore = useSalesStore()
+        const ordersStore = useOrdersStore()
+
+        // Ensure sales store is initialized
+        if (!salesStore.initialized) {
+          await salesStore.initialize()
+        }
+
+        // Get order to access bills and items
+        const order = ordersStore.orders.find(o => o.id === orderId)
+        if (order && order.bills.length > 0) {
+          // Get bill items from paid bills
+          const billItems = order.bills
+            .filter(bill => billIds.includes(bill.id))
+            .flatMap(bill => bill.items.filter(item => itemIds.includes(item.id)))
+
+          // Get bill discount (if any)
+          const billDiscountAmount = order.bills
+            .filter(bill => billIds.includes(bill.id))
+            .reduce((sum, bill) => sum + (bill.discountAmount || 0), 0)
+
+          if (billItems.length > 0) {
+            console.log('📊 [paymentsStore] Recording sales transaction:', {
+              itemsCount: billItems.length,
+              billDiscount: billDiscountAmount
+            })
+
+            await salesStore.recordSalesTransaction(payment, billItems, billDiscountAmount)
+            console.log('✅ [paymentsStore] Sales transaction recorded successfully')
+          }
+        }
+      } catch (salesErr) {
+        // Don't fail the payment if sales recording fails
+        console.error('⚠️ [paymentsStore] Failed to record sales transaction:', salesErr)
+      }
+
       console.log('💳 Payment processed:', payment.paymentNumber, {
         shiftId: payment.shiftId,
         amount,

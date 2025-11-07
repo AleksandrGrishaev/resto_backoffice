@@ -14,6 +14,9 @@ import { useDebugStore } from '@/stores/debug'
 import { usePosStore } from '@/stores/pos'
 import { useAuthStore } from '@/stores/auth'
 
+// 🆕 SALES STORES (Sprint 2)
+import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
+
 import { AppInitializerTests } from './appInitializerTests'
 import { DebugUtils } from '@/utils'
 import { usePlatform } from '@/composables/usePlatform'
@@ -234,7 +237,9 @@ export class AppInitializer {
       this.loadAccounts(),
       this.loadStorage(),
       this.loadPreparations(),
-      this.loadSuppliers()
+      this.loadSuppliers(),
+      this.loadSales(), // 🆕 Sprint 2
+      this.loadRecipeWriteOff() // 🆕 Sprint 2
     ])
 
     DebugUtils.info(MODULE_NAME, '✅ Integrated stores loaded successfully')
@@ -326,6 +331,42 @@ export class AppInitializer {
       })
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Failed to load suppliers (non-critical)', { error })
+    }
+  }
+
+  // ===== 🆕 SALES STORES (Sprint 2) =====
+
+  private async loadSales(): Promise<void> {
+    try {
+      const salesStore = useSalesStore()
+
+      if (!salesStore.initialized) {
+        await salesStore.initialize()
+      }
+
+      DebugUtils.store(MODULE_NAME, '💰 Sales transactions loaded', {
+        transactions: salesStore.transactions.length,
+        todayRevenue: salesStore.todayRevenue,
+        todayItemsSold: salesStore.todayItemsSold
+      })
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to load sales (non-critical)', { error })
+    }
+  }
+
+  private async loadRecipeWriteOff(): Promise<void> {
+    try {
+      const recipeWriteOffStore = useRecipeWriteOffStore()
+
+      if (!recipeWriteOffStore.initialized) {
+        await recipeWriteOffStore.initialize()
+      }
+
+      DebugUtils.store(MODULE_NAME, '📋 Recipe write-offs loaded', {
+        writeOffs: recipeWriteOffStore.writeOffs.length
+      })
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to load recipe write-offs (non-critical)', { error })
     }
   }
 

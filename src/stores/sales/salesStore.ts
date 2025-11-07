@@ -1,0 +1,317 @@
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import type { SalesTransaction, SalesFilters, DecompositionSummary } from './types'
+import { SalesService } from './services'
+import { useRecipeWriteOffStore } from './recipeWriteOff'
+import { useProfitCalculation } from './composables/useProfitCalculation'
+import { useDecomposition } from './recipeWriteOff/composables/useDecomposition'
+import { useMenuStore } from '@/stores/menu/menuStore'
+import type { PosPayment, PosBillItem } from '@/stores/pos/types'
+
+const MODULE_NAME = 'SalesStore'
+
+export const useSalesStore = defineStore('sales', () => {
+  // Dependencies
+  const recipeWriteOffStore = useRecipeWriteOffStore()
+  const menuStore = useMenuStore()
+  const { calculateItemProfit, allocateBillDiscount } = useProfitCalculation()
+  const { decomposeMenuItem, calculateTotalCost } = useDecomposition()
+
+  // State
+  const state = ref({
+    transactions: [] as SalesTransaction[],
+    loading: false,
+    error: null as string | null,
+    initialized: false,
+    filters: {
+      dateFrom: undefined,
+      dateTo: undefined,
+      menuItemId: undefined,
+      paymentMethod: undefined,
+      department: undefined
+    } as SalesFilters
+  })
+
+  // Computed
+  const transactions = computed(() => state.value.transactions)
+  const loading = computed(() => state.value.loading)
+  const error = computed(() => state.value.error)
+  const initialized = computed(() => state.value.initialized)
+
+  /**
+   * Today's revenue
+   */
+  const todayRevenue = computed(() => {
+    const today = new Date().toISOString().split('T')[0]
+    return state.value.transactions
+      .filter(t => t.soldAt.startsWith(today))
+      .reduce((sum, t) => sum + t.profitCalculation.finalRevenue, 0)
+  })
+
+  /**
+   * Today's profit
+   */
+  const todayProfit = computed(() => {
+    const today = new Date().toISOString().split('T')[0]
+    return state.value.transactions
+      .filter(t => t.soldAt.startsWith(today))
+      .reduce((sum, t) => sum + t.profitCalculation.profit, 0)
+  })
+
+  /**
+   * Today's items sold
+   */
+  const todayItemsSold = computed(() => {
+    const today = new Date().toISOString().split('T')[0]
+    return state.value.transactions
+      .filter(t => t.soldAt.startsWith(today))
+      .reduce((sum, t) => sum + t.quantity, 0)
+  })
+
+  /**
+   * Popular items (top 10)
+   */
+  const popularItems = computed(() => {
+    const itemsMap = new Map<
+      string,
+      {
+        menuItemId: string
+        menuItemName: string
+        quantitySold: number
+        totalRevenue: number
+        totalProfit: number
+      }
+    >()
+
+    state.value.transactions.forEach(t => {
+      const key = t.menuItemId
+      if (!itemsMap.has(key)) {
+        itemsMap.set(key, {
+          menuItemId: t.menuItemId,
+          menuItemName: t.menuItemName,
+          quantitySold: 0,
+          totalRevenue: 0,
+          totalProfit: 0
+        })
+      }
+
+      const item = itemsMap.get(key)!
+      item.quantitySold += t.quantity
+      item.totalRevenue += t.profitCalculation.finalRevenue
+      item.totalProfit += t.profitCalculation.profit
+    })
+
+    return Array.from(itemsMap.values())
+      .sort((a, b) => b.quantitySold - a.quantitySold)
+      .slice(0, 10)
+  })
+
+  /**
+   * Initialize store
+   */
+  async function initialize() {
+    if (state.value.initialized) {
+      console.log(`✅ [${MODULE_NAME}] Already initialized`)
+      return
+    }
+
+    console.log(`🔄 [${MODULE_NAME}] Initializing...`)
+    state.value.loading = true
+
+    try {
+      const result = await SalesService.getAllTransactions()
+      if (result.success && result.data) {
+        state.value.transactions = result.data
+        state.value.initialized = true
+        console.log(`✅ [${MODULE_NAME}] Initialized with ${result.data.length} transactions`)
+      } else {
+        throw new Error(result.error || 'Failed to load transactions')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      state.value.error = message
+      console.error(`❌ [${MODULE_NAME}] Initialization failed:`, message)
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  /**
+   * Record sales transaction
+   * Главная функция для записи продаж и запуска write-off
+   */
+  async function recordSalesTransaction(
+    payment: PosPayment,
+    billItems: PosBillItem[],
+    billDiscountAmount: number = 0
+  ) {
+    console.log(`🔄 [${MODULE_NAME}] Recording sales transaction:`, {
+      paymentId: payment.id,
+      itemsCount: billItems.length,
+      amount: payment.amount
+    })
+
+    try {
+      // Process each item
+      for (const billItem of billItems) {
+        // 1. Get menu item details
+        const menuItem = menuStore.menuItems.find(item => item.id === billItem.menuItemId)
+        if (!menuItem) {
+          console.error(`❌ [${MODULE_NAME}] Menu item not found:`, billItem.menuItemId)
+          continue
+        }
+
+        const variant = menuItem.variants.find(v => v.id === billItem.variantId)
+        if (!variant) {
+          console.error(`❌ [${MODULE_NAME}] Variant not found:`, billItem.variantId)
+          continue
+        }
+
+        // 2. Decompose item to get cost
+        const decomposedItems = await decomposeMenuItem(
+          billItem.menuItemId,
+          billItem.variantId || variant.id,
+          billItem.quantity
+        )
+
+        const totalCost = calculateTotalCost(decomposedItems)
+
+        // 3. Calculate allocated bill discount for this item
+        const itemsWithDiscount = allocateBillDiscount([billItem], billDiscountAmount)
+        const allocatedDiscount = itemsWithDiscount[0]?.allocatedBillDiscount || 0
+
+        // 4. Calculate profit
+        const profitCalculation = calculateItemProfit(billItem, decomposedItems, allocatedDiscount)
+
+        // 5. Create decomposition summary
+        const decompositionSummary: DecompositionSummary = {
+          totalProducts: decomposedItems.length,
+          totalCost,
+          decomposedItems
+        }
+
+        // 6. Create sales transaction
+        const transaction: SalesTransaction = {
+          id: `st-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          paymentId: payment.id,
+          orderId: payment.orderId,
+          billId: payment.billIds[0] || '',
+          itemId: billItem.id,
+          shiftId: payment.shiftId,
+          menuItemId: billItem.menuItemId,
+          menuItemName: billItem.menuItemName,
+          variantId: billItem.variantId || variant.id,
+          variantName: billItem.variantName || variant.name,
+          quantity: billItem.quantity,
+          unitPrice: billItem.unitPrice,
+          totalPrice: billItem.totalPrice,
+          paymentMethod: payment.method,
+          soldAt: payment.processedAt,
+          processedBy: payment.processedBy,
+          recipeId: undefined, // Can be set if applicable
+          recipeWriteOffId: undefined, // Will be set after write-off
+          profitCalculation,
+          decompositionSummary,
+          syncedToBackoffice: true,
+          syncedAt: new Date().toISOString(),
+          department: menuItem.department,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+
+        // 7. Save transaction
+        const saveResult = await SalesService.saveSalesTransaction(transaction)
+        if (saveResult.success && saveResult.data) {
+          state.value.transactions.push(saveResult.data)
+          console.log(`✅ [${MODULE_NAME}] Transaction saved:`, saveResult.data.id)
+
+          // 8. Trigger write-off
+          const writeOff = await recipeWriteOffStore.processItemWriteOff(
+            billItem,
+            saveResult.data.id
+          )
+
+          if (writeOff) {
+            // Update transaction with write-off ID
+            transaction.recipeWriteOffId = writeOff.id
+            await SalesService.saveSalesTransaction(transaction)
+            console.log(`✅ [${MODULE_NAME}] Transaction updated with write-off ID`)
+          }
+        } else {
+          throw new Error(saveResult.error || 'Failed to save transaction')
+        }
+      }
+
+      console.log(`✅ [${MODULE_NAME}] All transactions recorded successfully`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`❌ [${MODULE_NAME}] Failed to record transaction:`, message)
+      state.value.error = message
+      throw err // Re-throw to let caller handle
+    }
+  }
+
+  /**
+   * Fetch transactions with filters
+   */
+  async function fetchTransactions(filters?: SalesFilters) {
+    state.value.loading = true
+    try {
+      const result = await SalesService.getTransactions(filters)
+      if (result.success && result.data) {
+        state.value.transactions = result.data
+        if (filters) {
+          state.value.filters = { ...filters }
+        }
+        return result.data
+      } else {
+        throw new Error(result.error || 'Failed to fetch transactions')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      state.value.error = message
+      console.error(`❌ [${MODULE_NAME}] Failed to fetch transactions:`, message)
+      return []
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  /**
+   * Get statistics
+   */
+  async function getStatistics(filters?: SalesFilters) {
+    const result = await SalesService.getStatistics(filters)
+    return result.success ? result.data : null
+  }
+
+  /**
+   * Get transaction by ID
+   */
+  async function getTransactionById(id: string) {
+    const result = await SalesService.getTransactionById(id)
+    return result.success ? result.data : null
+  }
+
+  return {
+    // State
+    state,
+    transactions,
+    loading,
+    error,
+    initialized,
+
+    // Computed
+    todayRevenue,
+    todayProfit,
+    todayItemsSold,
+    popularItems,
+
+    // Actions
+    initialize,
+    recordSalesTransaction,
+    fetchTransactions,
+    getStatistics,
+    getTransactionById
+  }
+})

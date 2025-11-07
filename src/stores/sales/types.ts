@@ -1,0 +1,161 @@
+import type { BaseEntity } from '@/types/base'
+import type { PaymentMethod } from '@/stores/pos/types'
+
+/**
+ * Profit Calculation Data
+ * Расчет прибыли с учетом всех скидок
+ */
+export interface ProfitCalculation {
+  // Revenue (Выручка)
+  originalPrice: number // Цена до всех скидок
+  itemOwnDiscount: number // Скидка на саму позицию
+  allocatedBillDiscount: number // Доля скидки на счет (пропорциональная)
+  finalRevenue: number // Итоговая выручка после всех скидок
+
+  // Cost (Себестоимость)
+  ingredientsCost: number // Себестоимость ингредиентов из decomposition
+
+  // Profit (Прибыль)
+  profit: number // finalRevenue - ingredientsCost
+  profitMargin: number // (profit / finalRevenue) * 100%
+}
+
+/**
+ * Decomposition Summary
+ * Краткая информация о составе проданной позиции
+ */
+export interface DecompositionSummary {
+  totalProducts: number // Количество конечных продуктов
+  totalCost: number // Общая себестоимость
+  decomposedItems: DecomposedItem[] // Список продуктов
+}
+
+/**
+ * Decomposed Item
+ * Конечный продукт после декомпозиции рецепта/полуфабриката
+ */
+export interface DecomposedItem {
+  productId: string // ID конечного продукта
+  productName: string
+  quantity: number // Итоговое количество
+  unit: string // gram, ml, piece
+  costPerUnit: number // Себестоимость за единицу
+  totalCost: number // quantity * costPerUnit
+
+  // Trace path для debug (путь декомпозиции)
+  path: string[] // ['MenuItem', 'Recipe', 'Preparation', 'Product']
+}
+
+/**
+ * Sales Transaction
+ * Unified sales record для backoffice
+ */
+export interface SalesTransaction extends BaseEntity {
+  // Reference data (ссылки на POS данные)
+  paymentId: string // Link to PosPayment
+  orderId: string // Link to PosOrder
+  billId: string // Link to PosBill
+  itemId: string // Link to PosBillItem
+  shiftId?: string // Link to PosShift
+
+  // Menu data
+  menuItemId: string
+  menuItemName: string
+  variantId: string
+  variantName: string
+
+  // Sale data
+  quantity: number // Количество проданных порций
+  unitPrice: number // Цена за единицу
+  totalPrice: number // unitPrice * quantity (до скидок)
+  paymentMethod: PaymentMethod
+
+  // Date/time
+  soldAt: string // ISO timestamp
+  processedBy: string // Имя кассира
+
+  // Recipe/Inventory link
+  recipeId?: string // If menu item has recipe
+  recipeWriteOffId?: string // Link to write-off operation
+
+  // Profit data
+  profitCalculation: ProfitCalculation
+
+  // Decomposition summary
+  decompositionSummary: DecompositionSummary
+
+  // Sync status (для будущей синхронизации с API)
+  syncedToBackoffice: boolean
+  syncedAt?: string
+
+  // Department (для фильтрации)
+  department: 'kitchen' | 'bar'
+}
+
+/**
+ * Sales Filters
+ * Фильтры для запросов продаж
+ */
+export interface SalesFilters {
+  dateFrom?: string // ISO date
+  dateTo?: string // ISO date
+  menuItemId?: string
+  paymentMethod?: PaymentMethod
+  department?: 'kitchen' | 'bar'
+  shiftId?: string
+}
+
+/**
+ * Sales Statistics
+ * Статистика продаж для аналитики
+ */
+export interface SalesStatistics {
+  totalRevenue: number
+  totalCost: number
+  totalProfit: number
+  averageMargin: number // %
+
+  totalTransactions: number
+  totalItemsSold: number
+
+  // By payment method
+  revenueByPaymentMethod: Record<PaymentMethod, number>
+
+  // By department
+  revenueByDepartment: {
+    kitchen: number
+    bar: number
+  }
+
+  // Top selling items
+  topSellingItems: TopSellingItem[]
+}
+
+/**
+ * Top Selling Item
+ * Топ продаваемая позиция
+ */
+export interface TopSellingItem {
+  menuItemId: string
+  menuItemName: string
+  quantitySold: number
+  totalRevenue: number
+  totalCost: number
+  totalProfit: number
+  averageMargin: number // %
+}
+
+/**
+ * Item With Allocated Discount
+ * Позиция счета с распределенной скидкой
+ */
+export interface ItemWithAllocatedDiscount {
+  id: string
+  menuItemId: string
+  quantity: number
+  unitPrice: number
+  itemOwnDiscount: number // Собственная скидка позиции
+  allocatedBillDiscount: number // Распределенная скидка на счет
+  totalDiscount: number // itemOwnDiscount + allocatedBillDiscount
+  finalPrice: number // Итоговая цена после всех скидок
+}
