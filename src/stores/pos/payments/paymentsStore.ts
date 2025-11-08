@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { PaymentsService } from './services'
 import type { PosPayment, ServiceResponse, PaymentMethod } from '../types'
+import { usePosOrdersStore } from '../orders/ordersStore'
 
 export const usePosPaymentsStore = defineStore('posPayments', () => {
   // ===== STATE =====
@@ -137,10 +138,9 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       // 5. 🆕 Record sales transaction (Sprint 2)
       try {
         const { useSalesStore } = await import('@/stores/sales')
-        const { useOrdersStore } = await import('../orders/ordersStore')
 
         const salesStore = useSalesStore()
-        const ordersStore = useOrdersStore()
+        const ordersStore = usePosOrdersStore()
 
         // Ensure sales store is initialized
         if (!salesStore.initialized) {
@@ -404,8 +404,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     paymentId: string,
     itemIds: string[]
   ): Promise<void> {
-    // Import ordersStore dynamically to avoid circular dependency
-    const { usePosOrdersStore } = await import('../orders/ordersStore')
+    // Use already imported ordersStore
     const ordersStore = usePosOrdersStore()
 
     const order = ordersStore.orders.find(o => o.id === orderId)
@@ -465,7 +464,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     paymentId: string,
     itemIds: string[]
   ): Promise<void> {
-    const { usePosOrdersStore } = await import('../orders/ordersStore')
+    // Use already imported ordersStore
     const ordersStore = usePosOrdersStore()
 
     const order = ordersStore.orders.find(o => o.id === orderId)

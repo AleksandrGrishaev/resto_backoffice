@@ -16,6 +16,32 @@ export function useDecomposition() {
   const productsStore = useProductsStore()
 
   /**
+   * Проверка инициализации необходимых stores
+   */
+  function checkStoresInitialized(): void {
+    if (!recipesStore.initialized) {
+      throw new Error(
+        '❌ RecipesStore is not initialized! Decomposition requires recipes and preparations data. ' +
+          'Ensure appInitializer loads recipesStore before processing payments.'
+      )
+    }
+
+    if (!productsStore.products || productsStore.products.length === 0) {
+      throw new Error(
+        '❌ ProductsStore has no data! Decomposition requires products catalog. ' +
+          'Ensure appInitializer loads productsStore before processing payments.'
+      )
+    }
+
+    console.log('✅ [DecompositionEngine] Stores initialized check passed', {
+      recipesInitialized: recipesStore.initialized,
+      recipesCount: recipesStore.recipes?.length || 0,
+      preparationsCount: recipesStore.preparations?.length || 0,
+      productsCount: productsStore.products.length
+    })
+  }
+
+  /**
    * Main decomposition method
    * Разворачивает позицию меню до конечных продуктов
    */
@@ -24,6 +50,9 @@ export function useDecomposition() {
     variantId: string,
     soldQuantity: number
   ): Promise<DecomposedItem[]> {
+    // 🆕 Проверка инициализации stores перед декомпозицией
+    checkStoresInitialized()
+
     console.log(`🔍 [${MODULE_NAME}] Decomposing menu item:`, {
       menuItemId,
       variantId,
@@ -39,7 +68,7 @@ export function useDecomposition() {
       }
 
       // 2. Get variant
-      const variant = menuItem.variants.find(v => v.id === variantId)
+      const variant = menuItem.variants.find((v: any) => v.id === variantId)
       if (!variant) {
         console.error(`❌ [${MODULE_NAME}] Variant not found: ${variantId}`)
         return []
@@ -63,7 +92,7 @@ export function useDecomposition() {
 
       console.log(`✅ [${MODULE_NAME}] Decomposition complete:`, {
         totalProducts: merged.length,
-        totalCost: merged.reduce((sum, item) => sum + item.totalCost, 0)
+        totalCost: merged.reduce((sum: number, item: DecomposedItem) => sum + item.totalCost, 0)
       })
 
       return merged

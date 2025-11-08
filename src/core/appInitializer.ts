@@ -1,92 +1,115 @@
-// src/core/appInitializer.ts - ОБНОВЛЕННЫЙ с поддержкой POS и ролевой инициализации
+// src/core/appInitializer.ts - Оркестратор инициализации с поддержкой стратегий
 
-import { useProductsStore } from '@/stores/productsStore'
-import { useRecipesStore } from '@/stores/recipes'
-import { useCounteragentsStore } from '@/stores/counteragents'
-import { useAccountStore } from '@/stores/account'
-import { useMenuStore } from '@/stores/menu'
-import { useStorageStore } from '@/stores/storage'
-import { usePreparationStore } from '@/stores/preparation'
-import { useSupplierStore } from '@/stores/supplier_2'
-import { useDebugStore } from '@/stores/debug'
-
-// 🆕 POS STORES
-import { usePosStore } from '@/stores/pos'
-import { useAuthStore } from '@/stores/auth'
-
-// 🆕 SALES STORES (Sprint 2)
-import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
+import type {
+  InitializationConfig,
+  InitializationSummary,
+  InitializationStrategy,
+  UserRole,
+  StoreInitResult
+} from './initialization/types'
+import { DevInitializationStrategy, ProductionInitializationStrategy } from './initialization'
 
 import { AppInitializerTests } from './appInitializerTests'
 import { DebugUtils } from '@/utils'
 import { usePlatform } from '@/composables/usePlatform'
 import { ENV } from '@/config/environment'
 
-const MODULE_NAME = 'AppInitializer'
+// Для summary и utilities
+import { useProductsStore } from '@/stores/productsStore'
+import { useRecipesStore } from '@/stores/recipes'
+import { useCounteragentsStore } from '@/stores/counteragents'
+import { useMenuStore } from '@/stores/menu'
+import { useAccountStore } from '@/stores/account'
+import { useStorageStore } from '@/stores/storage'
+import { usePreparationStore } from '@/stores/preparation'
+import { useSupplierStore } from '@/stores/supplier_2'
+import { usePosStore } from '@/stores/pos'
+import { useDebugStore } from '@/stores/debug'
 
-export interface InitializationConfig {
-  useMockData: boolean
-  enableDebug: boolean
-  runIntegrationTests: boolean
-  userRoles?: string[] // 🆕 НОВОЕ ПОЛЕ
-}
-interface InitializationSummary {
-  timestamp: string
-  platform: string
-  userRoles: string[]
-  storesLoaded: number
-  totalTime: number
-}
+const MODULE_NAME = 'AppInitializer'
 
 export class AppInitializer {
   private config: InitializationConfig
   private tests: AppInitializerTests
+  private strategy: InitializationStrategy
   private platform = usePlatform()
   private startTime: number = 0
 
   constructor(config: InitializationConfig) {
     this.config = config
     this.tests = new AppInitializerTests(config)
+    this.strategy = this.selectStrategy(config)
   }
 
-  async initialize(userRoles?: string[]): Promise<InitializationSummary> {
+  /**
+   * Выбрать стратегию инициализации на основе конфигурации
+   */
+  private selectStrategy(config: InitializationConfig): InitializationStrategy {
+    // В dev mode или с mock данными используем Dev стратегию
+    if (import.meta.env.DEV || config.useMockData) {
+      DebugUtils.info(MODULE_NAME, '📋 Selected initialization strategy: Development')
+      return new DevInitializationStrategy(config)
+    }
+
+    // В production используем Production стратегию
+    DebugUtils.info(MODULE_NAME, '📋 Selected initialization strategy: Production')
+    return new ProductionInitializationStrategy(config)
+  }
+
+  /**
+   * Главный метод инициализации приложения
+   */
+  async initialize(userRoles?: UserRole[]): Promise<InitializationSummary> {
     this.startTime = Date.now()
 
     try {
+      const finalUserRoles = (userRoles || this.config.userRoles || []) as UserRole[]
+
       DebugUtils.info(MODULE_NAME, '🚀 Starting app initialization', {
+        strategy: this.strategy.getName(),
+        userRoles: finalUserRoles,
+        platform: this.platform.platform.value,
         useMockData: this.config.useMockData,
-        enableDebug: this.config.enableDebug,
-        runIntegrationTests: this.config.runIntegrationTests,
-        userRoles: userRoles,
-        platform: this.platform.platform.value
+        enableDebug: this.config.enableDebug
       })
 
-      // Роли передаются явно из App.vue или берем из конфига
-      const finalUserRoles = userRoles || this.config.userRoles || []
-      DebugUtils.info(MODULE_NAME, '👤 Initializing for user roles', { roles: finalUserRoles })
+      // Phase 1: Критические stores (для всех ролей)
+      const criticalResults = await this.strategy.initializeCriticalStores()
+      DebugUtils.info(MODULE_NAME, '✅ Phase 1/3: Critical stores initialized', {
+        count: criticalResults.length,
+        success: criticalResults.filter(r => r.success).length
+      })
 
-      if (this.shouldInitializeBackoffice(finalUserRoles)) {
-        await this.initializeBackofficeStores()
-      }
+      // Phase 2: Role-based stores
+      const roleBasedResults = await this.strategy.initializeRoleBasedStores(finalUserRoles)
+      DebugUtils.info(MODULE_NAME, '✅ Phase 2/3: Role-based stores initialized', {
+        count: roleBasedResults.length,
+        success: roleBasedResults.filter(r => r.success).length
+      })
 
-      if (this.shouldInitializePOS(finalUserRoles)) {
-        await this.initializePOSStores()
-      }
-
-      // Debug system (если включен)
-      if (this.config.enableDebug) {
-        await this.initializeDebugSystem()
-      }
+      // Phase 3: Optional stores (debug, analytics)
+      const optionalResults = await this.strategy.initializeOptionalStores()
+      DebugUtils.info(MODULE_NAME, '✅ Phase 3/3: Optional stores initialized', {
+        count: optionalResults.length,
+        success: optionalResults.filter(r => r.success).length
+      })
 
       // Integration tests (если включены)
       if (this.config.runIntegrationTests && import.meta.env.DEV) {
         await this.runIntegrationTests()
       }
 
-      DebugUtils.info(MODULE_NAME, '✅ App initialization completed successfully')
+      const allResults = [...criticalResults, ...roleBasedResults, ...optionalResults]
+      const summary = this.createInitializationSummary(finalUserRoles, allResults)
 
-      const summary = this.createInitializationSummary(finalUserRoles)
-      this.showInitializationSummary()
+      this.showInitializationSummary(finalUserRoles)
+
+      DebugUtils.info(MODULE_NAME, '✅ App initialization completed successfully', {
+        totalStores: allResults.length,
+        successfulStores: allResults.filter(r => r.success).length,
+        totalTime: summary.totalTime + 'ms'
+      })
+
       return summary
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ App initialization failed', { error })
@@ -94,324 +117,20 @@ export class AppInitializer {
     }
   }
 
-  private createInitializationSummary(userRoles: string[]): InitializationSummary {
+  /**
+   * Создать сводку инициализации
+   */
+  private createInitializationSummary(
+    userRoles: UserRole[],
+    results: StoreInitResult[]
+  ): InitializationSummary {
     return {
       timestamp: new Date().toISOString(),
       platform: this.platform.platform.value,
       userRoles: userRoles,
-      storesLoaded: this.getLoadedStoresCount(userRoles),
-      totalTime: Date.now() - this.startTime
-    }
-  }
-
-  private getLoadedStoresCount(userRoles: string[]): number {
-    let count = 0
-
-    if (this.shouldInitializeBackoffice(userRoles)) {
-      if (useProductsStore().products?.length) count++
-      if (useRecipesStore().recipes?.length) count++
-      if (useCounteragentsStore().counteragents?.length) count++
-      if (useMenuStore().state?.value?.menuItems?.length) count++
-      if (useAccountStore().state?.value?.accounts?.length) count++
-      if (useStorageStore().state?.value?.balances?.length) count++
-      if (usePreparationStore().state?.value?.preparations?.length) count++
-      if (useSupplierStore().state?.value?.requests?.length) count++
-    }
-
-    if (this.shouldInitializePOS(userRoles)) {
-      if (usePosStore().isInitialized) count++
-    }
-
-    return count
-  }
-  // ===== 🆕 НОВЫЕ МЕТОДЫ: ОПРЕДЕЛЕНИЕ ТИПА ИНИЦИАЛИЗАЦИИ =====
-
-  private shouldInitializeBackoffice(userRoles: string[]): boolean {
-    return userRoles.some(role => ['admin', 'manager'].includes(role))
-  }
-
-  private shouldInitializePOS(userRoles: string[]): boolean {
-    return userRoles.some(role => ['admin', 'cashier'].includes(role))
-  }
-
-  // ===== BACKOFFICE INITIALIZATION =====
-
-  private async initializeBackofficeStores(): Promise<void> {
-    DebugUtils.info(MODULE_NAME, '🏢 Initializing Backoffice stores...')
-
-    // Phase 1: Core catalogs (sequential - recipes depend on products)
-    await this.loadCoreCatalogs()
-
-    // Phase 2: Integrated stores (storage, menu, accounts, suppliers)
-    await this.loadIntegratedStores()
-
-    DebugUtils.info(MODULE_NAME, '✅ Backoffice stores initialized')
-  }
-
-  private async loadCoreCatalogs(): Promise<void> {
-    DebugUtils.info(MODULE_NAME, '📋 Loading core catalogs...')
-
-    // ВАЖНО: Последовательная загрузка - рецепты зависят от продуктов
-    await this.loadProducts()
-    await this.loadCounterAgents()
-    await this.loadRecipes()
-
-    DebugUtils.info(MODULE_NAME, '✅ Core catalogs loaded successfully')
-  }
-
-  private async loadProducts(): Promise<void> {
-    const productStore = useProductsStore()
-
-    DebugUtils.store(MODULE_NAME, 'Loading products...', {
-      useMock: this.config.useMockData
-    })
-
-    try {
-      await productStore.loadProducts(this.config.useMockData)
-
-      DebugUtils.info(MODULE_NAME, 'Products loaded successfully', {
-        count: productStore.products.length,
-        sellable: productStore.sellableProducts.length,
-        rawMaterials: productStore.rawMaterials.length
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load products', { error })
-      throw new Error(`Products loading failed: ${error}`)
-    }
-  }
-
-  // 2. В методе loadCounterAgents() заменить DebugUtils.debug на DebugUtils.store:
-  private async loadCounterAgents(): Promise<void> {
-    const counteragentsStore = useCounteragentsStore()
-
-    DebugUtils.store(MODULE_NAME, 'Loading counteragents...', {
-      useMock: this.config.useMockData
-    })
-
-    try {
-      if (counteragentsStore.initialize) {
-        await counteragentsStore.initialize()
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Counteragents loaded successfully', {
-        total: counteragentsStore.counteragents.length,
-        suppliers: counteragentsStore.supplierCounterAgents.length,
-        active: counteragentsStore.activeCounterAgents.length
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load counteragents', { error })
-      throw new Error(`Counteragents loading failed: ${error}`)
-    }
-  }
-
-  // 3. В методе loadRecipes() заменить DebugUtils.debug на DebugUtils.store:
-  private async loadRecipes(): Promise<void> {
-    const recipesStore = useRecipesStore()
-
-    DebugUtils.store(MODULE_NAME, 'Loading recipes and preparations...', {
-      useMock: this.config.useMockData
-    })
-
-    try {
-      if (recipesStore.initialize) {
-        await recipesStore.initialize()
-      }
-
-      DebugUtils.store(MODULE_NAME, 'Recipes loaded successfully', {
-        recipes: recipesStore.recipes.length,
-        preparations: recipesStore.preparations.length,
-        categories: recipesStore.categories.length
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load recipes', { error })
-      throw new Error(`Recipes loading failed: ${error}`)
-    }
-  }
-
-  private async loadIntegratedStores(): Promise<void> {
-    DebugUtils.info(MODULE_NAME, '🔗 Loading integrated stores...')
-
-    // Параллельная загрузка независимых stores
-    await Promise.all([
-      this.loadMenu(),
-      this.loadAccounts(),
-      this.loadStorage(),
-      this.loadPreparations(),
-      this.loadSuppliers(),
-      this.loadSales(), // 🆕 Sprint 2
-      this.loadRecipeWriteOff() // 🆕 Sprint 2
-    ])
-
-    DebugUtils.info(MODULE_NAME, '✅ Integrated stores loaded successfully')
-  }
-
-  private async loadMenu(): Promise<void> {
-    try {
-      const menuStore = useMenuStore()
-
-      if (menuStore.initialize) {
-        await menuStore.initialize()
-      }
-
-      DebugUtils.store(MODULE_NAME, '📄 Menu loaded', {
-        items: menuStore.state?.value?.menuItems?.length || 0,
-        categories: menuStore.state?.value?.categories?.length || 0
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load menu (non-critical)', { error })
-    }
-  }
-
-  private async loadAccounts(): Promise<void> {
-    try {
-      const accountStore = useAccountStore()
-
-      if (accountStore.initialize) {
-        await accountStore.initialize()
-      }
-
-      DebugUtils.debug(MODULE_NAME, '💰 Accounts loaded', {
-        accounts: accountStore.state?.value?.accounts?.length || 0,
-        transactions: accountStore.state?.value?.transactions?.length || 0
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load accounts (non-critical)', { error })
-    }
-  }
-
-  private async loadStorage(): Promise<void> {
-    try {
-      const storageStore = useStorageStore()
-
-      // ✅ ИСПРАВЛЕНИЕ: Вызываем initialize() вместо fetchBalances()
-      if (!storageStore.initialized) {
-        await storageStore.initialize()
-      } else {
-        // Если уже инициализирован, просто обновляем данные
-        await storageStore.fetchBalances()
-      }
-
-      DebugUtils.store(MODULE_NAME, '📦 Storage loaded', {
-        balances: storageStore.state.balances.length,
-        batches: storageStore.state.batches.length,
-        ready: storageStore.isReady
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load storage (non-critical)', { error })
-    }
-  }
-
-  private async loadPreparations(): Promise<void> {
-    try {
-      const preparationStore = usePreparationStore()
-
-      if (preparationStore.initialize) {
-        await preparationStore.initialize()
-      }
-
-      DebugUtils.store(MODULE_NAME, '🧑‍🍳 Preparations loaded', {
-        preparations: preparationStore.state?.value?.preparations?.length || 0
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load preparations (non-critical)', { error })
-    }
-  }
-
-  private async loadSuppliers(): Promise<void> {
-    try {
-      const supplierStore = useSupplierStore()
-
-      if (supplierStore.initialize) {
-        await supplierStore.initialize()
-      }
-
-      DebugUtils.store(MODULE_NAME, '🚚 Suppliers loaded', {
-        requests: supplierStore.state?.value?.requests?.length || 0,
-        orders: supplierStore.state?.value?.orders?.length || 0
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load suppliers (non-critical)', { error })
-    }
-  }
-
-  // ===== 🆕 SALES STORES (Sprint 2) =====
-
-  private async loadSales(): Promise<void> {
-    try {
-      const salesStore = useSalesStore()
-
-      if (!salesStore.initialized) {
-        await salesStore.initialize()
-      }
-
-      DebugUtils.store(MODULE_NAME, '💰 Sales transactions loaded', {
-        transactions: salesStore.transactions.length,
-        todayRevenue: salesStore.todayRevenue,
-        todayItemsSold: salesStore.todayItemsSold
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load sales (non-critical)', { error })
-    }
-  }
-
-  private async loadRecipeWriteOff(): Promise<void> {
-    try {
-      const recipeWriteOffStore = useRecipeWriteOffStore()
-
-      if (!recipeWriteOffStore.initialized) {
-        await recipeWriteOffStore.initialize()
-      }
-
-      DebugUtils.store(MODULE_NAME, '📋 Recipe write-offs loaded', {
-        writeOffs: recipeWriteOffStore.writeOffs.length
-      })
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Failed to load recipe write-offs (non-critical)', { error })
-    }
-  }
-
-  // ===== 🆕 POS INITIALIZATION =====
-
-  private async initializePOSStores(): Promise<void> {
-    DebugUtils.info(MODULE_NAME, '🏪 Initializing POS stores...')
-
-    try {
-      const posStore = usePosStore()
-
-      // Вызываем упрощенную инициализацию POS
-      const result = await posStore.initializePOS()
-
-      if (!result.success) {
-        throw new Error(result.error || 'POS initialization failed')
-      }
-
-      DebugUtils.info(MODULE_NAME, '✅ POS stores initialized successfully', {
-        isReady: posStore.isReady,
-        isOnline: posStore.isOnline
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to initialize POS stores', { error })
-      // POS инициализация критична для кассиров
-      throw error
-    }
-  }
-
-  // ===== DEBUG SYSTEM =====
-
-  private async initializeDebugSystem(): Promise<void> {
-    try {
-      DebugUtils.info(MODULE_NAME, '🐛 Initializing debug system...')
-
-      const debugStore = useDebugStore()
-      await debugStore.initialize()
-
-      DebugUtils.info(MODULE_NAME, '✅ Debug system initialized successfully', {
-        availableStores: debugStore.storesSortedByPriority.length,
-        loadedStores: debugStore.totalStoresLoaded
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to initialize debug system', { error })
-      // Debug система не критична, не прерываем инициализацию
+      storesLoaded: results.filter(r => r.success).length,
+      totalTime: Date.now() - this.startTime,
+      results: results
     }
   }
 
@@ -437,15 +156,13 @@ export class AppInitializer {
   /**
    * Показать сводку инициализации
    */
-  private showInitializationSummary(): void {
-    const authStore = useAuthStore()
-    const userRoles = authStore.userRoles
-
+  private showInitializationSummary(userRoles: UserRole[]): void {
     // Информация об устройстве и среде
     const deviceInfo = {
       platform: this.platform.platform.value,
       online: this.platform.isOnline.value,
       userRole: userRoles.join(', '),
+      strategy: this.strategy.getName(),
       debugMode: ENV.debugEnabled,
       mockData: ENV.useMockData,
       offlineEnabled: ENV.enableOffline
@@ -454,21 +171,16 @@ export class AppInitializer {
     // Статус stores
     const storesStatus: any = {}
 
-    if (this.shouldInitializeBackoffice(userRoles)) {
-      storesStatus.products = this.getStoreStatus(
-        () => useProductsStore().products?.length,
-        'items'
-      )
-      storesStatus.counteragents = this.getStoreStatus(
-        () => useCounteragentsStore().counteragents?.length,
-        'items'
-      )
-      storesStatus.recipes = this.getStoreStatus(() => useRecipesStore().recipes?.length, 'items')
-    }
+    // Critical stores (always loaded)
+    storesStatus.products = this.getStoreStatus(() => useProductsStore().products?.length, 'items')
+    storesStatus.recipes = this.getStoreStatus(() => useRecipesStore().recipes?.length, 'items')
+    storesStatus.menu = this.getStoreStatus(
+      () => useMenuStore().state?.value?.menuItems?.length,
+      'items'
+    )
 
-    if (this.shouldInitializePOS(userRoles)) {
-      storesStatus.pos = usePosStore().isInitialized ? 'Ready' : 'Failed'
-    }
+    // Role-based stores
+    storesStatus.pos = usePosStore().isInitialized ? 'Ready' : 'Not loaded'
 
     // Выводим сводки
     DebugUtils.deviceInfo(deviceInfo)

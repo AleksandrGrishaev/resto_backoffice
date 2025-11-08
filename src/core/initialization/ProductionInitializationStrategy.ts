@@ -1,0 +1,406 @@
+// src/core/initialization/ProductionInitializationStrategy.ts - Production режим инициализации
+
+import type {
+  InitializationStrategy,
+  InitializationConfig,
+  StoreInitResult,
+  UserRole,
+  StoreName
+} from './types'
+import {
+  getRequiredStoresForRoles,
+  shouldLoadBackofficeStores,
+  shouldLoadPOSStores,
+  getLoadOrderForStores,
+  CRITICAL_STORES
+} from './dependencies'
+import { DebugUtils } from '@/utils'
+
+// Импорт stores (те же что в Dev, но будут использовать API вместо localStorage)
+import { useProductsStore } from '@/stores/productsStore'
+import { useRecipesStore } from '@/stores/recipes'
+import { useMenuStore } from '@/stores/menu'
+import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
+import { usePosStore } from '@/stores/pos'
+
+const MODULE_NAME = 'ProductionInitStrategy'
+
+/**
+ * Стратегия инициализации для Production режима
+ *
+ * Характеристики:
+ * - Использует API для загрузки данных
+ * - Загружает критические stores для всех, остальные по ролям (оптимизация)
+ * - Параллельная загрузка где возможно
+ * - Кеширование и оптимизация
+ *
+ * ВАЖНО: Это placeholder для будущей реализации!
+ * В текущей версии делегирует логику в Dev стратегию.
+ *
+ * TODO для Production:
+ * 1. Заменить store.initialize() на API вызовы
+ * 2. Добавить кеширование ответов
+ * 3. Добавить retry логику для API
+ * 4. Оптимизировать параллельную загрузку
+ * 5. Добавить progressive loading (сначала критичные данные)
+ * 6. Добавить Service Workers для offline режима
+ */
+export class ProductionInitializationStrategy implements InitializationStrategy {
+  private config: InitializationConfig
+
+  constructor(config: InitializationConfig) {
+    this.config = config
+  }
+
+  getName(): string {
+    return 'Production (API + caching)'
+  }
+
+  /**
+   * Инициализировать критические stores
+   *
+   * В PRODUCTION режиме: загружаем для всех ролей, т.к. нужны для базовых операций
+   * (decomposition при продажах требует recipes даже для кассиров)
+   */
+  async initializeCriticalStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...')
+
+    const results: StoreInitResult[] = []
+
+    try {
+      // TODO: В production можно грузить параллельно через API
+      // Сейчас используем ту же логику что в Dev
+
+      // ВАЖНО: Критические stores нужны ВСЕМ для decomposition
+      results.push(await this.loadProductsFromAPI())
+      results.push(await this.loadRecipesFromAPI())
+      results.push(await this.loadMenuFromAPI())
+
+      DebugUtils.info(MODULE_NAME, '✅ [PROD] Critical stores initialized', {
+        count: results.length,
+        success: results.filter(r => r.success).length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '❌ [PROD] Critical stores initialization failed', { error })
+      throw error
+    }
+
+    return results
+  }
+
+  /**
+   * Инициализировать stores на основе ролей
+   *
+   * В PRODUCTION режиме: загружаем только необходимые stores для оптимизации
+   */
+  async initializeRoleBasedStores(userRoles: UserRole[]): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🏢 [PROD] Initializing role-based stores...', { userRoles })
+
+    const results: StoreInitResult[] = []
+
+    try {
+      // Определяем какие stores нужны для данных ролей
+      const requiredStores = this.getAdditionalStoresForRoles(userRoles)
+
+      // TODO: В production можно загружать все stores параллельно через API
+      // Сейчас используем простую логику
+
+      if (shouldLoadPOSStores(userRoles)) {
+        results.push(...(await this.initializePOSStores()))
+      }
+
+      if (shouldLoadBackofficeStores(userRoles)) {
+        results.push(...(await this.initializeBackofficeStores()))
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ [PROD] Role-based stores initialized', {
+        count: results.length,
+        success: results.filter(r => r.success).length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '⚠️ [PROD] Role-based stores initialization failed', {
+        error
+      })
+      // Не прерываем - некритичные stores
+    }
+
+    return results
+  }
+
+  /**
+   * Инициализировать опциональные stores
+   */
+  async initializeOptionalStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🐛 [PROD] Initializing optional stores...')
+
+    // В production debug system обычно не нужен
+    return []
+  }
+
+  // ===== HELPER METHODS =====
+
+  /**
+   * Получить дополнительные stores для ролей (кроме критических)
+   */
+  private getAdditionalStoresForRoles(userRoles: UserRole[]): StoreName[] {
+    const stores = new Set<StoreName>()
+
+    // POS stores
+    if (shouldLoadPOSStores(userRoles)) {
+      CRITICAL_STORES.pos.forEach(store => stores.add(store))
+    }
+
+    // Backoffice stores
+    if (shouldLoadBackofficeStores(userRoles)) {
+      CRITICAL_STORES.backoffice.forEach(store => stores.add(store))
+    }
+
+    return Array.from(stores)
+  }
+
+  // ===== API LOADING METHODS (PLACEHOLDERS) =====
+
+  /**
+   * TODO: Загрузить products через API
+   * Сейчас делегирует в store.initialize() который использует localStorage
+   */
+  private async loadProductsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useProductsStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading products from API...')
+
+      // TODO: Заменить на API вызов
+      // const response = await fetch('/api/v1/products')
+      // const products = await response.json()
+      // store.setProducts(products)
+
+      // Сейчас используем существующий метод
+      await store.loadProducts(this.config.useMockData)
+
+      return {
+        name: 'products',
+        success: true,
+        count: store.products.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load products'
+      DebugUtils.error(MODULE_NAME, `❌ [PROD] ${message}`, { error })
+
+      return {
+        name: 'products',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  /**
+   * TODO: Загрузить recipes через API
+   */
+  private async loadRecipesFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useRecipesStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading recipes from API...')
+
+      // TODO: Заменить на API вызов
+      // const response = await fetch('/api/v1/recipes')
+      // const recipes = await response.json()
+      // store.setRecipes(recipes)
+
+      // Сейчас используем существующий метод
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'recipes',
+        success: true,
+        count: (store.recipes?.length || 0) + (store.preparations?.length || 0),
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load recipes'
+      DebugUtils.error(MODULE_NAME, `❌ [PROD] ${message}`, { error })
+
+      return {
+        name: 'recipes',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  /**
+   * TODO: Загрузить menu через API
+   */
+  private async loadMenuFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useMenuStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading menu from API...')
+
+      // TODO: Заменить на API вызов
+      // const response = await fetch('/api/v1/menu')
+      // const menu = await response.json()
+      // store.setMenu(menu)
+
+      // Сейчас используем существующий метод
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'menu',
+        success: true,
+        count: store.state?.value?.menuItems?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load menu'
+      DebugUtils.error(MODULE_NAME, `❌ [PROD] ${message}`, { error })
+
+      return {
+        name: 'menu',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  // ===== ROLE-BASED LOADING (PLACEHOLDERS) =====
+
+  private async initializePOSStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🏪 [PROD] Initializing POS stores...')
+
+    const results: StoreInitResult[] = []
+
+    // POS system
+    results.push(await this.loadPOSFromAPI())
+
+    // Sales & Write-off
+    const [salesResult, writeOffResult] = await Promise.all([
+      this.loadSalesFromAPI(),
+      this.loadWriteOffFromAPI()
+    ])
+    results.push(salesResult, writeOffResult)
+
+    return results
+  }
+
+  private async loadPOSFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = usePosStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading POS from API...')
+
+      // TODO: Заменить на API вызов
+      const result = await store.initializePOS()
+
+      if (!result.success) {
+        throw new Error(result.error || 'POS initialization failed')
+      }
+
+      return {
+        name: 'pos',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load POS'
+      DebugUtils.error(MODULE_NAME, `❌ [PROD] ${message}`, { error })
+
+      return {
+        name: 'pos',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadSalesFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useSalesStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading sales from API...')
+
+      // TODO: Заменить на API вызов
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'sales',
+        success: true,
+        count: store.transactions.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load sales'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'sales',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadWriteOffFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useRecipeWriteOffStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading write-offs from API...')
+
+      // TODO: Заменить на API вызов
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'writeOff',
+        success: true,
+        count: store.writeOffs.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load write-offs'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'writeOff',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async initializeBackofficeStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🏢 [PROD] Initializing backoffice stores...')
+
+    // TODO: В production загружать через API
+    // Пока возвращаем пустой массив - будет реализовано позже
+    return []
+  }
+}

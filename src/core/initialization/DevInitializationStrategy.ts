@@ -1,0 +1,554 @@
+// src/core/initialization/DevInitializationStrategy.ts - Dev режим инициализации
+
+import type {
+  InitializationStrategy,
+  InitializationConfig,
+  StoreInitResult,
+  UserRole
+} from './types'
+import {
+  getRequiredStoresForRoles,
+  shouldLoadBackofficeStores,
+  shouldLoadPOSStores
+} from './dependencies'
+import { DebugUtils } from '@/utils'
+
+// Импорт stores
+import { useProductsStore } from '@/stores/productsStore'
+import { useRecipesStore } from '@/stores/recipes'
+import { useCounteragentsStore } from '@/stores/counteragents'
+import { useAccountStore } from '@/stores/account'
+import { useMenuStore } from '@/stores/menu'
+import { useStorageStore } from '@/stores/storage'
+import { usePreparationStore } from '@/stores/preparation'
+import { useSupplierStore } from '@/stores/supplier_2'
+import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
+import { usePosStore } from '@/stores/pos'
+import { useDebugStore } from '@/stores/debug'
+
+const MODULE_NAME = 'DevInitStrategy'
+
+/**
+ * Стратегия инициализации для Development режима
+ *
+ * Характеристики:
+ * - Использует localStorage + mock данные
+ * - Загружает критические stores для ВСЕХ ролей (для удобства тестирования)
+ * - Последовательная загрузка с учетом зависимостей
+ * - Подробное логирование
+ */
+export class DevInitializationStrategy implements InitializationStrategy {
+  private config: InitializationConfig
+
+  constructor(config: InitializationConfig) {
+    this.config = config
+  }
+
+  getName(): string {
+    return 'Development (localStorage + mock data)'
+  }
+
+  /**
+   * Инициализировать критические stores
+   *
+   * В DEV режиме: загружаем для всех ролей, чтобы можно было тестировать любые сценарии
+   */
+  async initializeCriticalStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '📦 [DEV] Initializing critical stores for all roles...')
+
+    const results: StoreInitResult[] = []
+
+    try {
+      // ВАЖНО: Последовательная загрузка - recipes зависят от products
+      results.push(await this.loadProducts())
+      results.push(await this.loadCounterAgents())
+      results.push(await this.loadRecipes()) // Зависит от products
+
+      // Menu зависит от recipes
+      results.push(await this.loadMenu())
+
+      DebugUtils.info(MODULE_NAME, '✅ [DEV] Critical stores initialized', {
+        count: results.length,
+        success: results.filter(r => r.success).length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '❌ [DEV] Critical stores initialization failed', { error })
+      throw error
+    }
+
+    return results
+  }
+
+  /**
+   * Инициализировать stores на основе ролей
+   *
+   * В DEV режиме: загружаем дополнительные stores для тестирования
+   */
+  async initializeRoleBasedStores(userRoles: UserRole[]): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🏢 [DEV] Initializing role-based stores...', { userRoles })
+
+    const results: StoreInitResult[] = []
+
+    try {
+      // POS stores
+      if (shouldLoadPOSStores(userRoles)) {
+        results.push(...(await this.initializePOSStores()))
+      }
+
+      // Backoffice stores (параллельная загрузка независимых stores)
+      if (shouldLoadBackofficeStores(userRoles)) {
+        results.push(...(await this.initializeBackofficeStores()))
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ [DEV] Role-based stores initialized', {
+        count: results.length,
+        success: results.filter(r => r.success).length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '❌ [DEV] Role-based stores initialization failed', { error })
+      // Не прерываем - некритичные stores
+    }
+
+    return results
+  }
+
+  /**
+   * Инициализировать опциональные stores
+   */
+  async initializeOptionalStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🐛 [DEV] Initializing optional stores...')
+
+    const results: StoreInitResult[] = []
+
+    try {
+      if (this.config.enableDebug) {
+        results.push(await this.loadDebug())
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ [DEV] Optional stores initialized', {
+        count: results.length
+      })
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, '⚠️ [DEV] Optional stores initialization failed', { error })
+      // Опциональные stores - не критично
+    }
+
+    return results
+  }
+
+  // ===== КРИТИЧЕСКИЕ STORES =====
+
+  private async loadProducts(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useProductsStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading products...', {
+        useMock: this.config.useMockData
+      })
+
+      await store.loadProducts(this.config.useMockData)
+
+      return {
+        name: 'products',
+        success: true,
+        count: store.products.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load products'
+      DebugUtils.error(MODULE_NAME, `❌ [DEV] ${message}`, { error })
+
+      return {
+        name: 'products',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadCounterAgents(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useCounteragentsStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading counteragents...', {
+        useMock: this.config.useMockData
+      })
+
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'counteragents',
+        success: true,
+        count: store.counteragents.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load counteragents'
+      DebugUtils.error(MODULE_NAME, `❌ [DEV] ${message}`, { error })
+
+      return {
+        name: 'counteragents',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadRecipes(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useRecipesStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipes and preparations...', {
+        useMock: this.config.useMockData
+      })
+
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'recipes',
+        success: true,
+        count: (store.recipes?.length || 0) + (store.preparations?.length || 0),
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load recipes'
+      DebugUtils.error(MODULE_NAME, `❌ [DEV] ${message}`, { error })
+
+      return {
+        name: 'recipes',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadMenu(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useMenuStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading menu...', {
+        useMock: this.config.useMockData
+      })
+
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'menu',
+        success: true,
+        count: store.state?.value?.menuItems?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load menu'
+      DebugUtils.error(MODULE_NAME, `❌ [DEV] ${message}`, { error })
+
+      return {
+        name: 'menu',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  // ===== POS STORES =====
+
+  private async initializePOSStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🏪 [DEV] Initializing POS stores...')
+
+    const results: StoreInitResult[] = []
+
+    // POS system
+    results.push(await this.loadPOS())
+
+    // Sales & Write-off (параллельно)
+    const [salesResult, writeOffResult] = await Promise.all([this.loadSales(), this.loadWriteOff()])
+    results.push(salesResult, writeOffResult)
+
+    return results
+  }
+
+  private async loadPOS(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = usePosStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading POS system...')
+
+      const result = await store.initializePOS()
+
+      if (!result.success) {
+        throw new Error(result.error || 'POS initialization failed')
+      }
+
+      return {
+        name: 'pos',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load POS'
+      DebugUtils.error(MODULE_NAME, `❌ [DEV] ${message}`, { error })
+
+      return {
+        name: 'pos',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadSales(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useSalesStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading sales transactions...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'sales',
+        success: true,
+        count: store.transactions.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load sales'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'sales',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadWriteOff(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useRecipeWriteOffStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipe write-offs...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'writeOff',
+        success: true,
+        count: store.writeOffs.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load write-offs'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'writeOff',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  // ===== BACKOFFICE STORES =====
+
+  private async initializeBackofficeStores(): Promise<StoreInitResult[]> {
+    DebugUtils.info(MODULE_NAME, '🏢 [DEV] Initializing backoffice stores...')
+
+    // Параллельная загрузка независимых stores
+    const results = await Promise.all([
+      this.loadAccounts(),
+      this.loadStorage(),
+      this.loadPreparations(),
+      this.loadSuppliers()
+    ])
+
+    return results
+  }
+
+  private async loadAccounts(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useAccountStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading accounts...')
+
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'accounts',
+        success: true,
+        count: store.state?.value?.accounts?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load accounts'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'accounts',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadStorage(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useStorageStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading storage...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      } else {
+        await store.fetchBalances()
+      }
+
+      return {
+        name: 'storage',
+        success: true,
+        count: store.state.balances.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load storage'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'storage',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadPreparations(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = usePreparationStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading preparations...')
+
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'preparations',
+        success: true,
+        count: store.state?.value?.preparations?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load preparations'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'preparations',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadSuppliers(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useSupplierStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading suppliers...')
+
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'suppliers',
+        success: true,
+        count: store.state?.value?.requests?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load suppliers'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'suppliers',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  // ===== OPTIONAL STORES =====
+
+  private async loadDebug(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useDebugStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading debug system...')
+
+      await store.initialize()
+
+      return {
+        name: 'debug',
+        success: true,
+        count: store.storesSortedByPriority.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load debug'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'debug',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+}

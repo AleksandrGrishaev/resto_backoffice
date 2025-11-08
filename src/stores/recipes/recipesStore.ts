@@ -67,6 +67,7 @@ export const useRecipesStore = defineStore('recipes', () => {
 
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const initialized = ref(false) // 🆕 Флаг инициализации
   const selectedRecipe = ref<Recipe | null>(null)
   const selectedPreparation = ref<Preparation | null>(null)
 
@@ -102,6 +103,12 @@ export const useRecipesStore = defineStore('recipes', () => {
    * Инициализирует Recipe Store с интеграцией
    */
   async function initialize(): Promise<void> {
+    // Если уже инициализирован, не делаем ничего
+    if (initialized.value) {
+      DebugUtils.info(MODULE_NAME, 'Recipe Store already initialized')
+      return
+    }
+
     try {
       loading.value = true
       error.value = null
@@ -130,6 +137,9 @@ export const useRecipesStore = defineStore('recipes', () => {
 
       // 4. Пересчитываем стоимости
       await recalculateAllCosts()
+
+      // 🆕 Устанавливаем флаг инициализации
+      initialized.value = true
 
       DebugUtils.info(MODULE_NAME, '✅ Recipe Store initialized successfully', {
         preparations: activePreparations.value.length,
@@ -545,6 +555,7 @@ export const useRecipesStore = defineStore('recipes', () => {
     state: readonly(state),
     loading: readonly(loading),
     error: readonly(error),
+    initialized: readonly(initialized), // 🆕 Флаг инициализации
 
     // Data (from composables)
     recipes: readonly(recipesComposable.recipes),
