@@ -67,6 +67,9 @@ export class DevInitializationStrategy implements InitializationStrategy {
       // Menu зависит от recipes
       results.push(await this.loadMenu())
 
+      // Storage нужен для write-off операций при продажах (критичен!)
+      results.push(await this.loadStorage())
+
       DebugUtils.info(MODULE_NAME, '✅ [DEV] Critical stores initialized', {
         count: results.length,
         success: results.filter(r => r.success).length
@@ -385,9 +388,9 @@ export class DevInitializationStrategy implements InitializationStrategy {
     DebugUtils.info(MODULE_NAME, '🏢 [DEV] Initializing backoffice stores...')
 
     // Параллельная загрузка независимых stores
+    // NOTE: storage уже загружен в критических stores
     const results = await Promise.all([
       this.loadAccounts(),
-      this.loadStorage(),
       this.loadPreparations(),
       this.loadSuppliers()
     ])

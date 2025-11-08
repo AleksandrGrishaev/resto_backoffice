@@ -291,6 +291,18 @@ export const STORE_CONFIGURATIONS = {
     icon: 'mdi-account-key',
     description: 'Authentication and user management',
     priority: 9
+  },
+  sales: {
+    name: 'Sales Store',
+    icon: 'mdi-cash-register',
+    description: 'Sales transactions with profit calculation',
+    priority: 10
+  },
+  recipeWriteOff: {
+    name: 'Recipe Write-off Store',
+    icon: 'mdi-file-document-remove',
+    description: 'Inventory write-offs from sales',
+    priority: 11
   }
 } as const
 

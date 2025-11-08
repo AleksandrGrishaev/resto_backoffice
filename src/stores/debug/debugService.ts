@@ -27,6 +27,7 @@ import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { useAuthStore } from '@/stores/auth'
+import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
 
 const MODULE_NAME = 'DebugService'
 
@@ -60,7 +61,12 @@ class DebugService {
         { id: 'storage', getInstance: () => this.safeGetStore(() => useStorageStore()) },
         { id: 'preparation', getInstance: () => this.safeGetStore(() => usePreparationStore()) },
         { id: 'supplier', getInstance: () => this.safeGetStore(() => useSupplierStore()) },
-        { id: 'auth', getInstance: () => this.safeGetStore(() => useAuthStore()) }
+        { id: 'auth', getInstance: () => this.safeGetStore(() => useAuthStore()) },
+        { id: 'sales', getInstance: () => this.safeGetStore(() => useSalesStore()) },
+        {
+          id: 'recipeWriteOff',
+          getInstance: () => this.safeGetStore(() => useRecipeWriteOffStore())
+        }
       ]
 
       for (const storeDef of storeDefinitions) {
@@ -207,6 +213,10 @@ class DebugService {
           return useSupplierStore()
         case 'auth':
           return useAuthStore()
+        case 'sales':
+          return useSalesStore()
+        case 'recipeWriteOff':
+          return useRecipeWriteOffStore()
         default:
           throw new Error(`Unknown store: ${storeId}`)
       }
@@ -241,6 +251,10 @@ class DebugService {
           return this.extractSupplierState(storeInstance)
         case 'auth':
           return this.extractAuthState(storeInstance)
+        case 'sales':
+          return this.extractSalesState(storeInstance)
+        case 'recipeWriteOff':
+          return this.extractRecipeWriteOffState(storeInstance)
         default:
           return this.extractGenericState(storeInstance)
       }
@@ -587,6 +601,30 @@ class DebugService {
         : null,
       error: storeState.error,
       lastLoginAt: storeState.lastLoginAt
+    }
+  }
+
+  private extractSalesState(storeInstance: any): Record<string, any> {
+    return {
+      transactions: this.serializeArray(storeInstance.transactions || []),
+      initialized: storeInstance.initialized || false,
+      loading: storeInstance.loading || false,
+      error: storeInstance.error,
+      todayTransactions: this.serializeArray(storeInstance.todayTransactions || []),
+      todayRevenue: storeInstance.todayRevenue || 0,
+      todayProfit: storeInstance.todayProfit || 0,
+      todayItemsSold: storeInstance.todayItemsSold || 0
+    }
+  }
+
+  private extractRecipeWriteOffState(storeInstance: any): Record<string, any> {
+    return {
+      writeOffs: this.serializeArray(storeInstance.writeOffs || []),
+      initialized: storeInstance.initialized || false,
+      loading: storeInstance.loading || false,
+      error: storeInstance.error,
+      todayWriteOffs: this.serializeArray(storeInstance.todayWriteOffs || []),
+      totalCostToday: storeInstance.totalCostToday || 0
     }
   }
 
@@ -1563,6 +1601,10 @@ class DebugService {
           return (supplierState.requests?.length || 0) + (supplierState.orders?.length || 0)
         case 'auth':
           return storeInstance?.state?.value?.currentUser ? 1 : 0
+        case 'sales':
+          return storeInstance?.transactions?.length || 0
+        case 'recipeWriteOff':
+          return storeInstance?.writeOffs?.length || 0
         default:
           return 0
       }

@@ -56,8 +56,9 @@ export const CRITICAL_STORES = {
    * - products: базовый справочник для всех операций
    * - recipes: нужны для decomposition при продажах (даже для кассиров)
    * - menu: основа для POS операций
+   * - storage: нужен для write-off операций при продажах
    */
-  all: ['products', 'recipes', 'menu'] as StoreName[],
+  all: ['products', 'recipes', 'menu', 'storage'] as StoreName[],
 
   /**
    * Дополнительные stores для POS пользователей (cashier, waiter)
