@@ -308,7 +308,9 @@ const categoryIcons: Record<string, string> = {
 /**
  * ✅ ИСПРАВЛЕНО: Получение отображения базовой единицы для продукта
  */
-function getBaseUnitDisplayForProduct(product: ProductItem): string {
+function getBaseUnitDisplayForProduct(product: ProductItem | undefined): string {
+  if (!product) return 'g'
+
   if (product.baseUnit) {
     return getUnitShortName(product.baseUnit as MeasurementUnit)
   }
@@ -404,10 +406,12 @@ function getFixedUnit(component: Component): string {
 
   if (component.componentType === 'product') {
     const product = products.value.find(p => p.id === component.componentId)
-    if (product?.baseUnit) {
+    if (!product) return 'Product not found'
+
+    if (product.baseUnit) {
       return getUnitShortName(product.baseUnit as MeasurementUnit)
     }
-    return getUnitShortName((product?.unit || 'gram') as MeasurementUnit)
+    return getUnitShortName((product.unit || 'gram') as MeasurementUnit)
   }
 
   const prep = preparations.value.find(p => p.id === component.componentId)
@@ -422,18 +426,15 @@ function getEnhancedPriceDisplay(component: Component): string {
 
   if (component.componentType === 'product') {
     const product = products.value.find(p => p.id === component.componentId)
-    if (product) {
-      if (product.baseCostPerUnit && product.baseUnit) {
-        return `${formatIDR(product.baseCostPerUnit)}/${getBaseUnitDisplayForProduct(product)}`
-      } else {
-        return `${formatIDR(product.costPerUnit)}/${getUnitShortName((product.unit || 'gram') as MeasurementUnit)}`
-      }
+    if (!product) return 'Product not found'
+
+    if (product.baseCostPerUnit && product.baseUnit) {
+      return `${formatIDR(product.baseCostPerUnit)}/${getBaseUnitDisplayForProduct(product)}`
     }
-  } else {
-    return 'Preparation cost calculated separately'
+    return `${formatIDR(product.costPerUnit)}/${getUnitShortName((product.unit || 'gram') as MeasurementUnit)}`
   }
 
-  return 'Price not available'
+  return 'Preparation cost calculated separately'
 }
 
 /**
@@ -444,7 +445,8 @@ function getBaseUnitInfo(component: Component): string {
 
   if (component.componentType === 'product') {
     const product = products.value.find(p => p.id === component.componentId)
-    return getBaseUnitDisplayForProduct(product!)
+    if (!product) return 'Product not found'
+    return getBaseUnitDisplayForProduct(product)
   }
 
   const prep = preparations.value.find(p => p.id === component.componentId)

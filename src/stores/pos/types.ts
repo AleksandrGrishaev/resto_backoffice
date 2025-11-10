@@ -1,4 +1,6 @@
 // src/stores/pos/types.ts
+import type { SelectedModifier } from '@/stores/menu/types'
+
 export interface BaseEntity {
   id: string
   createdAt: string
@@ -151,10 +153,17 @@ export interface PosBillItem extends BaseEntity {
   variantId?: string
   variantName?: string
   quantity: number
-  unitPrice: number
-  totalPrice: number
+  unitPrice: number // базовая цена варианта
+  totalPrice: number // итоговая цена (unitPrice + modifiersTotal) * quantity - discounts
   discounts: PosItemDiscount[]
+
+  // DEPRECATED: старая структура модификаторов (для обратной совместимости)
   modifications: PosItemModification[]
+
+  // NEW: модификаторы из menu system
+  selectedModifiers?: SelectedModifier[] // выбранные модификаторы
+  modifiersTotal?: number // сумма доплат за модификаторы (за 1 штуку)
+
   status: ItemStatus
   paymentStatus: ItemPaymentStatus
   kitchenNotes?: string

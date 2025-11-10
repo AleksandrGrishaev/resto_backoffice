@@ -291,7 +291,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     menuItem: PosMenuItem,
     selectedVariant: MenuItemVariant,
     quantity: number = 1,
-    modifications: any[] = []
+    modifications: any[] = [], // DEPRECATED: для обратной совместимости
+    selectedModifiers?: import('@/stores/menu/types').SelectedModifier[] // NEW: модификаторы из menu system
   ): Promise<ServiceResponse<PosBillItem>> {
     try {
       const response = await ordersService.addItemToBill(
@@ -300,7 +301,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         menuItem,
         selectedVariant,
         quantity,
-        modifications
+        modifications,
+        selectedModifiers
       )
 
       if (response.success && response.data) {

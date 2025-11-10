@@ -9,7 +9,7 @@ import type {
   OrderPaymentStatus,
   ItemPaymentStatus
 } from '../types'
-import type { MenuItemVariant } from '@/stores/menu'
+import type { MenuItemVariant, SelectedModifier } from '@/stores/menu'
 import { TimeUtils } from '@/utils'
 import { departmentNotificationService } from '../service/DepartmentNotificationService'
 
@@ -293,15 +293,26 @@ export class OrdersService {
     menuItem: PosMenuItem,
     selectedVariant: MenuItemVariant,
     quantity: number,
-    modifications: any[]
+    modifications: any[] = [], // DEPRECATED: для обратной совместимости
+    selectedModifiers?: SelectedModifier[] // NEW: модификаторы из menu system
   ): Promise<ServiceResponse<PosBillItem>> {
     try {
-      // Сначала рассчитываем цену модификаций
-      const modificationPrice = modifications.reduce((sum, mod) => sum + mod.price, 0)
+      // Рассчитываем сумму модификаторов
+      const modifiersTotal = selectedModifiers
+        ? selectedModifiers.reduce((sum, mod) => sum + mod.priceAdjustment, 0)
+        : 0
 
-      // Правильная цена = цена варианта + модификации
-      const finalUnitPrice = selectedVariant.price + modificationPrice
-      const finalTotalPrice = finalUnitPrice * quantity
+      // Для обратной совместимости со старой системой
+      const legacyModificationPrice = modifications.reduce((sum, mod) => sum + (mod.price || 0), 0)
+
+      // Базовая цена варианта (без модификаторов)
+      const unitPrice = selectedVariant.price
+
+      // Итоговая цена за единицу (базовая + модификаторы)
+      const pricePerUnit = unitPrice + modifiersTotal + legacyModificationPrice
+
+      // Итоговая цена с учетом количества
+      const totalPrice = pricePerUnit * quantity
 
       const newItem: PosBillItem = {
         id: `item_${Date.now()}`,
@@ -311,22 +322,36 @@ export class OrdersService {
         variantId: selectedVariant.id,
         variantName: selectedVariant.name,
         quantity,
-        unitPrice: finalUnitPrice, // ИСПРАВЛЕНО: включает модификации
-        totalPrice: finalTotalPrice, // ИСПРАВЛЕНО: правильная итоговая цена
+        unitPrice, // Базовая цена варианта (БЕЗ модификаторов)
+        totalPrice, // Итоговая цена (unitPrice + modifiersTotal) * quantity
         discounts: [],
+
+        // DEPRECATED: старая система модификаторов
         modifications: modifications.map(mod => ({
           id: mod.id,
           name: mod.name,
-          price: mod.price
+          price: mod.price || 0
         })),
-        status: 'draft', // Статус остается правильным
+
+        // NEW: новая система модификаторов
+        selectedModifiers: selectedModifiers || [],
+        modifiersTotal, // Сумма доплат за модификаторы (за 1 штуку)
+
+        status: 'draft',
         paymentStatus: 'unpaid',
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      // УБИРАЕМ эту строку - она перезаписывала правильную цену:
-      // newItem.totalPrice = (menuItem.price + modificationPrice) * quantity
+      console.log('➕ Adding item to bill:', {
+        itemName: menuItem.name,
+        variantName: selectedVariant.name,
+        unitPrice,
+        modifiersTotal,
+        modifiersCount: selectedModifiers?.length || 0,
+        quantity,
+        totalPrice
+      })
 
       // Сохраняем товар
       const items = await this.getItemsByBillId(billId)

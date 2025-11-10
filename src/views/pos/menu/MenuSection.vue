@@ -29,6 +29,15 @@
       </div>
     </div>
 
+    <!-- Customization Dialog -->
+    <CustomizationDialog
+      v-model="showCustomizationDialog"
+      :menu-item="customizingItem"
+      :variant="customizingVariant"
+      @add-to-bill="handleAddWithModifiers"
+      @cancel="handleCancelCustomization"
+    />
+
     <!-- Content Area -->
     <div class="menu-content">
       <!-- Loading State -->
@@ -127,15 +136,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
-import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
+import type { MenuItem, MenuItemVariant, SelectedModifier } from '@/stores/menu/types'
 
 // Components
 import CategoryCard from './components/CategoryCard.vue'
 import MenuItemCard from './components/MenuItemCard.vue'
+import CustomizationDialog from './dialogs/CustomizationDialog.vue'
 
 // ===== EMITS =====
 const emit = defineEmits<{
-  'add-item': [item: MenuItem, variant: MenuItemVariant]
+  'add-item': [item: MenuItem, variant: MenuItemVariant, selectedModifiers?: SelectedModifier[]]
 }>()
 
 // ===== STORES =====
@@ -150,6 +160,11 @@ type ViewMode = 'categories' | 'items' | 'variants'
 const currentView = ref<ViewMode>('categories')
 const selectedCategoryId = ref<string | null>(null)
 const selectedItem = ref<MenuItem | null>(null)
+
+// Customization Dialog State
+const showCustomizationDialog = ref(false)
+const customizingItem = ref<MenuItem | null>(null)
+const customizingVariant = ref<MenuItemVariant | null>(null)
 
 // ===== COMPUTED =====
 
@@ -258,7 +273,16 @@ const handleAddItem = (item: MenuItem, variant: MenuItemVariant): void => {
       throw new Error(`Variant ${variant.name} is not available`)
     }
 
-    // Эмитируем событие в родительский компонент
+    // ✨ NEW: Check if variant has modifiers
+    if (variant.modifierGroups && variant.modifierGroups.length > 0) {
+      // Open customization dialog
+      customizingItem.value = item
+      customizingVariant.value = variant
+      showCustomizationDialog.value = true
+      return
+    }
+
+    // No modifiers - add directly
     emit('add-item', item, variant)
 
     // Возвращаемся в главное меню после добавления из variants view
@@ -271,6 +295,40 @@ const handleAddItem = (item: MenuItem, variant: MenuItemVariant): void => {
     const message = error instanceof Error ? error.message : 'Failed to add item'
     console.error('Failed to add item:', message)
   }
+}
+
+/**
+ * ✨ NEW: Handle adding item with modifiers from CustomizationDialog
+ */
+const handleAddWithModifiers = (selectedModifiers: SelectedModifier[]): void => {
+  if (!customizingItem.value || !customizingVariant.value) return
+
+  try {
+    // Emit with modifiers
+    emit('add-item', customizingItem.value, customizingVariant.value, selectedModifiers)
+
+    // Close dialog
+    showCustomizationDialog.value = false
+    customizingItem.value = null
+    customizingVariant.value = null
+
+    // Return to main menu
+    currentView.value = 'categories'
+    selectedCategoryId.value = null
+    selectedItem.value = null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to add item with modifiers'
+    console.error('Failed to add item with modifiers:', message)
+  }
+}
+
+/**
+ * ✨ NEW: Handle customization dialog cancel
+ */
+const handleCancelCustomization = (): void => {
+  showCustomizationDialog.value = false
+  customizingItem.value = null
+  customizingVariant.value = null
 }
 
 /**

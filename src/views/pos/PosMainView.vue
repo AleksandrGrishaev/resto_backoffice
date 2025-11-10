@@ -320,7 +320,11 @@ const getBillNameForOrderType = (orderType: string): string => {
 /**
  * Обработка добавления товара из MenuSection
  */
-const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): Promise<void> => {
+const handleAddItemToOrder = async (
+  item: MenuItem,
+  variant: MenuItemVariant,
+  selectedModifiers?: import('@/stores/menu/types').SelectedModifier[]
+): Promise<void> => {
   try {
     DebugUtils.debug(MODULE_NAME, 'Adding item to order from menu', {
       itemId: item.id,
@@ -328,6 +332,8 @@ const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): P
       variantId: variant.id,
       variantName: variant.name,
       price: variant.price,
+      hasModifiers: !!selectedModifiers?.length,
+      modifiersCount: selectedModifiers?.length || 0,
       hasCurrentOrder: !!currentOrder.value,
       currentOrderId: currentOrder.value?.id,
       hasActiveBill: !!activeBill.value,
@@ -399,14 +405,15 @@ const handleAddItemToOrder = async (item: MenuItem, variant: MenuItemVariant): P
 
     console.log('📦 Adding POS menu item:', posMenuItem)
 
-    // ИСПРАВЛЕННЫЙ ВЫЗОВ: используем правильную сигнатуру метода
+    // ИСПРАВЛЕННЫЙ ВЫЗОВ: используем правильную сигнатуру метода с поддержкой модификаторов
     const addResult = await ordersStore.addItemToBill(
       currentOrder.value.id, // orderId
       targetBillId, // billId
       posMenuItem,
       variant, // menuItem: PosMenuItem
       1, // quantity
-      [] // modifications
+      [], // modifications (deprecated)
+      selectedModifiers // ✨ NEW: selectedModifiers
     )
 
     if (!addResult.success) {

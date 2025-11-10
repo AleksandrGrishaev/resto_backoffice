@@ -32,7 +32,7 @@ export interface MenuItem extends BaseEntity {
 export interface MenuItemVariant {
   id: string
   name: string // "с картошкой фри", "с пюре", "330мл", "500мл"
-  price: number // ЦЕНА ПРОДАЖИ (единственное место где есть цена!)
+  price: number // ЦЕНА ПРОДАЖИ (базовая цена без модификаторов)
   isActive: boolean
   sortOrder?: number
 
@@ -42,6 +42,10 @@ export interface MenuItemVariant {
   // Дополнительные поля
   portionMultiplier?: number // для рецептов - изменение размера порции
   notes?: string
+
+  // Модификаторы (для составных блюд)
+  modifierGroups?: ModifierGroup[]
+  templates?: VariantTemplate[]
 }
 
 // =============================================
@@ -58,6 +62,72 @@ export interface MenuComposition {
 }
 
 export type ComponentRole = 'main' | 'garnish' | 'sauce' | 'addon'
+
+// =============================================
+// Модификаторы (для составных блюд)
+// =============================================
+
+export type ModifierType = 'replacement' | 'addon' | 'removal'
+
+export interface ModifierGroup {
+  id: string
+  name: string // "Choose your bread", "Extra proteins", "Sauces"
+  description?: string
+  type: ModifierType
+  isRequired: boolean
+  minSelection?: number // минимум выбрать (для addon)
+  maxSelection?: number // максимум выбрать (0 = без ограничений)
+  options: ModifierOption[]
+  sortOrder?: number
+}
+
+export interface ModifierOption {
+  id: string
+  name: string // "Toast", "Mozzarella", "Bacon"
+  description?: string
+
+  // Что добавляется/заменяется в композиции
+  composition?: MenuComposition[] // компоненты для добавления
+
+  // Доплата за модификатор
+  priceAdjustment: number // +10000, +0, -5000
+
+  // UI и логика
+  isDefault?: boolean // выбрано по умолчанию
+  isActive?: boolean
+  sortOrder?: number
+  imageUrl?: string
+}
+
+export interface VariantTemplate {
+  id: string
+  name: string // "Toast base", "Big breakfast - standard"
+  description?: string
+  imageUrl?: string
+
+  // Какие модификаторы выбраны в шаблоне
+  selectedModifiers: TemplateModifierSelection[]
+
+  sortOrder?: number
+}
+
+export interface TemplateModifierSelection {
+  groupId: string // ID группы модификаторов
+  optionIds: string[] // IDs опций (может быть несколько для addon)
+}
+
+// =============================================
+// Выбранные модификаторы (для заказа в POS)
+// =============================================
+
+export interface SelectedModifier {
+  groupId: string
+  groupName: string
+  optionId: string
+  optionName: string
+  priceAdjustment: number
+  composition?: MenuComposition[] // что добавилось
+}
 
 // =============================================
 // DTOs для создания/обновления
@@ -143,7 +213,37 @@ export const DEFAULT_VARIANT: Omit<MenuItemVariant, 'id'> = {
   price: 0,
   isActive: true,
   sortOrder: 0,
-  composition: []
+  composition: [],
+  modifierGroups: [],
+  templates: []
+}
+
+export const DEFAULT_MODIFIER_GROUP: Omit<ModifierGroup, 'id'> = {
+  name: '',
+  description: '',
+  type: 'addon',
+  isRequired: false,
+  minSelection: 0,
+  maxSelection: 0,
+  options: [],
+  sortOrder: 0
+}
+
+export const DEFAULT_MODIFIER_OPTION: Omit<ModifierOption, 'id'> = {
+  name: '',
+  description: '',
+  composition: [],
+  priceAdjustment: 0,
+  isDefault: false,
+  isActive: true,
+  sortOrder: 0
+}
+
+export const DEFAULT_VARIANT_TEMPLATE: Omit<VariantTemplate, 'id'> = {
+  name: '',
+  description: '',
+  selectedModifiers: [],
+  sortOrder: 0
 }
 
 // Добавить новые константы после MENU_ITEM_TYPES:
@@ -172,6 +272,18 @@ export const COMPONENT_ROLES: Record<ComponentRole, string> = {
   garnish: 'Гарнир',
   sauce: 'Соус',
   addon: 'Дополнение'
+}
+
+export const MODIFIER_TYPES: Record<ModifierType, string> = {
+  replacement: 'Замена',
+  addon: 'Добавка',
+  removal: 'Удаление'
+}
+
+export const MODIFIER_TYPE_ICONS: Record<ModifierType, string> = {
+  replacement: 'mdi-swap-horizontal',
+  addon: 'mdi-plus-circle-outline',
+  removal: 'mdi-minus-circle-outline'
 }
 
 export const CATEGORY_SORT_OPTIONS = [
@@ -214,6 +326,27 @@ export function createDefaultMenuItem(): Omit<MenuItem, 'id' | 'createdAt' | 'up
   return {
     ...DEFAULT_MENU_ITEM,
     variants: [createDefaultVariant()]
+  }
+}
+
+export function createDefaultModifierGroup(): ModifierGroup {
+  return {
+    ...DEFAULT_MODIFIER_GROUP,
+    id: generateId('mg')
+  }
+}
+
+export function createDefaultModifierOption(): ModifierOption {
+  return {
+    ...DEFAULT_MODIFIER_OPTION,
+    id: generateId('mo')
+  }
+}
+
+export function createDefaultVariantTemplate(): VariantTemplate {
+  return {
+    ...DEFAULT_VARIANT_TEMPLATE,
+    id: generateId('tmpl')
   }
 }
 

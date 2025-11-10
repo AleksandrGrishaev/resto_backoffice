@@ -176,6 +176,44 @@ export const mockPreparations: Preparation[] = [
     updatedAt: now
   },
 
+  // Картофельные оладьи (хэшбраун)
+  {
+    id: 'prep-potato-hashbrown',
+    name: 'Картофельные оладьи (хэшбраун)',
+    code: 'P-010',
+    type: 'garnish',
+    description: 'Хрустящие картофельные оладьи для завтрака',
+    recipe: [
+      {
+        type: 'product',
+        id: 'prod-potato',
+        quantity: 800,
+        unit: 'gram',
+        notes: 'натертый на терке'
+      },
+      { type: 'product', id: 'prod-onion', quantity: 100, unit: 'gram', notes: 'мелко нарезанный' },
+      { type: 'product', id: 'prod-olive-oil', quantity: 80, unit: 'ml', notes: 'для жарки' },
+      { type: 'product', id: 'prod-salt', quantity: 8, unit: 'gram', notes: 'по вкусу' },
+      { type: 'product', id: 'prod-black-pepper', quantity: 2, unit: 'gram', notes: 'молотый' }
+    ],
+    outputQuantity: 700, // получается 700г готовых оладий (4-5 штук)
+    outputUnit: 'gram',
+    preparationTime: 20,
+    instructions:
+      '1. Натереть очищенный картофель на крупной терке\n' +
+      '2. Отжать лишнюю жидкость из картофеля\n' +
+      '3. Добавить мелко нарезанный лук\n' +
+      '4. Приправить солью и перцем\n' +
+      '5. Разогреть масло на сковороде до средней температуры\n' +
+      '6. Формировать оладьи и жарить 4-5 минут с каждой стороны\n' +
+      '7. Жарить до золотистой корочки\n' +
+      '8. Выложить на салфетки для удаления лишнего масла',
+    isActive: true,
+    costPerPortion: 0,
+    createdAt: now,
+    updatedAt: now
+  },
+
   // Соус 1 - Томатный соус
   {
     id: 'prep-tomato-sauce',

@@ -444,6 +444,305 @@ export const CORE_PRODUCTS: CoreProductDefinition[] = [
     leadTimeDays: 3,
     primarySupplierId: 'sup-beverage-distribution',
     priceVolatility: 0.02
+  },
+
+  // =============================================
+  // ПРОДУКТЫ ДЛЯ ЗАВТРАКОВ
+  // =============================================
+
+  // Яйца
+  {
+    id: 'prod-eggs',
+    name: 'Eggs',
+    nameEn: 'Eggs',
+    category: 'dairy',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'piece',
+    baseCostPerUnit: 2500, // 2,500 IDR за штуку
+
+    purchaseUnit: 'piece',
+    purchaseToBaseRatio: 1,
+    purchaseCost: 2500, // 2,500 IDR за штуку
+
+    dailyConsumption: 30, // 30 яиц в день
+    consumptionVolatility: 0.2,
+    canBeSold: false,
+    yieldPercentage: 95,
+    shelfLifeDays: 14,
+    leadTimeDays: 2,
+    primarySupplierId: 'sup-dairy-fresh',
+    priceVolatility: 0.05
+  },
+
+  // Хлеб - Тост
+  {
+    id: 'prod-toast',
+    name: 'Toast Bread',
+    nameEn: 'Toast Bread',
+    category: 'other',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'piece',
+    baseCostPerUnit: 1500, // 1,500 IDR за ломтик
+
+    purchaseUnit: 'piece',
+    purchaseToBaseRatio: 1,
+    purchaseCost: 1500, // 1,500 IDR за ломтик
+
+    dailyConsumption: 40, // 40 ломтиков в день
+    consumptionVolatility: 0.25,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 5,
+    leadTimeDays: 1,
+    primarySupplierId: 'sup-bakery',
+    priceVolatility: 0.03
+  },
+
+  // Хлеб - Чиабатта
+  {
+    id: 'prod-ciabatta',
+    name: 'Ciabatta Bread',
+    nameEn: 'Ciabatta Bread',
+    category: 'other',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'piece',
+    baseCostPerUnit: 8000, // 8,000 IDR за штуку
+
+    purchaseUnit: 'piece',
+    purchaseToBaseRatio: 1,
+    purchaseCost: 8000, // 8,000 IDR за штуку
+
+    dailyConsumption: 10, // 10 штук в день
+    consumptionVolatility: 0.3,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 3,
+    leadTimeDays: 1,
+    primarySupplierId: 'sup-bakery',
+    priceVolatility: 0.04
+  },
+
+  // Круассан
+  {
+    id: 'prod-croissant',
+    name: 'Croissant',
+    nameEn: 'Croissant',
+    category: 'other',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'piece',
+    baseCostPerUnit: 12000, // 12,000 IDR за штуку
+
+    purchaseUnit: 'piece',
+    purchaseToBaseRatio: 1,
+    purchaseCost: 12000, // 12,000 IDR за штуку
+
+    dailyConsumption: 8, // 8 штук в день
+    consumptionVolatility: 0.4,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 2,
+    leadTimeDays: 1,
+    primarySupplierId: 'sup-bakery',
+    priceVolatility: 0.05
+  },
+
+  // Сыры
+  {
+    id: 'prod-mozzarella',
+    name: 'Mozzarella Cheese',
+    nameEn: 'Mozzarella Cheese',
+    category: 'dairy',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'gram',
+    baseCostPerUnit: 150, // 150 IDR за грамм
+
+    purchaseUnit: 'kg',
+    purchaseToBaseRatio: 1000,
+    purchaseCost: 150000, // 150,000 IDR за кг
+
+    dailyConsumption: 300, // 300 грамм в день
+    consumptionVolatility: 0.3,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 14,
+    leadTimeDays: 3,
+    primarySupplierId: 'sup-dairy-fresh',
+    priceVolatility: 0.06
+  },
+
+  {
+    id: 'prod-cream-cheese',
+    name: 'Cream Cheese',
+    nameEn: 'Cream Cheese',
+    category: 'dairy',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'gram',
+    baseCostPerUnit: 120, // 120 IDR за грамм
+
+    purchaseUnit: 'kg',
+    purchaseToBaseRatio: 1000,
+    purchaseCost: 120000, // 120,000 IDR за кг
+
+    dailyConsumption: 200, // 200 грамм в день
+    consumptionVolatility: 0.35,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 21,
+    leadTimeDays: 3,
+    primarySupplierId: 'sup-dairy-fresh',
+    priceVolatility: 0.05
+  },
+
+  // Мясные продукты для завтрака
+  {
+    id: 'prod-bacon',
+    name: 'Bacon',
+    nameEn: 'Bacon',
+    category: 'meat',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'gram',
+    baseCostPerUnit: 250, // 250 IDR за грамм
+
+    purchaseUnit: 'kg',
+    purchaseToBaseRatio: 1000,
+    purchaseCost: 250000, // 250,000 IDR за кг
+
+    dailyConsumption: 400, // 400 грамм в день
+    consumptionVolatility: 0.3,
+    canBeSold: false,
+    yieldPercentage: 95,
+    shelfLifeDays: 7,
+    leadTimeDays: 3,
+    primarySupplierId: 'sup-premium-meat-co',
+    priceVolatility: 0.08
+  },
+
+  {
+    id: 'prod-salmon',
+    name: 'Salted Salmon',
+    nameEn: 'Salted Salmon',
+    category: 'seafood',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'gram',
+    baseCostPerUnit: 400, // 400 IDR за грамм
+
+    purchaseUnit: 'kg',
+    purchaseToBaseRatio: 1000,
+    purchaseCost: 400000, // 400,000 IDR за кг
+
+    dailyConsumption: 200, // 200 грамм в день
+    consumptionVolatility: 0.4,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 14,
+    leadTimeDays: 5,
+    primarySupplierId: 'sup-seafood-market',
+    priceVolatility: 0.12
+  },
+
+  {
+    id: 'prod-pork-ham',
+    name: 'Pork Ham',
+    nameEn: 'Pork Ham',
+    category: 'meat',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'gram',
+    baseCostPerUnit: 180, // 180 IDR за грамм
+
+    purchaseUnit: 'kg',
+    purchaseToBaseRatio: 1000,
+    purchaseCost: 180000, // 180,000 IDR за кг
+
+    dailyConsumption: 300, // 300 грамм в день
+    consumptionVolatility: 0.25,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 10,
+    leadTimeDays: 3,
+    primarySupplierId: 'sup-premium-meat-co',
+    priceVolatility: 0.07
+  },
+
+  {
+    id: 'prod-chicken-sausage',
+    name: 'Chicken Sausage',
+    nameEn: 'Chicken Sausage',
+    category: 'meat',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'piece',
+    baseCostPerUnit: 8000, // 8,000 IDR за штуку
+
+    purchaseUnit: 'piece',
+    purchaseToBaseRatio: 1,
+    purchaseCost: 8000, // 8,000 IDR за штуку
+
+    dailyConsumption: 15, // 15 штук в день
+    consumptionVolatility: 0.3,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 7,
+    leadTimeDays: 3,
+    primarySupplierId: 'sup-premium-meat-co',
+    priceVolatility: 0.06
+  },
+
+  // Соусы
+  {
+    id: 'prod-ketchup',
+    name: 'Tomato Ketchup',
+    nameEn: 'Tomato Ketchup',
+    category: 'other',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'gram',
+    baseCostPerUnit: 20, // 20 IDR за грамм
+
+    purchaseUnit: 'kg',
+    purchaseToBaseRatio: 1000,
+    purchaseCost: 20000, // 20,000 IDR за кг
+
+    dailyConsumption: 500, // 500 грамм в день
+    consumptionVolatility: 0.2,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 180,
+    leadTimeDays: 5,
+    primarySupplierId: 'sup-basic-supplies',
+    priceVolatility: 0.03
+  },
+
+  {
+    id: 'prod-mayo',
+    name: 'Mayonnaise',
+    nameEn: 'Mayonnaise',
+    category: 'other',
+    usedInDepartments: ['kitchen'],
+
+    baseUnit: 'gram',
+    baseCostPerUnit: 30, // 30 IDR за грамм
+
+    purchaseUnit: 'kg',
+    purchaseToBaseRatio: 1000,
+    purchaseCost: 30000, // 30,000 IDR за кг
+
+    dailyConsumption: 400, // 400 грамм в день
+    consumptionVolatility: 0.25,
+    canBeSold: false,
+    yieldPercentage: 100,
+    shelfLifeDays: 120,
+    leadTimeDays: 5,
+    primarySupplierId: 'sup-basic-supplies',
+    priceVolatility: 0.04
   }
 ]
 
