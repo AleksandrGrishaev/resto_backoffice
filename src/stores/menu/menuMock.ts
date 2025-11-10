@@ -199,8 +199,8 @@ export const mockMenuItems: MenuItem[] = [
           {
             type: 'recipe',
             id: 'recipe-beef-steak',
-            quantity: 200,
-            unit: 'gram',
+            quantity: 0.8, // 200г / 250г = 0.8 порции рецепта
+            unit: 'portion',
             role: 'main'
           }
         ],
@@ -216,8 +216,8 @@ export const mockMenuItems: MenuItem[] = [
           {
             type: 'recipe',
             id: 'recipe-beef-steak',
-            quantity: 250,
-            unit: 'gram',
+            quantity: 1, // Стандартная порция
+            unit: 'portion',
             role: 'main'
           }
         ],
@@ -233,8 +233,8 @@ export const mockMenuItems: MenuItem[] = [
           {
             type: 'recipe',
             id: 'recipe-beef-steak',
-            quantity: 300,
-            unit: 'gram',
+            quantity: 1.2, // 300г / 250г = 1.2 порции рецепта
+            unit: 'portion',
             role: 'main'
           }
         ],

@@ -88,7 +88,7 @@
             <v-col cols="12">
               <v-select
                 :model-value="component.componentId"
-                :items="getFilteredItems(component.componentType || 'product')"
+                :items="filteredItemsByType[component.componentType || 'product']"
                 item-title="name"
                 item-value="id"
                 :label="getItemLabel(component.componentType || 'product')"
@@ -216,6 +216,20 @@ import { formatIDR } from '@/utils/currency'
 // ✅ ИСПРАВЛЕНО: Используем правильный импорт для единиц измерения
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 
+// ===== CONSTANTS =====
+const CATEGORY_FILTER_OPTIONS = [
+  { value: 'all', text: 'All Categories' },
+  { value: 'meat', text: 'Meat & Poultry' },
+  { value: 'vegetables', text: 'Vegetables' },
+  { value: 'fruits', text: 'Fruits' },
+  { value: 'dairy', text: 'Dairy Products' },
+  { value: 'cereals', text: 'Cereals & Grains' },
+  { value: 'spices', text: 'Spices & Seasonings' },
+  { value: 'seafood', text: 'Seafood' },
+  { value: 'beverages', text: 'Beverages' },
+  { value: 'other', text: 'Other' }
+] as const
+
 // ===== TYPES =====
 interface Component {
   id: string
@@ -273,19 +287,8 @@ const storesLoaded = ref(false)
 const selectedCategory = ref<string>('all')
 const showCategoryFilter = ref(false)
 
-// Опции для фильтра категорий
-const categoryFilterOptions = computed(() => [
-  { value: 'all', text: 'All Categories' },
-  { value: 'meat', text: 'Meat & Poultry' },
-  { value: 'vegetables', text: 'Vegetables' },
-  { value: 'fruits', text: 'Fruits' },
-  { value: 'dairy', text: 'Dairy Products' },
-  { value: 'cereals', text: 'Cereals & Grains' },
-  { value: 'spices', text: 'Spices & Seasonings' },
-  { value: 'seafood', text: 'Seafood' },
-  { value: 'beverages', text: 'Beverages' },
-  { value: 'other', text: 'Other' }
-])
+// ✅ ИСПРАВЛЕНО: Используем константу вместо computed для предотвращения infinite loop
+const categoryFilterOptions = CATEGORY_FILTER_OPTIONS
 
 // Category icons mapping
 const categoryIcons: Record<string, string> = {
@@ -300,46 +303,7 @@ const categoryIcons: Record<string, string> = {
   other: 'mdi-package-variant'
 }
 
-// ===== VALIDATION =====
-const validateRequired = (value: unknown) => !!value || 'Required field'
-const validatePositiveNumber = (value: number) => value > 0 || 'Must be greater than 0'
-
-// ===== METHODS =====
-
-/**
- * Фильтрованные элементы (без дублирования)
- */
-function getFilteredItems(componentType: string) {
-  if (componentType === 'product') {
-    let filteredProducts = products.value.filter(product => product.isActive)
-
-    // Применяем фильтр категории
-    if (selectedCategory.value !== 'all') {
-      filteredProducts = filteredProducts.filter(
-        product => product.category === selectedCategory.value
-      )
-    }
-
-    return filteredProducts
-      .map(product => ({
-        id: product.id,
-        name: product.nameEn || product.name,
-        category: product.category,
-        subtitle: `${formatIDR(product.baseCostPerUnit || product.costPerUnit)}/${getBaseUnitDisplayForProduct(product)} • ${getCategoryName(product.category)}`
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  } else {
-    // Полуфабрикаты
-    return preparations.value
-      .map(prep => ({
-        id: prep.id,
-        name: `${prep.code} - ${prep.name}`,
-        category: 'preparation',
-        subtitle: `Output: ${prep.outputUnit}`
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }
-}
+// ===== HELPER FUNCTIONS (moved before computed) =====
 
 /**
  * ✅ ИСПРАВЛЕНО: Получение отображения базовой единицы для продукта
@@ -357,13 +321,6 @@ function getBaseUnitDisplayForProduct(product: ProductItem): string {
   return 'g' // По умолчанию граммы
 }
 
-/**
- * Фильтрация продуктов по категории
- */
-function filterProductsByCategory(category: string) {
-  selectedCategory.value = category
-}
-
 function getCategoryName(category: string): string {
   const names: Record<string, string> = {
     meat: 'Meat & Poultry',
@@ -377,6 +334,58 @@ function getCategoryName(category: string): string {
     other: 'Other'
   }
   return names[category] || category
+}
+
+// ✅ ИСПРАВЛЕНО: Computed property для кеширования отфильтрованных items
+// Предотвращает создание новых массивов при каждом рендере
+const filteredItemsByType = computed(() => {
+  const result: Record<string, any[]> = {}
+
+  // Products with category filter
+  let filteredProducts = products.value.filter(product => product.isActive)
+
+  if (selectedCategory.value !== 'all') {
+    filteredProducts = filteredProducts.filter(
+      product => product.category === selectedCategory.value
+    )
+  }
+
+  result['product'] = filteredProducts
+    .map(product => ({
+      id: product.id,
+      name: product.nameEn || product.name,
+      category: product.category,
+      subtitle: `${formatIDR(product.baseCostPerUnit || product.costPerUnit)}/${getBaseUnitDisplayForProduct(product)} • ${getCategoryName(product.category)}`
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // Preparations
+  result['preparation'] = preparations.value
+    .map(prep => ({
+      id: prep.id,
+      name: `${prep.code} - ${prep.name}`,
+      category: 'preparation',
+      subtitle: `Output: ${prep.outputUnit}`
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return result
+})
+
+// ===== VALIDATION =====
+const validateRequired = (value: unknown) => !!value || 'Required field'
+const validatePositiveNumber = (value: number) => value > 0 || 'Must be greater than 0'
+
+// ===== METHODS =====
+
+// ✅ ИСПРАВЛЕНО: Функция getFilteredItems удалена и заменена на computed property
+// Helper functions перемещены выше для использования в computed
+
+/**
+ * Фильтрация продуктов по категории
+ */
+function filterProductsByCategory(category: string) {
+  selectedCategory.value = category
 }
 
 function getCategoryIcon(category: string): string {
