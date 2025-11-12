@@ -20,6 +20,8 @@ export interface KitchenDecomposedItem {
   totalCost: number
   source: 'base' | 'modifier' // откуда пришел продукт
   modifierName?: string // название модификатора (если source === 'modifier')
+  role?: string // роль компонента (main, garnish, sauce, addon) - для component replacements
+  groupStyle?: 'component' | 'addon' // стиль группы модификатора (если source === 'modifier')
   path: string[] // путь декомпозиции для отладки
 }
 
@@ -84,24 +86,29 @@ export function useKitchenDecomposition() {
         return []
       }
 
+      // ✨ NEW: Get portionMultiplier from variant (default 1)
+      const portionMultiplier = variant.portionMultiplier ?? 1
+
       console.log(`📋 [${MODULE_NAME}] Found variant:`, {
         name: `${menuItem.name} - ${variant.name}`,
         baseCompositionCount: variant.composition.length,
-        modifiersCount: billItem.selectedModifiers?.length || 0
+        modifiersCount: billItem.selectedModifiers?.length || 0,
+        portionMultiplier
       })
 
-      const results: KitchenDecomposedItem[] = []
+      let baseResults: KitchenDecomposedItem[] = []
+      const modifierResults: KitchenDecomposedItem[] = []
 
-      // 2. Process base composition
-      console.log(`  🍽️ [${MODULE_NAME}] Processing base composition...`)
+      // 2. Process base composition with portionMultiplier
+      console.log(`  🍽️ [${MODULE_NAME}] Processing base composition (×${portionMultiplier})...`)
       for (const comp of variant.composition) {
         const items = await decomposeComposition(
           comp,
-          billItem.quantity,
+          billItem.quantity * portionMultiplier, // ✨ NEW: Apply portionMultiplier
           [menuItem.name, variant.name],
           'base'
         )
-        results.push(...items)
+        baseResults.push(...items)
       }
 
       // 3. Process modifiers
@@ -110,26 +117,66 @@ export function useKitchenDecomposition() {
           `  ➕ [${MODULE_NAME}] Processing ${billItem.selectedModifiers.length} modifiers...`
         )
 
+        // ✨ NEW: Collect roles that are replaced by component modifiers
+        const replacedRoles = new Set<string>()
+        for (const modifier of billItem.selectedModifiers) {
+          if (modifier.groupStyle === 'component' && modifier.composition) {
+            for (const comp of modifier.composition) {
+              if (comp.role) {
+                replacedRoles.add(comp.role)
+              }
+            }
+          }
+        }
+
+        if (replacedRoles.size > 0) {
+          console.log(
+            `  🔄 [${MODULE_NAME}] Component modifiers replacing roles:`,
+            Array.from(replacedRoles)
+          )
+        }
+
         for (const modifier of billItem.selectedModifiers) {
           if (!modifier.composition || modifier.composition.length === 0) {
             console.log(`  ⚠️ [${MODULE_NAME}] Modifier has no composition:`, modifier.optionName)
             continue
           }
 
-          console.log(`    🔧 [${MODULE_NAME}] Processing modifier:`, modifier.optionName)
+          const modifierType =
+            modifier.groupStyle === 'component' ? '🔄 (replacement)' : '➕ (addon)'
+          console.log(
+            `    🔧 [${MODULE_NAME}] Processing modifier: ${modifier.optionName} ${modifierType}`
+          )
 
           for (const comp of modifier.composition) {
             const items = await decomposeComposition(
               comp,
-              billItem.quantity,
+              billItem.quantity * portionMultiplier, // ✨ NEW: Apply portionMultiplier to modifiers too
               [menuItem.name, variant.name, modifier.optionName],
               'modifier',
-              modifier.optionName
+              modifier.optionName,
+              modifier.groupStyle
             )
-            results.push(...items)
+            modifierResults.push(...items)
+          }
+        }
+
+        // ✨ NEW: Filter out base items that are replaced by component modifiers
+        if (replacedRoles.size > 0) {
+          const originalBaseCount = baseResults.length
+          baseResults = baseResults.filter(item => !item.role || !replacedRoles.has(item.role))
+          const removedCount = originalBaseCount - baseResults.length
+
+          if (removedCount > 0) {
+            console.log(
+              `  ✂️ [${MODULE_NAME}] Removed ${removedCount} base items replaced by components`
+            )
           }
         }
       }
+
+      // 4. Combine base and modifier results
+      const results = [...baseResults, ...modifierResults]
 
       // 4. Merge duplicates
       const merged = mergeDecomposedItems(results)
@@ -157,7 +204,8 @@ export function useKitchenDecomposition() {
     quantity: number,
     path: string[],
     source: 'base' | 'modifier',
-    modifierName?: string
+    modifierName?: string,
+    groupStyle?: 'component' | 'addon'
   ): Promise<KitchenDecomposedItem[]> {
     console.log(`  🔄 [${MODULE_NAME}] Decomposing composition:`, {
       type: comp.type,
@@ -169,17 +217,17 @@ export function useKitchenDecomposition() {
 
     // БАЗОВЫЙ СЛУЧАЙ: Product (конечный продукт)
     if (comp.type === 'product') {
-      return await decomposeProduct(comp, quantity, path, source, modifierName)
+      return await decomposeProduct(comp, quantity, path, source, modifierName, groupStyle)
     }
 
     // РЕКУРСИЯ: Recipe
     if (comp.type === 'recipe') {
-      return await decomposeRecipe(comp, quantity, path, source, modifierName)
+      return await decomposeRecipe(comp, quantity, path, source, modifierName, groupStyle)
     }
 
     // РЕКУРСИЯ: Preparation
     if (comp.type === 'preparation') {
-      return await decomposePreparation(comp, quantity, path, source, modifierName)
+      return await decomposePreparation(comp, quantity, path, source, modifierName, groupStyle)
     }
 
     console.warn(`⚠️ [${MODULE_NAME}] Unknown composition type:`, comp.type)
@@ -194,7 +242,8 @@ export function useKitchenDecomposition() {
     quantity: number,
     path: string[],
     source: 'base' | 'modifier',
-    modifierName?: string
+    modifierName?: string,
+    groupStyle?: 'component' | 'addon'
   ): Promise<KitchenDecomposedItem[]> {
     const product = productsStore.products.find(p => p.id === comp.id)
     if (!product) {
@@ -210,7 +259,9 @@ export function useKitchenDecomposition() {
       quantity: totalQuantity,
       unit: comp.unit,
       cost: totalCost,
-      source
+      source,
+      role: comp.role,
+      groupStyle
     })
 
     return [
@@ -223,6 +274,8 @@ export function useKitchenDecomposition() {
         totalCost,
         source,
         modifierName,
+        role: comp.role, // ✨ NEW: сохраняем роль компонента
+        groupStyle, // ✨ NEW: сохраняем стиль группы модификатора
         path: [...path, product.name]
       }
     ]
@@ -236,7 +289,8 @@ export function useKitchenDecomposition() {
     quantity: number,
     path: string[],
     source: 'base' | 'modifier',
-    modifierName?: string
+    modifierName?: string,
+    groupStyle?: 'component' | 'addon'
   ): Promise<KitchenDecomposedItem[]> {
     const recipe = recipesStore.recipes.find(r => r.id === comp.id)
     if (!recipe) {
@@ -266,7 +320,8 @@ export function useKitchenDecomposition() {
         comp.quantity * quantity,
         [...path, recipe.name],
         source,
-        modifierName
+        modifierName,
+        groupStyle
       )
       results.push(...items)
     }
@@ -282,7 +337,8 @@ export function useKitchenDecomposition() {
     quantity: number,
     path: string[],
     source: 'base' | 'modifier',
-    modifierName?: string
+    modifierName?: string,
+    groupStyle?: 'component' | 'addon'
   ): Promise<KitchenDecomposedItem[]> {
     const preparation = recipesStore.preparations.find(p => p.id === comp.id)
     if (!preparation) {
@@ -312,7 +368,8 @@ export function useKitchenDecomposition() {
         comp.quantity * quantity,
         [...path, preparation.name],
         source,
-        modifierName
+        modifierName,
+        groupStyle
       )
       results.push(...items)
     }

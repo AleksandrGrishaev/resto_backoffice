@@ -66,6 +66,16 @@
                     variant="outlined"
                   />
                 </v-col>
+                <!-- ✨ NEW: Group Style (только для component-based блюд) -->
+                <v-col v-if="dishType === 'component-based'" cols="12" md="6">
+                  <v-select
+                    v-model="group.groupStyle"
+                    :items="groupStyleOptions"
+                    label="Group Style *"
+                    density="compact"
+                    variant="outlined"
+                  />
+                </v-col>
                 <v-col cols="12">
                   <v-textarea
                     v-model="group.description"
@@ -153,7 +163,9 @@
                       </v-col>
                       <v-col cols="12" md="3">
                         <div class="d-flex align-center ga-2 pa-2">
+                          <!-- ✨ UPDATED: isDefault только для component groups -->
                           <v-switch
+                            v-if="group.groupStyle === 'component'"
                             v-model="option.isDefault"
                             label="Default"
                             density="compact"
@@ -270,16 +282,18 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { ModifierGroup, ModifierOption, VariantTemplate } from '@/stores/menu/types'
+import type { ModifierGroup, ModifierOption, VariantTemplate, DishType } from '@/stores/menu/types'
 
 interface Props {
   modifierGroups: ModifierGroup[]
   templates: VariantTemplate[]
+  dishType: DishType // ✨ NEW: тип блюда
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modifierGroups: () => [],
-  templates: () => []
+  templates: () => [],
+  dishType: 'simple'
 })
 
 const emit = defineEmits<{
@@ -297,6 +311,12 @@ const modifierTypes = [
   { title: 'Removal (removes from base)', value: 'removal' }
 ]
 
+// ✨ NEW: Константы для groupStyle
+const groupStyleOptions = [
+  { title: 'Component (замена части блюда)', value: 'component' },
+  { title: 'Add-on (дополнение к блюду)', value: 'addon' }
+]
+
 // Computed
 const hasModifiers = computed(() => props.modifierGroups.length > 0)
 
@@ -307,6 +327,7 @@ function addModifierGroup(): void {
     name: 'New Modifier Group',
     description: '',
     type: 'addon',
+    groupStyle: props.dishType === 'component-based' ? 'component' : 'addon', // ✨ NEW: по умолчанию зависит от dishType
     isRequired: false,
     minSelection: 0,
     maxSelection: 1,

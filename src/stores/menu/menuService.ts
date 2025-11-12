@@ -1,12 +1,6 @@
 // stores/menu/menuService.ts
-import type {
-  Category,
-  MenuItem,
-  CreateCategoryDto,
-  CreateMenuItemDto,
-  generateId,
-  createTimestamp
-} from './types'
+import type { Category, MenuItem, CreateCategoryDto, CreateMenuItemDto } from './types'
+import { generateId, createTimestamp } from './types'
 import { mockCategories, mockMenuItems } from './menuMock'
 import { DebugUtils } from '@/utils'
 
@@ -280,11 +274,15 @@ export class MenuItemService {
         description: data.description,
         isActive: true,
         type: data.type,
+        department: data.department, // ✨ NEW
+        dishType: data.dishType, // ✨ NEW
         variants: processedVariants,
         sortOrder,
         preparationTime: data.preparationTime,
         allergens: data.allergens || [],
         tags: data.tags || [],
+        modifierGroups: data.modifierGroups || [], // ✨ NEW
+        templates: data.templates || [], // ✨ NEW
         createdAt: createTimestamp(),
         updatedAt: createTimestamp()
       }

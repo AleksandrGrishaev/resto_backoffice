@@ -21,7 +21,16 @@ export type {
   UpdateMenuItemDto,
   MenuCostCalculation,
   GroupedComposition,
-  SourceOption
+  SourceOption,
+  // ✨ NEW: Exported new types
+  Department,
+  DishType,
+  ModifierGroupStyle,
+  ModifierGroup,
+  ModifierOption,
+  ModifierType,
+  VariantTemplate,
+  SelectedModifier
 } from './types'
 
 // Константы и утилиты
@@ -37,7 +46,23 @@ export {
   createTimestamp,
   createDefaultVariant,
   createDefaultCategory,
-  createDefaultMenuItem
+  createDefaultMenuItem,
+  // ✨ NEW: Exported new constants
+  DEPARTMENTS,
+  DEPARTMENT_LABELS,
+  DEFAULT_DEPARTMENTS,
+  DISH_TYPES,
+  DISH_TYPE_DESCRIPTIONS,
+  DISH_TYPE_ICONS,
+  MODIFIER_GROUP_STYLES,
+  MODIFIER_TYPES,
+  MODIFIER_TYPE_ICONS,
+  DEFAULT_MODIFIER_GROUP,
+  DEFAULT_MODIFIER_OPTION,
+  DEFAULT_VARIANT_TEMPLATE,
+  createDefaultModifierGroup,
+  createDefaultModifierOption,
+  createDefaultVariantTemplate
 } from './types'
 
 // Mock данные для разработки/тестирования

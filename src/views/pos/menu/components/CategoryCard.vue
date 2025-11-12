@@ -26,7 +26,7 @@
 
         <!-- Status indicator -->
         <v-chip v-if="!category.isActive" size="x-small" color="error" variant="flat" class="ml-2">
-          Недоступно
+          Unavailable
         </v-chip>
       </div>
 
@@ -66,10 +66,8 @@ const emit = defineEmits<{
 // Computed
 const itemsCountText = computed(() => {
   const count = props.itemsCount
-  if (count === 0) return 'товаров'
-  if (count === 1) return 'товар'
-  if (count >= 2 && count <= 4) return 'товара'
-  return 'товаров'
+  if (count === 1) return 'item'
+  return 'items'
 })
 
 // Methods

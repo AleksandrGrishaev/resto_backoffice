@@ -27,7 +27,7 @@
         <!-- Status indicators -->
         <div class="status-indicators ml-2">
           <v-chip v-if="!item.isActive" size="x-small" color="error" variant="flat" class="mb-1">
-            Недоступно
+            Unavailable
           </v-chip>
 
           <v-chip
@@ -37,7 +37,7 @@
             variant="flat"
             class="mb-1"
           >
-            Нет вариантов
+            No variants
           </v-chip>
         </div>
       </div>
@@ -57,10 +57,10 @@
           <span class="price-value text-subtitle-1 font-weight-bold">
             {{ formatPrice(minPrice) }} - {{ formatPrice(maxPrice) }}
           </span>
-          <div class="text-caption text-medium-emphasis">{{ activevariants.length }} вариантов</div>
+          <div class="text-caption text-medium-emphasis">{{ activevariants.length }} variants</div>
         </div>
 
-        <div v-else class="no-price text-caption text-medium-emphasis">Цена не указана</div>
+        <div v-else class="no-price text-caption text-medium-emphasis">Price not set</div>
       </div>
 
       <!-- Variants chips (only for multiple variants) -->
@@ -93,18 +93,18 @@
         <div class="item-meta text-caption text-medium-emphasis">
           <span v-if="item.preparationTime">
             <v-icon size="12" class="mr-1">mdi-clock-outline</v-icon>
-            {{ item.preparationTime }}мин
+            {{ item.preparationTime }}min
           </span>
 
           <span v-if="item.type" class="ml-2">
             <v-icon size="12" class="mr-1">
               {{ item.type === 'food' ? 'mdi-silverware-fork-knife' : 'mdi-cup' }}
             </v-icon>
-            {{ item.type === 'food' ? 'Блюдо' : 'Напиток' }}
+            {{ item.type === 'food' ? 'Food' : 'Drink' }}
           </span>
         </div>
 
-        <!-- Показываем кнопку Add только для одного варианта -->
+        <!-- Show Add button only for single variant -->
         <v-btn
           v-if="activevariants.length === 1 && canSelect"
           size="small"
@@ -113,10 +113,10 @@
           @click.stop="handleAddSingle"
         >
           <v-icon size="16">mdi-plus</v-icon>
-          Добавить
+          Add
         </v-btn>
 
-        <!-- Для множественных вариантов - только иконка навигации -->
+        <!-- For multiple variants - navigation icon only -->
         <v-icon v-else :color="canSelect ? 'primary' : 'disabled'" size="20">
           {{ activevariants.length > 1 ? 'mdi-chevron-right' : 'mdi-help' }}
         </v-icon>

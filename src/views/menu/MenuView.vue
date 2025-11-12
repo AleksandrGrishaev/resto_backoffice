@@ -151,13 +151,24 @@
     </div>
 
     <!-- Dialogs -->
+    <!-- ✨ NEW: Dish Type Selection Dialog -->
+    <dish-type-selection-dialog
+      v-model="dialogs.dishTypeSelection"
+      @selected="handleDishTypeSelected"
+    />
+
     <menu-category-dialog
       v-model="dialogs.category"
       :category="editingCategory"
       @saved="handleCategorySaved"
     />
 
-    <menu-item-dialog v-model="dialogs.item" :item="editingItem" @saved="handleItemSaved" />
+    <menu-item-dialog
+      v-model="dialogs.item"
+      :item="editingItem"
+      :dish-type="selectedDishType"
+      @saved="handleItemSaved"
+    />
 
     <!-- Confirm Dialog -->
     <v-dialog v-model="confirmDialog.show" max-width="400">
@@ -181,11 +192,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu'
-import type { Category, MenuItem } from '@/types/menu'
+import type { Category, MenuItem, DishType } from '@/stores/menu'
 import { DebugUtils } from '@/utils'
 import MenuCategoryDialog from './components/MenuCategoryDialog.vue'
 import MenuItemDialog from './components/MenuItemDialog.vue'
 import MenuItemComponent from './components/MenuItem.vue'
+import DishTypeSelectionDialog from './components/DishTypeSelectionDialog.vue'
 
 const MODULE_NAME = 'MenuView'
 const menuStore = useMenuStore()
@@ -197,11 +209,13 @@ const filterTypes = ref<Array<'food' | 'beverage' | 'archive'>>(['food'])
 
 // Dialogs state
 const dialogs = ref({
+  dishTypeSelection: false, // ✨ NEW: Диалог выбора типа блюда
   category: false,
   item: false
 })
 const editingCategory = ref<Category | null>(null)
 const editingItem = ref<MenuItem | null>(null)
+const selectedDishType = ref<DishType | null>(null) // ✨ NEW: Выбранный тип блюда
 
 const confirmDialog = ref({
   show: false,
@@ -266,7 +280,18 @@ function showCategoryDialog() {
 
 function showItemDialog() {
   editingItem.value = null
-  dialogs.value.item = true
+  selectedDishType.value = null
+  dialogs.value.dishTypeSelection = true // ✨ CHANGED: Сначала выбор типа блюда
+}
+
+// ✨ NEW: Handler для выбора типа блюда
+function handleDishTypeSelected(dishType: DishType) {
+  console.log('🎯 [MenuView] DishType selected:', dishType)
+  selectedDishType.value = dishType
+  console.log('📦 [MenuView] selectedDishType set to:', selectedDishType.value)
+  dialogs.value.dishTypeSelection = false
+  dialogs.value.item = true // Открыть основной диалог создания блюда
+  console.log('✅ [MenuView] Opening MenuItemDialog with dishType:', selectedDishType.value)
 }
 
 function editCategory(category: Category) {

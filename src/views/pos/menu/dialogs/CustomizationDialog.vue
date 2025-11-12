@@ -12,11 +12,11 @@
       </v-card-title>
 
       <!-- Templates (if available) -->
-      <v-card-text v-if="variant.templates && variant.templates.length > 0" class="pt-4 pb-2">
-        <div class="text-subtitle-2 mb-2">Quick Select Templates:</div>
+      <v-card-text v-if="menuItem?.templates && menuItem.templates.length > 0" class="pt-4 pb-2">
+        <div class="text-subtitle-2 mb-2">Quick Select:</div>
         <div class="d-flex flex-wrap ga-2">
           <v-chip
-            v-for="template in variant.templates"
+            v-for="template in menuItem.templates"
             :key="template.id"
             :color="selectedTemplateId === template.id ? 'primary' : 'default'"
             :variant="selectedTemplateId === template.id ? 'flat' : 'outlined'"
@@ -31,99 +31,162 @@
 
       <!-- Modifier Groups -->
       <v-card-text class="pa-0" style="max-height: 60vh">
-        <div v-if="!variant.modifierGroups || variant.modifierGroups.length === 0" class="pa-4">
+        <div v-if="!menuItem?.modifierGroups || menuItem.modifierGroups.length === 0" class="pa-4">
           <p class="text-grey">No customization options available</p>
         </div>
 
         <div v-else>
-          <div
-            v-for="group in variant.modifierGroups"
-            :key="group.id"
-            class="modifier-group pa-4"
-            :class="{ 'border-b': true }"
-          >
-            <!-- Group Header -->
-            <div class="d-flex align-center justify-space-between mb-3">
-              <div>
-                <div class="text-subtitle-1 font-weight-bold">
-                  {{ group.name }}
-                  <v-chip v-if="group.isRequired" size="x-small" color="error" class="ml-2" label>
-                    Required
-                  </v-chip>
-                </div>
-                <div v-if="group.description" class="text-body-2 text-grey">
-                  {{ group.description }}
-                </div>
-              </div>
-              <div
-                v-if="group.maxSelection && group.maxSelection > 0"
-                class="text-caption text-grey"
-              >
-                {{ getSelectedCount(group) }} / {{ group.maxSelection }} selected
-              </div>
+          <!-- Component Groups Section (Replacements) -->
+          <div v-if="componentGroups.length > 0" class="component-groups-section">
+            <div class="section-header pa-3 bg-blue-lighten-5">
+              <v-icon icon="mdi-swap-horizontal" size="small" class="mr-2" />
+              <span class="text-subtitle-2 font-weight-bold">Select Components</span>
             </div>
 
-            <!-- Options -->
-            <v-list class="pa-0">
-              <v-list-item
-                v-for="option in group.options"
-                :key="option.id"
-                :disabled="!option.isActive"
-                class="px-0"
-                @click="toggleOption(group, option)"
-              >
-                <template #prepend>
-                  <!-- Single selection (radio) -->
-                  <v-radio
-                    v-if="group.maxSelection === 1"
-                    :model-value="isOptionSelected(group.id, option.id)"
-                    :value="true"
-                    color="primary"
-                    hide-details
-                    @click.stop="toggleOption(group, option)"
-                  />
-                  <!-- Multiple selection (checkbox) -->
-                  <v-checkbox
-                    v-else
-                    :model-value="isOptionSelected(group.id, option.id)"
-                    :disabled="isOptionDisabled(group, option)"
-                    color="primary"
-                    hide-details
-                    @click.stop="toggleOption(group, option)"
-                  />
-                </template>
-
-                <v-list-item-title>
-                  <div class="d-flex align-center justify-space-between">
-                    <div>
-                      <span>{{ option.name }}</span>
-                      <v-chip
-                        v-if="option.isDefault"
-                        size="x-small"
-                        color="success"
-                        variant="outlined"
-                        class="ml-2"
-                      >
-                        Default
-                      </v-chip>
-                    </div>
-                    <div class="text-body-2">
-                      <span v-if="option.priceAdjustment === 0" class="text-success">Free</span>
-                      <span v-else-if="option.priceAdjustment > 0" class="text-primary">
-                        +{{ formatPrice(option.priceAdjustment) }}
-                      </span>
-                      <span v-else class="text-error">
-                        {{ formatPrice(option.priceAdjustment) }}
-                      </span>
-                    </div>
+            <div
+              v-for="group in componentGroups"
+              :key="group.id"
+              class="modifier-group pa-4 border-b"
+            >
+              <!-- Group Header -->
+              <div class="d-flex align-center justify-space-between mb-3">
+                <div>
+                  <div class="text-subtitle-1 font-weight-bold">
+                    {{ group.name }}
+                    <v-chip v-if="group.isRequired" size="x-small" color="error" class="ml-2" label>
+                      Required
+                    </v-chip>
                   </div>
-                </v-list-item-title>
+                  <div v-if="group.description" class="text-body-2 text-grey">
+                    {{ group.description }}
+                  </div>
+                </div>
+              </div>
 
-                <v-list-item-subtitle v-if="option.description">
-                  {{ option.description }}
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
+              <!-- Options (Radio only for component groups) -->
+              <v-list class="pa-0">
+                <v-list-item
+                  v-for="option in group.options"
+                  :key="option.id"
+                  :disabled="!option.isActive"
+                  class="px-0"
+                  @click="toggleOption(group, option)"
+                >
+                  <template #prepend>
+                    <v-radio
+                      :model-value="isOptionSelected(group.id, option.id)"
+                      :value="true"
+                      color="primary"
+                      hide-details
+                      @click.stop="toggleOption(group, option)"
+                    />
+                  </template>
+
+                  <v-list-item-title>
+                    <div class="d-flex align-center justify-space-between">
+                      <div>
+                        <span>{{ option.name }}</span>
+                        <v-chip
+                          v-if="option.isDefault"
+                          size="x-small"
+                          color="success"
+                          variant="outlined"
+                          class="ml-2"
+                        >
+                          Included
+                        </v-chip>
+                      </div>
+                      <div class="text-body-2">
+                        <span v-if="option.priceAdjustment === 0" class="text-success">Free</span>
+                        <span v-else-if="option.priceAdjustment > 0" class="text-primary">
+                          +{{ formatPrice(option.priceAdjustment) }}
+                        </span>
+                        <span v-else class="text-error">
+                          {{ formatPrice(option.priceAdjustment) }}
+                        </span>
+                      </div>
+                    </div>
+                  </v-list-item-title>
+
+                  <v-list-item-subtitle v-if="option.description">
+                    {{ option.description }}
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </div>
+          </div>
+
+          <!-- Addon Groups Section -->
+          <div v-if="addonGroups.length > 0" class="addon-groups-section">
+            <div class="section-header pa-3 bg-green-lighten-5">
+              <v-icon icon="mdi-plus-circle-outline" size="small" class="mr-2" />
+              <span class="text-subtitle-2 font-weight-bold">Extras</span>
+            </div>
+
+            <div v-for="group in addonGroups" :key="group.id" class="modifier-group pa-4 border-b">
+              <!-- Group Header -->
+              <div class="d-flex align-center justify-space-between mb-3">
+                <div>
+                  <div class="text-subtitle-1 font-weight-bold">
+                    {{ group.name }}
+                    <v-chip v-if="group.isRequired" size="x-small" color="error" class="ml-2" label>
+                      Required
+                    </v-chip>
+                  </div>
+                  <div v-if="group.description" class="text-body-2 text-grey">
+                    {{ group.description }}
+                  </div>
+                </div>
+                <div
+                  v-if="group.maxSelection && group.maxSelection > 0"
+                  class="text-caption text-grey"
+                >
+                  {{ getSelectedCount(group) }} / {{ group.maxSelection }} selected
+                </div>
+              </div>
+
+              <!-- Options (Checkbox for addon groups) -->
+              <v-list class="pa-0">
+                <v-list-item
+                  v-for="option in group.options"
+                  :key="option.id"
+                  :disabled="!option.isActive"
+                  class="px-0"
+                  @click="toggleOption(group, option)"
+                >
+                  <template #prepend>
+                    <v-checkbox
+                      :model-value="isOptionSelected(group.id, option.id)"
+                      :disabled="isOptionDisabled(group, option)"
+                      color="primary"
+                      hide-details
+                      @click.stop="toggleOption(group, option)"
+                    />
+                  </template>
+
+                  <v-list-item-title>
+                    <div class="d-flex align-center justify-space-between">
+                      <div>
+                        <span>{{ option.name }}</span>
+                      </div>
+                      <div class="text-body-2">
+                        <span v-if="option.priceAdjustment === 0" class="text-success">Free</span>
+                        <span v-else-if="option.priceAdjustment > 0" class="text-primary">
+                          +{{ formatPrice(option.priceAdjustment) }}
+                        </span>
+                        <span v-else class="text-error">
+                          {{ formatPrice(option.priceAdjustment) }}
+                        </span>
+                      </div>
+                    </div>
+                  </v-list-item-title>
+
+                  <v-list-item-subtitle v-if="option.description">
+                    {{ option.description }}
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </div>
           </div>
         </div>
       </v-card-text>
@@ -196,12 +259,23 @@ const emit = defineEmits<{
 const selectedModifiers = ref<Map<string, Set<string>>>(new Map())
 const selectedTemplateId = ref<string | null>(null)
 
+// ✨ UPDATED: Read modifierGroups from menuItem (not variant)
+const componentGroups = computed(() => {
+  if (!props.menuItem?.modifierGroups) return []
+  return props.menuItem.modifierGroups.filter(group => group.groupStyle === 'component')
+})
+
+const addonGroups = computed(() => {
+  if (!props.menuItem?.modifierGroups) return []
+  return props.menuItem.modifierGroups.filter(group => group.groupStyle === 'addon')
+})
+
 // Computed
 const modifiersTotalPrice = computed(() => {
-  if (!props.variant?.modifierGroups) return 0
+  if (!props.menuItem?.modifierGroups) return 0
 
   let total = 0
-  props.variant.modifierGroups.forEach(group => {
+  props.menuItem.modifierGroups.forEach(group => {
     const selectedOptions = selectedModifiers.value.get(group.id)
     if (selectedOptions) {
       selectedOptions.forEach(optionId => {
@@ -222,9 +296,9 @@ const totalPrice = computed(() => {
 
 const validationErrors = computed(() => {
   const errors: string[] = []
-  if (!props.variant?.modifierGroups) return errors
+  if (!props.menuItem?.modifierGroups) return errors
 
-  props.variant.modifierGroups.forEach(group => {
+  props.menuItem.modifierGroups.forEach(group => {
     if (group.isRequired) {
       const selectedCount = getSelectedCount(group)
       const minSelection = group.minSelection || 1
@@ -314,7 +388,7 @@ function handleAddToBill(): void {
   // Convert selectedModifiers Map to SelectedModifier[]
   const modifiers: SelectedModifier[] = []
 
-  props.variant.modifierGroups?.forEach(group => {
+  props.menuItem?.modifierGroups?.forEach(group => {
     const selectedOptions = selectedModifiers.value.get(group.id)
     if (selectedOptions) {
       selectedOptions.forEach(optionId => {
@@ -323,6 +397,7 @@ function handleAddToBill(): void {
           modifiers.push({
             groupId: group.id,
             groupName: group.name,
+            groupStyle: group.groupStyle, // ✨ NEW: передаем groupStyle
             optionId: option.id,
             optionName: option.name,
             priceAdjustment: option.priceAdjustment,
@@ -342,15 +417,29 @@ function handleCancel(): void {
 }
 
 function initializeDefaults(): void {
-  if (!props.variant?.modifierGroups) return
+  if (!props.menuItem?.modifierGroups) return
 
   selectedModifiers.value.clear()
   selectedTemplateId.value = null
 
-  // Apply defaults for required groups
-  props.variant.modifierGroups.forEach(group => {
-    if (group.isRequired) {
-      const defaultOption = group.options.find(o => o.isDefault && o.isActive)
+  // ✨ NEW: Apply defaults for component groups (they always need a selection)
+  props.menuItem.modifierGroups.forEach(group => {
+    if (group.groupStyle === 'component') {
+      const defaultOption = group.options.find((o: ModifierOption) => o.isDefault && o.isActive)
+      if (defaultOption) {
+        const groupSelections = new Set<string>([defaultOption.id])
+        selectedModifiers.value.set(group.id, groupSelections)
+      } else {
+        // If no default, select first active option
+        const firstActive = group.options.find((o: ModifierOption) => o.isActive)
+        if (firstActive) {
+          const groupSelections = new Set<string>([firstActive.id])
+          selectedModifiers.value.set(group.id, groupSelections)
+        }
+      }
+    } else if (group.isRequired) {
+      // For addon groups, only apply defaults if required
+      const defaultOption = group.options.find((o: ModifierOption) => o.isDefault && o.isActive)
       if (defaultOption) {
         const groupSelections = new Set<string>([defaultOption.id])
         selectedModifiers.value.set(group.id, groupSelections)

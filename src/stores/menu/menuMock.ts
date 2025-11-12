@@ -10,8 +10,8 @@ const now = new Date().toISOString()
 export const mockCategories: Category[] = [
   {
     id: 'cat-main-dishes',
-    name: 'Основные блюда',
-    description: 'Горячие основные блюда и стейки',
+    name: 'Main Dishes',
+    description: 'Hot main dishes and steaks',
     isActive: true,
     sortOrder: 1,
     createdAt: now,
@@ -19,8 +19,8 @@ export const mockCategories: Category[] = [
   },
   {
     id: 'cat-garnishes',
-    name: 'Гарниры',
-    description: 'Отдельные гарниры к основным блюдам',
+    name: 'Sides',
+    description: 'Side dishes to complement main courses',
     isActive: true,
     sortOrder: 2,
     createdAt: now,
@@ -28,8 +28,8 @@ export const mockCategories: Category[] = [
   },
   {
     id: 'cat-beverages',
-    name: 'Напитки',
-    description: 'Алкогольные и безалкогольные напитки',
+    name: 'Beverages',
+    description: 'Alcoholic and non-alcoholic drinks',
     isActive: true,
     sortOrder: 3,
     createdAt: now,
@@ -37,8 +37,8 @@ export const mockCategories: Category[] = [
   },
   {
     id: 'cat-combo',
-    name: 'Комбо блюда',
-    description: 'Комплексные блюда с гарниром и соусами',
+    name: 'Combo Meals',
+    description: 'Complete meals with sides and sauces',
     isActive: true,
     sortOrder: 4,
     createdAt: now,
@@ -46,8 +46,8 @@ export const mockCategories: Category[] = [
   },
   {
     id: 'cat-desserts',
-    name: 'Десерты',
-    description: 'Сладкие блюда и выпечка',
+    name: 'Desserts',
+    description: 'Sweet dishes and pastries',
     isActive: true,
     sortOrder: 5,
     createdAt: now,
@@ -55,8 +55,8 @@ export const mockCategories: Category[] = [
   },
   {
     id: 'cat-breakfasts',
-    name: 'Завтраки',
-    description: 'Составные завтраки и утренние блюда',
+    name: 'Breakfasts',
+    description: 'Build-your-own breakfasts and morning dishes',
     isActive: true,
     sortOrder: 0,
     createdAt: now,
@@ -70,20 +70,22 @@ export const mockCategories: Category[] = [
 
 export const mockMenuItems: MenuItem[] = [
   // =============================================
-  // 1. ПРОСТАЯ ПЕРЕПРОДАЖА (пиво)
+  // 1. SIMPLE RESALE (beer)
   // =============================================
   {
     id: 'menu-beer-bintang',
     categoryId: 'cat-beverages',
-    name: 'Пиво Bintang',
-    description: 'Популярное индонезийское пиво',
+    name: 'Bintang Beer',
+    description: 'Popular Indonesian beer',
     type: 'beverage',
+    department: 'bar',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-beer-330',
-        name: '330мл',
-        price: 25000, // цена продажи 25,000 IDR
+        name: '330ml',
+        price: 25000, // selling price 25,000 IDR
         isActive: true,
         sortOrder: 0,
         composition: [
@@ -98,8 +100,8 @@ export const mockMenuItems: MenuItem[] = [
       },
       {
         id: 'var-beer-500',
-        name: '500мл',
-        price: 35000, // цена продажи 35,000 IDR
+        name: '500ml',
+        price: 35000, // selling price 35,000 IDR
         isActive: true,
         sortOrder: 1,
         composition: [
@@ -114,9 +116,9 @@ export const mockMenuItems: MenuItem[] = [
       }
     ],
     sortOrder: 0,
-    preparationTime: 1, // просто открыть бутылку
+    preparationTime: 1, // just open the bottle
     allergens: [],
-    tags: ['пиво', 'алкоголь', 'bintang'],
+    tags: ['beer', 'alcohol', 'bintang'],
     createdAt: now,
     updatedAt: now
   },
@@ -124,14 +126,16 @@ export const mockMenuItems: MenuItem[] = [
   {
     id: 'menu-cola',
     categoryId: 'cat-beverages',
-    name: 'Кока-Кола',
-    description: 'Освежающая кока-кола',
+    name: 'Coca-Cola',
+    description: 'Refreshing Coca-Cola',
     type: 'beverage',
+    department: 'bar',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-cola-330',
-        name: '330мл',
+        name: '330ml',
         price: 15000,
         isActive: true,
         sortOrder: 0,
@@ -149,7 +153,7 @@ export const mockMenuItems: MenuItem[] = [
     sortOrder: 1,
     preparationTime: 1,
     allergens: [],
-    tags: ['газировка', 'безалкогольное'],
+    tags: ['soda', 'non-alcoholic'],
     createdAt: now,
     updatedAt: now
   },
@@ -157,14 +161,16 @@ export const mockMenuItems: MenuItem[] = [
   {
     id: 'menu-water',
     categoryId: 'cat-beverages',
-    name: 'Вода минеральная',
-    description: 'Чистая минеральная вода',
+    name: 'Mineral Water',
+    description: 'Pure mineral water',
     type: 'beverage',
+    department: 'bar',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-water-500',
-        name: '500мл',
+        name: '500ml',
         price: 8000,
         isActive: true,
         sortOrder: 0,
@@ -182,25 +188,27 @@ export const mockMenuItems: MenuItem[] = [
     sortOrder: 2,
     preparationTime: 1,
     allergens: [],
-    tags: ['вода', 'безалкогольное'],
+    tags: ['water', 'non-alcoholic'],
     createdAt: now,
     updatedAt: now
   },
 
   // =============================================
-  // 2. ПРОСТОЕ ГОТОВОЕ БЛЮДО (стейк)
+  // 2. SIMPLE PREPARED DISH (steak)
   // =============================================
   {
     id: 'menu-beef-steak',
     categoryId: 'cat-main-dishes',
-    name: 'Стейк говяжий',
-    description: 'Сочный говяжий стейк на гриле',
+    name: 'Beef Steak',
+    description: 'Juicy grilled beef steak',
     type: 'food',
+    department: 'kitchen',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-steak-200',
-        name: '200г',
+        name: '200g',
         price: 85000,
         isActive: true,
         sortOrder: 0,
@@ -208,16 +216,16 @@ export const mockMenuItems: MenuItem[] = [
           {
             type: 'recipe',
             id: 'recipe-beef-steak',
-            quantity: 0.8, // 200г / 250г = 0.8 порции рецепта
+            quantity: 0.8, // 200g / 250g = 0.8 recipe portions
             unit: 'portion',
             role: 'main'
           }
         ],
-        portionMultiplier: 0.8 // 200г вместо стандартных 250г
+        portionMultiplier: 0.8 // 200g instead of standard 250g
       },
       {
         id: 'var-steak-250',
-        name: '250г (стандарт)',
+        name: '250g (standard)',
         price: 95000,
         isActive: true,
         sortOrder: 1,
@@ -225,16 +233,16 @@ export const mockMenuItems: MenuItem[] = [
           {
             type: 'recipe',
             id: 'recipe-beef-steak',
-            quantity: 1, // Стандартная порция
+            quantity: 1, // Standard portion
             unit: 'portion',
             role: 'main'
           }
         ],
-        portionMultiplier: 1 // стандартная порция
+        portionMultiplier: 1 // standard portion
       },
       {
         id: 'var-steak-300',
-        name: '300г',
+        name: '300g',
         price: 110000,
         isActive: true,
         sortOrder: 2,
@@ -242,36 +250,38 @@ export const mockMenuItems: MenuItem[] = [
           {
             type: 'recipe',
             id: 'recipe-beef-steak',
-            quantity: 1.2, // 300г / 250г = 1.2 порции рецепта
+            quantity: 1.2, // 300g / 250g = 1.2 recipe portions
             unit: 'portion',
             role: 'main'
           }
         ],
-        portionMultiplier: 1.2 // увеличенная порция
+        portionMultiplier: 1.2 // increased portion
       }
     ],
     sortOrder: 0,
     preparationTime: 20,
     allergens: [],
-    tags: ['стейк', 'говядина', 'гриль', 'премиум'],
+    tags: ['steak', 'beef', 'grill', 'premium'],
     createdAt: now,
     updatedAt: now
   },
 
   // =============================================
-  // 3. КОМПОЗИТНОЕ БЛЮДО (стейк с гарниром)
+  // 3. COMPOSITE DISH (steak with side)
   // =============================================
   {
     id: 'menu-steak-with-garnish',
     categoryId: 'cat-combo',
-    name: 'Стейк с гарниром',
-    description: 'Сочный стейк с выбором гарнира и соуса',
+    name: 'Steak with Side',
+    description: 'Juicy steak with choice of side and sauce',
     type: 'food',
+    department: 'kitchen',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-steak-fries',
-        name: 'с картофелем фри',
+        name: 'with French Fries',
         price: 120000,
         isActive: true,
         sortOrder: 0,
@@ -282,7 +292,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 250,
             unit: 'gram',
             role: 'main',
-            notes: 'стейк 250г'
+            notes: '250g steak'
           },
           {
             type: 'preparation',
@@ -290,7 +300,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 150,
             unit: 'gram',
             role: 'garnish',
-            notes: 'порция картофеля фри'
+            notes: 'french fries portion'
           },
           {
             type: 'preparation',
@@ -298,13 +308,13 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 30,
             unit: 'gram',
             role: 'sauce',
-            notes: 'томатный соус'
+            notes: 'tomato sauce'
           }
         ]
       },
       {
         id: 'var-steak-mashed',
-        name: 'с картофельным пюре',
+        name: 'with Mashed Potato',
         price: 115000,
         isActive: true,
         sortOrder: 1,
@@ -315,7 +325,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 250,
             unit: 'gram',
             role: 'main',
-            notes: 'стейк 250г'
+            notes: '250g steak'
           },
           {
             type: 'preparation',
@@ -323,7 +333,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 180,
             unit: 'gram',
             role: 'garnish',
-            notes: 'порция пюре'
+            notes: 'mashed potato portion'
           },
           {
             type: 'preparation',
@@ -331,13 +341,13 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 25,
             unit: 'gram',
             role: 'sauce',
-            notes: 'чесночный соус'
+            notes: 'garlic sauce'
           }
         ]
       },
       {
         id: 'var-steak-double-garnish',
-        name: 'с двойным гарниром',
+        name: 'with Double Side',
         price: 135000,
         isActive: true,
         sortOrder: 2,
@@ -348,7 +358,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 250,
             unit: 'gram',
             role: 'main',
-            notes: 'стейк 250г'
+            notes: '250g steak'
           },
           {
             type: 'preparation',
@@ -356,7 +366,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 100,
             unit: 'gram',
             role: 'garnish',
-            notes: 'картофель фри'
+            notes: 'french fries'
           },
           {
             type: 'preparation',
@@ -364,7 +374,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 120,
             unit: 'gram',
             role: 'garnish',
-            notes: 'картофельное пюре'
+            notes: 'mashed potato'
           },
           {
             type: 'preparation',
@@ -372,7 +382,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 20,
             unit: 'gram',
             role: 'sauce',
-            notes: 'томатный соус'
+            notes: 'tomato sauce'
           },
           {
             type: 'preparation',
@@ -380,7 +390,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 15,
             unit: 'gram',
             role: 'sauce',
-            notes: 'чесночный соус'
+            notes: 'garlic sauce'
           }
         ]
       }
@@ -388,25 +398,27 @@ export const mockMenuItems: MenuItem[] = [
     sortOrder: 0,
     preparationTime: 25,
     allergens: [],
-    tags: ['комбо', 'стейк', 'гарнир', 'комплексное блюдо'],
+    tags: ['combo', 'steak', 'side', 'complete meal'],
     createdAt: now,
     updatedAt: now
   },
 
   // =============================================
-  // 4. ОТДЕЛЬНЫЕ ГАРНИРЫ
+  // 4. SIDE DISHES
   // =============================================
   {
     id: 'menu-fries-side',
     categoryId: 'cat-garnishes',
-    name: 'Картофель фри',
-    description: 'Хрустящий картофель фри',
+    name: 'French Fries',
+    description: 'Crispy french fries',
     type: 'food',
+    department: 'kitchen',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-fries-regular',
-        name: 'Стандартная порция',
+        name: 'Regular Portion',
         price: 25000,
         isActive: true,
         sortOrder: 0,
@@ -423,7 +435,7 @@ export const mockMenuItems: MenuItem[] = [
       },
       {
         id: 'var-fries-large',
-        name: 'Большая порция',
+        name: 'Large Portion',
         price: 35000,
         isActive: true,
         sortOrder: 1,
@@ -442,7 +454,7 @@ export const mockMenuItems: MenuItem[] = [
     sortOrder: 0,
     preparationTime: 15,
     allergens: [],
-    tags: ['гарнир', 'картофель', 'фри'],
+    tags: ['side', 'potato', 'fries'],
     createdAt: now,
     updatedAt: now
   },
@@ -450,14 +462,16 @@ export const mockMenuItems: MenuItem[] = [
   {
     id: 'menu-mashed-potato-side',
     categoryId: 'cat-garnishes',
-    name: 'Картофельное пюре',
-    description: 'Нежное картофельное пюре с маслом',
+    name: 'Mashed Potato',
+    description: 'Creamy mashed potato with butter',
     type: 'food',
+    department: 'kitchen',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-mashed-regular',
-        name: 'Стандартная порция',
+        name: 'Regular Portion',
         price: 22000,
         isActive: true,
         sortOrder: 0,
@@ -474,7 +488,7 @@ export const mockMenuItems: MenuItem[] = [
       },
       {
         id: 'var-mashed-large',
-        name: 'Большая порция',
+        name: 'Large Portion',
         price: 30000,
         isActive: true,
         sortOrder: 1,
@@ -492,26 +506,28 @@ export const mockMenuItems: MenuItem[] = [
     ],
     sortOrder: 1,
     preparationTime: 20,
-    allergens: ['лактоза'],
-    tags: ['гарнир', 'картофель', 'пюре'],
+    allergens: ['lactose'],
+    tags: ['side', 'potato', 'mashed'],
     createdAt: now,
     updatedAt: now
   },
 
   // =============================================
-  // 5. ДЕСЕРТЫ (готовые продукты)
+  // 5. DESSERTS (prepared products)
   // =============================================
   {
     id: 'menu-cake',
     categoryId: 'cat-desserts',
-    name: 'Торт шоколадный',
-    description: 'Домашний шоколадный торт',
+    name: 'Chocolate Cake',
+    description: 'Homemade chocolate cake',
     type: 'food',
+    department: 'kitchen',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-cake-slice',
-        name: 'Кусочек',
+        name: 'Slice',
         price: 35000,
         isActive: true,
         sortOrder: 0,
@@ -519,7 +535,7 @@ export const mockMenuItems: MenuItem[] = [
           {
             type: 'product',
             id: 'prod-cake-chocolate',
-            quantity: 0.125, // 1/8 торта
+            quantity: 0.125, // 1/8 of cake
             unit: 'piece',
             role: 'main'
           }
@@ -527,8 +543,8 @@ export const mockMenuItems: MenuItem[] = [
       },
       {
         id: 'var-cake-whole',
-        name: 'Целый торт',
-        price: 250000, // скидка за целый торт (вместо 35000 * 8 = 280000)
+        name: 'Whole Cake',
+        price: 250000, // discount for whole cake (instead of 35000 * 8 = 280000)
         isActive: true,
         sortOrder: 1,
         composition: [
@@ -544,8 +560,8 @@ export const mockMenuItems: MenuItem[] = [
     ],
     sortOrder: 0,
     preparationTime: 2,
-    allergens: ['глютен', 'лактоза', 'яйца'],
-    tags: ['десерт', 'торт', 'шоколад'],
+    allergens: ['gluten', 'lactose', 'eggs'],
+    tags: ['dessert', 'cake', 'chocolate'],
     createdAt: now,
     updatedAt: now
   },
@@ -553,14 +569,16 @@ export const mockMenuItems: MenuItem[] = [
   {
     id: 'menu-bread',
     categoryId: 'cat-desserts',
-    name: 'Багет французский',
-    description: 'Свежий французский багет',
+    name: 'French Baguette',
+    description: 'Fresh French baguette',
     type: 'food',
+    department: 'kitchen',
+    dishType: 'simple',
     isActive: true,
     variants: [
       {
         id: 'var-bread-whole',
-        name: 'Целый багет',
+        name: 'Whole Baguette',
         price: 40000,
         isActive: true,
         sortOrder: 0,
@@ -576,7 +594,7 @@ export const mockMenuItems: MenuItem[] = [
       },
       {
         id: 'var-bread-half',
-        name: 'Половина багета',
+        name: 'Half Baguette',
         price: 22000,
         isActive: true,
         sortOrder: 1,
@@ -593,32 +611,310 @@ export const mockMenuItems: MenuItem[] = [
     ],
     sortOrder: 1,
     preparationTime: 1,
-    allergens: ['глютен'],
-    tags: ['хлеб', 'выпечка', 'французский'],
+    allergens: ['gluten'],
+    tags: ['bread', 'bakery', 'french'],
     createdAt: now,
     updatedAt: now
   },
 
   // =============================================
-  // СОСТАВНОЙ ЗАВТРАК С МОДИФИКАТОРАМИ
+  // BUILD-YOUR-OWN BREAKFAST WITH MODIFIERS
   // =============================================
   {
     id: 'menu-custom-breakfast',
     categoryId: 'cat-breakfasts',
-    name: 'Составной завтрак',
-    description: 'Создайте свой идеальный завтрак из базы и дополнений',
+    name: 'Build Your Own Breakfast',
+    description: 'Create your perfect breakfast from base and add-ons',
     type: 'food',
     department: 'kitchen',
+    dishType: 'addon-based',
     isActive: true,
+
+    // Modifier groups at MenuItem level
+    modifierGroups: [
+      {
+        id: 'mg-bread',
+        name: 'Choose your bread',
+        description: 'Select your bread (required)',
+        type: 'addon',
+        groupStyle: 'addon',
+        isRequired: true,
+        minSelection: 1,
+        maxSelection: 1,
+        sortOrder: 0,
+        options: [
+          {
+            id: 'mo-toast',
+            name: 'Toast',
+            description: '2 slices of toast',
+            priceAdjustment: 0,
+            isDefault: true,
+            isActive: true,
+            sortOrder: 0,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-toast',
+                quantity: 2,
+                unit: 'piece',
+                role: 'addon'
+              }
+            ]
+          },
+          {
+            id: 'mo-ciabatta',
+            name: 'Ciabatta',
+            description: 'Italian bread',
+            priceAdjustment: 5000,
+            isActive: true,
+            sortOrder: 1,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-ciabatta',
+                quantity: 1,
+                unit: 'piece',
+                role: 'addon'
+              }
+            ]
+          },
+          {
+            id: 'mo-croissant',
+            name: 'Croissant',
+            description: 'French croissant',
+            priceAdjustment: 8000,
+            isActive: true,
+            sortOrder: 2,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-croissant',
+                quantity: 1,
+                unit: 'piece',
+                role: 'addon'
+              }
+            ]
+          }
+        ]
+      },
+
+      {
+        id: 'mg-proteins',
+        name: 'Extra proteins & cheese',
+        description: 'Add proteins and cheese',
+        type: 'addon',
+        groupStyle: 'addon',
+        isRequired: false,
+        minSelection: 0,
+        maxSelection: 0, // no limit
+        sortOrder: 1,
+        options: [
+          {
+            id: 'mo-mozzarella',
+            name: 'Mozzarella',
+            description: 'Italian mozzarella',
+            priceAdjustment: 10000,
+            isActive: true,
+            sortOrder: 0,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-mozzarella',
+                quantity: 50,
+                unit: 'gram',
+                role: 'addon'
+              }
+            ]
+          },
+          {
+            id: 'mo-cream-cheese',
+            name: 'Cream cheese',
+            description: 'Creamy cheese',
+            priceAdjustment: 8000,
+            isActive: true,
+            sortOrder: 1,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-cream-cheese',
+                quantity: 40,
+                unit: 'gram',
+                role: 'addon'
+              }
+            ]
+          },
+          {
+            id: 'mo-bacon',
+            name: 'Bacon',
+            description: 'Crispy bacon',
+            priceAdjustment: 15000,
+            isActive: true,
+            sortOrder: 2,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-bacon',
+                quantity: 50,
+                unit: 'gram',
+                role: 'addon'
+              }
+            ]
+          },
+          {
+            id: 'mo-salmon',
+            name: 'Salted Salmon',
+            description: 'Salted salmon',
+            priceAdjustment: 25000,
+            isActive: true,
+            sortOrder: 3,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-salmon',
+                quantity: 60,
+                unit: 'gram',
+                role: 'addon'
+              }
+            ]
+          },
+          {
+            id: 'mo-pork-ham',
+            name: 'Pork ham',
+            description: 'Pork ham',
+            priceAdjustment: 12000,
+            isActive: true,
+            sortOrder: 4,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-pork-ham',
+                quantity: 50,
+                unit: 'gram',
+                role: 'addon'
+              }
+            ]
+          },
+          {
+            id: 'mo-chicken-sausage',
+            name: 'Chicken sausage',
+            description: 'Chicken sausage',
+            priceAdjustment: 10000,
+            isActive: true,
+            sortOrder: 5,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-chicken-sausage',
+                quantity: 2,
+                unit: 'piece',
+                role: 'addon'
+              }
+            ]
+          }
+        ]
+      },
+
+      {
+        id: 'mg-sauces',
+        name: 'Sauces',
+        description: 'Add sauces',
+        type: 'addon',
+        groupStyle: 'addon',
+        isRequired: false,
+        minSelection: 0,
+        maxSelection: 0, // no limit
+        sortOrder: 2,
+        options: [
+          {
+            id: 'mo-ketchup',
+            name: 'Ketchup',
+            description: 'Tomato ketchup (free)',
+            priceAdjustment: 0,
+            isActive: true,
+            sortOrder: 0,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-ketchup',
+                quantity: 20,
+                unit: 'gram',
+                role: 'sauce'
+              }
+            ]
+          },
+          {
+            id: 'mo-mayo',
+            name: 'Mayo',
+            description: 'Mayonnaise (free)',
+            priceAdjustment: 0,
+            isActive: true,
+            sortOrder: 1,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-mayo',
+                quantity: 20,
+                unit: 'gram',
+                role: 'sauce'
+              }
+            ]
+          },
+          {
+            id: 'mo-butter',
+            name: 'Butter',
+            description: 'Butter',
+            priceAdjustment: 2000,
+            isActive: true,
+            sortOrder: 2,
+            composition: [
+              {
+                type: 'product',
+                id: 'prod-butter',
+                quantity: 15,
+                unit: 'gram',
+                role: 'sauce'
+              }
+            ]
+          }
+        ]
+      }
+    ],
+
+    // Templates at MenuItem level
+    templates: [
+      {
+        id: 'tmpl-simple',
+        name: 'Simple breakfast',
+        description: 'Basic breakfast with toast',
+        sortOrder: 0,
+        selectedModifiers: [
+          { groupId: 'mg-bread', optionIds: ['mo-toast'] },
+          { groupId: 'mg-sauces', optionIds: ['mo-ketchup'] }
+        ]
+      },
+      {
+        id: 'tmpl-premium',
+        name: 'Premium breakfast',
+        description: 'Premium breakfast with salmon and croissant',
+        sortOrder: 1,
+        selectedModifiers: [
+          { groupId: 'mg-bread', optionIds: ['mo-croissant'] },
+          { groupId: 'mg-proteins', optionIds: ['mo-salmon', 'mo-cream-cheese'] },
+          { groupId: 'mg-sauces', optionIds: ['mo-butter'] }
+        ]
+      }
+    ],
+
+    // Variants at MenuItem level
     variants: [
       {
         id: 'var-custom-breakfast',
-        name: 'Составной завтрак',
-        price: 50000, // базовая цена
+        name: 'Standard Portion',
+        price: 50000, // base price
         isActive: true,
         sortOrder: 0,
 
-        // Базовая композиция (входит в цену)
+        // Base composition (included in price)
         composition: [
           {
             type: 'product',
@@ -626,7 +922,7 @@ export const mockMenuItems: MenuItem[] = [
             quantity: 2,
             unit: 'piece',
             role: 'main',
-            notes: 'Яйца на выбор (жареные/вареные/омлет)'
+            notes: 'Eggs (fried/boiled/omelet)'
           },
           {
             type: 'preparation',
@@ -635,285 +931,13 @@ export const mockMenuItems: MenuItem[] = [
             unit: 'piece',
             role: 'garnish'
           }
-        ],
-
-        // Модификаторы
-        modifierGroups: [
-          {
-            id: 'mg-bread',
-            name: 'Choose your bread',
-            description: 'Выберите хлеб (обязательно)',
-            type: 'addon',
-            isRequired: true,
-            minSelection: 1,
-            maxSelection: 1,
-            sortOrder: 0,
-            options: [
-              {
-                id: 'mo-toast',
-                name: 'Toast',
-                description: '2 ломтика тоста',
-                priceAdjustment: 0,
-                isDefault: true,
-                isActive: true,
-                sortOrder: 0,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-toast',
-                    quantity: 2,
-                    unit: 'piece',
-                    role: 'addon'
-                  }
-                ]
-              },
-              {
-                id: 'mo-ciabatta',
-                name: 'Ciabatta',
-                description: 'Итальянский хлеб',
-                priceAdjustment: 5000,
-                isActive: true,
-                sortOrder: 1,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-ciabatta',
-                    quantity: 1,
-                    unit: 'piece',
-                    role: 'addon'
-                  }
-                ]
-              },
-              {
-                id: 'mo-croissant',
-                name: 'Croissant',
-                description: 'Французский круассан',
-                priceAdjustment: 8000,
-                isActive: true,
-                sortOrder: 2,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-croissant',
-                    quantity: 1,
-                    unit: 'piece',
-                    role: 'addon'
-                  }
-                ]
-              }
-            ]
-          },
-
-          {
-            id: 'mg-proteins',
-            name: 'Extra proteins & cheese',
-            description: 'Добавьте белки и сыр',
-            type: 'addon',
-            isRequired: false,
-            minSelection: 0,
-            maxSelection: 0, // без ограничений
-            sortOrder: 1,
-            options: [
-              {
-                id: 'mo-mozzarella',
-                name: 'Mozzarella',
-                description: 'Итальянская моцарелла',
-                priceAdjustment: 10000,
-                isActive: true,
-                sortOrder: 0,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-mozzarella',
-                    quantity: 50,
-                    unit: 'gram',
-                    role: 'addon'
-                  }
-                ]
-              },
-              {
-                id: 'mo-cream-cheese',
-                name: 'Cream cheese',
-                description: 'Сливочный сыр',
-                priceAdjustment: 8000,
-                isActive: true,
-                sortOrder: 1,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-cream-cheese',
-                    quantity: 40,
-                    unit: 'gram',
-                    role: 'addon'
-                  }
-                ]
-              },
-              {
-                id: 'mo-bacon',
-                name: 'Bacon',
-                description: 'Хрустящий бекон',
-                priceAdjustment: 15000,
-                isActive: true,
-                sortOrder: 2,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-bacon',
-                    quantity: 50,
-                    unit: 'gram',
-                    role: 'addon'
-                  }
-                ]
-              },
-              {
-                id: 'mo-salmon',
-                name: 'Salted Salmon',
-                description: 'Соленый лосось',
-                priceAdjustment: 25000,
-                isActive: true,
-                sortOrder: 3,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-salmon',
-                    quantity: 60,
-                    unit: 'gram',
-                    role: 'addon'
-                  }
-                ]
-              },
-              {
-                id: 'mo-pork-ham',
-                name: 'Pork ham',
-                description: 'Свиная ветчина',
-                priceAdjustment: 12000,
-                isActive: true,
-                sortOrder: 4,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-pork-ham',
-                    quantity: 50,
-                    unit: 'gram',
-                    role: 'addon'
-                  }
-                ]
-              },
-              {
-                id: 'mo-chicken-sausage',
-                name: 'Chicken sausage',
-                description: 'Куриная колбаска',
-                priceAdjustment: 10000,
-                isActive: true,
-                sortOrder: 5,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-chicken-sausage',
-                    quantity: 2,
-                    unit: 'piece',
-                    role: 'addon'
-                  }
-                ]
-              }
-            ]
-          },
-
-          {
-            id: 'mg-sauces',
-            name: 'Sauces',
-            description: 'Добавьте соусы',
-            type: 'addon',
-            isRequired: false,
-            minSelection: 0,
-            maxSelection: 0, // без ограничений
-            sortOrder: 2,
-            options: [
-              {
-                id: 'mo-ketchup',
-                name: 'Ketchup',
-                description: 'Томатный кетчуп (бесплатно)',
-                priceAdjustment: 0,
-                isActive: true,
-                sortOrder: 0,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-ketchup',
-                    quantity: 20,
-                    unit: 'gram',
-                    role: 'sauce'
-                  }
-                ]
-              },
-              {
-                id: 'mo-mayo',
-                name: 'Mayo',
-                description: 'Майонез (бесплатно)',
-                priceAdjustment: 0,
-                isActive: true,
-                sortOrder: 1,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-mayo',
-                    quantity: 20,
-                    unit: 'gram',
-                    role: 'sauce'
-                  }
-                ]
-              },
-              {
-                id: 'mo-butter',
-                name: 'Butter',
-                description: 'Сливочное масло',
-                priceAdjustment: 2000,
-                isActive: true,
-                sortOrder: 2,
-                composition: [
-                  {
-                    type: 'product',
-                    id: 'prod-butter',
-                    quantity: 15,
-                    unit: 'gram',
-                    role: 'sauce'
-                  }
-                ]
-              }
-            ]
-          }
-        ],
-
-        // Шаблоны (готовые комбинации)
-        templates: [
-          {
-            id: 'tmpl-simple',
-            name: 'Simple breakfast',
-            description: 'Базовый завтрак с тостом',
-            sortOrder: 0,
-            selectedModifiers: [
-              { groupId: 'mg-bread', optionIds: ['mo-toast'] },
-              { groupId: 'mg-sauces', optionIds: ['mo-ketchup'] }
-            ]
-          },
-          {
-            id: 'tmpl-premium',
-            name: 'Premium breakfast',
-            description: 'Премиум завтрак с лососем и круассаном',
-            sortOrder: 1,
-            selectedModifiers: [
-              { groupId: 'mg-bread', optionIds: ['mo-croissant'] },
-              { groupId: 'mg-proteins', optionIds: ['mo-salmon', 'mo-cream-cheese'] },
-              { groupId: 'mg-sauces', optionIds: ['mo-butter'] }
-            ]
-          }
         ]
       }
     ],
     sortOrder: 1,
     preparationTime: 15,
-    allergens: ['яйца', 'глютен', 'молочные продукты'],
-    tags: ['завтрак', 'составной', 'кастомизируемый'],
+    allergens: ['eggs', 'gluten', 'dairy'],
+    tags: ['breakfast', 'build-your-own', 'customizable'],
     createdAt: now,
     updatedAt: now
   }

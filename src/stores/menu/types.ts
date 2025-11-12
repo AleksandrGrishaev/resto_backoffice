@@ -15,18 +15,29 @@ export interface Category extends BaseEntity {
 
 export type Department = 'kitchen' | 'bar'
 
+// ✨ NEW: Тип блюда (определяет UI и логику модификаторов)
+export type DishType = 'simple' | 'component-based' | 'addon-based'
+
+// ✨ NEW: Стиль группы модификаторов
+export type ModifierGroupStyle = 'component' | 'addon'
+
 export interface MenuItem extends BaseEntity {
   categoryId: string
   name: string // "Стейк с гарниром", "Пиво Bintang"
   description?: string
   type: 'food' | 'beverage'
   department: Department // добавить это поле
+  dishType: DishType // ✨ NEW: тип блюда (simple/component-based/addon-based)
   isActive: boolean
   variants: MenuItemVariant[]
   sortOrder: number
   preparationTime?: number // в минутах
   allergens?: string[]
   tags?: string[]
+
+  // ✨ NEW: Модификаторы на уровне блюда (общие для всех вариантов)
+  modifierGroups?: ModifierGroup[]
+  templates?: VariantTemplate[]
 }
 
 export interface MenuItemVariant {
@@ -40,12 +51,10 @@ export interface MenuItemVariant {
   composition: MenuComposition[]
 
   // Дополнительные поля
-  portionMultiplier?: number // для рецептов - изменение размера порции
+  portionMultiplier?: number // для масштабирования количества в композиции и модификаторах
   notes?: string
 
-  // Модификаторы (для составных блюд)
-  modifierGroups?: ModifierGroup[]
-  templates?: VariantTemplate[]
+  // ❌ УДАЛЕНО: modifierGroups и templates перенесены на уровень MenuItem
 }
 
 // =============================================
@@ -74,6 +83,7 @@ export interface ModifierGroup {
   name: string // "Choose your bread", "Extra proteins", "Sauces"
   description?: string
   type: ModifierType
+  groupStyle: ModifierGroupStyle // ✨ NEW: component (замена) vs addon (добавление)
   isRequired: boolean
   minSelection?: number // минимум выбрать (для addon)
   maxSelection?: number // максимум выбрать (0 = без ограничений)
@@ -123,6 +133,7 @@ export interface TemplateModifierSelection {
 export interface SelectedModifier {
   groupId: string
   groupName: string
+  groupStyle: ModifierGroupStyle // ✨ NEW: component vs addon
   optionId: string
   optionName: string
   priceAdjustment: number
@@ -148,11 +159,16 @@ export interface CreateMenuItemDto {
   description?: string
   type: 'food' | 'beverage'
   department: Department
+  dishType: DishType // ✨ NEW: тип блюда
   variants: CreateMenuItemVariantDto[]
   sortOrder?: number
   preparationTime?: number
   allergens?: string[]
   tags?: string[]
+
+  // ✨ NEW: Модификаторы и шаблоны на уровне блюда
+  modifierGroups?: ModifierGroup[]
+  templates?: VariantTemplate[]
 }
 
 export interface CreateMenuItemVariantDto {
@@ -201,6 +217,7 @@ export const DEFAULT_MENU_ITEM: Omit<MenuItem, 'id' | 'createdAt' | 'updatedAt'>
   isActive: true,
   type: 'food',
   department: 'kitchen',
+  dishType: 'simple', // ✨ NEW: по умолчанию simple
   variants: [],
   sortOrder: 0,
   preparationTime: 0,
@@ -213,15 +230,14 @@ export const DEFAULT_VARIANT: Omit<MenuItemVariant, 'id'> = {
   price: 0,
   isActive: true,
   sortOrder: 0,
-  composition: [],
-  modifierGroups: [],
-  templates: []
+  composition: []
 }
 
 export const DEFAULT_MODIFIER_GROUP: Omit<ModifierGroup, 'id'> = {
   name: '',
   description: '',
   type: 'addon',
+  groupStyle: 'addon', // ✨ NEW: по умолчанию addon
   isRequired: false,
   minSelection: 0,
   maxSelection: 0,
@@ -272,6 +288,31 @@ export const COMPONENT_ROLES: Record<ComponentRole, string> = {
   garnish: 'Гарнир',
   sauce: 'Соус',
   addon: 'Дополнение'
+}
+
+// ✨ NEW: Константы для типов блюд
+export const DISH_TYPES: Record<DishType, string> = {
+  simple: 'Простое блюдо',
+  'component-based': 'Составное блюдо',
+  'addon-based': 'Блюдо с дополнениями'
+}
+
+export const DISH_TYPE_DESCRIPTIONS: Record<DishType, string> = {
+  simple: 'Без модификаторов (фиксированная композиция)',
+  'component-based': 'С заменяемыми компонентами (гарнир, соус)',
+  'addon-based': 'Только дополнительные опции'
+}
+
+export const DISH_TYPE_ICONS: Record<DishType, string> = {
+  simple: 'mdi-food',
+  'component-based': 'mdi-food-variant',
+  'addon-based': 'mdi-plus-box-multiple'
+}
+
+// ✨ NEW: Константы для стилей групп модификаторов
+export const MODIFIER_GROUP_STYLES: Record<ModifierGroupStyle, string> = {
+  component: 'Компонент (замена части блюда)',
+  addon: 'Дополнение (добавление к блюду)'
 }
 
 export const MODIFIER_TYPES: Record<ModifierType, string> = {

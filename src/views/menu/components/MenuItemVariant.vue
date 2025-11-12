@@ -154,6 +154,8 @@
         </div>
       </div>
 
+      <!-- ✅ Модификаторы перенесены на уровень MenuItem (в MenuItemDialog) -->
+
       <!-- Предпросмотр -->
       <div class="variant-preview mt-3">
         <div class="variant-preview__label text-caption text-medium-emphasis mb-1">
@@ -254,13 +256,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { MenuItemVariant, MenuComposition } from '@/types/menu'
+import type { MenuItemVariant, MenuComposition, DishType } from '@/stores/menu'
 
 interface Props {
   variant: MenuItemVariant
   index: number
   canDelete: boolean
   itemName: string
+  dishType: DishType // ✨ NEW: тип блюда
   dishOptions: Array<{
     id: string
     name: string
@@ -487,6 +490,8 @@ function formatPrice(price: number): string {
     minimumFractionDigits: 0
   }).format(price)
 }
+
+// ✅ updateModifierGroups и updateTemplates удалены - модификаторы на уровне MenuItem
 
 // Watch for external changes
 watch(

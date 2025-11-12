@@ -15,6 +15,37 @@ import type {
 
 const MODULE_NAME = 'MenuStore'
 
+/**
+ * ✨ NEW: Validate MenuItem based on dishType requirements
+ */
+function validateMenuItem(data: CreateMenuItemDto | UpdateMenuItemDto): string[] {
+  const errors: string[] = []
+
+  // Component-based dishes must have at least one component group
+  if (data.dishType === 'component-based') {
+    const modifierGroups = data.modifierGroups || [] // ✅ Check at MenuItem level
+    const hasComponentGroup = modifierGroups.some(group => group.groupStyle === 'component')
+
+    if (!hasComponentGroup) {
+      errors.push(
+        'Component-based dishes must have at least one modifier group with groupStyle="component"'
+      )
+    }
+  }
+
+  // Addon-based dishes should have at least one addon group
+  if (data.dishType === 'addon-based') {
+    const modifierGroups = data.modifierGroups || [] // ✅ Check at MenuItem level
+    const hasAddonGroup = modifierGroups.length > 0
+
+    if (!hasAddonGroup) {
+      errors.push('Addon-based dishes should have at least one modifier group')
+    }
+  }
+
+  return errors
+}
+
 export const useMenuStore = defineStore('menu', () => {
   // State
   const state = ref<MenuState>({
@@ -229,6 +260,15 @@ export const useMenuStore = defineStore('menu', () => {
       state.value.loading = true
       state.value.error = null
 
+      // ✨ NEW: Validate MenuItem before saving
+      const validationErrors = validateMenuItem(data)
+      if (validationErrors.length > 0) {
+        const errorMessage = `Validation failed: ${validationErrors.join('; ')}`
+        state.value.error = errorMessage
+        DebugUtils.error(MODULE_NAME, errorMessage, { data, errors: validationErrors })
+        throw new Error(errorMessage)
+      }
+
       const menuItem = await menuItemService.createMenuItem(data)
       state.value.menuItems.push(menuItem)
 
@@ -248,6 +288,15 @@ export const useMenuStore = defineStore('menu', () => {
     try {
       state.value.loading = true
       state.value.error = null
+
+      // ✨ NEW: Validate MenuItem before saving
+      const validationErrors = validateMenuItem(data)
+      if (validationErrors.length > 0) {
+        const errorMessage = `Validation failed: ${validationErrors.join('; ')}`
+        state.value.error = errorMessage
+        DebugUtils.error(MODULE_NAME, errorMessage, { id, data, errors: validationErrors })
+        throw new Error(errorMessage)
+      }
 
       await menuItemService.updateMenuItem(id, data)
 

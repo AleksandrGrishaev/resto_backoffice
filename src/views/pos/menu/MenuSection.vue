@@ -273,8 +273,8 @@ const handleAddItem = (item: MenuItem, variant: MenuItemVariant): void => {
       throw new Error(`Variant ${variant.name} is not available`)
     }
 
-    // ✨ NEW: Check if variant has modifiers
-    if (variant.modifierGroups && variant.modifierGroups.length > 0) {
+    // ✨ UPDATED: Check if item has modifiers (moved from variant to MenuItem level)
+    if (item.modifierGroups && item.modifierGroups.length > 0) {
       // Open customization dialog
       customizingItem.value = item
       customizingVariant.value = variant
