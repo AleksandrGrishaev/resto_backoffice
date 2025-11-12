@@ -540,6 +540,20 @@ export class PaymentService extends MockBaseService<PendingPayment> {
         throw new Error('Payment not found')
       }
 
+      // ✅ Sprint 3: Если платеж требует подтверждения кассира, не обрабатываем сразу
+      if (payment.requiresCashierConfirmation && payment.confirmationStatus !== 'confirmed') {
+        DebugUtils.info(MODULE_NAME, 'Payment requires cashier confirmation, skipping processing', {
+          paymentId: data.paymentId,
+          confirmationStatus: payment.confirmationStatus
+        })
+        // Только назначаем счет, но не создаем транзакцию
+        await this.update(data.paymentId, {
+          assignedToAccount: data.accountId,
+          notes: data.notes || payment.notes
+        })
+        return
+      }
+
       const account = await accountService.getById(data.accountId)
       if (!account) {
         throw new Error('Account not found')
@@ -568,7 +582,11 @@ export class PaymentService extends MockBaseService<PendingPayment> {
           type: 'daily',
           category: payment.category === 'supplier' ? 'product' : 'other'
         },
-        performedBy: data.performedBy
+        performedBy: data.performedBy,
+        // ✅ Sprint 3: Связываем транзакцию с платежом
+        relatedPaymentId: payment.id,
+        counteragentId: payment.counteragentId,
+        counteragentName: payment.counteragentName
       })
 
       // Помечаем платеж как выполненный

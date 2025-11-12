@@ -63,6 +63,10 @@ export interface PosShift extends BaseEntity {
   // Account Store integration
   accountBalances: ShiftAccountBalance[]
 
+  // ✅ Sprint 3: Expense operations
+  expenseOperations: ShiftExpenseOperation[] // Все расходные операции смены
+  pendingPayments: string[] // ID платежей, ожидающих подтверждения
+
   // Sync information for the entire shift
   syncStatus: SyncStatus
   lastSyncAt?: string
@@ -107,6 +111,99 @@ export interface ShiftCorrection extends BaseEntity {
 }
 
 // =============================================
+// SPRINT 3: EXPENSE OPERATIONS
+// =============================================
+
+/**
+ * Тип расходной операции в смене
+ */
+export type ExpenseOperationType =
+  | 'direct_expense' // Прямой расход из кассы (создан кассиром)
+  | 'supplier_payment' // Платеж поставщику (из backoffice, требует подтверждения)
+  | 'incoming_transfer' // Входящий перевод на кассу (для отображения)
+
+/**
+ * Статус расходной операции
+ */
+export type ExpenseOperationStatus =
+  | 'pending' // Ожидает подтверждения (только для supplier_payment)
+  | 'confirmed' // Подтверждено
+  | 'rejected' // Отклонено
+  | 'completed' // Завершено (для прямых расходов)
+
+/**
+ * Расходная операция в смене
+ */
+export interface ShiftExpenseOperation extends BaseEntity {
+  shiftId: string
+  type: ExpenseOperationType
+
+  // Основная информация
+  amount: number
+  description: string
+  category?: string // DailyExpenseCategory или другая категория
+
+  // Контрагент (для supplier_payment и некоторых direct_expense)
+  counteragentId?: string
+  counteragentName?: string
+  invoiceNumber?: string
+
+  // Статус и подтверждение
+  status: ExpenseOperationStatus
+  performedBy: TransactionPerformer
+  confirmedBy?: TransactionPerformer
+  confirmedAt?: string
+  rejectionReason?: string
+
+  // Связь с другими системами
+  relatedPaymentId?: string // ID PendingPayment из Account Store
+  relatedTransactionId?: string // ID Transaction из Account Store
+  relatedAccountId: string // Счет, с которого происходит расход
+
+  // Sync
+  syncStatus: SyncStatus
+  lastSyncAt?: string
+  notes?: string
+}
+
+/**
+ * DTO для создания прямого расхода из кассы
+ */
+export interface CreateDirectExpenseDto {
+  shiftId: string
+  accountId: string // Счет "касса"
+  counteragentId?: string
+  counteragentName?: string
+  amount: number
+  description: string
+  category: string // DailyExpenseCategory
+  invoiceNumber?: string
+  notes?: string
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO для подтверждения платежа поставщику
+ */
+export interface ConfirmSupplierPaymentDto {
+  shiftId: string
+  paymentId: string // ID из PendingPayment
+  actualAmount?: number // Фактическая сумма (если отличается)
+  notes?: string
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO для отклонения платежа поставщику
+ */
+export interface RejectSupplierPaymentDto {
+  shiftId: string
+  paymentId: string
+  reason: string
+  performedBy: TransactionPerformer
+}
+
+// =============================================
 // ACCOUNT BALANCES AT SHIFT START/END
 // =============================================
 
@@ -125,6 +222,9 @@ export interface ShiftAccountBalance {
   totalIncome: number
   totalExpense: number
   transactionCount: number
+
+  // ✅ Sprint 3: Expense operations tracking
+  expenseOperations: ShiftExpenseOperation[] // История расходных операций
 
   // Discrepancies
   discrepancy?: number

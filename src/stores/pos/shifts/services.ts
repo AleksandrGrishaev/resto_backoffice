@@ -393,4 +393,88 @@ export class ShiftsService {
     if (discrepancy < 0) return 'shortage'
     return 'none'
   }
+
+  // =============================================
+  // SPRINT 3: EXPENSE OPERATIONS SYNC
+  // =============================================
+
+  private syncIntervalId: number | null = null
+  private readonly SYNC_INTERVAL = 30000 // 30 секунд
+
+  /**
+   * Начать периодическую синхронизацию расходных операций
+   * TODO: Заменить polling на WebSocket/Firebase Realtime/SSE для более эффективной синхронизации
+   */
+  startExpenseOperationsSync(onSyncCallback: () => Promise<void>): void {
+    console.log('⏰ Starting expense operations polling (every 30 sec)')
+    console.warn(
+      'TODO: Replace polling with WebSocket/Firebase Realtime/SSE for better performance'
+    )
+
+    // Очистить существующий интервал если есть
+    if (this.syncIntervalId !== null) {
+      this.stopExpenseOperationsSync()
+    }
+
+    // Запустить периодическую синхронизацию
+    this.syncIntervalId = window.setInterval(async () => {
+      try {
+        await onSyncCallback()
+      } catch (error) {
+        console.error('❌ Expense sync error:', error)
+      }
+    }, this.SYNC_INTERVAL)
+
+    console.log('✅ Expense operations sync started')
+  }
+
+  /**
+   * Остановить синхронизацию
+   */
+  stopExpenseOperationsSync(): void {
+    if (this.syncIntervalId !== null) {
+      clearInterval(this.syncIntervalId)
+      this.syncIntervalId = null
+      console.log('🛑 Expense operations sync stopped')
+    }
+  }
+
+  /**
+   * Синхронизировать текущую смену с Account Store
+   * Проверяет новые платежи, требующие подтверждения
+   */
+  async syncShiftWithAccountStore(
+    shiftId: string,
+    accountStorePayments: any[]
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const shifts = await this.loadShifts()
+      if (!shifts.success || !shifts.data) {
+        return { success: false, error: 'Failed to load shifts' }
+      }
+
+      const shift = shifts.data.find(s => s.id === shiftId)
+      if (!shift) {
+        return { success: false, error: `Shift not found: ${shiftId}` }
+      }
+
+      // Обновить список ожидающих платежей
+      const pendingPaymentIds = accountStorePayments
+        .filter(p => p.requiresCashierConfirmation && p.confirmationStatus === 'pending')
+        .map(p => p.id)
+
+      shift.pendingPayments = pendingPaymentIds
+
+      // Сохранить обновленную смену
+      await this.updateShift(shiftId, shift)
+
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to sync shift with account store:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Sync failed'
+      }
+    }
+  }
 }

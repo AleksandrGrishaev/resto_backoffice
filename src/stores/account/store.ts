@@ -648,6 +648,23 @@ export const useAccountStore = defineStore('account', () => {
       if (payment) {
         payment.assignedToAccount = accountId
         payment.updatedAt = new Date().toISOString()
+
+        // ✅ Sprint 3: Auto-set requiresCashierConfirmation for POS cash account
+        const { POS_CASH_ACCOUNT_ID } = await import('./types')
+        if (accountId === POS_CASH_ACCOUNT_ID) {
+          payment.requiresCashierConfirmation = true
+          payment.confirmationStatus = 'pending'
+          // Сохранить обновленный платеж через метод update базового сервиса
+          await paymentService.update(payment.id, {
+            requiresCashierConfirmation: true,
+            confirmationStatus: 'pending'
+          })
+          DebugUtils.info(MODULE_NAME, 'Payment requires cashier confirmation (POS cash account)', {
+            paymentId,
+            accountId,
+            posCashAccountId: POS_CASH_ACCOUNT_ID
+          })
+        }
       }
 
       DebugUtils.info(MODULE_NAME, 'Payment assigned successfully')
@@ -927,6 +944,176 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  // ============ SPRINT 3: POS CASHIER CONFIRMATION ============
+
+  /**
+   * Получить платежи, ожидающие подтверждения кассиром
+   * @param shiftId - ID смены (опционально, для фильтрации по смене)
+   * @param accountId - ID счета (опционально, обычно счет "касса")
+   */
+  async function getPendingPaymentsForConfirmation(
+    shiftId?: string,
+    accountId?: string
+  ): Promise<PendingPayment[]> {
+    try {
+      await fetchPayments()
+
+      let payments = state.value.pendingPayments.filter(
+        payment =>
+          payment.requiresCashierConfirmation === true && payment.confirmationStatus === 'pending'
+      )
+
+      // Фильтр по счету (если указан)
+      if (accountId) {
+        payments = payments.filter(payment => payment.assignedToAccount === accountId)
+      }
+
+      // Фильтр по смене (если указан)
+      if (shiftId) {
+        payments = payments.filter(payment => payment.assignedShiftId === shiftId)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Found payments for confirmation', {
+        total: payments.length,
+        shiftId,
+        accountId
+      })
+
+      return payments
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get pending payments for confirmation', { error })
+      return []
+    }
+  }
+
+  /**
+   * Подтвердить платеж кассиром
+   * @param paymentId - ID платежа
+   * @param performer - Кто подтверждает (кассир)
+   * @param actualAmount - Фактическая сумма (если отличается от запланированной)
+   */
+  async function confirmPayment(
+    paymentId: string,
+    performer: TransactionPerformer,
+    actualAmount?: number
+  ): Promise<void> {
+    try {
+      clearError()
+      state.value.loading.payments = true
+
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (!payment) {
+        throw new Error(`Payment not found: ${paymentId}`)
+      }
+
+      if (!payment.requiresCashierConfirmation) {
+        throw new Error('Payment does not require cashier confirmation')
+      }
+
+      if (payment.confirmationStatus !== 'pending') {
+        throw new Error(`Payment already ${payment.confirmationStatus}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Confirming payment', {
+        paymentId,
+        performer: performer.name,
+        actualAmount
+      })
+
+      const confirmedAt = new Date().toISOString()
+
+      // ✅ ВАЖНО: Сначала обновляем статус подтверждения в service
+      await paymentService.update(payment.id, {
+        confirmationStatus: 'confirmed',
+        confirmedBy: performer,
+        confirmedAt
+      })
+
+      // Обновляем локальный кеш
+      payment.confirmationStatus = 'confirmed'
+      payment.confirmedBy = performer
+      payment.confirmedAt = confirmedAt
+
+      // Обрабатываем платеж (создаем транзакцию)
+      // Теперь processPayment увидит confirmationStatus='confirmed' и создаст транзакцию
+      const processData: ProcessPaymentDto = {
+        paymentId,
+        accountId: payment.assignedToAccount!,
+        actualAmount,
+        notes: `Подтверждено кассиром: ${performer.name}`,
+        performedBy: performer
+      }
+
+      await processPayment(processData)
+
+      DebugUtils.info(MODULE_NAME, 'Payment confirmed successfully', { paymentId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to confirm payment', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.payments = false
+    }
+  }
+
+  /**
+   * Отклонить платеж кассиром
+   * @param paymentId - ID платежа
+   * @param performer - Кто отклоняет (кассир)
+   * @param reason - Причина отклонения
+   */
+  async function rejectPayment(
+    paymentId: string,
+    performer: TransactionPerformer,
+    reason: string
+  ): Promise<void> {
+    try {
+      clearError()
+      state.value.loading.payments = true
+
+      const payment = state.value.pendingPayments.find(p => p.id === paymentId)
+      if (!payment) {
+        throw new Error(`Payment not found: ${paymentId}`)
+      }
+
+      if (!payment.requiresCashierConfirmation) {
+        throw new Error('Payment does not require cashier confirmation')
+      }
+
+      if (payment.confirmationStatus !== 'pending') {
+        throw new Error(`Payment already ${payment.confirmationStatus}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Rejecting payment', {
+        paymentId,
+        performer: performer.name,
+        reason
+      })
+
+      // Обновляем статус
+      payment.confirmationStatus = 'rejected'
+      payment.confirmedBy = performer
+      payment.confirmedAt = new Date().toISOString()
+      payment.rejectionReason = reason
+
+      // Сохраняем обновленный платеж через метод update базового сервиса
+      await paymentService.update(payment.id, {
+        confirmationStatus: 'rejected',
+        confirmedBy: performer,
+        confirmedAt: payment.confirmedAt,
+        rejectionReason: reason
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment rejected successfully', { paymentId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to reject payment', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.payments = false
+    }
+  }
+
   // ============ RETURN ============
   return {
     // State
@@ -982,6 +1169,11 @@ export const useAccountStore = defineStore('account', () => {
     linkPaymentToOrder,
     unlinkPaymentFromOrder,
     getPaymentsByOrder,
+
+    // Sprint 3: POS Cashier Confirmation
+    getPendingPaymentsForConfirmation,
+    confirmPayment,
+    rejectPayment,
 
     // Other
     updatePaymentAmount,

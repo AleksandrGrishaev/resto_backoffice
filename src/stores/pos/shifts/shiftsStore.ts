@@ -14,7 +14,11 @@ import type {
   PaymentMethodSummary,
   ShiftReport,
   SyncStatus,
-  ServiceResponse
+  ServiceResponse,
+  ShiftExpenseOperation,
+  CreateDirectExpenseDto,
+  ConfirmSupplierPaymentDto,
+  RejectSupplierPaymentDto
 } from './types'
 import { ShiftsService } from './services'
 import { useShiftsComposables } from './composables'
@@ -486,6 +490,248 @@ export const useShiftsStore = defineStore('posShifts', () => {
     currentShift.value.pendingSync = !allSynced
   }
 
+  // ============ SPRINT 3: EXPENSE OPERATIONS ============
+
+  /**
+   * Загрузить ожидающие подтверждения платежи для текущей смены
+   */
+  async function loadPendingPayments(): Promise<void> {
+    if (!currentShift.value) {
+      console.warn('No active shift to load pending payments')
+      return
+    }
+
+    try {
+      // Получить платежи из Account Store, требующие подтверждения
+      // Используем POS_CASH_ACCOUNT_ID - ID основной кассы POS системы
+      const { POS_CASH_ACCOUNT_ID } = await import('@/stores/account/types')
+
+      const pendingPayments = await accountStore.getPendingPaymentsForConfirmation(
+        currentShift.value.id,
+        POS_CASH_ACCOUNT_ID
+      )
+
+      // Обновить список ожидающих платежей в смене
+      currentShift.value.pendingPayments = pendingPayments.map(p => p.id)
+
+      console.log(
+        `✅ Loaded ${pendingPayments.length} pending payments for shift ${currentShift.value.shiftNumber} (account: ${POS_CASH_ACCOUNT_ID})`
+      )
+    } catch (err) {
+      console.error('❌ Failed to load pending payments:', err)
+    }
+  }
+
+  /**
+   * Создать прямой расход из кассы
+   */
+  async function createDirectExpense(
+    data: CreateDirectExpenseDto
+  ): Promise<ServiceResponse<ShiftExpenseOperation>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.create = true
+      error.value = null
+
+      // Создать расходную операцию
+      const expenseOperation: ShiftExpenseOperation = {
+        id: `exp-${Date.now()}`,
+        shiftId: data.shiftId,
+        type: 'direct_expense',
+        amount: data.amount,
+        description: data.description,
+        category: data.category,
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName,
+        invoiceNumber: data.invoiceNumber,
+        status: 'completed',
+        performedBy: data.performedBy,
+        relatedAccountId: data.accountId,
+        syncStatus: 'pending',
+        notes: data.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Добавить в смену
+      currentShift.value.expenseOperations.push(expenseOperation)
+
+      // Создать транзакцию в Account Store
+      await accountStore.createOperation({
+        accountId: data.accountId,
+        type: 'expense',
+        amount: data.amount,
+        description: data.description,
+        expenseCategory: {
+          type: 'daily',
+          category: data.category as any
+        },
+        performedBy: data.performedBy,
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName
+      })
+
+      // Обновить баланс в смене
+      const accountBalance = currentShift.value.accountBalances.find(
+        ab => ab.accountId === data.accountId
+      )
+      if (accountBalance) {
+        accountBalance.totalExpense += data.amount
+        accountBalance.expenseOperations.push(expenseOperation)
+      }
+
+      // Сохранить смену через service
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      console.log('Direct expense created:', expenseOperation.id)
+      return { success: true, data: expenseOperation }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.create = false
+    }
+  }
+
+  /**
+   * Подтвердить платеж поставщику
+   */
+  async function confirmExpense(data: ConfirmSupplierPaymentDto): Promise<ServiceResponse<void>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.sync = true
+      error.value = null
+
+      // Подтвердить платеж в Account Store
+      await accountStore.confirmPayment(data.paymentId, data.performedBy, data.actualAmount)
+
+      // Создать запись расходной операции в смене
+      const payment = accountStore.pendingPayments.find(p => p.id === data.paymentId)
+      if (payment) {
+        const expenseOperation: ShiftExpenseOperation = {
+          id: `exp-${Date.now()}`,
+          shiftId: data.shiftId,
+          type: 'supplier_payment',
+          amount: data.actualAmount || payment.amount,
+          description: payment.description,
+          category: payment.category,
+          counteragentId: payment.counteragentId,
+          counteragentName: payment.counteragentName,
+          invoiceNumber: payment.invoiceNumber,
+          status: 'confirmed',
+          performedBy: data.performedBy,
+          confirmedBy: data.performedBy,
+          confirmedAt: new Date().toISOString(),
+          relatedPaymentId: data.paymentId,
+          relatedAccountId: payment.assignedToAccount!,
+          syncStatus: 'synced',
+          notes: data.notes,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+
+        // Добавить в смену
+        currentShift.value.expenseOperations.push(expenseOperation)
+
+        // Обновить баланс
+        const accountBalance = currentShift.value.accountBalances.find(
+          ab => ab.accountId === payment.assignedToAccount
+        )
+        if (accountBalance) {
+          accountBalance.totalExpense += expenseOperation.amount
+          accountBalance.expenseOperations.push(expenseOperation)
+        }
+
+        // Убрать из списка ожидающих
+        currentShift.value.pendingPayments = currentShift.value.pendingPayments.filter(
+          id => id !== data.paymentId
+        )
+
+        // Сохранить смену
+        await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+      }
+
+      console.log('Expense confirmed:', data.paymentId)
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to confirm expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.sync = false
+    }
+  }
+
+  /**
+   * Отклонить платеж поставщику
+   */
+  async function rejectExpense(data: RejectSupplierPaymentDto): Promise<ServiceResponse<void>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.sync = true
+      error.value = null
+
+      // Отклонить платеж в Account Store
+      await accountStore.rejectPayment(data.paymentId, data.performedBy, data.reason)
+
+      // Создать запись об отклонении в смене
+      const payment = accountStore.pendingPayments.find(p => p.id === data.paymentId)
+      if (payment) {
+        const expenseOperation: ShiftExpenseOperation = {
+          id: `exp-${Date.now()}`,
+          shiftId: data.shiftId,
+          type: 'supplier_payment',
+          amount: payment.amount,
+          description: payment.description,
+          category: payment.category,
+          counteragentId: payment.counteragentId,
+          counteragentName: payment.counteragentName,
+          invoiceNumber: payment.invoiceNumber,
+          status: 'rejected',
+          performedBy: data.performedBy,
+          confirmedBy: data.performedBy,
+          confirmedAt: new Date().toISOString(),
+          rejectionReason: data.reason,
+          relatedPaymentId: data.paymentId,
+          relatedAccountId: payment.assignedToAccount!,
+          syncStatus: 'synced',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+
+        // Добавить в историю операций (для аудита)
+        currentShift.value.expenseOperations.push(expenseOperation)
+
+        // Убрать из списка ожидающих
+        currentShift.value.pendingPayments = currentShift.value.pendingPayments.filter(
+          id => id !== data.paymentId
+        )
+
+        // Сохранить смену
+        await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+      }
+
+      console.log('Expense rejected:', data.paymentId)
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to reject expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.sync = false
+    }
+  }
+
   /**
    * Очистить ошибки
    */
@@ -529,6 +775,12 @@ export const useShiftsStore = defineStore('posShifts', () => {
     clearError,
     loadMockData,
     clearAllData,
+
+    // Sprint 3: Expense Operations
+    loadPendingPayments,
+    createDirectExpense,
+    confirmExpense,
+    rejectExpense,
 
     // Composables
     formatShiftDuration,

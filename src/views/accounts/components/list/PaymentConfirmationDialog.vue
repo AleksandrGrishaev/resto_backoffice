@@ -289,15 +289,27 @@ async function handleConfirm() {
   try {
     loading.value = true
 
-    await accountStore.processPayment({
-      paymentId: props.payment.id,
-      accountId: selectedAccountId.value,
-      performedBy: {
-        type: 'user',
-        id: authStore.userId,
-        name: authStore.userName
-      }
-    })
+    // ✅ Sprint 3: Сначала назначаем платеж на счет
+    // Это установит requiresCashierConfirmation=true для POS кассы
+    await accountStore.assignPaymentToAccount(props.payment.id, selectedAccountId.value)
+
+    // ✅ Sprint 3: Проверяем, требуется ли подтверждение кассира
+    const { POS_CASH_ACCOUNT_ID } = await import('@/stores/account/types')
+    const isPOSCashAccount = selectedAccountId.value === POS_CASH_ACCOUNT_ID
+
+    if (!isPOSCashAccount) {
+      // Для обычных счетов (не POS касса) - сразу обрабатываем платеж
+      await accountStore.processPayment({
+        paymentId: props.payment.id,
+        accountId: selectedAccountId.value,
+        performedBy: {
+          type: 'user',
+          id: authStore.userId,
+          name: authStore.userName
+        }
+      })
+    }
+    // Для POS кассы платеж уже назначен и ждет подтверждения кассира
 
     emit('success')
     handleCancel()

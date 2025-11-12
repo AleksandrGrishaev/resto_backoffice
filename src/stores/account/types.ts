@@ -154,6 +154,14 @@ export interface PendingPayment extends BaseEntity {
   // Payment completion fields
   paidAmount?: number
   paidDate?: string
+
+  // ✅ Sprint 3: POS Cashier Confirmation Integration
+  requiresCashierConfirmation?: boolean // Требуется подтверждение кассира (для платежей на счет "касса")
+  confirmationStatus?: 'pending' | 'confirmed' | 'rejected' // Статус подтверждения
+  confirmedBy?: TransactionPerformer // Кто подтвердил операцию
+  confirmedAt?: string // Когда подтверждено
+  rejectionReason?: string // Причина отклонения
+  assignedShiftId?: string // ID смены, которой назначена операция
 }
 
 export interface LinkPaymentToOrderDto {
@@ -207,6 +215,11 @@ export interface PaymentStatistics {
 }
 
 // ============ CONSTANTS ============
+
+// ✅ Sprint 3: POS Cash Account Configuration
+// ID счета "Основная касса" - используется в POS системе для кассовых операций
+// Этот счет отличается от других cash счетов (резервная касса, сейф и т.д.)
+export const POS_CASH_ACCOUNT_ID = 'acc_1'
 
 export const EXPENSE_CATEGORIES = {
   daily: {
