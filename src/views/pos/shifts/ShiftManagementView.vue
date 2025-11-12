@@ -8,8 +8,9 @@
       </v-btn>
       <h1>Shift Management</h1>
       <div class="header-actions">
+        <!-- ✅ Sprint 5: Hide End Shift button in read-only mode -->
         <v-btn
-          v-if="currentShift"
+          v-if="currentShift && !readOnly"
           color="error"
           variant="flat"
           :disabled="hasNegativeBalance"
@@ -79,6 +80,12 @@
             <div class="balance-item">
               <div class="label">Cash Refunded</div>
               <div class="value negative">- {{ formatPrice(shiftStats.cashRefunded) }}</div>
+            </div>
+
+            <!-- ✅ Sprint 4: Total Expenses -->
+            <div class="balance-item">
+              <div class="label">Total Expenses</div>
+              <div class="value negative">- {{ formatPrice(totalShiftExpenses) }}</div>
             </div>
 
             <div class="balance-item highlight">
@@ -157,7 +164,8 @@
       </v-alert>
 
       <!-- Sprint 3: Pending Confirmations -->
-      <div v-if="pendingPayments.length > 0" class="mt-4">
+      <!-- ✅ Sprint 5: Hide pending payments in read-only mode -->
+      <div v-if="pendingPayments.length > 0 && !readOnly" class="mt-4">
         <PendingSupplierPaymentsList
           :pending-payments="pendingPayments"
           @confirm-payment="handleConfirmPaymentClick"
@@ -172,7 +180,9 @@
             <v-icon icon="mdi-cash-minus" color="error" class="me-3" />
             <span>Expense Operations</span>
             <v-spacer />
+            <!-- ✅ Sprint 5: Hide Add Expense button in read-only mode -->
             <v-btn
+              v-if="!readOnly"
               color="error"
               variant="elevated"
               prepend-icon="mdi-plus"
@@ -315,7 +325,7 @@ import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useAccountStore } from '@/stores/account'
 import { POS_CASH_ACCOUNT_ID } from '@/stores/account/types'
 import type { PosShift, PosPayment } from '@/stores/pos/types'
-import type { PendingPayment, Transaction } from '@/stores/account/types'
+import type { PendingPayment } from '@/stores/account/types'
 import EndShiftDialog from './dialogs/EndShiftDialog.vue'
 import PaymentDetailsDialog from './dialogs/PaymentDetailsDialog.vue'
 import ExpenseOperationDialog from './dialogs/ExpenseOperationDialog.vue'
@@ -323,6 +333,22 @@ import SupplierPaymentConfirmDialog from './dialogs/SupplierPaymentConfirmDialog
 import ShiftExpensesList from './components/ShiftExpensesList.vue'
 import PendingSupplierPaymentsList from './components/PendingSupplierPaymentsList.vue'
 import ShiftTransfersList from './components/ShiftTransfersList.vue'
+
+// ✅ Sprint 5: Props for read-only mode
+interface Props {
+  shiftId?: string // Optional: view specific shift instead of current
+  readOnly?: boolean // If true, hide all action buttons
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  shiftId: undefined,
+  readOnly: false
+})
+
+// ✅ Sprint 5: Emit close event (for dialog usage) - currently unused
+// const emit = defineEmits<{
+//   close: []
+// }>()
 
 const router = useRouter()
 const shiftsStore = useShiftsStore()
@@ -341,7 +367,13 @@ const showConfirmPaymentDialog = ref(false)
 const selectedPayment = ref<PendingPayment | null>(null)
 
 // Computed
-const currentShift = computed(() => shiftsStore.currentShift)
+// ✅ Sprint 5: Support shiftId prop for viewing specific shift
+const currentShift = computed(() => {
+  if (props.shiftId) {
+    return shiftsStore.shifts.find(s => s.id === props.shiftId) || null
+  }
+  return shiftsStore.currentShift
+})
 const previousShifts = computed(() =>
   shiftsStore.shifts.filter((s: PosShift) => s.status === 'completed').slice(0, 10)
 )
@@ -394,19 +426,23 @@ const shiftStats = computed(() => {
   return stats
 })
 
+// ✅ Sprint 4: Total expenses (all expenses of the shift)
+const totalShiftExpenses = computed(() => {
+  return (
+    currentShift.value?.expenseOperations
+      ?.filter(e => e.status === 'completed' || e.status === 'confirmed')
+      .reduce((sum, e) => sum + e.amount, 0) || 0
+  )
+})
+
 const expectedCash = computed(() => {
   const baseExpected =
     (currentShift.value?.startingCash || 0) +
     shiftStats.value.cashReceived -
     shiftStats.value.cashRefunded
 
-  // Sprint 3: Subtract expenses
-  const totalExpenses =
-    currentShift.value?.expenseOperations
-      ?.filter(e => e.status === 'completed' || e.status === 'confirmed')
-      .reduce((sum, e) => sum + e.amount, 0) || 0
-
-  return baseExpected - totalExpenses
+  // ✅ Sprint 4: Subtract ALL expenses (direct + supplier payments)
+  return baseExpected - totalShiftExpenses.value
 })
 
 // Sprint 3: Check if balance is negative
@@ -431,7 +467,15 @@ const pendingPayments = computed(() => {
 
 // Sprint 3: Shift expenses
 const shiftExpenses = computed(() => {
-  return currentShift.value?.expenseOperations || []
+  if (!currentShift.value) return []
+
+  // ✅ Sprint 4: All expense operations (direct + supplier payments)
+  const expenses = currentShift.value.expenseOperations || []
+
+  // Sort by date (newest first)
+  return [...expenses].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
 })
 
 // Sprint 3: Incoming transfers to cash register

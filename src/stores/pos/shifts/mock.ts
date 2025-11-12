@@ -5,7 +5,8 @@ import type {
   ShiftTransaction,
   PaymentMethodSummary,
   ShiftCorrection,
-  ShiftAccountBalance
+  ShiftAccountBalance,
+  ShiftExpenseOperation
 } from './types'
 
 /**
@@ -13,41 +14,28 @@ import type {
  */
 export class ShiftsMockData {
   /**
-   * Generate realistic shifts for the last 7 days
+   * ✅ Sprint 4: Generate only 2 shifts for example
+   * - 1 previous completed shift (yesterday evening)
+   * - 1 current active shift (today morning)
    */
   static generateMockShifts(): PosShift[] {
     const shifts: PosShift[] = []
     const today = new Date()
 
-    // Generate shifts for last 7 days
-    for (let dayOffset = 6; dayOffset >= 0; dayOffset--) {
-      const shiftDate = new Date(today)
-      shiftDate.setDate(today.getDate() - dayOffset)
+    // 1. Previous completed shift (yesterday evening)
+    const yesterday = new Date(today)
+    yesterday.setDate(today.getDate() - 1)
 
-      // Morning shift (08:00 - 16:00)
-      const morningShift = this.createMockShift({
-        date: shiftDate,
-        startHour: 8,
-        endHour: 16,
-        cashierName: 'Sarah Johnson',
-        shiftType: 'morning'
-      })
-      shifts.push(morningShift)
+    const previousShift = this.createMockShift({
+      date: yesterday,
+      startHour: 16,
+      endHour: 24,
+      cashierName: 'Mike Chen',
+      shiftType: 'evening'
+    })
+    shifts.push(previousShift)
 
-      // Evening shift (16:00 - 00:00) - only if not today
-      if (dayOffset > 0) {
-        const eveningShift = this.createMockShift({
-          date: shiftDate,
-          startHour: 16,
-          endHour: 24,
-          cashierName: 'Mike Chen',
-          shiftType: 'evening'
-        })
-        shifts.push(eveningShift)
-      }
-    }
-
-    // Add current active shift if it's business hours
+    // 2. Current active shift (today morning, if business hours)
     const currentHour = today.getHours()
     if (currentHour >= 8 && currentHour < 24) {
       const activeShift = this.createActiveShift()
@@ -109,6 +97,9 @@ export class ShiftsMockData {
       paymentMethods: this.generatePaymentBreakdown(salesData),
       corrections: this.generateCorrections(shiftId),
       accountBalances: this.generateAccountBalances(),
+      // ✅ Sprint 4: Add expense operations
+      expenseOperations: this.generateExpenseOperations(shiftId, startTime),
+      pendingPayments: [],
       syncStatus: 'synced',
       lastSyncAt: endTime.toISOString(),
       pendingSync: false,
@@ -122,6 +113,7 @@ export class ShiftsMockData {
 
   /**
    * Create active shift for current day
+   * ✅ Sprint 4: Added realistic partial sales data
    */
   private static createActiveShift(): PosShift {
     const now = new Date()
@@ -129,7 +121,14 @@ export class ShiftsMockData {
     startTime.setHours(8, 0, 0, 0) // Started at 8 AM
 
     const duration = (now.getTime() - startTime.getTime()) / 60000 // minutes elapsed
-    const salesData = this.generateSalesData('active', duration)
+
+    // ✅ Sprint 4: Use realistic partial sales for active shift
+    const hoursElapsed = duration / 60
+    const salesData = {
+      totalSales: Math.round(hoursElapsed * 400000), // ~400k per hour
+      totalTransactions: Math.round(hoursElapsed * 8), // ~8 transactions per hour
+      cashSales: Math.round(hoursElapsed * 140000) // ~35% cash
+    }
 
     const shiftId = `active_shift_${startTime.getTime()}`
 
@@ -147,6 +146,9 @@ export class ShiftsMockData {
       paymentMethods: this.generatePaymentBreakdown(salesData),
       corrections: [],
       accountBalances: this.generateAccountBalances(),
+      // ✅ Sprint 4: Add expense operations for active shift
+      expenseOperations: this.generateExpenseOperations(shiftId, startTime, false),
+      pendingPayments: [],
       syncStatus: 'pending',
       pendingSync: true,
       notes: 'Current active shift',
@@ -159,11 +161,21 @@ export class ShiftsMockData {
 
   /**
    * Generate realistic sales data for 12-hour daily shift
+   * ✅ Sprint 4: Fixed amounts for previous shift to match account mock
    */
-  private static generateSalesData(shiftType: 'daily' | 'active', duration: number) {
+  private static generateSalesData(shiftType: 'morning' | 'evening' | 'active', duration: number) {
     const hoursWorked = duration / 60
 
-    // Single pattern for 12-hour daily shifts
+    // ✅ Sprint 4: Use fixed cash amount for evening shift to sync with account mock
+    if (shiftType === 'evening') {
+      return {
+        totalSales: 7500000, // Total sales for evening shift
+        totalTransactions: 80, // 80 transactions
+        cashSales: 2500000 // Fixed: 2.5M cash (matches account mock)
+      }
+    }
+
+    // For active shift: proportional to time elapsed
     const salesPerHour = 55000 // 55k IDR per hour
     const transactionsPerHour = 10 // 10 transactions per hour
     const variance = 0.2 // 20% variance
@@ -313,10 +325,104 @@ export class ShiftsMockData {
       totalIncome: this.randomBetween(50000, 200000),
       totalExpense: this.randomBetween(0, 20000),
       transactionCount: this.randomBetween(5, 25),
+      // ✅ Sprint 4: Add expense operations
+      expenseOperations: [],
       discrepancyExplained: Math.random() > 0.2, // 80% explained
       syncStatus: 'synced' as const,
       lastSyncAt: new Date().toISOString()
     }))
+  }
+
+  /**
+   * ✅ Sprint 4: Generate expense operations
+   * For previous shift: use fixed amount (150k) to match account mock
+   */
+  private static generateExpenseOperations(
+    shiftId: string,
+    shiftStartTime: Date,
+    isCompletedShift: boolean = true
+  ): ShiftExpenseOperation[] {
+    const expenseOperations: ShiftExpenseOperation[] = []
+
+    // ✅ Sprint 4: For completed shift (previous), use fixed expense amount
+    if (isCompletedShift) {
+      // Previous shift has exactly 150k in expenses (2 operations)
+      const expenseTime1 = new Date(shiftStartTime.getTime() + 2 * 60 * 60 * 1000) // 2 hours in
+      const expenseTime2 = new Date(shiftStartTime.getTime() + 5 * 60 * 60 * 1000) // 5 hours in
+
+      expenseOperations.push(
+        {
+          id: `exp_prev_1`,
+          shiftId,
+          type: 'direct_expense',
+          amount: 80000, // 80k IDR
+          description: 'Cleaning supplies',
+          category: 'other',
+          status: 'completed',
+          performedBy: {
+            type: 'user',
+            id: 'cashier_mike_chen',
+            name: 'Mike Chen'
+          },
+          relatedAccountId: 'acc_1',
+          syncStatus: 'synced',
+          createdAt: expenseTime1.toISOString(),
+          updatedAt: expenseTime1.toISOString()
+        },
+        {
+          id: `exp_prev_2`,
+          shiftId,
+          type: 'direct_expense',
+          amount: 70000, // 70k IDR
+          description: 'Emergency repair',
+          category: 'other',
+          status: 'completed',
+          performedBy: {
+            type: 'user',
+            id: 'cashier_mike_chen',
+            name: 'Mike Chen'
+          },
+          relatedAccountId: 'acc_1',
+          syncStatus: 'synced',
+          createdAt: expenseTime2.toISOString(),
+          updatedAt: expenseTime2.toISOString()
+        }
+      )
+
+      return expenseOperations
+    }
+
+    // For active shift: random expenses
+    if (Math.random() < 0.6) {
+      const expenseCount = Math.floor(Math.random() * 2) + 1 // 1-2 expenses
+
+      for (let i = 0; i < expenseCount; i++) {
+        const expenseTime = new Date(
+          shiftStartTime.getTime() + Math.random() * 6 * 60 * 60 * 1000 // Random time within 6 hours
+        )
+
+        expenseOperations.push({
+          id: `exp_${Date.now()}_${i}`,
+          shiftId,
+          type: 'direct_expense',
+          amount: this.randomBetween(20000, 100000), // 20k-100k IDR
+          description: this.getExpenseDescription(),
+          category: 'other',
+          status: 'completed',
+          performedBy: {
+            type: 'user',
+            id: 'cashier_current',
+            name: 'Current Cashier'
+          },
+          relatedAccountId: 'acc_1', // POS cash account
+          syncStatus: 'synced',
+          createdAt: expenseTime.toISOString(),
+          updatedAt: expenseTime.toISOString()
+        })
+      }
+    }
+
+    return expenseOperations
   }
 
   /**
@@ -409,6 +515,18 @@ export class ShiftsMockData {
       'Evening meal with dessert',
       'Business lunch meeting',
       'Weekend brunch order'
+    ]
+    return descriptions[Math.floor(Math.random() * descriptions.length)]
+  }
+
+  private static getExpenseDescription(): string {
+    const descriptions = [
+      'Office supplies purchase',
+      'Cleaning supplies',
+      'Emergency repair',
+      'Utility payment',
+      'Transport costs',
+      'Miscellaneous expense'
     ]
     return descriptions[Math.floor(Math.random() * descriptions.length)]
   }

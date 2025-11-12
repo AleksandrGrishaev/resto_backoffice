@@ -169,6 +169,15 @@ export const usePosStore = defineStore('pos', () => {
         currentShift: shiftsStore.currentShift?.shiftNumber || 'None'
       })
 
+      // ✅ Sprint 5: Process sync queue on startup
+      platform.debugLog('POS', '🔄 Processing sync queue...')
+      const syncQueueResult = await shiftsStore.processSyncQueue()
+      if (!syncQueueResult.success) {
+        platform.debugLog('POS', '⚠️ Sync queue processing failed', {
+          error: syncQueueResult.error
+        })
+      }
+
       // Пока просто помечаем как инициализированную
       isInitialized.value = true
       lastSync.value = new Date().toISOString()
@@ -322,6 +331,11 @@ export const usePosStore = defineStore('pos', () => {
     platform.debugLog('POS', `Network status changed: ${online ? 'ONLINE' : 'OFFLINE'}`)
 
     if (online && isInitialized.value) {
+      // ✅ Sprint 5: Process sync queue when connection restored
+      shiftsStore.processSyncQueue().catch(err => {
+        platform.debugLog('POS', 'Sync queue processing failed', { error: err.message })
+      })
+
       // Автоматическая синхронизация при восстановлении связи
       syncWithServer().catch(err => {
         platform.debugLog('POS', 'Auto-sync failed', { error: err.message })

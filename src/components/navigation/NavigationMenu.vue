@@ -119,6 +119,19 @@
           </template>
         </v-list-item>
 
+        <!-- ✅ Sprint 5: Shift History -->
+        <v-list-item
+          to="/sales/shifts"
+          prepend-icon="mdi-clock-outline"
+          color="primary"
+          class="ps-8"
+          :active-color="variables.colorPrimary"
+        >
+          <template #title>
+            <span>Shifts</span>
+          </template>
+        </v-list-item>
+
         <!-- Write-off History -->
         <v-list-item
           to="/inventory/write-offs"

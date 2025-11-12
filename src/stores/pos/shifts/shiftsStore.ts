@@ -18,11 +18,16 @@ import type {
   ShiftExpenseOperation,
   CreateDirectExpenseDto,
   ConfirmSupplierPaymentDto,
-  RejectSupplierPaymentDto
+  RejectSupplierPaymentDto,
+  SyncQueueItem
 } from './types'
 import { ShiftsService } from './services'
 import { useShiftsComposables } from './composables'
 import { useAccountStore } from '@/stores/account'
+
+// ✅ Sprint 5: Sync queue localStorage key
+const SYNC_QUEUE_KEY = 'pos_sync_queue'
+const MAX_SYNC_ATTEMPTS = 10 // Максимальное количество попыток
 
 export const useShiftsStore = defineStore('posShifts', () => {
   // ===== STATE =====
@@ -145,7 +150,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
   }
 
   /**
-   * Завершить смену
+   * Завершить смену (✅ Sprint 5: Offline-capable)
+   * ВАЖНО: Смена ВСЕГДА закрывается локально, даже без интернета
+   * Sync в account происходит асинхронно и не блокирует закрытие
    */
   async function endShift(dto: EndShiftDto): Promise<ServiceResponse<PosShift>> {
     try {
@@ -156,28 +163,44 @@ export const useShiftsStore = defineStore('posShifts', () => {
         throw new Error('No active shift to end')
       }
 
-      // Проверить синхронизацию
-      const hasPendingSync = pendingSyncTransactions.value.length > 0
-      if (hasPendingSync) {
-        throw new Error('Cannot end shift with pending sync transactions')
-      }
+      // ✅ Sprint 5: Удалена проверка pending sync - смена закрывается всегда
+      // const hasPendingSync = pendingSyncTransactions.value.length > 0
+      // if (hasPendingSync) {
+      //   throw new Error('Cannot end shift with pending sync transactions')
+      // }
 
+      // 1. ВСЕГДА закрываем смену локально (offline-first)
       const result = await shiftsService.endShift(dto)
 
-      if (result.success && result.data) {
-        const updatedShift = result.data
-
-        // Обновить в списке
-        const index = shifts.value.findIndex(s => s.id === updatedShift.id)
-        if (index !== -1) {
-          shifts.value[index] = updatedShift
-        }
-
-        currentShift.value = null
-        console.log('✅ Смена завершена:', updatedShift.shiftNumber)
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to close shift locally')
       }
 
-      return result
+      const closedShift = result.data
+
+      // 2. ПЫТАЕМСЯ синхронизировать с Account Store (но не блокируем)
+      const syncResult = await syncShiftToAccount(closedShift)
+
+      if (!syncResult.success) {
+        // ⚠️ Sync failed - добавляем в очередь для retry
+        console.warn(
+          `⚠️ Failed to sync shift ${closedShift.shiftNumber} to account: ${syncResult.error}`
+        )
+        await addToSyncQueue(closedShift.id, syncResult.error)
+      } else {
+        console.log(`✅ Shift ${closedShift.shiftNumber} synced to account immediately`)
+      }
+
+      // 3. ВСЕГДА обновляем store и возвращаем success
+      const index = shifts.value.findIndex(s => s.id === closedShift.id)
+      if (index !== -1) {
+        shifts.value[index] = closedShift
+      }
+
+      currentShift.value = null
+      console.log('✅ Смена закрыта локально:', closedShift.shiftNumber)
+
+      return { success: true, data: closedShift }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to end shift'
       error.value = errorMsg
@@ -739,6 +762,344 @@ export const useShiftsStore = defineStore('posShifts', () => {
     error.value = null
   }
 
+  // ============ SPRINT 4 & 5: SHIFT TO ACCOUNT SYNC ============
+
+  /**
+   * Синхронизировать смену с Account Store (acc_1)
+   * Создает итоговые транзакции при закрытии смены
+   *
+   * ✅ Sprint 5: Enhanced with error handling and retry tracking
+   */
+  async function syncShiftToAccount(shift: PosShift): Promise<ServiceResponse<void>> {
+    try {
+      if (!shift) {
+        return { success: false, error: 'Shift not provided' }
+      }
+
+      // Проверить что смена завершена
+      if (shift.status !== 'completed') {
+        return { success: false, error: 'Shift must be completed before sync' }
+      }
+
+      // Проверить что смена еще не синхронизирована
+      if (shift.syncedToAccount) {
+        console.log(`⚠️ Shift ${shift.shiftNumber} already synced to account`)
+        return { success: true }
+      }
+
+      // ✅ Sprint 5: Network check (simple)
+      if (!navigator.onLine) {
+        const error = 'No internet connection'
+        updateShiftSyncError(shift, error)
+        return { success: false, error }
+      }
+
+      const { POS_CASH_ACCOUNT_ID } = await import('@/stores/account/types')
+      const transactionIds: string[] = []
+
+      // 1. Рассчитать итоговую статистику смены
+      const cashPaymentMethod = shift.paymentMethods.find(pm => pm.methodType === 'cash')
+      const cashReceived = cashPaymentMethod?.amount || 0
+
+      // Рассчитать возвраты
+      const cashRefunds = shift.corrections
+        .filter(c => c.type === 'refund')
+        .reduce((sum, c) => sum + c.amount, 0)
+
+      // 2. Фильтровать прямые расходы (без supplier payments)
+      // ✅ Sprint 4: Skip supplier payment expenses to avoid duplication
+      const directExpenses = shift.expenseOperations.filter(
+        exp => exp.type === 'direct_expense' && exp.status === 'completed'
+      )
+      const totalDirectExpenses = directExpenses.reduce((sum, exp) => sum + exp.amount, 0)
+
+      // Рассчитать корректировки
+      const totalCorrections = shift.corrections
+        .filter(c => c.type === 'cash_adjustment')
+        .reduce((sum, c) => sum + c.amount, 0)
+
+      // Чистый доход (cash received - refunds)
+      const netIncome = cashReceived - cashRefunds
+
+      console.log(
+        `💰 Shift ${shift.shiftNumber} sync stats:
+        - Cash received: ${cashReceived}
+        - Cash refunds: ${cashRefunds}
+        - Net income: ${netIncome}
+        - Direct expenses: ${totalDirectExpenses}
+        - Corrections: ${totalCorrections}`
+      )
+
+      // 3. Создать транзакции в acc_1
+
+      // Транзакция #1: Итоговый приход за смену
+      if (netIncome > 0) {
+        const incomeTransaction = await accountStore.createOperation({
+          accountId: POS_CASH_ACCOUNT_ID,
+          type: 'income',
+          amount: netIncome,
+          description: `POS Shift ${shift.shiftNumber} - Net Income`,
+          performedBy: {
+            type: 'user',
+            id: shift.cashierId,
+            name: shift.cashierName
+          }
+        })
+
+        transactionIds.push(incomeTransaction.id)
+        console.log(`✅ Income transaction created: ${incomeTransaction.id}`)
+      }
+
+      // Транзакция #2: Прямые расходы (если есть)
+      if (totalDirectExpenses > 0) {
+        const expenseTransaction = await accountStore.createOperation({
+          accountId: POS_CASH_ACCOUNT_ID,
+          type: 'expense',
+          amount: totalDirectExpenses,
+          description: `POS Shift ${shift.shiftNumber} - Direct Expenses`,
+          expenseCategory: {
+            type: 'daily',
+            category: 'other'
+          },
+          performedBy: {
+            type: 'user',
+            id: shift.cashierId,
+            name: shift.cashierName
+          }
+        })
+
+        transactionIds.push(expenseTransaction.id)
+        console.log(`✅ Expense transaction created: ${expenseTransaction.id}`)
+      }
+
+      // Транзакция #3: Корректировки (если есть)
+      if (totalCorrections !== 0) {
+        const correctionTransaction = await accountStore.createOperation({
+          accountId: POS_CASH_ACCOUNT_ID,
+          type: 'correction',
+          amount: Math.abs(totalCorrections),
+          description: `POS Shift ${shift.shiftNumber} - Cash Corrections (${totalCorrections > 0 ? 'Overage' : 'Shortage'})`,
+          performedBy: {
+            type: 'user',
+            id: shift.cashierId,
+            name: shift.cashierName
+          }
+        })
+
+        transactionIds.push(correctionTransaction.id)
+        console.log(`✅ Correction transaction created: ${correctionTransaction.id}`)
+      }
+
+      // 4. Пометить смену как синхронизированную
+      shift.syncedToAccount = true
+      shift.syncedAt = new Date().toISOString()
+      shift.accountTransactionIds = transactionIds
+      shift.updatedAt = new Date().toISOString()
+
+      // ✅ Sprint 5: Очистить sync error при успешной синхронизации
+      shift.syncError = undefined
+      shift.lastSyncAttempt = new Date().toISOString()
+
+      // Сохранить обновленную смену в localStorage
+      const storedShifts = localStorage.getItem('pos_shifts')
+      const allShifts: PosShift[] = storedShifts ? JSON.parse(storedShifts) : []
+      const shiftIndex = allShifts.findIndex(s => s.id === shift.id)
+      if (shiftIndex !== -1) {
+        allShifts[shiftIndex] = shift
+        localStorage.setItem('pos_shifts', JSON.stringify(allShifts))
+      }
+
+      // Обновить в store если это текущая смена
+      const storeShiftIndex = shifts.value.findIndex(s => s.id === shift.id)
+      if (storeShiftIndex !== -1) {
+        shifts.value[storeShiftIndex] = shift
+      }
+
+      console.log(
+        `✅ Sprint 4+5: Shift ${shift.shiftNumber} synced to account ${POS_CASH_ACCOUNT_ID}. Created ${transactionIds.length} transactions.`
+      )
+
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to sync shift to account'
+      console.error(`❌ Failed to sync shift to account:`, errorMsg)
+
+      // ✅ Sprint 5: Track sync error in shift
+      updateShiftSyncError(shift, errorMsg)
+
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * ✅ Sprint 5: Update shift with sync error info
+   */
+  function updateShiftSyncError(shift: PosShift, error: string): void {
+    shift.syncError = error
+    shift.lastSyncAttempt = new Date().toISOString()
+    shift.syncAttempts = (shift.syncAttempts || 0) + 1
+
+    // Сохранить обновленную смену
+    const storedShifts = localStorage.getItem('pos_shifts')
+    const allShifts: PosShift[] = storedShifts ? JSON.parse(storedShifts) : []
+    const shiftIndex = allShifts.findIndex(s => s.id === shift.id)
+    if (shiftIndex !== -1) {
+      allShifts[shiftIndex] = shift
+      localStorage.setItem('pos_shifts', JSON.stringify(allShifts))
+    }
+  }
+
+  // ============ SPRINT 5: SYNC QUEUE MANAGEMENT ============
+
+  /**
+   * Добавить смену в очередь синхронизации
+   */
+  async function addToSyncQueue(shiftId: string, errorMsg?: string): Promise<void> {
+    try {
+      const queue = getSyncQueue()
+
+      // Проверить существует ли уже в очереди
+      const existing = queue.find(item => item.shiftId === shiftId)
+
+      if (existing) {
+        // Обновить существующую запись
+        existing.attempts += 1
+        existing.lastAttempt = new Date().toISOString()
+        existing.lastError = errorMsg
+      } else {
+        // Добавить новую запись
+        const newItem: SyncQueueItem = {
+          shiftId,
+          addedAt: new Date().toISOString(),
+          attempts: 1,
+          lastAttempt: new Date().toISOString(),
+          lastError: errorMsg
+        }
+        queue.push(newItem)
+      }
+
+      // Сохранить очередь
+      localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue))
+
+      // Обновить shift с информацией об очереди
+      const shift = shifts.value.find(s => s.id === shiftId)
+      if (shift) {
+        shift.syncQueuedAt = new Date().toISOString()
+        shift.syncError = errorMsg
+      }
+
+      console.log(
+        `📤 Shift ${shiftId} added to sync queue (attempt ${existing ? existing.attempts : 1})`
+      )
+    } catch (err) {
+      console.error('❌ Failed to add to sync queue:', err)
+    }
+  }
+
+  /**
+   * Удалить смену из очереди синхронизации
+   */
+  function removeFromSyncQueue(shiftId: string): void {
+    try {
+      const queue = getSyncQueue()
+      const filtered = queue.filter(item => item.shiftId !== shiftId)
+
+      localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(filtered))
+
+      // Очистить syncQueuedAt в shift
+      const shift = shifts.value.find(s => s.id === shiftId)
+      if (shift) {
+        shift.syncQueuedAt = undefined
+      }
+
+      console.log(`✅ Shift ${shiftId} removed from sync queue`)
+    } catch (err) {
+      console.error('❌ Failed to remove from sync queue:', err)
+    }
+  }
+
+  /**
+   * Получить текущую очередь синхронизации
+   */
+  function getSyncQueue(): SyncQueueItem[] {
+    try {
+      const stored = localStorage.getItem(SYNC_QUEUE_KEY)
+      return stored ? JSON.parse(stored) : []
+    } catch (err) {
+      console.error('❌ Failed to read sync queue:', err)
+      return []
+    }
+  }
+
+  /**
+   * Обработать очередь синхронизации
+   * Вызывается при старте приложения или при восстановлении соединения
+   */
+  async function processSyncQueue(): Promise<ServiceResponse<void>> {
+    try {
+      const queue = getSyncQueue()
+
+      if (queue.length === 0) {
+        console.log('✅ Sync queue is empty')
+        return { success: true }
+      }
+
+      console.log(`🔄 Processing sync queue: ${queue.length} items`)
+
+      let successCount = 0
+      let failedCount = 0
+      let skippedCount = 0
+
+      for (const item of queue) {
+        // Проверить максимальное количество попыток
+        if (item.attempts >= MAX_SYNC_ATTEMPTS) {
+          console.warn(
+            `⚠️ Shift ${item.shiftId} exceeded max sync attempts (${MAX_SYNC_ATTEMPTS}), skipping`
+          )
+          skippedCount++
+          continue
+        }
+
+        // Найти смену
+        const shift = shifts.value.find(s => s.id === item.shiftId)
+        if (!shift) {
+          console.warn(`⚠️ Shift ${item.shiftId} not found, removing from queue`)
+          removeFromSyncQueue(item.shiftId)
+          skippedCount++
+          continue
+        }
+
+        // Попытка синхронизации
+        const syncResult = await syncShiftToAccount(shift)
+
+        if (syncResult.success) {
+          // Успешно - удалить из очереди
+          removeFromSyncQueue(item.shiftId)
+          successCount++
+          console.log(`✅ Shift ${shift.shiftNumber} synced successfully from queue`)
+        } else {
+          // Неудача - обновить счетчик попыток
+          await addToSyncQueue(item.shiftId, syncResult.error)
+          failedCount++
+          console.warn(`⚠️ Shift ${shift.shiftNumber} sync failed: ${syncResult.error}`)
+        }
+      }
+
+      console.log(
+        `🔄 Sync queue processed: ${successCount} success, ${failedCount} failed, ${skippedCount} skipped`
+      )
+
+      return {
+        success: failedCount === 0,
+        error: failedCount > 0 ? `${failedCount} shifts failed to sync` : undefined
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to process sync queue'
+      console.error('❌ Failed to process sync queue:', errorMsg)
+      return { success: false, error: errorMsg }
+    }
+  }
+
   // ===== COMPOSABLES =====
   const {
     formatShiftDuration,
@@ -781,6 +1142,12 @@ export const useShiftsStore = defineStore('posShifts', () => {
     createDirectExpense,
     confirmExpense,
     rejectExpense,
+
+    // Sprint 5: Sync Queue
+    addToSyncQueue,
+    removeFromSyncQueue,
+    getSyncQueue,
+    processSyncQueue,
 
     // Composables
     formatShiftDuration,

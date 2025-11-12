@@ -1,1 +1,1 @@
-Check todo.md and grab next task from sprint and start working on it. Once done update todo.md
+Check src/About/todo.md and grab next task from sprint and start working on it. Once done update src/About/todo.md and write our sprint to backlog src/About/backlog.md. Always ask if you would like change type.ts files or interface.

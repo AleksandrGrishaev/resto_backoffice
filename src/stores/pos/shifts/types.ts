@@ -72,6 +72,17 @@ export interface PosShift extends BaseEntity {
   lastSyncAt?: string
   pendingSync: boolean
 
+  // ✅ Sprint 4: Account sync tracking
+  syncedToAccount?: boolean // Синхронизирована ли смена с acc_1
+  syncedAt?: string // Когда синхронизирована
+  accountTransactionIds?: string[] // IDs созданных транзакций в acc_1
+
+  // ✅ Sprint 5: Offline-capable closing + sync queue
+  syncAttempts?: number // Количество попыток синхронизации
+  lastSyncAttempt?: string // Когда была последняя попытка
+  syncError?: string // Последняя ошибка синхронизации
+  syncQueuedAt?: string // Когда добавлена в очередь синхронизации
+
   // Metadata
   deviceId?: string
   location?: string
@@ -417,6 +428,22 @@ export interface ServiceResponse<T = void> {
   success: boolean
   data?: T
   error?: string
+}
+
+// =============================================
+// SPRINT 5: SYNC QUEUE
+// =============================================
+
+/**
+ * Элемент очереди синхронизации
+ * Сохраняется в localStorage для retry
+ */
+export interface SyncQueueItem {
+  shiftId: string
+  addedAt: string
+  attempts: number
+  lastAttempt?: string
+  lastError?: string
 }
 
 // =============================================

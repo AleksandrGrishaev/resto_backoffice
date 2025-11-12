@@ -197,6 +197,76 @@ DebugUtils.summary('Title', { key: 'value' })
 
 Debug store (`src/stores/debug/`) provides runtime inspection of all stores.
 
+## UI/UX Guidelines
+
+**IMPORTANT: All user-facing UI elements MUST be in English.**
+
+- All component labels, buttons, placeholders, and error messages in English
+- Internal comments can be in Russian (for team consistency)
+
+**Styling System (`src/styles/`):**
+
+When creating UI components, use the existing design system:
+
+- `src/styles/variables.scss` - Design tokens (colors, spacing, typography, touch targets)
+- `src/styles/main.scss` - Utility classes (`.flex`, `.p-md`, `.text-lg`, `.gap-sm`, etc.)
+
+```vue
+<template>
+  <!-- Use utility classes for consistent styling -->
+  <div class="flex flex-col gap-md p-md">
+    <v-btn class="h-button touch-target">Click Me</v-btn>
+  </div>
+</template>
+
+<style scoped lang="scss">
+@use '@/styles/variables' as *;
+
+.custom-element {
+  padding: var(--spacing-md);
+  color: var(--color-primary);
+  font-size: var(--text-base);
+}
+</style>
+```
+
+**Key design tokens:**
+
+- Colors: `--color-primary`, `--color-surface`, `--black-primary`
+- Spacing: `--spacing-xs/sm/md/lg/xl` (responsive with clamp)
+- Typography: `--text-xs/sm/base/lg/xl/2xl/3xl`
+- Touch targets: `--touch-min` (44px), `--touch-button` (48px)
+
+## Utility Functions
+
+Centralized utilities in `src/utils/` - always use these instead of reimplementing:
+
+```typescript
+import { DebugUtils, TimeUtils, formatIDR, generateId } from '@/utils'
+
+// Debugging with blacklist filtering
+DebugUtils.info(MODULE_NAME, 'Message', { data })
+DebugUtils.store(MODULE_NAME, 'Store operation', { count })
+
+// Time operations
+TimeUtils.getCurrentLocalISO()
+TimeUtils.formatDateForDisplay(date) // "15 Jan 2024"
+TimeUtils.formatDateTimeForDisplay(date) // "15 Jan 2024, 14:30"
+TimeUtils.getRelativeTime(date) // "2 дня назад"
+
+// Currency formatting
+formatIDR(7500) // "Rp 7.500"
+formatIDR(1250000, { compact: true }) // "Rp 1.25M"
+formatIDRWithUnit(850, 'ml') // "Rp 850/ml"
+parseIDR('Rp 1.250.000') // 1250000
+
+// ID generation
+generateId() // UUID
+generateShortId() // Short ID
+```
+
+See `src/utils/debugger.ts`, `src/utils/time.ts`, `src/utils/currency.ts`, `src/utils/formatter.ts`, `src/utils/id.ts` for full API.
+
 ## Code Style & Conventions
 
 **TypeScript:**

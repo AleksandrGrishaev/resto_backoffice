@@ -213,6 +213,15 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'Sales Transactions'
             }
+          },
+          // ✅ Sprint 5: Shift History
+          {
+            path: 'shifts',
+            name: 'sales-shifts',
+            component: () => import('@/views/backoffice/sales/ShiftHistoryView.vue'),
+            meta: {
+              title: 'Shift History'
+            }
           }
         ]
       },

@@ -9,11 +9,12 @@ export const mockAccounts: Account[] = [
     name: 'Основная касса',
     type: 'cash',
     isActive: true,
-    balance: 4000000,
+    // ✅ Sprint 4: Base balance (4M) + previous shift net income (2.5M - 0.15M = 2.35M)
+    balance: 6350000,
     description: 'Наличные средства ресторана',
-    lastTransactionDate: '2025-01-15T10:30:00.000Z',
+    lastTransactionDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Yesterday
     createdAt: '2025-01-01T00:00:00.000Z',
-    updatedAt: '2025-01-15T10:30:00.000Z'
+    updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() // Yesterday
   },
   {
     id: 'acc_2',
@@ -105,8 +106,37 @@ export const mockTransactions: Transaction[] = [
     description: 'Выручка от продаж за август-сентябрь (накопленная)',
     performedBy: { type: 'user', id: 'user_1', name: 'Admin' },
     status: 'completed',
+    balanceAfter: 19000000,
     createdAt: '2025-08-31T23:59:00.000Z',
     updatedAt: '2025-08-31T23:59:00.000Z'
+  },
+
+  // ✅ Sprint 4: Transactions from previous completed shift (yesterday evening)
+  {
+    id: 'tx_shift_prev_income',
+    accountId: 'acc_1',
+    type: 'income',
+    amount: 2500000,
+    description: 'POS Shift (Yesterday Evening) - Net Income',
+    performedBy: { type: 'user', id: 'cashier_mike_chen', name: 'Mike Chen' },
+    status: 'completed',
+    balanceAfter: 6500000,
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Yesterday
+    updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  },
+
+  {
+    id: 'tx_shift_prev_expenses',
+    accountId: 'acc_1',
+    type: 'expense',
+    amount: 150000,
+    description: 'POS Shift (Yesterday Evening) - Direct Expenses',
+    expenseCategory: { type: 'daily', category: 'other' },
+    performedBy: { type: 'user', id: 'cashier_mike_chen', name: 'Mike Chen' },
+    status: 'completed',
+    balanceAfter: 6350000,
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Yesterday
+    updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   },
 
   // ✅ Транзакции для completed платежей

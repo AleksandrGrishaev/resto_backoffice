@@ -10,10 +10,13 @@
 
     <v-divider />
 
+    <!-- ✅ Sprint 4: Improved empty state -->
     <v-card-text v-if="expenses.length === 0" class="text-center py-8">
-      <v-icon icon="mdi-cash-minus" size="64" color="grey-lighten-2" />
+      <v-icon icon="mdi-receipt-text-off-outline" size="64" color="grey-lighten-2" />
       <div class="text-h6 mt-4 text-grey">No expenses yet</div>
-      <div class="text-caption text-grey">Expenses will appear here once created</div>
+      <div class="text-caption text-grey">
+        Click "Add Expense" to record a cash expense for this shift
+      </div>
     </v-card-text>
 
     <v-list v-else>
@@ -29,6 +32,22 @@
               <span class="font-weight-medium">
                 {{ expense.counteragentName || 'Direct Expense' }}
               </span>
+              <!-- ✅ Sprint 4: Type indicator -->
+              <v-chip
+                size="x-small"
+                :color="expense.relatedPaymentId ? 'purple' : 'blue'"
+                variant="tonal"
+                class="ml-2"
+              >
+                <v-icon
+                  v-if="expense.relatedPaymentId"
+                  start
+                  size="x-small"
+                  icon="mdi-file-document-check"
+                />
+                {{ expense.relatedPaymentId ? 'Supplier Payment' : 'Direct Expense' }}
+              </v-chip>
+              <!-- Status chip -->
               <v-chip size="x-small" :color="getStatusColor(expense.status)" class="ml-2">
                 {{ expense.status }}
               </v-chip>
