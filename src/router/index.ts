@@ -33,6 +33,7 @@ import DebugView from '@/views/debug/DebugView.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAuth, usePermissions } from '@/stores/auth/composables'
 import { CoreUserService } from '@/core/users'
+import type { UserRole } from '@/stores/auth/types'
 
 // ===== ROUTES CONFIGURATION =====
 
@@ -255,7 +256,17 @@ const routes: RouteRecordRaw[] = [
                   meta: {
                     title: 'Debug Stores',
                     requiresDev: true,
-                    allowedRoles: ['admin']
+                    allowedRoles: ['admin'] as UserRole[]
+                  }
+                },
+                {
+                  path: 'sync',
+                  name: 'debug-sync',
+                  component: () => import('@/views/debug/SyncMonitorView.vue'),
+                  meta: {
+                    title: 'Sync Monitor',
+                    requiresDev: true,
+                    allowedRoles: ['admin'] as UserRole[]
                   }
                 }
               ]
@@ -341,5 +352,16 @@ router.beforeEach(async (to, from, next) => {
     next('/auth/login')
   }
 })
+
+// ===== MODULE AUGMENTATION =====
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    allowedRoles?: UserRole[]
+    title?: string
+    requiresDev?: boolean
+  }
+}
 
 export default router

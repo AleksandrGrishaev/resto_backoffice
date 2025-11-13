@@ -472,6 +472,80 @@ pos/
 - **Offline-first capability**: Works without internet (when enabled)
 - **Network resilience**: Auto-sync when connection restored
 
+### Centralized SyncService (Sprint 6)
+
+The app uses a **centralized SyncService** for managing background synchronization of all entity types.
+
+**Architecture:**
+
+```
+src/core/sync/
+├── types.ts                    # Core sync types and interfaces
+├── SyncService.ts              # Main sync service (singleton)
+├── storage/                    # Storage abstraction layer
+│   ├── LocalStorageSyncStorage.ts   # localStorage implementation (dev/mobile)
+│   ├── ApiSyncStorage.ts            # API implementation (production)
+│   └── index.ts
+├── adapters/                   # Entity-specific sync adapters
+│   └── ShiftSyncAdapter.ts    # Shift sync to Account Store
+└── migrations/
+    └── migrateLegacyShiftQueue.ts  # Sprint 5 → Sprint 6 migration
+```
+
+**Key Features:**
+
+- **Generic sync queue**: Supports any entity type (shifts, transactions, discounts, etc.)
+- **Priority-based processing**: `critical` > `high` > `normal` > `low`
+- **Exponential backoff**: Automatic retry with increasing delays (2^attempts, max 1 hour)
+- **Storage abstraction**: Easy transition from localStorage to API
+- **Adapter pattern**: Each entity implements `ISyncAdapter` for custom sync logic
+- **Conflict resolution**: Configurable strategies (server-wins, local-wins, merge, manual)
+
+**Usage:**
+
+```typescript
+import { useSyncService } from '@/core/sync/SyncService'
+import { ShiftSyncAdapter } from '@/core/sync/adapters/ShiftSyncAdapter'
+
+// Initialize (done in posStore.initializePOS())
+const syncService = useSyncService()
+syncService.registerAdapter(new ShiftSyncAdapter())
+
+// Add to queue
+syncService.addToQueue({
+  entityType: 'shift',
+  entityId: shift.id,
+  operation: 'update',
+  priority: 'critical',
+  data: shift,
+  maxAttempts: 10
+})
+
+// Process queue (auto-called on app start and network restore)
+await syncService.processQueue()
+```
+
+**Production API Switch:**
+
+```typescript
+import { ENV } from '@/config/environment'
+import { LocalStorageSyncStorage, ApiSyncStorage } from '@/core/sync/storage'
+
+// Switch based on environment
+const storage = ENV.useApi ? new ApiSyncStorage() : new LocalStorageSyncStorage()
+const syncService = new SyncService(storage)
+```
+
+**Current Adapters:**
+
+- `ShiftSyncAdapter`: Syncs completed shifts to Account Store (acc_1), creates income/expense/correction transactions
+
+**Future Adapters:**
+
+- `TransactionSyncAdapter` (Sprint 7)
+- `DiscountSyncAdapter` (Sprint 8)
+- `CustomerSyncAdapter` (Sprint 9)
+
 ## Testing
 
 Integration tests are available in `src/core/appInitializerTests.ts` and run automatically in DEV mode when `ENV.debugEnabled` is true.

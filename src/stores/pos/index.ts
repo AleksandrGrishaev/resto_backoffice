@@ -10,6 +10,11 @@ import { usePosOrdersStore } from './orders/ordersStore'
 import { usePosPaymentsStore } from './payments/paymentsStore'
 import { useShiftsStore } from './shifts/shiftsStore'
 
+// ✅ Sprint 6: SyncService integration
+import { useSyncService } from '@/core/sync/SyncService'
+import { ShiftSyncAdapter } from '@/core/sync/adapters/ShiftSyncAdapter'
+import { migrateLegacyShiftQueue } from '@/core/sync/migrations/migrateLegacyShiftQueue'
+
 // Types (упрощенные)
 interface DailySalesStats {
   totalAmount: number
@@ -169,14 +174,27 @@ export const usePosStore = defineStore('pos', () => {
         currentShift: shiftsStore.currentShift?.shiftNumber || 'None'
       })
 
-      // ✅ Sprint 5: Process sync queue on startup
+      // ✅ Sprint 6: Initialize SyncService
+      platform.debugLog('POS', '🔄 Initializing SyncService...')
+      const syncService = useSyncService()
+
+      // Register shift sync adapter
+      syncService.registerAdapter(new ShiftSyncAdapter())
+
+      // Migrate legacy queue (one-time, auto-skips if no legacy data)
+      await migrateLegacyShiftQueue()
+
+      // Process sync queue on startup
       platform.debugLog('POS', '🔄 Processing sync queue...')
-      const syncQueueResult = await shiftsStore.processSyncQueue()
-      if (!syncQueueResult.success) {
-        platform.debugLog('POS', '⚠️ Sync queue processing failed', {
-          error: syncQueueResult.error
-        })
-      }
+      const syncReport = await syncService.processQueue()
+      platform.debugLog('POS', '✅ Sync queue processed', {
+        succeeded: syncReport.succeeded,
+        failed: syncReport.failed,
+        skipped: syncReport.skipped
+      })
+
+      // Start auto-processing
+      syncService.start()
 
       // Пока просто помечаем как инициализированную
       isInitialized.value = true
@@ -327,12 +345,14 @@ export const usePosStore = defineStore('pos', () => {
   // ===== WATCHERS =====
 
   // Следим за статусом сети
-  watch(isOnline, online => {
+  watch(isOnline, (online, wasOnline) => {
     platform.debugLog('POS', `Network status changed: ${online ? 'ONLINE' : 'OFFLINE'}`)
 
-    if (online && isInitialized.value) {
-      // ✅ Sprint 5: Process sync queue when connection restored
-      shiftsStore.processSyncQueue().catch(err => {
+    if (online && !wasOnline && isInitialized.value) {
+      // ✅ Sprint 6: Process sync queue when connection restored
+      platform.debugLog('POS', '🌐 Network restored, processing sync queue...')
+      const syncService = useSyncService()
+      syncService.processQueue().catch(err => {
         platform.debugLog('POS', 'Sync queue processing failed', { error: err.message })
       })
 

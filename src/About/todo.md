@@ -1,984 +1,931 @@
-# Sprint 5: Shift History UI + Offline-Resilient Sync
+# 🚀 Sprint 7: Supabase Integration & Web Deploy (MVP)
 
 ## Обзор
 
-Sprint 5 добавляет две критические функции:
+Sprint 7 фокусируется на **суперсрочном MVP релизе** (2-3 недели) для личного тестирования. Цель - перевести приложение с localStorage на Supabase и развернуть web-версию онлайн.
 
-1. **Backoffice интерфейс для истории смен** - отдельный view для просмотра всех смен (admin/manager)
-2. **Offline-capable закрытие смен** - возможность закрыть смену без интернета с очередью синхронизации
+**Выбранная стратегия:**
 
-## Предпосылки
+- ⚡ Timeline: Суперсрочно (2-3 недели)
+- 🚀 Backend: Supabase (быстрый старт)
+- 🧪 Audience: Личное тестирование
+- 📱 Mobile: Планируем на будущее (не в этом спринте)
 
-✅ **Sprint 4 завершен:**
+## Текущий статус проекта
 
-- Синхронизация shift → acc_1 при закрытии смены
-- Все expenses отображаются корректно
-- Mock данные упрощены (2 смены)
-- Балансы синхронизированы
+**Готовность к релизу: 🟡 60%**
 
-## Текущая ситуация
+**Что работает ✅:**
 
-### Что работает ✅
+- Все core features реализованы (POS, Backoffice, Orders, Shifts, Products, etc.)
+- UI/UX завершен
+- SyncService (Sprint 6) готов к интеграции с API
+- Repository pattern частично реализован
+- TypeScript strict mode + type safety
 
-- Смены синхронизируются с acc_1 при закрытии (Sprint 4)
-- ShiftManagementView показывает текущую активную смену (POS interface)
-- Expenses отображаются в Shift Management
-- syncShiftToAccount() создает транзакции в acc_1
+**Что нужно для MVP ⚠️:**
 
-### Что НЕ работает ❌
+- ❌ Нет реальной аутентификации (только mock users)
+- ❌ Нет backend API (все данные в localStorage)
+- ❌ localStorage теряет данные при очистке браузера
+- ❌ Нет защиты от XSS и security vulnerabilities
+- ❌ Нет production deployment
 
-- **НЕТ Backoffice интерфейса** для просмотра истории всех смен
-- **Смена НЕ закрывается** если нет интернета (sync блокирует endShift)
-- **НЕТ очереди синхронизации** для failed/offline shifts
-- **НЕТ retry логики** при старте приложения или восстановлении связи
+## Архитектурные решения
 
-## Решения по архитектуре ✅
+### 1. Supabase как Backend
 
-### Согласовано с пользователем:
+**Почему Supabase:**
 
-1. **Маршрут:** `/sales/shifts` (внутри Sales section, рядом с Analytics, Transactions)
-2. **Sync архитектура:** Упрощенная версия в `shiftsStore.ts` (рефакторинг в SyncService - Sprint 6)
-3. **Таблица:** Упрощенная (как на примере скриншота) - Name, Start Time, End Time, Total Expected, Total Actual, Difference
-4. **Детальный просмотр:** Переиспользовать существующий `ShiftManagementView.vue` (открывать в dialog или отдельной странице)
+- ✅ Быстрый старт (1-2 недели vs 8-12 недель custom API)
+- ✅ Managed PostgreSQL + Auth + Storage
+- ✅ Real-time subscriptions (bonus)
+- ✅ Row Level Security (RLS) из коробки
+- ✅ Auto-generated TypeScript types
+- ✅ Free tier для MVP ($0/месяц)
 
-### Следующие шаги:
+**Стоимость:**
 
-- **Sprint 5:** Базовая sync queue + Shift History UI
-- **Sprint 6:** Централизованный SyncService для всех сущностей (shifts, transactions, discounts, customers, etc.)
+- Development: $0/месяц (Free tier)
+- Production (100 orders/day): ~$25/месяц
 
-## Требования
+### 2. Authentication Strategy
 
-### 1. Backoffice Shift History View 📊
+**Выбор: Supabase Auth вместо Firebase**
 
-**Маршрут:** `/sales/shifts` (внутри Sales section)
+**Причины:**
 
-**Доступ:** Admin, Manager (allowedRoles: ['admin', 'manager'])
+- Единая платформа (Auth + DB + Storage)
+- Проще интеграция с PostgreSQL
+- Меньше vendor lock-in чем Firebase
+- Firebase уже частично настроен, но не используется
 
-**Функциональность:**
+**План:**
 
-- **Упрощенная таблица смен** (аналогично скриншоту):
-  - Name (Cashier + Shift Number)
-  - Start Time
-  - End Time
-  - Total Expected (ожидаемая выручка)
-  - Total Actual (фактическая выручка)
-  - Difference (разница, красным если минус)
-  - Sync Status (badge: ✅ synced / ⏳ pending / ❌ failed)
-- **Фильтры:**
-  - Date range (from/to)
-  - Cashier name (dropdown)
-  - Sync status filter (all/synced/pending/failed)
-- **Детальный просмотр:**
-  - Клик на строку → открыть существующий `ShiftManagementView.vue` (read-only mode)
-  - Или dialog с тем же компонентом
-  - Показать: shift summary, payments, expenses, transactions, sync status
-- **Actions:**
-  - Retry Sync кнопка для failed shifts
+- Заменить mock users в `authStore` на Supabase Auth
+- Email/password authentication
+- Session management через Supabase SDK
 
-### 2. Offline-Capable Shift Closing 📴
+### 3. Data Migration Strategy
 
-**Требование:** Смена **ДОЛЖНА** закрываться даже без интернета
+**Фазовый подход:**
 
-**Архитектура:**
+**Phase 1 (Week 1-2): Критические entities**
+
+- `shifts` - финансовые данные (priority: critical)
+- `orders` - заказы (priority: critical)
+- `payments` - платежи (priority: critical)
+- `products` - каталог товаров (priority: high)
+
+**Phase 2 (Week 3): Базовые entities**
+
+- `recipes` - рецепты
+- `menu` - меню
+- `tables` - столы (POS)
+
+**Phase 3 (После MVP): Остальные**
+
+- Storage/Inventory
+- Suppliers
+- Counteragents
+- Preparations
+
+### 4. Offline-First для POS
+
+**Стратегия:**
+
+- POS продолжает работать offline (localStorage)
+- SyncService (Sprint 6) синхронизирует с Supabase
+- ApiSyncStorage будет использовать Supabase API
+- Conflict resolution: server-wins (для финансовых данных)
+
+### 5. Архитектура Store + Service Layer (ВАЖНО!)
+
+**Существующий паттерн (следуем ему!):**
 
 ```
-endShift() → ALWAYS SUCCESS (save locally)
-  ↓
-syncShiftToAccount() → TRY SYNC
-  ↓
-Success? → Mark as synced
-  ↓
-Failure? → Add to sync queue (syncedToAccount: false, syncAttempts: 0)
-  ↓
-Retry later:
-  - On app startup (check queue)
-  - On network restore (POS goes online)
-  - Manual retry (from Backoffice UI)
+src/stores/pos/
+  orders/
+    ordersStore.ts     ← Pinia store (state management)
+    services.ts        ← API calls & business logic (ОБНОВЛЯЕМ ТУТ!)
+    composables.ts     ← Reusable logic
+    types.ts           ← TypeScript types
 ```
 
-**Поля для tracking:**
+**Правильный подход для Supabase интеграции:**
+
+```
+┌─────────────────────────────────────────────┐
+│     UI Component (PosMainView.vue)          │
+└──────────────────┬──────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────┐
+│    Pinia Store (ordersStore.ts)             │
+│    - Reactive state (orders, loading)       │
+│    - Вызывает services.ts                   │
+└──────────────────┬──────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────┐
+│    Service Layer (orders/services.ts)       │ ← КЛЮЧЕВОЙ СЛОЙ
+│    - Business logic                          │
+│    - Supabase API calls                     │
+│    - localStorage fallback (offline)        │
+│    - Returns ServiceResponse<T>             │
+└──────────────────┬──────────────────────────┘
+                   │
+                   ├─── Online ────────────────┐
+                   │                            ▼
+                   │              ┌──────────────────────┐
+                   │              │  Supabase Client     │
+                   │              │  (supabase/client)   │
+                   │              └──────────┬───────────┘
+                   │                         │
+                   │                         ▼
+                   │              ┌──────────────────────┐
+                   │              │  PostgreSQL          │
+                   │              │  (Supabase Cloud)    │
+                   │              └──────────────────────┘
+                   │
+                   └─── Offline ──────────────┐
+                                               ▼
+                                 ┌──────────────────────┐
+                                 │  localStorage        │
+                                 │  + SyncService queue │
+                                 └──────────────────────┘
+```
+
+**Что НЕ делаем (избыточно):**
+
+❌ Не создаем `src/supabase/services/ordersService.ts` (дубликат!)
+❌ Не создаем еще один слой абстракции
+❌ Не усложняем архитектуру
+
+**Что делаем (правильно):**
+
+✅ Обновляем `src/stores/pos/orders/services.ts` - добавляем Supabase calls
+✅ Добавляем fallback на localStorage (offline support)
+✅ Используем SyncService для offline → online sync
+✅ Stores остаются почти без изменений (используют обновленные services)
+
+**Пример кода (orders/services.ts):**
 
 ```typescript
-export interface PosShift {
-  // ... existing fields ...
-
-  // ✅ Sprint 4 (already exists)
-  syncedToAccount?: boolean
-  syncedAt?: string
-  accountTransactionIds?: string[]
-
-  // ✅ Sprint 5: NEW
-  syncAttempts?: number // Количество попыток синхронизации
-  lastSyncAttempt?: string // Когда была последняя попытка
-  syncError?: string // Последняя ошибка синхронизации
-  syncQueuedAt?: string // Когда добавлена в очередь
-}
-```
-
-### 3. Sync Queue + Retry Logic 🔄
-
-**LocalStorage ключ:** `pos_sync_queue`
-
-**Структура:**
-
-```typescript
-interface SyncQueueItem {
-  shiftId: string
-  addedAt: string
-  attempts: number
-  lastAttempt?: string
-  lastError?: string
-}
-
-type SyncQueue = SyncQueueItem[]
-```
-
-**Retry триггеры:**
-
-1. **On app startup** (в `appInitializer.ts` или `App.vue`):
-
-   ```typescript
-   if (ENV.pos.offlineFirst) {
-     await posStore.processSyncQueue() // После инициализации POS stores
-   }
-   ```
-
-2. **On network restore** (в `posStore.ts` при network monitoring):
-
-   ```typescript
-   watch(isOnline, async online => {
-     if (online && syncQueue.length > 0) {
-       await processSyncQueue()
-     }
-   })
-   ```
-
-3. **Manual retry** (из Backoffice UI):
-   ```typescript
-   async function retrySyncShift(shiftId: string) {
-     const shift = shifts.value.find(s => s.id === shiftId)
-     if (shift && !shift.syncedToAccount) {
-       await syncShiftToAccount(shift)
-     }
-   }
-   ```
-
-**Retry strategy:**
-
-- **Max attempts:** 10
-- **Backoff:** Exponential (1s, 2s, 4s, 8s, 16s, 32s, 60s, 60s, ...)
-- **Give up:** После 10 failed attempts → пометить как "needs_manual_intervention"
-
-## Детальный план реализации
-
-### Phase 1: Offline-Capable Shift Closing
-
-#### 1.1. Обновить PosShift type
-
-**Файл:** `src/stores/pos/shifts/types.ts`
-
-**Добавить поля:**
-
-```typescript
-export interface PosShift {
-  // ... existing fields ...
-
-  // Sprint 5: Offline sync tracking
-  syncAttempts?: number
-  lastSyncAttempt?: string
-  syncError?: string
-  syncQueuedAt?: string
-}
-```
-
-#### 1.2. Изменить логику endShift() + syncShiftToAccount()
-
-**Файл:** `src/stores/pos/shifts/shiftsStore.ts`
-
-**Текущая логика (Sprint 4):**
-
-```typescript
-async function endShift(dto: EndShiftDto) {
-  const result = await shiftsService.endShift(dto)
-
-  if (result.success && result.data) {
-    await syncShiftToAccount(result.data) // ❌ Блокирует если нет интернета
-  }
-
-  return result
-}
-```
-
-**Новая логика (Sprint 5):**
-
-```typescript
-async function endShift(dto: EndShiftDto): Promise<ServiceResponse<PosShift>> {
-  try {
-    // 1. ВСЕГДА закрываем смену локально (offline-first)
-    const result = await shiftsService.endShift(dto)
-
-    if (!result.success || !result.data) {
-      return result
-    }
-
-    const closedShift = result.data
-
-    // 2. ПЫТАЕМСЯ синхронизировать с acc_1 (но не блокируем)
-    const syncResult = await syncShiftToAccount(closedShift)
-
-    if (!syncResult.success) {
-      // Sync failed → добавляем в очередь
-      console.warn(`⚠️ Sync failed for shift ${closedShift.shiftNumber}, adding to queue`)
-      await addToSyncQueue(closedShift.id)
-    }
-
-    // 3. Обновляем локальный state
-    const index = shifts.value.findIndex(s => s.id === closedShift.id)
-    if (index !== -1) {
-      shifts.value[index] = closedShift
-    }
-    currentShift.value = null
-
-    // 4. ВСЕГДА возвращаем success (смена закрыта локально)
-    return {
-      success: true,
-      data: closedShift,
-      metadata: {
-        timestamp: new Date().toISOString(),
-        source: 'local',
-        synced: syncResult.success
-      }
-    }
-  } catch (error) {
-    console.error('❌ endShift failed:', error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to end shift'
-    }
-  }
-}
-```
-
-#### 1.3. Обновить syncShiftToAccount() для error handling
-
-**Файл:** `src/stores/pos/shifts/shiftsStore.ts`
-
-**Изменить:**
-
-```typescript
-async function syncShiftToAccount(shift: PosShift): Promise<ServiceResponse<void>> {
-  try {
-    // Increment sync attempts
-    shift.syncAttempts = (shift.syncAttempts || 0) + 1
-    shift.lastSyncAttempt = new Date().toISOString()
-
-    // Check if account store is available (offline check)
-    if (!accountStore.accounts || accountStore.accounts.length === 0) {
-      throw new Error('Account store not available (offline)')
-    }
-
-    // ... existing sync logic (create transactions) ...
-
-    // Success → mark as synced
-    shift.syncedToAccount = true
-    shift.syncedAt = new Date().toISOString()
-    shift.syncError = undefined
-
-    // Remove from sync queue if present
-    await removeFromSyncQueue(shift.id)
-
-    // Save updated shift
-    await shiftsService.updateShift(shift)
-
-    return { success: true }
-  } catch (error) {
-    // Failure → update error info
-    shift.syncError = error instanceof Error ? error.message : 'Sync failed'
-    shift.syncedToAccount = false
-
-    // Save shift with error info
-    await shiftsService.updateShift(shift)
-
-    console.error(`❌ Failed to sync shift ${shift.shiftNumber}:`, error)
-
-    return {
-      success: false,
-      error: shift.syncError
-    }
-  }
-}
-```
-
-### Phase 2: Sync Queue Management
-
-#### 2.1. Создать sync queue helpers
-
-**Файл:** `src/stores/pos/shifts/shiftsStore.ts`
-
-**Добавить методы:**
-
-```typescript
-// ===== SYNC QUEUE MANAGEMENT =====
-
-const SYNC_QUEUE_KEY = 'pos_sync_queue'
-const MAX_SYNC_ATTEMPTS = 10
-
-interface SyncQueueItem {
-  shiftId: string
-  addedAt: string
-  attempts: number
-  lastAttempt?: string
-  lastError?: string
-}
-
-/**
- * Добавить смену в очередь синхронизации
- */
-async function addToSyncQueue(shiftId: string): Promise<void> {
-  const queue = getSyncQueue()
-
-  // Check if already in queue
-  const existing = queue.find(item => item.shiftId === shiftId)
-  if (existing) {
-    console.log(`⏳ Shift ${shiftId} already in sync queue`)
-    return
-  }
-
-  const item: SyncQueueItem = {
-    shiftId,
-    addedAt: new Date().toISOString(),
-    attempts: 0
-  }
-
-  queue.push(item)
-  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue))
-
-  console.log(`📥 Added shift ${shiftId} to sync queue (${queue.length} items)`)
-}
-
-/**
- * Удалить смену из очереди синхронизации
- */
-async function removeFromSyncQueue(shiftId: string): Promise<void> {
-  const queue = getSyncQueue()
-  const filtered = queue.filter(item => item.shiftId !== shiftId)
-
-  if (filtered.length < queue.length) {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(filtered))
-    console.log(`✅ Removed shift ${shiftId} from sync queue`)
-  }
-}
-
-/**
- * Получить очередь синхронизации
- */
-function getSyncQueue(): SyncQueueItem[] {
-  const stored = localStorage.getItem(SYNC_QUEUE_KEY)
-  return stored ? JSON.parse(stored) : []
-}
-
-/**
- * Обработать очередь синхронизации
- */
-async function processSyncQueue(): Promise<void> {
-  const queue = getSyncQueue()
-
-  if (queue.length === 0) {
-    console.log('✅ Sync queue is empty')
-    return
-  }
-
-  console.log(`🔄 Processing sync queue (${queue.length} items)...`)
-
-  for (const item of queue) {
-    // Check max attempts
-    if (item.attempts >= MAX_SYNC_ATTEMPTS) {
-      console.error(`❌ Shift ${item.shiftId} exceeded max sync attempts (${MAX_SYNC_ATTEMPTS})`)
-      continue
-    }
-
-    // Find shift
-    const shift = shifts.value.find(s => s.id === item.shiftId)
-    if (!shift) {
-      console.warn(`⚠️ Shift ${item.shiftId} not found, removing from queue`)
-      await removeFromSyncQueue(item.shiftId)
-      continue
-    }
-
-    // Try to sync
-    console.log(`🔄 Retrying sync for shift ${shift.shiftNumber} (attempt ${item.attempts + 1})`)
-
-    const result = await syncShiftToAccount(shift)
-
-    if (result.success) {
-      console.log(`✅ Successfully synced shift ${shift.shiftNumber}`)
-      // removeFromSyncQueue is called inside syncShiftToAccount
-    } else {
-      // Update queue item with attempt info
-      item.attempts++
-      item.lastAttempt = new Date().toISOString()
-      item.lastError = result.error
-
-      const updatedQueue = getSyncQueue()
-      const index = updatedQueue.findIndex(q => q.shiftId === item.shiftId)
-      if (index !== -1) {
-        updatedQueue[index] = item
-        localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(updatedQueue))
+// src/stores/pos/orders/services.ts (ОБНОВЛЕННЫЙ)
+import { supabase } from '@/supabase/client'
+import { useSyncService } from '@/core/sync/SyncService'
+
+class OrdersService {
+  async createOrder(order: Order): Promise<ServiceResponse<Order>> {
+    try {
+      // 1. Try Supabase (online)
+      if (navigator.onLine) {
+        const { data, error } = await supabase.from('orders').insert(order).select().single()
+
+        if (!error) {
+          this.saveToCache(data) // Cache locally
+          return { success: true, data }
+        }
       }
 
-      console.error(
-        `❌ Sync failed for shift ${shift.shiftNumber} (${item.attempts}/${MAX_SYNC_ATTEMPTS})`
-      )
+      // 2. Fallback: localStorage (offline)
+      const saved = this.createOrderLocal(order)
+
+      // 3. Add to sync queue
+      useSyncService().addToQueue({
+        entityType: 'order',
+        entityId: order.id,
+        operation: 'create',
+        priority: 'high',
+        data: order
+      })
+
+      return { success: true, data: saved }
+    } catch (error) {
+      return { success: false, error: error.message }
     }
   }
 }
-
-// Export для использования в других местах
-return {
-  // ... existing exports ...
-
-  // Sprint 5: Sync queue
-  processSyncQueue,
-  getSyncQueue,
-  retrySyncShift: async (shiftId: string) => {
-    const shift = shifts.value.find(s => s.id === shiftId)
-    if (shift) {
-      return await syncShiftToAccount(shift)
-    }
-    return { success: false, error: 'Shift not found' }
-  }
-}
 ```
 
-#### 2.2. Интегрировать retry в posStore
+## Детальный план (3 недели)
 
-**Файл:** `src/stores/pos/index.ts`
+### Week 1: Authentication & Supabase Setup
 
-**Добавить в initializePOS():**
+#### Day 1-2: Supabase Project Setup
+
+**Tasks:**
+
+- [ ] Создать Supabase проект
+- [ ] Настроить Supabase Auth (email/password)
+- [ ] Создать database schema для критических entities:
+  - `shifts` table
+  - `orders` table
+  - `payments` table
+  - `products` table
+  - `users` table (auth.users уже есть)
+- [ ] Setup Row Level Security (RLS) policies (базовые)
+- [ ] Generate TypeScript types (`supabase gen types typescript`)
+
+**Files to create:**
+
+- `src/supabase/config.ts` - Supabase client config
+- `src/supabase/client.ts` - Supabase client instance
+- `src/supabase/types.ts` - Generated database types
+- `.env.development` - Add Supabase credentials
+
+**Deliverable:** Supabase проект готов, можно делать CRUD операции
+
+#### Day 3-4: Authentication Integration
+
+**Tasks:**
+
+- [ ] Обновить `authStore` - заменить mock users на Supabase Auth
+- [ ] Реализовать login/logout flow
+- [ ] Session management (persist auth state)
+- [ ] Password validation
+- [ ] Error handling для auth errors
+
+**Files to modify:**
+
+- `src/stores/auth/authStore.ts` - Replace mock auth
+- `src/stores/auth/services/session.service.ts` - Add Supabase session
+- `src/views/auth/LoginView.vue` - Update login form
+
+**Deliverable:** Реальная аутентификация работает
+
+#### Day 5: Testing & Integration
+
+**Tasks:**
+
+- [ ] Тестирование login/logout
+- [ ] Тестирование session persistence
+- [ ] Проверка router guards с реальной auth
+- [ ] Bug fixes
+
+**Deliverable:** Auth полностью работает
+
+---
+
+### Week 2: Store Migration & Security
+
+#### Day 1-2: Shifts Store → Supabase
+
+**Tasks:**
+
+- [ ] Обновить `ApiSyncStorage.ts` - использовать Supabase client
+- [ ] Обновить `ShiftSyncAdapter` - sync shifts to Supabase
+- [ ] Обновить `shifts/services.ts` - добавить Supabase calls (с fallback на localStorage)
+- [ ] Тестирование shift closing + sync
+- [ ] Проверка offline → online sync
+- [ ] Backoffice Shift History читает из Supabase
+
+**Files to modify:**
+
+- `src/core/sync/storage/ApiSyncStorage.ts` - Add Supabase integration
+- `src/core/sync/adapters/ShiftSyncAdapter.ts` - Update sync logic
+- `src/stores/pos/shifts/services.ts` - Add Supabase calls with localStorage fallback
+- `src/views/backoffice/sales/ShiftHistoryView.vue` - Read from Supabase
+
+**Deliverable:** Shifts синхронизируются с Supabase
+
+#### Day 2-3: Orders & Payments Store → Supabase
+
+**Tasks:**
+
+- [ ] Обновить `orders/services.ts` - добавить Supabase calls (с fallback на localStorage)
+- [ ] Обновить `payments/services.ts` - добавить Supabase calls (с fallback на localStorage)
+- [ ] Add to SyncService queue для offline operations
+- [ ] Тестирование create/update/delete operations
+- [ ] Тестирование offline → online sync для orders/payments
+
+**Files to modify:**
+
+- `src/stores/pos/orders/services.ts` - Add Supabase calls with localStorage fallback
+- `src/stores/pos/payments/services.ts` - Add Supabase calls with localStorage fallback
+- `src/stores/pos/orders/ordersStore.ts` - Update to use modified services (if needed)
+- `src/stores/pos/payments/paymentsStore.ts` - Update to use modified services (if needed)
+
+**Deliverable:** Orders и Payments работают с Supabase
+
+#### Day 4: Products Store → Supabase
+
+**Tasks:**
+
+- [ ] Обновить `productsStore/services.ts` - добавить Supabase calls (read from Supabase, write через Backoffice)
+- [ ] Migration скрипт: перенести текущие mock products в Supabase (one-time)
+- [ ] Тестирование CRUD operations (create/read/update/delete)
+- [ ] Fallback на localStorage для offline POS
+
+**Files to modify:**
+
+- `src/stores/productsStore/services.ts` - Add Supabase calls (create if doesn't exist)
+- `src/stores/productsStore/index.ts` - Update to use modified services
+
+**Files to create (if needed):**
+
+- `src/utils/migrations/migrateProductsToSupabase.ts` - One-time migration script
+
+**Deliverable:** Products читаются из Supabase
+
+#### Day 5: Security Fixes
+
+**Tasks:**
+
+- [ ] Input sanitization (DOMPurify или встроенные методы)
+- [ ] XSS protection для user inputs (forms, order notes, etc.)
+- [ ] Environment variables безопасность (не коммитить credentials)
+- [ ] Basic CORS configuration в Supabase
+- [ ] Проверка RLS policies (users видят только свои данные)
+
+**Files to modify:**
+
+- Все формы с user input (LoginView, Orders, Products, etc.)
+- Add DOMPurify library если нужно
+
+**Deliverable:** Базовая security на месте
+
+---
+
+### Week 3: Deploy & Final Testing
+
+#### Day 1-2: Deployment Setup
+
+**Tasks:**
+
+- [ ] Создать production environment config
+- [ ] Setup Vercel project (рекомендуется) или Netlify
+- [ ] Configure environment variables в Vercel
+- [ ] Setup custom domain (опционально)
+- [ ] Configure build optimization (chunk splitting, minification)
+- [ ] Test production build locally (`pnpm build && pnpm preview`)
+
+**Files to create:**
+
+- `.env.production` - Production config
+- `vercel.json` - Vercel configuration (если нужно)
+
+**Deliverable:** Deployment pipeline готов
+
+#### Day 2: Deploy to Production
+
+**Tasks:**
+
+- [ ] Deploy на Vercel/Netlify
+- [ ] Проверить auth работает в production
+- [ ] Проверить Supabase connection работает
+- [ ] Setup Vercel Analytics (опционально)
+- [ ] Test на разных устройствах (desktop, tablet, mobile web)
+
+**Deliverable:** Web app доступно онлайн
+
+#### Day 3: E2E Testing
+
+**Tasks:**
+
+- [ ] Тестирование POS flow (open shift → create orders → payments → close shift)
+- [ ] Тестирование Backoffice (view shift history, products, menu)
+- [ ] Тестирование offline → online sync
+- [ ] Тестирование на разных браузерах (Chrome, Firefox, Safari)
+- [ ] Performance testing (load times, bundle size)
+
+**Deliverable:** Все основные сценарии работают
+
+#### Day 4-5: Bug Fixes & Documentation
+
+**Tasks:**
+
+- [ ] Fix critical bugs
+- [ ] Написать README с инструкциями по развертыванию
+- [ ] Backup/restore скрипты (на всякий случай)
+- [ ] Rollback план (если что-то сломается)
+- [ ] Update CLAUDE.md с информацией о Supabase integration
+
+**Files to create/modify:**
+
+- `README.md` - Update deployment instructions
+- `CLAUDE.md` - Add Supabase section
+- `backup-restore.md` - Backup instructions (опционально)
+
+**Deliverable:** Готовый MVP для личного тестирования
+
+---
+
+## Что НЕ делаем в Sprint 7
+
+❌ **Не мигрируем ВСЕ stores** - только критические (shifts, orders, payments, products)
+❌ **Не настраиваем Capacitor/mobile** - фокус на web
+❌ **Не делаем production-hardening** - это для личного тестирования
+❌ **Не пишем unit-тесты** - можно добавить позже
+❌ **Не оптимизируем performance** - достаточно работающей версии
+❌ **Не настраиваем CI/CD** - manual deploy для начала
+❌ **Не делаем advanced RLS policies** - только базовые
+❌ **Не настраиваем monitoring/alerting** - опционально для MVP
+
+## Deliverables (что получим в конце)
+
+✅ **Web-приложение доступно онлайн** (Vercel URL)
+✅ **Реальная Supabase аутентификация** (email/password)
+✅ **Критические данные в PostgreSQL** (shifts, orders, payments, products)
+✅ **Offline → online sync работает** (POS может работать без интернета)
+✅ **Backoffice читает данные из Supabase**
+✅ **Базовая security** (input sanitization, RLS)
+✅ **Можно тестировать реальные сценарии**
+
+## Ограничения MVP
+
+⚠️ **Только для личного использования** - не готово для публичного релиза
+⚠️ **Один ресторан** - multi-tenancy не настроено
+⚠️ **Базовая security** - не прошел security audit
+⚠️ **localStorage fallback** - некоторые stores еще не мигрированы
+⚠️ **Manual backup** - нет автоматического backup для localStorage
+⚠️ **Limited error handling** - могут быть некрытые edge cases
+
+## Следующие шаги (после MVP)
+
+### Sprint 8-9: Полная миграция stores (1-2 месяца)
+
+**Цель:** Перевести все оставшиеся stores на Supabase
+
+**Entities to migrate:**
+
+- Recipes, Menu (2 недели)
+- Storage/Inventory (2 недели)
+- Suppliers, Counteragents (1-2 недели)
+- Preparations, Sales (1 неделя)
+
+**Deliverable:** Все данные в Supabase, localStorage только для cache
+
+### Sprint 10: Production Hardening (3-4 недели)
+
+**Цель:** Подготовить к beta-тестированию с реальными пользователями
+
+**Tasks:**
+
+- Security audit (penetration testing)
+- Advanced RLS policies (multi-user, multi-location)
+- Performance optimization (caching, lazy loading, code splitting)
+- Error monitoring (Sentry integration)
+- Analytics (user behavior tracking)
+- Advanced conflict resolution
+- Comprehensive error handling
+
+**Deliverable:** Beta-ready приложение
+
+### Sprint 11: Multi-tenancy (2-3 недели)
+
+**Цель:** Поддержка нескольких ресторанов
+
+**Tasks:**
+
+- Database schema update (add `restaurant_id` to all tables)
+- RLS policies для multi-tenancy
+- Restaurant selection UI
+- Data isolation testing
+
+**Deliverable:** Можно работать с несколькими ресторанами
+
+### Sprint 12+: Mobile App (2-3 месяца)
+
+**Цель:** iOS и Android приложения
+
+**Tasks:**
+
+- Capacitor setup
+- Platform-specific features (camera, push notifications)
+- Mobile UI/UX optimization
+- App store submission (Apple App Store, Google Play)
+- Testing на реальных устройствах
+
+**Deliverable:** Native mobile apps
+
+## Risks & Mitigation
+
+### Risk 1: Supabase RLS policies сложны
+
+**Impact:** Medium
+**Mitigation:** Начать с simple policies (authenticated users can access all), усложнять постепенно
+
+### Risk 2: Offline sync может дать конфликты
+
+**Impact:** Low (для личного тестирования)
+**Mitigation:** Для MVP это acceptable, fix в Sprint 10
+
+### Risk 3: Migration data loss
+
+**Impact:** High
+**Mitigation:** Backup localStorage перед началом миграции, rollback mechanism
+
+### Risk 4: Deployment issues
+
+**Impact:** Medium
+**Mitigation:** Test production build locally перед deploy, use Vercel rollback
+
+### Risk 5: Performance degradation
+
+**Impact:** Low
+**Mitigation:** Supabase fast enough для MVP, optimization в Sprint 10
+
+## Success Metrics
+
+**Week 1:**
+
+- ✅ Supabase проект создан
+- ✅ Аутентификация работает
+- ✅ Можно создать shifts в Supabase
+
+**Week 2:**
+
+- ✅ Shifts, Orders, Payments, Products в Supabase
+- ✅ Offline sync работает
+- ✅ Basic security на месте
+
+**Week 3:**
+
+- ✅ Приложение развернуто онлайн
+- ✅ Все основные сценарии работают
+- ✅ Можно тестировать реально
+
+## Technical Decisions
+
+### 1. Supabase Client Architecture
+
+**Option A: Direct Supabase calls в stores (выбрано для MVP)**
 
 ```typescript
-async function initializePOS(): Promise<ServiceResponse<void>> {
-  try {
-    // ... existing initialization ...
-
-    // ✅ Sprint 5: Process sync queue on startup
-    console.log('🔄 Checking for pending shift syncs...')
-    await shiftsStore.processSyncQueue()
-
-    initialized.value = true
-    return { success: true }
-  } catch (error) {
-    // ...
-  }
-}
+// В каждом store прямые вызовы Supabase
+const { data, error } = await supabase.from('shifts').select('*')
 ```
 
-**Добавить network watcher:**
+**Pros:** Простота, быстрая разработка
+**Cons:** Меньше абстракции, сложнее переключиться на другой backend
+
+**Option B: Service layer abstraction (для будущего)**
 
 ```typescript
-// Watch network status and trigger sync when online
-watch(isOnline, async (online, wasOnline) => {
-  if (online && !wasOnline) {
-    console.log('🌐 Network restored, processing sync queue...')
-    await shiftsStore.processSyncQueue()
-  }
-})
+// Service layer скрывает Supabase
+const shifts = await shiftsService.getAll()
 ```
 
-### Phase 3: Backoffice Shift History View (УПРОЩЕННАЯ)
+**Pros:** Легко переключиться на другой backend
+**Cons:** Больше кода, дольше разработка
 
-#### 3.1. Создать ShiftHistoryView.vue
+**Решение:** Начать с Option A (MVP), рефакторить в Option B (Sprint 10)
 
-**Файл:** `src/views/backoffice/sales/ShiftHistoryView.vue`
+### 2. Real-time Subscriptions
 
-**Упрощенная структура (аналогично скриншоту):**
+**Решение:** НЕ использовать в MVP
+**Причины:**
 
-```vue
-<template>
-  <v-container fluid>
-    <v-row>
-      <v-col cols="12">
-        <h1 class="text-h4 mb-4">Shift History</h1>
-      </v-col>
-    </v-row>
+- Добавляет сложность
+- Не критично для MVP
+- Можно добавить в Sprint 10
 
-    <!-- Filters (минимальные) -->
-    <v-row>
-      <v-col cols="12" md="4">
-        <v-text-field
-          v-model="filters.dateFrom"
-          label="Date From"
-          type="date"
-          variant="outlined"
-          density="compact"
-        />
-      </v-col>
-      <v-col cols="12" md="4">
-        <v-text-field
-          v-model="filters.dateTo"
-          label="Date To"
-          type="date"
-          variant="outlined"
-          density="compact"
-        />
-      </v-col>
-      <v-col cols="12" md="4">
-        <v-select
-          v-model="filters.cashier"
-          label="Cashier"
-          :items="cashierOptions"
-          variant="outlined"
-          density="compact"
-          clearable
-        />
-      </v-col>
-    </v-row>
+**Fallback:** Polling для критических данных (shift status check)
 
-    <!-- Простая таблица (как на скриншоте) -->
-    <v-card class="mt-4">
-      <v-data-table
-        :headers="headers"
-        :items="filteredShifts"
-        :loading="loading"
-        :items-per-page="25"
-        density="comfortable"
-        @click:row="viewShiftDetails"
-      >
-        <!-- Name (Cashier + Shift Number) -->
-        <template #[`item.name`]="{ item }">
-          <div>
-            <div class="font-weight-medium">{{ item.cashierName }}</div>
-            <div class="text-caption text-grey">{{ item.shiftNumber }}</div>
-          </div>
-        </template>
+### 3. File Storage
 
-        <!-- Start Time -->
-        <template #[`item.startTime`]="{ item }">
-          {{ formatDateTime(item.startTime) }}
-        </template>
+**Решение:** НЕ настраивать в MVP
+**Причины:**
 
-        <!-- End Time -->
-        <template #[`item.endTime`]="{ item }">
-          {{ item.endTime ? formatDateTime(item.endTime) : '-' }}
-        </template>
+- Нет features требующих file upload в MVP
+- Можно добавить позже (product images, receipts)
 
-        <!-- Total Expected -->
-        <template #[`item.totalExpected`]="{ item }">
-          {{ formatCurrency(calculateExpectedTotal(item)) }}
-        </template>
+**Fallback:** Base64 в database (если очень нужно)
 
-        <!-- Total Actual -->
-        <template #[`item.totalActual`]="{ item }">
-          {{ formatCurrency(item.actualCash || 0) }}
-        </template>
+## Database Schema (Supabase)
 
-        <!-- Difference -->
-        <template #[`item.difference`]="{ item }">
-          <span :class="getDifferenceClass(item)">
-            {{ formatCurrency(calculateDifference(item)) }}
-          </span>
-        </template>
+### Table: shifts
 
-        <!-- Sync Status (badge) -->
-        <template #[`item.syncStatus`]="{ item }">
-          <v-chip :color="getSyncStatusColor(item)" size="small" variant="tonal">
-            <v-icon start size="small">{{ getSyncStatusIcon(item) }}</v-icon>
-            {{ getSyncStatusText(item) }}
-          </v-chip>
-        </template>
+```sql
+CREATE TABLE shifts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  shift_number INTEGER NOT NULL,
+  cashier_id UUID REFERENCES auth.users(id),
+  cashier_name TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('active', 'completed')),
+  start_time TIMESTAMPTZ NOT NULL,
+  end_time TIMESTAMPTZ,
 
-        <!-- Actions -->
-        <template #[`item.actions`]="{ item }">
-          <v-btn
-            v-if="!item.syncedToAccount && item.status === 'completed'"
-            icon
-            size="small"
-            variant="text"
-            color="primary"
-            :loading="retryingSync[item.id]"
-            @click.stop="retrySync(item)"
-          >
-            <v-icon>mdi-refresh</v-icon>
-            <v-tooltip activator="parent">Retry Sync</v-tooltip>
-          </v-btn>
-        </template>
-      </v-data-table>
-    </v-card>
+  -- Totals
+  total_sales DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  total_cash DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  total_card DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  total_qr DECIMAL(10, 2) NOT NULL DEFAULT 0,
 
-    <!-- Shift Details Dialog (переиспользуем ShiftManagementView) -->
-    <v-dialog v-model="showDetailsDialog" max-width="1200px">
-      <v-card>
-        <v-card-title class="d-flex justify-space-between align-center">
-          <span>Shift Details</span>
-          <v-btn icon @click="showDetailsDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-        <v-card-text>
-          <!-- Переиспользуем существующий ShiftManagementView -->
-          <ShiftManagementView :shift="selectedShift" read-only />
-        </v-card-text>
-      </v-card>
-    </v-dialog>
-  </v-container>
-</template>
+  -- Payment methods (JSONB)
+  payment_methods JSONB NOT NULL DEFAULT '[]',
 
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
-import { formatCurrency, formatDateTime } from '@/utils'
-import ShiftManagementView from '@/views/pos/shifts/ShiftManagementView.vue'
-import type { PosShift } from '@/stores/pos/shifts/types'
+  -- Corrections & Expenses
+  corrections JSONB NOT NULL DEFAULT '[]',
+  expense_operations JSONB NOT NULL DEFAULT '[]',
 
-// Упрощенные headers (как на скриншоте)
-const headers = [
-  { title: 'Name', key: 'name' },
-  { title: 'Start Time', key: 'startTime' },
-  { title: 'End Time', key: 'endTime' },
-  { title: 'Total Expected', key: 'totalExpected', align: 'end' },
-  { title: 'Total Actual', key: 'totalActual', align: 'end' },
-  { title: 'Difference', key: 'difference', align: 'end' },
-  { title: 'Sync', key: 'syncStatus' },
-  { title: '', key: 'actions', sortable: false }
-]
+  -- Sync info
+  synced_to_account BOOLEAN NOT NULL DEFAULT false,
+  synced_at TIMESTAMPTZ,
+  account_transaction_ids TEXT[],
+  sync_error TEXT,
+  sync_attempts INTEGER DEFAULT 0,
+  last_sync_attempt TIMESTAMPTZ,
 
-// ... state, computed, methods ...
-</script>
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- RLS Policies
+ALTER TABLE shifts ENABLE ROW LEVEL SECURITY;
+
+-- MVP Policy: authenticated users can access all (multi-user в Sprint 11)
+CREATE POLICY "Authenticated users can access shifts"
+  ON shifts FOR ALL
+  USING (auth.role() = 'authenticated');
 ```
 
-**Ключевые упрощения:**
+### Table: orders
 
-- ❌ Убраны summary cards (не нужны для MVP)
-- ❌ Убран отдельный ShiftDetailsDialog компонент
-- ✅ Переиспользуем существующий ShiftManagementView.vue
-- ✅ Простая таблица как на скриншоте
-- ✅ Минимум фильтров (date range + cashier)
+```sql
+CREATE TABLE orders (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  order_number TEXT NOT NULL,
+  table_id UUID REFERENCES tables(id),
+  shift_id UUID REFERENCES shifts(id),
 
-#### 3.2. Добавить read-only режим в ShiftManagementView.vue
+  type TEXT NOT NULL CHECK (type IN ('dine_in', 'takeaway', 'delivery')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'preparing', 'ready', 'served', 'paid', 'cancelled')),
 
-**Файл:** `src/views/pos/shifts/ShiftManagementView.vue`
+  -- Items (JSONB array)
+  items JSONB NOT NULL DEFAULT '[]',
 
-**Добавить props:**
+  -- Totals
+  subtotal DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  discount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  tax DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  total DECIMAL(10, 2) NOT NULL DEFAULT 0,
 
-```typescript
-interface Props {
-  shift?: PosShift // Опциональная смена (для backoffice просмотра)
-  readOnly?: boolean // Режим только для чтения
-}
+  -- Payment info
+  payment_status TEXT NOT NULL DEFAULT 'unpaid',
+  payment_method TEXT,
+  paid_at TIMESTAMPTZ,
 
-const props = withDefaults(defineProps<Props>(), {
-  readOnly: false
-})
+  -- Notes
+  notes TEXT,
+  customer_name TEXT,
 
-// Использовать props.shift вместо currentShift если передан
-const displayShift = computed(() => props.shift || currentShift.value)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by UUID REFERENCES auth.users(id)
+);
 
-// Скрыть action buttons если readOnly
+-- RLS Policies
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can access orders"
+  ON orders FOR ALL
+  USING (auth.role() = 'authenticated');
 ```
 
-#### 3.3. Добавить route в router
+### Table: products
 
-**Файл:** `src/router/index.ts`
+```sql
+CREATE TABLE products (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  name_ru TEXT,
+  category TEXT NOT NULL,
 
-**Добавить в Sales routes (рядом с analytics, transactions):**
+  price DECIMAL(10, 2) NOT NULL,
+  cost DECIMAL(10, 2),
 
-```typescript
-{
-  path: 'sales',
-  meta: {
-    allowedRoles: ['admin', 'manager']
-  },
-  children: [
-    {
-      path: 'analytics',
-      name: 'sales-analytics',
-      component: () => import('@/views/backoffice/sales/SalesAnalyticsView.vue'),
-      meta: { title: 'Sales Analytics' }
-    },
-    {
-      path: 'transactions',
-      name: 'sales-transactions',
-      component: () => import('@/views/backoffice/sales/SalesTransactionsView.vue'),
-      meta: { title: 'Sales Transactions' }
-    },
-    // ✅ Sprint 5: NEW
-    {
-      path: 'shifts',
-      name: 'shift-history',
-      component: () => import('@/views/backoffice/sales/ShiftHistoryView.vue'),
-      meta: { title: 'Shift History' }
-    }
-  ]
-}
+  unit TEXT NOT NULL DEFAULT 'pcs',
+  sku TEXT,
+  barcode TEXT,
+
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  is_available BOOLEAN NOT NULL DEFAULT true,
+
+  -- Stock info
+  track_stock BOOLEAN NOT NULL DEFAULT false,
+  current_stock DECIMAL(10, 3) DEFAULT 0,
+  min_stock DECIMAL(10, 3) DEFAULT 0,
+
+  -- Metadata
+  description TEXT,
+  image_url TEXT,
+  tags TEXT[],
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- RLS Policies
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read products"
+  ON products FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can manage products"
+  ON products FOR ALL
+  USING (auth.role() = 'authenticated');
 ```
 
-### Phase 4: Testing & Validation
+### Table: payments
 
-#### 4.1. Test Offline Shift Closing
+```sql
+CREATE TABLE payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  order_id UUID REFERENCES orders(id) NOT NULL,
+  shift_id UUID REFERENCES shifts(id),
 
-**Сценарий:**
+  amount DECIMAL(10, 2) NOT NULL,
+  payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'qr', 'mixed')),
 
-1. Открыть POS → Start Shift
-2. Создать несколько orders
-3. **Отключить интернет** (DevTools → Network → Offline)
-4. End Shift
-5. Проверить:
-   - ✅ Смена закрылась локально (status = 'completed')
-   - ✅ UI показывает success
-   - ✅ Shift.syncedToAccount = false
-   - ✅ Shift добавлена в sync queue
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
 
-#### 4.2. Test Sync Retry on Startup
+  -- Payment details (JSONB for flexibility)
+  details JSONB NOT NULL DEFAULT '{}',
 
-**Сценарий:**
+  -- References
+  transaction_id TEXT,
+  receipt_number TEXT,
 
-1. При отключенном интернете закрыть смену (см. выше)
-2. Закрыть приложение (или reload page)
-3. **Включить интернет**
-4. Открыть приложение
-5. Проверить консоль:
-   - ✅ `🔄 Processing sync queue...`
-   - ✅ `✅ Successfully synced shift #...`
-6. Проверить Shift History:
-   - ✅ Смена помечена как synced
-   - ✅ Транзакции созданы в acc_1
+  processed_at TIMESTAMPTZ,
+  processed_by UUID REFERENCES auth.users(id),
 
-#### 4.3. Test Sync Retry on Network Restore
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-**Сценарий:**
+-- RLS Policies
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 
-1. При отключенном интернете закрыть смену
-2. **НЕ перезагружать** приложение
-3. Включить интернет в DevTools
-4. Проверить:
-   - ✅ Network watcher срабатывает
-   - ✅ Sync queue обрабатывается автоматически
-   - ✅ Смена синхронизируется
+CREATE POLICY "Authenticated users can access payments"
+  ON payments FOR ALL
+  USING (auth.role() = 'authenticated');
+```
 
-#### 4.4. Test Backoffice Shift History
+## Environment Variables
 
-**Сценарий:**
+### Development (.env.development)
 
-1. Открыть Backoffice → Shifts
-2. Проверить:
-   - ✅ Все смены отображаются в таблице
-   - ✅ Фильтры работают (date, cashier, sync status)
-   - ✅ Sync status badges корректны (synced, pending, failed)
-   - ✅ Summary cards показывают правильные значения
-3. Клик на "View Details":
-   - ✅ Dialog открывается с полной информацией о смене
-4. Клик на "Retry Sync" (для failed shift):
-   - ✅ Sync повторяется
-   - ✅ Status обновляется в таблице
+```bash
+# Supabase
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
 
-#### 4.5. Test Manual Retry from Backoffice
+# Platform
+VITE_PLATFORM=web
+VITE_USE_API=true
+VITE_STORAGE_TYPE=supabase
 
-**Сценарий:**
+# Debug
+VITE_DEBUG_ENABLED=true
+VITE_USE_MOCK_DATA=false
 
-1. Создать failed shift (симулировать offline при закрытии)
-2. Открыть Backoffice → Shifts
-3. Найти failed shift в таблице
-4. Клик "Retry Sync"
-5. Проверить:
-   - ✅ syncShiftToAccount() вызывается
-   - ✅ Транзакции создаются в acc_1
-   - ✅ Shift помечается как synced
-   - ✅ UI обновляется (badge меняется на "synced")
+# Legacy (keep for backward compatibility)
+VITE_USE_FIREBASE=false
+```
 
-## Файлы для изменения/создания (ОБНОВЛЕНО)
+### Production (.env.production)
 
-### Новые файлы
+```bash
+# Supabase
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
 
-1. **src/views/backoffice/sales/ShiftHistoryView.vue** ⭐ УПРОЩЕННАЯ ВЕРСИЯ
-   - Простая таблица (как на скриншоте)
-   - Минимальные фильтры (date range, cashier)
-   - Dialog с переиспользованием ShiftManagementView
-   - ~200-300 строк кода
+# Platform
+VITE_PLATFORM=web
+VITE_USE_API=true
+VITE_STORAGE_TYPE=supabase
 
-### Измененные файлы
+# Debug
+VITE_DEBUG_ENABLED=false
+VITE_USE_MOCK_DATA=false
 
-1. **src/stores/pos/shifts/types.ts**
+# Legacy
+VITE_USE_FIREBASE=false
+```
 
-   - Добавить поля: `syncAttempts`, `lastSyncAttempt`, `syncError`, `syncQueuedAt`
+## Files to Create/Modify
 
-2. **src/stores/pos/shifts/shiftsStore.ts** ⭐ ОСНОВНЫЕ ИЗМЕНЕНИЯ
+### New Files (Week 1-2)
 
-   - Обновить `endShift()` → всегда успешно (offline-first)
-   - Обновить `syncShiftToAccount()` → error handling + retry tracking
-   - Добавить sync queue methods:
-     - `addToSyncQueue()`
-     - `removeFromSyncQueue()`
-     - `getSyncQueue()`
-     - `processSyncQueue()`
-     - `retrySyncShift()`
-   - Export новых методов
+**Supabase Core:**
 
-3. **src/stores/pos/index.ts**
+- `src/supabase/config.ts` (~20 lines) - Supabase URL & API keys
+- `src/supabase/client.ts` (~30 lines) - Supabase client singleton
+- `src/supabase/types.ts` (auto-generated) - Database types from Supabase CLI
 
-   - Добавить `processSyncQueue()` в `initializePOS()`
-   - Добавить network watcher для auto-retry при восстановлении сети
+**Utilities:**
 
-4. **src/views/pos/shifts/ShiftManagementView.vue**
+- `src/utils/security.ts` (~50 lines) - Input sanitization helpers
+- `src/utils/migrations/migrateProductsToSupabase.ts` (~100 lines) - One-time migration
 
-   - Добавить props: `shift?: PosShift`, `readOnly?: boolean`
-   - Скрыть action buttons в read-only режиме
-   - Использовать props.shift если передан (для backoffice просмотра)
+**Environment:**
 
-5. **src/router/index.ts**
+- `.env.production` (~15 lines) - Production config
+- `vercel.json` (optional, ~10 lines) - Vercel deployment config
 
-   - Добавить route `sales/shifts` для ShiftHistoryView
+### Modified Files (Week 1-3)
 
-6. **src/stores/pos/shifts/services.ts** (если нужно)
-   - Добавить `updateShift()` метод для сохранения sync tracking полей
+**Authentication:**
+
+- `src/stores/auth/authStore.ts` - Replace mock auth with Supabase
+- `src/stores/auth/services/session.service.ts` - Add Supabase session
+- `src/views/auth/LoginView.vue` - Update login form
+
+**Service Layer (KEY CHANGES - следуем существующей архитектуре):**
+
+- `src/stores/pos/shifts/services.ts` - Add Supabase calls with localStorage fallback
+- `src/stores/pos/orders/services.ts` - Add Supabase calls with localStorage fallback
+- `src/stores/pos/payments/services.ts` - Add Supabase calls with localStorage fallback
+- `src/stores/productsStore/services.ts` - Add Supabase calls (create if doesn't exist)
+
+**Stores (minimal changes, используют обновленные services):**
+
+- `src/stores/pos/shifts/shiftsStore.ts` - Use updated services (minimal changes)
+- `src/stores/pos/orders/ordersStore.ts` - Use updated services (minimal changes)
+- `src/stores/pos/payments/paymentsStore.ts` - Use updated services (minimal changes)
+- `src/stores/productsStore/index.ts` - Use updated services
+
+**Sync Layer:**
+
+- `src/core/sync/storage/ApiSyncStorage.ts` - Use Supabase client instead of localStorage
+- `src/core/sync/adapters/ShiftSyncAdapter.ts` - Sync shifts to Supabase
+
+**Views:**
+
+- `src/views/backoffice/sales/ShiftHistoryView.vue` - Read from Supabase
+- All forms with user input - Add sanitization (LoginView, Orders, Products)
+
+**Config:**
+
+- `src/config/environment.ts` - Add Supabase config (VITE_SUPABASE_URL, etc.)
+- `.env.development` - Add Supabase credentials
+
+**Documentation:**
+
+- `README.md` - Update deployment instructions
+- `CLAUDE.md` - Add Supabase section
+
+## Timeline Summary
+
+| Week | Phase           | Deliverable                  | Status     |
+| ---- | --------------- | ---------------------------- | ---------- |
+| 1    | Auth & Setup    | Supabase ready, Auth works   | 🔲 Pending |
+| 2    | Store Migration | Critical stores in Supabase  | 🔲 Pending |
+| 3    | Deploy & Test   | Live MVP, all scenarios work | 🔲 Pending |
+
+**Total:** 15-21 дней (3 недели)
 
 ## Критерии приемки
 
 ### Must Have ✅
 
-- [ ] Смена закрывается даже без интернета (endShift всегда success)
-- [ ] Failed sync добавляется в очередь (localStorage: `pos_sync_queue`)
-- [ ] Sync queue обрабатывается при старте приложения (initializePOS)
-- [ ] Sync queue обрабатывается при восстановлении сети (network watcher)
-- [ ] Backoffice Shift History View создан и доступен по `/sales/shifts`
-- [ ] Упрощенная таблица смен (Name, Times, Expected, Actual, Difference, Sync)
-- [ ] Фильтры работают (date range, cashier)
-- [ ] Можно просмотреть детали смены (dialog с ShiftManagementView)
-- [ ] Можно вручную retry sync из таблицы
+- [ ] **Supabase проект создан** с database schema
+- [ ] **Аутентификация работает** (email/password login/logout)
+- [ ] **Shifts синхронизируются** с Supabase через SyncService
+- [ ] **Orders создаются** и сохраняются в Supabase
+- [ ] **Payments обрабатываются** и сохраняются в Supabase
+- [ ] **Products читаются** из Supabase
+- [ ] **Offline → online sync** работает для POS
+- [ ] **Backoffice читает** данные из Supabase
+- [ ] **Input sanitization** на всех формах
+- [ ] **RLS policies** настроены (базовые)
+- [ ] **Production build** работает (`pnpm build`)
+- [ ] **Deployed to Vercel** (или Netlify)
+- [ ] **Доступно онлайн** (публичный URL)
 
 ### Should Have 🎯
 
-- [ ] Max sync attempts = 10 (configurable)
-- [ ] Visual indicators для sync status (badges: ✅ synced / ⏳ pending / ❌ failed)
-- [ ] Read-only режим в ShiftManagementView
-- [ ] Sync attempt counter в shift details
+- [ ] Custom domain (опционально)
+- [ ] Vercel Analytics настроены
+- [ ] README обновлен
+- [ ] CLAUDE.md обновлен
+- [ ] Backup script создан
+- [ ] Cross-browser testing (Chrome, Firefox, Safari)
 
-### Nice to Have 💡 (Sprint 6+)
+### Nice to Have 💡
 
-- [ ] Exponential backoff для retry
-- [ ] Batch retry (retry all failed shifts)
-- [ ] Централизованный SyncService (вместо queue в shiftsStore)
-- [ ] Sync для других сущностей (transactions, discounts, customers)
-- [ ] Export shift data to CSV/Excel
-
-## Риски и митигация
-
-### Риски
-
-1. **Race condition:** Если sync queue обрабатывается дважды одновременно
-
-   - **Митигация:** Mutex/lock механизм для processSyncQueue()
-
-2. **LocalStorage overflow:** Если много failed shifts накапливается
-
-   - **Митигация:** Limit queue size (max 100 items), cleanup old items
-
-3. **Infinite retry loop:** Если sync всегда fails
-
-   - **Митигация:** Max attempts = 10, exponential backoff
-
-4. **Inconsistent state:** Shift closed locally but never synced
-   - **Митигация:** Manual retry from Backoffice, clear error messaging
-
-### Ограничения
-
-1. Sync queue хранится в localStorage (не персистентен при clear data)
-2. Network detection может быть неточным (navigator.onLine не всегда надежен)
-3. Max 10 retry attempts (после этого нужен manual intervention)
-
-## Timeline (ОБНОВЛЕНО - упрощенная версия)
-
-- **Phase 1 (Offline Shift Closing):** 2-3 часа
-
-  - Update types (30 мин)
-  - Update endShift logic (1 час)
-  - Update syncShiftToAccount error handling (1-1.5 часа)
-
-- **Phase 2 (Sync Queue):** 2-3 часа
-
-  - Sync queue helpers (1.5-2 часа)
-  - Integration в posStore (30 мин - 1 час)
-
-- **Phase 3 (Backoffice UI - УПРОЩЕННАЯ):** 2-3 часа
-
-  - ShiftHistoryView.vue (1.5-2 часа)
-  - Update ShiftManagementView read-only mode (30 мин)
-  - Add route (15 мин)
-
-- **Phase 4 (Testing):** 1-2 часа
-  - Offline shift closing (30 мин)
-  - Sync retry scenarios (30 мин)
-  - UI testing (30 мин)
-
-**Общее время:** 7-11 часов (~1-1.5 рабочих дня) ✅ БЫСТРЕЕ чем первоначальная оценка!
-
-## Зависимости
-
-- ✅ Sprint 4 завершен (syncShiftToAccount() существует)
-- ✅ Network monitoring в posStore (isOnline)
-- ✅ ShiftsService имеет updateShift() метод
-- ✅ Account store доступен из shiftsStore
-
-## Следующие шаги
-
-После Sprint 5:
-
-- **Sprint 6:** Real-time sync (WebSocket/Firebase) вместо manual retry
-- **Sprint 7:** Multi-device conflict resolution
-- **Sprint 8:** Advanced shift analytics & reporting
-- **Sprint 9:** Shift templates & scheduling
+- [ ] Real-time subscriptions (для будущего)
+- [ ] File storage настроен (product images)
+- [ ] Advanced RLS policies (multi-user)
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] Error monitoring (Sentry)
 
 ---
 
-## Решения принятые с пользователем ✅
+## 🎯 Ready to Start!
 
-1. **Роут для Shift History:** ✅ `/sales/shifts` (внутри Sales section)
+План согласован, архитектурные решения приняты. Sprint 7 начинается!
 
-2. **Доступ:** ✅ Только admin/manager
+**Start Date:** 2024-11-13
+**Target End Date:** 2024-12-04 (3 недели)
 
-3. **Sync архитектура:** ✅ Упрощенная версия в shiftsStore (рефакторинг в Sprint 6)
+**Порядок выполнения:**
 
-4. **Таблица:** ✅ Упрощенная (как на скриншоте)
+1. ✅ Week 1: Authentication & Supabase Setup
+2. ✅ Week 2: Store Migration & Security
+3. ✅ Week 3: Deploy & Testing
 
-5. **Детальный просмотр:** ✅ Переиспользовать ShiftManagementView.vue
-
-6. **Max sync attempts:** ✅ 10 попыток (manual retry после этого)
-
-7. **Network detection:** ✅ `navigator.onLine` + watcher в posStore
-
-8. **Sync queue cleanup:** ✅ Удалять сразу после успешной синхронизации
-
----
-
-## Готово к реализации! 🚀
-
-План согласован, архитектурные решения приняты. Можно начинать Sprint 5.
-
-**Порядок реализации:**
-
-1. Phase 1: Offline-capable endShift (types + store logic)
-2. Phase 2: Sync queue (localStorage + retry logic)
-3. Phase 3: Backoffice UI (ShiftHistoryView + read-only mode)
-4. Phase 4: Testing (offline scenarios + sync retry)
-
----
-
-## Quick Summary для разработчика 📋
-
-### Что делаем:
-
-✅ Смена закрывается ВСЕГДА (даже offline)
-✅ Failed sync → localStorage queue → retry автоматически
-✅ Backoffice UI для просмотра истории смен (упрощенная таблица)
-
-### Ключевые изменения:
-
-- **types.ts**: +4 поля (syncAttempts, lastSyncAttempt, syncError, syncQueuedAt)
-- **shiftsStore.ts**: endShift не блокирует + sync queue methods (~150 строк)
-- **posStore.ts**: processSyncQueue on startup + network watcher (~30 строк)
-- **ShiftHistoryView.vue**: простая таблица + dialog (~250 строк)
-- **ShiftManagementView.vue**: props для read-only mode (~20 строк)
-- **router.ts**: новый route `/sales/shifts` (5 строк)
-
-### Timeline: 7-11 часов (~1-1.5 дня)
-
-Переходим к реализации? 🎯
+**Next Sprint (Sprint 8-9):** Full stores migration + Production hardening

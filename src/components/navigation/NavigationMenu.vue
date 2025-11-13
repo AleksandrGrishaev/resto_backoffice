@@ -248,6 +248,19 @@
           </template>
         </v-list-item>
 
+        <!-- Sync Monitor -->
+        <v-list-item
+          to="/debug/sync"
+          prepend-icon="mdi-sync"
+          color="warning"
+          class="ps-8"
+          :active-color="variables.colorWarning"
+        >
+          <template #title>
+            <span>Sync Monitor</span>
+          </template>
+        </v-list-item>
+
         <!-- :TODO Future debug tools -->
         <!--
         <v-list-item

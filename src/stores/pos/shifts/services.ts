@@ -6,7 +6,9 @@ import type {
   EndShiftDto,
   UpdateShiftDto,
   ShiftTransaction,
-  ServiceResponse
+  ServiceResponse,
+  PaymentMethodSummary,
+  ShiftCorrection
 } from './types'
 import { ShiftsMockData } from './mock'
 
@@ -117,7 +119,7 @@ export class ShiftsService {
       const timestamp = new Date().toISOString()
 
       const newShift: PosShift = {
-        id: `shift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `shift_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
         shiftNumber,
         status: 'active',
         cashierId: dto.cashierId,
@@ -130,6 +132,8 @@ export class ShiftsService {
         paymentMethods: this.getDefaultPaymentMethods(),
         corrections: [],
         accountBalances: [],
+        expenseOperations: [], // ✅ Sprint 3: Initialize expense operations
+        pendingPayments: [], // ✅ Sprint 3: Initialize pending payments
         syncStatus: 'synced', // Новая смена считается синхронизированной
         pendingSync: false,
         notes: dto.notes,
@@ -179,6 +183,15 @@ export class ShiftsService {
       const startTime = new Date(shift.startTime)
       const duration = Math.floor((new Date(endTime).getTime() - startTime.getTime()) / 60000)
 
+      // Преобразовать corrections из DTO в полные ShiftCorrection объекты
+      const newCorrections: ShiftCorrection[] = dto.corrections.map(c => ({
+        ...c,
+        id: `correction_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        shiftId: shift.id,
+        createdAt: endTime,
+        updatedAt: endTime
+      }))
+
       // Обновить смену
       const updatedShift: PosShift = {
         ...shift,
@@ -191,7 +204,7 @@ export class ShiftsService {
         cashDiscrepancyType: this.getCashDiscrepancyType(
           dto.endingCash - (shift.startingCash + this.calculateCashSales(shift))
         ),
-        corrections: [...shift.corrections, ...dto.corrections],
+        corrections: [...shift.corrections, ...newCorrections],
         notes: dto.notes || shift.notes,
         updatedAt: endTime
       }
@@ -216,26 +229,20 @@ export class ShiftsService {
   /**
    * Обновить смену
    */
-  async updateShift(dto: UpdateShiftDto): Promise<ServiceResponse<PosShift>> {
+  async updateShift(shiftId: string, shift: PosShift): Promise<ServiceResponse<PosShift>> {
     try {
       const shifts = await this.loadShifts()
       if (!shifts.success || !shifts.data) {
         throw new Error('Failed to load shifts')
       }
 
-      const shiftIndex = shifts.data.findIndex(s => s.id === dto.shiftId)
+      const shiftIndex = shifts.data.findIndex(s => s.id === shiftId)
       if (shiftIndex === -1) {
         throw new Error('Shift not found')
       }
 
-      const shift = shifts.data[shiftIndex]
       const updatedShift: PosShift = {
         ...shift,
-        corrections: dto.corrections
-          ? [...shift.corrections, ...dto.corrections]
-          : shift.corrections,
-        notes: dto.notes || shift.notes,
-        deviceId: dto.deviceId || shift.deviceId,
         updatedAt: new Date().toISOString()
       }
 

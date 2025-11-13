@@ -128,8 +128,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import type { PosShift } from '@/stores/pos/shifts/types'
 import ShiftManagementView from '@/views/pos/shifts/ShiftManagementView.vue'
+// ✅ Sprint 6: Import SyncService
+import { useSyncService } from '@/core/sync/SyncService'
 
 const shiftsStore = useShiftsStore()
+const syncService = useSyncService()
 
 // State
 const loading = ref(false)
@@ -272,16 +275,40 @@ async function retrySync(shiftId: string): Promise<void> {
       throw new Error('Shift not found')
     }
 
-    // Call syncShiftToAccount directly (it's not exported, so we'll need to process sync queue)
-    await shiftsStore.processSyncQueue()
+    // ✅ Sprint 6: Use SyncService instead of shiftsStore.processSyncQueue()
+    // Find existing queue item or add new one
+    const existingItems = await syncService.getQueue({
+      entityType: 'shift',
+      entityId: shift.id
+    })
 
-    // Check if sync succeeded
-    const updatedShift = shiftsStore.shifts.find(s => s.id === shiftId)
-    if (updatedShift?.syncedToAccount) {
-      console.log('✅ Shift sync retry succeeded')
+    if (existingItems.length > 0) {
+      // Retry existing item
+      const result = await syncService.processItem(existingItems[0].id)
+      if (!result.success) {
+        throw new Error(result.error)
+      }
     } else {
-      throw new Error(updatedShift?.syncError || 'Sync failed')
+      // Add to queue and process
+      const itemId = syncService.addToQueue({
+        entityType: 'shift',
+        entityId: shift.id,
+        operation: 'update',
+        priority: 'critical',
+        data: shift,
+        maxAttempts: 10
+      })
+
+      const result = await syncService.processItem(itemId)
+      if (!result.success) {
+        throw new Error(result.error)
+      }
     }
+
+    // Reload shifts to update UI
+    await loadShifts()
+
+    console.log('✅ Shift sync retry succeeded')
   } catch (err) {
     errorMessage.value = err instanceof Error ? err.message : 'Failed to retry sync'
     showError.value = true

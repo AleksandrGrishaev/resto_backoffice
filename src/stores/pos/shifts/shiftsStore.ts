@@ -13,7 +13,6 @@ import type {
   ShiftAccountBalance,
   PaymentMethodSummary,
   ShiftReport,
-  SyncStatus,
   ServiceResponse,
   ShiftExpenseOperation,
   CreateDirectExpenseDto,
@@ -150,9 +149,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
   }
 
   /**
-   * Завершить смену (✅ Sprint 5: Offline-capable)
+   * Завершить смену (✅ Sprint 6: Using SyncService)
    * ВАЖНО: Смена ВСЕГДА закрывается локально, даже без интернета
-   * Sync в account происходит асинхронно и не блокирует закрытие
+   * Sync в account происходит асинхронно через SyncService
    */
   async function endShift(dto: EndShiftDto): Promise<ServiceResponse<PosShift>> {
     try {
@@ -163,12 +162,6 @@ export const useShiftsStore = defineStore('posShifts', () => {
         throw new Error('No active shift to end')
       }
 
-      // ✅ Sprint 5: Удалена проверка pending sync - смена закрывается всегда
-      // const hasPendingSync = pendingSyncTransactions.value.length > 0
-      // if (hasPendingSync) {
-      //   throw new Error('Cannot end shift with pending sync transactions')
-      // }
-
       // 1. ВСЕГДА закрываем смену локально (offline-first)
       const result = await shiftsService.endShift(dto)
 
@@ -178,27 +171,32 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
       const closedShift = result.data
 
-      // 2. ПЫТАЕМСЯ синхронизировать с Account Store (но не блокируем)
-      const syncResult = await syncShiftToAccount(closedShift)
+      // 2. ✅ Sprint 6: Добавить в SyncService queue
+      const { useSyncService } = await import('@/core/sync/SyncService')
+      const syncService = useSyncService()
 
-      if (!syncResult.success) {
-        // ⚠️ Sync failed - добавляем в очередь для retry
-        console.warn(
-          `⚠️ Failed to sync shift ${closedShift.shiftNumber} to account: ${syncResult.error}`
-        )
-        await addToSyncQueue(closedShift.id, syncResult.error)
-      } else {
-        console.log(`✅ Shift ${closedShift.shiftNumber} synced to account immediately`)
-      }
+      syncService.addToQueue({
+        entityType: 'shift',
+        entityId: closedShift.id,
+        operation: 'update',
+        priority: 'critical',
+        data: closedShift,
+        maxAttempts: 10
+      })
 
-      // 3. ВСЕГДА обновляем store и возвращаем success
+      // 3. Попытка немедленной синхронизации (не блокируем UI)
+      syncService.processQueue().catch(err => {
+        console.warn('⚠️ Immediate sync failed, will retry later:', err)
+      })
+
+      // 4. ВСЕГДА обновляем store и возвращаем success
       const index = shifts.value.findIndex(s => s.id === closedShift.id)
       if (index !== -1) {
         shifts.value[index] = closedShift
       }
 
       currentShift.value = null
-      console.log('✅ Смена закрыта локально:', closedShift.shiftNumber)
+      console.log('✅ Shift closed locally:', closedShift.shiftNumber)
 
       return { success: true, data: closedShift }
     } catch (err) {
@@ -449,6 +447,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
       totalIncome: 0,
       totalExpense: 0,
       transactionCount: 0,
+      expenseOperations: [], // ✅ Sprint 3: Initialize expense operations array
       discrepancyExplained: true,
       syncStatus: 'synced'
     }))
