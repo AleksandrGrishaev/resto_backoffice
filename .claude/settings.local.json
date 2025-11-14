@@ -7,7 +7,9 @@
       "mcp__playwright__browser_take_screenshot",
       "Bash(pnpm build:*)",
       "mcp__playwright__browser_evaluate",
-      "mcp__playwright__browser_console_messages"
+      "mcp__playwright__browser_console_messages",
+      "Bash(test:*)",
+      "Bash(pnpm add:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

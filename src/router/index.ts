@@ -268,6 +268,16 @@ const routes: RouteRecordRaw[] = [
                     requiresDev: true,
                     allowedRoles: ['admin'] as UserRole[]
                   }
+                },
+                {
+                  path: 'supabase',
+                  name: 'debug-supabase',
+                  component: () => import('@/views/debug/SupabaseTestView.vue'),
+                  meta: {
+                    title: 'Supabase Test',
+                    requiresDev: true,
+                    allowedRoles: ['admin'] as UserRole[]
+                  }
                 }
               ]
             }

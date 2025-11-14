@@ -1,4 +1,4 @@
-// src/stores/pos/shifts/services.ts - SHIFTS SERVICE
+// src/stores/pos/shifts/services.ts - SHIFTS SERVICE (Sprint 7: Supabase Integration)
 
 import type {
   PosShift,
@@ -11,16 +11,31 @@ import type {
   ShiftCorrection
 } from './types'
 import { ShiftsMockData } from './mock'
+import { supabase } from '@/supabase'
+import { getSupabaseErrorMessage } from '@/supabase/config'
+import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
+import { ENV } from '@/config/environment'
 
 /**
  * Сервис для работы с данными смен
- * В будущем заменится на API вызовы
+ * Sprint 7: Integrated with Supabase + localStorage fallback
  */
 export class ShiftsService {
   private readonly STORAGE_KEYS = {
     shifts: 'pos_shifts',
     transactions: 'pos_shift_transactions',
     currentShift: 'pos_current_shift'
+  }
+
+  // =============================================
+  // HELPER METHODS
+  // =============================================
+
+  /**
+   * Check if Supabase is available and enabled
+   */
+  private isSupabaseAvailable(): boolean {
+    return ENV.supabase.enabled && navigator.onLine
   }
 
   // =============================================
@@ -93,16 +108,40 @@ export class ShiftsService {
 
   /**
    * Загрузить все смены
+   * Sprint 7: Reads from Supabase, fallback to localStorage
    */
   async loadShifts(): Promise<ServiceResponse<PosShift[]>> {
     try {
+      // Try Supabase first if available
+      if (this.isSupabaseAvailable()) {
+        const { data, error } = await supabase
+          .from('shifts')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (!error && data) {
+          // Convert Supabase format to app format
+          const shifts = data.map(fromSupabase)
+          console.log('✅ Загружено смен из Supabase:', shifts.length)
+
+          // Cache in localStorage for offline access
+          localStorage.setItem(this.STORAGE_KEYS.shifts, JSON.stringify(shifts))
+
+          return { success: true, data: shifts }
+        }
+
+        // If Supabase fails, fallback to localStorage
+        console.warn('⚠️ Supabase load failed, using localStorage:', getSupabaseErrorMessage(error))
+      }
+
+      // Fallback: Read from localStorage
       const stored = localStorage.getItem(this.STORAGE_KEYS.shifts)
       const shifts = stored ? JSON.parse(stored) : []
 
-      console.log('Загружено смен:', shifts.length)
+      console.log('📦 Загружено смен из localStorage:', shifts.length)
       return { success: true, data: shifts }
     } catch (error) {
-      console.error('Ошибка загрузки смен:', error)
+      console.error('❌ Ошибка загрузки смен:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load shifts'
@@ -112,6 +151,7 @@ export class ShiftsService {
 
   /**
    * Создать новую смену
+   * Sprint 7: Saves to Supabase + localStorage
    */
   async createShift(dto: CreateShiftDto): Promise<ServiceResponse<PosShift>> {
     try {
@@ -119,7 +159,7 @@ export class ShiftsService {
       const timestamp = new Date().toISOString()
 
       const newShift: PosShift = {
-        id: `shift_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+        id: crypto.randomUUID(), // UUID format for Supabase compatibility
         shiftNumber,
         status: 'active',
         cashierId: dto.cashierId,
@@ -143,16 +183,37 @@ export class ShiftsService {
         updatedAt: timestamp
       }
 
-      // Сохранить в localStorage
+      // Try to save to Supabase first
+      if (this.isSupabaseAvailable()) {
+        const supabaseShift = toSupabaseInsert(newShift)
+        const { error } = await supabase.from('shifts').insert(supabaseShift)
+
+        if (error) {
+          console.warn(
+            '⚠️ Supabase insert failed, saving to localStorage only:',
+            getSupabaseErrorMessage(error)
+          )
+          newShift.syncStatus = 'pending'
+          newShift.pendingSync = true
+        } else {
+          console.log('✅ Смена создана в Supabase:', shiftNumber)
+        }
+      } else {
+        // Offline mode - mark for sync
+        newShift.syncStatus = 'pending'
+        newShift.pendingSync = true
+      }
+
+      // Always save to localStorage (for offline access + cache)
       await this.saveShift(newShift)
 
       // Установить как текущую смену
       localStorage.setItem(this.STORAGE_KEYS.currentShift, newShift.id)
 
-      console.log('Смена создана:', shiftNumber)
+      console.log('📦 Смена создана:', shiftNumber)
       return { success: true, data: newShift }
     } catch (error) {
-      console.error('Ошибка создания смены:', error)
+      console.error('❌ Ошибка создания смены:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create shift'
@@ -228,6 +289,7 @@ export class ShiftsService {
 
   /**
    * Обновить смену
+   * Sprint 7: Updates in Supabase + localStorage
    */
   async updateShift(shiftId: string, shift: PosShift): Promise<ServiceResponse<PosShift>> {
     try {
@@ -246,11 +308,33 @@ export class ShiftsService {
         updatedAt: new Date().toISOString()
       }
 
+      // Try to update in Supabase first
+      if (this.isSupabaseAvailable()) {
+        const supabaseUpdate = toSupabaseUpdate(updatedShift)
+        const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shiftId)
+
+        if (error) {
+          console.warn(
+            '⚠️ Supabase update failed, saving to localStorage only:',
+            getSupabaseErrorMessage(error)
+          )
+          updatedShift.syncStatus = 'pending'
+          updatedShift.pendingSync = true
+        } else {
+          console.log('✅ Смена обновлена в Supabase:', shiftId)
+        }
+      } else {
+        // Offline mode - mark for sync
+        updatedShift.syncStatus = 'pending'
+        updatedShift.pendingSync = true
+      }
+
+      // Always save to localStorage
       await this.saveShift(updatedShift)
 
       return { success: true, data: updatedShift }
     } catch (error) {
-      console.error('Ошибка обновления смены:', error)
+      console.error('❌ Ошибка обновления смены:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update shift'

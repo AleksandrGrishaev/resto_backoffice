@@ -70,6 +70,15 @@ interface EnvironmentConfig {
     messagingSenderId: string
     appId: string
   }
+
+  // Supabase
+  supabase: {
+    url: string
+    anonKey: string
+    serviceKey: string
+    enabled: boolean
+    useServiceKey: boolean
+  }
 }
 
 /**
@@ -142,6 +151,15 @@ function createEnvironmentConfig(): EnvironmentConfig {
       storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
       messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
       appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
+    },
+
+    // Supabase
+    supabase: {
+      url: import.meta.env.VITE_SUPABASE_URL || '',
+      anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+      serviceKey: import.meta.env.VITE_SUPABASE_SERVICE_KEY || '',
+      enabled: import.meta.env.VITE_USE_SUPABASE === 'true',
+      useServiceKey: import.meta.env.VITE_SUPABASE_USE_SERVICE_KEY === 'true'
     }
   }
 }
@@ -182,6 +200,13 @@ export const EnvUtils = {
       ENV.firebase.apiKey.length > 0 &&
       ENV.firebase.authDomain.length > 0
     )
+  },
+
+  /**
+   * Check if Supabase is properly configured
+   */
+  isSupabaseConfigured(): boolean {
+    return ENV.supabase.enabled && ENV.supabase.url.length > 0 && ENV.supabase.anonKey.length > 0
   },
 
   /**
