@@ -11,9 +11,10 @@
       "Bash(test:*)",
       "Bash(pnpm add:*)",
       "Bash(pnpm exec tsc:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "mcp__supabase__execute_sql"
     ]
   },
   "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": ["playwright"]
+  "enabledMcpjsonServers": ["playwright", "supabase"]
 }

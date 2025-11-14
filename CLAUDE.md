@@ -313,6 +313,51 @@ Supabase is used for:
 
 Current state: Configured but not yet fully integrated. Using localStorage and mock data in development.
 
+### Working with Database via MCP
+
+The project has **MCP Supabase integration** enabled, allowing direct database operations through Claude Code.
+
+**Available MCP tools:**
+
+- `mcp__supabase__list_tables` - List all database tables and their structure
+- `mcp__supabase__execute_sql` - Execute raw SQL queries (SELECT, INSERT, UPDATE, DELETE)
+- `mcp__supabase__apply_migration` - Apply database migrations (DDL operations)
+- `mcp__supabase__list_migrations` - View migration history
+- `mcp__supabase__get_advisors` - Check for security/performance issues
+- `mcp__supabase__get_logs` - View service logs (api, postgres, auth, storage, etc.)
+- `mcp__supabase__generate_typescript_types` - Generate TypeScript types from database schema
+
+**Common workflows:**
+
+```typescript
+// 1. Inspect database structure
+mcp__supabase__list_tables({ schemas: ['public'] })
+
+// 2. Query data
+mcp__supabase__execute_sql({
+  query: 'SELECT * FROM products WHERE category = $1 LIMIT 10'
+})
+
+// 3. Create migration
+mcp__supabase__apply_migration({
+  name: 'add_products_category_index',
+  query: 'CREATE INDEX idx_products_category ON products(category);'
+})
+
+// 4. Check for issues
+mcp__supabase__get_advisors({ type: 'security' }) // Check RLS policies, etc.
+```
+
+**Best practices:**
+
+- Always use `list_tables` first to understand database structure
+- Use `execute_sql` for DML operations (SELECT, INSERT, UPDATE, DELETE)
+- Use `apply_migration` for DDL operations (CREATE, ALTER, DROP)
+- Run `get_advisors` regularly after schema changes to catch missing RLS policies
+- Use prepared statements or parameterized queries to prevent SQL injection
+
+**Quick command:** Use `/db` slash command for common database operations (see `.claude/commands/db.md`)
+
 ## Common Patterns
 
 **Store initialization check:**

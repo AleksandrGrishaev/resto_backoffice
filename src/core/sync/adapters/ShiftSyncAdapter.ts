@@ -176,9 +176,14 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
   }
 
   async validate(shift: PosShift): Promise<boolean> {
+    console.log(`🔍 Validating shift ${shift.shiftNumber} for sync:`, {
+      status: shift.status,
+      syncedToAccount: shift.syncedToAccount
+    })
+
     // Check if shift is completed
     if (shift.status !== 'completed') {
-      console.warn('⚠️ Shift validation failed: not completed')
+      console.warn('⚠️ Shift validation failed: not completed', { status: shift.status })
       return false
     }
 
@@ -190,11 +195,21 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
     // Check if account store is available
     const accountStore = useAccountStore()
-    if (!accountStore.accounts || accountStore.accounts.length === 0) {
-      console.warn('⚠️ Shift validation failed: account store not initialized')
+    const accountsCount = accountStore.accounts?.length || 0
+
+    console.log(`💰 Account Store check:`, {
+      accountsAvailable: accountsCount,
+      hasAccounts: accountsCount > 0
+    })
+
+    if (accountsCount === 0) {
+      console.warn('⚠️ Shift validation failed: account store not initialized', {
+        accountsCount
+      })
       return false
     }
 
+    console.log(`✅ Shift ${shift.shiftNumber} validation passed`)
     return true
   }
 

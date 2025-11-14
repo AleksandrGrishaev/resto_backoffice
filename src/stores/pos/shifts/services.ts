@@ -264,6 +264,11 @@ export class ShiftsService {
         updatedAt: endTime
       }))
 
+      // Calculate expected cash: Starting + Sales - Expenses
+      const cashSales = this.calculateCashSales(shift)
+      const totalExpenses = this.calculateTotalExpenses(shift)
+      const expectedCash = shift.startingCash + cashSales - totalExpenses
+
       // Обновить смену
       const updatedShift: PosShift = {
         ...shift,
@@ -271,11 +276,9 @@ export class ShiftsService {
         endTime,
         duration,
         endingCash: dto.endingCash,
-        expectedCash: shift.startingCash + this.calculateCashSales(shift),
-        cashDiscrepancy: dto.endingCash - (shift.startingCash + this.calculateCashSales(shift)),
-        cashDiscrepancyType: this.getCashDiscrepancyType(
-          dto.endingCash - (shift.startingCash + this.calculateCashSales(shift))
-        ),
+        expectedCash,
+        cashDiscrepancy: dto.endingCash - expectedCash,
+        cashDiscrepancyType: this.getCashDiscrepancyType(dto.endingCash - expectedCash),
         corrections: [...shift.corrections, ...newCorrections],
         notes: dto.notes || shift.notes,
         updatedAt: endTime
@@ -500,12 +503,88 @@ export class ShiftsService {
   }
 
   /**
+   * Рассчитать общую сумму расходов (completed only)
+   */
+  private calculateTotalExpenses(shift: PosShift): number {
+    return shift.expenseOperations
+      .filter(exp => exp.status === 'completed')
+      .reduce((sum, exp) => sum + exp.amount, 0)
+  }
+
+  /**
    * Определить тип расхождения по кассе
    */
   private getCashDiscrepancyType(discrepancy: number): 'shortage' | 'overage' | 'none' {
     if (discrepancy > 0) return 'overage'
     if (discrepancy < 0) return 'shortage'
     return 'none'
+  }
+
+  /**
+   * ✅ Sprint 7: Update payment methods in active shift after payment
+   * @param paymentMethodType - Payment method type: 'cash' | 'card' | 'qr'
+   */
+  async updatePaymentMethods(
+    shiftId: string,
+    paymentMethodType: string,
+    amount: number
+  ): Promise<ServiceResponse<void>> {
+    try {
+      console.log(`🔄 Updating payment methods in shift ${shiftId}:`, {
+        paymentMethodType,
+        amount
+      })
+
+      // Load current shifts
+      const storedShifts = localStorage.getItem(this.STORAGE_KEYS.shifts)
+      const shifts: PosShift[] = storedShifts ? JSON.parse(storedShifts) : []
+
+      const shift = shifts.find(s => s.id === shiftId)
+      if (!shift) {
+        throw new Error('Shift not found')
+      }
+
+      console.log(`📊 Current payment methods:`, shift.paymentMethods)
+
+      // Find matching payment method summary by methodType
+      const methodSummary = shift.paymentMethods.find(pm => pm.methodType === paymentMethodType)
+
+      if (methodSummary) {
+        // Update existing method
+        const oldAmount = methodSummary.amount
+        methodSummary.amount += amount
+        methodSummary.count += 1
+        console.log(
+          `✅ Updated ${paymentMethodType}: ${oldAmount} → ${methodSummary.amount} (+${amount})`
+        )
+      } else {
+        console.warn(`⚠️ Payment method ${paymentMethodType} not found in shift payment methods`, {
+          availableTypes: shift.paymentMethods.map(pm => pm.methodType)
+        })
+      }
+
+      // Recalculate total sales
+      const oldTotalSales = shift.totalSales
+      shift.totalSales = shift.paymentMethods.reduce((sum, pm) => sum + pm.amount, 0)
+      shift.totalTransactions = shift.paymentMethods.reduce((sum, pm) => sum + pm.count, 0)
+
+      console.log(`📈 Total sales: ${oldTotalSales} → ${shift.totalSales}`)
+
+      // Update shift
+      await this.updateShift(shiftId, shift)
+
+      console.log(
+        `✅ Updated payment methods in shift ${shift.shiftNumber}: ${paymentMethodType} +${amount}`
+      )
+
+      return { success: true }
+    } catch (error) {
+      console.error('❌ Failed to update payment methods:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update payment methods'
+      }
+    }
   }
 
   // =============================================

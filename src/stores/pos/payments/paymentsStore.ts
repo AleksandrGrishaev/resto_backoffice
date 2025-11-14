@@ -133,6 +133,9 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
           amount,
           `Payment ${payment.paymentNumber} - ${method}`
         )
+
+        // ✅ Sprint 7: Update payment methods in shift
+        await shiftsStore.updatePaymentMethods(payment.method, amount)
       }
 
       // 5. 🆕 Record sales transaction (Sprint 2)

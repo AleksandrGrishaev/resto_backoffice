@@ -10,6 +10,9 @@ import { usePosOrdersStore } from './orders/ordersStore'
 import { usePosPaymentsStore } from './payments/paymentsStore'
 import { useShiftsStore } from './shifts/shiftsStore'
 
+// ✅ Sprint 7: Account Store for shift sync
+import { useAccountStore } from '@/stores/account'
+
 // ✅ Sprint 6: SyncService integration
 import { useSyncService } from '@/core/sync/SyncService'
 import { ShiftSyncAdapter } from '@/core/sync/adapters/ShiftSyncAdapter'
@@ -172,6 +175,14 @@ export const usePosStore = defineStore('pos', () => {
         paymentsCount: paymentsStore.payments.length,
         shiftsCount: shiftsStore.shifts.length,
         currentShift: shiftsStore.currentShift?.shiftNumber || 'None'
+      })
+
+      // ✅ Sprint 7: Initialize Account Store for shift sync
+      platform.debugLog('POS', '💰 Initializing Account Store...')
+      const accountStore = useAccountStore()
+      await accountStore.initializeStore()
+      platform.debugLog('POS', '✅ Account Store initialized', {
+        accountsCount: accountStore.accounts.length
       })
 
       // ✅ Sprint 6: Initialize SyncService

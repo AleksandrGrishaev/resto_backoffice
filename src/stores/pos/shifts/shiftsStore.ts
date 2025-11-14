@@ -620,6 +620,30 @@ export const useShiftsStore = defineStore('posShifts', () => {
   }
 
   /**
+   * ✅ Sprint 7: Update payment methods after payment
+   * @param paymentMethodType - Payment method type: 'cash' | 'card' | 'qr'
+   */
+  async function updatePaymentMethods(
+    paymentMethodType: string,
+    amount: number
+  ): Promise<ServiceResponse<void>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      return await shiftsService.updatePaymentMethods(
+        currentShift.value.id,
+        paymentMethodType,
+        amount
+      )
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update payment methods'
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Подтвердить платеж поставщику
    */
   async function confirmExpense(data: ConfirmSupplierPaymentDto): Promise<ServiceResponse<void>> {
@@ -1141,6 +1165,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
     createDirectExpense,
     confirmExpense,
     rejectExpense,
+
+    // Sprint 7: Payment Methods Update
+    updatePaymentMethods,
 
     // Sprint 5: Sync Queue
     addToSyncQueue,
