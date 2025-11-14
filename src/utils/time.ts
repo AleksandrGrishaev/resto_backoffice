@@ -1,26 +1,17 @@
 // src/utils/time.ts - ENHANCED with supplier integration
 import { format, parseISO, formatISO } from 'date-fns'
 import { utcToZonedTime } from 'date-fns-tz'
-import { Timestamp } from 'firebase/firestore'
 
 const TIMEZONE = 'Asia/Jakarta' // Вместо 'Asia/Denpasar'
 const DATE_FORMAT = 'yyyy-MM-dd HH:mm:ss'
 
 export class TimeUtils {
   // =============================================
-  // EXISTING METHODS - Firebase & Local Time
+  // CORE TIME UTILITIES
   // =============================================
 
   static getCurrentLocalISO(): string {
     return new Date().toISOString()
-  }
-
-  static isoToTimestamp(date: string): Timestamp {
-    return Timestamp.fromDate(new Date(date))
-  }
-
-  static timestampToLocalISO(timestamp: Timestamp): string {
-    return timestamp.toDate().toISOString()
   }
 
   static formatDateToDisplay(date: string | Date, formatStr: string = DATE_FORMAT): string {

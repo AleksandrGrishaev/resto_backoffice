@@ -23,7 +23,7 @@ Kitchen App - **единое приложение** с множественны�
 - Vuetify 3.7+ (Material Design UI)
 - Pinia (state management)
 - Vue Router 4
-- Firebase 12+ (authentication, data persistence)
+- Supabase (database, authentication - replacing Firebase)
 - Vite 5+ (build tool)
 - Capacitor (mobile deployment)
 
@@ -300,17 +300,18 @@ See `src/utils/debugger.ts`, `src/utils/time.ts`, `src/utils/currency.ts`, `src/
 
 Example: `import { useProductsStore } from '@/stores/productsStore'`
 
-## Firebase Integration
+## Supabase Integration
 
-Firebase config: `src/firebase/config.ts`
+Supabase config: `src/config/environment.ts` (supabase section)
 
-Firebase is used for:
+Supabase is used for:
 
-- Authentication (`src/stores/auth/`)
-- Data persistence (Firestore)
-- Offline support (enabled via ENV.enableOffline)
+- Database (PostgreSQL)
+- Authentication (future migration from local storage)
+- Real-time subscriptions (future implementation)
+- Storage (future implementation)
 
-Converters in `src/firebase/converters.ts` handle data transformation between Firebase and app models.
+Current state: Configured but not yet fully integrated. Using localStorage and mock data in development.
 
 ## Common Patterns
 

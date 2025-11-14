@@ -1,7 +1,6 @@
-// src/stores/productsStore/productsService.ts - ФИНАЛЬНАЯ упрощенная версия
+// src/stores/productsStore/productsService.ts - Legacy service without Firebase
 
-import { BaseService } from '@/firebase/services/base.service'
-import { where, orderBy, QueryConstraint } from 'firebase/firestore'
+import { ref } from 'vue'
 import type {
   Product,
   ProductCategory,
@@ -14,94 +13,79 @@ import { DebugUtils, TimeUtils } from '@/utils'
 
 const MODULE_NAME = 'ProductsService'
 
-export class ProductsService extends BaseService<Product> {
-  constructor() {
-    super('products')
+/**
+ * Legacy ProductsService for backward compatibility
+ * Works with in-memory data (ref), no Firebase
+ * In future, will delegate to Supabase or API
+ */
+export class ProductsService {
+  private products = ref<Product[]>([])
+
+  constructor(initialData: Product[] = []) {
+    this.products.value = initialData
   }
 
   // =============================================
   // ОСНОВНЫЕ МЕТОДЫ ПРОДУКТОВ
   // =============================================
 
-  /**
-   * Получение всех активных продуктов
-   */
+  async getAll(): Promise<Product[]> {
+    return [...this.products.value]
+  }
+
+  async getById(id: string): Promise<Product | null> {
+    return this.products.value.find(p => p.id === id) || null
+  }
+
   async getActiveProducts(): Promise<Product[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Getting active products')
-      const constraints: QueryConstraint[] = [
-        where('isActive', '==', true),
-        orderBy('category', 'asc'),
-        orderBy('name', 'asc')
-      ]
-      return await this.getAll(constraints)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error getting active products', { error })
-      throw error
-    }
+    return this.products.value
+      .filter(p => p.isActive)
+      .sort((a, b) => {
+        if (a.category !== b.category) {
+          return a.category.localeCompare(b.category)
+        }
+        return a.name.localeCompare(b.name)
+      })
   }
 
-  /**
-   * Получение продуктов по категории
-   */
   async getProductsByCategory(category: ProductCategory): Promise<Product[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Getting products by category', { category })
-      const constraints: QueryConstraint[] = [
-        where('category', '==', category),
-        where('isActive', '==', true),
-        orderBy('name', 'asc')
-      ]
-      return await this.getAll(constraints)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error getting products by category', { error, category })
-      throw error
-    }
+    return this.products.value
+      .filter(p => p.category === category && p.isActive)
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  /**
-   * Поиск продуктов по названию
-   */
   async searchProducts(searchTerm: string): Promise<Product[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Searching products', { searchTerm })
-      const allProducts = await this.getActiveProducts()
-      return allProducts.filter(
-        product =>
-          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.nameEn?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error searching products', { error, searchTerm })
-      throw error
-    }
+    const term = searchTerm.toLowerCase()
+    return this.products.value.filter(
+      p =>
+        p.name.toLowerCase().includes(term) ||
+        p.nameEn?.toLowerCase().includes(term) ||
+        p.description?.toLowerCase().includes(term)
+    )
   }
 
-  /**
-   * Создание нового продукта (без упаковок - создаются в store)
-   */
   async createProduct(data: CreateProductData): Promise<Product> {
     try {
       DebugUtils.info(MODULE_NAME, 'Creating product', { data })
 
-      // ✅ ADD VALIDATION
       if (!data.usedInDepartments || data.usedInDepartments.length === 0) {
         throw new Error('Product must be used in at least one department')
       }
 
       const now = TimeUtils.getCurrentLocalISO()
-      const productData: Omit<Product, 'id'> = {
+      const newProduct: Product = {
         ...data,
+        id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         packageOptions: [],
         isActive: data.isActive ?? true,
         canBeSold: data.canBeSold ?? false,
-        usedInDepartments: data.usedInDepartments, // ✅ ADD THIS
         createdAt: now,
         updatedAt: now
       }
 
-      const newProduct = await this.create(productData)
+      this.products.value.push(newProduct)
       DebugUtils.info(MODULE_NAME, 'Product created successfully', { id: newProduct.id })
+
       return newProduct
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error creating product', { error, data })
@@ -109,25 +93,26 @@ export class ProductsService extends BaseService<Product> {
     }
   }
 
-  /**
-   * Обновление продукта
-   */
   async updateProduct(data: UpdateProductData): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating product', { data })
 
-      // ✅ ADD VALIDATION if usedInDepartments is being updated
       if (data.usedInDepartments !== undefined && data.usedInDepartments.length === 0) {
         throw new Error('Product must be used in at least one department')
       }
 
+      const index = this.products.value.findIndex(p => p.id === data.id)
+      if (index === -1) {
+        throw new Error(`Product not found: ${data.id}`)
+      }
+
       const { id, ...updateData } = data
-      const updatedData = {
+      this.products.value[index] = {
+        ...this.products.value[index],
         ...updateData,
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      await this.update(id, updatedData)
       DebugUtils.info(MODULE_NAME, 'Product updated successfully', { id })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error updating product', { error, data })
@@ -135,69 +120,40 @@ export class ProductsService extends BaseService<Product> {
     }
   }
 
-  /**
-   * Мягкое удаление продукта (деактивация)
-   */
   async deactivateProduct(id: string): Promise<void> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Deactivating product', { id })
-
-      await this.update(id, {
-        isActive: false,
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      })
-
-      DebugUtils.info(MODULE_NAME, 'Product deactivated successfully', { id })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error deactivating product', { error, id })
-      throw error
+    const product = await this.getById(id)
+    if (!product) {
+      throw new Error(`Product not found: ${id}`)
     }
+
+    await this.updateProduct({
+      id,
+      isActive: false
+    })
   }
 
-  /**
-   * Активация продукта
-   */
   async activateProduct(id: string): Promise<void> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Activating product', { id })
-
-      await this.update(id, {
-        isActive: true,
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      })
-
-      DebugUtils.info(MODULE_NAME, 'Product activated successfully', { id })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error activating product', { error, id })
-      throw error
+    const product = await this.getById(id)
+    if (!product) {
+      throw new Error(`Product not found: ${id}`)
     }
+
+    await this.updateProduct({
+      id,
+      isActive: true
+    })
   }
 
-  /**
-   * Получение продуктов с низким остатком
-   */
   async getLowStockProducts(): Promise<Product[]> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Getting low stock products')
-      const constraints: QueryConstraint[] = [
-        where('isActive', '==', true),
-        where('minStock', '>', 0),
-        orderBy('minStock', 'asc')
-      ]
-      return await this.getAll(constraints)
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error getting low stock products', { error })
-      throw error
-    }
+    return this.products.value
+      .filter(p => p.isActive && (p.minStock || 0) > 0)
+      .sort((a, b) => (a.minStock || 0) - (b.minStock || 0))
   }
 
   // =============================================
   // МЕТОДЫ РАБОТЫ С УПАКОВКАМИ
   // =============================================
 
-  /**
-   * Добавление новой упаковки к продукту
-   */
   async addPackageOption(packageData: PackageOption): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Adding package option', { packageData })
@@ -209,9 +165,9 @@ export class ProductsService extends BaseService<Product> {
 
       const updatedPackages = [...product.packageOptions, packageData]
 
-      await this.update(packageData.productId, {
-        packageOptions: updatedPackages,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+      await this.updateProduct({
+        id: packageData.productId,
+        packageOptions: updatedPackages
       })
 
       DebugUtils.info(MODULE_NAME, 'Package option added', {
@@ -224,15 +180,13 @@ export class ProductsService extends BaseService<Product> {
     }
   }
 
-  /**
-   * Обновление упаковки
-   */
   async updatePackageOption(data: UpdatePackageOptionDto): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating package option', { data })
 
-      const allProducts = await this.getAll()
-      const product = allProducts.find(p => p.packageOptions.some(pkg => pkg.id === data.id))
+      const product = this.products.value.find(p =>
+        p.packageOptions.some(pkg => pkg.id === data.id)
+      )
 
       if (!product) {
         throw new Error(`Package not found: ${data.id}`)
@@ -242,9 +196,9 @@ export class ProductsService extends BaseService<Product> {
         pkg.id === data.id ? { ...pkg, ...data, updatedAt: TimeUtils.getCurrentLocalISO() } : pkg
       )
 
-      await this.update(product.id, {
-        packageOptions: updatedPackages,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+      await this.updateProduct({
+        id: product.id,
+        packageOptions: updatedPackages
       })
 
       DebugUtils.info(MODULE_NAME, 'Package option updated', { packageId: data.id })
@@ -254,15 +208,13 @@ export class ProductsService extends BaseService<Product> {
     }
   }
 
-  /**
-   * Удаление упаковки
-   */
   async deletePackageOption(packageId: string): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Deleting package option', { packageId })
 
-      const allProducts = await this.getAll()
-      const product = allProducts.find(p => p.packageOptions.some(pkg => pkg.id === packageId))
+      const product = this.products.value.find(p =>
+        p.packageOptions.some(pkg => pkg.id === packageId)
+      )
 
       if (!product) {
         throw new Error(`Package not found: ${packageId}`)
@@ -279,10 +231,10 @@ export class ProductsService extends BaseService<Product> {
         updatedRecommendedId = updatedPackages[0]?.id
       }
 
-      await this.update(product.id, {
+      await this.updateProduct({
+        id: product.id,
         packageOptions: updatedPackages,
-        recommendedPackageId: updatedRecommendedId,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        recommendedPackageId: updatedRecommendedId
       })
 
       DebugUtils.info(MODULE_NAME, 'Package option deleted', {
@@ -296,9 +248,6 @@ export class ProductsService extends BaseService<Product> {
     }
   }
 
-  /**
-   * Установка рекомендуемой упаковки
-   */
   async setRecommendedPackage(productId: string, packageId: string): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Setting recommended package', { productId, packageId })
@@ -313,9 +262,9 @@ export class ProductsService extends BaseService<Product> {
         throw new Error(`Package not found in product: ${packageId}`)
       }
 
-      await this.update(productId, {
-        recommendedPackageId: packageId,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+      await this.updateProduct({
+        id: productId,
+        recommendedPackageId: packageId
       })
 
       DebugUtils.info(MODULE_NAME, 'Recommended package set', { productId, packageId })
@@ -326,5 +275,5 @@ export class ProductsService extends BaseService<Product> {
   }
 }
 
-// Экспортируем экземпляр сервиса
+// Export instance (will be initialized with mock data in store)
 export const productsService = new ProductsService()
