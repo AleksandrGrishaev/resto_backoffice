@@ -223,15 +223,26 @@ export class ShiftsService {
 
   /**
    * Завершить смену
+   * Sprint 7: Updates in Supabase + localStorage
+   * ИСПРАВЛЕНО: Ищет смену в localStorage (для текущей смены), затем fallback на Supabase
    */
   async endShift(dto: EndShiftDto): Promise<ServiceResponse<PosShift>> {
     try {
-      const shifts = await this.loadShifts()
-      if (!shifts.success || !shifts.data) {
-        throw new Error('Failed to load shifts')
+      // Try to find shift in localStorage first (for current shift)
+      const storedShifts = localStorage.getItem(this.STORAGE_KEYS.shifts)
+      const shifts = storedShifts ? JSON.parse(storedShifts) : []
+      let shift = shifts.find((s: PosShift) => s.id === dto.shiftId)
+
+      // Fallback: try to load from Supabase
+      if (!shift) {
+        console.log('⚠️ Shift not found in localStorage, loading from Supabase...')
+        const supabaseShifts = await this.loadShifts()
+        if (!supabaseShifts.success || !supabaseShifts.data) {
+          throw new Error('Failed to load shifts')
+        }
+        shift = supabaseShifts.data.find(s => s.id === dto.shiftId)
       }
 
-      const shift = shifts.data.find(s => s.id === dto.shiftId)
       if (!shift) {
         throw new Error('Shift not found')
       }
@@ -270,16 +281,37 @@ export class ShiftsService {
         updatedAt: endTime
       }
 
-      // Сохранить обновленную смену
+      // Try to update in Supabase first
+      if (this.isSupabaseAvailable()) {
+        const supabaseUpdate = toSupabaseUpdate(updatedShift)
+        const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shift.id)
+
+        if (error) {
+          console.warn(
+            '⚠️ Supabase update failed when closing shift, saving to localStorage only:',
+            getSupabaseErrorMessage(error)
+          )
+          updatedShift.syncStatus = 'pending'
+          updatedShift.pendingSync = true
+        } else {
+          console.log('✅ Смена закрыта и обновлена в Supabase:', updatedShift.shiftNumber)
+        }
+      } else {
+        // Offline mode - mark for sync
+        updatedShift.syncStatus = 'pending'
+        updatedShift.pendingSync = true
+      }
+
+      // Always save to localStorage
       await this.saveShift(updatedShift)
 
       // Удалить текущую смену
       localStorage.removeItem(this.STORAGE_KEYS.currentShift)
 
-      console.log('Смена завершена:', updatedShift.shiftNumber)
+      console.log('✅ Смена завершена:', updatedShift.shiftNumber)
       return { success: true, data: updatedShift }
     } catch (error) {
-      console.error('Ошибка завершения смены:', error)
+      console.error('❌ Ошибка завершения смены:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to end shift'
@@ -290,19 +322,10 @@ export class ShiftsService {
   /**
    * Обновить смену
    * Sprint 7: Updates in Supabase + localStorage
+   * ИСПРАВЛЕНО: Не перезагружает смены, просто обновляет переданную смену
    */
   async updateShift(shiftId: string, shift: PosShift): Promise<ServiceResponse<PosShift>> {
     try {
-      const shifts = await this.loadShifts()
-      if (!shifts.success || !shifts.data) {
-        throw new Error('Failed to load shifts')
-      }
-
-      const shiftIndex = shifts.data.findIndex(s => s.id === shiftId)
-      if (shiftIndex === -1) {
-        throw new Error('Shift not found')
-      }
-
       const updatedShift: PosShift = {
         ...shift,
         updatedAt: new Date().toISOString()

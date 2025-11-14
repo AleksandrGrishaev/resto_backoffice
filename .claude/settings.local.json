@@ -9,7 +9,9 @@
       "mcp__playwright__browser_evaluate",
       "mcp__playwright__browser_console_messages",
       "Bash(test:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(pnpm exec tsc:*)",
+      "mcp__ide__getDiagnostics"
     ]
   },
   "enableAllProjectMcpServers": true,

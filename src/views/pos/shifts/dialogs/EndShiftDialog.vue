@@ -114,6 +114,9 @@
                 <div class="text-caption text-medium-emphasis">
                   Starting: {{ formatCurrency(currentShift.startingCash) }} + Sales:
                   {{ formatCurrency(cashSales) }}
+                  <span v-if="totalExpenses > 0" class="text-error">
+                    - Expenses: {{ formatCurrency(totalExpenses) }}
+                  </span>
                 </div>
               </v-card>
             </v-col>
@@ -268,8 +271,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
+import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useShiftsComposables } from '@/stores/pos/shifts/composables'
-import type { EndShiftDto, ShiftCorrection, TransactionPerformer } from '@/stores/pos/shifts/types'
+import type {
+  EndShiftDto,
+  ShiftCorrection,
+  TransactionPerformer,
+  ShiftAccountBalance
+} from '@/stores/pos/shifts/types'
+import type { PosPayment } from '@/stores/pos/types'
 
 // Props
 interface Props {
@@ -288,12 +298,12 @@ const emit = defineEmits<{
 
 // Stores
 const shiftsStore = useShiftsStore()
+const paymentsStore = usePosPaymentsStore()
 const {
   formatShiftDuration,
   formatCurrency,
   canEndShift: checkCanEndShift,
-  getCashDiscrepancyColor,
-  getTopPaymentMethods
+  getCashDiscrepancyColor
 } = useShiftsComposables()
 
 // State
@@ -344,15 +354,44 @@ const validationWarnings = computed(() => validationCheck.value.warnings || [])
 
 const canEndShift = computed(() => validationCheck.value.canEnd && form.value.endingCash > 0)
 
+// ✅ FIX: Get real payments for this shift
+const shiftPayments = computed(() => {
+  if (!currentShift.value) return []
+  return paymentsStore.getShiftPayments(currentShift.value.id)
+})
+
+// ✅ FIX: Calculate cash sales from real payments (not shift.paymentMethods)
 const cashSales = computed(() => {
+  let cashReceived = 0
+  let cashRefunded = 0
+
+  shiftPayments.value.forEach((p: PosPayment) => {
+    if (p.status === 'completed' || p.status === 'refunded') {
+      if (p.method === 'cash') {
+        if (p.amount > 0) {
+          cashReceived += p.amount
+        } else {
+          cashRefunded += Math.abs(p.amount)
+        }
+      }
+    }
+  })
+
+  return cashReceived - cashRefunded
+})
+
+// ✅ FIX: Calculate total expenses
+const totalExpenses = computed(() => {
   if (!currentShift.value) return 0
-  const cashMethod = currentShift.value.paymentMethods.find(p => p.methodType === 'cash')
-  return cashMethod ? cashMethod.amount : 0
+  return currentShift.value.expenseOperations
+    .filter(exp => exp.status === 'completed')
+    .reduce((sum, exp) => sum + exp.amount, 0)
 })
 
 const expectedCash = computed(() => {
   if (!currentShift.value) return 0
-  return currentShift.value.startingCash + cashSales.value
+  // Expected = Starting + Sales - Expenses
+  return currentShift.value.startingCash + cashSales.value - totalExpenses.value
 })
 
 const cashDiscrepancy = computed(() => form.value.endingCash - expectedCash.value)
@@ -365,9 +404,54 @@ const discrepancyHint = computed(() => {
   return `${formatCurrency(Math.abs(cashDiscrepancy.value))} ${type}`
 })
 
+// ✅ FIX: Calculate payment methods summary from real payments
 const topPaymentMethods = computed(() => {
-  if (!currentShift.value) return []
-  return getTopPaymentMethods(currentShift.value.paymentMethods, 4)
+  const methodsMap = new Map<
+    string,
+    {
+      methodId: string
+      methodName: string
+      methodType: string
+      count: number
+      amount: number
+      percentage: number
+    }
+  >()
+
+  // Initialize payment methods
+  const methods = [
+    { methodId: 'cash', methodName: 'Cash', methodType: 'cash' },
+    { methodId: 'card', methodName: 'Card', methodType: 'card' },
+    { methodId: 'qr', methodName: 'QR Code', methodType: 'qr' }
+  ]
+
+  methods.forEach(m => {
+    methodsMap.set(m.methodType, { ...m, count: 0, amount: 0, percentage: 0 })
+  })
+
+  // Calculate totals from real payments
+  let totalAmount = 0
+  shiftPayments.value.forEach((p: PosPayment) => {
+    if (p.status === 'completed' || p.status === 'refunded') {
+      const method = methodsMap.get(p.method)
+      if (method) {
+        method.count++
+        method.amount += p.amount
+      }
+      totalAmount += p.amount
+    }
+  })
+
+  // Calculate percentages
+  methodsMap.forEach(method => {
+    method.percentage = totalAmount > 0 ? (method.amount / totalAmount) * 100 : 0
+  })
+
+  // Return top 4 methods by amount
+  return Array.from(methodsMap.values())
+    .filter(m => m.count > 0)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 4)
 })
 
 // Watchers
@@ -396,7 +480,7 @@ function initializeForm() {
 
   // Initialize account balances
   form.value.actualAccountBalances = {}
-  currentShift.value.accountBalances.forEach(balance => {
+  currentShift.value.accountBalances.forEach((balance: ShiftAccountBalance) => {
     form.value.actualAccountBalances[balance.accountId] =
       balance.expectedBalance || balance.startingBalance
   })

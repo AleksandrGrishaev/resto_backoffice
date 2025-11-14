@@ -1,5 +1,6 @@
 /**
  * Sprint 6: ShiftSyncAdapter
+ * Sprint 7: Added Supabase sync after Account Store sync
  *
  * Adapter for synchronizing completed shifts to Account Store (acc_1).
  * Implements ISyncAdapter pattern for shift entity type.
@@ -9,6 +10,10 @@ import type { ISyncAdapter, SyncQueueItem, SyncResult, ConflictResolution } from
 import type { PosShift } from '@/stores/pos/shifts/types'
 import { useAccountStore } from '@/stores/account'
 import { POS_CASH_ACCOUNT_ID } from '@/stores/account/types'
+import { supabase } from '@/supabase'
+import { getSupabaseErrorMessage } from '@/supabase/config'
+import { toSupabaseUpdate } from '@/stores/pos/shifts/supabaseMappers'
+import { ENV } from '@/config/environment'
 
 export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
   entityType = 'shift' as const
@@ -127,7 +132,25 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
       shift.syncAttempts = item.attempts
       shift.lastSyncAttempt = new Date().toISOString()
 
-      // Save updated shift to localStorage
+      // ===== SPRINT 7: UPDATE IN SUPABASE =====
+
+      // Try to update in Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const supabaseUpdate = toSupabaseUpdate(shift)
+        const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shift.id)
+
+        if (error) {
+          console.warn(
+            `⚠️ Failed to update shift ${shift.shiftNumber} in Supabase after account sync:`,
+            getSupabaseErrorMessage(error)
+          )
+          // Continue anyway - localStorage update will happen below
+        } else {
+          console.log(`✅ Shift ${shift.shiftNumber} updated in Supabase with sync status`)
+        }
+      }
+
+      // Always save to localStorage (for offline cache + fallback)
       this.saveShiftToLocalStorage(shift)
 
       console.log(
@@ -198,6 +221,13 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
   async onError(item: SyncQueueItem<PosShift>, error: Error): Promise<void> {
     console.error(`❌ Error syncing shift ${item.data.shiftNumber}:`, error.message)
+  }
+
+  /**
+   * Helper: Check if Supabase is available and enabled
+   */
+  private isSupabaseAvailable(): boolean {
+    return ENV.supabase.enabled && navigator.onLine
   }
 
   /**

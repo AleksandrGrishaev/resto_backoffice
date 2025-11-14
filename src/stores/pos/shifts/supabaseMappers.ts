@@ -29,10 +29,26 @@ export function toSupabaseInsert(shift: PosShift): SupabaseShiftInsert {
     status: shift.status === 'completed' ? 'completed' : 'active',
     start_time: shift.startTime,
     end_time: shift.endTime || null,
+
+    // Cash management
+    starting_cash: shift.startingCash,
+    starting_cash_verified: shift.startingCashVerified,
+    ending_cash: shift.endingCash || null,
+    expected_cash: shift.expectedCash || null,
+    cash_discrepancy: shift.cashDiscrepancy || null,
+    cash_discrepancy_type: shift.cashDiscrepancyType || null,
+
+    // Sales totals
     total_sales: shift.totalSales,
+    total_transactions: shift.totalTransactions,
     total_cash: cashMethod?.amount || 0,
     total_card: cardMethod?.amount || 0,
     total_qr: qrMethod?.amount || 0,
+
+    // Duration
+    duration: shift.duration || null,
+
+    // Complex data (JSONB)
     payment_methods: shift.paymentMethods.map(p => ({
       type: p.methodType as 'cash' | 'card' | 'qr',
       amount: p.amount,
@@ -50,12 +66,33 @@ export function toSupabaseInsert(shift: PosShift): SupabaseShiftInsert {
       amount: e.amount,
       timestamp: e.createdAt
     })),
+    account_balances: shift.accountBalances.map(ab => ({
+      accountId: ab.accountId,
+      accountName: ab.accountName,
+      startingBalance: ab.startingBalance,
+      endingBalance: ab.endingBalance,
+      totalIncome: ab.totalIncome,
+      totalExpense: ab.totalExpense
+    })),
+    pending_payments: shift.pendingPayments,
+
+    // Notes and metadata
+    notes: shift.notes || null,
+    device_id: shift.deviceId || null,
+    location: shift.location || null,
+
+    // Sync tracking
+    sync_status: shift.syncStatus,
+    last_sync_at: shift.lastSyncAt || null,
+    pending_sync: shift.pendingSync,
     synced_to_account: shift.syncedToAccount || false,
     synced_at: shift.syncedAt || null,
     account_transaction_ids: shift.accountTransactionIds || null,
     sync_error: shift.syncError || null,
     sync_attempts: shift.syncAttempts || 0,
     last_sync_attempt: shift.lastSyncAttempt || null,
+    sync_queued_at: shift.syncQueuedAt || null,
+
     created_at: shift.createdAt,
     updated_at: shift.updatedAt
   }
@@ -119,6 +156,24 @@ export function fromSupabase(supabaseShift: SupabaseShift): PosShift {
     updatedAt: e.timestamp
   }))
 
+  // Convert account balances back to app format
+  const accountBalances = (supabaseShift.account_balances || []).map((ab: any) => ({
+    accountId: ab.accountId,
+    accountName: ab.accountName,
+    accountType: 'cash' as const, // Default, should be stored in JSONB
+    startingBalance: ab.startingBalance || 0,
+    endingBalance: ab.endingBalance,
+    expectedBalance: ab.expectedBalance,
+    actualBalance: ab.actualBalance,
+    totalIncome: ab.totalIncome || 0,
+    totalExpense: ab.totalExpense || 0,
+    transactionCount: 0,
+    expenseOperations: [],
+    discrepancy: 0,
+    discrepancyExplained: false,
+    syncStatus: 'synced' as const
+  }))
+
   return {
     id: supabaseShift.id,
     shiftNumber,
@@ -127,35 +182,42 @@ export function fromSupabase(supabaseShift: SupabaseShift): PosShift {
     cashierName: supabaseShift.cashier_name,
     startTime: supabaseShift.start_time,
     endTime: supabaseShift.end_time || undefined,
-    duration: supabaseShift.end_time
-      ? Math.floor(
-          (new Date(supabaseShift.end_time).getTime() -
-            new Date(supabaseShift.start_time).getTime()) /
-            60000
-        )
-      : undefined,
-    startingCash: 0, // Not in Supabase, needs to be stored separately or calculated
-    startingCashVerified: true,
-    endingCash: undefined,
-    expectedCash: undefined,
-    cashDiscrepancy: undefined,
-    cashDiscrepancyType: undefined,
+    duration: supabaseShift.duration || undefined,
+
+    // Cash management - NOW FROM SUPABASE!
+    startingCash: supabaseShift.starting_cash || 0,
+    startingCashVerified: supabaseShift.starting_cash_verified || false,
+    endingCash: supabaseShift.ending_cash || undefined,
+    expectedCash: supabaseShift.expected_cash || undefined,
+    cashDiscrepancy: supabaseShift.cash_discrepancy || undefined,
+    cashDiscrepancyType: (supabaseShift.cash_discrepancy_type as any) || undefined,
+
+    // Sales
     totalSales: supabaseShift.total_sales,
-    totalTransactions: 0, // Not stored in Supabase
+    totalTransactions: supabaseShift.total_transactions || 0,
     paymentMethods,
     corrections,
-    accountBalances: [], // Not in Supabase
+    accountBalances,
     expenseOperations,
-    pendingPayments: [], // Not in Supabase
-    syncStatus: supabaseShift.synced_to_account ? 'synced' : 'pending',
-    lastSyncAt: supabaseShift.synced_at || undefined,
-    pendingSync: !supabaseShift.synced_to_account,
+    pendingPayments: supabaseShift.pending_payments || [],
+
+    // Notes and metadata
+    notes: supabaseShift.notes || undefined,
+    deviceId: supabaseShift.device_id || undefined,
+    location: supabaseShift.location || undefined,
+
+    // Sync tracking
+    syncStatus: (supabaseShift.sync_status as any) || 'pending',
+    lastSyncAt: supabaseShift.last_sync_at || undefined,
+    pendingSync: supabaseShift.pending_sync || false,
     syncedToAccount: supabaseShift.synced_to_account,
     syncedAt: supabaseShift.synced_at || undefined,
     accountTransactionIds: supabaseShift.account_transaction_ids || undefined,
     syncAttempts: supabaseShift.sync_attempts,
     lastSyncAttempt: supabaseShift.last_sync_attempt || undefined,
     syncError: supabaseShift.sync_error || undefined,
+    syncQueuedAt: supabaseShift.sync_queued_at || undefined,
+
     createdAt: supabaseShift.created_at,
     updatedAt: supabaseShift.updated_at
   }
