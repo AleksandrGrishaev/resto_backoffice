@@ -1,30 +1,6 @@
 <!-- src/views/kitchen/orders/OrdersScreen.vue -->
 <template>
   <div class="orders-screen">
-    <!-- Header with Stats -->
-    <div class="orders-header">
-      <h2 class="screen-title">Kitchen Display System</h2>
-      <div class="stats-row">
-        <div class="stat-item">
-          <span class="stat-label">Total Dishes:</span>
-          <span class="stat-value">{{ dishesStats.total }}</span>
-        </div>
-        <div class="stat-divider" />
-        <div class="stat-item waiting">
-          <span class="stat-label">Waiting:</span>
-          <span class="stat-value">{{ dishesStats.waiting }}</span>
-        </div>
-        <div class="stat-item cooking">
-          <span class="stat-label">Cooking:</span>
-          <span class="stat-value">{{ dishesStats.cooking }}</span>
-        </div>
-        <div class="stat-item ready">
-          <span class="stat-label">Ready:</span>
-          <span class="stat-value">{{ dishesStats.ready }}</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Dishes Columns (Kanban) -->
     <div class="orders-columns" :class="{ 'ready-collapsed': readyColumnCollapsed }">
       <!-- Waiting Column -->
@@ -78,19 +54,25 @@
       <!-- Ready Column (Collapsible) -->
       <div class="order-column ready-column" :class="{ collapsed: readyColumnCollapsed }">
         <div class="column-header">
-          <v-icon color="green" size="28">mdi-check-circle</v-icon>
-          <h3 v-if="!readyColumnCollapsed" class="column-title">Ready</h3>
-          <v-badge :content="dishesByStatus.ready.length" color="green" inline />
+          <template v-if="!readyColumnCollapsed">
+            <v-icon color="green" size="28">mdi-check-circle</v-icon>
+            <h3 class="column-title">Ready</h3>
+            <v-badge :content="dishesByStatus.ready.length" color="green" inline />
+          </template>
 
           <!-- Collapse/Expand button -->
           <v-btn
             icon
             size="small"
-            variant="text"
-            class="ml-auto"
+            variant="flat"
+            color="green"
+            :class="readyColumnCollapsed ? '' : 'ml-auto'"
+            class="expand-btn"
             @click="readyColumnCollapsed = !readyColumnCollapsed"
           >
-            <v-icon>{{ readyColumnCollapsed ? 'mdi-chevron-left' : 'mdi-chevron-right' }}</v-icon>
+            <v-icon>
+              {{ readyColumnCollapsed ? 'mdi-chevron-double-left' : 'mdi-chevron-double-right' }}
+            </v-icon>
           </v-btn>
         </div>
 
@@ -184,76 +166,29 @@ const handleDishStatusUpdate = async (
 .orders-screen {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  width: 100%;
+  height: 100vh;
+  width: 100vw;
+  max-width: 100%;
   background-color: var(--v-theme-background);
-}
-
-/* Header */
-.orders-header {
-  padding: var(--spacing-lg);
-  background-color: var(--v-theme-surface);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.screen-title {
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  margin-bottom: var(--spacing-md);
-}
-
-.stats-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-
-  &.waiting {
-    color: rgb(var(--v-theme-warning));
-  }
-
-  &.cooking {
-    color: rgb(var(--v-theme-info));
-  }
-
-  &.ready {
-    color: rgb(var(--v-theme-success));
-  }
-}
-
-.stat-label {
-  font-size: var(--text-sm);
-  opacity: 0.7;
-}
-
-.stat-value {
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.stat-divider {
-  width: 1px;
-  height: 24px;
-  background-color: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* Kanban Board - 3 Vertical Columns Side by Side */
 .orders-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr 80px;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: var(--spacing-md);
   flex: 1;
   overflow: hidden;
   padding: var(--spacing-lg);
-  height: 100%;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 
   &.ready-collapsed {
-    grid-template-columns: 1fr 1fr 80px;
+    grid-template-columns: 1fr 1fr 60px;
   }
 
   &:not(.ready-collapsed) {
@@ -270,10 +205,11 @@ const handleDishStatusUpdate = async (
   overflow: hidden;
   transition: all 0.3s ease;
   height: 100%;
+  box-sizing: border-box;
 
   &.collapsed {
-    min-width: 80px;
-    max-width: 80px;
+    min-width: 60px;
+    max-width: 60px;
   }
 }
 
@@ -285,12 +221,29 @@ const handleDishStatusUpdate = async (
   background-color: rgba(0, 0, 0, 0.2);
   border-bottom: 2px solid rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
+
+  .collapsed & {
+    justify-content: center;
+    padding: var(--spacing-sm);
+  }
 }
 
 .column-title {
   font-size: var(--text-lg);
   font-weight: 600;
   flex: 1;
+}
+
+.expand-btn {
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.2s ease !important;
+
+  &:hover {
+    transform: scale(1.1);
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4) !important;
+  }
 }
 
 .column-content {

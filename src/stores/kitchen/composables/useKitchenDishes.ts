@@ -104,11 +104,18 @@ export function useKitchenDishes() {
 
   /**
    * Группировка блюд по статусам (для колонок)
+   * Сортировка по времени создания (старые сверху)
    */
   const dishesByStatus = computed(() => ({
-    waiting: kitchenDishes.value.filter(d => d.status === 'waiting'),
-    cooking: kitchenDishes.value.filter(d => d.status === 'cooking'),
-    ready: kitchenDishes.value.filter(d => d.status === 'ready')
+    waiting: kitchenDishes.value
+      .filter(d => d.status === 'waiting')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    cooking: kitchenDishes.value
+      .filter(d => d.status === 'cooking')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    ready: kitchenDishes.value
+      .filter(d => d.status === 'ready')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }))
 
   /**
