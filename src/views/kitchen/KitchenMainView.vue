@@ -48,35 +48,20 @@
     <KitchenLayout v-else-if="showMainInterface">
       <!-- Sidebar: Navigation -->
       <template #sidebar>
-        <div class="kitchen-sidebar-content">
-          <!-- Placeholder: Will be replaced with KitchenSidebar.vue -->
-          <div class="pa-4">
-            <h4>Kitchen</h4>
-            <p class="text-caption">{{ currentScreen }}</p>
-          </div>
-        </div>
+        <KitchenSidebar :current-screen="currentScreen" @screen-select="handleScreenSelect" />
       </template>
 
       <!-- Content: Active Screen -->
       <template #content>
         <div class="kitchen-screen-content">
-          <!-- Placeholder: Will be replaced with OrdersScreen.vue / PreparationScreen.vue -->
-          <v-container fluid>
-            <h2 class="mb-4">{{ currentScreen }} Screen</h2>
-            <p class="text-medium-emphasis">{{ ordersStats.total }} active orders</p>
+          <!-- Orders Screen -->
+          <OrdersScreen v-if="currentScreen === 'orders'" />
 
-            <v-row class="mt-4">
-              <v-col v-for="status in ['waiting', 'cooking', 'ready']" :key="status" cols="4">
-                <v-card>
-                  <v-card-title>{{ capitalize(status) }}</v-card-title>
-                  <v-card-text>
-                    <div class="text-h3">{{ ordersStats[status] }}</div>
-                    <div class="text-caption">orders</div>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
-          </v-container>
+          <!-- Preparation Screen (Stub) -->
+          <PreparationScreen
+            v-else-if="currentScreen === 'preparation'"
+            @navigate-to-orders="handleScreenSelect('orders')"
+          />
         </div>
       </template>
     </KitchenLayout>
@@ -98,10 +83,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useKitchenStore } from '@/stores/kitchen'
-import { useKitchenOrders } from '@/stores/kitchen/composables'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
 import KitchenLayout from '@/layouts/KitchenLayout.vue'
+import KitchenSidebar from './components/KitchenSidebar.vue'
+import OrdersScreen from './orders/OrdersScreen.vue'
+import PreparationScreen from './preparation/PreparationScreen.vue'
 
 const MODULE_NAME = 'KitchenMainView'
 
@@ -111,7 +98,6 @@ const MODULE_NAME = 'KitchenMainView'
 
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
-const { ordersStats } = useKitchenOrders()
 
 // =============================================
 // STATE
@@ -120,7 +106,7 @@ const { ordersStats } = useKitchenOrders()
 const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
-const currentScreen = ref<'Orders' | 'Preparation'>('Orders')
+const currentScreen = ref<'orders' | 'preparation'>('orders')
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -199,18 +185,11 @@ const retryInitialization = async (): Promise<void> => {
 }
 
 /**
- * Switch screen
+ * Handle screen selection from sidebar
  */
-const switchScreen = (screen: 'Orders' | 'Preparation'): void => {
+const handleScreenSelect = (screen: 'orders' | 'preparation'): void => {
   currentScreen.value = screen
-  DebugUtils.debug(MODULE_NAME, 'Switched to screen', { screen })
-}
-
-/**
- * Capitalize string
- */
-const capitalize = (str: string): string => {
-  return str.charAt(0).toUpperCase() + str.slice(1)
+  DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
 }
 
 // =============================================

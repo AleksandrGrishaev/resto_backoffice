@@ -78,12 +78,13 @@ export function useKitchenOrders() {
   function getTableNumber(order: PosOrder): string | null {
     if (order.type !== 'dine_in' || !order.tableId) return null
 
-    // Можно получить номер стола из tablesStore если нужно
-    // const tablesStore = usePosTablesStore()
-    // const table = tablesStore.tables.find(t => t.id === order.tableId)
-    // return table?.number || null
+    // Извлекаем номер стола из tableId (формат: table_1 -> "1")
+    const match = order.tableId.match(/table_(\d+)/)
+    if (match) {
+      return match[1]
+    }
 
-    // Пока просто возвращаем tableId
+    // Fallback: возвращаем tableId как есть
     return order.tableId
   }
 
