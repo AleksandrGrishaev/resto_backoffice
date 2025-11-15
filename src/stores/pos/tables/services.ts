@@ -1,25 +1,63 @@
 // src/stores/pos/tables/services.ts
 import type { PosTable, ServiceResponse, TableStatus } from '../types'
 import { TimeUtils } from '@/utils'
+import { ENV } from '@/config/environment'
+import { supabase } from '@/supabase/client'
+import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
 
 export class TablesService {
   private readonly STORAGE_KEY = 'pos_tables'
+
+  /**
+   * Check if Supabase is available
+   */
+  private isSupabaseAvailable(): boolean {
+    return ENV.useSupabase && supabase !== null
+  }
 
   /**
    * Получить все столы
    */
   async getAllTables(): Promise<ServiceResponse<PosTable[]>> {
     try {
-      // TODO: Заменить на API вызов
+      // Try Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const { data, error } = await supabase!
+          .from('tables')
+          .select('*')
+          .order('table_number', { ascending: true })
+
+        if (!error && data) {
+          console.log(`✅ Loaded ${data.length} tables from Supabase`)
+          const tables = data.map(fromSupabase)
+
+          // Cache to localStorage for offline access
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables))
+
+          return {
+            success: true,
+            data: tables,
+            metadata: {
+              timestamp: TimeUtils.getCurrentLocalISO(),
+              source: 'api'
+            }
+          }
+        } else if (error) {
+          console.warn('⚠️ Supabase load failed, falling back to localStorage:', error.message)
+        }
+      }
+
+      // Fallback to localStorage (offline or Supabase failed)
       const stored = localStorage.getItem(this.STORAGE_KEY)
       const tables = stored ? JSON.parse(stored) : this.generateDefaultTables()
 
-      // Симуляция задержки API
-      await new Promise(resolve => setTimeout(resolve, 100))
-
       return {
         success: true,
-        data: tables
+        data: tables,
+        metadata: {
+          timestamp: TimeUtils.getCurrentLocalISO(),
+          source: 'local'
+        }
       }
     } catch (error) {
       return {
@@ -96,8 +134,23 @@ export class TablesService {
         updatedTable.currentOrderId = undefined
       }
 
+      // Dual-write: Supabase + localStorage
+      // 1. Update in Supabase (if online)
+      if (this.isSupabaseAvailable()) {
+        const supabaseUpdate = toSupabaseUpdate(updatedTable)
+        const { error } = await supabase!.from('tables').update(supabaseUpdate).eq('id', tableId)
+
+        if (error) {
+          console.error('❌ Supabase table status update failed:', error.message)
+        } else {
+          console.log(`✅ Table ${updatedTable.number} status updated in Supabase: ${status}`)
+        }
+      }
+
+      // 2. Always update localStorage (offline resilience)
       tables.data[tableIndex] = updatedTable
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables.data))
+      console.log(`💾 Table ${updatedTable.number} status saved to localStorage (backup)`)
 
       return {
         success: true,

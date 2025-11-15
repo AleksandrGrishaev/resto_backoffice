@@ -626,49 +626,53 @@ export class OrdersService {
           console.error('❌ Supabase update failed:', error.message)
           // Continue to localStorage (offline fallback)
         } else {
-          console.log('✅ Order updated in Supabase:', order.orderNumber)
+          console.log('✅ Order updated in Supabase:', order.orderNumber, {
+            billsCount: order.bills.length,
+            totalItems: order.bills.reduce((sum, b) => sum + b.items.length, 0)
+          })
         }
       }
 
-      // Always update in localStorage (backup)
-      // Load all orders
-      const allOrders = await this.getAllOrders()
-      if (!allOrders.success || !allOrders.data) {
-        throw new Error('Failed to load orders')
-      }
+      // Always update in localStorage (backup) - read from LOCAL storage, not Supabase!
+      const storedOrders = localStorage.getItem(this.ORDERS_KEY)
+      const allOrders: PosOrder[] = storedOrders ? JSON.parse(storedOrders) : []
 
       // Find and update order
-      const orderIndex = allOrders.data.findIndex(o => o.id === order.id)
-      if (orderIndex === -1) {
-        return { success: false, error: 'Order not found in localStorage' }
+      const orderIndex = allOrders.findIndex(o => o.id === order.id)
+      if (orderIndex !== -1) {
+        allOrders[orderIndex] = { ...order, bills: [] } // Store without bills (3-level pattern)
+      } else {
+        // Order not found, add it
+        allOrders.push({ ...order, bills: [] })
       }
 
-      allOrders.data[orderIndex] = order
-
       // Save orders (without bills)
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(allOrders.data.map(o => ({ ...o, bills: [] })))
-      )
+      localStorage.setItem(this.ORDERS_KEY, JSON.stringify(allOrders))
 
-      // Save bills and items
+      // Save bills and items (3-level structure)
       for (const bill of order.bills) {
         // Update bill in storage
         const allBills = this.getAllStoredBills()
         const billIndex = allBills.findIndex(b => b.id === bill.id)
         if (billIndex !== -1) {
-          allBills[billIndex] = bill
-          localStorage.setItem(this.BILLS_KEY, JSON.stringify(allBills))
+          allBills[billIndex] = { ...bill, items: [] } // Store without items
+        } else {
+          allBills.push({ ...bill, items: [] })
         }
+        localStorage.setItem(this.BILLS_KEY, JSON.stringify(allBills))
 
-        // Update items
+        // Update items for this bill
         const allItems = this.getAllStoredItems()
         const filteredItems = allItems.filter(item => item.billId !== bill.id)
         filteredItems.push(...bill.items)
         localStorage.setItem(this.ITEMS_KEY, JSON.stringify(filteredItems))
       }
 
-      console.log('💾 Order updated in localStorage (backup)')
+      console.log('💾 Order updated in localStorage (backup)', {
+        orderId: order.id,
+        billsCount: order.bills.length,
+        itemsCount: order.bills.reduce((sum, b) => sum + b.items.length, 0)
+      })
 
       return { success: true, data: order }
     } catch (error) {

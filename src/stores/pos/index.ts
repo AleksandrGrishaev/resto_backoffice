@@ -156,9 +156,9 @@ export const usePosStore = defineStore('pos', () => {
         throw new Error('POS stores not available')
       }
 
-      // Загружаем данные из localStorage
-      platform.debugLog('POS', '📦 Loading tables from storage...')
-      await tablesStore.loadTables()
+      // Загружаем данные из Supabase/localStorage
+      platform.debugLog('POS', '📦 Initializing tables from Supabase...')
+      await tablesStore.initialize()
 
       platform.debugLog('POS', '📦 Loading orders from storage...')
       await ordersStore.loadOrders()

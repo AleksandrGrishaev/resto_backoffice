@@ -15,7 +15,12 @@
         <div class="screen-btn-content">
           <v-icon size="24">mdi-chef-hat</v-icon>
           <span class="screen-btn-label">Orders</span>
-          <v-badge v-if="dishesStats.total > 0" :content="dishesStats.total" color="error" inline />
+          <v-badge
+            v-if="dishesStats.waiting + dishesStats.cooking > 0"
+            :content="dishesStats.waiting + dishesStats.cooking"
+            color="error"
+            inline
+          />
         </div>
       </v-btn>
 

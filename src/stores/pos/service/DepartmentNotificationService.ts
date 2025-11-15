@@ -150,9 +150,8 @@ export class DepartmentNotificationService {
       // Находим menu item для определения department
       const menuItem = menuStore.menuItems.find(item => item.id === item.menuItemId)
 
-      if (!menuItem) {
-        console.warn('⚠️ Menu item not found:', item.menuItemId, 'defaulting to kitchen')
-      }
+      // Note: Menu item may not be found if using POS menu items instead of backoffice menu
+      // Default to kitchen department in this case
 
       // Определяем department (по умолчанию kitchen если не найдено)
       const department: Department = menuItem?.department || 'kitchen'

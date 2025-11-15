@@ -505,6 +505,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     // Обновляем timestamp
     order.updatedAt = new Date().toISOString()
 
+    // CRITICAL: Save order to Supabase after recalculation (dual-write)
+    await updateOrder(order)
+
     // Автоматически управлять статусом стола после пересчета
     // (ловит изменения paymentStatus и order.status)
     await updateTableStatusForOrder(orderId)

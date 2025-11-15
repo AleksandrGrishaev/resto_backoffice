@@ -1,6 +1,9 @@
 <!-- src/views/kitchen/orders/OrdersScreen.vue -->
 <template>
   <div class="orders-screen">
+    <!-- New Order Notifications -->
+    <NewOrderNotification ref="notificationComponent" />
+
     <!-- Dishes Columns (Kanban) -->
     <div class="orders-columns" :class="{ 'ready-collapsed': readyColumnCollapsed }">
       <!-- Waiting Column -->
@@ -96,11 +99,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useKitchenDishes } from '@/stores/kitchen/composables'
 import type { KitchenDish } from '@/stores/kitchen/composables'
 import { DebugUtils } from '@/utils'
 import DishCard from './components/DishCard.vue'
+import NewOrderNotification from './components/NewOrderNotification.vue'
 
 const MODULE_NAME = 'OrdersScreen'
 
@@ -109,12 +113,17 @@ const MODULE_NAME = 'OrdersScreen'
 // =============================================
 
 const readyColumnCollapsed = ref(true) // Collapsed by default
+const notificationComponent = ref<InstanceType<typeof NewOrderNotification>>()
+
+// Track previous order numbers to detect new orders
+const previousOrderNumbers = ref<Set<string>>(new Set())
 
 // =============================================
 // COMPOSABLES
 // =============================================
 
-const { dishesByStatus, dishesStats, updateDishStatus, getOrderColor } = useKitchenDishes()
+const { dishesByStatus, dishesByOrder, dishesStats, updateDishStatus, getOrderColor } =
+  useKitchenDishes()
 
 // Debug: Log dishes data
 onMounted(() => {
@@ -127,7 +136,51 @@ onMounted(() => {
     cookingDishes: dishesByStatus.value.cooking,
     readyDishes: dishesByStatus.value.ready
   })
+
+  // Initialize with current order numbers
+  const currentOrders = new Set<string>(Array.from(dishesByOrder.value.keys()))
+  previousOrderNumbers.value = currentOrders
 })
+
+// Watch for new orders
+watch(
+  () => dishesByOrder.value,
+  newDishesByOrder => {
+    const currentOrderNumbers = new Set<string>(Array.from(newDishesByOrder.keys()))
+
+    // Find new orders
+    const newOrders = Array.from(currentOrderNumbers).filter(
+      (orderNumber: string) => !previousOrderNumbers.value.has(orderNumber)
+    )
+
+    // Show notification for each new order
+    newOrders.forEach((orderNumber: string) => {
+      const orderDishes = newDishesByOrder.get(orderNumber)
+      if (!orderDishes || orderDishes.length === 0) return
+
+      const firstDish = orderDishes[0]
+      const itemsCount = orderDishes.length
+
+      DebugUtils.info(MODULE_NAME, 'New order detected', {
+        orderNumber,
+        itemsCount,
+        tableNumber: firstDish.tableNumber
+      })
+
+      // Show notification
+      notificationComponent.value?.showNotification({
+        orderNumber,
+        itemsCount,
+        tableNumber: firstDish.tableNumber,
+        color: getOrderColor(orderNumber)
+      })
+    })
+
+    // Update tracked order numbers
+    previousOrderNumbers.value = currentOrderNumbers
+  },
+  { deep: true }
+)
 
 // =============================================
 // METHODS
@@ -235,14 +288,22 @@ const handleDishStatusUpdate = async (
 }
 
 .expand-btn {
-  border: 2px solid rgba(255, 255, 255, 0.3) !important;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.3) !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
   transition: all 0.2s ease !important;
 
+  :deep(.v-icon) {
+    font-size: 18px !important;
+  }
+
   &:hover {
-    transform: scale(1.1);
-    border-color: rgba(255, 255, 255, 0.6) !important;
-    box-shadow: 0 4px 4px rgba(76, 175, 80, 0.4) !important;
+    transform: scale(1.05);
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3) !important;
   }
 }
 

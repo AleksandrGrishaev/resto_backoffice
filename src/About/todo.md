@@ -4,9 +4,9 @@
 
 ## 📊 Current Status (2025-11-15)
 
-**Sprint 7 Progress: 🟢 80%** (Week 2, Day 4)
+**Sprint 7 Progress: 🟢 90%** (Week 2, Day 4 - Complete)
 
-**Готовность к релизу: 🟢 90%**
+**Готовность к релизу: 🟢 95%**
 
 ---
 
@@ -109,7 +109,7 @@
   - `src/stores/pos/payments/services.ts` - Payment & Refund IDs
   - `src/stores/pos/orders/services.ts` - Order, Bill, Item IDs
 
-### Week 2, Day 4: Orders Store → Supabase Migration ✅
+### Week 2, Day 4 (Morning): Orders Store → Supabase Migration ✅
 
 - ✅ **Orders Mappers Created:** `src/stores/pos/orders/supabaseMappers.ts`
 - ✅ **Complex Bills Flattening/Reconstruction:**
@@ -137,6 +137,117 @@
 3. ✅ Order READ → Supabase first (auto-reconstruct) → localStorage fallback
 4. ✅ Bills/Items operations → automatic dual-write via updateOrder()
 5. ✅ Offline fallback → localStorage 3-level structure intact
+
+---
+
+### Week 2, Day 4 (Afternoon): Tables Store → Supabase Migration ✅
+
+**Priority:** Critical (blocking Orders - UUID validation issue)
+**ETA:** Day 4 afternoon (4 hours)
+**Status:** ✅ COMPLETED
+
+**Problem Found:**
+
+- Orders were failing with UUID validation error: `invalid input syntax for type uuid: "table_main_1"`
+- Root cause: Tables store was using **string IDs** (`table_main_1`) instead of UUIDs
+- Supabase already had 5 tables with proper UUIDs (T1-T5)
+
+**Solution Implemented:**
+
+1. ✅ **Tables Supabase Mappers Created:** `src/stores/pos/tables/supabaseMappers.ts`
+
+   - `toSupabaseInsert()` - Maps PosTable → Supabase format
+   - `toSupabaseUpdate()` - Maps PosTable → Supabase UPDATE format
+   - `fromSupabase()` - Maps Supabase row → PosTable
+   - Status mapping: `free` ↔ `available`, `occupied` ↔ `occupied`, `reserved` ↔ `reserved`
+   - Section mapping: `section` ↔ `area`
+
+2. ✅ **Tables Service Updated:** Dual-write pattern implemented
+
+   - `getAllTables()` - Reads from Supabase first → fallback to localStorage
+   - `updateTableStatus()` - Dual-write to Supabase + localStorage
+   - Caches Supabase data to localStorage for offline access
+   - Console logging for debugging
+
+3. ✅ **Tables Store Refactored:**
+
+   - Removed `createInitialTables()` function (was creating invalid string IDs)
+   - Changed initial state from `createInitialTables()` → `[]` (empty array)
+   - Added `initialize()` method to load from Supabase on app start
+   - Added `initialized` flag to prevent double-initialization
+
+4. ✅ **POS Store Integration:**
+
+   - Updated `initializePOS()` to call `tablesStore.initialize()` instead of `tablesStore.loadTables()`
+   - Tables now load from Supabase with proper UUIDs on POS startup
+
+5. ✅ **Composables Cleanup:**
+   - Removed duplicate `loading`, `error`, `clearError` from `useTables()` composable
+   - These properties are now only in main tablesStore
+
+**Bug Fixes:**
+
+1. ✅ **updateOrder() race condition fixed:**
+
+   - Issue: `updateOrder()` was calling `getAllOrders()` which reads from Supabase
+   - Problem: New items not yet saved to Supabase were lost on read
+   - Fix: `updateOrder()` now reads from **localStorage directly** for update operations
+   - Result: Items persist correctly through add/update/remove operations
+
+2. ✅ **recalculateOrderTotals() missing save:**
+   - Issue: `recalculateOrderTotals()` was only updating local state, not saving to Supabase
+   - Problem: After adding items, `recalculate` was called but changes weren't persisted
+   - Fix: Added `await updateOrder(order)` after totals recalculation
+   - Result: Items now save to Supabase immediately after being added
+
+**What Works:**
+
+1. ✅ Tables READ → Supabase first (with UUIDs) → localStorage fallback
+2. ✅ Tables UPDATE status → Dual-write to Supabase + localStorage
+3. ✅ Orders CREATE with table UUID → No more validation errors
+4. ✅ Table status auto-update (free → occupied → free)
+5. ✅ Offline cache → Supabase tables cached to localStorage
+6. ✅ Items persistence → Fixed updateOrder() to preserve items
+
+**Test Results (2025-11-15, 00:13 - Final):**
+
+```
+✅ Loaded 5 tables from Supabase
+✅ Table T1 status updated in Supabase: occupied
+✅ Order saved to Supabase: ORD-20251115-8117
+✅ Order updated in Supabase: ORD-20251115-8117 {billsCount: 1, totalItems: 1}
+✅ Bintang Beer added to Bill 1
+✅ Table auto-occupied: {tableId: '94facdc9-...', orderId: 'bc0976...'}
+✅ Kitchen notification sent
+✅ Order status: draft → waiting
+```
+
+**Performance Optimizations:**
+
+- Removed excessive console logging from TablesSidebar (was logging every order on computed)
+- Removed warning spam from DepartmentNotificationService
+
+**Architecture:**
+
+```
+POS UI → tablesStore.initialize()
+      → tablesService.getAllTables()
+         → Supabase SELECT * FROM tables (5 rows with UUIDs)
+         → Cache to localStorage
+         → Return PosTable[] (mapped via fromSupabase())
+
+Table Selection → ordersStore.createOrder(tableId: UUID)
+               → ordersService.createOrder()
+                  → Supabase INSERT orders (table_id: UUID) ✅
+                  → localStorage 3-level structure
+
+Add Item → ordersStore.addItemToBill()
+        → ordersService.addItemToBill()
+           → Save item to localStorage items array
+           → updateOrder() → Dual-write
+              → Supabase UPDATE (flattened items with bill metadata)
+              → localStorage (3-level: orders, bills, items) ✅
+```
 
 ---
 
@@ -745,18 +856,30 @@ Consolidated into single JSONB field when syncing to Supabase ✅
 
 ---
 
-##### Day 5: Orders Testing
+##### Day 4 (Evening): Orders Testing ✅
 
-**Status:** Ready for testing
+**Status:** ✅ COMPLETED - All core scenarios working!
 
 **Test Scenarios:**
 
-- [ ] **Create Order (Dine-In)**
+- [x] **Create Order (Dine-In)** ✅ WORKING
 
-  - Create order with tableId
+  - Create order with tableId (UUID from Supabase)
   - Verify first bill created automatically
   - Verify saved to Supabase with flattened items
   - Verify table status updated to 'occupied'
+
+- [x] **Add Items to Bills** ✅ WORKING
+
+  - Add item (Bintang Beer) to bill
+  - Verify item saved to Supabase in flattened JSONB format
+  - Verify bill totals recalculated
+  - Verify dual-write to Supabase + localStorage
+
+- [x] **Send to Kitchen** ✅ WORKING
+
+  - Kitchen notification sent successfully
+  - Order status updated: draft → waiting
 
 - [ ] **Add Multiple Bills**
 

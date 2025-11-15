@@ -151,23 +151,12 @@ const tables = computed((): PosTable[] => {
  * Сортируем по времени создания от старых к новым
  */
 const deliveryOrders = computed((): PosOrder[] => {
-  console.log('📋 Computing deliveryOrders:', {
-    totalOrders: ordersStore.orders.length,
-    orders: ordersStore.orders.map(o => ({ id: o.id, type: o.type, status: o.status }))
-  })
+  // Removed verbose logging - use browser DevTools for debugging
 
   return ordersStore.orders
     .filter(order => {
       const isDeliveryOrTakeaway = ['takeaway', 'delivery'].includes(order.type)
       const isNotCompletedOrCancelled = !['cancelled', 'paid'].includes(order.status)
-
-      console.log(`📦 Order ${order.id}:`, {
-        type: order.type,
-        status: order.status,
-        isDeliveryOrTakeaway,
-        isNotCompletedOrCancelled,
-        willBeIncluded: isDeliveryOrTakeaway && isNotCompletedOrCancelled
-      })
 
       return isDeliveryOrTakeaway && isNotCompletedOrCancelled
     })

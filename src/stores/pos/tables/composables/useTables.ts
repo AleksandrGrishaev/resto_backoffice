@@ -1,13 +1,11 @@
 // src/stores/pos/tables/composables/useTables.ts
-import { ref } from 'vue'
 import type { PosTable, TableStatus } from '../../types'
 
 /**
  * Composable для работы со столами
  */
 export function useTables() {
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+  // Note: loading and error are managed in main tablesStore
 
   // =============================================
   // ПРОВЕРКИ СОСТОЯНИЯ СТОЛОВ
@@ -153,10 +151,6 @@ export function useTables() {
   }
 
   return {
-    // State
-    loading,
-    error,
-
     // Checks
     canOccupyTable,
     canFreeTable,
@@ -172,7 +166,7 @@ export function useTables() {
     getTableStatusText,
 
     // Actions
-    handleTableSelect,
-    clearError
+    handleTableSelect
+    // Note: loading, error, clearError removed - they're in main store
   }
 }
