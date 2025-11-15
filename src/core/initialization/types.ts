@@ -25,6 +25,7 @@ export type StoreName =
   | 'sales'
   | 'writeOff'
   | 'pos'
+  | 'kitchen'
   | 'debug'
 
 /**

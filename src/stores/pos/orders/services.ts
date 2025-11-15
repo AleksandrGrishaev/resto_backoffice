@@ -10,16 +10,53 @@ import type {
   ItemPaymentStatus
 } from '../types'
 import type { MenuItemVariant, SelectedModifier } from '@/stores/menu'
-import { TimeUtils } from '@/utils'
+import { TimeUtils, generateId } from '@/utils'
 import { departmentNotificationService } from '../service/DepartmentNotificationService'
+import { ENV } from '@/config/environment'
+import { supabase } from '@/supabase/client'
+import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
 
+/**
+ * Order service - handles storage operations
+ * Uses dual-write pattern: Supabase (online) + localStorage (offline backup)
+ */
 export class OrdersService {
   private readonly ORDERS_KEY = 'pos_orders'
   private readonly BILLS_KEY = 'pos_bills'
   private readonly ITEMS_KEY = 'pos_bill_items'
 
+  /**
+   * Check if Supabase is available
+   */
+  private isSupabaseAvailable(): boolean {
+    return ENV.useSupabase && !!supabase
+  }
+
+  /**
+   * Get all orders from storage
+   * Tries Supabase first (if online), falls back to localStorage
+   */
   async getAllOrders(): Promise<ServiceResponse<PosOrder[]>> {
     try {
+      // Try to load from Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (!error && data) {
+          console.log('✅ Loaded orders from Supabase:', data.length)
+          return { success: true, data: data.map(fromSupabase) }
+        }
+
+        // Log error but continue to localStorage fallback
+        if (error) {
+          console.warn('⚠️ Supabase load failed, falling back to localStorage:', error.message)
+        }
+      }
+
+      // Fallback to localStorage
       const stored = localStorage.getItem(this.ORDERS_KEY)
       const orders = stored ? JSON.parse(stored) : []
 
@@ -30,6 +67,7 @@ export class OrdersService {
 
       await new Promise(resolve => setTimeout(resolve, 100))
 
+      console.log('📦 Loaded orders from localStorage:', orders.length)
       return { success: true, data: orders }
     } catch (error) {
       return {
@@ -213,7 +251,7 @@ export class OrdersService {
       const orderNumber = this.generateOrderNumber()
 
       const newOrder: PosOrder = {
-        id: `order_${Date.now()}`,
+        id: generateId(), // UUID for Supabase compatibility
         orderNumber,
         type: orderData.type, // ВАЖНО: правильно сохраняем тип
         status: 'draft',
@@ -244,7 +282,20 @@ export class OrdersService {
         newOrder.bills = [firstBill.data]
       }
 
-      // Сохраняем заказ
+      // Try Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const supabaseRow = toSupabaseInsert(newOrder)
+        const { error } = await supabase.from('orders').insert(supabaseRow)
+
+        if (error) {
+          console.error('❌ Supabase save failed:', error.message)
+          // Continue to localStorage (offline fallback)
+        } else {
+          console.log('✅ Order saved to Supabase:', newOrder.orderNumber)
+        }
+      }
+
+      // Always save to localStorage (backup)
       const orders = await this.getAllOrders()
       const ordersList = orders.success && orders.data ? orders.data : []
       ordersList.push(newOrder)
@@ -260,7 +311,7 @@ export class OrdersService {
         )
       )
 
-      console.log('💾 Saved order to localStorage:', {
+      console.log('💾 Order saved to localStorage (backup):', {
         id: newOrder.id,
         type: newOrder.type,
         saved: true
@@ -315,7 +366,7 @@ export class OrdersService {
       const totalPrice = pricePerUnit * quantity
 
       const newItem: PosBillItem = {
-        id: `item_${Date.now()}`,
+        id: generateId(), // UUID for Supabase compatibility
         billId,
         menuItemId: menuItem.id,
         menuItemName: menuItem.name,
@@ -558,6 +609,7 @@ export class OrdersService {
 
   /**
    * Update order in storage (simple update without notifications)
+   * Dual-write: Supabase (if online) + localStorage (always)
    * Used by payment system to update order payment status
    */
   async updateOrder(order: PosOrder): Promise<ServiceResponse<PosOrder>> {
@@ -565,6 +617,20 @@ export class OrdersService {
       // Update order timestamp
       order.updatedAt = TimeUtils.getCurrentLocalISO()
 
+      // Try Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const supabaseRow = toSupabaseUpdate(order)
+        const { error } = await supabase.from('orders').update(supabaseRow).eq('id', order.id)
+
+        if (error) {
+          console.error('❌ Supabase update failed:', error.message)
+          // Continue to localStorage (offline fallback)
+        } else {
+          console.log('✅ Order updated in Supabase:', order.orderNumber)
+        }
+      }
+
+      // Always update in localStorage (backup)
       // Load all orders
       const allOrders = await this.getAllOrders()
       if (!allOrders.success || !allOrders.data) {
@@ -574,7 +640,7 @@ export class OrdersService {
       // Find and update order
       const orderIndex = allOrders.data.findIndex(o => o.id === order.id)
       if (orderIndex === -1) {
-        throw new Error('Order not found')
+        return { success: false, error: 'Order not found in localStorage' }
       }
 
       allOrders.data[orderIndex] = order
@@ -602,6 +668,8 @@ export class OrdersService {
         localStorage.setItem(this.ITEMS_KEY, JSON.stringify(filteredItems))
       }
 
+      console.log('💾 Order updated in localStorage (backup)')
+
       return { success: true, data: order }
     } catch (error) {
       return {
@@ -616,7 +684,7 @@ export class OrdersService {
     billName: string
   ): Promise<ServiceResponse<PosBill>> {
     const newBill: PosBill = {
-      id: `bill_${Date.now()}`,
+      id: generateId(), // UUID for Supabase compatibility
       billNumber: this.generateBillNumber(),
       orderId,
       name: billName,

@@ -11,6 +11,7 @@ import {
   getRequiredStoresForRoles,
   shouldLoadBackofficeStores,
   shouldLoadPOSStores,
+  shouldLoadKitchenStores,
   getLoadOrderForStores,
   CRITICAL_STORES
 } from './dependencies'
@@ -22,6 +23,7 @@ import { useRecipesStore } from '@/stores/recipes'
 import { useMenuStore } from '@/stores/menu'
 import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
 import { usePosStore } from '@/stores/pos'
+import { useKitchenStore } from '@/stores/kitchen'
 
 const MODULE_NAME = 'ProductionInitStrategy'
 
@@ -107,6 +109,11 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       if (shouldLoadPOSStores(userRoles)) {
         results.push(...(await this.initializePOSStores()))
+      }
+
+      // Kitchen stores (depends on POS)
+      if (shouldLoadKitchenStores(userRoles)) {
+        results.push(await this.loadKitchenFromAPI())
       }
 
       if (shouldLoadBackofficeStores(userRoles)) {
@@ -389,6 +396,39 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'writeOff',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadKitchenFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useKitchenStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading Kitchen from API...')
+
+      // TODO: Заменить на API вызов
+      const result = await store.initialize()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Kitchen initialization failed')
+      }
+
+      return {
+        name: 'kitchen',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load Kitchen'
+      DebugUtils.error(MODULE_NAME, `❌ [PROD] ${message}`, { error })
+
+      return {
+        name: 'kitchen',
         success: false,
         error: message,
         duration: Date.now() - start

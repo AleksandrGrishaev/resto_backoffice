@@ -1,21 +1,52 @@
 // src/stores/pos/payments/services.ts
 import type { PosPayment, ServiceResponse, PaymentMethod } from '../types'
-import { TimeUtils } from '@/utils'
+import { TimeUtils, generateId } from '@/utils'
+import { ENV } from '@/config/environment'
+import { supabase } from '@/supabase/client'
+import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
 
 /**
  * Payment service - handles storage operations
- * Currently uses localStorage, can be swapped with API/Firebase later
+ * Uses dual-write pattern: Supabase (online) + localStorage (offline backup)
  */
 export class PaymentsService {
   private readonly STORAGE_KEY = 'pos_payments'
 
   /**
+   * Check if Supabase is available
+   */
+  private isSupabaseAvailable(): boolean {
+    return ENV.useSupabase && !!supabase
+  }
+
+  /**
    * Get all payments from storage
+   * Tries Supabase first (if online), falls back to localStorage
    */
   async getAllPayments(): Promise<ServiceResponse<PosPayment[]>> {
     try {
+      // Try to load from Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const { data, error } = await supabase
+          .from('payments')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (!error && data) {
+          console.log('✅ Loaded payments from Supabase:', data.length)
+          return { success: true, data: data.map(fromSupabase) }
+        }
+
+        // Log error but continue to localStorage fallback
+        if (error) {
+          console.warn('⚠️ Supabase load failed, falling back to localStorage:', error.message)
+        }
+      }
+
+      // Fallback to localStorage
       const stored = localStorage.getItem(this.STORAGE_KEY)
       const payments = stored ? JSON.parse(stored) : []
+      console.log('📦 Loaded payments from localStorage:', payments.length)
 
       return { success: true, data: payments }
     } catch (error) {
@@ -28,14 +59,30 @@ export class PaymentsService {
 
   /**
    * Save payment to storage
+   * Dual-write: Supabase (if online) + localStorage (always)
    */
   async savePayment(payment: PosPayment): Promise<ServiceResponse<PosPayment>> {
     try {
+      // Try Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const supabaseRow = toSupabaseInsert(payment)
+        const { error } = await supabase.from('payments').insert(supabaseRow)
+
+        if (error) {
+          console.error('❌ Supabase save failed:', error.message)
+          // Continue to localStorage (offline fallback)
+        } else {
+          console.log('✅ Payment saved to Supabase:', payment.paymentNumber)
+        }
+      }
+
+      // Always save to localStorage (backup)
       const allPayments = await this.getAllPayments()
       const payments = allPayments.success && allPayments.data ? allPayments.data : []
 
       payments.push(payment)
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(payments))
+      console.log('💾 Payment saved to localStorage (backup)')
 
       return { success: true, data: payment }
     } catch (error) {
@@ -48,20 +95,37 @@ export class PaymentsService {
 
   /**
    * Update existing payment
+   * Dual-write: Supabase (if online) + localStorage (always)
    */
   async updatePayment(payment: PosPayment): Promise<ServiceResponse<PosPayment>> {
     try {
+      payment.updatedAt = TimeUtils.getCurrentLocalISO()
+
+      // Try Supabase first (if online)
+      if (this.isSupabaseAvailable()) {
+        const supabaseRow = toSupabaseUpdate(payment)
+        const { error } = await supabase.from('payments').update(supabaseRow).eq('id', payment.id)
+
+        if (error) {
+          console.error('❌ Supabase update failed:', error.message)
+          // Continue to localStorage (offline fallback)
+        } else {
+          console.log('✅ Payment updated in Supabase:', payment.paymentNumber)
+        }
+      }
+
+      // Always update in localStorage (backup)
       const allPayments = await this.getAllPayments()
       const payments = allPayments.success && allPayments.data ? allPayments.data : []
 
       const index = payments.findIndex(p => p.id === payment.id)
       if (index === -1) {
-        return { success: false, error: 'Payment not found' }
+        return { success: false, error: 'Payment not found in localStorage' }
       }
 
-      payment.updatedAt = TimeUtils.getCurrentLocalISO()
       payments[index] = payment
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(payments))
+      console.log('💾 Payment updated in localStorage (backup)')
 
       return { success: true, data: payment }
     } catch (error) {
@@ -89,7 +153,7 @@ export class PaymentsService {
       const paymentNumber = this.generatePaymentNumber()
 
       const newPayment: PosPayment = {
-        id: `payment_${Date.now()}`,
+        id: generateId(), // UUID for Supabase compatibility
         paymentNumber,
         orderId: paymentData.orderId,
         billIds: paymentData.billIds,
@@ -160,7 +224,7 @@ export class PaymentsService {
 
       // Create refund payment (negative amount)
       const refundPayment: PosPayment = {
-        id: `refund_${Date.now()}`,
+        id: generateId(), // UUID for Supabase compatibility
         paymentNumber: this.generatePaymentNumber(),
         orderId: originalPayment.orderId,
         billIds: originalPayment.billIds,

@@ -19,6 +19,7 @@ interface EnvironmentConfig {
   useAPI: boolean
   useMockData: boolean
   useFirebase: boolean
+  useSupabase: boolean // Alias for supabase.enabled
 
   // Offline capabilities
   enableOffline: boolean
@@ -102,6 +103,7 @@ function createEnvironmentConfig(): EnvironmentConfig {
     useAPI: import.meta.env.VITE_USE_API === 'true',
     useMockData: import.meta.env.VITE_USE_MOCK_DATA === 'true',
     useFirebase: import.meta.env.VITE_USE_FIREBASE === 'true',
+    useSupabase: import.meta.env.VITE_USE_SUPABASE === 'true',
 
     // Offline capabilities
     enableOffline: import.meta.env.VITE_ENABLE_OFFLINE === 'true',

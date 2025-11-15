@@ -24,6 +24,7 @@ import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { usePosStore } from '@/stores/pos'
+import { useKitchenStore } from '@/stores/kitchen'
 import { useDebugStore } from '@/stores/debug'
 
 const MODULE_NAME = 'AppInitializer'
@@ -181,6 +182,7 @@ export class AppInitializer {
 
     // Role-based stores
     storesStatus.pos = usePosStore().isInitialized ? 'Ready' : 'Not loaded'
+    storesStatus.kitchen = useKitchenStore().initialized ? 'Ready' : 'Not loaded'
 
     // Выводим сводки
     DebugUtils.deviceInfo(deviceInfo)
@@ -222,7 +224,8 @@ export class AppInitializer {
     }
 
     const posStores = {
-      pos: !!usePosStore().isInitialized
+      pos: !!usePosStore().isInitialized,
+      kitchen: !!useKitchenStore().initialized
     }
 
     const debugStores = {

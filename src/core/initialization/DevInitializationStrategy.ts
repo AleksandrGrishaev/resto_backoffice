@@ -9,7 +9,8 @@ import type {
 import {
   getRequiredStoresForRoles,
   shouldLoadBackofficeStores,
-  shouldLoadPOSStores
+  shouldLoadPOSStores,
+  shouldLoadKitchenStores
 } from './dependencies'
 import { DebugUtils } from '@/utils'
 
@@ -24,6 +25,7 @@ import { usePreparationStore } from '@/stores/preparation'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
 import { usePosStore } from '@/stores/pos'
+import { useKitchenStore } from '@/stores/kitchen'
 import { useDebugStore } from '@/stores/debug'
 
 const MODULE_NAME = 'DevInitStrategy'
@@ -96,6 +98,11 @@ export class DevInitializationStrategy implements InitializationStrategy {
       // POS stores
       if (shouldLoadPOSStores(userRoles)) {
         results.push(...(await this.initializePOSStores()))
+      }
+
+      // Kitchen stores (depends on POS)
+      if (shouldLoadKitchenStores(userRoles)) {
+        results.push(await this.loadKitchen())
       }
 
       // Backoffice stores (параллельная загрузка независимых stores)
@@ -375,6 +382,38 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       return {
         name: 'writeOff',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadKitchen(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useKitchenStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading Kitchen system...')
+
+      const result = await store.initialize()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Kitchen initialization failed')
+      }
+
+      return {
+        name: 'kitchen',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load Kitchen'
+      DebugUtils.error(MODULE_NAME, `❌ [DEV] ${message}`, { error })
+
+      return {
+        name: 'kitchen',
         success: false,
         error: message,
         duration: Date.now() - start

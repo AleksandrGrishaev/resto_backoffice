@@ -22,6 +22,13 @@ export const CORE_USERS = [
     roles: ['cashier'] as UserRole[],
     isActive: true,
     description: 'Cashier for POS operations'
+  },
+  {
+    name: 'Kitchen User',
+    pin: '4567',
+    roles: ['kitchen'] as UserRole[],
+    isActive: true,
+    description: 'Kitchen staff for order preparation'
   }
 ]
 
@@ -49,6 +56,8 @@ export class CoreUserService {
     if (roles.includes('admin')) return '/menu'
     if (roles.includes('manager')) return '/menu'
     if (roles.includes('cashier')) return '/pos'
+    if (roles.includes('kitchen')) return '/kitchen'
+    if (roles.includes('bar')) return '/kitchen'
     return '/unauthorized'
   }
 

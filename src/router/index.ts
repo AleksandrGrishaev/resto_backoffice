@@ -77,6 +77,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
 
+  // ===== KITCHEN ROUTES =====
+  {
+    path: '/kitchen',
+    name: 'kitchen',
+    component: () => import('@/views/kitchen/KitchenMainView.vue'),
+    meta: {
+      requiresAuth: true,
+      allowedRoles: ['admin', 'kitchen', 'bar'],
+      title: 'Kitchen Display'
+    }
+  },
+
   // ===== BACKOFFICE ROUTES =====
   {
     path: '/',

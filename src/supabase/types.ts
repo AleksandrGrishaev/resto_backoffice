@@ -1,339 +1,461 @@
 // src/supabase/types.ts - Supabase database types
-// This file will be auto-generated using: supabase gen types typescript --project-id fjkfckjpnbcyuknsnchy
-
-/**
- * Database type definitions
- * These types will be auto-generated from Supabase schema
- * For now, we define them manually
- */
+// Auto-generated from Supabase schema using mcp__supabase__generate_typescript_types
+// Last updated: 2025-11-15 (after Migration 003)
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
-// Payment method type
-export interface PaymentMethod {
-  type: 'cash' | 'card' | 'qr'
-  amount: number
-  label?: string
-}
-
-// Correction operation
-export interface CorrectionOperation {
-  id: string
-  reason: string
-  amount: number
-  timestamp: string
-}
-
-// Expense operation
-export interface ExpenseOperation {
-  id: string
-  description: string
-  amount: number
-  timestamp: string
-}
-
-// Order item
-export interface OrderItem {
-  id: string
-  product_id: string
-  product_name: string
-  quantity: number
-  price: number
-  total: number
-  notes?: string
-}
-
-// Payment details
-export interface PaymentDetails {
-  cash?: number
-  card?: number
-  qr?: number
-  change?: number
-}
-
-// Database schema
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: '13.0.5'
+  }
   public: {
     Tables: {
-      shifts: {
-        Row: {
-          id: string
-          shift_number: number
-          cashier_id: string | null
-          cashier_name: string
-          status: 'active' | 'completed'
-          start_time: string
-          end_time: string | null
-          total_sales: number
-          total_cash: number
-          total_card: number
-          total_qr: number
-          payment_methods: PaymentMethod[]
-          corrections: CorrectionOperation[]
-          expense_operations: ExpenseOperation[]
-          synced_to_account: boolean
-          synced_at: string | null
-          account_transaction_ids: string[] | null
-          sync_error: string | null
-          sync_attempts: number
-          last_sync_attempt: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          shift_number: number
-          cashier_id?: string | null
-          cashier_name: string
-          status: 'active' | 'completed'
-          start_time: string
-          end_time?: string | null
-          total_sales?: number
-          total_cash?: number
-          total_card?: number
-          total_qr?: number
-          payment_methods?: PaymentMethod[]
-          corrections?: CorrectionOperation[]
-          expense_operations?: ExpenseOperation[]
-          synced_to_account?: boolean
-          synced_at?: string | null
-          account_transaction_ids?: string[] | null
-          sync_error?: string | null
-          sync_attempts?: number
-          last_sync_attempt?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          shift_number?: number
-          cashier_id?: string | null
-          cashier_name?: string
-          status?: 'active' | 'completed'
-          start_time?: string
-          end_time?: string | null
-          total_sales?: number
-          total_cash?: number
-          total_card?: number
-          total_qr?: number
-          payment_methods?: PaymentMethod[]
-          corrections?: CorrectionOperation[]
-          expense_operations?: ExpenseOperation[]
-          synced_to_account?: boolean
-          synced_at?: string | null
-          account_transaction_ids?: string[] | null
-          sync_error?: string | null
-          sync_attempts?: number
-          last_sync_attempt?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
       orders: {
         Row: {
-          id: string
-          order_number: string
-          table_id: string | null
-          shift_id: string | null
-          type: 'dine_in' | 'takeaway' | 'delivery'
-          status: 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled'
-          items: OrderItem[]
-          subtotal: number
-          discount: number
-          tax: number
-          total: number
-          payment_status: string
-          payment_method: string | null
-          paid_at: string | null
-          notes: string | null
-          customer_name: string | null
+          actual_ready_time: string | null
           created_at: string
-          updated_at: string
           created_by: string | null
-        }
-        Insert: {
-          id?: string
-          order_number: string
-          table_id?: string | null
-          shift_id?: string | null
-          type: 'dine_in' | 'takeaway' | 'delivery'
-          status?: 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled'
-          items?: OrderItem[]
-          subtotal?: number
-          discount?: number
-          tax?: number
-          total?: number
-          payment_status?: string
-          payment_method?: string | null
-          paid_at?: string | null
-          notes?: string | null
-          customer_name?: string | null
-          created_at?: string
-          updated_at?: string
-          created_by?: string | null
-        }
-        Update: {
-          id?: string
-          order_number?: string
-          table_id?: string | null
-          shift_id?: string | null
-          type?: 'dine_in' | 'takeaway' | 'delivery'
-          status?: 'pending' | 'preparing' | 'ready' | 'served' | 'paid' | 'cancelled'
-          items?: OrderItem[]
-          subtotal?: number
-          discount?: number
-          tax?: number
-          total?: number
-          payment_status?: string
-          payment_method?: string | null
-          paid_at?: string | null
-          notes?: string | null
-          customer_name?: string | null
-          created_at?: string
-          updated_at?: string
-          created_by?: string | null
-        }
-      }
-      products: {
-        Row: {
+          customer_name: string | null
+          discount: number
+          discount_amount: number | null
+          estimated_ready_time: string | null
+          final_amount: number | null
           id: string
-          name: string
-          name_ru: string | null
-          category: string
-          price: number
-          cost: number | null
-          unit: string
-          sku: string | null
-          barcode: string | null
-          is_active: boolean
-          is_available: boolean
-          track_stock: boolean
-          current_stock: number | null
-          min_stock: number | null
-          description: string | null
-          image_url: string | null
-          tags: string[] | null
-          created_at: string
+          items: Json
+          notes: string | null
+          order_number: string
+          paid_amount: number | null
+          paid_at: string | null
+          payment_ids: string[] | null
+          payment_method: string | null
+          payment_status: string
+          shift_id: string | null
+          status: string
+          subtotal: number
+          table_id: string | null
+          tax: number
+          tax_amount: number | null
+          total: number
+          total_amount: number | null
+          type: string
           updated_at: string
+          waiter_name: string | null
         }
         Insert: {
-          id?: string
-          name: string
-          name_ru?: string | null
-          category: string
-          price: number
-          cost?: number | null
-          unit?: string
-          sku?: string | null
-          barcode?: string | null
-          is_active?: boolean
-          is_available?: boolean
-          track_stock?: boolean
-          current_stock?: number | null
-          min_stock?: number | null
-          description?: string | null
-          image_url?: string | null
-          tags?: string[] | null
+          actual_ready_time?: string | null
           created_at?: string
+          created_by?: string | null
+          customer_name?: string | null
+          discount?: number
+          discount_amount?: number | null
+          estimated_ready_time?: string | null
+          final_amount?: number | null
+          id?: string
+          items?: Json
+          notes?: string | null
+          order_number: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_ids?: string[] | null
+          payment_method?: string | null
+          payment_status?: string
+          shift_id?: string | null
+          status?: string
+          subtotal?: number
+          table_id?: string | null
+          tax?: number
+          tax_amount?: number | null
+          total?: number
+          total_amount?: number | null
+          type: string
           updated_at?: string
+          waiter_name?: string | null
         }
         Update: {
-          id?: string
-          name?: string
-          name_ru?: string | null
-          category?: string
-          price?: number
-          cost?: number | null
-          unit?: string
-          sku?: string | null
-          barcode?: string | null
-          is_active?: boolean
-          is_available?: boolean
-          track_stock?: boolean
-          current_stock?: number | null
-          min_stock?: number | null
-          description?: string | null
-          image_url?: string | null
-          tags?: string[] | null
+          actual_ready_time?: string | null
           created_at?: string
+          created_by?: string | null
+          customer_name?: string | null
+          discount?: number
+          discount_amount?: number | null
+          estimated_ready_time?: string | null
+          final_amount?: number | null
+          id?: string
+          items?: Json
+          notes?: string | null
+          order_number?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_ids?: string[] | null
+          payment_method?: string | null
+          payment_status?: string
+          shift_id?: string | null
+          status?: string
+          subtotal?: number
+          table_id?: string | null
+          tax?: number
+          tax_amount?: number | null
+          total?: number
+          total_amount?: number | null
+          type?: string
           updated_at?: string
+          waiter_name?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: 'orders_shift_id_fkey'
+            columns: ['shift_id']
+            isOneToOne: false
+            referencedRelation: 'shifts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'orders_table_id_fkey'
+            columns: ['table_id']
+            isOneToOne: false
+            referencedRelation: 'tables'
+            referencedColumns: ['id']
+          }
+        ]
       }
       payments: {
         Row: {
-          id: string
-          order_id: string
-          shift_id: string | null
           amount: number
-          payment_method: 'cash' | 'card' | 'qr' | 'mixed'
-          status: 'pending' | 'completed' | 'failed' | 'refunded'
-          details: PaymentDetails
-          transaction_id: string | null
-          receipt_number: string | null
+          bill_ids: string[] | null
+          change_amount: number | null
+          created_at: string
+          details: Json
+          id: string
+          item_ids: string[] | null
+          order_id: string | null
+          original_payment_id: string | null
+          payment_method: string
+          payment_number: string | null
           processed_at: string | null
           processed_by: string | null
-          created_at: string
+          processed_by_name: string | null
+          receipt_number: string | null
+          receipt_printed: boolean | null
+          received_amount: number | null
+          reconciled_at: string | null
+          reconciled_by: string | null
+          refund_reason: string | null
+          refunded_at: string | null
+          refunded_by: string | null
+          shift_id: string | null
+          status: string
+          sync_status: string | null
+          synced_at: string | null
+          transaction_id: string | null
         }
         Insert: {
-          id?: string
-          order_id: string
-          shift_id?: string | null
           amount: number
-          payment_method: 'cash' | 'card' | 'qr' | 'mixed'
-          status?: 'pending' | 'completed' | 'failed' | 'refunded'
-          details?: PaymentDetails
-          transaction_id?: string | null
-          receipt_number?: string | null
+          bill_ids?: string[] | null
+          change_amount?: number | null
+          created_at?: string
+          details?: Json
+          id?: string
+          item_ids?: string[] | null
+          order_id?: string | null
+          original_payment_id?: string | null
+          payment_method: string
+          payment_number?: string | null
           processed_at?: string | null
           processed_by?: string | null
-          created_at?: string
+          processed_by_name?: string | null
+          receipt_number?: string | null
+          receipt_printed?: boolean | null
+          received_amount?: number | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          refund_reason?: string | null
+          refunded_at?: string | null
+          refunded_by?: string | null
+          shift_id?: string | null
+          status?: string
+          sync_status?: string | null
+          synced_at?: string | null
+          transaction_id?: string | null
         }
         Update: {
-          id?: string
-          order_id?: string
-          shift_id?: string | null
           amount?: number
-          payment_method?: 'cash' | 'card' | 'qr' | 'mixed'
-          status?: 'pending' | 'completed' | 'failed' | 'refunded'
-          details?: PaymentDetails
-          transaction_id?: string | null
-          receipt_number?: string | null
+          bill_ids?: string[] | null
+          change_amount?: number | null
+          created_at?: string
+          details?: Json
+          id?: string
+          item_ids?: string[] | null
+          order_id?: string | null
+          original_payment_id?: string | null
+          payment_method?: string
+          payment_number?: string | null
           processed_at?: string | null
           processed_by?: string | null
-          created_at?: string
+          processed_by_name?: string | null
+          receipt_number?: string | null
+          receipt_printed?: boolean | null
+          received_amount?: number | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          refund_reason?: string | null
+          refunded_at?: string | null
+          refunded_by?: string | null
+          shift_id?: string | null
+          status?: string
+          sync_status?: string | null
+          synced_at?: string | null
+          transaction_id?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: 'payments_order_id_fkey'
+            columns: ['order_id']
+            isOneToOne: false
+            referencedRelation: 'orders'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'payments_original_payment_id_fkey'
+            columns: ['original_payment_id']
+            isOneToOne: false
+            referencedRelation: 'payments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'payments_shift_id_fkey'
+            columns: ['shift_id']
+            isOneToOne: false
+            referencedRelation: 'shifts'
+            referencedColumns: ['id']
+          }
+        ]
       }
-      tables: {
+      products: {
         Row: {
-          id: string
-          table_number: string
-          area: string | null
-          capacity: number
-          status: 'available' | 'occupied' | 'reserved'
-          current_order_id: string | null
+          barcode: string | null
+          category: string
+          cost: number | null
           created_at: string
+          current_stock: number | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          is_available: boolean
+          min_stock: number | null
+          name: string
+          name_ru: string | null
+          price: number
+          sku: string | null
+          tags: string[] | null
+          track_stock: boolean
+          unit: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          table_number: string
-          area?: string | null
-          capacity?: number
-          status?: 'available' | 'occupied' | 'reserved'
-          current_order_id?: string | null
+          barcode?: string | null
+          category: string
+          cost?: number | null
           created_at?: string
+          current_stock?: number | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          is_available?: boolean
+          min_stock?: number | null
+          name: string
+          name_ru?: string | null
+          price: number
+          sku?: string | null
+          tags?: string[] | null
+          track_stock?: boolean
+          unit?: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          table_number?: string
-          area?: string | null
-          capacity?: number
-          status?: 'available' | 'occupied' | 'reserved'
-          current_order_id?: string | null
+          barcode?: string | null
+          category?: string
+          cost?: number | null
           created_at?: string
+          current_stock?: number | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          is_available?: boolean
+          min_stock?: number | null
+          name?: string
+          name_ru?: string | null
+          price?: number
+          sku?: string | null
+          tags?: string[] | null
+          track_stock?: boolean
+          unit?: string
           updated_at?: string
         }
+        Relationships: []
+      }
+      shifts: {
+        Row: {
+          account_balances: Json
+          account_transaction_ids: string[] | null
+          cash_discrepancy: number | null
+          cash_discrepancy_type: string | null
+          cashier_id: string | null
+          cashier_name: string
+          corrections: Json
+          created_at: string
+          device_id: string | null
+          duration: number | null
+          end_time: string | null
+          ending_cash: number | null
+          expected_cash: number | null
+          expense_operations: Json
+          id: string
+          last_sync_at: string | null
+          last_sync_attempt: string | null
+          location: string | null
+          notes: string | null
+          payment_methods: Json
+          pending_payments: Json
+          pending_sync: boolean
+          shift_number: number
+          start_time: string
+          starting_cash: number
+          starting_cash_verified: boolean
+          status: string
+          sync_attempts: number | null
+          sync_error: string | null
+          sync_queued_at: string | null
+          sync_status: string
+          synced_at: string | null
+          synced_to_account: boolean
+          total_card: number
+          total_cash: number
+          total_qr: number
+          total_sales: number
+          total_transactions: number
+          updated_at: string
+        }
+        Insert: {
+          account_balances?: Json
+          account_transaction_ids?: string[] | null
+          cash_discrepancy?: number | null
+          cash_discrepancy_type?: string | null
+          cashier_id?: string | null
+          cashier_name: string
+          corrections?: Json
+          created_at?: string
+          device_id?: string | null
+          duration?: number | null
+          end_time?: string | null
+          ending_cash?: number | null
+          expected_cash?: number | null
+          expense_operations?: Json
+          id?: string
+          last_sync_at?: string | null
+          last_sync_attempt?: string | null
+          location?: string | null
+          notes?: string | null
+          payment_methods?: Json
+          pending_payments?: Json
+          pending_sync?: boolean
+          shift_number: number
+          start_time: string
+          starting_cash?: number
+          starting_cash_verified?: boolean
+          status: string
+          sync_attempts?: number | null
+          sync_error?: string | null
+          sync_queued_at?: string | null
+          sync_status?: string
+          synced_at?: string | null
+          synced_to_account?: boolean
+          total_card?: number
+          total_cash?: number
+          total_qr?: number
+          total_sales?: number
+          total_transactions?: number
+          updated_at?: string
+        }
+        Update: {
+          account_balances?: Json
+          account_transaction_ids?: string[] | null
+          cash_discrepancy?: number | null
+          cash_discrepancy_type?: string | null
+          cashier_id?: string | null
+          cashier_name?: string
+          corrections?: Json
+          created_at?: string
+          device_id?: string | null
+          duration?: number | null
+          end_time?: string | null
+          ending_cash?: number | null
+          expected_cash?: number | null
+          expense_operations?: Json
+          id?: string
+          last_sync_at?: string | null
+          last_sync_attempt?: string | null
+          location?: string | null
+          notes?: string | null
+          payment_methods?: Json
+          pending_payments?: Json
+          pending_sync?: boolean
+          shift_number?: number
+          start_time?: string
+          starting_cash?: number
+          starting_cash_verified?: boolean
+          status?: string
+          sync_attempts?: number | null
+          sync_error?: string | null
+          sync_queued_at?: string | null
+          sync_status?: string
+          synced_at?: string | null
+          synced_to_account?: boolean
+          total_card?: number
+          total_cash?: number
+          total_qr?: number
+          total_sales?: number
+          total_transactions?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tables: {
+        Row: {
+          area: string | null
+          capacity: number
+          created_at: string
+          current_order_id: string | null
+          id: string
+          status: string
+          table_number: string
+          updated_at: string
+        }
+        Insert: {
+          area?: string | null
+          capacity?: number
+          created_at?: string
+          current_order_id?: string | null
+          id?: string
+          status?: string
+          table_number: string
+          updated_at?: string
+        }
+        Update: {
+          area?: string | null
+          capacity?: number
+          created_at?: string
+          current_order_id?: string | null
+          id?: string
+          status?: string
+          table_number?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -345,5 +467,129 @@ export interface Database {
     Enums: {
       [_ in never]: never
     }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    ? (DefaultSchema['Tables'] & DefaultSchema['Views'])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema['Tables']
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema['Tables']
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema['Enums']
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
+    : never = never
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums'][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema['Enums']
+    ? DefaultSchema['Enums'][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema['CompositeTypes']
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
+    : never = never
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes'][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema['CompositeTypes']
+    ? DefaultSchema['CompositeTypes'][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {}
+  }
+} as const

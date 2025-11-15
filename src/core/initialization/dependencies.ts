@@ -37,6 +37,9 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   // POS system
   pos: ['menu'],
 
+  // Kitchen system (depends on POS orders)
+  kitchen: ['pos'],
+
   // Debug system
   debug: []
 }
@@ -96,6 +99,7 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   pos: 'pos',
   sales: 'pos',
   writeOff: 'pos',
+  kitchen: 'pos',
 
   // Backoffice специфичные
   counteragents: 'backoffice',
@@ -142,6 +146,13 @@ export function shouldLoadPOSStores(userRoles: UserRole[]): boolean {
  */
 export function shouldLoadBackofficeStores(userRoles: UserRole[]): boolean {
   return userRoles.some(role => ['admin', 'manager'].includes(role))
+}
+
+/**
+ * Проверить нужно ли загружать Kitchen stores
+ */
+export function shouldLoadKitchenStores(userRoles: UserRole[]): boolean {
+  return userRoles.some(role => ['admin', 'kitchen', 'bar'].includes(role))
 }
 
 /**
