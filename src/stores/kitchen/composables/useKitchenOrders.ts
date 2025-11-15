@@ -48,28 +48,18 @@ export function useKitchenOrders() {
   }))
 
   /**
-   * Обновление статуса заказа - делегируем в POS
+   * Обновление статуса заказа - НЕ ИСПОЛЬЗУЕТСЯ в Kitchen
+   * Kitchen обновляет только статусы items, статус заказа вычисляется автоматически
    */
   async function updateOrderStatus(
     orderId: string,
     newStatus: OrderStatus
   ): Promise<ServiceResponse<PosOrder>> {
-    const order = posOrdersStore.orders.find(o => o.id === orderId)
-
-    if (!order) {
-      return {
-        success: false,
-        error: 'Order not found'
-      }
+    return {
+      success: false,
+      error:
+        'Kitchen cannot update order status directly. Order status is auto-calculated from items.'
     }
-
-    // Обновляем статус локально (reactive)
-    order.status = newStatus
-    order.updatedAt = new Date().toISOString()
-
-    // Сохраняем через POS store
-    // ⚠️ Sprint 1: localStorage (Team A переключит на Supabase)
-    return await posOrdersStore.updateOrder(order)
   }
 
   /**

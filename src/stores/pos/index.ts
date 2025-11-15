@@ -18,6 +18,10 @@ import { useSyncService } from '@/core/sync/SyncService'
 import { ShiftSyncAdapter } from '@/core/sync/adapters/ShiftSyncAdapter'
 import { migrateLegacyShiftQueue } from '@/core/sync/migrations/migrateLegacyShiftQueue'
 
+// ✅ Sprint 7: Realtime integration for Kitchen updates
+import { useOrdersRealtime } from './orders/useOrdersRealtime'
+import { ENV } from '@/config/environment'
+
 // Types (упрощенные)
 interface DailySalesStats {
   totalAmount: number
@@ -207,13 +211,22 @@ export const usePosStore = defineStore('pos', () => {
       // Start auto-processing
       syncService.start()
 
+      // ✅ Sprint 7: Initialize Realtime for Kitchen updates
+      if (ENV.useSupabase) {
+        platform.debugLog('POS', '📡 Initializing Realtime for Kitchen updates...')
+        const ordersRealtime = useOrdersRealtime()
+        ordersRealtime.subscribe()
+        platform.debugLog('POS', '✅ POS Realtime subscription active')
+      }
+
       // Пока просто помечаем как инициализированную
       isInitialized.value = true
       lastSync.value = new Date().toISOString()
 
       platform.debugLog('POS', '✅ POS system initialized', {
         platform: platform.platform.value,
-        offline: platform.offlineEnabled.value
+        offline: platform.offlineEnabled.value,
+        realtimeEnabled: ENV.useSupabase
       })
 
       return { success: true }

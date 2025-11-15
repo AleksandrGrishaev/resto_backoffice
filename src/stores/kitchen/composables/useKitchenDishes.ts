@@ -172,45 +172,27 @@ export function useKitchenDishes() {
 
   /**
    * Обновить статус блюда
-   * Обновляет статус оригинального bill item
+   * Обновляет статус через Kitchen Service → Supabase
    */
   async function updateDishStatus(
     dish: KitchenDish,
     newStatus: 'waiting' | 'cooking' | 'ready'
   ): Promise<ServiceResponse<any>> {
     try {
-      // Находим оригинальный заказ
-      const order = posOrdersStore.orders.find(o => o.id === dish.orderId)
-      if (!order) {
-        return { success: false, error: 'Order not found' }
+      // Импортируем Kitchen Service динамически для избежания циклических зависимостей
+      const { kitchenService } = await import('../kitchenService')
+
+      // Обновляем статус item через Supabase
+      const result = await kitchenService.updateItemStatus(dish.orderId, dish.itemId, newStatus)
+
+      if (result.success) {
+        // Auto-update order status based on all items
+        await kitchenService.checkAndUpdateOrderStatus(dish.orderId)
+
+        return { success: true }
       }
 
-      // Находим bill
-      const bill = order.bills.find(b => b.id === dish.billId)
-      if (!bill) {
-        return { success: false, error: 'Bill not found' }
-      }
-
-      // Находим оригинальный item
-      const item = bill.items.find(i => i.id === dish.itemId)
-      if (!item) {
-        return { success: false, error: 'Item not found' }
-      }
-
-      // Обновляем статус item
-      item.status = newStatus
-      item.updatedAt = new Date().toISOString()
-
-      // Проставляем timestamps
-      if (newStatus === 'cooking' && !item.sentToKitchenAt) {
-        item.sentToKitchenAt = new Date().toISOString()
-      }
-      if (newStatus === 'ready') {
-        item.preparedAt = new Date().toISOString()
-      }
-
-      // Сохраняем через POS store
-      return await posOrdersStore.updateOrder(order)
+      return { success: false, error: result.error }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update dish status'
       return { success: false, error: message }

@@ -957,13 +957,13 @@ Consolidated into single JSONB field when syncing to Supabase ✅
 
 ---
 
-### 🟡 High Priority (Week 2-3)
+### ✅ Completed (Week 2, Day 5)
 
 #### 5. Menu Store → Supabase Migration 🍽️
 
 **Priority:** CRITICAL (Blocking POS MVP)
-**ETA:** Week 2, Day 5-7 (3 days)
-**Dependencies:** None - can start immediately
+**ETA:** Week 2, Day 5-7 (3 days) - ✅ COMPLETED
+**Dependencies:** None
 
 **Why Critical:**
 
@@ -1301,7 +1301,695 @@ async createCategory(data: CreateCategoryDto): Promise<Category> {
 3. ✅ POS MenuSection loads menu from Supabase
 4. ✅ Offline cache works (localStorage fallback)
 5. ✅ Complex JSONB fields (modifierGroups, variants) saved/loaded correctly
-6. ✅ All CRUD operations work (create, read, update, delete)
+6. ✅ Mock data migrated to Supabase (6 categories, 9 menu items)
+
+**Migration Completed:** 2025-11-15
+
+- 6 categories loaded (all in English)
+- 9 menu items loaded with complex JSONB structures
+- Dual-write pattern implemented
+- Mappers created and tested
+
+---
+
+### 🟡 High Priority (Week 2-3)
+
+#### 6. Kitchen Display System (KDS) → Supabase Integration 👨‍🍳
+
+**Priority:** CRITICAL (Blocking Kitchen-POS workflow)
+**ETA:** Week 2, Day 6-8 (3 days)
+**Dependencies:** Orders Store → Supabase ✅, Menu Store → Supabase ✅
+
+**Why Critical:**
+
+- Kitchen needs to see orders from POS in real-time
+- Kitchen updates item status (`waiting` → `cooking` → `ready`)
+- POS needs to receive status updates to mark orders complete
+- Without this, manual coordination required between Kitchen and POS
+
+**Current State:**
+
+- Kitchen Store reads from POS orders store (in-memory)
+- No Supabase integration
+- No real-time sync between POS and Kitchen
+- Status updates only work in same browser session
+
+**Architecture Decision:**
+
+- ✅ **Pattern:** Kitchen reads from Supabase `orders` table
+- ✅ **Real-time:** Supabase Realtime subscriptions for order updates
+- ✅ **Status Updates:** Kitchen updates `orders.items[].status` via Supabase
+- ✅ **POS Sync:** POS listens to order updates via Realtime
+- ✅ **Business Logic:** Clarify final status (ready vs served)
+
+**Challenge:**
+
+1. **Status Flow Clarification** - Current flow has `ready` → `served`/`collected`/`delivered`, but user wants `ready` as final status
+2. **Real-time Sync** - Need Supabase Realtime for Kitchen ↔ POS communication
+3. **Item-level Status** - Orders have flattened items, each with individual status
+
+---
+
+##### Day 1: Business Logic & Status Flow Analysis 🔍
+
+**Goal:** Clarify status flow and business requirements
+
+**✅ Business Logic Decisions (FINALIZED 2025-11-16):**
+
+1. **`ready` IS the final status** ✅
+
+   - Kitchen marks items: `waiting` → `cooking` → `ready`
+   - `ready` = final status, no further transitions to `served`/`collected`/`delivered`
+   - No need for waiter confirmation or POS final status update
+
+2. **Order status = minimum of all items** ✅
+
+   - If ANY item is `waiting` → Order status: `waiting`
+   - If ALL items `cooking` or higher → Order status: `cooking`
+   - If ALL items `ready` → Order status: `ready`
+   - Example: [ready, cooking, waiting] → Order: `waiting`
+   - Example: [ready, ready, cooking] → Order: `cooking`
+   - Example: [ready, ready, ready] → Order: `ready`
+
+3. **Status Flow:**
+   - Kitchen: `waiting` → `cooking` → `ready` (final)
+   - POS: Creates orders with status `draft`, sends to kitchen → `waiting`
+   - Auto-update: Order status calculated from items
+
+**Tasks:**
+
+- [x] Review current status transitions in `src/stores/pos/types.ts`
+- [x] Document business logic for each order type (all types use same flow)
+- [x] Decide on final status handling (ready = final)
+- [ ] Update `ORDER_TYPE_STATUS_CONFIG` to remove `served`/`collected`/`delivered`
+- [ ] Document Kitchen → POS status sync workflow
+- [ ] Implement order status calculation (min of items)
+
+**✅ Final Status Flow Documentation:**
+
+````markdown
+# Kitchen-POS Status Flow (FINALIZED)
+
+## Universal Flow (All Order Types: dine-in, takeaway, delivery)
+
+1. **POS creates order** → Order status: `draft`, Items: `draft`
+2. **POS sends to kitchen** → Order status: `waiting`, Items: `waiting`
+3. **Kitchen starts cooking** → Items: `cooking` (one or more)
+   - Order status: `cooking` (if ALL items ≥ cooking)
+   - Order status: `waiting` (if ANY item still waiting)
+4. **Kitchen marks ready** → Items: `ready` (one or more)
+   - Order status: `ready` (if ALL items ready)
+   - Order status: `cooking` (if ANY item still cooking)
+5. **Final state** → Order status: `ready` (FINAL - no further transitions)
+
+## Order Status Calculation Algorithm
+
+```typescript
+function calculateOrderStatus(items: PosBillItem[]): OrderStatus {
+  if (items.length === 0) return 'draft'
+
+  // Check for minimum status (priority order)
+  if (items.some(i => i.status === 'draft')) return 'draft'
+  if (items.some(i => i.status === 'waiting')) return 'waiting'
+  if (items.some(i => i.status === 'cooking')) return 'cooking'
+
+  // All items ready
+  return 'ready'
+}
+```
+````
+
+## Auto-transitions
+
+- Order status auto-calculated whenever item status changes
+- No manual order status updates needed
+- `ready` is FINAL status (payment handled separately)
+
+## Removed Statuses
+
+- ❌ `served` - not used
+- ❌ `collected` - not used
+- ❌ `delivered` - not used
+
+````
+
+---
+
+##### Day 2: Kitchen Service + Supabase Integration 🔧
+
+**File:** `src/stores/kitchen/kitchenService.ts` (NEW)
+
+**Goal:** Create Kitchen-specific service layer for Supabase operations
+
+**Functions to Create:**
+
+```typescript
+// Kitchen Service - Read-only operations + status updates
+
+import { supabase } from '@/supabase/client'
+import { fromSupabase as orderFromSupabase } from '@/stores/pos/orders/supabaseMappers'
+import type { PosOrder } from '@/stores/pos/types'
+
+const MODULE_NAME = 'KitchenService'
+
+/**
+ * Get all active kitchen orders (waiting, cooking, ready)
+ */
+async function getActiveKitchenOrders(): Promise<PosOrder[]> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .in('status', ['waiting', 'cooking', 'ready'])
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('❌ Failed to load kitchen orders:', error)
+    return []
+  }
+
+  return data.map(orderFromSupabase)
+}
+
+/**
+ * Update item status in order
+ * Kitchen updates individual items (not full order)
+ */
+async function updateItemStatus(
+  orderId: string,
+  itemId: string,
+  newStatus: 'waiting' | 'cooking' | 'ready'
+): Promise<{ success: boolean; error?: string }> {
+  // 1. Get order from Supabase
+  const { data: order, error: fetchError } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('id', orderId)
+    .single()
+
+  if (fetchError || !order) {
+    return { success: false, error: 'Order not found' }
+  }
+
+  // 2. Update item status in JSONB array
+  const items = order.items || []
+  const itemIndex = items.findIndex((i: any) => i.id === itemId)
+
+  if (itemIndex === -1) {
+    return { success: false, error: 'Item not found' }
+  }
+
+  items[itemIndex].status = newStatus
+  items[itemIndex].updatedAt = new Date().toISOString()
+
+  // Set timestamps
+  if (newStatus === 'cooking') {
+    items[itemIndex].sentToKitchenAt = items[itemIndex].sentToKitchenAt || new Date().toISOString()
+  }
+  if (newStatus === 'ready') {
+    items[itemIndex].preparedAt = new Date().toISOString()
+  }
+
+  // 3. Update order in Supabase
+  const { error: updateError } = await supabase
+    .from('orders')
+    .update({
+      items,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', orderId)
+
+  if (updateError) {
+    console.error('❌ Failed to update item status:', updateError)
+    return { success: false, error: updateError.message }
+  }
+
+  console.log(`✅ Item status updated: ${itemId} → ${newStatus}`)
+  return { success: true }
+}
+
+/**
+ * Calculate order status from items (minimum status)
+ * Priority: draft > waiting > cooking > ready
+ */
+function calculateOrderStatus(items: any[]): 'draft' | 'waiting' | 'cooking' | 'ready' {
+  if (items.length === 0) return 'draft'
+
+  // Check for minimum status (priority order)
+  if (items.some((i: any) => i.status === 'draft')) return 'draft'
+  if (items.some((i: any) => i.status === 'waiting')) return 'waiting'
+  if (items.some((i: any) => i.status === 'cooking')) return 'cooking'
+
+  // All items ready
+  return 'ready'
+}
+
+/**
+ * Auto-update order status based on items
+ * Called after each item status change
+ */
+async function checkAndUpdateOrderStatus(orderId: string): Promise<void> {
+  const { data: order } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('id', orderId)
+    .single()
+
+  if (!order) return
+
+  const items = order.items || []
+  const calculatedStatus = calculateOrderStatus(items)
+
+  // Update order status if changed
+  if (calculatedStatus !== order.status) {
+    const updates: any = {
+      status: calculatedStatus,
+      updated_at: new Date().toISOString()
+    }
+
+    // Set actual_ready_time when all items ready
+    if (calculatedStatus === 'ready' && !order.actual_ready_time) {
+      updates.actual_ready_time = new Date().toISOString()
+    }
+
+    await supabase
+      .from('orders')
+      .update(updates)
+      .eq('id', orderId)
+
+    console.log(`✅ Order status auto-updated: ${order.order_number} → ${calculatedStatus}`)
+  }
+}
+
+export const kitchenService = {
+  getActiveKitchenOrders,
+  updateItemStatus,
+  checkAndUpdateOrderStatus
+}
+````
+
+**Tasks:**
+
+- [ ] Create `src/stores/kitchen/kitchenService.ts`
+- [ ] Implement `getActiveKitchenOrders()` - Read from Supabase
+- [ ] Implement `updateItemStatus()` - Update JSONB item status
+- [ ] Implement `checkAndUpdateOrderStatus()` - Auto-update order when all items ready
+- [ ] Add error handling and logging
+- [ ] Test with mock data
+
+---
+
+##### Day 3: Realtime Subscriptions 🔄
+
+**File:** `src/stores/kitchen/useKitchenRealtime.ts` (NEW)
+
+**Goal:** Setup Supabase Realtime subscriptions for live order updates
+
+**Composable to Create:**
+
+```typescript
+// Kitchen Realtime Composable
+
+import { ref, onMounted, onUnmounted } from 'vue'
+import { supabase } from '@/supabase/client'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+
+export function useKitchenRealtime() {
+  const channel = ref<RealtimeChannel | null>(null)
+  const isConnected = ref(false)
+
+  /**
+   * Subscribe to orders table changes
+   * Listen for: INSERT, UPDATE on orders with status in (waiting, cooking, ready)
+   */
+  function subscribe(onOrderUpdate: (order: any) => void) {
+    channel.value = supabase
+      .channel('kitchen-orders')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'orders',
+          filter: 'status=in.(waiting,cooking,ready)'
+        },
+        payload => {
+          console.log('🔄 Kitchen order update:', payload)
+          onOrderUpdate(payload.new)
+        }
+      )
+      .subscribe(status => {
+        console.log('📡 Kitchen Realtime status:', status)
+        isConnected.value = status === 'SUBSCRIBED'
+      })
+  }
+
+  /**
+   * Unsubscribe from realtime updates
+   */
+  function unsubscribe() {
+    if (channel.value) {
+      supabase.removeChannel(channel.value)
+      channel.value = null
+      isConnected.value = false
+    }
+  }
+
+  // Cleanup on unmount
+  onUnmounted(() => {
+    unsubscribe()
+  })
+
+  return {
+    subscribe,
+    unsubscribe,
+    isConnected
+  }
+}
+```
+
+**Tasks:**
+
+- [ ] Create `src/stores/kitchen/useKitchenRealtime.ts`
+- [ ] Implement Supabase Realtime subscription for orders
+- [ ] Filter for kitchen-relevant statuses (waiting, cooking, ready)
+- [ ] Handle INSERT (new orders from POS)
+- [ ] Handle UPDATE (status changes from Kitchen or POS)
+- [ ] Add connection status indicator
+- [ ] Test realtime sync between POS and Kitchen
+
+---
+
+##### Day 4: Kitchen Store Integration 🏪
+
+**File:** `src/stores/kitchen/index.ts` (UPDATE)
+
+**Goal:** Integrate Kitchen Store with Supabase service + Realtime
+
+**Updates Required:**
+
+```typescript
+// src/stores/kitchen/index.ts
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { kitchenService } from './kitchenService'
+import { useKitchenRealtime } from './useKitchenRealtime'
+import { DebugUtils } from '@/utils'
+import { ENV } from '@/config/environment'
+
+const MODULE_NAME = 'KitchenStore'
+
+export const useKitchenStore = defineStore('kitchen', () => {
+  const initialized = ref(false)
+  const error = ref<string | null>(null)
+  const realtimeConnected = ref(false)
+
+  const posOrdersStore = usePosOrdersStore()
+  const { subscribe, unsubscribe, isConnected } = useKitchenRealtime()
+
+  /**
+   * Initialize Kitchen System with Supabase
+   */
+  async function initialize() {
+    if (initialized.value) {
+      DebugUtils.debug(MODULE_NAME, 'Already initialized')
+      return { success: true }
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Initializing Kitchen system...')
+
+      // Load active orders from Supabase
+      if (ENV.useSupabase) {
+        const orders = await kitchenService.getActiveKitchenOrders()
+        posOrdersStore.orders = orders
+
+        DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded from Supabase', {
+          count: orders.length,
+          waiting: orders.filter(o => o.status === 'waiting').length,
+          cooking: orders.filter(o => o.status === 'cooking').length,
+          ready: orders.filter(o => o.status === 'ready').length
+        })
+
+        // Subscribe to realtime updates
+        subscribe(updatedOrder => {
+          // Find and update order in local state
+          const index = posOrdersStore.orders.findIndex(o => o.id === updatedOrder.id)
+          if (index !== -1) {
+            posOrdersStore.orders[index] = orderFromSupabase(updatedOrder)
+          } else {
+            // New order - add to list
+            posOrdersStore.orders.push(orderFromSupabase(updatedOrder))
+          }
+        })
+
+        realtimeConnected.value = isConnected.value
+      } else {
+        // Mock data fallback
+        posOrdersStore.orders = [...MOCK_KITCHEN_ORDERS]
+      }
+
+      initialized.value = true
+      return { success: true }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      error.value = errorMessage
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  /**
+   * Cleanup - unsubscribe from realtime
+   */
+  function cleanup() {
+    unsubscribe()
+    initialized.value = false
+  }
+
+  return {
+    initialized,
+    error,
+    realtimeConnected,
+    initialize,
+    cleanup
+  }
+})
+```
+
+**Tasks:**
+
+- [ ] Update `initialize()` to load from Supabase
+- [ ] Integrate Realtime subscription
+- [ ] Handle order updates from POS
+- [ ] Add cleanup method for Realtime unsubscribe
+- [ ] Test Kitchen UI with live data
+
+---
+
+##### Day 5: Kitchen Composables Update 🔄
+
+**Files:**
+
+- `src/stores/kitchen/composables/useKitchenDishes.ts` (UPDATE)
+- `src/stores/kitchen/composables/useKitchenOrders.ts` (UPDATE)
+
+**Goal:** Update Kitchen composables to use Supabase service
+
+**useKitchenDishes.ts Updates:**
+
+```typescript
+import { kitchenService } from '../kitchenService'
+
+async function updateDishStatus(
+  dish: KitchenDish,
+  newStatus: 'waiting' | 'cooking' | 'ready'
+): Promise<ServiceResponse<any>> {
+  // Update via Supabase service (not POS store directly)
+  const result = await kitchenService.updateItemStatus(dish.orderId, dish.itemId, newStatus)
+
+  if (result.success) {
+    // Check if all items ready → auto-update order status
+    await kitchenService.checkAndUpdateOrderStatus(dish.orderId)
+  }
+
+  return result
+}
+```
+
+**useKitchenOrders.ts Updates:**
+
+```typescript
+import { kitchenService } from '../kitchenService'
+
+async function updateOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus
+): Promise<ServiceResponse<PosOrder>> {
+  // Kitchen should NOT update order status directly
+  // Only update item statuses → order status auto-updates
+  return {
+    success: false,
+    error: 'Kitchen cannot update order status directly. Update item statuses instead.'
+  }
+}
+```
+
+**Tasks:**
+
+- [ ] Update `useKitchenDishes.updateDishStatus()` to use `kitchenService`
+- [ ] Remove direct POS store manipulation
+- [ ] Add auto-update order status after item update
+- [ ] Update `useKitchenOrders` to prevent direct order status changes
+- [ ] Test Kitchen UI with Supabase integration
+
+---
+
+##### Day 6: POS Realtime Integration 📲
+
+**File:** `src/stores/pos/orders/useOrdersRealtime.ts` (NEW)
+
+**Goal:** POS listens to order updates from Kitchen
+
+**Composable to Create:**
+
+```typescript
+// POS Orders Realtime Composable
+
+import { ref } from 'vue'
+import { supabase } from '@/supabase/client'
+import { usePosOrdersStore } from './ordersStore'
+import { fromSupabase } from './supabaseMappers'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+
+export function useOrdersRealtime() {
+  const channel = ref<RealtimeChannel | null>(null)
+  const isConnected = ref(false)
+  const ordersStore = usePosOrdersStore()
+
+  /**
+   * Subscribe to orders table changes
+   * POS listens for updates from Kitchen (item status changes)
+   */
+  function subscribe() {
+    channel.value = supabase
+      .channel('pos-orders')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders'
+        },
+        payload => {
+          console.log('🔄 POS order update received:', payload)
+
+          // Update order in local state
+          const updatedOrder = fromSupabase(payload.new)
+          const index = ordersStore.orders.findIndex(o => o.id === updatedOrder.id)
+
+          if (index !== -1) {
+            ordersStore.orders[index] = updatedOrder
+            console.log(`✅ Order updated in POS: ${updatedOrder.orderNumber}`)
+          }
+        }
+      )
+      .subscribe(status => {
+        console.log('📡 POS Realtime status:', status)
+        isConnected.value = status === 'SUBSCRIBED'
+      })
+  }
+
+  function unsubscribe() {
+    if (channel.value) {
+      supabase.removeChannel(channel.value)
+      channel.value = null
+      isConnected.value = false
+    }
+  }
+
+  return {
+    subscribe,
+    unsubscribe,
+    isConnected
+  }
+}
+```
+
+**Tasks:**
+
+- [ ] Create `src/stores/pos/orders/useOrdersRealtime.ts`
+- [ ] Implement Realtime subscription for POS
+- [ ] Handle UPDATE events from Kitchen
+- [ ] Auto-update local order state
+- [ ] Integrate into POS initialization
+- [ ] Test bidirectional sync (POS ↔ Kitchen)
+
+---
+
+##### Day 7: Testing & Business Logic Finalization 🧪
+
+**Test Scenarios:**
+
+**1. Kitchen → POS Status Updates**
+
+- [ ] Kitchen marks item `waiting` → `cooking` → POS sees update
+- [ ] Kitchen marks item `ready` → POS sees update
+- [ ] All items `ready` → Order status auto-updates to `ready`
+
+**2. POS → Kitchen New Orders**
+
+- [ ] POS creates new order → Kitchen receives via Realtime
+- [ ] POS sends order to kitchen → Items status: `waiting`
+- [ ] Kitchen sees new order in "Waiting" column
+
+**3. Multi-device Sync**
+
+- [ ] Open Kitchen on Device A
+- [ ] Open POS on Device B
+- [ ] Create order on POS → Kitchen sees it
+- [ ] Update status on Kitchen → POS sees it
+- [ ] Verify no conflicts or race conditions
+
+**4. Status Flow Validation**
+
+- [ ] Verify Kitchen can only update: `waiting` → `cooking` → `ready`
+- [ ] Verify POS can update: `ready` → `served`/`collected`/`delivered`
+- [ ] Verify final status handling based on order type
+
+**5. Offline → Online Sync**
+
+- [ ] Kitchen offline → mark items ready (localStorage)
+- [ ] Kitchen online → sync pending updates to Supabase
+- [ ] POS receives updates when Kitchen reconnects
+
+**Expected Console Logs:**
+
+```
+Kitchen:
+✅ Kitchen orders loaded from Supabase (7 orders)
+📡 Kitchen Realtime status: SUBSCRIBED
+🔄 Kitchen order update: ORD-001
+✅ Item status updated: item_123 → cooking
+
+POS:
+📡 POS Realtime status: SUBSCRIBED
+🔄 POS order update received: ORD-001
+✅ Order updated in POS: ORD-001
+✅ All items ready → Order status: ready
+```
+
+---
+
+**✅ Completion Criteria:**
+
+1. ✅ Kitchen loads orders from Supabase
+2. ✅ Kitchen updates item status → saves to Supabase
+3. ✅ POS receives Kitchen updates via Realtime
+4. ✅ Kitchen receives POS new orders via Realtime
+5. ✅ Auto-update order status when all items ready
+6. ✅ Status flow clarified and documented
+7. ✅ Multi-device sync works
+8. ✅ Offline → online sync works
 
 ---
 

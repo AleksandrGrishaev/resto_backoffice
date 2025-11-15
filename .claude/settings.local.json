@@ -19,7 +19,9 @@
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_wait_for",
       "mcp__supabase__apply_migration",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(npx supabase:*)",
+      "Bash(src/supabase/types.gen.ts)"
     ]
   },
   "enableAllProjectMcpServers": true,
