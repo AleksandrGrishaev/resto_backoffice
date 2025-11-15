@@ -63,7 +63,7 @@
           <!-- Collapse/Expand button -->
           <v-btn
             icon
-            size="small"
+            size="x-small"
             variant="flat"
             color="green"
             :class="readyColumnCollapsed ? '' : 'ml-auto'"
@@ -236,13 +236,13 @@ const handleDishStatusUpdate = async (
 
 .expand-btn {
   border: 2px solid rgba(255, 255, 255, 0.3) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.3) !important;
   transition: all 0.2s ease !important;
 
   &:hover {
     transform: scale(1.1);
     border-color: rgba(255, 255, 255, 0.6) !important;
-    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4) !important;
+    box-shadow: 0 4px 4px rgba(76, 175, 80, 0.4) !important;
   }
 }
 
