@@ -1,6 +1,6 @@
 // src/supabase/types.ts - Supabase database types
 // Auto-generated from Supabase schema using mcp__supabase__generate_typescript_types
-// Last updated: 2025-11-15 (after Migration 003)
+// Last updated: 2025-11-16 (after Migration 004 - Menu tables added)
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
@@ -12,6 +12,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      menu_categories: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      menu_items: {
+        Row: {
+          category_id: string | null
+          cost: number | null
+          created_at: string | null
+          description: string | null
+          dish_type: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          modifier_groups: Json | null
+          name: string
+          name_en: string | null
+          price: number
+          sort_order: number | null
+          updated_at: string | null
+          variants: Json | null
+        }
+        Insert: {
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          dish_type?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          modifier_groups?: Json | null
+          name: string
+          name_en?: string | null
+          price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+          variants?: Json | null
+        }
+        Update: {
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          dish_type?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          modifier_groups?: Json | null
+          name?: string
+          name_en?: string | null
+          price?: number
+          sort_order?: number | null
+          updated_at?: string | null
+          variants?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'menu_items_category_id_fkey'
+            columns: ['category_id']
+            isOneToOne: false
+            referencedRelation: 'menu_categories'
+            referencedColumns: ['id']
+          }
+        ]
+      }
       orders: {
         Row: {
           actual_ready_time: string | null
@@ -209,13 +301,6 @@ export type Database = {
           transaction_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: 'payments_order_id_fkey'
-            columns: ['order_id']
-            isOneToOne: false
-            referencedRelation: 'orders'
-            referencedColumns: ['id']
-          },
           {
             foreignKeyName: 'payments_original_payment_id_fkey'
             columns: ['original_payment_id']
@@ -593,3 +678,35 @@ export const Constants = {
     Enums: {}
   }
 } as const
+
+// ===== HELPER TYPES =====
+
+// Menu Categories types
+export type SupabaseMenuCategory = Tables<'menu_categories'>
+export type SupabaseMenuCategoryInsert = TablesInsert<'menu_categories'>
+export type SupabaseMenuCategoryUpdate = TablesUpdate<'menu_categories'>
+
+// Menu Items types
+export type SupabaseMenuItem = Tables<'menu_items'>
+export type SupabaseMenuItemInsert = TablesInsert<'menu_items'>
+export type SupabaseMenuItemUpdate = TablesUpdate<'menu_items'>
+
+// Orders types
+export type SupabaseOrder = Tables<'orders'>
+export type SupabaseOrderInsert = TablesInsert<'orders'>
+export type SupabaseOrderUpdate = TablesUpdate<'orders'>
+
+// Payments types
+export type SupabasePayment = Tables<'payments'>
+export type SupabasePaymentInsert = TablesInsert<'payments'>
+export type SupabasePaymentUpdate = TablesUpdate<'payments'>
+
+// Shifts types
+export type SupabaseShift = Tables<'shifts'>
+export type SupabaseShiftInsert = TablesInsert<'shifts'>
+export type SupabaseShiftUpdate = TablesUpdate<'shifts'>
+
+// Tables types
+export type SupabaseTable = Tables<'tables'>
+export type SupabaseTableInsert = TablesInsert<'tables'>
+export type SupabaseTableUpdate = TablesUpdate<'tables'>

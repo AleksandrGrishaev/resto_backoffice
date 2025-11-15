@@ -959,32 +959,380 @@ Consolidated into single JSONB field when syncing to Supabase ✅
 
 ### 🟡 High Priority (Week 2-3)
 
-#### 5. Products Store → Supabase
+#### 5. Menu Store → Supabase Migration 🍽️
 
-**Priority:** High
-**ETA:** Week 3, Day 1
+**Priority:** CRITICAL (Blocking POS MVP)
+**ETA:** Week 2, Day 5-7 (3 days)
+**Dependencies:** None - can start immediately
+
+**Why Critical:**
+
+- POS MenuSection directly uses Menu Store for order creation
+- Currently menu data stored in-memory only (lost on reload)
+- Categories and Menu Items must persist in Supabase
+- Without this, POS cannot reliably take orders
+
+**Architecture Decision:**
+
+- ✅ **Storage:** Two tables - `menu_categories` + `menu_items`
+- ✅ **Pattern:** Dual-write (Supabase + localStorage cache)
+- ✅ **Data Migration:** Migrate mock data to Supabase on first run
+- ✅ **Modifier Groups:** Store as JSONB (component-based, addon-based dishes)
+- ✅ **Variants:** Store as JSONB (Small/Medium/Large pricing)
+
+**Challenge:** Complex nested structure (modifierGroups[], variants[]) must be stored as JSONB
+
+---
+
+##### Day 1: Migration 004 - Menu Schema
+
+**File:** `supabase/migrations/004_create_menu_tables.sql`
+
+**Schema Required:**
+
+```sql
+-- Menu Categories
+CREATE TABLE menu_categories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  description TEXT,
+  sort_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Menu Items
+CREATE TABLE menu_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  category_id UUID REFERENCES menu_categories(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  name_en TEXT,
+  description TEXT,
+
+  -- Pricing
+  price NUMERIC NOT NULL DEFAULT 0,
+  cost NUMERIC DEFAULT 0,
+
+  -- Dish configuration
+  dish_type TEXT CHECK (dish_type IN ('component-based', 'addon-based', 'final')),
+
+  -- Complex nested data (JSONB)
+  modifier_groups JSONB DEFAULT '[]'::jsonb,  -- [{id, name, groupStyle, options: [{id, name, price}]}]
+  variants JSONB DEFAULT '[]'::jsonb,         -- [{id, name, price, cost}]
+
+  -- Status
+  is_active BOOLEAN DEFAULT true,
+  sort_order INTEGER DEFAULT 0,
+
+  -- Media
+  image_url TEXT,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Indexes
+CREATE INDEX idx_menu_items_category ON menu_items(category_id);
+CREATE INDEX idx_menu_items_active ON menu_items(is_active);
+CREATE INDEX idx_menu_categories_active ON menu_categories(is_active);
+```
 
 **Tasks:**
+
+- [ ] Create migration file `004_create_menu_tables.sql`
+- [ ] Apply migration via MCP: `mcp__supabase__apply_migration`
+- [ ] Verify schema: `mcp__supabase__list_tables`
+- [ ] Regenerate TypeScript types: `mcp__supabase__generate_typescript_types`
+
+---
+
+##### Day 2: Menu Mappers
+
+**File:** `src/stores/menu/supabaseMappers.ts`
+
+**Functions to Create:**
+
+1. **Category Mappers:**
+
+```typescript
+// Category → Supabase INSERT
+export function categoryToSupabaseInsert(category: Category): SupabaseCategoryInsert {
+  return {
+    id: category.id,
+    name: category.name,
+    description: category.description || null,
+    sort_order: category.sortOrder || 0,
+    is_active: category.isActive,
+    created_at: category.createdAt,
+    updated_at: category.updatedAt
+  }
+}
+
+// Supabase → Category
+export function categoryFromSupabase(row: SupabaseCategory): Category {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || undefined,
+    sortOrder: row.sort_order,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+```
+
+2. **Menu Item Mappers:**
+
+```typescript
+// MenuItem → Supabase INSERT
+export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert {
+  return {
+    id: item.id,
+    category_id: item.categoryId,
+    name: item.name,
+    name_en: item.nameEn || null,
+    description: item.description || null,
+    price: item.price,
+    cost: item.cost || 0,
+    dish_type: item.dishType,
+
+    // Complex JSONB fields
+    modifier_groups: item.modifierGroups || [],
+    variants: item.variants || [],
+
+    is_active: item.isActive,
+    sort_order: item.sortOrder || 0,
+    image_url: item.imageUrl || null,
+    created_at: item.createdAt,
+    updated_at: item.updatedAt
+  }
+}
+
+// Supabase → MenuItem
+export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    name: row.name,
+    nameEn: row.name_en || undefined,
+    description: row.description || undefined,
+    price: row.price,
+    cost: row.cost,
+    dishType: row.dish_type as DishType,
+
+    // Complex JSONB fields (already parsed by Supabase client)
+    modifierGroups: row.modifier_groups || [],
+    variants: row.variants || [],
+
+    isActive: row.is_active,
+    sortOrder: row.sort_order,
+    imageUrl: row.image_url || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+```
+
+**Tasks:**
+
+- [ ] Create `menu/supabaseMappers.ts`
+- [ ] Implement category mappers (toSupabase, fromSupabase)
+- [ ] Implement menu item mappers (toSupabase, fromSupabase)
+- [ ] Handle JSONB arrays (modifierGroups, variants)
+
+---
+
+##### Day 3: Menu Service Update
+
+**File:** `src/stores/menu/menuService.ts`
+
+**Updates Required:**
+
+1. **Add Supabase Integration:**
+
+```typescript
+import { ENV } from '@/config/environment'
+import { supabase } from '@/supabase/client'
+import {
+  categoryToSupabaseInsert,
+  categoryFromSupabase,
+  menuItemToSupabaseInsert,
+  menuItemFromSupabase
+} from './supabaseMappers'
+
+function isSupabaseAvailable(): boolean {
+  return ENV.useSupabase && !!supabase
+}
+```
+
+2. **Update Category Service:**
+
+```typescript
+// GET all categories
+async getAllSorted(): Promise<Category[]> {
+  // Try Supabase first (if online)
+  if (isSupabaseAvailable()) {
+    const { data, error } = await supabase
+      .from('menu_categories')
+      .select('*')
+      .order('sort_order', { ascending: true })
+
+    if (!error && data) {
+      const categories = data.map(categoryFromSupabase)
+      // Cache to localStorage for offline
+      localStorage.setItem('menu_categories_cache', JSON.stringify(categories))
+      return categories
+    }
+  }
+
+  // Fallback to localStorage cache or in-memory
+  const cached = localStorage.getItem('menu_categories_cache')
+  if (cached) return JSON.parse(cached)
+
+  return categoriesStore // in-memory fallback
+}
+
+// CREATE category
+async createCategory(data: CreateCategoryDto): Promise<Category> {
+  const newCategory = { /* ... */ }
+
+  // Dual-write: Supabase + localStorage
+  if (isSupabaseAvailable()) {
+    const { error } = await supabase
+      .from('menu_categories')
+      .insert(categoryToSupabaseInsert(newCategory))
+
+    if (error) console.error('Failed to save category to Supabase:', error)
+  }
+
+  // Always save to in-memory for immediate UI update
+  categoriesStore.push(newCategory)
+
+  return newCategory
+}
+```
+
+3. **Update Menu Item Service:** (similar pattern)
+
+**Tasks:**
+
+- [ ] Add Supabase imports and helper
+- [ ] Update `CategoryService.getAllSorted()` - dual-read
+- [ ] Update `CategoryService.createCategory()` - dual-write
+- [ ] Update `CategoryService.update()` - dual-write
+- [ ] Update `CategoryService.delete()` - dual-write
+- [ ] Update `MenuItemService.getAllSorted()` - dual-read
+- [ ] Update `MenuItemService.createMenuItem()` - dual-write
+- [ ] Update `MenuItemService.updateMenuItem()` - dual-write
+- [ ] Update `MenuItemService.delete()` - dual-write
+- [ ] Add localStorage caching for offline access
+
+---
+
+##### Day 4: Testing & Data Migration
+
+**Test Scenarios:**
+
+- [ ] **Load Categories (Online)**
+
+  - Verify categories loaded from Supabase
+  - Verify cached to localStorage
+
+- [ ] **Load Menu Items (Online)**
+
+  - Verify items loaded from Supabase
+  - Verify modifierGroups and variants parsed correctly
+
+- [ ] **Create Category**
+
+  - Verify saved to Supabase
+  - Verify visible in POS MenuSection
+
+- [ ] **Create Menu Item (Component-based)**
+
+  - Verify modifierGroups saved as JSONB
+  - Verify reconstruction from Supabase
+
+- [ ] **Create Menu Item (Addon-based)**
+
+  - Verify multiple modifier groups saved
+  - Verify variants saved correctly
+
+- [ ] **Update Menu Item**
+
+  - Verify changes sync to Supabase
+  - Verify POS MenuSection reflects updates
+
+- [ ] **Delete Menu Item**
+
+  - Verify removed from Supabase
+  - Verify removed from POS menu
+
+- [ ] **Offline Mode**
+  - Disconnect network
+  - Verify categories/items load from localStorage cache
+  - Create item → should save to localStorage only
+  - Reconnect → verify stays in cache (no auto-sync for now)
+
+**Data Migration:**
+
+- [ ] Create migration script to populate Supabase with mock menu data
+- [ ] Run migration: migrate mock categories (Appetizers, Mains, Beverages, etc.)
+- [ ] Run migration: migrate mock menu items with modifiers
+
+**Expected Console Logs:**
+
+```
+✅ Loaded 8 categories from Supabase
+✅ Loaded 24 menu items from Supabase
+✅ Menu item created: Nasi Goreng (with 2 modifier groups)
+✅ Menu cached to localStorage for offline access
+```
+
+---
+
+**✅ Completion Criteria:**
+
+1. ✅ Migration 004 applied successfully
+2. ✅ Categories and Menu Items sync to Supabase
+3. ✅ POS MenuSection loads menu from Supabase
+4. ✅ Offline cache works (localStorage fallback)
+5. ✅ Complex JSONB fields (modifierGroups, variants) saved/loaded correctly
+6. ✅ All CRUD operations work (create, read, update, delete)
+
+---
+
+#### 6. Products Store → Supabase (MOVED TO SPRINT 8-9)
+
+**Priority:** Normal (Backoffice feature, not blocking POS)
+**ETA:** Sprint 8-9 (after Menu migration complete)
+
+**Reason for Postponement:**
+
+- Products Store is primarily used in Backoffice (warehouse, suppliers, recipes)
+- POS does NOT directly use Products Store for orders (uses Menu Items)
+- Menu Items contain product references through recipes (indirect)
+- Not critical for POS MVP - can be deferred
+
+**Tasks (Future Sprint):**
 
 - [ ] Create `products/supabaseMappers.ts`
 - [ ] Update `productsStore/services.ts`
 - [ ] POS: READ only (no writes)
 - [ ] Backoffice: Full CRUD
 - [ ] Migration script for mock products
+- [ ] Handle `package_options` (may need separate table)
 
 ---
 
-#### 6. Tables Store → Supabase
+#### 7. Tables Store → Supabase ✅ COMPLETED
 
-**Priority:** Normal
-**ETA:** Week 2, Day 5
+**Status:** ✅ COMPLETED (Week 2, Day 4 afternoon)
 
-**Tasks:**
-
-- [ ] Create `tables/supabaseMappers.ts`
-- [ ] Update `tables/services.ts`
-- [ ] POS: READ + UPDATE status
-- [ ] Backoffice: Full CRUD
+Tables migration was completed during Orders migration to fix UUID validation errors.
 
 ---
 
@@ -1021,14 +1369,15 @@ Consolidated into single JSONB field when syncing to Supabase ✅
 
 ## 📈 Sprint 7 Timeline
 
-| Week | Phase           | Status      | Deliverable                                                 |
-| ---- | --------------- | ----------- | ----------------------------------------------------------- |
-| 1    | Supabase Setup  | ✅ Complete | Supabase working, Auth ready                                |
-| 2    | Store Migration | 🚧 60% done | Shifts ✅, Migration 003 ✅, Payments Mappers + Services ✅ |
-| 3    | Deploy & Test   | 🔲 Pending  | Live MVP, all scenarios work                                |
+| Week | Phase           | Status      | Deliverable                                           |
+| ---- | --------------- | ----------- | ----------------------------------------------------- |
+| 1    | Supabase Setup  | ✅ Complete | Supabase working, Auth ready                          |
+| 2    | Store Migration | ✅ Complete | Shifts ✅, Payments ✅, Orders ✅, Tables ✅          |
+| 3    | Menu Migration  | 🚧 Starting | Menu Categories + Items → Supabase (CRITICAL for POS) |
+| 3+   | Deploy & Test   | 🔲 Pending  | Live MVP, all scenarios work                          |
 
-**Current:** Week 2, Day 3 (completed Day 1-2 of Payments migration!)
-**Next Milestone:** Payments Testing (Day 3), then Orders migration (Day 4-8)
+**Current:** Week 2, Day 5 - Starting Menu Store migration!
+**Next Milestone:** Menu migration (Day 5-7), then Deploy & Test
 
 ---
 
@@ -1038,19 +1387,21 @@ Consolidated into single JSONB field when syncing to Supabase ✅
 
 - [x] Supabase project created with schema ✅
 - [x] Shifts sync to Supabase ✅
-- [x] Execute migration 002 ✅
-- [x] Execute migration 003 ✅
-- [ ] Test shift flow successfully 🧪
-- [ ] Payments sync to Supabase
-- [ ] Orders sync to Supabase
+- [x] Payments sync to Supabase ✅
+- [x] Orders sync to Supabase ✅
+- [x] Tables sync to Supabase ✅
+- [x] Execute migration 002 (Shifts fields) ✅
+- [x] Execute migration 003 (Orders + Payments fields) ✅
+- [ ] Execute migration 004 (Menu Categories + Items) 🚧
+- [ ] Menu sync to Supabase (CRITICAL for POS) 🚧
+- [ ] Test complete POS flow (shift → menu → orders → payments → close)
 - [ ] Offline → online sync works
-- [ ] Backoffice reads from Supabase
 - [ ] Deployed to production (web accessible)
 
 ### Should Have 🎯
 
-- [ ] Products sync to Supabase
-- [ ] Tables sync to Supabase
+- [ ] Products sync to Supabase (Sprint 8-9)
+- [ ] Backoffice reads from Supabase
 - [ ] Cross-browser testing
 - [ ] Performance optimization
 - [ ] Error monitoring

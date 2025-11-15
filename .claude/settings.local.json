@@ -17,7 +17,9 @@
       "mcp__supabase__list_tables",
       "mcp__supabase__generate_typescript_types",
       "mcp__playwright__browser_type",
-      "mcp__playwright__browser_wait_for"
+      "mcp__playwright__browser_wait_for",
+      "mcp__supabase__apply_migration",
+      "Bash(npx tsx:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
