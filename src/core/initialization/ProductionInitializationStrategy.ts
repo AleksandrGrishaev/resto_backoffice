@@ -63,13 +63,39 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
    *
    * В PRODUCTION режиме: загружаем для всех ролей, т.к. нужны для базовых операций
    * (decomposition при продажах требует recipes даже для кассиров)
+   * ОПТИМИЗАЦИЯ: Для Kitchen monitor (роль 'kitchen') грузим только menu
    */
-  async initializeCriticalStores(): Promise<StoreInitResult[]> {
-    DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...')
-
+  async initializeCriticalStores(userRoles?: UserRole[]): Promise<StoreInitResult[]> {
     const results: StoreInitResult[] = []
 
     try {
+      // 🆕 ОПТИМИЗАЦИЯ: Kitchen monitor нуждается только в menu
+      const isKitchenMonitorOnly =
+        userRoles?.length === 1 && (userRoles[0] === 'kitchen' || userRoles[0] === 'bar')
+
+      if (isKitchenMonitorOnly) {
+        DebugUtils.info(
+          MODULE_NAME,
+          '📦 [PROD] Kitchen monitor - loading minimal stores (menu only)',
+          {
+            role: userRoles[0]
+          }
+        )
+
+        // Kitchen нуждается только в menu для отображения dish names
+        results.push(await this.loadMenuFromAPI())
+
+        DebugUtils.info(MODULE_NAME, '✅ [PROD] Kitchen critical stores initialized', {
+          count: results.length,
+          stores: ['menu']
+        })
+
+        return results
+      }
+
+      // Стандартная загрузка для всех остальных ролей
+      DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...')
+
       // TODO: В production можно грузить параллельно через API
       // Сейчас используем ту же логику что в Dev
 

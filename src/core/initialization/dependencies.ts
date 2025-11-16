@@ -37,8 +37,8 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   // POS system
   pos: ['menu'],
 
-  // Kitchen system (depends on POS orders)
-  kitchen: ['pos'],
+  // Kitchen system (reads orders from Supabase, only needs menu for item details)
+  kitchen: ['menu'],
 
   // Debug system
   debug: []
@@ -62,6 +62,13 @@ export const CRITICAL_STORES = {
    * - storage: нужен для write-off операций при продажах
    */
   all: ['products', 'recipes', 'menu', 'storage'] as StoreName[],
+
+  /**
+   * Минимальный набор для Kitchen monitor
+   * Kitchen читает orders из Supabase и показывает dish names из menu
+   * НЕ нуждается в products/recipes/storage
+   */
+  kitchen: ['menu'] as StoreName[],
 
   /**
    * Дополнительные stores для POS пользователей (cashier, waiter)
@@ -150,6 +157,7 @@ export function shouldLoadBackofficeStores(userRoles: UserRole[]): boolean {
 
 /**
  * Проверить нужно ли загружать Kitchen stores
+ * Kitchen monitor используется для ролей: kitchen, bar, admin
  */
 export function shouldLoadKitchenStores(userRoles: UserRole[]): boolean {
   return userRoles.some(role => ['admin', 'kitchen', 'bar'].includes(role))

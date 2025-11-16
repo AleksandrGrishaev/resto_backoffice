@@ -1,7 +1,7 @@
 // src/stores/kitchen/useKitchenRealtime.ts
 // Kitchen Realtime Composable - Subscribe to order updates from POS
 
-import { ref, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { supabase } from '@/supabase/client'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { DebugUtils } from '@/utils'
@@ -11,6 +11,9 @@ const MODULE_NAME = 'KitchenRealtime'
 /**
  * Kitchen Realtime Subscription
  * Listens for order changes from POS (new orders, status updates)
+ *
+ * NOTE: This composable is used in Pinia store (not Vue component),
+ * so we DON'T use onUnmounted here. Cleanup is handled manually via unsubscribe().
  */
 export function useKitchenRealtime() {
   const channel = ref<RealtimeChannel | null>(null)
@@ -44,32 +47,57 @@ export function useKitchenRealtime() {
         payload => {
           const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE'
           const order = payload.new || payload.old
+          const oldOrder = payload.old
 
-          // Filter: Kitchen only sees waiting, cooking, ready
-          if (order && ['waiting', 'cooking', 'ready'].includes(order.status)) {
-            DebugUtils.info(MODULE_NAME, 'Kitchen order update received', {
-              event: eventType,
-              orderNumber: order.order_number,
-              status: order.status
-            })
+          // IMPORTANT: Kitchen ONLY processes orders in ['waiting', 'cooking', 'ready']
+          // Ignore all other statuses (draft, served, cancelled, etc.)
+          const kitchenStatuses = ['waiting', 'cooking', 'ready']
+          const isKitchenOrder = order && kitchenStatuses.includes(order.status)
+          const wasKitchenOrder = oldOrder && kitchenStatuses.includes(oldOrder.status)
 
-            onOrderUpdate(order, eventType)
-          } else if (eventType === 'DELETE') {
-            // Handle deletion (order moved to served/cancelled)
+          if (eventType === 'DELETE') {
+            // Handle deletion (order removed from database)
             DebugUtils.info(MODULE_NAME, 'Order removed from kitchen view', {
               event: eventType,
               orderId: payload.old?.id
             })
             onOrderUpdate(payload.old, eventType)
-          } else if (eventType === 'UPDATE' && order) {
-            // Order status changed to non-kitchen status (e.g., cancelled)
-            if (!['waiting', 'cooking', 'ready'].includes(order.status)) {
-              DebugUtils.info(MODULE_NAME, 'Order status changed to non-kitchen', {
-                orderNumber: order.order_number,
-                status: order.status
-              })
-              onOrderUpdate(order, 'DELETE') // Treat as removal
-            }
+          } else if (eventType === 'INSERT' && isKitchenOrder) {
+            // New order arrived for kitchen
+            DebugUtils.info(MODULE_NAME, 'Kitchen order created', {
+              event: eventType,
+              orderNumber: order.order_number,
+              status: order.status
+            })
+            onOrderUpdate(order, eventType)
+          } else if (eventType === 'UPDATE' && isKitchenOrder) {
+            // Existing kitchen order updated
+            DebugUtils.info(MODULE_NAME, 'Kitchen order updated', {
+              event: eventType,
+              orderNumber: order.order_number,
+              status: order.status
+            })
+            onOrderUpdate(order, eventType)
+          } else if (eventType === 'UPDATE' && wasKitchenOrder && !isKitchenOrder) {
+            // Order status changed FROM kitchen status TO non-kitchen status
+            // (e.g., cooking → served, ready → cancelled)
+            DebugUtils.info(MODULE_NAME, '🔄 Order removed from kitchen', {
+              orderNumber: order.order_number,
+              oldStatus: oldOrder.status,
+              newStatus: order.status
+            })
+            // Only remove if it was previously in kitchen
+            onOrderUpdate(order, 'DELETE')
+          } else {
+            // IGNORE all other cases:
+            // - draft → draft (POS editing order)
+            // - draft → waiting (will be handled by INSERT logic)
+            // - served → served (already removed)
+            DebugUtils.debug(MODULE_NAME, 'Ignoring non-kitchen order update', {
+              event: eventType,
+              status: order?.status,
+              oldStatus: oldOrder?.status
+            })
           }
         }
       )
@@ -89,6 +117,7 @@ export function useKitchenRealtime() {
 
   /**
    * Unsubscribe from realtime updates
+   * IMPORTANT: Must be called manually when store is destroyed (e.g., in cleanup())
    */
   function unsubscribe() {
     if (channel.value) {
@@ -98,11 +127,6 @@ export function useKitchenRealtime() {
       isConnected.value = false
     }
   }
-
-  // Cleanup on component unmount
-  onUnmounted(() => {
-    unsubscribe()
-  })
 
   return {
     subscribe,

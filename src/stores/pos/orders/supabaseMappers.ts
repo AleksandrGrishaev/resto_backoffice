@@ -55,6 +55,7 @@ interface FlattenedItem {
   kitchenNotes?: string
   sentToKitchenAt?: string
   preparedAt?: string
+  department?: 'kitchen' | 'bar' // Which department should prepare this
 
   // Payment links
   paidByPaymentIds?: string[]
@@ -112,6 +113,7 @@ export function flattenBillsToItems(order: PosOrder): FlattenedItem[] {
         kitchenNotes: item.kitchenNotes,
         sentToKitchenAt: item.sentToKitchenAt,
         preparedAt: item.preparedAt,
+        department: item.department || 'kitchen', // Default to kitchen
 
         // Payment links
         paidByPaymentIds: item.paidByPaymentIds || [],
@@ -200,6 +202,7 @@ export function reconstructBillsFromItems(items: FlattenedItem[]): PosBill[] {
       kitchenNotes: item.kitchenNotes,
       sentToKitchenAt: item.sentToKitchenAt,
       preparedAt: item.preparedAt,
+      department: item.department,
 
       // Payment links
       paidByPaymentIds: item.paidByPaymentIds,

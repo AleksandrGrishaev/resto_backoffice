@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useKitchenStore } from '@/stores/kitchen'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
@@ -198,6 +198,15 @@ const handleScreenSelect = (screen: 'orders' | 'preparation'): void => {
 
 onMounted(async () => {
   await initializeKitchen()
+})
+
+/**
+ * Cleanup on unmount
+ * Unsubscribe from Realtime to prevent memory leaks
+ */
+onUnmounted(() => {
+  DebugUtils.debug(MODULE_NAME, 'Component unmounting, cleaning up Kitchen store')
+  kitchenStore.cleanup()
 })
 </script>
 

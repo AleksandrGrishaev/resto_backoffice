@@ -10,7 +10,8 @@ import {
   getRequiredStoresForRoles,
   shouldLoadBackofficeStores,
   shouldLoadPOSStores,
-  shouldLoadKitchenStores
+  shouldLoadKitchenStores,
+  CRITICAL_STORES
 } from './dependencies'
 import { DebugUtils } from '@/utils'
 
@@ -54,13 +55,39 @@ export class DevInitializationStrategy implements InitializationStrategy {
    * Инициализировать критические stores
    *
    * В DEV режиме: загружаем для всех ролей, чтобы можно было тестировать любые сценарии
+   * ОПТИМИЗАЦИЯ: Для Kitchen monitor (роль 'kitchen') грузим только menu
    */
-  async initializeCriticalStores(): Promise<StoreInitResult[]> {
-    DebugUtils.info(MODULE_NAME, '📦 [DEV] Initializing critical stores for all roles...')
-
+  async initializeCriticalStores(userRoles?: UserRole[]): Promise<StoreInitResult[]> {
     const results: StoreInitResult[] = []
 
     try {
+      // 🆕 ОПТИМИЗАЦИЯ: Kitchen monitor нуждается только в menu
+      const isKitchenMonitorOnly =
+        userRoles?.length === 1 && (userRoles[0] === 'kitchen' || userRoles[0] === 'bar')
+
+      if (isKitchenMonitorOnly) {
+        DebugUtils.info(
+          MODULE_NAME,
+          '📦 [DEV] Kitchen monitor - loading minimal stores (menu only)',
+          {
+            role: userRoles[0]
+          }
+        )
+
+        // Kitchen нуждается только в menu для отображения dish names
+        results.push(await this.loadMenu())
+
+        DebugUtils.info(MODULE_NAME, '✅ [DEV] Kitchen critical stores initialized', {
+          count: results.length,
+          stores: ['menu']
+        })
+
+        return results
+      }
+
+      // Стандартная загрузка для всех остальных ролей
+      DebugUtils.info(MODULE_NAME, '📦 [DEV] Initializing critical stores for all roles...')
+
       // ВАЖНО: Последовательная загрузка - recipes зависят от products
       results.push(await this.loadProducts())
       results.push(await this.loadCounterAgents())

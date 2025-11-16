@@ -79,6 +79,7 @@ export function useKitchenDishes() {
 
   /**
    * Все блюда для Kitchen (статусы: waiting, cooking, ready)
+   * ВАЖНО: Показываем только блюда с department='kitchen' (НЕ bar)
    */
   const kitchenDishes = computed((): KitchenDish[] => {
     const dishes: KitchenDish[] = []
@@ -89,8 +90,11 @@ export function useKitchenDishes() {
       for (const bill of order.bills) {
         // Проходим по всем items в bill
         for (const item of bill.items) {
-          // Фильтруем только Kitchen статусы
-          if (['waiting', 'cooking', 'ready'].includes(item.status)) {
+          // Фильтруем только Kitchen статусы И department='kitchen'
+          if (
+            ['waiting', 'cooking', 'ready'].includes(item.status) &&
+            (!item.department || item.department === 'kitchen') // Show only kitchen items (default to kitchen if not set)
+          ) {
             // Разворачиваем item в отдельные блюда
             const expandedDishes = expandBillItemToDishes(item, order, bill)
             dishes.push(...expandedDishes)

@@ -3,7 +3,7 @@
 /**
  * Роли пользователей в системе
  */
-export type UserRole = 'admin' | 'manager' | 'cashier' | 'waiter' | 'kitchen'
+export type UserRole = 'admin' | 'manager' | 'kitchen' | 'bar' | 'cashier' | 'waiter'
 
 /**
  * Категории stores для инициализации
@@ -67,8 +67,9 @@ export interface InitializationSummary {
 export interface InitializationStrategy {
   /**
    * Загрузить критические stores (нужны всем для базовых операций)
+   * @param userRoles - опциональные роли пользователя для оптимизации загрузки
    */
-  initializeCriticalStores(): Promise<StoreInitResult[]>
+  initializeCriticalStores(userRoles?: UserRole[]): Promise<StoreInitResult[]>
 
   /**
    * Загрузить stores на основе ролей пользователя

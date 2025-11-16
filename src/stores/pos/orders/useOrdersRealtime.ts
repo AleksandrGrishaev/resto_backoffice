@@ -46,23 +46,48 @@ export function useOrdersRealtime() {
             status: payload.new?.status
           })
 
-          // Update order in local state
-          const updatedOrder = fromSupabase(payload.new)
-          const index = ordersStore.orders.findIndex(o => o.id === updatedOrder.id)
+          const index = ordersStore.orders.findIndex(o => o.id === payload.new?.id)
 
           if (index !== -1) {
-            // Update existing order
-            ordersStore.orders[index] = updatedOrder
+            // IMPORTANT: Preserve local bills/items, only update order-level fields
+            // Supabase Realtime UPDATE events may not include full JSONB items array
+            const existingOrder = ordersStore.orders[index]
+            const updatedOrderPartial = fromSupabase(payload.new)
 
-            DebugUtils.info(MODULE_NAME, '✅ Order updated in POS', {
-              orderNumber: updatedOrder.orderNumber,
-              status: updatedOrder.status,
-              itemsCount: updatedOrder.bills.reduce((sum, b) => sum + b.items.length, 0)
+            // Merge: keep local bills, update order-level fields
+            const mergedOrder = {
+              ...existingOrder,
+              // Update order-level fields from Supabase
+              status: updatedOrderPartial.status,
+              paymentStatus: updatedOrderPartial.paymentStatus,
+              totalAmount: updatedOrderPartial.totalAmount,
+              discountAmount: updatedOrderPartial.discountAmount,
+              taxAmount: updatedOrderPartial.taxAmount,
+              finalAmount: updatedOrderPartial.finalAmount,
+              paidAmount: updatedOrderPartial.paidAmount,
+              paymentIds: updatedOrderPartial.paymentIds,
+              updatedAt: updatedOrderPartial.updatedAt,
+
+              // Preserve local bills unless Supabase has bills (from full fetch)
+              bills:
+                updatedOrderPartial.bills.length > 0
+                  ? updatedOrderPartial.bills
+                  : existingOrder.bills
+            }
+
+            ordersStore.orders[index] = mergedOrder
+
+            DebugUtils.info(MODULE_NAME, '✅ Order updated in POS (merged)', {
+              orderNumber: mergedOrder.orderNumber,
+              status: mergedOrder.status,
+              billsCount: mergedOrder.bills.length,
+              itemsCount: mergedOrder.bills.reduce((sum, b) => sum + b.items.length, 0)
             })
           } else {
-            // Order not found locally - might be a new order
+            // Order not found locally - might be from another POS instance
+            // Load full order from Supabase (not from Realtime payload)
             DebugUtils.debug(MODULE_NAME, 'Order not found in local state, ignoring', {
-              orderId: updatedOrder.id
+              orderId: payload.new?.id
             })
           }
         }

@@ -21,7 +21,8 @@
       "mcp__supabase__apply_migration",
       "Bash(npx tsx:*)",
       "Bash(npx supabase:*)",
-      "Bash(src/supabase/types.gen.ts)"
+      "Bash(src/supabase/types.gen.ts)",
+      "Bash(pnpm build:web:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

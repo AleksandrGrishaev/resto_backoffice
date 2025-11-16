@@ -388,6 +388,9 @@ export class OrdersService {
         selectedModifiers: selectedModifiers || [],
         modifiersTotal, // Сумма доплат за модификаторы (за 1 штуку)
 
+        // Department routing
+        department: menuItem.department || 'kitchen', // Default to kitchen if not specified
+
         status: 'draft',
         paymentStatus: 'unpaid',
         createdAt: TimeUtils.getCurrentLocalISO(),

@@ -170,6 +170,9 @@ export interface PosBillItem extends BaseEntity {
   sentToKitchenAt?: string
   preparedAt?: string
 
+  // Department routing (Kitchen vs Bar)
+  department?: Department // Which department should prepare this item
+
   // Payment link (Sprint 1: Payment Architecture)
   paidByPaymentIds?: string[] // Links to payments that paid this item
 }
@@ -239,6 +242,8 @@ export interface PaymentSplit {
 }
 
 // ===== MENU INTEGRATION TYPES =====
+export type Department = 'kitchen' | 'bar'
+
 export interface PosMenuItem {
   id: string
   name: string
@@ -252,6 +257,7 @@ export interface PosMenuItem {
   imageUrl?: string
   variants?: PosMenuVariant[]
   modifications?: PosMenuModification[]
+  department?: Department // Kitchen or Bar
 }
 
 export interface PosMenuVariant {

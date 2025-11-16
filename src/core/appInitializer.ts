@@ -75,7 +75,7 @@ export class AppInitializer {
       })
 
       // Phase 1: Критические stores (для всех ролей)
-      const criticalResults = await this.strategy.initializeCriticalStores()
+      const criticalResults = await this.strategy.initializeCriticalStores(finalUserRoles)
       DebugUtils.info(MODULE_NAME, '✅ Phase 1/3: Critical stores initialized', {
         count: criticalResults.length,
         success: criticalResults.filter(r => r.success).length

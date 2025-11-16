@@ -123,9 +123,9 @@ export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
     nameEn: row.name_en || undefined,
     description: row.description || undefined,
 
-    // Type and department (defaults for compatibility)
+    // Type and department
     type: inferMenuItemType(row),
-    department: inferDepartment(row),
+    department: (row.department as 'kitchen' | 'bar') || 'kitchen',
 
     // Dish type
     dishType: (row.dish_type as any) || 'simple',
