@@ -16,7 +16,15 @@
 - Migration 005 ✅ **COMPLETED** (Products schema fixed to match Product interface)
 - Migration 006 ✅ **COMPLETED** (Menu 'type' column added)
 - Menu ✅ **COMPLETED** (Phase 1 - 9 items, 6 categories seeded)
-- Backoffice Full Migration 🔲 Pending (Phase 2+)
+- Migration 007 ✅ **COMPLETED** (Counteragents table created)
+- Counteragents/Suppliers ✅ **COMPLETED** (9 counteragents seeded: 7 suppliers, 2 services)
+- Migration 008 ✅ **COMPLETED** (Recipes tables: recipes, recipe_components, recipe_steps)
+- Migration 009 ✅ **COMPLETED** (Preparations tables: preparations, preparation_ingredients)
+- Recipes ✅ **COMPLETED** (3 recipes seeded with 6 components, 13 steps)
+- Preparations ✅ **COMPLETED** (10 preparations seeded with 48 ingredients)
+- Migration 010 ✅ **COMPLETED** (Storage tables: warehouses, storage_batches, storage_operations, inventory_documents)
+- Migration 011 ✅ **COMPLETED** (Supplier tables: procurement_requests, purchase_orders, receipts)
+- Storage & Supplier ✅ **COMPLETED** (1 warehouse, 28 batches for all products, 6 operations over 7 days, 1 procurement flow seeded)
 
 ---
 
@@ -27,9 +35,12 @@
 1. ✅ Products/Categories already in Supabase (COMPLETED)
 2. ✅ Create seed script infrastructure (COMPLETED)
 3. ✅ Migrate Menu to Supabase (Phase 1 - COMPLETED)
-4. 🔲 Seed remaining catalog data (package_options)
-5. 🔲 Create missing Supabase tables (suppliers, recipes, preparations)
-6. 🔲 Replace mock files with seed scripts (Phase 2)
+4. ✅ Migrate Counteragents/Suppliers to Supabase (COMPLETED)
+5. ✅ Create missing Supabase tables (recipes, preparations) - **COMPLETED**
+6. ✅ Create Storage tables (warehouses, batches, operations, inventories) - **COMPLETED**
+7. ✅ Create Supplier Operations tables (requests, orders, receipts) - **COMPLETED**
+8. 🔲 Seed remaining catalog data (package_options - optional)
+9. 🔲 Replace mock files with seed scripts (Phase 2)
 
 ### 🔴 Phase 0: Seed Scripts Infrastructure (Day 1-2) ✅ **COMPLETED**
 
@@ -267,6 +278,35 @@ Use after /clean-db to reset test data.
 
 ---
 
+### 🔴 Phase 1.5: Counteragents/Suppliers Migration ✅ **COMPLETED**
+
+**Goal:** Counteragents (suppliers, service providers) in Supabase
+
+**Status:** ✅ **COMPLETED** (2025-11-17)
+
+**Tasks:**
+
+- [x] Check Counteragent TypeScript interface ✅
+- [x] Create Migration 007: counteragents table ✅
+- [x] Seed counteragent data via MCP (9 counteragents) ✅
+- [ ] Create seed script (003_seed_counteragents.ts) - optional
+- [ ] Test backoffice can read/write counteragents - pending
+
+**Results:**
+
+- ✅ Migration 007 applied: Created counteragents table with full schema
+- ✅ Counteragents seeded: 9 total (7 suppliers, 2 service providers)
+- ✅ Preferred suppliers: 5 (meat, dairy, seafood, vegetables, cleaning)
+- ✅ Product category mapping: Suppliers linked to product categories
+- ✅ All business fields included: payment terms, lead times, delivery schedules
+
+**Breakdown by type:**
+
+- Suppliers: 7 (covering meat, dairy, seafood, vegetables, beverages, spices, other)
+- Services: 2 (cleaning, equipment maintenance)
+
+---
+
 ### 🟡 Phase 2: Mock Files Cleanup (Day 5)
 
 **Goal:** Replace all mock files with seed scripts
@@ -301,14 +341,14 @@ find src/stores -name "*mock*.ts" -o -name "*Mock*.ts"
 
 **Goal:** Migrate all Backoffice stores to Supabase
 
-**Status:** 🔲 Pending (future sprints)
+**Status:** ✅ **COMPLETED** (2025-11-17)
 
-**Stores to Migrate:**
+**Stores Migrated:**
 
-- [ ] Suppliers → Supabase (Sprint N)
-- [ ] Recipes → Supabase (Sprint N+1)
-- [ ] Storage → Supabase (Sprint N+2)
-- [ ] Preparations → Supabase (Sprint N+3)
+- [x] Recipes → Supabase ✅ (Migration 008 - 3 recipes, 6 components, 13 steps)
+- [x] Preparations → Supabase ✅ (Migration 009 - 10 preparations, 48 ingredients)
+- [x] Storage → Supabase ✅ (Migration 010 - 1 warehouse, 28 batches, 6 operations)
+- [x] Supplier Operations → Supabase ✅ (Migration 011 - 1 request, 1 order, 1 receipt)
 
 **Reference:** See PrepProduction.md Section 5 for detailed roadmap
 
