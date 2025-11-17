@@ -1,7 +1,14 @@
 // src/stores/kitchen/composables/useKitchenDishes.ts
-import { computed } from 'vue'
+import { computed, type Ref } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
-import type { PosOrder, PosBillItem, OrderStatus, ServiceResponse } from '@/stores/pos/types'
+import { useAuthStore } from '@/stores/auth'
+import type {
+  PosOrder,
+  PosBillItem,
+  OrderStatus,
+  ServiceResponse,
+  Department
+} from '@/stores/pos/types'
 
 /**
  * Kitchen Dish (expanded from bill item)
@@ -17,6 +24,7 @@ export interface KitchenDish {
   quantity: 1 // Всегда 1, так как каждое блюдо - отдельная карточка
   status: 'waiting' | 'cooking' | 'ready'
   kitchenNotes?: string
+  department?: Department // Which department should prepare this item (kitchen or bar)
 
   // Order context
   orderId: string
@@ -36,9 +44,13 @@ export interface KitchenDish {
 /**
  * Kitchen Dishes Composable
  * Разбивает заказы на отдельные блюда для KDS
+ * Поддерживает role-based filtering для Kitchen и Bar
+ *
+ * @param selectedDepartment - Optional ref для admin manual department selection ('all' | 'kitchen' | 'bar')
  */
-export function useKitchenDishes() {
+export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'bar' | undefined>) {
   const posOrdersStore = usePosOrdersStore()
+  const authStore = useAuthStore()
 
   /**
    * Разбить bill item на отдельные блюда
@@ -63,6 +75,7 @@ export function useKitchenDishes() {
         quantity: 1, // Всегда 1
         status: item.status as 'waiting' | 'cooking' | 'ready',
         kitchenNotes: item.kitchenNotes,
+        department: item.department || 'kitchen', // Default to kitchen if not specified
         orderId: order.id,
         orderNumber: order.orderNumber,
         orderType: order.type,
@@ -78,11 +91,42 @@ export function useKitchenDishes() {
   }
 
   /**
-   * Все блюда для Kitchen (статусы: waiting, cooking, ready)
-   * ВАЖНО: Показываем только блюда с department='kitchen' (НЕ bar)
+   * Определить разрешенные департаменты на основе роли пользователя
+   * Admin может переключаться между департаментами, остальные видят только свой
+   */
+  const allowedDepartments = computed((): Department[] => {
+    const roles = authStore.userRoles
+    const isAdmin = roles.includes('admin')
+    const isKitchen = roles.includes('kitchen')
+    const isBar = roles.includes('bar')
+
+    // Admin: manual selection via selectedDepartment prop
+    if (isAdmin) {
+      const selected = selectedDepartment?.value
+      if (selected === 'all') return ['kitchen', 'bar']
+      if (selected === 'kitchen') return ['kitchen']
+      if (selected === 'bar') return ['bar']
+      // Default for admin: show all
+      return ['kitchen', 'bar']
+    }
+
+    // Kitchen role: only kitchen items
+    if (isKitchen) return ['kitchen']
+
+    // Bar role: only bar items
+    if (isBar) return ['bar']
+
+    // Fallback: show kitchen by default
+    return ['kitchen']
+  })
+
+  /**
+   * Все блюда для отображения (статусы: waiting, cooking, ready)
+   * Фильтрация по department на основе роли пользователя
    */
   const kitchenDishes = computed((): KitchenDish[] => {
     const dishes: KitchenDish[] = []
+    const allowed = allowedDepartments.value
 
     // Проходим по всем заказам
     for (const order of posOrdersStore.orders) {
@@ -90,10 +134,13 @@ export function useKitchenDishes() {
       for (const bill of order.bills) {
         // Проходим по всем items в bill
         for (const item of bill.items) {
-          // Фильтруем только Kitchen статусы И department='kitchen'
+          // Определяем department (default: 'kitchen' если не указан)
+          const itemDepartment = item.department || 'kitchen'
+
+          // Фильтруем только Kitchen/Bar статусы И разрешенные департаменты
           if (
             ['waiting', 'cooking', 'ready'].includes(item.status) &&
-            (!item.department || item.department === 'kitchen') // Show only kitchen items (default to kitchen if not set)
+            allowed.includes(itemDepartment)
           ) {
             // Разворачиваем item в отдельные блюда
             const expandedDishes = expandBillItemToDishes(item, order, bill)

@@ -1,6 +1,24 @@
 <!-- src/views/kitchen/components/KitchenSidebar.vue -->
 <template>
   <div class="kitchen-sidebar">
+    <!-- Department Tabs (Admin only) -->
+    <div v-if="showDepartmentTabs" class="department-tabs-section">
+      <v-tabs v-model="selectedDepartment" density="compact" color="primary" grow>
+        <v-tab value="all">
+          <v-icon start size="18">mdi-view-grid</v-icon>
+          All
+        </v-tab>
+        <v-tab value="kitchen">
+          <v-icon start size="18">mdi-chef-hat</v-icon>
+          Kitchen
+        </v-tab>
+        <v-tab value="bar">
+          <v-icon start size="18">mdi-glass-cocktail</v-icon>
+          Bar
+        </v-tab>
+      </v-tabs>
+    </div>
+
     <!-- Screen Buttons Section -->
     <div class="screens-section">
       <!-- Orders Screen Button -->
@@ -52,8 +70,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useKitchenDishes } from '@/stores/kitchen/composables'
+import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
 import KitchenNavigationMenu from './KitchenNavigationMenu.vue'
 
@@ -77,13 +96,44 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'screen-select': [screen: 'orders' | 'preparation']
+  'department-change': [department: 'all' | 'kitchen' | 'bar']
 }>()
 
 // =============================================
 // COMPOSABLES
 // =============================================
 
+const authStore = useAuthStore()
 const { dishesStats } = useKitchenDishes()
+
+// =============================================
+// STATE
+// =============================================
+
+const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>('all')
+
+// =============================================
+// COMPUTED
+// =============================================
+
+/**
+ * Show department tabs only for admin
+ */
+const showDepartmentTabs = computed(() => {
+  return authStore.userRoles.includes('admin')
+})
+
+// =============================================
+// WATCHERS
+// =============================================
+
+/**
+ * Emit department change when admin selects a tab
+ */
+watch(selectedDepartment, value => {
+  DebugUtils.debug(MODULE_NAME, 'Department filter changed', { department: value })
+  emit('department-change', value)
+})
 
 // =============================================
 // METHODS
@@ -102,6 +152,29 @@ const handleScreenSelect = (screen: 'orders' | 'preparation') => {
   height: 100%;
   width: 100%;
   background-color: var(--v-theme-surface);
+}
+
+/* Department Tabs Section (Admin only) */
+.department-tabs-section {
+  padding: var(--spacing-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgba(0, 0, 0, 0.1);
+
+  :deep(.v-tabs) {
+    height: 40px;
+  }
+
+  :deep(.v-tab) {
+    min-height: 36px;
+    font-size: var(--text-sm);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 500;
+  }
+
+  :deep(.v-tab--selected) {
+    font-weight: 600;
+  }
 }
 
 /* Screens Section */

@@ -48,14 +48,21 @@
     <KitchenLayout v-else-if="showMainInterface">
       <!-- Sidebar: Navigation -->
       <template #sidebar>
-        <KitchenSidebar :current-screen="currentScreen" @screen-select="handleScreenSelect" />
+        <KitchenSidebar
+          :current-screen="currentScreen"
+          @screen-select="handleScreenSelect"
+          @department-change="handleDepartmentChange"
+        />
       </template>
 
       <!-- Content: Active Screen -->
       <template #content>
         <div class="kitchen-screen-content">
           <!-- Orders Screen -->
-          <OrdersScreen v-if="currentScreen === 'orders'" />
+          <OrdersScreen
+            v-if="currentScreen === 'orders'"
+            :selected-department="selectedDepartment"
+          />
 
           <!-- Preparation Screen (Stub) -->
           <PreparationScreen
@@ -107,6 +114,7 @@ const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
 const currentScreen = ref<'orders' | 'preparation'>('orders')
+const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>('all')
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -190,6 +198,14 @@ const retryInitialization = async (): Promise<void> => {
 const handleScreenSelect = (screen: 'orders' | 'preparation'): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
+}
+
+/**
+ * Handle department selection from sidebar (admin only)
+ */
+const handleDepartmentChange = (department: 'all' | 'kitchen' | 'bar'): void => {
+  selectedDepartment.value = department
+  DebugUtils.debug(MODULE_NAME, 'Department filter changed', { department })
 }
 
 // =============================================

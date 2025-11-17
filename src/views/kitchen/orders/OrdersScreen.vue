@@ -5,7 +5,13 @@
     <NewOrderNotification ref="notificationComponent" />
 
     <!-- Dishes Columns (Kanban) -->
-    <div class="orders-columns" :class="{ 'ready-collapsed': readyColumnCollapsed }">
+    <div
+      class="orders-columns"
+      :class="{
+        'ready-collapsed': readyColumnCollapsed,
+        'two-columns': !showCookingColumn
+      }"
+    >
       <!-- Waiting Column -->
       <div class="order-column waiting-column">
         <div class="column-header">
@@ -30,8 +36,8 @@
         </div>
       </div>
 
-      <!-- Cooking Column -->
-      <div class="order-column cooking-column">
+      <!-- Cooking Column (conditionally shown for kitchen/all) -->
+      <div v-if="showCookingColumn" class="order-column cooking-column">
         <div class="column-header">
           <v-icon color="blue" size="28">mdi-fire</v-icon>
           <h3 class="column-title">Cooking</h3>
@@ -99,14 +105,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useKitchenDishes } from '@/stores/kitchen/composables'
 import type { KitchenDish } from '@/stores/kitchen/composables'
+import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
 import DishCard from './components/DishCard.vue'
 import NewOrderNotification from './components/NewOrderNotification.vue'
 
 const MODULE_NAME = 'OrdersScreen'
+const authStore = useAuthStore()
+
+// =============================================
+// PROPS
+// =============================================
+
+interface Props {
+  selectedDepartment?: 'all' | 'kitchen' | 'bar'
+}
+
+const props = defineProps<Props>()
 
 // =============================================
 // STATE
@@ -122,11 +140,41 @@ const previousOrderNumbers = ref<Set<string>>(new Set())
 // COMPOSABLES
 // =============================================
 
+/**
+ * Pass selectedDepartment as computed ref to useKitchenDishes
+ * This allows dynamic filtering when admin changes department tab
+ */
+const selectedDepartmentRef = computed(() => props.selectedDepartment)
+
 const { dishesByStatus, dishesByOrder, dishesStats, updateDishStatus, getOrderColor } =
-  useKitchenDishes()
+  useKitchenDishes(selectedDepartmentRef)
+
+/**
+ * Determine if we should show the Cooking column
+ * Bar-only view: Hide cooking column (bar items skip cooking)
+ * Kitchen or All: Show cooking column
+ */
+const showCookingColumn = computed(() => {
+  const roles = authStore.userRoles
+  const isBarUser = roles.includes('bar') && !roles.includes('admin')
+
+  // Bar user (non-admin) → hide cooking column
+  if (isBarUser) {
+    return false
+  }
+
+  // Admin selected bar-only → hide cooking column
+  if (props.selectedDepartment === 'bar') {
+    return false
+  }
+
+  // Otherwise, show cooking (kitchen or all)
+  return true
+})
 
 // Debug: Log dishes data
 onMounted(() => {
+  const roles = authStore.userRoles
   DebugUtils.info(MODULE_NAME, 'Dishes loaded', {
     total: dishesStats.value.total,
     waiting: dishesStats.value.waiting,
@@ -134,7 +182,10 @@ onMounted(() => {
     ready: dishesStats.value.ready,
     waitingDishes: dishesByStatus.value.waiting,
     cookingDishes: dishesByStatus.value.cooking,
-    readyDishes: dishesByStatus.value.ready
+    readyDishes: dishesByStatus.value.ready,
+    showCookingColumn: showCookingColumn.value,
+    userRoles: roles,
+    selectedDepartment: props.selectedDepartment
   })
 
   // Initialize with current order numbers
@@ -240,12 +291,24 @@ const handleDishStatusUpdate = async (
   max-width: 100%;
   box-sizing: border-box;
 
-  &.ready-collapsed {
-    grid-template-columns: 1fr 1fr 60px;
+  /* Two-column layout (bar mode: waiting + ready) */
+  &.two-columns {
+    grid-template-columns: 1fr 1fr;
+
+    &.ready-collapsed {
+      grid-template-columns: 1fr 60px;
+    }
   }
 
-  &:not(.ready-collapsed) {
-    grid-template-columns: 1fr 1fr 1fr;
+  /* Three-column layout (kitchen/all mode: waiting + cooking + ready) */
+  &:not(.two-columns) {
+    &.ready-collapsed {
+      grid-template-columns: 1fr 1fr 60px;
+    }
+
+    &:not(.ready-collapsed) {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
   }
 }
 

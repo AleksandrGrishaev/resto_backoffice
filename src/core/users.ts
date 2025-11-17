@@ -29,6 +29,13 @@ export const CORE_USERS = [
     roles: ['kitchen'] as UserRole[],
     isActive: true,
     description: 'Kitchen staff for order preparation'
+  },
+  {
+    name: 'Bar User',
+    pin: '5678',
+    roles: ['bar'] as UserRole[],
+    isActive: true,
+    description: 'Bar staff for beverage preparation'
   }
 ]
 

@@ -1,5 +1,5 @@
 // src/stores/kitchen/composables/useKitchenStatus.ts
-import type { OrderStatus } from '@/stores/pos/types'
+import type { OrderStatus, Department } from '@/stores/pos/types'
 
 /**
  * Kitchen Status Helpers
@@ -8,9 +8,27 @@ import type { OrderStatus } from '@/stores/pos/types'
 export function useKitchenStatus() {
   /**
    * Получить следующий статус для заказа
+   * @param currentStatus - текущий статус
+   * @param department - департамент (kitchen или bar), для бара пропускаем cooking
    */
-  function getNextStatus(currentStatus: OrderStatus): OrderStatus | null {
-    const transitions: Record<OrderStatus, OrderStatus | null> = {
+  function getNextStatus(currentStatus: OrderStatus, department?: Department): OrderStatus | null {
+    // Bar items: skip cooking, go directly from waiting to ready
+    if (department === 'bar') {
+      const barTransitions: Record<OrderStatus, OrderStatus | null> = {
+        draft: null,
+        waiting: 'ready', // Bar: waiting → ready (skip cooking)
+        cooking: 'ready', // Fallback if somehow in cooking state
+        ready: null,
+        served: null,
+        collected: null,
+        delivered: null,
+        cancelled: null
+      }
+      return barTransitions[currentStatus] || null
+    }
+
+    // Kitchen items: standard 3-step flow
+    const kitchenTransitions: Record<OrderStatus, OrderStatus | null> = {
       draft: null, // Kitchen не работает с draft
       waiting: 'cooking',
       cooking: 'ready',
@@ -20,14 +38,32 @@ export function useKitchenStatus() {
       delivered: null,
       cancelled: null
     }
-    return transitions[currentStatus] || null
+    return kitchenTransitions[currentStatus] || null
   }
 
   /**
    * Получить текст кнопки для статуса
+   * @param currentStatus - текущий статус
+   * @param department - департамент (kitchen или bar), для бара другие тексты
    */
-  function getStatusButtonText(currentStatus: OrderStatus): string {
-    const texts: Record<OrderStatus, string> = {
+  function getStatusButtonText(currentStatus: OrderStatus, department?: Department): string {
+    // Bar items: simplified flow
+    if (department === 'bar') {
+      const barTexts: Record<OrderStatus, string> = {
+        draft: '',
+        waiting: 'Mark Ready', // Bar: waiting → ready (no cooking)
+        cooking: 'Mark Ready', // Fallback
+        ready: 'Ready',
+        served: '',
+        collected: '',
+        delivered: '',
+        cancelled: ''
+      }
+      return barTexts[currentStatus] || ''
+    }
+
+    // Kitchen items: standard flow
+    const kitchenTexts: Record<OrderStatus, string> = {
       draft: '',
       waiting: 'Start Cooking',
       cooking: 'Mark Ready',
@@ -37,7 +73,7 @@ export function useKitchenStatus() {
       delivered: '',
       cancelled: ''
     }
-    return texts[currentStatus] || ''
+    return kitchenTexts[currentStatus] || ''
   }
 
   /**

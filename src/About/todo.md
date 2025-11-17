@@ -1,2230 +1,435 @@
-# 🚀 Sprint 7: Supabase Integration & Web Deploy (MVP)
+# 🚀 Current Sprint: Seed Infrastructure + Backoffice Migration
 
-> **📘 See also:** [SupabaseGlobalTodo.md](./SupabaseGlobalTodo.md) - Global integration roadmap with architecture diagrams and sync flows
+> **📘 Strategy:** See [PrepProduction.md](./PrepProduction.md) for production preparation strategy
+> **📘 Migration Guide:** See [BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md) for detailed plan
 
-## 📊 Current Status (2025-11-16)
+## 📊 Current Status (2025-11-17)
 
-**Sprint 7 Progress: 🟢 95%** (Week 2, Day 5 - Kitchen-POS Integration Complete)
+**Sprint Goal: 🎯 Create Seed Infrastructure → Migrate Backoffice → v1.0 Release**
 
-**Готовность к релизу: 🟢 98%**
+**Progress:**
 
----
-
-## ✅ Completed (2025-11-15)
-
-### Week 1: Supabase Setup ✅
-
-- ✅ Supabase project created
-- ✅ Initial SQL migration executed (shifts, orders, payments, products, tables)
-- ✅ Service Key integration (RLS bypass for PIN auth)
-- ✅ TypeScript types generated
-
-### Week 2, Day 1-2: Shifts Store → Supabase ✅
-
-- ✅ **Mappers:** `supabaseMappers.ts` (toSupabaseInsert, toSupabaseUpdate, fromSupabase)
-- ✅ **Services:** CREATE, UPDATE, CLOSE operations sync to Supabase
-- ✅ **ShiftSyncAdapter:** Syncs to Account Store + Supabase
-- ✅ **Bug Fixes:**
-  - Fixed "Shift not found" error (updateShift, endShift)
-  - Fixed Expected Cash calculation (now subtracts expenses)
-  - Fixed UUID generation
-  - Updated EndShiftDialog UI (shows expense breakdown)
-
-**What Works:**
-
-1. ✅ Shift CREATE → Supabase
-2. ✅ Shift UPDATE → Supabase
-3. ✅ Shift CLOSE → Supabase
-4. ✅ Expenses tracked in shift
-5. ✅ ShiftSyncAdapter → Account Store + Supabase
-6. ✅ Offline fallback to localStorage
-
-### Week 2, Day 3: Migration 002 ✅
-
-- ✅ **Migration 002 Executed:** All missing shift fields added to Supabase
-  - Cash management: `starting_cash`, `ending_cash`, `expected_cash`, `cash_discrepancy`
-  - Additional data: `total_transactions`, `duration`, `notes`, `device_id`, `location`
-  - JSONB fields: `account_balances`, `pending_payments`
-  - Sync tracking: `sync_status`, `last_sync_at`, `pending_sync`, `sync_queued_at`
-- ✅ **Schema Verified:** All columns present with correct types and comments
-
-### Week 2, Day 3: Migration 003 ✅
-
-- ✅ **Migration File Created:** `003_update_orders_payments_schema.sql`
-- ✅ **Migration Applied Successfully:** All Orders & Payments fields added
-- ✅ **Orders Table Updates:**
-  - Payment tracking: `payment_ids[]`, `paid_amount`
-  - Waiter & timing: `waiter_name`, `estimated_ready_time`, `actual_ready_time`
-  - Amount fields: `total_amount`, `discount_amount`, `tax_amount`, `final_amount`
-  - Status constraint updated: `'draft', 'waiting', 'cooking', 'ready', 'served', 'collected', 'delivered', 'cancelled'`
-  - Indexes: `idx_orders_payment_ids`, `idx_orders_waiter_name`, `idx_orders_estimated_ready_time`
-- ✅ **Payments Table Updates:**
-  - Core tracking: `payment_number`, `bill_ids[]`, `item_ids[]`
-  - Cash handling: `received_amount`, `change_amount`
-  - Refund support: `refunded_at`, `refund_reason`, `refunded_by`, `original_payment_id`
-  - Reconciliation: `reconciled_at`, `reconciled_by`
-  - Sync tracking: `receipt_printed`, `sync_status`, `synced_at`, `processed_by_name`
-  - Constraint: `sync_status IN ('pending', 'synced', 'failed', 'offline')`
-  - Indexes: 6 new indexes for performance
-- ✅ **Verification Completed:** All columns, constraints, and indexes verified
-
-### Week 2, Day 3 (cont.): Payments Mappers ✅
-
-- ✅ **Supabase Types Regenerated:** Updated `src/supabase/types.ts` with Migration 003 changes
-- ✅ **Mappers File Created:** `src/stores/pos/payments/supabaseMappers.ts`
-- ✅ **Three Mapper Functions:**
-  - `toSupabaseInsert()` - Converts PosPayment → Supabase INSERT format
-  - `toSupabaseUpdate()` - Converts PosPayment → Supabase UPDATE format
-  - `fromSupabase()` - Converts Supabase row → PosPayment
-- ✅ **Field Mappings:**
-  - Arrays: `billIds[]` ↔ `bill_ids[]`, `itemIds[]` ↔ `item_ids[]`
-  - Cash: `receivedAmount` ↔ `received_amount`, `changeAmount` ↔ `change_amount`
-  - Refunds: Full refund data mapping with `original_payment_id` reference
-  - Sync: `syncStatus` ↔ `sync_status`, `syncedAt` ↔ `synced_at`
-- ✅ **Pattern:** Follows shifts/supabaseMappers.ts reference implementation
-
-### Week 2, Day 3 (final): Payments Services Update ✅
-
-- ✅ **Services File Updated:** `src/stores/pos/payments/services.ts`
-- ✅ **Dual-Write Pattern Implemented:**
-  - `getAllPayments()` - Reads from Supabase first, fallback to localStorage
-  - `savePayment()` - Writes to Supabase + localStorage
-  - `updatePayment()` - Updates in Supabase + localStorage
-  - `processPayment()` - Automatic dual-write via savePayment()
-  - `refundPayment()` - Automatic dual-write via savePayment() + updatePayment()
-- ✅ **Helper Method:** `isSupabaseAvailable()` for online/offline detection
-- ✅ **Console Logging:** Success/failure messages for debugging
-- ✅ **Offline Resilience:** Always saves to localStorage even if Supabase fails
-
-### Week 2, Day 3 (bug fixes): UUID Generation Fixed ✅
-
-- ✅ **Bug Found:** IDs generated as strings (`order_123`, `payment_456`) instead of UUIDs
-- ✅ **Environment Fix:** Added `ENV.useSupabase` alias to `environment.ts`
-- ✅ **Payment IDs Fixed:** Changed from `payment_${Date.now()}` → `generateId()`
-- ✅ **Order IDs Fixed:** Changed from `order_${Date.now()}` → `generateId()`
-- ✅ **Bill IDs Fixed:** Changed from `bill_${Date.now()}` → `generateId()`
-- ✅ **Item IDs Fixed:** Changed from `item_${Date.now()}` → `generateId()`
-- ✅ **Files Updated:**
-  - `src/config/environment.ts` - Added useSupabase alias
-  - `src/stores/pos/payments/services.ts` - Payment & Refund IDs
-  - `src/stores/pos/orders/services.ts` - Order, Bill, Item IDs
-
-### Week 2, Day 4 (Morning): Orders Store → Supabase Migration ✅
-
-- ✅ **Orders Mappers Created:** `src/stores/pos/orders/supabaseMappers.ts`
-- ✅ **Complex Bills Flattening/Reconstruction:**
-  - `flattenBillsToItems()` - Converts Order → Bills[] → Items[] into flat Items[] with bill metadata
-  - `reconstructBillsFromItems()` - Rebuilds Bills[] hierarchy from flat Items[]
-  - `toSupabaseInsert()` - Maps PosOrder → Supabase format
-  - `toSupabaseUpdate()` - Maps PosOrder → Supabase UPDATE format
-  - `fromSupabase()` - Maps Supabase row → PosOrder (auto-reconstructs bills)
-- ✅ **Orders Services Updated:** Dual-write pattern implemented
-  - `getAllOrders()` - Reads Supabase first, fallback to localStorage
-  - `createOrder()` - Dual-write to Supabase + localStorage
-  - `updateOrder()` - Dual-write to Supabase + localStorage
-  - All child operations (add/update/remove items) auto-trigger dual-write
-- ✅ **Key Features:**
-  - Preserves 3-level localStorage structure for offline compatibility
-  - Flattens to single JSONB array for Supabase efficiency
-  - Both old (modifications) and new (selectedModifiers) systems supported
-  - All discounts, payment links, kitchen data preserved
-  - Console logging for debugging sync operations
-
-**What Works:**
-
-1. ✅ Order CREATE → Supabase (flattened) + localStorage (3-level)
-2. ✅ Order UPDATE → Supabase (flattened) + localStorage (3-level)
-3. ✅ Order READ → Supabase first (auto-reconstruct) → localStorage fallback
-4. ✅ Bills/Items operations → automatic dual-write via updateOrder()
-5. ✅ Offline fallback → localStorage 3-level structure intact
+- POS ✅ Kitchen ✅ Bar ✅
+- Products ✅ Categories ✅
+- Seed Scripts 🔲 Pending
+- Menu 🔲 Pending
+- Backoffice Full Migration 🔲 Pending
 
 ---
 
-### Week 2, Day 4 (Afternoon): Tables Store → Supabase Migration ✅
+## 🎯 THIS WEEK: Seed Infrastructure + Menu Migration
 
-**Priority:** Critical (blocking Orders - UUID validation issue)
-**ETA:** Day 4 afternoon (4 hours)
-**Status:** ✅ COMPLETED
+**New Strategy (2025-11-17):**
 
-**Problem Found:**
+1. ✅ Products/Categories already in Supabase
+2. 🔲 Create seed script infrastructure (this week)
+3. 🔲 Replace mock files with seed scripts
+4. 🔲 Migrate Menu to Supabase
+5. 🔲 Continue with other stores (Suppliers, Recipes, Storage)
 
-- Orders were failing with UUID validation error: `invalid input syntax for type uuid: "table_main_1"`
-- Root cause: Tables store was using **string IDs** (`table_main_1`) instead of UUIDs
-- Supabase already had 5 tables with proper UUIDs (T1-T5)
+### 🔴 Phase 0: Seed Scripts Infrastructure (Day 1-2) **← START HERE**
 
-**Solution Implemented:**
+**Goal:** Create seed script infrastructure to replace mock data
 
-1. ✅ **Tables Supabase Mappers Created:** `src/stores/pos/tables/supabaseMappers.ts`
+**Why:** Mock files are hardcoded in TypeScript. Seed scripts allow quick database reset with test data.
 
-   - `toSupabaseInsert()` - Maps PosTable → Supabase format
-   - `toSupabaseUpdate()` - Maps PosTable → Supabase UPDATE format
-   - `fromSupabase()` - Maps Supabase row → PosTable
-   - Status mapping: `free` ↔ `available`, `occupied` ↔ `occupied`, `reserved` ↔ `reserved`
-   - Section mapping: `section` ↔ `area`
+#### Task 0.1: Create Seed Scripts Directory Structure
 
-2. ✅ **Tables Service Updated:** Dual-write pattern implemented
-
-   - `getAllTables()` - Reads from Supabase first → fallback to localStorage
-   - `updateTableStatus()` - Dual-write to Supabase + localStorage
-   - Caches Supabase data to localStorage for offline access
-   - Console logging for debugging
-
-3. ✅ **Tables Store Refactored:**
-
-   - Removed `createInitialTables()` function (was creating invalid string IDs)
-   - Changed initial state from `createInitialTables()` → `[]` (empty array)
-   - Added `initialize()` method to load from Supabase on app start
-   - Added `initialized` flag to prevent double-initialization
-
-4. ✅ **POS Store Integration:**
-
-   - Updated `initializePOS()` to call `tablesStore.initialize()` instead of `tablesStore.loadTables()`
-   - Tables now load from Supabase with proper UUIDs on POS startup
-
-5. ✅ **Composables Cleanup:**
-   - Removed duplicate `loading`, `error`, `clearError` from `useTables()` composable
-   - These properties are now only in main tablesStore
-
-**Bug Fixes:**
-
-1. ✅ **updateOrder() race condition fixed:**
-
-   - Issue: `updateOrder()` was calling `getAllOrders()` which reads from Supabase
-   - Problem: New items not yet saved to Supabase were lost on read
-   - Fix: `updateOrder()` now reads from **localStorage directly** for update operations
-   - Result: Items persist correctly through add/update/remove operations
-
-2. ✅ **recalculateOrderTotals() missing save:**
-   - Issue: `recalculateOrderTotals()` was only updating local state, not saving to Supabase
-   - Problem: After adding items, `recalculate` was called but changes weren't persisted
-   - Fix: Added `await updateOrder(order)` after totals recalculation
-   - Result: Items now save to Supabase immediately after being added
-
-**What Works:**
-
-1. ✅ Tables READ → Supabase first (with UUIDs) → localStorage fallback
-2. ✅ Tables UPDATE status → Dual-write to Supabase + localStorage
-3. ✅ Orders CREATE with table UUID → No more validation errors
-4. ✅ Table status auto-update (free → occupied → free)
-5. ✅ Offline cache → Supabase tables cached to localStorage
-6. ✅ Items persistence → Fixed updateOrder() to preserve items
-
-**Test Results (2025-11-15, 00:13 - Final):**
-
-```
-✅ Loaded 5 tables from Supabase
-✅ Table T1 status updated in Supabase: occupied
-✅ Order saved to Supabase: ORD-20251115-8117
-✅ Order updated in Supabase: ORD-20251115-8117 {billsCount: 1, totalItems: 1}
-✅ Bintang Beer added to Bill 1
-✅ Table auto-occupied: {tableId: '94facdc9-...', orderId: 'bc0976...'}
-✅ Kitchen notification sent
-✅ Order status: draft → waiting
-```
-
-**Performance Optimizations:**
-
-- Removed excessive console logging from TablesSidebar (was logging every order on computed)
-- Removed warning spam from DepartmentNotificationService
-
-**Architecture:**
-
-```
-POS UI → tablesStore.initialize()
-      → tablesService.getAllTables()
-         → Supabase SELECT * FROM tables (5 rows with UUIDs)
-         → Cache to localStorage
-         → Return PosTable[] (mapped via fromSupabase())
-
-Table Selection → ordersStore.createOrder(tableId: UUID)
-               → ordersService.createOrder()
-                  → Supabase INSERT orders (table_id: UUID) ✅
-                  → localStorage 3-level structure
-
-Add Item → ordersStore.addItemToBill()
-        → ordersService.addItemToBill()
-           → Save item to localStorage items array
-           → updateOrder() → Dual-write
-              → Supabase UPDATE (flattened items with bill metadata)
-              → localStorage (3-level: orders, bills, items) ✅
-```
-
----
-
-## ⚠️ Pending Tasks
-
-### 🔴 Critical (This Week)
-
-#### 1. Test Complete Shift Flow 🧪
-
-**See:** `SHIFT_TESTING_PLAN.md`, `SHIFT_FIXES_IMMEDIATE.md`
-
-**Test Scenarios:**
-
-- [ ] Online shift closing → verify Supabase sync
-- [ ] Offline → online sync
-- [ ] Backoffice displays correct values
-- [ ] Expense operations appear in shift
-- [ ] `synced_to_account: true` after close
-
-**Expected Result:**
-
-```
-Expected Cash = Starting + Sales - Expenses
-synced_to_account: true in Supabase
-Account Store has expense transactions
-```
-
----
-
-#### 2. Payments Store → Supabase Migration 💳
-
-**Priority:** Critical (Do FIRST - simpler than Orders)
-**ETA:** Week 2, Day 4-6 (3 days)
-**Dependencies:** ✅ Migration 003 executed
-
-**Architecture Decision:**
-
-- ✅ **Storage:** Flat structure (no nested data)
-- ✅ **Pattern:** Dual-write (Supabase + localStorage)
-- ✅ **Data Migration:** Fresh start (no old data migration)
-
----
-
-##### Day 1: Payments Mappers ✅
-
-**File:** `src/stores/pos/payments/supabaseMappers.ts` ✅ CREATED
-
-**Functions Created:**
-
-1. ✅ **`toSupabaseInsert(payment: PosPayment): SupabasePaymentInsert`**
-
-   - Maps all PosPayment fields → Supabase columns
-   - Handles arrays: `billIds` → `bill_ids`, `itemIds` → `item_ids`
-   - Maps `processedBy` (cashier name) → `processed_by_name`
-   - Sets `details` JSONB to empty object
-   - Handles refund data and reconciliation fields
-
-2. ✅ **`toSupabaseUpdate(payment: PosPayment): SupabasePaymentUpdate`**
-
-   - Reuses toSupabaseInsert() logic
-   - Removes `created_at` (immutable field)
-
-3. ✅ **`fromSupabase(row: SupabasePayment): PosPayment`**
-   - Maps Supabase row → PosPayment
-   - Parses arrays: `bill_ids` → `billIds`, `item_ids` → `itemIds`
-   - Handles defaults for optional fields
-   - Uses `created_at` for both createdAt and updatedAt (Supabase has no updated_at)
-
-**Completed:** All mappers implemented following shifts/supabaseMappers.ts pattern
-
----
-
-##### Day 2: Payments Services Update ✅
-
-**File:** `src/stores/pos/payments/services.ts` ✅ UPDATED
-
-**Updates Completed:**
-
-1. ✅ **Added Imports:**
-
-   - `ENV` from `@/config/environment`
-   - `supabase` from `@/supabase/client`
-   - Mapper functions: `toSupabaseInsert`, `toSupabaseUpdate`, `fromSupabase`
-
-2. ✅ **Added Helper Method:**
-
-   - `isSupabaseAvailable()` - Checks if Supabase is enabled and initialized
-
-3. ✅ **Updated `getAllPayments()`:**
-
-   - Tries Supabase first (if online)
-   - Falls back to localStorage (if offline or Supabase fails)
-   - Returns mapped PosPayment[] from Supabase rows
-
-4. ✅ **Updated `savePayment()`:**
-
-   - Dual-write: Supabase INSERT (if online) + localStorage (always)
-   - Logs success/failure for each operation
-   - Uses `toSupabaseInsert()` mapper
-
-5. ✅ **Updated `updatePayment()`:**
-
-   - Dual-write: Supabase UPDATE (if online) + localStorage (always)
-   - Uses `toSupabaseUpdate()` mapper
-   - Updates `updatedAt` timestamp
-
-6. ✅ **Automatic Integration:**
-   - `processPayment()` → calls `savePayment()` → dual-write automatic ✅
-   - `refundPayment()` → calls `savePayment()` + `updatePayment()` → dual-write automatic ✅
-   - No additional changes needed!
-
----
-
-##### Day 2 (cont.): Foreign Key Constraint Workaround ✅
-
-**Issue:** Payments referencing Orders that don't exist in Supabase yet
-
-**Root Cause:**
-
-- Payments are syncing to Supabase ✅
-- But Orders are NOT migrated yet ❌
-- Foreign key constraint `payments_order_id_fkey` requires valid order_id
-- Error: `insert or update on table "payments" violates foreign key constraint`
-
-**Temporary Solution Applied:**
-
-1. ✅ **Made `order_id` nullable:**
-
-   ```sql
-   ALTER TABLE payments ALTER COLUMN order_id DROP NOT NULL;
-   ```
-
-2. ✅ **Dropped foreign key constraint:**
-
-   ```sql
-   ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_id_fkey;
-   ```
-
-3. ✅ **Updated TypeScript types:**
-   - `src/supabase/types.ts` - `order_id: string | null` in Row, Insert, Update types
-
-**⚠️ IMPORTANT:**
-
-- This is a **temporary workaround** until Orders migration (Task #3) is complete
-- When Orders migration done, **re-add** the foreign key constraint:
-  ```sql
-  ALTER TABLE payments
-  ADD CONSTRAINT payments_order_id_fkey
-  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
-  ```
-- Payments can now be created without orders (useful for direct sales/refunds)
-- Existing payment flow continues to work without blocking
-
-**Status:** ✅ Applied, payments now sync successfully to Supabase
-
----
-
-##### Day 3: Payments Testing ✅
-
-**Status:** ✅ COMPLETED - Payment sync working successfully!
-
-**Test Results:**
-
-- ✅ **Process Cash Payment** - VERIFIED
-  - Payment ID: `e6b6c014-ad95-48b5-a396-f04fd123b44e` (UUID ✅)
-  - Order ID: `0b14214c-4585-4dda-9792-3098b9c9cdff` (UUID ✅)
-  - Shift ID: `6f79b293-c724-48b0-8504-6325acae8c93` (UUID ✅)
-  - Bill IDs: `["b2113dd1-208d-4623-8faf-da937635fad9"]` (UUID ✅)
-  - Item IDs: `["3c59733a-fb68-4b09-a0b2-cb4a744657e5"]` (UUID ✅)
-  - Amount: Rp 40,250
-  - Payment method: cash
-  - Status: completed
-  - Payment number: `PAY-20251115-034273`
-  - Saved to Supabase ✅
-  - Visible in UI ✅
-  - All fields populated correctly ✅
-
-**What Works:**
-
-1. ✅ UUID generation for all entities (payments, orders, bills, items)
-2. ✅ Dual-write pattern (Supabase + localStorage)
-3. ✅ Online payment processing → immediate Supabase sync
-4. ✅ All payment fields mapped correctly (billIds, itemIds, amounts, etc.)
-5. ✅ processedBy (cashier name) stored in `processed_by_name`
-6. ✅ Shift integration (shiftId reference)
-7. ✅ Foreign key workaround allows payments without orders in Supabase
-
-**✅ Payments Store → Supabase Migration COMPLETE!**
-
----
-
-##### Additional Test Scenarios (Future):
-
-These scenarios can be tested later for comprehensive coverage:
-
-- [ ] **Process Card/QR Payment** - Verify payment_method and status
-- [ ] **Process Refund** - Verify refund fields and negative amount
-- [ ] **Shift Integration** - Verify payment added to shift transactions
-- [ ] **Offline Mode** - Test localStorage fallback and sync queue
-- [ ] **Online Mode** - Verify immediate Supabase sync
-
----
-
-#### 3. Orders Store → Supabase Migration 🍽️
-
-**Priority:** Critical (Do AFTER Payments)
-**ETA:** Week 2, Day 7-11 (5 days)
-**Dependencies:** ✅ Migration 003 executed + Payments migration complete
-
-**Architecture Decision:**
-
-- ✅ **Bills Storage:** Option A - Flatten bills into `orders.items` JSONB with bill metadata
-- ✅ **Pattern:** Dual-write (Supabase + localStorage)
-- ✅ **Data Migration:** Fresh start (no old data migration)
-
-**Challenge:** Three-level hierarchy (Order → Bills[] → Items[]) must be flattened for Supabase storage
-
----
-
-##### Day 1-2: Orders Mappers ✅
-
-**File:** `src/stores/pos/orders/supabaseMappers.ts` ✅ CREATED
-**Status:** ✅ COMPLETED
-
-**Key Challenge: Bills Flattening & Reconstruction** - SOLVED ✅
-
-**Current Structure (TypeScript):**
-
-```typescript
-PosOrder {
-  id, orderNumber, type, status, ...
-  bills: PosBill[] {
-    id, billNumber, name, status, ...
-    items: PosBillItem[] {
-      id, menuItemId, quantity, unitPrice, ...
-      modifications, selectedModifiers, discounts
-    }
-  }
-}
-```
-
-**Supabase Structure (Flattened):**
-
-```sql
-orders {
-  id, order_number, type, status, ...
-  items: JSONB[] -- Flattened array with bill metadata
-}
-```
-
-**Each item in JSONB includes:**
-
-```json
-{
-  "id": "item-uuid",
-  "menuItemId": "menu-uuid",
-  "quantity": 2,
-  "unitPrice": 50000,
-  // ... all item fields ...
-
-  // Bill metadata (for reconstruction)
-  "bill_id": "bill-uuid",
-  "bill_name": "Bill 1",
-  "bill_number": "BILL-123456",
-  "bill_status": "active"
-}
-```
-
----
-
-**Functions to Create:**
-
-1. **`flattenBillsToItems(order: PosOrder): any[]`**
-
-   ```typescript
-   function flattenBillsToItems(order: PosOrder): any[] {
-     return order.bills.flatMap(bill =>
-       bill.items.map(item => ({
-         // Item data
-         id: item.id,
-         billId: item.billId,
-         menuItemId: item.menuItemId,
-         menuItemName: item.menuItemName,
-         variantId: item.variantId,
-         variantName: item.variantName,
-         quantity: item.quantity,
-         unitPrice: item.unitPrice,
-         totalPrice: item.totalPrice,
-
-         // Modifiers (handle both systems!)
-         modifications: item.modifications || [],
-         selectedModifiers: item.selectedModifiers || [],
-         modifiersTotal: item.modifiersTotal || 0,
-
-         // Discounts
-         discounts: item.discounts || [],
-
-         // Status
-         status: item.status,
-         paymentStatus: item.paymentStatus,
-
-         // Kitchen
-         kitchenNotes: item.kitchenNotes,
-         sentToKitchenAt: item.sentToKitchenAt,
-         preparedAt: item.preparedAt,
-
-         // Payment links
-         paidByPaymentIds: item.paidByPaymentIds || [],
-
-         // Bill metadata (CRITICAL for reconstruction!)
-         bill_id: bill.id,
-         bill_name: bill.name,
-         bill_number: bill.billNumber,
-         bill_status: bill.status,
-         bill_notes: bill.notes,
-
-         // Timestamps
-         createdAt: item.createdAt,
-         updatedAt: item.updatedAt
-       }))
-     )
-   }
-   ```
-
-2. **`reconstructBillsFromItems(items: any[]): PosBill[]`**
-
-   ```typescript
-   function reconstructBillsFromItems(items: any[]): PosBill[] {
-     const billsMap = new Map<string, PosBill>()
-
-     items.forEach(item => {
-       const billId = item.bill_id
-
-       // Create bill if not exists
-       if (!billsMap.has(billId)) {
-         billsMap.set(billId, {
-           id: billId,
-           billNumber: item.bill_number,
-           orderId: '', // Will be set later
-           name: item.bill_name,
-           status: item.bill_status as BillStatus,
-           items: [],
-
-           // Calculated fields (will compute after adding items)
-           subtotal: 0,
-           discountAmount: 0,
-           taxAmount: 0,
-           total: 0,
-           paymentStatus: 'unpaid',
-           paidAmount: 0,
-
-           notes: item.bill_notes,
-           createdAt: item.createdAt,
-           updatedAt: item.updatedAt
-         })
-       }
-
-       // Add item to bill
-       const bill = billsMap.get(billId)!
-       bill.items.push({
-         id: item.id,
-         billId: item.billId,
-         menuItemId: item.menuItemId,
-         menuItemName: item.menuItemName,
-         variantId: item.variantId,
-         variantName: item.variantName,
-         quantity: item.quantity,
-         unitPrice: item.unitPrice,
-         totalPrice: item.totalPrice,
-         modifications: item.modifications || [],
-         selectedModifiers: item.selectedModifiers || [],
-         modifiersTotal: item.modifiersTotal || 0,
-         discounts: item.discounts || [],
-         status: item.status,
-         paymentStatus: item.paymentStatus,
-         kitchenNotes: item.kitchenNotes,
-         sentToKitchenAt: item.sentToKitchenAt,
-         preparedAt: item.preparedAt,
-         paidByPaymentIds: item.paidByPaymentIds || [],
-         createdAt: item.createdAt,
-         updatedAt: item.updatedAt
-       })
-     })
-
-     // Calculate bill totals
-     billsMap.forEach(bill => {
-       bill.subtotal = bill.items.reduce((sum, item) => sum + item.totalPrice, 0)
-       bill.total = bill.subtotal - bill.discountAmount + bill.taxAmount
-
-       // Calculate payment status
-       const paidItems = bill.items.filter(i => i.paymentStatus === 'paid').length
-       if (paidItems === 0) bill.paymentStatus = 'unpaid'
-       else if (paidItems === bill.items.length) bill.paymentStatus = 'paid'
-       else bill.paymentStatus = 'partial'
-     })
-
-     return Array.from(billsMap.values())
-   }
-   ```
-
-3. **`toSupabaseInsert(order: PosOrder): SupabaseOrderInsert`**
-
-   ```typescript
-   export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
-     return {
-       id: order.id,
-       order_number: order.orderNumber,
-       table_id: order.tableId || null,
-       shift_id: order.shiftId || null,
-
-       type: order.type,
-       status: order.status,
-
-       // Flatten bills → items with bill metadata
-       items: flattenBillsToItems(order),
-
-       // Totals
-       subtotal: order.totalAmount || 0,
-       discount: order.discountAmount || 0,
-       tax: order.taxAmount || 0,
-       total: order.finalAmount || 0,
-       total_amount: order.totalAmount || 0,
-       discount_amount: order.discountAmount || 0,
-       tax_amount: order.taxAmount || 0,
-       final_amount: order.finalAmount || 0,
-
-       // Payment tracking
-       payment_status: order.paymentStatus,
-       payment_method: order.paymentMethod || null,
-       payment_ids: order.paymentIds || [],
-       paid_amount: order.paidAmount || 0,
-       paid_at: order.paidAt || null,
-
-       // Additional metadata
-       waiter_name: order.waiterName || null,
-       estimated_ready_time: order.estimatedReadyTime || null,
-       actual_ready_time: order.actualReadyTime || null,
-       notes: order.notes || null,
-       customer_name: order.customerName || null,
-
-       created_at: order.createdAt,
-       updated_at: order.updatedAt
-     }
-   }
-   ```
-
-4. **`fromSupabase(row: SupabaseOrder): PosOrder`**
-
-   ```typescript
-   export function fromSupabase(row: SupabaseOrder): PosOrder {
-     return {
-       id: row.id,
-       orderNumber: row.order_number,
-       tableId: row.table_id || undefined,
-       shiftId: row.shift_id || undefined,
-
-       type: row.type as OrderType,
-       status: row.status as OrderStatus,
-
-       // Reconstruct bills from flattened items
-       bills: reconstructBillsFromItems(row.items || []),
-
-       // Totals
-       totalAmount: row.total_amount || 0,
-       discountAmount: row.discount_amount || 0,
-       taxAmount: row.tax_amount || 0,
-       finalAmount: row.final_amount || 0,
-
-       // Payment tracking
-       paymentStatus: row.payment_status as OrderPaymentStatus,
-       paymentMethod: row.payment_method || undefined,
-       paymentIds: row.payment_ids || [],
-       paidAmount: row.paid_amount || 0,
-       paidAt: row.paid_at || undefined,
-
-       // Additional metadata
-       waiterName: row.waiter_name || undefined,
-       estimatedReadyTime: row.estimated_ready_time || undefined,
-       actualReadyTime: row.actual_ready_time || undefined,
-       notes: row.notes || undefined,
-       customerName: row.customer_name || undefined,
-
-       createdAt: row.created_at,
-       updatedAt: row.updated_at
-     }
-   }
-   ```
-
-**Completed Functions:**
-
-1. ✅ `flattenBillsToItems()` - Flattens Order → Bills[] → Items[] into single Items[] array with bill metadata
-2. ✅ `reconstructBillsFromItems()` - Reconstructs Bills[] hierarchy from flattened Items[] array
-3. ✅ `toSupabaseInsert()` - Maps PosOrder → Supabase INSERT format (uses flattenBillsToItems)
-4. ✅ `toSupabaseUpdate()` - Maps PosOrder → Supabase UPDATE format
-5. ✅ `fromSupabase()` - Maps Supabase row → PosOrder (uses reconstructBillsFromItems)
-
-**Key Implementation Details:**
-
-- Each flattened item includes full bill metadata (id, number, name, status, totals, notes)
-- Reconstruction preserves bill-level data (subtotal, discount, tax, payment status)
-- Both old (modifications) and new (selectedModifiers) modifier systems supported
-- All discounts, payment links, kitchen data preserved
-
----
-
-##### Day 3-4: Orders Services Update ✅
-
-**File:** `src/stores/pos/orders/services.ts` ✅ UPDATED
-**Status:** ✅ COMPLETED
-
-**Critical:** Orders Store has complex 3-level localStorage storage:
-
-- `pos_orders` - orders WITHOUT bills
-- `pos_bills` - bills separately
-- `pos_bill_items` - items separately
-
-Consolidated into single JSONB field when syncing to Supabase ✅
-
-**Updates Required:**
-
-1. **Update `getAllOrders()`:**
-
-   ```typescript
-   async getAllOrders(): Promise<PosOrder[]> {
-     // Try Supabase first (if online)
-     if (this.isSupabaseAvailable()) {
-       const { data, error } = await supabase
-         .from('orders')
-         .select('*')
-         .order('created_at', { ascending: false })
-
-       if (!error && data) {
-         // Reconstruct bills from flattened items
-         return data.map(fromSupabase)
-       }
-     }
-
-     // Fallback to localStorage (OLD 3-level structure)
-     return this.loadOrdersFromLocalStorage() // Existing method
-   }
-   ```
-
-2. **Update `createOrder(type, tableId?, customerName?)`:**
-
-   - After creating order, call dual-write
-   - Flatten bills before saving to Supabase
-
-3. **Update `updateOrder(order: PosOrder)`:**
-
-   ```typescript
-   async updateOrder(order: PosOrder) {
-     // Update in Supabase (if online)
-     if (this.isSupabaseAvailable()) {
-       const supabaseRow = toSupabaseUpdate(order)
-       await supabase
-         .from('orders')
-         .update(supabaseRow)
-         .eq('id', order.id)
-     }
-
-     // Always save to localStorage (3-level structure)
-     await this.saveOrderToLocalStorage(order) // Existing method
-   }
-   ```
-
-4. **Update `addItemToBill(orderId, billId, menuItem, ...)`:**
-
-   - After adding item, trigger `updateOrder()` for dual-write
-
-5. **Update `updateItemQuantity(itemId, quantity)`:**
-
-   - After updating, trigger `updateOrder()` for dual-write
-
-6. **Update `removeItemFromBill(itemId)`:**
-   - After removing, trigger `updateOrder()` for dual-write
-
-**IMPORTANT:** Preserve existing integrations:
-
-- ✅ `updateTableStatusForOrder()` - Table status management
-- ✅ `saveAndNotifyOrder()` - Kitchen notifications
-- ✅ Payment integration
-
-**✅ Completed Updates:**
-
-1. ✅ **Added imports:** ENV, supabase, mappers (toSupabaseInsert, toSupabaseUpdate, fromSupabase)
-2. ✅ **Added helper:** `isSupabaseAvailable()` - Checks ENV.useSupabase && supabase client
-3. ✅ **Updated `getAllOrders()`:**
-   - Tries Supabase first → fallback to localStorage (3-level)
-   - Maps Supabase rows using `fromSupabase()` (bills reconstruction automatic)
-4. ✅ **Updated `createOrder()`:**
-   - Dual-write: Supabase INSERT + localStorage (3-level)
-   - Uses `toSupabaseInsert()` for Supabase format
-   - Console logs for success/failure
-5. ✅ **Updated `updateOrder()`:**
-   - Dual-write: Supabase UPDATE + localStorage (3-level)
-   - Uses `toSupabaseUpdate()` for Supabase format
-   - All child operations (addItem, updateQuantity, removeItem) automatically trigger dual-write via updateOrder()
-
-**What Works:**
-
-- ✅ Order CREATE → Supabase (flattened bills/items) + localStorage (3-level)
-- ✅ Order UPDATE → Supabase (flattened bills/items) + localStorage (3-level)
-- ✅ Order READ → Supabase first (bills reconstruction) → localStorage fallback
-- ✅ Bills/Items operations → automatic dual-write via updateOrder()
-- ✅ Offline fallback → localStorage 3-level structure preserved
-
----
-
-##### Day 4 (Evening): Orders Testing ✅
-
-**Status:** ✅ COMPLETED - All core scenarios working!
-
-**Test Scenarios:**
-
-- [x] **Create Order (Dine-In)** ✅ WORKING
-
-  - Create order with tableId (UUID from Supabase)
-  - Verify first bill created automatically
-  - Verify saved to Supabase with flattened items
-  - Verify table status updated to 'occupied'
-
-- [x] **Add Items to Bills** ✅ WORKING
-
-  - Add item (Bintang Beer) to bill
-  - Verify item saved to Supabase in flattened JSONB format
-  - Verify bill totals recalculated
-  - Verify dual-write to Supabase + localStorage
-
-- [x] **Send to Kitchen** ✅ WORKING
-
-  - Kitchen notification sent successfully
-  - Order status updated: draft → waiting
-
-- [ ] **Add Multiple Bills**
-
-  - Add 2nd bill to order
-  - Add items to both bills
-  - Verify items have correct bill_id in Supabase
-  - Verify reconstruction shows 2 bills correctly
-
-- [ ] **Add Items to Bills**
-
-  - Add item with modifiers (both old & new system)
-  - Add item with discounts
-  - Verify all nested data saved to JSONB correctly
-
-- [ ] **Update Item Quantity**
-
-  - Update quantity from 1 → 3
-  - Verify totalPrice recalculated
-  - Verify bill totals recalculated
-  - Verify saved to Supabase
-
-- [ ] **Remove Item**
-
-  - Remove item from bill
-  - Verify removed from Supabase items array
-  - Verify bill totals updated
-
-- [ ] **Send to Kitchen**
-
-  - Call `saveAndNotifyOrder()`
-  - Verify DepartmentNotificationService triggered
-  - Verify item status updated to 'waiting'
-
-- [ ] **Process Payment**
-
-  - Process payment for order
-  - Verify order `paymentIds` updated
-  - Verify order `paidAmount` updated
-  - Verify order `paymentStatus` updated
-
-- [ ] **Close Order**
-
-  - Close order after full payment
-  - Verify order status = 'served' or 'collected'
-  - Verify all data in Supabase correct
-
-- [ ] **Load Order (Reconstruction)**
-
-  - Load order from Supabase
-  - Verify bills reconstructed correctly
-  - Verify bill totals correct
-  - Verify all items have correct bill assignments
-
-- [ ] **Offline Mode**
-
-  - Disconnect network
-  - Create order → should save to localStorage only (3-level)
-  - Reconnect → verify stays in localStorage (no auto-sync for now)
-
-- [ ] **Table Integration**
-  - Create order for table T1
-  - Verify table status = 'occupied'
-  - Close order
-  - Verify table status = 'available'
-
-**Expected Console Logs:**
-
-```
-✅ Order created: ORD-20251115-1234
-✅ Order saved to Supabase with 5 items (2 bills flattened)
-✅ Order saved to localStorage (backup, 3-level structure)
-✅ Table T1 status updated: occupied
-✅ Kitchen notification sent: 3 items to Kitchen department
-```
-
----
-
-### ✅ Completed (Week 2, Day 5)
-
-#### 5. Menu Store → Supabase Migration 🍽️
-
-**Priority:** CRITICAL (Blocking POS MVP)
-**ETA:** Week 2, Day 5-7 (3 days) - ✅ COMPLETED
-**Dependencies:** None
-
-**Why Critical:**
-
-- POS MenuSection directly uses Menu Store for order creation
-- Currently menu data stored in-memory only (lost on reload)
-- Categories and Menu Items must persist in Supabase
-- Without this, POS cannot reliably take orders
-
-**Architecture Decision:**
-
-- ✅ **Storage:** Two tables - `menu_categories` + `menu_items`
-- ✅ **Pattern:** Dual-write (Supabase + localStorage cache)
-- ✅ **Data Migration:** Migrate mock data to Supabase on first run
-- ✅ **Modifier Groups:** Store as JSONB (component-based, addon-based dishes)
-- ✅ **Variants:** Store as JSONB (Small/Medium/Large pricing)
-
-**Challenge:** Complex nested structure (modifierGroups[], variants[]) must be stored as JSONB
-
----
-
-##### Day 1: Migration 004 - Menu Schema
-
-**File:** `supabase/migrations/004_create_menu_tables.sql`
-
-**Schema Required:**
-
-```sql
--- Menu Categories
-CREATE TABLE menu_categories (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL,
-  description TEXT,
-  sort_order INTEGER DEFAULT 0,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Menu Items
-CREATE TABLE menu_items (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  category_id UUID REFERENCES menu_categories(id) ON DELETE SET NULL,
-  name TEXT NOT NULL,
-  name_en TEXT,
-  description TEXT,
-
-  -- Pricing
-  price NUMERIC NOT NULL DEFAULT 0,
-  cost NUMERIC DEFAULT 0,
-
-  -- Dish configuration
-  dish_type TEXT CHECK (dish_type IN ('component-based', 'addon-based', 'final')),
-
-  -- Complex nested data (JSONB)
-  modifier_groups JSONB DEFAULT '[]'::jsonb,  -- [{id, name, groupStyle, options: [{id, name, price}]}]
-  variants JSONB DEFAULT '[]'::jsonb,         -- [{id, name, price, cost}]
-
-  -- Status
-  is_active BOOLEAN DEFAULT true,
-  sort_order INTEGER DEFAULT 0,
-
-  -- Media
-  image_url TEXT,
-
-  -- Timestamps
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Indexes
-CREATE INDEX idx_menu_items_category ON menu_items(category_id);
-CREATE INDEX idx_menu_items_active ON menu_items(is_active);
-CREATE INDEX idx_menu_categories_active ON menu_categories(is_active);
-```
+**Time:** 1 hour
+**Status:** 🔲 Pending
 
 **Tasks:**
 
-- [ ] Create migration file `004_create_menu_tables.sql`
-- [ ] Apply migration via MCP: `mcp__supabase__apply_migration`
-- [ ] Verify schema: `mcp__supabase__list_tables`
-- [ ] Regenerate TypeScript types: `mcp__supabase__generate_typescript_types`
+- [ ] Create `scripts/seeds/` directory
+- [ ] Create `scripts/seeds/catalog/` (stable reference data)
+- [ ] Create `scripts/seeds/transactional/` (test operational data)
+- [ ] Create `scripts/seeds/README.md` with documentation
+- [ ] Create `scripts/seeds/index.ts` (main seed runner)
+
+**Structure:**
+
+```
+scripts/
+└── seeds/
+    ├── README.md
+    ├── index.ts                      # Main runner
+    ├── catalog/                      # Stable data
+    │   ├── 001_seed_products.ts
+    │   ├── 002_seed_categories.ts
+    │   └── 003_seed_suppliers.ts
+    └── transactional/                # Test data
+        └── 101_seed_storage_ops.ts
+```
 
 ---
 
-##### Day 2: Menu Mappers
+#### Task 0.2: Create Products Seed Script (First Example)
 
-**File:** `src/stores/menu/supabaseMappers.ts`
+**Time:** 2-3 hours
+**Status:** 🔲 Pending
 
-**Functions to Create:**
-
-1. **Category Mappers:**
-
-```typescript
-// Category → Supabase INSERT
-export function categoryToSupabaseInsert(category: Category): SupabaseCategoryInsert {
-  return {
-    id: category.id,
-    name: category.name,
-    description: category.description || null,
-    sort_order: category.sortOrder || 0,
-    is_active: category.isActive,
-    created_at: category.createdAt,
-    updated_at: category.updatedAt
-  }
-}
-
-// Supabase → Category
-export function categoryFromSupabase(row: SupabaseCategory): Category {
-  return {
-    id: row.id,
-    name: row.name,
-    description: row.description || undefined,
-    sortOrder: row.sort_order,
-    isActive: row.is_active,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }
-}
-```
-
-2. **Menu Item Mappers:**
-
-```typescript
-// MenuItem → Supabase INSERT
-export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert {
-  return {
-    id: item.id,
-    category_id: item.categoryId,
-    name: item.name,
-    name_en: item.nameEn || null,
-    description: item.description || null,
-    price: item.price,
-    cost: item.cost || 0,
-    dish_type: item.dishType,
-
-    // Complex JSONB fields
-    modifier_groups: item.modifierGroups || [],
-    variants: item.variants || [],
-
-    is_active: item.isActive,
-    sort_order: item.sortOrder || 0,
-    image_url: item.imageUrl || null,
-    created_at: item.createdAt,
-    updated_at: item.updatedAt
-  }
-}
-
-// Supabase → MenuItem
-export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
-  return {
-    id: row.id,
-    categoryId: row.category_id,
-    name: row.name,
-    nameEn: row.name_en || undefined,
-    description: row.description || undefined,
-    price: row.price,
-    cost: row.cost,
-    dishType: row.dish_type as DishType,
-
-    // Complex JSONB fields (already parsed by Supabase client)
-    modifierGroups: row.modifier_groups || [],
-    variants: row.variants || [],
-
-    isActive: row.is_active,
-    sortOrder: row.sort_order,
-    imageUrl: row.image_url || undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }
-}
-```
+**File:** `scripts/seeds/catalog/001_seed_products.ts`
 
 **Tasks:**
 
-- [ ] Create `menu/supabaseMappers.ts`
-- [ ] Implement category mappers (toSupabase, fromSupabase)
-- [ ] Implement menu item mappers (toSupabase, fromSupabase)
-- [ ] Handle JSONB arrays (modifierGroups, variants)
+- [ ] Import CORE_PRODUCTS from productDefinitions
+- [ ] Create seedProducts() function
+- [ ] Map product definitions to Supabase schema
+- [ ] Insert products with proper error handling
+- [ ] Test seed script works
 
----
-
-##### Day 3: Menu Service Update
-
-**File:** `src/stores/menu/menuService.ts`
-
-**Updates Required:**
-
-1. **Add Supabase Integration:**
+**Template:**
 
 ```typescript
-import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
-import {
-  categoryToSupabaseInsert,
-  categoryFromSupabase,
-  menuItemToSupabaseInsert,
-  menuItemFromSupabase
-} from './supabaseMappers'
-
-function isSupabaseAvailable(): boolean {
-  return ENV.useSupabase && !!supabase
-}
-```
-
-2. **Update Category Service:**
-
-```typescript
-// GET all categories
-async getAllSorted(): Promise<Category[]> {
-  // Try Supabase first (if online)
-  if (isSupabaseAvailable()) {
-    const { data, error } = await supabase
-      .from('menu_categories')
-      .select('*')
-      .order('sort_order', { ascending: true })
-
-    if (!error && data) {
-      const categories = data.map(categoryFromSupabase)
-      // Cache to localStorage for offline
-      localStorage.setItem('menu_categories_cache', JSON.stringify(categories))
-      return categories
-    }
-  }
-
-  // Fallback to localStorage cache or in-memory
-  const cached = localStorage.getItem('menu_categories_cache')
-  if (cached) return JSON.parse(cached)
-
-  return categoriesStore // in-memory fallback
-}
-
-// CREATE category
-async createCategory(data: CreateCategoryDto): Promise<Category> {
-  const newCategory = { /* ... */ }
-
-  // Dual-write: Supabase + localStorage
-  if (isSupabaseAvailable()) {
-    const { error } = await supabase
-      .from('menu_categories')
-      .insert(categoryToSupabaseInsert(newCategory))
-
-    if (error) console.error('Failed to save category to Supabase:', error)
-  }
-
-  // Always save to in-memory for immediate UI update
-  categoriesStore.push(newCategory)
-
-  return newCategory
-}
-```
-
-3. **Update Menu Item Service:** (similar pattern)
-
-**Tasks:**
-
-- [ ] Add Supabase imports and helper
-- [ ] Update `CategoryService.getAllSorted()` - dual-read
-- [ ] Update `CategoryService.createCategory()` - dual-write
-- [ ] Update `CategoryService.update()` - dual-write
-- [ ] Update `CategoryService.delete()` - dual-write
-- [ ] Update `MenuItemService.getAllSorted()` - dual-read
-- [ ] Update `MenuItemService.createMenuItem()` - dual-write
-- [ ] Update `MenuItemService.updateMenuItem()` - dual-write
-- [ ] Update `MenuItemService.delete()` - dual-write
-- [ ] Add localStorage caching for offline access
-
----
-
-##### Day 4: Testing & Data Migration
-
-**Test Scenarios:**
-
-- [ ] **Load Categories (Online)**
-
-  - Verify categories loaded from Supabase
-  - Verify cached to localStorage
-
-- [ ] **Load Menu Items (Online)**
-
-  - Verify items loaded from Supabase
-  - Verify modifierGroups and variants parsed correctly
-
-- [ ] **Create Category**
-
-  - Verify saved to Supabase
-  - Verify visible in POS MenuSection
-
-- [ ] **Create Menu Item (Component-based)**
-
-  - Verify modifierGroups saved as JSONB
-  - Verify reconstruction from Supabase
-
-- [ ] **Create Menu Item (Addon-based)**
-
-  - Verify multiple modifier groups saved
-  - Verify variants saved correctly
-
-- [ ] **Update Menu Item**
-
-  - Verify changes sync to Supabase
-  - Verify POS MenuSection reflects updates
-
-- [ ] **Delete Menu Item**
-
-  - Verify removed from Supabase
-  - Verify removed from POS menu
-
-- [ ] **Offline Mode**
-  - Disconnect network
-  - Verify categories/items load from localStorage cache
-  - Create item → should save to localStorage only
-  - Reconnect → verify stays in cache (no auto-sync for now)
-
-**Data Migration:**
-
-- [ ] Create migration script to populate Supabase with mock menu data
-- [ ] Run migration: migrate mock categories (Appetizers, Mains, Beverages, etc.)
-- [ ] Run migration: migrate mock menu items with modifiers
-
-**Expected Console Logs:**
-
-```
-✅ Loaded 8 categories from Supabase
-✅ Loaded 24 menu items from Supabase
-✅ Menu item created: Nasi Goreng (with 2 modifier groups)
-✅ Menu cached to localStorage for offline access
-```
-
----
-
-**✅ Completion Criteria:**
-
-1. ✅ Migration 004 applied successfully
-2. ✅ Categories and Menu Items sync to Supabase
-3. ✅ POS MenuSection loads menu from Supabase
-4. ✅ Offline cache works (localStorage fallback)
-5. ✅ Complex JSONB fields (modifierGroups, variants) saved/loaded correctly
-6. ✅ Mock data migrated to Supabase (6 categories, 9 menu items)
-
-**Migration Completed:** 2025-11-15
-
-- 6 categories loaded (all in English)
-- 9 menu items loaded with complex JSONB structures
-- Dual-write pattern implemented
-- Mappers created and tested
-
----
-
-### 🟡 High Priority (Week 2-3)
-
-#### 6. Kitchen Display System (KDS) → Supabase Integration ✅ COMPLETED
-
-**Priority:** CRITICAL (Blocking Kitchen-POS workflow)
-**ETA:** Week 2, Day 5 (1 day) - ✅ COMPLETED
-**Dependencies:** Orders Store → Supabase ✅, Menu Store → Supabase ✅
-
-**Status:** ✅ COMPLETED (2025-11-16)
-
-**Implementation Summary:**
-
-- ✅ Kitchen Service created for Supabase operations
-- ✅ Real-time subscriptions for Kitchen ↔ POS sync
-- ✅ Department-based filtering (kitchen vs bar items)
-- ✅ Item status updates with auto-order status calculation
-- ✅ Business logic finalized: `ready` is FINAL status
-
----
-
-### ✅ Completed (2025-11-16)
-
-#### Kitchen-POS Integration Implementation
-
-**Architecture Implemented:**
-
-- ✅ **Pattern:** Kitchen reads from Supabase `orders` table
-- ✅ **Real-time:** Supabase Realtime subscriptions for order updates
-- ✅ **Status Updates:** Kitchen updates `orders.items[].status` via Supabase
-- ✅ **POS Sync:** POS listens to order updates via Realtime
-- ✅ **Business Logic:** `ready` is FINAL status
-- ✅ **Department Filtering:** Kitchen shows only `department='kitchen'` items
-
----
-
-##### ✅ Phase 1: Business Logic & Status Flow (Completed)
-
-**✅ Business Logic Decisions (FINALIZED 2025-11-16):**
-
-1. **`ready` IS the final status** ✅
-
-   - Kitchen marks items: `waiting` → `cooking` → `ready`
-   - `ready` = final status, no further transitions to `served`/`collected`/`delivered`
-   - No need for waiter confirmation or POS final status update
-
-2. **Order status = minimum of all items** ✅
-
-   - If ANY item is `waiting` → Order status: `waiting`
-   - If ALL items `cooking` or higher → Order status: `cooking`
-   - If ALL items `ready` → Order status: `ready`
-   - Example: [ready, cooking, waiting] → Order: `waiting`
-   - Example: [ready, ready, cooking] → Order: `cooking`
-   - Example: [ready, ready, ready] → Order: `ready`
-
-3. **Status Flow:**
-   - Kitchen: `waiting` → `cooking` → `ready` (final)
-   - POS: Creates orders with status `draft`, sends to kitchen → `waiting`
-   - Auto-update: Order status calculated from items
-
-**Tasks:**
-
-- [x] Review current status transitions in `src/stores/pos/types.ts`
-- [x] Document business logic for each order type (all types use same flow)
-- [x] Decide on final status handling (ready = final)
-- [ ] Update `ORDER_TYPE_STATUS_CONFIG` to remove `served`/`collected`/`delivered`
-- [ ] Document Kitchen → POS status sync workflow
-- [ ] Implement order status calculation (min of items)
-
-**✅ Final Status Flow Documentation:**
-
-````markdown
-# Kitchen-POS Status Flow (FINALIZED)
-
-## Universal Flow (All Order Types: dine-in, takeaway, delivery)
-
-1. **POS creates order** → Order status: `draft`, Items: `draft`
-2. **POS sends to kitchen** → Order status: `waiting`, Items: `waiting`
-3. **Kitchen starts cooking** → Items: `cooking` (one or more)
-   - Order status: `cooking` (if ALL items ≥ cooking)
-   - Order status: `waiting` (if ANY item still waiting)
-4. **Kitchen marks ready** → Items: `ready` (one or more)
-   - Order status: `ready` (if ALL items ready)
-   - Order status: `cooking` (if ANY item still cooking)
-5. **Final state** → Order status: `ready` (FINAL - no further transitions)
-
-## Order Status Calculation Algorithm
-
-```typescript
-function calculateOrderStatus(items: PosBillItem[]): OrderStatus {
-  if (items.length === 0) return 'draft'
-
-  // Check for minimum status (priority order)
-  if (items.some(i => i.status === 'draft')) return 'draft'
-  if (items.some(i => i.status === 'waiting')) return 'waiting'
-  if (items.some(i => i.status === 'cooking')) return 'cooking'
-
-  // All items ready
-  return 'ready'
-}
-```
-````
-
-## Auto-transitions
-
-- Order status auto-calculated whenever item status changes
-- No manual order status updates needed
-- `ready` is FINAL status (payment handled separately)
-
-## Removed Statuses
-
-- ❌ `served` - not used
-- ❌ `collected` - not used
-- ❌ `delivered` - not used
-
-````
-
----
-
-##### Day 2: Kitchen Service + Supabase Integration 🔧
-
-**File:** `src/stores/kitchen/kitchenService.ts` (NEW)
-
-**Goal:** Create Kitchen-specific service layer for Supabase operations
-
-**Functions to Create:**
-
-```typescript
-// Kitchen Service - Read-only operations + status updates
-
-import { supabase } from '@/supabase/client'
-import { fromSupabase as orderFromSupabase } from '@/stores/pos/orders/supabaseMappers'
-import type { PosOrder } from '@/stores/pos/types'
-
-const MODULE_NAME = 'KitchenService'
-
-/**
- * Get all active kitchen orders (waiting, cooking, ready)
- */
-async function getActiveKitchenOrders(): Promise<PosOrder[]> {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*')
-    .in('status', ['waiting', 'cooking', 'ready'])
-    .order('created_at', { ascending: true })
-
-  if (error) {
-    console.error('❌ Failed to load kitchen orders:', error)
-    return []
-  }
-
-  return data.map(orderFromSupabase)
-}
-
-/**
- * Update item status in order
- * Kitchen updates individual items (not full order)
- */
-async function updateItemStatus(
-  orderId: string,
-  itemId: string,
-  newStatus: 'waiting' | 'cooking' | 'ready'
-): Promise<{ success: boolean; error?: string }> {
-  // 1. Get order from Supabase
-  const { data: order, error: fetchError } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('id', orderId)
-    .single()
-
-  if (fetchError || !order) {
-    return { success: false, error: 'Order not found' }
-  }
-
-  // 2. Update item status in JSONB array
-  const items = order.items || []
-  const itemIndex = items.findIndex((i: any) => i.id === itemId)
-
-  if (itemIndex === -1) {
-    return { success: false, error: 'Item not found' }
-  }
-
-  items[itemIndex].status = newStatus
-  items[itemIndex].updatedAt = new Date().toISOString()
-
-  // Set timestamps
-  if (newStatus === 'cooking') {
-    items[itemIndex].sentToKitchenAt = items[itemIndex].sentToKitchenAt || new Date().toISOString()
-  }
-  if (newStatus === 'ready') {
-    items[itemIndex].preparedAt = new Date().toISOString()
-  }
-
-  // 3. Update order in Supabase
-  const { error: updateError } = await supabase
-    .from('orders')
-    .update({
-      items,
-      updated_at: new Date().toISOString()
+import { CORE_PRODUCTS } from '@/stores/shared/productDefinitions'
+
+export async function seedProducts() {
+  console.log('🌱 Seeding products...')
+
+  for (const product of CORE_PRODUCTS) {
+    const { error } = await supabase.from('products').insert({
+      id: product.id,
+      name: product.name,
+      category: product.category,
+      base_unit: product.baseUnit,
+      base_cost_per_unit: product.baseCostPerUnit
+      // ... other fields
     })
-    .eq('id', orderId)
 
-  if (updateError) {
-    console.error('❌ Failed to update item status:', updateError)
-    return { success: false, error: updateError.message }
-  }
-
-  console.log(`✅ Item status updated: ${itemId} → ${newStatus}`)
-  return { success: true }
-}
-
-/**
- * Calculate order status from items (minimum status)
- * Priority: draft > waiting > cooking > ready
- */
-function calculateOrderStatus(items: any[]): 'draft' | 'waiting' | 'cooking' | 'ready' {
-  if (items.length === 0) return 'draft'
-
-  // Check for minimum status (priority order)
-  if (items.some((i: any) => i.status === 'draft')) return 'draft'
-  if (items.some((i: any) => i.status === 'waiting')) return 'waiting'
-  if (items.some((i: any) => i.status === 'cooking')) return 'cooking'
-
-  // All items ready
-  return 'ready'
-}
-
-/**
- * Auto-update order status based on items
- * Called after each item status change
- */
-async function checkAndUpdateOrderStatus(orderId: string): Promise<void> {
-  const { data: order } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('id', orderId)
-    .single()
-
-  if (!order) return
-
-  const items = order.items || []
-  const calculatedStatus = calculateOrderStatus(items)
-
-  // Update order status if changed
-  if (calculatedStatus !== order.status) {
-    const updates: any = {
-      status: calculatedStatus,
-      updated_at: new Date().toISOString()
+    if (error) {
+      console.error(`❌ Failed: ${product.name}`, error)
+    } else {
+      console.log(`✅ Seeded: ${product.name}`)
     }
-
-    // Set actual_ready_time when all items ready
-    if (calculatedStatus === 'ready' && !order.actual_ready_time) {
-      updates.actual_ready_time = new Date().toISOString()
-    }
-
-    await supabase
-      .from('orders')
-      .update(updates)
-      .eq('id', orderId)
-
-    console.log(`✅ Order status auto-updated: ${order.order_number} → ${calculatedStatus}`)
   }
 }
+```
 
-export const kitchenService = {
-  getActiveKitchenOrders,
-  updateItemStatus,
-  checkAndUpdateOrderStatus
-}
-````
+---
+
+#### Task 0.3: Create Seed Runner Script
+
+**Time:** 1-2 hours
+**Status:** 🔲 Pending
+
+**File:** `scripts/seeds/index.ts`
 
 **Tasks:**
 
-- [ ] Create `src/stores/kitchen/kitchenService.ts`
-- [ ] Implement `getActiveKitchenOrders()` - Read from Supabase
-- [ ] Implement `updateItemStatus()` - Update JSONB item status
-- [ ] Implement `checkAndUpdateOrderStatus()` - Auto-update order when all items ready
-- [ ] Add error handling and logging
-- [ ] Test with mock data
+- [ ] Create main seedAll() function
+- [ ] Import all seed scripts
+- [ ] Run seeds in correct order (respecting foreign keys)
+- [ ] Add CLI argument support (seed all, seed specific)
+- [ ] Add error handling and rollback
 
----
-
-##### Day 3: Realtime Subscriptions 🔄
-
-**File:** `src/stores/kitchen/useKitchenRealtime.ts` (NEW)
-
-**Goal:** Setup Supabase Realtime subscriptions for live order updates
-
-**Composable to Create:**
+**Template:**
 
 ```typescript
-// Kitchen Realtime Composable
+import { seedProducts } from './catalog/001_seed_products'
 
-import { ref, onMounted, onUnmounted } from 'vue'
-import { supabase } from '@/supabase/client'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+export async function seedAll() {
+  console.log('🌱 Starting database seeding...')
 
-export function useKitchenRealtime() {
-  const channel = ref<RealtimeChannel | null>(null)
-  const isConnected = ref(false)
-
-  /**
-   * Subscribe to orders table changes
-   * Listen for: INSERT, UPDATE on orders with status in (waiting, cooking, ready)
-   */
-  function subscribe(onOrderUpdate: (order: any) => void) {
-    channel.value = supabase
-      .channel('kitchen-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // INSERT, UPDATE, DELETE
-          schema: 'public',
-          table: 'orders',
-          filter: 'status=in.(waiting,cooking,ready)'
-        },
-        payload => {
-          console.log('🔄 Kitchen order update:', payload)
-          onOrderUpdate(payload.new)
-        }
-      )
-      .subscribe(status => {
-        console.log('📡 Kitchen Realtime status:', status)
-        isConnected.value = status === 'SUBSCRIBED'
-      })
+  try {
+    await seedProducts()
+    console.log('✅ Seeding completed!')
+  } catch (error) {
+    console.error('❌ Seeding failed:', error)
+    throw error
   }
+}
 
-  /**
-   * Unsubscribe from realtime updates
-   */
-  function unsubscribe() {
-    if (channel.value) {
-      supabase.removeChannel(channel.value)
-      channel.value = null
-      isConnected.value = false
-    }
-  }
-
-  // Cleanup on unmount
-  onUnmounted(() => {
-    unsubscribe()
-  })
-
-  return {
-    subscribe,
-    unsubscribe,
-    isConnected
-  }
+// CLI usage
+if (require.main === module) {
+  seedAll()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1))
 }
 ```
 
-**Tasks:**
-
-- [ ] Create `src/stores/kitchen/useKitchenRealtime.ts`
-- [ ] Implement Supabase Realtime subscription for orders
-- [ ] Filter for kitchen-relevant statuses (waiting, cooking, ready)
-- [ ] Handle INSERT (new orders from POS)
-- [ ] Handle UPDATE (status changes from Kitchen or POS)
-- [ ] Add connection status indicator
-- [ ] Test realtime sync between POS and Kitchen
-
 ---
 
-##### Day 4: Kitchen Store Integration 🏪
+#### Task 0.4: Create `/seed-db` Command
 
-**File:** `src/stores/kitchen/index.ts` (UPDATE)
+**Time:** 30 minutes
+**Status:** 🔲 Pending
 
-**Goal:** Integrate Kitchen Store with Supabase service + Realtime
-
-**Updates Required:**
-
-```typescript
-// src/stores/kitchen/index.ts
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
-import { kitchenService } from './kitchenService'
-import { useKitchenRealtime } from './useKitchenRealtime'
-import { DebugUtils } from '@/utils'
-import { ENV } from '@/config/environment'
-
-const MODULE_NAME = 'KitchenStore'
-
-export const useKitchenStore = defineStore('kitchen', () => {
-  const initialized = ref(false)
-  const error = ref<string | null>(null)
-  const realtimeConnected = ref(false)
-
-  const posOrdersStore = usePosOrdersStore()
-  const { subscribe, unsubscribe, isConnected } = useKitchenRealtime()
-
-  /**
-   * Initialize Kitchen System with Supabase
-   */
-  async function initialize() {
-    if (initialized.value) {
-      DebugUtils.debug(MODULE_NAME, 'Already initialized')
-      return { success: true }
-    }
-
-    try {
-      DebugUtils.info(MODULE_NAME, 'Initializing Kitchen system...')
-
-      // Load active orders from Supabase
-      if (ENV.useSupabase) {
-        const orders = await kitchenService.getActiveKitchenOrders()
-        posOrdersStore.orders = orders
-
-        DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded from Supabase', {
-          count: orders.length,
-          waiting: orders.filter(o => o.status === 'waiting').length,
-          cooking: orders.filter(o => o.status === 'cooking').length,
-          ready: orders.filter(o => o.status === 'ready').length
-        })
-
-        // Subscribe to realtime updates
-        subscribe(updatedOrder => {
-          // Find and update order in local state
-          const index = posOrdersStore.orders.findIndex(o => o.id === updatedOrder.id)
-          if (index !== -1) {
-            posOrdersStore.orders[index] = orderFromSupabase(updatedOrder)
-          } else {
-            // New order - add to list
-            posOrdersStore.orders.push(orderFromSupabase(updatedOrder))
-          }
-        })
-
-        realtimeConnected.value = isConnected.value
-      } else {
-        // Mock data fallback
-        posOrdersStore.orders = [...MOCK_KITCHEN_ORDERS]
-      }
-
-      initialized.value = true
-      return { success: true }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      error.value = errorMessage
-      return { success: false, error: errorMessage }
-    }
-  }
-
-  /**
-   * Cleanup - unsubscribe from realtime
-   */
-  function cleanup() {
-    unsubscribe()
-    initialized.value = false
-  }
-
-  return {
-    initialized,
-    error,
-    realtimeConnected,
-    initialize,
-    cleanup
-  }
-})
-```
+**File:** `.claude/commands/seed-db.md`
 
 **Tasks:**
 
-- [ ] Update `initialize()` to load from Supabase
-- [ ] Integrate Realtime subscription
-- [ ] Handle order updates from POS
-- [ ] Add cleanup method for Realtime unsubscribe
-- [ ] Test Kitchen UI with live data
+- [ ] Create seed-db.md command file
+- [ ] Add instructions to run seed scripts
+- [ ] Add option to seed all or specific entities
+
+**Template:**
+
+```markdown
+# /seed-db
+
+Execute seed scripts to populate database with test data.
+
+## Usage
+
+\`\`\`bash
+
+# Seed all data
+
+pnpm seed
+
+# Seed specific entity
+
+pnpm seed products
+pnpm seed menu
+\`\`\`
+
+## Process
+
+1. Run seed scripts from scripts/seeds/
+2. Catalog data first (products, categories, etc.)
+3. Transactional data second (optional)
+
+Use after /clean-db to reset test data.
+```
 
 ---
 
-##### Day 5: Kitchen Composables Update 🔄
+#### Task 0.5: Test Seed Workflow
 
-**Files:**
-
-- `src/stores/kitchen/composables/useKitchenDishes.ts` (UPDATE)
-- `src/stores/kitchen/composables/useKitchenOrders.ts` (UPDATE)
-
-**Goal:** Update Kitchen composables to use Supabase service
-
-**useKitchenDishes.ts Updates:**
-
-```typescript
-import { kitchenService } from '../kitchenService'
-
-async function updateDishStatus(
-  dish: KitchenDish,
-  newStatus: 'waiting' | 'cooking' | 'ready'
-): Promise<ServiceResponse<any>> {
-  // Update via Supabase service (not POS store directly)
-  const result = await kitchenService.updateItemStatus(dish.orderId, dish.itemId, newStatus)
-
-  if (result.success) {
-    // Check if all items ready → auto-update order status
-    await kitchenService.checkAndUpdateOrderStatus(dish.orderId)
-  }
-
-  return result
-}
-```
-
-**useKitchenOrders.ts Updates:**
-
-```typescript
-import { kitchenService } from '../kitchenService'
-
-async function updateOrderStatus(
-  orderId: string,
-  newStatus: OrderStatus
-): Promise<ServiceResponse<PosOrder>> {
-  // Kitchen should NOT update order status directly
-  // Only update item statuses → order status auto-updates
-  return {
-    success: false,
-    error: 'Kitchen cannot update order status directly. Update item statuses instead.'
-  }
-}
-```
+**Time:** 1 hour
+**Status:** 🔲 Pending
 
 **Tasks:**
 
-- [ ] Update `useKitchenDishes.updateDishStatus()` to use `kitchenService`
-- [ ] Remove direct POS store manipulation
-- [ ] Add auto-update order status after item update
-- [ ] Update `useKitchenOrders` to prevent direct order status changes
-- [ ] Test Kitchen UI with Supabase integration
+- [ ] Run `/clean-db` to clear data
+- [ ] Run `/seed-db` to populate test data
+- [ ] Verify products appear in Supabase
+- [ ] Verify app loads products correctly
+- [ ] Test repeatability (clean → seed → clean → seed)
+
+**Acceptance:**
+
+- ✅ Seed scripts run without errors
+- ✅ Test data appears in Supabase
+- ✅ App functions with seeded data
+- ✅ Can repeat clean → seed workflow
 
 ---
 
-##### Day 6: POS Realtime Integration 📲
+### 🔴 Phase 1: Menu Migration (Day 3-4)
 
-**File:** `src/stores/pos/orders/useOrdersRealtime.ts` (NEW)
+**Goal:** Menu items in Supabase (critical for POS order creation)
 
-**Goal:** POS listens to order updates from Kitchen
+**Status:** 🔲 Pending (after Phase 0 complete)
 
-**Composable to Create:**
-
-```typescript
-// POS Orders Realtime Composable
-
-import { ref } from 'vue'
-import { supabase } from '@/supabase/client'
-import { usePosOrdersStore } from './ordersStore'
-import { fromSupabase } from './supabaseMappers'
-import type { RealtimeChannel } from '@supabase/supabase-js'
-
-export function useOrdersRealtime() {
-  const channel = ref<RealtimeChannel | null>(null)
-  const isConnected = ref(false)
-  const ordersStore = usePosOrdersStore()
-
-  /**
-   * Subscribe to orders table changes
-   * POS listens for updates from Kitchen (item status changes)
-   */
-  function subscribe() {
-    channel.value = supabase
-      .channel('pos-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders'
-        },
-        payload => {
-          console.log('🔄 POS order update received:', payload)
-
-          // Update order in local state
-          const updatedOrder = fromSupabase(payload.new)
-          const index = ordersStore.orders.findIndex(o => o.id === updatedOrder.id)
-
-          if (index !== -1) {
-            ordersStore.orders[index] = updatedOrder
-            console.log(`✅ Order updated in POS: ${updatedOrder.orderNumber}`)
-          }
-        }
-      )
-      .subscribe(status => {
-        console.log('📡 POS Realtime status:', status)
-        isConnected.value = status === 'SUBSCRIBED'
-      })
-  }
-
-  function unsubscribe() {
-    if (channel.value) {
-      supabase.removeChannel(channel.value)
-      channel.value = null
-      isConnected.value = false
-    }
-  }
-
-  return {
-    subscribe,
-    unsubscribe,
-    isConnected
-  }
-}
-```
+**Reference:** Migration pattern same as Products in PrepProduction.md
 
 **Tasks:**
 
-- [ ] Create `src/stores/pos/orders/useOrdersRealtime.ts`
-- [ ] Implement Realtime subscription for POS
-- [ ] Handle UPDATE events from Kitchen
-- [ ] Auto-update local order state
-- [ ] Integrate into POS initialization
-- [ ] Test bidirectional sync (POS ↔ Kitchen)
+- [ ] Create Migration 006: menu tables (categories + items)
+- [ ] Create menuService with CRUD
+- [ ] Update menuStore to use Supabase
+- [ ] Create seed script for test menu
+- [ ] Remove menuMock.ts after migration
+- [ ] Test POS can read menu items
 
 ---
 
-##### ✅ Phase 2-6: Implementation Complete (2025-11-16)
+### 🟡 Phase 2: Mock Files Cleanup (Day 5)
 
-**Files Created:**
+**Goal:** Replace all mock files with seed scripts
 
-1. ✅ **`src/stores/kitchen/kitchenService.ts`** - Kitchen-specific Supabase service
+**Status:** 🔲 Pending
 
-   - `getActiveKitchenOrders()` - Load orders with status in (waiting, cooking, ready)
-   - `updateItemStatus()` - Update individual item status in JSONB array
-   - `checkAndUpdateOrderStatus()` - Auto-calculate order status from items
-   - `calculateOrderStatus()` - Minimum status algorithm implementation
+**Mock Files to Replace:** (12 files found)
 
-2. ✅ **`src/stores/kitchen/useKitchenRealtime.ts`** - Kitchen Realtime subscriptions
+- [ ] recipes/unitsMock.ts → seed script
+- [ ] recipes/recipesMock.ts → seed script
+- [ ] preparation/preparationMock.ts → seed script
+- [ ] account/paymentMock.ts → seed script
+- [ ] account/accountBasedMock.ts → seed script
+- [ ] account/mock.ts → seed script
+- [ ] counteragents/mock/counteragentsMock.ts → seed script
+- [ ] pos/mocks/posMockData.ts → keep (POS test data)
+- [ ] pos/shifts/mock.ts → keep (POS test data)
+- [ ] menu/menuMock.ts → remove (after Menu migration)
+- [ ] kitchen/mocks/kitchenMockData.ts → keep (Kitchen test data)
+- [ ] shared/mockDataCoordinator.ts → keep as reference
 
-   - Subscribe to `orders` table changes
-   - Filter for kitchen-relevant statuses (waiting, cooking, ready)
-   - Handle INSERT, UPDATE, DELETE events
-   - Auto-remove orders when status changes to non-kitchen statuses
+**Verification:**
 
-3. ✅ **`src/stores/pos/orders/useOrdersRealtime.ts`** - POS Realtime subscriptions
-   - Subscribe to `orders` table UPDATE events
-   - Auto-update local state when Kitchen changes item status
-   - Preserve bill hierarchy during reconstruction
-
-**Files Updated:**
-
-1. ✅ **`src/stores/pos/types.ts`**
-
-   - Added `Department` type: `'kitchen' | 'bar'`
-   - Added `department` field to `PosMenuItem`
-   - Added `department` field to `PosBillItem`
-
-2. ✅ **`src/stores/pos/orders/services.ts`** (line 392)
-
-   - Updated `addItemToBill()` to include department from menu item
-   - Defaults to `'kitchen'` if not specified
-
-3. ✅ **`src/stores/pos/orders/supabaseMappers.ts`**
-
-   - Added `department` to `FlattenedItem` interface (line 58)
-   - Updated `flattenBillsToItems()` to include department (line 116)
-   - Updated `reconstructBillsFromItems()` to restore department (line 205)
-
-4. ✅ **`src/stores/kitchen/composables/useKitchenDishes.ts`** (line 96)
-
-   - Added department filter: `department === 'kitchen'` OR undefined
-   - Kitchen now shows only kitchen items, excludes bar items
-
-5. ✅ **`src/stores/kitchen/index.ts`**
-
-   - Integrated Kitchen Service for Supabase operations
-   - Added Realtime subscription on initialization
-   - Auto-update local state on order changes
-
-6. ✅ **`src/stores/menu/supabaseMappers.ts`** (line 128)
-   - Read `department` field from database
-   - Map to MenuItem.department field
-
-**Database Changes:**
-
-1. ✅ **Realtime Enabled:**
-
-   ```sql
-   ALTER PUBLICATION supabase_realtime ADD TABLE orders;
-   ```
-
-2. ✅ **Migration 004_add_menu_department.sql:**
-
-   ```sql
-   ALTER TABLE menu_items ADD COLUMN department TEXT
-   CHECK (department IN ('kitchen', 'bar'))
-   DEFAULT 'kitchen';
-
-   CREATE INDEX idx_menu_items_department ON menu_items(department);
-
-   UPDATE menu_items SET department = CASE
-     WHEN category_id = (SELECT id FROM menu_categories WHERE name = 'Beverages')
-     THEN 'bar' ELSE 'kitchen'
-   END;
-   ```
-
-**What Works:**
-
-1. ✅ **Department Filtering:**
-
-   - Menu items have `department` field in Supabase
-   - Department copied to bill items when creating orders
-   - Kitchen view filters to show only `department='kitchen'`
-   - Bar items (Bintang Beer, Coca-Cola) hidden from Kitchen
-
-2. ✅ **Status Updates:**
-
-   - Kitchen updates item status via `kitchenService.updateItemStatus()`
-   - Order status auto-calculated from items (minimum status)
-   - Status flow: `waiting` → `cooking` → `ready` (final)
-
-3. ✅ **Real-time Sync:**
-
-   - Kitchen receives new orders from POS automatically
-   - POS receives status updates from Kitchen automatically
-   - No page reload required
-
-4. ✅ **Business Logic:**
-   - `ready` is FINAL status (no served/collected/delivered)
-   - Order status = minimum of all item statuses
-   - Auto-update timestamps (sentToKitchenAt, preparedAt)
-
-**Test Scenarios Ready:**
-
-- [ ] **Create order in POS** with Bintang Beer (bar) + Beef Steak (kitchen)
-- [ ] **Verify Kitchen** shows only Beef Steak, NOT Beer
-- [ ] **Update status** in Kitchen → `cooking` → `ready`
-- [ ] **Verify POS** receives status updates via Realtime
-- [ ] **Test multi-device** sync (Kitchen on Device A, POS on Device B)
-
-**Expected Console Logs:**
-
-```
-POS:
-✅ Order saved to Supabase: ORD-20251116-1234
-✅ 2 items added (1 kitchen, 1 bar)
-📡 POS Realtime status: SUBSCRIBED
-
-Kitchen:
-✅ Kitchen orders loaded from Supabase (1 order)
-✅ 1 kitchen item (Beef Steak) - Beer filtered out ✅
-📡 Kitchen Realtime status: SUBSCRIBED
-✅ Item status updated: waiting → cooking
-✅ Order status auto-updated: waiting → cooking
-
-POS:
-🔄 Order update received: ORD-20251116-1234
-✅ Order updated in POS: cooking
+```bash
+# Check for remaining mock files
+find src/stores -name "*mock*.ts" -o -name "*Mock*.ts"
 ```
 
 ---
 
-**✅ Completion Criteria - ALL MET:**
+### 🟢 Phase 3: Remaining Stores Migration (Week 2+)
 
-1. ✅ Kitchen Service created for Supabase operations
-2. ✅ Kitchen Realtime subscriptions implemented
-3. ✅ POS Realtime subscriptions implemented
-4. ✅ Department-based filtering (kitchen vs bar)
-5. ✅ Item status updates save to Supabase
-6. ✅ Order status auto-calculation from items
-7. ✅ Status flow finalized: `ready` is FINAL
-8. ✅ Multi-device sync architecture ready
-9. ✅ Code compiles successfully (no TypeScript errors)
+**Goal:** Migrate all Backoffice stores to Supabase
 
-**✅ Kitchen-POS Integration COMPLETE!**
+**Status:** 🔲 Pending (future sprints)
 
----
+**Stores to Migrate:**
 
----
+- [ ] Suppliers → Supabase (Sprint N)
+- [ ] Recipes → Supabase (Sprint N+1)
+- [ ] Storage → Supabase (Sprint N+2)
+- [ ] Preparations → Supabase (Sprint N+3)
 
-#### 6. Products Store → Supabase (MOVED TO SPRINT 8-9)
-
-**Priority:** Normal (Backoffice feature, not blocking POS)
-**ETA:** Sprint 8-9 (after Menu migration complete)
-
-**Reason for Postponement:**
-
-- Products Store is primarily used in Backoffice (warehouse, suppliers, recipes)
-- POS does NOT directly use Products Store for orders (uses Menu Items)
-- Menu Items contain product references through recipes (indirect)
-- Not critical for POS MVP - can be deferred
-
-**Tasks (Future Sprint):**
-
-- [ ] Create `products/supabaseMappers.ts`
-- [ ] Update `productsStore/services.ts`
-- [ ] POS: READ only (no writes)
-- [ ] Backoffice: Full CRUD
-- [ ] Migration script for mock products
-- [ ] Handle `package_options` (may need separate table)
+**Reference:** See PrepProduction.md Section 5 for detailed roadmap
 
 ---
 
-#### 7. Tables Store → Supabase ✅ COMPLETED
+### 🔵 Phase 4: Google Sheets Import (Before Production)
 
-**Status:** ✅ COMPLETED (Week 2, Day 4 afternoon)
+**Goal:** Import real data from Google Sheets to Production DB
 
-Tables migration was completed during Orders migration to fix UUID validation errors.
+**Status:** 🔲 Pending (before v1.0 release)
 
----
+**Tasks:**
 
-### 🔵 Week 3: Deploy & Testing
+- [ ] Set up Google Sheets API credentials
+- [ ] Create import script (scripts/import/importFromGoogleSheets.ts)
+- [ ] Map columns: Google Sheets → Supabase schema
+- [ ] Test import on Development DB
+- [ ] Create Production Supabase project
+- [ ] Import real data to Production DB
 
-#### 7. Deployment Setup
-
-- [ ] Configure production environment (.env.production)
-- [ ] Setup Vercel/Netlify
-- [ ] Configure environment variables
-- [ ] Test production build locally
-
-#### 8. Deploy to Production
-
-- [ ] Deploy to Vercel
-- [ ] Verify Supabase connection
-- [ ] Test on multiple devices
-
-#### 9. E2E Testing
-
-- [ ] Test full POS flow (shift → orders → payments → close)
-- [ ] Test Backoffice views
-- [ ] Test offline → online sync
-- [ ] Cross-browser testing
-
-#### 10. Bug Fixes & Documentation
-
-- [ ] Fix critical bugs
-- [ ] Update README with deployment instructions
-- [ ] Update CLAUDE.md with Supabase section
-- [ ] Create backup/restore scripts
+**Reference:** See PrepProduction.md Section 4
 
 ---
 
-## 📈 Sprint 7 Timeline
+## 📋 Testing Checklist
 
-| Week | Phase           | Status      | Deliverable                                           |
-| ---- | --------------- | ----------- | ----------------------------------------------------- |
-| 1    | Supabase Setup  | ✅ Complete | Supabase working, Auth ready                          |
-| 2    | Store Migration | ✅ Complete | Shifts ✅, Payments ✅, Orders ✅, Tables ✅          |
-| 3    | Menu Migration  | 🚧 Starting | Menu Categories + Items → Supabase (CRITICAL for POS) |
-| 3+   | Deploy & Test   | 🔲 Pending  | Live MVP, all scenarios work                          |
+### Integration Tests (Day 4-5):
 
-**Current:** Week 2, Day 5 - Menu Store ✅, Kitchen-POS Integration ✅
-**Next Milestone:** Deploy & Test (Week 3)
+#### Test 1: Backoffice → POS Data Flow
 
----
+- [ ] Create order in POS
+- [ ] Check order appears in Backoffice immediately
+- [ ] Verify all order details correct (items, amounts, status)
 
-## 🎯 Success Criteria
+#### Test 2: Backoffice → POS Product Flow
 
-### Must Have for MVP ✅
+- [ ] Create product in Backoffice
+- [ ] Check product appears in POS menu
+- [ ] Use product in POS order
+- [ ] Verify order saves correctly
 
-- [x] Supabase project created with schema ✅
-- [x] Shifts sync to Supabase ✅
-- [x] Payments sync to Supabase ✅
-- [x] Orders sync to Supabase ✅
-- [x] Tables sync to Supabase ✅
-- [x] Execute migration 002 (Shifts fields) ✅
-- [x] Execute migration 003 (Orders + Payments fields) ✅
-- [x] Execute migration 004 (Menu Categories + Items) ✅
-- [x] Menu sync to Supabase ✅
-- [x] Kitchen-POS Integration with Realtime ✅
-- [x] Department-based filtering (kitchen vs bar) ✅
-- [ ] Test complete POS flow (shift → menu → orders → payments → close) 🚧
-- [ ] Offline → online sync works
-- [ ] Deployed to production (web accessible)
+#### Test 3: Backoffice → POS Menu Flow
 
-### Should Have 🎯
+- [ ] Create menu item in Backoffice
+- [ ] Set department (kitchen or bar)
+- [ ] Check item appears in POS
+- [ ] Create order with new item
+- [ ] Verify shows in correct department (Kitchen/Bar monitor)
 
-- [ ] Products sync to Supabase (Sprint 8-9)
-- [ ] Backoffice reads from Supabase
-- [ ] Cross-browser testing
-- [ ] Performance optimization
-- [ ] Error monitoring
+#### Test 4: End-to-End Flow
+
+- [ ] Backoffice: Create product (Eggs)
+- [ ] Backoffice: Create menu item (Scrambled Eggs, uses Eggs)
+- [ ] POS: Create order with Scrambled Eggs
+- [ ] POS: Send to kitchen
+- [ ] Kitchen: Mark as ready
+- [ ] POS: Process payment
+- [ ] Backoffice: Check order history shows payment
+- [ ] Backoffice: Check shift report includes sale
+
+**Expected:** Full data flow works end-to-end ✅
 
 ---
 
-## 📝 Notes
+## 📝 Completed This Sprint
 
-### Architecture Decisions
+### PrepProduction Strategy ✅ (2025-11-17)
 
-**Chosen Strategy:** Service Layer Pattern (not Repository abstraction)
+- ✅ Created PrepProduction.md with full strategy
+- ✅ Defined seed scripts approach
+- ✅ Defined Google Sheets import strategy
+- ✅ Identified 12 mock files to replace
+- ✅ Two-database strategy (Dev + Prod)
 
-**Why:**
+### Bar Workflow ✅ (2025-11-16)
 
-- ✅ Faster development (2-3 weeks vs 8-12 weeks)
-- ✅ Direct Supabase calls in `services.ts`
-- ✅ Dual-write: Supabase (online) + localStorage (offline)
-- ✅ SyncService for offline → online sync
-- ✅ Easy to understand and maintain
+- ✅ Simplified bar workflow (2 columns)
+- ✅ Department-aware status transitions
+- ✅ Role-based access
 
-**Pattern:**
+### Kitchen-POS Realtime ✅ (2025-11-15)
 
-```
-UI → Pinia Store → Service Layer → Supabase (online) | localStorage (offline)
-                                 → SyncService Queue (for offline operations)
-```
+- ✅ Realtime sync working
+- ✅ Department filtering
+- ✅ Item status tracking
 
-### Known Limitations (MVP)
+### POS Supabase Migration ✅ (Week 2)
 
-- ⚠️ Only for personal testing (not production-ready)
-- ⚠️ One restaurant (multi-tenancy in Sprint 11)
-- ⚠️ Basic security (no audit)
-- ⚠️ Some stores still in localStorage (Menu, Recipes, Storage, etc.)
-- ⚠️ Manual backup required
+- ✅ Orders → Supabase
+- ✅ Payments → Supabase
+- ✅ Shifts → Supabase
+- ✅ Tables → Supabase
 
----
+### Catalog Data ✅ (Week 1)
 
-## 🔗 Related Documentation
-
-- **SupabaseGlobalTodo.md** - Global integration roadmap with diagrams
-- **SHIFT_TESTING_PLAN.md** - Detailed shift sync testing scenarios
-- **SHIFT_FIXES_IMMEDIATE.md** - Recent bug fixes and testing steps
-- **SHIFT_EXPENSE_FIX_SUMMARY.md** - Expense operations analysis
-- **QUICK_START_TESTING.md** - 5-minute quick test guide
-- **SHIFT_SYNC_SUMMARY.md** - Shift sync implementation summary
-- **CLAUDE.md** - Project architecture and guidelines
-- **src/supabase/README.md** - Supabase setup documentation
+- ✅ Products → Supabase
+- ✅ Categories → Supabase
 
 ---
 
-**Last Updated:** 2025-11-16
-**Status:** Sprint 7 Week 2 Day 5 - Kitchen-POS Integration ✅ Complete
-**Next:** Testing & Deployment (Week 3)
-**Blockers:** None
+## 🎯 v1.0 Release Criteria
+
+### Must Have:
+
+- ✅ POS → Supabase (Orders, Payments, Shifts, Tables)
+- ✅ Kitchen/Bar → Supabase (Realtime sync)
+- ✅ Products → Supabase
+- ✅ Categories → Supabase
+- 🔲 Seed scripts infrastructure
+- 🔲 Menu → Supabase
+- 🔲 Mock files replaced with seeds
+- 🔲 Google Sheets import script
+- 🔲 Production DB created
+- 🔲 Real data imported
+- 🔲 Build succeeds
+- 🔲 Production deployed
+
+### Deferred to v1.1+:
+
+- Recipes → Supabase (Sprint N+1)
+- Storage → Supabase (Sprint N+2)
+- Suppliers → Supabase (Sprint N)
+- Preparations → Supabase (Sprint N+3)
+- Offline sync queue (Sprint 9)
+
+---
+
+## 🔗 Related Files
+
+- **[PrepProduction.md](./PrepProduction.md)** - 🔥 Production preparation strategy (NEW)
+- **[BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md)** - Detailed migration plan
+- **[PRIORITIES.md](./PRIORITIES.md)** - Weekly priorities
+- **[next_todo.md](./next_todo.md)** - Offline sync (Sprint 9)
+- **[SupabaseGlobalTodo.md](./SupabaseGlobalTodo.md)** - Global roadmap
+
+---
+
+## 📅 This Week Schedule (Updated 2025-11-17)
+
+**Day 1 (Today):** Create seed scripts infrastructure
+**Day 2:** Products seed script + /seed-db command
+**Day 3:** Test seed workflow, start Menu migration
+**Day 4:** Menu migration (tables + service + store)
+**Day 5:** Menu seed script, mock cleanup
+**Day 6:** Review progress, plan next sprint
+
+---
+
+**Mantra:** "Seed Scripts → Clean Data → Production Ready"
+
+---
+
+**Last Updated:** 2025-11-17
+**Target:** v1.0 Release (TBD after all stores migrated)
+**Status:** Creating seed infrastructure

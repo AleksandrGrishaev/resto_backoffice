@@ -394,6 +394,7 @@ const handleAddItemToOrder = async (
       preparationTime: undefined,
       description: item.description,
       imageUrl: item.imageUrl,
+      department: item.department || 'kitchen', // 🔧 FIX: Copy department from menu item
       variants: item.variants?.map(v => ({
         id: v.id,
         name: v.name,

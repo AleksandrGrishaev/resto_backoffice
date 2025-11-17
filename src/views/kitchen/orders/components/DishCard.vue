@@ -126,22 +126,29 @@ const isUrgent = computed(() => {
 })
 
 /**
- * Кнопка статуса
+ * Кнопка статуса (department-aware)
  */
 const getStatusButtonText = (): string => {
+  // Bar items: waiting → ready (skip cooking)
+  if (props.dish.department === 'bar') {
+    if (props.dish.status === 'waiting') return 'MARK READY'
+    return 'READY FOR PICKUP'
+  }
+
+  // Kitchen items: waiting → cooking → ready
   if (props.dish.status === 'waiting') return 'START COOKING'
   if (props.dish.status === 'cooking') return 'MARK READY'
   return 'READY FOR PICKUP'
 }
 
 const getNextStatusColor = (): string => {
-  const nextStatus = getNextStatus(props.dish.status)
+  const nextStatus = getNextStatus(props.dish.status, props.dish.department)
   if (!nextStatus) return 'grey'
   return getStatusColor(nextStatus)
 }
 
 const getNextStatusIcon = (): string => {
-  const nextStatus = getNextStatus(props.dish.status)
+  const nextStatus = getNextStatus(props.dish.status, props.dish.department)
   if (!nextStatus) return 'mdi-check-circle'
   return getStatusIcon(nextStatus)
 }
@@ -172,7 +179,7 @@ const getOrderTypeColor = (type: string): string => {
 // =============================================
 
 const handleStatusUpdate = () => {
-  const nextStatus = getNextStatus(props.dish.status)
+  const nextStatus = getNextStatus(props.dish.status, props.dish.department)
   if (nextStatus && ['waiting', 'cooking', 'ready'].includes(nextStatus)) {
     emit('status-update', props.dish, nextStatus as 'waiting' | 'cooking' | 'ready')
   }
