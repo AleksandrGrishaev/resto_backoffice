@@ -12,7 +12,10 @@
     "lint": "eslint --ext .vue,.js,.ts,.cjs,.mjs --ignore-path .gitignore .",
     "lint:fix": "eslint --ext .vue,.js,.ts,.cjs,.mjs --ignore-path .gitignore . --fix",
     "lint-staged": "lint-staged",
-    "release": "sh release.sh"
+    "release": "sh release.sh",
+    "seed": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts",
+    "seed:products": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts products",
+    "seed:menu": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts menu"
   },
   "lint-staged": {
     "*.{vue,js,ts,cjs,mjs}": [
@@ -51,6 +54,7 @@
     "@vitejs/plugin-vue": "^5.1.4",
     "@vue/eslint-config-prettier": "9.0.0",
     "@vue/eslint-config-typescript": "12.0.0",
+    "dotenv": "^17.2.3",
     "eslint": "8.56.0",
     "eslint-plugin-prettier": "5.2.1",
     "eslint-plugin-vue": "^9.31.0",

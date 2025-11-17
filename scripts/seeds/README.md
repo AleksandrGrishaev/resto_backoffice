@@ -69,18 +69,25 @@ seeds/
 
 ## Usage
 
-### Run All Seeds
+### Recommended: Via Claude Code MCP
+
+Use the `/db` or `/seed-db` command with Claude Code:
 
 ```bash
-pnpm seed
+# In Claude Code chat
+/seed-db
+
+# Claude will execute seed scripts using MCP Supabase tools
 ```
 
-### Run Specific Seed
+### Alternative: Via pnpm scripts
 
 ```bash
-pnpm seed products
-pnpm seed menu
+pnpm seed              # Seed all data
+pnpm seed:products     # Seed specific entity
 ```
+
+**Note:** The pnpm approach currently has `import.meta.env` limitations in Node.js. The MCP approach via Claude Code is recommended.
 
 ### Clean + Seed Workflow
 

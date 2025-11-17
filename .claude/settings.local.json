@@ -22,7 +22,8 @@
       "Bash(npx tsx:*)",
       "Bash(npx supabase:*)",
       "Bash(src/supabase/types.gen.ts)",
-      "Bash(pnpm build:web:*)"
+      "Bash(pnpm build:web:*)",
+      "Bash(pnpm seed:products:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

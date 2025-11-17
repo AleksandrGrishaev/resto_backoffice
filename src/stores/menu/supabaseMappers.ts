@@ -73,6 +73,9 @@ export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert
     name_en: (item as any).nameEn || null, // Optional English name
     description: item.description || null,
 
+    // Type: food or beverage
+    type: item.type,
+
     // Pricing: Use first variant price as base price
     price: item.variants?.[0]?.price || 0,
     cost: calculateMenuItemCost(item),
@@ -124,7 +127,7 @@ export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
     description: row.description || undefined,
 
     // Type and department
-    type: inferMenuItemType(row),
+    type: (row.type as 'food' | 'beverage') || 'food',
     department: (row.department as 'kitchen' | 'bar') || 'kitchen',
 
     // Dish type
@@ -168,38 +171,7 @@ function calculateMenuItemCost(item: MenuItem): number {
   return 0
 }
 
-/**
- * Infer menu item type from name/category
- * This is a fallback for old data without explicit type field
- */
-function inferMenuItemType(row: SupabaseMenuItem): 'food' | 'beverage' {
-  const name = row.name.toLowerCase()
-  const beverageKeywords = ['beer', 'wine', 'juice', 'soda', 'coffee', 'tea', 'water', 'drink']
-
-  if (beverageKeywords.some(keyword => name.includes(keyword))) {
-    return 'beverage'
-  }
-
-  return 'food'
-}
-
-/**
- * Infer department from dish type
- * component-based/addon-based → likely kitchen
- * simple → could be bar (beverages) or kitchen
- */
-function inferDepartment(row: SupabaseMenuItem): 'kitchen' | 'bar' {
-  const dishType = row.dish_type
-
-  // Component-based and addon-based dishes are typically kitchen
-  if (dishType === 'component-based' || dishType === 'addon-based') {
-    return 'kitchen'
-  }
-
-  // For simple dishes, check if it's a beverage
-  const type = inferMenuItemType(row)
-  return type === 'beverage' ? 'bar' : 'kitchen'
-}
+// Helper functions removed - using explicit database columns instead of inference
 
 // =============================================
 // BATCH OPERATIONS
