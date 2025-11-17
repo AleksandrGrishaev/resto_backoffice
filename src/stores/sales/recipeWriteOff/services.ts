@@ -1,11 +1,13 @@
 import type { ServiceResponse } from '@/repositories/base/ServiceResponse'
 import type { RecipeWriteOff, WriteOffFilters, WriteOffSummary } from './types'
+import { supabase } from '@/supabase/client'
+import { toSupabase, fromSupabase } from './supabase/mappers'
 
 const STORAGE_KEY = 'recipe_writeoffs'
 
 /**
  * Recipe Write-off Service
- * CRUD операции для recipe write-offs с localStorage
+ * CRUD операции для recipe write-offs с Supabase (dual-write с localStorage)
  */
 export class RecipeWriteOffService {
   /**
@@ -13,19 +15,50 @@ export class RecipeWriteOffService {
    */
   static async getAllWriteOffs(): Promise<ServiceResponse<RecipeWriteOff[]>> {
     try {
-      const data = localStorage.getItem(STORAGE_KEY)
-      const writeOffs: RecipeWriteOff[] = data ? JSON.parse(data) : []
+      // Try Supabase first
+      const { data, error } = await supabase
+        .from('recipe_write_offs')
+        .select('*')
+        .order('performed_at', { ascending: false })
+
+      if (error) {
+        console.warn(
+          '⚠️ [RecipeWriteOffService] Supabase query failed, falling back to localStorage:',
+          error.message
+        )
+
+        // Fallback to localStorage
+        const localData = localStorage.getItem(STORAGE_KEY)
+        const writeOffs: RecipeWriteOff[] = localData ? JSON.parse(localData) : []
+
+        return {
+          success: true,
+          data: writeOffs,
+          metadata: {
+            timestamp: new Date().toISOString(),
+            source: 'local',
+            platform: 'web'
+          }
+        }
+      }
+
+      const writeOffs = data ? data.map(fromSupabase) : []
+      console.log(`✅ [RecipeWriteOffService] Loaded ${writeOffs.length} write-offs from Supabase`)
+
+      // Cache to localStorage
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(writeOffs))
 
       return {
         success: true,
         data: writeOffs,
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
     } catch (error) {
+      console.error('❌ [RecipeWriteOffService] Error:', error)
       return {
         success: false,
         error: `Failed to get write-offs: ${error}`,
@@ -217,41 +250,77 @@ export class RecipeWriteOffService {
    */
   static async saveWriteOff(writeOff: RecipeWriteOff): Promise<ServiceResponse<RecipeWriteOff>> {
     try {
-      const allResult = await this.getAllWriteOffs()
-      if (!allResult.success) {
+      const updatedWriteOff = {
+        ...writeOff,
+        updatedAt: new Date().toISOString()
+      }
+
+      // Dual-write: Supabase + localStorage
+      const supabaseData = toSupabase(updatedWriteOff)
+
+      const { data, error } = await supabase
+        .from('recipe_write_offs')
+        .upsert(supabaseData)
+        .select()
+        .single()
+
+      if (error) {
+        console.warn(
+          '⚠️ [RecipeWriteOffService] Supabase save failed, saving to localStorage only:',
+          error.message
+        )
+
+        // Fallback to localStorage only
+        const allResult = await this.getAllWriteOffs()
+        const writeOffs = allResult.data || []
+        const existingIndex = writeOffs.findIndex(w => w.id === writeOff.id)
+
+        if (existingIndex >= 0) {
+          writeOffs[existingIndex] = updatedWriteOff
+        } else {
+          writeOffs.push(updatedWriteOff)
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(writeOffs))
+
         return {
-          success: false,
-          error: 'Failed to get existing write-offs',
-          metadata: allResult.metadata
+          success: true,
+          data: updatedWriteOff,
+          metadata: {
+            timestamp: new Date().toISOString(),
+            source: 'local',
+            platform: 'web'
+          }
         }
       }
 
+      console.log(`✅ [RecipeWriteOffService] Write-off saved to Supabase: ${updatedWriteOff.id}`)
+
+      // Cache to localStorage (backup)
+      const allResult = await this.getAllWriteOffs()
       const writeOffs = allResult.data || []
       const existingIndex = writeOffs.findIndex(w => w.id === writeOff.id)
 
       if (existingIndex >= 0) {
-        // Update existing
-        writeOffs[existingIndex] = {
-          ...writeOff,
-          updatedAt: new Date().toISOString()
-        }
+        writeOffs[existingIndex] = updatedWriteOff
       } else {
-        // Add new
-        writeOffs.push(writeOff)
+        writeOffs.push(updatedWriteOff)
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(writeOffs))
+      console.log(`💾 [RecipeWriteOffService] Write-off cached to localStorage (backup)`)
 
       return {
         success: true,
-        data: writeOff,
+        data: fromSupabase(data),
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
     } catch (error) {
+      console.error('❌ [RecipeWriteOffService] Error:', error)
       return {
         success: false,
         error: `Failed to save write-off: ${error}`,

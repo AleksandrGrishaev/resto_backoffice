@@ -1,12 +1,14 @@
 import type { ServiceResponse } from '@/repositories/base/ServiceResponse'
 import type { SalesTransaction, SalesFilters, SalesStatistics, TopSellingItem } from './types'
 import type { PaymentMethod } from '@/stores/pos/types'
+import { supabase } from '@/supabase/client'
+import { toSupabase, fromSupabase } from './supabase/mappers'
 
 const STORAGE_KEY = 'sales_transactions'
 
 /**
  * Sales Service
- * CRUD операции для sales transactions с localStorage
+ * CRUD операции для sales transactions с Supabase (dual-write с localStorage)
  */
 export class SalesService {
   /**
@@ -14,19 +16,50 @@ export class SalesService {
    */
   static async getAllTransactions(): Promise<ServiceResponse<SalesTransaction[]>> {
     try {
-      const data = localStorage.getItem(STORAGE_KEY)
-      const transactions: SalesTransaction[] = data ? JSON.parse(data) : []
+      // Try Supabase first
+      const { data, error } = await supabase
+        .from('sales_transactions')
+        .select('*')
+        .order('sold_at', { ascending: false })
+
+      if (error) {
+        console.warn(
+          '⚠️ [SalesService] Supabase query failed, falling back to localStorage:',
+          error.message
+        )
+
+        // Fallback to localStorage
+        const localData = localStorage.getItem(STORAGE_KEY)
+        const transactions: SalesTransaction[] = localData ? JSON.parse(localData) : []
+
+        return {
+          success: true,
+          data: transactions,
+          metadata: {
+            timestamp: new Date().toISOString(),
+            source: 'local',
+            platform: 'web'
+          }
+        }
+      }
+
+      const transactions = data ? data.map(fromSupabase) : []
+      console.log(`✅ [SalesService] Loaded ${transactions.length} transactions from Supabase`)
+
+      // Cache to localStorage
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions))
 
       return {
         success: true,
         data: transactions,
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
     } catch (error) {
+      console.error('❌ [SalesService] Error:', error)
       return {
         success: false,
         error: `Failed to get sales transactions: ${error}`,
@@ -153,41 +186,77 @@ export class SalesService {
     transaction: SalesTransaction
   ): Promise<ServiceResponse<SalesTransaction>> {
     try {
-      const allResult = await this.getAllTransactions()
-      if (!allResult.success) {
+      const updatedTransaction = {
+        ...transaction,
+        updatedAt: new Date().toISOString()
+      }
+
+      // Dual-write: Supabase + localStorage
+      const supabaseData = toSupabase(updatedTransaction)
+
+      const { data, error } = await supabase
+        .from('sales_transactions')
+        .upsert(supabaseData)
+        .select()
+        .single()
+
+      if (error) {
+        console.warn(
+          '⚠️ [SalesService] Supabase save failed, saving to localStorage only:',
+          error.message
+        )
+
+        // Fallback to localStorage only
+        const allResult = await this.getAllTransactions()
+        const transactions = allResult.data || []
+        const existingIndex = transactions.findIndex(t => t.id === transaction.id)
+
+        if (existingIndex >= 0) {
+          transactions[existingIndex] = updatedTransaction
+        } else {
+          transactions.push(updatedTransaction)
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions))
+
         return {
-          success: false,
-          error: 'Failed to get existing transactions',
-          metadata: allResult.metadata
+          success: true,
+          data: updatedTransaction,
+          metadata: {
+            timestamp: new Date().toISOString(),
+            source: 'local',
+            platform: 'web'
+          }
         }
       }
 
+      console.log(`✅ [SalesService] Transaction saved to Supabase: ${updatedTransaction.id}`)
+
+      // Cache to localStorage (backup)
+      const allResult = await this.getAllTransactions()
       const transactions = allResult.data || []
       const existingIndex = transactions.findIndex(t => t.id === transaction.id)
 
       if (existingIndex >= 0) {
-        // Update existing
-        transactions[existingIndex] = {
-          ...transaction,
-          updatedAt: new Date().toISOString()
-        }
+        transactions[existingIndex] = updatedTransaction
       } else {
-        // Add new
-        transactions.push(transaction)
+        transactions.push(updatedTransaction)
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions))
+      console.log(`💾 [SalesService] Transaction cached to localStorage (backup)`)
 
       return {
         success: true,
-        data: transaction,
+        data: fromSupabase(data),
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
     } catch (error) {
+      console.error('❌ [SalesService] Error:', error)
       return {
         success: false,
         error: `Failed to save sales transaction: ${error}`,

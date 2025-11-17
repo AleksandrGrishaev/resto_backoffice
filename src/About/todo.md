@@ -25,6 +25,14 @@
 - Migration 010 ✅ **COMPLETED** (Storage tables: warehouses, storage_batches, storage_operations, inventory_documents)
 - Migration 011 ✅ **COMPLETED** (Supplier tables: procurement_requests, purchase_orders, receipts)
 - Storage & Supplier ✅ **COMPLETED** (1 warehouse, 28 batches for all products, 6 operations over 7 days, 1 procurement flow seeded)
+- Migration 012 ✅ **COMPLETED** (Account tables: accounts, transactions, pending_payments)
+- Account Store ✅ **COMPLETED** (3 accounts, 4 transactions, 1 pending payment seeded)
+- Supplier → Account Integration ✅ **VERIFIED** (Purchase order linked to pending payment and transaction)
+- Migration 013 ✅ **COMPLETED** (Sales Transactions table created)
+- Migration 014 ✅ **COMPLETED** (Recipe Write-offs table created)
+- Migration 015-016 ✅ **COMPLETED** (FK constraints fixed for circular dependencies)
+- Sales Store ✅ **COMPLETED** (Migrated to Supabase with dual-write pattern)
+- Recipe Write-off Store ✅ **COMPLETED** (Migrated to Supabase with dual-write pattern)
 
 ---
 
@@ -39,8 +47,10 @@
 5. ✅ Create missing Supabase tables (recipes, preparations) - **COMPLETED**
 6. ✅ Create Storage tables (warehouses, batches, operations, inventories) - **COMPLETED**
 7. ✅ Create Supplier Operations tables (requests, orders, receipts) - **COMPLETED**
-8. 🔲 Seed remaining catalog data (package_options - optional)
-9. 🔲 Replace mock files with seed scripts (Phase 2)
+8. ✅ Create Account Store tables (accounts, transactions, pending_payments) - **COMPLETED**
+9. ✅ Verify Supplier → Account integration (bill_id references) - **COMPLETED**
+10. 🔲 Seed remaining catalog data (package_options - optional)
+11. 🔲 Replace mock files with seed scripts (Phase 2)
 
 ### 🔴 Phase 0: Seed Scripts Infrastructure (Day 1-2) ✅ **COMPLETED**
 
@@ -349,8 +359,144 @@ find src/stores -name "*mock*.ts" -o -name "*Mock*.ts"
 - [x] Preparations → Supabase ✅ (Migration 009 - 10 preparations, 48 ingredients)
 - [x] Storage → Supabase ✅ (Migration 010 - 1 warehouse, 28 batches, 6 operations)
 - [x] Supplier Operations → Supabase ✅ (Migration 011 - 1 request, 1 order, 1 receipt)
+- [x] Account Store → Supabase ✅ (Migration 012 - 3 accounts, 4 transactions, 1 pending payment)
+- [x] Sales Store → Supabase ✅ (Migration 013 - sales transactions with profit calculation)
+- [x] Recipe Write-offs → Supabase ✅ (Migration 014 - automatic inventory write-offs)
+
+**Integration Verified:**
+
+- [x] Supplier → Account ✅ (Purchase order → Pending payment → Transaction flow working)
+- [x] POS → Sales → Write-off → Storage ✅ (Payment triggers sales transaction, recipe decomposition, and inventory write-off)
 
 **Reference:** See PrepProduction.md Section 5 for detailed roadmap
+
+---
+
+### 🟣 Phase 3.5: Sales Store Migration ✅ **COMPLETED** (2025-11-17)
+
+**Goal:** Migrate Sales Store and Recipe Write-offs from localStorage to Supabase
+
+**Status:** ✅ **COMPLETED**
+
+**Tasks Completed:**
+
+#### Migration 013: Sales Transactions Table
+
+**Created table:** `sales_transactions`
+
+**Schema:**
+
+- Reference links: `payment_id`, `order_id`, `bill_id`, `item_id`, `shift_id`
+- Menu data: `menu_item_id`, `menu_item_name`, `variant_id`, `variant_name`
+- Sale data: `quantity`, `unit_price`, `total_price`, `payment_method`
+- Timestamps: `sold_at`, `processed_by`
+- Recipe link: `recipe_id`, `recipe_write_off_id`
+- **JSONB fields:**
+  - `profit_calculation`: originalPrice, itemOwnDiscount, allocatedBillDiscount, finalRevenue, ingredientsCost, profit, profitMargin
+  - `decomposition_summary`: totalProducts, totalCost, decomposedItems[]
+- Department: `kitchen` | `bar`
+- Sync status: `synced_to_backoffice`, `synced_at`
+
+**Indexes:** sold_at, menu_item_id, payment_id, shift_id, department, payment_method
+
+**RLS:** Enabled with authenticated user policies
+
+#### Migration 014: Recipe Write-offs Table
+
+**Created table:** `recipe_write_offs`
+
+**Schema:**
+
+- Links: `sales_transaction_id`, `menu_item_id`, `variant_id`, `recipe_id`
+- Recipe data: `portion_size`, `sold_quantity`
+- **JSONB arrays:**
+  - `write_off_items`: type, itemId, itemName, quantityPerPortion, totalQuantity, unit, costPerUnit, totalCost, batchIds[]
+  - `decomposed_items`: productId, productName, quantity, unit, costPerUnit, totalCost, path[]
+  - `original_composition`: MenuComposition[] (for audit trail)
+- Operation: `department`, `operation_type` ('auto_sales_writeoff'), `performed_at`, `performed_by`
+- Storage link: `storage_operation_id` (nullable - storage ops not yet in Supabase)
+
+**Indexes:** sales_transaction_id, menu_item_id, performed_at, department, storage_operation_id
+
+**RLS:** Enabled with authenticated user policies
+
+#### Migration 015-016: Foreign Key Constraints
+
+- Made `recipe_write_off_id` nullable in `sales_transactions` (two-phase insert pattern)
+- Made `storage_operation_id` nullable with no FK constraint (storage ops still in localStorage)
+- Added comments explaining circular dependency workaround
+
+#### Services Updated
+
+**SalesService (`src/stores/sales/services.ts`):**
+
+- ✅ Dual-write pattern (Supabase + localStorage fallback)
+- ✅ `getAllTransactions()` - reads from Supabase, caches to localStorage
+- ✅ `saveSalesTransaction()` - upsert to Supabase, backup to localStorage
+- ✅ Mappers created (`src/stores/sales/supabase/mappers.ts`)
+
+**RecipeWriteOffService (`src/stores/sales/recipeWriteOff/services.ts`):**
+
+- ✅ Dual-write pattern (Supabase + localStorage fallback)
+- ✅ `getAllWriteOffs()` - reads from Supabase, caches to localStorage
+- ✅ `saveWriteOff()` - upsert to Supabase, backup to localStorage
+- ✅ Mappers created (`src/stores/sales/recipeWriteOff/supabase/mappers.ts`)
+
+#### Data Flow Verified
+
+**Complete audit trail:**
+
+```
+Payment (Supabase)
+  ↓
+SalesTransaction (Supabase)
+  ↓ profit_calculation = {finalRevenue, ingredientsCost, profit, profitMargin}
+  ↓ decomposition_summary = {totalProducts, totalCost, decomposedItems[]}
+  ↓
+RecipeWriteOff (Supabase)
+  ↓ write_off_items = [{type, itemId, quantity, cost, batchIds}]
+  ↓ decomposed_items = [{productId, quantity, unit, cost, path}]
+  ↓
+StorageOperation (localStorage - not yet migrated)
+  ↓ FIFO batch allocation
+  ↓
+StorageBatches (Supabase)
+  ↓ currentQuantity updated
+```
+
+#### Test Results
+
+**Tested transactions:**
+
+1. **Bintang Beer (bar)** - Rp 25,000
+
+   - Revenue: Rp 25,000
+   - Cost: Rp 12,000
+   - Profit: Rp 13,000
+   - Margin: 52%
+
+2. **Beef Steak (kitchen)** - Rp 95,000
+   - Revenue: Rp 95,000
+   - Cost: Rp 46,099
+   - Profit: Rp 48,901
+   - Margin: 51.47%
+   - Write-off: 250g beef, 10ml oil, 3g salt, 2g pepper
+
+**Aggregate Statistics (from Supabase):**
+
+- Total transactions: 2
+- Total revenue: Rp 120,000
+- Total cost: Rp 58,099
+- Total profit: Rp 61,901
+- Average margin: 51.73%
+
+**Key Learnings:**
+
+1. ✅ JSONB fields perfect for complex nested data (profit calculations, decompositions)
+2. ✅ Two-phase insert pattern resolves circular FK dependencies
+3. ✅ Nullable FK constraints allow gradual migration (storage ops later)
+4. ✅ Dual-write pattern provides resilience during migration
+5. ✅ TypeScript interfaces → Supabase schema mapping critical for data integrity
 
 ---
 
