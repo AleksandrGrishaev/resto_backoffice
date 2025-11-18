@@ -24,7 +24,8 @@
       "Bash(src/supabase/types.gen.ts)",
       "Bash(pnpm build:web:*)",
       "Bash(pnpm seed:products:*)",
-      "mcp__supabase__list_migrations"
+      "mcp__supabase__list_migrations",
+      "Bash(code --list-extensions)"
     ]
   },
   "enableAllProjectMcpServers": true,

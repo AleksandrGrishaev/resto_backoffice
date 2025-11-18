@@ -113,3 +113,42 @@ Always provide:
 5. Next suggested actions (if relevant)
 
 Be concise but informative. Focus on helping the user understand the database state and changes.
+
+## IMPORTANT: Compact Output for Large Results
+
+When using MCP Supabase tools that return long responses (especially `list_tables`, `execute_sql` with many rows, or `get_advisors`):
+
+**DO:**
+
+- Summarize table counts and key statistics
+- Show only first 3-5 rows of query results (mention total count)
+- Group similar items (e.g., "10 products tables, 5 POS tables, 3 account tables")
+- Use bullet points for summaries
+- Show full details only when explicitly requested
+
+**Example compact output:**
+
+```
+Database summary (15 tables total):
+- Catalog: products, menu_items, recipes, preparations (4 tables)
+- POS: orders, bills, payments, shifts, tables (5 tables)
+- Operations: storage_operations, storage_batches, warehouses (3 tables)
+- Finance: accounts, transactions, pending_payments (3 tables)
+
+Total rows: ~1,250 across all tables
+RLS enabled: 14/15 tables
+```
+
+**DON'T:**
+
+- Show all rows from large tables
+- Display full schema for every table
+- Return verbose JSON/JSONB field contents
+- List every single column unless asked
+
+**When to show full details:**
+
+- User explicitly asks for "full", "complete", or "all" data
+- Debugging specific issues
+- Showing schema for a single table
+- Displaying results from a targeted query (< 20 rows)

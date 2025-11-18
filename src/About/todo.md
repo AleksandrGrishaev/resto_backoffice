@@ -4,117 +4,255 @@
 > **📘 Migration Guide:** See [BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md) for detailed plan
 > **⚠️ CRITICAL RULE:** Always check TypeScript interface FIRST before creating/updating Supabase tables!
 
-## 📊 Current Status (2025-11-17)
+## 📊 Current Status (2025-11-18)
 
-**Sprint Goal: 🎯 Create Seed Infrastructure → Migrate Backoffice → v1.0 Release**
+**Sprint Goal: 🎯 Phase 2 - Clean Up Mock Files → Backoffice Supabase-Only**
 
-**Progress:**
+**Phase 1 Migration:** ✅ **COMPLETED** (2025-11-17)
 
-- POS ✅ Kitchen ✅ Bar ✅
-- Products ✅ Categories ✅
-- Seed Scripts ✅ **COMPLETED** (28 products seeded)
-- Migration 005 ✅ **COMPLETED** (Products schema fixed to match Product interface)
-- Migration 006 ✅ **COMPLETED** (Menu 'type' column added)
-- Menu ✅ **COMPLETED** (Phase 1 - 9 items, 6 categories seeded)
-- Migration 007 ✅ **COMPLETED** (Counteragents table created)
-- Counteragents/Suppliers ✅ **COMPLETED** (9 counteragents seeded: 7 suppliers, 2 services)
-- Migration 008 ✅ **COMPLETED** (Recipes tables: recipes, recipe_components, recipe_steps)
-- Migration 009 ✅ **COMPLETED** (Preparations tables: preparations, preparation_ingredients)
-- Recipes ✅ **COMPLETED** (3 recipes seeded with 6 components, 13 steps)
-- Preparations ✅ **COMPLETED** (10 preparations seeded with 48 ingredients)
-- Migration 010 ✅ **COMPLETED** (Storage tables: warehouses, storage_batches, storage_operations, inventory_documents)
-- Migration 011 ✅ **COMPLETED** (Supplier tables: procurement_requests, purchase_orders, receipts)
-- Storage & Supplier ✅ **COMPLETED** (1 warehouse, 28 batches for all products, 6 operations over 7 days, 1 procurement flow seeded)
-- Migration 012 ✅ **COMPLETED** (Account tables: accounts, transactions, pending_payments)
-- Account Store ✅ **COMPLETED** (3 accounts, 4 transactions, 1 pending payment seeded)
-- Supplier → Account Integration ✅ **VERIFIED** (Purchase order linked to pending payment and transaction)
-- Migration 013 ✅ **COMPLETED** (Sales Transactions table created)
-- Migration 014 ✅ **COMPLETED** (Recipe Write-offs table created)
-- Migration 015-016 ✅ **COMPLETED** (FK constraints fixed for circular dependencies)
-- Sales Store ✅ **COMPLETED** (Migrated to Supabase with dual-write pattern)
-- Recipe Write-off Store ✅ **COMPLETED** (Migrated to Supabase with dual-write pattern)
+- All Backoffice stores migrated to Supabase
+- All tables created with proper schema
+- Test data seeded successfully
+- Integration flows verified
+
+**Phase 2 Goal:** Clean up mock files, ensure Backoffice uses Supabase-only (no localStorage fallbacks)
+
+**Current Progress:**
+
+- ✅ All stores migrated to Supabase (Phase 1)
+- ✅ POS keeps offline-first (localStorage + Supabase dual-write)
+- 🔄 Mock files cleanup in progress (Phase 2)
 
 ---
 
-## 🎯 THIS WEEK: Seed Infrastructure + Menu Migration
+## 🎯 THIS WEEK: Phase 2 - Mock Files Cleanup
 
-**New Strategy (2025-11-17 - Updated):**
+**Strategy:**
 
-1. ✅ Products/Categories already in Supabase (COMPLETED)
-2. ✅ Create seed script infrastructure (COMPLETED)
-3. ✅ Migrate Menu to Supabase (Phase 1 - COMPLETED)
-4. ✅ Migrate Counteragents/Suppliers to Supabase (COMPLETED)
-5. ✅ Create missing Supabase tables (recipes, preparations) - **COMPLETED**
-6. ✅ Create Storage tables (warehouses, batches, operations, inventories) - **COMPLETED**
-7. ✅ Create Supplier Operations tables (requests, orders, receipts) - **COMPLETED**
-8. ✅ Create Account Store tables (accounts, transactions, pending_payments) - **COMPLETED**
-9. ✅ Verify Supplier → Account integration (bill_id references) - **COMPLETED**
-10. 🔲 Seed remaining catalog data (package_options - optional)
-11. 🔲 Replace mock files with seed scripts (Phase 2)
-
-### 🔴 Phase 0: Seed Scripts Infrastructure (Day 1-2) ✅ **COMPLETED**
-
-**Goal:** Create seed script infrastructure to replace mock data
-
-**Why:** Mock files are hardcoded in TypeScript. Seed scripts allow quick database reset with test data.
-
-#### Task 0.1: Create Seed Scripts Directory Structure ✅
-
-**Time:** 1 hour
-**Status:** ✅ Completed
-
-**Tasks:**
-
-- [x] Create `scripts/seeds/` directory
-- [x] Create `scripts/seeds/catalog/` (stable reference data)
-- [x] Create `scripts/seeds/transactional/` (test operational data)
-- [x] Create `scripts/seeds/README.md` with documentation
-- [x] Create `scripts/seeds/index.ts` (main seed runner)
-
-**Structure:**
-
-```
-scripts/
-└── seeds/
-    ├── README.md
-    ├── index.ts                      # Main runner
-    ├── catalog/                      # Stable data
-    │   ├── 001_seed_products.ts
-    │   ├── 002_seed_categories.ts
-    │   └── 003_seed_suppliers.ts
-    └── transactional/                # Test data
-        └── 101_seed_storage_ops.ts
-```
+1. Remove all Backoffice mock files (keep POS mocks for offline-first)
+2. Verify all stores use Supabase-only (no localStorage fallbacks)
+3. Clean up shared/mockDataCoordinator.ts
+4. Update appInitializer.ts verification
 
 ---
 
-#### Task 0.2: Create Products Seed Script (First Example) ✅
+## 🧹 Phase 2: Mock Files Cleanup & Verification
 
-**Time:** 2-3 hours
-**Status:** ✅ Completed
+### 📊 Mock Files Inventory
 
-**File:** `scripts/seeds/catalog/001_seed_products.ts`
+**Total mock files found:** 15
+
+**Backoffice (to clean):** 12 files
+
+- Menu: menuMock.ts
+- Recipes: recipesMock.ts, unitsMock.ts
+- Preparation: preparationMock.ts
+- Counteragents: counteragentsMock.ts
+- Account: mock.ts, accountBasedMock.ts, paymentMock.ts
+- Shared: productDefinitions.ts, supplierDefinitions.ts, storageDefinitions.ts, mockDataCoordinator.ts
+
+**POS (keep for offline-first):** 3 files
+
+- pos/mocks/posMockData.ts ✅ Keep
+- pos/shifts/mock.ts ✅ Keep
+- kitchen/mocks/kitchenMockData.ts ✅ Keep
+
+---
+
+### Step 1: Menu Mock (menuMock.ts)
+
+**File:** `src/stores/menu/menuMock.ts`
+**Used by:** menuService.ts, index.ts, migrateMenuToSupabase.ts
 
 **Tasks:**
 
-- [x] Import CORE_PRODUCTS from productDefinitions
-- [x] Create seedProducts() function
-- [x] Map product definitions to Supabase schema
-- [x] Insert products with proper error handling
-- [x] Test seed script works
-- [x] **Seeded all 28 products via MCP Supabase tools**
+- [ ] Check menuService.ts - should use Supabase only
+- [ ] Check index.ts - should not export MENU_MOCK_DATA
+- [ ] Remove menuMock.ts if not used
 
-**Template:**
+---
 
-```typescript
-import { supabase } from '@/supabase/client'
-import { CORE_PRODUCTS } from '@/stores/shared/productDefinitions'
+### Step 2: Recipes Mocks (recipesMock.ts, unitsMock.ts)
 
-export async function seedProducts() {
-  console.log('🌱 Seeding products...')
+**Files:** `src/stores/recipes/recipesMock.ts`, `src/stores/recipes/unitsMock.ts`
+**Used by:** recipesStore.ts, index.ts
 
-  for (const product of CORE_PRODUCTS) {
-    const { error } = await supabase.from('products').insert({
+**Tasks:**
+
+- [ ] Check recipesStore.ts - should use recipesService (Supabase)
+- [ ] Check index.ts - should not export RECIPES_MOCK
+- [ ] Remove both mock files if not used
+
+---
+
+### Step 3: Preparation Mock (preparationMock.ts)
+
+**File:** `src/stores/preparation/preparationMock.ts`
+**Used by:** preparationService.ts, index.ts
+
+**Tasks:**
+
+- [ ] Check preparationService.ts - should use Supabase only
+- [ ] Check index.ts - should not export PREPARATION_MOCK
+- [ ] Remove mock file if not used
+
+---
+
+### Step 4: Counteragents Mock (counteragentsMock.ts)
+
+**File:** `src/stores/counteragents/mock/counteragentsMock.ts`
+**Used by:** counteragentsService.ts, index.ts, mockDataCoordinator.ts
+
+**Tasks:**
+
+- [ ] Check counteragentsService.ts - should use Supabase only
+- [ ] Check index.ts - should not export COUNTERAGENTS_MOCK
+- [ ] Remove mock file if not used
+- [ ] Delete empty mock/ directory
+
+---
+
+### Step 5: Account Mocks (3 files)
+
+**Files:**
+
+- `src/stores/account/mock.ts`
+- `src/stores/account/accountBasedMock.ts`
+- `src/stores/account/paymentMock.ts`
+
+**Used by:** service.ts, store.ts
+
+**Tasks:**
+
+- [ ] Check account/service.ts - should use Supabase only
+- [ ] Check account/store.ts - should use Supabase only
+- [ ] Remove all 3 mock files if not used
+
+---
+
+### Step 6: Shared Definitions (productDefinitions.ts, etc.)
+
+**Files:**
+
+- `src/stores/shared/productDefinitions.ts` - used by supplierService, mockDataCoordinator
+- `src/stores/shared/supplierDefinitions.ts` - used by mockDataCoordinator
+- `src/stores/shared/storageDefinitions.ts` - used by mockDataCoordinator
+
+**Tasks:**
+
+- [ ] Check supplierService.ts - should NOT use productDefinitions
+- [ ] Remove exports from shared/index.ts
+- [ ] Add deprecation notice to files
+- [ ] Move to /reference directory OR keep as-is with deprecation
+
+---
+
+### Step 7: Clean Up mockDataCoordinator.ts
+
+**File:** `src/stores/shared/mockDataCoordinator.ts`
+
+**Tasks:**
+
+- [ ] Remove imports of deleted mocks
+- [ ] Add deprecation notice at top
+- [ ] Keep file as reference for data structures
+
+---
+
+### Step 8: Verify appInitializer.ts
+
+**File:** `src/core/appInitializer.ts`
+
+**Tasks:**
+
+- [ ] Verify all stores initialize from Supabase (via services)
+- [ ] No imports from mock files
+- [ ] No fallback to mock data
+
+---
+
+### Step 9: Final Verification
+
+**Tasks:**
+
+- [ ] Build succeeds: `pnpm build`
+- [ ] App runs: `pnpm dev`
+- [ ] All stores initialize correctly
+- [ ] No console errors about missing mocks
+- [ ] No mock file imports in production code
+
+---
+
+### 🔵 Phase 3: Google Sheets Import (Future)
+
+**Goal:** Import real data from Google Sheets to Production DB
+**Status:** 🔲 Deferred to v1.1+
+
+**Tasks:**
+
+- [ ] Set up Google Sheets API credentials
+- [ ] Create import script (scripts/import/importFromGoogleSheets.ts)
+- [ ] Map columns: Google Sheets → Supabase schema
+- [ ] Test import on Development DB
+- [ ] Create Production Supabase project
+- [ ] Import real data to Production DB
+
+## 📝 Phase 1 Completed (2025-11-17)
+
+### ✅ All Backoffice Stores Migrated to Supabase
+
+**Stores:**
+
+- Products ✅
+- Menu ✅
+- Recipes ✅
+- Preparations ✅
+- Counteragents/Suppliers ✅
+- Storage ✅
+- Account ✅
+- Sales ✅
+- Recipe Write-offs ✅
+
+**Integration flows verified:**
+
+- POS → Sales → Write-off → Storage ✅
+- Supplier → Account (Purchase order → Pending payment → Transaction) ✅
+
+**Test data seeded via MCP Supabase tools**
+
+## 🔗 Related Files
+
+- **[PrepProduction.md](./PrepProduction.md)** - Production preparation strategy
+- **[BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md)** - Phase 1 migration details
+- **[PHASE2_MIGRATION.md](./PHASE2_MIGRATION.md)** - Phase 2 cleanup plan
+- **[PRIORITIES.md](./PRIORITIES.md)** - Weekly priorities
+- **[SupabaseGlobalTodo.md](./SupabaseGlobalTodo.md)** - Global roadmap
+
+---
+
+## 📅 Schedule
+
+**This Week (2025-11-18):** Phase 2 Mock Cleanup
+
+- Day 1-2: Check and remove menu/recipes/preparation mocks
+- Day 3-4: Check and remove counteragents/account mocks
+- Day 5: Clean up shared definitions and mockDataCoordinator
+- Day 6: Verify appInitializer, final testing
+
+**Next Week:** Production preparation (Google Sheets import)
+
+---
+
+**Mantra:** "Supabase-only → Clean code → Production ready"
+
+---
+
+**Last Updated:** 2025-11-18
+**Target:** v1.0 Release (after Phase 2 + Google Sheets import)
+**Status:** Phase 2 in progress (mock cleanup)
+
+---
+
       id: product.id,
       name: product.name,
       category: product.category,
@@ -128,9 +266,11 @@ export async function seedProducts() {
     } else {
       console.log(`✅ Seeded: ${product.name}`)
     }
-  }
+
 }
-```
+}
+
+````
 
 ---
 
@@ -173,7 +313,7 @@ if (require.main === module) {
     .then(() => process.exit(0))
     .catch(() => process.exit(1))
 }
-```
+````
 
 ---
 
@@ -466,7 +606,7 @@ StorageBatches (Supabase)
 
 #### Test Results
 
-**Tested transactions:**
+**Tested transactions (2025-11-17):**
 
 1. **Bintang Beer (bar)** - Rp 25,000
 
@@ -474,12 +614,16 @@ StorageBatches (Supabase)
    - Cost: Rp 12,000
    - Profit: Rp 13,000
    - Margin: 52%
+   - Payment method: Cash
+   - Department: Bar
 
 2. **Beef Steak (kitchen)** - Rp 95,000
    - Revenue: Rp 95,000
    - Cost: Rp 46,099
    - Profit: Rp 48,901
    - Margin: 51.47%
+   - Payment method: Cash
+   - Department: Kitchen
    - Write-off: 250g beef, 10ml oil, 3g salt, 2g pepper
 
 **Aggregate Statistics (from Supabase):**
@@ -490,13 +634,32 @@ StorageBatches (Supabase)
 - Total profit: Rp 61,901
 - Average margin: 51.73%
 
+**Data Flow Verified:**
+
+```
+POS Payment (✅)
+  ↓
+Sales Transaction (✅ Supabase + localStorage backup)
+  ↓ profit_calculation = {finalRevenue: 120000, ingredientsCost: 58099, profit: 61901}
+  ↓ decomposition_summary = {totalProducts: 4, totalCost: 58099}
+  ↓
+Recipe Write-off (✅ Supabase + localStorage backup)
+  ↓ write_off_items = [{beef: 250g}, {oil: 10ml}, {salt: 3g}, {pepper: 2g}]
+  ↓ decomposed_items with FIFO batch tracking
+  ↓
+Storage Operation (⏳ localStorage - migration pending)
+  ↓ FIFO batch allocation from storage_batches
+```
+
 **Key Learnings:**
 
 1. ✅ JSONB fields perfect for complex nested data (profit calculations, decompositions)
-2. ✅ Two-phase insert pattern resolves circular FK dependencies
-3. ✅ Nullable FK constraints allow gradual migration (storage ops later)
-4. ✅ Dual-write pattern provides resilience during migration
+2. ✅ Two-phase insert pattern resolves circular FK dependencies (sales_transaction ↔ recipe_write_off)
+3. ✅ Nullable FK constraints allow gradual migration (storage_operation_id has no FK until storage ops migrated)
+4. ✅ Dual-write pattern provides resilience during migration (Supabase primary, localStorage fallback)
 5. ✅ TypeScript interfaces → Supabase schema mapping critical for data integrity
+6. ✅ Recipe decomposition engine works correctly (menu → recipes → preparations → products)
+7. ✅ Profit calculation accurate (revenue - discounts - ingredient costs = profit)
 
 ---
 

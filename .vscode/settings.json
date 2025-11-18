@@ -14,6 +14,9 @@
   "[vue]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   "prettier.singleQuote": true,
   "prettier.semi": false,
   "javascript.updateImportsOnFileMove.enabled": "always",
