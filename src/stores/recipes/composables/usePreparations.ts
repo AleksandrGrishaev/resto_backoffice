@@ -76,12 +76,25 @@ export function usePreparations() {
       loading.value = true
       error.value = null
 
-      preparations.value = [...initialData]
+      // If initialData provided, use it (for testing/migration)
+      // Otherwise load from Supabase
+      if (initialData.length > 0) {
+        preparations.value = [...initialData]
+        DebugUtils.info(MODULE_NAME, '✅ Preparations initialized with provided data', {
+          total: preparations.value.length,
+          active: activePreparations.value.length
+        })
+      } else {
+        // Load from Supabase via recipesService
+        const { recipesService } = await import('../recipesService')
+        const preparationsFromSupabase = await recipesService.getAllPreparations()
+        preparations.value = preparationsFromSupabase
 
-      DebugUtils.info(MODULE_NAME, '✅ Preparations initialized', {
-        total: preparations.value.length,
-        active: activePreparations.value.length
-      })
+        DebugUtils.info(MODULE_NAME, '✅ Preparations loaded from Supabase', {
+          total: preparations.value.length,
+          active: activePreparations.value.length
+        })
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize preparations'
       error.value = message
@@ -148,13 +161,23 @@ export function usePreparations() {
       loading.value = true
       error.value = null
 
-      // Проверяем уникальность кода
-      if (checkCodeExists(data.code)) {
-        throw new Error(`Preparation with code ${data.code} already exists`)
+      // Генерируем код, если он не предоставлен
+      let code = data.code
+      if (!code) {
+        code = getNextAvailableCode(data.type)
+      } else {
+        // Проверяем уникальность кода, если он предоставлен
+        if (checkCodeExists(code)) {
+          const message = `Preparation with code ${code} already exists`
+          error.value = message
+          DebugUtils.error(MODULE_NAME, message, { code, data })
+          throw new Error(message)
+        }
       }
 
       const preparation: Preparation = {
         ...data,
+        code, // Используем сгенерированный или предоставленный код
         id: generateId(),
         isActive: true,
         costPerPortion: 0,
@@ -198,7 +221,10 @@ export function usePreparations() {
       // Проверяем уникальность кода если он изменяется
       if (data.code && data.code !== preparations.value[index].code) {
         if (checkCodeExists(data.code, id)) {
-          throw new Error(`Preparation with code ${data.code} already exists`)
+          const message = `Preparation with code ${data.code} already exists`
+          error.value = message
+          DebugUtils.error(MODULE_NAME, message, { code, id, data })
+          throw new Error(message)
         }
       }
 

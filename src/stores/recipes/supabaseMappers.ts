@@ -1,0 +1,383 @@
+// src/stores/recipes/supabaseMappers.ts
+// Mappers for Recipes ↔ Supabase conversion
+
+import type {
+  Preparation,
+  Recipe,
+  RecipeStep,
+  RecipeComponent,
+  PreparationIngredient
+} from './types'
+import type { Tables, TablesInsert, TablesUpdate } from '@/supabase/types'
+
+// =============================================
+// SUPABASE TYPES (from generated types.gen.ts)
+// =============================================
+
+export type SupabasePreparation = Tables<'preparations'>
+export type SupabasePreparationInsert = TablesInsert<'preparations'>
+export type SupabasePreparationUpdate = TablesUpdate<'preparations'>
+
+export type SupabasePreparationIngredient = Tables<'preparation_ingredients'>
+export type SupabasePreparationIngredientInsert = TablesInsert<'preparation_ingredients'>
+export type SupabasePreparationIngredientUpdate = TablesUpdate<'preparation_ingredients'>
+
+export type SupabaseRecipe = Tables<'recipes'>
+export type SupabaseRecipeInsert = TablesInsert<'recipes'>
+export type SupabaseRecipeUpdate = TablesUpdate<'recipes'>
+
+export type SupabaseRecipeComponent = Tables<'recipe_components'>
+export type SupabaseRecipeComponentInsert = TablesInsert<'recipe_components'>
+export type SupabaseRecipeComponentUpdate = TablesUpdate<'recipe_components'>
+
+export type SupabaseRecipeStep = Tables<'recipe_steps'>
+export type SupabaseRecipeStepInsert = TablesInsert<'recipe_steps'>
+export type SupabaseRecipeStepUpdate = TablesUpdate<'recipe_steps'>
+
+// =============================================
+// PREPARATION MAPPERS
+// =============================================
+
+/**
+ * Convert Preparation to Supabase INSERT format
+ * Note: Database will generate UUID for id field
+ */
+export function preparationToSupabaseInsert(preparation: Preparation): SupabasePreparationInsert {
+  return {
+    // Remove: id: preparation.id - let database generate UUID
+    name: preparation.name,
+    code: preparation.code || null, // Code is optional now
+    description: preparation.description || null,
+    type: preparation.type,
+    output_quantity: preparation.outputQuantity,
+    output_unit: preparation.outputUnit,
+    preparation_time: preparation.preparationTime || null,
+    instructions: preparation.instructions || null,
+    is_active: preparation.isActive,
+    cost_per_portion: preparation.costPerPortion || null,
+    updated_at: preparation.updatedAt
+  }
+}
+
+/**
+ * Convert Preparation to Supabase UPDATE format
+ */
+export function preparationToSupabaseUpdate(preparation: Preparation): SupabasePreparationUpdate {
+  const insert = preparationToSupabaseInsert(preparation)
+  // created_at is immutable, already omitted by type
+  return insert
+}
+
+/**
+ * Convert Supabase row to Preparation
+ *
+ * NOTE: ingredients must be loaded separately via JOIN or secondary query
+ */
+export function preparationFromSupabase(
+  row: SupabasePreparation,
+  ingredients: PreparationIngredient[] = []
+): Preparation {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code || undefined,
+    description: row.description || undefined,
+    type: row.type as any, // PreparationType
+    outputQuantity: Number(row.output_quantity),
+    outputUnit: row.output_unit as any, // MeasurementUnit
+    preparationTime: row.preparation_time || undefined,
+    instructions: row.instructions || undefined,
+    isActive: row.is_active ?? true,
+    costPerPortion: row.cost_per_portion ? Number(row.cost_per_portion) : undefined,
+    recipe: ingredients, // Ingredients from separate query
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString()
+  }
+}
+
+// =============================================
+// PREPARATION INGREDIENT MAPPERS
+// =============================================
+
+/**
+ * Convert PreparationIngredient to Supabase INSERT format
+ */
+export function preparationIngredientToSupabaseInsert(
+  ingredient: PreparationIngredient,
+  preparationId: string
+): SupabasePreparationIngredientInsert {
+  return {
+    // Remove: id: ingredient.id - let database generate UUID
+    preparation_id: preparationId,
+    type: ingredient.type,
+    product_id: ingredient.id, // ingredient.id maps to product_id
+    quantity: ingredient.quantity,
+    unit: ingredient.unit,
+    notes: ingredient.notes || null,
+    sort_order: ingredient.sortOrder || 0
+  }
+}
+
+/**
+ * Convert Supabase row to PreparationIngredient
+ */
+export function preparationIngredientFromSupabase(
+  row: SupabasePreparationIngredient
+): PreparationIngredient {
+  return {
+    id: row.product_id, // product_id maps to ingredient.id
+    type: row.type as any, // 'product' | 'preparation'
+    quantity: Number(row.quantity),
+    unit: row.unit as any, // MeasurementUnit
+    notes: row.notes || undefined,
+    sortOrder: row.sort_order || 0
+  }
+}
+
+// =============================================
+// RECIPE MAPPERS
+// =============================================
+
+/**
+ * Convert Recipe to Supabase INSERT format
+ */
+export function recipeToSupabaseInsert(recipe: Recipe): SupabaseRecipeInsert {
+  // Generate legacy_id from recipe name for backward compatibility
+  const legacy_id = `recipe-${recipe.name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 50)}`
+
+  return {
+    id: recipe.id,
+    legacy_id, // Add legacy_id for backward compatibility
+    name: recipe.name,
+    code: recipe.code || null,
+    description: recipe.description || null,
+    category: recipe.category,
+    portion_size: recipe.portionSize,
+    portion_unit: recipe.portionUnit,
+    prep_time: recipe.prepTime || null,
+    cook_time: recipe.cookTime || null,
+    difficulty: recipe.difficulty || 'medium',
+    tags: recipe.tags && recipe.tags.length > 0 ? recipe.tags : null,
+    is_active: recipe.isActive,
+    cost: recipe.cost || null,
+    updated_at: recipe.updatedAt
+  }
+}
+
+/**
+ * Convert Recipe to Supabase UPDATE format
+ */
+export function recipeToSupabaseUpdate(recipe: Recipe): SupabaseRecipeUpdate {
+  const insert = recipeToSupabaseInsert(recipe)
+  // created_at is immutable, already omitted by type
+  return insert
+}
+
+/**
+ * Convert Supabase row to Recipe
+ *
+ * NOTE: components and steps must be loaded separately via JOIN or secondary queries
+ */
+export function recipeFromSupabase(
+  row: SupabaseRecipe,
+  components: RecipeComponent[] = [],
+  steps: RecipeStep[] = []
+): Recipe {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code || undefined,
+    description: row.description || undefined,
+    category: row.category as any, // RecipeCategory
+    portionSize: Number(row.portion_size),
+    portionUnit: row.portion_unit as any, // MeasurementUnit
+    prepTime: row.prep_time || undefined,
+    cookTime: row.cook_time || undefined,
+    difficulty: row.difficulty as any, // DifficultyLevel
+    tags: row.tags || undefined,
+    isActive: row.is_active ?? true,
+    cost: row.cost ? Number(row.cost) : undefined,
+    components, // Components from separate query
+    steps, // Steps from separate query
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString()
+  }
+}
+
+// =============================================
+// RECIPE COMPONENT MAPPERS
+// =============================================
+
+/**
+ * Convert RecipeComponent to Supabase INSERT format
+ */
+export function recipeComponentToSupabaseInsert(
+  component: RecipeComponent,
+  recipeId: string
+): SupabaseRecipeComponentInsert {
+  return {
+    // Remove: id: component.id - let database generate UUID
+    recipe_id: recipeId,
+    component_id: component.componentId,
+    component_type: component.componentType,
+    quantity: component.quantity,
+    unit: component.unit,
+    preparation: component.preparation || null,
+    is_optional: component.isOptional || false,
+    notes: component.notes || null,
+    sort_order: component.sortOrder || 0
+  }
+}
+
+/**
+ * Convert Supabase row to RecipeComponent
+ */
+export function recipeComponentFromSupabase(row: SupabaseRecipeComponent): RecipeComponent {
+  return {
+    id: row.id,
+    componentId: row.component_id,
+    componentType: row.component_type as any, // 'product' | 'preparation'
+    quantity: Number(row.quantity),
+    unit: row.unit as any, // MeasurementUnit
+    preparation: row.preparation || undefined,
+    isOptional: row.is_optional || false,
+    notes: row.notes || undefined,
+    sortOrder: row.sort_order || 0
+  }
+}
+
+// =============================================
+// RECIPE STEP MAPPERS
+// =============================================
+
+/**
+ * Convert RecipeStep to Supabase INSERT format
+ */
+export function recipeStepToSupabaseInsert(
+  step: RecipeStep,
+  recipeId: string
+): SupabaseRecipeStepInsert {
+  return {
+    // Remove: id: step.id - let database generate UUID
+    recipe_id: recipeId,
+    step_number: step.stepNumber,
+    instruction: step.instruction,
+    duration: step.duration || null,
+    temperature: step.temperature || null,
+    equipment: step.equipment && step.equipment.length > 0 ? step.equipment : null
+  }
+}
+
+/**
+ * Convert Supabase row to RecipeStep
+ */
+export function recipeStepFromSupabase(row: SupabaseRecipeStep): RecipeStep {
+  return {
+    id: row.id,
+    stepNumber: row.step_number,
+    instruction: row.instruction,
+    duration: row.duration || undefined,
+    temperature: row.temperature || undefined,
+    equipment: row.equipment || undefined
+  }
+}
+
+// =============================================
+// BATCH OPERATIONS
+// =============================================
+
+/**
+ * Convert multiple preparations to Supabase format
+ */
+export function preparationsToSupabase(preparations: Preparation[]): SupabasePreparationInsert[] {
+  return preparations.map(preparationToSupabaseInsert)
+}
+
+/**
+ * Convert multiple Supabase rows to preparations
+ */
+export function preparationsFromSupabase(
+  rows: SupabasePreparation[],
+  ingredientsMap: Map<string, PreparationIngredient[]> = new Map()
+): Preparation[] {
+  return rows.map(row => preparationFromSupabase(row, ingredientsMap.get(row.id) || []))
+}
+
+/**
+ * Convert multiple preparation ingredients to Supabase format
+ */
+export function preparationIngredientsToSupabase(
+  ingredients: PreparationIngredient[],
+  preparationId: string
+): SupabasePreparationIngredientInsert[] {
+  return ingredients.map(ingredient =>
+    preparationIngredientToSupabaseInsert(ingredient, preparationId)
+  )
+}
+
+/**
+ * Convert multiple Supabase rows to preparation ingredients
+ */
+export function preparationIngredientsFromSupabase(
+  rows: SupabasePreparationIngredient[]
+): PreparationIngredient[] {
+  return rows.map(preparationIngredientFromSupabase)
+}
+
+/**
+ * Convert multiple recipes to Supabase format
+ */
+export function recipesToSupabase(recipes: Recipe[]): SupabaseRecipeInsert[] {
+  return recipes.map(recipeToSupabaseInsert)
+}
+
+/**
+ * Convert multiple Supabase rows to recipes
+ */
+export function recipesFromSupabase(
+  rows: SupabaseRecipe[],
+  componentsMap: Map<string, RecipeComponent[]> = new Map(),
+  stepsMap: Map<string, RecipeStep[]> = new Map()
+): Recipe[] {
+  return rows.map(row =>
+    recipeFromSupabase(row, componentsMap.get(row.id) || [], stepsMap.get(row.id) || [])
+  )
+}
+
+/**
+ * Convert multiple recipe components to Supabase format
+ */
+export function recipeComponentsToSupabase(
+  components: RecipeComponent[],
+  recipeId: string
+): SupabaseRecipeComponentInsert[] {
+  return components.map(component => recipeComponentToSupabaseInsert(component, recipeId))
+}
+
+/**
+ * Convert multiple Supabase rows to recipe components
+ */
+export function recipeComponentsFromSupabase(rows: SupabaseRecipeComponent[]): RecipeComponent[] {
+  return rows.map(recipeComponentFromSupabase)
+}
+
+/**
+ * Convert multiple recipe steps to Supabase format
+ */
+export function recipeStepsToSupabase(
+  steps: RecipeStep[],
+  recipeId: string
+): SupabaseRecipeStepInsert[] {
+  return steps.map(step => recipeStepToSupabaseInsert(step, recipeId))
+}
+
+/**
+ * Convert multiple Supabase rows to recipe steps
+ */
+export function recipeStepsFromSupabase(rows: SupabaseRecipeStep[]): RecipeStep[] {
+  return rows.map(recipeStepFromSupabase)
+}

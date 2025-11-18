@@ -256,7 +256,7 @@
     />
 
     <!-- Loading overlay -->
-    <v-overlay v-model="store.loading" class="align-center justify-center">
+    <v-overlay :model-value="store.loading" class="align-center justify-center" persistent>
       <v-progress-circular color="primary" indeterminate size="64" />
     </v-overlay>
 

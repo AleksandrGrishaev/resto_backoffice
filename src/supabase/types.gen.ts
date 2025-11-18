@@ -8,44 +8,251 @@ export type Database = {
   }
   public: {
     Tables: {
-      accounts: {
+      preparation_ingredients: {
         Row: {
-          balance: number
-          closed_at: string | null
-          created_at: string
-          description: string | null
           id: string
-          is_active: boolean
-          last_transaction_date: string | null
-          name: string
+          notes: string | null
+          preparation_id: string
+          product_id: string
+          quantity: number
+          sort_order: number
           type: string
-          updated_at: string
+          unit: string
         }
         Insert: {
-          balance?: number
-          closed_at?: string | null
-          created_at?: string
-          description?: string | null
           id: string
-          is_active?: boolean
-          last_transaction_date?: string | null
-          name: string
-          type: string
-          updated_at?: string
+          notes?: string | null
+          preparation_id: string
+          product_id: string
+          quantity: number
+          sort_order?: number
+          type?: string
+          unit: string
         }
         Update: {
-          balance?: number
+          id?: string
+          notes?: string | null
+          preparation_id?: string
+          product_id?: string
+          quantity?: number
+          sort_order?: number
+          type?: string
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'preparation_ingredients_preparation_id_fkey'
+            columns: ['preparation_id']
+            isOneToOne: false
+            referencedRelation: 'preparations'
+            referencedColumns: ['id']
+          }
+        ]
+      }
+      preparations: {
+        Row: {
+          closed_at: string | null
+          code: string
+          cost_per_portion: number | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          instructions: string
+          is_active: boolean
+          name: string
+          output_quantity: number
+          output_unit: string
+          preparation_time: number
+          type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
           closed_at?: string | null
+          code: string
+          cost_per_portion?: number | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id: string
+          instructions: string
+          is_active?: boolean
+          name: string
+          output_quantity: number
+          output_unit: string
+          preparation_time: number
+          type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          closed_at?: string | null
+          code?: string
+          cost_per_portion?: number | null
+          created_at?: string
+          created_by?: string | null
           description?: string | null
           id?: string
+          instructions?: string
           is_active?: boolean
-          last_transaction_date?: string | null
           name?: string
+          output_quantity?: number
+          output_unit?: string
+          preparation_time?: number
           type?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
+      }
+      recipe_components: {
+        Row: {
+          component_id: string
+          component_type: string
+          id: string
+          is_optional: boolean | null
+          notes: string | null
+          preparation: string | null
+          quantity: number
+          recipe_id: string
+          sort_order: number
+          unit: string
+        }
+        Insert: {
+          component_id: string
+          component_type: string
+          id: string
+          is_optional?: boolean | null
+          notes?: string | null
+          preparation?: string | null
+          quantity: number
+          recipe_id: string
+          sort_order?: number
+          unit: string
+        }
+        Update: {
+          component_id?: string
+          component_type?: string
+          id?: string
+          is_optional?: boolean | null
+          notes?: string | null
+          preparation?: string | null
+          quantity?: number
+          recipe_id?: string
+          sort_order?: number
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'recipe_components_recipe_id_fkey'
+            columns: ['recipe_id']
+            isOneToOne: false
+            referencedRelation: 'recipes'
+            referencedColumns: ['id']
+          }
+        ]
+      }
+      recipes: {
+        Row: {
+          category: string
+          closed_at: string | null
+          code: string | null
+          cook_time: number | null
+          cost: number | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          difficulty: string
+          id: string
+          is_active: boolean
+          name: string
+          portion_size: number
+          portion_unit: string
+          prep_time: number | null
+          tags: string[] | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          category: string
+          closed_at?: string | null
+          code?: string | null
+          cook_time?: number | null
+          cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          difficulty?: string
+          id: string
+          is_active?: boolean
+          name: string
+          portion_size: number
+          portion_unit: string
+          prep_time?: number | null
+          tags?: string[] | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          category?: string
+          closed_at?: string | null
+          code?: string | null
+          cook_time?: number | null
+          cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          difficulty?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          portion_size?: number
+          portion_unit?: string
+          prep_time?: number | null
+          tags?: string[] | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      recipe_steps: {
+        Row: {
+          duration: number | null
+          equipment: string[] | null
+          id: string
+          instruction: string
+          recipe_id: string
+          step_number: number
+          temperature: number | null
+        }
+        Insert: {
+          duration?: number | null
+          equipment?: string[] | null
+          id: string
+          instruction: string
+          recipe_id: string
+          step_number: number
+          temperature?: number | null
+        }
+        Update: {
+          duration?: number | null
+          equipment?: string[] | null
+          id?: string
+          instruction?: string
+          recipe_id?: string
+          step_number?: number
+          temperature?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'recipe_steps_recipe_id_fkey'
+            columns: ['recipe_id']
+            isOneToOne: false
+            referencedRelation: 'recipes'
+            referencedColumns: ['id']
+          }
+        ]
       }
       package_options: {
         Row: {

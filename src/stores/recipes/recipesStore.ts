@@ -12,11 +12,8 @@ import { useRecipeIntegration } from './composables/useRecipeIntegration'
 import { useMenuRecipeLinks } from './composables/useMenuRecipeLinks'
 import { useUnits } from './composables/useUnits'
 
-// Import mock data
-import { mockPreparations, mockRecipes } from './recipesMock'
-import { mockUnits } from './unitsMock'
-
-// Import legacy services for backward compatibility
+// Note: Mock imports removed - recipes now use Supabase via composables
+// Legacy services kept for backward compatibility if needed
 import {
   PreparationService,
   RecipeService,
@@ -55,11 +52,13 @@ export const useRecipesStore = defineStore('recipes', () => {
   // =============================================
   // LEGACY SERVICES (for backward compatibility)
   // =============================================
+  // Note: Legacy services initialized with empty data since mock files are removed
+  // Real data comes from Supabase via composables
 
-  const preparationService = new PreparationService(mockPreparations)
-  const recipeService = new RecipeService(mockRecipes)
+  const preparationService = new PreparationService([])
+  const recipeService = new RecipeService([])
   const menuRecipeLinkService = new MenuRecipeLinkService([])
-  const unitService = new UnitService(mockUnits)
+  const unitService = new UnitService([])
 
   // =============================================
   // STORE STATE
@@ -115,12 +114,12 @@ export const useRecipesStore = defineStore('recipes', () => {
 
       DebugUtils.info(MODULE_NAME, '🚀 Initializing Recipe Store with composables')
 
-      // 1. Инициализируем базовые данные
+      // 1. Инициализируем базовые данные из Supabase
       await Promise.all([
-        preparationsComposable.initializePreparations(mockPreparations),
-        recipesComposable.initializeRecipes(mockRecipes),
+        preparationsComposable.initializePreparations(), // Load from Supabase
+        recipesComposable.initializeRecipes(), // Load from Supabase
         menuLinksComposable.initializeMenuRecipeLinks([]),
-        unitsComposable.initializeUnits(mockUnits),
+        unitsComposable.initializeUnits(), // Load from Supabase or defaults
         costCalculationComposable.initializeCostCalculations()
       ])
 

@@ -2,6 +2,7 @@
 
 import { ref, computed } from 'vue'
 import { generateId, DebugUtils } from '@/utils'
+import { recipesService } from '../recipesService'
 import type {
   Recipe,
   CreateRecipeData,
@@ -89,12 +90,24 @@ export function useRecipes() {
       loading.value = true
       error.value = null
 
-      recipes.value = [...initialData]
+      // If initialData provided, use it (for testing/migration)
+      // Otherwise load from Supabase
+      if (initialData.length > 0) {
+        recipes.value = [...initialData]
+        DebugUtils.info(MODULE_NAME, '✅ Recipes initialized with provided data', {
+          total: recipes.value.length,
+          active: activeRecipes.value.length
+        })
+      } else {
+        // Load from Supabase via recipesService
+        const recipesFromSupabase = await recipesService.getAllRecipes()
+        recipes.value = recipesFromSupabase
 
-      DebugUtils.info(MODULE_NAME, '✅ Recipes initialized', {
-        total: recipes.value.length,
-        active: activeRecipes.value.length
-      })
+        DebugUtils.info(MODULE_NAME, '✅ Recipes loaded from Supabase', {
+          total: recipes.value.length,
+          active: activeRecipes.value.length
+        })
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize recipes'
       error.value = message
@@ -165,31 +178,19 @@ export function useRecipes() {
       loading.value = true
       error.value = null
 
-      // Проверяем уникальность кода если указан
-      if (data.code && checkCodeExists(data.code)) {
-        throw new Error(`Recipe with code ${data.code} already exists`)
-      }
+      // Use RecipesService to create recipe with UUID generation
+      const newRecipe = await recipesService.createRecipe(data)
 
-      const recipe: Recipe = {
-        ...data,
-        id: generateId(),
-        components: [],
-        instructions: [],
-        isActive: true,
-        cost: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+      // Add to local array for immediate UI update
+      recipes.value.push(newRecipe)
 
-      recipes.value.push(recipe)
-
-      DebugUtils.info(MODULE_NAME, `✅ Recipe created: ${recipe.name}`, {
-        id: recipe.id,
-        category: recipe.category,
-        code: recipe.code
+      DebugUtils.info(MODULE_NAME, `✅ Recipe created: ${newRecipe.name}`, {
+        id: newRecipe.id,
+        category: newRecipe.category,
+        code: newRecipe.code
       })
 
-      return recipe
+      return newRecipe
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create recipe'
       error.value = message
@@ -315,12 +316,12 @@ export function useRecipes() {
     const updatedRecipe = await updateRecipe(duplicatedRecipe.id, {
       components: original.components.map(comp => ({
         ...comp,
-        id: generateId() // новый ID для компонента
+        id: undefined // Remove manual ID generation - database will generate UUID
       })),
       instructions: original.instructions
         ? original.instructions.map(inst => ({
             ...inst,
-            id: generateId() // новый ID для инструкции
+            id: undefined // Remove manual ID generation - database will generate UUID
           }))
         : undefined
     })
@@ -346,7 +347,7 @@ export function useRecipes() {
 
     const newComponent: RecipeComponent = {
       ...component,
-      id: generateId()
+      id: undefined // Remove manual ID generation - database will generate UUID
     }
 
     const updatedComponents = [...recipe.components, newComponent]

@@ -17,8 +17,7 @@ export {
 export { useAccountStore } from './store'
 
 // ============ MOCK DATA ============
-export * from './mock'
-export * from './paymentMock'
+// Mock data removed - now using Supabase-only implementation
 
 // ============ TYPE ALIASES FOR BACKWARD COMPATIBILITY ============
 // Эти экспорты обеспечивают обратную совместимость с существующими импортами
