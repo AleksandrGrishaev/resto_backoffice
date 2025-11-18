@@ -125,10 +125,12 @@
         <template #[`item.items`]="{ item }">
           <div>
             <div class="font-weight-medium">
-              {{ item.items.length }} preparation{{ item.items.length !== 1 ? 's' : '' }}
+              {{ item.items?.length || 0 }} preparation{{
+                (item.items?.length || 0) !== 1 ? 's' : ''
+              }}
             </div>
             <div class="text-caption text-medium-emphasis">
-              {{ getPreparationsSummary(item.items) }}
+              {{ getPreparationsSummary(item.items || []) }}
             </div>
             <!-- Shelf Life Indicator -->
             <div v-if="hasShelfLifeIssues(item)" class="mt-1">
@@ -368,7 +370,7 @@
                     <div class="d-flex align-center justify-space-between">
                       <div class="flex-grow-1">
                         <div class="font-weight-medium">
-                          {{ item.preparationName || item.itemName }}
+                          {{ item.preparationName || item.itemName || 'Unknown preparation' }}
                         </div>
                         <div class="text-caption text-medium-emphasis">
                           {{ item.quantity }} {{ item.unit || 'g' }}

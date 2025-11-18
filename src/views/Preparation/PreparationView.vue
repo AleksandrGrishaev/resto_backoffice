@@ -108,78 +108,95 @@
     <v-tabs-window v-model="selectedTab">
       <!-- Preparations Tab -->
       <v-tabs-window-item value="preparations">
-        <div v-if="preparationBalances.length === 0 && !preparationStore.state.loading.balances">
-          <v-empty-state
-            headline="No Preparations Found"
-            title="No preparations available for this department"
-            text="Add preparations through production or check if recipes are loaded."
-          >
-            <template #actions>
-              <v-btn color="success" variant="flat" @click="showProductionDialog = true">
-                <v-icon icon="mdi-chef-hat" class="mr-2" />
-                Add Production
-              </v-btn>
-            </template>
-          </v-empty-state>
-        </div>
+        <!-- Keep-alive to prevent component destruction -->
+        <keep-alive>
+          <div>
+            <div
+              v-if="preparationBalances.length === 0 && !preparationStore.state.loading.balances"
+            >
+              <v-empty-state
+                headline="No Preparations Found"
+                title="No preparations available for this department"
+                text="Add preparations through production or check if recipes are loaded."
+              >
+                <template #actions>
+                  <v-btn color="success" variant="flat" @click="showProductionDialog = true">
+                    <v-icon icon="mdi-chef-hat" class="mr-2" />
+                    Add Production
+                  </v-btn>
+                </template>
+              </v-empty-state>
+            </div>
 
-        <!-- ✅ UPDATED: Stock Table with write-off toggle -->
-        <preparation-stock-table
-          v-else
-          :balances="preparationBalances"
-          :loading="preparationStore.state.loading.balances"
-          :department="selectedDepartment"
-          :show-zero-stock="showZeroStock"
-          @write-off="handleWriteOffFromBalance"
-          @toggle-zero-stock="toggleZeroStockFilter"
-          @refresh-needed="refreshCurrentData"
-          @add-production="showProductionDialog = true"
-        />
+            <!-- ✅ UPDATED: Stock Table with write-off toggle -->
+            <preparation-stock-table
+              v-else
+              :balances="preparationBalances"
+              :loading="preparationStore.state.loading.balances"
+              :department="selectedDepartment"
+              :show-zero-stock="showZeroStock"
+              @write-off="handleWriteOffFromBalance"
+              @toggle-zero-stock="toggleZeroStockFilter"
+              @refresh-needed="refreshCurrentData"
+              @add-production="showProductionDialog = true"
+            />
+          </div>
+        </keep-alive>
       </v-tabs-window-item>
 
       <!-- Operations Tab -->
       <v-tabs-window-item value="operations">
-        <div v-if="recentOperations.length === 0 && !preparationStore.state.loading.operations">
-          <v-empty-state
-            headline="No Operations Found"
-            title="No recent operations for this department"
-            text="Operations will appear here after production or consumption activities."
-          />
-        </div>
+        <!-- Keep-alive to prevent component destruction -->
+        <keep-alive>
+          <div>
+            <div v-if="recentOperations.length === 0 && !preparationStore.state.loading.operations">
+              <v-empty-state
+                headline="No Operations Found"
+                title="No recent operations for this department"
+                text="Operations will appear here after production or consumption activities."
+              />
+            </div>
 
-        <preparation-operations-table
-          v-else
-          :operations="recentOperations"
-          :loading="preparationStore.state.loading.operations"
-          :department="selectedDepartment"
-        />
+            <preparation-operations-table
+              v-else
+              :operations="recentOperations"
+              :loading="preparationStore.state.loading.operations"
+              :department="selectedDepartment"
+            />
+          </div>
+        </keep-alive>
       </v-tabs-window-item>
 
       <!-- Inventories Tab -->
       <v-tabs-window-item value="inventories">
-        <div v-if="recentInventories.length === 0 && !preparationStore.state.loading.inventory">
-          <v-empty-state
-            headline="No Inventories Found"
-            title="No inventory records for this department"
-            text="Start an inventory to track and correct preparation stock levels."
-          >
-            <template #actions>
-              <v-btn color="primary" variant="flat" @click="openInventoryDialog">
-                <v-icon icon="mdi-clipboard-list" class="mr-2" />
-                Start Preparation Inventory
-              </v-btn>
-            </template>
-          </v-empty-state>
-        </div>
+        <!-- Keep-alive to prevent component destruction -->
+        <keep-alive>
+          <div>
+            <div v-if="recentInventories.length === 0 && !preparationStore.state.loading.inventory">
+              <v-empty-state
+                headline="No Inventories Found"
+                title="No inventory records for this department"
+                text="Start an inventory to track and correct preparation stock levels."
+              >
+                <template #actions>
+                  <v-btn color="primary" variant="flat" @click="openInventoryDialog">
+                    <v-icon icon="mdi-clipboard-list" class="mr-2" />
+                    Start Preparation Inventory
+                  </v-btn>
+                </template>
+              </v-empty-state>
+            </div>
 
-        <preparation-inventories-table
-          v-else
-          :inventories="recentInventories"
-          :loading="preparationStore.state.loading.inventory"
-          :department="selectedDepartment"
-          @edit-inventory="handleEditInventory"
-          @start-inventory="handleStartInventory"
-        />
+            <preparation-inventories-table
+              v-else
+              :inventories="recentInventories"
+              :loading="preparationStore.state.loading.inventory"
+              :department="selectedDepartment"
+              @edit-inventory="handleEditInventory"
+              @start-inventory="handleStartInventory"
+            />
+          </div>
+        </keep-alive>
       </v-tabs-window-item>
     </v-tabs-window>
 

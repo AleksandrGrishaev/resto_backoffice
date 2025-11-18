@@ -7,8 +7,11 @@ import type {
   CreatePreparationData,
   PreparationType,
   ProductUsageInPreparation,
-  GetProductCallback
+  GetProductCallback,
+  PreparationCategoryDisplay
 } from '../types'
+import type { preparationService } from '@/stores/preparation/preparationService'
+import type { PreparationCategoryDisplay } from '@/stores/preparation/types'
 
 const MODULE_NAME = 'usePreparations'
 
@@ -18,6 +21,7 @@ const MODULE_NAME = 'usePreparations'
 
 // Global state for preparations
 const preparations = ref<Preparation[]>([])
+const categories = ref<PreparationCategoryDisplay[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
@@ -59,6 +63,8 @@ export const preparationsStats = computed(() => ({
   )
 }))
 
+export const preparationCategories = computed(() => categories.value)
+
 // =============================================
 // MAIN COMPOSABLE
 // =============================================
@@ -85,10 +91,14 @@ export function usePreparations() {
           active: activePreparations.value.length
         })
       } else {
-        // Load from Supabase via recipesService
-        const { recipesService } = await import('../recipesService')
-        const preparationsFromSupabase = await recipesService.getAllPreparations()
+        // Load from Supabase via preparationService (includes categories)
+        const { preparationService } = await import('@/stores/preparation/preparationService')
+        const preparationsFromSupabase = await preparationService.fetchPreparations()
         preparations.value = preparationsFromSupabase
+
+        // Load categories from preparationService
+        const preparationCategories = await preparationService.fetchCategories()
+        categories.value = preparationCategories
 
         DebugUtils.info(MODULE_NAME, '✅ Preparations loaded from Supabase', {
           total: preparations.value.length,
@@ -536,6 +546,7 @@ export function usePreparations() {
     activePreparations,
     preparationsByType,
     preparationsStats,
+    preparationCategories,
 
     // Setup
     initializePreparations,

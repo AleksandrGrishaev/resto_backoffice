@@ -2,6 +2,29 @@
 import { BaseEntity } from '@/types/common'
 
 export type PreparationDepartment = 'kitchen' | 'bar'
+
+// =============================================
+// PREPARATION CATEGORIES
+// =============================================
+
+export interface PreparationCategory extends BaseEntity {
+  name: string
+  key: string
+  description?: string
+  icon: string
+  emoji: string
+  color: string
+  sortOrder: number
+  isActive: boolean
+}
+
+export interface PreparationCategoryDisplay {
+  key: string
+  name: string
+  icon: string
+  emoji: string
+  color: string
+}
 // ✅ UPDATED: Added write_off operation type
 export type PreparationOperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType =
@@ -9,7 +32,7 @@ export type BatchSourceType =
   | 'correction'
   | 'opening_balance'
   | 'inventory_adjustment'
-export type BatchStatus = 'active' | 'expired' | 'consumed'
+export type BatchStatus = 'active' | 'expired' | 'consumed' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
 // ✅ NEW: Write-off Reason Types for Preparations
@@ -39,6 +62,11 @@ export interface PreparationBatch extends BaseEntity {
   notes?: string
   status: BatchStatus
   isActive: boolean
+
+  // Additional fields from Supabase
+  producedAt?: string
+  expiresAt?: string
+  createdBy?: string
 }
 
 export interface BatchAllocation {

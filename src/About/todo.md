@@ -54,6 +54,14 @@
   - Application runs successfully on http://localhost:5178/
   - Account data loads from Supabase (3 accounts, 4 transactions, 1 pending payment)
   - **Future task**: Mark acc_1 as "касса" (cash register) for POS system integration
+- ✅ **Step 6: Counteragents Mock Cleanup COMPLETED** (2025-11-18)
+  - Refactored counteragentsService.ts to Supabase-only implementation
+  - Created supabaseMappers.ts for data transformation
+  - Deleted all counteragents mock files and directory
+  - Updated mockDataCoordinator.ts to remove counteragentsMock imports
+  - Store loads 9 real counteragents from database (7 suppliers, 2 service providers)
+  - All CRUD operations work with Supabase + localStorage cache fallback
+  - Application runs successfully on http://localhost:5178/
 
 ---
 
@@ -219,17 +227,39 @@
 
 ---
 
-### Step 4: Counteragents Mock (counteragentsMock.ts)
+### Step 4: Counteragents Mock (counteragentsMock.ts) ✅ **COMPLETED** (2025-11-18)
 
 **File:** `src/stores/counteragents/mock/counteragentsMock.ts`
 **Used by:** counteragentsService.ts, index.ts, mockDataCoordinator.ts
 
-**Tasks:**
+**Tasks Completed:**
 
-- [ ] Check counteragentsService.ts - should use Supabase only
-- [ ] Check index.ts - should not export COUNTERAGENTS_MOCK
-- [ ] Remove mock file if not used
-- [ ] Delete empty mock/ directory
+- [x] ✅ Refactored counteragentsService.ts to use Supabase-only
+- [x] ✅ Removed mock exports from index.ts
+- [x] ✅ Created supabaseMappers.ts for data transformation
+- [x] ✅ Deleted mock/counteragentsMock.ts file
+- [x] ✅ Deleted entire mock/ directory
+- [x] ✅ Updated mockDataCoordinator.ts to remove counteragentsMock import
+- [x] ✅ Added deprecation notice for counteragents mock data
+
+**Results:**
+
+- ✅ CounteragentsService fully migrated to Supabase with cache fallback
+- ✅ Store loads 9 real counteragents from database (UUID primary keys)
+- ✅ All CRUD operations work with Supabase (create, read, update, delete)
+- ✅ Search, filtering, sorting implemented on database side
+- ✅ localStorage cache for offline resilience
+- ✅ Application runs successfully on http://localhost:5178/
+- ✅ No mock dependencies in counteragents store
+- ✅ Following established migration pattern (same as products, menu, accounts)
+
+**Data Flow Verification:**
+
+```
+Supabase (counteragents table) → CounteragentsService → CounteragentsStore → UI
+                                      ↓
+                               localStorage cache (5 min TTL)
+```
 
 ---
 
@@ -680,9 +710,9 @@ Use after /clean-db to reset test data.
 - [x] recipes/unitsMock.ts → seed script ✅ REMOVED (Phase 2 completed)
 - [x] recipes/recipesMock.ts → seed script ✅ REMOVED (Phase 2 completed)
 - [x] preparation/preparationMock.ts → seed script ✅ REMOVED (Phase 2 completed)
-- [ ] account/paymentMock.ts → seed script
-- [ ] account/accountBasedMock.ts → seed script
-- [ ] account/mock.ts → seed script
+- [x] account/paymentMock.ts → seed script
+- [x] account/accountBasedMock.ts → seed script
+- [x] account/mock.ts → seed script
 - [ ] counteragents/mock/counteragentsMock.ts → seed script
 - [ ] pos/mocks/posMockData.ts → keep (POS test data)
 - [ ] pos/shifts/mock.ts → keep (POS test data)

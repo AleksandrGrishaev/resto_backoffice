@@ -21,17 +21,15 @@ export { useCounteragentsStore } from './counteragentsStore'
 // Service export
 export { CounteragentsService } from './counteragentsService'
 
-// Mock data exports
+// Supabase mappers export
 export {
-  mockCounterAgents,
-  getRandomCounteragent,
-  getMockCounteragentsByType,
-  getMockCounteragentsByCategory,
-  getMockActiveCounterAgents,
-  getMockPreferredCounterAgents,
-  findCounteragentById,
-  generateMockStatistics
-} from './mock/counteragentsMock'
+  counteragentFromSupabase,
+  counteragentsFromSupabase,
+  counteragentToSupabaseInsert,
+  counteragentToSupabaseUpdate,
+  balanceHistoryEntryFromSupabase,
+  balanceHistoryEntryToSupabase
+} from './supabaseMappers'
 
 // Constants and utilities
 export const COUNTERAGENT_TYPES = {

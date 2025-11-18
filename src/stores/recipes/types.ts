@@ -2,6 +2,7 @@
 
 import { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
+import type { PreparationCategoryDisplay } from '@/stores/preparation/types'
 
 // =============================================
 // ИНТЕГРАЦИЯ С ОБНОВЛЕННОЙ ПРОДУКТОВОЙ СИСТЕМОЙ
@@ -55,6 +56,10 @@ export interface Preparation extends BaseEntity {
   description?: string
   type: PreparationType
 
+  // ✅ NEW: Category relationship
+  categoryId?: string
+  category?: PreparationCategoryDisplay
+
   // ✅ ОБНОВЛЕНО: Рецепт из продуктов с правильными единицами
   recipe: PreparationIngredient[]
 
@@ -66,6 +71,10 @@ export interface Preparation extends BaseEntity {
   instructions: string
   isActive: boolean
   costPerPortion?: number // Себестоимость за грамм/мл
+
+  // ✅ NEW: Stock management fields
+  minStock?: number // Минимальный запас в граммах/мл
+  maxStock?: number // Максимальный запас
 }
 
 /**

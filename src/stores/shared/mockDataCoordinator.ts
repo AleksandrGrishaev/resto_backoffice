@@ -17,7 +17,6 @@ import type {
   OrderSuggestion
 } from '@/stores/supplier_2/types'
 import type { StorageOperation, StorageBalance, StorageBatch } from '@/stores/storage/types'
-import { generateCounteragentsMockData } from '@/stores/counteragents/mock/counteragentsMock'
 import { DebugUtils, TimeUtils } from '@/utils'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 
@@ -399,16 +398,15 @@ export class MockDataCoordinator {
   }
 
   private loadCounteragentsData() {
-    const mockData = generateCounteragentsMockData()
-
-    DebugUtils.info(MODULE_NAME, 'Counteragents data loaded', {
-      counteragents: mockData.counteragents.length,
-      suppliers: mockData.suppliers.length
+    // ✅ DEPRECATED: Counteragents now use Supabase instead of mock data
+    // This method returns empty data as counteragents are loaded from database
+    DebugUtils.warn(MODULE_NAME, 'Counteragents mock data deprecated - using Supabase instead', {
+      recommendation: 'Use CounteragentsService.fetchCounterAgents() for real data'
     })
 
     return {
-      counteragents: mockData.counteragents,
-      suppliers: mockData.suppliers
+      counteragents: [],
+      suppliers: []
     }
   }
 

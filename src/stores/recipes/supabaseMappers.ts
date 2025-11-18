@@ -83,6 +83,7 @@ export function preparationFromSupabase(
     code: row.code || undefined,
     description: row.description || undefined,
     type: row.type as any, // PreparationType
+    categoryId: row.category_id || undefined,
     outputQuantity: Number(row.output_quantity),
     outputUnit: row.output_unit as any, // MeasurementUnit
     preparationTime: row.preparation_time || undefined,

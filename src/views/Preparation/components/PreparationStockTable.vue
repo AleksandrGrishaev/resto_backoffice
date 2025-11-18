@@ -113,7 +113,7 @@
           color="primary"
           @click:close="selectedCategory = null"
         >
-          {{ PREPARATION_CATEGORIES[selectedCategory] || selectedCategory }}
+          {{ getCategoryDisplayName(selectedCategory) }}
         </v-chip>
 
         <v-chip
@@ -385,6 +385,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
+import { usePreparations } from '@/stores/recipes/composables/usePreparations'
 import type { PreparationBalance, PreparationDepartment } from '@/stores/preparation'
 
 // Components
@@ -414,6 +415,7 @@ const emit = defineEmits<{
 
 // Store
 const recipesStore = useRecipesStore()
+const { preparationCategories } = usePreparations()
 
 // State
 const searchQuery = ref('')
@@ -428,15 +430,6 @@ const filters = ref({
 })
 
 // Preparation Categories
-const PREPARATION_CATEGORIES: Record<string, string> = {
-  sauce: 'Sauces',
-  base: 'Base Preparations',
-  garnish: 'Garnishes',
-  marinade: 'Marinades',
-  dough: 'Dough & Pastry',
-  filling: 'Fillings',
-  other: 'Other'
-}
 
 // Computed
 const headers = computed(() => [
@@ -450,7 +443,15 @@ const headers = computed(() => [
 ])
 
 const filteredBalances = computed(() => {
-  let items = [...props.balances]
+  let items = [...props.balances].filter(balance => {
+    // Filter out invalid balance objects
+    return (
+      balance &&
+      typeof balance.preparationId === 'string' &&
+      typeof balance.totalQuantity === 'number' &&
+      balance.preparationId
+    ) // Ensure preparationId exists
+  })
 
   // Apply category filter first
   if (selectedCategory.value) {
@@ -492,13 +493,15 @@ const sortedFilteredBalances = computed(() => {
     }
 
     // Secondary sort: By category
-    const categoryA = getPreparationCategory(a.preparationId)
-    const categoryB = getPreparationCategory(b.preparationId)
+    const categoryA = getPreparationCategory(a.preparationId) || 'other'
+    const categoryB = getPreparationCategory(b.preparationId) || 'other'
     const categoryCompare = categoryA.localeCompare(categoryB)
     if (categoryCompare !== 0) return categoryCompare
 
     // Tertiary sort: Alphabetical by name within each group
-    return a.preparationName.localeCompare(b.preparationName)
+    const nameA = a.preparationName || ''
+    const nameB = b.preparationName || ''
+    return nameA.localeCompare(nameB)
   })
 })
 
@@ -511,11 +514,13 @@ const hasActiveFilters = computed(
     props.showZeroStock
 )
 
-const expiringCount = computed(() => props.balances.filter(b => b.hasNearExpiry).length)
-const lowStockCount = computed(() => props.balances.filter(b => b.belowMinStock).length)
-const expiredCount = computed(() => props.balances.filter(b => b.hasExpired).length)
-const outOfStockCount = computed(() => props.balances.filter(b => b.totalQuantity <= 0).length)
-const negativeStockCount = computed(() => props.balances.filter(b => b.totalQuantity < 0).length)
+const expiringCount = computed(() => props.balances.filter(b => b && b.hasNearExpiry).length)
+const lowStockCount = computed(() => props.balances.filter(b => b && b.belowMinStock).length)
+const expiredCount = computed(() => props.balances.filter(b => b && b.hasExpired).length)
+const outOfStockCount = computed(() => props.balances.filter(b => b && b.totalQuantity <= 0).length)
+const negativeStockCount = computed(
+  () => props.balances.filter(b => b && b.totalQuantity < 0).length
+)
 
 // Category options for the filter
 const categoryOptions = computed(() => {
@@ -523,17 +528,20 @@ const categoryOptions = computed(() => {
 
   props.balances.forEach(balance => {
     const category = getPreparationCategory(balance.preparationId)
-    if (category) {
+    if (category && category !== 'other') {
       categories.add(category)
     }
   })
 
   return Array.from(categories)
     .sort()
-    .map(category => ({
-      title: PREPARATION_CATEGORIES[category] || category,
-      value: category
-    }))
+    .map(categoryKey => {
+      const category = preparationCategories.value.find(cat => cat.key === categoryKey)
+      return {
+        title: category?.name || categoryKey,
+        value: categoryKey
+      }
+    })
 })
 
 // Style helper methods
@@ -569,19 +577,9 @@ function formatDepartment(dept: PreparationDepartment): string {
 function getPreparationCategory(preparationId: string): string {
   try {
     const preparation = recipesStore.preparations.find(p => p.id === preparationId)
-    if (!preparation) return 'other'
+    if (!preparation || !preparation.category) return 'other'
 
-    // Map preparation type to category
-    const typeToCategory: Record<string, string> = {
-      sauce: 'sauce',
-      base: 'base',
-      garnish: 'garnish',
-      marinade: 'marinade',
-      dough: 'dough',
-      filling: 'filling'
-    }
-
-    return typeToCategory[preparation.type] || 'other'
+    return preparation.category.key
   } catch (error) {
     console.warn('Error getting preparation category:', error)
     return 'other'
@@ -589,8 +587,15 @@ function getPreparationCategory(preparationId: string): string {
 }
 
 function getPreparationCategoryDisplay(preparationId: string): string {
-  const category = getPreparationCategory(preparationId)
-  return PREPARATION_CATEGORIES[category] || 'Other'
+  try {
+    const preparation = recipesStore.preparations.find(p => p.id === preparationId)
+    if (!preparation || !preparation.category) return 'Other'
+
+    return preparation.category.name
+  } catch (error) {
+    console.warn('Error getting preparation category display:', error)
+    return 'Other'
+  }
 }
 
 function getPreparationType(preparationId: string): string {
@@ -603,43 +608,46 @@ function getPreparationType(preparationId: string): string {
 }
 
 function getPreparationIcon(preparationId: string): string {
-  const category = getPreparationCategory(preparationId)
-  const iconMap: Record<string, string> = {
-    sauce: '🥫',
-    base: '🍲',
-    garnish: '🌿',
-    marinade: '🧄',
-    dough: '🥐',
-    filling: '🥟',
-    other: '👨‍🍳'
+  try {
+    const preparation = recipesStore.preparations.find(p => p.id === preparationId)
+    if (!preparation || !preparation.category) return '👨‍🍳'
+
+    return preparation.category.emoji || '👨‍🍳'
+  } catch (error) {
+    console.warn('Error getting preparation icon:', error)
+    return '👨‍🍳'
   }
-  return iconMap[category] || '👨‍🍳'
 }
 
-function getCategoryIcon(category: string): string {
-  const iconMap: Record<string, string> = {
-    sauce: 'mdi-bottle-tonic',
-    base: 'mdi-pot-steam',
-    garnish: 'mdi-leaf',
-    marinade: 'mdi-food-variant',
-    dough: 'mdi-bread-slice',
-    filling: 'mdi-food-drumstick',
-    other: 'mdi-chef-hat'
+function getCategoryIcon(categoryKey: string): string {
+  try {
+    const category = preparationCategories.value.find(cat => cat.key === categoryKey)
+    return category?.icon || 'mdi-chef-hat'
+  } catch (error) {
+    console.warn('Error getting category icon:', error)
+    return 'mdi-chef-hat'
   }
-  return iconMap[category] || 'mdi-chef-hat'
 }
 
-function getCategoryColor(category: string): string {
-  const colorMap: Record<string, string> = {
-    sauce: 'red-darken-2',
-    base: 'orange-darken-2',
-    garnish: 'green-darken-2',
-    marinade: 'brown-darken-2',
-    dough: 'amber-darken-2',
-    filling: 'purple-darken-2',
-    other: 'grey-darken-2'
+function getCategoryColor(categoryKey: string): string {
+  try {
+    const category = preparationCategories.value.find(cat => cat.key === categoryKey)
+    return category?.color || 'grey-darken-2'
+  } catch (error) {
+    console.warn('Error getting category color:', error)
+    return 'grey-darken-2'
   }
-  return colorMap[category] || 'grey-darken-2'
+}
+
+function getCategoryDisplayName(categoryKey: string): string {
+  if (!categoryKey) return ''
+  try {
+    const category = preparationCategories.value.find(cat => cat.key === categoryKey)
+    return category?.name || categoryKey
+  } catch (error) {
+    console.warn('Error getting category display name:', error)
+    return categoryKey
+  }
 }
 
 function formatQuantity(quantity: number, unit: string): string {
