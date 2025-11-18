@@ -632,7 +632,7 @@ onMounted(async () => {
     // Initialize both stores
     await Promise.all([
       store.initialize(),
-      productsStore.loadProducts(true) // Use mock data
+      productsStore.loadProducts() // Use mock data
     ])
 
     // Expand all categories by default

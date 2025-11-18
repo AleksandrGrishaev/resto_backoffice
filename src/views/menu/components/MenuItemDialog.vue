@@ -1,12 +1,12 @@
 <template>
   <base-dialog
     v-model="dialogModel"
-    :title="isEdit ? 'Редактировать блюдо' : 'Добавить блюдо'"
+    :title="isEdit ? 'Edit Dish' : 'Add Dish'"
     :loading="loading"
     :disabled="!isFormValid"
     max-width="1200"
-    cancel-text="Отмена"
-    confirm-text="Сохранить"
+    cancel-text="Cancel"
+    confirm-text="Save"
     @cancel="handleCancel"
     @confirm="handleSubmit"
   >
@@ -15,11 +15,11 @@
       <v-tabs v-model="currentTab" bg-color="transparent" class="mb-4">
         <v-tab value="basic">
           <v-icon icon="mdi-information-outline" size="20" class="mr-2" />
-          Основное
+          Basic
         </v-tab>
         <v-tab value="variants">
           <v-icon icon="mdi-format-list-bulleted" size="20" class="mr-2" />
-          Варианты
+          Variants
           <v-badge
             v-if="formData.variants.length > 0"
             :content="formData.variants.length"
@@ -30,7 +30,7 @@
         </v-tab>
         <v-tab v-if="formData.dishType !== 'simple'" value="modifiers">
           <v-icon icon="mdi-puzzle-outline" size="20" class="mr-2" />
-          Модификаторы
+          Modifiers
           <v-badge
             v-if="formData.modifierGroups && formData.modifierGroups.length > 0"
             :content="formData.modifierGroups.length"
@@ -41,7 +41,7 @@
         </v-tab>
         <v-tab v-if="formData.dishType !== 'simple'" value="templates">
           <v-icon icon="mdi-content-copy" size="20" class="mr-2" />
-          Шаблоны
+          Templates
           <v-badge
             v-if="formData.templates && formData.templates.length > 0"
             :content="formData.templates.length"
@@ -62,8 +62,8 @@
               :items="categories"
               item-title="name"
               item-value="id"
-              label="Категория"
-              :rules="[v => !!v || 'Обязательное поле']"
+              label="Category"
+              :rules="[v => !!v || 'Required field']"
               hide-details="auto"
               class="mb-4"
             />
@@ -79,11 +79,11 @@
               >
                 <v-btn value="food" class="flex-grow-1">
                   <v-icon icon="mdi-silverware-fork-knife" size="20" class="mr-2" />
-                  Кухня
+                  Kitchen
                 </v-btn>
                 <v-btn value="beverage" class="flex-grow-1">
                   <v-icon icon="mdi-coffee" size="20" class="mr-2" />
-                  Бар
+                  Bar
                 </v-btn>
               </v-btn-toggle>
             </div>
@@ -97,12 +97,12 @@
               class="mb-4"
             >
               <div class="text-body-2">
-                <strong>Тип блюда:</strong>
+                <strong>Dish Type:</strong>
                 <template v-if="formData.dishType === 'component-based'">
-                  Составное блюдо (с заменяемыми компонентами)
+                  Component-based Dish (with replaceable components)
                 </template>
                 <template v-else-if="formData.dishType === 'addon-based'">
-                  Блюдо с дополнениями
+                  Dish with Add-ons
                 </template>
               </div>
             </v-alert>
@@ -110,8 +110,8 @@
             <!-- Название -->
             <v-text-field
               v-model="formData.name"
-              label="Название позиции"
-              :rules="[v => !!v || 'Обязательное поле']"
+              label="Dish Name"
+              :rules="[v => !!v || 'Required field']"
               hide-details="auto"
               class="mb-4"
             />
@@ -119,7 +119,7 @@
             <!-- Описание -->
             <v-textarea
               v-model="formData.description"
-              label="Описание"
+              label="Description"
               rows="3"
               hide-details="auto"
               class="mb-4"
@@ -134,8 +134,8 @@
                 color="primary"
                 class="w-100"
               >
-                <v-btn :value="true" class="flex-grow-1">Активно</v-btn>
-                <v-btn :value="false" class="flex-grow-1">Не активно</v-btn>
+                <v-btn :value="true" class="flex-grow-1">Active</v-btn>
+                <v-btn :value="false" class="flex-grow-1">Inactive</v-btn>
               </v-btn-toggle>
             </div>
           </div>
@@ -145,11 +145,11 @@
         <v-window-item value="variants">
           <div class="tab-content">
             <div class="variants-header d-flex align-center mb-4">
-              <div class="text-subtitle-1">Варианты блюда</div>
+              <div class="text-subtitle-1">Dish Variants</div>
               <v-spacer />
               <v-btn color="primary" variant="text" @click="addVariant">
                 <v-icon icon="mdi-plus" size="20" class="mr-2" />
-                Добавить вариант
+                Add Variant
               </v-btn>
             </div>
 
@@ -179,12 +179,12 @@
           <div class="tab-content">
             <v-alert type="info" variant="tonal" density="compact" class="mb-4">
               <div class="text-body-2">
-                Модификаторы применяются ко всем вариантам блюда.
+                Modifiers apply to all variants of the dish.
                 <template v-if="formData.dishType === 'component-based'">
-                  Используйте groupStyle="component" для замены компонентов (гарнир, соус).
+                  Use groupStyle="component" to replace components (side, sauce).
                 </template>
                 <template v-else-if="formData.dishType === 'addon-based'">
-                  Используйте groupStyle="addon" для добавления опций (топпинги, сиропы).
+                  Use groupStyle="addon" to add options (toppings, syrups).
                 </template>
               </div>
             </v-alert>
@@ -206,14 +206,14 @@
           <div class="tab-content">
             <v-alert type="info" variant="tonal" density="compact" class="mb-4">
               <div class="text-body-2">
-                Шаблоны - это предустановленные комбинации модификаторов для быстрого выбора в POS.
+                Templates are preset modifier combinations for quick selection in POS.
               </div>
             </v-alert>
 
             <!-- TODO: Создать TemplatesEditorWidget -->
             <div class="text-center py-8 text-medium-emphasis">
               <v-icon icon="mdi-content-copy" size="48" />
-              <div class="mt-2">Редактор шаблонов будет добавлен позже</div>
+              <div class="mt-2">Template editor will be added later</div>
             </div>
           </div>
         </v-window-item>
@@ -353,6 +353,11 @@ const productOptions = computed(() => {
 
   try {
     const activeProducts = productsStore.activeProducts || []
+    console.log('🔍 [MenuItemDialog] Building productOptions:', {
+      totalActiveProducts: activeProducts.length,
+      productsWithCanBeSold: activeProducts.filter(p => p.canBeSold).length
+    })
+
     activeProducts
       .filter(product => product.canBeSold) // ✅ Только продукты на прямую продажу
       .forEach(product => {
@@ -364,6 +369,8 @@ const productOptions = computed(() => {
           costPerUnit: product.baseCostPerUnit // ✅ Используем baseCostPerUnit вместо costPerUnit
         })
       })
+
+    console.log('✅ [MenuItemDialog] productOptions built:', options.length, options)
   } catch (error) {
     console.warn('Error building product options:', error)
   }
@@ -373,19 +380,19 @@ const productOptions = computed(() => {
 
 // Опции для единиц измерения
 const unitOptions = computed(() => [
-  { title: 'Граммы', value: 'gram' },
-  { title: 'Миллилитры', value: 'ml' },
-  { title: 'Штуки', value: 'piece' },
-  { title: 'Литры', value: 'liter' },
-  { title: 'Килограммы', value: 'kg' }
+  { title: 'Grams', value: 'gram' },
+  { title: 'Milliliters', value: 'ml' },
+  { title: 'Pieces', value: 'piece' },
+  { title: 'Liters', value: 'liter' },
+  { title: 'Kilograms', value: 'kg' }
 ])
 
 // Опции для ролей компонентов
 const roleOptions = computed(() => [
-  { title: 'Основное', value: 'main' },
-  { title: 'Гарнир', value: 'garnish' },
-  { title: 'Соус', value: 'sauce' },
-  { title: 'Дополнение', value: 'addon' }
+  { title: 'Main', value: 'main' },
+  { title: 'Side', value: 'garnish' },
+  { title: 'Sauce', value: 'sauce' },
+  { title: 'Add-on', value: 'addon' }
 ])
 
 const isFormValid = computed(() => {
@@ -604,7 +611,7 @@ onMounted(async () => {
     console.log('MenuItemDialog: Initializing stores...')
 
     // Загружаем продукты (используем ENV.useMockData)
-    await productsStore.loadProducts(ENV.useMockData)
+    await productsStore.loadProducts()
     console.log('MenuItemDialog: Products loaded:', productsStore.products?.length)
 
     // Инициализируем recipes store

@@ -686,7 +686,7 @@ function clearAllFilters() {
 async function forceRefresh() {
   try {
     loadingMessage.value = 'Refreshing products...'
-    await productsStore.loadProducts(true)
+    await productsStore.loadProducts()
 
     loadingMessage.value = 'Refreshing balances...'
     await storageStore.fetchBalances(props.department)

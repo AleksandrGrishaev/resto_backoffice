@@ -24,6 +24,7 @@ export type ModifierGroupStyle = 'component' | 'addon'
 export interface MenuItem extends BaseEntity {
   categoryId: string
   name: string // "Стейк с гарниром", "Пиво Bintang"
+  nameEn?: string // English name (optional)
   description?: string
   type: 'food' | 'beverage'
   department: Department // добавить это поле
@@ -34,6 +35,7 @@ export interface MenuItem extends BaseEntity {
   preparationTime?: number // в минутах
   allergens?: string[]
   tags?: string[]
+  imageUrl?: string // Menu item image
 
   // ✨ NEW: Модификаторы на уровне блюда (общие для всех вариантов)
   modifierGroups?: ModifierGroup[]

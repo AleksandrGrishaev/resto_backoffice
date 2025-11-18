@@ -9,7 +9,7 @@
     <v-card>
       <!-- Header -->
       <v-card-title class="d-flex align-center pa-4 bg-grey-lighten-4">
-        <span class="text-h5">Выберите тип блюда</span>
+        <span class="text-h5">Select Dish Type</span>
         <v-spacer />
         <v-btn icon="mdi-close" variant="text" size="small" @click="handleCancel" />
       </v-card-title>
@@ -19,7 +19,7 @@
       <!-- Content -->
       <v-card-text class="pa-6">
         <div class="text-body-1 text-grey mb-4">
-          Выберите тип блюда для настройки соответствующего интерфейса:
+          Select dish type to configure the appropriate interface:
         </div>
 
         <v-row>
@@ -41,7 +41,7 @@
                     variant="outlined"
                     class="mt-2"
                   >
-                    Рекомендуется
+                    Recommended
                   </v-chip>
                 </div>
 

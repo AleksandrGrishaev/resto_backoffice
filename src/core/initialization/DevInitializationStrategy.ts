@@ -185,7 +185,7 @@ export class DevInitializationStrategy implements InitializationStrategy {
         useMock: this.config.useMockData
       })
 
-      await store.loadProducts(this.config.useMockData)
+      await store.loadProducts()
 
       return {
         name: 'products',

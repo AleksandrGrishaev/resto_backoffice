@@ -1,7 +1,7 @@
 // stores/menu/menuService.ts
 import type { Category, MenuItem, CreateCategoryDto, CreateMenuItemDto } from './types'
-import { generateId, createTimestamp } from './types'
-import { mockCategories, mockMenuItems } from './menuMock'
+import { createTimestamp } from './types'
+import { generateId } from '@/utils/id'
 import { DebugUtils } from '@/utils'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
@@ -15,13 +15,6 @@ import {
 } from './supabaseMappers'
 
 const MODULE_NAME = 'MenuService'
-
-// In-memory хранилище для разработки
-let categoriesStore: Category[] = [...mockCategories]
-let menuItemsStore: MenuItem[] = [...mockMenuItems]
-
-// Имитация задержки сети
-const delay = (ms: number = 300) => new Promise(resolve => setTimeout(resolve, ms))
 
 // Helper: Check if Supabase is available
 function isSupabaseAvailable(): boolean {
@@ -47,8 +40,11 @@ export class CategoryService {
   // Получение активных категорий
   async getActiveCategories(): Promise<Category[]> {
     try {
-      await delay()
-      const result = categoriesStore
+      // Get all categories from Supabase
+      const allCategories = await this.getAllSorted()
+
+      // Filter active categories
+      const result = allCategories
         .filter(category => category.isActive)
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -99,14 +95,9 @@ export class CategoryService {
         return categories
       }
 
-      // Final fallback to in-memory
-      await delay()
-      const result = [...categoriesStore]
-        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-        .sort((a, b) => a.name.localeCompare(b.name))
-
-      DebugUtils.debug(MODULE_NAME, '💾 Categories loaded from in-memory', { count: result.length })
-      return result
+      // No data available - return empty array
+      DebugUtils.warn(MODULE_NAME, '⚠️ No categories found (Supabase offline and no cache)')
+      return []
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting sorted categories:', error)
       throw error
@@ -116,8 +107,8 @@ export class CategoryService {
   // Получение всех категорий (для внутреннего использования)
   async getAll(): Promise<Category[]> {
     try {
-      await delay(100)
-      return [...categoriesStore]
+      // Use getAllSorted() which handles Supabase + cache
+      return await this.getAllSorted()
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting all categories:', error)
       throw error
@@ -127,8 +118,8 @@ export class CategoryService {
   // Получение категории по ID
   async getById(id: string): Promise<Category | null> {
     try {
-      await delay(100)
-      const category = categoriesStore.find(c => c.id === id) || null
+      const allCategories = await this.getAllSorted()
+      const category = allCategories.find(c => c.id === id) || null
       DebugUtils.info(MODULE_NAME, 'Category by ID', { id, found: !!category })
       return category
     } catch (error) {
@@ -140,18 +131,19 @@ export class CategoryService {
   // Создание категории с валидацией
   async createCategory(data: CreateCategoryDto): Promise<Category> {
     try {
-      await delay()
-
       // Устанавливаем sortOrder если не указан
       let sortOrder = data.sortOrder
       if (sortOrder === undefined) {
+        const existingCategories = await this.getAllSorted()
         const maxOrder =
-          categoriesStore.length > 0 ? Math.max(...categoriesStore.map(c => c.sortOrder || 0)) : -1
+          existingCategories.length > 0
+            ? Math.max(...existingCategories.map(c => c.sortOrder || 0))
+            : -1
         sortOrder = maxOrder + 1
       }
 
       const newCategory: Category = {
-        id: generateId('cat'),
+        id: generateId(),
         name: data.name,
         description: data.description,
         sortOrder,
@@ -160,25 +152,28 @@ export class CategoryService {
         updatedAt: createTimestamp()
       }
 
-      // Dual-write: Supabase + in-memory
-      if (isSupabaseAvailable()) {
-        const { error } = await supabase
-          .from('menu_categories')
-          .insert(categoryToSupabaseInsert(newCategory))
-
-        if (error) {
-          console.error('❌ Failed to save category to Supabase:', error)
-        } else {
-          DebugUtils.info(MODULE_NAME, '✅ Category saved to Supabase', {
-            id: newCategory.id,
-            name: newCategory.name
-          })
-        }
+      // Save to Supabase only (Backoffice is online-first)
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot create category.')
       }
 
-      // Always save to in-memory for immediate UI update
-      categoriesStore.push(newCategory)
-      DebugUtils.info(MODULE_NAME, 'Category created', { category: newCategory })
+      const { error } = await supabase
+        .from('menu_categories')
+        .insert(categoryToSupabaseInsert(newCategory))
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to save category to Supabase:', error)
+        throw new Error(`Failed to create category: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Category saved to Supabase', {
+        id: newCategory.id,
+        name: newCategory.name
+      })
+
+      // Invalidate cache to force fresh read
+      localStorage.removeItem('menu_categories_cache')
+
       return newCategory
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error creating category:', error)
@@ -189,35 +184,37 @@ export class CategoryService {
   // Обновление категории
   async update(id: string, data: Partial<Category>): Promise<void> {
     try {
-      await delay()
-
-      const index = categoriesStore.findIndex(c => c.id === id)
-      if (index === -1) {
+      // Get existing category first
+      const existingCategory = await this.getById(id)
+      if (!existingCategory) {
         throw new Error(`Category with id ${id} not found`)
       }
 
       const updatedCategory = {
-        ...categoriesStore[index],
+        ...existingCategory,
         ...data,
         updatedAt: createTimestamp()
       }
 
-      // Dual-write: Supabase + in-memory
-      if (isSupabaseAvailable()) {
-        const { error } = await supabase
-          .from('menu_categories')
-          .update(categoryToSupabaseUpdate(updatedCategory))
-          .eq('id', id)
-
-        if (error) {
-          console.error('❌ Failed to update category in Supabase:', error)
-        } else {
-          DebugUtils.info(MODULE_NAME, '✅ Category updated in Supabase', { id })
-        }
+      // Update Supabase only (Backoffice is online-first)
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot update category.')
       }
 
-      categoriesStore[index] = updatedCategory
-      DebugUtils.info(MODULE_NAME, 'Category updated', { id, data })
+      const { error } = await supabase
+        .from('menu_categories')
+        .update(categoryToSupabaseUpdate(updatedCategory))
+        .eq('id', id)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to update category in Supabase:', error)
+        throw new Error(`Failed to update category: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Category updated in Supabase', { id })
+
+      // Invalidate cache to force fresh read
+      localStorage.removeItem('menu_categories_cache')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error updating category:', error)
       throw error
@@ -227,26 +224,28 @@ export class CategoryService {
   // Удаление категории
   async delete(id: string): Promise<void> {
     try {
-      await delay()
-
-      const index = categoriesStore.findIndex(c => c.id === id)
-      if (index === -1) {
+      // Verify category exists
+      const existingCategory = await this.getById(id)
+      if (!existingCategory) {
         throw new Error(`Category with id ${id} not found`)
       }
 
-      // Dual-write: Supabase + in-memory
-      if (isSupabaseAvailable()) {
-        const { error } = await supabase.from('menu_categories').delete().eq('id', id)
-
-        if (error) {
-          console.error('❌ Failed to delete category from Supabase:', error)
-        } else {
-          DebugUtils.info(MODULE_NAME, '✅ Category deleted from Supabase', { id })
-        }
+      // Delete from Supabase only (Backoffice is online-first)
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot delete category.')
       }
 
-      categoriesStore.splice(index, 1)
-      DebugUtils.info(MODULE_NAME, 'Category deleted', { id })
+      const { error } = await supabase.from('menu_categories').delete().eq('id', id)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to delete category from Supabase:', error)
+        throw new Error(`Failed to delete category: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Category deleted from Supabase', { id })
+
+      // Invalidate cache to force fresh read
+      localStorage.removeItem('menu_categories_cache')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error deleting category:', error)
       throw error
@@ -280,8 +279,8 @@ export class MenuItemService {
   // Получение позиций по категории
   async getItemsByCategory(categoryId: string): Promise<MenuItem[]> {
     try {
-      await delay()
-      const result = menuItemsStore
+      const allItems = await this.getAllSorted()
+      const result = allItems
         .filter(item => item.categoryId === categoryId)
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -297,8 +296,8 @@ export class MenuItemService {
   // Получение активных позиций
   async getActiveItems(): Promise<MenuItem[]> {
     try {
-      await delay()
-      const result = menuItemsStore
+      const allItems = await this.getAllSorted()
+      const result = allItems
         .filter(item => item.isActive)
         .sort((a, b) => a.categoryId.localeCompare(b.categoryId))
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
@@ -351,15 +350,9 @@ export class MenuItemService {
         return menuItems
       }
 
-      // Final fallback to in-memory
-      await delay()
-      const result = [...menuItemsStore]
-        .sort((a, b) => a.categoryId.localeCompare(b.categoryId))
-        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-        .sort((a, b) => a.name.localeCompare(b.name))
-
-      DebugUtils.debug(MODULE_NAME, '💾 Menu items loaded from in-memory', { count: result.length })
-      return result
+      // No data available - return empty array
+      DebugUtils.warn(MODULE_NAME, '⚠️ No menu items found (Supabase offline and no cache)')
+      return []
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting sorted items:', error)
       throw error
@@ -369,8 +362,8 @@ export class MenuItemService {
   // Получение всех позиций (для внутреннего использования)
   async getAll(): Promise<MenuItem[]> {
     try {
-      await delay(100)
-      return [...menuItemsStore]
+      // Use getAllSorted() which handles Supabase + cache
+      return await this.getAllSorted()
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting all items:', error)
       throw error
@@ -380,8 +373,8 @@ export class MenuItemService {
   // Получение позиции по ID
   async getById(id: string): Promise<MenuItem | null> {
     try {
-      await delay(100)
-      const item = menuItemsStore.find(i => i.id === id) || null
+      const allItems = await this.getAllSorted()
+      const item = allItems.find(i => i.id === id) || null
       DebugUtils.info(MODULE_NAME, 'Item by ID', { id, found: !!item })
       return item
     } catch (error) {
@@ -393,12 +386,11 @@ export class MenuItemService {
   // Создание позиции меню с валидацией
   async createMenuItem(data: CreateMenuItemDto): Promise<MenuItem> {
     try {
-      await delay()
-
       // Устанавливаем sortOrder если не указан
       let sortOrder = data.sortOrder
       if (sortOrder === undefined) {
-        const categoryItems = menuItemsStore.filter(item => item.categoryId === data.categoryId)
+        const allItems = await this.getAllSorted()
+        const categoryItems = allItems.filter(item => item.categoryId === data.categoryId)
         const maxOrder =
           categoryItems.length > 0
             ? Math.max(...categoryItems.map(item => item.sortOrder || 0))
@@ -409,13 +401,13 @@ export class MenuItemService {
       // Обрабатываем варианты - добавляем ID если отсутствует
       const processedVariants = data.variants.map((variant, index) => ({
         ...variant,
-        id: generateId('var'),
+        id: generateId(),
         isActive: variant.isActive ?? true,
         sortOrder: variant.sortOrder ?? index
       }))
 
       const newMenuItem: MenuItem = {
-        id: generateId('item'),
+        id: generateId(),
         categoryId: data.categoryId,
         name: data.name,
         description: data.description,
@@ -434,24 +426,28 @@ export class MenuItemService {
         updatedAt: createTimestamp()
       }
 
-      // Dual-write: Supabase + in-memory
-      if (isSupabaseAvailable()) {
-        const { error } = await supabase
-          .from('menu_items')
-          .insert(menuItemToSupabaseInsert(newMenuItem))
-
-        if (error) {
-          console.error('❌ Failed to save menu item to Supabase:', error)
-        } else {
-          DebugUtils.info(MODULE_NAME, '✅ Menu item saved to Supabase', {
-            id: newMenuItem.id,
-            name: newMenuItem.name
-          })
-        }
+      // Save to Supabase only (Backoffice is online-first)
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot create menu item.')
       }
 
-      menuItemsStore.push(newMenuItem)
-      DebugUtils.info(MODULE_NAME, 'Menu item created', { item: newMenuItem })
+      const { error } = await supabase
+        .from('menu_items')
+        .insert(menuItemToSupabaseInsert(newMenuItem))
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to save menu item to Supabase:', error)
+        throw new Error(`Failed to create menu item: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Menu item saved to Supabase', {
+        id: newMenuItem.id,
+        name: newMenuItem.name
+      })
+
+      // Invalidate cache to force fresh read
+      localStorage.removeItem('menu_items_cache')
+
       return newMenuItem
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error creating menu item:', error)
@@ -462,10 +458,9 @@ export class MenuItemService {
   // Обновление позиции меню
   async update(id: string, data: Partial<MenuItem>): Promise<void> {
     try {
-      await delay()
-
-      const index = menuItemsStore.findIndex(i => i.id === id)
-      if (index === -1) {
+      // Get existing menu item first
+      const existingItem = await this.getById(id)
+      if (!existingItem) {
         throw new Error(`Menu item with id ${id} not found`)
       }
 
@@ -473,33 +468,36 @@ export class MenuItemService {
       if (data.variants) {
         data.variants = data.variants.map((variant, index) => ({
           ...variant,
-          id: variant.id || generateId('var'),
+          id: variant.id || generateId(),
           sortOrder: variant.sortOrder ?? index
         }))
       }
 
       const updatedMenuItem = {
-        ...menuItemsStore[index],
+        ...existingItem,
         ...data,
         updatedAt: createTimestamp()
       }
 
-      // Dual-write: Supabase + in-memory
-      if (isSupabaseAvailable()) {
-        const { error } = await supabase
-          .from('menu_items')
-          .update(menuItemToSupabaseUpdate(updatedMenuItem))
-          .eq('id', id)
-
-        if (error) {
-          console.error('❌ Failed to update menu item in Supabase:', error)
-        } else {
-          DebugUtils.info(MODULE_NAME, '✅ Menu item updated in Supabase', { id })
-        }
+      // Update Supabase only (Backoffice is online-first)
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot update menu item.')
       }
 
-      menuItemsStore[index] = updatedMenuItem
-      DebugUtils.info(MODULE_NAME, 'Menu item updated', { id, data })
+      const { error } = await supabase
+        .from('menu_items')
+        .update(menuItemToSupabaseUpdate(updatedMenuItem))
+        .eq('id', id)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to update menu item in Supabase:', error)
+        throw new Error(`Failed to update menu item: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Menu item updated in Supabase', { id })
+
+      // Invalidate cache to force fresh read
+      localStorage.removeItem('menu_items_cache')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error updating menu item:', error)
       throw error
@@ -509,26 +507,28 @@ export class MenuItemService {
   // Удаление позиции меню
   async delete(id: string): Promise<void> {
     try {
-      await delay()
-
-      const index = menuItemsStore.findIndex(i => i.id === id)
-      if (index === -1) {
+      // Verify menu item exists
+      const existingItem = await this.getById(id)
+      if (!existingItem) {
         throw new Error(`Menu item with id ${id} not found`)
       }
 
-      // Dual-write: Supabase + in-memory
-      if (isSupabaseAvailable()) {
-        const { error } = await supabase.from('menu_items').delete().eq('id', id)
-
-        if (error) {
-          console.error('❌ Failed to delete menu item from Supabase:', error)
-        } else {
-          DebugUtils.info(MODULE_NAME, '✅ Menu item deleted from Supabase', { id })
-        }
+      // Delete from Supabase only (Backoffice is online-first)
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot delete menu item.')
       }
 
-      menuItemsStore.splice(index, 1)
-      DebugUtils.info(MODULE_NAME, 'Menu item deleted', { id })
+      const { error } = await supabase.from('menu_items').delete().eq('id', id)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to delete menu item from Supabase:', error)
+        throw new Error(`Failed to delete menu item: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Menu item deleted from Supabase', { id })
+
+      // Invalidate cache to force fresh read
+      localStorage.removeItem('menu_items_cache')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error deleting menu item:', error)
       throw error
@@ -565,10 +565,9 @@ export class MenuItemService {
   // Перемещение позиции в другую категорию
   async moveToCategory(itemId: string, newCategoryId: string): Promise<void> {
     try {
-      await delay()
-
       // Получаем новый sortOrder для новой категории
-      const categoryItems = menuItemsStore.filter(item => item.categoryId === newCategoryId)
+      const allItems = await this.getAllSorted()
+      const categoryItems = allItems.filter(item => item.categoryId === newCategoryId)
       const newSortOrder =
         categoryItems.length > 0
           ? Math.max(...categoryItems.map(item => item.sortOrder || 0)) + 1
@@ -590,31 +589,3 @@ export class MenuItemService {
 // Создаем экземпляры сервисов
 export const categoryService = new CategoryService()
 export const menuItemService = new MenuItemService()
-
-// Утилиты для тестирования и сброса данных
-export const mockUtils = {
-  // Сброс данных к начальному состоянию
-  resetData() {
-    categoriesStore = [...mockCategories]
-    menuItemsStore = [...mockMenuItems]
-    DebugUtils.info(MODULE_NAME, 'Mock data reset to initial state')
-  },
-
-  // Получение текущего состояния данных
-  getCurrentData() {
-    return {
-      categories: [...categoriesStore],
-      menuItems: [...menuItemsStore]
-    }
-  },
-
-  // Загрузка пользовательских данных
-  loadData(categories: Category[], menuItems: MenuItem[]) {
-    categoriesStore = [...categories]
-    menuItemsStore = [...menuItems]
-    DebugUtils.info(MODULE_NAME, 'Custom data loaded', {
-      categoriesCount: categories.length,
-      itemsCount: menuItems.length
-    })
-  }
-}

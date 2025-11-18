@@ -21,7 +21,20 @@
 
 - ✅ All stores migrated to Supabase (Phase 1)
 - ✅ POS keeps offline-first (localStorage + Supabase dual-write)
-- 🔄 Mock files cleanup in progress (Phase 2)
+- ✅ **Step 1: Menu Mock Cleanup COMPLETED** (2025-11-18)
+  - menuService.ts → Supabase-only
+  - UUID generation fixed
+  - dish_type constraint fixed
+  - TypeScript ↔ Supabase alignment verified
+- ✅ **Step 2: Products Store Migration COMPLETED** (2025-11-18)
+  - productsService.ts → Supabase-only
+  - 28 products loading with UUIDs
+  - localStorage cache fallback working
+  - Package options loading from Supabase
+- 🔄 **Step 3: Recipes Migration - NEXT** (Phase 2)
+  - Current issue: Recipes use mock data with old product IDs
+  - Console warnings: 50+ "Product not found" errors
+  - Need to migrate recipes to Supabase with real UUIDs
 
 ---
 
@@ -59,29 +72,76 @@
 
 ---
 
-### Step 1: Menu Mock (menuMock.ts)
+### Step 1: Menu Mock (menuMock.ts) ✅ **COMPLETED** (2025-11-18)
 
 **File:** `src/stores/menu/menuMock.ts`
 **Used by:** menuService.ts, index.ts, migrateMenuToSupabase.ts
 
 **Tasks:**
 
-- [ ] Check menuService.ts - should use Supabase only
-- [ ] Check index.ts - should not export MENU_MOCK_DATA
-- [ ] Remove menuMock.ts if not used
+- [x] Check menuService.ts - should use Supabase only ✅
+- [x] Check index.ts - should not export MENU_MOCK_DATA ✅
+- [x] Remove menuMock.ts if not used ✅
+- [x] Fix UUID generation (crypto.randomUUID) ✅
+- [x] Fix dish_type constraint mismatch ✅
+- [x] Add missing fields to MenuItem interface (nameEn, imageUrl) ✅
+
+**Results:**
+
+- ✅ menuService.ts migrated to Supabase-only (no in-memory fallback)
+- ✅ Removed mock exports from index.ts
+- ✅ Deleted menuMock.ts
+- ✅ Changed from dual-write to Supabase-first with cache fallback
+- ✅ Fixed UUID generation: now uses crypto.randomUUID() from @/utils/id
+- ✅ Fixed dish_type constraint: 'final' → 'simple' (matches TypeScript)
+- ✅ Added nameEn and imageUrl to MenuItem interface
+- ✅ Full TypeScript ↔ Supabase schema alignment verified
 
 ---
 
-### Step 2: Recipes Mocks (recipesMock.ts, unitsMock.ts)
+### Step 2: Products Store Migration ✅ **COMPLETED** (2025-11-18)
+
+**Files:** `src/stores/productsStore/productsStore.ts`, `src/stores/productsStore/productsService.ts`
+
+**Tasks:**
+
+- [x] ✅ Products Store migrated to Supabase-only (no mock data)
+- [x] ✅ Loading 28 products from Supabase successfully
+- [x] ✅ localStorage cache fallback implemented
+- [x] ✅ All mock data references removed
+- [x] ✅ Package options loading from Supabase
+
+**Results:**
+
+- ✅ Products Store verified working with Supabase
+- ✅ 28 products loaded with UUIDs (e.g., `77497b8d-a841-4631-ac73-dae4bfe5a592` for "Olive Oil")
+- ✅ No compilation errors
+- ✅ App running successfully
+
+**IMPORTANT NOTE:** Recipes Store still uses mock data and references old product IDs (`prod-olive-oil`, etc.). This causes "Product not found" warnings. Recipes migration is **Step 3** below.
+
+---
+
+### Step 3: Recipes Mocks (recipesMock.ts, unitsMock.ts)
 
 **Files:** `src/stores/recipes/recipesMock.ts`, `src/stores/recipes/unitsMock.ts`
 **Used by:** recipesStore.ts, index.ts
 
+**Current Issue:**
+
+- ❌ Recipes Store loads from `recipesMock.ts` (line 16, 120-121 in recipesStore.ts)
+- ❌ Mock recipes reference old product IDs like `prod-olive-oil`, `prod-garlic`, etc.
+- ❌ Products Store uses UUIDs like `77497b8d-a841-4631-ac73-dae4bfe5a592`
+- ❌ Console warnings: "Product not found: prod-olive-oil" (50+ warnings)
+
 **Tasks:**
 
-- [ ] Check recipesStore.ts - should use recipesService (Supabase)
+- [ ] Create recipes and preparations tables in Supabase
+- [ ] Create recipesService.ts with Supabase integration (like productsService.ts)
+- [ ] Migrate recipe data to use real product UUIDs instead of mock IDs
+- [ ] Update recipesStore.ts to load from Supabase
 - [ ] Check index.ts - should not export RECIPES_MOCK
-- [ ] Remove both mock files if not used
+- [ ] Remove both mock files after migration
 
 ---
 
@@ -234,7 +294,13 @@
 
 **This Week (2025-11-18):** Phase 2 Mock Cleanup
 
-- Day 1-2: Check and remove menu/recipes/preparation mocks
+- ✅ **Day 1 (2025-11-18):** Menu mock cleanup COMPLETED
+  - menuService.ts → Supabase-only
+  - Fixed UUID generation
+  - Fixed dish_type constraint
+  - Added missing TypeScript fields
+  - Verified full schema alignment
+- Day 2: Check and remove recipes/preparation mocks
 - Day 3-4: Check and remove counteragents/account mocks
 - Day 5: Clean up shared definitions and mockDataCoordinator
 - Day 6: Verify appInitializer, final testing

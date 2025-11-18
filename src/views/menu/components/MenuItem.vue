@@ -12,7 +12,7 @@
                 size="16"
                 class="mr-1"
               />
-              {{ item.type === 'food' ? 'Кухня' : 'Бар' }}
+              {{ item.type === 'food' ? 'Kitchen' : 'Bar' }}
             </v-chip>
 
             <!-- Индикатор типа блюда -->
@@ -49,7 +49,7 @@
         <div class="variant-item__content">
           <div class="variant-item__info">
             <div class="variant-item__name">
-              {{ variant.name ? variant.name : 'Стандартный' }}
+              {{ variant.name ? variant.name : 'Standard' }}
             </div>
 
             <!-- Композиция варианта -->
@@ -122,13 +122,13 @@ const itemTypeIndicator = computed(() => {
     if (maxComponents > 1) {
       return {
         icon: 'mdi-layers-plus',
-        label: 'Композиция',
+        label: 'Composition',
         color: 'orange'
       }
     } else {
       return {
         icon: 'mdi-chef-hat',
-        label: 'Простое',
+        label: 'Simple',
         color: 'primary'
       }
     }
@@ -182,18 +182,18 @@ function getComponentDisplayName(component: MenuComposition): string {
   // Пока возвращаем роль или тип
   if (component.role) {
     const roleNames = {
-      main: 'Основное',
-      garnish: 'Гарнир',
-      sauce: 'Соус',
-      addon: 'Добавка'
+      main: 'Main',
+      garnish: 'Side',
+      sauce: 'Sauce',
+      addon: 'Add-on'
     }
     return roleNames[component.role as keyof typeof roleNames] || component.role
   }
 
   const typeNames = {
-    product: 'Продукт',
-    recipe: 'Блюдо',
-    preparation: 'Полуфабрикат'
+    product: 'Product',
+    recipe: 'Dish',
+    preparation: 'Semi-finished'
   }
   return typeNames[component.type as keyof typeof typeNames] || component.type
 }

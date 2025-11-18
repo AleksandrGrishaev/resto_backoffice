@@ -17,4 +17,10 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
+// Global debug functions
+interface Window {
+  __PRODUCT_STORE_DEBUG__?: () => any
+  __TEST_COST_CALCULATION__?: () => any
+}
+
 export {}

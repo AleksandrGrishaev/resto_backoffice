@@ -2,11 +2,11 @@
 <template>
   <base-dialog
     v-model="dialogModel"
-    :title="isEdit ? 'Редактировать категорию' : 'Добавить категорию'"
+    :title="isEdit ? 'Edit Category' : 'Add Category'"
     :loading="loading"
     :disabled="!isFormValid"
-    cancel-text="Отмена"
-    confirm-text="Сохранить"
+    cancel-text="Cancel"
+    confirm-text="Save"
     @cancel="handleCancel"
     @confirm="handleSubmit"
   >
@@ -14,8 +14,8 @@
       <v-form ref="form" v-model="isValid" @submit.prevent="handleSubmit">
         <v-text-field
           v-model="formData.name"
-          label="Название"
-          :rules="[v => !!v || 'Обязательное поле']"
+          label="Name"
+          :rules="[v => !!v || 'Required field']"
           required
           class="mb-4"
           hide-details="auto"
@@ -23,7 +23,7 @@
 
         <v-text-field
           v-model="formData.description"
-          label="Описание"
+          label="Description"
           hide-details="auto"
           class="mb-4"
         />
@@ -36,8 +36,8 @@
             color="primary"
             class="w-100"
           >
-            <v-btn :value="true" class="flex-grow-1">Активно</v-btn>
-            <v-btn :value="false" class="flex-grow-1">Не активно</v-btn>
+            <v-btn :value="true" class="flex-grow-1">Active</v-btn>
+            <v-btn :value="false" class="flex-grow-1">Inactive</v-btn>
           </v-btn-toggle>
         </div>
       </v-form>

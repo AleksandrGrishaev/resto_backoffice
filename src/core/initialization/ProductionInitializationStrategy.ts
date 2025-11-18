@@ -211,7 +211,7 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
       // store.setProducts(products)
 
       // Сейчас используем существующий метод
-      await store.loadProducts(this.config.useMockData)
+      await store.loadProducts()
 
       return {
         name: 'products',

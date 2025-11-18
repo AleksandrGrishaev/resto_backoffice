@@ -26,7 +26,6 @@ export const useProductsStore = defineStore('products', {
     loading: false,
     error: null,
     selectedProduct: null,
-    useMockMode: false,
     filters: {
       category: 'all',
       isActive: 'all',
@@ -82,32 +81,20 @@ export const useProductsStore = defineStore('products', {
     // ОСНОВНЫЕ МЕТОДЫ (без изменений)
     // =============================================
 
-    async loadProducts(useMock = false): Promise<void> {
+    async loadProducts(): Promise<void> {
       try {
         this.loading = true
         this.error = null
-        this.useMockMode = useMock
 
-        DebugUtils.info(MODULE_NAME, '🛍️ Loading products', { useMock })
+        DebugUtils.info(MODULE_NAME, '🛍️ Loading products from Supabase')
 
-        if (useMock) {
-          // ✅ ОБНОВЛЕНО: Получаем продукты с правильной структурой базовых единиц
-          const { mockDataCoordinator } = await import('@/stores/shared')
-          const data = mockDataCoordinator.getProductsStoreData()
+        // Load from Supabase only (no mock data)
+        const { productsService } = await import('./productsService')
+        this.products = await productsService.getAll()
 
-          this.products = data.products
-
-          DebugUtils.info(MODULE_NAME, '✅ Products loaded from coordinator', {
-            products: this.products.length
-          })
-        } else {
-          // Загрузка из Firebase (пока не изменяется)
-          const { productsService } = await import('./productsService')
-          this.products = await productsService.getAll()
-          DebugUtils.info(MODULE_NAME, '✅ Products loaded from Firebase', {
-            count: this.products.length
-          })
-        }
+        DebugUtils.info(MODULE_NAME, '✅ Products loaded from Supabase', {
+          count: this.products.length
+        })
 
         if (import.meta.env.DEV) {
           this.setupDevDebugFunctions()
@@ -142,33 +129,14 @@ export const useProductsStore = defineStore('products', {
           updatedAt: now
         }
 
-        let newProduct: Product
+        // Always use productsService (Supabase-only)
+        const { productsService } = await import('./productsService')
+        const newProduct = await productsService.createProduct(data)
 
-        if (this.useMockMode) {
-          const productId = `prod-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-          // Устанавливаем правильный productId в упаковке
-          basePackage.productId = productId
-
-          newProduct = {
-            id: productId,
-            ...data,
-            isActive: data.isActive ?? true,
-            canBeSold: data.canBeSold ?? false,
-            packageOptions: [basePackage], // ✅ Добавляем базовую упаковку
-            recommendedPackageId: basePackage.id,
-            createdAt: now,
-            updatedAt: now
-          } as Product
-        } else {
-          const { productsService } = await import('./productsService')
-          newProduct = await productsService.createProduct(data)
-
-          // В реальном сервисе тоже нужно будет создавать базовую упаковку
-          basePackage.productId = newProduct.id
-          newProduct.packageOptions = [basePackage]
-          newProduct.recommendedPackageId = basePackage.id
-        }
+        // Create base package for the new product
+        basePackage.productId = newProduct.id
+        newProduct.packageOptions = [basePackage]
+        newProduct.recommendedPackageId = basePackage.id
 
         this.products.push(newProduct)
 
@@ -227,12 +195,11 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        DebugUtils.info(MODULE_NAME, 'Updating product', { data, mockMode: this.useMockMode })
+        DebugUtils.info(MODULE_NAME, 'Updating product', { data })
 
-        if (!this.useMockMode) {
-          const { productsService } = await import('./productsService')
-          await productsService.updateProduct(data)
-        }
+        // Always use productsService (Supabase-only)
+        const { productsService } = await import('./productsService')
+        await productsService.updateProduct(data)
 
         const index = this.products.findIndex(p => p.id === data.id)
         if (index !== -1) {
@@ -478,7 +445,8 @@ export const useProductsStore = defineStore('products', {
       // Определяем стоимость за базовую единицу
       const calculateBaseCost = (): number => {
         const baseUnit = getBaseUnit()
-        const oldCostPerUnit = (product as any).currentCostPerUnit || product.costPerUnit || 0
+        const oldCostPerUnit =
+          (product as any).currentCostPerUnit || (product as any).costPerUnit || 0
         const oldUnit = (product as any).unit
 
         // Если единицы уже базовые, возвращаем как есть
@@ -516,7 +484,7 @@ export const useProductsStore = defineStore('products', {
         baseUnit,
         baseCostPerUnit,
         oldUnit: (product as any).unit,
-        oldCostPerUnit: product.costPerUnit
+        oldCostPerUnit: (product as any).costPerUnit
       })
 
       return {
@@ -529,7 +497,7 @@ export const useProductsStore = defineStore('products', {
         isActive: product.isActive,
         // Сохраняем старые поля для совместимости
         unit: (product as any).unit,
-        costPerUnit: product.costPerUnit
+        costPerUnit: (product as any).costPerUnit
       }
     },
 
@@ -651,25 +619,15 @@ export const useProductsStore = defineStore('products', {
           throw new Error('Product not found')
         }
 
-        const now = new Date().toISOString()
-        const newPackage: PackageOption = {
-          id: `pkg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          ...data,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now
-        }
+        // Always use productsService (Supabase-only)
+        const { productsService } = await import('./productsService')
+        const newPackage = await productsService.addPackageOption(data)
 
-        if (!this.useMockMode) {
-          const { productsService } = await import('./productsService')
-          await productsService.addPackageOption(newPackage)
-        }
-
-        // Добавляем упаковку к продукту
+        // Добавляем упаковку к продукту в store
         const productIndex = this.products.findIndex(p => p.id === data.productId)
         if (productIndex !== -1) {
           this.products[productIndex].packageOptions.push(newPackage)
-          this.products[productIndex].updatedAt = now
+          this.products[productIndex].updatedAt = newPackage.updatedAt
         }
 
         DebugUtils.info(MODULE_NAME, 'Package option created', {
@@ -695,10 +653,9 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        if (!this.useMockMode) {
-          const { productsService } = await import('./productsService')
-          await productsService.updatePackageOption(data)
-        }
+        // Always use productsService (Supabase-only)
+        const { productsService } = await import('./productsService')
+        await productsService.updatePackageOption(data)
 
         // Обновляем упаковку в продукте
         const product = this.products.find(p => p.packageOptions.some(pkg => pkg.id === data.id))
@@ -733,10 +690,9 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        if (!this.useMockMode) {
-          const { productsService } = await import('./productsService')
-          await productsService.deletePackageOption(packageId)
-        }
+        // Always use productsService (Supabase-only)
+        const { productsService } = await import('./productsService')
+        await productsService.deletePackageOption(packageId)
 
         // Удаляем упаковку из продукта
         const product = this.products.find(p => p.id === productId)
@@ -776,10 +732,9 @@ export const useProductsStore = defineStore('products', {
           throw new Error('Package option not found')
         }
 
-        if (!this.useMockMode) {
-          const { productsService } = await import('./productsService')
-          await productsService.setRecommendedPackage(productId, packageId)
-        }
+        // Always use productsService (Supabase-only)
+        const { productsService } = await import('./productsService')
+        await productsService.setRecommendedPackage(productId, packageId)
 
         // Обновляем рекомендуемую упаковку
         const productIndex = this.products.findIndex(p => p.id === productId)

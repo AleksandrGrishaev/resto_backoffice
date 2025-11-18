@@ -65,17 +65,5 @@ export {
   createDefaultVariantTemplate
 } from './types'
 
-// Mock данные для разработки/тестирования
-export {
-  mockCategories,
-  mockMenuItems,
-  getMockCategoriesWithItems,
-  getMockItemsByCategory,
-  getMockActiveCategories,
-  getMockActiveItems,
-  findMenuItemById,
-  findCategoryById
-} from './menuMock'
-
 // Re-export для удобства
 export { useMenuStore as useMenu } from './menuStore'

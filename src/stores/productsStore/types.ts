@@ -95,13 +95,12 @@ export interface UpdatePackageOptionDto {
   notes?: string
 }
 
-// ✅ СУЩЕСТВУЮЩИЙ: ProductsState (без изменений)
+// ✅ UPDATED: ProductsState (removed useMockMode)
 export interface ProductsState {
   products: Product[]
   loading: boolean
   error: string | null
   selectedProduct: Product | null
-  useMockMode: boolean
 
   // 🆕 ENHANCED: Extended filters
   filters: {
@@ -140,10 +139,7 @@ export interface CreateProductData {
 
 export interface UpdateProductData extends Partial<CreateProductData> {
   id: string
-}
-
-export interface UpdateProductData extends Partial<CreateProductData> {
-  id: string
+  recommendedPackageId?: string
 }
 
 // Константы для категорий

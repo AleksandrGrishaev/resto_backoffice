@@ -1,81 +1,234 @@
-// src/stores/productsStore/productsService.ts - Legacy service without Firebase
+// src/stores/productsStore/productsService.ts - Supabase-only service
 
-import { ref } from 'vue'
 import type {
   Product,
   ProductCategory,
   CreateProductData,
   UpdateProductData,
   PackageOption,
+  CreatePackageOptionDto,
   UpdatePackageOptionDto
 } from './types'
-import { DebugUtils, TimeUtils } from '@/utils'
+import { DebugUtils, TimeUtils, generateId } from '@/utils'
+import { ENV } from '@/config/environment'
+import { supabase } from '@/supabase/client'
+import {
+  productToSupabaseInsert,
+  productToSupabaseUpdate,
+  productFromSupabase,
+  packageOptionToSupabaseInsert,
+  packageOptionToSupabaseUpdate,
+  packageOptionFromSupabase,
+  packageOptionsFromSupabase
+} from './supabaseMappers'
 
 const MODULE_NAME = 'ProductsService'
 
+// Helper: Check if Supabase is available
+function isSupabaseAvailable(): boolean {
+  return ENV.useSupabase && !!supabase
+}
+
+// Helper: Timeout wrapper for Supabase requests
+const SUPABASE_TIMEOUT = 5000 // 5 seconds
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number = SUPABASE_TIMEOUT
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase request timeout')), timeoutMs)
+    )
+  ])
+}
+
 /**
- * Legacy ProductsService for backward compatibility
- * Works with in-memory data (ref), no Firebase
- * In future, will delegate to Supabase or API
+ * ProductsService - Supabase-only implementation
+ * Pattern: Supabase-first with localStorage cache fallback
  */
 export class ProductsService {
-  private products = ref<Product[]>([])
-
-  constructor(initialData: Product[] = []) {
-    this.products.value = initialData
-  }
-
   // =============================================
-  // ОСНОВНЫЕ МЕТОДЫ ПРОДУКТОВ
+  // PRODUCTS - READ OPERATIONS
   // =============================================
 
+  /**
+   * Get all products with package options
+   */
   async getAll(): Promise<Product[]> {
-    return [...this.products.value]
-  }
+    try {
+      // Try Supabase first (if online)
+      if (isSupabaseAvailable()) {
+        try {
+          // Fetch products and their package options in parallel
+          const [productsResult, packagesResult] = await Promise.all([
+            withTimeout(supabase.from('products').select('*').order('name', { ascending: true })),
+            withTimeout(supabase.from('package_options').select('*'))
+          ])
 
-  async getById(id: string): Promise<Product | null> {
-    return this.products.value.find(p => p.id === id) || null
-  }
+          if (!productsResult.error && productsResult.data && !packagesResult.error) {
+            // Group package options by product_id
+            const packageOptionsMap = new Map<string, PackageOption[]>()
+            if (packagesResult.data) {
+              packagesResult.data.forEach(pkg => {
+                const productId = pkg.product_id
+                if (!packageOptionsMap.has(productId)) {
+                  packageOptionsMap.set(productId, [])
+                }
+                packageOptionsMap.get(productId)!.push(packageOptionFromSupabase(pkg))
+              })
+            }
 
-  async getActiveProducts(): Promise<Product[]> {
-    return this.products.value
-      .filter(p => p.isActive)
-      .sort((a, b) => {
-        if (a.category !== b.category) {
-          return a.category.localeCompare(b.category)
+            // Map products with their package options
+            const products = productsResult.data.map(row =>
+              productFromSupabase(row, packageOptionsMap.get(row.id) || [])
+            )
+
+            // Cache to localStorage for offline
+            localStorage.setItem('products_cache', JSON.stringify(products))
+            DebugUtils.info(MODULE_NAME, '✅ Products loaded from Supabase', {
+              count: products.length,
+              withPackages: products.filter(p => p.packageOptions.length > 0).length
+            })
+            return products
+          } else {
+            DebugUtils.error(MODULE_NAME, 'Failed to load from Supabase:', {
+              productsError: productsResult.error,
+              packagesError: packagesResult.error
+            })
+          }
+        } catch (timeoutError) {
+          DebugUtils.warn(MODULE_NAME, '⚠️ Supabase timeout or network error, using cache', {
+            error: timeoutError instanceof Error ? timeoutError.message : 'Unknown error'
+          })
         }
-        return a.name.localeCompare(b.name)
-      })
+      }
+
+      // Fallback to localStorage cache
+      const cached = localStorage.getItem('products_cache')
+      if (cached) {
+        const products = JSON.parse(cached)
+        DebugUtils.info(MODULE_NAME, '📦 Products loaded from cache', { count: products.length })
+        return products
+      }
+
+      // No data available - return empty array
+      DebugUtils.warn(MODULE_NAME, '⚠️ No products found (Supabase offline and no cache)')
+      return []
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting all products:', error)
+      throw error
+    }
   }
 
+  /**
+   * Get product by ID
+   */
+  async getById(id: string): Promise<Product | null> {
+    try {
+      const allProducts = await this.getAll()
+      const product = allProducts.find(p => p.id === id) || null
+      DebugUtils.info(MODULE_NAME, 'Product by ID', { id, found: !!product })
+      return product
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting product by ID:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get active products
+   */
+  async getActiveProducts(): Promise<Product[]> {
+    try {
+      const allProducts = await this.getAll()
+      return allProducts
+        .filter(p => p.isActive)
+        .sort((a, b) => {
+          if (a.category !== b.category) {
+            return a.category.localeCompare(b.category)
+          }
+          return a.name.localeCompare(b.name)
+        })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting active products:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get products by category
+   */
   async getProductsByCategory(category: ProductCategory): Promise<Product[]> {
-    return this.products.value
-      .filter(p => p.category === category && p.isActive)
-      .sort((a, b) => a.name.localeCompare(b.name))
+    try {
+      const allProducts = await this.getAll()
+      return allProducts
+        .filter(p => p.category === category && p.isActive)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting products by category:', error)
+      throw error
+    }
   }
 
+  /**
+   * Search products by name/description
+   */
   async searchProducts(searchTerm: string): Promise<Product[]> {
-    const term = searchTerm.toLowerCase()
-    return this.products.value.filter(
-      p =>
-        p.name.toLowerCase().includes(term) ||
-        p.nameEn?.toLowerCase().includes(term) ||
-        p.description?.toLowerCase().includes(term)
-    )
+    try {
+      const allProducts = await this.getAll()
+      const term = searchTerm.toLowerCase()
+      return allProducts.filter(
+        p =>
+          p.name.toLowerCase().includes(term) ||
+          p.nameEn?.toLowerCase().includes(term) ||
+          p.description?.toLowerCase().includes(term)
+      )
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error searching products:', error)
+      throw error
+    }
   }
 
+  /**
+   * Get products with low stock
+   */
+  async getLowStockProducts(): Promise<Product[]> {
+    try {
+      const allProducts = await this.getAll()
+      return allProducts
+        .filter(p => p.isActive && (p.minStock || 0) > 0)
+        .sort((a, b) => (a.minStock || 0) - (b.minStock || 0))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting low stock products:', error)
+      throw error
+    }
+  }
+
+  // =============================================
+  // PRODUCTS - WRITE OPERATIONS
+  // =============================================
+
+  /**
+   * Create new product
+   */
   async createProduct(data: CreateProductData): Promise<Product> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Creating product', { data })
+      DebugUtils.info(MODULE_NAME, '🛍️ Creating product', { data })
 
       if (!data.usedInDepartments || data.usedInDepartments.length === 0) {
         throw new Error('Product must be used in at least one department')
       }
 
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot create product.')
+      }
+
       const now = TimeUtils.getCurrentLocalISO()
       const newProduct: Product = {
         ...data,
-        id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: generateId(),
         packageOptions: [],
         isActive: data.isActive ?? true,
         canBeSold: data.canBeSold ?? false,
@@ -83,8 +236,21 @@ export class ProductsService {
         updatedAt: now
       }
 
-      this.products.value.push(newProduct)
-      DebugUtils.info(MODULE_NAME, 'Product created successfully', { id: newProduct.id })
+      // Insert to Supabase
+      const { error } = await supabase.from('products').insert(productToSupabaseInsert(newProduct))
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to save product to Supabase:', error)
+        throw new Error(`Failed to create product: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Product saved to Supabase', {
+        id: newProduct.id,
+        name: newProduct.name
+      })
+
+      // Invalidate cache to force fresh read
+      localStorage.removeItem('products_cache')
 
       return newProduct
     } catch (error) {
@@ -93,6 +259,9 @@ export class ProductsService {
     }
   }
 
+  /**
+   * Update existing product
+   */
   async updateProduct(data: UpdateProductData): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating product', { data })
@@ -101,156 +270,221 @@ export class ProductsService {
         throw new Error('Product must be used in at least one department')
       }
 
-      const index = this.products.value.findIndex(p => p.id === data.id)
-      if (index === -1) {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot update product.')
+      }
+
+      // Get existing product
+      const existingProduct = await this.getById(data.id)
+      if (!existingProduct) {
         throw new Error(`Product not found: ${data.id}`)
       }
 
       const { id, ...updateData } = data
-      this.products.value[index] = {
-        ...this.products.value[index],
+      const updatedProduct: Product = {
+        ...existingProduct,
         ...updateData,
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      DebugUtils.info(MODULE_NAME, 'Product updated successfully', { id })
+      // Update in Supabase
+      const { error } = await supabase
+        .from('products')
+        .update(productToSupabaseUpdate(updatedProduct))
+        .eq('id', id)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to update product in Supabase:', error)
+        throw new Error(`Failed to update product: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Product updated in Supabase', { id })
+
+      // Invalidate cache
+      localStorage.removeItem('products_cache')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error updating product', { error, data })
       throw error
     }
   }
 
+  /**
+   * Deactivate product
+   */
   async deactivateProduct(id: string): Promise<void> {
-    const product = await this.getById(id)
-    if (!product) {
-      throw new Error(`Product not found: ${id}`)
-    }
-
-    await this.updateProduct({
-      id,
-      isActive: false
-    })
+    await this.updateProduct({ id, isActive: false })
   }
 
+  /**
+   * Activate product
+   */
   async activateProduct(id: string): Promise<void> {
-    const product = await this.getById(id)
-    if (!product) {
-      throw new Error(`Product not found: ${id}`)
-    }
-
-    await this.updateProduct({
-      id,
-      isActive: true
-    })
-  }
-
-  async getLowStockProducts(): Promise<Product[]> {
-    return this.products.value
-      .filter(p => p.isActive && (p.minStock || 0) > 0)
-      .sort((a, b) => (a.minStock || 0) - (b.minStock || 0))
+    await this.updateProduct({ id, isActive: true })
   }
 
   // =============================================
-  // МЕТОДЫ РАБОТЫ С УПАКОВКАМИ
+  // PACKAGE OPTIONS - CRUD OPERATIONS
   // =============================================
 
-  async addPackageOption(packageData: PackageOption): Promise<void> {
+  /**
+   * Add package option to product
+   */
+  async addPackageOption(packageData: CreatePackageOptionDto): Promise<PackageOption> {
     try {
       DebugUtils.info(MODULE_NAME, 'Adding package option', { packageData })
 
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot add package option.')
+      }
+
+      // Verify product exists
       const product = await this.getById(packageData.productId)
       if (!product) {
         throw new Error(`Product not found: ${packageData.productId}`)
       }
 
-      const updatedPackages = [...product.packageOptions, packageData]
+      const now = TimeUtils.getCurrentLocalISO()
+      const newPackage: PackageOption = {
+        id: generateId(),
+        ...packageData,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now
+      }
 
-      await this.updateProduct({
-        id: packageData.productId,
-        packageOptions: updatedPackages
+      // Insert to Supabase
+      const { error } = await supabase
+        .from('package_options')
+        .insert(packageOptionToSupabaseInsert(newPackage))
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to save package option to Supabase:', error)
+        throw new Error(`Failed to add package option: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Package option added to Supabase', {
+        packageId: newPackage.id,
+        productId: newPackage.productId
       })
 
-      DebugUtils.info(MODULE_NAME, 'Package option added', {
-        packageId: packageData.id,
-        productId: packageData.productId
-      })
+      // Invalidate cache
+      localStorage.removeItem('products_cache')
+
+      return newPackage
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error adding package option', { error, packageData })
       throw error
     }
   }
 
+  /**
+   * Update package option
+   */
   async updatePackageOption(data: UpdatePackageOptionDto): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Updating package option', { data })
 
-      const product = this.products.value.find(p =>
-        p.packageOptions.some(pkg => pkg.id === data.id)
-      )
-
-      if (!product) {
-        throw new Error(`Package not found: ${data.id}`)
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot update package option.')
       }
 
-      const updatedPackages = product.packageOptions.map(pkg =>
-        pkg.id === data.id ? { ...pkg, ...data, updatedAt: TimeUtils.getCurrentLocalISO() } : pkg
-      )
+      // Get existing package option (from cached products)
+      const allProducts = await this.getAll()
+      const product = allProducts.find(p => p.packageOptions.some(pkg => pkg.id === data.id))
 
-      await this.updateProduct({
-        id: product.id,
-        packageOptions: updatedPackages
-      })
+      if (!product) {
+        throw new Error(`Package option not found: ${data.id}`)
+      }
 
-      DebugUtils.info(MODULE_NAME, 'Package option updated', { packageId: data.id })
+      const existingPackage = product.packageOptions.find(pkg => pkg.id === data.id)!
+      const { id, ...updateData } = data
+      const updatedPackage: PackageOption = {
+        ...existingPackage,
+        ...updateData,
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // Update in Supabase
+      const { error } = await supabase
+        .from('package_options')
+        .update(packageOptionToSupabaseUpdate(updatedPackage))
+        .eq('id', id)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to update package option in Supabase:', error)
+        throw new Error(`Failed to update package option: ${error.message}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Package option updated in Supabase', { packageId: data.id })
+
+      // Invalidate cache
+      localStorage.removeItem('products_cache')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error updating package option', { error, data })
       throw error
     }
   }
 
+  /**
+   * Delete package option
+   */
   async deletePackageOption(packageId: string): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Deleting package option', { packageId })
 
-      const product = this.products.value.find(p =>
-        p.packageOptions.some(pkg => pkg.id === packageId)
-      )
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot delete package option.')
+      }
+
+      // Find product with this package option
+      const allProducts = await this.getAll()
+      const product = allProducts.find(p => p.packageOptions.some(pkg => pkg.id === packageId))
 
       if (!product) {
-        throw new Error(`Package not found: ${packageId}`)
+        throw new Error(`Package option not found: ${packageId}`)
       }
 
       if (product.packageOptions.length <= 1) {
         throw new Error('Cannot delete the last package option')
       }
 
-      const updatedPackages = product.packageOptions.filter(pkg => pkg.id !== packageId)
+      // Delete from Supabase
+      const { error } = await supabase.from('package_options').delete().eq('id', packageId)
 
-      let updatedRecommendedId = product.recommendedPackageId
-      if (product.recommendedPackageId === packageId) {
-        updatedRecommendedId = updatedPackages[0]?.id
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to delete package option from Supabase:', error)
+        throw new Error(`Failed to delete package option: ${error.message}`)
       }
 
-      await this.updateProduct({
-        id: product.id,
-        packageOptions: updatedPackages,
-        recommendedPackageId: updatedRecommendedId
+      // If this was the recommended package, update product's recommendedPackageId
+      if (product.recommendedPackageId === packageId) {
+        const remainingPackages = product.packageOptions.filter(pkg => pkg.id !== packageId)
+        await this.setRecommendedPackage(product.id, remainingPackages[0]?.id || '')
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Package option deleted from Supabase', {
+        packageId,
+        productId: product.id
       })
 
-      DebugUtils.info(MODULE_NAME, 'Package option deleted', {
-        packageId,
-        productId: product.id,
-        remainingPackages: updatedPackages.length
-      })
+      // Invalidate cache
+      localStorage.removeItem('products_cache')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error deleting package option', { error, packageId })
       throw error
     }
   }
 
+  /**
+   * Set recommended package for product
+   */
   async setRecommendedPackage(productId: string, packageId: string): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Setting recommended package', { productId, packageId })
+
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot set recommended package.')
+      }
 
       const product = await this.getById(productId)
       if (!product) {
@@ -267,7 +501,7 @@ export class ProductsService {
         recommendedPackageId: packageId
       })
 
-      DebugUtils.info(MODULE_NAME, 'Recommended package set', { productId, packageId })
+      DebugUtils.info(MODULE_NAME, '✅ Recommended package set', { productId, packageId })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error setting recommended package', { error })
       throw error
@@ -275,5 +509,5 @@ export class ProductsService {
   }
 }
 
-// Export instance (will be initialized with mock data in store)
+// Export singleton instance
 export const productsService = new ProductsService()

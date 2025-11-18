@@ -2,7 +2,7 @@
   <div class="variant-item">
     <!-- Заголовок варианта -->
     <div class="variant-item__header d-flex align-center mb-2">
-      <div class="text-subtitle-2">Вариант {{ index + 1 }}</div>
+      <div class="text-subtitle-2">Variant {{ index + 1 }}</div>
       <v-spacer />
       <v-btn
         size="small"
@@ -20,9 +20,9 @@
       <div class="d-flex gap-2 mb-3">
         <v-text-field
           v-model="localVariant.name"
-          label="Название варианта"
+          label="Variant Name"
           hide-details="auto"
-          placeholder="Оставьте пустым если не требуется"
+          placeholder="Leave empty if not required"
           class="flex-grow-1"
           bg-color="surface"
           @update:model-value="emitUpdate"
@@ -30,10 +30,10 @@
         <v-text-field
           v-model.number="localVariant.price"
           type="number"
-          label="Цена"
+          label="Price"
           hide-details="auto"
           suffix="IDR"
-          :rules="[v => v > 0 || 'Цена должна быть больше 0']"
+          :rules="[v => v > 0 || 'Price must be greater than 0']"
           required
           style="width: 150px"
           bg-color="surface"
@@ -44,14 +44,14 @@
       <!-- Композиция -->
       <div class="composition-section">
         <div class="d-flex align-center mb-2">
-          <div class="text-subtitle-2">Состав блюда</div>
+          <div class="text-subtitle-2">Dish Composition</div>
           <v-spacer />
 
           <!-- Две кнопки для добавления -->
           <div class="d-flex gap-1">
             <v-btn size="small" variant="text" color="primary" @click="showDishSelector = true">
               <v-icon icon="mdi-chef-hat" size="16" class="mr-1" />
-              Блюдо
+              Dish
             </v-btn>
             <v-btn
               size="small"
@@ -60,7 +60,7 @@
               @click="showProductSelector = true"
             >
               <v-icon icon="mdi-package-variant" size="16" class="mr-1" />
-              Продукт
+              Product
             </v-btn>
           </div>
         </div>
@@ -70,7 +70,7 @@
           class="text-caption text-medium-emphasis mb-2 pa-3 text-center"
           style="border: 1px dashed var(--color-border); border-radius: 8px"
         >
-          Добавьте блюда или продукты для создания композитного блюда
+          Add dishes or products to create a composite dish
         </div>
 
         <!-- Список компонентов, сгруппированных по ролям -->
@@ -109,7 +109,7 @@
                 <v-text-field
                   v-model.number="component.quantity"
                   type="number"
-                  label="Кол-во"
+                  label="Qty"
                   hide-details="auto"
                   bg-color="background"
                   style="width: 100px"
@@ -120,7 +120,7 @@
                 <v-select
                   v-model="component.unit"
                   :items="unitOptions"
-                  label="Ед."
+                  label="Unit"
                   hide-details="auto"
                   bg-color="background"
                   style="width: 100px"
@@ -131,7 +131,7 @@
                 <v-select
                   v-model="component.role"
                   :items="roleOptions"
-                  label="Роль"
+                  label="Role"
                   hide-details="auto"
                   bg-color="background"
                   style="width: 120px"
@@ -158,9 +158,7 @@
 
       <!-- Предпросмотр -->
       <div class="variant-preview mt-3">
-        <div class="variant-preview__label text-caption text-medium-emphasis mb-1">
-          Предпросмотр:
-        </div>
+        <div class="variant-preview__label text-caption text-medium-emphasis mb-1">Preview:</div>
         <div class="variant-preview__content d-flex justify-space-between align-center">
           <div class="text-body-2">
             {{ getFullItemName(itemName, localVariant.name) }}
@@ -173,11 +171,11 @@
     <!-- Диалог выбора блюда -->
     <v-dialog v-model="showDishSelector" max-width="600">
       <v-card>
-        <v-card-title>Добавить блюдо</v-card-title>
+        <v-card-title>Add Dish</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="dishSearch"
-            label="Поиск блюда"
+            label="Search Dish"
             prepend-inner-icon="mdi-magnify"
             hide-details="auto"
             class="mb-3"
@@ -198,7 +196,7 @@
                 </template>
                 <v-list-item-title>{{ dish.name }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ dish.type === 'recipe' ? 'Рецепт' : 'Полуфабрикат' }} •
+                  {{ dish.type === 'recipe' ? 'Recipe' : 'Semi-finished' }} •
                   {{ dish.outputQuantity }} {{ getUnitLabel(dish.unit) }}
                 </v-list-item-subtitle>
               </v-list-item>
@@ -207,7 +205,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="showDishSelector = false">Отмена</v-btn>
+          <v-btn @click="showDishSelector = false">Cancel</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -215,11 +213,11 @@
     <!-- Диалог выбора продукта -->
     <v-dialog v-model="showProductSelector" max-width="600">
       <v-card>
-        <v-card-title>Добавить продукт</v-card-title>
+        <v-card-title>Add Product</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="productSearch"
-            label="Поиск продукта"
+            label="Search Product"
             prepend-inner-icon="mdi-magnify"
             hide-details="auto"
             class="mb-3"
@@ -247,7 +245,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="showProductSelector = false">Отмена</v-btn>
+          <v-btn @click="showProductSelector = false">Cancel</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -416,7 +414,7 @@ function getComponentName(component: MenuComposition): string {
   const product = props.productOptions.find(p => p.id === component.id)
   if (product) return product.name
 
-  return 'Неизвестный компонент'
+  return 'Unknown component'
 }
 
 function getComponentIcon(component: MenuComposition): string {
@@ -448,22 +446,22 @@ function getComponentColor(component: MenuComposition): string {
 function getComponentTypeLabel(component: MenuComposition): string {
   switch (component.type) {
     case 'recipe':
-      return 'Рецепт'
+      return 'Recipe'
     case 'preparation':
-      return 'Полуфабрикат'
+      return 'Semi-finished'
     case 'product':
-      return 'Продукт'
+      return 'Product'
     default:
-      return 'Неизвестно'
+      return 'Unknown'
   }
 }
 
 function getRoleDisplayName(role: string): string {
   const roleMap: Record<string, string> = {
-    main: 'Основное',
-    garnish: 'Гарниры',
-    sauce: 'Соусы',
-    addon: 'Дополнения'
+    main: 'Main',
+    garnish: 'Sides',
+    sauce: 'Sauces',
+    addon: 'Add-ons'
   }
   return roleMap[role] || role
 }
