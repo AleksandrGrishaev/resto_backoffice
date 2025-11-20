@@ -10,7 +10,7 @@ import type { PreparationBatch, PreparationOperation } from '../types'
 // =====================================================
 
 /**
- * Convert PreparationBatch to Supabase format (camelCase → snake_case)
+ * Convert PreparationBatch to Supabase format for INSERT (camelCase → snake_case)
  */
 export function batchToSupabase(batch: PreparationBatch): Record<string, any> {
   return {
@@ -30,6 +30,29 @@ export function batchToSupabase(batch: PreparationBatch): Record<string, any> {
     is_active: batch.isActive,
     notes: batch.notes || null,
     created_at: batch.createdAt,
+    updated_at: batch.updatedAt
+  }
+}
+
+/**
+ * Convert PreparationBatch to Supabase format for UPDATE (excludes id and created_at)
+ */
+export function batchToSupabaseUpdate(batch: PreparationBatch): Record<string, any> {
+  return {
+    batch_number: batch.batchNumber,
+    preparation_id: batch.preparationId,
+    department: batch.department,
+    initial_quantity: batch.initialQuantity,
+    current_quantity: batch.currentQuantity,
+    unit: batch.unit,
+    cost_per_unit: batch.costPerUnit,
+    total_value: batch.totalValue,
+    production_date: batch.productionDate,
+    expiry_date: batch.expiryDate || null,
+    source_type: batch.sourceType,
+    status: batch.status,
+    is_active: batch.isActive,
+    notes: batch.notes || null,
     updated_at: batch.updatedAt
   }
 }

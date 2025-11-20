@@ -5,6 +5,7 @@ import { supabase } from '@/supabase/client'
 import {
   batchFromSupabase,
   batchToSupabase,
+  batchToSupabaseUpdate,
   operationFromSupabase,
   operationToSupabase
 } from './supabase/mappers'
@@ -410,7 +411,7 @@ export class PreparationService {
         totalValue += totalCost
         totalBatchesUpdated += allocations.length
 
-        // ✅ Update batches with precision handling
+        // ✅ Update batches with precision handling AND save to Supabase
         for (const allocation of allocations) {
           const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
           if (batchIndex !== -1) {
@@ -424,15 +425,28 @@ export class PreparationService {
             if (batch.currentQuantity <= 0.0001) {
               batch.currentQuantity = 0
               batch.totalValue = 0
-              batch.status = 'consumed'
+              batch.status = 'depleted'
               batch.isActive = false
 
-              DebugUtils.info(MODULE_NAME, 'Preparation batch marked as consumed', {
+              DebugUtils.info(MODULE_NAME, 'Preparation batch marked as depleted', {
                 batchId: batch.id,
                 batchNumber: batch.batchNumber,
                 originalQuantity: batch.initialQuantity,
                 finalQuantity: batch.currentQuantity
               })
+            }
+
+            // ✅ UPDATE batch in Supabase
+            const { error: batchUpdateError } = await supabase
+              .from('preparation_batches')
+              .update(batchToSupabaseUpdate(batch))
+              .eq('id', batch.id)
+
+            if (batchUpdateError) {
+              DebugUtils.error(MODULE_NAME, 'Failed to update batch in Supabase', {
+                batchUpdateError
+              })
+              throw batchUpdateError
             }
 
             this.batches[batchIndex] = batch
@@ -441,7 +455,7 @@ export class PreparationService {
       }
 
       const operation: PreparationOperation = {
-        id: `prep-op-${Date.now()}`,
+        id: crypto.randomUUID(),
         operationType: 'write_off',
         documentNumber: `PREP-WR-${String(this.operations.length + 1).padStart(3, '0')}`,
         operationDate: TimeUtils.getCurrentLocalISO(),
@@ -458,6 +472,18 @@ export class PreparationService {
         notes: data.notes,
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // ✅ INSERT operation into Supabase
+      const { error: operationError } = await supabase
+        .from('preparation_operations')
+        .insert(operationToSupabase(operation))
+
+      if (operationError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert operation into Supabase', {
+          operationError
+        })
+        throw operationError
       }
 
       this.operations.push(operation)
@@ -703,7 +729,7 @@ export class PreparationService {
         if (item.quantity > 0) {
           // Positive correction (surplus) - create new batch
           const batch: PreparationBatch = {
-            id: `prep-batch-corr-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: crypto.randomUUID(),
             batchNumber: this.generateBatchNumber(
               preparationInfo.name,
               TimeUtils.getCurrentLocalISO()
@@ -722,6 +748,16 @@ export class PreparationService {
             isActive: true,
             createdAt: TimeUtils.getCurrentLocalISO(),
             updatedAt: TimeUtils.getCurrentLocalISO()
+          }
+
+          // ✅ INSERT new batch into Supabase
+          const { error: batchError } = await supabase
+            .from('preparation_batches')
+            .insert(batchToSupabase(batch))
+
+          if (batchError) {
+            DebugUtils.error(MODULE_NAME, 'Failed to insert batch into Supabase', { batchError })
+            throw batchError
           }
 
           this.batches.push(batch)
@@ -746,7 +782,7 @@ export class PreparationService {
             0
           )
 
-          // Update batches with proper precision
+          // Update batches with proper precision AND save to Supabase
           for (const allocation of allocations) {
             const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
             if (batchIndex !== -1) {
@@ -760,8 +796,21 @@ export class PreparationService {
               if (batch.currentQuantity <= 0.0001) {
                 batch.currentQuantity = 0
                 batch.totalValue = 0
-                batch.status = 'consumed'
+                batch.status = 'depleted'
                 batch.isActive = false
+              }
+
+              // ✅ UPDATE batch in Supabase
+              const { error: batchUpdateError } = await supabase
+                .from('preparation_batches')
+                .update(batchToSupabaseUpdate(batch))
+                .eq('id', batch.id)
+
+              if (batchUpdateError) {
+                DebugUtils.error(MODULE_NAME, 'Failed to update batch in Supabase', {
+                  batchUpdateError
+                })
+                throw batchUpdateError
               }
 
               this.batches[batchIndex] = batch
@@ -783,7 +832,7 @@ export class PreparationService {
       }
 
       const operation: PreparationOperation = {
-        id: `prep-op-${Date.now()}`,
+        id: crypto.randomUUID(),
         operationType: 'correction',
         documentNumber: `PREP-COR-${String(this.operations.length + 1).padStart(3, '0')}`,
         operationDate: TimeUtils.getCurrentLocalISO(),
@@ -796,6 +845,18 @@ export class PreparationService {
         notes: data.notes,
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // ✅ INSERT operation into Supabase
+      const { error: operationError } = await supabase
+        .from('preparation_operations')
+        .insert(operationToSupabase(operation))
+
+      if (operationError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert operation into Supabase', {
+          operationError
+        })
+        throw operationError
       }
 
       this.operations.push(operation)
@@ -1146,39 +1207,9 @@ export class PreparationService {
         this.balances.push(balance)
       }
 
-      // Add preparations without stock
-      if (departmentPreparations.length > 0) {
-        for (const preparation of departmentPreparations) {
-          const preparationId = preparation.id
-
-          if (preparationGroups.has(preparationId)) {
-            continue
-          }
-
-          const actualBalance = Math.round((actualBalances.get(preparationId) || 0) * 10000) / 10000
-
-          const balance: PreparationBalance = {
-            preparationId,
-            preparationName: preparation.name,
-            department,
-            totalQuantity: actualBalance,
-            unit: preparation.outputUnit || 'gram',
-            totalValue: actualBalance > 0 ? actualBalance * (preparation.costPerPortion || 0) : 0,
-            averageCost: preparation.costPerPortion || 0,
-            latestCost: preparation.costPerPortion || 0,
-            costTrend: 'stable',
-            batches: [],
-            oldestBatchDate: '',
-            newestBatchDate: '',
-            hasExpired: false,
-            hasNearExpiry: false,
-            belowMinStock: true,
-            lastCalculated: TimeUtils.getCurrentLocalISO()
-          }
-
-          this.balances.push(balance)
-        }
-      }
+      // ✅ REMOVED: Don't add preparations without stock
+      // Only show preparations that have or had batches in this department
+      // This prevents showing all catalog preparations as zero-stock balances
 
       // Add preparations that have consumed batches but aren't in catalog
       const allBatchPreparations = new Set<string>()

@@ -9,7 +9,7 @@ export type BatchSourceType =
   | 'correction'
   | 'opening_balance'
   | 'inventory_adjustment'
-export type BatchStatus = 'active' | 'expired' | 'consumed'
+export type BatchStatus = 'active' | 'expired' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
 // ✅ NEW: Write-off Reason Types for Preparations
