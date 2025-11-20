@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# claude - Standard Claude Sonnet wrapper
+# Clears Z.AI environment to use standard Claude
+
+# Clear Z.AI environment variables to ensure standard Claude usage
+unset ANTHROPIC_AUTH_TOKEN
+unset ANTHROPIC_BASE_URL
+unset ANTHROPIC_DEFAULT_SONNET_MODEL
+unset ANTHROPIC_DEFAULT_OPUS_MODEL
+unset ANTHROPIC_DEFAULT_HAIKU_MODEL
+unset Z_AI_API_KEY
+
+# Execute claude with all passed arguments
+exec claude "$@"
