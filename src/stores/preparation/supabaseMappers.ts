@@ -6,7 +6,6 @@ import type {
   PreparationIngredient,
   PreparationBatch,
   PreparationOperation,
-  PreparationBalance,
   CreatePreparationReceiptData,
   CreatePreparationCorrectionData,
   CreatePreparationWriteOffData,
@@ -80,17 +79,6 @@ export interface PreparationOperationRow {
   performed_at: string
   performed_by: string | null
   created_at: string
-}
-
-export interface PreparationBalanceRow {
-  id: string
-  preparation_id: string
-  department: string
-  current_quantity: number
-  unit: string
-  average_cost: number | null
-  last_updated: string
-  last_operation_at: string | null
 }
 
 // =============================================
@@ -298,31 +286,6 @@ export function preparationOperationToSupabaseInsert(
 }
 
 // =============================================
-// BALANCE MAPPERS
-// =============================================
-
-export function preparationBalanceFromSupabase(row: PreparationBalanceRow): PreparationBalance {
-  return {
-    preparationId: row.preparation_id,
-    preparationName: '', // Will be filled by store/layer above
-    department: row.department as PreparationDepartment,
-    totalQuantity: row.current_quantity,
-    unit: row.unit,
-    totalValue: row.current_quantity * (row.average_cost || 0),
-    averageCost: row.average_cost || 0,
-    latestCost: row.average_cost || 0,
-    costTrend: 'stable',
-    batches: [], // Will be loaded separately
-    oldestBatchDate: row.last_updated,
-    newestBatchDate: row.last_updated,
-    hasExpired: false, // Will be calculated from batches
-    hasNearExpiry: false, // Will be calculated from batches
-    belowMinStock: false, // Will be calculated from preparation settings
-    lastCalculated: row.last_updated
-  }
-}
-
-// =============================================
 // UTILITY FUNCTIONS
 // =============================================
 
@@ -344,12 +307,6 @@ export function preparationOperationsFromSupabase(
   rows: PreparationOperationRow[]
 ): PreparationOperation[] {
   return rows.map(preparationOperationFromSupabase)
-}
-
-export function preparationBalancesFromSupabase(
-  rows: PreparationBalanceRow[]
-): PreparationBalance[] {
-  return rows.map(preparationBalanceFromSupabase)
 }
 
 export function generateBatchNumber(): string {

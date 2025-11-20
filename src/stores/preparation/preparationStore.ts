@@ -401,22 +401,27 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      const correctionOperations = await preparationService.finalizeInventory(inventoryId)
-
+      // Find the inventory document
       const inventoryIndex = state.value.inventories.findIndex(inv => inv.id === inventoryId)
-      if (inventoryIndex !== -1) {
-        state.value.inventories[inventoryIndex].status = 'confirmed'
+      if (inventoryIndex === -1) {
+        throw new Error('Inventory document not found')
       }
 
+      const inventory = state.value.inventories[inventoryIndex]
+
+      // Pass the full inventory document to the service
+      const correctionOperations = await preparationService.finalizeInventory(inventory)
+
+      // Update inventory status
+      state.value.inventories[inventoryIndex].status = 'confirmed'
+
+      // Add correction operations to state
       correctionOperations.forEach(op => {
         state.value.operations.unshift(op)
       })
 
-      // ✅ FIXED: After inventory finalization, sync all data including batches
-      const inventory = state.value.inventories[inventoryIndex]
-      if (inventory) {
-        await fetchBalances(inventory.department)
-      }
+      // Refresh balances after finalization
+      await fetchBalances(inventory.department)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to finalize preparation inventory'

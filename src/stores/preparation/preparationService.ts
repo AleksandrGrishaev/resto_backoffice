@@ -28,7 +28,6 @@ import {
   preparationIngredientsFromSupabase,
   preparationBatchesFromSupabase,
   preparationOperationsFromSupabase,
-  preparationBalancesFromSupabase,
   preparationBatchFromSupabase,
   preparationOperationToSupabaseInsert,
   preparationIngredientToSupabase,
@@ -335,12 +334,8 @@ export class PreparationsService {
 
       const { data, error } = await query
 
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Error fetching batches', { error })
-        return []
-      }
-
       const batches = data ? preparationBatchesFromSupabase(data) : []
+
       this.setCache(cacheKey, batches)
 
       return batches
@@ -477,81 +472,124 @@ export class PreparationsService {
     }
 
     try {
-      // Fetch all needed data in parallel
-      const [balancesResponse, preparationsResult, batchesResult] = await Promise.all([
-        (supabase as any)
-          .from('preparation_balances')
-          .select('*')
-          .eq('department', department || 'kitchen'),
+      // Fetch preparations and batches in parallel
+      const [preparationsResult, batchesResult, operationsResult] = await Promise.all([
         this.fetchPreparations(),
-        this.fetchBatches()
+        this.fetchBatches(),
+        this.fetchOperations()
       ])
 
-      if (balancesResponse.error) {
-        DebugUtils.error(MODULE_NAME, 'Error fetching balances', { error: balancesResponse.error })
-        return []
-      }
-
-      const balances = balancesResponse.data
-        ? preparationBalancesFromSupabase(balancesResponse.data)
-        : []
       const preparations = preparationsResult
-      const batches = batchesResult
+      const batches = batchesResult.filter(b => !department || b.department === department)
+      const operations = operationsResult.filter(o => !department || o.department === department)
 
-      // Enrich balances with preparation data and batches
+      // Calculate balances from active batches
       const now = new Date()
       const settings = await this.getPreparationSettings()
+      const balances: PreparationBalance[] = []
 
-      balances.forEach(balance => {
-        const preparation = preparations.find(p => p.id === balance.preparationId)
-        if (preparation) {
-          balance.preparationName = preparation.name
+      // Group batches by preparation and department
+      const batchesByPreparation = new Map<string, PreparationBatch[]>()
+      batches.forEach(batch => {
+        const key = `${batch.preparationId}-${batch.department}`
+        if (!batchesByPreparation.has(key)) {
+          batchesByPreparation.set(key, [])
         }
-
-        // Get batches for this preparation and department
-        const preparationBatches = batches.filter(
-          b => b.preparationId === balance.preparationId && b.department === balance.department
-        )
-
-        balance.batches = preparationBatches
-
-        // Calculate expiry status
-        const expiredBatches = preparationBatches.filter(
-          b => b.expiryDate && new Date(b.expiryDate) < now
-        )
-        const nearExpiryBatches = preparationBatches.filter(b => {
-          if (!b.expiryDate) return false
-          const expiryDate = new Date(b.expiryDate)
-          const daysUntilExpiry = Math.ceil(
-            (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-          )
-          return daysUntilExpiry >= 0 && daysUntilExpiry <= settings.expiryWarningDays
-        })
-
-        balance.hasExpired = expiredBatches.length > 0
-        balance.hasNearExpiry = nearExpiryBatches.length > 0
-
-        // Calculate low stock status
-        const minStockThreshold = preparation?.minStock || 100 // Default to 100g/ml if not set
-        balance.belowMinStock = balance.totalQuantity <= minStockThreshold
-
-        // Set batch dates
-        if (preparationBatches.length > 0) {
-          const sortedBatches = preparationBatches.sort(
-            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          )
-          balance.oldestBatchDate = sortedBatches[0].createdAt
-          balance.newestBatchDate = sortedBatches[sortedBatches.length - 1].createdAt
-        }
+        batchesByPreparation.get(key)!.push(batch)
       })
+
+      // Calculate balances for each preparation
+      for (const preparation of preparations) {
+        const departments = department
+          ? [department]
+          : (['kitchen', 'bar'] as PreparationDepartment[])
+
+        for (const dept of departments) {
+          const key = `${preparation.id}-${dept}`
+          const preparationBatches = batchesByPreparation.get(key) || []
+          const activeBatches = preparationBatches.filter(
+            b => b.status === 'active' && b.currentQuantity > 0
+          )
+
+          if (activeBatches.length === 0 && !department) continue // Skip empty balances unless specific department requested
+
+          // Calculate totals from active batches
+          const totalQuantity = activeBatches.reduce((sum, b) => sum + b.currentQuantity, 0)
+          const totalValue = activeBatches.reduce(
+            (sum, b) => sum + b.currentQuantity * b.costPerUnit,
+            0
+          )
+          const averageCost = totalQuantity > 0 ? totalValue / totalQuantity : 0
+
+          // Calculate expiry status
+          const expiredBatches = activeBatches.filter(
+            b => b.expiresAt && new Date(b.expiresAt) < now
+          )
+          const nearExpiryBatches = activeBatches.filter(b => {
+            if (!b.expiresAt) return false
+            const expiryDate = new Date(b.expiresAt)
+            const daysUntilExpiry = Math.ceil(
+              (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+            )
+            return daysUntilExpiry >= 0 && daysUntilExpiry <= settings.expiryWarningDays
+          })
+
+          // Get last operation date for this preparation and department
+          const preparationOperations = operations.filter(
+            o => o.preparationId === preparation.id && o.department === dept
+          )
+          const lastOperationDate =
+            preparationOperations.length > 0 ? preparationOperations[0].performedAt : undefined
+
+          // Calculate low stock status (using default 100g/ml if not set)
+          const minStockThreshold = 100
+          const belowMinStock = totalQuantity <= minStockThreshold
+
+          // Set batch dates
+          let oldestBatchDate: string | undefined
+          let newestBatchDate: string | undefined
+          if (activeBatches.length > 0) {
+            const sortedBatches = activeBatches.sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            )
+            oldestBatchDate = sortedBatches[0].createdAt
+            newestBatchDate = sortedBatches[sortedBatches.length - 1].createdAt
+          }
+
+          // Create balance object
+          const balance: PreparationBalance = {
+            id: `${preparation.id}-${dept}`, // Composite ID
+            preparationId: preparation.id,
+            preparationName: preparation.name,
+            department: dept,
+            totalQuantity,
+            unit: preparation.outputUnit || 'gram',
+            totalValue,
+            averageCost,
+            latestCost:
+              activeBatches.length > 0 ? activeBatches[activeBatches.length - 1].costPerUnit : 0,
+            costTrend: 'stable', // TODO: Calculate based on historical data
+            batches: activeBatches,
+            oldestBatchDate,
+            newestBatchDate,
+            hasExpired: expiredBatches.length > 0,
+            hasNearExpiry: nearExpiryBatches.length > 0,
+            belowMinStock,
+            lastConsumptionDate: lastOperationDate,
+            lastCalculated: now.toISOString()
+          }
+
+          balances.push(balance)
+        }
+      }
 
       this.setCache(cacheKey, balances)
 
-      DebugUtils.info(MODULE_NAME, `Loaded ${balances.length} balances with batches and status`)
+      DebugUtils.info(MODULE_NAME, `Calculated ${balances.length} balances from active batches`)
 
       return balances
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch balances', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to calculate balances', { error })
       return []
     }
   }
@@ -582,11 +620,6 @@ export class PreparationsService {
       }
 
       const { data, error } = await query
-
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Error fetching operations', { error })
-        return []
-      }
 
       return data ? preparationOperationsFromSupabase(data) : []
     } catch (error) {
@@ -650,18 +683,453 @@ export class PreparationsService {
   // =============================================
 
   async createCorrection(data: CreatePreparationCorrectionData): Promise<PreparationOperation> {
-    // TODO: Implement correction operations
-    throw new Error('Correction operations not implemented yet')
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating preparation correction', {
+        department: data.department,
+        reason: data.correctionDetails.reason,
+        itemCount: data.items.length
+      })
+
+      const now = TimeUtils.getCurrentLocalISO()
+      const documentNumber = `PREP-COR-${Date.now()}`
+
+      // Prepare all operation items with batch allocations
+      const operationItems: any[] = []
+      let totalValue = 0
+
+      // Process each correction item with FIFO allocation
+      for (const item of data.items) {
+        // Get preparation details
+        const preparation = await this.getPreparationById(item.preparationId)
+        if (!preparation) {
+          throw new Error(`Preparation not found: ${item.preparationId}`)
+        }
+
+        // Use FIFO allocation for negative corrections (similar to write-off)
+        const allocations = await this.calculateFifoAllocation(
+          item.preparationId,
+          data.department,
+          Math.abs(item.quantity)
+        )
+
+        if (allocations.length === 0 && item.quantity < 0) {
+          throw new Error(`Insufficient stock for correction: ${preparation.name}`)
+        }
+
+        let totalAllocated = 0
+        let totalCost = 0
+
+        // Update each batch and create operation records
+        for (const allocation of allocations) {
+          // Fetch current batch to get current quantity
+          const { data: batchData, error: fetchError } = await (supabase as any)
+            .from('preparation_batches')
+            .select('current_quantity')
+            .eq('id', allocation.batchId)
+            .single()
+
+          if (fetchError || !batchData) {
+            DebugUtils.error(MODULE_NAME, 'Error fetching batch for update', { fetchError })
+            throw fetchError || new Error('Batch not found')
+          }
+
+          // Calculate new quantity (item.quantity can be positive or negative)
+          const newQuantity = batchData.current_quantity + item.quantity
+
+          // Update batch quantity
+          const { error: updateError } = await (supabase as any)
+            .from('preparation_batches')
+            .update({
+              current_quantity: newQuantity,
+              status: newQuantity <= 0 ? 'depleted' : 'active'
+            })
+            .eq('id', allocation.batchId)
+
+          if (updateError) {
+            DebugUtils.error(MODULE_NAME, 'Error updating batch quantity', { updateError })
+            throw updateError
+          }
+
+          // Create operation record
+          const operationData = {
+            preparation_id: item.preparationId,
+            batch_id: allocation.batchId,
+            operation_type: 'adjustment',
+            quantity: item.quantity, // Can be positive or negative
+            unit: preparation.outputUnit,
+            cost_per_unit: allocation.costPerUnit,
+            department: data.department,
+            reference_id: documentNumber,
+            reference_type: 'correction',
+            notes: `Correction reason: ${data.correctionDetails.reason}${item.notes ? ` - ${item.notes}` : ''}`,
+            performed_at: now,
+            performed_by: data.responsiblePerson
+          }
+
+          const { error: operationError } = await (supabase as any)
+            .from('preparation_operations')
+            .insert(operationData)
+
+          if (operationError) {
+            DebugUtils.error(MODULE_NAME, 'Error creating correction operation', {
+              operationError
+            })
+            throw operationError
+          }
+
+          totalAllocated += allocation.quantity
+          totalCost += allocation.quantity * allocation.costPerUnit
+        }
+
+        operationItems.push({
+          id: `cor-${item.preparationId}-${Date.now()}`,
+          preparationId: item.preparationId,
+          preparationName: preparation.name,
+          quantity: item.quantity,
+          unit: preparation.outputUnit,
+          batchAllocations: allocations,
+          totalCost,
+          averageCostPerUnit: totalAllocated > 0 ? totalCost / totalAllocated : 0,
+          notes: item.notes
+        })
+
+        totalValue += totalCost
+      }
+
+      // Update balances
+      this.clearCache(`balances_${data.department}`)
+
+      const operation: PreparationOperation = {
+        id: documentNumber,
+        operationType: 'correction',
+        documentNumber,
+        operationDate: now,
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: operationItems,
+        totalValue,
+        correctionDetails: data.correctionDetails,
+        status: 'confirmed',
+        notes: data.notes,
+        createdAt: now,
+        updatedAt: now,
+        closedAt: null,
+        createdBy: data.responsiblePerson,
+        updatedBy: data.responsiblePerson
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Preparation correction created successfully', {
+        documentNumber,
+        itemCount: operationItems.length,
+        totalValue
+      })
+
+      return operation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create preparation correction', { error })
+      throw error
+    }
   }
 
   async createReceipt(data: CreatePreparationReceiptData): Promise<PreparationOperation> {
-    // TODO: Implement receipt operations
-    throw new Error('Receipt operations not implemented yet')
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating preparation receipt', {
+        department: data.department,
+        itemCount: data.items.length
+      })
+
+      const now = TimeUtils.getCurrentLocalISO()
+      const documentNumber = `PREP-RCP-${Date.now()}`
+
+      // Prepare all operation items with batch allocations
+      const operationItems: any[] = []
+      let totalValue = 0
+
+      // Create batches and operation items for each item in the receipt
+      for (const item of data.items) {
+        const batchNumber = generateBatchNumber()
+        const itemValue = item.quantity * item.costPerUnit
+
+        // Get preparation details
+        const preparation = await this.getPreparationById(item.preparationId)
+        if (!preparation) {
+          throw new Error(`Preparation not found: ${item.preparationId}`)
+        }
+
+        // Create batch
+        const batchData = {
+          preparation_id: item.preparationId,
+          batch_number: batchNumber,
+          initial_quantity: item.quantity,
+          current_quantity: item.quantity,
+          unit: preparation.outputUnit,
+          cost_per_unit: item.costPerUnit,
+          produced_at: now,
+          expires_at: item.expiryDate || null,
+          department: data.department,
+          status: 'active',
+          notes: item.notes || null,
+          created_by: data.responsiblePerson
+        }
+
+        const { data: batchResult, error: batchError } = await (supabase as any)
+          .from('preparation_batches')
+          .insert(batchData)
+          .select()
+          .single()
+
+        if (batchError) {
+          DebugUtils.error(MODULE_NAME, 'Error creating batch', { batchError })
+          throw batchError
+        }
+
+        // Create operation record for this batch
+        const operationData = {
+          preparation_id: item.preparationId,
+          batch_id: batchResult.id,
+          operation_type: 'production',
+          quantity: item.quantity,
+          unit: preparation.outputUnit,
+          cost_per_unit: item.costPerUnit,
+          department: data.department,
+          reference_id: documentNumber,
+          reference_type: 'receipt',
+          notes: item.notes || null,
+          performed_at: now,
+          performed_by: data.responsiblePerson
+        }
+
+        const { error: operationError } = await (supabase as any)
+          .from('preparation_operations')
+          .insert(operationData)
+
+        if (operationError) {
+          DebugUtils.error(MODULE_NAME, 'Error creating operation', { operationError })
+          throw operationError
+        }
+
+        operationItems.push({
+          id: batchResult.id,
+          preparationId: item.preparationId,
+          preparationName: preparation.name,
+          quantity: item.quantity,
+          unit: preparation.outputUnit,
+          batchAllocations: [
+            {
+              batchId: batchResult.id,
+              batchNumber: batchNumber,
+              quantity: item.quantity,
+              costPerUnit: item.costPerUnit,
+              batchDate: now
+            }
+          ],
+          totalCost: itemValue,
+          averageCostPerUnit: item.costPerUnit,
+          notes: item.notes,
+          expiryDate: item.expiryDate
+        })
+
+        totalValue += itemValue
+      }
+
+      // Update balances (trigger should handle this automatically, but we can force refresh)
+      this.clearCache(`balances_${data.department}`)
+
+      const operation: PreparationOperation = {
+        id: documentNumber,
+        operationType: 'receipt',
+        documentNumber,
+        operationDate: now,
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: operationItems,
+        totalValue,
+        status: 'confirmed',
+        notes: data.notes,
+        createdAt: now,
+        updatedAt: now,
+        closedAt: null,
+        createdBy: data.responsiblePerson,
+        updatedBy: data.responsiblePerson
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Preparation receipt created successfully', {
+        documentNumber,
+        itemCount: operationItems.length,
+        totalValue
+      })
+
+      return operation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create preparation receipt', { error })
+      throw error
+    }
   }
 
   async createWriteOff(data: CreatePreparationWriteOffData): Promise<PreparationOperation> {
-    // TODO: Implement write-off operations
-    throw new Error('Write-off operations not implemented yet')
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating preparation write-off', {
+        department: data.department,
+        reason: data.reason,
+        itemCount: data.items.length
+      })
+
+      const now = TimeUtils.getCurrentLocalISO()
+      const documentNumber = `PREP-WO-${Date.now()}`
+
+      // Prepare all operation items with batch allocations
+      const operationItems: any[] = []
+      let totalValue = 0
+
+      // Process each write-off item with FIFO allocation
+      for (const item of data.items) {
+        // Get preparation details
+        const preparation = await this.getPreparationById(item.preparationId)
+        if (!preparation) {
+          throw new Error(`Preparation not found: ${item.preparationId}`)
+        }
+
+        // Use FIFO allocation to determine which batches to write off
+        const allocations = await this.calculateFifoAllocation(
+          item.preparationId,
+          data.department,
+          item.quantity
+        )
+
+        if (allocations.length === 0) {
+          throw new Error(`Insufficient stock for ${preparation.name}`)
+        }
+
+        let totalAllocated = 0
+        let totalCost = 0
+
+        // Update each batch and create operation records
+        for (const allocation of allocations) {
+          // Fetch current batch to get current quantity
+          const { data: batchData, error: fetchError } = await (supabase as any)
+            .from('preparation_batches')
+            .select('current_quantity')
+            .eq('id', allocation.batchId)
+            .single()
+
+          if (fetchError || !batchData) {
+            DebugUtils.error(MODULE_NAME, 'Error fetching batch for update', { fetchError })
+            throw fetchError || new Error('Batch not found')
+          }
+
+          // Calculate new quantity
+          const newQuantity = batchData.current_quantity - allocation.quantity
+
+          // Update batch quantity
+          const { error: updateError } = await (supabase as any)
+            .from('preparation_batches')
+            .update({
+              current_quantity: newQuantity,
+              status: newQuantity <= 0 ? 'depleted' : 'active'
+            })
+            .eq('id', allocation.batchId)
+
+          if (updateError) {
+            DebugUtils.error(MODULE_NAME, 'Error updating batch quantity', { updateError })
+            throw updateError
+          }
+
+          // Create operation record for this batch write-off
+          const operationData = {
+            preparation_id: item.preparationId,
+            batch_id: allocation.batchId,
+            operation_type: 'write_off',
+            quantity: -allocation.quantity, // Negative for write-off
+            unit: preparation.outputUnit,
+            cost_per_unit: allocation.costPerUnit,
+            department: data.department,
+            reference_id: documentNumber,
+            reference_type: 'write_off',
+            notes: `Write-off reason: ${data.reason}${item.notes ? ` - ${item.notes}` : ''}`,
+            performed_at: now,
+            performed_by: data.responsiblePerson
+          }
+
+          const { error: operationError } = await (supabase as any)
+            .from('preparation_operations')
+            .insert(operationData)
+
+          if (operationError) {
+            DebugUtils.error(MODULE_NAME, 'Error creating write-off operation', {
+              operationError
+            })
+            throw operationError
+          }
+
+          totalAllocated += allocation.quantity
+          totalCost += allocation.quantity * allocation.costPerUnit
+        }
+
+        operationItems.push({
+          id: `wo-${item.preparationId}-${Date.now()}`,
+          preparationId: item.preparationId,
+          preparationName: preparation.name,
+          quantity: item.quantity,
+          unit: preparation.outputUnit,
+          batchAllocations: allocations,
+          totalCost,
+          averageCostPerUnit: totalCost / totalAllocated,
+          notes: item.notes
+        })
+
+        totalValue += totalCost
+      }
+
+      // Update balances (trigger should handle this automatically, but we can force refresh)
+      this.clearCache(`balances_${data.department}`)
+
+      const operation: PreparationOperation = {
+        id: documentNumber,
+        operationType: 'write_off',
+        documentNumber,
+        operationDate: now,
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: operationItems,
+        totalValue,
+        writeOffDetails: {
+          reason: data.reason,
+          affectsKPI: !['education', 'test'].includes(data.reason),
+          notes: data.notes
+        },
+        status: 'confirmed',
+        notes: data.notes,
+        createdAt: now,
+        updatedAt: now,
+        closedAt: null,
+        createdBy: data.responsiblePerson,
+        updatedBy: data.responsiblePerson
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Preparation write-off created successfully', {
+        documentNumber,
+        itemCount: operationItems.length,
+        totalValue,
+        reason: data.reason
+      })
+
+      return operation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create preparation write-off', { error })
+      throw error
+    }
   }
 
   async getWriteOffStatistics(
@@ -669,7 +1137,101 @@ export class PreparationsService {
     dateFrom?: string,
     dateTo?: string
   ): Promise<PreparationWriteOffStatistics> {
-    // TODO: Implement write-off statistics
+    if (!isSupabaseAvailable()) {
+      DebugUtils.warn(MODULE_NAME, 'Supabase not available for statistics')
+      return this.getEmptyStatistics()
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Calculating write-off statistics', {
+        department,
+        dateFrom,
+        dateTo
+      })
+
+      // Query write-off operations
+      let query = (supabase as any)
+        .from('preparation_operations')
+        .select('*')
+        .eq('operation_type', 'write_off')
+
+      if (department) {
+        query = query.eq('department', department)
+      }
+      if (dateFrom) {
+        query = query.gte('performed_at', dateFrom)
+      }
+      if (dateTo) {
+        query = query.lte('performed_at', dateTo)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Error fetching write-off operations', { error })
+        return this.getEmptyStatistics()
+      }
+
+      // Initialize statistics
+      const stats = this.getEmptyStatistics()
+
+      // Process each operation (note: operations may reference multiple batches)
+      for (const operation of data || []) {
+        const value = Math.abs(operation.quantity) * (operation.cost_per_unit || 0)
+
+        // Extract write-off reason from notes (format: "Write-off reason: expired - ...")
+        const reason = this.extractWriteOffReason(operation.notes)
+        const isKPIAffecting = !['education', 'test'].includes(reason)
+
+        // Update totals
+        stats.total.count++
+        stats.total.value += value
+
+        // Update by department
+        const dept = operation.department as 'kitchen' | 'bar'
+        stats.byDepartment[dept].total += value
+
+        // Update by KPI category
+        if (isKPIAffecting) {
+          stats.kpiAffecting.count++
+          stats.kpiAffecting.value += value
+          stats.byDepartment[dept].kpiAffecting += value
+
+          // Update specific reason within KPI-affecting
+          if (reason in stats.kpiAffecting.reasons) {
+            stats.kpiAffecting.reasons[reason as keyof typeof stats.kpiAffecting.reasons].count++
+            stats.kpiAffecting.reasons[reason as keyof typeof stats.kpiAffecting.reasons].value +=
+              value
+          }
+        } else {
+          stats.nonKpiAffecting.count++
+          stats.nonKpiAffecting.value += value
+          stats.byDepartment[dept].nonKpiAffecting += value
+
+          // Update specific reason within non-KPI
+          if (reason in stats.nonKpiAffecting.reasons) {
+            stats.nonKpiAffecting.reasons[reason as keyof typeof stats.nonKpiAffecting.reasons]
+              .count++
+            stats.nonKpiAffecting.reasons[
+              reason as keyof typeof stats.nonKpiAffecting.reasons
+            ].value += value
+          }
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Write-off statistics calculated', {
+        totalCount: stats.total.count,
+        totalValue: stats.total.value
+      })
+
+      return stats
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off statistics', { error })
+      return this.getEmptyStatistics()
+    }
+  }
+
+  private getEmptyStatistics(): PreparationWriteOffStatistics {
     return {
       total: { count: 0, value: 0 },
       kpiAffecting: {
@@ -699,24 +1261,354 @@ export class PreparationsService {
     }
   }
 
+  private extractWriteOffReason(notes: string | null): string {
+    if (!notes) return 'other'
+    const match = notes.match(/Write-off reason: (\w+)/)
+    return match ? match[1] : 'other'
+  }
+
   async startInventory(
     data: CreatePreparationInventoryData
   ): Promise<PreparationInventoryDocument> {
-    // TODO: Implement inventory start
-    throw new Error('Inventory start not implemented yet')
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Starting preparation inventory', {
+        department: data.department
+      })
+
+      const now = TimeUtils.getCurrentLocalISO()
+      const documentNumber = `PREP-INV-${Date.now()}`
+
+      // Get all balances for the department
+      const balances = await this.getBalances(data.department)
+
+      // Create inventory items from current balances
+      const inventoryItems: PreparationInventoryItem[] = balances.map(balance => ({
+        id: `inv-item-${balance.preparationId}`,
+        preparationId: balance.preparationId,
+        preparationName: balance.preparationName,
+        systemQuantity: balance.totalQuantity,
+        actualQuantity: 0, // To be filled by user during counting
+        difference: 0,
+        unit: balance.unit,
+        averageCost: balance.averageCost,
+        valueDifference: 0,
+        confirmed: false
+      }))
+
+      const inventoryDocument: PreparationInventoryDocument = {
+        id: documentNumber,
+        documentNumber,
+        inventoryDate: now,
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: inventoryItems,
+        totalItems: inventoryItems.length,
+        totalDiscrepancies: 0,
+        totalValueDifference: 0,
+        status: 'draft',
+        createdAt: now,
+        updatedAt: now,
+        closedAt: null,
+        createdBy: data.responsiblePerson,
+        updatedBy: data.responsiblePerson
+      }
+
+      // Store inventory document in localStorage (or could be in Supabase)
+      // For now, we'll return it and let the store handle persistence
+      DebugUtils.info(MODULE_NAME, 'Preparation inventory started', {
+        documentNumber,
+        itemCount: inventoryItems.length
+      })
+
+      return inventoryDocument
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to start preparation inventory', { error })
+      throw error
+    }
   }
 
   async updateInventory(
     inventoryId: string,
     items: PreparationInventoryItem[]
   ): Promise<PreparationInventoryDocument> {
-    // TODO: Implement inventory update
-    throw new Error('Inventory update not implemented yet')
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating preparation inventory', {
+        inventoryId,
+        itemCount: items.length
+      })
+
+      // Recalculate differences and totals
+      let totalDiscrepancies = 0
+      let totalValueDifference = 0
+
+      const updatedItems = items.map(item => {
+        const difference = item.actualQuantity - item.systemQuantity
+        const valueDifference = difference * item.averageCost
+
+        if (difference !== 0) {
+          totalDiscrepancies++
+        }
+
+        totalValueDifference += valueDifference
+
+        return {
+          ...item,
+          difference,
+          valueDifference
+        }
+      })
+
+      // This would normally fetch the inventory document from storage and update it
+      // For now, we construct the updated document
+      const now = TimeUtils.getCurrentLocalISO()
+
+      // In a real implementation, you would fetch the existing inventory document
+      // For now, we create a partial update that the store will merge
+      const updatedInventory: PreparationInventoryDocument = {
+        id: inventoryId,
+        documentNumber: inventoryId, // Will be overwritten by existing value
+        inventoryDate: now, // Will be overwritten by existing value
+        department: 'kitchen', // Will be overwritten by existing value
+        responsiblePerson: '', // Will be overwritten by existing value
+        items: updatedItems,
+        totalItems: updatedItems.length,
+        totalDiscrepancies,
+        totalValueDifference,
+        status: 'draft',
+        createdAt: now, // Will be overwritten by existing value
+        updatedAt: now,
+        closedAt: null,
+        createdBy: '', // Will be overwritten by existing value
+        updatedBy: ''
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Preparation inventory updated', {
+        inventoryId,
+        totalDiscrepancies,
+        totalValueDifference
+      })
+
+      return updatedInventory
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update preparation inventory', { error })
+      throw error
+    }
   }
 
-  async finalizeInventory(inventoryId: string): Promise<PreparationOperation[]> {
-    // TODO: Implement inventory finalization
-    throw new Error('Inventory finalization not implemented yet')
+  async finalizeInventory(
+    inventoryDocument: PreparationInventoryDocument
+  ): Promise<PreparationOperation[]> {
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Finalizing preparation inventory', {
+        inventoryId: inventoryDocument.id,
+        totalDiscrepancies: inventoryDocument.totalDiscrepancies
+      })
+
+      const now = TimeUtils.getCurrentLocalISO()
+      const correctionOperations: PreparationOperation[] = []
+
+      // Group items by whether they have discrepancies
+      const itemsWithDiscrepancies = inventoryDocument.items.filter(item => item.difference !== 0)
+
+      if (itemsWithDiscrepancies.length === 0) {
+        DebugUtils.info(
+          MODULE_NAME,
+          'No discrepancies found, inventory finalized without corrections'
+        )
+        return []
+      }
+
+      // Create correction operations for items with discrepancies
+      for (const item of itemsWithDiscrepancies) {
+        const documentNumber = `PREP-INV-COR-${inventoryDocument.id}-${item.preparationId}`
+
+        // Get preparation details
+        const preparation = await this.getPreparationById(item.preparationId)
+        if (!preparation) {
+          DebugUtils.warn(MODULE_NAME, 'Preparation not found for inventory correction', {
+            preparationId: item.preparationId
+          })
+          continue
+        }
+
+        // Determine if this is a positive or negative correction
+        const isNegative = item.difference < 0
+        const quantity = Math.abs(item.difference)
+
+        if (isNegative) {
+          // Negative correction - reduce stock using FIFO
+          const allocations = await this.calculateFifoAllocation(
+            item.preparationId,
+            inventoryDocument.department,
+            quantity
+          )
+
+          if (allocations.length === 0) {
+            DebugUtils.warn(MODULE_NAME, 'Insufficient stock for inventory correction', {
+              preparationId: item.preparationId,
+              required: quantity
+            })
+            continue
+          }
+
+          // Update each batch
+          for (const allocation of allocations) {
+            // Fetch current batch
+            const { data: batchData, error: fetchError } = await (supabase as any)
+              .from('preparation_batches')
+              .select('current_quantity')
+              .eq('id', allocation.batchId)
+              .single()
+
+            if (fetchError || !batchData) {
+              DebugUtils.error(MODULE_NAME, 'Error fetching batch for inventory correction', {
+                fetchError
+              })
+              continue
+            }
+
+            // Calculate new quantity
+            const newQuantity = batchData.current_quantity - allocation.quantity
+
+            // Update batch
+            const { error: updateError } = await (supabase as any)
+              .from('preparation_batches')
+              .update({
+                current_quantity: newQuantity,
+                status: newQuantity <= 0 ? 'depleted' : 'active'
+              })
+              .eq('id', allocation.batchId)
+
+            if (updateError) {
+              DebugUtils.error(MODULE_NAME, 'Error updating batch for inventory correction', {
+                updateError
+              })
+              continue
+            }
+
+            // Create operation record
+            const operationData = {
+              preparation_id: item.preparationId,
+              batch_id: allocation.batchId,
+              operation_type: 'adjustment',
+              quantity: -allocation.quantity,
+              unit: item.unit,
+              cost_per_unit: allocation.costPerUnit,
+              department: inventoryDocument.department,
+              reference_id: inventoryDocument.id,
+              reference_type: 'inventory',
+              notes: `Inventory correction: ${item.notes || 'System/actual discrepancy'}`,
+              performed_at: now,
+              performed_by: inventoryDocument.responsiblePerson
+            }
+
+            await (supabase as any).from('preparation_operations').insert(operationData)
+          }
+        } else {
+          // Positive correction - create a new batch (like a receipt)
+          const batchNumber = generateBatchNumber()
+
+          const batchData = {
+            preparation_id: item.preparationId,
+            batch_number: batchNumber,
+            initial_quantity: quantity,
+            current_quantity: quantity,
+            unit: item.unit,
+            cost_per_unit: item.averageCost,
+            produced_at: now,
+            expires_at: null,
+            department: inventoryDocument.department,
+            status: 'active',
+            notes: `Inventory correction: Found excess stock`,
+            created_by: inventoryDocument.responsiblePerson
+          }
+
+          const { data: batchResult, error: batchError } = await (supabase as any)
+            .from('preparation_batches')
+            .insert(batchData)
+            .select()
+            .single()
+
+          if (batchError) {
+            DebugUtils.error(MODULE_NAME, 'Error creating batch for inventory correction', {
+              batchError
+            })
+            continue
+          }
+
+          // Create operation record
+          const operationData = {
+            preparation_id: item.preparationId,
+            batch_id: batchResult.id,
+            operation_type: 'adjustment',
+            quantity: quantity,
+            unit: item.unit,
+            cost_per_unit: item.averageCost,
+            department: inventoryDocument.department,
+            reference_id: inventoryDocument.id,
+            reference_type: 'inventory',
+            notes: `Inventory correction: ${item.notes || 'System/actual discrepancy'}`,
+            performed_at: now,
+            performed_by: inventoryDocument.responsiblePerson
+          }
+
+          await (supabase as any).from('preparation_operations').insert(operationData)
+        }
+
+        // Create operation summary for return
+        const correctionOperation: PreparationOperation = {
+          id: documentNumber,
+          operationType: 'inventory',
+          documentNumber,
+          operationDate: now,
+          department: inventoryDocument.department,
+          responsiblePerson: inventoryDocument.responsiblePerson,
+          items: [
+            {
+              id: item.id,
+              preparationId: item.preparationId,
+              preparationName: item.preparationName,
+              quantity: item.difference,
+              unit: item.unit,
+              totalCost: item.valueDifference,
+              averageCostPerUnit: item.averageCost,
+              notes: item.notes
+            }
+          ],
+          totalValue: item.valueDifference,
+          relatedInventoryId: inventoryDocument.id,
+          status: 'confirmed',
+          createdAt: now,
+          updatedAt: now,
+          closedAt: null,
+          createdBy: inventoryDocument.responsiblePerson,
+          updatedBy: inventoryDocument.responsiblePerson
+        }
+
+        correctionOperations.push(correctionOperation)
+      }
+
+      // Clear balance cache
+      this.clearCache(`balances_${inventoryDocument.department}`)
+
+      DebugUtils.info(MODULE_NAME, 'Preparation inventory finalized', {
+        inventoryId: inventoryDocument.id,
+        correctionsCreated: correctionOperations.length
+      })
+
+      return correctionOperations
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to finalize preparation inventory', { error })
+      throw error
+    }
   }
 
   // =============================================

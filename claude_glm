@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# claude_glm - GLM-4.6 wrapper via Z.AI
+# Uses existing Z.AI configuration for GLM model access
+
+# Set Z.AI environment variables for GLM-4.6
+# These should already be configured globally according to user
+export ANTHROPIC_DEFAULT_SONNET_MODEL="GLM-4.6"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="GLM-4.6"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="GLM-4.5-Air"
+
+# Z.AI API endpoint (using standard Z.AI endpoint)
+if [ -z "$ANTHROPIC_BASE_URL" ]; then
+    export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+fi
+
+# Execute claude with all passed arguments
+exec claude "$@"

@@ -27,4 +27,8 @@ dist-ssr
 # Environment variables
 .env
 .env.*
-!.env.example' > .gitignore
+!.env.example
+
+# Claude CLI scripts (local configuration)
+claude
+claude_glm' > .gitignore

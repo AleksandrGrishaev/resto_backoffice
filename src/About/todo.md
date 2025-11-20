@@ -1,12 +1,120 @@
-# 🚀 Current Sprint: Seed Infrastructure + Backoffice Migration
+# 🚀 Current Sprint: Preparation Store Implementation
 
-> **📘 Strategy:** See [PrepProduction.md](./PrepProduction.md) for production preparation strategy
-> **📘 Migration Guide:** See [BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md) for detailed plan
-> **⚠️ CRITICAL RULE:** Always check TypeScript interface FIRST before creating/updating Supabase tables!
+> **Focus:** Fix preparation store operations (production, write-off, inventory)
+> **Goal:** Ensure all UI dialogs work correctly with Supabase backend
 
-## 📊 Current Status (2025-11-18)
+## 📊 Current Status (2025-11-20)
 
-**Sprint Goal: 🎯 Phase 2 - Clean Up Mock Files → Backoffice Supabase-Only**
+**Issue:** Preparation store UI dialogs fail because `preparationService.ts` has stub methods that throw "not implemented yet" errors.
+
+**Root Cause:**
+
+- ✅ Store layer complete (preparationStore.ts)
+- ✅ Types complete (types.ts)
+- ✅ Composables complete (usePreparationWriteOff.ts)
+- ✅ UI components complete (dialogs)
+- ❌ **Service layer incomplete** - all CRUD methods are stubs
+
+**Critical Missing Methods in preparationService.ts:**
+
+- `createReceipt()` - Production operations (line 648-651)
+- `createWriteOff()` - Write-off operations with FIFO (line 653-656)
+- `createCorrection()` - Correction/adjustment operations (line 643-646)
+- `startInventory()` - Start inventory document (line 694-698)
+- `updateInventory()` - Update inventory counts (line 700-706)
+- `finalizeInventory()` - Finalize and create corrections (line 708-711)
+- `getWriteOffStatistics()` - Calculate write-off stats (line 658-691)
+
+---
+
+## 🎯 Current Tasks
+
+### Task 1: Implement createReceipt() - Production Operations
+
+**File:** `src/stores/preparation/preparationService.ts`
+
+**Requirements:**
+
+- Create PreparationOperation document (operation_type: 'receipt')
+- Create PreparationBatch for each item with FIFO tracking
+- Update preparation balances
+- Return created operation
+
+**Status:** 🔲 Pending
+
+### Task 2: Implement createWriteOff() - Write-Off Operations
+
+**File:** `src/stores/preparation/preparationService.ts`
+
+**Requirements:**
+
+- Create PreparationOperation document (operation_type: 'write_off')
+- Use FIFO allocation to assign batches for each item
+- Update batch quantities (reduce stock)
+- Handle KPI-affecting vs non-KPI write-offs
+- Return created operation
+
+**Status:** 🔲 Pending
+
+### Task 3: Implement createCorrection() - Correction Operations
+
+**File:** `src/stores/preparation/preparationService.ts`
+
+**Requirements:**
+
+- Create PreparationOperation document (operation_type: 'correction')
+- Use FIFO allocation similar to write-off
+- Include correction reason and details
+- Return created operation
+
+**Status:** 🔲 Pending
+
+### Task 4: Implement Inventory Operations
+
+**File:** `src/stores/preparation/preparationService.ts`
+
+**Requirements:**
+
+- `startInventory()` - Create inventory document with current balances
+- `updateInventory()` - Update item actual quantities
+- `finalizeInventory()` - Calculate discrepancies and create correction operations
+- Update balances after finalization
+
+**Status:** 🔲 Pending
+
+### Task 5: Implement getWriteOffStatistics()
+
+**File:** `src/stores/preparation/preparationService.ts`
+
+**Requirements:**
+
+- Query operations table for write-offs
+- Calculate totals by reason
+- Separate KPI-affecting vs non-KPI
+- Group by department (kitchen/bar)
+- Return statistics object
+
+**Status:** 🔲 Pending
+
+### Task 6: Test UI Dialogs
+
+**Files:**
+
+- `src/views/Preparation/components/PreparationProductionDialog.vue`
+- `src/views/Preparation/components/writeoff/PreparationWriteOffDialog.vue`
+- `src/views/Preparation/components/PreparationInventoryDialog.vue`
+
+**Test Cases:**
+
+- ✅ Production: Create new batches
+- ✅ Write-off: FIFO allocation works
+- ✅ Inventory: Discrepancies create corrections
+
+**Status:** 🔲 Pending
+
+---
+
+## ✅ Completed Migrations (Archive)
 
 **Phase 1 Migration:** ✅ **COMPLETED** (2025-11-17)
 

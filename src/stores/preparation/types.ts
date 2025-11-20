@@ -119,6 +119,7 @@ export interface PreparationOperation extends BaseEntity {
 }
 
 export interface PreparationBalance {
+  id: string // Composite ID: preparationId-department
   preparationId: string
   preparationName: string
   department: PreparationDepartment
@@ -129,8 +130,8 @@ export interface PreparationBalance {
   latestCost: number
   costTrend: 'up' | 'down' | 'stable'
   batches: PreparationBatch[]
-  oldestBatchDate: string
-  newestBatchDate: string
+  oldestBatchDate?: string
+  newestBatchDate?: string
   hasExpired: boolean
   hasNearExpiry: boolean
   belowMinStock: boolean
