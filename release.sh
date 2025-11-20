@@ -19,4 +19,4 @@ fi
 git add .
 git commit -m "$message"
 pnpm version patch -m "chore(release): %s - $message"
-git push && git push --tags
+git push && git push origin $(git describe --tags --abbrev=0)
