@@ -1,7 +1,7 @@
 // src/stores/preparation/types.ts - UPDATED: Added Write-off Support
 import { BaseEntity } from '@/types/common'
 
-export type PreparationDepartment = 'kitchen' | 'bar'
+export type PreparationDepartment = 'kitchen' | 'bar' | 'all'
 // ✅ UPDATED: Added write_off operation type
 export type PreparationOperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
 export type BatchSourceType =

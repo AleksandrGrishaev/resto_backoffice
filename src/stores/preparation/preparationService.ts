@@ -1,12 +1,13 @@
-// src/stores/preparation/preparationService.ts - UPDATED: Added Write-off Support
+// src/stores/preparation/preparationService.ts - UPDATED: Supabase Integration
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useRecipesStore } from '@/stores/recipes'
+import { supabase } from '@/supabase/client'
 import {
-  mockPreparationBatches,
-  mockPreparationOperations,
-  generatePreparationBatchNumber,
-  calculatePreparationFifoAllocation
-} from './preparationMock'
+  batchFromSupabase,
+  batchToSupabase,
+  operationFromSupabase,
+  operationToSupabase
+} from './supabase/mappers'
 
 // ✅ UPDATED: Import new types
 import type {
@@ -39,6 +40,50 @@ export class PreparationService {
   // ===========================
   // HELPER METHODS
   // ===========================
+
+  private generateBatchNumber(preparationName: string, date: string): string {
+    const shortName =
+      preparationName
+        .toUpperCase()
+        .replace(/[^A-Z]/g, '')
+        .substring(0, 4) || 'PREP'
+    const counter = String(Date.now()).slice(-3)
+    const dateStr = date.substring(0, 10).replace(/-/g, '')
+    return `B-PREP-${shortName}-${counter}-${dateStr}`
+  }
+
+  private calculateFifoAllocationHelper(
+    batches: PreparationBatch[],
+    quantity: number
+  ): { allocations: BatchAllocation[]; remainingQuantity: number } {
+    const allocations: BatchAllocation[] = []
+    let remainingQuantity = quantity
+
+    // Sort batches by production date (FIFO - oldest first)
+    const sortedBatches = [...batches].sort(
+      (a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
+    )
+
+    for (const batch of sortedBatches) {
+      if (remainingQuantity <= 0) break
+
+      const allocatedQuantity = Math.min(batch.currentQuantity, remainingQuantity)
+
+      if (allocatedQuantity > 0) {
+        allocations.push({
+          batchId: batch.id,
+          batchNumber: batch.batchNumber,
+          quantity: allocatedQuantity,
+          costPerUnit: batch.costPerUnit,
+          batchDate: batch.productionDate
+        })
+
+        remainingQuantity -= allocatedQuantity
+      }
+    }
+
+    return { allocations, remainingQuantity }
+  }
 
   private getPreparationInfo(preparationId: string) {
     try {
@@ -97,12 +142,14 @@ export class PreparationService {
         await recipesStore.fetchPreparations()
       }
 
-      // ✅ FIXED: Load mock data during initialization
-      this.loadMockData()
+      // Load data from Supabase
+      await this.loadBatchesFromSupabase()
+      await this.loadOperationsFromSupabase()
+      this.inventories = []
       await this.recalculateAllBalances()
 
       this.initialized = true
-      DebugUtils.info(MODULE_NAME, 'Preparation service initialized with mock data', {
+      DebugUtils.info(MODULE_NAME, 'Preparation service initialized from Supabase', {
         batches: this.batches.length,
         operations: this.operations.length,
         balances: this.balances.length
@@ -113,24 +160,59 @@ export class PreparationService {
     }
   }
 
-  // ✅ NEW: Load mock data method
-  private loadMockData(): void {
-    try {
-      // Deep clone to avoid reference issues
-      this.batches = JSON.parse(JSON.stringify(mockPreparationBatches))
-      this.operations = JSON.parse(JSON.stringify(mockPreparationOperations))
-      this.inventories = []
+  // ===========================
+  // SUPABASE DATA LOADING
+  // ===========================
 
-      DebugUtils.info(MODULE_NAME, 'Mock data loaded successfully', {
-        batches: this.batches.length,
-        operations: this.operations.length
+  private async loadBatchesFromSupabase(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Loading batches from Supabase')
+
+      const { data, error } = await supabase
+        .from('preparation_batches')
+        .select('*')
+        .order('production_date', { ascending: true })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load batches from Supabase', { error })
+        throw error
+      }
+
+      this.batches = (data || []).map(batchFromSupabase)
+
+      DebugUtils.info(MODULE_NAME, 'Batches loaded from Supabase', {
+        count: this.batches.length
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load mock data', { error })
-      // Initialize with empty arrays as fallback
+      DebugUtils.error(MODULE_NAME, 'Error loading batches', { error })
+      // Initialize with empty array on error
       this.batches = []
+    }
+  }
+
+  private async loadOperationsFromSupabase(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Loading operations from Supabase')
+
+      const { data, error } = await supabase
+        .from('preparation_operations')
+        .select('*')
+        .order('operation_date', { ascending: false })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load operations from Supabase', { error })
+        throw error
+      }
+
+      this.operations = (data || []).map(operationFromSupabase)
+
+      DebugUtils.info(MODULE_NAME, 'Operations loaded from Supabase', {
+        count: this.operations.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error loading operations', { error })
+      // Initialize with empty array on error
       this.operations = []
-      this.inventories = []
     }
   }
 
@@ -258,7 +340,7 @@ export class PreparationService {
           b.currentQuantity > 0
       )
 
-      return calculatePreparationFifoAllocation(batches, quantity)
+      return this.calculateFifoAllocationHelper(batches, quantity)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate FIFO allocation', { error })
       throw error
@@ -504,16 +586,15 @@ export class PreparationService {
 
       const operationItems = []
       let totalValue = 0
+      const now = TimeUtils.getCurrentLocalISO()
 
+      // Step 1: Create batches and insert into Supabase
       for (const item of data.items) {
         const preparationInfo = this.getPreparationInfo(item.preparationId)
 
         const batch: PreparationBatch = {
-          id: `prep-batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          batchNumber: generatePreparationBatchNumber(
-            preparationInfo.name,
-            TimeUtils.getCurrentLocalISO()
-          ),
+          id: crypto.randomUUID(),
+          batchNumber: this.generateBatchNumber(preparationInfo.name, now),
           preparationId: item.preparationId,
           department: data.department,
           initialQuantity: item.quantity,
@@ -521,20 +602,31 @@ export class PreparationService {
           unit: preparationInfo.unit,
           costPerUnit: item.costPerUnit,
           totalValue: Math.round(item.quantity * item.costPerUnit * 100) / 100,
-          productionDate: TimeUtils.getCurrentLocalISO(),
+          productionDate: now,
           expiryDate: item.expiryDate,
           sourceType: data.sourceType,
           notes: item.notes,
           status: 'active',
           isActive: true,
-          createdAt: TimeUtils.getCurrentLocalISO(),
-          updatedAt: TimeUtils.getCurrentLocalISO()
+          createdAt: now,
+          updatedAt: now
         }
 
+        // Insert batch into Supabase
+        const { error: batchError } = await supabase
+          .from('preparation_batches')
+          .insert(batchToSupabase(batch))
+
+        if (batchError) {
+          DebugUtils.error(MODULE_NAME, 'Failed to insert batch into Supabase', { batchError })
+          throw batchError
+        }
+
+        // Add to local array
         this.batches.push(batch)
 
         operationItems.push({
-          id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: crypto.randomUUID(),
           preparationId: item.preparationId,
           preparationName: preparationInfo.name,
           quantity: item.quantity,
@@ -548,26 +640,42 @@ export class PreparationService {
         totalValue += batch.totalValue
       }
 
+      // Step 2: Create operation and insert into Supabase
       const operation: PreparationOperation = {
-        id: `prep-op-${Date.now()}`,
+        id: crypto.randomUUID(),
         operationType: 'receipt',
         documentNumber: `PREP-REC-${String(this.operations.length + 1).padStart(3, '0')}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
+        operationDate: now,
         department: data.department,
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
         status: 'confirmed',
         notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        createdAt: now,
+        updatedAt: now
       }
 
+      const { error: operationError } = await supabase
+        .from('preparation_operations')
+        .insert(operationToSupabase(operation))
+
+      if (operationError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert operation into Supabase', {
+          operationError
+        })
+        throw operationError
+      }
+
+      // Add to local array
       this.operations.push(operation)
+
+      // Step 3: Recalculate balances
       await this.recalculateBalances(data.department)
 
-      DebugUtils.info(MODULE_NAME, 'Preparation receipt operation created', {
+      DebugUtils.info(MODULE_NAME, 'Preparation receipt created in Supabase', {
         operationId: operation.id,
+        batchCount: data.items.length,
         totalValue
       })
 
@@ -596,7 +704,7 @@ export class PreparationService {
           // Positive correction (surplus) - create new batch
           const batch: PreparationBatch = {
             id: `prep-batch-corr-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            batchNumber: generatePreparationBatchNumber(
+            batchNumber: this.generateBatchNumber(
               preparationInfo.name,
               TimeUtils.getCurrentLocalISO()
             ),
@@ -892,7 +1000,7 @@ export class PreparationService {
   // ALERT HELPERS
   // ===========================
 
-  getExpiringPreparations(days: number = 1): PreparationBalance[] {
+  getExpiringPreparations(): PreparationBalance[] {
     try {
       return this.balances.filter(balance => balance.hasNearExpiry || balance.hasExpired)
     } catch (error) {

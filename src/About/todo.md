@@ -1,1099 +1,794 @@
-# 🚀 Current Sprint: Seed Infrastructure + Backoffice Migration
+# =� Current Sprint: Preparation Store - Supabase Migration
 
-> **📘 Strategy:** See [PrepProduction.md](./PrepProduction.md) for production preparation strategy
-> **📘 Migration Guide:** See [BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md) for detailed plan
-> **⚠️ CRITICAL RULE:** Always check TypeScript interface FIRST before creating/updating Supabase tables!
+> **=� Strategy:** See [PrepProduction.md](./PrepProduction.md) for production preparation strategy
+> **� CRITICAL RULE:** Always check TypeScript interface FIRST before creating/updating Supabase tables!
 
-## 📊 Current Status (2025-11-18)
+## =� Current Status (2025-11-20)
 
-**Sprint Goal: 🎯 Phase 2 - Clean Up Mock Files → Backoffice Supabase-Only**
+**Sprint Goal: <� Complete Preparation Store Supabase Migration**
 
-**Phase 1 Migration:** ✅ **COMPLETED** (2025-11-17)
+**What's Working:**
 
-- All Backoffice stores migrated to Supabase
-- All tables created with proper schema
-- Test data seeded successfully
-- Integration flows verified
+-  Products, Menu, Recipes - fully migrated to Supabase
+-  Supabase tables for preparations exist and are populated (12 preparations, 14 batches, 17 operations)
+-  Recipe creation and preparation creation working correctly
 
-**Phase 2 Goal:** Clean up mock files, ensure Backoffice uses Supabase-only (no localStorage fallbacks)
+**What's Broken:**
 
-**Current Progress:**
-
-- ✅ All stores migrated to Supabase (Phase 1)
-- ✅ POS keeps offline-first (localStorage + Supabase dual-write)
-- ✅ **Step 1: Menu Mock Cleanup COMPLETED** (2025-11-18)
-  - menuService.ts → Supabase-only
-  - UUID generation fixed
-  - dish_type constraint fixed
-  - TypeScript ↔ Supabase alignment verified
-- ✅ **Step 2: Products Store Migration COMPLETED** (2025-11-18)
-  - productsService.ts → Supabase-only
-  - 28 products loading with UUIDs
-  - localStorage cache fallback working
-  - Package options loading from Supabase
-- ✅ **Step 3: Recipes Migration COMPLETED** (2025-11-18)
-  - Recipes tables already existed in Supabase with UUID primary keys
-  - 3 recipes found with proper UUIDs (R-001, R-002, R-003)
-  - 10 preparations found with proper UUIDs
-  - Mock files cleaned up successfully
-  - All "Product not found" errors resolved
-- ✅ **Step 4: Post-Migration Issues Fixed** (2025-11-18)
-  - Fixed recipesService import error when creating recipes
-  - Added legacy_id generation for recipes (backward compatibility)
-  - Fixed Vue proxy trap error in RecipesView (loading overlay)
-  - Made preparation code optional with auto-generation (P-001, P-002...)
-  - Improved error handling for duplicate codes (UI error display)
-- ✅ **Step 5: Account Mock Cleanup COMPLETED** (2025-11-18)
-  - Created Supabase mappers for Account, Transaction, PendingPayment
-  - Created accountSupabaseService for all operations
-  - Updated service.ts to use Supabase-only implementation
-  - Removed mock file exports from index.ts
-  - **Note**: Two mock files restored for future integration:
-    - `accountBasedMock.ts` - needed for supplier store integration
-    - `paymentMock.ts` - needed for counteragent payments integration
-  - Application runs successfully on http://localhost:5178/
-  - Account data loads from Supabase (3 accounts, 4 transactions, 1 pending payment)
-  - **Future task**: Mark acc_1 as "касса" (cash register) for POS system integration
+- L Preparation storage operations (receipts, corrections, write-offs, inventory)
+- L preparationService.ts has compilation errors (missing mock file, type errors)
+- L Supabase service exists but not integrated
+- L RLS policies disabled on preparation tables
+- L Database contains mixed data (old TEXT IDs + new UUIDs)
 
 ---
 
-## 🔄 Future Integration Tasks
+## =� Preparation Tables Schema Reference
 
-### Supplier Store + Account Integration
+**Use this schema for implementation - avoid large `list_tables` queries**
 
-**Planned for next development phase:**
+### 1. `preparations` (12 rows) - Catalog
 
-- **Task**: Integrate supplier store with account module for purchase order processing
-- **Files to integrate**: `accountBasedMock.ts` (restored for this purpose)
-- **Flow**: Purchase Order → Pending Payment → Account Transaction
-- **Status**: 🔲 Planned (mock files preserved)
+**Purpose:** Primary catalog of semi-finished products
 
-### Counteragent Payments Integration
-
-**Planned for supplier/customer payment processing:**
-
-- **Task**: Integrate counteragent payments with account module
-- **Files to integrate**: `paymentMock.ts` (restored for this purpose)
-- **Flow**: Counteragent Payment → Account Transaction
-- **Status**: 🔲 Planned (mock files preserved)
-
-### POS System Integration
-
-**Critical for POS operations:**
-
-- **Task**: Mark acc_1 as "касса" (cash register) in POS system
-- **Purpose**: Identify main cash register account for POS transactions
-- **Impact**: POS payments will reference this account
-- **Status**: 🔲 Pending implementation
-
----
-
-## 🎯 THIS WEEK: Phase 2 - Mock Files Cleanup
-
-**Strategy:**
-
-1. Remove all Backoffice mock files (keep POS mocks for offline-first)
-2. Verify all stores use Supabase-only (no localStorage fallbacks)
-3. Clean up shared/mockDataCoordinator.ts
-4. Update appInitializer.ts verification
-
----
-
-## 🧹 Phase 2: Mock Files Cleanup & Verification
-
-### 📊 Mock Files Inventory
-
-**Total mock files found:** 15
-
-**Backoffice (to clean):** 8 files
-
-- Menu: menuMock.ts ✅ COMPLETED
-- Recipes: recipesMock.ts, unitsMock.ts ✅ COMPLETED
-- Preparation: preparationMock.ts ✅ COMPLETED
-- Counteragents: counteragentsMock.ts
-- Account: mock.ts, accountBasedMock.ts, paymentMock.ts
-- Shared: productDefinitions.ts, supplierDefinitions.ts, storageDefinitions.ts, mockDataCoordinator.ts
-
-**POS (keep for offline-first):** 3 files
-
-- pos/mocks/posMockData.ts ✅ Keep
-- pos/shifts/mock.ts ✅ Keep
-- kitchen/mocks/kitchenMockData.ts ✅ Keep
-
----
-
-### Step 1: Menu Mock (menuMock.ts) ✅ **COMPLETED** (2025-11-18)
-
-**File:** `src/stores/menu/menuMock.ts`
-**Used by:** menuService.ts, index.ts, migrateMenuToSupabase.ts
-
-**Tasks:**
-
-- [x] Check menuService.ts - should use Supabase only ✅
-- [x] Check index.ts - should not export MENU_MOCK_DATA ✅
-- [x] Remove menuMock.ts if not used ✅
-- [x] Fix UUID generation (crypto.randomUUID) ✅
-- [x] Fix dish_type constraint mismatch ✅
-- [x] Add missing fields to MenuItem interface (nameEn, imageUrl) ✅
-
-**Results:**
-
-- ✅ menuService.ts migrated to Supabase-only (no in-memory fallback)
-- ✅ Removed mock exports from index.ts
-- ✅ Deleted menuMock.ts
-- ✅ Changed from dual-write to Supabase-first with cache fallback
-- ✅ Fixed UUID generation: now uses crypto.randomUUID() from @/utils/id
-- ✅ Fixed dish_type constraint: 'final' → 'simple' (matches TypeScript)
-- ✅ Added nameEn and imageUrl to MenuItem interface
-- ✅ Full TypeScript ↔ Supabase schema alignment verified
-
----
-
-### Step 2: Products Store Migration ✅ **COMPLETED** (2025-11-18)
-
-**Files:** `src/stores/productsStore/productsStore.ts`, `src/stores/productsStore/productsService.ts`
-
-**Tasks:**
-
-- [x] ✅ Products Store migrated to Supabase-only (no mock data)
-- [x] ✅ Loading 28 products from Supabase successfully
-- [x] ✅ localStorage cache fallback implemented
-- [x] ✅ All mock data references removed
-- [x] ✅ Package options loading from Supabase
-
-**Results:**
-
-- ✅ Products Store verified working with Supabase
-- ✅ 28 products loaded with UUIDs (e.g., `77497b8d-a841-4631-ac73-dae4bfe5a592` for "Olive Oil")
-- ✅ No compilation errors
-- ✅ App running successfully
-
-**IMPORTANT NOTE:** Recipes Store still uses mock data and references old product IDs (`prod-olive-oil`, etc.). This causes "Product not found" warnings. Recipes migration is **Step 3** below.
-
----
-
-### Step 3: Recipes Mocks (recipesMock.ts, unitsMock.ts)
-
-**Files:** `src/stores/recipes/recipesMock.ts`, `src/stores/recipes/unitsMock.ts`
-**Used by:** recipesStore.ts, index.ts
-
-**Current Issue:**
-
-- ❌ Recipes Store loads from `recipesMock.ts` (line 16, 120-121 in recipesStore.ts)
-- ❌ Mock recipes reference old product IDs like `prod-olive-oil`, `prod-garlic`, etc.
-- ❌ Products Store uses UUIDs like `77497b8d-a841-4631-ac73-dae4bfe5a592`
-- ❌ Console warnings: "Product not found: prod-olive-oil" (50+ warnings)
-
-**Tasks:**
-
-- [ ] Create recipes and preparations tables in Supabase
-- [ ] Create recipesService.ts with Supabase integration (like productsService.ts)
-- [ ] Migrate recipe data to use real product UUIDs instead of mock IDs
-- [ ] Update recipesStore.ts to load from Supabase
-- [ ] Check index.ts - should not export RECIPES_MOCK
-- [ ] Remove both mock files after migration
-
----
-
-### Step 3: Preparation Mock (preparationMock.ts) ✅ **COMPLETED** (2025-11-18)
-
-**File:** `src/stores/preparation/preparationMock.ts`
-**Used by:** preparationService.ts, index.ts
-
-**Tasks Completed:**
-
-- [x] ✅ Checked preparationService.ts - simplified to stub mode
-- [x] ✅ Checked index.ts - removed PREPARATION_MOCK exports
-- [x] ✅ Removed mock file completely
-- [x] ✅ Updated recipesStore.ts to remove mock imports
-- [x] ✅ Created simplified preparationService stub for future Supabase integration
-
-**Results:**
-
-- ✅ preparationMock.ts deleted completely
-- ✅ preparationService.ts simplified to stub mode (empty arrays)
-- ✅ All mock exports removed from preparation/index.ts
-- ✅ recipesStore.ts updated to remove mock imports
-- ✅ Application compiles and runs successfully
-- ✅ All "preparationMock" references removed from codebase
-
----
-
-### Step 4: Counteragents Mock (counteragentsMock.ts)
-
-**File:** `src/stores/counteragents/mock/counteragentsMock.ts`
-**Used by:** counteragentsService.ts, index.ts, mockDataCoordinator.ts
-
-**Tasks:**
-
-- [ ] Check counteragentsService.ts - should use Supabase only
-- [ ] Check index.ts - should not export COUNTERAGENTS_MOCK
-- [ ] Remove mock file if not used
-- [ ] Delete empty mock/ directory
-
----
-
-### Step 5: Account Mocks (3 files)
-
-**Files:**
-
-- `src/stores/account/mock.ts`
-- `src/stores/account/accountBasedMock.ts`
-- `src/stores/account/paymentMock.ts`
-
-**Used by:** service.ts, store.ts
-
-**Tasks:**
-
-- [ ] Check account/service.ts - should use Supabase only
-- [ ] Check account/store.ts - should use Supabase only
-- [ ] Remove all 3 mock files if not used
-
----
-
-### Step 6: Shared Definitions (productDefinitions.ts, etc.)
-
-**Files:**
-
-- `src/stores/shared/productDefinitions.ts` - used by supplierService, mockDataCoordinator
-- `src/stores/shared/supplierDefinitions.ts` - used by mockDataCoordinator
-- `src/stores/shared/storageDefinitions.ts` - used by mockDataCoordinator
-
-**Tasks:**
-
-- [ ] Check supplierService.ts - should NOT use productDefinitions
-- [ ] Remove exports from shared/index.ts
-- [ ] Add deprecation notice to files
-- [ ] Move to /reference directory OR keep as-is with deprecation
-
----
-
-### Step 7: Clean Up mockDataCoordinator.ts
-
-**File:** `src/stores/shared/mockDataCoordinator.ts`
-
-**Tasks:**
-
-- [ ] Remove imports of deleted mocks
-- [ ] Add deprecation notice at top
-- [ ] Keep file as reference for data structures
-
----
-
-### Step 8: Verify appInitializer.ts
-
-**File:** `src/core/appInitializer.ts`
-
-**Tasks:**
-
-- [ ] Verify all stores initialize from Supabase (via services)
-- [ ] No imports from mock files
-- [ ] No fallback to mock data
-
----
-
-### Step 9: Final Verification
-
-**Tasks:**
-
-- [ ] Build succeeds: `pnpm build`
-- [ ] App runs: `pnpm dev`
-- [ ] All stores initialize correctly
-- [ ] No console errors about missing mocks
-- [ ] No mock file imports in production code
-
----
-
-### 🔵 Phase 3: Google Sheets Import (Future)
-
-**Goal:** Import real data from Google Sheets to Production DB
-**Status:** 🔲 Deferred to v1.1+
-
-**Tasks:**
-
-- [ ] Set up Google Sheets API credentials
-- [ ] Create import script (scripts/import/importFromGoogleSheets.ts)
-- [ ] Map columns: Google Sheets → Supabase schema
-- [ ] Test import on Development DB
-- [ ] Create Production Supabase project
-- [ ] Import real data to Production DB
-
-## 📝 Phase 1 Completed (2025-11-17)
-
-### ✅ All Backoffice Stores Migrated to Supabase
-
-**Stores:**
-
-- Products ✅
-- Menu ✅
-- Recipes ✅
-- Preparations ✅
-- Counteragents/Suppliers ✅
-- Storage ✅
-- Account ✅
-- Sales ✅
-- Recipe Write-offs ✅
-
-**Integration flows verified:**
-
-- POS → Sales → Write-off → Storage ✅
-- Supplier → Account (Purchase order → Pending payment → Transaction) ✅
-
-**Test data seeded via MCP Supabase tools**
-
-## 🔗 Related Files
-
-- **[PrepProduction.md](./PrepProduction.md)** - Production preparation strategy
-- **[BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md)** - Phase 1 migration details
-- **[PHASE2_MIGRATION.md](./PHASE2_MIGRATION.md)** - Phase 2 cleanup plan
-- **[PRIORITIES.md](./PRIORITIES.md)** - Weekly priorities
-- **[SupabaseGlobalTodo.md](./SupabaseGlobalTodo.md)** - Global roadmap
-
----
-
-## 📅 Schedule
-
-**This Week (2025-11-18):** Phase 2 Mock Cleanup
-
-- ✅ **Day 1 (2025-11-18):** Menu mock cleanup COMPLETED
-  - menuService.ts → Supabase-only
-  - Fixed UUID generation
-  - Fixed dish_type constraint
-  - Added missing TypeScript fields
-  - Verified full schema alignment
-- Day 2: Check and remove recipes/preparation mocks
-- Day 3-4: Check and remove counteragents/account mocks
-- Day 5: Clean up shared definitions and mockDataCoordinator
-- Day 6: Verify appInitializer, final testing
-
-**Next Week:** Production preparation (Google Sheets import)
-
----
-
-**Mantra:** "Supabase-only → Clean code → Production ready"
-
----
-
-**Last Updated:** 2025-11-18
-**Target:** v1.0 Release (after Phase 2 + Google Sheets import)
-**Status:** Phase 2 in progress (mock cleanup)
-
----
-
-# 🔄 Recipes Architecture Refactoring (NEW)
-
-## Phase 1: Preparations ID Migration - IN PROGRESS
-
-### 🔍 Current Analysis Results:
-
-**Current Issues Found:**
-
-- Preparations use TEXT primary keys ("prep-french-fries") ❌
-- Components use global sequence IDs ("comp-1", "comp-2") ❌
-- Steps use global sequence IDs ("step-1", "step-2") ❌
-- Mixed ID types create mapper complexity ❌
-
-**Current Structure:**
-
-```
-Products (UUID) ✅ - Already migrated in previous session
-Preparations (TEXT) - NEED MIGRATION → UUID
-Recipes (TEXT) - NEED MIGRATION → UUID
-Recipe_Components (global: "comp-1") - NEED MIGRATION → composite PK
-Recipe_Steps (global: "step-1") - NEED MIGRATION → composite PK
-```
-
-**Good News:**
-
-- Recipe steps DO start from 1 correctly per recipe ✅
-- Preparation_ingredients vs recipe_components separation is architecturally correct ✅
-- Products → Preparations → Recipes → Menu_Items flow is correct ✅
-
-### 📋 Database Migration Tasks for Preparations:
-
-- [x] Preparations table: TEXT → UUID migration ✅
-- [x] Update preparation_ingredients foreign keys (UUID) ✅
-- [x] Update recipe_components preparation references (UUID) ✅
-- [ ] Update menu_items variants JSON (preparation references)
-- [ ] Create constraints and indexes
-
-### 📋 Frontend Tasks for Preparations:
-
-- [x] Update SupabaseMappers for UUID generation (remove manual ID) ✅
-- [x] Update RecipesService ID handling (let DB generate UUID) ✅
-- [x] Update composables for UUID preparation ✅
-- [x] Create codeGenerator utility for preparation codes ✅
-- [x] Update TypeScript types (if needed) ✅
-
-### ✅ COMPLETED: Preparations UUID Migration (2025-11-18)
-
-**Results:**
-
-- ✅ Preparations table migrated from TEXT to UUID primary keys
-- ✅ All foreign keys updated to use UUID references
-- ✅ Database auto-generates UUIDs for new preparations
-- ✅ Auto-generation of sequential codes (P-001, P-002, etc.)
-- ✅ Frontend service updated to work with UUID generation
-- ✅ Application running successfully on port 5178
-
-### 🧪 Test Tasks:
-
-- [ ] Verify preparation creation works with UUID
-- [ ] Test preparation updates/deletes
-- [ ] Verify menu items still reference preparations correctly
-- [ ] Test cost calculation still works
-
-## Next Steps After Preparations:
-
-**Phase 2: Recipes UUID migration**
-
-- Similar migration for recipes table
-- Update recipe_components and recipe_steps foreign keys
-- Update menu_items recipe references
-
-**Phase 3: Components/Steps Optimization**
-
-- Remove global sequence IDs ("comp-1", "step-1")
-- Use composite primary keys (recipe_id, sort_order)
-- Add constraints for step sequence continuity
-
-**Phase 4: Performance & Constraints**
-
-- Add indexes for frequent queries
-- Add database constraints for data integrity
-- Optimize JSONB queries for menu_items composition
-
----
-
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      base_unit: product.baseUnit,
-      base_cost_per_unit: product.baseCostPerUnit
-      // ... other fields
-    })
-
-    if (error) {
-      console.error(`❌ Failed: ${product.name}`, error)
-    } else {
-      console.log(`✅ Seeded: ${product.name}`)
-    }
-
-}
-}
-
-````
-
----
-
-#### Task 0.3: Create Seed Runner Script ✅
-
-**Time:** 1-2 hours
-**Status:** ✅ Completed
-
-**File:** `scripts/seeds/index.ts`
-
-**Tasks:**
-
-- [x] Create main seedAll() function
-- [x] Import all seed scripts
-- [x] Run seeds in correct order (respecting foreign keys)
-- [x] Add CLI argument support (seed all, seed specific)
-- [x] Add error handling and rollback
-- [x] Created standalone supabaseClient.ts for scripts
-
-**Template:**
-
-```typescript
-import { seedProducts } from './catalog/001_seed_products'
-
-export async function seedAll() {
-  console.log('🌱 Starting database seeding...')
-
-  try {
-    await seedProducts()
-    console.log('✅ Seeding completed!')
-  } catch (error) {
-    console.error('❌ Seeding failed:', error)
-    throw error
-  }
-}
-
-// CLI usage
-if (require.main === module) {
-  seedAll()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1))
-}
-````
-
----
-
-#### Task 0.4: Create `/seed-db` Command ✅
-
-**Time:** 30 minutes
-**Status:** ✅ Completed
-
-**File:** `.claude/commands/seed-db.md`
-
-**Tasks:**
-
-- [x] Create seed-db.md command file
-- [x] Add instructions to run seed scripts
-- [x] Add option to seed all or specific entities
-- [x] Documented MCP-based seeding approach (recommended)
-
-**Template:**
-
-```markdown
-# /seed-db
-
-Execute seed scripts to populate database with test data.
-
-## Usage
-
-\`\`\`bash
-
-# Seed all data
-
-pnpm seed
-
-# Seed specific entity
-
-pnpm seed products
-pnpm seed menu
-\`\`\`
-
-## Process
-
-1. Run seed scripts from scripts/seeds/
-2. Catalog data first (products, categories, etc.)
-3. Transactional data second (optional)
-
-Use after /clean-db to reset test data.
-```
-
----
-
-#### Task 0.5: Test Seed Workflow ✅
-
-**Time:** 1 hour
-**Status:** ✅ Completed
-
-**Tasks:**
-
-- [x] Run `/clean-db` to clear data
-- [x] Run `/seed-db` to populate test data
-- [x] Verify products appear in Supabase
-- [x] Verify app loads products correctly (pending app test)
-- [x] Test repeatability (clean → seed → clean → seed)
-
-**Results:**
-
-- ✅ All 28 products seeded successfully via MCP
-- ✅ Products verified in Supabase (7 categories, 28 total)
-- ✅ Seed workflow operational
-- ✅ MCP-based approach works reliably
-
-**Breakdown by category:**
-
-- Beverages: 4 products
-- Dairy: 5 products
-- Meat: 4 products
-- Other: 6 products
-- Seafood: 1 product
-- Spices: 4 products
-- Vegetables: 4 products
-
----
-
-### 🔴 Phase 1: Menu Migration (Day 3-4) ✅ **COMPLETED**
-
-**Goal:** Menu items in Supabase (critical for POS order creation)
-
-**Status:** ✅ **COMPLETED** (2025-11-17)
-
-**Reference:** Migration pattern same as Products in PrepProduction.md
-
-**Tasks:**
-
-- [x] Create Migration 006: add 'type' column to menu_items ✅
-- [x] Menu tables already exist (menu_categories + menu_items) ✅
-- [x] MenuService with CRUD already implemented ✅
-- [x] MenuStore already uses Supabase (dual-write + cache fallback) ✅
-- [x] Create seed script for test menu (002_seed_menu.ts) ✅
-- [x] Seed menu data via MCP (9 items, 6 categories) ✅
-- [x] Update Supabase mappers to use 'type' column ✅
-- [ ] Test POS can read menu items (pending)
-- [ ] Remove menuMock.ts after full migration verification
-
-**Results:**
-
-- ✅ Migration 006 applied: Added 'type' column (food/beverage)
-- ✅ Supabase mappers updated (removed inference, use explicit columns)
-- ✅ Menu seeded: 6 categories, 9 items (3 beverages, 6 food)
-- ✅ Complex item tested: "Build Your Own Breakfast" with 3 modifier groups
-- ✅ MenuService has dual-write (Supabase + in-memory fallback)
-- ✅ MenuStore prioritizes Supabase with localStorage cache
-
-**Note:** Seed script has Node.js environment compatibility issue (import.meta.env). Used MCP-based seeding instead (recommended approach per PrepProduction.md).
-
----
-
-### 🔴 Phase 1.5: Counteragents/Suppliers Migration ✅ **COMPLETED**
-
-**Goal:** Counteragents (suppliers, service providers) in Supabase
-
-**Status:** ✅ **COMPLETED** (2025-11-17)
-
-**Tasks:**
-
-- [x] Check Counteragent TypeScript interface ✅
-- [x] Create Migration 007: counteragents table ✅
-- [x] Seed counteragent data via MCP (9 counteragents) ✅
-- [ ] Create seed script (003_seed_counteragents.ts) - optional
-- [ ] Test backoffice can read/write counteragents - pending
-
-**Results:**
-
-- ✅ Migration 007 applied: Created counteragents table with full schema
-- ✅ Counteragents seeded: 9 total (7 suppliers, 2 service providers)
-- ✅ Preferred suppliers: 5 (meat, dairy, seafood, vegetables, cleaning)
-- ✅ Product category mapping: Suppliers linked to product categories
-- ✅ All business fields included: payment terms, lead times, delivery schedules
-
-**Breakdown by type:**
-
-- Suppliers: 7 (covering meat, dairy, seafood, vegetables, beverages, spices, other)
-- Services: 2 (cleaning, equipment maintenance)
-
----
-
-### 🟡 Phase 2: Mock Files Cleanup (Day 5)
-
-**Goal:** Replace all mock files with seed scripts
-
-**Status:** 🔲 Pending
-
-**Mock Files to Replace:** (12 files found)
-
-- [x] recipes/unitsMock.ts → seed script ✅ REMOVED (Phase 2 completed)
-- [x] recipes/recipesMock.ts → seed script ✅ REMOVED (Phase 2 completed)
-- [x] preparation/preparationMock.ts → seed script ✅ REMOVED (Phase 2 completed)
-- [ ] account/paymentMock.ts → seed script
-- [ ] account/accountBasedMock.ts → seed script
-- [ ] account/mock.ts → seed script
-- [ ] counteragents/mock/counteragentsMock.ts → seed script
-- [ ] pos/mocks/posMockData.ts → keep (POS test data)
-- [ ] pos/shifts/mock.ts → keep (POS test data)
-- [ ] menu/menuMock.ts → remove (after Menu migration)
-- [ ] kitchen/mocks/kitchenMockData.ts → keep (Kitchen test data)
-- [ ] shared/mockDataCoordinator.ts → keep as reference
-
-**Verification:**
-
-```bash
-# Check for remaining mock files
-find src/stores -name "*mock*.ts" -o -name "*Mock*.ts"
-```
-
----
-
-### 🟢 Phase 3: Remaining Stores Migration (Week 2+)
-
-**Goal:** Migrate all Backoffice stores to Supabase
-
-**Status:** ✅ **COMPLETED** (2025-11-17)
-
-**Stores Migrated:**
-
-- [x] Recipes → Supabase ✅ (Migration 008 - 3 recipes, 6 components, 13 steps)
-- [x] Preparations → Supabase ✅ (Migration 009 - 10 preparations, 48 ingredients)
-- [x] Storage → Supabase ✅ (Migration 010 - 1 warehouse, 28 batches, 6 operations)
-- [x] Supplier Operations → Supabase ✅ (Migration 011 - 1 request, 1 order, 1 receipt)
-- [x] Account Store → Supabase ✅ (Migration 012 - 3 accounts, 4 transactions, 1 pending payment)
-- [x] Sales Store → Supabase ✅ (Migration 013 - sales transactions with profit calculation)
-- [x] Recipe Write-offs → Supabase ✅ (Migration 014 - automatic inventory write-offs)
-
-**Integration Verified:**
-
-- [x] Supplier → Account ✅ (Purchase order → Pending payment → Transaction flow working)
-- [x] POS → Sales → Write-off → Storage ✅ (Payment triggers sales transaction, recipe decomposition, and inventory write-off)
-
-**Reference:** See PrepProduction.md Section 5 for detailed roadmap
-
----
-
-### 🟣 Phase 3.5: Sales Store Migration ✅ **COMPLETED** (2025-11-17)
-
-**Goal:** Migrate Sales Store and Recipe Write-offs from localStorage to Supabase
-
-**Status:** ✅ **COMPLETED**
-
-**Tasks Completed:**
-
-#### Migration 013: Sales Transactions Table
-
-**Created table:** `sales_transactions`
-
-**Schema:**
-
-- Reference links: `payment_id`, `order_id`, `bill_id`, `item_id`, `shift_id`
-- Menu data: `menu_item_id`, `menu_item_name`, `variant_id`, `variant_name`
-- Sale data: `quantity`, `unit_price`, `total_price`, `payment_method`
-- Timestamps: `sold_at`, `processed_by`
-- Recipe link: `recipe_id`, `recipe_write_off_id`
-- **JSONB fields:**
-  - `profit_calculation`: originalPrice, itemOwnDiscount, allocatedBillDiscount, finalRevenue, ingredientsCost, profit, profitMargin
-  - `decomposition_summary`: totalProducts, totalCost, decomposedItems[]
-- Department: `kitchen` | `bar`
-- Sync status: `synced_to_backoffice`, `synced_at`
-
-**Indexes:** sold_at, menu_item_id, payment_id, shift_id, department, payment_method
-
-**RLS:** Enabled with authenticated user policies
-
-#### Migration 014: Recipe Write-offs Table
-
-**Created table:** `recipe_write_offs`
-
-**Schema:**
-
-- Links: `sales_transaction_id`, `menu_item_id`, `variant_id`, `recipe_id`
-- Recipe data: `portion_size`, `sold_quantity`
-- **JSONB arrays:**
-  - `write_off_items`: type, itemId, itemName, quantityPerPortion, totalQuantity, unit, costPerUnit, totalCost, batchIds[]
-  - `decomposed_items`: productId, productName, quantity, unit, costPerUnit, totalCost, path[]
-  - `original_composition`: MenuComposition[] (for audit trail)
-- Operation: `department`, `operation_type` ('auto_sales_writeoff'), `performed_at`, `performed_by`
-- Storage link: `storage_operation_id` (nullable - storage ops not yet in Supabase)
-
-**Indexes:** sales_transaction_id, menu_item_id, performed_at, department, storage_operation_id
-
-**RLS:** Enabled with authenticated user policies
-
-#### Migration 015-016: Foreign Key Constraints
-
-- Made `recipe_write_off_id` nullable in `sales_transactions` (two-phase insert pattern)
-- Made `storage_operation_id` nullable with no FK constraint (storage ops still in localStorage)
-- Added comments explaining circular dependency workaround
-
-#### Services Updated
-
-**SalesService (`src/stores/sales/services.ts`):**
-
-- ✅ Dual-write pattern (Supabase + localStorage fallback)
-- ✅ `getAllTransactions()` - reads from Supabase, caches to localStorage
-- ✅ `saveSalesTransaction()` - upsert to Supabase, backup to localStorage
-- ✅ Mappers created (`src/stores/sales/supabase/mappers.ts`)
-
-**RecipeWriteOffService (`src/stores/sales/recipeWriteOff/services.ts`):**
-
-- ✅ Dual-write pattern (Supabase + localStorage fallback)
-- ✅ `getAllWriteOffs()` - reads from Supabase, caches to localStorage
-- ✅ `saveWriteOff()` - upsert to Supabase, backup to localStorage
-- ✅ Mappers created (`src/stores/sales/recipeWriteOff/supabase/mappers.ts`)
-
-#### Data Flow Verified
-
-**Complete audit trail:**
-
-```
-Payment (Supabase)
-  ↓
-SalesTransaction (Supabase)
-  ↓ profit_calculation = {finalRevenue, ingredientsCost, profit, profitMargin}
-  ↓ decomposition_summary = {totalProducts, totalCost, decomposedItems[]}
-  ↓
-RecipeWriteOff (Supabase)
-  ↓ write_off_items = [{type, itemId, quantity, cost, batchIds}]
-  ↓ decomposed_items = [{productId, quantity, unit, cost, path}]
-  ↓
-StorageOperation (localStorage - not yet migrated)
-  ↓ FIFO batch allocation
-  ↓
-StorageBatches (Supabase)
-  ↓ currentQuantity updated
-```
-
-#### Test Results
-
-**Tested transactions (2025-11-17):**
-
-1. **Bintang Beer (bar)** - Rp 25,000
-
-   - Revenue: Rp 25,000
-   - Cost: Rp 12,000
-   - Profit: Rp 13,000
-   - Margin: 52%
-   - Payment method: Cash
-   - Department: Bar
-
-2. **Beef Steak (kitchen)** - Rp 95,000
-   - Revenue: Rp 95,000
-   - Cost: Rp 46,099
-   - Profit: Rp 48,901
-   - Margin: 51.47%
-   - Payment method: Cash
-   - Department: Kitchen
-   - Write-off: 250g beef, 10ml oil, 3g salt, 2g pepper
-
-**Aggregate Statistics (from Supabase):**
-
-- Total transactions: 2
-- Total revenue: Rp 120,000
-- Total cost: Rp 58,099
-- Total profit: Rp 61,901
-- Average margin: 51.73%
-
-**Data Flow Verified:**
-
-```
-POS Payment (✅)
-  ↓
-Sales Transaction (✅ Supabase + localStorage backup)
-  ↓ profit_calculation = {finalRevenue: 120000, ingredientsCost: 58099, profit: 61901}
-  ↓ decomposition_summary = {totalProducts: 4, totalCost: 58099}
-  ↓
-Recipe Write-off (✅ Supabase + localStorage backup)
-  ↓ write_off_items = [{beef: 250g}, {oil: 10ml}, {salt: 3g}, {pepper: 2g}]
-  ↓ decomposed_items with FIFO batch tracking
-  ↓
-Storage Operation (⏳ localStorage - migration pending)
-  ↓ FIFO batch allocation from storage_batches
-```
-
-**Key Learnings:**
-
-1. ✅ JSONB fields perfect for complex nested data (profit calculations, decompositions)
-2. ✅ Two-phase insert pattern resolves circular FK dependencies (sales_transaction ↔ recipe_write_off)
-3. ✅ Nullable FK constraints allow gradual migration (storage_operation_id has no FK until storage ops migrated)
-4. ✅ Dual-write pattern provides resilience during migration (Supabase primary, localStorage fallback)
-5. ✅ TypeScript interfaces → Supabase schema mapping critical for data integrity
-6. ✅ Recipe decomposition engine works correctly (menu → recipes → preparations → products)
-7. ✅ Profit calculation accurate (revenue - discounts - ingredient costs = profit)
-
----
-
-### 🔵 Phase 4: Google Sheets Import (Before Production)
-
-**Goal:** Import real data from Google Sheets to Production DB
-
-**Status:** 🔲 Pending (before v1.0 release)
-
-**Tasks:**
-
-- [ ] Set up Google Sheets API credentials
-- [ ] Create import script (scripts/import/importFromGoogleSheets.ts)
-- [ ] Map columns: Google Sheets → Supabase schema
-- [ ] Test import on Development DB
-- [ ] Create Production Supabase project
-- [ ] Import real data to Production DB
-
-**Reference:** See PrepProduction.md Section 4
-
----
-
-## 📋 Testing Checklist
-
-### Integration Tests (Day 4-5):
-
-#### Test 1: Backoffice → POS Data Flow
-
-- [ ] Create order in POS
-- [ ] Check order appears in Backoffice immediately
-- [ ] Verify all order details correct (items, amounts, status)
-
-#### Test 2: Backoffice → POS Product Flow
-
-- [ ] Create product in Backoffice
-- [ ] Check product appears in POS menu
-- [ ] Use product in POS order
-- [ ] Verify order saves correctly
-
-#### Test 3: Backoffice → POS Menu Flow
-
-- [ ] Create menu item in Backoffice
-- [ ] Set department (kitchen or bar)
-- [ ] Check item appears in POS
-- [ ] Create order with new item
-- [ ] Verify shows in correct department (Kitchen/Bar monitor)
-
-#### Test 4: End-to-End Flow
-
-- [ ] Backoffice: Create product (Eggs)
-- [ ] Backoffice: Create menu item (Scrambled Eggs, uses Eggs)
-- [ ] POS: Create order with Scrambled Eggs
-- [ ] POS: Send to kitchen
-- [ ] Kitchen: Mark as ready
-- [ ] POS: Process payment
-- [ ] Backoffice: Check order history shows payment
-- [ ] Backoffice: Check shift report includes sale
-
-**Expected:** Full data flow works end-to-end ✅
-
----
-
-## 📝 Completed This Sprint
-
-### PrepProduction Strategy ✅ (2025-11-17)
-
-- ✅ Created PrepProduction.md with full strategy
-- ✅ Defined seed scripts approach
-- ✅ Defined Google Sheets import strategy
-- ✅ Identified 12 mock files to replace
-- ✅ Two-database strategy (Dev + Prod)
-
-### Bar Workflow ✅ (2025-11-16)
-
-- ✅ Simplified bar workflow (2 columns)
-- ✅ Department-aware status transitions
-- ✅ Role-based access
-
-### Kitchen-POS Realtime ✅ (2025-11-15)
-
-- ✅ Realtime sync working
-- ✅ Department filtering
-- ✅ Item status tracking
-
-### POS Supabase Migration ✅ (Week 2)
-
-- ✅ Orders → Supabase
-- ✅ Payments → Supabase
-- ✅ Shifts → Supabase
-- ✅ Tables → Supabase
-
-### Catalog Data ✅ (Week 1)
-
-- ✅ Products → Supabase
-- ✅ Categories → Supabase
-
----
-
-## 🎯 v1.0 Release Criteria
-
-### Must Have:
-
-- ✅ POS → Supabase (Orders, Payments, Shifts, Tables)
-- ✅ Kitchen/Bar → Supabase (Realtime sync)
-- ✅ Products → Supabase
-- ✅ Categories → Supabase
-- ✅ Seed scripts infrastructure (Phase 0 complete)
-- ✅ 28 products seeded successfully
-- 🔲 Menu → Supabase (Phase 1 - in progress)
-- 🔲 Mock files replaced with seeds
-- 🔲 Google Sheets import script
-- 🔲 Production DB created
-- 🔲 Real data imported
-- 🔲 Build succeeds
-- 🔲 Production deployed
-
-### Deferred to v1.1+:
-
-- Recipes → Supabase (Sprint N+1)
-- Storage → Supabase (Sprint N+2)
-- Suppliers → Supabase (Sprint N)
-- Preparations → Supabase (Sprint N+3)
-- Offline sync queue (Sprint 9)
-
----
-
-## ⚠️ CRITICAL: Migration Best Practices
-
-### Rule #1: TypeScript Interface First, Database Schema Second
-
-**ALWAYS follow this workflow when creating/updating database tables:**
-
-1. **Check TypeScript Interface:**
-
-   ```typescript
-   // Example: src/stores/productsStore/types.ts
-   export interface Product extends BaseEntity {
-     name: string
-     baseUnit: BaseUnit // ← Check this field exists!
-     baseCostPerUnit: number // ← Check this field exists!
-     // ... all other fields
-   }
-   ```
-
-2. **Map Interface → Database Schema:**
-
-   - TypeScript: `baseUnit` → SQL: `base_unit` (snake_case)
-   - TypeScript: `baseCostPerUnit` → SQL: `base_cost_per_unit`
-   - TypeScript: `usedInDepartments: Department[]` → SQL: `used_in_departments TEXT[]`
-
-3. **Create Migration:**
-
-   - Reference the TypeScript interface in migration comments
-   - Add ALL required fields from interface
-   - Include proper types, constraints, defaults
-
-4. **Verify with Seed Script:**
-   - Seed data should match interface structure
-   - Test that app can read seeded data without errors
-
-### Example: Products Migration (Lesson Learned)
-
-**❌ What Went Wrong:**
-
-- Created `products` table without checking `Product` interface
-- Missing: `baseUnit`, `baseCostPerUnit`, `yieldPercentage`, `canBeSold`, `usedInDepartments`
-- Had to create Migration 005 to fix the schema
-
-**✅ Correct Approach:**
+**Structure:**
 
 ```sql
--- Migration 005: Update products table to match Product interface
--- Reference: src/stores/productsStore/types.ts
-
-ALTER TABLE products
-ADD COLUMN base_unit TEXT CHECK (base_unit IN ('gram', 'ml', 'piece')),
-ADD COLUMN base_cost_per_unit DECIMAL(10, 2),
-ADD COLUMN yield_percentage INTEGER DEFAULT 100,
-ADD COLUMN can_be_sold BOOLEAN DEFAULT false,
-ADD COLUMN used_in_departments TEXT[] DEFAULT ARRAY['kitchen'];
+id                    UUID PRIMARY KEY
+code                  TEXT UNIQUE          -- Auto: P-001, P-002...
+name                  TEXT NOT NULL
+type                  preparation_type     -- 'sauce', 'garnish', 'marinade', 'semifinished', 'seasoning', 'other'
+output_quantity       DECIMAL(10,3)
+output_unit           TEXT                 -- 'gram', 'ml', 'piece'
+preparation_time      INTEGER              -- minutes
+cost_per_portion      DECIMAL(10,2)
+used_in_departments   TEXT[]               -- ['kitchen', 'bar']
+shelf_life            INTEGER              -- days (� MISSING in TypeScript interface)
+is_active             BOOLEAN DEFAULT true
+created_at            TIMESTAMPTZ
+updated_at            TIMESTAMPTZ
 ```
 
-### Checklist for New Migrations
+**RLS:** � DISABLED (needs enabling)
 
-- [ ] Read TypeScript interface file (`src/stores/*/types.ts`)
-- [ ] List ALL fields from interface
-- [ ] Map camelCase → snake_case
-- [ ] Map TypeScript types → PostgreSQL types
-- [ ] Add NOT NULL constraints for required fields
-- [ ] Add CHECK constraints for enums
-- [ ] Add default values where appropriate
-- [ ] Create indexes for frequently queried fields
-- [ ] Add comments referencing the TypeScript interface
-- [ ] Test with seed data
+**TypeScript Interface Location:** `src/stores/recipes/types.ts`
 
 ---
 
-## 🔗 Related Files
+### 2. `preparation_batches` (14 rows + old data) - Inventory
 
-- **[PrepProduction.md](./PrepProduction.md)** - 🔥 Production preparation strategy (NEW)
-- **[BACKOFFICE_MIGRATION.md](./BACKOFFICE_MIGRATION.md)** - Detailed migration plan
-- **[PRIORITIES.md](./PRIORITIES.md)** - Weekly priorities
-- **[next_todo.md](./next_todo.md)** - Offline sync (Sprint 9)
-- **[SupabaseGlobalTodo.md](./SupabaseGlobalTodo.md)** - Global roadmap
+**Purpose:** Tracks inventory batches with FIFO logic
+
+**Structure:**
+
+```sql
+id                 UUID PRIMARY KEY
+batch_number       TEXT NOT NULL         -- Format: B-PREP-{NAME}-{SEQ}-{DATE}
+preparation_id     UUID REFERENCES preparations(id)
+department         TEXT NOT NULL         -- 'kitchen' | 'bar'
+initial_quantity   DECIMAL(10,3)
+current_quantity   DECIMAL(10,3)         -- Decreases with consumption
+unit               TEXT NOT NULL
+cost_per_unit      DECIMAL(10,2)
+total_value        DECIMAL(10,2)         -- current_quantity * cost_per_unit
+production_date    TIMESTAMPTZ NOT NULL
+expiry_date        TIMESTAMPTZ
+source_type        TEXT                  -- 'production', 'transfer', 'correction'
+status             TEXT                  -- 'active', 'consumed', 'expired', 'written_off'
+is_active          BOOLEAN DEFAULT true
+created_at         TIMESTAMPTZ
+updated_at         TIMESTAMPTZ
+```
+
+**RLS:** � DISABLED (needs enabling)
+
+**FIFO Query:**
+
+```sql
+-- Get batches in FIFO order for consumption
+SELECT * FROM preparation_batches
+WHERE preparation_id = $1
+  AND department = $2
+  AND status = 'active'
+  AND current_quantity > 0
+ORDER BY production_date ASC, created_at ASC;
+```
+
+**� DATA ISSUE:** Contains old TEXT IDs that need cleanup:
+
+- `prep-batch-015`, `prep-batch-016`, etc.
 
 ---
 
-## 📅 This Week Schedule (Updated 2025-11-17)
+### 3. `preparation_operations` (17 rows + old data) - Audit Trail
 
-**Day 1 (Today):** Create seed scripts infrastructure
-**Day 2:** Products seed script + /seed-db command
-**Day 3:** Test seed workflow, start Menu migration
-**Day 4:** Menu migration (tables + service + store)
-**Day 5:** Menu seed script, mock cleanup
-**Day 6:** Review progress, plan next sprint
+**Purpose:** Complete audit trail of all storage operations
+
+**Structure:**
+
+```sql
+id                   UUID PRIMARY KEY
+operation_type       TEXT NOT NULL      -- 'receipt', 'correction', 'write_off', 'inventory'
+document_number      TEXT UNIQUE        -- Format: PREP-{TYPE}-{SEQ}
+operation_date       TIMESTAMPTZ NOT NULL
+department           TEXT NOT NULL
+responsible_person   TEXT
+items                JSONB NOT NULL     -- Array of operation items
+total_value          DECIMAL(10,2)
+status               TEXT               -- 'draft', 'confirmed', 'cancelled'
+notes                TEXT
+consumption_details  JSONB              -- For consumption operations
+created_at           TIMESTAMPTZ
+updated_at           TIMESTAMPTZ
+```
+
+**RLS:** � DISABLED (needs enabling)
+
+**Items JSONB Structure:**
+
+```typescript
+{
+  preparationId: string,
+  preparationName: string,
+  quantity: number,
+  unit: string,
+  totalCost: number,
+  batchAllocations?: [{
+    batchId: string,
+    batchNumber: string,
+    quantity: number,
+    costPerUnit: number,
+    batchDate: string
+  }]
+}[]
+```
+
+**� DATA ISSUE:** Contains invalid operation type `'consumption'` (should be `'write_off'`)
 
 ---
 
-**Mantra:** "Seed Scripts → Clean Data → Production Ready"
+### 4. `preparation_inventory_documents` (0 rows) - Inventory Sessions
+
+**Purpose:** Track inventory counting sessions
+
+**Structure:**
+
+```sql
+id                     UUID PRIMARY KEY
+document_number        TEXT UNIQUE
+inventory_date         TIMESTAMPTZ NOT NULL
+department             TEXT NOT NULL
+status                 TEXT              -- 'in_progress', 'completed', 'cancelled'
+responsible_person     TEXT
+total_items            INTEGER
+discrepancies_count    INTEGER
+created_at             TIMESTAMPTZ
+updated_at             TIMESTAMPTZ
+```
+
+**RLS:**  ENABLED
 
 ---
 
-**Last Updated:** 2025-11-17
-**Target:** v1.0 Release (TBD after all stores migrated)
-**Status:** Creating seed infrastructure
+### 5. `preparation_inventory_items` (0 rows) - Inventory Items
+
+**Purpose:** Individual items counted during inventory
+
+**Structure:**
+
+```sql
+id                 UUID PRIMARY KEY
+inventory_id       UUID REFERENCES preparation_inventory_documents(id)
+preparation_id     UUID REFERENCES preparations(id)
+system_quantity    DECIMAL(10,3)        -- From batches
+counted_quantity   DECIMAL(10,3)        -- Physical count
+difference         DECIMAL(10,3)        -- counted - system
+notes              TEXT
+created_at         TIMESTAMPTZ
+updated_at         TIMESTAMPTZ
+```
+
+**RLS:**  ENABLED
+
+---
+
+### 6. `preparation_ingredients` (57 rows) - Recipe Composition
+
+**Purpose:** Links preparations to products (what products are used to make preparations)
+
+**Structure:**
+
+```sql
+id                 TEXT (� Should be UUID)
+preparation_id     UUID REFERENCES preparations(id)
+product_id         UUID REFERENCES products(id)
+quantity           DECIMAL(10,3)
+unit               TEXT
+notes              TEXT
+```
+
+**RLS:** � DISABLED (needs enabling)
+
+**� MIGRATION NEEDED:** ID column should be UUID, currently TEXT
+
+---
+
+## <� Migration Tasks
+
+### Phase 1: Cleanup & Type Fixes (~45 min)
+
+#### 1.1 Fix Type System
+
+- [ ] Add `shelfLife?: number` to Preparation interface
+
+  - File: `src/stores/recipes/types.ts`
+  - Location: Preparation interface
+  - Fixes errors in: preparationService.ts:66, usePreparationWriteOff.ts:469
+
+- [ ] Fix PreparationDepartment type to include 'all'
+  - File: `src/stores/preparation/types.ts`
+  - Change: `type PreparationDepartment = 'kitchen' | 'bar' | 'all'`
+  - Fixes 6 type errors in preparationService.ts (lines 153, 187, 208, 411, 855, 878)
+
+#### 1.2 Remove Mock Files
+
+- [ ] Delete `src/stores/preparation/preparationMock.ts`
+- [ ] Remove mock import from `src/stores/preparation/index.ts` (line 59)
+- [ ] Remove mock exports from index.ts (lines 51-59)
+- [ ] Remove mock imports from `src/stores/preparation/preparationService.ts` (lines 4-8)
+- [ ] Remove unused variable `days` from preparationService.ts:895
+
+#### 1.3 Clean Up Database - Remove Old Data
+
+**� CRITICAL:** Database contains two sets of data:
+
+- **Old data** (TEXT IDs): 4 batches + 2 operations with IDs like `prep-batch-015`, `prep-tomato-sauce`
+- **New data** (UUIDs): 12 preparations without batches
+
+**Example of problematic data:**
+
+```json
+// OLD - TEXT IDs (should be deleted)
+{
+  "id": "prep-batch-015",
+  "preparationId": "prep-mashed-potato"
+}
+
+// NEW - UUIDs (correct)
+{
+  "id": "f57a4016-2c2c-4c1b-bd22-5275eaf5ff3b",
+  "preparationId": "b05daffe-3e98-4106-977a-522d91b30dd9"
+}
+```
+
+**Tasks:**
+
+- [ ] Delete old batches with TEXT IDs:
+
+  ```sql
+  -- First verify what will be deleted
+  SELECT id, batch_number, preparation_id
+  FROM preparation_batches
+  WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+  -- Then delete
+  DELETE FROM preparation_batches
+  WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  ```
+
+- [ ] Delete old operations with TEXT IDs:
+
+  ```sql
+  -- First verify
+  SELECT id, operation_type, document_number
+  FROM preparation_operations
+  WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+  -- Then delete
+  DELETE FROM preparation_operations
+  WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  ```
+
+- [ ] Fix invalid operation type 'consumption' � 'write_off':
+
+  ```sql
+  -- First check
+  SELECT id, operation_type FROM preparation_operations
+  WHERE operation_type = 'consumption';
+
+  -- Then fix
+  UPDATE preparation_operations
+  SET operation_type = 'write_off'
+  WHERE operation_type = 'consumption';
+  ```
+
+- [ ] Verify cleanup completed:
+
+  ```sql
+  -- Should return 0 rows
+  SELECT id FROM preparation_batches
+  WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+  SELECT id FROM preparation_operations
+  WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  ```
+
+---
+
+### Phase 2: Supabase Service Integration (~60 min)
+
+#### 2.1 Fix Existing Supabase Service
+
+- [ ] Fix `src/stores/recipes/supabase/preparationsSupabaseService.ts` imports
+  - [ ] Fix `@/config/supabase` import path
+  - [ ] Fix `@/utils` import path
+  - [ ] Fix `./mappers` import (create if missing)
+  - [ ] Fix all implicit `any` type errors
+
+#### 2.2 Create Database Mappers
+
+- [ ] Create `src/stores/recipes/supabase/preparationMappers.ts`
+  - [ ] `mapPreparationFromDB()` - Database � App
+  - [ ] `mapPreparationToDB()` - App � Database
+  - [ ] `mapBatchFromDB()` - Database � App
+  - [ ] `mapBatchToDB()` - App � Database
+  - [ ] `mapOperationFromDB()` - Database � App
+  - [ ] `mapOperationToDB()` - App � Database
+
+**Mapper Example:**
+
+```typescript
+export function mapBatchFromDB(dbBatch: any): PreparationBatch {
+  return {
+    id: dbBatch.id,
+    batchNumber: dbBatch.batch_number,
+    preparationId: dbBatch.preparation_id,
+    department: dbBatch.department,
+    initialQuantity: dbBatch.initial_quantity,
+    currentQuantity: dbBatch.current_quantity,
+    unit: dbBatch.unit,
+    costPerUnit: dbBatch.cost_per_unit,
+    totalValue: dbBatch.total_value,
+    productionDate: dbBatch.production_date,
+    expiryDate: dbBatch.expiry_date,
+    sourceType: dbBatch.source_type,
+    status: dbBatch.status,
+    isActive: dbBatch.is_active,
+    createdAt: dbBatch.created_at,
+    updatedAt: dbBatch.updated_at
+  }
+}
+```
+
+#### 2.3 Migrate preparationService to Supabase
+
+**File:** `src/stores/preparation/preparationService.ts`
+
+- [ ] Import preparationsSupabaseService
+- [ ] Remove in-memory storage (batches, operations, balances arrays)
+- [ ] Remove `loadMockData()` method
+
+**Implement Supabase Operations:**
+
+- [ ] `fetchBalances()` � Query batches and calculate balances
+
+  ```typescript
+  // Get all active batches
+  const { data: batches } = await supabase
+    .from('preparation_batches')
+    .select('*')
+    .eq('status', 'active')
+    .gt('current_quantity', 0)
+
+  // Calculate balances by preparation + department
+  ```
+
+- [ ] `fetchBatches(department, status)` � Query with filters
+
+  ```typescript
+  let query = supabase
+    .from('preparation_batches')
+    .select('*')
+    .order('production_date', { ascending: true })
+
+  if (department && department !== 'all') {
+    query = query.eq('department', department)
+  }
+  if (status) {
+    query = query.eq('status', status)
+  }
+  ```
+
+- [ ] `fetchOperations(dateFrom, dateTo, department)` � Query with date range
+
+  ```typescript
+  const { data } = await supabase
+    .from('preparation_operations')
+    .select('*')
+    .gte('operation_date', dateFrom)
+    .lte('operation_date', dateTo)
+    .eq('department', department)
+    .order('operation_date', { ascending: false })
+  ```
+
+- [ ] `createReceipt()` � Transaction: insert operation + create batch
+
+  ```typescript
+  // 1. Insert operation
+  const { data: operation } = await supabase
+    .from('preparation_operations')
+    .insert({
+      operation_type: 'receipt',
+      document_number: generateDocNumber('PREP-REC'),
+      operation_date: new Date(),
+      department,
+      items,
+      total_value
+    })
+    .select()
+    .single()
+
+  // 2. Create batch
+  const { data: batch } = await supabase
+    .from('preparation_batches')
+    .insert({
+      preparation_id: preparationId,
+      batch_number: generateBatchNumber(),
+      department,
+      initial_quantity: quantity,
+      current_quantity: quantity,
+      cost_per_unit: costPerUnit,
+      production_date: new Date(),
+      expiry_date: calculateExpiryDate(shelfLife)
+    })
+    .select()
+    .single()
+  ```
+
+- [ ] `createCorrection()` � Transaction: insert operation + update batch
+- [ ] `createWriteOff()` � Transaction: insert operation + FIFO batch allocation
+
+  ```typescript
+  // 1. Find batches to allocate from (FIFO)
+  const batches = await getBatchesFIFO(preparationId, department, quantity)
+
+  // 2. Update batch quantities
+  for (const allocation of batches) {
+    await supabase
+      .from('preparation_batches')
+      .update({
+        current_quantity: allocation.newQuantity,
+        status: allocation.newQuantity === 0 ? 'consumed' : 'active'
+      })
+      .eq('id', allocation.batchId)
+  }
+
+  // 3. Insert operation with batch allocations
+  await supabase.from('preparation_operations').insert(operation)
+  ```
+
+- [ ] `startInventory()` � Insert inventory document
+- [ ] `updateInventory()` � Upsert inventory items
+- [ ] `finalizeInventory()` � Transaction: update document + create corrections
+
+**Workflow Reference:**
+
+<details>
+<summary>=� Complete Supabase Integration Examples</summary>
+
+```typescript
+// FIFO Batch Allocation Helper
+async function getBatchesFIFO(
+  preparationId: string,
+  department: string,
+  neededQuantity: number
+): Promise<BatchAllocation[]> {
+  const { data: batches } = await supabase
+    .from('preparation_batches')
+    .select('*')
+    .eq('preparation_id', preparationId)
+    .eq('department', department)
+    .eq('status', 'active')
+    .gt('current_quantity', 0)
+    .order('production_date', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  let remaining = neededQuantity
+  const allocations: BatchAllocation[] = []
+
+  for (const batch of batches) {
+    if (remaining <= 0) break
+
+    const allocatedQty = Math.min(remaining, batch.current_quantity)
+    allocations.push({
+      batchId: batch.id,
+      batchNumber: batch.batch_number,
+      quantity: allocatedQty,
+      costPerUnit: batch.cost_per_unit,
+      newQuantity: batch.current_quantity - allocatedQty
+    })
+
+    remaining -= allocatedQty
+  }
+
+  return allocations
+}
+
+// Calculate Balances
+async function calculateBalances(department?: string): Promise<PreparationBalance[]> {
+  let query = supabase
+    .from('preparation_batches')
+    .select('*, preparation:preparations(*)')
+    .eq('status', 'active')
+    .gt('current_quantity', 0)
+
+  if (department && department !== 'all') {
+    query = query.eq('department', department)
+  }
+
+  const { data: batches } = await query
+
+  // Group by preparation + department
+  const grouped = batches.reduce((acc, batch) => {
+    const key = `${batch.preparation_id}_${batch.department}`
+    if (!acc[key]) {
+      acc[key] = {
+        preparationId: batch.preparation_id,
+        preparationName: batch.preparation.name,
+        department: batch.department,
+        batches: [],
+        totalQuantity: 0,
+        totalValue: 0
+      }
+    }
+    acc[key].batches.push(batch)
+    acc[key].totalQuantity += batch.current_quantity
+    acc[key].totalValue += batch.total_value
+    return acc
+  }, {})
+
+  return Object.values(grouped)
+}
+```
+
+</details>
+
+---
+
+### Phase 3: RLS Policies & Security (~45 min)
+
+#### 3.1 Enable RLS
+
+- [ ] Create migration: `enable_rls_on_preparations`
+  ```sql
+  -- Enable RLS on all preparation tables
+  ALTER TABLE preparations ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE preparation_batches ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE preparation_operations ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE preparation_ingredients ENABLE ROW LEVEL SECURITY;
+  ```
+
+#### 3.2 Create RLS Policies
+
+- [ ] `preparations` table policies:
+
+  ```sql
+  -- SELECT: All authenticated users
+  CREATE POLICY "preparations_select" ON preparations
+    FOR SELECT TO authenticated
+    USING (true);
+
+  -- INSERT: All authenticated users
+  CREATE POLICY "preparations_insert" ON preparations
+    FOR INSERT TO authenticated
+    WITH CHECK (true);
+
+  -- UPDATE: All authenticated users
+  CREATE POLICY "preparations_update" ON preparations
+    FOR UPDATE TO authenticated
+    USING (true);
+
+  -- DELETE: Admin/Manager only
+  CREATE POLICY "preparations_delete" ON preparations
+    FOR DELETE TO authenticated
+    USING (auth.jwt() ->> 'role' IN ('admin', 'manager'));
+  ```
+
+- [ ] `preparation_batches` table policies:
+
+  ```sql
+  CREATE POLICY "preparation_batches_select" ON preparation_batches
+    FOR SELECT TO authenticated USING (true);
+
+  CREATE POLICY "preparation_batches_insert" ON preparation_batches
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+  CREATE POLICY "preparation_batches_update" ON preparation_batches
+    FOR UPDATE TO authenticated USING (true);
+
+  CREATE POLICY "preparation_batches_delete" ON preparation_batches
+    FOR DELETE TO authenticated
+    USING (auth.jwt() ->> 'role' IN ('admin', 'manager'));
+  ```
+
+- [ ] `preparation_operations` table policies:
+
+  ```sql
+  CREATE POLICY "preparation_operations_select" ON preparation_operations
+    FOR SELECT TO authenticated USING (true);
+
+  CREATE POLICY "preparation_operations_insert" ON preparation_operations
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+  CREATE POLICY "preparation_operations_update" ON preparation_operations
+    FOR UPDATE TO authenticated
+    USING (auth.jwt() ->> 'email' = responsible_person);
+
+  CREATE POLICY "preparation_operations_delete" ON preparation_operations
+    FOR DELETE TO authenticated
+    USING (auth.jwt() ->> 'role' IN ('admin', 'manager'));
+  ```
+
+- [ ] `preparation_ingredients` table policies:
+
+  ```sql
+  CREATE POLICY "preparation_ingredients_select" ON preparation_ingredients
+    FOR SELECT TO authenticated USING (true);
+
+  CREATE POLICY "preparation_ingredients_insert" ON preparation_ingredients
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+  CREATE POLICY "preparation_ingredients_update" ON preparation_ingredients
+    FOR UPDATE TO authenticated USING (true);
+
+  CREATE POLICY "preparation_ingredients_delete" ON preparation_ingredients
+    FOR DELETE TO authenticated
+    USING (auth.jwt() ->> 'role' IN ('admin', 'manager'));
+  ```
+
+#### 3.3 Verify Security
+
+- [ ] Run security advisor: `mcp__supabase__get_advisors({ type: 'security' })`
+- [ ] Verify no missing RLS policies
+- [ ] Fix any security warnings
+
+---
+
+### Phase 4: Testing & Validation (~30 min)
+
+#### 4.1 TypeScript Compilation
+
+- [ ] Run `pnpm build` - verify no errors
+- [ ] Verify all 16+ diagnostics from preparationService.ts are fixed
+- [ ] Check no implicit any errors
+- [ ] Check no type mismatch errors
+
+#### 4.2 Functional Testing
+
+**Test Balances View:**
+
+- [ ] Open `/preparation` view in browser
+- [ ] Verify preparations load from Supabase
+- [ ] Check balances display correctly
+- [ ] Verify department filter works ('all', 'kitchen', 'bar')
+- [ ] Verify batch tracking (FIFO order)
+
+**Test Production Receipt:**
+
+- [ ] Create new receipt
+- [ ] Select preparation
+- [ ] Enter quantity and cost
+- [ ] Save receipt
+- [ ] Verify batch created in Supabase
+- [ ] Verify operation saved in Supabase
+- [ ] Check balance updated
+
+**Test Correction:**
+
+- [ ] Create correction (add/subtract)
+- [ ] Select preparation and batch
+- [ ] Enter correction quantity
+- [ ] Save correction
+- [ ] Verify batch quantity updated
+- [ ] Verify correction operation saved
+
+**Test Write-off:**
+
+- [ ] Create write-off
+- [ ] Select preparation
+- [ ] Select reason (spoilage, waste, sample, other)
+- [ ] Enter quantity
+- [ ] Save write-off
+- [ ] Verify FIFO batch allocation
+- [ ] Verify batch quantities decreased
+- [ ] Verify write-off operation saved
+
+**Test Inventory:**
+
+- [ ] Start new inventory
+- [ ] Select department
+- [ ] Count preparations (enter counted quantities)
+- [ ] Verify discrepancies calculated
+- [ ] Finalize inventory
+- [ ] Verify corrections created for discrepancies
+- [ ] Check balances updated
+
+**Test Operations History:**
+
+- [ ] Open operations tab
+- [ ] Verify all operations displayed
+- [ ] Verify date range filter works
+- [ ] Verify department filter works
+- [ ] Verify operation details show correctly
+
+#### 4.3 Console Verification
+
+- [ ] No TypeScript errors in browser console
+- [ ] No network errors (failed Supabase queries)
+- [ ] No data loading errors
+- [ ] No RLS policy errors
+- [ ] Verify debug logs show Supabase operations
+
+---
+
+## <� Success Criteria
+
+**Phase 1 Complete:**
+
+-  TypeScript compiles without errors
+-  Mock files deleted
+-  Database cleaned (only UUID data)
+-  All type system issues fixed
+
+**Phase 2 Complete:**
+
+-  preparationService uses Supabase
+-  All CRUD operations work
+-  FIFO logic implemented
+-  Balances calculated correctly
+-  Operations audit trail complete
+
+**Phase 3 Complete:**
+
+-  RLS enabled on all tables
+-  All policies created
+-  Security advisor shows no warnings
+
+**Phase 4 Complete:**
+
+-  All functional tests pass
+-  No errors in console
+-  App runs successfully at http://localhost:5174/
+-  Preparation view works end-to-end
+
+---
+
+## =� Notes & Reminders
+
+**Field Naming Convention:**
+
+- Database: `snake_case` (preparation_id, cost_per_unit)
+- TypeScript: `camelCase` (preparationId, costPerUnit)
+
+**FIFO Logic:**
+
+- Always order by `production_date ASC, created_at ASC`
+- Allocate from oldest batches first
+- Update batch status to 'consumed' when quantity reaches 0
+
+**Cost Calculation:**
+
+- Batch total_value = current_quantity \* cost_per_unit
+- Balance average_cost = SUM(total_value) / SUM(quantity)
+
+**TypeScript Issues to Remember:**
+
+- Add `shelfLife?: number` to Preparation interface
+- Add `'all'` to PreparationDepartment type
+- Remove all mock file references
+
+---
+
+**Last Updated:** 2025-11-20
+**Estimated Total Time:** ~3 hours
+**Status:** Phase 1 - Ready to start

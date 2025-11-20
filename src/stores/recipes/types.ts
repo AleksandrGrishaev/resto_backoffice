@@ -66,6 +66,7 @@ export interface Preparation extends BaseEntity {
   instructions: string
   isActive: boolean
   costPerPortion?: number // Себестоимость за грамм/мл
+  shelfLife?: number // Срок хранения в днях
 }
 
 /**
