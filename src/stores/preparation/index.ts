@@ -47,4 +47,13 @@ export { usePreparationStore } from './preparationStore'
 // ✅ NEW: Export write-off composable
 export { usePreparationWriteOff } from './composables/usePreparationWriteOff'
 
-// Note: Preparation mock data removed - batch tracking will be migrated to Supabase in future sprint
+// Export mock data for testing
+export {
+  mockPreparationBatches,
+  mockPreparationOperations,
+  mockPreparationBalances,
+  generatePreparationBatchNumber,
+  calculatePreparationFifoAllocation,
+  createPreparationBalances,
+  getPreparationStatistics
+} from './preparationMock'
