@@ -76,6 +76,7 @@ export interface StorageOperation extends BaseEntity {
   operationType: OperationType
   documentNumber: string
   operationDate: string
+  warehouseId?: string // Warehouse where operation was performed
   department: Department
   responsiblePerson: string
   items: StorageOperationItem[]
@@ -178,23 +179,30 @@ export interface InventoryItem {
 
 // DTOs
 export interface CreateReceiptData {
+  warehouseId: string
   department: Department
   responsiblePerson: string
   items: ReceiptItem[]
   sourceType: BatchSourceType
+  supplierId?: string
+  purchaseOrderId?: string
   notes?: string
 }
 
 export interface ReceiptItem {
   itemId: string
+  itemName: string
   itemType: 'product'
   quantity: number
+  unit: string
   costPerUnit: number
+  totalCost: number
   expiryDate?: string
   notes?: string
 }
 
 export interface CreateCorrectionData {
+  warehouseId: string
   department: Department
   responsiblePerson: string
   items: CorrectionItem[]
@@ -208,13 +216,17 @@ export interface CreateCorrectionData {
 }
 
 export interface CorrectionItem {
+  batchId: string
   itemId: string
+  itemName: string
   itemType: 'product'
   quantity: number
+  unit: string
   notes?: string
 }
 
 export interface CreateWriteOffData {
+  warehouseId: string
   department: Department
   responsiblePerson: string
   reason: WriteOffReason
@@ -224,8 +236,10 @@ export interface CreateWriteOffData {
 
 export interface WriteOffItem {
   itemId: string
+  itemName: string
   itemType: 'product'
   quantity: number
+  unit: string
   notes?: string
 }
 
@@ -283,6 +297,11 @@ export interface StorageState {
     correction: boolean
     writeOff: boolean
   }
+  // NEW: Additional loading states for Phase 4
+  initializing: boolean
+  loadingBalances: boolean
+  loadingOperations: boolean
+  creatingOperation: boolean
   error: string | null
 
   filters: {

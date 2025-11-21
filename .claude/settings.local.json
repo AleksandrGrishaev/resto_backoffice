@@ -25,7 +25,8 @@
       "Bash(pnpm build:web:*)",
       "Bash(pnpm seed:products:*)",
       "mcp__supabase__list_migrations",
-      "Bash(code --list-extensions)"
+      "Bash(code --list-extensions)",
+      "mcp__supabase__get_advisors"
     ]
   },
   "enableAllProjectMcpServers": true,

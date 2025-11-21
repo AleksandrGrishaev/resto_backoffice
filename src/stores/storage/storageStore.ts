@@ -51,6 +51,11 @@ export const useStorageStore = defineStore('storage', () => {
       correction: false,
       writeOff: false
     },
+    // Phase 4: Additional loading states
+    initializing: false,
+    loadingBalances: false,
+    loadingOperations: false,
+    creatingOperation: false,
     error: null,
 
     filters: {
@@ -243,57 +248,88 @@ export const useStorageStore = defineStore('storage', () => {
   // ===========================
 
   async function initialize() {
+    if (initialized.value) {
+      DebugUtils.debug(MODULE_NAME, 'Storage store already initialized')
+      return
+    }
+
+    state.value.initializing = true
+    state.value.error = null
+
     try {
-      if (initialized.value) {
-        DebugUtils.debug(MODULE_NAME, 'Storage store already initialized')
-        return
-      }
-
       DebugUtils.info(MODULE_NAME, 'Initializing storage store...')
-      state.value.loading.balances = true
-      state.value.error = null
 
-      // ✅ ИСПРАВЛЕНО: Используем статический импорт (уже есть в начале файла)
-      // import { storageService } from './storageService'
-
+      // Initialize service
       await storageService.initialize()
 
-      // Load data from service
-      const balances = await storageService.getBalances()
-      const activeBatches = await storageService.getActiveBatches()
-      const transitBatches = await storageService.getTransitBatches()
-      const operations = await storageService.getOperations()
-      const inventories = await storageService.getInventories()
+      // Load initial data in parallel
+      await Promise.all([loadBalances(), loadRecentOperations()])
 
-      // Update state
-      state.value.balances = balances
-      state.value.activeBatches = activeBatches
-      state.value.transitBatches = transitBatches
-      state.value.operations = operations
-      state.value.inventories = inventories
+      // Load inventories (if migrated to Supabase)
+      try {
+        const inventories = await storageService.getInventories()
+        state.value.inventories = inventories
+      } catch (error) {
+        DebugUtils.warn(MODULE_NAME, 'Inventory feature not yet migrated, skipping', { error })
+        state.value.inventories = []
+      }
 
       // Load transit batches into service
-      transitBatchService.load(transitBatches)
+      transitBatchService.load(state.value.transitBatches)
 
       initialized.value = true
 
-      DebugUtils.info(MODULE_NAME, 'Storage store initialized successfully', {
-        activeBatches: activeBatches.length,
-        transitBatches: transitBatches.length,
-        operations: operations.length,
-        balances: balances.length
+      DebugUtils.info(MODULE_NAME, '✅ Storage store initialized successfully', {
+        balances: state.value.balances.length,
+        activeBatches: state.value.activeBatches.length,
+        transitBatches: state.value.transitBatches.length,
+        operations: state.value.operations.length,
+        inventories: state.value.inventories.length
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to initialize storage store'
       state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
+      DebugUtils.error(MODULE_NAME, '❌ Storage store initialization failed', { error })
       throw error
     } finally {
-      state.value.loading.balances = false
+      state.value.initializing = false
     }
   }
 
-  async function fetchBalances(department?: Department) {
+  /**
+   * Phase 4: Load balances with dedicated loading state
+   */
+  async function loadBalances() {
+    state.value.loadingBalances = true
+    state.value.error = null
+
+    try {
+      const [balances, activeBatches, transitBatches] = await Promise.all([
+        storageService.getBalances(),
+        storageService.getActiveBatches(),
+        storageService.getTransitBatches()
+      ])
+
+      state.value.balances = balances
+      state.value.activeBatches = activeBatches
+      state.value.transitBatches = transitBatches
+
+      DebugUtils.store(MODULE_NAME, 'Balances loaded', {
+        balances: balances.length,
+        activeBatches: activeBatches.length,
+        transitBatches: transitBatches.length
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load balances'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, '❌ Failed to load balances', { error })
+      throw error
+    } finally {
+      state.value.loadingBalances = false
+    }
+  }
+
+  async function fetchBalances(_department?: Department) {
     try {
       state.value.loading.balances = true
       state.value.error = null
@@ -312,7 +348,7 @@ export const useStorageStore = defineStore('storage', () => {
         balances: balances.length,
         activeBatches: activeBatches.length,
         transitBatches: transitBatches.length,
-        department: department || 'all'
+        department: _department || 'all'
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch balances'
@@ -321,6 +357,33 @@ export const useStorageStore = defineStore('storage', () => {
       throw error
     } finally {
       state.value.loading.balances = false
+    }
+  }
+
+  /**
+   * Phase 4: Load recent operations (last 30 days) with dedicated loading state
+   */
+  async function loadRecentOperations() {
+    state.value.loadingOperations = true
+    state.value.error = null
+
+    try {
+      const dateFrom = new Date()
+      dateFrom.setDate(dateFrom.getDate() - 30) // Last 30 days
+
+      const operations = await storageService.getOperations()
+      state.value.operations = operations
+
+      DebugUtils.store(MODULE_NAME, 'Recent operations loaded', {
+        count: operations.length
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load operations'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, '❌ Failed to load operations', { error })
+      throw error
+    } finally {
+      state.value.loadingOperations = false
     }
   }
 
@@ -373,62 +436,86 @@ export const useStorageStore = defineStore('storage', () => {
   // ===========================
 
   async function createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
+    state.value.creatingOperation = true
+    state.value.error = null
+
     try {
-      state.value.loading.correction = true
-      state.value.error = null
+      const response = await storageService.createCorrection(data)
 
-      const operation = await storageService.createCorrection(data)
-      state.value.operations.unshift(operation)
-      await fetchBalances(data.department)
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to create correction')
+      }
 
-      return operation
+      state.value.operations.unshift(response.data)
+
+      // Reload balances after operation
+      await loadBalances()
+
+      DebugUtils.info(MODULE_NAME, '✅ Correction created successfully')
+      return response.data
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create correction'
       state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create correction', { error })
       throw error
     } finally {
-      state.value.loading.correction = false
+      state.value.creatingOperation = false
     }
   }
 
   async function createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
+    state.value.creatingOperation = true
+    state.value.error = null
+
     try {
-      state.value.loading.correction = true
-      state.value.error = null
+      const response = await storageService.createReceipt(data)
 
-      const operation = await storageService.createReceipt(data)
-      state.value.operations.unshift(operation)
-      await fetchBalances(data.department)
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to create receipt')
+      }
 
-      return operation
+      state.value.operations.unshift(response.data)
+
+      // Reload balances after operation
+      await loadBalances()
+
+      DebugUtils.info(MODULE_NAME, '✅ Receipt created successfully')
+      return response.data
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create receipt'
       state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create receipt', { error })
       throw error
     } finally {
-      state.value.loading.correction = false
+      state.value.creatingOperation = false
     }
   }
 
   async function createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
+    state.value.creatingOperation = true
+    state.value.error = null
+
     try {
-      state.value.loading.writeOff = true
-      state.value.error = null
+      const response = await storageService.createWriteOff(data)
 
-      const operation = await storageService.createWriteOff(data)
-      state.value.operations.unshift(operation)
-      await fetchBalances(data.department)
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to create write-off')
+      }
 
-      return operation
+      state.value.operations.unshift(response.data)
+
+      // Reload balances after operation
+      await loadBalances()
+
+      DebugUtils.info(MODULE_NAME, '✅ Write-off created successfully')
+      return response.data
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create write-off'
       state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create write-off', { error })
       throw error
     } finally {
-      state.value.loading.writeOff = false
+      state.value.creatingOperation = false
     }
   }
 
@@ -624,18 +711,17 @@ export const useStorageStore = defineStore('storage', () => {
   }
 
   /**
-   * Get transit batches by order
+   * Get transit batches by order (synchronous, uses state)
    */
   function getTransitBatchesByOrder(orderId: string): StorageBatch[] {
-    return transitBatchService.findByOrder(orderId)
+    return state.value.transitBatches.filter(b => b.purchaseOrderId === orderId)
   }
 
   /**
-   * Get transit batches for specific item
+   * Get transit batches for specific item (synchronous, uses state)
    */
   function getTransitBatchesForItem(itemId: string): StorageBatch[] {
-    // ✅ ИСПРАВЛЕНО: убрали department параметр
-    return transitBatchService.findByItem(itemId)
+    return state.value.transitBatches.filter(b => b.itemId === itemId)
   }
 
   /**

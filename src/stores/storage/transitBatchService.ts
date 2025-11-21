@@ -1,14 +1,17 @@
 // src/stores/storage/transitBatchService.ts
-// ✅ NEW: Centralized service for transit batch management
+// ✅ UPDATED: Uses Supabase for persistence
 
-import { DebugUtils } from '@/utils/debugger'
+import { DebugUtils, generateId } from '@/utils'
+import { supabase } from '@/supabase'
 import { convertToBaseUnits } from '@/composables/useMeasurementUnits'
-import type { StorageBatch, CreateTransitBatchData, StorageDepartment } from './types'
+import type { StorageBatch, CreateTransitBatchData } from './types'
+import { mapBatchFromDB, mapBatchToDB } from './supabaseMappers'
+import { DEFAULT_WAREHOUSE } from './types'
 
 const MODULE_NAME = 'TransitBatchService'
 
 export class TransitBatchService {
-  private transitBatches: StorageBatch[] = []
+  // No more in-memory storage - all data in Supabase
 
   // ===========================
   // CREATE METHODS
@@ -55,8 +58,7 @@ export class TransitBatchService {
         batches.push(batch)
       }
 
-      // Add to internal storage
-      this.transitBatches.push(...batches)
+      // Batches are now persisted in Supabase during createSingleBatch
 
       DebugUtils.info(MODULE_NAME, 'Transit batches created successfully', {
         orderId,
@@ -106,17 +108,16 @@ export class TransitBatchService {
       costPerUnitInBase = item.estimatedCostPerUnit * conversionFactor
     }
 
-    // Generate IDs using new format
-    const batchId = this.generateBatchId(orderId, item.itemId, index)
-    const batchNumber = this.generateBatchNumber(orderId, index)
+    const batchId = generateId()
+    const batchNumber = `TB-${orderId.slice(-6)}-${index + 1}`
 
-    // Create batch
-    const batch: StorageBatch = {
+    // Create batch object
+    const batch: Partial<StorageBatch> = {
       id: batchId,
       batchNumber,
       itemId: item.itemId,
       itemType: 'product',
-      department: item.department,
+      warehouseId: DEFAULT_WAREHOUSE.id,
       initialQuantity: quantityInBaseUnits,
       currentQuantity: quantityInBaseUnits,
       unit: baseUnit,
@@ -135,14 +136,23 @@ export class TransitBatchService {
       updatedAt: new Date().toISOString()
     }
 
-    DebugUtils.debug(MODULE_NAME, 'Single batch created', {
-      batchId: batch.id,
-      itemId: batch.itemId,
-      quantity: batch.currentQuantity,
-      unit: batch.unit
+    // Insert to Supabase
+    const { data, error } = await supabase
+      .from('storage_batches')
+      .insert([mapBatchToDB(batch)])
+      .select()
+      .single()
+
+    if (error) throw error
+
+    const savedBatch = mapBatchFromDB(data)
+
+    DebugUtils.debug(MODULE_NAME, 'Transit batch saved to DB', {
+      batchId: savedBatch.id,
+      itemId: savedBatch.itemId
     })
 
-    return batch
+    return savedBatch
   }
 
   // ===========================
@@ -162,32 +172,22 @@ export class TransitBatchService {
         itemsCount: receivedItems.length
       })
 
-      // Find transit batches for this order
-      const transitBatches = this.findByOrder(orderId)
+      // Update batches in database
+      const { data, error } = await supabase
+        .from('storage_batches')
+        .update({
+          status: 'active',
+          is_active: true,
+          actual_delivery_date: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('purchase_order_id', orderId)
+        .eq('status', 'in_transit')
+        .select()
 
-      if (transitBatches.length === 0) {
-        throw new Error(`No transit batches found for order ${orderId}`)
-      }
+      if (error) throw error
 
-      const activeBatches: StorageBatch[] = []
-
-      for (const batch of transitBatches) {
-        const receivedItem = receivedItems.find(item => item.itemId === batch.itemId)
-
-        if (!receivedItem) {
-          DebugUtils.warn(MODULE_NAME, 'No received data for transit batch', {
-            batchId: batch.id,
-            itemId: batch.itemId
-          })
-          continue
-        }
-
-        const activeBatch = this.convertBatch(batch, receivedItem)
-        activeBatches.push(activeBatch)
-      }
-
-      // Remove converted batches from transit array
-      this.transitBatches = this.transitBatches.filter(b => !transitBatches.includes(b))
+      const activeBatches = (data || []).map(mapBatchFromDB)
 
       DebugUtils.info(MODULE_NAME, 'Batches converted successfully', {
         orderId,
@@ -252,17 +252,21 @@ export class TransitBatchService {
   /**
    * Remove transit batches by order ID (e.g., on order cancellation)
    */
-  removeByOrder(orderId: string): number {
-    const countBefore = this.transitBatches.length
-    this.transitBatches = this.transitBatches.filter(b => b.purchaseOrderId !== orderId)
-    const removedCount = countBefore - this.transitBatches.length
+  async removeByOrder(orderId: string): Promise<number> {
+    const { error, count } = await supabase
+      .from('storage_batches')
+      .delete({ count: 'exact' })
+      .eq('purchase_order_id', orderId)
+      .eq('status', 'in_transit')
+
+    if (error) throw error
 
     DebugUtils.info(MODULE_NAME, 'Transit batches removed', {
       orderId,
-      removedCount
+      removedCount: count || 0
     })
 
-    return removedCount
+    return count || 0
   }
 
   // ===========================
@@ -272,22 +276,29 @@ export class TransitBatchService {
   /**
    * Find transit batches by order ID
    */
-  findByOrder(orderId: string): StorageBatch[] {
-    return this.transitBatches.filter(b => b.purchaseOrderId === orderId)
-  }
+  async findByOrder(orderId: string): Promise<StorageBatch[]> {
+    const { data, error } = await supabase
+      .from('storage_batches')
+      .select('*')
+      .eq('purchase_order_id', orderId)
+      .eq('status', 'in_transit')
 
-  /**
-   * Find transit batches by item and department
-   */
-  findByItem(itemId: string, department: StorageDepartment): StorageBatch[] {
-    return this.transitBatches.filter(b => b.itemId === itemId && b.department === department)
+    if (error) throw error
+    return (data || []).map(mapBatchFromDB)
   }
 
   /**
    * Get all transit batches
    */
-  getAll(): StorageBatch[] {
-    return [...this.transitBatches]
+  async getAll(): Promise<StorageBatch[]> {
+    const { data, error } = await supabase
+      .from('storage_batches')
+      .select('*')
+      .eq('status', 'in_transit')
+      .order('planned_delivery_date', { ascending: true })
+
+    if (error) throw error
+    return (data || []).map(mapBatchFromDB)
   }
 
   // ===========================
@@ -297,8 +308,20 @@ export class TransitBatchService {
   /**
    * Check if transit batches already exist for order
    */
-  hasExistingBatches(orderId: string): boolean {
-    return this.transitBatches.some(b => b.purchaseOrderId === orderId)
+  async hasExistingBatches(orderId: string): Promise<boolean> {
+    const batches = await this.findByOrder(orderId)
+    return batches.length > 0
+  }
+
+  /**
+   * Legacy helper for ID generation (no longer needed with generateId)
+   */
+  private generateBatchId(orderId: string, itemId: string, index: number): string {
+    return generateId()
+  }
+
+  private generateBatchNumber(orderId: string, index: number): string {
+    return `TB-${orderId.slice(-6)}-${index + 1}`
   }
 
   /**

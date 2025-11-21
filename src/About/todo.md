@@ -3,26 +3,115 @@
 > **📋 Strategy:** Direct migration - Replace all mock data with Supabase in one go
 > **🔴 CRITICAL RULE:** Always check TypeScript interface FIRST before creating/updating Supabase tables!
 
-## 📊 Current Status (2025-11-21)
+## 📊 Current Status (2025-11-21 - INVENTORY MIGRATION COMPLETE!)
 
 **Sprint Goal: ✅ Complete Storage Store Supabase Migration**
 
-**What's Working:**
+**🎉 LATEST UPDATE (2025-11-21):** Inventory feature fully migrated to Supabase! All 5 inventory methods now work with database:
 
-- ✅ Products, Menu, Recipes, Preparations - fully migrated to Supabase
-- ✅ Storage architecture well-designed (Store + Service pattern)
-- ✅ FIFO allocation logic implemented in service layer
-- ✅ Transit batch system working (in-memory)
-- ✅ Balance calculation logic working (in-memory)
+- ✅ `startInventory()` - Creates inventory sessions from current balances
+- ✅ `updateInventory()` - Updates counted items with discrepancy calculation
+- ✅ `finalizeInventory()` - Generates correction operations automatically
+- ✅ `getInventories()` - Fetches all inventory documents
+- ✅ `getInventory()` - Fetches single inventory document
+- ✅ Removed mockDataCoordinator dependency
 
-**What Needs Migration:**
+**✅ Phase 1 Complete - Database Schema & Setup:**
 
-- 🔴 Storage batches - Currently using mock data
-- 🔴 Storage operations - Currently using mock data
-- 🔴 Transit batches - Currently in-memory only (lost on refresh)
-- 🔴 Warehouses - Currently using mock data
-- 🔴 Service layer - Needs Supabase integration
-- 🔴 UI components - Need loading/error states
+- ✅ Database schema verified (28 batches, 6 operations, 1 warehouse)
+- ✅ TypeScript interfaces updated with `warehouseId` field
+- ✅ Performance indexes created (FIFO, transit, operations)
+- ✅ TypeScript types generated from Supabase (`types.gen.ts`)
+- ✅ Security advisories checked (only minor warnings)
+
+**✅ Phase 2 Complete - Service Layer Migration:**
+
+- ✅ Supabase client setup in storageService.ts
+- ✅ Database mapper functions created (`supabaseMappers.ts`)
+- ✅ Mock data dependencies removed
+- ✅ `getBatches()` - Fetches from Supabase with filtering
+- ✅ `getOperationsFromDB()` - Fetches operations from Supabase
+- ✅ `calculateBalances()` - Calculates from Supabase batches
+- ✅ `allocateFIFO()` - FIFO allocation helper implemented
+- ✅ `createReceipt()` - Supabase transaction with batch creation
+- ✅ `createWriteOff()` - FIFO allocation + batch updates
+- ✅ `createCorrection()` - Handles positive/negative corrections
+
+**✅ Phase 3 Complete - Transit Batch Persistence & Cleanup:**
+
+- ✅ `createSingleBatch()` - Inserts to database with status='in_transit'
+- ✅ `convertToActive()` - Updates status to 'active' in database
+- ✅ `removeByOrder()` - Deletes transit batches from database
+- ✅ `findByOrder()` - Queries transit batches from Supabase
+- ✅ `getAll()` - Fetches all transit batches from database
+- ✅ Removed in-memory storage, all data persists to Supabase
+- ✅ Fixed import paths (`@/supabase` instead of `@/config/supabase`)
+- ✅ Updated `getActiveBatches()`, `getTransitBatches()`, `getAllBatches()` to use Supabase
+- ✅ Updated `getOperations()` to fetch from Supabase with department filtering
+- ✅ Updated `getWriteOffStatistics()` to fetch operations from Supabase
+- ✅ Removed runtime batch methods (addRuntimeBatch, removeRuntimeBatch, getRuntimeDataStats)
+- ✅ Updated `deleteBatch()` to delete from Supabase
+- ✅ Inventory methods marked as "Phase 4 TODO" (not yet migrated)
+- ✅ Removed `recalculateAllBalances()` - use `calculateBalances()` instead
+
+**✅ Phase 4 Complete - Store Loading/Error States (2025-11-21):**
+
+- ✅ Added `initializing`, `loadingBalances`, `loadingOperations`, `creatingOperation` states to StorageState
+- ✅ Updated `initialize()` method with proper error handling and initializing state
+- ✅ Created `loadBalances()` method with dedicated loadingBalances state
+- ✅ Created `loadRecentOperations()` method with dedicated loadingOperations state
+- ✅ Updated all CRUD methods (createReceipt, createWriteOff, createCorrection) with creatingOperation state
+- ✅ Fixed ServiceResponse handling in CRUD methods
+- ✅ Added graceful handling for inventory feature (not yet migrated)
+- ✅ TypeScript compilation passes without errors
+
+**✅ Phase 5 Complete - Composables Async Operations (2025-11-21):**
+
+- ✅ Verified `useInventory.ts` has proper async operation handling
+- ✅ Verified `useWriteOff.ts` has proper async operation handling
+- ✅ Both composables use loading/error states correctly
+- ✅ All functions use try/catch/finally pattern
+- ✅ Composables call store methods (not service directly) - store handles ServiceResponse
+- ✅ Error propagation works correctly (store throws, composables catch)
+- ✅ TypeScript compilation passes without errors
+
+**🎯 Current State (Session Active - 2025-11-21):**
+
+- All service layer CRUD methods use Supabase ✅
+- Store layer has comprehensive loading/error states ✅
+- All operations properly handle ServiceResponse pattern ✅
+- Composables have async operation handling with loading/error states ✅
+- UI components have loading/error states integrated ✅
+- **Inventory operations fully migrated to Supabase** ✅
+- Mock data dependencies removed from service layer ✅
+- Type compilation passes without errors ✅
+- **Ready for Phase 8 (Final testing & validation)**
+
+**✅ Phase 6 Complete - UI Component Loading/Error States (2025-11-21):**
+
+- ✅ StorageView.vue has error alert with close button
+- ✅ StorageView.vue has loading state with v-progress-circular
+- ✅ `isLoading` computed uses `storageStore.state.loading.balances` and `.operations`
+- ✅ All dialogs have `:loading` prop on action buttons (ReceiptDialog, WriteOffDialog, InventoryDialog)
+- ✅ StorageStockTable receives `:loading="isLoading"` prop
+- ✅ StorageOperationsTable receives `:loading="storageStore.state.loading.operations"` prop
+- ✅ All components properly display loading spinners and disable buttons during operations
+
+**✅ Phase 7 Complete - Inventory Migration (2025-11-21):**
+
+- ✅ Implemented inventory database mappers (`mapInventoryFromDB`, `mapInventoryToDB`)
+- ✅ Implemented `startInventory()` - Creates inventory session with current balances
+- ✅ Implemented `updateInventory()` - Updates counted items and calculates discrepancies
+- ✅ Implemented `finalizeInventory()` - Creates correction operations for discrepancies
+- ✅ Implemented `getInventories()` - Fetches all inventory documents
+- ✅ Implemented `getInventory()` - Fetches single inventory document
+- ✅ Removed `mockDataCoordinator` dependency from `getProductInfo()`
+- ✅ All inventory operations now use Supabase
+- ✅ Inventory workflow fully functional
+
+**What's Remaining:**
+
+- 🔴 Phase 8: Final testing & validation (receipts, write-offs, corrections, inventory)
 
 ---
 
@@ -183,24 +272,26 @@ updated_at             TIMESTAMPTZ
 
 ## 🎯 Migration Tasks
 
-### Phase 1: Database Schema Verification & Cleanup (~30 min)
+### ✅ Phase 1: Database Schema Verification & Cleanup (COMPLETE - 30 min)
 
-#### 1.1 Verify Current Database State
+#### ✅ 1.1 Verify Current Database State
 
-- [ ] List storage tables: `mcp__supabase__list_tables({ schemas: ['public'] })`
-- [ ] Check existing data in `storage_batches` (should have 28 rows)
-- [ ] Check existing data in `storage_operations` (should have 6 rows)
-- [ ] Check existing data in `warehouses` (should have 1 row)
+- [x] List storage tables: `mcp__supabase__list_tables({ schemas: ['public'] })`
+- [x] Check existing data in `storage_batches` (28 rows confirmed)
+- [x] Check existing data in `storage_operations` (6 rows confirmed)
+- [x] Check existing data in `warehouses` (1 row confirmed)
 
-#### 1.2 Verify Schema Matches TypeScript
+#### ✅ 1.2 Verify Schema Matches TypeScript
 
-- [ ] Compare database schema with `src/stores/storage/types.ts`
-- [ ] Ensure all fields match (snake_case in DB, camelCase in TS)
-- [ ] Check if any migrations needed for missing fields
+- [x] Compare database schema with `src/stores/storage/types.ts`
+- [x] Updated `StorageOperation` interface with `warehouseId` field
+- [x] Updated DTOs with missing fields (warehouseId, itemName, unit, totalCost, batchId)
+- [x] Ensure all fields match (snake_case in DB, camelCase in TS)
+- [x] All fields verified - no migrations needed
 
-#### 1.3 Add Indexes for Performance
+#### ✅ 1.3 Add Indexes for Performance
 
-- [ ] Create migration: `add_storage_indexes`
+- [x] Create migration: `add_storage_performance_indexes` - 6 indexes created
 
 ```sql
 -- FIFO queries optimization
@@ -222,15 +313,15 @@ CREATE INDEX IF NOT EXISTS idx_storage_operations_type
   ON storage_operations(operation_type, warehouse_id);
 ```
 
-#### 1.4 Generate TypeScript Types
+#### ✅ 1.4 Generate TypeScript Types
 
-- [ ] Run `mcp__supabase__generate_typescript_types`
-- [ ] Save to `src/supabase/types.gen.ts`
-- [ ] Compare with existing types in `src/stores/storage/types.ts`
+- [x] Run `mcp__supabase__generate_typescript_types`
+- [x] Save to `src/supabase/types.gen.ts`
+- [x] Compare with existing types in `src/stores/storage/types.ts`
 
 ---
 
-### Phase 2: Service Layer Supabase Integration (~90 min)
+### 🔄 Phase 2: Service Layer Supabase Integration (~90 min - IN PROGRESS)
 
 **File:** `src/stores/storage/storageService.ts` (1254 lines)
 
@@ -1208,11 +1299,11 @@ async createReceipt(receiptData: CreateReceiptData) {
 
 ---
 
-### Phase 5: Composables Updates (~20 min)
+### ✅ Phase 5: Composables Updates (COMPLETE - 2025-11-21)
 
-#### 5.1 Update useInventory.ts
+#### ✅ 5.1 Update useInventory.ts
 
-- [ ] Handle async operations properly
+- [x] Handle async operations properly - **Already implemented correctly**
 
 ```typescript
 // src/stores/storage/composables/useInventory.ts
@@ -1255,9 +1346,9 @@ export function useInventory() {
 }
 ```
 
-#### 5.2 Update useWriteOff.ts
+#### ✅ 5.2 Update useWriteOff.ts
 
-- [ ] Handle async write-off operations
+- [x] Handle async write-off operations - **Already implemented correctly**
 
 ```typescript
 // src/stores/storage/composables/useWriteOff.ts
@@ -1299,11 +1390,11 @@ export function useWriteOff() {
 
 ---
 
-### Phase 6: UI Component Updates (~60 min)
+### ✅ Phase 6: UI Component Updates (COMPLETE - 2025-11-21)
 
-#### 6.1 Update Main View (StorageView.vue)
+#### ✅ 6.1 Update Main View (StorageView.vue)
 
-- [ ] Add loading skeleton during initialization
+- [x] Add loading skeleton during initialization - **Already implemented**
 
 ```vue
 <template>
@@ -1346,11 +1437,11 @@ const retry = async () => {
 </script>
 ```
 
-#### 6.2 Update Dialogs with Loading States
+#### ✅ 6.2 Update Dialogs with Loading States
 
-##### ReceiptDialog.vue
+##### ✅ ReceiptDialog.vue
 
-- [ ] Disable save button during creation
+- [x] Disable save button during creation - **Already implemented**
 
 ```vue
 <template>
@@ -1398,9 +1489,9 @@ const save = async () => {
 </script>
 ```
 
-##### WriteOffDialog.vue
+##### ✅ WriteOffDialog.vue
 
-- [ ] Add loading state during write-off creation
+- [x] Add loading state during write-off creation - **Already implemented**
 
 ```vue
 <v-btn
@@ -1413,9 +1504,9 @@ const save = async () => {
 </v-btn>
 ```
 
-##### InventoryDialog.vue
+##### ✅ InventoryDialog.vue
 
-- [ ] Add loading state during finalization
+- [x] Add loading state during finalization - **Already implemented**
 
 ```vue
 <v-btn @click="finalizeInventory" color="primary" :loading="useInventory().finalizing.value">
@@ -1423,11 +1514,11 @@ const save = async () => {
 </v-btn>
 ```
 
-#### 6.3 Update Tables with Loading Spinners
+#### ✅ 6.3 Update Tables with Loading Spinners
 
-##### StorageStockTable.vue
+##### ✅ StorageStockTable.vue
 
-- [ ] Show loading overlay while fetching balances
+- [x] Show loading overlay while fetching balances - **Already implemented**
 
 ```vue
 <v-data-table
@@ -1439,9 +1530,9 @@ const save = async () => {
 </v-data-table>
 ```
 
-##### StorageOperationsTable.vue
+##### ✅ StorageOperationsTable.vue
 
-- [ ] Show loading overlay while fetching operations
+- [x] Show loading overlay while fetching operations - **Already implemented**
 
 ```vue
 <v-data-table
@@ -1622,12 +1713,14 @@ export const ENV = {
 - ✅ Composables have loading and error states
 - ✅ Composables integrate with store
 
-### Phase 6 Complete:
+### ✅ Phase 6 Complete (2025-11-21):
 
-- ✅ Main view shows loading skeleton
-- ✅ All dialogs have loading states
-- ✅ All tables have loading spinners
-- ✅ Error alerts show with retry button
+- ✅ Main view shows loading skeleton with v-progress-circular
+- ✅ Main view shows error alert with close button
+- ✅ All dialogs have `:loading` states on action buttons
+- ✅ All tables have `:loading` props and show spinners
+- ✅ Error alerts integrated in StorageView with `clearError` action
+- ✅ Loading states tied to store's `loading.balances` and `loading.operations`
 
 ### Phase 7 Complete:
 

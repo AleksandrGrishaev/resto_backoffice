@@ -1,10 +1,11 @@
-// src/stores/storage/storageService.ts - ОБНОВЛЕНО ДЛЯ ИСПОЛЬЗОВАНИЯ MockDataCoordinator
-// Удалены собственные моки, теперь использует единый координатор с базовыми единицами
+// src/stores/storage/storageService.ts - Updated for Supabase integration
+// Migrated from mock data to Supabase database
 
-import { DebugUtils, TimeUtils } from '@/utils'
+import { DebugUtils, TimeUtils, generateId } from '@/utils'
 import { useProductsStore } from '@/stores/productsStore'
+import { supabase } from '@/supabase'
 
-import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
+import type { Department } from '@/stores/productsStore/types'
 import type {
   StorageBatch,
   StorageOperation,
@@ -17,29 +18,48 @@ import type {
   InventoryItem,
   BatchAllocation,
   WriteOffStatistics,
-  Warehouse
+  Warehouse,
+  StorageBatchStatus,
+  OperationType
 } from './types'
 
 import { doesWriteOffAffectKPI, DEFAULT_WAREHOUSE } from './types'
+import {
+  mapBatchFromDB,
+  mapBatchToDB,
+  mapOperationFromDB,
+  mapOperationToDB,
+  mapInventoryFromDB,
+  mapInventoryToDB
+} from './supabaseMappers'
+
+interface ServiceResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  metadata?: {
+    timestamp: string
+    source: 'api' | 'cache'
+  }
+}
 
 const MODULE_NAME = 'StorageService'
 
 export class StorageService {
-  private warehouses: Warehouse[] = [] // ✅ ДОБАВЛЕНО
-  private activeBatches: StorageBatch[] = []
-  private transitBatches: StorageBatch[] = []
-  private operations: StorageOperation[] = []
-  private balances: StorageBalance[] = []
-  private inventories: InventoryDocument[] = []
+  private warehouses: Warehouse[] = []
   private initialized: boolean = false
 
   constructor() {
-    // ✅ ДОБАВИТЬ инициализацию warehouse
+    // Initialize default warehouse
     this.warehouses = [DEFAULT_WAREHOUSE]
   }
 
   isInitialized(): boolean {
     return this.initialized
+  }
+
+  getDefaultWarehouse(): Warehouse {
+    return this.warehouses[0]
   }
   // ===========================
   // HELPER METHODS (используют базовые единицы)
@@ -47,14 +67,11 @@ export class StorageService {
 
   private async getProductInfo(productId: string) {
     try {
-      // ✅ ИСПРАВЛЕНО: Правильный динамический импорт
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-      const productDef = mockDataCoordinator.getProductDefinition(productId)
       const productsStore = useProductsStore()
       const product = productsStore.products.find(p => p.id === productId)
 
-      if (!product || !productDef) {
-        DebugUtils.warn(MODULE_NAME, 'Product not found', { productId })
+      if (!product) {
+        // Silently return defaults - product might be deleted or not yet loaded
         return {
           name: productId,
           unit: 'gram',
@@ -67,10 +84,10 @@ export class StorageService {
 
       return {
         name: product.name,
-        baseUnit: productDef.baseUnit,
-        baseCostPerUnit: productDef.baseCostPerUnit,
+        baseUnit: product.baseUnit || 'gram',
+        baseCostPerUnit: product.baseCostPerUnit || 0,
         minStock: product.minStock || 0,
-        shelfLife: productDef.shelfLifeDays || 7
+        shelfLife: product.shelfLifeDays || 7
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting product info', { error, productId })
@@ -85,9 +102,8 @@ export class StorageService {
   }
 
   // ===========================
-  // INITIALIZATION - ИСПОЛЬЗУЕТ MockDataCoordinator
+  // INITIALIZATION - Uses Supabase
   // ===========================
-  // ✅ ПОЛНАЯ ЗАМЕНА метода initialize
   async initialize(): Promise<void> {
     if (this.initialized) {
       DebugUtils.debug(MODULE_NAME, 'StorageService already initialized')
@@ -95,43 +111,14 @@ export class StorageService {
     }
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Initializing StorageService with BASE UNITS...')
+      DebugUtils.info(MODULE_NAME, 'Initializing StorageService with Supabase...')
 
-      // ✅ Import and load mock data
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-      const storageData = mockDataCoordinator.getStorageStoreData()
-
-      // ✅ ИСПРАВЛЕНО: Разделяем батчи на active и transit
-      this.activeBatches = storageData.batches.filter(b => b.status === 'active')
-      this.transitBatches = storageData.batches.filter(b => b.status === 'in_transit')
-
-      this.operations = storageData.operations
-      this.balances = storageData.balances
-
-      // ✅ Initialize warehouses (already done in constructor)
-      DebugUtils.info(MODULE_NAME, 'Warehouses initialized', {
-        count: this.warehouses.length,
-        defaultWarehouse: this.getDefaultWarehouse().name
-      })
-
-      await this.recalculateAllBalances()
-
+      // No more mock data - data is fetched on demand from Supabase
       this.initialized = true
 
       DebugUtils.info(MODULE_NAME, 'Storage service initialized', {
-        activeBatches: this.activeBatches.length,
-        transitBatches: this.transitBatches.length,
-        // ✅ Детали transit батчей
-        transitBatchDetails: this.transitBatches.map(b => ({
-          id: b.id,
-          itemId: b.itemId,
-          status: b.status,
-          quantity: b.currentQuantity,
-          purchaseOrderId: b.purchaseOrderId
-        })),
-        operations: this.operations.length,
-        inventories: this.inventories.length,
-        balances: this.balances.length
+        warehouses: this.warehouses.length,
+        defaultWarehouse: this.getDefaultWarehouse().name
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to initialize StorageService', { error })
@@ -139,73 +126,173 @@ export class StorageService {
     }
   }
 
-  // ✅ НОВЫЙ МЕТОД: Загрузка данных из координатора
-  private async loadDataFromCoordinator(): Promise<void> {
+  // ===========================
+  // SUPABASE DATA FETCHING
+  // ===========================
+
+  /**
+   * Fetches batches from Supabase with optional filtering
+   */
+  async getBatches(
+    warehouseId: string = 'warehouse-winter',
+    status?: StorageBatchStatus
+  ): Promise<ServiceResponse<StorageBatch[]>> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Loading data from coordinator with runtime preservation')
+      let query = supabase
+        .from('storage_batches')
+        .select('*')
+        .eq('warehouse_id', warehouseId)
+        .order('receipt_date', { ascending: true })
+        .order('created_at', { ascending: true })
 
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-      const storageData = mockDataCoordinator.getStorageStoreData()
+      if (status) {
+        query = query.eq('status', status)
+      }
 
-      // BEFORE: Save runtime batches (all mixed)
-      // const existingRuntimeBatches = this.batches.filter(...)
+      const { data, error } = await query
 
-      // AFTER: Save only runtime transit batches
-      const existingRuntimeTransitBatches = this.transitBatches.filter(
-        batch => batch.id.startsWith('transit-') && !batch.id.startsWith('transit-TEST')
-      )
+      if (error) throw error
 
-      DebugUtils.debug(MODULE_NAME, 'Runtime data to preserve', {
-        runtimeTransitBatches: existingRuntimeTransitBatches.length,
-        runtimeBatchIds: existingRuntimeTransitBatches.map(b => b.id)
+      const batches = (data || []).map(mapBatchFromDB)
+
+      DebugUtils.info(MODULE_NAME, `Fetched ${batches.length} batches`, {
+        warehouseId,
+        status
       })
 
-      // Load base data from coordinator (deep clone)
-      const baseBatches = JSON.parse(JSON.stringify(storageData.batches))
-      const baseOperations = JSON.parse(JSON.stringify(storageData.operations))
-
-      // BEFORE: MERGE all batches together
-      // this.batches = [...baseBatches, ...existingRuntimeBatches]
-
-      // AFTER: Separate active and transit batches
-      this.activeBatches = baseBatches.filter((b: StorageBatch) => b.status === 'active')
-
-      this.transitBatches = [
-        ...baseBatches.filter((b: StorageBatch) => b.status === 'in_transit'),
-        ...existingRuntimeTransitBatches
-      ]
-
-      this.operations = baseOperations
-      this.balances = JSON.parse(JSON.stringify(storageData.balances))
-
-      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator', {
-        activeBatches: this.activeBatches.length,
-        transitBatches: this.transitBatches.length,
-        operations: this.operations.length,
-        balances: this.balances.length
-      })
+      return {
+        success: true,
+        data: batches,
+        metadata: {
+          timestamp: new Date().toISOString(),
+          source: 'api'
+        }
+      }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', { error })
-      throw error
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch batches', { error })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
   }
 
-  async reinitialize(preserveRuntimeData: boolean = true): Promise<void> {
-    DebugUtils.info(MODULE_NAME, 'Force reinitializing storage service', { preserveRuntimeData })
+  /**
+   * Fetches operations from Supabase with optional filtering
+   */
+  async getOperationsFromDB(
+    warehouseId: string,
+    dateFrom?: string,
+    dateTo?: string,
+    operationType?: OperationType
+  ): Promise<ServiceResponse<StorageOperation[]>> {
+    try {
+      let query = supabase
+        .from('storage_operations')
+        .select('*')
+        .eq('warehouse_id', warehouseId)
+        .order('operation_date', { ascending: false })
 
-    if (preserveRuntimeData) {
-      // ✅ ИСПРАВЛЕНО: Ждем загрузку данных
-      await this.loadDataFromCoordinator()
-      await this.recalculateAllBalances()
-    } else {
-      // Полная реинициализация (потеря runtime данных)
-      this.initialized = false
-      this.activeBatches = [] // ✅ ИСПРАВЛЕНО
-      this.transitBatches = []
-      this.operations = []
-      this.balances = []
-      this.inventories = []
-      await this.initialize()
+      if (dateFrom) {
+        query = query.gte('operation_date', dateFrom)
+      }
+      if (dateTo) {
+        query = query.lte('operation_date', dateTo)
+      }
+      if (operationType) {
+        query = query.eq('operation_type', operationType)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      const operations = (data || []).map(mapOperationFromDB)
+
+      return {
+        success: true,
+        data: operations,
+        metadata: {
+          timestamp: new Date().toISOString(),
+          source: 'api'
+        }
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch operations', { error })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * FIFO allocation helper - fetches batches and allocates quantities
+   */
+  private async allocateFIFO(
+    itemId: string,
+    warehouseId: string,
+    neededQuantity: number
+  ): Promise<ServiceResponse<BatchAllocation[]>> {
+    try {
+      // Fetch batches in FIFO order (oldest first)
+      const { data: batches, error } = await supabase
+        .from('storage_batches')
+        .select('*')
+        .eq('item_id', itemId)
+        .eq('warehouse_id', warehouseId)
+        .eq('status', 'active')
+        .gt('current_quantity', 0)
+        .order('receipt_date', { ascending: true })
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+
+      if (!batches || batches.length === 0) {
+        throw new Error('No active batches available for this item')
+      }
+
+      // Allocate quantities using FIFO logic
+      let remaining = neededQuantity
+      const allocations: BatchAllocation[] = []
+
+      for (const batch of batches) {
+        if (remaining <= 0) break
+
+        const allocatedQty = Math.min(remaining, Number(batch.current_quantity))
+
+        allocations.push({
+          batchId: batch.id,
+          batchNumber: batch.batch_number,
+          quantity: allocatedQty,
+          costPerUnit: Number(batch.cost_per_unit),
+          batchDate: batch.receipt_date
+        })
+
+        remaining -= allocatedQty
+      }
+
+      // Check if we have enough quantity
+      if (remaining > 0) {
+        const available = neededQuantity - remaining
+        throw new Error(`Insufficient quantity. Need ${neededQuantity}, available ${available}`)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'FIFO allocation complete', {
+        itemId,
+        needed: neededQuantity,
+        batchesUsed: allocations.length
+      })
+
+      return {
+        success: true,
+        data: allocations
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
   }
 
@@ -214,122 +301,60 @@ export class StorageService {
   // ===========================
 
   async getBalances(): Promise<StorageBalance[]> {
-    // ❌ УДАЛЁН параметр department
     if (!this.initialized) {
       throw new Error('StorageService not initialized')
     }
 
-    if (this.balances.length === 0) {
-      await this.recalculateAllBalances()
+    // Calculate balances from Supabase data
+    const result = await this.calculateBalances()
+    if (!result.success || !result.data) {
+      throw new Error(result.error || 'Failed to calculate balances')
     }
 
-    return [...this.balances] // Возвращаем ВСЕ balances без фильтрации
+    return result.data
   }
 
-  // ✅ ПОЛНАЯ ЗАМЕНА метода getTransitBatches
-  async getTransitBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
+  /**
+   * Calculates balances from active batches in Supabase
+   */
+  async calculateBalances(
+    warehouseId: string = 'warehouse-winter'
+  ): Promise<ServiceResponse<StorageBalance[]>> {
     try {
-      if (!this.initialized) {
-        throw new Error('StorageService not initialized. Call initialize() first.')
+      // Fetch all active batches from Supabase
+      const batchesResponse = await this.getBatches(warehouseId, 'active')
+      if (!batchesResponse.success || !batchesResponse.data) {
+        throw new Error('Failed to fetch batches')
       }
 
-      // ✅ ИЗМЕНЕНО: Возвращаем ВСЕ transit батчи (без фильтра по department)
-      // Фильтрация будет в UI через Product.usedInDepartments
-      const batches = [...this.transitBatches]
-
-      // Sort by planned delivery date
-      return batches.sort((a, b) => {
-        const dateA = new Date(a.plannedDeliveryDate || a.createdAt)
-        const dateB = new Date(b.plannedDeliveryDate || b.createdAt)
-        return dateA.getTime() - dateB.getTime()
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get transit batches', { error, department })
-      throw error
-    }
-  }
-
-  // ✅ ПОЛНАЯ ЗАМЕНА метода getActiveBatches
-  async getActiveBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
-    try {
-      if (!this.initialized) {
-        throw new Error('StorageService not initialized. Call initialize() first.')
-      }
-
-      // ✅ ИЗМЕНЕНО: Возвращаем ВСЕ active батчи (без фильтра по department)
-      // Фильтрация будет в UI через Product.usedInDepartments
-      const batches = [...this.activeBatches]
-
-      return batches.sort(
-        (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
-      )
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get active batches', { error, department })
-      throw error
-    }
-  }
-
-  // ✅ ПОЛНАЯ ЗАМЕНА метода getAllBatches
-  async getAllBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
-    try {
-      if (!this.initialized) {
-        throw new Error('StorageService not initialized. Call initialize() first.')
-      }
-
-      // ✅ ИЗМЕНЕНО: Возвращаем ВСЕ батчи (без фильтра по department)
-      // Combine active and transit batches
-      const batches = [...this.activeBatches, ...this.transitBatches]
-
-      return batches.sort(
-        (a, b) => new Date(b.receiptDate).getTime() - new Date(a.receiptDate).getTime()
-      )
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get all batches', { error })
-      throw error
-    }
-  }
-
-  async getOperations(department?: Department | 'all'): Promise<StorageOperation[]> {
-    // ✅ Параметр остаётся, но тип изменён на Department
-    if (!this.initialized) {
-      throw new Error('StorageService not initialized')
-    }
-
-    if (!department || department === 'all') {
-      return [...this.operations]
-    }
-
-    return this.operations.filter(op => op.department === department)
-  }
-
-  // ===========================
-  // BALANCE CALCULATION - ОБНОВЛЕНО ДЛЯ БАЗОВЫХ ЕДИНИЦ
-  // ===========================
-
-  // ✅ ПОЛНАЯ ЗАМЕНА метода recalculateAllBalances
-  private async recalculateAllBalances(): Promise<void> {
-    try {
-      DebugUtils.debug(MODULE_NAME, 'Recalculating all balances...')
-
+      const batches = batchesResponse.data
       const balanceMap = new Map<string, StorageBalance>()
       const productsStore = useProductsStore()
 
-      // ✅ НОВОЕ: Сначала создаём балансы для ВСЕХ продуктов (даже без батчей)
+      // Products should already be initialized by AppInitializer
+      // If not, this will be caught as an error
+      if (productsStore.products.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No products in store - balances will be empty', {
+          hint: 'Ensure AppInitializer loads products before storage'
+        })
+      }
+
+      DebugUtils.debug(MODULE_NAME, 'Building balances', {
+        productsCount: productsStore.products.length,
+        batchesCount: batches.length
+      })
+
+      // Initialize balances for ALL products (even with zero stock)
       for (const product of productsStore.products) {
-        const productInfo = await this.getProductInfo(product.id)
-        if (!productInfo) continue
-
-        const key = product.id // Один баланс на продукт
-
-        balanceMap.set(key, {
+        balanceMap.set(product.id, {
           itemId: product.id,
           itemType: 'product',
-          itemName: productInfo.name,
-          totalQuantity: 0, // ✅ Начинаем с 0
-          unit: productInfo.baseUnit,
+          itemName: product.name, // Use product.name directly instead of getProductInfo()
+          totalQuantity: 0,
+          unit: product.baseUnit || 'gram',
           totalValue: 0,
-          averageCost: productInfo.baseCostPerUnit,
-          latestCost: productInfo.baseCostPerUnit,
+          averageCost: product.baseCostPerUnit || 0,
+          latestCost: product.baseCostPerUnit || 0,
           costTrend: 'stable',
           batches: [],
           oldestBatchDate: TimeUtils.getCurrentLocalISO(),
@@ -341,18 +366,45 @@ export class StorageService {
         })
       }
 
-      // ✅ ЗАТЕМ добавляем данные из активных батчей
-      for (const batch of this.activeBatches) {
+      // Add data from active batches
+      for (const batch of batches) {
         if (!batch.isActive || batch.status !== 'active') continue
 
-        const key = batch.itemId
+        let balance = balanceMap.get(batch.itemId)
 
-        if (!balanceMap.has(key)) {
-          // Продукт не найден в products store - пропускаем
-          continue
+        // If batch exists but product not in store (orphaned batch), create placeholder balance
+        if (!balance) {
+          const product = productsStore.products.find(p => p.id === batch.itemId)
+          if (!product) {
+            DebugUtils.warn(MODULE_NAME, 'Orphaned batch found - product not in store', {
+              batchId: batch.id,
+              itemId: batch.itemId
+            })
+            // Create placeholder balance for orphaned batch
+            balance = {
+              itemId: batch.itemId,
+              itemType: 'product',
+              itemName: `[Unknown: ${batch.itemId.slice(0, 8)}]`,
+              totalQuantity: 0,
+              unit: batch.unit,
+              totalValue: 0,
+              averageCost: 0,
+              latestCost: 0,
+              costTrend: 'stable',
+              batches: [],
+              oldestBatchDate: batch.receiptDate,
+              newestBatchDate: batch.receiptDate,
+              hasExpired: false,
+              hasNearExpiry: false,
+              belowMinStock: false,
+              lastCalculated: TimeUtils.getCurrentLocalISO()
+            }
+            balanceMap.set(batch.itemId, balance)
+          } else {
+            continue // Product exists but balance wasn't created? Skip this batch
+          }
         }
 
-        const balance = balanceMap.get(key)!
         balance.batches.push(batch)
         balance.totalQuantity += batch.currentQuantity
         balance.totalValue += batch.totalValue
@@ -367,11 +419,16 @@ export class StorageService {
       }
 
       // Calculate averages and trends
+      const now = new Date()
+      const warningDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
       for (const balance of balanceMap.values()) {
+        // Calculate average cost
         if (balance.totalQuantity > 0) {
           balance.averageCost = balance.totalValue / balance.totalQuantity
         }
 
+        // Sort batches and calculate trend
         if (balance.batches.length > 0) {
           balance.batches.sort(
             (a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime()
@@ -387,16 +444,11 @@ export class StorageService {
               balance.costTrend = 'up'
             } else if (diff < -threshold) {
               balance.costTrend = 'down'
-            } else {
-              balance.costTrend = 'stable'
             }
           }
         }
 
         // Check expiry
-        const now = new Date()
-        const warningDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
         for (const batch of balance.batches) {
           if (batch.expiryDate) {
             const expiryDate = new Date(batch.expiryDate)
@@ -408,210 +460,335 @@ export class StorageService {
           }
         }
 
-        // ✅ Check low stock (including zero and negative)
-        const productInfo = await this.getProductInfo(balance.itemId)
-        if (productInfo.minStock && balance.totalQuantity <= productInfo.minStock) {
+        // Check low stock
+        const product = productsStore.products.find(p => p.id === balance.itemId)
+        if (product?.minStock && balance.totalQuantity <= product.minStock) {
           balance.belowMinStock = true
         }
       }
 
-      this.balances = Array.from(balanceMap.values())
+      const balances = Array.from(balanceMap.values())
 
-      DebugUtils.debug(MODULE_NAME, 'Balances recalculated', {
-        totalBalances: this.balances.length,
-        withStock: this.balances.filter(b => b.totalQuantity > 0).length,
-        zeroStock: this.balances.filter(b => b.totalQuantity === 0).length,
-        negativeStock: this.balances.filter(b => b.totalQuantity < 0).length,
-        totalQuantity: this.balances.reduce((sum, b) => sum + b.totalQuantity, 0),
-        totalValue: this.balances.reduce((sum, b) => sum + b.totalValue, 0)
+      DebugUtils.store(MODULE_NAME, 'Calculated balances', {
+        count: balances.length,
+        totalValue: balances.reduce((sum, b) => sum + b.totalValue, 0)
       })
+
+      return {
+        success: true,
+        data: balances
+      }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to recalculate balances', { error })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Get transit batches from Supabase
+   */
+  async getTransitBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
+    try {
+      const response = await this.getBatches('warehouse-winter', 'in_transit')
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to fetch transit batches')
+      }
+      return response.data
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get transit batches', { error, department })
       throw error
     }
   }
+
+  /**
+   * Get active batches from Supabase
+   */
+  async getActiveBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
+    try {
+      const response = await this.getBatches('warehouse-winter', 'active')
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to fetch active batches')
+      }
+      return response.data
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get active batches', { error, department })
+      throw error
+    }
+  }
+
+  /**
+   * Get all batches (active + transit) from Supabase
+   */
+  async getAllBatches(department?: Department | 'all'): Promise<StorageBatch[]> {
+    try {
+      const response = await this.getBatches('warehouse-winter')
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to fetch all batches')
+      }
+      return response.data
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get all batches', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Get operations from Supabase
+   */
+  async getOperations(department?: Department | 'all'): Promise<StorageOperation[]> {
+    try {
+      const warehouseId = this.getDefaultWarehouse().id
+      const response = await this.getOperationsFromDB(warehouseId)
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to fetch operations')
+      }
+
+      // Filter by department if specified
+      if (department && department !== 'all') {
+        return response.data.filter(op => op.department === department)
+      }
+
+      return response.data
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get operations', { error, department })
+      throw error
+    }
+  }
+
+  // recalculateAllBalances is no longer needed - use calculateBalances() instead
 
   // ===========================
   // CRUD OPERATIONS - ОБНОВЛЕНЫ ДЛЯ БАЗОВЫХ ЕДИНИЦ
   // ===========================
 
-  // ✅ ПОЛНАЯ ЗАМЕНА метода createReceipt
-  async createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
+  /**
+   * Creates receipt operation with Supabase transaction
+   */
+  async createReceipt(data: CreateReceiptData): Promise<ServiceResponse<StorageOperation>> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      return {
+        success: false,
+        error: 'StorageService not initialized'
+      }
     }
 
     try {
+      const documentNumber = `RC-${String(Date.now()).slice(-6)}`
+      const operationDate = TimeUtils.getCurrentLocalISO()
+      const warehouseId = data.warehouseId || this.getDefaultWarehouse().id
+
       DebugUtils.info(MODULE_NAME, 'Creating receipt', {
+        documentNumber,
         department: data.department,
         itemCount: data.items.length,
-        sourceType: data.sourceType
+        warehouseId
       })
 
-      const operationItems: StorageOperationItem[] = []
+      // Prepare operation items and batches
+      const operationItems: any[] = []
       let totalValue = 0
-      const defaultWarehouse = this.getDefaultWarehouse() // ✅ ДОБАВЛЕНО
 
       for (const item of data.items) {
         const productInfo = await this.getProductInfo(item.itemId)
-        if (!productInfo) {
-          throw new Error(`Product not found: ${item.itemId}`)
-        }
 
-        const quantityInBaseUnits = item.quantity
-        const costPerBaseUnit = item.costPerUnit
-        const totalCost = quantityInBaseUnits * costPerBaseUnit
+        const batchId = generateId()
+        const batchNumber = this.generateBatchNumber(item.itemId)
 
-        const newBatch: StorageBatch = {
-          id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          batchNumber: this.generateBatchNumber(item.itemId),
+        // Create batch record
+        const batch: Partial<StorageBatch> = {
+          id: batchId,
+          batchNumber,
           itemId: item.itemId,
           itemType: 'product',
-          warehouseId: defaultWarehouse.id, // ✅ ИЗМЕНЕНО: используем warehouseId вместо department
-          initialQuantity: quantityInBaseUnits,
-          currentQuantity: quantityInBaseUnits,
-          unit: productInfo.baseUnit,
-          costPerUnit: costPerBaseUnit,
-          totalValue: totalCost,
-          receiptDate: TimeUtils.getCurrentLocalISO(),
+          warehouseId,
+          initialQuantity: item.quantity,
+          currentQuantity: item.quantity,
+          unit: item.unit,
+          costPerUnit: item.costPerUnit,
+          totalValue: item.totalCost,
+          receiptDate: operationDate,
           expiryDate: item.expiryDate,
           sourceType: data.sourceType,
           status: 'active',
           isActive: true,
           notes: item.notes,
-          createdAt: TimeUtils.getCurrentLocalISO(),
-          updatedAt: TimeUtils.getCurrentLocalISO()
+          supplierId: data.supplierId,
+          purchaseOrderId: data.purchaseOrderId,
+          createdAt: operationDate,
+          updatedAt: operationDate
         }
 
-        this.activeBatches.push(newBatch)
+        // Insert batch into database
+        const { error: batchError } = await supabase
+          .from('storage_batches')
+          .insert([mapBatchToDB(batch)])
 
-        DebugUtils.debug(MODULE_NAME, 'Batch added to activeBatches', {
-          batchId: newBatch.id,
-          itemId: newBatch.itemId,
-          itemName: productInfo.name,
-          quantity: newBatch.currentQuantity,
-          warehouseId: newBatch.warehouseId, // ✅ ДОБАВЛЕНО в лог
-          totalActiveBatches: this.activeBatches.length
-        })
+        if (batchError) throw batchError
 
+        // Prepare operation item
         operationItems.push({
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: generateId(),
           itemId: item.itemId,
-          itemType: 'product' as const,
-          itemName: productInfo.name,
-          quantity: quantityInBaseUnits,
-          unit: productInfo.baseUnit,
-          totalCost,
-          averageCostPerUnit: costPerBaseUnit,
+          itemType: 'product',
+          itemName: item.itemName,
+          quantity: item.quantity,
+          unit: item.unit,
+          totalCost: item.totalCost,
+          averageCostPerUnit: item.costPerUnit,
           expiryDate: item.expiryDate,
           notes: item.notes
         })
 
-        totalValue += totalCost
+        totalValue += item.totalCost
       }
 
-      const operation: StorageOperation = {
-        id: `op-${Date.now()}`,
+      // Create operation record
+      const operation: Partial<StorageOperation> = {
+        id: generateId(),
         operationType: 'receipt',
-        documentNumber: `RC-${String(Date.now()).slice(-6)}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department, // ✅ Сохраняем для отчётности
+        documentNumber,
+        operationDate,
+        warehouseId,
+        department: data.department,
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
         status: 'confirmed',
         notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        createdAt: operationDate,
+        updatedAt: operationDate
       }
 
-      this.operations.unshift(operation)
-      await this.recalculateAllBalances() // ✅ ИЗМЕНЕНО: пересчитываем все балансы
+      const { data: opData, error: opError } = await supabase
+        .from('storage_operations')
+        .insert([mapOperationToDB(operation)])
+        .select()
+        .single()
 
-      DebugUtils.info(MODULE_NAME, 'Receipt created successfully', {
-        operationId: operation.id,
-        itemCount: operation.items.length,
-        totalValue,
-        warehouse: defaultWarehouse.name
+      if (opError) throw opError
+
+      DebugUtils.info(MODULE_NAME, '✅ Receipt created successfully', {
+        documentNumber,
+        itemsCount: data.items.length,
+        totalValue
       })
 
-      return operation
+      return {
+        success: true,
+        data: mapOperationFromDB(opData),
+        metadata: {
+          timestamp: operationDate,
+          source: 'api'
+        }
+      }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create receipt', { error })
-      throw error
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create receipt', { error })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
   }
 
-  // ✅ ПОЛНАЯ ЗАМЕНА метода createWriteOff
-  async createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
+  /**
+   * Creates write-off operation with FIFO allocation and Supabase transaction
+   */
+  async createWriteOff(data: CreateWriteOffData): Promise<ServiceResponse<StorageOperation>> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      return {
+        success: false,
+        error: 'StorageService not initialized'
+      }
     }
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Creating write-off operation in BASE UNITS', {
+      const documentNumber = `WO-${String(Date.now()).slice(-6)}`
+      const operationDate = TimeUtils.getCurrentLocalISO()
+      const warehouseId = data.warehouseId || this.getDefaultWarehouse().id
+
+      DebugUtils.info(MODULE_NAME, 'Creating write-off operation', {
+        documentNumber,
         department: data.department,
         reason: data.reason,
-        items: data.items.length
+        itemsCount: data.items.length
       })
 
-      const operationItems = []
+      const operationItems: any[] = []
       let totalValue = 0
 
       for (const item of data.items) {
         const productInfo = await this.getProductInfo(item.itemId)
 
-        // ✅ РАСЧЕТ В БАЗОВЫХ ЕДИНИЦАХ
-        const quantityInBaseUnits = item.quantity
+        // Allocate quantities using FIFO
+        const allocationResult = await this.allocateFIFO(item.itemId, warehouseId, item.quantity)
 
-        // ✅ ИЗМЕНЕНО: Находим батчи для списания (FIFO) БЕЗ фильтра по department
-        const availableBatches = this.activeBatches
-          .filter(b => b.itemId === item.itemId && b.currentQuantity > 0)
-          .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
+        if (!allocationResult.success || !allocationResult.data) {
+          throw new Error(allocationResult.error || 'FIFO allocation failed')
+        }
 
-        const allocations = this.calculateFifoAllocation(availableBatches, quantityInBaseUnits)
+        const allocations = allocationResult.data
 
-        // Обновляем количества в батчах
-        allocations.forEach(allocation => {
-          const batch = this.activeBatches.find(b => b.id === allocation.batchId)
-          if (batch) {
-            batch.currentQuantity -= allocation.quantity
-            batch.updatedAt = TimeUtils.getCurrentLocalISO()
+        // Update batch quantities in database
+        for (const allocation of allocations) {
+          const { data: batchData, error: fetchError } = await supabase
+            .from('storage_batches')
+            .select('*')
+            .eq('id', allocation.batchId)
+            .single()
 
-            if (batch.currentQuantity <= 0) {
-              batch.currentQuantity = 0
-              batch.status = 'consumed'
-              batch.isActive = false
-            }
-          }
-        })
+          if (fetchError) throw fetchError
 
-        const totalCost = allocations.reduce(
+          const newQuantity = Number(batchData.current_quantity) - allocation.quantity
+          const newStatus = newQuantity <= 0 ? 'consumed' : 'active'
+          const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
+
+          const { error: updateError } = await supabase
+            .from('storage_batches')
+            .update({
+              current_quantity: newQuantity,
+              total_value: newTotalValue,
+              status: newStatus,
+              is_active: newQuantity > 0,
+              updated_at: operationDate
+            })
+            .eq('id', allocation.batchId)
+
+          if (updateError) throw updateError
+        }
+
+        // Calculate total cost from allocations
+        const itemTotalCost = allocations.reduce(
           (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
           0
         )
 
+        // Prepare operation item
         operationItems.push({
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: generateId(),
           itemId: item.itemId,
-          itemType: 'product' as const,
-          itemName: productInfo.name,
-          quantity: quantityInBaseUnits,
-          unit: productInfo.baseUnit,
+          itemType: 'product',
+          itemName: item.itemName,
+          quantity: item.quantity,
+          unit: item.unit,
+          totalCost: itemTotalCost,
           batchAllocations: allocations,
-          totalCost,
           notes: item.notes
         })
 
-        totalValue += totalCost
+        totalValue += itemTotalCost
       }
 
-      const operation: StorageOperation = {
-        id: `op-${Date.now()}`,
+      // Create operation record
+      const operation: Partial<StorageOperation> = {
+        id: generateId(),
         operationType: 'write_off',
-        documentNumber: `WO-${String(Date.now()).slice(-6)}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department, // ✅ Сохраняем для отчётности
+        documentNumber,
+        operationDate,
+        warehouseId,
+        department: data.department,
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
@@ -622,157 +799,220 @@ export class StorageService {
         },
         status: 'confirmed',
         notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        createdAt: operationDate,
+        updatedAt: operationDate
       }
 
-      this.operations.unshift(operation)
-      await this.recalculateAllBalances() // ✅ ИЗМЕНЕНО: пересчитываем все балансы
+      const { data: opData, error: opError } = await supabase
+        .from('storage_operations')
+        .insert([mapOperationToDB(operation)])
+        .select()
+        .single()
 
-      DebugUtils.info(MODULE_NAME, 'Write-off operation created successfully', {
-        operationId: operation.id,
+      if (opError) throw opError
+
+      DebugUtils.info(MODULE_NAME, '✅ Write-off created successfully', {
+        documentNumber,
         reason: data.reason,
         affectsKPI: operation.writeOffDetails?.affectsKPI,
-        totalValue,
-        unitSystem: 'BASE_UNITS'
+        batchesUsed: operationItems.reduce(
+          (sum, item) => sum + (item.batchAllocations?.length || 0),
+          0
+        ),
+        totalValue
       })
 
-      return operation
+      return {
+        success: true,
+        data: mapOperationFromDB(opData),
+        metadata: {
+          timestamp: operationDate,
+          source: 'api'
+        }
+      }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create write-off', { error })
-      throw error
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create write-off', { error })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
   }
 
-  // ✅ ПОЛНАЯ ЗАМЕНА метода createCorrection
-  async createCorrection(data: CreateCorrectionData): Promise<StorageOperation> {
+  /**
+   * Creates correction operation with Supabase transaction
+   * Handles both positive (surplus) and negative (shortage) corrections
+   */
+  async createCorrection(data: CreateCorrectionData): Promise<ServiceResponse<StorageOperation>> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      return {
+        success: false,
+        error: 'StorageService not initialized'
+      }
     }
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Creating correction operation in BASE UNITS', {
+      const documentNumber = `CR-${String(Date.now()).slice(-6)}`
+      const operationDate = TimeUtils.getCurrentLocalISO()
+      const warehouseId = data.warehouseId || this.getDefaultWarehouse().id
+
+      DebugUtils.info(MODULE_NAME, 'Creating correction operation', {
+        documentNumber,
         department: data.department,
         reason: data.correctionDetails.reason,
-        items: data.items.length
+        itemsCount: data.items.length
       })
 
-      const operationItems = []
+      const operationItems: any[] = []
       let totalValue = 0
-      const defaultWarehouse = this.getDefaultWarehouse() // ✅ ДОБАВЛЕНО
 
       for (const item of data.items) {
         const productInfo = await this.getProductInfo(item.itemId)
-
-        // ✅ РАБОТАЕМ В БАЗОВЫХ ЕДИНИЦАХ
-        const quantityInBaseUnits = item.quantity
-
-        // Для коррекций также используем FIFO если это списание
         let allocations: BatchAllocation[] = []
-        let totalCost = 0
+        let itemTotalCost = 0
 
-        if (quantityInBaseUnits > 0) {
-          // Поступление - создаем новый батч
-          const newBatch: StorageBatch = {
-            id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            batchNumber: this.generateBatchNumber(item.itemId),
+        if (item.quantity > 0) {
+          // Positive correction - create new batch
+          const batchId = generateId()
+          const batchNumber = this.generateBatchNumber(item.itemId)
+
+          const batch: Partial<StorageBatch> = {
+            id: batchId,
+            batchNumber,
             itemId: item.itemId,
             itemType: 'product',
-            warehouseId: defaultWarehouse.id, // ✅ ИЗМЕНЕНО: используем warehouseId
-            initialQuantity: quantityInBaseUnits,
-            currentQuantity: quantityInBaseUnits,
-            unit: productInfo.baseUnit,
+            warehouseId,
+            initialQuantity: item.quantity,
+            currentQuantity: item.quantity,
+            unit: item.unit,
             costPerUnit: productInfo.baseCostPerUnit,
-            totalValue: quantityInBaseUnits * productInfo.baseCostPerUnit,
-            receiptDate: TimeUtils.getCurrentLocalISO(),
+            totalValue: item.quantity * productInfo.baseCostPerUnit,
+            receiptDate: operationDate,
             sourceType: 'correction',
             status: 'active',
             isActive: true,
             notes: item.notes,
-            createdAt: TimeUtils.getCurrentLocalISO(),
-            updatedAt: TimeUtils.getCurrentLocalISO()
+            createdAt: operationDate,
+            updatedAt: operationDate
           }
 
-          this.activeBatches.push(newBatch)
-          totalCost = newBatch.totalValue
-        } else {
-          // Списание - используем FIFO
-          // ✅ ИЗМЕНЕНО: фильтруем только по itemId (БЕЗ department)
-          const availableBatches = this.activeBatches
-            .filter(b => b.itemId === item.itemId && b.currentQuantity > 0)
-            .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
+          const { error: batchError } = await supabase
+            .from('storage_batches')
+            .insert([mapBatchToDB(batch)])
 
-          allocations = this.calculateFifoAllocation(
-            availableBatches,
-            Math.abs(quantityInBaseUnits)
+          if (batchError) throw batchError
+
+          itemTotalCost = batch.totalValue!
+        } else if (item.quantity < 0) {
+          // Negative correction - use FIFO allocation
+          const allocationResult = await this.allocateFIFO(
+            item.itemId,
+            warehouseId,
+            Math.abs(item.quantity)
           )
 
-          // Обновляем батчи
-          allocations.forEach(allocation => {
-            const batch = this.activeBatches.find(b => b.id === allocation.batchId)
-            if (batch) {
-              batch.currentQuantity -= allocation.quantity
-              batch.updatedAt = TimeUtils.getCurrentLocalISO()
+          if (!allocationResult.success || !allocationResult.data) {
+            throw new Error(allocationResult.error || 'FIFO allocation failed')
+          }
 
-              if (batch.currentQuantity <= 0) {
-                batch.currentQuantity = 0
-                batch.status = 'consumed'
-                batch.isActive = false
-              }
-            }
-          })
+          allocations = allocationResult.data
 
-          totalCost = allocations.reduce(
+          // Update batch quantities in database
+          for (const allocation of allocations) {
+            const { data: batchData, error: fetchError } = await supabase
+              .from('storage_batches')
+              .select('*')
+              .eq('id', allocation.batchId)
+              .single()
+
+            if (fetchError) throw fetchError
+
+            const newQuantity = Number(batchData.current_quantity) - allocation.quantity
+            const newStatus = newQuantity <= 0 ? 'consumed' : 'active'
+            const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
+
+            const { error: updateError } = await supabase
+              .from('storage_batches')
+              .update({
+                current_quantity: newQuantity,
+                total_value: newTotalValue,
+                status: newStatus,
+                is_active: newQuantity > 0,
+                updated_at: operationDate
+              })
+              .eq('id', allocation.batchId)
+
+            if (updateError) throw updateError
+          }
+
+          itemTotalCost = allocations.reduce(
             (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
             0
           )
         }
 
+        // Prepare operation item
         operationItems.push({
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: generateId(),
           itemId: item.itemId,
-          itemType: 'product' as const,
-          itemName: productInfo.name,
-          quantity: quantityInBaseUnits,
-          unit: productInfo.baseUnit,
-          batchAllocations: allocations,
-          totalCost,
+          itemType: 'product',
+          itemName: item.itemName,
+          quantity: item.quantity,
+          unit: item.unit,
+          totalCost: itemTotalCost,
+          batchAllocations: allocations.length > 0 ? allocations : undefined,
           notes: item.notes
         })
 
-        totalValue += totalCost
+        totalValue += itemTotalCost
       }
 
-      const operation: StorageOperation = {
-        id: `op-${Date.now()}`,
+      // Create operation record
+      const operation: Partial<StorageOperation> = {
+        id: generateId(),
         operationType: 'correction',
-        documentNumber: `CR-${String(Date.now()).slice(-6)}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department, // ✅ Сохраняем для отчётности
+        documentNumber,
+        operationDate,
+        warehouseId,
+        department: data.department,
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
         correctionDetails: data.correctionDetails,
         status: 'confirmed',
         notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        createdAt: operationDate,
+        updatedAt: operationDate
       }
 
-      this.operations.unshift(operation)
-      await this.recalculateAllBalances() // ✅ ИЗМЕНЕНО: пересчитываем все балансы
+      const { data: opData, error: opError } = await supabase
+        .from('storage_operations')
+        .insert([mapOperationToDB(operation)])
+        .select()
+        .single()
 
-      DebugUtils.info(MODULE_NAME, 'Correction operation created successfully', {
-        operationId: operation.id,
+      if (opError) throw opError
+
+      DebugUtils.info(MODULE_NAME, '✅ Correction created successfully', {
+        documentNumber,
         reason: data.correctionDetails.reason,
-        totalValue,
-        unitSystem: 'BASE_UNITS'
+        totalValue
       })
 
-      return operation
+      return {
+        success: true,
+        data: mapOperationFromDB(opData),
+        metadata: {
+          timestamp: operationDate,
+          source: 'api'
+        }
+      }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create correction', { error })
-      throw error
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create correction', { error })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
     }
   }
 
@@ -847,171 +1087,262 @@ export class StorageService {
   // INVENTORY OPERATIONS
   // ===========================
 
-  // ✅ ПОЛНАЯ ЗАМЕНА метода startInventory
+  /**
+   * Creates a new inventory session with items from current balances
+   */
   async startInventory(data: CreateInventoryData): Promise<InventoryDocument> {
     if (!this.initialized) {
       throw new Error('StorageService not initialized')
     }
 
     try {
+      const documentNumber = `INV-${String(Date.now()).slice(-6)}`
+      const inventoryDate = TimeUtils.getCurrentLocalISO()
+      const warehouseId = this.getDefaultWarehouse().id
+
       DebugUtils.info(MODULE_NAME, 'Starting inventory', {
+        documentNumber,
         department: data.department,
         responsiblePerson: data.responsiblePerson
       })
 
-      // ✅ ИЗМЕНЕНО: получаем ВСЕ balances (без фильтрации по department)
-      const allBalances = await this.getBalances()
+      // 1. Fetch current balances for the department
+      const balances = await this.getBalances()
+      const productsStore = useProductsStore()
 
-      // Создаём items для ВСЕХ продуктов
-      const inventoryItems: InventoryItem[] = allBalances.map(balance => ({
-        id: `inv-item-${balance.itemId}`,
+      // Filter balances by department
+      const departmentBalances = balances.filter(balance => {
+        const product = productsStore.products.find(p => p.id === balance.itemId)
+        return product && product.usedInDepartments.includes(data.department)
+      })
+
+      // 2. Create inventory items from balances
+      const inventoryItems: InventoryItem[] = departmentBalances.map(balance => ({
+        id: generateId(),
         itemId: balance.itemId,
         itemType: 'product',
         itemName: balance.itemName,
         systemQuantity: balance.totalQuantity,
-        actualQuantity: balance.totalQuantity,
-        difference: 0,
+        actualQuantity: 0, // To be filled during counting
+        difference: -balance.totalQuantity, // Initial difference (not counted yet)
         unit: balance.unit,
         averageCost: balance.averageCost,
-        valueDifference: 0,
+        valueDifference: -balance.totalValue,
         confirmed: false
       }))
 
-      const inventory: InventoryDocument = {
-        id: `inv-${Date.now()}`,
-        documentNumber: `IV-${String(Date.now()).slice(-6)}`,
-        inventoryDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department, // ✅ Сохраняем для отчётности (кто делал)
+      // 3. Create inventory document
+      const inventory: Partial<InventoryDocument> = {
+        id: generateId(),
+        documentNumber,
+        inventoryDate,
+        department: data.department,
         itemType: 'product',
         responsiblePerson: data.responsiblePerson,
         items: inventoryItems,
         totalItems: inventoryItems.length,
-        totalDiscrepancies: 0,
+        totalDiscrepancies: 0, // Will be calculated on finalize
         totalValueDifference: 0,
         status: 'draft',
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        notes: undefined,
+        createdAt: inventoryDate,
+        updatedAt: inventoryDate
       }
 
-      this.inventories.push(inventory)
+      // 4. Insert into database
+      const { data: dbData, error } = await supabase
+        .from('inventory_documents')
+        .insert([mapInventoryToDB(inventory)])
+        .select()
+        .single()
 
-      DebugUtils.info(MODULE_NAME, 'Inventory started', {
-        inventoryId: inventory.id,
-        totalItems: inventoryItems.length,
-        department: data.department
+      if (error) throw error
+
+      const createdInventory = mapInventoryFromDB(dbData)
+
+      DebugUtils.info(MODULE_NAME, '✅ Inventory started', {
+        documentNumber,
+        itemsCount: inventoryItems.length
       })
 
-      return inventory
+      return createdInventory
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to start inventory', { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to start inventory', { error })
       throw error
     }
   }
 
+  /**
+   * Updates inventory with counted items
+   */
   async updateInventory(inventoryId: string, items: InventoryItem[]): Promise<InventoryDocument> {
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
+    }
+
     try {
-      const inventory = this.inventories.find(inv => inv.id === inventoryId)
-      if (!inventory) {
-        throw new Error(`Inventory ${inventoryId} not found`)
-      }
-
-      // Обновляем данные инвентаризации
-      inventory.items = items
-      inventory.totalDiscrepancies = items.filter(item => item.difference !== 0).length
-      inventory.totalValueDifference = items.reduce((sum, item) => sum + item.valueDifference, 0)
-      inventory.updatedAt = TimeUtils.getCurrentLocalISO()
-
-      DebugUtils.info(MODULE_NAME, 'Inventory updated', {
+      DebugUtils.info(MODULE_NAME, 'Updating inventory', {
         inventoryId,
-        discrepancies: inventory.totalDiscrepancies,
-        valueDifference: inventory.totalValueDifference
+        itemsCount: items.length
       })
 
-      return inventory
+      // 1. Fetch current inventory
+      const { data: currentInventory, error: fetchError } = await supabase
+        .from('inventory_documents')
+        .select('*')
+        .eq('id', inventoryId)
+        .single()
+
+      if (fetchError) throw fetchError
+      if (!currentInventory) throw new Error(`Inventory ${inventoryId} not found`)
+
+      // 2. Recalculate differences and totals
+      const updatedItems = items.map(item => ({
+        ...item,
+        difference: item.actualQuantity - item.systemQuantity,
+        valueDifference: (item.actualQuantity - item.systemQuantity) * item.averageCost
+      }))
+
+      const totalDiscrepancies = updatedItems.filter(
+        item => Math.abs(item.difference) > 0.001
+      ).length
+
+      const totalValueDifference = updatedItems.reduce((sum, item) => sum + item.valueDifference, 0)
+
+      // 3. Update database
+      const { data: dbData, error: updateError } = await supabase
+        .from('inventory_documents')
+        .update({
+          items: updatedItems as any,
+          total_discrepancies: totalDiscrepancies,
+          total_value_difference: totalValueDifference,
+          updated_at: TimeUtils.getCurrentLocalISO()
+        })
+        .eq('id', inventoryId)
+        .select()
+        .single()
+
+      if (updateError) throw updateError
+
+      const updatedInventory = mapInventoryFromDB(dbData)
+
+      DebugUtils.info(MODULE_NAME, '✅ Inventory updated', {
+        inventoryId,
+        discrepancies: totalDiscrepancies,
+        valueDifference: totalValueDifference
+      })
+
+      return updatedInventory
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to update inventory', { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to update inventory', { error })
       throw error
     }
   }
 
+  /**
+   * Finalizes inventory and creates correction operations for discrepancies
+   */
   async finalizeInventory(inventoryId: string): Promise<StorageOperation[]> {
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
+    }
+
     try {
-      const inventory = this.inventories.find(inv => inv.id === inventoryId)
-      if (!inventory) {
-        throw new Error(`Inventory ${inventoryId} not found`)
+      DebugUtils.info(MODULE_NAME, 'Finalizing inventory', { inventoryId })
+
+      // 1. Fetch inventory document
+      const { data: inventoryData, error: fetchError } = await supabase
+        .from('inventory_documents')
+        .select('*')
+        .eq('id', inventoryId)
+        .single()
+
+      if (fetchError) throw fetchError
+      if (!inventoryData) throw new Error(`Inventory ${inventoryId} not found`)
+
+      const inventory = mapInventoryFromDB(inventoryData)
+
+      if (inventory.status === 'confirmed') {
+        throw new Error('Inventory already finalized')
       }
+
+      // 2. Find items with discrepancies
+      const itemsWithDiscrepancies = inventory.items.filter(
+        item => Math.abs(item.difference) > 0.001
+      )
 
       const correctionOperations: StorageOperation[] = []
-      const discrepancies = inventory.items.filter(item => item.difference !== 0)
 
-      if (discrepancies.length > 0) {
-        // Создаем корректировку для расхождений
+      // 3. Create correction operations for each discrepancy
+      for (const item of itemsWithDiscrepancies) {
         const correctionData: CreateCorrectionData = {
+          warehouseId: this.getDefaultWarehouse().id,
           department: inventory.department,
           responsiblePerson: inventory.responsiblePerson,
-          items: discrepancies.map(item => ({
-            itemId: item.itemId,
-            itemType: 'product',
-            quantity: item.difference, // ✅ В базовых единицах
-            notes: `Inventory adjustment: ${item.difference > 0 ? 'surplus' : 'shortage'}`
-          })),
+          items: [
+            {
+              batchId: '', // Will be set by FIFO allocation for negative corrections
+              itemId: item.itemId,
+              itemName: item.itemName,
+              itemType: 'product',
+              quantity: item.difference, // ← Keep the sign! Positive = add, Negative = subtract
+              unit: item.unit,
+              notes: `Inventory adjustment: ${inventory.documentNumber}`
+            }
+          ],
           correctionDetails: {
             reason: 'other',
             relatedId: inventoryId,
-            relatedName: `Inventory ${inventory.documentNumber}`
+            relatedName: inventory.documentNumber
           },
-          notes: `Automatic correction from inventory ${inventory.documentNumber}`
+          notes: `Inventory correction for ${item.itemName}: System ${item.systemQuantity}, Actual ${item.actualQuantity}, Diff ${item.difference}`
         }
 
-        const correctionOperation = await this.createCorrection(correctionData)
-        correctionOperations.push(correctionOperation)
+        // Create correction (handles both positive and negative)
+        const response = await this.createCorrection(correctionData)
+
+        if (!response.success || !response.data) {
+          throw new Error(`Failed to create correction for ${item.itemName}: ${response.error}`)
+        }
+
+        correctionOperations.push(response.data)
       }
 
-      // Финализируем инвентаризацию
-      inventory.status = 'confirmed'
-      inventory.updatedAt = TimeUtils.getCurrentLocalISO()
+      // 4. Mark inventory as confirmed
+      const { data: confirmedData, error: confirmError } = await supabase
+        .from('inventory_documents')
+        .update({
+          status: 'confirmed',
+          updated_at: TimeUtils.getCurrentLocalISO()
+        })
+        .eq('id', inventoryId)
+        .select()
+        .single()
 
-      DebugUtils.info(MODULE_NAME, 'Inventory finalized', {
+      if (confirmError) throw confirmError
+
+      DebugUtils.info(MODULE_NAME, '✅ Inventory finalized', {
         inventoryId,
-        corrections: correctionOperations.length
+        correctionsCreated: correctionOperations.length,
+        totalValueDifference: inventory.totalValueDifference
       })
 
       return correctionOperations
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to finalize inventory', { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to finalize inventory', { error })
       throw error
     }
   }
 
   async deleteBatch(batchId: string): Promise<void> {
     try {
-      DebugUtils.debug(MODULE_NAME, 'Deleting batch', { batchId })
+      DebugUtils.debug(MODULE_NAME, 'Deleting batch from Supabase', { batchId })
 
-      // ✅ Try to remove from activeBatches
-      let index = this.activeBatches.findIndex(b => b.id === batchId)
-      if (index !== -1) {
-        const deletedBatch = this.activeBatches.splice(index, 1)[0]
-        DebugUtils.info(MODULE_NAME, 'Active batch removed', {
-          batchId,
-          itemId: deletedBatch.itemId,
-          remainingActiveBatches: this.activeBatches.length
-        })
-        return
-      }
+      const { error } = await supabase.from('storage_batches').delete().eq('id', batchId)
 
-      // ✅ Try to remove from transitBatches
-      index = this.transitBatches.findIndex(b => b.id === batchId)
-      if (index !== -1) {
-        const deletedBatch = this.transitBatches.splice(index, 1)[0]
-        DebugUtils.info(MODULE_NAME, 'Transit batch removed', {
-          batchId,
-          itemId: deletedBatch.itemId,
-          remainingTransitBatches: this.transitBatches.length
-        })
-        return
-      }
+      if (error) throw error
 
-      DebugUtils.warn(MODULE_NAME, 'Batch not found', { batchId })
+      DebugUtils.info(MODULE_NAME, 'Batch deleted', { batchId })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to delete batch', { batchId, error })
       throw error
@@ -1022,15 +1353,16 @@ export class StorageService {
   // WRITE-OFF STATISTICS
   // ===========================
 
-  // ✅ ПОЛНАЯ ЗАМЕНА метода getWriteOffStatistics
   async getWriteOffStatistics(
-    department?: Department | 'all', // ✅ Тип изменён
+    department?: Department | 'all',
     dateFrom?: string,
     dateTo?: string
   ): Promise<WriteOffStatistics> {
-    const writeOffOps = this.operations.filter(op => {
+    // Fetch operations from Supabase
+    const opsResponse = await this.getOperations(department)
+
+    const writeOffOps = opsResponse.filter(op => {
       if (op.operationType !== 'write_off') return false
-      if (department && department !== 'all' && op.department !== department) return false
 
       if (dateFrom || dateTo) {
         const opDate = new Date(op.operationDate)
@@ -1122,125 +1454,92 @@ export class StorageService {
     return stats
   }
 
-  /**
-   * Добавление runtime batch (для transit)
-   */
-  addRuntimeBatch(batch: StorageBatch): void {
-    if (batch.status === 'in_transit') {
-      this.transitBatches.push(batch)
-      DebugUtils.info(MODULE_NAME, 'Runtime transit batch added', {
-        batchId: batch.id,
-        itemId: batch.itemId,
-        totalTransitBatches: this.transitBatches.length
-      })
-    } else if (batch.status === 'active') {
-      this.activeBatches.push(batch)
-      DebugUtils.info(MODULE_NAME, 'Runtime active batch added', {
-        batchId: batch.id,
-        itemId: batch.itemId,
-        totalActiveBatches: this.activeBatches.length
-      })
-    } else {
-      DebugUtils.warn(MODULE_NAME, 'Attempted to add batch with unsupported status', {
-        batchId: batch.id,
-        status: batch.status
-      })
-    }
-  }
+  // Runtime batch methods removed - all data now persists in Supabase
+  // Use getBatches(), getActiveBatches(), getTransitBatches() instead
 
   /**
-   * Удаление runtime batch
+   * Debug info - fetches current state from Supabase
    */
-  removeRuntimeBatch(batchId: string): boolean {
-    // Try to remove from transit batches
-    let index = this.transitBatches.findIndex(b => b.id === batchId)
-    if (index !== -1) {
-      const removed = this.transitBatches.splice(index, 1)[0]
-      DebugUtils.info(MODULE_NAME, 'Runtime transit batch removed', {
-        batchId,
-        itemId: removed.itemId,
-        remainingTransitBatches: this.transitBatches.length
-      })
-      return true
-    }
+  async getDebugInfo() {
+    const [active, transit] = await Promise.all([this.getActiveBatches(), this.getTransitBatches()])
 
-    // Try to remove from active batches
-    index = this.activeBatches.findIndex(b => b.id === batchId)
-    if (index !== -1) {
-      const removed = this.activeBatches.splice(index, 1)[0]
-      DebugUtils.info(MODULE_NAME, 'Runtime active batch removed', {
-        batchId,
-        itemId: removed.itemId,
-        remainingActiveBatches: this.activeBatches.length
-      })
-      return true
-    }
-
-    DebugUtils.warn(MODULE_NAME, 'Runtime batch not found for removal', { batchId })
-    return false
-  }
-
-  /**
-   * Получение статистики runtime данных
-   */
-  getRuntimeDataStats() {
-    const runtimeTransitBatches = this.transitBatches.filter(
-      b => b.id.startsWith('transit-') && !b.id.startsWith('transit-TEST')
-    )
-
-    return {
-      totalBatches: this.activeBatches.length + this.transitBatches.length,
-      activeBatches: this.activeBatches.length,
-      transitBatches: this.transitBatches.length,
-      runtimeTransitBatches: runtimeTransitBatches.length,
-      runtimeBatchIds: runtimeTransitBatches.map(b => b.id),
-      runtimeValue: runtimeTransitBatches.reduce((sum, b) => sum + b.totalValue, 0)
-    }
-  }
-
-  /**
-   * Отладочная информация
-   */
-  getDebugInfo() {
     return {
       initialized: this.initialized,
       dataStats: {
-        activeBatches: this.activeBatches.length,
-        transitBatches: this.transitBatches.length,
-        operations: this.operations.length,
-        balances: this.balances.length,
-        inventories: this.inventories.length
-      },
-      runtimeStats: this.getRuntimeDataStats(),
-      batchesByStatus: {
-        active: this.activeBatches.filter(b => b.status === 'active').length,
-        transit: this.transitBatches.filter(b => b.status === 'in_transit').length
+        activeBatches: active.length,
+        transitBatches: transit.length,
+        totalValue: active.reduce((sum, b) => sum + b.totalValue, 0)
       }
     }
   }
 
   // ===========================
-  // INVENTORY OPERATIONS
+  // INVENTORY FETCH OPERATIONS
   // ===========================
 
+  /**
+   * Fetches all inventory documents, optionally filtered by department
+   */
   async getInventories(department?: Department | 'all'): Promise<InventoryDocument[]> {
-    // ✅ Тип изменён на Department
     if (!this.initialized) {
       throw new Error('StorageService not initialized')
     }
 
-    if (!department || department === 'all') {
-      return [...this.inventories]
-    }
+    try {
+      let query = supabase
+        .from('inventory_documents')
+        .select('*')
+        .order('inventory_date', { ascending: false })
 
-    return this.inventories.filter(inv => inv.department === department)
+      // Filter by department if specified
+      if (department && department !== 'all') {
+        query = query.eq('department', department)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      const inventories = (data || []).map(mapInventoryFromDB)
+
+      DebugUtils.debug(MODULE_NAME, 'Inventories fetched', {
+        count: inventories.length,
+        department: department || 'all'
+      })
+
+      return inventories
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch inventories', { error })
+      throw error
+    }
   }
 
+  /**
+   * Fetches a single inventory document by ID
+   */
   async getInventory(inventoryId: string): Promise<InventoryDocument | null> {
+    if (!this.initialized) {
+      throw new Error('StorageService not initialized')
+    }
+
     try {
-      return this.inventories.find(inv => inv.id === inventoryId) || null
+      const { data, error } = await supabase
+        .from('inventory_documents')
+        .select('*')
+        .eq('id', inventoryId)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Not found
+          return null
+        }
+        throw error
+      }
+
+      return data ? mapInventoryFromDB(data) : null
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get inventory', { error, inventoryId })
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch inventory', { inventoryId, error })
       throw error
     }
   }
