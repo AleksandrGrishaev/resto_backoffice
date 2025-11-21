@@ -325,7 +325,8 @@ const expandedPanels = ref<string[]>([])
 // ✅ НОВОЕ: Filter state
 const currentFilters = ref({
   search: '',
-  status: 'active' as 'active' | 'archived' | 'all'
+  status: 'active' as 'active' | 'archived' | 'all',
+  department: 'all' as 'kitchen' | 'bar' | 'all'
 })
 
 // Dialogs
@@ -399,6 +400,11 @@ const filteredPreparations = computed(() => {
   }
   // 'all' shows everything
 
+  // Filter by department
+  if (currentFilters.value.department && currentFilters.value.department !== 'all') {
+    preparations = preparations.filter(p => p.department === currentFilters.value.department)
+  }
+
   // Filter by search
   if (currentFilters.value.search.trim()) {
     const searchText = currentFilters.value.search.toLowerCase()
@@ -415,7 +421,11 @@ const filteredPreparations = computed(() => {
 
 // ✅ НОВОЕ: Check if filters are active
 const hasActiveFilters = computed(() => {
-  return currentFilters.value.search.trim() !== '' || currentFilters.value.status !== 'active'
+  return (
+    currentFilters.value.search.trim() !== '' ||
+    currentFilters.value.status !== 'active' ||
+    currentFilters.value.department !== 'all'
+  )
 })
 
 // =============================================
@@ -448,8 +458,12 @@ function getTypePreparations(type: PreparationType): Preparation[] {
 // FILTER METHODS
 // =============================================
 
-function handleFiltersUpdate(filters: { search: string; status: 'active' | 'archived' | 'all' }) {
-  currentFilters.value = { ...filters }
+function handleFiltersUpdate(filters: {
+  search: string
+  status: 'active' | 'archived' | 'all'
+  department?: 'kitchen' | 'bar' | 'all'
+}) {
+  currentFilters.value = { ...filters, department: filters.department || 'all' }
 
   DebugUtils.debug(MODULE_NAME, 'Filters updated', {
     filters,
@@ -461,7 +475,8 @@ function handleFiltersUpdate(filters: { search: string; status: 'active' | 'arch
 function clearAllFilters() {
   currentFilters.value = {
     search: '',
-    status: 'active'
+    status: 'active',
+    department: 'all'
   }
 
   showSnackbar('Filters cleared', 'info')

@@ -72,6 +72,35 @@
         </v-col>
       </v-row>
 
+      <!-- Third row: Department Filter (Preparations only) -->
+      <v-row v-if="localActiveTab === 'preparations'" align="center" class="mt-2">
+        <v-col cols="12" md="6">
+          <div class="d-flex align-center">
+            <v-icon class="mr-2">mdi-domain</v-icon>
+            <span class="text-subtitle-2 mr-4">Department:</span>
+            <v-chip-group
+              v-model="localFilters.department"
+              selected-class="text-primary"
+              mandatory
+              class="status-filter"
+            >
+              <v-chip value="all" variant="outlined">
+                <v-icon start size="14">mdi-format-list-bulleted</v-icon>
+                All
+              </v-chip>
+              <v-chip value="kitchen" variant="outlined">
+                <v-icon start size="14">mdi-chef-hat</v-icon>
+                Kitchen
+              </v-chip>
+              <v-chip value="bar" variant="outlined">
+                <v-icon start size="14">mdi-glass-cocktail</v-icon>
+                Bar
+              </v-chip>
+            </v-chip-group>
+          </div>
+        </v-col>
+      </v-row>
+
       <!-- Debug Info (только для разработки) -->
       <v-row v-if="$DEBUG" class="mt-2">
         <v-col>
@@ -117,6 +146,7 @@ interface Emits {
 interface FilterState {
   search: string
   status: 'active' | 'archived' | 'all'
+  department?: 'kitchen' | 'bar' | 'all'
 }
 
 const props = defineProps<Props>()
@@ -132,7 +162,8 @@ const store = useRecipesStore()
 // Local filters state
 const localFilters = ref<FilterState>({
   search: '',
-  status: 'active'
+  status: 'active',
+  department: 'all'
 })
 
 // Panel state
@@ -214,6 +245,11 @@ const filteredPreparations = computed(() => {
   }
   // 'all' shows everything
 
+  // Filter by department
+  if (localFilters.value.department && localFilters.value.department !== 'all') {
+    preparations = preparations.filter(p => p.department === localFilters.value.department)
+  }
+
   // Filter by search
   if (localFilters.value.search.trim()) {
     const searchText = localFilters.value.search.toLowerCase()
@@ -287,6 +323,20 @@ watch(
     })
 
     // Apply immediately for status changes
+    emit('update:filters', { ...localFilters.value })
+  }
+)
+
+// Watch for department filter changes
+watch(
+  () => localFilters.value.department,
+  newDepartment => {
+    DebugUtils.debug(MODULE_NAME, 'Department filter changed', {
+      newDepartment,
+      tab: props.activeTab
+    })
+
+    // Apply immediately for department changes
     emit('update:filters', { ...localFilters.value })
   }
 )

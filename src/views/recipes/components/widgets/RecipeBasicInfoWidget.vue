@@ -57,6 +57,23 @@
         />
       </v-col>
 
+      <!-- Department (Preparations only) -->
+      <v-col v-if="type === 'preparation'" cols="12" md="4">
+        <v-select
+          :model-value="formData.department"
+          :items="departmentItems"
+          item-title="label"
+          item-value="value"
+          label="Department"
+          :rules="[rules.required]"
+          required
+          variant="outlined"
+          density="comfortable"
+          hint="Which department prepares this item"
+          @update:model-value="updateField('department', $event)"
+        />
+      </v-col>
+
       <!-- Output/Portion Info -->
       <template v-if="type === 'preparation'">
         <v-col cols="12" md="4">
@@ -199,6 +216,7 @@ interface FormData {
   code: string
   description: string
   category: string
+  department?: string // ✅ NEW: Department for preparations
   outputQuantity: number
   outputUnit: string
   portionSize: number
@@ -237,6 +255,13 @@ async function getUnitOptions() {
 // Computed
 const categoryItems = computed(() => {
   return props.type === 'preparation' ? PREPARATION_TYPES : RECIPE_CATEGORIES
+})
+
+const departmentItems = computed(() => {
+  return [
+    { label: 'Kitchen', value: 'kitchen' },
+    { label: 'Bar', value: 'bar' }
+  ]
 })
 
 const unitItems = computed(() => {

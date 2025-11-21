@@ -9,6 +9,7 @@ import type {
   PreparationIngredient
 } from './types'
 import type { Tables, TablesInsert, TablesUpdate } from '@/supabase/types'
+import type { Department } from '@/stores/menu/types'
 
 // =============================================
 // SUPABASE TYPES (from generated types.gen.ts)
@@ -49,6 +50,7 @@ export function preparationToSupabaseInsert(preparation: Preparation): SupabaseP
     code: preparation.code || null, // Code is optional now
     description: preparation.description || null,
     type: preparation.type,
+    department: preparation.department,
     output_quantity: preparation.outputQuantity,
     output_unit: preparation.outputUnit,
     preparation_time: preparation.preparationTime || null,
@@ -83,6 +85,7 @@ export function preparationFromSupabase(
     code: row.code || undefined,
     description: row.description || undefined,
     type: row.type as any, // PreparationType
+    department: row.department as Department,
     outputQuantity: Number(row.output_quantity),
     outputUnit: row.output_unit as any, // MeasurementUnit
     preparationTime: row.preparation_time || undefined,

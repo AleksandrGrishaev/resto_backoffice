@@ -1,4 +1,4 @@
-import type { PreparationBatch, PreparationOperation } from '../types'
+import type { PreparationBatch, PreparationOperation, PreparationInventoryDocument } from '../types'
 
 /**
  * Supabase Mappers for Preparation Storage
@@ -135,6 +135,78 @@ export function operationFromSupabase(row: any): PreparationOperation {
     status: row.status,
     relatedInventoryId: row.related_inventory_id,
     notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+// =====================================================
+// PREPARATION INVENTORY DOCUMENT MAPPERS
+// =====================================================
+
+/**
+ * Convert PreparationInventoryDocument to Supabase format for INSERT (camelCase → snake_case)
+ */
+export function inventoryDocumentToSupabase(
+  doc: PreparationInventoryDocument
+): Record<string, any> {
+  return {
+    id: doc.id,
+    document_number: doc.documentNumber,
+    inventory_date: doc.inventoryDate,
+    department: doc.department,
+    responsible_person: doc.responsiblePerson,
+    status: doc.status,
+    total_items: doc.totalItems,
+    total_discrepancies: doc.totalDiscrepancies,
+    total_value_difference: doc.totalValueDifference,
+    notes: doc.notes || null,
+    // JSONB field (stored as-is)
+    items: doc.items,
+    created_at: doc.createdAt,
+    updated_at: doc.updatedAt
+  }
+}
+
+/**
+ * Convert PreparationInventoryDocument to Supabase format for UPDATE (excludes id and created_at)
+ */
+export function inventoryDocumentToSupabaseUpdate(
+  doc: PreparationInventoryDocument
+): Record<string, any> {
+  return {
+    document_number: doc.documentNumber,
+    inventory_date: doc.inventoryDate,
+    department: doc.department,
+    responsible_person: doc.responsiblePerson,
+    status: doc.status,
+    total_items: doc.totalItems,
+    total_discrepancies: doc.totalDiscrepancies,
+    total_value_difference: doc.totalValueDifference,
+    notes: doc.notes || null,
+    // JSONB field (stored as-is)
+    items: doc.items,
+    updated_at: doc.updatedAt
+  }
+}
+
+/**
+ * Convert Supabase row to PreparationInventoryDocument (snake_case → camelCase)
+ */
+export function inventoryDocumentFromSupabase(row: any): PreparationInventoryDocument {
+  return {
+    id: row.id,
+    documentNumber: row.document_number,
+    inventoryDate: row.inventory_date,
+    department: row.department,
+    responsiblePerson: row.responsible_person,
+    status: row.status,
+    totalItems: Number(row.total_items),
+    totalDiscrepancies: Number(row.total_discrepancies),
+    totalValueDifference: Number(row.total_value_difference),
+    notes: row.notes,
+    // JSONB field (already parsed by Supabase client)
+    items: row.items,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

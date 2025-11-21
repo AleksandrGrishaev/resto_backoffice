@@ -7,7 +7,10 @@ import {
   batchToSupabase,
   batchToSupabaseUpdate,
   operationFromSupabase,
-  operationToSupabase
+  operationToSupabase,
+  inventoryDocumentFromSupabase,
+  inventoryDocumentToSupabase,
+  inventoryDocumentToSupabaseUpdate
 } from './supabase/mappers'
 
 // ✅ UPDATED: Import new types
@@ -146,13 +149,14 @@ export class PreparationService {
       // Load data from Supabase
       await this.loadBatchesFromSupabase()
       await this.loadOperationsFromSupabase()
-      this.inventories = []
+      await this.loadInventoriesFromSupabase()
       await this.recalculateAllBalances()
 
       this.initialized = true
       DebugUtils.info(MODULE_NAME, 'Preparation service initialized from Supabase', {
         batches: this.batches.length,
         operations: this.operations.length,
+        inventories: this.inventories.length,
         balances: this.balances.length
       })
     } catch (error) {
@@ -214,6 +218,32 @@ export class PreparationService {
       DebugUtils.error(MODULE_NAME, 'Error loading operations', { error })
       // Initialize with empty array on error
       this.operations = []
+    }
+  }
+
+  private async loadInventoriesFromSupabase(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Loading inventory documents from Supabase')
+
+      const { data, error } = await supabase
+        .from('preparation_inventory_documents')
+        .select('*')
+        .order('inventory_date', { ascending: false })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load inventories from Supabase', { error })
+        throw error
+      }
+
+      this.inventories = (data || []).map(inventoryDocumentFromSupabase)
+
+      DebugUtils.info(MODULE_NAME, 'Inventory documents loaded from Supabase', {
+        count: this.inventories.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error loading inventories', { error })
+      // Initialize with empty array on error
+      this.inventories = []
     }
   }
 
@@ -882,24 +912,41 @@ export class PreparationService {
     data: CreatePreparationInventoryData
   ): Promise<PreparationInventoryDocument> {
     try {
-      const currentBalances = this.balances.filter(b => b.department === data.department)
+      const recipesStore = useRecipesStore()
 
-      const inventoryItems = currentBalances.map(balance => ({
-        id: `prep-inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        preparationId: balance.preparationId,
-        preparationName: balance.preparationName,
-        systemQuantity: balance.totalQuantity,
-        actualQuantity: balance.totalQuantity,
-        difference: 0,
-        unit: balance.unit,
-        averageCost: balance.averageCost,
-        valueDifference: 0,
-        notes: '',
-        countedBy: ''
-      }))
+      // ✅ FIXED: Get preparations by their department field (not by batch history)
+      const departmentPreparations = recipesStore.preparations.filter(
+        p => p.department === data.department && p.isActive
+      )
+
+      // Get current balances for quick lookup
+      const balanceMap = new Map(
+        this.balances.filter(b => b.department === data.department).map(b => [b.preparationId, b])
+      )
+
+      // ✅ Create inventory items for all active preparations in this department
+      const inventoryItems: PreparationInventoryItem[] = []
+
+      for (const preparation of departmentPreparations) {
+        const balance = balanceMap.get(preparation.id)
+
+        inventoryItems.push({
+          id: crypto.randomUUID(),
+          preparationId: preparation.id,
+          preparationName: preparation.name,
+          systemQuantity: balance ? balance.totalQuantity : 0, // ✅ 0 if consumed/depleted
+          actualQuantity: balance ? balance.totalQuantity : 0,
+          difference: 0,
+          unit: preparation.outputUnit || 'gram',
+          averageCost: balance ? balance.averageCost : preparation.costPerPortion || 0,
+          valueDifference: 0,
+          notes: '',
+          countedBy: ''
+        })
+      }
 
       const inventory: PreparationInventoryDocument = {
-        id: `prep-inv-${Date.now()}`,
+        id: crypto.randomUUID(),
         documentNumber: `INV-PREP-${data.department.toUpperCase()}-${String(this.inventories.length + 1).padStart(3, '0')}`,
         inventoryDate: TimeUtils.getCurrentLocalISO(),
         department: data.department,
@@ -912,6 +959,24 @@ export class PreparationService {
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
+
+      // ✅ INSERT inventory document into Supabase
+      const { error: inventoryError } = await supabase
+        .from('preparation_inventory_documents')
+        .insert(inventoryDocumentToSupabase(inventory))
+
+      if (inventoryError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert inventory document into Supabase', {
+          inventoryError
+        })
+        throw inventoryError
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Inventory document created in Supabase', {
+        documentNumber: inventory.documentNumber,
+        department: inventory.department,
+        itemsCount: inventoryItems.length
+      })
 
       this.inventories.push(inventory)
       return inventory
@@ -951,6 +1016,27 @@ export class PreparationService {
       inventory.updatedAt = TimeUtils.getCurrentLocalISO()
       this.inventories[inventoryIndex] = inventory
 
+      // ✅ UPDATE inventory document in Supabase
+      const { error: updateError } = await supabase
+        .from('preparation_inventory_documents')
+        .update(inventoryDocumentToSupabaseUpdate(inventory))
+        .eq('id', inventoryId)
+
+      if (updateError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update inventory document in Supabase', {
+          updateError,
+          inventoryId
+        })
+        throw updateError
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Inventory document updated in Supabase', {
+        inventoryId,
+        totalItems: inventory.totalItems,
+        totalDiscrepancies: inventory.totalDiscrepancies,
+        totalValueDifference: inventory.totalValueDifference
+      })
+
       return inventory
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update preparation inventory', {
@@ -977,6 +1063,7 @@ export class PreparationService {
         item => Math.abs(item.difference) > 0.01
       )
 
+      // ✅ Create correction operations for discrepancies (if any)
       if (itemsWithDiscrepancies.length > 0) {
         const correctionData: CreatePreparationCorrectionData = {
           department: inventory.department,
@@ -997,6 +1084,30 @@ export class PreparationService {
         const correctionOperation = await this.createCorrection(correctionData)
         correctionOperations.push(correctionOperation)
       }
+
+      // ✅ UPDATE inventory document status in Supabase (status → 'confirmed')
+      const { error: updateError } = await supabase
+        .from('preparation_inventory_documents')
+        .update({
+          status: 'confirmed',
+          updated_at: inventory.updatedAt
+        })
+        .eq('id', inventoryId)
+
+      if (updateError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update inventory status in Supabase', {
+          updateError,
+          inventoryId
+        })
+        throw updateError
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Inventory finalized in Supabase', {
+        inventoryId,
+        documentNumber: inventory.documentNumber,
+        discrepancies: itemsWithDiscrepancies.length,
+        correctionsCreated: correctionOperations.length
+      })
 
       this.inventories[inventoryIndex] = inventory
       return correctionOperations

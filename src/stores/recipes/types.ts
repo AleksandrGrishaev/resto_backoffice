@@ -2,6 +2,7 @@
 
 import { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
+import type { Department } from '@/stores/menu/types'
 
 // =============================================
 // ИНТЕГРАЦИЯ С ОБНОВЛЕННОЙ ПРОДУКТОВОЙ СИСТЕМОЙ
@@ -36,6 +37,7 @@ export interface PreparationForRecipe {
   name: string
   code: string
   type: PreparationType
+  department: Department // ✅ NEW: Department that prepares this item
 
   // ✅ БАЗОВЫЕ ЕДИНИЦЫ: Всегда в граммах или мл
   outputQuantity: number
@@ -54,6 +56,7 @@ export interface Preparation extends BaseEntity {
   code: string
   description?: string
   type: PreparationType
+  department: Department // ✅ NEW: Department that prepares this item ('kitchen' | 'bar')
 
   // ✅ ОБНОВЛЕНО: Рецепт из продуктов с правильными единицами
   recipe: PreparationIngredient[]
@@ -245,6 +248,7 @@ export interface CreatePreparationData {
   name: string
   code: string
   type: PreparationType
+  department: Department // ✅ NEW: Department that prepares this item
   description?: string
   outputQuantity: number
   outputUnit: 'gram' | 'ml' // Только базовые единицы

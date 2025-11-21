@@ -352,25 +352,27 @@ function updateInventoryItem(updatedItem: PreparationInventoryItem) {
   }
 }
 
-function initializeInventoryItems() {
-  inventoryItems.value = availableBalances.value.map(balance => ({
-    id: `prep-inv-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    preparationId: balance.preparationId,
-    preparationName: balance.preparationName,
-    systemQuantity: balance.totalQuantity,
-    actualQuantity: balance.totalQuantity,
-    difference: 0,
-    unit: balance.unit,
-    averageCost: balance.averageCost,
-    valueDifference: 0,
-    notes: '',
-    countedBy: ''
-  }))
+async function initializeInventoryItems() {
+  try {
+    // ✅ Use store method to get ALL preparations (including 0 stock)
+    const inventoryData: CreatePreparationInventoryData = {
+      department: props.department,
+      responsiblePerson: responsiblePerson.value || 'Default User'
+    }
 
-  DebugUtils.info(MODULE_NAME, 'Preparation inventory items initialized', {
-    count: inventoryItems.value.length,
-    department: props.department
-  })
+    const inventory = await preparationStore.startInventory(inventoryData)
+    currentInventory.value = inventory
+    inventoryItems.value = [...inventory.items]
+
+    DebugUtils.info(MODULE_NAME, 'Preparation inventory items initialized from store', {
+      count: inventoryItems.value.length,
+      department: props.department
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to initialize inventory items', { error })
+    // Fallback to empty array
+    inventoryItems.value = []
+  }
 }
 
 function loadExistingInventory() {
@@ -413,16 +415,10 @@ async function handleSaveDraft() {
       totalItems: totalItems.value
     })
 
+    // ✅ currentInventory already created by initializeInventoryItems()
     if (!currentInventory.value) {
-      const inventoryData: CreatePreparationInventoryData = {
-        department: props.department,
-        responsiblePerson: responsiblePerson.value
-      }
-
-      currentInventory.value = await preparationStore.startInventory(inventoryData)
-      DebugUtils.info(MODULE_NAME, 'New preparation inventory created', {
-        inventoryId: currentInventory.value.id
-      })
+      DebugUtils.error(MODULE_NAME, 'No current inventory found - this should not happen')
+      throw new Error('No current inventory found')
     }
 
     if (preparationStore.updateInventory) {
@@ -467,13 +463,10 @@ async function handleFinalize() {
       allItemsCounted: isComplete.value
     })
 
+    // ✅ currentInventory already created by initializeInventoryItems()
     if (!currentInventory.value) {
-      const inventoryData: CreatePreparationInventoryData = {
-        department: props.department,
-        responsiblePerson: responsiblePerson.value
-      }
-
-      currentInventory.value = await preparationStore.startInventory(inventoryData)
+      DebugUtils.error(MODULE_NAME, 'No current inventory found - this should not happen')
+      throw new Error('No current inventory found')
     }
 
     if (preparationStore.updateInventory) {
@@ -529,7 +522,7 @@ watch(
       if (props.existingInventory) {
         loadExistingInventory()
       } else {
-        initializeInventoryItems()
+        await initializeInventoryItems() // ✅ await async call
       }
     }
   }
