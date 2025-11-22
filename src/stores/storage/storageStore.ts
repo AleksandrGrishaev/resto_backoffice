@@ -274,8 +274,7 @@ export const useStorageStore = defineStore('storage', () => {
         state.value.inventories = []
       }
 
-      // Load transit batches into service
-      transitBatchService.load(state.value.transitBatches)
+      // ✅ REMOVED: transitBatchService.load() - data now loaded from Supabase via getTransitBatches()
 
       initialized.value = true
 
