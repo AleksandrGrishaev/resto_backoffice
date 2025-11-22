@@ -647,7 +647,7 @@ onMounted(async () => {
     // Initialize both stores
     await Promise.all([
       store.initialize(),
-      productsStore.loadProducts() // Use mock data
+      productsStore.loadProducts() // Load from Supabase
     ])
 
     // Expand all categories by default

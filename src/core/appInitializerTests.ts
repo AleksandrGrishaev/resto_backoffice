@@ -200,7 +200,7 @@ export class AppInitializerTests {
       const state = accountStore.state?.value || accountStore.state || {}
 
       if (!state.accounts || state.accounts.length === 0) {
-        DebugUtils.warn(MODULE_NAME, 'No accounts found - this may be expected in mock mode')
+        DebugUtils.warn(MODULE_NAME, 'No accounts found - this may be expected during initial setup')
       }
 
       // Проверяем getters если есть счета
