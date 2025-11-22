@@ -46,8 +46,8 @@ export class AppInitializer {
    * Выбрать стратегию инициализации на основе конфигурации
    */
   private selectStrategy(config: InitializationConfig): InitializationStrategy {
-    // В dev mode или с mock данными используем Dev стратегию
-    if (import.meta.env.DEV || config.useMockData) {
+    // В dev mode используем Dev стратегию
+    if (import.meta.env.DEV) {
       DebugUtils.info(MODULE_NAME, '📋 Selected initialization strategy: Development')
       return new DevInitializationStrategy(config)
     }
@@ -70,7 +70,6 @@ export class AppInitializer {
         strategy: this.strategy.getName(),
         userRoles: finalUserRoles,
         platform: this.platform.platform.value,
-        useMockData: this.config.useMockData,
         enableDebug: this.config.enableDebug
       })
 
@@ -165,7 +164,6 @@ export class AppInitializer {
       userRole: userRoles.join(', '),
       strategy: this.strategy.getName(),
       debugMode: ENV.debugEnabled,
-      mockData: ENV.useMockData,
       offlineEnabled: ENV.enableOffline
     }
 
@@ -262,12 +260,10 @@ function createAppInitializer(): AppInitializer {
   console.log('🔍 DIRECT LOG: createAppInitializer called', {
     ENV_debugEnabled: ENV.debugEnabled,
     ENV_debugLevel: ENV.debugLevel,
-    ENV_useMockData: ENV.useMockData,
     import_meta_DEV: import.meta.env.DEV
   })
 
   const config: InitializationConfig = {
-    useMockData: ENV.useMockData,
     enableDebug: ENV.debugEnabled,
     runIntegrationTests: ENV.debugEnabled && import.meta.env.DEV
   }
@@ -276,11 +272,9 @@ function createAppInitializer(): AppInitializer {
     config,
     env: {
       platform: ENV.platform,
-      useMockData: ENV.useMockData,
       enableOffline: ENV.enableOffline,
       debugEnabled: ENV.debugEnabled,
       useFirebase: ENV.useFirebase,
-      useMockEnv: import.meta.env.VITE_USE_MOCK_DATA,
       mode: import.meta.env.MODE
     }
   })

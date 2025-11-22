@@ -199,23 +199,20 @@
 
 ---
 
-## 🚨 Critical Flags to Remove
+## ✅ Critical Flags Removed
 
-### ENV.useMockData Usage
+### ENV.useMockData Cleanup - COMPLETE!
 
-**Files to update:**
-- [ ] `src/config/environment.ts` - Remove `useMockData` flag
-- [ ] `src/composables/usePlatform.ts` - Remove mock checks
-- [ ] `src/core/appInitializer.ts` - Remove mock initialization
-- [ ] `src/stores/counteragents/counteragentsStore.ts` - Remove `useMockData` param
-- [ ] `src/stores/supplier_2/supplierStore.ts` - Remove `useMockData` state
+**Cleaned up files:**
+- [x] `src/config/environment.ts` - Removed `useMockData` flag
+- [x] `src/composables/usePlatform.ts` - Removed mock checks
+- [x] `src/core/appInitializer.ts` - Removed mock initialization
+- [x] `src/core/initialization/types.ts` - Removed `useMockData` from InitializationConfig
+- [x] `src/core/initialization/DevInitializationStrategy.ts` - Removed mock references
+- [x] `src/stores/supplier_2/supplierStore.ts` - Removed `useMockData` state and `dataSource`
+- [x] `CLAUDE.md` - Updated documentation to reflect Supabase integration
 
-**Integration State Cleanup:**
-```typescript
-// REMOVE from supplierStore.ts:
-integrationState.value.useMockData = false  // ❌ Delete
-state.value.dataSource = 'mock' | 'integrated'  // ❌ Delete
-```
+**Cleanup complete:** All ENV.useMockData references removed from codebase.
 
 ---
 

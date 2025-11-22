@@ -32,7 +32,6 @@ export type StoreName =
  * Конфигурация инициализации
  */
 export interface InitializationConfig {
-  useMockData: boolean
   enableDebug: boolean
   runIntegrationTests: boolean
   userRoles?: UserRole[]

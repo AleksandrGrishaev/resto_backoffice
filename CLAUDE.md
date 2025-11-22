@@ -141,7 +141,6 @@ Configuration is centralized in `src/config/environment.ts`:
 ```typescript
 import { ENV } from '@/config/environment'
 
-ENV.useMockData // Use mock data instead of Firebase
 ENV.useFirebase // Enable Firebase integration
 ENV.debugEnabled // Enable debug logging
 ENV.platform // 'web' | 'mobile'
@@ -308,10 +307,10 @@ Supabase is used for:
 
 - Database (PostgreSQL)
 - Authentication (future migration from local storage)
-- Real-time subscriptions (future implementation)
+- Real-time subscriptions (implemented for Kitchen and POS)
 - Storage (future implementation)
 
-Current state: Configured but not yet fully integrated. Using localStorage and mock data in development.
+Current state: Fully integrated for most stores. Uses Supabase as primary data source with localStorage for offline caching (POS only).
 
 ### Working with Database via MCP
 
@@ -384,10 +383,10 @@ if (hasAnyRole(['admin', 'manager'])) {
 ```typescript
 import { ENV } from '@/config/environment'
 
-if (ENV.useMockData) {
-  // Use mock data
-} else {
-  // Use Firebase
+if (ENV.useSupabase) {
+  // Use Supabase (primary data source)
+} else if (ENV.useFirebase) {
+  // Use Firebase (legacy, being phased out)
 }
 ```
 
@@ -428,12 +427,10 @@ pos/
 │   └── composables.ts    # Payment composables
 ├── shifts/               # Shift management
 │   ├── shiftsStore.ts    # Shift state (current, history)
-│   ├── types.ts          # Shift-specific types
-│   └── mock.ts           # Mock shift data
-├── service/              # Service modules
-│   └── DepartmentNotificationService.ts  # Kitchen notifications
-└── mocks/                # Mock data for development/testing
-    └── posMockData.ts
+│   ├── services.ts       # Shift persistence services
+│   └── types.ts          # Shift-specific types
+└── service/              # Service modules
+    └── DepartmentNotificationService.ts  # Kitchen notifications
 ```
 
 **Key Store Patterns:**

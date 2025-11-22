@@ -35,7 +35,7 @@ const MODULE_NAME = 'DevInitStrategy'
  * Стратегия инициализации для Development режима
  *
  * Характеристики:
- * - Использует localStorage + mock данные
+ * - Использует Supabase + localStorage для оффлайн кеширования
  * - Загружает критические stores для ВСЕХ ролей (для удобства тестирования)
  * - Последовательная загрузка с учетом зависимостей
  * - Подробное логирование
@@ -48,7 +48,7 @@ export class DevInitializationStrategy implements InitializationStrategy {
   }
 
   getName(): string {
-    return 'Development (localStorage + mock data)'
+    return 'Development (Supabase + localStorage)'
   }
 
   /**
@@ -181,9 +181,7 @@ export class DevInitializationStrategy implements InitializationStrategy {
     try {
       const store = useProductsStore()
 
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading products...', {
-        useMock: this.config.useMockData
-      })
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading products...')
 
       await store.loadProducts()
 
@@ -212,9 +210,7 @@ export class DevInitializationStrategy implements InitializationStrategy {
     try {
       const store = useCounteragentsStore()
 
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading counteragents...', {
-        useMock: this.config.useMockData
-      })
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading counteragents...')
 
       if (store.initialize) {
         await store.initialize()
@@ -245,9 +241,7 @@ export class DevInitializationStrategy implements InitializationStrategy {
     try {
       const store = useRecipesStore()
 
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipes and preparations...', {
-        useMock: this.config.useMockData
-      })
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipes and preparations...')
 
       if (store.initialize) {
         await store.initialize()
@@ -278,9 +272,7 @@ export class DevInitializationStrategy implements InitializationStrategy {
     try {
       const store = useMenuStore()
 
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading menu...', {
-        useMock: this.config.useMockData
-      })
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading menu...')
 
       if (store.initialize) {
         await store.initialize()

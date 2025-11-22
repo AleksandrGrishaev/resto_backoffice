@@ -17,7 +17,6 @@ interface EnvironmentConfig {
 
   // Data sources
   useAPI: boolean
-  useMockData: boolean
   useFirebase: boolean
   useSupabase: boolean // Alias for supabase.enabled
 
@@ -101,7 +100,6 @@ function createEnvironmentConfig(): EnvironmentConfig {
 
     // Data sources
     useAPI: import.meta.env.VITE_USE_API === 'true',
-    useMockData: import.meta.env.VITE_USE_MOCK_DATA === 'true',
     useFirebase: import.meta.env.VITE_USE_FIREBASE === 'true',
     useSupabase: import.meta.env.VITE_USE_SUPABASE === 'true',
 

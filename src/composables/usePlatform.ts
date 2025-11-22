@@ -24,7 +24,6 @@ interface PlatformCapabilities {
 
   // Features
   canSync: boolean
-  shouldUseMock: boolean
   debugEnabled: boolean
 }
 
@@ -57,7 +56,6 @@ export function usePlatform() {
 
     // Features
     canSync: ENV.enableSync && (ENV.useAPI || ENV.useFirebase),
-    shouldUseMock: ENV.useMockData,
     debugEnabled: ENV.debugEnabled
   }))
 

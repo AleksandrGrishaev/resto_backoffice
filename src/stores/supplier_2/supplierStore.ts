@@ -36,7 +36,6 @@ interface IntegrationState {
   lastSuggestionsUpdate: string | null
   lastStorageSync: string | null
   lastProductsSync: string | null
-  useMockData: boolean
   integrationErrors: string[]
   storageOperationsCreated: number
   priceUpdatesProcessed: number
@@ -80,7 +79,6 @@ export const useSupplierStore = defineStore('supplier', () => {
     lastSuggestionsUpdate: null,
     lastStorageSync: null,
     lastProductsSync: null,
-    useMockData: true,
     integrationErrors: [],
     storageOperationsCreated: 0,
     priceUpdatesProcessed: 0,
@@ -152,7 +150,6 @@ export const useSupplierStore = defineStore('supplier', () => {
       averageReceiptTime: number
       integrationHealth: string
       lastDataUpdate: string | null
-      dataSource: 'mock' | 'integrated'
       performanceScore: number
     } => {
       const now = new Date()
@@ -212,7 +209,6 @@ export const useSupplierStore = defineStore('supplier', () => {
         averageReceiptTime: Math.round(averageReceiptTime * 10) / 10,
         integrationHealth: integrationState.value.integrationHealth,
         lastDataUpdate: integrationState.value.lastSuggestionsUpdate,
-        dataSource: integrationState.value.useMockData ? 'mock' : 'integrated',
         performanceScore: Math.round(performanceScore * 10) / 10
       }
     }
@@ -228,10 +224,7 @@ export const useSupplierStore = defineStore('supplier', () => {
 
   const hasIntegrationErrors = computed(() => integrationState.value.integrationErrors.length > 0)
   const isFullyIntegrated = computed(
-    () =>
-      integrationState.value.isInitialized &&
-      !integrationState.value.useMockData &&
-      !hasIntegrationErrors.value
+    () => integrationState.value.isInitialized && !hasIntegrationErrors.value
   )
 
   // =============================================
@@ -284,7 +277,6 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       // Step 9: Mark as initialized
       integrationState.value.isInitialized = true
-      integrationState.value.useMockData = false
 
       const initTime = Date.now() - startTime
 
@@ -1135,7 +1127,6 @@ export const useSupplierStore = defineStore('supplier', () => {
   function getIntegrationStatus() {
     return {
       isInitialized: integrationState.value.isInitialized,
-      useMockData: integrationState.value.useMockData,
       hasErrors: integrationState.value.integrationErrors.length > 0,
       errors: [...integrationState.value.integrationErrors],
 
