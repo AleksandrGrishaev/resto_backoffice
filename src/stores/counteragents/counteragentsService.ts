@@ -1,4 +1,4 @@
-// src/stores/counteragents/counteragentsService.ts - REFACTORED with Utils Integration
+// src/stores/counteragents/counteragentsService.ts - Supabase Migration
 
 import type {
   Counteragent,
@@ -6,39 +6,23 @@ import type {
   CounteragentsResponse,
   CounteragentResponse,
   CounteragentFilters,
-  CounteragentsStatistics
+  CounteragentsStatistics,
+  CounteragentType,
+  PaymentTerms,
+  BalanceHistoryEntry
 } from './types'
-import {
-  generateCounteragentsMockData,
-  findCounteragentById,
-  generateCounteragentsStatistics,
-  getActiveCounterAgents,
-  getCounteragentsByCategory
-} from './mock/counteragentsMock'
-import { DebugUtils, generateId, TimeUtils } from '@/utils'
+import type { ProductCategory } from '@/stores/productsStore/types'
+import { supabase } from '@/supabase/client'
+import { generateId, TimeUtils, DebugUtils } from '@/utils'
+import { mapCounteragentFromDB, mapCounteragentToDB } from './supabaseMappers'
 
 const MODULE_NAME = 'CounteragentsService'
 
-// Симуляция задержки API
-const API_DELAY = 300
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
 export class CounteragentsService {
   private static instance: CounteragentsService
-  private counteragents: Counteragent[]
 
   constructor() {
-    // ✅ Используем интегрированные mock данные
-    this.counteragents = [...generateCounteragentsMockData()]
-
-    DebugUtils.info(MODULE_NAME, 'CounteragentsService initialized', {
-      totalCounterAgents: this.counteragents.length,
-      activeCounterAgents: this.counteragents.filter(ca => ca.isActive).length,
-      preferredCounterAgents: this.counteragents.filter(ca => ca.isPreferred).length
-    })
+    DebugUtils.info(MODULE_NAME, 'CounteragentsService initialized (Supabase mode)')
   }
 
   static getInstance(): CounteragentsService {
@@ -53,55 +37,94 @@ export class CounteragentsService {
   // =============================================
 
   async fetchCounterAgents(filters?: CounteragentFilters): Promise<CounteragentsResponse> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Fetching counteragents', { filters })
+      DebugUtils.debug(MODULE_NAME, 'Fetching counteragents from Supabase', { filters })
 
-      let filtered = [...this.counteragents]
+      // Build query
+      let query = supabase.from('counteragents').select('*', { count: 'exact' })
 
       // Apply filters
       if (filters) {
-        filtered = this.applyFilters(filtered, filters)
+        if (filters.search) {
+          query = query.or(
+            `name.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%,contact_person.ilike.%${filters.search}%`
+          )
+        }
+
+        if (filters.type && filters.type !== 'all') {
+          query = query.eq('type', filters.type)
+        }
+
+        if (typeof filters.isActive === 'boolean') {
+          query = query.eq('is_active', filters.isActive)
+        }
+
+        if (typeof filters.isPreferred === 'boolean') {
+          query = query.eq('is_preferred', filters.isPreferred)
+        }
+
+        if (filters.productCategories && filters.productCategories.length > 0) {
+          query = query.overlaps('product_categories', filters.productCategories)
+        }
+
+        if (filters.paymentTerms && filters.paymentTerms !== 'all') {
+          query = query.eq('payment_terms', filters.paymentTerms)
+        }
       }
 
       // Apply sorting
-      if (filters?.sortBy) {
-        filtered = this.applySorting(filtered, filters)
-      }
+      const sortBy = filters?.sortBy || 'name'
+      const sortOrder = filters?.sortOrder || 'asc'
+      const dbSortBy = sortBy.replace(/([A-Z])/g, '_$1').toLowerCase() // camelCase to snake_case
+      query = query.order(dbSortBy, { ascending: sortOrder === 'asc' })
 
       // Apply pagination
-      const { paginatedData, total } = this.applyPagination(filtered, filters)
+      const page = filters?.page || 1
+      const limit = filters?.limit || 100
+      const offset = (page - 1) * limit
+      query = query.range(offset, offset + limit - 1)
 
-      DebugUtils.debug(MODULE_NAME, 'Counteragents fetched successfully', {
-        total,
-        filtered: filtered.length,
-        returned: paginatedData.length
+      const { data, error, count } = await query
+
+      if (error) throw error
+
+      const counteragents = (data || []).map(mapCounteragentFromDB)
+
+      DebugUtils.info(MODULE_NAME, 'Counteragents fetched from Supabase', {
+        total: count || 0,
+        returned: counteragents.length
       })
 
       return {
-        data: paginatedData,
-        total,
-        page: filters?.page || 1,
-        limit: filters?.limit || 10
+        data: counteragents,
+        total: count || 0,
+        page,
+        limit
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch counteragents', { error, filters })
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch counteragents from Supabase', {
+        error,
+        filters
+      })
       throw new Error('Failed to fetch counteragents')
     }
   }
 
   async getCounteragentById(id: string): Promise<CounteragentResponse> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Getting counteragent by ID', { id })
+      DebugUtils.debug(MODULE_NAME, 'Getting counteragent by ID from Supabase', { id })
 
-      const counteragent = this.counteragents.find(ca => ca.id === id)
-      if (!counteragent) {
-        DebugUtils.warn(MODULE_NAME, 'Counteragent not found', { id })
-        throw new Error(`Counteragent with id ${id} not found`)
+      const { data, error } = await supabase.from('counteragents').select('*').eq('id', id).single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          DebugUtils.warn(MODULE_NAME, 'Counteragent not found', { id })
+          throw new Error(`Counteragent with id ${id} not found`)
+        }
+        throw error
       }
+
+      const counteragent = mapCounteragentFromDB(data)
 
       DebugUtils.debug(MODULE_NAME, 'Counteragent found', {
         id,
@@ -117,10 +140,8 @@ export class CounteragentsService {
   }
 
   async createCounteragent(data: CreateCounteragentData): Promise<CounteragentResponse> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Creating counteragent', {
+      DebugUtils.debug(MODULE_NAME, 'Creating counteragent in Supabase', {
         name: data.name,
         type: data.type
       })
@@ -136,6 +157,7 @@ export class CounteragentsService {
         email: data.email,
         phone: data.phone,
         address: data.address,
+        website: data.website,
         productCategories: data.productCategories || [],
         paymentTerms: data.paymentTerms || 'on_delivery',
         isActive: data.isActive ?? true,
@@ -144,7 +166,7 @@ export class CounteragentsService {
         notes: data.notes,
         creditLimit: data.creditLimit,
         currentBalance: 0,
-        balanceHistory: [], // НОВОЕ ПОЛЕ - инициализируем пустым массивом
+        balanceHistory: [],
         leadTimeDays: data.leadTimeDays || 3,
         deliverySchedule: data.deliverySchedule,
         minOrderAmount: data.minOrderAmount,
@@ -154,29 +176,36 @@ export class CounteragentsService {
         updatedAt: now
       }
 
-      this.counteragents.push(newCounteragent)
+      // Insert to Supabase
+      const dbCounteragent = mapCounteragentToDB(newCounteragent)
+      const { data: insertedData, error } = await supabase
+        .from('counteragents')
+        .insert(dbCounteragent)
+        .select()
+        .single()
 
-      DebugUtils.info(MODULE_NAME, 'Counteragent created successfully', {
-        id: newCounteragent.id,
-        name: newCounteragent.name,
-        type: newCounteragent.type
+      if (error) throw error
+
+      const result = mapCounteragentFromDB(insertedData)
+
+      DebugUtils.info(MODULE_NAME, 'Counteragent created successfully in Supabase', {
+        id: result.id,
+        name: result.name,
+        type: result.type
       })
 
-      return { data: newCounteragent }
+      return { data: result }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create counteragent', { error, data })
+      DebugUtils.error(MODULE_NAME, 'Failed to create counteragent in Supabase', { error, data })
       throw new Error('Failed to create counteragent')
     }
   }
 
   async getBalanceHistory(id: string): Promise<BalanceHistoryEntry[]> {
     try {
-      const counteragent = this.counteragents.find(ca => ca.id === id)
-      if (!counteragent) {
-        throw new Error(`Counteragent with id ${id} not found`)
-      }
+      const { data } = await this.getCounteragentById(id)
 
-      return (counteragent.balanceHistory || []).sort(
+      return (data.balanceHistory || []).sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       )
     } catch (error) {
@@ -186,62 +215,78 @@ export class CounteragentsService {
   }
 
   async updateCounteragent(id: string, data: Partial<Counteragent>): Promise<CounteragentResponse> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Updating counteragent', { id, updates: Object.keys(data) })
+      DebugUtils.debug(MODULE_NAME, 'Updating counteragent in Supabase', {
+        id,
+        updates: Object.keys(data)
+      })
 
-      const index = this.counteragents.findIndex(ca => ca.id === id)
-      if (index === -1) {
-        DebugUtils.warn(MODULE_NAME, 'Counteragent not found for update', { id })
-        throw new Error(`Counteragent with id ${id} not found`)
-      }
+      // First get the current counteragent to preserve fields not being updated
+      const { data: currentData } = await this.getCounteragentById(id)
 
       const updatedCounteragent = {
-        ...this.counteragents[index],
+        ...currentData,
         ...data,
         // ВАЖНО: Убедиться что balanceHistory не затирается при обновлении других полей
-        balanceHistory: data.balanceHistory ?? this.counteragents[index].balanceHistory ?? [],
+        balanceHistory: data.balanceHistory ?? currentData.balanceHistory ?? [],
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      this.counteragents[index] = updatedCounteragent
+      // Update in Supabase
+      const dbCounteragent = mapCounteragentToDB(updatedCounteragent)
+      const { data: updatedData, error } = await supabase
+        .from('counteragents')
+        .update(dbCounteragent)
+        .eq('id', id)
+        .select()
+        .single()
 
-      DebugUtils.info(MODULE_NAME, 'Counteragent updated successfully', {
+      if (error) {
+        if (error.code === 'PGRST116') {
+          DebugUtils.warn(MODULE_NAME, 'Counteragent not found for update', { id })
+          throw new Error(`Counteragent with id ${id} not found`)
+        }
+        throw error
+      }
+
+      const result = mapCounteragentFromDB(updatedData)
+
+      DebugUtils.info(MODULE_NAME, 'Counteragent updated successfully in Supabase', {
         id,
-        name: updatedCounteragent.name,
+        name: result.name,
         updatedFields: Object.keys(data),
-        balanceHistoryLength: updatedCounteragent.balanceHistory.length
+        balanceHistoryLength: result.balanceHistory?.length || 0
       })
 
-      return { data: updatedCounteragent }
+      return { data: result }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to update counteragent', { error, id, data })
+      DebugUtils.error(MODULE_NAME, 'Failed to update counteragent in Supabase', {
+        error,
+        id,
+        data
+      })
       throw error
     }
   }
 
   async deleteCounteragent(id: string): Promise<void> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Deleting counteragent', { id })
+      DebugUtils.debug(MODULE_NAME, 'Deleting counteragent from Supabase', { id })
 
-      const index = this.counteragents.findIndex(ca => ca.id === id)
-      if (index === -1) {
-        DebugUtils.warn(MODULE_NAME, 'Counteragent not found for deletion', { id })
-        throw new Error(`Counteragent with id ${id} not found`)
-      }
+      // Get counteragent first for logging
+      const { data: counteragent } = await this.getCounteragentById(id)
 
-      const deletedCounterAgent = this.counteragents[index]
-      this.counteragents.splice(index, 1)
+      // Delete from Supabase
+      const { error } = await supabase.from('counteragents').delete().eq('id', id)
 
-      DebugUtils.info(MODULE_NAME, 'Counteragent deleted successfully', {
+      if (error) throw error
+
+      DebugUtils.info(MODULE_NAME, 'Counteragent deleted successfully from Supabase', {
         id,
-        name: deletedCounterAgent.name
+        name: counteragent.name
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to delete counteragent', { error, id })
+      DebugUtils.error(MODULE_NAME, 'Failed to delete counteragent from Supabase', { error, id })
       throw error
     }
   }
@@ -251,28 +296,17 @@ export class CounteragentsService {
   // =============================================
 
   async searchCounterAgents(query: string): Promise<Counteragent[]> {
-    await delay(API_DELAY / 2)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Searching counteragents', { query })
+      DebugUtils.debug(MODULE_NAME, 'Searching counteragents in Supabase', { query })
 
-      const searchLower = query.toLowerCase()
-      const results = this.counteragents.filter(
-        ca =>
-          ca.name.toLowerCase().includes(searchLower) ||
-          ca.displayName?.toLowerCase().includes(searchLower) ||
-          ca.contactPerson?.toLowerCase().includes(searchLower) ||
-          ca.email?.toLowerCase().includes(searchLower) ||
-          ca.description?.toLowerCase().includes(searchLower) ||
-          ca.tags?.some(tag => tag.toLowerCase().includes(searchLower))
-      )
+      const response = await this.fetchCounterAgents({ search: query, limit: 100 })
 
       DebugUtils.debug(MODULE_NAME, 'Search completed', {
         query,
-        resultsCount: results.length
+        resultsCount: response.data.length
       })
 
-      return results
+      return response.data
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Search failed', { error, query })
       return []
@@ -280,23 +314,26 @@ export class CounteragentsService {
   }
 
   async getCounteragentsByCategory(category: string): Promise<Counteragent[]> {
-    await delay(API_DELAY / 2)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Getting counteragents by category', { category })
+      DebugUtils.debug(MODULE_NAME, 'Getting counteragents by category from Supabase', { category })
 
-      if (category === 'all') {
-        return getActiveCounterAgents()
+      const filters: CounteragentFilters = {
+        isActive: true,
+        limit: 1000
       }
 
-      const results = getCounteragentsByCategory(category as any)
+      if (category !== 'all') {
+        filters.productCategories = [category as any]
+      }
+
+      const response = await this.fetchCounterAgents(filters)
 
       DebugUtils.debug(MODULE_NAME, 'Counteragents by category retrieved', {
         category,
-        count: results.length
+        count: response.data.length
       })
 
-      return results
+      return response.data
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get counteragents by category', { error, category })
       return []
@@ -304,23 +341,23 @@ export class CounteragentsService {
   }
 
   async getCounteragentsByType(type: string): Promise<Counteragent[]> {
-    await delay(API_DELAY / 2)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Getting counteragents by type', { type })
+      DebugUtils.debug(MODULE_NAME, 'Getting counteragents by type from Supabase', { type })
 
-      if (type === 'all') {
-        return getActiveCounterAgents()
+      const filters: CounteragentFilters = {
+        isActive: true,
+        type: type === 'all' ? 'all' : (type as any),
+        limit: 1000
       }
 
-      const results = this.counteragents.filter(ca => ca.isActive && ca.type === type)
+      const response = await this.fetchCounterAgents(filters)
 
       DebugUtils.debug(MODULE_NAME, 'Counteragents by type retrieved', {
         type,
-        count: results.length
+        count: response.data.length
       })
 
-      return results
+      return response.data
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get counteragents by type', { error, type })
       return []
@@ -332,16 +369,45 @@ export class CounteragentsService {
   // =============================================
 
   async getCounteragentsStatistics(): Promise<CounteragentsStatistics> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Generating counteragents statistics')
+      DebugUtils.debug(MODULE_NAME, 'Generating counteragents statistics from Supabase')
 
-      const stats = generateCounteragentsStatistics()
+      // Fetch all counteragents
+      const response = await this.fetchCounterAgents({ limit: 10000 })
+      const counteragents = response.data
+
+      // Compute statistics
+      const stats: CounteragentsStatistics = {
+        totalCounterAgents: counteragents.length,
+        activeCounterAgents: counteragents.filter(ca => ca.isActive).length,
+        preferredCounterAgents: counteragents.filter(ca => ca.isPreferred).length,
+        typeBreakdown: {} as Record<CounteragentType, number>,
+        productCategoryBreakdown: {} as Record<ProductCategory, number>,
+        paymentTermsBreakdown: {} as Record<PaymentTerms, number>
+      }
+
+      // Type breakdown
+      counteragents.forEach(ca => {
+        stats.typeBreakdown[ca.type] = (stats.typeBreakdown[ca.type] || 0) + 1
+      })
+
+      // Product category breakdown
+      counteragents.forEach(ca => {
+        ca.productCategories.forEach(category => {
+          stats.productCategoryBreakdown[category] =
+            (stats.productCategoryBreakdown[category] || 0) + 1
+        })
+      })
+
+      // Payment terms breakdown
+      counteragents.forEach(ca => {
+        stats.paymentTermsBreakdown[ca.paymentTerms] =
+          (stats.paymentTermsBreakdown[ca.paymentTerms] || 0) + 1
+      })
 
       DebugUtils.debug(MODULE_NAME, 'Statistics generated', stats)
 
-      return stats as CounteragentsStatistics
+      return stats
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to generate statistics', { error })
       throw new Error('Failed to generate statistics')
@@ -356,10 +422,7 @@ export class CounteragentsService {
     try {
       DebugUtils.debug(MODULE_NAME, 'Toggling counteragent status', { id })
 
-      const counteragent = this.counteragents.find(ca => ca.id === id)
-      if (!counteragent) {
-        throw new Error(`Counteragent with id ${id} not found`)
-      }
+      const { data: counteragent } = await this.getCounteragentById(id)
 
       const newStatus = !counteragent.isActive
       const result = await this.updateCounteragent(id, { isActive: newStatus })
@@ -400,10 +463,12 @@ export class CounteragentsService {
   // =============================================
 
   async bulkUpdateStatus(ids: string[], isActive: boolean): Promise<void> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Bulk updating status', { ids, isActive, count: ids.length })
+      DebugUtils.debug(MODULE_NAME, 'Bulk updating status in Supabase', {
+        ids,
+        isActive,
+        count: ids.length
+      })
 
       const updatePromises = ids.map(id => this.updateCounteragent(id, { isActive }))
       await Promise.all(updatePromises)
@@ -419,10 +484,11 @@ export class CounteragentsService {
   }
 
   async bulkDelete(ids: string[]): Promise<void> {
-    await delay(API_DELAY)
-
     try {
-      DebugUtils.debug(MODULE_NAME, 'Bulk deleting counteragents', { ids, count: ids.length })
+      DebugUtils.debug(MODULE_NAME, 'Bulk deleting counteragents from Supabase', {
+        ids,
+        count: ids.length
+      })
 
       const deletePromises = ids.map(id => this.deleteCounteragent(id))
       await Promise.all(deletePromises)
@@ -445,23 +511,19 @@ export class CounteragentsService {
    */
   async getSupplierForProduct(supplierId: string): Promise<Counteragent | null> {
     try {
-      DebugUtils.debug(MODULE_NAME, 'Getting supplier for product', { supplierId })
+      DebugUtils.debug(MODULE_NAME, 'Getting supplier for product from Supabase', { supplierId })
 
-      const supplier = findCounteragentById(supplierId)
+      const { data: supplier } = await this.getCounteragentById(supplierId)
 
-      if (supplier) {
-        DebugUtils.debug(MODULE_NAME, 'Supplier found for product', {
-          supplierId,
-          supplierName: supplier.name,
-          categories: supplier.productCategories
-        })
-      } else {
-        DebugUtils.warn(MODULE_NAME, 'Supplier not found for product', { supplierId })
-      }
+      DebugUtils.debug(MODULE_NAME, 'Supplier found for product', {
+        supplierId,
+        supplierName: supplier.name,
+        categories: supplier.productCategories
+      })
 
-      return supplier || null
+      return supplier
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get supplier for product', { error, supplierId })
+      DebugUtils.warn(MODULE_NAME, 'Supplier not found for product', { supplierId, error })
       return null
     }
   }
@@ -471,9 +533,11 @@ export class CounteragentsService {
    */
   async getSuppliersForProductCategory(category: string): Promise<Counteragent[]> {
     try {
-      DebugUtils.debug(MODULE_NAME, 'Getting suppliers for product category', { category })
+      DebugUtils.debug(MODULE_NAME, 'Getting suppliers for product category from Supabase', {
+        category
+      })
 
-      const suppliers = getCounteragentsByCategory(category as any)
+      const suppliers = await this.getCounteragentsByCategory(category)
 
       DebugUtils.debug(MODULE_NAME, 'Suppliers found for category', {
         category,
@@ -499,31 +563,33 @@ export class CounteragentsService {
     }
   ): Promise<void> {
     try {
-      DebugUtils.debug(MODULE_NAME, 'Updating supplier order stats', { supplierId, orderData })
+      DebugUtils.debug(MODULE_NAME, 'Updating supplier order stats in Supabase', {
+        supplierId,
+        orderData
+      })
 
-      const counteragent = this.counteragents.find(ca => ca.id === supplierId)
-      if (counteragent) {
-        const updates = {
-          totalOrders: (counteragent.totalOrders || 0) + 1,
-          totalOrderValue: (counteragent.totalOrderValue || 0) + orderData.orderValue,
-          lastOrderDate: TimeUtils.getCurrentLocalISO()
-        }
+      const { data: counteragent } = await this.getCounteragentById(supplierId)
 
-        if (orderData.deliveryTime && counteragent.averageDeliveryTime) {
-          updates.averageDeliveryTime =
-            (counteragent.averageDeliveryTime * (counteragent.totalOrders || 0) +
-              orderData.deliveryTime) /
-            (counteragent.totalOrders || 0 + 1)
-        }
-
-        await this.updateCounteragent(supplierId, updates)
-
-        DebugUtils.info(MODULE_NAME, 'Supplier order stats updated', {
-          supplierId,
-          newTotalOrders: updates.totalOrders,
-          newTotalValue: updates.totalOrderValue
-        })
+      const updates: Partial<Counteragent> = {
+        totalOrders: (counteragent.totalOrders || 0) + 1,
+        totalOrderValue: (counteragent.totalOrderValue || 0) + orderData.orderValue,
+        lastOrderDate: TimeUtils.getCurrentLocalISO()
       }
+
+      if (orderData.deliveryTime && counteragent.averageDeliveryTime) {
+        updates.averageDeliveryTime =
+          (counteragent.averageDeliveryTime * (counteragent.totalOrders || 0) +
+            orderData.deliveryTime) /
+          ((counteragent.totalOrders || 0) + 1)
+      }
+
+      await this.updateCounteragent(supplierId, updates)
+
+      DebugUtils.info(MODULE_NAME, 'Supplier order stats updated in Supabase', {
+        supplierId,
+        newTotalOrders: updates.totalOrders,
+        newTotalValue: updates.totalOrderValue
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update supplier order stats', {
         error,
@@ -534,90 +600,7 @@ export class CounteragentsService {
   }
 
   // =============================================
-  // PRIVATE HELPER METHODS
+  // PRIVATE HELPER METHODS - REMOVED
+  // All filtering, sorting, and pagination now handled by Supabase in fetchCounterAgents()
   // =============================================
-
-  private applyFilters(
-    counteragents: Counteragent[],
-    filters: CounteragentFilters
-  ): Counteragent[] {
-    let filtered = [...counteragents]
-
-    // Search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase()
-      filtered = filtered.filter(
-        ca =>
-          ca.name.toLowerCase().includes(searchLower) ||
-          ca.displayName?.toLowerCase().includes(searchLower) ||
-          ca.contactPerson?.toLowerCase().includes(searchLower) ||
-          ca.email?.toLowerCase().includes(searchLower) ||
-          ca.description?.toLowerCase().includes(searchLower)
-      )
-    }
-
-    // Type filter
-    if (filters.type && filters.type !== 'all') {
-      filtered = filtered.filter(ca => ca.type === filters.type)
-    }
-
-    // Active status filter
-    if (typeof filters.isActive === 'boolean') {
-      filtered = filtered.filter(ca => ca.isActive === filters.isActive)
-    }
-
-    // Preferred status filter
-    if (typeof filters.isPreferred === 'boolean') {
-      filtered = filtered.filter(ca => ca.isPreferred === filters.isPreferred)
-    }
-
-    // Product categories filter
-    if (filters.productCategories && filters.productCategories.length > 0) {
-      filtered = filtered.filter(ca =>
-        filters.productCategories!.some(category => ca.productCategories.includes(category))
-      )
-    }
-
-    // Payment terms filter
-    if (filters.paymentTerms && filters.paymentTerms !== 'all') {
-      filtered = filtered.filter(ca => ca.paymentTerms === filters.paymentTerms)
-    }
-
-    return filtered
-  }
-
-  private applySorting(
-    counteragents: Counteragent[],
-    filters: CounteragentFilters
-  ): Counteragent[] {
-    const { sortBy, sortOrder = 'asc' } = filters
-
-    return counteragents.sort((a, b) => {
-      const aVal = (a as any)[sortBy!]
-      const bVal = (b as any)[sortBy!]
-
-      if (sortOrder === 'desc') {
-        return bVal > aVal ? 1 : -1
-      }
-      return aVal > bVal ? 1 : -1
-    })
-  }
-
-  private applyPagination(
-    counteragents: Counteragent[],
-    filters?: CounteragentFilters
-  ): {
-    paginatedData: Counteragent[]
-    total: number
-  } {
-    const page = filters?.page || 1
-    const limit = filters?.limit || 10
-    const start = (page - 1) * limit
-    const end = start + limit
-
-    return {
-      paginatedData: counteragents.slice(start, end),
-      total: counteragents.length
-    }
-  }
 }
