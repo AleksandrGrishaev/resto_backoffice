@@ -248,14 +248,12 @@ export class SupplierStorageIntegration {
       const storageStore = await this.getStorageStore()
 
       const storageData: CreateReceiptData = {
+        warehouseId: 'warehouse-winter', // Default warehouse (TODO: make configurable)
         department,
         responsiblePerson: receipt.receivedBy,
         sourceType: 'purchase',
-        sourceReference: {
-          type: 'purchase_order',
-          id: order.id,
-          number: order.orderNumber
-        },
+        supplierId: order.supplierId,
+        purchaseOrderId: order.id,
         items: await this.prepareStorageItems(receipt.items, order),
         notes: this.buildStorageNotes(receipt, order)
       }
