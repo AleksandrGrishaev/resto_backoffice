@@ -1,4 +1,4 @@
-# 📦 Current Sprint: Supplier Module - Supabase Migration
+# 📦 Current Sprint: Supplier Module - Supabase Migration - 1
 
 > **📋 Strategy:** 4-sprint incremental migration - Requests → Order Assistant → Orders → Receipts+Payments
 > **🔴 CRITICAL RULE:** Always check TypeScript interface FIRST before creating/updating Supabase tables!
