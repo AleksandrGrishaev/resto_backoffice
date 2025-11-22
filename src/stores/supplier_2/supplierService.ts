@@ -1079,6 +1079,10 @@ class SupplierService {
     )
 
     return baskets
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create supplier baskets', { error })
+      throw error
+    }
   }
 
   private getOrderedQuantityForItem(requestId: string, itemId: string): number {
