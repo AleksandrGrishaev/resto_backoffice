@@ -17,11 +17,8 @@ import type {
   AccountStoreState,
   UpdatePaymentAmountDto,
   AmountChange,
-  LinkPaymentToOrderDto // ✅ ДОБАВИТЬ эту строку
+  LinkPaymentToOrderDto
 } from './types'
-
-// Mock
-import { mockAccountTransactions } from './accountBasedMock'
 
 const MODULE_NAME = 'AccountStore'
 
