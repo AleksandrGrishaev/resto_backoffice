@@ -370,9 +370,12 @@ export class SupplierStorageIntegration {
 
       storageItems.push({
         itemId: receiptItem.itemId,
-        itemType: 'product' as const, // ✅ FIX 5: Added required itemType field
+        itemName: receiptItem.itemName,
+        itemType: 'product' as const,
         quantity: receiptItem.receivedQuantity,
+        unit: receiptItem.unit,
         costPerUnit: actualPrice,
+        totalCost: receiptItem.receivedQuantity * actualPrice,
         notes: this.buildItemNotes(receiptItem, orderItem),
         expiryDate
       })
