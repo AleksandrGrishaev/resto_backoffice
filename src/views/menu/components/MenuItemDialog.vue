@@ -610,7 +610,7 @@ onMounted(async () => {
   try {
     console.log('MenuItemDialog: Initializing stores...')
 
-    // Загружаем продукты (используем ENV.useMockData)
+    // Загружаем продукты из Supabase
     await productsStore.loadProducts()
     console.log('MenuItemDialog: Products loaded:', productsStore.products?.length)
 

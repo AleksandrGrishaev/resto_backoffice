@@ -273,7 +273,6 @@ class DebugService {
       loading: storeInstance.loading || false,
       error: storeInstance.error,
       selectedProduct: storeInstance.selectedProduct,
-      useMockMode: storeInstance.useMockMode || false,
       filters: storeInstance.filters || {},
       statistics: storeInstance.statistics || {}
     }

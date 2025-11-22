@@ -23,27 +23,6 @@
       </v-row>
     </div>
 
-    <!-- Mock mode indicator with simple test button (dev only) -->
-    <v-alert v-if="useMockMode" type="info" variant="tonal" class="mb-4" density="compact">
-      <template #prepend>
-        <v-icon>mdi-database-outline</v-icon>
-      </template>
-      <div class="d-flex align-center justify-space-between">
-        <span class="text-body-2">Режим разработки: используются координированные mock-данные</span>
-        <!-- DEV: Simple test button -->
-        <v-btn
-          v-if="isDev"
-          size="small"
-          variant="outlined"
-          color="info"
-          @click="testStockRecommendations"
-        >
-          <v-icon start size="small">mdi-calculator</v-icon>
-          Тест расчетов
-        </v-btn>
-      </div>
-    </v-alert>
-
     <!-- Original filters -->
     <products-filters
       :filters="storeFilters"
@@ -172,7 +151,6 @@ const notification = ref({
 
 // Original computed
 const isDev = computed(() => import.meta.env.DEV)
-const useMockMode = computed(() => store.useMockMode)
 
 const storeFilters = computed(() => ({
   category: store.filters.category,
@@ -395,7 +373,6 @@ const resetFilters = (): void => {
 onMounted(async () => {
   DebugUtils.info(MODULE_NAME, '🎯 ProductsView mounted', {
     productsLoaded: store.products.length,
-    useMockMode: store.useMockMode,
     hasError: !!store.error
   })
 

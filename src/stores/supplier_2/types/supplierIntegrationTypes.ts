@@ -204,7 +204,6 @@ export interface IntegrationStatistics {
   // Suggestions accuracy
   suggestionsGenerated: number
   suggestionsFromRealData: number
-  suggestionsFromMockData: number
 
   // Health score
   integrationHealth: 'excellent' | 'good' | 'poor' | 'critical'
