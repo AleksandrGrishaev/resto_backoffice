@@ -84,18 +84,29 @@ export class TransitBatchService {
     item: CreateTransitBatchData,
     index: number
   ): Promise<StorageBatch> {
-    // Get product definition
-    const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-    const productDef = mockDataCoordinator.getProductDefinition(item.itemId)
+    // ✅ Get product from ProductsStore (Supabase)
+    const { useProductsStore } = await import('@/stores/productsStore')
+    const productsStore = useProductsStore()
+    const product = productsStore.products.find(p => p.id === item.itemId)
 
-    if (!productDef) {
+    if (!product) {
+      DebugUtils.error(MODULE_NAME, 'Product not found in ProductsStore', {
+        itemId: item.itemId,
+        availableProducts: productsStore.products.length
+      })
       throw new Error(`Product not found: ${item.itemId}`)
     }
 
+    DebugUtils.debug(MODULE_NAME, 'Product found for transit batch', {
+      itemId: item.itemId,
+      productName: product.name,
+      baseUnit: product.baseUnit
+    })
+
     // Convert to base units
     let unitType: 'weight' | 'volume' | 'piece' = 'piece'
-    if (productDef.baseUnit === 'gram') unitType = 'weight'
-    else if (productDef.baseUnit === 'ml') unitType = 'volume'
+    if (product.baseUnit === 'gram') unitType = 'weight'
+    else if (product.baseUnit === 'ml') unitType = 'volume'
 
     const conversionResult = convertToBaseUnits(item.quantity, item.unit, unitType)
     const quantityInBaseUnits = conversionResult.success ? conversionResult.value! : item.quantity
