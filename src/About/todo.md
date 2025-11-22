@@ -1,6 +1,6 @@
 # 🎯 Supplier Module - Supabase Migration Strategy
 
-> **Status:** Planning Phase | **Start Date:** 2025-11-22
+> **Status:** Phase 0 COMPLETED ✅ | **Start Date:** 2025-11-22 | **Phase 0 Completed:** 2025-11-22
 > **Approach:** Incremental CRUD-based migration with Service Layer focus
 
 ## 📋 Strategic Overview
@@ -8,6 +8,7 @@
 **Migration Goal:** Replace mock data persistence with Supabase in Supplier Module
 
 **Current Architecture:**
+
 ```
 UI Components
     ↓ (calls)
@@ -21,6 +22,7 @@ Supabase (PostgreSQL) → ✅ NEW
 ```
 
 **Key Decisions:**
+
 1. ✅ **Service Layer Focus** - Only modify `supplierService.ts`, minimal store changes
 2. ✅ **Table Naming** - Prefix all tables with `supplierstore_` (e.g., `supplierstore_requests`)
 3. ✅ **CRUD-Based Phases** - Work one entity at a time: Requests → Orders → Receipts
@@ -31,39 +33,54 @@ Supabase (PostgreSQL) → ✅ NEW
 
 ## 🏗️ Migration Phases
 
-### Phase 0: Database Setup ⬜ NOT STARTED
+### Phase 0: Database Setup ✅ COMPLETED (2025-11-22)
+
 **Purpose:** Create database schema and infrastructure
 
-**What we're doing:**
-- Create 6 Supabase tables with `supplierstore_` prefix
-  - `supplierstore_requests` + `supplierstore_request_items`
-  - `supplierstore_orders` + `supplierstore_order_items`
-  - `supplierstore_receipts` + `supplierstore_receipt_items`
-- Add performance indexes
-- Generate TypeScript types
-- Create data mappers (camelCase ↔ snake_case)
-- Run security advisors
+**What we did:**
+
+- ✅ Created 6 Supabase tables with `supplierstore_` prefix
+  - `supplierstore_requests` (13 columns) + `supplierstore_request_items` (13 columns)
+  - `supplierstore_orders` (28 columns) + `supplierstore_order_items` (17 columns)
+  - `supplierstore_receipts` (14 columns) + `supplierstore_receipt_items` (18 columns)
+- ✅ Added 18 performance indexes (status, foreign keys, dates, composites)
+- ✅ Generated TypeScript types in `src/supabase/types.gen.ts`
+- ✅ Created data mappers (camelCase ↔ snake_case)
+- ✅ Enabled Row Level Security (RLS) with policies for authenticated users
+- ✅ Automatic `updated_at` triggers on all main tables
 
 **Validation:**
-- [ ] All 6 tables created successfully
-- [ ] Indexes applied and working
-- [ ] No RLS policy warnings
-- [ ] TypeScript types generated
-- [ ] Can query tables via Supabase client
 
-**Files:**
-- New: `src/stores/supplier_2/supabaseMappers.ts`
-- Generated: `src/supabase/types.gen.ts`
-- Reference: `src/stores/supplier_2/types.ts`
+- [x] All 6 tables created successfully
+- [x] Indexes applied and working (18 indexes total)
+- [x] No RLS policy warnings for supplierstore tables
+- [x] TypeScript types generated and integrated
+- [x] Can query tables via Supabase client
+- [x] Data mappers tested and working
+- [x] CASCADE DELETE working on child tables
+- [x] Insert/select operations validated
 
-**Estimated time:** 2-3 hours
+**Files Created:**
+
+- ✅ `src/stores/supplier_2/supabaseMappers.ts` - All mapper functions implemented
+- ✅ `src/supabase/types.gen.ts` - Auto-generated (Database types with supplierstore tables)
+
+**Migrations Applied:**
+
+1. `create_supplierstore_tables` - Main table structure with proper constraints
+2. `add_supplierstore_indexes` - 18 performance indexes
+3. `enable_rls_supplierstore_tables` - RLS policies for all tables
+
+**Actual time:** ~2 hours
 
 ---
 
 ### Phase 1: Procurement Requests Migration ⬜ NOT STARTED
+
 **Purpose:** Migrate requests CRUD from mock to Supabase
 
 **Current Implementation (Mock):**
+
 ```typescript
 // Service Layer (supplierService.ts)
 class SupplierService {
@@ -89,6 +106,7 @@ class SupplierService {
 ```
 
 **New Implementation (Supabase):**
+
 ```typescript
 // Service Layer (supplierService.ts)
 import { supabase } from '@/supabase/client'
@@ -144,6 +162,7 @@ class SupplierService {
 ```
 
 **Store Changes (Minimal):**
+
 ```typescript
 // Store (supplierStore.ts)
 async function initialize() {
@@ -174,6 +193,7 @@ async function createRequest(data) {
 ```
 
 **Tasks:**
+
 1. Create mapper functions (`mapRequestFromDB`, `mapRequestToDB`, `mapRequestItemFromDB`, `mapRequestItemToDB`)
 2. Update `getRequests()` - fetch from `supplierstore_requests` with filters
 3. Update `getRequestById()` - fetch single with items
@@ -186,6 +206,7 @@ async function createRequest(data) {
 10. Add `loadRequests()` method in store
 
 **Validation:**
+
 - [ ] Can create request → appears in Supabase
 - [ ] Can fetch all requests → loads from Supabase
 - [ ] Can fetch single request → loads with items
@@ -198,6 +219,7 @@ async function createRequest(data) {
 - [ ] UI works as before
 
 **Files:**
+
 - `src/stores/supplier_2/supplierService.ts` (main changes)
 - `src/stores/supplier_2/supplierStore.ts` (minimal changes)
 - `src/stores/supplier_2/supabaseMappers.ts` (new)
@@ -207,9 +229,11 @@ async function createRequest(data) {
 ---
 
 ### Phase 2: Purchase Orders Migration ⬜ NOT STARTED
+
 **Purpose:** Migrate orders CRUD from mock to Supabase
 
 **Current Implementation (Mock):**
+
 ```typescript
 class SupplierService {
   private orders: PurchaseOrder[] = [] // ❌ In-memory storage
@@ -228,6 +252,7 @@ class SupplierService {
 ```
 
 **New Implementation (Supabase):**
+
 ```typescript
 // Service Layer (supplierService.ts)
 import { supabase } from '@/supabase/client'
@@ -270,6 +295,7 @@ class SupplierService {
 ```
 
 **Store Changes (Minimal):**
+
 ```typescript
 async function initialize() {
   await loadRequests() // Phase 1
@@ -290,6 +316,7 @@ async function loadOrders() {
 ```
 
 **Tasks:**
+
 1. Create mapper functions (`mapOrderFromDB`, `mapOrderToDB`, `mapOrderItemFromDB`, `mapOrderItemToDB`)
 2. Update `getOrders()` - fetch from `supplierstore_orders` with filters
 3. Update `getOrderById()` - fetch single with items
@@ -302,6 +329,7 @@ async function loadOrders() {
 10. Test integrations (Storage transit batches, Account bills)
 
 **Validation:**
+
 - [ ] Can create order → appears in Supabase
 - [ ] Can send order → creates bill in Account Store
 - [ ] Can fetch all orders → loads from Supabase
@@ -313,6 +341,7 @@ async function loadOrders() {
 - [ ] No regressions in requests
 
 **Files:**
+
 - `src/stores/supplier_2/supplierService.ts`
 - `src/stores/supplier_2/supplierStore.ts` (add loadOrders)
 - `src/stores/supplier_2/supabaseMappers.ts` (add order mappers)
@@ -322,9 +351,11 @@ async function loadOrders() {
 ---
 
 ### Phase 3: Receipts Migration ⬜ NOT STARTED
+
 **Purpose:** Migrate receipts CRUD from mock to Supabase
 
 **Current Implementation (Mock):**
+
 ```typescript
 class SupplierService {
   private receipts: Receipt[] = [] // ❌ In-memory storage
@@ -343,6 +374,7 @@ class SupplierService {
 ```
 
 **New Implementation (Supabase):**
+
 ```typescript
 // Service Layer (supplierService.ts)
 import { supabase } from '@/supabase/client'
@@ -393,6 +425,7 @@ class SupplierService {
 ```
 
 **Store Changes (Minimal):**
+
 ```typescript
 async function initialize() {
   await loadRequests() // Phase 1
@@ -414,6 +447,7 @@ async function loadReceipts() {
 ```
 
 **Tasks:**
+
 1. Create mapper functions (`mapReceiptFromDB`, `mapReceiptToDB`, `mapReceiptItemFromDB`, `mapReceiptItemToDB`)
 2. Update `getReceipts()` - fetch from `supplierstore_receipts`
 3. Update `getReceiptById()` - fetch single with items
@@ -425,6 +459,7 @@ async function loadReceipts() {
 9. Test integrations (Storage operations, Order updates, Bill status)
 
 **Validation:**
+
 - [ ] Can create receipt → appears in Supabase
 - [ ] Can complete receipt → creates storage operation
 - [ ] Order quantities updated correctly
@@ -436,6 +471,7 @@ async function loadReceipts() {
 - [ ] No regressions in requests/orders
 
 **Files:**
+
 - `src/stores/supplier_2/supplierService.ts`
 - `src/stores/supplier_2/supplierStore.ts` (add loadReceipts)
 - `src/stores/supplier_2/supabaseMappers.ts` (add receipt mappers)
@@ -445,9 +481,11 @@ async function loadReceipts() {
 ---
 
 ### Phase 4: Cleanup & Final Testing ⬜ NOT STARTED
+
 **Purpose:** Remove all mock data dependencies and validate complete system
 
 **Cleanup Tasks:**
+
 1. Remove `loadDataFromCoordinator()` from store entirely
 2. Remove `loadDataFromCoordinator()` from service entirely
 3. Remove private arrays (`requests`, `orders`, `receipts`) from service
@@ -456,6 +494,7 @@ async function loadReceipts() {
 6. Update documentation/comments
 
 **Final Validation:**
+
 - [ ] Full workflow: Create request → Convert to order → Send → Receive → Complete
 - [ ] All filters work (requests, orders, receipts)
 - [ ] All integrations work (Storage, Account, Products, Counteragents)
@@ -473,11 +512,13 @@ async function loadReceipts() {
 ## 🗄️ Database Schema Reference
 
 ### Table Naming Convention
+
 **Prefix:** `supplierstore_` for all tables (namespace isolation)
 
 ### Table Structure
 
 **supplierstore_requests** - Procurement requests from departments
+
 - Primary: `id` (TEXT), `request_number` (UNIQUE, REQ-DEPT-SEQ)
 - Status: `draft | submitted | converted | cancelled`
 - Priority: `normal | urgent`
@@ -485,6 +526,7 @@ async function loadReceipts() {
 - TypeScript: `ProcurementRequest` in `types.ts:47`
 
 **supplierstore_request_items** - Items in procurement requests
+
 - Primary: `id` (TEXT)
 - Foreign: `request_id` → supplierstore_requests (CASCADE DELETE)
 - Quantities: `requested_quantity` (NUMERIC 10,3 - base units only)
@@ -492,6 +534,7 @@ async function loadReceipts() {
 - TypeScript: `RequestItem` in `types.ts:71`
 
 **supplierstore_orders** - Purchase orders to suppliers
+
 - Primary: `id` (TEXT), `order_number` (UNIQUE, PO-SEQ)
 - Status: `draft | sent | delivered | cancelled`
 - Bill Status: `not_billed | pending | partially_paid | fully_paid | overpaid | credit_used`
@@ -500,6 +543,7 @@ async function loadReceipts() {
 - TypeScript: `PurchaseOrder` in `types.ts:95`
 
 **supplierstore_order_items** - Items in purchase orders
+
 - Primary: `id` (TEXT)
 - Foreign: `order_id` → supplierstore_orders (CASCADE DELETE)
 - Quantities: `ordered_quantity`, `received_quantity` (base units)
@@ -508,12 +552,14 @@ async function loadReceipts() {
 - TypeScript: `OrderItem` in `types.ts:135`
 
 **supplierstore_receipts** - Delivery receipts from suppliers
+
 - Primary: `id` (TEXT), `receipt_number` (UNIQUE, RCP-SEQ)
 - Foreign: `purchase_order_id`, `storage_operation_id`
 - Status: `pending | completed | cancelled`
 - TypeScript: `Receipt` in `types.ts:175`
 
 **supplierstore_receipt_items** - Items in receipts
+
 - Primary: `id` (TEXT)
 - Foreign: `receipt_id` → supplierstore_receipts (CASCADE), `order_item_id`
 - Ordered vs Received: Separate quantity/price fields
@@ -523,18 +569,20 @@ async function loadReceipts() {
 ### Critical Rules
 
 ⚠️ **IMPORTANT:**
+
 1. **Table Prefix**: ALL tables MUST have `supplierstore_` prefix
 2. **Check Types First**: Always reference `src/stores/supplier_2/types.ts` before creating tables
 3. **Naming**: Database = `snake_case`, TypeScript = `camelCase`
 4. **Quantities**: ALWAYS in base units (gram, ml, piece), never packages
 5. **Packages**: Metadata for UI display only, not for calculations
 6. **Precision**: NUMERIC(10,3) for quantities, NUMERIC(12,2) for money
-7. **Cascade**: `ON DELETE CASCADE` for all *_items tables
+7. **Cascade**: `ON DELETE CASCADE` for all \*\_items tables
 8. **Indexes**: Create AFTER tables (see below)
 
 ### Index Strategy
 
 **Performance indexes** (create after tables):
+
 ```sql
 -- Requests
 CREATE INDEX idx_supplierstore_requests_status ON supplierstore_requests(status);
@@ -556,37 +604,49 @@ CREATE INDEX idx_supplierstore_receipt_items_receipt ON supplierstore_receipt_it
 
 ## 📊 Progress Tracking
 
-**Overall Progress:** 0% (0/4 phases complete)
+**Overall Progress:** 20% (1/5 phases complete)
 
 **Phase Status:**
-- ⬜ Phase 0: Database Setup (0%)
+
+- ✅ Phase 0: Database Setup (100% - COMPLETED 2025-11-22)
 - ⬜ Phase 1: Requests Migration (0%)
 - ⬜ Phase 2: Orders Migration (0%)
 - ⬜ Phase 3: Receipts Migration (0%)
 - ⬜ Phase 4: Cleanup & Testing (0%)
 
-**Estimated Total Time:** 18-23 hours
+**Estimated Total Time:** 18-23 hours | **Actual Time (Phase 0):** 2 hours
 
 ---
 
 ## 🎯 Next Steps
 
-**Start with Phase 0:**
-1. Read `src/stores/supplier_2/types.ts` - understand all interfaces
-2. Create 6 Supabase tables with `supplierstore_` prefix
-3. Apply indexes
-4. Generate TypeScript types
-5. Create mapper functions
-6. Validate database setup
+**✅ Phase 0 Complete - Ready for Phase 1!**
 
-**Then Phase 1:**
-1. Work only in `supplierService.ts`
-2. Replace mock methods with Supabase queries
-3. Test each CRUD operation
-4. Minimal changes to store
-5. Validate completely before Phase 2
+**Start Phase 1: Procurement Requests Migration**
+
+1. Update `supplierService.ts` - replace mock methods with Supabase queries
+2. Implement CRUD operations using mapper functions:
+   - `getRequests()` - fetch from `supplierstore_requests` with items
+   - `getRequestById()` - fetch single request with items
+   - `createRequest()` - insert to Supabase (transaction with items)
+   - `updateRequest()` - update in Supabase
+   - `deleteRequest()` - delete from Supabase (CASCADE)
+3. Remove `private requests` array from service
+4. Remove `loadDataFromCoordinator()` method from service
+5. Update `supplierStore.ts`:
+   - Remove coordinator loading from `initialize()`
+   - Add `loadRequests()` method
+6. Test each CRUD operation thoroughly
+7. Validate filters (status, department, priority)
+8. Validate completely before Phase 2
+
+**Current Focus:**
+
+- Database foundation ✅ DONE
+- Next: Service layer refactoring for Requests CRUD
 
 **Working Rules:**
+
 - ✅ Complete one phase fully before starting next
 - ✅ Test thoroughly after each phase
 - ✅ No parallel work on multiple phases
@@ -600,6 +660,7 @@ CREATE INDEX idx_supplierstore_receipt_items_receipt ON supplierstore_receipt_it
 ### Mock Data Removal Strategy
 
 **What's being removed:**
+
 - `mockDataCoordinator.getSupplierStoreData()` - test data source
 - `supplierService.loadDataFromCoordinator()` - loading method
 - `supplierStore.loadDataFromCoordinator()` - loading method
@@ -607,11 +668,13 @@ CREATE INDEX idx_supplierstore_receipt_items_receipt ON supplierstore_receipt_it
 - All in-memory data persistence
 
 **Why mock data was used:**
+
 - Development/testing without database
 - Quick iteration during prototyping
 - Easy data seeding for UI testing
 
 **After migration:**
+
 - All data persists in Supabase (PostgreSQL)
 - No in-memory storage (except Pinia state for reactivity)
 - Real data persistence across sessions
@@ -620,6 +683,7 @@ CREATE INDEX idx_supplierstore_receipt_items_receipt ON supplierstore_receipt_it
 ### Service Layer Architecture
 
 **Before (Mock):**
+
 ```
 Service Layer = Data Storage + Business Logic
 ├── private requests: ProcurementRequest[]  ← Data storage
@@ -629,6 +693,7 @@ Service Layer = Data Storage + Business Logic
 ```
 
 **After (Supabase):**
+
 ```
 Service Layer = Business Logic only
 ├── Supabase queries                        ← Data access
@@ -639,27 +704,31 @@ Service Layer = Business Logic only
 ### Integration Points
 
 **Storage Store:**
+
 - Create transit batches when order sent
 - Convert transit → active when receipt completed
 - Update product costs from actual receipts
 
 **Account Store:**
+
 - Create bills when order sent
 - Update bill status based on payments
 - Handle overpayments (supplier credit)
 
 **Products Store:**
+
 - Fetch product definitions
 - Get base units and packages
 - Cache product names
 
 **Counteragents Store:**
+
 - Fetch supplier information
 - Cache supplier names
 - Handle supplier credit balances
 
 ---
 
-**Last Updated:** 2025-11-22
-**Status:** Ready to start Phase 0
-**Focus:** Service layer refactoring, no store rewrites
+**Last Updated:** 2025-11-22 (Phase 0 COMPLETED ✅)
+**Status:** Phase 0 DONE - Ready to start Phase 1
+**Focus:** Service layer refactoring for Requests CRUD, minimal store changes
