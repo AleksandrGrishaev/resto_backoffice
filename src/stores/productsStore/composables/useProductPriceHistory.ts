@@ -19,14 +19,12 @@ export function useProductPriceHistory() {
     try {
       DebugUtils.info(MODULE_NAME, '💰 Loading price history', { productId, days })
 
-      // 🔧 FUTURE: Get real data from Firebase
+      // 🔧 FUTURE: Get real data from Supabase
       // const history = await priceHistoryService.getByProduct(productId, days)
 
-      // 🆕 FOR NOW: Get from coordinator
-      const { mockDataCoordinator } = await import('@/stores/shared')
-      const allHistory = mockDataCoordinator.getProductsStoreData().priceHistory
-
-      let history = allHistory.filter(record => record.productId === productId)
+      // 🆕 FOR NOW: Return empty array (no mock data)
+      // Real price history will be implemented with Supabase
+      let history: ProductPriceHistory[] = []
 
       // Filter by days if specified
       if (days) {
@@ -294,9 +292,9 @@ export function useProductPriceHistory() {
 
       const results: Record<string, ProductPriceHistory[]> = {}
 
-      // Get all data from coordinator
-      const { mockDataCoordinator } = await import('@/stores/shared')
-      const allHistory = mockDataCoordinator.getProductsStoreData().priceHistory
+      // 🔧 FUTURE: Get all data from Supabase
+      // For now, return empty arrays for all products
+      const allHistory: ProductPriceHistory[] = []
 
       // Filter and process for each product
       productIds.forEach(productId => {

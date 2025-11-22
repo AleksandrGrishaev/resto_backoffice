@@ -40,17 +40,11 @@ export function useProductUsage() {
     }
   }
 
-  // 🆕 Generate realistic usage data from coordinator
+  // 🆕 Generate realistic usage data with fallback logic
   const generateRealisticUsage = async (productId: string): Promise<ProductUsage> => {
     try {
-      // Get product definition from coordinator
-      const { mockDataCoordinator } = await import('@/stores/shared')
-      const productDef = mockDataCoordinator.getProductDefinition(productId)
-
-      if (!productDef) {
-        throw new Error(`Product definition not found: ${productId}`)
-      }
-
+      // 🔧 FUTURE: Get real usage data from Recipes, Preparations, and Menu stores
+      // For now, return empty usage structure
       const usage: ProductUsage = {
         id: `usage-${productId}`,
         productId,
@@ -62,15 +56,10 @@ export function useProductUsage() {
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      // Generate usage based on product type
-      if (!productDef.canBeSold) {
-        // Raw materials - used in recipes and preparations
-        usage.usedInRecipes = generateRecipeUsage(productDef)
-        usage.usedInPreparations = generatePreparationUsage(productDef)
-      } else {
-        // Direct sale items - used in menu
-        usage.directMenuItems = generateMenuItemUsage(productDef)
-      }
+      // In the future, this will query real stores:
+      // - recipesStore.getRecipesUsingProduct(productId)
+      // - preparationsStore.getPreparationsUsingProduct(productId)
+      // - menuStore.getMenuItemsUsingProduct(productId)
 
       return usage
     } catch (error) {

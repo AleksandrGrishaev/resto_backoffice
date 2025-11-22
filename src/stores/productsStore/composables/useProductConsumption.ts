@@ -41,23 +41,30 @@ export function useProductConsumption() {
     }
   }
 
-  // 🆕 Generate consumption estimate from coordinator data
+  // 🆕 Generate consumption estimate with fallback logic
   const generateRealisticConsumption = async (
     productId: string,
     days: number
   ): Promise<ProductConsumption> => {
     try {
-      // Get product definition from coordinator
-      const { mockDataCoordinator } = await import('@/stores/shared')
-      const productDef = mockDataCoordinator.getProductDefinition(productId)
-
-      if (!productDef) {
-        throw new Error(`Product definition not found: ${productId}`)
+      // 🔧 Use fallback consumption estimates
+      // In the future, this will be replaced with real data from Supabase
+      const categoryEstimates: Record<string, { daily: number; volatility: number }> = {
+        beverages: { daily: 15, volatility: 0.4 },
+        meat: { daily: 2.5, volatility: 0.3 },
+        vegetables: { daily: 3.0, volatility: 0.25 },
+        dairy: { daily: 1.5, volatility: 0.2 },
+        spices: { daily: 0.1, volatility: 0.5 },
+        seafood: { daily: 1.5, volatility: 0.35 },
+        fruits: { daily: 2.0, volatility: 0.3 },
+        cereals: { daily: 1.0, volatility: 0.15 },
+        other: { daily: 1.0, volatility: 0.2 }
       }
 
-      // 🔧 Apply realistic daily variation patterns
-      const baseDaily = productDef.dailyConsumption
-      const volatility = productDef.consumptionVolatility
+      // Get default estimates (will be improved with real data later)
+      const estimate = categoryEstimates['other'] || { daily: 1.0, volatility: 0.2 }
+      const baseDaily = estimate.daily
+      const volatility = estimate.volatility
 
       // Simulate realistic consumption with weekend patterns
       let totalConsumed = 0
@@ -69,7 +76,7 @@ export function useProductConsumption() {
 
         // Weekend pattern: more beverages, less cooking ingredients
         const isWeekend = date.getDay() === 0 || date.getDay() === 6
-        const weekendMultiplier = productDef.canBeSold ? 1.4 : 0.7
+        const weekendMultiplier = 1.0 // Default neutral multiplier
 
         // Daily variation
         const variation = (Math.random() - 0.5) * 2 * volatility
@@ -176,10 +183,9 @@ export function useProductConsumption() {
         confidence = 'medium'
       }
 
-      // Lower confidence for volatile products
-      const { mockDataCoordinator } = await import('@/stores/shared')
-      const productDef = mockDataCoordinator.getProductDefinition(productId)
-      if (productDef && productDef.consumptionVolatility > 0.3) {
+      // Lower confidence for products with high volatility
+      // In the future, this will use real product data from Supabase
+      if (Math.abs(changePercent) > 30) {
         confidence = confidence === 'high' ? 'medium' : 'low'
       }
 

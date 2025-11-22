@@ -3,7 +3,6 @@
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { useSupplierStorageIntegration } from './integrations/storageIntegration'
-import { getProductDefinition } from '@/stores/shared/productDefinitions'
 import { useCounteragentsStore } from '@/stores/counteragents'
 import { supabase } from '@/supabase/client'
 import { generateId } from '@/utils/id'
@@ -1562,12 +1561,17 @@ class SupplierService {
     }
   }
   private async getItemName(itemId: string): Promise<string> {
-    const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-    const product = mockDataCoordinator.getProductDefinition(itemId)
-    if (product) {
-      return product.name
+    try {
+      const productsStore = useProductsStore()
+      const product = productsStore.getProductById(itemId)
+      if (product) {
+        return product.name
+      }
+    } catch (error) {
+      DebugUtils.debug(MODULE_NAME, 'Failed to get product name from store', { itemId, error })
     }
 
+    // Fallback to hardcoded names if product not found in store
     const itemNames: Record<string, string> = {
       'prod-beef-steak': 'Beef Steak',
       'prod-potato': 'Potato',
@@ -1590,12 +1594,17 @@ class SupplierService {
   }
 
   private async getItemUnit(itemId: string): string {
-    const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-    const product = mockDataCoordinator.getProductDefinition(itemId)
-    if (product) {
-      return product.baseUnit
+    try {
+      const productsStore = useProductsStore()
+      const product = productsStore.getProductById(itemId)
+      if (product) {
+        return product.baseUnit
+      }
+    } catch (error) {
+      DebugUtils.debug(MODULE_NAME, 'Failed to get product unit from store', { itemId, error })
     }
 
+    // Fallback to simple heuristics if product not found in store
     if (itemId.includes('beer') || itemId.includes('cola') || itemId.includes('water'))
       return 'piece'
     if (itemId.includes('oil') || itemId.includes('milk')) return 'ml'

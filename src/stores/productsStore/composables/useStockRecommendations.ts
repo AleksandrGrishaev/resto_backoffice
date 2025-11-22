@@ -225,52 +225,27 @@ export function useStockRecommendations() {
     let dailyUsage = 1 // Default fallback
     let basedOnDays = 0 // Estimated
 
-    // 🔧 ИСПРАВЛЕНО: Пытаемся получить данные из координатора, но не зависим от этого
-    try {
-      const { mockDataCoordinator } = await import('@/stores/shared')
-      const productDef = mockDataCoordinator.getProductDefinition(product.id)
+    // 🔧 Use fallback consumption estimates
+    // In the future, this will be replaced with real consumption data from Supabase
+    DebugUtils.debug(MODULE_NAME, '📊 Using fallback consumption estimates', {
+      productId: product.id,
+      category: product.category
+    })
 
-      if (
-        productDef &&
-        typeof productDef.dailyConsumption === 'number' &&
-        !isNaN(productDef.dailyConsumption)
-      ) {
-        // Use coordinated mock data
-        const variation = (Math.random() - 0.5) * 2 * (productDef.consumptionVolatility || 0.2)
-        dailyUsage = productDef.dailyConsumption * (1 + variation)
-        basedOnDays = 30 // Based on definitions
-
-        DebugUtils.debug(MODULE_NAME, '✅ Using coordinated consumption data', {
-          productId: product.id,
-          originalConsumption: productDef.dailyConsumption,
-          variation,
-          calculatedUsage: dailyUsage
-        })
-      } else {
-        throw new Error('No valid consumption data in product definition')
-      }
-    } catch (error) {
-      DebugUtils.debug(MODULE_NAME, '⚠️ Using fallback consumption estimates', {
-        productId: product.id,
-        error: error.message
-      })
-
-      // 🔧 ИСПРАВЛЕНО: Более точные fallback estimates
-      const categoryEstimates: Record<string, number> = {
-        beverages: product.canBeSold ? 15 : 1,
-        meat: 2.5,
-        vegetables: 3.0,
-        dairy: 1.0,
-        spices: 0.1,
-        seafood: 1.5,
-        fruits: 2.0,
-        cereals: 1.0,
-        other: 1.0
-      }
-
-      dailyUsage = categoryEstimates[product.category] || 1.0
-      basedOnDays = 0 // Estimated
+    const categoryEstimates: Record<string, number> = {
+      beverages: product.canBeSold ? 15 : 1,
+      meat: 2.5,
+      vegetables: 3.0,
+      dairy: 1.0,
+      spices: 0.1,
+      seafood: 1.5,
+      fruits: 2.0,
+      cereals: 1.0,
+      other: 1.0
     }
+
+    dailyUsage = categoryEstimates[product.category] || 1.0
+    basedOnDays = 0 // Estimated
 
     // 🔧 ИСПРАВЛЕНО: Убеждаемся что значение валидное
     if (isNaN(dailyUsage) || dailyUsage <= 0) {
@@ -298,7 +273,7 @@ export function useStockRecommendations() {
       productId: product.id,
       dailyUsage: consumption.dailyAverageUsage,
       weeklyUsage: consumption.weeklyAverageUsage,
-      source: basedOnDays > 0 ? 'coordinated' : 'fallback'
+      source: 'fallback'
     })
 
     return consumption

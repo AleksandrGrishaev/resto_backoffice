@@ -262,13 +262,7 @@ export const useSupplierStore = defineStore('supplier', () => {
       // Step 3: Load receipts from Supabase (Phase 3)
       await loadReceipts()
 
-      // Step 4: Load suggestions from coordinator (not migrated yet)
-      await loadDataFromCoordinator()
-
-      // Step 5: Initialize service (no-op since all data from Supabase)
-      await supplierService.loadDataFromCoordinator()
-
-      // Step 6: Ensure dependent stores are ready
+      // Step 4: Ensure dependent stores are ready
       await ensureDependentStoresReady()
 
       // Step 7: Generate suggestions from Storage data
@@ -378,43 +372,6 @@ export const useSupplierStore = defineStore('supplier', () => {
       throw error
     } finally {
       state.value.loading.receipts = false
-    }
-  }
-
-  /**
-   * ✅ DEPRECATED (Phase 3): All data now loaded from Supabase
-   */
-  async function loadDataFromCoordinator(): Promise<void> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Loading suggestions from mockDataCoordinator...')
-
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-
-      if (!mockDataCoordinator) {
-        throw new Error('mockDataCoordinator is not available')
-      }
-
-      const supplierData = mockDataCoordinator.getSupplierStoreData()
-
-      if (!supplierData) {
-        throw new Error('No supplier data returned from coordinator')
-      }
-
-      // ✅ PHASE 3: Load ONLY suggestions (requests, orders, receipts now from Supabase)
-      // ❌ REMOVED: state.value.receipts (Phase 3)
-      // ❌ REMOVED: state.value.orders (Phase 2)
-      // ❌ REMOVED: state.value.requests (Phase 1)
-      state.value.orderSuggestions = [...supplierData.suggestions]
-
-      DebugUtils.info(MODULE_NAME, 'Suggestions loaded from coordinator', {
-        suggestions: state.value.orderSuggestions.length
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', {
-        error,
-        errorMessage: error instanceof Error ? error.message : String(error)
-      })
-      throw new Error(`Failed to load coordinator data: ${error}`)
     }
   }
 
@@ -1613,7 +1570,6 @@ export const useSupplierStore = defineStore('supplier', () => {
 
     // Core actions
     initialize,
-    loadDataFromCoordinator,
     refreshSuggestions,
     refreshIntegratedData,
 
