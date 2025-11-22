@@ -623,20 +623,14 @@ export class StorageService {
 
         const dbBatch = mapBatchToDB(batch)
 
-        // Debug logging before insert
-        DebugUtils.info(MODULE_NAME, '🔍 Inserting batch to Supabase', {
-          batchNumber,
-          itemId: item.itemId,
-          batchData: dbBatch
-        })
-
         // Insert batch into database
         const { error: batchError } = await supabase.from('storage_batches').insert([dbBatch])
 
         if (batchError) {
           DebugUtils.error(MODULE_NAME, '❌ Failed to insert batch', {
             error: batchError,
-            batchData: dbBatch
+            itemId: item.itemId,
+            batchNumber
           })
           throw batchError
         }
