@@ -574,23 +574,49 @@ const categoryOptions = computed(() => {
 // ===========================
 
 const departmentTransitBatches = computed(() => {
+  console.log('🔍 departmentTransitBatches computed', {
+    hasStore: !!props.storageStore,
+    hasTransitBatches: !!props.storageStore?.transitBatches,
+    transitBatchesCount: props.storageStore?.transitBatches?.length || 0,
+    department: props.department,
+    transitBatches: props.storageStore?.transitBatches
+  })
+
   if (!props.storageStore?.transitBatches) {
+    console.log('❌ No transitBatches in store')
     return []
   }
 
   // ✅ ИЗМЕНЕНО: если department не указан - показываем все
   if (!props.department) {
+    console.log(
+      '✅ No department filter, returning all transit batches:',
+      props.storageStore.transitBatches.length
+    )
     return props.storageStore.transitBatches
   }
 
   // Фильтруем по Product.usedInDepartments
   const filtered = props.storageStore.transitBatches.filter((batch: any) => {
     const product = productsStore.products?.find(p => p.id === batch.itemId)
-    if (!product) return false
+    console.log('🔍 Filtering batch:', {
+      batchId: batch.id,
+      itemId: batch.itemId,
+      productFound: !!product,
+      productName: product?.name,
+      usedInDepartments: product?.usedInDepartments,
+      department: props.department,
+      included: product?.usedInDepartments?.includes(props.department!)
+    })
+    if (!product) {
+      console.log('❌ Product not found for batch:', batch.itemId)
+      return false
+    }
 
     return product.usedInDepartments.includes(props.department!)
   })
 
+  console.log('✅ Filtered transit batches:', filtered.length)
   return filtered
 })
 
