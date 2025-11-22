@@ -13,7 +13,10 @@ import {
   mapRequestItemToDB,
   mapOrderFromDB,
   mapOrderToDB,
-  mapOrderItemToDB
+  mapOrderItemToDB,
+  mapReceiptFromDB,
+  mapReceiptToDB,
+  mapReceiptItemToDB
 } from './supabaseMappers'
 
 import { DebugUtils } from '@/utils'
@@ -38,9 +41,9 @@ import type {
 const MODULE_NAME = 'SupplierService'
 
 class SupplierService {
-  // ✅ REMOVED: private requests array (now using Supabase)
-  // ✅ REMOVED: private orders array (now using Supabase)
-  private receipts: Receipt[] = []
+  // ✅ REMOVED: private requests array (now using Supabase - Phase 1)
+  // ✅ REMOVED: private orders array (now using Supabase - Phase 2)
+  // ✅ REMOVED: private receipts array (now using Supabase - Phase 3)
   private storageIntegration = useSupplierStorageIntegration()
 
   constructor() {}
@@ -49,22 +52,16 @@ class SupplierService {
   // LOAD DATA FROM COORDINATOR (Phase 1: Requests migrated to Supabase)
   // =============================================
 
-  async loadDataFromCoordinator(): void {
-    try {
-      const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
-      const supplierData = mockDataCoordinator.getSupplierStoreData()
+  async loadDataFromCoordinator(): Promise<void> {
+    // ✅ PHASE 1-3 COMPLETE: All data now loaded from Supabase
+    // ✅ REMOVED: requests (Phase 1)
+    // ✅ REMOVED: orders (Phase 2)
+    // ✅ REMOVED: receipts (Phase 3)
+    // This method is kept for compatibility, will be removed in Phase 4
 
-      // ✅ REMOVED: this.requests = [...supplierData.requests] (now using Supabase)
-      // ✅ REMOVED: this.orders = [...supplierData.orders] (now using Supabase)
-      this.receipts = [...supplierData.receipts]
-
-      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator (receipts only)', {
-        receipts: this.receipts.length
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load data from coordinator', { error })
-      // Keep empty arrays as fallback
-    }
+    DebugUtils.info(MODULE_NAME, '✅ All data now loaded from Supabase (Phase 1-3 complete)', {
+      message: 'Mock data coordinator no longer used'
+    })
   }
 
   // =============================================
@@ -656,59 +653,135 @@ class SupplierService {
   // =============================================
 
   async getReceipts(): Promise<Receipt[]> {
-    await this.delay(100)
-    return [...this.receipts]
+    // ✅ FETCH FROM SUPABASE (Phase 3)
+    const { data, error } = await supabase
+      .from('supplierstore_receipts')
+      .select('*, supplierstore_receipt_items(*)')
+      .order('delivery_date', { ascending: false })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch receipts from Supabase', { error })
+      throw error
+    }
+
+    const receipts = (data || []).map(dbReceipt =>
+      mapReceiptFromDB(dbReceipt, dbReceipt.supplierstore_receipt_items || [])
+    )
+
+    DebugUtils.info(MODULE_NAME, '✅ Receipts loaded from Supabase', { count: receipts.length })
+    return receipts
   }
 
   async getReceiptById(id: string): Promise<Receipt | null> {
-    await this.delay(50)
-    return this.receipts.find(receipt => receipt.id === id) || null
+    // ✅ FETCH FROM SUPABASE (Phase 3)
+    const { data, error } = await supabase
+      .from('supplierstore_receipts')
+      .select('*, supplierstore_receipt_items(*)')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null // Not found
+      }
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch receipt from Supabase', { error, id })
+      throw error
+    }
+
+    return mapReceiptFromDB(data, data.supplierstore_receipt_items || [])
   }
 
   async createReceipt(data: CreateReceiptData): Promise<Receipt> {
-    await this.delay(200)
-
     // ✅ FETCH ORDER FROM SUPABASE (Phase 2)
     const order = await this.getOrderById(data.purchaseOrderId)
     if (!order) {
       throw new Error(`Order with id ${data.purchaseOrderId} not found`)
     }
 
-    const newReceipt: Receipt = {
-      id: `receipt-${Date.now()}`,
-      receiptNumber: this.generateReceiptNumber(),
-      purchaseOrderId: data.purchaseOrderId,
-      deliveryDate: new Date().toISOString(),
-      receivedBy: data.receivedBy,
-      items: data.items.map(item => {
-        const orderItem = order.items.find(oi => oi.id === item.orderItemId)
-        if (!orderItem) {
-          throw new Error(`Order item with id ${item.orderItemId} not found`)
-        }
+    const receiptId = generateId()
+    const timestamp = new Date().toISOString()
+    const receiptNumber = await this.generateReceiptNumber()
 
-        return {
-          id: `receipt-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          orderItemId: item.orderItemId,
-          itemId: orderItem.itemId,
-          itemName: orderItem.itemName,
-          orderedQuantity: orderItem.orderedQuantity,
-          receivedQuantity: item.receivedQuantity,
-          orderedPrice: orderItem.pricePerUnit,
-          actualPrice: item.actualPrice || orderItem.pricePerUnit,
-          notes: item.notes
-        }
-      }),
+    // Build receipt items from order items
+    const receiptItems = data.items.map(item => {
+      const orderItem = order.items.find(oi => oi.id === item.orderItemId)
+      if (!orderItem) {
+        throw new Error(`Order item with id ${item.orderItemId} not found`)
+      }
+
+      return {
+        id: generateId(),
+        orderItemId: item.orderItemId,
+        itemId: orderItem.itemId,
+        itemName: orderItem.itemName,
+
+        // Quantities (always in base units)
+        orderedQuantity: orderItem.orderedQuantity,
+        receivedQuantity: item.receivedQuantity,
+        unit: orderItem.unit,
+
+        // Package info
+        packageId: orderItem.packageId,
+        packageName: orderItem.packageName,
+        orderedPackageQuantity: orderItem.packageQuantity,
+        receivedPackageQuantity: item.receivedPackageQuantity || 0,
+        packageUnit: orderItem.packageUnit,
+
+        // Pricing
+        orderedPrice: orderItem.pricePerUnit,
+        actualPrice: item.actualPrice || orderItem.pricePerUnit,
+        orderedBaseCost: orderItem.pricePerUnit,
+        actualBaseCost: item.actualPrice || orderItem.pricePerUnit,
+
+        notes: item.notes
+      }
+    })
+
+    const newReceipt: Receipt = {
+      id: receiptId,
+      receiptNumber,
+      purchaseOrderId: data.purchaseOrderId,
+      deliveryDate: timestamp,
+      receivedBy: data.receivedBy,
+      items: receiptItems,
       hasDiscrepancies: this.calculateDiscrepancies(data, order),
       status: 'draft',
       notes: data.notes,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: timestamp,
+      updatedAt: timestamp
     }
 
-    this.receipts.unshift(newReceipt)
+    // ✅ INSERT TO SUPABASE (Phase 3)
+    const { data: dbReceipt, error: receiptError } = await supabase
+      .from('supplierstore_receipts')
+      .insert([mapReceiptToDB(newReceipt)])
+      .select()
+      .single()
 
-    DebugUtils.info(MODULE_NAME, 'Receipt created', {
+    if (receiptError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create receipt in Supabase', { error: receiptError })
+      throw receiptError
+    }
+
+    // ✅ INSERT ITEMS TO SUPABASE
+    const itemsToInsert = receiptItems.map(item => mapReceiptItemToDB(item, receiptId))
+
+    const { error: itemsError } = await supabase
+      .from('supplierstore_receipt_items')
+      .insert(itemsToInsert)
+
+    if (itemsError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create receipt items in Supabase', {
+        error: itemsError
+      })
+      // Rollback: delete the receipt
+      await supabase.from('supplierstore_receipts').delete().eq('id', receiptId)
+      throw itemsError
+    }
+
+    DebugUtils.info(MODULE_NAME, '✅ Receipt created in Supabase', {
       receiptId: newReceipt.id,
+      receiptNumber: newReceipt.receiptNumber,
       orderId: data.purchaseOrderId,
       itemCount: newReceipt.items.length,
       hasDiscrepancies: newReceipt.hasDiscrepancies
@@ -718,9 +791,8 @@ class SupplierService {
   }
 
   async completeReceipt(id: string, notes?: string): Promise<Receipt> {
-    await this.delay(200)
-
-    const receipt = this.receipts.find(r => r.id === id)
+    // ✅ FETCH RECEIPT FROM SUPABASE (Phase 3)
+    const receipt = await this.getReceiptById(id)
     if (!receipt) {
       throw new Error(`Receipt with id ${id} not found`)
     }
@@ -741,16 +813,19 @@ class SupplierService {
       orderId: order.id
     })
 
+    const timestamp = new Date().toISOString()
+
     // Update receipt status
     receipt.status = 'completed'
     receipt.notes = notes || receipt.notes
-    receipt.updatedAt = new Date().toISOString()
+    receipt.closedAt = timestamp
+    receipt.updatedAt = timestamp
 
     // Update order status
     if (order.status === 'confirmed') {
       order.status = 'delivered'
       order.receiptId = receipt.id
-      order.updatedAt = new Date().toISOString()
+      order.updatedAt = timestamp
 
       // Update order items with received quantities
       receipt.items.forEach(receiptItem => {
@@ -806,7 +881,33 @@ class SupplierService {
       })
     }
 
-    DebugUtils.info(MODULE_NAME, 'Receipt completed successfully with full integration', {
+    // ✅ UPDATE RECEIPT IN SUPABASE (Phase 3)
+    const { error: receiptError } = await supabase
+      .from('supplierstore_receipts')
+      .update({
+        status: receipt.status,
+        notes: receipt.notes,
+        closed_at: receipt.closedAt,
+        updated_at: receipt.updatedAt,
+        storage_operation_id: receipt.storageOperationId ?? null
+      })
+      .eq('id', id)
+
+    if (receiptError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update receipt in Supabase', { error: receiptError })
+      throw receiptError
+    }
+
+    // ✅ UPDATE ORDER IN SUPABASE (already implemented in Phase 2)
+    await this.updateOrder(order.id, {
+      status: order.status,
+      receiptId: order.receiptId,
+      totalAmount: order.totalAmount,
+      isEstimatedTotal: order.isEstimatedTotal,
+      items: order.items
+    })
+
+    DebugUtils.info(MODULE_NAME, '✅ Receipt completed successfully with full integration', {
       receiptId: receipt.id,
       receiptNumber: receipt.receiptNumber,
       storageOperationId: receipt.storageOperationId,
@@ -818,19 +919,62 @@ class SupplierService {
   }
 
   async updateReceipt(id: string, data: UpdateReceiptData): Promise<Receipt> {
-    await this.delay(150)
-
-    const receipt = this.receipts.find(rec => rec.id === id)
+    // ✅ FETCH RECEIPT FROM SUPABASE (Phase 3)
+    const receipt = await this.getReceiptById(id)
     if (!receipt) {
       throw new Error(`Receipt with id ${id} not found`)
     }
 
+    const timestamp = new Date().toISOString()
+
+    // Update receipt object
     Object.assign(receipt, {
       ...data,
-      updatedAt: new Date().toISOString()
+      updatedAt: timestamp
     })
 
-    DebugUtils.info(MODULE_NAME, 'Receipt updated', { receiptId: id })
+    // ✅ UPDATE IN SUPABASE (Phase 3)
+    const updateData: any = {
+      updated_at: timestamp
+    }
+
+    // Map only provided fields
+    if (data.notes !== undefined) updateData.notes = data.notes ?? null
+    if (data.receivedBy !== undefined) updateData.received_by = data.receivedBy
+    if (data.deliveryDate !== undefined) updateData.delivery_date = data.deliveryDate
+    if (data.status !== undefined) updateData.status = data.status
+    if (data.hasDiscrepancies !== undefined) updateData.has_discrepancies = data.hasDiscrepancies
+
+    const { error } = await supabase.from('supplierstore_receipts').update(updateData).eq('id', id)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update receipt in Supabase', { error, id })
+      throw error
+    }
+
+    // If items provided, update them (delete old, insert new)
+    if (data.items) {
+      // Delete old items
+      await supabase.from('supplierstore_receipt_items').delete().eq('receipt_id', id)
+
+      // Insert new items
+      const itemsToInsert = data.items.map(item => mapReceiptItemToDB(item, id))
+      const { error: itemsError } = await supabase
+        .from('supplierstore_receipt_items')
+        .insert(itemsToInsert)
+
+      if (itemsError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update receipt items in Supabase', {
+          error: itemsError,
+          id
+        })
+        throw itemsError
+      }
+
+      receipt.items = data.items
+    }
+
+    DebugUtils.info(MODULE_NAME, '✅ Receipt updated in Supabase', { receiptId: id })
     return receipt
   }
 
@@ -1365,13 +1509,23 @@ class SupplierService {
     }
   }
 
-  private generateReceiptNumber(): string {
-    const count = this.receipts.length + 1
+  private async generateReceiptNumber(): Promise<string> {
+    // ✅ COUNT FROM SUPABASE (Phase 3)
+    const { count, error } = await supabase
+      .from('supplierstore_receipts')
+      .select('*', { count: 'exact', head: true })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to count receipts for number generation', { error })
+      throw error
+    }
+
+    const receiptCount = (count || 0) + 1
     const date = new Date()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
 
-    return `RCP-${month}${day}-${String(count).padStart(3, '0')}`
+    return `RCP-${month}${day}-${String(receiptCount).padStart(3, '0')}`
   }
 
   private async getSupplierName(supplierId: string): Promise<string> {

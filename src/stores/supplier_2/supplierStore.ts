@@ -250,28 +250,28 @@ export const useSupplierStore = defineStore('supplier', () => {
     const startTime = Date.now()
 
     try {
-      DebugUtils.info(
-        MODULE_NAME,
-        'Initializing supplier store (Phase 2: Requests & Orders from Supabase)'
-      )
+      DebugUtils.info(MODULE_NAME, 'Initializing supplier store (Phase 3: All data from Supabase)')
       integrationState.value.integrationErrors = []
 
-      // Step 1: Load requests from Supabase
+      // Step 1: Load requests from Supabase (Phase 1)
       await loadRequests()
 
-      // Step 2: Load orders from Supabase
+      // Step 2: Load orders from Supabase (Phase 2)
       await loadOrders()
 
-      // Step 3: Load receipts from coordinator (Phase 3 will migrate these)
+      // Step 3: Load receipts from Supabase (Phase 3)
+      await loadReceipts()
+
+      // Step 4: Load suggestions from coordinator (not migrated yet)
       await loadDataFromCoordinator()
 
-      // Step 4: Initialize service with receipts data
+      // Step 5: Initialize service (no-op since all data from Supabase)
       await supplierService.loadDataFromCoordinator()
 
-      // Step 5: Ensure dependent stores are ready
+      // Step 6: Ensure dependent stores are ready
       await ensureDependentStoresReady()
 
-      // Step 6: Generate suggestions from Storage data
+      // Step 7: Generate suggestions from Storage data
       try {
         DebugUtils.info(MODULE_NAME, 'Generating initial suggestions from Storage data...')
         await refreshSuggestions()
@@ -285,10 +285,10 @@ export const useSupplierStore = defineStore('supplier', () => {
         state.value.orderSuggestions = []
       }
 
-      // Step 7: Validate integration health
+      // Step 8: Validate integration health
       validateIntegrationHealth()
 
-      // Step 8: Mark as initialized
+      // Step 9: Mark as initialized
       integrationState.value.isInitialized = true
       integrationState.value.useMockData = false
 
@@ -360,11 +360,33 @@ export const useSupplierStore = defineStore('supplier', () => {
   }
 
   /**
-   * ✅ UPDATED: Load receipts ONLY from mockDataCoordinator (Phase 2: requests & orders migrated)
+   * ✅ NEW (Phase 3): Load receipts from Supabase
+   */
+  async function loadReceipts(): Promise<void> {
+    try {
+      state.value.loading.receipts = true
+      DebugUtils.info(MODULE_NAME, 'Loading receipts from Supabase...')
+
+      const receipts = await supplierService.getReceipts()
+      state.value.receipts = receipts
+
+      DebugUtils.info(MODULE_NAME, 'Receipts loaded from Supabase', {
+        count: receipts.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load receipts from Supabase', { error })
+      throw error
+    } finally {
+      state.value.loading.receipts = false
+    }
+  }
+
+  /**
+   * ✅ DEPRECATED (Phase 3): All data now loaded from Supabase
    */
   async function loadDataFromCoordinator(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator (receipts only)...')
+      DebugUtils.info(MODULE_NAME, 'Loading suggestions from mockDataCoordinator...')
 
       const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
 
@@ -378,13 +400,13 @@ export const useSupplierStore = defineStore('supplier', () => {
         throw new Error('No supplier data returned from coordinator')
       }
 
-      // ✅ PHASE 2 FIX: Load ONLY receipts (requests & orders now from Supabase)
-      // ❌ REMOVED: state.value.orders = [...supplierData.orders]
-      state.value.receipts = [...supplierData.receipts]
+      // ✅ PHASE 3: Load ONLY suggestions (requests, orders, receipts now from Supabase)
+      // ❌ REMOVED: state.value.receipts (Phase 3)
+      // ❌ REMOVED: state.value.orders (Phase 2)
+      // ❌ REMOVED: state.value.requests (Phase 1)
       state.value.orderSuggestions = [...supplierData.suggestions]
 
-      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator successfully', {
-        receipts: state.value.receipts.length,
+      DebugUtils.info(MODULE_NAME, 'Suggestions loaded from coordinator', {
         suggestions: state.value.orderSuggestions.length
       })
     } catch (error) {
