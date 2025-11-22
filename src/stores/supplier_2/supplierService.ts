@@ -10,7 +10,10 @@ import { generateId } from '@/utils/id'
 import {
   mapRequestFromDB,
   mapRequestToDB,
-  mapRequestItemToDB
+  mapRequestItemToDB,
+  mapOrderFromDB,
+  mapOrderToDB,
+  mapOrderItemToDB
 } from './supabaseMappers'
 
 import { DebugUtils } from '@/utils'
@@ -36,7 +39,7 @@ const MODULE_NAME = 'SupplierService'
 
 class SupplierService {
   // ✅ REMOVED: private requests array (now using Supabase)
-  private orders: PurchaseOrder[] = []
+  // ✅ REMOVED: private orders array (now using Supabase)
   private receipts: Receipt[] = []
   private storageIntegration = useSupplierStorageIntegration()
 
@@ -52,11 +55,10 @@ class SupplierService {
       const supplierData = mockDataCoordinator.getSupplierStoreData()
 
       // ✅ REMOVED: this.requests = [...supplierData.requests] (now using Supabase)
-      this.orders = [...supplierData.orders]
+      // ✅ REMOVED: this.orders = [...supplierData.orders] (now using Supabase)
       this.receipts = [...supplierData.receipts]
 
-      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator (orders/receipts only)', {
-        orders: this.orders.length,
+      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator (receipts only)', {
         receipts: this.receipts.length
       })
     } catch (error) {
@@ -181,9 +183,7 @@ class SupplierService {
 
       // Insert request items
       if (newRequest.items.length > 0) {
-        const itemsToInsert = newRequest.items.map(item =>
-          mapRequestItemToDB(item, requestId)
-        )
+        const itemsToInsert = newRequest.items.map(item => mapRequestItemToDB(item, requestId))
 
         const { error: itemsError } = await supabase
           .from('supplierstore_request_items')
@@ -308,18 +308,60 @@ class SupplierService {
   // =============================================
 
   async getOrders(): Promise<PurchaseOrder[]> {
-    await this.delay(100)
-    return [...this.orders]
+    try {
+      const { data, error } = await supabase
+        .from('supplierstore_orders')
+        .select('*, supplierstore_order_items(*)')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      const orders = (data || []).map(dbOrder =>
+        mapOrderFromDB(dbOrder, dbOrder.supplierstore_order_items || [])
+      )
+
+      DebugUtils.info(MODULE_NAME, 'Orders fetched from Supabase', {
+        count: orders.length
+      })
+
+      return orders
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error fetching orders from Supabase', { error })
+      throw error
+    }
   }
 
   async getOrderById(id: string): Promise<PurchaseOrder | null> {
-    await this.delay(50)
-    return this.orders.find(order => order.id === id) || null
+    try {
+      const { data, error } = await supabase
+        .from('supplierstore_orders')
+        .select('*, supplierstore_order_items(*)')
+        .eq('id', id)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows returned
+          return null
+        }
+        throw error
+      }
+
+      const order = mapOrderFromDB(data, data.supplierstore_order_items || [])
+
+      DebugUtils.info(MODULE_NAME, 'Order fetched from Supabase', {
+        orderId: id,
+        orderNumber: order.orderNumber
+      })
+
+      return order
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error fetching order by id from Supabase', { id, error })
+      throw error
+    }
   }
 
   async createOrder(data: CreateOrderData): Promise<PurchaseOrder> {
-    await this.delay(300)
-
     // ✅ ПОЛУЧАЕМ ДОСТУП К STORES
     const productsStore = useProductsStore()
 
@@ -395,7 +437,7 @@ class SupplierService {
       const totalPrice = packageQuantity * packagePrice
 
       orderItems.push({
-        id: `po-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        id: generateId(),
         itemId: item.itemId,
         itemName: product.name,
 
@@ -423,13 +465,18 @@ class SupplierService {
       })
     }
 
+    // Generate order ID and timestamp
+    const orderId = generateId()
+    const timestamp = new Date().toISOString()
+    const orderNumber = await this.generateOrderNumber()
+
     // Создаем заказ
     const newOrder: PurchaseOrder = {
-      id: `po-${Date.now()}`,
-      orderNumber: this.generateOrderNumber(),
+      id: orderId,
+      orderNumber,
       supplierId: data.supplierId,
       supplierName: await this.getSupplierName(data.supplierId),
-      orderDate: new Date().toISOString(),
+      orderDate: timestamp,
       expectedDeliveryDate: data.expectedDeliveryDate,
 
       items: orderItems,
@@ -443,63 +490,165 @@ class SupplierService {
       requestIds: data.requestIds || [],
       notes: data.notes,
 
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: timestamp,
+      updatedAt: timestamp
     }
 
-    this.orders.unshift(newOrder)
+    try {
+      // ✅ INSERT ORDER TO SUPABASE
+      const { data: insertedOrder, error: orderError } = await supabase
+        .from('supplierstore_orders')
+        .insert([mapOrderToDB(newOrder)])
+        .select()
+        .single()
 
-    // Link requests to order (but don't change status)
-    if (data.requestIds) {
-      data.requestIds.forEach(requestId => {
-        const request = this.requests.find(req => req.id === requestId)
-        if (request) {
-          request.purchaseOrderIds.push(newOrder.id)
-          request.updatedAt = new Date().toISOString()
+      if (orderError) throw orderError
+
+      // ✅ INSERT ORDER ITEMS TO SUPABASE
+      if (orderItems.length > 0) {
+        const itemsToInsert = orderItems.map(item => mapOrderItemToDB(item, orderId))
+
+        const { error: itemsError } = await supabase
+          .from('supplierstore_order_items')
+          .insert(itemsToInsert)
+
+        if (itemsError) {
+          // Rollback: delete the order
+          await supabase.from('supplierstore_orders').delete().eq('id', orderId)
+          throw itemsError
         }
+      }
+
+      // ✅ UPDATE RELATED REQUESTS IN SUPABASE (link to order)
+      if (data.requestIds && data.requestIds.length > 0) {
+        for (const requestId of data.requestIds) {
+          // Fetch the request
+          const { data: dbRequest, error: fetchError } = await supabase
+            .from('supplierstore_requests')
+            .select('purchase_order_ids')
+            .eq('id', requestId)
+            .single()
+
+          if (fetchError) {
+            DebugUtils.warn(MODULE_NAME, 'Failed to fetch request for linking', {
+              requestId,
+              error: fetchError
+            })
+            continue
+          }
+
+          // Add order ID to purchase_order_ids array
+          const updatedOrderIds = [...(dbRequest.purchase_order_ids || []), orderId]
+
+          // Update the request
+          const { error: updateError } = await supabase
+            .from('supplierstore_requests')
+            .update({
+              purchase_order_ids: updatedOrderIds,
+              updated_at: timestamp
+            })
+            .eq('id', requestId)
+
+          if (updateError) {
+            DebugUtils.warn(MODULE_NAME, 'Failed to link request to order', {
+              requestId,
+              orderId,
+              error: updateError
+            })
+          }
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Purchase order created in Supabase with packages', {
+        orderId: newOrder.id,
+        orderNumber: newOrder.orderNumber,
+        supplierId: data.supplierId,
+        itemCount: newOrder.items.length,
+        totalAmount: newOrder.totalAmount,
+        totalPackages: orderItems.reduce((sum, item) => sum + item.packageQuantity, 0),
+        usedLatestPrices: Object.keys(latestPrices).length > 0,
+        requestIds: data.requestIds
       })
+
+      return newOrder
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error creating order in Supabase', { error })
+      throw error
     }
-
-    DebugUtils.info(MODULE_NAME, 'Purchase order created with packages', {
-      orderId: newOrder.id,
-      supplierId: data.supplierId,
-      itemCount: newOrder.items.length,
-      totalAmount: newOrder.totalAmount,
-      totalPackages: orderItems.reduce((sum, item) => sum + item.packageQuantity, 0),
-      usedLatestPrices: Object.keys(latestPrices).length > 0,
-      requestIds: data.requestIds
-    })
-
-    return newOrder
   }
 
   async updateOrder(id: string, data: UpdateOrderData): Promise<PurchaseOrder> {
-    await this.delay(150)
+    try {
+      // Fetch current order from Supabase
+      const currentOrder = await this.getOrderById(id)
+      if (!currentOrder) {
+        throw new Error(`Order with id ${id} not found`)
+      }
 
-    const order = this.orders.find(ord => ord.id === id)
-    if (!order) {
-      throw new Error(`Order with id ${id} not found`)
+      // Merge update data with current order
+      const updatedOrder: PurchaseOrder = {
+        ...currentOrder,
+        ...data,
+        updatedAt: new Date().toISOString()
+      }
+
+      // Update order in Supabase
+      const { error: orderError } = await supabase
+        .from('supplierstore_orders')
+        .update(mapOrderToDB(updatedOrder))
+        .eq('id', id)
+
+      if (orderError) throw orderError
+
+      // If items are being updated, replace them
+      if (data.items) {
+        // Delete existing items
+        const { error: deleteError } = await supabase
+          .from('supplierstore_order_items')
+          .delete()
+          .eq('order_id', id)
+
+        if (deleteError) throw deleteError
+
+        // Insert new items
+        if (data.items.length > 0) {
+          const itemsToInsert = data.items.map(item => mapOrderItemToDB(item, id))
+
+          const { error: insertError } = await supabase
+            .from('supplierstore_order_items')
+            .insert(itemsToInsert)
+
+          if (insertError) throw insertError
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Purchase order updated in Supabase', {
+        orderId: id,
+        updatedFields: Object.keys(data),
+        itemsUpdated: !!data.items
+      })
+
+      return updatedOrder
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error updating order in Supabase', { id, error })
+      throw error
     }
-
-    Object.assign(order, {
-      ...data,
-      updatedAt: new Date().toISOString()
-    })
-
-    DebugUtils.info(MODULE_NAME, 'Purchase order updated', { orderId: id })
-    return order
   }
 
   async deleteOrder(id: string): Promise<void> {
-    await this.delay(100)
+    try {
+      // Delete order from Supabase (CASCADE will delete order items)
+      const { error } = await supabase.from('supplierstore_orders').delete().eq('id', id)
 
-    const index = this.orders.findIndex(order => order.id === id)
-    if (index === -1) {
-      throw new Error(`Order with id ${id} not found`)
+      if (error) throw error
+
+      DebugUtils.info(MODULE_NAME, 'Purchase order deleted from Supabase (with CASCADE)', {
+        orderId: id
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error deleting order from Supabase', { id, error })
+      throw error
     }
-
-    this.orders.splice(index, 1)
-    DebugUtils.info(MODULE_NAME, 'Purchase order deleted', { orderId: id })
   }
 
   // =============================================
@@ -519,7 +668,8 @@ class SupplierService {
   async createReceipt(data: CreateReceiptData): Promise<Receipt> {
     await this.delay(200)
 
-    const order = this.orders.find(ord => ord.id === data.purchaseOrderId)
+    // ✅ FETCH ORDER FROM SUPABASE (Phase 2)
+    const order = await this.getOrderById(data.purchaseOrderId)
     if (!order) {
       throw new Error(`Order with id ${data.purchaseOrderId} not found`)
     }
@@ -579,7 +729,8 @@ class SupplierService {
       throw new Error('Only draft receipts can be completed')
     }
 
-    const order = this.orders.find(o => o.id === receipt.purchaseOrderId)
+    // ✅ FETCH ORDER FROM SUPABASE (Phase 2)
+    const order = await this.getOrderById(receipt.purchaseOrderId)
     if (!order) {
       throw new Error(`Order not found for receipt ${id}`)
     }
@@ -989,106 +1140,108 @@ class SupplierService {
         return []
       }
 
-    // ✅ Импортируем productsStore в начале метода
-    const { useProductsStore } = await import('@/stores/productsStore')
-    const productsStore = useProductsStore()
+      // ✅ Импортируем productsStore в начале метода
+      const { useProductsStore } = await import('@/stores/productsStore')
+      const productsStore = useProductsStore()
 
-    const unassignedItems: UnassignedItem[] = []
+      const unassignedItems: UnassignedItem[] = []
 
-    for (const request of requests) {
-      console.log(`Processing request ${request.requestNumber} (${request.status})`)
+      for (const request of requests) {
+        console.log(`Processing request ${request.requestNumber} (${request.status})`)
 
-      for (const item of request.items) {
-        // ✅ ПОЛУЧАЕМ ПРОДУКТ ДЛЯ БАЗОВЫХ ДАННЫХ
-        const product = productsStore.getProductById(item.itemId)
+        for (const item of request.items) {
+          // ✅ ПОЛУЧАЕМ ПРОДУКТ ДЛЯ БАЗОВЫХ ДАННЫХ
+          const product = productsStore.getProductById(item.itemId)
 
-        if (!product) {
-          console.warn(`Product not found: ${item.itemId}, skipping item`)
-          continue
-        }
-
-        const orderedQuantity = this.getOrderedQuantityForItem(request.id, item.itemId)
-        const remainingQuantity = item.requestedQuantity - orderedQuantity
-
-        console.log(
-          `Item ${item.itemName}: requested=${item.requestedQuantity}, ordered=${orderedQuantity}, remaining=${remainingQuantity}`
-        )
-
-        if (remainingQuantity > 0) {
-          const existingItem = unassignedItems.find(ui => ui.itemId === item.itemId)
-
-          if (existingItem) {
-            existingItem.totalQuantity += remainingQuantity
-            existingItem.sources.push({
-              requestId: request.id,
-              requestNumber: request.requestNumber,
-              department: request.department,
-              quantity: remainingQuantity,
-              packageId: item.packageId,
-              packageQuantity: item.packageQuantity
-            })
-          } else {
-            unassignedItems.push({
-              itemId: item.itemId,
-              itemName: item.itemName,
-              category: product.category, // ✅ Из продукта
-              totalQuantity: remainingQuantity,
-
-              // ✅ КРИТИЧНО: Заполняем из продукта
-              unit: product.baseUnit,
-              estimatedBaseCost: product.baseCostPerUnit,
-
-              // Рекомендованная упаковка из request
-              recommendedPackageId: item.packageId,
-              recommendedPackageName: item.packageName,
-
-              sources: [
-                {
-                  requestId: request.id,
-                  requestNumber: request.requestNumber,
-                  department: request.department,
-                  quantity: remainingQuantity,
-                  packageId: item.packageId,
-                  packageQuantity: item.packageQuantity
-                }
-              ]
-            })
+          if (!product) {
+            console.warn(`Product not found: ${item.itemId}, skipping item`)
+            continue
           }
-        } else {
-          console.log(`Item ${item.itemName} is fully ordered, skipping`)
+
+          const orderedQuantity = this.getOrderedQuantityForItem(request.id, item.itemId)
+          const remainingQuantity = item.requestedQuantity - orderedQuantity
+
+          console.log(
+            `Item ${item.itemName}: requested=${item.requestedQuantity}, ordered=${orderedQuantity}, remaining=${remainingQuantity}`
+          )
+
+          if (remainingQuantity > 0) {
+            const existingItem = unassignedItems.find(ui => ui.itemId === item.itemId)
+
+            if (existingItem) {
+              existingItem.totalQuantity += remainingQuantity
+              existingItem.sources.push({
+                requestId: request.id,
+                requestNumber: request.requestNumber,
+                department: request.department,
+                quantity: remainingQuantity,
+                packageId: item.packageId,
+                packageQuantity: item.packageQuantity
+              })
+            } else {
+              unassignedItems.push({
+                itemId: item.itemId,
+                itemName: item.itemName,
+                category: product.category, // ✅ Из продукта
+                totalQuantity: remainingQuantity,
+
+                // ✅ КРИТИЧНО: Заполняем из продукта
+                unit: product.baseUnit,
+                estimatedBaseCost: product.baseCostPerUnit,
+
+                // Рекомендованная упаковка из request
+                recommendedPackageId: item.packageId,
+                recommendedPackageName: item.packageName,
+
+                sources: [
+                  {
+                    requestId: request.id,
+                    requestNumber: request.requestNumber,
+                    department: request.department,
+                    quantity: remainingQuantity,
+                    packageId: item.packageId,
+                    packageQuantity: item.packageQuantity
+                  }
+                ]
+              })
+            }
+          } else {
+            console.log(`Item ${item.itemName} is fully ordered, skipping`)
+          }
         }
       }
-    }
 
-    const baskets: SupplierBasket[] = [
-      {
-        supplierId: null,
-        supplierName: 'Unassigned',
-        items: unassignedItems,
-        totalItems: unassignedItems.length,
-        // ✅ Считаем по baseCostPerUnit
-        estimatedTotal: unassignedItems.reduce(
-          (sum, item) => sum + item.totalQuantity * item.estimatedBaseCost,
-          0
-        )
-      }
-    ]
+      const baskets: SupplierBasket[] = [
+        {
+          supplierId: null,
+          supplierName: 'Unassigned',
+          items: unassignedItems,
+          totalItems: unassignedItems.length,
+          // ✅ Считаем по baseCostPerUnit
+          estimatedTotal: unassignedItems.reduce(
+            (sum, item) => sum + item.totalQuantity * item.estimatedBaseCost,
+            0
+          )
+        }
+      ]
 
-    console.log(
-      `Created baskets: ${unassignedItems.length} unassigned items from ${requests.length} requests`
-    )
+      console.log(
+        `Created baskets: ${unassignedItems.length} unassigned items from ${requests.length} requests`
+      )
 
-    return baskets
+      return baskets
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create supplier baskets', { error })
       throw error
     }
   }
 
-  private getOrderedQuantityForItem(requestId: string, itemId: string): number {
+  private async getOrderedQuantityForItem(requestId: string, itemId: string): Promise<number> {
     let totalOrdered = 0
 
-    const relatedOrders = this.orders.filter(order => order.requestIds.includes(requestId))
+    // ✅ FETCH ORDERS FROM SUPABASE (Phase 2)
+    const allOrders = await this.getOrders()
+    const relatedOrders = allOrders.filter(order => order.requestIds.includes(requestId))
 
     for (const order of relatedOrders) {
       const orderItem = order.items.find(item => item.itemId === itemId)
@@ -1106,15 +1259,18 @@ class SupplierService {
 
   async getStatistics() {
     await this.delay(50)
+
+    // ✅ FETCH FROM SUPABASE (Phase 2)
+    const requests = await this.getRequests()
+    const orders = await this.getOrders()
+
     return {
-      totalRequests: this.requests.length,
-      pendingRequests: this.requests.filter(r => r.status === 'submitted').length,
-      totalOrders: this.orders.length,
-      ordersAwaitingPayment: this.orders.filter(o => o.paymentStatus === 'pending').length,
-      ordersAwaitingDelivery: this.orders.filter(
-        // ❌ СТАРОЕ: o => ['sent', 'confirmed'].includes(o.status) && o.paymentStatus === 'paid'
-        o => o.status === 'sent' && o.paymentStatus === 'paid' // ✅ НОВОЕ
-      ).length,
+      totalRequests: requests.length,
+      pendingRequests: requests.filter(r => r.status === 'submitted').length,
+      totalOrders: orders.length,
+      ordersAwaitingPayment: orders.filter(o => o.billStatus === 'pending').length,
+      ordersAwaitingDelivery: orders.filter(o => o.status === 'sent' && o.billStatus === 'billed')
+        .length,
       totalReceipts: this.receipts.length,
       pendingReceipts: this.receipts.filter(r => r.status === 'draft').length,
       urgentSuggestions: 0
@@ -1181,13 +1337,31 @@ class SupplierService {
     }
   }
 
-  private generateOrderNumber(): string {
-    const count = this.orders.length + 1
+  private async generateOrderNumber(): Promise<string> {
     const date = new Date()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
 
-    return `PO-${month}${day}-${String(count).padStart(3, '0')}`
+    try {
+      // Count orders from Supabase
+      const { count, error } = await supabase
+        .from('supplierstore_orders')
+        .select('*', { count: 'exact', head: true })
+
+      if (error) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to count orders from Supabase, using timestamp', {
+          error
+        })
+        // Fallback to timestamp-based number
+        return `PO-${month}${day}-${String(Date.now()).slice(-3)}`
+      }
+
+      const sequence = (count || 0) + 1
+      return `PO-${month}${day}-${String(sequence).padStart(3, '0')}`
+    } catch (error) {
+      DebugUtils.warn(MODULE_NAME, 'Error generating order number, using timestamp', { error })
+      return `PO-${month}${day}-${String(Date.now()).slice(-3)}`
+    }
   }
 
   private generateReceiptNumber(): string {

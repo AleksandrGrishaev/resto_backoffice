@@ -250,22 +250,28 @@ export const useSupplierStore = defineStore('supplier', () => {
     const startTime = Date.now()
 
     try {
-      DebugUtils.info(MODULE_NAME, 'Initializing supplier store (Phase 1: Requests from Supabase)')
+      DebugUtils.info(
+        MODULE_NAME,
+        'Initializing supplier store (Phase 2: Requests & Orders from Supabase)'
+      )
       integrationState.value.integrationErrors = []
 
       // Step 1: Load requests from Supabase
       await loadRequests()
 
-      // Step 2: Load orders/receipts from coordinator (Phase 2 & 3 will migrate these)
+      // Step 2: Load orders from Supabase
+      await loadOrders()
+
+      // Step 3: Load receipts from coordinator (Phase 3 will migrate these)
       await loadDataFromCoordinator()
 
-      // Step 3: Initialize service with orders/receipts data
+      // Step 4: Initialize service with receipts data
       await supplierService.loadDataFromCoordinator()
 
-      // Step 4: Ensure dependent stores are ready
+      // Step 5: Ensure dependent stores are ready
       await ensureDependentStoresReady()
 
-      // Step 5: Generate suggestions from Storage data
+      // Step 6: Generate suggestions from Storage data
       try {
         DebugUtils.info(MODULE_NAME, 'Generating initial suggestions from Storage data...')
         await refreshSuggestions()
@@ -279,10 +285,10 @@ export const useSupplierStore = defineStore('supplier', () => {
         state.value.orderSuggestions = []
       }
 
-      // Step 6: Validate integration health
+      // Step 7: Validate integration health
       validateIntegrationHealth()
 
-      // Step 7: Mark as initialized
+      // Step 8: Mark as initialized
       integrationState.value.isInitialized = true
       integrationState.value.useMockData = false
 
@@ -294,7 +300,7 @@ export const useSupplierStore = defineStore('supplier', () => {
         requests: state.value.requests.length,
         orders: state.value.orders.length,
         receipts: state.value.receipts.length,
-        dataSource: 'Phase1: requests=Supabase, orders/receipts=coordinator'
+        dataSource: 'Phase2: requests+orders=Supabase, receipts=coordinator'
       })
     } catch (error) {
       const errorMessage = `Initialization failed: ${error}`
@@ -332,11 +338,36 @@ export const useSupplierStore = defineStore('supplier', () => {
   }
 
   /**
-   * ✅ UPDATED: Load orders/receipts from mockDataCoordinator (Phase 1: requests removed)
+   * ✅ NEW (Phase 2): Load orders from Supabase
+   */
+  async function loadOrders(): Promise<void> {
+    try {
+      state.value.loading.orders = true
+      DebugUtils.info(MODULE_NAME, 'Loading orders from Supabase...')
+
+      const orders = await supplierService.getOrders()
+      state.value.orders = orders
+
+      DebugUtils.info(MODULE_NAME, 'Orders loaded from Supabase', {
+        count: orders.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load orders from Supabase', { error })
+      throw error
+    } finally {
+      state.value.loading.orders = false
+    }
+  }
+
+  /**
+   * ✅ UPDATED: Load receipts from mockDataCoordinator (Phase 2: orders removed)
    */
   async function loadDataFromCoordinator(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator (orders/receipts only)...')
+      DebugUtils.info(
+        MODULE_NAME,
+        'Loading data from mockDataCoordinator (orders/receipts only)...'
+      )
 
       const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
 
@@ -705,7 +736,8 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const newOrder = await supplierService.createOrder(data)
 
-      state.value.orders.unshift(newOrder)
+      // ✅ RELOAD FROM SUPABASE (Phase 2)
+      await loadOrders()
       state.value.currentOrder = newOrder
 
       DebugUtils.info(MODULE_NAME, 'Purchase order created successfully', {
@@ -742,19 +774,8 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const updatedOrder = await supplierService.updateOrder(id, data)
 
-      // Обновляем массив
-      const index = state.value.orders.findIndex(o => o.id === id)
-      if (index !== -1) {
-        state.value.orders = [
-          ...state.value.orders.slice(0, index),
-          updatedOrder,
-          ...state.value.orders.slice(index + 1)
-        ]
-
-        console.log(`SupplierStore: Reactively updated order ${id} in array at index ${index}`)
-      } else {
-        console.warn(`SupplierStore: Order ${id} not found in local state for update`)
-      }
+      // ✅ RELOAD FROM SUPABASE (Phase 2)
+      await loadOrders()
 
       if (state.value.currentOrder?.id === id) {
         state.value.currentOrder = updatedOrder
@@ -763,8 +784,7 @@ export const useSupplierStore = defineStore('supplier', () => {
       DebugUtils.info(MODULE_NAME, 'Order updated successfully', {
         orderId: id,
         status: updatedOrder.status,
-        billStatus: updatedOrder.billStatus,
-        updatedInArray: index !== -1
+        billStatus: updatedOrder.billStatus
       })
 
       // ✅ АВТОМАТИЗАЦИЯ С СОХРАНЕННЫМ СТАТУСОМ
