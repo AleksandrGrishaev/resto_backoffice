@@ -91,8 +91,9 @@ class SupplierService {
 **New Implementation (Supabase):**
 ```typescript
 // Service Layer (supplierService.ts)
-import { supabase } from '@/config/supabase'
-import { mapRequestFromDB, mapRequestToDB } from './supabaseMappers'
+import { supabase } from '@/supabase/client'
+import { generateId } from '@/utils/id'
+import { mapRequestFromDB, mapRequestToDB, mapRequestItemToDB } from './supabaseMappers'
 
 class SupplierService {
   // ✅ REMOVE: private requests array
@@ -110,15 +111,31 @@ class SupplierService {
   }
 
   async createRequest(data) {
+    // ✅ Use UUID instead of Date.now()
+    const requestId = generateId()
+    const timestamp = new Date().toISOString()
+
     // ✅ Insert to Supabase (with items in transaction)
     const { data: request, error } = await supabase
       .from('supplierstore_requests')
-      .insert([mapRequestToDB(data)])
+      .insert([mapRequestToDB({ ...data, id: requestId, createdAt: timestamp })])
       .select()
       .single()
 
     if (error) throw error
-    // ... insert items
+
+    // Insert items
+    const items = data.items.map(item => ({
+      ...item,
+      id: generateId()
+    }))
+
+    const { error: itemsError } = await supabase
+      .from('supplierstore_request_items')
+      .insert(items.map(item => mapRequestItemToDB(item, requestId)))
+
+    if (itemsError) throw itemsError
+
     return mapRequestFromDB(request)
   }
 
@@ -212,6 +229,11 @@ class SupplierService {
 
 **New Implementation (Supabase):**
 ```typescript
+// Service Layer (supplierService.ts)
+import { supabase } from '@/supabase/client'
+import { generateId } from '@/utils/id'
+import { mapOrderFromDB, mapOrderToDB, mapOrderItemToDB } from './supabaseMappers'
+
 class SupplierService {
   // ✅ REMOVE: private orders array
 
@@ -227,6 +249,10 @@ class SupplierService {
   }
 
   async createOrder(data) {
+    // ✅ Use UUID for order and items
+    const orderId = generateId()
+    const timestamp = new Date().toISOString()
+
     // ✅ Insert to Supabase
     // + Update request status (convert to 'converted')
     // + Create transit batches in Storage
@@ -318,6 +344,11 @@ class SupplierService {
 
 **New Implementation (Supabase):**
 ```typescript
+// Service Layer (supplierService.ts)
+import { supabase } from '@/supabase/client'
+import { generateId } from '@/utils/id'
+import { mapReceiptFromDB, mapReceiptToDB, mapReceiptItemToDB } from './supabaseMappers'
+
 class SupplierService {
   // ✅ REMOVE: private receipts array
 
@@ -330,6 +361,23 @@ class SupplierService {
 
     if (error) throw error
     return data.map(mapReceiptFromDB)
+  }
+
+  async createReceipt(data) {
+    // ✅ Use UUID for receipt and items
+    const receiptId = generateId()
+    const timestamp = new Date().toISOString()
+
+    // ✅ Insert to Supabase
+    const { data: receipt, error } = await supabase
+      .from('supplierstore_receipts')
+      .insert([mapReceiptToDB({ ...data, id: receiptId, createdAt: timestamp })])
+      .select()
+      .single()
+
+    if (error) throw error
+    // ... insert items
+    return mapReceiptFromDB(receipt)
   }
 
   async completeReceipt(id) {
