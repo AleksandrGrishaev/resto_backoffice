@@ -414,6 +414,51 @@ export class AccountSupabaseService {
   }
 
   /**
+   * Get pending payments with filters
+   */
+  async getPendingPaymentsByFilters(filters: PaymentFilters): Promise<PendingPayment[]> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      let query = supabase.from('pending_payments').select('*')
+
+      // Apply status filter
+      if (filters.status) {
+        query = query.eq('status', filters.status)
+      }
+
+      // Apply priority filter
+      if (filters.priority) {
+        query = query.eq('priority', filters.priority)
+      }
+
+      // Order by due date
+      query = query.order('due_date', { ascending: true })
+
+      const { data, error } = await withTimeout(query)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to fetch filtered payments:', error)
+        throw error
+      }
+
+      const payments = data ? pendingPaymentsFromSupabase(data) : []
+
+      DebugUtils.info(MODULE_NAME, '✅ Filtered payments loaded from Supabase', {
+        count: payments.length,
+        filters
+      })
+
+      return payments
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error loading filtered payments:', error)
+      throw error
+    }
+  }
+
+  /**
    * Create pending payment
    */
   async createPendingPayment(data: CreatePaymentDto): Promise<PendingPayment> {

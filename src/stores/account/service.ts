@@ -277,6 +277,20 @@ export class PaymentService {
     }
   }
 
+  async getPaymentsByFilters(filters: PaymentFilters): Promise<PendingPayment[]> {
+    try {
+      if (shouldUseSupabase()) {
+        return await accountSupabaseService.getPendingPaymentsByFilters(filters)
+      }
+
+      DebugUtils.warn(MODULE_NAME, 'Supabase not available, returning empty payments list')
+      return []
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get filtered payments:', error)
+      throw error
+    }
+  }
+
   async createPayment(data: CreatePaymentDto): Promise<PendingPayment> {
     try {
       if (shouldUseSupabase()) {

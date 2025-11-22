@@ -20,6 +20,7 @@ import { DebugUtils } from '@/utils'
 // Импорт stores (те же что в Dev, но будут использовать API вместо localStorage)
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
+import { useAccountStore } from '@/stores/account'
 import { useMenuStore } from '@/stores/menu'
 import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
 import { usePosStore } from '@/stores/pos'
@@ -465,8 +466,39 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
   private async initializeBackofficeStores(): Promise<StoreInitResult[]> {
     DebugUtils.info(MODULE_NAME, '🏢 [PROD] Initializing backoffice stores...')
 
-    // TODO: В production загружать через API
-    // Пока возвращаем пустой массив - будет реализовано позже
-    return []
+    // Параллельная загрузка независимых stores
+    const results = await Promise.all([this.loadAccountsFromAPI()])
+
+    return results
+  }
+
+  private async loadAccountsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useAccountStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading accounts from API...')
+
+      // TODO: Заменить на API вызов, пока используем store method
+      await store.initializeStore()
+
+      return {
+        name: 'accounts',
+        success: true,
+        count: store.state?.value?.accounts?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load accounts'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'accounts',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
   }
 }

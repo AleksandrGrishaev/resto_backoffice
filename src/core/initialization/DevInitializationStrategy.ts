@@ -472,9 +472,8 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       DebugUtils.store(MODULE_NAME, '[DEV] Loading accounts...')
 
-      if (store.initialize) {
-        await store.initialize()
-      }
+      // ✅ FIXED: Use initializeStore() instead of initialize()
+      await store.initializeStore()
 
       return {
         name: 'accounts',
