@@ -1,6 +1,6 @@
 # 🎯 Supplier Module - Supabase Migration Strategy
 
-> **Status:** Phase 0 COMPLETED ✅ | **Start Date:** 2025-11-22 | **Phase 0 Completed:** 2025-11-22
+> **Status:** Phase 1 COMPLETED ✅ | **Start Date:** 2025-11-22 | **Phase 1 Completed:** 2025-11-22
 > **Approach:** Incremental CRUD-based migration with Service Layer focus
 
 ## 📋 Strategic Overview
@@ -75,7 +75,7 @@ Supabase (PostgreSQL) → ✅ NEW
 
 ---
 
-### Phase 1: Procurement Requests Migration ⬜ NOT STARTED
+### Phase 1: Procurement Requests Migration ✅ COMPLETED (2025-11-22)
 
 **Purpose:** Migrate requests CRUD from mock to Supabase
 
@@ -194,37 +194,35 @@ async function createRequest(data) {
 
 **Tasks:**
 
-1. Create mapper functions (`mapRequestFromDB`, `mapRequestToDB`, `mapRequestItemFromDB`, `mapRequestItemToDB`)
-2. Update `getRequests()` - fetch from `supplierstore_requests` with filters
-3. Update `getRequestById()` - fetch single with items
-4. Update `createRequest()` - insert to Supabase with items (transaction)
-5. Update `updateRequest()` - update in Supabase (replace items)
-6. Update `deleteRequest()` - delete from Supabase (cascade)
-7. Remove `private requests` array
-8. Remove `loadDataFromCoordinator()` method
-9. Update store `initialize()` - remove coordinator loading
-10. Add `loadRequests()` method in store
+1. ✅ Mapper functions already exist from Phase 0
+2. ✅ Updated `getRequests()` - fetch from `supplierstore_requests` with joins
+3. ✅ Updated `getRequestById()` - fetch single with items
+4. ✅ Updated `createRequest()` - insert to Supabase with items (transaction)
+5. ✅ Updated `updateRequest()` - update in Supabase (replace items)
+6. ✅ Updated `deleteRequest()` - delete from Supabase (cascade)
+7. ✅ Removed `private requests` array
+8. ✅ Updated `loadDataFromCoordinator()` to skip requests
+9. ✅ Updated store `initialize()` - added loadRequests() call
+10. ✅ Added `loadRequests()` method in store
 
-**Validation:**
+**Implementation Details:**
 
-- [ ] Can create request → appears in Supabase
-- [ ] Can fetch all requests → loads from Supabase
-- [ ] Can fetch single request → loads with items
-- [ ] Can update request → persists to Supabase
-- [ ] Can delete request → removes from Supabase (items cascade)
-- [ ] Filters work (status, department, priority)
-- [ ] Request number generation works
-- [ ] Page refresh loads data from Supabase
-- [ ] No console errors
-- [ ] UI works as before
+- All CRUD methods in service now use Supabase queries
+- Request number generation counts from Supabase
+- Store methods reload from Supabase after mutations
+- Mappers handle camelCase ↔ snake_case conversion
+- CASCADE DELETE works automatically via database constraints
+- Transaction logic for request + items insert
+- Filter methods updated to fetch from Supabase
+- Supplier basket creation fetches requests from DB
 
-**Files:**
+**Files Modified:**
 
-- `src/stores/supplier_2/supplierService.ts` (main changes)
-- `src/stores/supplier_2/supplierStore.ts` (minimal changes)
-- `src/stores/supplier_2/supabaseMappers.ts` (new)
+- `src/stores/supplier_2/supplierService.ts` - Service layer migration
+- `src/stores/supplier_2/supplierStore.ts` - Store initialization updates
+- Commit: `53fa5a5` - feat(supplier): Phase 1 - migrate procurement requests to Supabase
 
-**Estimated time:** 4-5 hours
+**Actual time:** ~3 hours
 
 ---
 
@@ -604,46 +602,47 @@ CREATE INDEX idx_supplierstore_receipt_items_receipt ON supplierstore_receipt_it
 
 ## 📊 Progress Tracking
 
-**Overall Progress:** 20% (1/5 phases complete)
+**Overall Progress:** 40% (2/5 phases complete)
 
 **Phase Status:**
 
 - ✅ Phase 0: Database Setup (100% - COMPLETED 2025-11-22)
-- ⬜ Phase 1: Requests Migration (0%)
+- ✅ Phase 1: Requests Migration (100% - COMPLETED 2025-11-22)
 - ⬜ Phase 2: Orders Migration (0%)
 - ⬜ Phase 3: Receipts Migration (0%)
 - ⬜ Phase 4: Cleanup & Testing (0%)
 
-**Estimated Total Time:** 18-23 hours | **Actual Time (Phase 0):** 2 hours
+**Estimated Total Time:** 18-23 hours | **Actual Time:** Phase 0: 2 hours, Phase 1: 3 hours (Total: 5 hours)
 
 ---
 
 ## 🎯 Next Steps
 
-**✅ Phase 0 Complete - Ready for Phase 1!**
+**✅ Phase 1 Complete - Ready for Phase 2!**
 
-**Start Phase 1: Procurement Requests Migration**
+**Start Phase 2: Purchase Orders Migration**
 
-1. Update `supplierService.ts` - replace mock methods with Supabase queries
-2. Implement CRUD operations using mapper functions:
-   - `getRequests()` - fetch from `supplierstore_requests` with items
-   - `getRequestById()` - fetch single request with items
-   - `createRequest()` - insert to Supabase (transaction with items)
-   - `updateRequest()` - update in Supabase
-   - `deleteRequest()` - delete from Supabase (CASCADE)
-3. Remove `private requests` array from service
-4. Remove `loadDataFromCoordinator()` method from service
-5. Update `supplierStore.ts`:
-   - Remove coordinator loading from `initialize()`
-   - Add `loadRequests()` method
-6. Test each CRUD operation thoroughly
-7. Validate filters (status, department, priority)
-8. Validate completely before Phase 2
+1. Import order mappers from supabaseMappers.ts (already exist)
+2. Update `getOrders()` - fetch from `supplierstore_orders` with items
+3. Update `getOrderById()` - fetch single order with items
+4. Update `createOrder()` - insert to Supabase (transaction with items)
+5. Update `sendOrder()` - update status + create bill in Account Store
+6. Update `updateOrder()` - update in Supabase
+7. Update `deleteOrder()` - delete from Supabase (CASCADE)
+8. Remove `private orders` array from service
+9. Update `loadDataFromCoordinator()` to skip orders
+10. Add `loadOrders()` method in store
+11. Update store `initialize()` to call loadOrders()
+12. Test integrations:
+    - Storage transit batches creation
+    - Account Store bill creation
+    - Request status updates
+13. Validate completely before Phase 3
 
 **Current Focus:**
 
-- Database foundation ✅ DONE
-- Next: Service layer refactoring for Requests CRUD
+- Requests migration ✅ DONE
+- Next: Service layer refactoring for Orders CRUD
 
 **Working Rules:**
 
@@ -729,6 +728,6 @@ Service Layer = Business Logic only
 
 ---
 
-**Last Updated:** 2025-11-22 (Phase 0 COMPLETED ✅)
-**Status:** Phase 0 DONE - Ready to start Phase 1
-**Focus:** Service layer refactoring for Requests CRUD, minimal store changes
+**Last Updated:** 2025-11-22 (Phase 1 COMPLETED ✅)
+**Status:** Phase 1 DONE - Ready to start Phase 2
+**Focus:** Service layer refactoring for Orders CRUD with Account/Storage integrations
