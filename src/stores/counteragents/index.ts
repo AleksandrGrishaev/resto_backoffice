@@ -21,18 +21,6 @@ export { useCounteragentsStore } from './counteragentsStore'
 // Service export
 export { CounteragentsService } from './counteragentsService'
 
-// Mock data exports
-export {
-  mockCounterAgents,
-  getRandomCounteragent,
-  getMockCounteragentsByType,
-  getMockCounteragentsByCategory,
-  getMockActiveCounterAgents,
-  getMockPreferredCounterAgents,
-  findCounteragentById,
-  generateMockStatistics
-} from './mock/counteragentsMock'
-
 // Constants and utilities
 export const COUNTERAGENT_TYPES = {
   SUPPLIER: 'supplier' as const,

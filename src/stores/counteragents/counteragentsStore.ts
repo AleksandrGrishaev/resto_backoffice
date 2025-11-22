@@ -233,12 +233,12 @@ export const useCounteragentsStore = defineStore('counteragents', {
     /**
      * Инициализация store (вызывается из AppInitializer)
      */
-    async initialize(useMockData: boolean = true): Promise<void> {
+    async initialize(): Promise<void> {
       try {
         this.loading.counteragents = true
         this.error = null
 
-        DebugUtils.info(MODULE_NAME, '🚀 Initializing Counteragents Store', { useMockData })
+        DebugUtils.info(MODULE_NAME, '🚀 Initializing Counteragents Store')
 
         await this.fetchCounterAgents()
 
