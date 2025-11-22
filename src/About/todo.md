@@ -458,34 +458,53 @@ state.value.orderSuggestions = [...supplierData.suggestions]
 
 ---
 
-### Phase 2.5: Counteragents Migration ⬜ PLANNED (Future)
+### Phase 2.5: Counteragents Migration ✅ COMPLETED (2025-11-22)
 
 **Purpose:** Migrate counteragents from mock data to Supabase
 
-**Current Situation:**
+**What we did:**
 
-- ✅ Table `counteragents` exists in Supabase (created in Phase 0)
-- ❌ `CounteragentsService` uses mock data (`generateCounteragentsMockData()`)
-- ❌ No Supabase mappers for counteragents
-- ❌ No CRUD implementation for Supabase
+- ✅ Created Supabase mappers (`mapCounteragentFromDB`, `mapCounteragentToDB`)
+- ✅ Migrated all CRUD methods to Supabase in `counteragentsService.ts`
+  - `fetchCounterAgents()` - with advanced filtering (search, categories, pagination)
+  - `getCounteragentById()` - with PGRST116 error handling
+  - `createCounteragent()` - full field mapping
+  - `updateCounteragent()` - partial updates with updatedAt
+  - `deleteCounteragent()` - soft delete (isActive = false)
+- ✅ Removed all mock data dependencies from CounteragentsService
+- ✅ Implemented filtering with `.or()` for search and `.overlaps()` for categories
+- ✅ Added snake_case conversion for sort fields
+- ✅ Integrated with Supplier Module (order creation, baskets, etc.)
 
-**Dependencies:**
+**Implementation Details:**
 
-- Used by `supplierService.getSupplierName()` when creating orders
-- Used in supplier baskets creation
-- Used in CounteragentsView UI
-- Blocks full Supplier Module migration completion
+- All 28+ fields mapped (camelCase ↔ snake_case)
+- Advanced query building:
+  - Search by name/display_name with `.ilike`
+  - Filter by product categories with `.overlaps`
+  - Pagination with `.range(offset, offset + limit - 1)`
+  - Dynamic sorting with field conversion
+- Error handling for not found (PGRST116 code)
+- Full type safety with TypeScript
 
-**Why separate phase:**
+**Files Modified:**
 
-- Counteragents is a shared dependency (used by Suppliers, Customers, POS)
-- Requires separate migration strategy
-- Should be done after Receipts (Phase 3) to avoid blocking Supplier Module completion
-- Independent validation and testing required
+- `src/stores/counteragents/supabaseMappers.ts` (NEW) - Data mappers
+- `src/stores/counteragents/counteragentsService.ts` - Service layer migration
 
-**Recommended timeline:** After Phase 3 and Phase 4 completion
+**Commits:**
 
-**Estimated time:** 3-4 hours
+- `b96af16` - feat(counteragents): phase 2.5 - migrate to supabase
+
+**Actual time:** ~1.5 hours
+
+**Validation:**
+
+- ✅ Can fetch counteragents from Supabase with filters
+- ✅ Can create/update/delete counteragents
+- ✅ Supplier orders use Supabase counteragents
+- ✅ No mock data loaded
+- ✅ UI works correctly with real data
 
 ---
 
