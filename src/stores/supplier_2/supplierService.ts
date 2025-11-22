@@ -1,10 +1,17 @@
-// src/stores/supplier_2/supplierService.ts - FIXED TO USE COORDINATOR
+// src/stores/supplier_2/supplierService.ts - MIGRATED TO SUPABASE
 
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { useSupplierStorageIntegration } from './integrations/storageIntegration'
 import { getProductDefinition } from '@/stores/shared/productDefinitions'
 import { useCounteragentsStore } from '@/stores/counteragents'
+import { supabase } from '@/supabase/client'
+import { generateId } from '@/utils/id'
+import {
+  mapRequestFromDB,
+  mapRequestToDB,
+  mapRequestItemToDB
+} from './supabaseMappers'
 
 import { DebugUtils } from '@/utils'
 import type {
@@ -21,13 +28,14 @@ import type {
   SupplierBasket,
   UnassignedItem,
   Department,
-  OrderItem
+  OrderItem,
+  RequestItem
 } from './types'
 
 const MODULE_NAME = 'SupplierService'
 
 class SupplierService {
-  private requests: ProcurementRequest[] = []
+  // ✅ REMOVED: private requests array (now using Supabase)
   private orders: PurchaseOrder[] = []
   private receipts: Receipt[] = []
   private storageIntegration = useSupplierStorageIntegration()
@@ -35,7 +43,7 @@ class SupplierService {
   constructor() {}
 
   // =============================================
-  // LOAD DATA FROM COORDINATOR
+  // LOAD DATA FROM COORDINATOR (Phase 1: Requests migrated to Supabase)
   // =============================================
 
   async loadDataFromCoordinator(): void {
@@ -43,12 +51,11 @@ class SupplierService {
       const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
       const supplierData = mockDataCoordinator.getSupplierStoreData()
 
-      this.requests = [...supplierData.requests]
+      // ✅ REMOVED: this.requests = [...supplierData.requests] (now using Supabase)
       this.orders = [...supplierData.orders]
       this.receipts = [...supplierData.receipts]
 
-      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator', {
-        requests: this.requests.length,
+      DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator (orders/receipts only)', {
         orders: this.orders.length,
         receipts: this.receipts.length
       })
@@ -63,73 +70,237 @@ class SupplierService {
   // =============================================
 
   async getRequests(): Promise<ProcurementRequest[]> {
-    await this.delay(100)
-    return [...this.requests]
+    try {
+      DebugUtils.info(MODULE_NAME, 'Fetching requests from Supabase...')
+
+      // Fetch requests with items in a single query
+      const { data, error } = await supabase
+        .from('supplierstore_requests')
+        .select('*, supplierstore_request_items(*)')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to fetch requests from Supabase', { error })
+        throw error
+      }
+
+      // Map database rows to TypeScript objects
+      const requests = (data || []).map(dbRequest =>
+        mapRequestFromDB(dbRequest, dbRequest.supplierstore_request_items || [])
+      )
+
+      DebugUtils.info(MODULE_NAME, 'Requests fetched from Supabase', {
+        count: requests.length
+      })
+
+      return requests
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error fetching requests', { error })
+      throw error
+    }
   }
 
   async getRequestById(id: string): Promise<ProcurementRequest | null> {
-    await this.delay(50)
-    return this.requests.find(req => req.id === id) || null
+    try {
+      DebugUtils.info(MODULE_NAME, 'Fetching request by ID from Supabase', { id })
+
+      // Fetch request with items
+      const { data, error } = await supabase
+        .from('supplierstore_requests')
+        .select('*, supplierstore_request_items(*)')
+        .eq('id', id)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Not found
+          DebugUtils.warn(MODULE_NAME, 'Request not found', { id })
+          return null
+        }
+        DebugUtils.error(MODULE_NAME, 'Failed to fetch request by ID', { id, error })
+        throw error
+      }
+
+      const request = mapRequestFromDB(data, data.supplierstore_request_items || [])
+
+      DebugUtils.info(MODULE_NAME, 'Request fetched by ID', {
+        id,
+        requestNumber: request.requestNumber
+      })
+
+      return request
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error fetching request by ID', { id, error })
+      throw error
+    }
   }
 
   async createRequest(data: CreateRequestData): Promise<ProcurementRequest> {
-    await this.delay(200)
+    try {
+      const requestId = generateId()
+      const timestamp = new Date().toISOString()
 
-    const newRequest: ProcurementRequest = {
-      id: `req-${Date.now()}`,
-      requestNumber: this.generateRequestNumber(data.department),
-      department: data.department,
-      requestedBy: data.requestedBy,
-      items: data.items.map(item => ({
-        ...item,
-        id: `req-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
-      })),
-      status: 'draft',
-      priority: data.priority || 'normal',
-      purchaseOrderIds: [],
-      notes: data.notes,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      DebugUtils.info(MODULE_NAME, 'Creating request in Supabase', {
+        requestId,
+        department: data.department,
+        itemsCount: data.items.length
+      })
+
+      // Generate request number
+      const requestNumber = await this.generateRequestNumber(data.department)
+
+      // Prepare request data
+      const newRequest: ProcurementRequest = {
+        id: requestId,
+        requestNumber,
+        department: data.department,
+        requestedBy: data.requestedBy,
+        items: data.items.map(item => ({
+          ...item,
+          id: generateId()
+        })),
+        status: 'draft',
+        priority: data.priority || 'normal',
+        purchaseOrderIds: [],
+        notes: data.notes,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }
+
+      // Insert request (main record)
+      const { data: insertedRequest, error: requestError } = await supabase
+        .from('supplierstore_requests')
+        .insert([mapRequestToDB(newRequest)])
+        .select()
+        .single()
+
+      if (requestError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert request', { requestError })
+        throw requestError
+      }
+
+      // Insert request items
+      if (newRequest.items.length > 0) {
+        const itemsToInsert = newRequest.items.map(item =>
+          mapRequestItemToDB(item, requestId)
+        )
+
+        const { error: itemsError } = await supabase
+          .from('supplierstore_request_items')
+          .insert(itemsToInsert)
+
+        if (itemsError) {
+          DebugUtils.error(MODULE_NAME, 'Failed to insert request items', { itemsError })
+          // Rollback: delete the request
+          await supabase.from('supplierstore_requests').delete().eq('id', requestId)
+          throw itemsError
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Request created successfully in Supabase', {
+        requestId,
+        requestNumber,
+        itemsCount: newRequest.items.length
+      })
+
+      return newRequest
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error creating request', { error })
+      throw error
     }
-
-    this.requests.unshift(newRequest)
-
-    DebugUtils.info(MODULE_NAME, 'Procurement request created', {
-      requestId: newRequest.id,
-      department: newRequest.department,
-      itemCount: newRequest.items.length
-    })
-
-    return newRequest
   }
 
   async updateRequest(id: string, data: UpdateRequestData): Promise<ProcurementRequest> {
-    await this.delay(150)
+    try {
+      const timestamp = new Date().toISOString()
 
-    const request = this.requests.find(req => req.id === id)
-    if (!request) {
-      throw new Error(`Request with id ${id} not found`)
+      DebugUtils.info(MODULE_NAME, 'Updating request in Supabase', { id })
+
+      // Update main request record
+      const updateData: any = {
+        updated_at: timestamp
+      }
+
+      if (data.status !== undefined) updateData.status = data.status
+      if (data.priority !== undefined) updateData.priority = data.priority
+      if (data.notes !== undefined) updateData.notes = data.notes
+      if (data.purchaseOrderIds !== undefined) updateData.purchase_order_ids = data.purchaseOrderIds
+
+      const { error: requestError } = await supabase
+        .from('supplierstore_requests')
+        .update(updateData)
+        .eq('id', id)
+
+      if (requestError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update request', { id, requestError })
+        throw requestError
+      }
+
+      // If items are updated, replace all items
+      if (data.items) {
+        // Delete old items
+        const { error: deleteError } = await supabase
+          .from('supplierstore_request_items')
+          .delete()
+          .eq('request_id', id)
+
+        if (deleteError) {
+          DebugUtils.error(MODULE_NAME, 'Failed to delete old request items', { deleteError })
+          throw deleteError
+        }
+
+        // Insert new items
+        if (data.items.length > 0) {
+          const itemsToInsert = data.items.map(item => {
+            const itemWithId: RequestItem = {
+              ...item,
+              id: item.id || generateId()
+            }
+            return mapRequestItemToDB(itemWithId, id)
+          })
+
+          const { error: itemsError } = await supabase
+            .from('supplierstore_request_items')
+            .insert(itemsToInsert)
+
+          if (itemsError) {
+            DebugUtils.error(MODULE_NAME, 'Failed to insert new request items', { itemsError })
+            throw itemsError
+          }
+        }
+      }
+
+      // Fetch updated request
+      const updatedRequest = await this.getRequestById(id)
+      if (!updatedRequest) {
+        throw new Error(`Request ${id} not found after update`)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Request updated successfully', { id })
+      return updatedRequest
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error updating request', { id, error })
+      throw error
     }
-
-    Object.assign(request, {
-      ...data,
-      updatedAt: new Date().toISOString()
-    })
-
-    DebugUtils.info(MODULE_NAME, 'Procurement request updated', { requestId: id })
-    return request
   }
 
   async deleteRequest(id: string): Promise<void> {
-    await this.delay(100)
+    try {
+      DebugUtils.info(MODULE_NAME, 'Deleting request from Supabase', { id })
 
-    const index = this.requests.findIndex(req => req.id === id)
-    if (index === -1) {
-      throw new Error(`Request with id ${id} not found`)
+      // Delete request (CASCADE will auto-delete items)
+      const { error } = await supabase.from('supplierstore_requests').delete().eq('id', id)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to delete request', { id, error })
+        throw error
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Request deleted successfully', { id })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error deleting request', { id, error })
+      throw error
     }
-
-    this.requests.splice(index, 1)
-    DebugUtils.info(MODULE_NAME, 'Procurement request deleted', { requestId: id })
   }
 
   // =============================================
@@ -565,7 +736,7 @@ class SupplierService {
       }
 
       // ✅ ФИЛЬТРАЦИЯ: Убираем товары с существующими активными заявками
-      const filteredSuggestions = this.filterSuggestionsWithExistingRequests(
+      const filteredSuggestions = await this.filterSuggestionsWithExistingRequests(
         validSuggestions,
         department
       )
@@ -602,21 +773,33 @@ class SupplierService {
     }
   }
 
-  // ✅ ДОБАВИТЬ отсутствующую функцию filterSuggestionsWithExistingRequests в supplierService
-  private filterSuggestionsWithExistingRequests(
+  // ✅ UPDATED: filterSuggestionsWithExistingRequests now fetches from Supabase
+  private async filterSuggestionsWithExistingRequests(
     suggestions: OrderSuggestion[],
     department?: Department
-  ): OrderSuggestion[] {
+  ): Promise<OrderSuggestion[]> {
     try {
-      // Получаем активные заявки (draft + submitted, НЕ converted/cancelled)
-      const activeRequests = this.requests.filter(
-        request => request.status === 'draft' || request.status === 'submitted'
-      )
+      // Fetch active requests from Supabase (draft + submitted, NOT converted/cancelled)
+      let query = supabase
+        .from('supplierstore_requests')
+        .select('*, supplierstore_request_items(*)')
+        .in('status', ['draft', 'submitted'])
 
-      // Фильтруем по департаменту если указан
-      const relevantRequests = department
-        ? activeRequests.filter(request => request.department === department)
-        : activeRequests
+      // Filter by department if specified
+      if (department) {
+        query = query.eq('department', department)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to fetch active requests, skipping filter', { error })
+        return suggestions
+      }
+
+      const relevantRequests = (data || []).map(dbRequest =>
+        mapRequestFromDB(dbRequest, dbRequest.supplierstore_request_items || [])
+      )
 
       if (relevantRequests.length === 0) {
         DebugUtils.debug(MODULE_NAME, 'No active requests found, returning all suggestions', {
@@ -626,7 +809,7 @@ class SupplierService {
         return suggestions
       }
 
-      // Подсчитываем уже запрошенные количества по каждому товару
+      // Calculate already requested quantities per item
       const requestedQuantities: Record<string, number> = {}
 
       relevantRequests.forEach(request => {
@@ -642,11 +825,11 @@ class SupplierService {
         department: department || 'all'
       })
 
-      // Фильтруем suggestions
+      // Filter suggestions
       const filtered = suggestions.filter(suggestion => {
         const alreadyRequested = requestedQuantities[suggestion.itemId] || 0
 
-        // Если уже запросили достаточно количество - убираем suggestion
+        // Remove suggestion if already requested enough
         if (alreadyRequested >= suggestion.suggestedQuantity) {
           DebugUtils.debug(MODULE_NAME, 'Removing suggestion - already requested enough', {
             itemId: suggestion.itemId,
@@ -657,7 +840,7 @@ class SupplierService {
           return false
         }
 
-        // Если частично запросили - уменьшаем предлагаемое количество
+        // Reduce suggested quantity if partially requested
         if (alreadyRequested > 0) {
           const originalQuantity = suggestion.suggestedQuantity
           suggestion.suggestedQuantity = Math.max(
@@ -781,12 +964,30 @@ class SupplierService {
   // =============================================
 
   async createSupplierBaskets(requestIds: string[]): Promise<SupplierBasket[]> {
-    await this.delay(200)
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating supplier baskets from requests', {
+        requestIds
+      })
 
-    const requests = this.requests.filter(req => requestIds.includes(req.id))
-    if (requests.length === 0) {
-      return []
-    }
+      // Fetch requests from Supabase
+      const { data, error } = await supabase
+        .from('supplierstore_requests')
+        .select('*, supplierstore_request_items(*)')
+        .in('id', requestIds)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to fetch requests for baskets', { error })
+        throw error
+      }
+
+      const requests = (data || []).map(dbRequest =>
+        mapRequestFromDB(dbRequest, dbRequest.supplierstore_request_items || [])
+      )
+
+      if (requests.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No requests found for baskets', { requestIds })
+        return []
+      }
 
     // ✅ Импортируем productsStore в начале метода
     const { useProductsStore } = await import('@/stores/productsStore')
@@ -943,14 +1144,37 @@ class SupplierService {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 
-  private generateRequestNumber(department: Department): string {
-    const departmentPrefix = department === 'kitchen' ? 'KIT' : 'BAR'
-    const count = this.requests.filter(req => req.department === department).length + 1
-    const date = new Date()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
+  private async generateRequestNumber(department: Department): Promise<string> {
+    try {
+      const departmentPrefix = department === 'kitchen' ? 'KIT' : 'BAR'
+      const date = new Date()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
 
-    return `REQ-${departmentPrefix}-${month}${day}-${String(count).padStart(3, '0')}`
+      // Count existing requests for this department
+      const { count, error } = await supabase
+        .from('supplierstore_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('department', department)
+
+      if (error) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to count requests, using fallback', { error })
+        // Fallback to timestamp-based number
+        return `REQ-${departmentPrefix}-${month}${day}-${String(Date.now()).slice(-3)}`
+      }
+
+      const sequence = (count || 0) + 1
+
+      return `REQ-${departmentPrefix}-${month}${day}-${String(sequence).padStart(3, '0')}`
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error generating request number', { error })
+      // Fallback
+      const departmentPrefix = department === 'kitchen' ? 'KIT' : 'BAR'
+      const date = new Date()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `REQ-${departmentPrefix}-${month}${day}-${String(Date.now()).slice(-3)}`
+    }
   }
 
   private generateOrderNumber(): string {

@@ -239,7 +239,7 @@ export const useSupplierStore = defineStore('supplier', () => {
   // =============================================
 
   /**
-   * ✅ FIXED: Load data from mockDataCoordinator instead of old mocks
+   * ✅ PHASE 1: Initialize with Supabase for requests
    */
   async function initialize(): Promise<void> {
     if (integrationState.value.isInitialized) {
@@ -250,22 +250,22 @@ export const useSupplierStore = defineStore('supplier', () => {
     const startTime = Date.now()
 
     try {
-      DebugUtils.info(
-        MODULE_NAME,
-        'Initializing supplier store with dynamic coordinator loading...'
-      )
+      DebugUtils.info(MODULE_NAME, 'Initializing supplier store (Phase 1: Requests from Supabase)')
       integrationState.value.integrationErrors = []
 
-      // Step 1: Динамически загружаем данные из координатора
+      // Step 1: Load requests from Supabase
+      await loadRequests()
+
+      // Step 2: Load orders/receipts from coordinator (Phase 2 & 3 will migrate these)
       await loadDataFromCoordinator()
 
-      // Step 2: Инициализируем supplierService с данными координатора
+      // Step 3: Initialize service with orders/receipts data
       await supplierService.loadDataFromCoordinator()
 
-      // Step 3: Обеспечиваем готовность зависимых stores
+      // Step 4: Ensure dependent stores are ready
       await ensureDependentStoresReady()
 
-      // Step 4: Генерируем suggestions из Storage данных
+      // Step 5: Generate suggestions from Storage data
       try {
         DebugUtils.info(MODULE_NAME, 'Generating initial suggestions from Storage data...')
         await refreshSuggestions()
@@ -279,10 +279,10 @@ export const useSupplierStore = defineStore('supplier', () => {
         state.value.orderSuggestions = []
       }
 
-      // Step 5: Валидируем здоровье интеграции
+      // Step 6: Validate integration health
       validateIntegrationHealth()
 
-      // Step 6: Отмечаем как успешно инициализированный
+      // Step 7: Mark as initialized
       integrationState.value.isInitialized = true
       integrationState.value.useMockData = false
 
@@ -294,7 +294,7 @@ export const useSupplierStore = defineStore('supplier', () => {
         requests: state.value.requests.length,
         orders: state.value.orders.length,
         receipts: state.value.receipts.length,
-        dataSource: 'dynamic_coordinator_loading'
+        dataSource: 'Phase1: requests=Supabase, orders/receipts=coordinator'
       })
     } catch (error) {
       const errorMessage = `Initialization failed: ${error}`
@@ -305,16 +305,38 @@ export const useSupplierStore = defineStore('supplier', () => {
       integrationState.value.isInitialized = true
       state.value.orderSuggestions = []
 
-      DebugUtils.warn(MODULE_NAME, 'Supplier store initialized with errors - no suggestions loaded')
+      DebugUtils.warn(MODULE_NAME, 'Supplier store initialized with errors')
     }
   }
 
   /**
-   * ✅ NEW: Load all data from mockDataCoordinator
+   * ✅ PHASE 1: Load requests from Supabase
+   */
+  async function loadRequests(): Promise<void> {
+    try {
+      state.value.loading.requests = true
+      DebugUtils.info(MODULE_NAME, 'Loading requests from Supabase...')
+
+      const requests = await supplierService.getRequests()
+      state.value.requests = requests
+
+      DebugUtils.info(MODULE_NAME, 'Requests loaded from Supabase', {
+        count: requests.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load requests from Supabase', { error })
+      throw error
+    } finally {
+      state.value.loading.requests = false
+    }
+  }
+
+  /**
+   * ✅ UPDATED: Load orders/receipts from mockDataCoordinator (Phase 1: requests removed)
    */
   async function loadDataFromCoordinator(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator...')
+      DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator (orders/receipts only)...')
 
       const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
 
@@ -328,19 +350,12 @@ export const useSupplierStore = defineStore('supplier', () => {
         throw new Error('No supplier data returned from coordinator')
       }
 
-      // Проверить структуру данных
-      if (!Array.isArray(supplierData.requests)) {
-        throw new Error('Invalid requests data structure from coordinator')
-      }
-
-      // Load data into state
-      state.value.requests = [...supplierData.requests]
+      // Load data into state (REMOVED: requests - now from Supabase)
       state.value.orders = [...supplierData.orders]
       state.value.receipts = [...supplierData.receipts]
       state.value.orderSuggestions = [...supplierData.suggestions]
 
       DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator successfully', {
-        requests: state.value.requests.length,
         orders: state.value.orders.length,
         receipts: state.value.receipts.length,
         suggestions: state.value.orderSuggestions.length
@@ -562,7 +577,8 @@ export const useSupplierStore = defineStore('supplier', () => {
       const enhancedData = await enhanceRequestWithLatestPrices(data)
       const newRequest = await supplierService.createRequest(enhancedData)
 
-      state.value.requests.unshift(newRequest)
+      // ✅ PHASE 1: Reload from Supabase after creating
+      await loadRequests()
       state.value.currentRequest = newRequest
 
       DebugUtils.info(MODULE_NAME, 'Request created successfully', {
@@ -570,7 +586,7 @@ export const useSupplierStore = defineStore('supplier', () => {
         requestNumber: newRequest.requestNumber,
         itemsCount: newRequest.items.length,
         totalValue: newRequest.items.reduce(
-          (sum, item) => sum + item.estimatedPrice * item.requestedQuantity,
+          (sum, item) => sum + (item.estimatedPrice || 0) * item.requestedQuantity,
           0
         ),
         pricesUpdated: enhancedData !== data
@@ -591,18 +607,8 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       const updatedRequest = await supplierService.updateRequest(id, data)
 
-      const index = state.value.requests.findIndex(r => r.id === id)
-      if (index !== -1) {
-        state.value.requests = [
-          ...state.value.requests.slice(0, index),
-          updatedRequest,
-          ...state.value.requests.slice(index + 1)
-        ]
-
-        console.log(`SupplierStore: Reactively updated request ${id} in array at index ${index}`)
-      } else {
-        console.warn(`SupplierStore: Request ${id} not found in local state for update`)
-      }
+      // ✅ PHASE 1: Reload from Supabase after updating
+      await loadRequests()
 
       if (state.value.currentRequest?.id === id) {
         state.value.currentRequest = updatedRequest
@@ -610,8 +616,7 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       DebugUtils.info(MODULE_NAME, 'Request updated successfully', {
         requestId: id,
-        status: updatedRequest.status,
-        updatedInArray: index !== -1
+        status: updatedRequest.status
       })
 
       return updatedRequest
@@ -627,25 +632,19 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       await supplierService.deleteRequest(id)
 
-      const index = state.value.requests.findIndex(r => r.id === id)
-      if (index !== -1) {
-        const deletedRequest = state.value.requests[index]
-        state.value.requests.splice(index, 1)
+      // ✅ PHASE 1: Reload from Supabase after deleting
+      await loadRequests()
 
-        if (state.value.currentRequest?.id === id) {
-          state.value.currentRequest = undefined
-        }
-
-        const selectedIndex = state.value.selectedRequestIds.indexOf(id)
-        if (selectedIndex !== -1) {
-          state.value.selectedRequestIds.splice(selectedIndex, 1)
-        }
-
-        DebugUtils.info(MODULE_NAME, 'Request deleted successfully', {
-          requestId: id,
-          requestNumber: deletedRequest.requestNumber
-        })
+      if (state.value.currentRequest?.id === id) {
+        state.value.currentRequest = undefined
       }
+
+      const selectedIndex = state.value.selectedRequestIds.indexOf(id)
+      if (selectedIndex !== -1) {
+        state.value.selectedRequestIds.splice(selectedIndex, 1)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Request deleted successfully', { requestId: id })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to delete request', { id, error })
       throw error
@@ -662,8 +661,10 @@ export const useSupplierStore = defineStore('supplier', () => {
     try {
       state.value.loading.requests = true
 
+      // ✅ PHASE 1: Always fetch from Supabase
       let requests = await supplierService.getRequests()
 
+      // Apply filters
       if (filters) {
         if (filters.status?.length) {
           requests = requests.filter(req => filters.status!.includes(req.status))
