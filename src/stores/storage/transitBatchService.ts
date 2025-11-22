@@ -33,9 +33,9 @@ export class TransitBatchService {
       }
 
       // Check for existing batches
-      if (this.hasExistingBatches(orderId)) {
+      if (await this.hasExistingBatches(orderId)) {
         DebugUtils.warn(MODULE_NAME, 'Transit batches already exist for order', { orderId })
-        return this.findByOrder(orderId)
+        return await this.findByOrder(orderId)
       }
 
       // Validate items
@@ -327,15 +327,15 @@ export class TransitBatchService {
   /**
    * Validate conversion readiness
    */
-  validateConversion(orderId: string): {
+  async validateConversion(orderId: string): Promise<{
     valid: boolean
     errors: string[]
     warnings: string[]
-  } {
+  }> {
     const errors: string[] = []
     const warnings: string[] = []
 
-    const batches = this.findByOrder(orderId)
+    const batches = await this.findByOrder(orderId)
 
     if (batches.length === 0) {
       errors.push(`No transit batches found for order ${orderId}`)
@@ -392,31 +392,34 @@ export class TransitBatchService {
   /**
    * Get comprehensive statistics
    */
-  getStatistics() {
+  async getStatistics() {
     const now = new Date()
+    const transitBatches = await this.getAll()
 
     return {
-      total: this.transitBatches.length,
-      totalValue: this.transitBatches.reduce((sum, b) => sum + b.totalValue, 0),
-      overdue: this.transitBatches.filter(b => this.isOverdue(b)).length,
-      today: this.transitBatches.filter(b => this.isDeliveryToday(b)).length,
-      future: this.transitBatches.filter(b => {
+      total: transitBatches.length,
+      totalValue: transitBatches.reduce((sum, b) => sum + b.totalValue, 0),
+      overdue: transitBatches.filter(b => this.isOverdue(b)).length,
+      today: transitBatches.filter(b => this.isDeliveryToday(b)).length,
+      future: transitBatches.filter(b => {
         if (!b.plannedDeliveryDate) return false
         const date = new Date(b.plannedDeliveryDate)
         return date > now && !this.isDeliveryToday(b)
       }).length,
-      bySupplier: this.groupBySupplier(),
-      byDepartment: this.groupByDepartment()
+      bySupplier: this.groupBySupplier(transitBatches),
+      byDepartment: this.groupByDepartment(transitBatches)
     }
   }
 
   /**
    * Group batches by supplier
    */
-  private groupBySupplier(): Record<string, { count: number; value: number }> {
+  private groupBySupplier(
+    transitBatches: StorageBatch[]
+  ): Record<string, { count: number; value: number }> {
     const result: Record<string, { count: number; value: number }> = {}
 
-    for (const batch of this.transitBatches) {
+    for (const batch of transitBatches) {
       const supplier = batch.supplierName || 'Unknown'
       if (!result[supplier]) {
         result[supplier] = { count: 0, value: 0 }
@@ -431,70 +434,32 @@ export class TransitBatchService {
   /**
    * Group batches by department
    */
-  private groupByDepartment(): Record<StorageDepartment, { count: number; value: number }> {
-    const result: Record<StorageDepartment, { count: number; value: number }> = {
-      kitchen: { count: 0, value: 0 },
-      bar: { count: 0, value: 0 }
-    }
+  private groupByDepartment(
+    transitBatches: StorageBatch[]
+  ): Record<string, { count: number; value: number }> {
+    const result: Record<string, { count: number; value: number }> = {}
 
-    for (const batch of this.transitBatches) {
-      result[batch.department].count++
-      result[batch.department].value += batch.totalValue
+    for (const batch of transitBatches) {
+      const dept = batch.department || 'kitchen'
+      if (!result[dept]) {
+        result[dept] = { count: 0, value: 0 }
+      }
+      result[dept].count++
+      result[dept].value += batch.totalValue
     }
 
     return result
   }
 
   // ===========================
-  // LOAD/INIT METHODS
+  // LOAD/INIT METHODS - REMOVED
+  // All data now loaded from Supabase via getAll()
   // ===========================
 
-  /**
-   * Load initial transit batches (from mock or storage)
-   */
-  load(batches: StorageBatch[]): void {
-    this.transitBatches = batches.filter(b => b.status === 'in_transit')
-    DebugUtils.info(MODULE_NAME, 'Transit batches loaded', {
-      count: this.transitBatches.length
-    })
-  }
-
-  /**
-   * Clear all transit batches (for testing)
-   */
-  clear(): void {
-    this.transitBatches = []
-    DebugUtils.debug(MODULE_NAME, 'Transit batches cleared')
-  }
-
   // ===========================
-  // ID GENERATION (PRIVATE)
+  // ID GENERATION (PRIVATE) - REMOVED DUPLICATES
+  // Methods moved to lines 319-325
   // ===========================
-
-  /**
-   * Generate batch ID with new format: transit-{orderId}-{itemId}-{index}
-   */
-  private generateBatchId(orderId: string, itemId: string, index: number): string {
-    return `transit-${orderId}-${itemId}-${index}`
-  }
-
-  /**
-   * Generate batch number with new format: TRN-{date}-{orderPrefix}-{index}
-   */
-  private generateBatchNumber(orderId: string, index: number): string {
-    const date = new Date()
-    const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
-
-    // Extract order prefix (e.g., "order-123" -> "123", "PO-001" -> "PO001")
-    const orderPrefix = orderId
-      .replace('order-', '')
-      .replace('PO-', 'PO')
-      .replace(/-/g, '')
-      .substring(0, 6)
-      .toUpperCase()
-
-    return `TRN-${dateStr}-${orderPrefix}-${index.toString().padStart(2, '0')}`
-  }
 }
 
 // ===========================

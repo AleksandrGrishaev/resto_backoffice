@@ -745,8 +745,8 @@ export const useStorageStore = defineStore('storage', () => {
   /**
    * Get transit batch statistics
    */
-  function getTransitBatchStatistics() {
-    return transitBatchService.getStatistics()
+  async function getTransitBatchStatistics() {
+    return await transitBatchService.getStatistics()
   }
 
   // ===========================
