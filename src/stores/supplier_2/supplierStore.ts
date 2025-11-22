@@ -360,14 +360,11 @@ export const useSupplierStore = defineStore('supplier', () => {
   }
 
   /**
-   * ✅ UPDATED: Load receipts from mockDataCoordinator (Phase 2: orders removed)
+   * ✅ UPDATED: Load receipts ONLY from mockDataCoordinator (Phase 2: requests & orders migrated)
    */
   async function loadDataFromCoordinator(): Promise<void> {
     try {
-      DebugUtils.info(
-        MODULE_NAME,
-        'Loading data from mockDataCoordinator (orders/receipts only)...'
-      )
+      DebugUtils.info(MODULE_NAME, 'Loading data from mockDataCoordinator (receipts only)...')
 
       const { mockDataCoordinator } = await import('@/stores/shared/mockDataCoordinator')
 
@@ -381,13 +378,12 @@ export const useSupplierStore = defineStore('supplier', () => {
         throw new Error('No supplier data returned from coordinator')
       }
 
-      // Load data into state (REMOVED: requests - now from Supabase)
-      state.value.orders = [...supplierData.orders]
+      // ✅ PHASE 2 FIX: Load ONLY receipts (requests & orders now from Supabase)
+      // ❌ REMOVED: state.value.orders = [...supplierData.orders]
       state.value.receipts = [...supplierData.receipts]
       state.value.orderSuggestions = [...supplierData.suggestions]
 
       DebugUtils.info(MODULE_NAME, 'Data loaded from coordinator successfully', {
-        orders: state.value.orders.length,
         receipts: state.value.receipts.length,
         suggestions: state.value.orderSuggestions.length
       })

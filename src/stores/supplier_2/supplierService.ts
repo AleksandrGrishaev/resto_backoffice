@@ -1158,7 +1158,8 @@ class SupplierService {
             continue
           }
 
-          const orderedQuantity = this.getOrderedQuantityForItem(request.id, item.itemId)
+          // ✅ FIX: Add await (method is async since Phase 2)
+          const orderedQuantity = await this.getOrderedQuantityForItem(request.id, item.itemId)
           const remainingQuantity = item.requestedQuantity - orderedQuantity
 
           console.log(

@@ -361,6 +361,132 @@ async function loadOrders() {
 
 **Actual time:** ~2 hours
 
+**Known Issues (discovered during testing):**
+
+- 🔴 Bug #1: Missing `await` in `createSupplierBaskets()` → shows `[object Promise]` and `NaN` values
+- 🔴 Bug #2: Mock data overwrites Supabase data in `loadDataFromCoordinator()` → orders table shows mock instead of Supabase
+
+**Status:** Requires bug fixes before validation ⚠️
+
+---
+
+### Phase 2 Extension: Bug Fixes ✅ COMPLETED (2025-11-22)
+
+**Purpose:** Fix critical bugs discovered during Phase 2 testing
+
+**Bug #1: Missing await in createSupplierBaskets**
+
+**Problem:**
+
+- Line 1161 in `supplierService.ts` calls `getOrderedQuantityForItem()` WITHOUT `await`
+- Method was made async in Phase 2, but call site wasn't updated
+- Results in `[object Promise]` instead of number, `remaining=NaN`
+
+**Impact:** Basket creation doesn't work, can't create orders from requests
+
+**Fix:**
+
+```typescript
+// Line 1161 - ADD AWAIT:
+const orderedQuantity = await this.getOrderedQuantityForItem(request.id, item.itemId)
+
+// Line ~1100 - MAKE METHOD ASYNC:
+async createSupplierBaskets(requestIds: string[]): Promise<SupplierBasket[]> {
+  // ... existing code
+}
+```
+
+**Files to modify:**
+
+- `src/stores/supplier_2/supplierService.ts` (line 1161, line ~1100)
+- `src/stores/supplier_2/supplierStore.ts` (update calls to await createSupplierBaskets)
+
+---
+
+**Bug #2: Mock data overwrites Supabase data**
+
+**Problem:**
+
+- `loadDataFromCoordinator()` runs AFTER `loadOrders()` in `initialize()`
+- Line 385 overwrites Supabase orders with mock data: `state.value.orders = [...supplierData.orders]`
+- Orders table shows mock data instead of real Supabase data
+
+**Impact:** Phase 2 migration appears not working, UI shows stale mock data
+
+**Fix:**
+
+```typescript
+// Line 385 - REMOVE THIS LINE:
+// state.value.orders = [...supplierData.orders]  // ❌ DELETE
+
+// Keep only receipts (Phase 3 not migrated yet):
+state.value.receipts = [...supplierData.receipts]
+state.value.orderSuggestions = [...supplierData.suggestions]
+```
+
+**Files to modify:**
+
+- `src/stores/supplier_2/supplierStore.ts` (line 385, update comment, update debug log)
+
+---
+
+**Tasks:**
+
+1. ✅ Fix Bug #1: Add await to getOrderedQuantityForItem call
+2. ✅ Fix Bug #1: Make createSupplierBaskets async (already was async)
+3. ✅ Fix Bug #1: Update store calls with await (already had await)
+4. ✅ Fix Bug #2: Remove orders overwrite from loadDataFromCoordinator
+5. ✅ Fix Bug #2: Update comments and debug logs
+6. ✅ Build and validate (no new errors)
+7. ⬜ Test: Create request → Create basket → Create order (USER TESTING)
+8. ⬜ Verify order appears in Supabase (USER TESTING)
+
+**Files Modified:**
+
+- `src/stores/supplier_2/supplierService.ts` (line 1161 - added await)
+- `src/stores/supplier_2/supplierStore.ts` (removed line 385, updated comments and logs)
+- `src/About/todo.md` (documented bugs and fixes)
+
+**Actual time:** ~15 minutes
+
+**What's fixed:**
+
+- ✅ Basket creation now shows correct quantities (not NaN)
+- ✅ Orders table will show Supabase data (not mock)
+- ✅ Can create orders from requests (awaits are correct)
+- ⏳ Needs user testing to verify end-to-end flow
+
+---
+
+### Phase 2.5: Counteragents Migration ⬜ PLANNED (Future)
+
+**Purpose:** Migrate counteragents from mock data to Supabase
+
+**Current Situation:**
+
+- ✅ Table `counteragents` exists in Supabase (created in Phase 0)
+- ❌ `CounteragentsService` uses mock data (`generateCounteragentsMockData()`)
+- ❌ No Supabase mappers for counteragents
+- ❌ No CRUD implementation for Supabase
+
+**Dependencies:**
+
+- Used by `supplierService.getSupplierName()` when creating orders
+- Used in supplier baskets creation
+- Used in CounteragentsView UI
+- Blocks full Supplier Module migration completion
+
+**Why separate phase:**
+
+- Counteragents is a shared dependency (used by Suppliers, Customers, POS)
+- Requires separate migration strategy
+- Should be done after Receipts (Phase 3) to avoid blocking Supplier Module completion
+- Independent validation and testing required
+
+**Recommended timeline:** After Phase 3 and Phase 4 completion
+
+**Estimated time:** 3-4 hours
+
 ---
 
 ### Phase 3: Receipts Migration ⬜ NOT STARTED
