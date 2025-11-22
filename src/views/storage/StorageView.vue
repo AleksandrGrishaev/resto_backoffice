@@ -342,7 +342,16 @@ const displayProductBalances = computed(() => {
   if (showZeroStock.value) {
     return filteredBalances.value
   }
-  return filteredBalances.value.filter(b => b.totalQuantity > 0)
+
+  // ✅ FIXED: Always show products with transit batches, even if zero active stock
+  return filteredBalances.value.filter(b => {
+    // Show if has active stock
+    if (b.totalQuantity > 0) return true
+
+    // Also show if has transit batches (incoming inventory)
+    const hasTransit = storageStore.transitBatches?.some((batch: any) => batch.itemId === b.itemId)
+    return hasTransit
+  })
 })
 
 // ===========================
