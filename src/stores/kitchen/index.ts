@@ -7,7 +7,6 @@ import { useKitchenRealtime } from './useKitchenRealtime'
 import { fromSupabase as orderFromSupabase } from '@/stores/pos/orders/supabaseMappers'
 import { DebugUtils } from '@/utils'
 import { ENV } from '@/config/environment'
-import { MOCK_KITCHEN_ORDERS } from './mocks/kitchenMockData'
 
 const MODULE_NAME = 'KitchenStore'
 
@@ -32,40 +31,25 @@ export const useKitchenStore = defineStore('kitchen', () => {
     try {
       DebugUtils.info(MODULE_NAME, 'Initializing Kitchen system...')
 
-      // Load active orders from Supabase (if enabled)
-      if (ENV.useSupabase) {
-        DebugUtils.info(MODULE_NAME, 'Loading orders from Supabase...')
+      // Load active orders from Supabase
+      DebugUtils.info(MODULE_NAME, 'Loading orders from Supabase...')
 
-        const orders = await kitchenService.getActiveKitchenOrders()
-        posOrdersStore.orders = orders
+      const orders = await kitchenService.getActiveKitchenOrders()
+      posOrdersStore.orders = orders
 
-        DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded from Supabase', {
-          count: orders.length,
-          waiting: orders.filter(o => o.status === 'waiting').length,
-          cooking: orders.filter(o => o.status === 'cooking').length,
-          ready: orders.filter(o => o.status === 'ready').length
-        })
+      DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded from Supabase', {
+        count: orders.length,
+        waiting: orders.filter(o => o.status === 'waiting').length,
+        cooking: orders.filter(o => o.status === 'cooking').length,
+        ready: orders.filter(o => o.status === 'ready').length
+      })
 
-        // Subscribe to realtime updates
-        subscribe((updatedOrder, eventType) => {
-          handleRealtimeUpdate(updatedOrder, eventType)
-        })
+      // Subscribe to realtime updates
+      subscribe((updatedOrder, eventType) => {
+        handleRealtimeUpdate(updatedOrder, eventType)
+      })
 
-        realtimeConnected.value = isConnected.value
-      } else {
-        // Mock data fallback (dev mode)
-        DebugUtils.info(MODULE_NAME, 'Loading mock kitchen orders...', {
-          count: MOCK_KITCHEN_ORDERS.length
-        })
-
-        posOrdersStore.orders = [...MOCK_KITCHEN_ORDERS]
-
-        DebugUtils.info(MODULE_NAME, 'Mock orders loaded', {
-          waiting: MOCK_KITCHEN_ORDERS.filter(o => o.status === 'waiting').length,
-          cooking: MOCK_KITCHEN_ORDERS.filter(o => o.status === 'cooking').length,
-          ready: MOCK_KITCHEN_ORDERS.filter(o => o.status === 'ready').length
-        })
-      }
+      realtimeConnected.value = isConnected.value
 
       initialized.value = true
 
