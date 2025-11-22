@@ -7,7 +7,6 @@
 export { useShiftsStore } from './shiftsStore'
 export { ShiftsService } from './services'
 export { useShiftsComposables } from './composables'
-export { ShiftsMockData } from './mock'
 
 // Export all types
 export type * from './types'

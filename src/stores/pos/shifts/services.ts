@@ -10,7 +10,6 @@ import type {
   PaymentMethodSummary,
   ShiftCorrection
 } from './types'
-import { ShiftsMockData } from './mock'
 import { supabase } from '@/supabase'
 import { getSupabaseErrorMessage } from '@/supabase/config'
 import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
@@ -39,25 +38,16 @@ export class ShiftsService {
   }
 
   // =============================================
-  // ИНИЦИАЛИЗАЦИЯ И MOCK ДАННЫЕ
+  // ИНИЦИАЛИЗАЦИЯ
   // =============================================
 
   /**
-   * Инициализировать сервис и загрузить mock данные если нужно
+   * Инициализировать сервис
+   * Supabase integration handles data loading via loadShifts()
    */
   async initialize(): Promise<ServiceResponse<void>> {
     try {
-      // Проверить есть ли данные
-      const existingShifts = localStorage.getItem(this.STORAGE_KEYS.shifts)
-
-      if (!existingShifts) {
-        // Загрузить mock данные если нет существующих
-        console.log('No existing shifts found, loading mock data...')
-        await this.loadMockData()
-      } else {
-        console.log('Existing shifts found in storage')
-      }
-
+      console.log('✅ Shifts service initialized (Supabase integration active)')
       return { success: true }
     } catch (error) {
       console.error('Failed to initialize shifts service:', error)
@@ -69,32 +59,17 @@ export class ShiftsService {
   }
 
   /**
-   * Загрузить mock данные
-   */
-  async loadMockData(): Promise<ServiceResponse<void>> {
-    try {
-      ShiftsMockData.loadMockData()
-      console.log('Mock shifts data loaded successfully')
-      return { success: true }
-    } catch (error) {
-      console.error('Failed to load mock data:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to load mock data'
-      }
-    }
-  }
-
-  /**
-   * Очистить все данные
+   * Очистить все данные из localStorage
    */
   async clearAllData(): Promise<ServiceResponse<void>> {
     try {
-      ShiftsMockData.clearMockData()
-      console.log('All shifts data cleared')
+      localStorage.removeItem(this.STORAGE_KEYS.shifts)
+      localStorage.removeItem(this.STORAGE_KEYS.transactions)
+      localStorage.removeItem(this.STORAGE_KEYS.currentShift)
+      console.log('✅ All shifts data cleared from localStorage')
       return { success: true }
     } catch (error) {
-      console.error('Failed to clear data:', error)
+      console.error('❌ Failed to clear data:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to clear data'

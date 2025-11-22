@@ -455,25 +455,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
     shift.accountBalances = balances
   }
   /**
-   * Загрузить mock данные (для тестирования)
-   */
-  async function loadMockData(): Promise<ServiceResponse<void>> {
-    try {
-      const result = await shiftsService.loadMockData()
-      if (result.success) {
-        // Перезагрузить смены после загрузки mock данных
-        await loadShifts()
-      }
-      return result
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load mock data'
-      error.value = errorMsg
-      return { success: false, error: errorMsg }
-    }
-  }
-
-  /**
-   * Очистить все данные (для тестирования)
+   * Очистить все данные из localStorage
    */
   async function clearAllData(): Promise<ServiceResponse<void>> {
     try {
@@ -1157,7 +1139,6 @@ export const useShiftsStore = defineStore('posShifts', () => {
     addCorrection,
     getShiftReport,
     clearError,
-    loadMockData,
     clearAllData,
 
     // Sprint 3: Expense Operations
