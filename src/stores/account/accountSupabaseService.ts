@@ -481,6 +481,14 @@ export class AccountSupabaseService {
         notes: data.notes,
         createdBy: data.createdBy,
         assignedToAccount: data.assignedToAccount,
+        // ✅ FIXED: Copy missing fields from CreatePaymentDto
+        usedAmount: data.usedAmount || 0,
+        linkedOrders: data.linkedOrders || [],
+        sourceOrderId: data.sourceOrderId,
+        autoSyncEnabled: data.autoSyncEnabled || false,
+        amountHistory: [],
+        paidAmount: 0,
+        requiresCashierConfirmation: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -503,7 +511,9 @@ export class AccountSupabaseService {
       DebugUtils.info(MODULE_NAME, '✅ Pending payment created in Supabase', {
         id: createdPayment.id,
         amount: createdPayment.amount,
-        status: createdPayment.status
+        status: createdPayment.status,
+        linkedOrdersCount: createdPayment.linkedOrders?.length || 0,
+        sourceOrderId: createdPayment.sourceOrderId
       })
 
       return createdPayment
