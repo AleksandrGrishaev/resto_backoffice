@@ -20,7 +20,7 @@
         prepend-icon="mdi-silverware-fork-knife"
         color="primary"
         class="mb-2"
-        :active-color="variables.colorPrimary"
+        :active-color="colors.primary"
       >
         <template #title>
           <span>Menu</span>
@@ -33,7 +33,7 @@
         prepend-icon="mdi-chef-hat"
         color="primary"
         class="mb-2"
-        :active-color="variables.colorPrimary"
+        :active-color="colors.primary"
       >
         <template #title>
           <span>Preparations</span>
@@ -49,7 +49,7 @@
         prepend-icon="mdi-warehouse"
         color="primary"
         class="mb-2"
-        :active-color="variables.colorPrimary"
+        :active-color="colors.primary"
       >
         <template #title>
           <span>Storage</span>
@@ -65,7 +65,7 @@
         prepend-icon="mdi-truck"
         color="primary"
         class="mb-2"
-        :active-color="variables.colorPrimary"
+        :active-color="colors.primary"
       >
         <template #title>
           <span>Suppliers</span>
@@ -85,7 +85,7 @@
             v-bind="props"
             prepend-icon="mdi-cash-multiple"
             color="primary"
-            :active-color="variables.colorPrimary"
+            :active-color="colors.primary"
           >
             <template #title>
               <span>Sales</span>
@@ -99,7 +99,7 @@
           prepend-icon="mdi-chart-line"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Analytics</span>
@@ -112,7 +112,7 @@
           prepend-icon="mdi-receipt-text"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Transactions</span>
@@ -125,7 +125,7 @@
           prepend-icon="mdi-clock-outline"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Shifts</span>
@@ -138,7 +138,7 @@
           prepend-icon="mdi-file-document-remove"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Write-off History</span>
@@ -153,7 +153,7 @@
             v-bind="props"
             prepend-icon="mdi-folder-open"
             color="primary"
-            :active-color="variables.colorPrimary"
+            :active-color="colors.primary"
           >
             <template #title>
               <span>Catalogs</span>
@@ -167,7 +167,7 @@
           prepend-icon="mdi-book-open-page-variant"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Recipes</span>
@@ -180,7 +180,7 @@
           prepend-icon="mdi-package-variant"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Products</span>
@@ -193,7 +193,7 @@
           prepend-icon="mdi-store"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Counteragents</span>
@@ -206,7 +206,7 @@
           prepend-icon="mdi-cash-register"
           color="primary"
           class="ps-8"
-          :active-color="variables.colorPrimary"
+          :active-color="colors.primary"
         >
           <template #title>
             <span>Payment</span>
@@ -221,7 +221,7 @@
             v-bind="props"
             prepend-icon="mdi-developer-board"
             color="warning"
-            :active-color="variables.colorWarning"
+            :active-color="colors.warning"
           >
             <template #title>
               <span>Developer</span>
@@ -238,7 +238,7 @@
           prepend-icon="mdi-bug"
           color="warning"
           class="ps-8"
-          :active-color="variables.colorWarning"
+          :active-color="colors.warning"
         >
           <template #title>
             <span>Debug Stores</span>
@@ -254,7 +254,7 @@
           prepend-icon="mdi-sync"
           color="warning"
           class="ps-8"
-          :active-color="variables.colorWarning"
+          :active-color="colors.warning"
         >
           <template #title>
             <span>Sync Monitor</span>
@@ -268,7 +268,7 @@
           prepend-icon="mdi-speedometer"
           color="warning"
           class="ps-8"
-          :active-color="variables.colorWarning"
+          :active-color="colors.warning"
           disabled
         >
           <template #title>
@@ -281,7 +281,7 @@
           prepend-icon="mdi-lan"
           color="warning"
           class="ps-8"
-          :active-color="variables.colorWarning"
+          :active-color="colors.warning"
           disabled
         >
           <template #title>
@@ -328,7 +328,12 @@ import NavigationAccounts from './NavigationAccounts.vue'
 import AlertsBadge from './AlertsBadge.vue'
 // ✅ НОВЫЙ: Импорт Debug Stores Badge
 import DebugStoresBadge from './DebugStoresBadge.vue'
-import * as variables from '@/styles/variables.scss'
+
+// Design tokens (matches src/styles/variables.scss)
+const colors = {
+  primary: '#A395E9',
+  warning: '#FFB076'
+}
 
 const MODULE_NAME = 'NavigationMenu'
 

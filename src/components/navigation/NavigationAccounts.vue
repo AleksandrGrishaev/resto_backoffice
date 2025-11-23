@@ -6,7 +6,7 @@
         prepend-icon="mdi-wallet"
         title="Счета"
         color="primary"
-        :active-color="variables.colorPrimary"
+        :active-color="colors.primary"
       />
     </template>
     <v-list-item
@@ -14,7 +14,7 @@
       prepend-icon="mdi-format-list-bulleted"
       color="primary"
       class="mb-2"
-      :active-color="variables.colorPrimary"
+      :active-color="colors.primary"
     >
       <template #title>
         <span>Список счетов</span>
@@ -38,7 +38,7 @@
         :prepend-icon="getAccountIcon(account.type)"
         color="primary"
         class="mb-2"
-        :active-color="variables.colorPrimary"
+        :active-color="colors.primary"
       >
         <template #title>
           <div class="d-flex align-center justify-space-between">
@@ -54,7 +54,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
-import * as variables from '@/styles/variables.scss'
+// Design tokens (matches src/styles/variables.scss)
+const colors = {
+  primary: '#A395E9'
+}
 
 const accountStore = useAccountStore()
 const loading = ref(true)

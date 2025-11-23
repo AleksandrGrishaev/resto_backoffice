@@ -3,7 +3,17 @@ import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import { aliases, mdi } from 'vuetify/iconsets/mdi'
-import * as variables from '@/styles/variables.scss'
+
+// Design tokens (matches src/styles/variables.scss)
+const colors = {
+  primary: '#A395E9',
+  secondary: '#BFB5F2',
+  background: '#141416',
+  surface: '#1A1A1E',
+  error: '#FF9676',
+  success: '#92C9AF',
+  warning: '#FFB076'
+}
 
 export const vuetify = createVuetify({
   components,
@@ -89,13 +99,13 @@ export const vuetify = createVuetify({
       dark: {
         dark: true,
         colors: {
-          background: variables.colorBackground || '#141416',
-          surface: variables.colorSurface || '#1A1A1E',
-          primary: variables.colorPrimary || '#A395E9',
-          secondary: variables.colorSecondary || '#BFB5F2',
-          error: variables.colorError || '#FF9676',
-          success: variables.colorSuccess || '#92C9AF',
-          warning: variables.colorWarning || '#FFB076'
+          background: colors.background,
+          surface: colors.surface,
+          primary: colors.primary,
+          secondary: colors.secondary,
+          error: colors.error,
+          success: colors.success,
+          warning: colors.warning
         }
       }
     }
