@@ -27,7 +27,8 @@ export default defineConfig({
     },
     terserOptions: {
       compress: {
-        drop_console: true,
+        // TEMPORARILY DISABLED for diagnosis - will re-enable after fixing env vars issue
+        // drop_console: true,
         drop_debugger: true
       }
     }

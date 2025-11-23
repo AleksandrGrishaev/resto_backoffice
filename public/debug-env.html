@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Environment Variables Debug - Kitchen App</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New',
+          monospace;
+        background: #141416;
+        color: #fff;
+        padding: 40px 20px;
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        color: #a395e9;
+        margin-bottom: 10px;
+        font-size: 32px;
+      }
+
+      .subtitle {
+        color: #bfb5f2;
+        margin-bottom: 40px;
+        font-size: 16px;
+      }
+
+      .section {
+        background: #1a1a1e;
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+
+      .section h2 {
+        color: #a395e9;
+        font-size: 20px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+
+      .status.ok {
+        background: #92c9af;
+        color: #141416;
+      }
+
+      .status.error {
+        background: #ff9676;
+        color: #141416;
+      }
+
+      .status.warning {
+        background: #ffb076;
+        color: #141416;
+      }
+
+      .var-list {
+        list-style: none;
+      }
+
+      .var-item {
+        background: #0d0d0f;
+        border: 1px solid #222;
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+      }
+
+      .var-name {
+        color: #92c9af;
+        font-weight: 600;
+        flex-shrink: 0;
+        min-width: 250px;
+      }
+
+      .var-value {
+        color: #fff;
+        word-break: break-all;
+        flex-grow: 1;
+        font-size: 13px;
+      }
+
+      .var-value.undefined {
+        color: #ff9676;
+        font-style: italic;
+      }
+
+      .var-value.masked {
+        color: #ffb076;
+      }
+
+      .refresh-btn {
+        background: #a395e9;
+        color: #141416;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .refresh-btn:hover {
+        background: #bfb5f2;
+        transform: translateY(-2px);
+      }
+
+      pre {
+        background: #0d0d0f;
+        border: 1px solid #222;
+        border-radius: 6px;
+        padding: 16px;
+        overflow-x: auto;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .timestamp {
+        color: #666;
+        font-size: 14px;
+        margin-top: 40px;
+        text-align: center;
+      }
+
+      .critical-vars {
+        margin-top: 16px;
+      }
+
+      .critical-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+
+      .icon {
+        font-size: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔍 Environment Variables Debug</h1>
+      <p class="subtitle">
+        This page shows all environment variables available at runtime. Use this to diagnose
+        deployment issues.
+      </p>
+
+      <div class="section">
+        <h2>📊 Critical Variables Status</h2>
+        <div class="critical-vars" id="critical-vars"></div>
+      </div>
+
+      <div class="section">
+        <h2>🌍 All VITE_* Environment Variables</h2>
+        <ul class="var-list" id="vite-vars"></ul>
+      </div>
+
+      <div class="section">
+        <h2>⚙️ import.meta.env (Raw)</h2>
+        <pre id="raw-env"></pre>
+      </div>
+
+      <div class="section">
+        <h2>🌐 Build & Runtime Info</h2>
+        <ul class="var-list">
+          <li class="var-item">
+            <span class="var-name">MODE</span>
+            <span class="var-value" id="mode"></span>
+          </li>
+          <li class="var-item">
+            <span class="var-name">BASE_URL</span>
+            <span class="var-value" id="base-url"></span>
+          </li>
+          <li class="var-item">
+            <span class="var-name">DEV</span>
+            <span class="var-value" id="dev"></span>
+          </li>
+          <li class="var-item">
+            <span class="var-name">PROD</span>
+            <span class="var-value" id="prod"></span>
+          </li>
+          <li class="var-item">
+            <span class="var-name">SSR</span>
+            <span class="var-value" id="ssr"></span>
+          </li>
+        </ul>
+      </div>
+
+      <div style="text-align: center; margin-top: 40px">
+        <button class="refresh-btn" onclick="window.location.reload()">🔄 Refresh</button>
+      </div>
+
+      <p class="timestamp" id="timestamp"></p>
+    </div>
+
+    <script type="module">
+      // This script will have access to import.meta.env after Vite processes it
+      const env = import.meta.env
+
+      // Critical variables to check
+      const criticalVars = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_USE_SUPABASE']
+
+      // Check critical variables
+      const criticalContainer = document.getElementById('critical-vars')
+      criticalVars.forEach((varName) => {
+        const value = env[varName]
+        const exists = value !== undefined && value !== ''
+        const icon = exists ? '✅' : '❌'
+        const status = exists ? 'ok' : 'error'
+        const statusText = exists ? 'OK' : 'MISSING'
+
+        const item = document.createElement('div')
+        item.className = 'critical-item'
+        item.innerHTML = `
+          <span class="icon">${icon}</span>
+          <span class="var-name">${varName}</span>
+          <span class="status ${status}">${statusText}</span>
+        `
+        criticalContainer.appendChild(item)
+      })
+
+      // Display all VITE_* variables
+      const viteVarsContainer = document.getElementById('vite-vars')
+      const viteVars = {}
+      Object.keys(env).forEach((key) => {
+        if (key.startsWith('VITE_')) {
+          viteVars[key] = env[key]
+        }
+      })
+
+      const sortedKeys = Object.keys(viteVars).sort()
+
+      if (sortedKeys.length === 0) {
+        viteVarsContainer.innerHTML =
+          '<li class="var-item"><span class="var-value undefined">No VITE_* variables found!</span></li>'
+      } else {
+        sortedKeys.forEach((key) => {
+          const value = viteVars[key]
+          const li = document.createElement('li')
+          li.className = 'var-item'
+
+          let displayValue = String(value)
+          let valueClass = 'var-value'
+
+          // Mask sensitive values
+          if (key.includes('KEY') || key.includes('SECRET') || key.includes('TOKEN')) {
+            if (value && String(value).length > 20) {
+              displayValue = `${String(value).slice(0, 20)}... [MASKED]`
+              valueClass = 'var-value masked'
+            }
+          }
+
+          // Check if undefined
+          if (value === undefined || value === 'undefined') {
+            displayValue = 'undefined'
+            valueClass = 'var-value undefined'
+          }
+
+          li.innerHTML = `
+            <span class="var-name">${key}</span>
+            <span class="${valueClass}">${displayValue}</span>
+          `
+          viteVarsContainer.appendChild(li)
+        })
+      }
+
+      // Display raw env
+      document.getElementById('raw-env').textContent = JSON.stringify(env, null, 2)
+
+      // Display build info
+      document.getElementById('mode').textContent = env.MODE || 'undefined'
+      document.getElementById('base-url').textContent = env.BASE_URL || 'undefined'
+      document.getElementById('dev').textContent = String(env.DEV)
+      document.getElementById('prod').textContent = String(env.PROD)
+      document.getElementById('ssr').textContent = String(env.SSR)
+
+      // Timestamp
+      document.getElementById('timestamp').textContent = `Generated: ${new Date().toLocaleString()}`
+
+      // Log to console
+      console.log('=== ENVIRONMENT DEBUG INFO ===')
+      console.log('All VITE_* vars:', viteVars)
+      console.log('Critical vars status:', {
+        VITE_SUPABASE_URL: !!env.VITE_SUPABASE_URL,
+        VITE_SUPABASE_ANON_KEY: !!env.VITE_SUPABASE_ANON_KEY,
+        VITE_USE_SUPABASE: !!env.VITE_USE_SUPABASE
+      })
+      console.log('Full import.meta.env:', env)
+    </script>
+  </body>
+</html>
