@@ -43,7 +43,7 @@ jobs:
           VITE_ENABLE_SYNC: true
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dev-build
           path: dist/
