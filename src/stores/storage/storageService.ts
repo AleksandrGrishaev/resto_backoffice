@@ -58,9 +58,6 @@ export class StorageService {
     return this.initialized
   }
 
-  getDefaultWarehouse(): Warehouse {
-    return this.warehouses[0]
-  }
   // ===========================
   // HELPER METHODS (используют базовые единицы)
   // ===========================

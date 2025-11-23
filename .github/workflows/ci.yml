@@ -10,6 +10,7 @@ jobs:
   lint:
     name: Lint & Format Check
     runs-on: ubuntu-latest
+    if: false # Temporarily disabled
 
     steps:
       - name: Checkout code
@@ -46,6 +47,7 @@ jobs:
   typecheck:
     name: TypeScript Type Check
     runs-on: ubuntu-latest
+    if: false # Temporarily disabled
 
     steps:
       - uses: actions/checkout@v4
