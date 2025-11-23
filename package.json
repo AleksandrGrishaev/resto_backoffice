@@ -16,7 +16,7 @@
     "seed": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts",
     "seed:products": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts products",
     "seed:menu": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts menu",
-    "seed:users": "npx tsx --tsconfig tsconfig.scripts.json scripts/seed-users.ts",
+    "seed:users": "npx tsx --env-file=.env.development --tsconfig tsconfig.scripts.json scripts/seed-users.ts",
     "migrate:users": "bash scripts/apply-migration.sh"
   },
   "lint-staged": {
