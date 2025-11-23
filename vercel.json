@@ -4,10 +4,14 @@
   "framework": "vite",
   "devCommand": "pnpm dev",
   "installCommand": "pnpm install --frozen-lockfile",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ],
   "headers": [
