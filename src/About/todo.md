@@ -23,7 +23,7 @@
 
 - ✅ База данных (Supabase dev + prod готовы, 36 таблиц мигрированы)
 - ⚠️ Git workflow (нет веток main/dev)
-- ⚠️ Аутентификация (SERVICE_KEY в dev → Supabase Auth в prod)
+- ✅ **Аутентификация (PHASE 4 completed: Email + PIN auth working in dev)**
 - ⚠️ Offline-first testing (критично!)
 - ⚠️ CI/CD (отсутствует)
 - ✅ Окружения (.env.development и .env.production настроены)
@@ -1001,13 +1001,28 @@ migrateUsers().catch(console.error)
 
 **Deliverables:**
 
-- ✅ Таблица users создана
+- ✅ Таблица users создана (via migration 007_create_users_table.sql)
 - ✅ RLS policies настроены
-- ✅ Функция authenticate_with_pin работает
+- ✅ Функция authenticate_with_pin работает (fixed via apply_migration)
 - ✅ authStore обновлен (email + PIN login)
-- ✅ LoginView поддерживает оба режима
-- ✅ Пользователи мигрированы
+- ✅ LoginView поддерживает три режима (Email, POS PIN, KITCHEN PIN)
+- ✅ Пользователи созданы (6 test users: 2 email + 4 PIN)
 - ✅ Протестирован вход (email и PIN)
+- ✅ Kitchen redirect bug исправлен (redirect to /kitchen instead of /)
+
+**✅ PHASE 4 COMPLETED - 2025-11-23**
+
+**Achievements:**
+- Triple authentication system working in development
+- Email auth: admin@resto.local, manager@resto.local
+- POS PIN auth: Cashiers (PIN 3333, 4444)
+- KITCHEN PIN auth: Kitchen Staff (PIN 1111), Bartender (PIN 2222)
+- All RPC functions properly registered in PostgREST
+- CLAUDE.md updated with RPC best practices
+
+**Critical lesson learned:**
+- Always use `mcp__supabase__apply_migration` for creating RPC functions
+- Functions created manually via SQL Editor are NOT accessible via REST API
 
 ---
 
