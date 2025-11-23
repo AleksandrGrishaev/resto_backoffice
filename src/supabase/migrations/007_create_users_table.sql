@@ -200,13 +200,17 @@ $$;
 -- This ensures users table has RLS enabled from the start
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "users_view_own" ON users;
+DROP POLICY IF EXISTS "users_update_own" ON users;
+
 -- Basic policy: Users can view their own profile
-CREATE POLICY IF NOT EXISTS "users_view_own" ON users
+CREATE POLICY "users_view_own" ON users
   FOR SELECT
   USING (auth.uid() = id);
 
 -- Basic policy: Users can update their own profile
-CREATE POLICY IF NOT EXISTS "users_update_own" ON users
+CREATE POLICY "users_update_own" ON users
   FOR UPDATE
   USING (auth.uid() = id);
 
