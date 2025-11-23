@@ -30,7 +30,8 @@
       "Bash(node migrate_to_production.js:*)",
       "Bash(node migrate_schema.mjs:*)",
       "Bash(combined_migrations.sql)",
-      "Bash(node apply_to_production.mjs:*)"
+      "Bash(node apply_to_production.mjs:*)",
+      "mcp__supabase__get_logs"
     ]
   },
   "enableAllProjectMcpServers": true,
