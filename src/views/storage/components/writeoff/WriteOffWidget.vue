@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { DebugUtils } from '@/utils'
-import WriteoffDialog from './WriteoffDialog.vue'
+import WriteoffDialog from './WriteOffDialog.vue'
 import type { Department } from '@/stores/productsStore/types'
 
 const MODULE_NAME = 'WriteOffWidget'
