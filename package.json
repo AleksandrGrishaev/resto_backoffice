@@ -15,7 +15,9 @@
     "release": "sh release.sh",
     "seed": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts",
     "seed:products": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts products",
-    "seed:menu": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts menu"
+    "seed:menu": "npx tsx --tsconfig tsconfig.scripts.json scripts/seeds/index.ts menu",
+    "seed:users": "npx tsx --tsconfig tsconfig.scripts.json scripts/seed-users.ts",
+    "migrate:users": "bash scripts/apply-migration.sh"
   },
   "lint-staged": {
     "*.{vue,js,ts,cjs,mjs}": [
