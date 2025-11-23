@@ -8,7 +8,7 @@
 
 ## 📍 Current Status
 
-**Phase 5: CI/CD Pipeline Setup** - ⏳ **In Progress** (90% complete)
+**Phase 5: CI/CD Pipeline Setup** - ✅ **COMPLETE** (100%)
 
 ### ✅ Completed Tasks
 
@@ -37,91 +37,120 @@
 - ✅ Temporarily disabled lint/typecheck in CI (build-first approach)
 - ✅ Modified build script to skip type checking (`pnpm build` → vite only)
 - ✅ Local build verification successful (27.84s, 6.7 MB output)
+- ✅ **Vercel Deployment Configured:**
+  - Environment variables configured for Preview
+  - Fixed SCSS import issues (removed problematic `:export` usage)
+  - Removed SERVICE_KEY from Preview environment (critical security fix)
+  - Application successfully deployed to Vercel Preview
+  - Created debug-env.html diagnostic page for troubleshooting
+- ✅ **Dev Deployment Working:** https://resto-backoffice-git-dev-alexs-projects-f4358626.vercel.app
 
 ---
 
 ## 🎯 Current Work Point
 
-**Status:** Vercel configuration ready ✅
-**Next:** Configure Vercel dashboard and deploy ⏳
+**Status:** ✅ **DEV DEPLOYMENT SUCCESSFUL!**
+**Environment:** Preview (dev branch) is live and working
+
+**Deployment URLs:**
+
+- **Dev (Preview):** https://resto-backoffice-git-dev-alexs-projects-f4358626.vercel.app ✅
+- **Debug Page:** https://resto-backoffice-git-dev-alexs-projects-f4358626.vercel.app/debug-env.html ✅
+- **Production:** Not configured yet
 
 **Deployment Strategy: Vercel (Auto-deploy on push)**
 
 ```
-Push to dev → Vercel builds → Deploy to Preview URL (dev environment)
-Push to main → Vercel builds → Deploy to Production URL
+✅ Push to dev → Vercel builds → Deploy to Preview URL
+⏳ Push to main → Vercel builds → Deploy to Production URL (not configured)
 ```
 
-**What we have:**
+## 🐛 Known Issues (Current Session)
 
-- ✅ vercel.json configuration created
-- ✅ VERCEL_SETUP.md guide created
-- ✅ Repository connected to Vercel
-- ✅ GitHub Actions (optional, for CI checks)
+### 1. ⚠️ Debug Logs Not Working in Preview Environment
 
-**What's needed:**
+**Problem:**
 
-1. ⏳ Configure environment variables in Vercel dashboard (see VERCEL_SETUP.md)
-2. ⏳ Push to dev branch to trigger first deployment
-3. ⏳ Verify dev deployment URL works
-4. ⏳ Configure production environment
-5. ⏳ Push to main for production deployment
+- `DebugUtils` detects Preview as "production" mode
+- Console logs are stripped by Terser in production build
+- Environment shows `PROD: true` even for Preview deployments
 
-**Current Issues to Address (non-blocking for deployment):**
+**Impact:**
 
-1. ⚠️ 40 prettier formatting errors (scripts/, src/components/)
-2. ⚠️ 10 TypeScript type errors (AlertsBadge.vue, DateRangePicker.vue, etc.)
-3. ⚠️ 838 ESLint warnings (unused vars, missing prop defaults, implicit any)
+- No debug information in browser console
+- Harder to troubleshoot issues
+
+**Root Cause:**
+
+- Vite's `import.meta.env.DEV` is `false` for production builds
+- Preview deployments use production build with development env vars
+- `DebugUtils.isDev` checks `import.meta.env.DEV` which is always false
+
+**Solution Needed:**
+
+- Detect environment based on `VITE_DEBUG_ENABLED` or `VITE_VERCEL_ENV` instead of `import.meta.env.DEV`
+- Allow debug logs when `VITE_DEBUG_ENABLED=true` regardless of build mode
+
+### 2. ⚠️ Supabase RLS Policy Errors
+
+**Problem:**
+
+- Some tables show "permission denied" errors in console
+- Missing or incomplete Row Level Security policies
+
+**Impact:**
+
+- Limited functionality for some features
+- Data access errors
+
+**Solution Needed:**
+
+- Review Supabase RLS policies for all tables
+- Add missing policies for authenticated users
+- Test with non-admin users
+
+### 3. ⚠️ Code Quality Issues (Non-blocking)
+
+1. 40 prettier formatting errors (scripts/, src/components/)
+2. 10 TypeScript type errors (AlertsBadge.vue, DateRangePicker.vue, etc.)
+3. 838 ESLint warnings (unused vars, missing prop defaults, implicit any)
 
 ---
 
 ## 📋 Next Steps (Priority Order)
 
-### Immediate Tasks (Deployment)
+### Phase 6: Production Deployment & Environment Fixes
 
-#### 1. Configure Vercel Dev Environment ⏳ **NEXT**
+#### 1. Fix Debug Logging for Preview Environment 🔥 **HIGH PRIORITY**
 
-**Follow the detailed guide in `VERCEL_SETUP.md`**
+**Problem:** Debug logs don't work in Preview because it uses production build
 
-Quick steps:
+**Solution:**
 
-1. **Open Vercel Dashboard**: https://vercel.com/dashboard
-2. **Find your project**: `kitchen-app` or `backoffice`
-3. **Configure Settings → Environment Variables**:
-   - Copy all variables from VERCEL_SETUP.md
-   - Select **Preview** environment (for dev branch)
-4. **Configure Git Integration**:
-   - Production Branch: `main`
-   - Preview Branches: Enable for `dev`
+- Modify `DebugUtils` to check `VITE_DEBUG_ENABLED` env var instead of `import.meta.env.DEV`
+- Allow console logs when `VITE_DEBUG_ENABLED=true` regardless of build mode
+- Consider conditional Terser config (strip console only if `VITE_DEBUG_ENABLED !== 'true'`)
 
-#### 2. Deploy to Dev Environment
+**Files to modify:**
 
-```bash
-# Commit Vercel configuration
-git add vercel.json VERCEL_SETUP.md .gitignore TODO.md
-git commit -m "chore(deploy): add Vercel configuration for dev/prod deployment"
-git push origin dev
-```
+- `src/utils/debugger.ts` - Change `isDev` detection logic
+- `vite.config.ts` - Make Terser console stripping conditional (optional)
 
-**Expected Result:**
+#### 2. Review and Fix Supabase RLS Policies ⚠️ **MEDIUM PRIORITY**
 
-- ✅ Vercel automatically detects push to `dev` branch
-- ✅ Build starts (~30-40 seconds)
-- ✅ Deploy to preview URL: `https://backoffice-xyz.vercel.app`
-- ✅ GitHub Actions CI also runs (optional)
+**Problem:** Permission denied errors for some tables
 
-#### 3. Verify Dev Deployment
+**Action Items:**
 
-Open preview URL and check:
+- [ ] Use `/db` command to check which tables have RLS errors
+- [ ] Review RLS policies for affected tables
+- [ ] Add missing policies for authenticated users
+- [ ] Test access with different user roles
+- [ ] Run `mcp__supabase__get_advisors` to check security issues
 
-- ✅ App loads without errors
-- ✅ Login page shows
-- ✅ Supabase connection works
-- ✅ Debug logs visible in console
+#### 3. Configure Production Deployment ⏳ **MEDIUM PRIORITY**
 
-#### 4. Configure Production Environment
-
-After dev works:
+After dev environment is stable:
 
 1. **Add Production Environment Variables** (see VERCEL_SETUP.md)
 2. **Select Production environment** in Vercel dashboard
