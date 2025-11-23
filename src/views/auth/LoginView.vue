@@ -132,11 +132,11 @@
                       Test PINs (Dev Only)
                     </p>
                     <div class="d-flex gap-2 justify-center flex-wrap">
-                      <v-chip size="small" variant="outlined" @click="fillPin('1234')">
-                        Cashier 1 (1234)
+                      <v-chip size="small" variant="outlined" @click="fillPin('3333')">
+                        Cashier 1 (3333)
                       </v-chip>
-                      <v-chip size="small" variant="outlined" @click="fillPin('5678')">
-                        Cashier 2 (5678)
+                      <v-chip size="small" variant="outlined" @click="fillPin('4444')">
+                        Cashier 2 (4444)
                       </v-chip>
                     </div>
                   </div>

@@ -73,11 +73,7 @@ export const useAuthStore = defineStore('auth', () => {
   // Load user profile from Supabase users table
   async function loadUserProfile(userId: string) {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single()
+      const { data, error } = await supabase.from('users').select('*').eq('id', userId).single()
 
       if (error) throw error
 
@@ -148,8 +144,8 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('Too many failed attempts. Please try later.')
       }
 
-      // Call Supabase function to authenticate with PIN
-      const { data, error } = await supabase.rpc('authenticate_with_pin', {
+      // Step 1: Validate PIN and get credentials for Supabase Auth
+      const { data, error } = await supabase.rpc('get_pin_user_credentials', {
         pin_input: pin
       })
 
@@ -168,44 +164,37 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('Invalid PIN')
       }
 
-      const userData = data[0]
+      const credentials = data[0]
 
-      // Create user object
-      const user: User = {
-        id: userData.user_id,
-        name: userData.user_name,
-        email: userData.user_email || undefined,
-        roles: userData.user_roles || [],
-        lastLoginAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        avatarUrl: userData.user_avatar || undefined
-      }
+      // Step 2: Use credentials to sign in via Supabase Auth
+      // This creates a real Supabase session with auth.uid() set
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: credentials.user_email,
+        password: credentials.user_password
+      })
 
-      // Save to state
-      state.value.currentUser = user
-      state.value.isAuthenticated = true
-      state.value.lastLoginAt = user.lastLoginAt
+      if (authError) throw authError
+      if (!authData.user) throw new Error('Failed to create session')
 
-      // Save PIN session to localStorage (for persistence)
-      localStorage.setItem('pin_session', JSON.stringify(user))
-      AuthSessionService.saveSession(user, 'backoffice')
+      DebugUtils.info(MODULE_NAME, 'PIN login successful - Supabase session created', {
+        userId: authData.user.id,
+        email: credentials.user_email,
+        roles: credentials.user_roles,
+        hasAuthSession: !!authData.session
+      })
 
       // Log successful attempt
       AuthSessionService.logLoginAttempt({
         timestamp: new Date().toISOString(),
-        userId: user.id,
+        userId: authData.user.id,
         pin: '***',
         success: true,
         appType: 'backoffice',
         ip: window.location.hostname
       })
 
-      DebugUtils.info(MODULE_NAME, 'PIN login successful', {
-        userId: user.id,
-        roles: user.roles
-      })
-
+      // Note: User data will be loaded via onAuthStateChange listener
+      // No need to manually set state here
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed'
@@ -369,7 +358,7 @@ export const useAuthStore = defineStore('auth', () => {
       const availableUsers = CoreUserService.getActiveUsers()
       DebugUtils.info(MODULE_NAME, 'Default users initialized', {
         count: availableUsers.length,
-        users: availableUsers.map((u) => ({
+        users: availableUsers.map(u => ({
           name: u.name,
           roles: u.roles
         }))

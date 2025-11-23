@@ -1,8 +1,63 @@
 # CLAUDE.md
 
-## how to make sprints
-
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Documentation Structure
+
+The project uses a structured approach to documentation and task management:
+
+### Task Management Files
+
+- **`todo.md`** - General plan, strategy and tactics
+
+  - High-level roadmap
+  - Strategic direction
+  - General tasks without detailed code examples
+  - Long-term goals and phases
+
+- **`NextTodo.md`** - Current sprint with detailed implementation
+
+  - Current sprint tasks
+  - Detailed implementation plans
+  - Code examples and snippets
+  - Step-by-step instructions
+  - Migration queries and SQL
+
+- **`src/About/errors.md`** - All discovered errors and issues
+  - Bug reports
+  - Error logs
+  - Known issues
+  - Workarounds and fixes
+
+### Slash Commands
+
+- **`/todo`** - View or update general project plan (todo.md)
+- **`/next_todo`** - View or update current sprint (NextTodo.md)
+
+## How to Work with Sprints
+
+1. **Planning Phase:**
+
+   - Update `todo.md` with strategic goals
+   - Break down into phases and milestones
+   - Keep it high-level
+
+2. **Sprint Start:**
+
+   - Create/update `NextTodo.md` with current sprint
+   - Add detailed implementation steps
+   - Include code examples, migrations, queries
+
+3. **During Development:**
+
+   - Track errors in `src/About/errors.md`
+   - Update `NextTodo.md` with progress
+   - Mark completed tasks
+
+4. **Sprint Complete:**
+   - Archive sprint details from `NextTodo.md`
+   - Update `todo.md` with next phase
+   - Clean up `NextTodo.md` for next sprint
 
 ## Project Overview
 
@@ -624,6 +679,47 @@ pnpm android        # Run Android app
 - `.env.mobile` - Mobile mode (offline-first, local storage)
 - `.env.development` - Development config
 - `.env.production` - Production config
+
+## Deployment Strategy
+
+### Vercel Hosting
+
+The application is deployed using **Vercel** with automatic deployments:
+
+**Deployment Flow:**
+
+```
+Push to dev  → Vercel Auto-build → Preview Deployment
+Push to main → Vercel Auto-build → Production Deployment
+```
+
+**Environments:**
+
+1. **Preview (Development)**
+
+   - Branch: `dev`
+   - Auto-generated preview URL
+   - Debug enabled
+   - Auto-deploy on every push
+
+2. **Production**
+   - Branch: `main`
+   - Production domain
+   - Debug disabled
+   - Auto-deploy on every push
+
+**Vercel Configuration:**
+
+- Framework: Vite (auto-detected)
+- Build command: `pnpm build`
+- Output directory: `dist`
+- Environment variables: Configured in Vercel Dashboard
+
+**IMPORTANT Security:**
+
+- **NEVER** use `VITE_SUPABASE_SERVICE_KEY` in any Vercel deployment
+- Service keys only for local development
+- All deployed environments use `VITE_SUPABASE_ANON_KEY` with RLS policies
 
 ## Persistence Strategies
 
