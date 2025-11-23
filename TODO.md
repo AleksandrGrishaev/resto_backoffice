@@ -41,6 +41,9 @@ We are now using **Vercel** for all deployments:
 
 - ✅ Supabase integration (dev + prod databases, 36 tables migrated)
 - ✅ Authentication system (Email + PIN auth for POS/Kitchen)
+- ✅ RLS policies fixed (infinite recursion, RPC permissions)
+- ✅ Recipe decomposition formula fixed (ERROR-POS-001)
+- ✅ Negative stock allowed for POS operations
 - ✅ CI/CD workflows (GitHub Actions)
 - ✅ Vercel deployment setup (dev environment)
 - ✅ Fixed critical build errors
@@ -65,17 +68,6 @@ We are now using **Vercel** for all deployments:
 
 - `src/utils/debugger.ts`
 - `vite.config.ts` (optional)
-
-#### 2. Review Supabase RLS Policies
-
-**Problem:** Some tables show permission denied errors
-
-**Action items:**
-
-- Use `/db` command to check affected tables
-- Review and fix RLS policies for authenticated users
-- Run `mcp__supabase__get_advisors` to check security issues
-- Test with different user roles
 
 ### Medium Priority
 
@@ -130,13 +122,7 @@ After code quality is fixed:
 - **Cause:** Production build strips console.log
 - **Fix:** Check `VITE_DEBUG_ENABLED` env var
 
-### 2. Supabase RLS Errors
-
-- **Impact:** Some features have permission errors
-- **Cause:** Missing/incomplete RLS policies
-- **Fix:** Review and update policies
-
-### 3. Code Quality
+### 2. Code Quality
 
 - 40 prettier errors
 - 10 TypeScript errors
@@ -220,10 +206,9 @@ After code quality is fixed:
 ## 🎯 Next Actions
 
 1. **Immediate:** Fix debug logging for Preview environment
-2. **This week:** Review and fix RLS policies
-3. **This week:** Configure production deployment
-4. **Next week:** Code quality cleanup
-5. **Next week:** Documentation updates
+2. **This week:** Configure production deployment
+3. **Next week:** Code quality cleanup
+4. **Next week:** Documentation updates
 
 ---
 
