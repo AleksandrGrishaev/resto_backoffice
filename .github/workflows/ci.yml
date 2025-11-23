@@ -54,7 +54,7 @@ jobs:
           node-version: '20'
       - uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -73,7 +73,7 @@ jobs:
           node-version: '20'
       - uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -97,7 +97,7 @@ jobs:
           node-version: '20'
       - uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 9
 
       - name: Security audit
         run: pnpm audit --audit-level=high
