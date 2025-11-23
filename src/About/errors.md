@@ -17,11 +17,13 @@
 
 ## POS Module
 
-### 🔴 ERROR-POS-001: Write-off fails due to incorrect quantity calculation
+### ✅ ERROR-POS-001: Write-off fails due to incorrect quantity calculation
 
-**Status:** 🔴 Critical - Blocks sales operations
+**Status:** ✅ FIXED - 2025-11-23
 
 **Discovered:** 2025-11-22T23:20:06
+
+**Fixed:** 2025-11-23T15:45:00
 
 **Module:** POS → Sales → Recipe Write-off
 
@@ -36,46 +38,67 @@ Payment → Sales Transaction → Recipe Write-off → Decomposition → Storage
 
 **Example Case:**
 
-- **Menu Item:** French Fries (Regular Portion)
-- **Expected:** Small amount of oil for frying (~20-30ml per portion)
-- **Actual:** System tries to write off 40,000 ml (40 liters!)
-- **Available Stock:** 1,500 ml
-- **Error:** `Insufficient quantity. Need 40000, available 1500`
+- **Menu Item:** Steak with Fries (1 portion)
+- **Expected:** 250g beef steak per portion
+- **Actual:** System tries to write off 62,500g (62.5 kg!)
+- **Available Stock:** 7,100g (7.1 kg)
+- **Error:** `Insufficient quantity. Need 62500, available 7100`
 
 **Technical Details:**
 
 ```javascript
 // Decomposition log shows incorrect multiplication:
 {
-  type: 'product',
-  id: 'olive-oil-id',
-  quantity: 200,      // Base quantity in recipe
-  multiplier: 200     // ❌ Wrong multiplier (should be 1 for single portion)
+  type: 'recipe',
+  id: 'steak-recipe',
+  quantity: 250,      // Recipe portion size (250g)
+  multiplier: 250     // ❌ Wrong! Should be 1 (number of portions sold)
 }
-// Result: 200 * 200 = 40,000 ml instead of 200 ml
+// In decomposeRecipe (line 208):
+await decomposeComposition(menuComp, comp.quantity * quantity)
+// = comp.quantity (250) * quantity (1) = 250 ❌ WRONG MULTIPLIER
+
+// Then in decomposeProduct (line 154):
+totalQuantity = comp.quantity * quantity
+// = 250 (beef in recipe) * 250 (wrong multiplier) = 62,500g ❌
 ```
 
 **Root Cause:**
-Likely issue in preparation recipe composition or decomposition multiplier calculation in `useDecomposition.ts`
+Incorrect multiplier calculation in `useDecomposition.ts`:
+
+- Lines 208 and 249 multiply `comp.quantity * quantity`
+- This creates wrong multiplier: recipe portion size instead of sold quantity
+- Should pass only `quantity` (number of portions sold)
 
 **Impact:**
 
-- All menu items with preparations fail to process payment
+- All menu items with recipes/preparations fail to process payment
 - Sales cannot be completed
 - POS system unusable for items requiring ingredient write-off
 
 **Affected Files:**
 
-- `src/stores/recipes/composables/useDecomposition.ts:114` - Decomposition logic
-- `src/stores/sales/recipeWriteOffStore.ts:129` - Write-off processing
-- `src/stores/storage/storageService.ts:841` - FIFO allocation
+- `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts:208` - decomposeRecipe multiplier
+- `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts:249` - decomposePreparation multiplier
+- `src/stores/storage/storageService.ts:273` - Insufficient quantity check
 
-**Workaround:**
-None - payment processing blocked for affected items
+**Fix Applied:**
 
-**Fix Priority:** 🔥 Urgent - Next sprint
+1. **useDecomposition.ts line 208:** Changed `comp.quantity * quantity` → `quantity`
+2. **useDecomposition.ts line 249:** Changed `comp.quantity * quantity` → `quantity`
+3. **storageService.ts line 273:** Changed `throw new Error` → `DebugUtils.warn` (allow negative stock)
 
-**Related Issues:** None
+**Result:**
+
+```javascript
+// BEFORE: 250 * 250 = 62,500g
+// AFTER:  250 * 1 = 250g ✅
+```
+
+**Secondary Fix:**
+Removed hard block on insufficient quantity in `storageService.ts`. Now logs warning and allows negative stock (intentional for POS operations).
+
+**Related Issues:** ERROR-POS-002
 
 ---
 
@@ -152,9 +175,9 @@ Login as admin/manager instead of cashier (they get all stores loaded)
 
 ## Backoffice Module
 
-### 🔴 ERROR-AUTH-001: Infinite recursion in users table RLS policies
+### ✅ ERROR-AUTH-001: Infinite recursion in users table RLS policies
 
-**Status:** 🔴 Critical - Blocks all authentication
+**Status:** ✅ FIXED - 2025-11-23
 
 **Discovered:** 2025-11-23T14:31:42
 
@@ -219,9 +242,9 @@ Use SECURITY DEFINER function or check user metadata instead of querying users t
 
 ---
 
-### 🔴 ERROR-AUTH-002: RPC function get_pin_user_credentials not found (404)
+### ✅ ERROR-AUTH-002: RPC function get_pin_user_credentials not found (404)
 
-**Status:** 🔴 Critical - Blocks PIN authentication
+**Status:** ✅ FIXED - 2025-11-23
 
 **Discovered:** 2025-11-23T14:31:27
 
@@ -293,16 +316,23 @@ None - PIN login unusable
 ## 📊 Statistics
 
 - **Total Errors:** 4
-- **Critical (🔴):** 4
+- **Fixed (✅):** 3
+- **Open Critical (🔴):** 1
 - **High Priority (🟠):** 0
 - **Medium Priority (🟡):** 0
 - **Low Priority (🟢):** 0
 
 **By Module:**
 
-- POS: 2 errors
-- Backoffice/Auth: 2 errors
+- POS: 2 errors (1 fixed, 1 open)
+- Backoffice/Auth: 2 errors (2 fixed)
 - Kitchen: 0 errors
+
+**Recently Fixed (2025-11-23):**
+
+- ✅ ERROR-POS-001: Recipe decomposition multiplier fix
+- ✅ ERROR-AUTH-001: RLS recursion fix (SECURITY DEFINER function)
+- ✅ ERROR-AUTH-002: RPC permissions fix (GRANT EXECUTE)
 
 ---
 

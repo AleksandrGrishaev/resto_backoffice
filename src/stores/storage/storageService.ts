@@ -272,13 +272,21 @@ export class StorageService {
       // Check if we have enough quantity
       if (remaining > 0) {
         const available = neededQuantity - remaining
-        throw new Error(`Insufficient quantity. Need ${neededQuantity}, available ${available}`)
+        // FIX: Allow negative stock - just log warning instead of throwing error
+        DebugUtils.warn(MODULE_NAME, '⚠️ Insufficient quantity - allowing negative stock', {
+          itemId,
+          needed: neededQuantity,
+          available,
+          shortage: remaining
+        })
+        // Note: This will result in negative stock, which is intentional for POS operations
       }
 
       DebugUtils.info(MODULE_NAME, 'FIFO allocation complete', {
         itemId,
         needed: neededQuantity,
-        batchesUsed: allocations.length
+        batchesUsed: allocations.length,
+        hasShortage: remaining > 0
       })
 
       return {

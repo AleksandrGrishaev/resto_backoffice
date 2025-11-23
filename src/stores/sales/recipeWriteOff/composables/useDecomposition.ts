@@ -205,10 +205,9 @@ export function useDecomposition() {
         unit: recipeComp.unit
       }
 
-      const items = await decomposeComposition(menuComp, comp.quantity * quantity, [
-        ...path,
-        recipe.name
-      ])
+      // FIX: Don't multiply by comp.quantity here - it's already in menuComp.quantity
+      // quantity = soldQuantity (number of portions sold)
+      const items = await decomposeComposition(menuComp, quantity, [...path, recipe.name])
       results.push(...items)
     }
 
@@ -246,10 +245,9 @@ export function useDecomposition() {
         unit: prepIngredient.unit
       }
 
-      const items = await decomposeComposition(menuComp, comp.quantity * quantity, [
-        ...path,
-        preparation.name
-      ])
+      // FIX: Don't multiply by comp.quantity here - it's already in menuComp.quantity
+      // quantity = soldQuantity (number of portions sold)
+      const items = await decomposeComposition(menuComp, quantity, [...path, preparation.name])
       results.push(...items)
     }
 
