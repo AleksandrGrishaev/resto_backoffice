@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --project tsconfig.app.json --noEmit && vite build",
+    "build": "vite build",
+    "build:check": "vue-tsc --project tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
     "prepare": "husky install",
     "format": "prettier --write \"src/**/*.{vue,js,ts,scss}\"",
