@@ -1,4 +1,4 @@
-echo '# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -33,4 +33,8 @@ dist-ssr
 .env.staging
 
 # Keep example for documentation
-!.env.example' > .gitignore
+!.env.example
+
+# Vercel
+.vercel
+*.vercel.json

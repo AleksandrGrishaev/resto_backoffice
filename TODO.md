@@ -42,22 +42,32 @@
 
 ## 🎯 Current Work Point
 
-**Status:** Build works locally and in CI ✅
-**Blocker:** No actual deployment to hosting service yet ❌
+**Status:** Vercel configuration ready ✅
+**Next:** Configure Vercel dashboard and deploy ⏳
+
+**Deployment Strategy: Vercel (Auto-deploy on push)**
+
+```
+Push to dev → Vercel builds → Deploy to Preview URL (dev environment)
+Push to main → Vercel builds → Deploy to Production URL
+```
 
 **What we have:**
 
-```
-Push to dev → GitHub Actions → Build → Upload artifacts to GitHub
-```
+- ✅ vercel.json configuration created
+- ✅ VERCEL_SETUP.md guide created
+- ✅ Repository connected to Vercel
+- ✅ GitHub Actions (optional, for CI checks)
 
-**What we need:**
+**What's needed:**
 
-```
-Push to dev → GitHub Actions → Build → Deploy to Railway/Vercel → Live URL
-```
+1. ⏳ Configure environment variables in Vercel dashboard (see VERCEL_SETUP.md)
+2. ⏳ Push to dev branch to trigger first deployment
+3. ⏳ Verify dev deployment URL works
+4. ⏳ Configure production environment
+5. ⏳ Push to main for production deployment
 
-**Current Issues to Address:**
+**Current Issues to Address (non-blocking for deployment):**
 
 1. ⚠️ 40 prettier formatting errors (scripts/, src/components/)
 2. ⚠️ 10 TypeScript type errors (AlertsBadge.vue, DateRangePicker.vue, etc.)
@@ -67,47 +77,61 @@ Push to dev → GitHub Actions → Build → Deploy to Railway/Vercel → Live U
 
 ## 📋 Next Steps (Priority Order)
 
-### Immediate Tasks (Before Deployment)
+### Immediate Tasks (Deployment)
 
-#### 1. Merge and Test CI/CD ⏳ **NEXT**
+#### 1. Configure Vercel Dev Environment ⏳ **NEXT**
+
+**Follow the detailed guide in `VERCEL_SETUP.md`**
+
+Quick steps:
+
+1. **Open Vercel Dashboard**: https://vercel.com/dashboard
+2. **Find your project**: `kitchen-app` or `backoffice`
+3. **Configure Settings → Environment Variables**:
+   - Copy all variables from VERCEL_SETUP.md
+   - Select **Preview** environment (for dev branch)
+4. **Configure Git Integration**:
+   - Production Branch: `main`
+   - Preview Branches: Enable for `dev`
+
+#### 2. Deploy to Dev Environment
 
 ```bash
-git checkout dev
-git merge claude/supabase-setup-plan-0198QaZiTjA7YSgswtQjwSmq
+# Commit Vercel configuration
+git add vercel.json VERCEL_SETUP.md .gitignore TODO.md
+git commit -m "chore(deploy): add Vercel configuration for dev/prod deployment"
 git push origin dev
 ```
 
 **Expected Result:**
 
-- ✅ Build Test passes (~30s)
-- ✅ Security Audit passes (or warns)
-- ⏸️ Lint skipped (disabled)
-- ⏸️ TypeCheck skipped (disabled)
+- ✅ Vercel automatically detects push to `dev` branch
+- ✅ Build starts (~30-40 seconds)
+- ✅ Deploy to preview URL: `https://backoffice-xyz.vercel.app`
+- ✅ GitHub Actions CI also runs (optional)
 
-#### 2. Configure Deployment (Choose One)
+#### 3. Verify Dev Deployment
 
-**Option A: Railway (Recommended for Backend + Frontend)**
+Open preview URL and check:
 
-- [ ] Create Railway account and project
-- [ ] Get Railway API token
-- [ ] Add `RAILWAY_TOKEN` to GitHub Secrets
-- [ ] Uncomment Railway deployment in workflows
-- [ ] Test deployment → Get URL like `https://resto-backoffice-dev.up.railway.app`
+- ✅ App loads without errors
+- ✅ Login page shows
+- ✅ Supabase connection works
+- ✅ Debug logs visible in console
 
-**Option B: Vercel (Fastest for Frontend)**
+#### 4. Configure Production Environment
 
-- [ ] Create Vercel account
-- [ ] Connect GitHub repository
-- [ ] Configure environment variables in Vercel dashboard
-- [ ] Auto-deployment on push (no workflow changes needed)
-- [ ] Get preview URL instantly
+After dev works:
 
-**Option C: Netlify (Alternative)**
+1. **Add Production Environment Variables** (see VERCEL_SETUP.md)
+2. **Select Production environment** in Vercel dashboard
+3. **Push to main branch** for production deployment
 
-- [ ] Create Netlify account
-- [ ] Connect GitHub repository
-- [ ] Configure build settings
-- [ ] Auto-deployment on push
+```bash
+git checkout main
+git merge dev
+git push origin main
+```
 
 #### 3. Fix Code Quality Issues (After Deployment Works)
 
@@ -272,13 +296,38 @@ ci: CI/CD changes
 
 **Environment Variables Required:**
 
-- `VITE_SUPABASE_URL` - Supabase project URL
-- `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `VITE_SUPABASE_SERVICE_KEY` - Supabase service key (dev only!)
+**Core:**
+
+- `VITE_APP_TITLE` - Application title
+- `VITE_PLATFORM` - Platform (web/mobile)
 - `VITE_USE_SUPABASE` - Enable Supabase integration
-- `VITE_DEBUG_ENABLED` - Enable debug mode (dev only)
+
+**Supabase (Dev):**
+
+- `VITE_SUPABASE_URL` - Dev Supabase URL
+- `VITE_SUPABASE_ANON_KEY` - Dev anonymous key
+- `VITE_SUPABASE_SERVICE_KEY` - Dev service key (dev only!)
+
+**Supabase (Prod):**
+
+- `VITE_SUPABASE_URL` - Prod Supabase URL
+- `VITE_SUPABASE_ANON_KEY` - Prod anonymous key
+- NO service key in production!
+
+**Debug (Dev only):**
+
+- `VITE_DEBUG_ENABLED` - Enable debug mode
+- `VITE_DEBUG_STORES` - Enable store debugging
+- `VITE_SHOW_DEV_TOOLS` - Show dev tools
+
+**See VERCEL_SETUP.md for complete list of environment variables**
 
 ---
 
 **Last Commit:** `68e2f15 - fix(build): resolve critical errors + disable CI lint/typecheck`
-**Next Action:** Merge to dev → Test CI/CD → Configure deployment
+**Next Action:** Configure Vercel environment variables → Push to dev → Verify deployment
+
+**Deployment URLs:**
+
+- Dev (Preview): Will be available after first deployment (https://backoffice-xyz.vercel.app)
+- Production: Will be configured after dev is stable
