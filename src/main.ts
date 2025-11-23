@@ -17,12 +17,16 @@ import { vuetify } from '@/plugins/vuetify'
 // App
 import App from './App.vue'
 import { DebugUtils } from './utils'
+import { validateEnvironment } from '@/config/validateEnv'
 
 const MODULE_NAME = 'Main'
 
 // ===== МИНИМАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ =====
 function initializeApp() {
   try {
+    // CRITICAL: Validate environment before anything else
+    validateEnvironment()
+
     DebugUtils.info(MODULE_NAME, '🏁 Starting minimal application bootstrap')
 
     const app = createApp(App)
