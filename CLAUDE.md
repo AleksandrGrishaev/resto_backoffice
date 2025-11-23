@@ -354,6 +354,11 @@ mcp__supabase__get_advisors({ type: 'security' }) // Check RLS policies, etc.
 - Use `apply_migration` for DDL operations (CREATE, ALTER, DROP)
 - Run `get_advisors` regularly after schema changes to catch missing RLS policies
 - Use prepared statements or parameterized queries to prevent SQL injection
+- **CRITICAL: Always use `apply_migration` for creating RPC functions (stored procedures)**
+  - Functions created manually via SQL Editor are NOT registered in PostgREST
+  - They will NOT be accessible via Supabase REST API (`.rpc()` calls)
+  - Use migrations to ensure functions are properly registered and accessible
+  - Example: `mcp__supabase__apply_migration({ name: 'create_auth_functions', query: 'CREATE FUNCTION ...' })`
 
 **Quick command:** Use `/db` slash command for common database operations (see `.claude/commands/db.md`)
 
