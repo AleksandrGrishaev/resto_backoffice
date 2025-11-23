@@ -317,7 +317,7 @@ const handleKitchenPinLogin = async (pin: string) => {
       DebugUtils.info(MODULE_NAME, 'Kitchen PIN login successful')
 
       // Redirect to kitchen dashboard or intended page
-      const redirectPath = (route.query.redirect as string) || '/' // Kitchen dashboard
+      const redirectPath = (route.query.redirect as string) || '/kitchen'
       await router.push(redirectPath)
     } else {
       throw new Error(authStore.state.error || 'Invalid PIN')
