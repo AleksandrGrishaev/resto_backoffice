@@ -26,7 +26,11 @@
       "Bash(pnpm seed:products:*)",
       "mcp__supabase__list_migrations",
       "Bash(code --list-extensions)",
-      "mcp__supabase__get_advisors"
+      "mcp__supabase__get_advisors",
+      "Bash(node migrate_to_production.js:*)",
+      "Bash(node migrate_schema.mjs:*)",
+      "Bash(combined_migrations.sql)",
+      "Bash(node apply_to_production.mjs:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

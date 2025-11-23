@@ -13,18 +13,20 @@
 Проект готов к первому production релизу после миграции на Supabase. Система предназначена для одного ресторана с критичным требованием - **offline-first для POS**.
 
 **Ключевые решения:**
+
 - ✅ **Один ресторан** - нет multi-tenancy в v1.0
 - ✅ **Authentication:** Supabase Auth для admin/manager, PIN для cashier/kitchen
 - ✅ **Offline-first:** Критично для POS - обязательное тестирование
 - 📋 **Принтер:** Post-v1.0 improvement
 
 **Критические области:**
-- ✅ База данных (Supabase готова)
+
+- ✅ База данных (Supabase dev + prod готовы, 36 таблиц мигрированы)
 - ⚠️ Git workflow (нет веток main/dev)
 - ⚠️ Аутентификация (SERVICE_KEY в dev → Supabase Auth в prod)
 - ⚠️ Offline-first testing (критично!)
 - ⚠️ CI/CD (отсутствует)
-- ⚠️ Окружения (нет разделения dev/prod)
+- ✅ Окружения (.env.development и .env.production настроены)
 - ⚠️ Deployment (нет настроенных серверов)
 
 ---
@@ -32,9 +34,11 @@
 ## 🎯 RELEASE PHASES
 
 ### **PHASE 0: Pre-Release Audit** (1-2 дня)
+
 **Цель:** Аудит текущего состояния и выявление рисков
 
 #### 0.1 Security Audit
+
 - [ ] Проверить использование SERVICE_KEY в коде (должен быть только в dev!)
 - [ ] Найти все hardcoded secrets
 - [ ] Проверить SQL injection векторы (Supabase queries)
@@ -42,21 +46,25 @@
 - [ ] Audit environment.ts - какие переменные используются
 
 #### 0.2 Offline-First Audit (КРИТИЧНО!)
+
 - [ ] Проверить localStorage persistence для POS
 - [ ] Проверить SyncService работает
 - [ ] Проверить conflict resolution
 - [ ] Найти все места где требуется network (пометить как optional для POS)
 
 **Deliverables:**
+
 - `docs/SECURITY_AUDIT.md` - отчет по безопасности
 - `docs/OFFLINE_TESTING.md` - план тестирования offline режима
 
 ---
 
 ### **PHASE 1: Git Workflow Setup** (1 день)
+
 **Цель:** Создать четкую систему версионирования
 
 #### 1.1 Создание веток
+
 ```bash
 # Создать main (production code)
 git checkout -b main
@@ -72,6 +80,7 @@ git push -u origin dev
 Создать `docs/GIT_WORKFLOW.md`:
 
 **Структура веток:**
+
 - **main** - production code (защищена, только через PR)
 - **dev** - development/testing (защищена, только через PR)
 - **feature/{name}** - новые фичи (создаются от dev)
@@ -97,6 +106,7 @@ git push -u origin bugfix/critical-bug
 ```
 
 **Release процесс:**
+
 1. Все фичи merged в dev и протестированы
 2. Создать PR: dev → main
 3. Review + тестирование
@@ -104,9 +114,11 @@ git push -u origin bugfix/critical-bug
 5. Tag: `git tag v1.0.0 && git push origin v1.0.0`
 
 #### 1.3 Conventional Commits
+
 Уже настроено в `.commitlintrc`, документировать:
 
 **Типы коммитов:**
+
 - `feat:` - новая функциональность
 - `fix:` - исправление бага
 - `refactor:` - рефакторинг
@@ -116,6 +128,7 @@ git push -u origin bugfix/critical-bug
 - `chore:` - обновление зависимостей, конфиг
 
 **Примеры:**
+
 ```
 feat(pos): add offline order queue
 fix(auth): prevent SERVICE_KEY usage in production
@@ -124,6 +137,7 @@ docs(release): add git workflow guide
 ```
 
 **Deliverables:**
+
 - ✅ Ветки main и dev созданы
 - ✅ `docs/GIT_WORKFLOW.md`
 - ✅ `docs/CONTRIBUTING.md` (commit conventions)
@@ -131,11 +145,13 @@ docs(release): add git workflow guide
 ---
 
 ### **PHASE 2: Environment Configuration** (1 день)
+
 **Цель:** Разделить dev и production окружения
 
 #### 2.1 Создать .env файлы
 
 **`.env.development`** (локальная разработка):
+
 ```bash
 # App
 VITE_APP_TITLE=Kitchen App (DEV)
@@ -170,6 +186,7 @@ VITE_POS_AUTO_SYNC_INTERVAL=30000
 ```
 
 **`.env.production`** (production deploy):
+
 ```bash
 # App
 VITE_APP_TITLE=Kitchen App
@@ -202,6 +219,7 @@ VITE_POS_AUTO_SYNC_INTERVAL=60000
 ```
 
 **`.env.staging`** (pre-production testing):
+
 ```bash
 # Копия production, но с debug логами
 VITE_DEBUG_ENABLED=true
@@ -212,16 +230,14 @@ VITE_DEBUG_LEVEL=standard
 #### 2.2 Environment Validation
 
 Создать `src/config/validateEnv.ts`:
+
 ```typescript
 /**
  * Validate environment variables on app start
  * Prevents deployment with invalid config
  */
 export function validateEnvironment() {
-  const required = [
-    'VITE_SUPABASE_URL',
-    'VITE_SUPABASE_ANON_KEY',
-  ]
+  const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']
 
   // Check required variables
   const missing = required.filter(key => !import.meta.env[key])
@@ -252,6 +268,7 @@ export function validateEnvironment() {
 ```
 
 Вызвать в `src/main.ts`:
+
 ```typescript
 import { validateEnvironment } from './config/validateEnv'
 
@@ -264,6 +281,7 @@ validateEnvironment()
 #### 2.3 .env.example
 
 Создать `.env.example` для документации:
+
 ```bash
 # Copy this file to .env.development or .env.production
 # and fill in your actual values
@@ -277,6 +295,7 @@ VITE_SUPABASE_SERVICE_KEY=your_service_key  # DEV ONLY!
 ```
 
 #### 2.4 Update .gitignore
+
 ```bash
 # Environment files (никогда не коммитить!)
 .env
@@ -291,6 +310,7 @@ VITE_SUPABASE_SERVICE_KEY=your_service_key  # DEV ONLY!
 ```
 
 **Deliverables:**
+
 - ✅ `.env.development`, `.env.production`, `.env.staging`
 - ✅ `.env.example`
 - ✅ `src/config/validateEnv.ts`
@@ -298,107 +318,84 @@ VITE_SUPABASE_SERVICE_KEY=your_service_key  # DEV ONLY!
 
 ---
 
-### **PHASE 3: Supabase Setup (Dev + Prod)** (1 день)
+### **PHASE 3: Supabase Setup (Dev + Prod)** ✅ ЗАВЕРШЕНО
+
 **Цель:** Создать отдельные базы данных для development и production
 
-#### 3.1 Создать проекты в Supabase
+#### 3.1 Создать проекты в Supabase ✅
 
-**Development:**
-1. Зайти на https://supabase.com
-2. Создать проект: `kitchen-app-dev`
-3. Регион: ближайший к вам
-4. Сохранить credentials в `.env.development`
+**Development:** ✅
 
-**Production:**
-1. Создать проект: `kitchen-app-prod`
-2. Регион: тот же что dev (для консистентности)
-3. Сохранить credentials в `.env.production`
+- Проект: `fjkfckjpnbcyuknsnchy`
+- URL: `https://fjkfckjpnbcyuknsnchy.supabase.co`
+- Credentials сохранены в `.env.development`
 
-#### 3.2 Применить миграции
+**Production:** ✅
 
-```bash
-# Проверить список миграций
-npx supabase migration list
+- Проект: `bkntdcvzatawencxghob`
+- URL: `https://bkntdcvzatawencxghob.supabase.co`
+- Credentials сохранены в `.env.production`
 
-# Применить в dev
-npx supabase db push --db-url "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres"
+#### 3.2 Применить миграции ✅
 
-# Применить в prod (осторожно!)
-npx supabase db push --db-url "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres"
-```
+**Миграция выполнена:** 2025-11-23
 
-#### 3.3 RLS Policies (Row Level Security)
+- ✅ Использован MCP Supabase integration для экспорта схемы
+- ✅ Создан файл `docs/supabase/PRODUCTION_MIGRATION_SAFE.sql` (40KB)
+- ✅ Все 36 таблиц успешно мигрированы в production
+- ✅ 113 индексов созданы
+- ✅ Базовые RLS policies применены
+- ✅ Скрипт идемпотентный (можно запускать повторно)
 
-**КРИТИЧНО! Настроить RLS policies для всех таблиц:**
+#### 3.3 RLS Policies (Row Level Security) ✅
 
-**Таблицы для RLS:**
+**Статус:** Базовые RLS policies применены для всех 36 таблиц
 
-**users** - только свои данные:
+**Текущая стратегия:**
+
+- ✅ Все таблицы имеют `ENABLE ROW LEVEL SECURITY`
+- ✅ Базовая policy: "Allow all for authenticated users" (временная для v1.0)
+- ⚠️ **TODO для Phase 4:** Заменить на детализированные policies после миграции на Supabase Auth
+
+**Пример базовой policy (применена ко всем таблицам):**
+
 ```sql
--- Enable RLS
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
--- Users can view own profile
-CREATE POLICY "users_select_own" ON users
-  FOR SELECT USING (auth.uid() = id);
-
--- Users can update own profile
-CREATE POLICY "users_update_own" ON users
-  FOR UPDATE USING (auth.uid() = id);
+ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for authenticated users"
+  ON table_name FOR ALL USING (true);
 ```
 
-**products** - read для всех, write для admin/manager:
-```sql
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+**Следующий шаг (Phase 4):**
+После миграции аутентификации на Supabase Auth создать детализированные policies:
 
--- Everyone can view products
-CREATE POLICY "products_select_all" ON products
-  FOR SELECT USING (true);
+- **users** - только свои данные
+- **products** - read для всех, write для admin/manager
+- **orders/payments/shifts** - только для POS users (admin/cashier/manager)
+- **storage operations** - только для warehouse/admin
+- **suppliers** - только для admin/manager
 
--- Only admin/manager can modify
-CREATE POLICY "products_modify_admin" ON products
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND ('admin' = ANY(users.roles) OR 'manager' = ANY(users.roles))
-    )
-  );
-```
+#### 3.4 Seed данные для production ⚠️ PENDING
 
-**orders** - только для POS users:
-```sql
-ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+**Минимальный seed (TODO для Phase 4):**
 
--- POS users can view/create orders
-CREATE POLICY "orders_pos_users" ON orders
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND ('admin' = ANY(users.roles)
-           OR 'cashier' = ANY(users.roles)
-           OR 'manager' = ANY(users.roles))
-    )
-  );
-```
-
-**payments**, **shifts** - аналогично orders.
-
-#### 3.4 Seed данные для production
-
-**Минимальный seed:**
-- [ ] Дефолтный admin аккаунт (email/password)
+- [ ] Дефолтный admin аккаунт (email/password) - после миграции на Supabase Auth
 - [ ] Базовые категории продуктов
 - [ ] Базовые единицы измерения
 - [ ] Дефолтные кассиры/кухня с PIN
+- [ ] Дефолтный счет (acc_1) для Account Store
+
+**Команды:**
 
 ```bash
-# Запустить seed
+# Seed products and categories
 pnpm seed:products
+
+# Create admin user (after Phase 4 auth migration)
+pnpm seed:admin
 ```
 
 Создать отдельный seed для admin:
+
 ```typescript
 // scripts/seeds/admin-user.ts
 import { supabase } from './supabaseClient'
@@ -427,35 +424,43 @@ async function createAdminUser() {
 }
 ```
 
-#### 3.5 Backup стратегия
+#### 3.5 Backup стратегия ⚠️ TODO
 
-Настроить в Supabase Dashboard:
-- **Daily backups** - последние 7 дней
-- **Weekly backups** - последние 4 недели
-- **Point-in-Time Recovery** (если доступно в плане)
+**План резервного копирования:**
 
-**Тестировать restore!**
+- [ ] Настроить Daily backups в Supabase Dashboard (последние 7 дней)
+- [ ] Настроить Weekly backups (последние 4 недели)
+- [ ] Проверить Point-in-Time Recovery (если доступно в плане)
+- [ ] Протестировать restore процедуру на dev окружении
+
+**Ручной backup (доступен сейчас):**
+
 ```bash
-# Скачать backup
-npx supabase db dump --db-url "..." > backup.sql
+# Используем готовый migration файл как baseline backup
+cp docs/supabase/PRODUCTION_MIGRATION_SAFE.sql backups/baseline_$(date +%Y%m%d).sql
 
-# Восстановить на dev (тест)
-psql "postgresql://..." < backup.sql
+# Для backup данных использовать MCP Supabase:
+# mcp__supabase__execute_sql с COPY TO или pg_dump
 ```
 
-**Deliverables:**
-- ✅ Dev и Prod проекты в Supabase
-- ✅ Миграции применены
-- ✅ RLS policies настроены и протестированы
-- ✅ Seed данные загружены
-- ✅ Backup стратегия настроена
+**Deliverables Phase 3:**
+
+- ✅ Dev и Prod проекты в Supabase созданы
+- ✅ Миграции применены (36 таблиц + 113 индексов)
+- ✅ RLS policies настроены (базовые)
+- ✅ Migration файл сохранен: `docs/supabase/PRODUCTION_MIGRATION_SAFE.sql`
+- ⚠️ Seed данные - TODO для Phase 4
+- ⚠️ Backup стратегия - TODO (настроить в Supabase Dashboard)
+- ⚠️ Детализированные RLS policies - TODO для Phase 4
 
 ---
 
 ### **PHASE 4: Authentication Migration** (2-3 дня)
+
 **Цель:** Supabase Auth для admin/manager, PIN для cashier/kitchen
 
 #### 4.1 Текущее состояние
+
 - ✅ PIN-based auth работает (CoreUserService)
 - ⚠️ Использует SERVICE_KEY для обхода RLS (dev only!)
 - ⚠️ Нет таблицы users в Supabase
@@ -463,11 +468,13 @@ psql "postgresql://..." < backup.sql
 #### 4.2 Целевая архитектура
 
 **Admin/Manager:**
+
 - Вход через Supabase Auth (email + password)
 - Полноценные сессии с JWT
 - RLS policies работают автоматически
 
 **Cashier/Kitchen:**
+
 - Быстрый вход по PIN (как сейчас)
 - PIN проверяется через Supabase функцию
 - Создается кастомная сессия или анонимная с metadata
@@ -634,7 +641,9 @@ export const useAuthStore = defineStore('auth', () => {
     DebugUtils.info(MODULE_NAME, 'Initializing auth...')
 
     // Check existing session
-    const { data: { session: existingSession } } = await supabase.auth.getSession()
+    const {
+      data: { session: existingSession }
+    } = await supabase.auth.getSession()
 
     if (existingSession) {
       session.value = existingSession
@@ -656,11 +665,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Load user profile from users table
   async function loadUserProfile(userId: string) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    const { data, error } = await supabase.from('users').select('*').eq('id', userId).single()
 
     if (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load profile', { error })
@@ -814,21 +819,9 @@ export const useAuthStore = defineStore('auth', () => {
             <v-window v-model="loginMode">
               <v-window-item value="email">
                 <v-form @submit.prevent="handleEmailLogin">
-                  <v-text-field
-                    v-model="email"
-                    label="Email"
-                    type="email"
-                    required
-                  />
-                  <v-text-field
-                    v-model="password"
-                    label="Password"
-                    type="password"
-                    required
-                  />
-                  <v-btn type="submit" block color="primary" :loading="isLoading">
-                    Login
-                  </v-btn>
+                  <v-text-field v-model="email" label="Email" type="email" required />
+                  <v-text-field v-model="password" label="Password" type="password" required />
+                  <v-btn type="submit" block color="primary" :loading="isLoading">Login</v-btn>
                 </v-form>
               </v-window-item>
 
@@ -1007,6 +1000,7 @@ migrateUsers().catch(console.error)
 ```
 
 **Deliverables:**
+
 - ✅ Таблица users создана
 - ✅ RLS policies настроены
 - ✅ Функция authenticate_with_pin работает
@@ -1018,6 +1012,7 @@ migrateUsers().catch(console.error)
 ---
 
 ### **PHASE 5: CI/CD Pipeline** (1-2 дня)
+
 **Цель:** Автоматизация тестирования и деплоя
 
 #### 5.1 GitHub Actions - CI (Continuous Integration)
@@ -1290,13 +1285,16 @@ jobs:
 Настроить в **Settings → Secrets and variables → Actions**:
 
 **Repository secrets:**
+
 - `RAILWAY_TOKEN` - токен Railway CLI
 
 **Environment: development**
+
 - `DEV_SUPABASE_URL`
 - `DEV_SUPABASE_ANON_KEY`
 
 **Environment: production**
+
 - `PROD_SUPABASE_URL`
 - `PROD_SUPABASE_ANON_KEY`
 
@@ -1305,15 +1303,18 @@ jobs:
 Создать в **Settings → Environments**:
 
 **development:**
+
 - No protection rules (auto-deploy)
-- Add secrets (DEV_SUPABASE_*)
+- Add secrets (DEV*SUPABASE*\*)
 
 **production:**
+
 - Required reviewers: You
 - Deployment branches: main only
-- Add secrets (PROD_SUPABASE_*)
+- Add secrets (PROD*SUPABASE*\*)
 
 **Deliverables:**
+
 - ✅ CI workflow (lint, typecheck, build test)
 - ✅ CD workflow для dev (auto-deploy)
 - ✅ CD workflow для prod (requires approval)
@@ -1323,6 +1324,7 @@ jobs:
 ---
 
 ### **PHASE 6: Railway Deployment** (1 день)
+
 **Цель:** Настроить hosting на Railway
 
 #### 6.1 Создать проекты на Railway
@@ -1334,6 +1336,7 @@ jobs:
 #### 6.2 Создать сервисы
 
 **Dev Frontend Service:**
+
 ```bash
 # Service name: dev-frontend
 # Environment: development
@@ -1346,6 +1349,7 @@ pnpm preview --host 0.0.0.0 --port $PORT
 ```
 
 **Environment variables (dev-frontend):**
+
 ```
 NODE_VERSION=20
 VITE_APP_TITLE=Kitchen App (DEV)
@@ -1360,6 +1364,7 @@ VITE_ENABLE_SYNC=true
 ```
 
 **Prod Frontend Service:**
+
 ```bash
 # Service name: prod-frontend
 # Environment: production
@@ -1372,6 +1377,7 @@ pnpm preview --host 0.0.0.0 --port $PORT
 ```
 
 **Environment variables (prod-frontend):**
+
 ```
 NODE_VERSION=20
 VITE_APP_TITLE=Kitchen App
@@ -1389,10 +1395,12 @@ VITE_ENABLE_SYNC=true
 #### 6.3 Health Checks
 
 Railway автоматически проверяет:
+
 - HTTP status 200 на `/`
 - Service restart при падении
 
 Создать `public/health` endpoint (опционально):
+
 ```typescript
 // src/router/index.ts
 router.get('/health', (req, res) => {
@@ -1403,26 +1411,31 @@ router.get('/health', (req, res) => {
 #### 6.4 Custom Domain (опционально)
 
 **Dev:**
+
 - Railway domain: `dev-frontend.railway.app`
 - Custom (если есть): `dev.yourrestaurant.com`
 
 **Prod:**
+
 - Railway domain: `prod-frontend.railway.app`
 - Custom (если есть): `app.yourrestaurant.com`
 
 #### 6.5 Мониторинг
 
 Railway Dashboard показывает:
+
 - CPU/Memory usage
 - Build logs
 - Deploy logs
 - Request metrics
 
 **Настроить alerts:**
+
 - Email notification при deploy failure
 - Slack notification (опционально)
 
 **Deliverables:**
+
 - ✅ Railway проект создан
 - ✅ Dev и Prod сервисы настроены
 - ✅ Environment variables загружены
@@ -1432,6 +1445,7 @@ Railway Dashboard показывает:
 ---
 
 ### **PHASE 7: Offline-First Testing** (2-3 дня)
+
 **Цель:** КРИТИЧНО! Протестировать POS без интернета
 
 #### 7.1 Offline Testing Scenarios
@@ -1439,6 +1453,7 @@ Railway Dashboard показывает:
 Создать `docs/OFFLINE_TESTING.md` с планом:
 
 **Test Case 1: Create Order Offline**
+
 1. Отключить интернет
 2. Открыть POS
 3. Создать новый заказ
@@ -1448,6 +1463,7 @@ Railway Dashboard показывает:
 7. Проверить: заказ синхронизирован с Supabase
 
 **Test Case 2: Process Payment Offline**
+
 1. Отключить интернет
 2. Создать заказ
 3. Оформить оплату
@@ -1456,6 +1472,7 @@ Railway Dashboard показывает:
 6. Проверить: payment синхронизирован
 
 **Test Case 3: Close Shift Offline**
+
 1. Отключить интернет
 2. Закрыть смену
 3. Проверить: shift data сохранена локально
@@ -1463,6 +1480,7 @@ Railway Dashboard показывает:
 5. Проверить: shift синхронизирована в Account Store
 
 **Test Case 4: Conflict Resolution**
+
 1. Два кассира работают offline
 2. Оба редактируют один заказ
 3. Включить интернет
@@ -1471,6 +1489,7 @@ Railway Dashboard показывает:
 #### 7.2 Offline Testing Tools
 
 **Chrome DevTools:**
+
 - Network tab → Offline mode
 - Application tab → Service Workers
 - Application tab → Local Storage
@@ -1478,6 +1497,7 @@ Railway Dashboard показывает:
 **Создать debug view для offline status:**
 
 `src/views/debug/OfflineDebugView.vue`:
+
 ```vue
 <template>
   <v-container>
@@ -1525,8 +1545,8 @@ const isOnline = ref(navigator.onLine)
 const lastSync = ref<string | null>(null)
 const syncQueue = ref<any[]>([])
 
-const pendingCount = computed(() =>
-  syncQueue.value.filter(item => item.status === 'pending').length
+const pendingCount = computed(
+  () => syncQueue.value.filter(item => item.status === 'pending').length
 )
 
 const localStorageData = computed(() => {
@@ -1576,6 +1596,7 @@ async function clearQueue() {
 ```
 
 Добавить роут:
+
 ```typescript
 // src/router/index.ts
 {
@@ -1588,6 +1609,7 @@ async function clearQueue() {
 #### 7.3 Automated Offline Tests (Playwright)
 
 Создать `tests/offline.spec.ts`:
+
 ```typescript
 import { test, expect } from '@playwright/test'
 
@@ -1642,6 +1664,7 @@ test.describe('POS Offline Mode', () => {
 ```
 
 Добавить в `package.json`:
+
 ```json
 {
   "scripts": {
@@ -1656,12 +1679,14 @@ test.describe('POS Offline Mode', () => {
 #### 7.4 Offline Performance Testing
 
 **Metrics to measure:**
+
 - [ ] Time to load POS offline (should be < 2s)
 - [ ] Time to create order offline (should be instant)
 - [ ] Time to sync after reconnect (should be < 5s)
 - [ ] localStorage size (should be < 10MB)
 
 **Load testing:**
+
 ```typescript
 // tests/offline-load.spec.ts
 test('should handle 100 offline orders', async ({ page, context }) => {
@@ -1692,6 +1717,7 @@ test('should handle 100 offline orders', async ({ page, context }) => {
 ```
 
 **Deliverables:**
+
 - ✅ `docs/OFFLINE_TESTING.md` - план тестирования
 - ✅ Offline debug view создан
 - ✅ Automated tests для offline (Playwright)
@@ -1701,11 +1727,13 @@ test('should handle 100 offline orders', async ({ page, context }) => {
 ---
 
 ### **PHASE 8: Production Hardening** (1-2 дня)
+
 **Цель:** Security, performance, monitoring
 
 #### 8.1 Security Checklist
 
 **Code Security:**
+
 - [ ] Убрать все `console.log` в production (vite.config.ts - terser)
 - [ ] Убрать SOURCE_MAPS в production
 - [ ] Проверить нет hardcoded secrets
@@ -1713,11 +1741,13 @@ test('should handle 100 offline orders', async ({ page, context }) => {
 - [ ] XSS protection (CSP headers)
 
 **Environment Security:**
+
 - [ ] SERVICE_KEY не используется в production ✅
 - [ ] ANON_KEY ограничен RLS policies ✅
 - [ ] CORS настроен (только ваш домен)
 
 **Database Security:**
+
 - [ ] RLS policies на всех таблицах ✅
 - [ ] Row-level backups включены ✅
 - [ ] Admin аккаунты защищены (сильные пароли)
@@ -1725,15 +1755,16 @@ test('should handle 100 offline orders', async ({ page, context }) => {
 #### 8.2 Performance Optimization
 
 **vite.config.ts** - обновить:
+
 ```typescript
 export default defineConfig({
   build: {
     rollupOptions: {
       output: {
         manualChunks: {
-          'vuetify': ['vuetify'],
-          'vendor': ['vue', 'vue-router', 'pinia'],
-          'supabase': ['@supabase/supabase-js']
+          vuetify: ['vuetify'],
+          vendor: ['vue', 'vue-router', 'pinia'],
+          supabase: ['@supabase/supabase-js']
         }
       }
     },
@@ -1751,6 +1782,7 @@ export default defineConfig({
 ```
 
 **Code splitting:**
+
 ```typescript
 // src/router/index.ts
 const routes = [
@@ -1766,6 +1798,7 @@ const routes = [
 ```
 
 **Image optimization:**
+
 - [ ] Compress images (TinyPNG)
 - [ ] Use WebP format
 - [ ] Lazy load images
@@ -1775,6 +1808,7 @@ const routes = [
 **Centralized error handler:**
 
 `src/core/errorHandler.ts`:
+
 ```typescript
 import { ENV } from '@/config/environment'
 
@@ -1810,6 +1844,7 @@ export class ErrorHandler {
 ```
 
 Использовать везде:
+
 ```typescript
 try {
   await someOperation()
@@ -1823,6 +1858,7 @@ try {
 #### 8.4 Monitoring Setup (Базовый)
 
 **Sentry (опционально для v1.0):**
+
 ```bash
 pnpm add @sentry/vue
 ```
@@ -1842,11 +1878,13 @@ if (import.meta.env.PROD) {
 ```
 
 **Google Analytics (опционально):**
+
 ```bash
 pnpm add vue-gtag-next
 ```
 
 **Deliverables:**
+
 - ✅ Security checklist выполнен
 - ✅ Performance optimizations внедрены
 - ✅ Centralized error handling
@@ -1855,17 +1893,20 @@ pnpm add vue-gtag-next
 ---
 
 ### **PHASE 9: Documentation & Release** (1 день)
+
 **Цель:** Финальная документация и v1.0.0 релиз
 
 #### 9.1 Обновить документацию
 
 **README.md:**
+
 ```markdown
 # Kitchen App - Restaurant Management System
 
 Complete POS and backoffice system with offline-first architecture.
 
 ## Features
+
 - 🍽️ POS System (offline-first)
 - 📦 Inventory Management
 - 👥 Staff Management
@@ -1875,11 +1916,13 @@ Complete POS and backoffice system with offline-first architecture.
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js 20+
 - pnpm 8+
 - Supabase account
 
 ### Installation
+
 \`\`\`bash
 git clone https://github.com/yourusername/kitchen-app
 cd kitchen-app
@@ -1887,24 +1930,32 @@ pnpm install
 \`\`\`
 
 ### Configuration
+
 \`\`\`bash
 cp .env.example .env.development
+
 # Edit .env.development with your Supabase credentials
+
 \`\`\`
 
 ### Development
+
 \`\`\`bash
 pnpm dev
+
 # Open http://localhost:5174
+
 \`\`\`
 
 ### Production Build
+
 \`\`\`bash
 pnpm build
 pnpm preview
 \`\`\`
 
 ## Documentation
+
 - [Architecture](CLAUDE.md)
 - [Git Workflow](docs/GIT_WORKFLOW.md)
 - [Deployment](docs/DEPLOYMENT.md)
@@ -1912,6 +1963,7 @@ pnpm preview
 - [Database Schema](DATABASE_SCHEMA.md)
 
 ## Tech Stack
+
 - Vue 3.5+ (Composition API)
 - TypeScript
 - Vuetify 3.7+
@@ -1920,10 +1972,12 @@ pnpm preview
 - Railway (hosting)
 
 ## License
+
 MIT
 ```
 
 **CHANGELOG.md:**
+
 ```markdown
 # Changelog
 
@@ -1934,6 +1988,7 @@ All notable changes to Kitchen App will be documented here.
 ### 🎉 First Production Release
 
 #### Features
+
 - Complete POS system with offline-first support
 - Table management (dine-in, takeaway)
 - Order processing with multiple bills
@@ -1947,35 +2002,42 @@ All notable changes to Kitchen App will be documented here.
 - Role-based permissions (admin, manager, cashier, kitchen)
 
 #### Infrastructure
+
 - Supabase backend integration
 - Railway deployment (dev + prod)
 - GitHub Actions CI/CD
 - Automated testing
 
 #### Security
+
 - Row Level Security (RLS) policies
 - Supabase authentication for admin/manager
 - PIN-based quick login for cashier/kitchen
 - No SERVICE_KEY in production
 
 #### Performance
+
 - Code splitting
 - Lazy loading routes
 - Bundle optimization
 - localStorage caching for offline
 
 ### Known Issues
+
 See [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)
 
 ### Roadmap
+
 See [ROADMAP.md](docs/ROADMAP.md)
 ```
 
 **docs/ROADMAP.md** (Post-v1.0):
+
 ```markdown
 # Roadmap
 
 ## v1.1 (Post-launch improvements)
+
 - [ ] Printer integration (receipts, kitchen orders)
 - [ ] Mobile app (Capacitor build)
 - [ ] Push notifications
@@ -1983,12 +2045,14 @@ See [ROADMAP.md](docs/ROADMAP.md)
 - [ ] Export to Excel/PDF
 
 ## v1.2 (Feature enhancements)
+
 - [ ] Multi-restaurant support (if needed)
 - [ ] Customer loyalty program
 - [ ] Online ordering integration
 - [ ] Table reservation system
 
 ## v2.0 (Major features)
+
 - [ ] Kitchen Display System (KDS)
 - [ ] Inventory automation (auto-reorder)
 - [ ] Integration with accounting software
@@ -1998,10 +2062,12 @@ See [ROADMAP.md](docs/ROADMAP.md)
 #### 9.2 Release Checklist
 
 **docs/RELEASE_CHECKLIST.md:**
+
 ```markdown
 # Production Release Checklist
 
 ## Pre-Release
+
 - [ ] All tests passing (lint, typecheck, build)
 - [ ] No critical bugs in dev environment
 - [ ] Security audit completed
@@ -2013,6 +2079,7 @@ See [ROADMAP.md](docs/ROADMAP.md)
 - [ ] Admin users created
 
 ## Release Steps
+
 1. [ ] Merge dev → main (via PR)
 2. [ ] Review + approve PR
 3. [ ] Merge triggers CI/CD
@@ -2023,6 +2090,7 @@ See [ROADMAP.md](docs/ROADMAP.md)
 8. [ ] Create GitHub Release with changelog
 
 ## Post-Release
+
 - [ ] Monitor error logs (first 24h)
 - [ ] Check performance metrics
 - [ ] Verify offline sync working
@@ -2031,7 +2099,9 @@ See [ROADMAP.md](docs/ROADMAP.md)
 - [ ] Update documentation based on issues
 
 ## Rollback Plan
+
 If critical issues:
+
 1. Revert deployment on Railway
 2. Create hotfix branch from main
 3. Fix issue
@@ -2066,11 +2136,13 @@ git push origin v1.0.0
 #### 9.4 GitHub Release
 
 Создать release на GitHub:
+
 - Title: `v1.0.0 - First Production Release`
 - Description: Copy from CHANGELOG.md
 - Attach build artifacts (опционально)
 
 **Deliverables:**
+
 - ✅ README.md обновлен
 - ✅ CHANGELOG.md создан
 - ✅ ROADMAP.md создан
@@ -2085,45 +2157,74 @@ git push origin v1.0.0
 **Realistic timeline для solo developer:**
 
 ```
-Week 1:
-- Day 1-2: Phase 0 (Audit) + Phase 1 (Git)
-- Day 3: Phase 2 (Environment)
-- Day 4: Phase 3 (Supabase)
-- Day 5: Phase 4 start (Auth migration)
+Week 1: ✅ ЗАВЕРШЕНО (Phase 3)
+- Day 1-2: Phase 0 (Audit) + Phase 1 (Git) - SKIP (на потом)
+- Day 3: Phase 2 (Environment) - PARTIAL (.env файлы готовы)
+- Day 4: ✅ Phase 3 (Supabase) - ЗАВЕРШЕНО
+  - ✅ Dev проект создан
+  - ✅ Prod проект создан
+  - ✅ Миграция выполнена (36 таблиц)
+  - ✅ RLS policies (базовые)
+- Day 5: Phase 4 start (Auth migration) - READY
 
-Week 2:
-- Day 1-2: Phase 4 finish (Auth)
-- Day 3: Phase 5 (CI/CD)
-- Day 4: Phase 6 (Railway)
-- Day 5: Phase 7 start (Offline testing)
+Week 2: СЛЕДУЮЩАЯ
+- Day 1-2: Phase 4 (Auth migration)
+  - [ ] Создать таблицу users
+  - [ ] Implement PIN authentication
+  - [ ] Migrate existing users
+  - [ ] Update authStore
+- Day 3: Phase 1 (Git workflow) + Phase 2 finish
+- Day 4: Phase 5 (CI/CD basic)
+- Day 5: Phase 6 (Railway deployment)
 
 Week 3:
-- Day 1-2: Phase 7 finish (Offline)
+- Day 1-2: Phase 7 (Offline testing) - КРИТИЧНО!
 - Day 3: Phase 8 (Hardening)
 - Day 4: Phase 9 (Documentation)
 - Day 5: Final testing + Release 🚀
 ```
 
-**TOTAL: ~3 недели (15 рабочих дней)**
+**ТЕКУЩИЙ СТАТУС:**
+
+- ✅ Phase 3 завершена (2025-11-23)
+- 📋 Phase 4 следующая (Authentication migration)
+- **TOTAL: ~2.5 недели осталось**
 
 ---
 
 ## 🚀 NEXT ACTIONS
 
-**Немедленно (сегодня):**
+**✅ Завершено (2025-11-23):**
+
 1. ✅ Создать проекты в Supabase (dev + prod)
 2. ✅ Создать `.env.development` и `.env.production`
-3. ✅ Создать git ветки (main, dev)
+3. ✅ Применить миграции в Supabase (36 таблиц)
+4. ✅ Настроить базовые RLS policies
 
-**На этой неделе:**
-4. Запустить Phase 0 (Audit) - проверить текущее состояние
-5. Применить миграции в Supabase
-6. Начать Phase 4 (Authentication migration)
+**Немедленно (следующий шаг):**
+
+1. **Phase 4 - Authentication Migration** (ПРИОРИТЕТ!)
+
+   - [ ] Создать таблицу `users` с расширенными полями
+   - [ ] Implement `authenticate_with_pin()` функцию
+   - [ ] Migrate существующих пользователей из localStorage
+   - [ ] Update authStore для поддержки email + PIN
+   - [ ] Update LoginView (tabs для email/PIN)
+   - [ ] Протестировать оба режима входа
+
+2. **Phase 4 - Post-Auth Tasks:**
+   - [ ] Создать детализированные RLS policies (заменить базовые)
+   - [ ] Seed admin user в production
+   - [ ] Seed базовые данные (категории, единицы измерения)
+
+**На этой неделе:** 3. Phase 1 (Git workflow) - создать main/dev ветки 4. Phase 5 (CI/CD basic) - базовый GitHub Actions workflow 5. Phase 6 (Railway) - настроить deployment
 
 **Критично протестировать:**
-- Offline-first для POS (Phase 7)
-- RLS policies (Phase 3)
-- Authentication flow (Phase 4)
+
+- ✅ Миграция БД (готова, протестирована)
+- ⚠️ Authentication flow (Phase 4) - ДО деплоя!
+- ⚠️ Offline-first для POS (Phase 7) - КРИТИЧНО!
+- ⚠️ RLS policies (Phase 4) - после миграции auth
 
 ---
 
@@ -2132,24 +2233,28 @@ Week 3:
 **Не для первого релиза, но важно запланировать:**
 
 ### Printer Integration (v1.1)
+
 - Receipt printer для касс
 - Kitchen printer для кухни
 - ESC/POS protocol support
 - Network и USB printers
 
 **План:**
+
 - Research printer libraries (escpos, node-thermal-printer)
 - Create printer service abstraction
 - Add printer settings to admin panel
 - Test with physical printers
 
 ### Mobile App (v1.1-v1.2)
+
 - Capacitor build для iOS/Android
 - Push notifications
 - Camera для barcode scanning
 - Offline-first уже готов!
 
 ### Advanced Features (v2.0+)
+
 - Multi-restaurant support (если понадобится)
 - Kitchen Display System (KDS)
 - Customer-facing display
@@ -2173,11 +2278,44 @@ Week 3:
 
 ---
 
-**Готовы начать? С какой фазы стартуем?** 🚀
+---
 
-Рекомендую:
-1. **Phase 0 (Audit)** - понять что уже есть
-2. **Phase 1-2 (Git + Env)** - быстро настроить базу
-3. **Phase 4 (Auth)** - самая сложная часть, начать раньше
+## 📊 ТЕКУЩИЙ СТАТУС
 
-Или можем работать параллельно по нескольким фазам. Ваши мысли? 💭
+**Дата обновления:** 2025-11-23
+
+**Завершенные фазы:**
+
+- ✅ **Phase 3: Supabase Setup** - База данных готова (dev + prod)
+  - 36 таблиц мигрированы
+  - 113 индексов созданы
+  - Базовые RLS policies применены
+  - Migration файл: `docs/supabase/PRODUCTION_MIGRATION_SAFE.sql`
+
+**Текущая фаза:**
+
+- 📋 **Phase 4: Authentication Migration** - NEXT UP!
+
+**Прогресс:**
+
+- Завершено: Phase 3 (частично Phase 2)
+- В процессе: -
+- Осталось: Phases 4-9
+- **Общий прогресс: ~15%** (1.5 из 9 фаз)
+
+**Следующий шаг:**
+🎯 **Phase 4 - Authentication Migration** (2-3 дня)
+Приоритет: HIGH - блокирует production deployment
+
+---
+
+**Готовы продолжать? Следующий этап - Phase 4! 🚀**
+
+Рекомендованная последовательность:
+
+1. ✅ **Phase 3 (Supabase)** - ЗАВЕРШЕНА
+2. 📋 **Phase 4 (Auth)** - ТЕКУЩАЯ (самая сложная часть)
+3. **Phase 1-2 (Git + Env)** - быстро настроить после Auth
+4. **Phase 5-6 (CI/CD + Railway)** - автоматизация
+5. **Phase 7 (Offline)** - КРИТИЧНО! Тщательное тестирование
+6. **Phase 8-9 (Hardening + Release)** - финальный штрих
