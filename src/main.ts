@@ -18,6 +18,7 @@ import { vuetify } from '@/plugins/vuetify'
 import App from './App.vue'
 import { DebugUtils } from './utils'
 import { validateEnvironment } from '@/config/validateEnv'
+import { ENV } from '@/config/environment'
 
 const MODULE_NAME = 'Main'
 
@@ -28,6 +29,19 @@ function initializeApp() {
     validateEnvironment()
 
     DebugUtils.info(MODULE_NAME, '🏁 Starting minimal application bootstrap')
+
+    // 🔍 DEBUG: Show ENV configuration (temporary for Vercel debugging)
+    console.group('🔧 Environment Configuration')
+    console.log('enableLogs:', ENV.enableLogs)
+    console.log('debugEnabled:', ENV.debugEnabled)
+    console.log('debugLevel:', ENV.debugLevel)
+    console.log('useBlacklist:', ENV.useBlacklist)
+    console.log('showInitSummary:', ENV.showInitSummary)
+    console.log('showStoreDetails:', ENV.showStoreDetails)
+    console.log('showDeviceInfo:', ENV.showDeviceInfo)
+    console.log('platform:', ENV.platform)
+    console.log('useSupabase:', ENV.useSupabase)
+    console.groupEnd()
 
     const app = createApp(App)
     const pinia = createPinia()

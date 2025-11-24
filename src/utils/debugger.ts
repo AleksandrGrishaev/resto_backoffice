@@ -166,14 +166,15 @@ export class DebugUtils {
     }
 
     // Используем debugLevel из ENV вместо жесткой проверки isDev
-    // Это позволяет управлять логами через .env файлы в dev и prod
+    // Это позволяет управлять логами через .env файлы в dev и prod builds
     const debugLevel = this.debugLevel
     if (debugLevel === 'silent') return level === 'error'
     if (debugLevel === 'standard') return ['info', 'warn', 'error'].includes(level)
     if (debugLevel === 'verbose') return true
 
-    // Fallback: если debugLevel не задан, используем старую логику
-    return this.isDev ? true : level === 'error'
+    // Fallback: используем VITE_ENABLE_LOGS из ENV вместо MODE
+    // Теперь `pnpm build` с .env.development будет показывать логи
+    return ENV.enableLogs ? true : level === 'error'
   }
 
   static log(level: LogLevel, module: string, message: string, data?: LogData) {
@@ -263,7 +264,7 @@ export class DebugUtils {
    * Сводка инициализации - только если включена
    */
   static summary(title: string, data: any): void {
-    if (this.showInitSummary && this.isDev) {
+    if (this.showInitSummary && ENV.enableLogs) {
       console.group(`📋 ${title}`)
       console.table(data)
       console.groupEnd()
@@ -274,7 +275,7 @@ export class DebugUtils {
    * Информация об устройстве - только если включена
    */
   static deviceInfo(info: any): void {
-    if (this.showDeviceInfo && this.isDev) {
+    if (this.showDeviceInfo && ENV.enableLogs) {
       console.group('📱 Device & Environment Info')
       console.table(info)
       console.groupEnd()
@@ -414,8 +415,8 @@ export class DebugUtils {
   }
 
   static async saveLogs(): Promise<void> {
-    if (!this.isDev) {
-      console.warn('Log saving is only available in development mode')
+    if (!ENV.enableLogs) {
+      console.warn('Log saving is only available when VITE_ENABLE_LOGS=true')
       return
     }
 
