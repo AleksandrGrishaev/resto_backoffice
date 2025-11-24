@@ -16,9 +16,23 @@ This will create:
 - ✅ `public.users` table
 - ✅ Indexes for performance
 - ✅ RLS policies
-- ✅ Helper functions (`authenticate_with_pin`, `create_user_with_pin`, etc.)
 
-## Step 2: Seed Users
+## Step 2: Create PIN Auth Functions
+
+**CRITICAL:** Migration 007 does NOT include all required RPC functions!
+
+1. Stay in SQL Editor
+2. Copy content from `src/scripts/seed/createPinAuthFunctions.sql`
+3. Paste and Run
+
+This creates 4 required functions:
+
+- ✅ `authenticate_with_pin` - Simple PIN validation
+- ✅ `get_pin_user_credentials` - PIN → credentials (CRITICAL for login!)
+- ✅ `create_user_with_pin` - Create users with PIN
+- ✅ `update_user_pin` - Update user PIN
+
+## Step 3: Seed Users (public.users)
 
 After migration is applied, you have two options:
 
@@ -34,18 +48,54 @@ After migration is applied, you have two options:
 pnpm seed:users:prod
 ```
 
-## Step 3: Verify
+## Step 4: Create Auth Users (auth.users)
 
-Check users were created:
+**CRITICAL:** PIN login requires auth.users records for Supabase Auth!
+
+1. Stay in SQL Editor
+2. Copy content from `src/scripts/seed/createAuthUsersProduction.sql`
+3. Paste and Run
+
+This creates auth.users for all 12 users with temporary passwords following pattern:
+
+- Format: `first4chars + role + 123`
+- Example: "Admin User" + "admin" → "admiadmin123"
+
+### Optional: Sync Additional DEV Users
+
+If you need to match DEV database exactly:
+
+1. Copy content from `src/scripts/seed/syncUsersFromDev.sql`
+2. Paste and Run
+
+This adds 6 more users from DEV (resto.local + internal.local domains).
+
+## Step 5: Verify
+
+Check `public.users` created:
 
 ```sql
 SELECT id, name, email, roles, is_active
 FROM public.users
-WHERE email LIKE '%kitchen-app.com%'
-ORDER BY name;
+ORDER BY email;
 ```
 
-Expected result: 6 users (Admin, Manager, Cashier, Kitchen, Bar, Multi-Role)
+Expected result: 12 users total
+
+Check `auth.users` created:
+
+```sql
+SELECT
+  id,
+  email,
+  email_confirmed_at IS NOT NULL as email_confirmed,
+  raw_user_meta_data->>'name' as name,
+  raw_user_meta_data->>'is_pin_user' as is_pin_user
+FROM auth.users
+ORDER BY email;
+```
+
+Expected result: 12 auth users with confirmed emails
 
 ## User Credentials
 
