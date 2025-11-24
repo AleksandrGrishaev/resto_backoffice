@@ -15,26 +15,14 @@
     <!-- Navigation -->
     <v-list nav class="px-2 flex-grow-1 overflow-y-auto">
       <!-- Menu -->
-      <v-list-item
-        to="/menu"
-        prepend-icon="mdi-silverware-fork-knife"
-        color="primary"
-        class="mb-2"
-        :active-color="colors.primary"
-      >
+      <v-list-item to="/menu" prepend-icon="mdi-silverware-fork-knife" color="primary" class="mb-2">
         <template #title>
           <span>Menu</span>
         </template>
       </v-list-item>
 
       <!-- Preparations -->
-      <v-list-item
-        to="/preparations"
-        prepend-icon="mdi-chef-hat"
-        color="primary"
-        class="mb-2"
-        :active-color="colors.primary"
-      >
+      <v-list-item to="/preparations" prepend-icon="mdi-chef-hat" color="primary" class="mb-2">
         <template #title>
           <span>Preparations</span>
         </template>
@@ -44,13 +32,7 @@
       </v-list-item>
 
       <!-- Storage -->
-      <v-list-item
-        to="/storage"
-        prepend-icon="mdi-warehouse"
-        color="primary"
-        class="mb-2"
-        :active-color="colors.primary"
-      >
+      <v-list-item to="/storage" prepend-icon="mdi-warehouse" color="primary" class="mb-2">
         <template #title>
           <span>Storage</span>
         </template>
@@ -60,13 +42,7 @@
       </v-list-item>
 
       <!-- Suppliers & Procurement -->
-      <v-list-item
-        to="/suppliers"
-        prepend-icon="mdi-truck"
-        color="primary"
-        class="mb-2"
-        :active-color="colors.primary"
-      >
+      <v-list-item to="/suppliers" prepend-icon="mdi-truck" color="primary" class="mb-2">
         <template #title>
           <span>Suppliers</span>
         </template>
@@ -81,12 +57,7 @@
       <!-- Sales Section (Sprint 2) -->
       <v-list-group value="sales" class="mb-2">
         <template #activator="{ props }">
-          <v-list-item
-            v-bind="props"
-            prepend-icon="mdi-cash-multiple"
-            color="primary"
-            :active-color="colors.primary"
-          >
+          <v-list-item v-bind="props" prepend-icon="mdi-cash-multiple" color="primary">
             <template #title>
               <span>Sales</span>
             </template>
@@ -99,7 +70,6 @@
           prepend-icon="mdi-chart-line"
           color="primary"
           class="ps-8"
-          :active-color="colors.primary"
         >
           <template #title>
             <span>Analytics</span>
@@ -112,7 +82,6 @@
           prepend-icon="mdi-receipt-text"
           color="primary"
           class="ps-8"
-          :active-color="colors.primary"
         >
           <template #title>
             <span>Transactions</span>
@@ -125,7 +94,6 @@
           prepend-icon="mdi-clock-outline"
           color="primary"
           class="ps-8"
-          :active-color="colors.primary"
         >
           <template #title>
             <span>Shifts</span>
@@ -138,7 +106,6 @@
           prepend-icon="mdi-file-document-remove"
           color="primary"
           class="ps-8"
-          :active-color="colors.primary"
         >
           <template #title>
             <span>Write-off History</span>
@@ -149,12 +116,7 @@
       <!-- Catalogs Section -->
       <v-list-group value="catalogs" class="mb-2">
         <template #activator="{ props }">
-          <v-list-item
-            v-bind="props"
-            prepend-icon="mdi-folder-open"
-            color="primary"
-            :active-color="colors.primary"
-          >
+          <v-list-item v-bind="props" prepend-icon="mdi-folder-open" color="primary">
             <template #title>
               <span>Catalogs</span>
             </template>
@@ -167,7 +129,6 @@
           prepend-icon="mdi-book-open-page-variant"
           color="primary"
           class="ps-8"
-          :active-color="colors.primary"
         >
           <template #title>
             <span>Recipes</span>
@@ -175,26 +136,14 @@
         </v-list-item>
 
         <!-- Products -->
-        <v-list-item
-          to="/products"
-          prepend-icon="mdi-package-variant"
-          color="primary"
-          class="ps-8"
-          :active-color="colors.primary"
-        >
+        <v-list-item to="/products" prepend-icon="mdi-package-variant" color="primary" class="ps-8">
           <template #title>
             <span>Products</span>
           </template>
         </v-list-item>
 
         <!-- Counteragents -->
-        <v-list-item
-          to="/counteragents"
-          prepend-icon="mdi-store"
-          color="primary"
-          class="ps-8"
-          :active-color="colors.primary"
-        >
+        <v-list-item to="/counteragents" prepend-icon="mdi-store" color="primary" class="ps-8">
           <template #title>
             <span>Counteragents</span>
           </template>
@@ -206,7 +155,6 @@
           prepend-icon="mdi-cash-register"
           color="primary"
           class="ps-8"
-          :active-color="colors.primary"
         >
           <template #title>
             <span>Payment</span>
@@ -217,12 +165,7 @@
       <!-- ✅ НОВЫЙ: Developer Tools Section (только в dev режиме) -->
       <v-list-group v-if="isDev" value="developer" class="mb-2">
         <template #activator="{ props }">
-          <v-list-item
-            v-bind="props"
-            prepend-icon="mdi-developer-board"
-            color="warning"
-            :active-color="colors.warning"
-          >
+          <v-list-item v-bind="props" prepend-icon="mdi-developer-board" color="warning">
             <template #title>
               <span>Developer</span>
             </template>
@@ -233,13 +176,7 @@
         </template>
 
         <!-- Debug Stores -->
-        <v-list-item
-          to="/debug/stores"
-          prepend-icon="mdi-bug"
-          color="warning"
-          class="ps-8"
-          :active-color="colors.warning"
-        >
+        <v-list-item to="/debug/stores" prepend-icon="mdi-bug" color="warning" class="ps-8">
           <template #title>
             <span>Debug Stores</span>
           </template>
@@ -249,13 +186,7 @@
         </v-list-item>
 
         <!-- Sync Monitor -->
-        <v-list-item
-          to="/debug/sync"
-          prepend-icon="mdi-sync"
-          color="warning"
-          class="ps-8"
-          :active-color="colors.warning"
-        >
+        <v-list-item to="/debug/sync" prepend-icon="mdi-sync" color="warning" class="ps-8">
           <template #title>
             <span>Sync Monitor</span>
           </template>
@@ -268,7 +199,6 @@
           prepend-icon="mdi-speedometer"
           color="warning"
           class="ps-8"
-          :active-color="colors.warning"
           disabled
         >
           <template #title>
@@ -281,7 +211,6 @@
           prepend-icon="mdi-lan"
           color="warning"
           class="ps-8"
-          :active-color="colors.warning"
           disabled
         >
           <template #title>
@@ -328,12 +257,6 @@ import NavigationAccounts from './NavigationAccounts.vue'
 import AlertsBadge from './AlertsBadge.vue'
 // ✅ НОВЫЙ: Импорт Debug Stores Badge
 import DebugStoresBadge from './DebugStoresBadge.vue'
-
-// Design tokens (matches src/styles/variables.scss)
-const colors = {
-  primary: '#A395E9',
-  warning: '#FFB076'
-}
 
 const MODULE_NAME = 'NavigationMenu'
 

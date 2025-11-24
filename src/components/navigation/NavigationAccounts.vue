@@ -1,20 +1,13 @@
 <template>
   <v-list-group value="accounts">
     <template #activator="{ props }">
-      <v-list-item
-        v-bind="props"
-        prepend-icon="mdi-wallet"
-        title="Счета"
-        color="primary"
-        :active-color="colors.primary"
-      />
+      <v-list-item v-bind="props" prepend-icon="mdi-wallet" title="Счета" color="primary" />
     </template>
     <v-list-item
       to="/accounts"
       prepend-icon="mdi-format-list-bulleted"
       color="primary"
       class="mb-2"
-      :active-color="colors.primary"
     >
       <template #title>
         <span>Список счетов</span>
@@ -38,7 +31,6 @@
         :prepend-icon="getAccountIcon(account.type)"
         color="primary"
         class="mb-2"
-        :active-color="colors.primary"
       >
         <template #title>
           <div class="d-flex align-center justify-space-between">
@@ -54,10 +46,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
-// Design tokens (matches src/styles/variables.scss)
-const colors = {
-  primary: '#A395E9'
-}
 
 const accountStore = useAccountStore()
 const loading = ref(true)
