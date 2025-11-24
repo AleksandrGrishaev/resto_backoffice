@@ -1,8 +1,9 @@
 # Kitchen App - TODO
 
-**Last Updated:** 2025-11-23
-**Current Branch:** `feature/vercel-deployment-setup`
+**Last Updated:** 2025-11-24
+**Current Branch:** `dev`
 **Project Version:** 0.0.320
+**Current Sprint:** Sprint 1 - Production Readiness (see NextTodo.md)
 
 ---
 
@@ -51,66 +52,48 @@ We are now using **Vercel** for all deployments:
 
 ---
 
-## 🎯 Active Tasks
+## 🎯 Active Sprint
 
-### High Priority
+**Current Sprint:** Production Readiness & POS Enhancements (see `NextTodo.md` for details)
 
-#### 1. Fix Debug Logging in Preview Environment
+**Sprint Duration:** 2-3 weeks
+**Sprint Goals:**
 
-**Problem:** Debug logs don't work in Vercel Preview (production build mode)
+1. Prepare production database with seed data (users, products, warehouse, menu)
+2. Integrate thermal printer for POS receipt printing
+3. Deploy production environment on Vercel
+4. Stabilize code quality and fix bugs
 
-**Solution needed:**
+### High Priority Tasks
 
-- Modify `src/utils/debugger.ts` to check `VITE_DEBUG_ENABLED` instead of `import.meta.env.DEV`
-- Update Vite config to conditionally strip console logs
+#### 1. Production Database Seeding
 
-**Files to update:**
+- Create seed scripts for users, products, warehouse, menu
+- Run seeds on production Supabase
+- Verify data integrity
 
-- `src/utils/debugger.ts`
-- `vite.config.ts` (optional)
+#### 3. Production Deployment
 
-### Medium Priority
+- Configure production environment variables in Vercel
+- Set production branch to `main`
+- Merge dev → main after testing
+- Verify production deployment
 
-#### 3. Configure Production Deployment
+### Medium Priority Tasks
 
-After dev environment is stable:
+#### 4. Code Quality & Bug Fixes
 
-1. Add production environment variables in Vercel
-2. Set production branch to `main`
-3. Merge dev → main
-4. Verify production deployment
+- Fix debug logging in preview environment
+- Fix TypeScript errors (10 errors)
+- Run Prettier formatting
+- Address critical ESLint warnings
 
-#### 4. Code Quality Fixes
+#### 5. Documentation
 
-**Prettier (auto-fix):**
-
-```bash
-pnpm format
-```
-
-**TypeScript errors to fix:**
-
-- AlertsBadge.vue - Missing store properties
-- DateRangePicker.vue - Type mismatches
-- components/index.ts - Missing PinInput import
-- BaseDialog.vue - Unused 'props' variable
-
-**ESLint warnings:** 838 warnings (optional cleanup)
-
-### Low Priority
-
-#### 5. Re-enable CI Checks
-
-After code quality is fixed:
-
-- Re-enable lint job in `.github/workflows/ci.yml`
-- Re-enable typecheck job in `.github/workflows/ci.yml`
-
-#### 6. Documentation Updates
-
-- Update README.md with Vercel deployment info
-- Create DEPLOYMENT.md with environment setup guide
-- Update CLAUDE.md with new deployment strategy
+- Update README.md with deployment info
+- Create DEPLOYMENT.md guide
+- Create PRINTER_INTEGRATION.md
+- Update CLAUDE.md
 
 ---
 
@@ -132,26 +115,177 @@ After code quality is fixed:
 
 ## 🚀 Future Phases
 
-### Phase 6: Production Deployment
+### Sprint 2: POS Printer Integration (First Production Update)
 
-- Production environment on Vercel
-- Production Supabase configuration
-- Error tracking (Sentry)
-- Performance monitoring
-- Domain and SSL setup
+**Goal:** Add thermal printer support for receipt printing + practice hot updates in production
 
-### Phase 7: Mobile Build
+**Why this sprint:** This will be our first feature added to live production system, providing valuable experience with:
 
-- Capacitor configuration
-- iOS/Android builds
-- App store deployment
+- Hot deployments to production
+- Testing updates without breaking existing functionality
+- Rollback procedures if something goes wrong
+- Version management and release process
 
-### Phase 8: Feature Development
+**Tasks:**
 
-- Complete POS features
-- Kitchen Display System
-- Advanced reporting
-- Multi-restaurant support (future)
+1. **Research & Planning**
+
+   - Evaluate thermal printer libraries (escpos, star-prnt, capacitor-thermal-printer)
+   - Choose web-compatible library for browser-based printing
+   - Research Capacitor plugin for mobile (future)
+   - Document supported printer models (Epson, Star, etc.)
+
+2. **Core Implementation**
+
+   - Create PrinterService (`src/services/PrinterService.ts`)
+     - Printer detection and connection
+     - Print queue management
+     - Error handling and retry logic
+     - Support for USB, Network, and Bluetooth printers
+   - Create receipt template (`src/templates/receipt.ts`)
+     - Restaurant header (name, address, phone)
+     - Order details (items, quantities, prices)
+     - Subtotal, tax, discounts, total
+     - Payment method and change
+     - Footer (thank you message, date/time)
+     - QR code support (optional, for digital receipts)
+
+3. **POS Integration**
+
+   - Add "Print Receipt" button in CheckoutDialog
+   - Auto-print on successful payment (configurable)
+   - Handle printer errors gracefully
+   - Add printer status indicator in POS toolbar
+
+4. **Settings & Configuration**
+
+   - Create PrinterSettings.vue page
+   - Printer selection and configuration
+   - Test print functionality
+   - Paper size settings (58mm, 80mm)
+   - Auto-print preferences
+   - Printer status monitoring
+
+5. **Testing & Deployment**
+
+   - Test in dev environment
+   - Test in preview environment
+   - Create release branch
+   - Deploy to production
+   - Monitor for errors
+   - Test rollback if needed
+
+6. **Documentation**
+   - Create PRINTER_INTEGRATION.md
+   - Update user guide
+   - Document troubleshooting
+
+**Technical Notes:**
+
+- Web printing: Use ESC/POS library or window.print() with custom CSS
+- Mobile printing: Capacitor plugin (future)
+- Printer types: USB (web), Network (web + mobile), Bluetooth (mobile only)
+- Fallback: Generate PDF receipt if printer unavailable
+
+**Success Criteria:**
+
+- Receipts print correctly from POS checkout
+- Printer settings page works
+- No breaking changes to existing functionality
+- Production deployment successful
+- Rollback procedure documented and tested
+
+### Sprint 3: Mobile App Deployment (Capacitor)
+
+**Goal:** Deploy mobile apps for iOS and Android
+
+- Mobile-specific environment configuration
+- Capacitor plugin integration (printer, camera, storage)
+- Offline-first optimization for POS
+- Mobile UI/UX adjustments
+- App store submission (iOS App Store, Google Play)
+- In-app updates and versioning
+
+### Sprint 4: Kitchen Display System (KDS)
+
+**Goal:** Real-time kitchen order display and management
+
+- Kitchen display interface (Vue components)
+- Real-time order updates (Supabase subscriptions)
+- Order status workflow (new → preparing → ready → served)
+- Department-based filtering (kitchen, bar, grill)
+- Audio/visual notifications for new orders
+- Timer and SLA tracking
+- Kitchen staff authentication (PIN-based)
+
+### Sprint 5: Advanced Reporting & Analytics
+
+**Goal:** Business intelligence and data insights
+
+- Sales reports (daily, weekly, monthly)
+- Product performance analytics
+- Inventory tracking and alerts
+- Staff performance reports
+- Customer analytics (order history, preferences)
+- Financial reports (profit/loss, cash flow)
+- Export to Excel/PDF
+- Dashboard with charts and KPIs
+
+### Sprint 6: Performance Optimization
+
+**Goal:** Improve app performance and bundle size
+
+- Code splitting and lazy loading
+- Bundle size optimization (target: <1MB main chunk)
+- Image optimization (WebP, lazy loading)
+- Database query optimization
+- Caching strategies (service workers)
+- Performance monitoring (Lighthouse, Web Vitals)
+
+### Sprint 7: Multi-Restaurant Support
+
+**Goal:** Support multiple restaurant locations
+
+- Restaurant/location management
+- Multi-tenant data isolation
+- Cross-location reporting
+- Central admin dashboard
+- Location-specific menus and pricing
+- Inventory transfer between locations
+
+### Sprint 8: Advanced POS Features
+
+**Goal:** Enhance POS functionality
+
+- Customer loyalty program
+- Gift cards and vouchers
+- Advanced discounts (BOGO, bundle deals)
+- Split payments (multiple payment methods)
+- Refunds and returns
+- Email receipts (alternative to printing)
+- QR code payment integration (QRIS, GoPay, OVO)
+- Reservation system integration
+
+### Sprint 9: Integration & Automation
+
+**Goal:** Third-party integrations and workflow automation
+
+- Accounting software integration (Xero, QuickBooks)
+- Payment gateway integration (Stripe, Midtrans)
+- Delivery platform integration (GrabFood, GoFood)
+- Email marketing (Mailchimp, SendGrid)
+- SMS notifications (Twilio)
+- Automated inventory ordering
+- Scheduled reports and backups
+
+### Long-term Vision
+
+- AI-powered demand forecasting
+- Recipe optimization and cost analysis
+- Employee scheduling and payroll
+- Supplier management and procurement
+- Quality control and food safety compliance
+- Franchise management tools
 
 ---
 
