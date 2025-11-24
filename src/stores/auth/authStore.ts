@@ -146,9 +146,17 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Step 1: Validate PIN and get credentials for Supabase Auth
       DebugUtils.info(MODULE_NAME, 'Calling get_pin_user_credentials RPC')
-      const { data, error } = await supabase.rpc('get_pin_user_credentials', {
+
+      // Add timeout wrapper to catch hanging RPC calls
+      const rpcPromise = supabase.rpc('get_pin_user_credentials', {
         pin_input: pin
       })
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('RPC call timed out after 15 seconds')), 15000)
+      })
+
+      const { data, error } = (await Promise.race([rpcPromise, timeoutPromise])) as any
 
       DebugUtils.info(MODULE_NAME, 'RPC response received', {
         hasData: !!data,
