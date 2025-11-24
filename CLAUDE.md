@@ -2,6 +2,59 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL: Two Separate Databases
+
+**The project uses TWO completely separate Supabase databases:**
+
+### Development Database
+
+- **URL:** `https://fjkfckjpnbcyuknsnchy.supabase.co`
+- **Config:** `.env.development`
+- **Purpose:** Local development, testing, experiments
+- **MCP Connection:** ✅ MCP Supabase server is connected to **DEV database**
+- **Seed Scripts:** `pnpm seed:users`, `pnpm seed:products`, etc.
+
+### Production Database
+
+- **URL:** `https://bkntdcvzatawencxghob.supabase.co`
+- **Config:** `.env.production` (anon key only) + `.env.seed.production` (service key for seeding)
+- **Purpose:** Live production environment
+- **MCP Connection:** ❌ MCP is **NOT** connected to production
+- **Seed Scripts:** `pnpm seed:users:prod`, `pnpm seed:products:prod`, etc.
+
+### Important Notes
+
+1. **MCP Tools (`mcp__supabase__*`) always use DEV database**
+
+   - `mcp__supabase__execute_sql` → DEV database
+   - `mcp__supabase__apply_migration` → DEV database
+   - Cannot switch MCP connection dynamically
+
+2. **For Production Operations:**
+
+   - Use seed scripts with `.env.seed.production` (contains service key)
+   - Seed scripts use direct SQL, not PostgREST API
+   - Never commit `.env.seed.production` to git (already in `.gitignore`)
+
+3. **PostgREST Schema Cache Issue:**
+
+   - Both databases have schema cache problems
+   - Tables/functions exist but not visible via PostgREST API
+   - Use direct SQL via `mcp__supabase__execute_sql` or seed scripts
+   - Reload cache: `NOTIFY pgrst, 'reload schema';`
+
+4. **Seed Script Architecture:**
+
+   ```bash
+   # Development (uses .env.development)
+   pnpm seed:users          # DEV database
+   pnpm seed:products       # DEV database
+
+   # Production (uses .env.seed.production with service key)
+   pnpm seed:users:prod     # PROD database
+   pnpm seed:products:prod  # PROD database
+   ```
+
 ## Documentation Structure
 
 The project uses a structured approach to documentation and task management:

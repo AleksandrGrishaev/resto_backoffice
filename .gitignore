@@ -31,6 +31,10 @@ dist-ssr
 .env.development
 .env.production
 .env.staging
+.env.seed.production  # ⚠️ CRITICAL: Contains SERVICE KEY for seeding
+
+# Production credentials (NEVER commit!)
+PRODUCTION_CREDENTIALS.md
 
 # Keep example for documentation
 !.env.example

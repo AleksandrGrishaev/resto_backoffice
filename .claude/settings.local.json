@@ -33,7 +33,10 @@
       "Bash(node apply_to_production.mjs:*)",
       "mcp__supabase__get_logs",
       "Bash(git checkout:*)",
-      "Bash(pnpm lint:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(mkdir:*)",
+      "Bash(pnpm seed:users:*)",
+      "Bash(pnpm seed:users:prod:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
