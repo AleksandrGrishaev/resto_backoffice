@@ -41,6 +41,11 @@ function initializeApp() {
     console.log('showDeviceInfo:', ENV.showDeviceInfo)
     console.log('platform:', ENV.platform)
     console.log('useSupabase:', ENV.useSupabase)
+    console.log('supabaseUrl:', ENV.supabase.url)
+    console.log(
+      'supabaseAnonKey:',
+      ENV.supabase.anonKey ? '***' + ENV.supabase.anonKey.slice(-10) : 'NOT SET'
+    )
     console.groupEnd()
 
     const app = createApp(App)

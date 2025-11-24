@@ -145,11 +145,22 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       // Step 1: Validate PIN and get credentials for Supabase Auth
+      DebugUtils.info(MODULE_NAME, 'Calling get_pin_user_credentials RPC')
       const { data, error } = await supabase.rpc('get_pin_user_credentials', {
         pin_input: pin
       })
 
-      if (error) throw error
+      DebugUtils.info(MODULE_NAME, 'RPC response received', {
+        hasData: !!data,
+        dataLength: data?.length,
+        hasError: !!error,
+        errorMessage: error?.message
+      })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'RPC error', { error: error.message })
+        throw error
+      }
       if (!data || data.length === 0) {
         // Log failed attempt
         AuthSessionService.logLoginAttempt({
@@ -168,12 +179,23 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Step 2: Use credentials to sign in via Supabase Auth
       // This creates a real Supabase session with auth.uid() set
+      DebugUtils.info(MODULE_NAME, 'Calling signInWithPassword', { email: credentials.user_email })
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: credentials.user_email,
         password: credentials.user_password
       })
 
-      if (authError) throw authError
+      DebugUtils.info(MODULE_NAME, 'signInWithPassword response', {
+        hasAuthData: !!authData,
+        hasUser: !!authData?.user,
+        hasError: !!authError,
+        errorMessage: authError?.message
+      })
+
+      if (authError) {
+        DebugUtils.error(MODULE_NAME, 'signInWithPassword error', { error: authError.message })
+        throw authError
+      }
       if (!authData.user) throw new Error('Failed to create session')
 
       DebugUtils.info(MODULE_NAME, 'PIN login successful - Supabase session created', {
