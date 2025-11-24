@@ -27,8 +27,9 @@ export default defineConfig({
     },
     terserOptions: {
       compress: {
-        drop_console: true,
-        drop_debugger: true
+        // Allow console.log in dev/preview builds, remove in production
+        drop_console: process.env.VITE_ENABLE_LOGS !== 'true',
+        drop_debugger: process.env.VITE_ENABLE_LOGS !== 'true'
       }
     }
   },
