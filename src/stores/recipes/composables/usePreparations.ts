@@ -30,17 +30,16 @@ let getProductCallback: GetProductCallback | null = null
 
 export const activePreparations = computed(() => preparations.value.filter(p => p.isActive))
 
+// ✅ UPDATED: Group by UUID categories instead of old text keys
 export const preparationsByType = computed(() => {
-  const types: Record<PreparationType, Preparation[]> = {
-    sauce: [],
-    garnish: [],
-    marinade: [],
-    semifinished: [],
-    seasoning: []
-  }
+  const types: Record<string, Preparation[]> = {}
 
   activePreparations.value.forEach(preparation => {
-    types[preparation.type].push(preparation)
+    const typeId = preparation.type
+    if (!types[typeId]) {
+      types[typeId] = []
+    }
+    types[typeId].push(preparation)
   })
 
   return types
@@ -234,6 +233,11 @@ export function usePreparations() {
         updatedAt: new Date().toISOString()
       }
 
+      // ✅ UPDATE: Save to Supabase via recipesService
+      const { recipesService } = await import('../recipesService')
+      await recipesService.updatePreparation({ id, ...updatedPreparation })
+
+      // Update local state after successful Supabase update
       preparations.value[index] = updatedPreparation
 
       DebugUtils.info(MODULE_NAME, `✅ Preparation updated: ${updatedPreparation.name}`, {

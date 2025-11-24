@@ -1,280 +1,930 @@
-# Next Sprint - Product Categories Table
+# Next Sprint - Preparation & Recipe Categories Refactoring
 
 **Created:** 2025-11-24
 **Priority:** High
-**Status:** 🚀 Ready to Start
+**Status:** ✅ Phase 1 Complete | 🚀 Phase 2 Ready
 
 ---
 
 ## 🎯 Sprint Goal
 
-> **Create `product_categories` table and integrate into existing products store**
+> **Refactor preparation types and recipe categories to use database tables (following product_categories pattern)**
 >
-> Simple refactoring:
+> Two-phase approach:
 >
-> 1. Create categories table in database
-> 2. Migrate products.category from string to UUID
-> 3. Update products store to load categories
-> 4. Update components to display categories
+> 1. **Phase 1:** Integrate existing `preparation_categories` table (already exists!)
+> 2. **Phase 2:** Create `recipe_categories` table and migrate
+>
+> **Key principles:**
+>
+> - ✅ All UI text in English (no Cyrillic)
+> - ✅ Use UUID foreign keys (data integrity)
+> - ✅ Follow product categories pattern exactly
+> - ✅ Load categories from database (not hardcoded constants)
 
 ---
 
-## 📋 Tasks
+## 📊 Current State Analysis
 
-### Phase 1: Database Schema
+### Preparation Categories
 
-- [ ] **1.1 Create product_categories table**
+- ✅ **Database table exists:** `preparation_categories` (7 categories)
+- ❌ **Code still uses hardcoded constants** with Cyrillic text
+- ❌ **Mismatch:** DB has (sauce, base, garnish, marinade, dough, filling, other)
+  Code has (sauce, garnish, marinade, semifinished, seasoning)
+- 🎯 **Decision:** Keep DB categories (7 categories) and update code
 
-  ```sql
-  -- Migration: create_product_categories
-  CREATE TABLE product_categories (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    key TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    color TEXT,
-    icon TEXT,
-    sort_order INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+### Recipe Categories
+
+- ❌ **No database table** - need to create
+- ❌ **Hardcoded constants** with Cyrillic text
+- 🎯 **Action:** Create table, seed data, migrate column
+
+---
+
+## 📋 PHASE 1: Preparation Categories Integration
+
+### Task 1.1: Update TypeScript Types
+
+**File:** `src/stores/recipes/types.ts`
+
+**Actions:**
+
+1. **Add PreparationCategory interface** (line ~310, before PREPARATION_TYPES):
+
+```typescript
+// Preparation Category (from database)
+export interface PreparationCategory {
+  id: string
+  key: string
+  name: string
+  description?: string
+  icon?: string
+  emoji?: string
+  color?: string
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+```
+
+2. **Update PreparationType** (replace existing type):
+
+```typescript
+// Updated to match database keys
+export type PreparationType =
+  | 'sauce'
+  | 'base'
+  | 'garnish'
+  | 'marinade'
+  | 'dough'
+  | 'filling'
+  | 'other'
+```
+
+3. **Delete PREPARATION_TYPES constant** (lines 310-317):
+
+```typescript
+// ❌ DELETE THIS:
+export const PREPARATION_TYPES = [
+  { value: 'sauce', text: 'Соусы', prefix: 'P' },
+  { value: 'garnish', text: 'Гарниры', prefix: 'P' }
+  // ... rest
+] as const
+```
+
+4. **Update Preparation interface** (around line 302):
+
+```typescript
+export interface Preparation {
+  id: string
+  name: string
+  nameEn?: string
+  type: string // UUID (FK to preparation_categories), will migrate from TEXT
+  servings?: number
+  cookingTime?: number
+  instructions?: string
+  ingredients: RecipeIngredient[]
+  outputProduct?: string
+  outputQuantity?: number
+  outputUnit?: MeasurementUnit
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+```
+
+---
+
+### Task 1.2: Add Categories to RecipesStore
+
+**File:** `src/stores/recipes/recipesStore.ts`
+
+**Actions:**
+
+1. **Update RecipesState interface** (line ~40):
+
+```typescript
+interface RecipesState {
+  recipes: Recipe[]
+  preparations: Preparation[]
+  preparationCategories: PreparationCategory[] // ✅ ADD THIS
+  recipeCategories: RecipeCategory[] // ✅ ADD THIS (Phase 2)
+  loading: boolean
+  error: string | null
+  initialized: boolean
+}
+```
+
+2. **Update state initialization** (line ~50):
+
+```typescript
+state: (): RecipesState => ({
+  recipes: [],
+  preparations: [],
+  preparationCategories: [], // ✅ ADD THIS
+  recipeCategories: [],      // ✅ ADD THIS (Phase 2)
+  loading: false,
+  error: null,
+  initialized: false
+}),
+```
+
+3. **Add getters for preparation categories** (after existing getters, around line ~100):
+
+```typescript
+getters: {
+  // ... existing getters
+
+  // ✅ ADD: Preparation category getters
+  activePreparationCategories: state =>
+    state.preparationCategories
+      .filter(c => c.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder),
+
+  getPreparationCategoryById: state => (id: string) =>
+    state.preparationCategories.find(c => c.id === id),
+
+  getPreparationCategoryName: state => (id: string) =>
+    state.preparationCategories.find(c => c.id === id)?.name || id,
+
+  getPreparationCategoryColor: state => (id: string) =>
+    state.preparationCategories.find(c => c.id === id)?.color || 'grey',
+
+  getPreparationCategoryEmoji: state => (id: string) =>
+    state.preparationCategories.find(c => c.id === id)?.emoji || '👨‍🍳',
+
+  // Group preparations by category
+  preparationsByCategory: state => {
+    const grouped: Record<string, Preparation[]> = {}
+    state.preparations.forEach(prep => {
+      if (!grouped[prep.type]) {
+        grouped[prep.type] = []
+      }
+      grouped[prep.type].push(prep)
+    })
+    return grouped
+  },
+},
+```
+
+4. **Update initialize() method** (around line ~150):
+
+```typescript
+async initialize() {
+  if (this.initialized) {
+    DebugUtils.info(MODULE_NAME, 'Already initialized')
+    return
+  }
+
+  try {
+    this.loading = true
+
+    // ✅ ADD: Load categories first
+    await this.loadPreparationCategories()
+    await this.loadRecipeCategories() // Phase 2
+
+    // Then load recipes and preparations
+    await Promise.all([
+      this.loadRecipes(),
+      this.loadPreparations()
+    ])
+
+    this.initialized = true
+    DebugUtils.info(MODULE_NAME, 'Initialized successfully', {
+      recipes: this.recipes.length,
+      preparations: this.preparations.length,
+      preparationCategories: this.preparationCategories.length
+    })
+  } catch (error) {
+    this.error = (error as Error).message
+    DebugUtils.error(MODULE_NAME, 'Initialization failed', error)
+  } finally {
+    this.loading = false
+  }
+},
+```
+
+5. **Add loadPreparationCategories() action** (after loadPreparations, around line ~200):
+
+```typescript
+async loadPreparationCategories(): Promise<void> {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Loading preparation categories...')
+    const categories = await recipesService.getPreparationCategories()
+    this.preparationCategories = categories
+    DebugUtils.store(MODULE_NAME, 'Loaded preparation categories', {
+      count: categories.length
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load preparation categories', error)
+    throw error
+  }
+},
+```
+
+---
+
+### Task 1.3: Add Service Methods
+
+**File:** `src/stores/recipes/recipesService.ts`
+
+**Actions:**
+
+1. **Add getPreparationCategories() method** (after getPreparations, around line ~100):
+
+```typescript
+async getPreparationCategories(): Promise<PreparationCategory[]> {
+  if (!isSupabaseAvailable()) {
+    DebugUtils.info(MODULE_NAME, 'Supabase not available, returning empty categories')
+    return []
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('preparation_categories')
+      .select('*')
+      .order('sort_order', { ascending: true })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load preparation categories', error)
+      throw error
+    }
+
+    const categories = (data || []).map(row => ({
+      id: row.id,
+      key: row.key,
+      name: row.name,
+      description: row.description,
+      icon: row.icon,
+      emoji: row.emoji,
+      color: row.color,
+      sortOrder: row.sort_order,
+      isActive: row.is_active,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }))
+
+    DebugUtils.info(MODULE_NAME, 'Loaded preparation categories', {
+      count: categories.length
+    })
+
+    return categories
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Error loading preparation categories', error)
+    throw error
+  }
+}
+```
+
+---
+
+### Task 1.4: Migrate preparations.type to UUID
+
+**File:** `src/supabase/migrations/009_migrate_preparations_type_to_uuid.sql`
+
+**Migration SQL:**
+
+```sql
+-- Migration: Migrate preparations.type from TEXT to UUID foreign key
+-- Created: 2025-11-24
+-- Description: Convert preparations.type column to reference preparation_categories table
+
+-- Step 1: Add new column with UUID type
+ALTER TABLE preparations ADD COLUMN type_new UUID;
+
+-- Step 2: Populate new column by matching keys
+-- Map old TEXT keys to new UUID from preparation_categories
+UPDATE preparations
+SET type_new = pc.id
+FROM preparation_categories pc
+WHERE preparations.type = pc.key;
+
+-- Step 3: Handle unmapped values (if any)
+-- Check for preparations with NULL type_new (no match found)
+DO $$
+DECLARE
+  unmapped_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO unmapped_count
+  FROM preparations
+  WHERE type_new IS NULL;
+
+  IF unmapped_count > 0 THEN
+    -- Map unmapped preparations to 'other' category
+    UPDATE preparations
+    SET type_new = (SELECT id FROM preparation_categories WHERE key = 'other')
+    WHERE type_new IS NULL;
+
+    RAISE NOTICE 'Mapped % unmapped preparations to "other" category', unmapped_count;
+  END IF;
+END $$;
+
+-- Step 4: Drop old column and rename new column
+ALTER TABLE preparations DROP COLUMN type;
+ALTER TABLE preparations RENAME COLUMN type_new TO type;
+
+-- Step 5: Add NOT NULL constraint
+ALTER TABLE preparations ALTER COLUMN type SET NOT NULL;
+
+-- Step 6: Add foreign key constraint
+ALTER TABLE preparations
+  ADD CONSTRAINT fk_preparations_type
+  FOREIGN KEY (type) REFERENCES preparation_categories(id)
+  ON DELETE RESTRICT;
+
+-- Step 7: Add index for performance
+CREATE INDEX idx_preparations_type ON preparations(type);
+
+-- Add comment
+COMMENT ON COLUMN preparations.type IS 'Reference to preparation_categories.id (formerly TEXT key)';
+```
+
+**Apply migration:**
+
+```bash
+# Use MCP tool to apply migration
+mcp__supabase__apply_migration({
+  name: "migrate_preparations_type_to_uuid",
+  query: "... SQL above ..."
+})
+```
+
+---
+
+### Task 1.5: Update Components
+
+#### File: `src/views/recipes/RecipesView.vue`
+
+**Current code (lines ~50-60):**
+
+```typescript
+// ❌ DELETE: Hardcoded preparation types
+const preparationTypes = [
+  { value: 'all', text: 'All Types' },
+  { value: 'sauce', text: 'Соусы' },
+  { value: 'garnish', text: 'Гарниры' }
+  // ...
+]
+```
+
+**Replace with:**
+
+```typescript
+import { useRecipesStore } from '@/stores/recipes'
+
+const recipesStore = useRecipesStore()
+
+// ✅ NEW: Load from store
+const preparationTypes = computed(() => [
+  { value: 'all', text: 'All Types' },
+  ...recipesStore.activePreparationCategories.map(cat => ({
+    value: cat.id,
+    text: cat.name
+  }))
+])
+
+// ✅ Helper functions
+const getPreparationCategoryName = (categoryId: string) =>
+  recipesStore.getPreparationCategoryName(categoryId)
+
+const getPreparationCategoryColor = (categoryId: string) =>
+  recipesStore.getPreparationCategoryColor(categoryId)
+
+const getPreparationCategoryEmoji = (categoryId: string) =>
+  recipesStore.getPreparationCategoryEmoji(categoryId)
+```
+
+**Update template** (replace Cyrillic with English labels):
+
+```vue
+<template>
+  <!-- Filter section -->
+  <v-select
+    v-model="selectedPrepType"
+    :items="preparationTypes"
+    label="Preparation Type"
+    density="compact"
+  />
+
+  <!-- Preparation display -->
+  <v-chip :color="getPreparationCategoryColor(prep.type)" size="small">
+    {{ getPreparationCategoryEmoji(prep.type) }}
+    {{ getPreparationCategoryName(prep.type) }}
+  </v-chip>
+</template>
+```
+
+#### File: `src/views/Preparation/components/PreparationStockTable.vue`
+
+**Update category display** (around line ~80):
+
+```typescript
+// ✅ Import store
+import { useRecipesStore } from '@/stores/recipes'
+
+const recipesStore = useRecipesStore()
+
+// ✅ Replace hardcoded type labels
+const getTypeLabel = (typeId: string) => recipesStore.getPreparationCategoryName(typeId)
+const getTypeColor = (typeId: string) => recipesStore.getPreparationCategoryColor(typeId)
+```
+
+```vue
+<template>
+  <!-- Replace hardcoded text with store getters -->
+  <v-chip :color="getTypeColor(item.type)" size="small">
+    {{ getTypeLabel(item.type) }}
+  </v-chip>
+</template>
+```
+
+#### Files to update similarly:
+
+- `src/stores/recipes/composables/usePreparations.ts`
+- `src/stores/recipes/supabaseMappers.ts` (if it has type mapping logic)
+- Any other components that display preparation types
+
+---
+
+## 📋 PHASE 2: Recipe Categories Migration
+
+### Task 2.1: Create recipe_categories Table
+
+**File:** `src/supabase/migrations/010_create_recipe_categories.sql`
+
+**Migration SQL:**
+
+```sql
+-- Migration: Create recipe_categories table
+-- Created: 2025-11-24
+-- Description: Create normalized recipe categories table (following product_categories pattern)
+
+-- Create recipe_categories table
+CREATE TABLE recipe_categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  color TEXT,
+  icon TEXT,
+  sort_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create indexes for performance
+CREATE UNIQUE INDEX idx_recipe_categories_key ON recipe_categories(key);
+CREATE INDEX idx_recipe_categories_sort ON recipe_categories(sort_order);
+CREATE INDEX idx_recipe_categories_active ON recipe_categories(is_active);
+
+-- Enable Row Level Security
+ALTER TABLE recipe_categories ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policy: Allow read for all authenticated users
+CREATE POLICY "Allow read for authenticated users"
+  ON recipe_categories FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- RLS Policy: Allow all operations for admins
+CREATE POLICY "Allow all for admins"
+  ON recipe_categories FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE users.id = auth.uid()
+      AND 'admin' = ANY(users.roles)
+    )
   );
 
-  -- Indexes
-  CREATE UNIQUE INDEX idx_product_categories_key ON product_categories(key);
-  CREATE INDEX idx_product_categories_sort ON product_categories(sort_order);
+-- Seed initial categories (migrated from RECIPE_CATEGORIES constant)
+INSERT INTO recipe_categories (key, name, description, color, icon, sort_order) VALUES
+  ('main_dish', 'Main Dishes', 'Primary courses and entrees', 'red-darken-2', 'mdi-food-steak', 1),
+  ('side_dish', 'Side Dishes', 'Accompaniments and sides', 'green-darken-2', 'mdi-food-variant', 2),
+  ('dessert', 'Desserts', 'Sweet dishes and treats', 'pink-darken-2', 'mdi-cake', 3),
+  ('appetizer', 'Appetizers', 'Starters and small plates', 'orange-darken-2', 'mdi-food-apple', 4),
+  ('beverage', 'Beverages', 'Drinks and cocktails', 'blue-darken-2', 'mdi-glass-cocktail', 5),
+  ('sauce', 'Sauces', 'Sauces and condiments', 'purple-darken-2', 'mdi-bottle-tonic', 6);
 
-  -- RLS
-  ALTER TABLE product_categories ENABLE ROW LEVEL SECURITY;
+-- Add comments to table
+COMMENT ON TABLE recipe_categories IS 'Recipe categories with localization and UI properties';
+COMMENT ON COLUMN recipe_categories.key IS 'Unique English key for programmatic access';
+COMMENT ON COLUMN recipe_categories.name IS 'Display name for UI';
+COMMENT ON COLUMN recipe_categories.color IS 'Vuetify color name for UI chips';
+COMMENT ON COLUMN recipe_categories.icon IS 'Material Design icon name';
+COMMENT ON COLUMN recipe_categories.sort_order IS 'Display order in UI';
+```
 
-  CREATE POLICY "Allow read for authenticated"
-    ON product_categories FOR SELECT
-    TO authenticated
-    USING (true);
+**Apply migration:**
 
-  CREATE POLICY "Allow all for admins"
-    ON product_categories FOR ALL
-    TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM users
-        WHERE users.id = auth.uid() AND 'admin' = ANY(users.roles)
-      )
-    );
+```bash
+mcp__supabase__apply_migration({
+  name: "create_recipe_categories",
+  query: "... SQL above ..."
+})
+```
 
-  -- Seed data
-  INSERT INTO product_categories (key, name, color, sort_order) VALUES
-    ('meat', 'Meat & Poultry', 'red', 1),
-    ('vegetables', 'Vegetables', 'green', 2),
-    ('fruits', 'Fruits', 'orange', 3),
-    ('dairy', 'Dairy Products', 'blue', 4),
-    ('cereals', 'Grains & Cereals', 'amber', 5),
-    ('spices', 'Spices & Condiments', 'purple', 6),
-    ('seafood', 'Seafood', 'cyan', 7),
-    ('beverages', 'Beverages', 'indigo', 8),
-    ('other', 'Other', 'grey', 9);
-  ```
+---
 
-- [ ] **1.2 Migrate products.category to foreign key**
+### Task 2.2: Migrate recipes.category to UUID
 
-  ```sql
-  -- Migration: migrate_products_category
+**File:** `src/supabase/migrations/011_migrate_recipes_category_to_uuid.sql`
 
-  -- Add new column
-  ALTER TABLE products ADD COLUMN category_new UUID;
+**Migration SQL:**
 
-  -- Copy data (match by key)
-  UPDATE products
-  SET category_new = pc.id
-  FROM product_categories pc
-  WHERE products.category = pc.key;
+```sql
+-- Migration: Migrate recipes.category from TEXT to UUID foreign key
+-- Created: 2025-11-24
+-- Description: Convert recipes.category column to reference recipe_categories table
 
-  -- Drop old, rename new
-  ALTER TABLE products DROP COLUMN category;
-  ALTER TABLE products RENAME COLUMN category_new TO category;
+-- Step 1: Add new column with UUID type
+ALTER TABLE recipes ADD COLUMN category_new UUID;
 
-  -- Add constraints
-  ALTER TABLE products ALTER COLUMN category SET NOT NULL;
-  ALTER TABLE products
-    ADD CONSTRAINT fk_products_category
-    FOREIGN KEY (category) REFERENCES product_categories(id);
-  ```
+-- Step 2: Populate new column by matching keys
+-- Map old TEXT keys to new UUID from recipe_categories
+UPDATE recipes
+SET category_new = rc.id
+FROM recipe_categories rc
+WHERE recipes.category = rc.key;
 
-### Phase 2: Update TypeScript Types
+-- Step 3: Handle unmapped values (if any)
+DO $$
+DECLARE
+  unmapped_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO unmapped_count
+  FROM recipes
+  WHERE category_new IS NULL;
 
-- [ ] **2.1 Create ProductCategory interface**
+  IF unmapped_count > 0 THEN
+    -- Map unmapped recipes to 'main_dish' category (default)
+    UPDATE recipes
+    SET category_new = (SELECT id FROM recipe_categories WHERE key = 'main_dish')
+    WHERE category_new IS NULL;
 
-  Add to `src/stores/productsStore/types.ts`:
+    RAISE NOTICE 'Mapped % unmapped recipes to "main_dish" category', unmapped_count;
+  END IF;
+END $$;
 
-  ```typescript
-  export interface ProductCategory {
-    id: string
-    key: string
-    name: string
-    color?: string
-    icon?: string
-    sortOrder: number
-    isActive: boolean
-    createdAt: string
-    updatedAt: string
-  }
-  ```
+-- Step 4: Drop old column and rename new column
+ALTER TABLE recipes DROP COLUMN category;
+ALTER TABLE recipes RENAME COLUMN category_new TO category;
 
-- [ ] **2.2 Update Product interface**
+-- Step 5: Add NOT NULL constraint
+ALTER TABLE recipes ALTER COLUMN category SET NOT NULL;
 
-  ```typescript
-  export interface Product {
-    // ... existing fields
-    category: string // UUID (FK to product_categories)
-    // ... rest
-  }
-  ```
+-- Step 6: Add foreign key constraint
+ALTER TABLE recipes
+  ADD CONSTRAINT fk_recipes_category
+  FOREIGN KEY (category) REFERENCES recipe_categories(id)
+  ON DELETE RESTRICT;
 
-- [ ] **2.3 Remove old PRODUCT_CATEGORIES constant**
+-- Step 7: Add index for performance
+CREATE INDEX idx_recipes_category ON recipes(category);
 
-  Delete from `src/stores/productsStore/types.ts`:
+-- Add comment
+COMMENT ON COLUMN recipes.category IS 'Reference to recipe_categories.id (formerly TEXT key)';
+```
 
-  ```typescript
-  // ❌ DELETE:
-  export const PRODUCT_CATEGORIES: Record<ProductCategory, string> = { ... }
-  ```
+**Apply migration:**
 
-### Phase 3: Update Products Store
+```bash
+mcp__supabase__apply_migration({
+  name: "migrate_recipes_category_to_uuid",
+  query: "... SQL above ..."
+})
+```
 
-- [ ] **3.1 Add categories to productsStore state**
+---
 
-  Update `src/stores/productsStore/productsStore.ts`:
+### Task 2.3: Update TypeScript Types for Recipe Categories
 
-  ```typescript
-  interface ProductsState {
-    products: Product[]
-    categories: ProductCategory[] // ADD THIS
-    loading: boolean
-    error: string | null
-    initialized: boolean
-  }
+**File:** `src/stores/recipes/types.ts`
 
-  export const useProductsStore = defineStore('products', {
-    state: (): ProductsState => ({
-      products: [],
-      categories: [], // ADD THIS
-      loading: false,
-      error: null,
-      initialized: false
-    }),
+**Actions:**
 
-    getters: {
-      // ADD these getters
-      activeCategories: state =>
-        state.categories.filter(c => c.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
+1. **Add RecipeCategory interface** (around line ~328):
 
-      getCategoryById: state => (id: string) => state.categories.find(c => c.id === id),
+```typescript
+// Recipe Category (from database)
+export interface RecipeCategory {
+  id: string
+  key: string
+  name: string
+  description?: string
+  color?: string
+  icon?: string
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+```
 
-      getCategoryName: state => (id: string) => state.categories.find(c => c.id === id)?.name || id,
+2. **Update RecipeCategoryType** (replace existing type):
 
-      getCategoryColor: state => (id: string) =>
-        state.categories.find(c => c.id === id)?.color || 'grey'
-    },
+```typescript
+// Updated to match database keys
+export type RecipeCategoryType =
+  | 'main_dish'
+  | 'side_dish'
+  | 'dessert'
+  | 'appetizer'
+  | 'beverage'
+  | 'sauce'
+```
 
-    actions: {
-      async initialize() {
-        await this.loadCategories() // ADD THIS
-        await this.loadProducts()
-      },
+3. **Delete RECIPE_CATEGORIES constant** (lines ~319-326):
 
-      async loadCategories() {
-        // ADD THIS method
-        const categories = await productsService.getCategories()
-        this.categories = categories
+```typescript
+// ❌ DELETE THIS:
+export const RECIPE_CATEGORIES = [
+  { value: 'main_dish', text: 'Основные блюда' },
+  { value: 'side_dish', text: 'Гарниры' }
+  // ... rest
+] as const
+```
+
+4. **Update Recipe interface** (around line ~280):
+
+```typescript
+export interface Recipe {
+  id: string
+  name: string
+  nameEn?: string
+  category: string // UUID (FK to recipe_categories)
+  servings?: number
+  cookingTime?: number
+  cookingSteps?: string[]
+  ingredients: RecipeIngredient[]
+  preparationIds: string[]
+  isActive: boolean
+  canBeSold: boolean
+  price?: number
+  createdAt: string
+  updatedAt: string
+}
+```
+
+---
+
+### Task 2.4: Add Recipe Categories to Store
+
+**File:** `src/stores/recipes/recipesStore.ts`
+
+**Actions:**
+
+1. **Add recipe category getters** (after preparation category getters):
+
+```typescript
+getters: {
+  // ... existing getters
+  // ... preparation category getters
+
+  // ✅ ADD: Recipe category getters
+  activeRecipeCategories: state =>
+    state.recipeCategories
+      .filter(c => c.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder),
+
+  getRecipeCategoryById: state => (id: string) =>
+    state.recipeCategories.find(c => c.id === id),
+
+  getRecipeCategoryName: state => (id: string) =>
+    state.recipeCategories.find(c => c.id === id)?.name || id,
+
+  getRecipeCategoryColor: state => (id: string) =>
+    state.recipeCategories.find(c => c.id === id)?.color || 'grey',
+
+  getRecipeCategoryIcon: state => (id: string) =>
+    state.recipeCategories.find(c => c.id === id)?.icon || 'mdi-food',
+
+  // Group recipes by category
+  recipesByCategory: state => {
+    const grouped: Record<string, Recipe[]> = {}
+    state.recipes.forEach(recipe => {
+      if (!grouped[recipe.category]) {
+        grouped[recipe.category] = []
       }
-    }
-  })
-  ```
+      grouped[recipe.category].push(recipe)
+    })
+    return grouped
+  },
+},
+```
 
-- [ ] **3.2 Add categories methods to productsService**
+2. **Add loadRecipeCategories() action**:
 
-  Update `src/stores/productsStore/productsService.ts`:
-
-  ```typescript
-  class ProductsService {
-    // ADD THIS method
-    async getCategories(): Promise<ProductCategory[]> {
-      if (!isSupabaseAvailable()) return []
-
-      const { data, error } = await supabase
-        .from('product_categories')
-        .select('*')
-        .order('sort_order', { ascending: true })
-
-      if (error) throw error
-      return data.map(row => ({
-        id: row.id,
-        key: row.key,
-        name: row.name,
-        color: row.color,
-        icon: row.icon,
-        sortOrder: row.sort_order,
-        isActive: row.is_active,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-      }))
-    }
+```typescript
+async loadRecipeCategories(): Promise<void> {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Loading recipe categories...')
+    const categories = await recipesService.getRecipeCategories()
+    this.recipeCategories = categories
+    DebugUtils.store(MODULE_NAME, 'Loaded recipe categories', {
+      count: categories.length
+    })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load recipe categories', error)
+    throw error
   }
-  ```
+},
+```
 
-### Phase 4: Update Components
+---
 
-- [ ] **4.1 Update ProductsList.vue**
+### Task 2.5: Add Recipe Categories Service Methods
 
-  Replace `getCategoryLabel` and `getCategoryColor`:
+**File:** `src/stores/recipes/recipesService.ts`
 
-  ```typescript
-  import { useProductsStore } from '@/stores/productsStore'
+**Actions:**
 
-  const productsStore = useProductsStore()
+1. **Add getRecipeCategories() method**:
 
-  // Use store getters
-  const getCategoryLabel = (categoryId: string) => productsStore.getCategoryName(categoryId)
-  const getCategoryColor = (categoryId: string) => productsStore.getCategoryColor(categoryId)
-  ```
+```typescript
+async getRecipeCategories(): Promise<RecipeCategory[]> {
+  if (!isSupabaseAvailable()) {
+    DebugUtils.info(MODULE_NAME, 'Supabase not available, returning empty categories')
+    return []
+  }
 
-- [ ] **4.2 Update ProductsFilters.vue**
+  try {
+    const { data, error } = await supabase
+      .from('recipe_categories')
+      .select('*')
+      .order('sort_order', { ascending: true })
 
-  Replace hardcoded categories:
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load recipe categories', error)
+      throw error
+    }
 
-  ```typescript
-  import { computed } from 'vue'
-  import { useProductsStore } from '@/stores/productsStore'
-
-  const productsStore = useProductsStore()
-
-  const categoryOptions = computed(() => [
-    { value: 'all', label: 'All categories' },
-    ...productsStore.activeCategories.map(c => ({
-      value: c.id,
-      label: c.name
+    const categories = (data || []).map(row => ({
+      id: row.id,
+      key: row.key,
+      name: row.name,
+      description: row.description,
+      color: row.color,
+      icon: row.icon,
+      sortOrder: row.sort_order,
+      isActive: row.is_active,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     }))
-  ])
-  ```
 
-- [ ] **4.3 Update ProductCard.vue**
-- [ ] **4.4 Update ProductDetailsDialog.vue**
-- [ ] **4.5 Update AddItemDialog.vue** (supplier_2)
+    DebugUtils.info(MODULE_NAME, 'Loaded recipe categories', {
+      count: categories.length
+    })
 
-### Phase 5: Testing
+    return categories
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Error loading recipe categories', error)
+    throw error
+  }
+}
+```
 
-- [ ] **5.1 Run migrations on DEV database**
-- [ ] **5.2 Test categories load**
-- [ ] **5.3 Test product display**
-- [ ] **5.4 Test filters work**
-- [ ] **5.5 Run migrations on PROD database**
+---
+
+### Task 2.6: Update Components for Recipe Categories
+
+#### File: `src/views/recipes/RecipesView.vue`
+
+**Replace hardcoded categories** (around line ~40):
+
+```typescript
+// ❌ DELETE: Hardcoded recipe categories
+const recipeCategories = [
+  { value: 'all', text: 'All Categories' },
+  { value: 'main_dish', text: 'Основные блюда' }
+  // ...
+]
+```
+
+**Replace with:**
+
+```typescript
+const recipesStore = useRecipesStore()
+
+// ✅ NEW: Load from store
+const recipeCategories = computed(() => [
+  { value: 'all', text: 'All Categories' },
+  ...recipesStore.activeRecipeCategories.map(cat => ({
+    value: cat.id,
+    text: cat.name
+  }))
+])
+
+// ✅ Helper functions
+const getRecipeCategoryName = (categoryId: string) => recipesStore.getRecipeCategoryName(categoryId)
+
+const getRecipeCategoryColor = (categoryId: string) =>
+  recipesStore.getRecipeCategoryColor(categoryId)
+
+const getRecipeCategoryIcon = (categoryId: string) => recipesStore.getRecipeCategoryIcon(categoryId)
+```
+
+**Update template:**
+
+```vue
+<template>
+  <!-- Filter section -->
+  <v-select
+    v-model="selectedCategory"
+    :items="recipeCategories"
+    label="Recipe Category"
+    density="compact"
+  />
+
+  <!-- Recipe display -->
+  <v-chip
+    :color="getRecipeCategoryColor(recipe.category)"
+    size="small"
+    :prepend-icon="getRecipeCategoryIcon(recipe.category)"
+  >
+    {{ getRecipeCategoryName(recipe.category) }}
+  </v-chip>
+</template>
+```
+
+#### Update these components similarly:
+
+- `src/views/recipes/components/UnifiedRecipeItem.vue` (category display)
+- `src/views/recipes/components/UnifiedViewDialog.vue` (detail view)
+- `src/views/recipes/components/UnifiedRecipeDialog.vue` (edit dialog)
+- `src/stores/recipes/composables/useRecipes.ts`
+- `src/stores/recipes/supabaseMappers.ts`
+
+---
+
+## 🧪 Testing Checklist
+
+### Phase 1: Preparation Categories
+
+- [ ] Run migration 009 on DEV database
+- [ ] Verify preparations.type is UUID column
+- [ ] Test preparation categories load in store
+- [ ] Test RecipesView shows preparation categories
+- [ ] Test PreparationStockTable shows correct categories
+- [ ] Verify no TypeScript errors
+- [ ] Test filtering by preparation type works
+- [ ] Run migration 009 on PROD database
+
+### Phase 2: Recipe Categories
+
+- [ ] Run migrations 010 & 011 on DEV database
+- [ ] Verify recipe_categories table created with 6 categories
+- [ ] Verify recipes.category is UUID column
+- [ ] Test recipe categories load in store
+- [ ] Test RecipesView shows recipe categories
+- [ ] Test recipe filtering by category works
+- [ ] Test recipe dialogs show correct categories
+- [ ] Verify no TypeScript errors
+- [ ] Run migrations 010 & 011 on PROD database
 
 ---
 
 ## 🎯 Success Criteria
 
-- [ ] Categories table created with 9 categories
-- [ ] Products migrated to use category UUID
-- [ ] All product views show correct category names
+### Phase 1 Complete When:
+
+- [ ] preparation_categories integrated into recipesStore
+- [ ] All preparation type displays use store getters
+- [ ] preparations.type column is UUID foreign key
+- [ ] No Cyrillic text in UI
+- [ ] No TypeScript errors
+- [ ] Works in both DEV and PROD
+
+### Phase 2 Complete When:
+
+- [ ] recipe_categories table created with 6 categories
+- [ ] All recipe category displays use store getters
+- [ ] recipes.category column is UUID foreign key
+- [ ] No Cyrillic text in UI
 - [ ] No TypeScript errors
 - [ ] Works in both DEV and PROD
 
@@ -282,18 +932,190 @@
 
 ## 📝 Files to Modify
 
-- `supabase/migrations/` - 2 new migration files
-- `src/stores/productsStore/types.ts` - Add ProductCategory, remove PRODUCT_CATEGORIES
-- `src/stores/productsStore/productsStore.ts` - Add categories state + getters
-- `src/stores/productsStore/productsService.ts` - Add getCategories()
-- `src/views/products/components/ProductsList.vue`
-- `src/views/products/components/ProductsFilters.vue`
-- `src/views/products/components/ProductCard.vue`
-- `src/views/products/components/ProductDetailsDialog.vue`
-- `src/views/supplier_2/components/procurement/AddItemDialog.vue`
+### Phase 1: Preparation Categories
+
+- `src/supabase/migrations/009_migrate_preparations_type_to_uuid.sql` (NEW)
+- `src/stores/recipes/types.ts` (ADD PreparationCategory interface, UPDATE PreparationType)
+- `src/stores/recipes/recipesStore.ts` (ADD preparationCategories state + getters + actions)
+- `src/stores/recipes/recipesService.ts` (ADD getPreparationCategories())
+- `src/views/recipes/RecipesView.vue` (REMOVE hardcoded types, USE store getters)
+- `src/views/Preparation/components/PreparationStockTable.vue` (USE store getters)
+- `src/stores/recipes/composables/usePreparations.ts` (USE store getters)
+- `src/stores/recipes/supabaseMappers.ts` (UPDATE if needed)
+
+### Phase 2: Recipe Categories
+
+- `src/supabase/migrations/010_create_recipe_categories.sql` (NEW)
+- `src/supabase/migrations/011_migrate_recipes_category_to_uuid.sql` (NEW)
+- `src/stores/recipes/types.ts` (ADD RecipeCategory interface, UPDATE RecipeCategoryType)
+- `src/stores/recipes/recipesStore.ts` (ADD recipeCategories state + getters + actions)
+- `src/stores/recipes/recipesService.ts` (ADD getRecipeCategories())
+- `src/views/recipes/RecipesView.vue` (REMOVE hardcoded categories, USE store getters)
+- `src/views/recipes/components/UnifiedRecipeItem.vue` (USE store getters)
+- `src/views/recipes/components/UnifiedViewDialog.vue` (USE store getters)
+- `src/views/recipes/components/UnifiedRecipeDialog.vue` (USE store getters)
+- `src/stores/recipes/composables/useRecipes.ts` (USE store getters)
+- `src/stores/recipes/supabaseMappers.ts` (UPDATE if needed)
 
 ---
 
-## 🚀 Ready to Start?
+## 🚀 Implementation Order
 
-Начинаем с Phase 1 - создание миграций?
+**Recommended sequence:**
+
+1. **Phase 1 - Steps 1.1 to 1.3** (TypeScript + Store, 30 min)
+2. **Phase 1 - Step 1.4** (Migration, 15 min)
+3. **Phase 1 - Step 1.5** (Components, 45 min)
+4. **Test Phase 1** (30 min)
+5. **Phase 2 - Steps 2.1 to 2.2** (Migrations, 30 min)
+6. **Phase 2 - Steps 2.3 to 2.5** (TypeScript + Store, 45 min)
+7. **Phase 2 - Step 2.6** (Components, 60 min)
+8. **Test Phase 2** (30 min)
+9. **Deploy to PROD** (30 min)
+
+**Total estimated time:** 5-6 hours
+
+---
+
+## ✅ PHASE 1 COMPLETED (2025-11-24)
+
+### Summary of Changes:
+
+**1. TypeScript Types Updated:**
+
+- ✅ Removed `PREPARATION_TYPES` constant from `types.ts`
+- ✅ Added `PreparationCategory` interface
+- ✅ Updated `PreparationType` to use new keys
+
+**2. Store Integration:**
+
+- ✅ Added `preparationCategories` state to recipesStore
+- ✅ Added getters: `activePreparationCategories`, `getPreparationCategoryName`, etc.
+- ✅ Added `loadPreparationCategories()` action
+- ✅ Fixed `preparationsByType` to use UUID instead of text keys
+
+**3. Service Methods:**
+
+- ✅ Added `getPreparationCategories()` in recipesService
+- ✅ Fixed `updatePreparation()` to save to Supabase
+
+**4. Components Updated:**
+
+- ✅ `UnifiedRecipeItem.vue` - replaced PREPARATION_TYPES with store getters
+- ✅ `UnifiedViewDialog.vue` - replaced PREPARATION_TYPES with store getters
+- ✅ `RecipeBasicInfoWidget.vue` - replaced PREPARATION_TYPES with store getters
+- ✅ `RecipeFilters.vue` - added safe navigation for statistics
+- ✅ `UnifiedRecipeDialog.vue` - fixed department field handling
+
+**5. Bug Fixes:**
+
+- ✅ Fixed `RecipesService` import in recipesStore
+- ✅ Fixed `preparationIngredientToSupabaseInsert` to generate id
+- ✅ Fixed department field not saving/loading
+
+**6. Database Cleanup:**
+
+- ✅ Removed duplicate `category_id` column (migration 010)
+
+### Migration Files Created/Restored:
+
+- ✅ Migration 009: `009_migrate_preparations_type_to_uuid.sql` (RESTORED from DB)
+- ✅ Migration 010: `010_cleanup_preparations_category_id.sql` (NEW)
+
+### Migrations Applied (DEV):
+
+- ✅ Migration 009: `migrate_preparations_type_to_uuid` (version 20251124122314)
+- ✅ Migration 010: `cleanup_preparations_category_id` (version 20251124222905)
+
+---
+
+## 🚀 PRODUCTION DEPLOYMENT
+
+### ⚠️ IMPORTANT: Apply migrations to PROD before deploying code!
+
+**Migrations to apply on PROD (in order):**
+
+1. **Migration 009 - Migrate preparations.type to UUID**:
+
+   - **File:** `src/supabase/migrations/009_migrate_preparations_type_to_uuid.sql`
+   - **Status:** Check if already applied on PROD
+   - **What it does:** Converts `preparations.type` from TEXT to UUID foreign key
+   - **Verification:** Check if `preparations.type` is already UUID type
+
+2. **Migration 010 - Cleanup category_id column**:
+   - **File:** `src/supabase/migrations/010_cleanup_preparations_category_id.sql`
+   - **Status:** ⚠️ PENDING - must be applied after migration 009
+   - **What it does:** Removes duplicate `category_id` column
+   - **Verification:** Check if `category_id` column exists
+
+**Steps to apply:**
+
+```bash
+# Method 1: Using MCP Supabase tool (if connected to PROD)
+# Switch MCP connection to PROD database first!
+# Then use mcp__supabase__apply_migration with SQL from files
+
+# Method 2: Using Supabase CLI
+npx supabase db push --db-url "postgresql://postgres:[PASSWORD]@[PROD-HOST]:6543/postgres"
+
+# Method 3: Manual via Supabase Dashboard
+# Copy SQL from migration files → SQL Editor → Run
+```
+
+**Pre-migration verification (check what's already applied):**
+
+```sql
+-- Check if migration 009 is needed (is type still TEXT?)
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'preparations' AND column_name = 'type';
+-- If data_type = 'text' → Migration 009 needed
+-- If data_type = 'uuid' → Migration 009 already applied
+
+-- Check if migration 010 is needed (does category_id still exist?)
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name = 'preparations' AND column_name = 'category_id';
+-- If returns row → Migration 010 needed
+-- If no rows → Migration 010 already applied
+```
+
+**Post-migration verification:**
+
+```sql
+-- Verify preparations.type is UUID
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_name = 'preparations' AND column_name = 'type';
+-- Expected: data_type = 'uuid', is_nullable = 'NO'
+
+-- Verify category_id is removed
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name = 'preparations'
+  AND column_name IN ('type', 'category_id');
+-- Expected: only 'type' should exist
+
+-- Check data integrity
+SELECT COUNT(*) FROM preparations WHERE type IS NULL;
+-- Expected: 0
+
+-- Check foreign key constraint exists
+SELECT constraint_name, column_name
+FROM information_schema.key_column_usage
+WHERE table_name = 'preparations' AND column_name = 'type';
+-- Expected: fk_preparations_type
+
+-- Check data distribution by category
+SELECT pc.name, COUNT(p.id) as prep_count
+FROM preparation_categories pc
+LEFT JOIN preparations p ON p.type = pc.id
+GROUP BY pc.id, pc.name
+ORDER BY prep_count DESC;
+```
+
+---
+
+## 🚀 Ready for Phase 2?
+
+Begin with **Phase 2, Task 2.1** - Create `recipe_categories` table

@@ -303,7 +303,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
-import { RECIPE_CATEGORIES, PREPARATION_TYPES } from '@/stores/recipes/types'
 import type { Recipe, Preparation, RecipeCategory, PreparationType } from '@/stores/recipes/types'
 import { DebugUtils } from '@/utils'
 import UnifiedRecipeItem from './components/UnifiedRecipeItem.vue'
@@ -354,9 +353,34 @@ const rules = {
   required: (value: string) => !!value?.trim() || 'Required field'
 }
 
-// Constants
-const recipeCategories = RECIPE_CATEGORIES
-const preparationTypes = PREPARATION_TYPES
+// ✅ NEW: Load categories from store
+const recipeCategories = computed(() => [
+  // TODO Phase 2: Use store.activeRecipeCategories
+  { value: 'main_dish', text: 'Main Dishes' },
+  { value: 'side_dish', text: 'Side Dishes' },
+  { value: 'dessert', text: 'Desserts' },
+  { value: 'beverage', text: 'Beverages' },
+  { value: 'appetizer', text: 'Appetizers' },
+  { value: 'sauce', text: 'Sauces' }
+])
+
+const preparationTypes = computed(() => [
+  { value: 'all', text: 'All Types' },
+  ...store.activePreparationCategories.map(cat => ({
+    value: cat.id,
+    text: cat.name
+  }))
+])
+
+// ✅ Helper functions for preparation categories
+const getPreparationCategoryName = (categoryId: string) =>
+  store.getPreparationCategoryName(categoryId)
+
+const getPreparationCategoryColor = (categoryId: string) =>
+  store.getPreparationCategoryColor(categoryId)
+
+const getPreparationCategoryEmoji = (categoryId: string) =>
+  store.getPreparationCategoryEmoji(categoryId)
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -450,7 +474,12 @@ function getCategoryRecipes(category: RecipeCategory): Recipe[] {
   return filteredRecipes.value.filter(recipe => recipe.category === category)
 }
 
-function getTypePreparations(type: PreparationType): Preparation[] {
+function getTypePreparations(type: string): Preparation[] {
+  // Handle 'all' filter
+  if (type === 'all') {
+    return filteredPreparations.value
+  }
+  // Filter by category UUID
   return filteredPreparations.value.filter(preparation => preparation.type === type)
 }
 
@@ -484,13 +513,13 @@ function clearAllFilters() {
 
 function handleToggleAllPanels() {
   if (expandedPanels.value.length > 0) {
-    // Сворачиваем все
+    // Collapse all
     expandedPanels.value = []
   } else {
-    // Разворачиваем все
+    // Expand all
     expandedPanels.value = [
-      ...recipeCategories.map(c => c.value),
-      ...preparationTypes.map(c => c.value)
+      ...recipeCategories.value.map(c => c.value),
+      ...preparationTypes.value.map(c => c.value)
     ]
   }
 }
@@ -652,8 +681,8 @@ onMounted(async () => {
 
     // Expand all categories by default
     expandedPanels.value = [
-      ...recipeCategories.map(c => c.value),
-      ...preparationTypes.map(c => c.value)
+      ...recipeCategories.value.map(c => c.value),
+      ...preparationTypes.value.map(c => c.value)
     ]
 
     DebugUtils.info(MODULE_NAME, 'Initialization complete', {

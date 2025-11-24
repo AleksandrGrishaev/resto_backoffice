@@ -113,7 +113,7 @@
           color="primary"
           @click:close="selectedCategory = null"
         >
-          {{ PREPARATION_CATEGORIES[selectedCategory] || selectedCategory }}
+          {{ getPreparationCategoryName(selectedCategory) }}
         </v-chip>
 
         <v-chip
@@ -427,16 +427,15 @@ const filters = ref({
   showLowStock: false
 })
 
-// Preparation Categories
-const PREPARATION_CATEGORIES: Record<string, string> = {
-  sauce: 'Sauces',
-  base: 'Base Preparations',
-  garnish: 'Garnishes',
-  marinade: 'Marinades',
-  dough: 'Dough & Pastry',
-  filling: 'Fillings',
-  other: 'Other'
-}
+// ✅ Helper functions using store getters
+const getPreparationCategoryName = (categoryId: string) =>
+  recipesStore.getPreparationCategoryName(categoryId)
+
+const getPreparationCategoryColor = (categoryId: string) =>
+  recipesStore.getPreparationCategoryColor(categoryId)
+
+const getPreparationCategoryEmoji = (categoryId: string) =>
+  recipesStore.getPreparationCategoryEmoji(categoryId)
 
 // Computed
 const headers = computed(() => [
@@ -522,18 +521,18 @@ const categoryOptions = computed(() => {
   const categories = new Set<string>()
 
   props.balances.forEach(balance => {
-    const category = getPreparationCategory(balance.preparationId)
-    if (category) {
-      categories.add(category)
+    const categoryId = getPreparationCategory(balance.preparationId)
+    if (categoryId) {
+      categories.add(categoryId)
     }
   })
 
   return Array.from(categories)
-    .sort()
-    .map(category => ({
-      title: PREPARATION_CATEGORIES[category] || category,
-      value: category
+    .map(categoryId => ({
+      title: getPreparationCategoryName(categoryId),
+      value: categoryId
     }))
+    .sort((a, b) => a.title.localeCompare(b.title))
 })
 
 // Style helper methods
@@ -569,51 +568,36 @@ function formatDepartment(dept: PreparationDepartment): string {
 function getPreparationCategory(preparationId: string): string {
   try {
     const preparation = recipesStore.preparations.find(p => p.id === preparationId)
-    if (!preparation) return 'other'
+    if (!preparation) return ''
 
-    // Map preparation type to category
-    const typeToCategory: Record<string, string> = {
-      sauce: 'sauce',
-      base: 'base',
-      garnish: 'garnish',
-      marinade: 'marinade',
-      dough: 'dough',
-      filling: 'filling'
-    }
-
-    return typeToCategory[preparation.type] || 'other'
+    // preparation.type is now UUID (FK to preparation_categories)
+    return preparation.type
   } catch (error) {
     console.warn('Error getting preparation category:', error)
-    return 'other'
+    return ''
   }
 }
 
 function getPreparationCategoryDisplay(preparationId: string): string {
-  const category = getPreparationCategory(preparationId)
-  return PREPARATION_CATEGORIES[category] || 'Other'
+  const categoryId = getPreparationCategory(preparationId)
+  return getPreparationCategoryName(categoryId)
 }
 
 function getPreparationType(preparationId: string): string {
   try {
     const preparation = recipesStore.preparations.find(p => p.id === preparationId)
-    return preparation?.type || 'preparation'
+    if (!preparation) return 'preparation'
+
+    // preparation.type is UUID, get display name
+    return getPreparationCategoryName(preparation.type)
   } catch (error) {
     return 'preparation'
   }
 }
 
 function getPreparationIcon(preparationId: string): string {
-  const category = getPreparationCategory(preparationId)
-  const iconMap: Record<string, string> = {
-    sauce: '🥫',
-    base: '🍲',
-    garnish: '🌿',
-    marinade: '🧄',
-    dough: '🥐',
-    filling: '🥟',
-    other: '👨‍🍳'
-  }
-  return iconMap[category] || '👨‍🍳'
+  const categoryId = getPreparationCategory(preparationId)
+  return getPreparationCategoryEmoji(categoryId)
 }
 
 function getCategoryIcon(category: string): string {
@@ -629,17 +613,8 @@ function getCategoryIcon(category: string): string {
   return iconMap[category] || 'mdi-chef-hat'
 }
 
-function getCategoryColor(category: string): string {
-  const colorMap: Record<string, string> = {
-    sauce: 'red-darken-2',
-    base: 'orange-darken-2',
-    garnish: 'green-darken-2',
-    marinade: 'brown-darken-2',
-    dough: 'amber-darken-2',
-    filling: 'purple-darken-2',
-    other: 'grey-darken-2'
-  }
-  return colorMap[category] || 'grey-darken-2'
+function getCategoryColor(categoryId: string): string {
+  return getPreparationCategoryColor(categoryId)
 }
 
 function formatQuantity(quantity: number, unit: string): string {

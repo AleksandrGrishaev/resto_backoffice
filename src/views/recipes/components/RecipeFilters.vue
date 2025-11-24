@@ -105,16 +105,16 @@
       <v-row v-if="$DEBUG" class="mt-2">
         <v-col>
           <v-chip size="small" variant="outlined" class="mr-2">
-            Total R: {{ store.statistics.recipes.total }}
+            Total R: {{ store.statistics.recipes?.total || 0 }}
           </v-chip>
           <v-chip size="small" variant="outlined" class="mr-2">
-            Active R: {{ store.statistics.recipes.active }}
+            Active R: {{ store.statistics.recipes?.active || 0 }}
           </v-chip>
           <v-chip size="small" variant="outlined" class="mr-2">
-            Total P: {{ store.statistics.preparations.total }}
+            Total P: {{ store.statistics.preparations?.total || 0 }}
           </v-chip>
           <v-chip size="small" variant="outlined" class="mr-2">
-            Active P: {{ store.statistics.preparations.active }}
+            Active P: {{ store.statistics.preparations?.active || 0 }}
           </v-chip>
           <v-chip size="small" variant="outlined" class="mr-2">
             Filtered: {{ filteredCount }}
@@ -178,32 +178,36 @@ const localActiveTab = computed({
   set: value => emit('update:activeTab', value)
 })
 
-// ✅ ИСПРАВЛЕНО: Правильный подсчет количества
+// ✅ ИСПРАВЛЕНО: Правильный подсчет количества с защитой от undefined
 const recipesCount = computed(() => {
   const stats = store.statistics.recipes
+  if (!stats) return 0
+
   switch (localFilters.value.status) {
     case 'active':
-      return stats.active
+      return stats.active || 0
     case 'archived':
-      return stats.inactive
+      return stats.inactive || 0
     case 'all':
-      return stats.total
+      return stats.total || 0
     default:
-      return stats.active
+      return stats.active || 0
   }
 })
 
 const preparationsCount = computed(() => {
   const stats = store.statistics.preparations
+  if (!stats) return 0
+
   switch (localFilters.value.status) {
     case 'active':
-      return stats.active
+      return stats.active || 0
     case 'archived':
-      return stats.inactive
+      return stats.inactive || 0
     case 'all':
-      return stats.total
+      return stats.total || 0
     default:
-      return stats.active
+      return stats.active || 0
   }
 })
 

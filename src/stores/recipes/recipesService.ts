@@ -2,6 +2,7 @@
 
 import type {
   Preparation,
+  PreparationCategory,
   Recipe,
   MenuRecipeLink,
   Unit,
@@ -218,6 +219,51 @@ export class RecipesService {
       return allPreparations.filter(p => p.isActive).sort((a, b) => a.name.localeCompare(b.name))
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting active preparations:', error)
+      throw error
+    }
+  }
+
+  /**
+   * ✅ NEW: Get all preparation categories from database
+   */
+  async getPreparationCategories(): Promise<PreparationCategory[]> {
+    if (!isSupabaseAvailable()) {
+      DebugUtils.info(MODULE_NAME, 'Supabase not available, returning empty categories')
+      return []
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('preparation_categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load preparation categories', error)
+        throw error
+      }
+
+      const categories = (data || []).map(row => ({
+        id: row.id,
+        key: row.key,
+        name: row.name,
+        description: row.description,
+        icon: row.icon,
+        emoji: row.emoji,
+        color: row.color,
+        sortOrder: row.sort_order,
+        isActive: row.is_active,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }))
+
+      DebugUtils.info(MODULE_NAME, 'Loaded preparation categories', {
+        count: categories.length
+      })
+
+      return categories
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error loading preparation categories', error)
       throw error
     }
   }

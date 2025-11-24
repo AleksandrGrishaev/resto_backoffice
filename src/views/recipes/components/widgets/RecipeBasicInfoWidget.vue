@@ -209,7 +209,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { PREPARATION_TYPES, RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
+import { RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
+import { useRecipesStore } from '@/stores/recipes'
 
 interface FormData {
   name: string
@@ -241,6 +242,9 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+// ✅ Initialize recipes store
+const recipesStore = useRecipesStore()
+
 // ✅ ИСПРАВЛЕНО: Избегаем циклических импортов - ленивая загрузка
 let unitOptions: { value: Array<{ value: string; title: string }> } | null = null
 
@@ -254,7 +258,15 @@ async function getUnitOptions() {
 
 // Computed
 const categoryItems = computed(() => {
-  return props.type === 'preparation' ? PREPARATION_TYPES : RECIPE_CATEGORIES
+  if (props.type === 'preparation') {
+    // ✅ Use store getters instead of PREPARATION_TYPES constant
+    return recipesStore.activePreparationCategories.map(cat => ({
+      value: cat.id,
+      text: cat.name
+    }))
+  } else {
+    return RECIPE_CATEGORIES
+  }
 })
 
 const departmentItems = computed(() => {

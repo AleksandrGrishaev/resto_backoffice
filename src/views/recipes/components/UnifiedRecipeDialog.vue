@@ -182,6 +182,7 @@ async function handleSubmit() {
         name: formData.value.name,
         code: formData.value.code,
         type: formData.value.category,
+        department: formData.value.department, // ✅ ADD: Include department
         description: formData.value.description,
         outputQuantity: formData.value.outputQuantity,
         outputUnit: formData.value.outputUnit,
@@ -257,6 +258,7 @@ function resetForm() {
     code: '',
     description: '',
     category: props.type === 'preparation' ? 'sauce' : 'main_dish',
+    department: 'kitchen', // ✅ ADD: Default department for new preparations
     outputQuantity: 1,
     outputUnit: 'gram',
     portionSize: 1,
@@ -285,6 +287,7 @@ watch(dialogModel, async newVal => {
           code: prep.code,
           description: prep.description || '',
           category: prep.type,
+          department: prep.department, // ✅ ADD: Include department
           outputQuantity: prep.outputQuantity,
           outputUnit: prep.outputUnit,
           preparationTime: prep.preparationTime,

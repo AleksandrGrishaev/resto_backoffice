@@ -109,8 +109,11 @@ export function preparationIngredientToSupabaseInsert(
   ingredient: PreparationIngredient,
   preparationId: string
 ): SupabasePreparationIngredientInsert {
+  // ✅ FIXED: Generate id manually since column is TEXT NOT NULL without default
+  const ingredientId = `${preparationId}_${ingredient.id}_${Date.now()}`
+
   return {
-    // Remove: id: ingredient.id - let database generate UUID
+    id: ingredientId, // ✅ ADD: Generate unique id
     preparation_id: preparationId,
     type: ingredient.type,
     product_id: ingredient.id, // ingredient.id maps to product_id

@@ -55,7 +55,7 @@ export interface Preparation extends BaseEntity {
   name: string
   code: string
   description?: string
-  type: PreparationType
+  type: string // UUID (FK to preparation_categories), will be migrated from TEXT
   department: Department // ✅ NEW: Department that prepares this item ('kitchen' | 'bar')
 
   // ✅ ОБНОВЛЕНО: Рецепт из продуктов с правильными единицами
@@ -83,7 +83,15 @@ export interface PreparationIngredient {
   notes?: string
 }
 
-export type PreparationType = 'sauce' | 'garnish' | 'marinade' | 'semifinished' | 'seasoning'
+// Updated to match database keys
+export type PreparationType =
+  | 'sauce'
+  | 'base'
+  | 'garnish'
+  | 'marinade'
+  | 'dough'
+  | 'filling'
+  | 'other'
 
 // =============================================
 // RECIPE (рецепты готовых блюд)
@@ -305,16 +313,28 @@ export interface Unit {
 }
 
 // =============================================
+// PREPARATION CATEGORY (from database)
+// =============================================
+
+export interface PreparationCategory {
+  id: string
+  key: string
+  name: string
+  description?: string
+  icon?: string
+  emoji?: string
+  color?: string
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// =============================================
 // CONSTANTS
 // =============================================
 
-export const PREPARATION_TYPES = [
-  { value: 'sauce', text: 'Соусы', prefix: 'P' },
-  { value: 'garnish', text: 'Гарниры', prefix: 'P' },
-  { value: 'marinade', text: 'Маринады', prefix: 'P' },
-  { value: 'semifinished', text: 'Полуфабрикаты', prefix: 'P' },
-  { value: 'seasoning', text: 'Приправы', prefix: 'P' }
-] as const
+// ❌ PREPARATION_TYPES removed - now loaded from database via preparation_categories table
 
 export const RECIPE_CATEGORIES = [
   { value: 'main_dish', text: 'Основные блюда' },
@@ -427,8 +447,7 @@ export type Ingredient = Preparation
 /** @deprecated Используйте PreparationType */
 export type IngredientCategory = PreparationType
 
-/** @deprecated Используйте PREPARATION_TYPES */
-export const INGREDIENT_CATEGORIES = PREPARATION_TYPES
+// ❌ INGREDIENT_CATEGORIES removed - use preparation_categories from database
 
 /** @deprecated Используйте RecipeComponent */
 export type RecipeIngredient = RecipeComponent

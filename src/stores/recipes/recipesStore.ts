@@ -18,12 +18,15 @@ import {
   PreparationService,
   RecipeService,
   MenuRecipeLinkService,
-  UnitService
+  UnitService,
+  RecipesService
 } from './recipesService'
 
 import type {
   Recipe,
   Preparation,
+  PreparationCategory,
+  RecipeCategory,
   CreateRecipeData,
   CreatePreparationData,
   PreparationPlanCost,
@@ -70,6 +73,10 @@ export const useRecipesStore = defineStore('recipes', () => {
   const selectedRecipe = ref<Recipe | null>(null)
   const selectedPreparation = ref<Preparation | null>(null)
 
+  // ✅ NEW: Categories from database
+  const preparationCategories = ref<PreparationCategory[]>([])
+  const recipeCategories = ref<RecipeCategory[]>([]) // Phase 2
+
   // =============================================
   // COMPUTED PROPERTIES
   // =============================================
@@ -94,6 +101,39 @@ export const useRecipesStore = defineStore('recipes', () => {
     costs: costCalculationComposable.costCalculationsStats.value
   }))
 
+  // ✅ NEW: Preparation category getters
+  const activePreparationCategories = computed(() =>
+    preparationCategories.value.filter(c => c.isActive).sort((a, b) => a.sortOrder - b.sortOrder)
+  )
+
+  const getPreparationCategoryById = computed(
+    () => (id: string) => preparationCategories.value.find(c => c.id === id)
+  )
+
+  const getPreparationCategoryName = computed(
+    () => (id: string) => preparationCategories.value.find(c => c.id === id)?.name || id
+  )
+
+  const getPreparationCategoryColor = computed(
+    () => (id: string) => preparationCategories.value.find(c => c.id === id)?.color || 'grey'
+  )
+
+  const getPreparationCategoryEmoji = computed(
+    () => (id: string) => preparationCategories.value.find(c => c.id === id)?.emoji || '👨‍🍳'
+  )
+
+  // Group preparations by category
+  const preparationsByCategory = computed(() => {
+    const grouped: Record<string, Preparation[]> = {}
+    preparationsComposable.preparations.value.forEach(prep => {
+      if (!grouped[prep.type]) {
+        grouped[prep.type] = []
+      }
+      grouped[prep.type].push(prep)
+    })
+    return grouped
+  })
+
   // =============================================
   // MAIN ACTIONS
   // =============================================
@@ -114,7 +154,11 @@ export const useRecipesStore = defineStore('recipes', () => {
 
       DebugUtils.info(MODULE_NAME, '🚀 Initializing Recipe Store with composables')
 
-      // 1. Инициализируем базовые данные из Supabase
+      // 1. ✅ Загружаем категории первыми
+      await loadPreparationCategories()
+      await loadRecipeCategories() // Phase 2
+
+      // 2. Инициализируем базовые данные из Supabase
       await Promise.all([
         preparationsComposable.initializePreparations(), // Load from Supabase
         recipesComposable.initializeRecipes(), // Load from Supabase
@@ -123,10 +167,10 @@ export const useRecipesStore = defineStore('recipes', () => {
         costCalculationComposable.initializeCostCalculations()
       ])
 
-      // 2. Настраиваем интеграцию с Product Store
+      // 3. Настраиваем интеграцию с Product Store
       await integrationComposable.setupProductStoreIntegration()
 
-      // 3. Устанавливаем integration callbacks
+      // 4. Устанавливаем integration callbacks
       const callbacks = setupIntegrationCallbacks()
       costCalculationComposable.setIntegrationCallbacks(
         callbacks.getProduct,
@@ -134,7 +178,7 @@ export const useRecipesStore = defineStore('recipes', () => {
       )
       recipesComposable.setIntegrationCallbacks(callbacks.getProduct, callbacks.getPreparationCost)
 
-      // 4. Пересчитываем стоимости
+      // 5. Пересчитываем стоимости
       await recalculateAllCosts()
 
       // 🆕 Устанавливаем флаг инициализации
@@ -143,7 +187,9 @@ export const useRecipesStore = defineStore('recipes', () => {
       DebugUtils.info(MODULE_NAME, '✅ Recipe Store initialized successfully', {
         preparations: activePreparations.value.length,
         recipes: activeRecipes.value.length,
-        units: unitsComposable.units.value.length
+        units: unitsComposable.units.value.length,
+        preparationCategories: preparationCategories.value.length,
+        recipeCategories: recipeCategories.value.length
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize Recipe Store'
@@ -494,6 +540,46 @@ export const useRecipesStore = defineStore('recipes', () => {
   }
 
   // =============================================
+  // CATEGORY ACTIONS
+  // =============================================
+
+  /**
+   * ✅ NEW: Load preparation categories from database
+   */
+  async function loadPreparationCategories(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Loading preparation categories...')
+      const recipesService = new RecipesService()
+      const categories = await recipesService.getPreparationCategories()
+      preparationCategories.value = categories
+      DebugUtils.store(MODULE_NAME, 'Loaded preparation categories', {
+        count: categories.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load preparation categories', error)
+      throw error
+    }
+  }
+
+  /**
+   * ✅ NEW: Load recipe categories from database (Phase 2)
+   */
+  async function loadRecipeCategories(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Loading recipe categories...')
+      // TODO: Implement in Phase 2
+      const categories: RecipeCategory[] = []
+      recipeCategories.value = categories
+      DebugUtils.store(MODULE_NAME, 'Loaded recipe categories', {
+        count: categories.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load recipe categories', error)
+      throw error
+    }
+  }
+
+  // =============================================
   // INTEGRATION METHODS
   // =============================================
 
@@ -562,6 +648,10 @@ export const useRecipesStore = defineStore('recipes', () => {
     units: readonly(unitsComposable.units),
     menuRecipeLinks: readonly(menuLinksComposable.menuRecipeLinks),
 
+    // ✅ NEW: Categories data
+    preparationCategories: readonly(preparationCategories),
+    recipeCategories: readonly(recipeCategories), // Phase 2
+
     // Computed
     activeRecipes,
     activePreparations,
@@ -569,8 +659,20 @@ export const useRecipesStore = defineStore('recipes', () => {
     preparationsByType,
     statistics,
 
+    // ✅ NEW: Category computed
+    activePreparationCategories,
+    getPreparationCategoryById,
+    getPreparationCategoryName,
+    getPreparationCategoryColor,
+    getPreparationCategoryEmoji,
+    preparationsByCategory,
+
     // Main actions
     initialize,
+
+    // ✅ NEW: Category actions
+    loadPreparationCategories,
+    loadRecipeCategories, // Phase 2
 
     // Preparation actions
     fetchPreparations,

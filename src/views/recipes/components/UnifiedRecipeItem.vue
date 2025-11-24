@@ -191,7 +191,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { PREPARATION_TYPES, RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
+import { RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
 import type {
   Recipe,
   Preparation,
@@ -200,6 +200,8 @@ import type {
 } from '@/stores/recipes/types'
 // ✅ НОВОЕ: Импорт централизованных утилит валюты
 import { formatIDR, isExpensiveAmount } from '@/utils/currency'
+// ✅ Import recipes store for preparation categories
+import { useRecipesStore } from '@/stores/recipes'
 
 interface Props {
   item: Recipe | Preparation
@@ -217,6 +219,9 @@ interface Emits {
 
 const props = defineProps<Props>()
 defineEmits<Emits>()
+
+// ✅ Initialize recipes store
+const recipesStore = useRecipesStore()
 
 const hasCostData = computed(() => {
   return !!props.costCalculation && props.costCalculation.totalCost > 0
@@ -286,8 +291,8 @@ function getCategoryColor(): string {
 function getCategoryText(): string {
   if (props.type === 'preparation') {
     const prep = props.item as Preparation
-    const category = PREPARATION_TYPES.find(c => c.value === prep.type)
-    return category?.text || prep.type
+    // ✅ Use store getter instead of PREPARATION_TYPES constant
+    return recipesStore.getPreparationCategoryName(prep.type)
   } else {
     const recipe = props.item as Recipe
     const category = RECIPE_CATEGORIES.find(c => c.value === recipe.category)
