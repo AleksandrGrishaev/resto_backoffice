@@ -1,9 +1,9 @@
 // src/stores/productsStore/index.ts
 
-// Экспорт основного store
+// Export main store
 export { useProductsStore } from './productsStore'
 
-// Экспорт типов
+// Export types
 export type {
   Product,
   ProductCategory,
@@ -13,8 +13,8 @@ export type {
   UpdateProductData
 } from './types'
 
-// Экспорт констант
+// Export constants
 export { PRODUCT_CATEGORIES, MEASUREMENT_UNITS } from './types'
 
-// Экспорт сервиса
+// Export service
 export { productsService } from './productsService'

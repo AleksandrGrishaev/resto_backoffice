@@ -1,4 +1,4 @@
-// src/stores/productsStore/productsStore.ts - ОБНОВЛЕННАЯ интеграция
+// src/stores/productsStore/productsStore.ts - UPDATED integration
 
 import { defineStore } from 'pinia'
 import type {
@@ -38,7 +38,7 @@ export const useProductsStore = defineStore('products', {
   }),
 
   getters: {
-    // Существующие геттеры остаются без изменений
+    // Existing getters remain unchanged
     filteredProducts: (state): Product[] => {
       let filtered = [...state.products]
 
@@ -78,7 +78,7 @@ export const useProductsStore = defineStore('products', {
 
   actions: {
     // =============================================
-    // ОСНОВНЫЕ МЕТОДЫ (без изменений)
+    // CORE METHODS (unchanged)
     // =============================================
 
     async loadProducts(): Promise<void> {
@@ -115,10 +115,10 @@ export const useProductsStore = defineStore('products', {
 
         const now = new Date().toISOString()
 
-        // ✅ Сначала создаем базовую упаковку
+        // ✅ First create base package
         const basePackage: PackageOption = {
           id: `pkg-base-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          productId: '', // Будет установлен после создания продукта
+          productId: '', // Will be set after product creation
           packageName: this.getDefaultPackageName(data.baseUnit),
           packageSize: this.getDefaultPackageSize(data.baseUnit),
           packageUnit: this.getDefaultPackageUnit(data.baseUnit),
@@ -156,15 +156,15 @@ export const useProductsStore = defineStore('products', {
       }
     },
 
-    // Вспомогательные методы для создания базовых упаковок
+    // Helper methods for creating base packages
     getDefaultPackageName(baseUnit: BaseUnit): string {
       switch (baseUnit) {
         case 'gram':
-          return 'Килограмм'
+          return 'Kilogram'
         case 'ml':
-          return 'Литр'
+          return 'Liter'
         case 'piece':
-          return 'Штука'
+          return 'Piece'
       }
     },
 
@@ -221,11 +221,11 @@ export const useProductsStore = defineStore('products', {
     },
 
     // =============================================
-    // ✅ ОБНОВЛЕННЫЕ МЕТОДЫ ИНТЕГРАЦИИ
+    // ✅ UPDATED INTEGRATION METHODS
     // =============================================
 
     /**
-     * ✅ ИСПРАВЛЕНО: Получает продукт в формате для Recipe Store с базовыми единицами
+     * ✅ FIXED: Gets product in format for Recipe Store with base units
      */
     getProductForRecipe(productId: string): ProductForRecipe | null {
       const product = this.getProductById(productId)
@@ -235,23 +235,23 @@ export const useProductsStore = defineStore('products', {
         return null
       }
 
-      // ✅ Используем новую структуру с базовыми единицами
+      // ✅ Use new structure with base units
       return {
         id: product.id,
         name: product.name,
         nameEn: product.nameEn || product.name,
-        baseUnit: product.baseUnit, // Всегда базовая единица
-        baseCostPerUnit: product.baseCostPerUnit, // Цена за базовую единицу
+        baseUnit: product.baseUnit, // Always base unit
+        baseCostPerUnit: product.baseCostPerUnit, // Price per base unit
         category: product.category,
         isActive: product.isActive,
-        // Deprecated поля для совместимости (если нужны)
+        // Deprecated fields for compatibility (if needed)
         unit: product.baseUnit as MeasurementUnit,
         costPerUnit: product.baseCostPerUnit
       }
     },
 
     /**
-     * ✅ ОБНОВЛЕНО: Получает продукт в формате для Menu Store
+     * ✅ UPDATED: Gets product in format for Menu Store
      */
     getProductForMenu(productId: string): ProductForMenu | null {
       const product = this.getProductById(productId)
@@ -266,13 +266,13 @@ export const useProductsStore = defineStore('products', {
         name: product.name,
         nameEn: product.nameEn || product.name,
         canBeSold: product.canBeSold,
-        currentCostPerUnit: product.baseCostPerUnit, // Цена за базовую единицу
-        unit: product.baseUnit as MeasurementUnit // Базовая единица
+        currentCostPerUnit: product.baseCostPerUnit, // Price per base unit
+        unit: product.baseUnit as MeasurementUnit // Base unit
       }
     },
 
     /**
-     * ✅ ОБНОВЛЕНО: Получает продукт в формате для Supplier Store с упаковками
+     * ✅ UPDATED: Gets product in format for Supplier Store with packages
      */
     getProductForSupplier(productId: string): ProductForSupplier | null {
       const product = this.getProductById(productId)
@@ -282,7 +282,7 @@ export const useProductsStore = defineStore('products', {
         return null
       }
 
-      // Получаем рекомендуемую упаковку для расчета заказа
+      // Get recommended package for order calculation
       const recommendedPackage = this.getRecommendedPackage(productId)
 
       return {
@@ -296,12 +296,12 @@ export const useProductsStore = defineStore('products', {
         leadTimeDays: product.leadTimeDays,
         baseUnit: product.baseUnit,
         recommendedPackage: recommendedPackage || undefined,
-        packageOptions: product.packageOptions || [] // ✅ ИСПРАВЛЕНО: добавлен fallback
+        packageOptions: product.packageOptions || [] // ✅ FIXED: added fallback
       }
     },
 
     /**
-     * ✅ ОБНОВЛЕННЫЙ МЕТОД: Обновить baseCostPerUnit продукта
+     * ✅ UPDATED METHOD: Update product's baseCostPerUnit
      */
     async updateProductCost(productId: string, newBaseCost: number): Promise<void> {
       try {
@@ -310,7 +310,7 @@ export const useProductsStore = defineStore('products', {
           throw new Error('Product not found')
         }
 
-        // Обновляем базовую стоимость продукта
+        // Update product's base cost
         const productIndex = this.products.findIndex(p => p.id === productId)
         if (productIndex !== -1) {
           this.products[productIndex].baseCostPerUnit = newBaseCost
@@ -337,7 +337,7 @@ export const useProductsStore = defineStore('products', {
     },
 
     /**
-     * ✅ НОВЫЙ МЕТОД: Получает информацию о продукте для заказов
+     * ✅ NEW METHOD: Get product information for orders
      */
     getProductForOrder(productId: string): {
       product: Product
@@ -363,13 +363,13 @@ export const useProductsStore = defineStore('products', {
     },
 
     /**
-     * ✅ НОВЫЙ МЕТОД: Получает все упаковки с лучшими ценами
+     * ✅ NEW METHOD: Get all packages with best prices
      */
     getBestPricePackages(): Array<{
       productId: string
       productName: string
       bestPackage: PackageOption
-      savings: number // сколько экономим в процентах
+      savings: number // percentage saved
     }> {
       return this.products
         .map(product => {
@@ -406,15 +406,15 @@ export const useProductsStore = defineStore('products', {
     },
 
     /**
-     * ✅ НОВЫЙ МЕТОД: Мигрирует старый формат продукта в новый
+     * ✅ NEW METHOD: Migrate old product format to new
      */
     migrateOldProductToNew(product: Product): ProductForRecipe {
-      // Определяем базовую единицу по старой структуре
+      // Determine base unit from old structure
       const getBaseUnit = (): 'gram' | 'ml' | 'piece' => {
         const unit = (product as any).unit
         const category = product.category.toLowerCase()
 
-        // По категории продукта
+        // By product category
         if (['meat', 'vegetables', 'spices', 'cereals'].includes(category)) {
           return 'gram'
         }
@@ -431,25 +431,25 @@ export const useProductsStore = defineStore('products', {
           return 'ml'
         }
 
-        // По единице измерения (если есть)
+        // By measurement unit (if available)
         if (unit) {
           if (['kg', 'gram'].includes(unit)) return 'gram'
           if (['liter', 'ml'].includes(unit)) return 'ml'
           if (['piece', 'pack'].includes(unit)) return 'piece'
         }
 
-        // По умолчанию граммы
+        // Default to grams
         return 'gram'
       }
 
-      // Определяем стоимость за базовую единицу
+      // Determine cost per base unit
       const calculateBaseCost = (): number => {
         const baseUnit = getBaseUnit()
         const oldCostPerUnit =
           (product as any).currentCostPerUnit || (product as any).costPerUnit || 0
         const oldUnit = (product as any).unit
 
-        // Если единицы уже базовые, возвращаем как есть
+        // If units are already base units, return as is
         if (
           (baseUnit === 'gram' && oldUnit === 'gram') ||
           (baseUnit === 'ml' && oldUnit === 'ml') ||
@@ -458,7 +458,7 @@ export const useProductsStore = defineStore('products', {
           return oldCostPerUnit
         }
 
-        // Конвертируем из крупных единиц в базовые
+        // Convert from large units to base units
         if (baseUnit === 'gram' && oldUnit === 'kg') {
           return oldCostPerUnit / 1000 // IDR/кг -> IDR/г
         }
@@ -467,7 +467,7 @@ export const useProductsStore = defineStore('products', {
           return oldCostPerUnit / 1000 // IDR/л -> IDR/мл
         }
 
-        // Если не можем определить, логируем предупреждение
+        // If we can't determine, log warning
         DebugUtils.warn(MODULE_NAME, `Cannot determine base cost for product ${product.name}`, {
           baseUnit,
           oldUnit,
@@ -495,14 +495,14 @@ export const useProductsStore = defineStore('products', {
         baseCostPerUnit,
         category: product.category,
         isActive: product.isActive,
-        // Сохраняем старые поля для совместимости
+        // Keep old fields for compatibility
         unit: (product as any).unit,
         costPerUnit: (product as any).costPerUnit
       }
     },
 
     /**
-     * ✅ ОБНОВЛЕНО: Получает все активные продукты для Recipe Store
+     * ✅ UPDATED: Get all active products for Recipe Store
      */
     getProductsForRecipes(): ProductForRecipe[] {
       return this.products
@@ -512,7 +512,7 @@ export const useProductsStore = defineStore('products', {
     },
 
     /**
-     * ✅ ОБНОВЛЕНО: Уведомляет об изменении цены продукта
+     * ✅ UPDATED: Notify about product price change
      */
     async notifyPriceChange(productId: string, newPrice: number): Promise<void> {
       DebugUtils.info(MODULE_NAME, `💰 Price changed for product ${productId}: ${newPrice}`)
@@ -523,13 +523,13 @@ export const useProductsStore = defineStore('products', {
         return
       }
 
-      // ✅ УПРОЩЕНО: У нас теперь только новая структура
+      // ✅ SIMPLIFIED: We now only have the new structure
       await this.updateProduct({
         id: productId,
-        baseCostPerUnit: newPrice // Цена уже в базовых единицах
+        baseCostPerUnit: newPrice // Price already in base units
       })
 
-      // ✅ УПРОЩЕНО: Логируем для отладки вместо callback
+      // ✅ SIMPLIFIED: Log for debugging instead of callback
       DebugUtils.info(MODULE_NAME, 'Product price updated - recipes may need recalculation', {
         productId,
         productName: product.name,
@@ -537,7 +537,7 @@ export const useProductsStore = defineStore('products', {
         baseUnit: product.baseUnit
       })
 
-      // В dev режиме выводим в консоль для удобства отладки
+      // In dev mode, output to console for easier debugging
       if (import.meta.env.DEV) {
         console.log(`🔄 Recipe costs may need recalculation for product: ${product.name}`)
       }

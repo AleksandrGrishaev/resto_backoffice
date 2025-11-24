@@ -1,4 +1,4 @@
-// src/stores/productsStore/types.ts - ОБНОВЛЕННАЯ версия с PackageOption
+// src/stores/productsStore/types.ts - UPDATED version with PackageOption
 
 import type { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
@@ -19,12 +19,12 @@ export type ProductCategory =
 
 export type BaseUnit = 'gram' | 'ml' | 'piece'
 
-// ✅ НОВЫЙ ИНТЕРФЕЙС: PackageOption
+// ✅ NEW INTERFACE: PackageOption
 export interface PackageOption {
   id: string
   productId: string
 
-  // ОПИСАНИЕ УПАКОВКИ
+  // PACKAGE DESCRIPTION
   packageName: string // "Пачка 100г", "Бутылка 1л", "Коробка 24шт"
   packageSize: number // Количество базовых единиц в упаковке
   packageUnit: MeasurementUnit // Единица упаковки ('pack', 'bottle', 'box')

@@ -1,10 +1,10 @@
-// src/stores/productsStore/composables/useStockRecommendations.ts - ИСПРАВЛЕНО
+// src/stores/productsStore/composables/useStockRecommendations.ts - FIXED
 
 import { ref, computed } from 'vue'
 import type {
   StockRecommendation,
   ProductConsumption,
-  Product, // Используем базовый Product вместо EnhancedProduct пока
+  Product, // Use base Product instead of EnhancedProduct for now
   StockCalculationParams,
   CreateStockRecommendationData,
   RecommendationCalculationInput
@@ -13,7 +13,7 @@ import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'StockRecommendations'
 
-// Временная функция для получения текущего времени (заменим на TimeUtils позже)
+// Temporary function to get current time (will replace with TimeUtils later)
 const getCurrentISO = () => new Date().toISOString()
 
 export function useStockRecommendations() {
