@@ -32,7 +32,8 @@
       "Bash(combined_migrations.sql)",
       "Bash(node apply_to_production.mjs:*)",
       "mcp__supabase__get_logs",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(pnpm lint:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
