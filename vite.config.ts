@@ -27,10 +27,10 @@ export default defineConfig({
     },
     terserOptions: {
       compress: {
-        // Only remove console.log in production builds
-        // Preview and development builds will keep console.log
-        drop_console: process.env.NODE_ENV === 'production',
-        drop_debugger: process.env.NODE_ENV === 'production'
+        // Keep console.log in all builds
+        // Production log control is handled by DebugUtils and ENV.debugLevel
+        drop_console: false,
+        drop_debugger: false
       }
     }
   },
