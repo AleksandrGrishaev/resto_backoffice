@@ -3,7 +3,7 @@
   <v-card>
     <v-card-title class="d-flex align-center pb-2">
       <v-icon start color="info">mdi-chart-line</v-icon>
-      <span>История цен</span>
+      <span>Price History</span>
       <v-spacer />
       <div class="d-flex align-center ga-2">
         <!-- 🆕 Period selector -->
@@ -36,7 +36,7 @@
           @click="generateMockHistory"
         >
           <v-icon start size="small">mdi-refresh</v-icon>
-          Обновить
+          Refresh
         </v-btn>
       </div>
     </v-card-title>
@@ -46,7 +46,7 @@
     <!-- Loading state -->
     <div v-if="loading" class="text-center pa-6">
       <v-progress-circular size="32" color="primary" indeterminate />
-      <div class="text-body-2 text-medium-emphasis mt-2">Загрузка истории цен...</div>
+      <div class="text-body-2 text-medium-emphasis mt-2">Loading price history...</div>
     </div>
 
     <!-- Error state -->
@@ -71,7 +71,7 @@
               <div class="price-metric__value text-h6 primary--text">
                 {{ formatCurrency(currentPrice) }}
               </div>
-              <div class="price-metric__label">Текущая цена</div>
+              <div class="price-metric__label">Current Price</div>
               <div class="text-caption text-medium-emphasis">
                 {{ formatDate(latestPriceDate) }}
               </div>
@@ -83,8 +83,8 @@
               <div class="price-metric__value text-h6 info--text">
                 {{ formatCurrency(averagePrice) }}
               </div>
-              <div class="price-metric__label">Средняя ({{ periodLabel }})</div>
-              <div class="text-caption text-medium-emphasis">{{ priceHistory.length }} записей</div>
+              <div class="price-metric__label">Average ({{ periodLabel }})</div>
+              <div class="text-caption text-medium-emphasis">{{ priceHistory.length }} records</div>
             </div>
           </v-col>
 
@@ -93,9 +93,9 @@
               <div class="price-metric__value text-h6" :class="`${getChangeColor()}--text`">
                 {{ changePercent >= 0 ? '+' : '' }}{{ changePercent.toFixed(1) }}%
               </div>
-              <div class="price-metric__label">Изменение</div>
+              <div class="price-metric__label">Change</div>
               <div class="text-caption text-medium-emphasis">
-                За {{ periodLabel.toLowerCase() }}
+                For {{ periodLabel.toLowerCase() }}
               </div>
             </div>
           </v-col>
@@ -105,8 +105,8 @@
               <div class="price-metric__value text-h6 warning--text">
                 {{ volatility.toFixed(1) }}%
               </div>
-              <div class="price-metric__label">Волатильность</div>
-              <div class="text-caption text-medium-emphasis">Стандартное отклонение</div>
+              <div class="price-metric__label">Volatility</div>
+              <div class="text-caption text-medium-emphasis">Standard deviation</div>
             </div>
           </v-col>
         </v-row>
@@ -118,8 +118,8 @@
       <v-card-text class="pa-4">
         <div class="chart-container">
           <div class="chart-header mb-3">
-            <div class="text-subtitle-2">Динамика цен за {{ chartPeriodDays }} дней</div>
-            <div class="text-caption text-medium-emphasis">По {{ formatUnit(product.unit) }}</div>
+            <div class="text-subtitle-2">Price dynamics for {{ chartPeriodDays }} days</div>
+            <div class="text-caption text-medium-emphasis">Per {{ formatUnit(product.unit) }}</div>
           </div>
 
           <!-- Simple line chart using CSS -->
@@ -195,8 +195,8 @@
       <v-divider />
       <v-card-text class="pa-4">
         <div class="d-flex align-center justify-space-between mb-3">
-          <div class="text-subtitle-2">Последние изменения цен</div>
-          <v-chip size="small" variant="outlined">{{ priceHistory.length }} записей</v-chip>
+          <div class="text-subtitle-2">Recent Price Changes</div>
+          <v-chip size="small" variant="outlined">{{ priceHistory.length }} records</v-chip>
         </div>
 
         <div class="price-history-table">
@@ -237,9 +237,9 @@
 
           <div v-if="priceHistory.length === 0" class="text-center pa-4">
             <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-chart-line-variant</v-icon>
-            <div class="text-body-2 text-medium-emphasis">История цен пока не ведется</div>
+            <div class="text-body-2 text-medium-emphasis">Price history not available yet</div>
             <div class="text-caption text-medium-emphasis">
-              Данные появятся после первых поставок
+              Data will appear after first deliveries
             </div>
           </div>
         </div>
@@ -274,9 +274,9 @@ const selectedPeriod = ref<'1month' | '3months' | '1year'>('1month') // 🆕 Per
 
 // 🆕 Period configuration
 const periodConfig = {
-  '1month': { days: 30, label: '1 месяц', dataPoints: 6 },
-  '3months': { days: 90, label: '3 месяца', dataPoints: 12 },
-  '1year': { days: 365, label: '1 год', dataPoints: 24 }
+  '1month': { days: 30, label: '1 month', dataPoints: 6 },
+  '3months': { days: 90, label: '3 months', dataPoints: 12 },
+  '1year': { days: 365, label: '1 year', dataPoints: 24 }
 }
 // Mock data generation
 const generateMockHistory = async (): Promise<void> => {
@@ -330,11 +330,11 @@ const generateMockHistory = async (): Promise<void> => {
           supplierId: 'sup-mock-supplier',
           notes:
             i === 0
-              ? 'Текущая цена'
+              ? 'Current price'
               : i % 30 === 0
-                ? 'Плановый заказ'
+                ? 'Planned order'
                 : i % 7 === 0
-                  ? 'Поставка от поставщика'
+                  ? 'Supplier delivery'
                   : undefined,
           createdAt: date.toISOString(),
           updatedAt: date.toISOString()
@@ -345,7 +345,7 @@ const generateMockHistory = async (): Promise<void> => {
     allPriceHistory.value = fullHistory.reverse() // Latest first
     updatePeriod() // Apply current period filter
   } catch (err) {
-    error.value = 'Ошибка загрузки истории цен'
+    error.value = 'Error loading price history'
   } finally {
     loading.value = false
   }
@@ -511,16 +511,16 @@ const getTrendIcon = (): string => {
 }
 
 const getTrendLabel = (): string => {
-  if (changePercent.value > 5) return 'Растет'
-  if (changePercent.value < -5) return 'Снижается'
-  return 'Стабильно'
+  if (changePercent.value > 5) return 'Rising'
+  if (changePercent.value < -5) return 'Falling'
+  return 'Stable'
 }
 
 const getTrendDescription = (): string => {
   const abs = Math.abs(changePercent.value)
-  if (abs > 10) return `Сильное изменение (${abs.toFixed(1)}%)`
-  if (abs > 5) return `Умеренное изменение (${abs.toFixed(1)}%)`
-  return `Стабильная цена (${abs.toFixed(1)}%)`
+  if (abs > 10) return `Strong change (${abs.toFixed(1)}%)`
+  if (abs > 5) return `Moderate change (${abs.toFixed(1)}%)`
+  return `Stable price (${abs.toFixed(1)}%)`
 }
 
 const getChangeColor = (): string => {
@@ -536,9 +536,9 @@ const getPointColor = (price: number): string => {
 
 const getSourceLabel = (sourceType: string): string => {
   const labels = {
-    purchase_order: 'Заказ',
-    receipt: 'Поставка',
-    manual_update: 'Ручное обновление'
+    purchase_order: 'Order',
+    receipt: 'Delivery',
+    manual_update: 'Manual update'
   }
   return labels[sourceType] || sourceType
 }

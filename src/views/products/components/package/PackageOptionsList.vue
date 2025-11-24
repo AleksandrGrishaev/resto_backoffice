@@ -1,14 +1,14 @@
 <template>
   <div class="package-options-list">
     <div class="d-flex justify-space-between align-center mb-3">
-      <h4>Упаковки</h4>
+      <h4>Packages</h4>
       <v-btn size="small" color="primary" variant="outlined" @click="$emit('add-package')">
         <v-icon start>mdi-plus</v-icon>
-        Добавить упаковку
+        Add Package
       </v-btn>
     </div>
 
-    <div v-if="!packageOptions.length" class="text-center text-grey py-4">Нет упаковок</div>
+    <div v-if="!packageOptions.length" class="text-center text-grey py-4">No packages</div>
 
     <div v-else>
       <v-card
@@ -32,17 +32,17 @@
                   color="success"
                   variant="tonal"
                 >
-                  Рекомендуемая
+                  Recommended
                 </v-chip>
                 <v-chip v-if="!pkg.isActive" size="x-small" color="error" variant="tonal">
-                  Неактивна
+                  Inactive
                 </v-chip>
               </div>
 
               <div class="text-body-2 text-grey-darken-1 mt-1">
                 {{ pkg.packageSize }} {{ baseUnit }}
                 <span v-if="pkg.packagePrice">
-                  • {{ formatPrice(pkg.packagePrice) }} за упаковку
+                  • {{ formatPrice(pkg.packagePrice) }} per package
                 </span>
                 • {{ formatPrice(pkg.baseCostPerUnit) }}/{{ baseUnit }}
               </div>

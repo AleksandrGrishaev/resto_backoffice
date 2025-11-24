@@ -1,16 +1,16 @@
 <!-- src/views/products/components/ProductsList.vue - SAFE VERSION -->
 <template>
   <div class="products-list">
-    <!-- Пустое состояние -->
+    <!-- Empty state -->
     <div v-if="!loading && products.length === 0" class="text-center pa-8">
       <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-package-variant-off</v-icon>
-      <h3 class="text-h6 text-medium-emphasis mb-2">Продукты не найдены</h3>
+      <h3 class="text-h6 text-medium-emphasis mb-2">No products found</h3>
       <p class="text-body-2 text-medium-emphasis">
-        Попробуйте изменить параметры поиска или добавить новый продукт
+        Try changing the search parameters or adding a new product
       </p>
     </div>
 
-    <!-- Таблица продуктов -->
+    <!-- Products table -->
     <div v-else>
       <v-data-table
         :headers="tableHeaders"
@@ -23,14 +23,14 @@
         show-current-page
         hover
       >
-        <!-- Название продукта -->
+        <!-- Product name -->
         <template #[`item.name`]="{ item }">
           <div class="product-name-cell">
             <div class="font-weight-medium">{{ item.name }}</div>
           </div>
         </template>
 
-        <!-- Категория -->
+        <!-- Category -->
         <template #[`item.category`]="{ item }">
           <v-chip :color="getCategoryColor(item.category)" size="small" variant="tonal">
             {{ getCategoryLabel(item.category) }}
@@ -53,21 +53,21 @@
           </div>
         </template>
 
-        <!-- Единица измерения -->
+        <!-- Measurement unit -->
         <template #[`item.unit`]="{ item }">
           <v-chip size="small" variant="outlined">
             {{ formatUnit(item) }}
           </v-chip>
         </template>
 
-        <!-- Стоимость -->
+        <!-- Cost -->
         <template #[`item.costPerUnit`]="{ item }">
           <div class="text-end">
             <div class="font-weight-medium">{{ formatCurrency(item.costPerUnit) }}</div>
           </div>
         </template>
 
-        <!-- Процент выхода -->
+        <!-- Yield percentage -->
         <template #[`item.yieldPercentage`]="{ item }">
           <div class="text-center">
             <v-chip :color="getYieldColor(item.yieldPercentage)" size="small" variant="tonal">
@@ -76,14 +76,14 @@
           </div>
         </template>
 
-        <!-- Статус -->
+        <!-- Status -->
         <template #[`item.isActive`]="{ item }">
           <v-chip :color="item.isActive ? 'success' : 'error'" size="small" variant="tonal">
-            {{ item.isActive ? 'Активен' : 'Неактивен' }}
+            {{ item.isActive ? 'Active' : 'Inactive' }}
           </v-chip>
         </template>
 
-        <!-- Действия -->
+        <!-- Actions -->
         <template #[`item.actions`]="{ item }">
           <div class="d-flex align-center ga-1">
             <v-btn
@@ -95,7 +95,7 @@
               @click="$emit('view-details', item)"
             >
               <v-icon>mdi-eye</v-icon>
-              <v-tooltip activator="parent">Подробности</v-tooltip>
+              <v-tooltip activator="parent">Details</v-tooltip>
             </v-btn>
 
             <v-btn
@@ -107,7 +107,7 @@
               @click="$emit('edit', item)"
             >
               <v-icon>mdi-pencil</v-icon>
-              <v-tooltip activator="parent">Редактировать</v-tooltip>
+              <v-tooltip activator="parent">Edit</v-tooltip>
             </v-btn>
 
             <v-btn
@@ -121,7 +121,7 @@
             >
               <v-icon>{{ item.isActive ? 'mdi-pause' : 'mdi-play' }}</v-icon>
               <v-tooltip activator="parent">
-                {{ item.isActive ? 'Деактивировать' : 'Активировать' }}
+                {{ item.isActive ? 'Deactivate' : 'Activate' }}
               </v-tooltip>
             </v-btn>
           </div>
@@ -154,17 +154,17 @@ interface Emits {
 
 defineEmits<Emits>()
 
-// Упрощенные заголовки таблицы
+// Simplified table headers
 const tableHeaders = computed(() => [
   {
-    title: 'Название',
+    title: 'Name',
     key: 'name',
     align: 'start' as const,
     sortable: true,
     width: '25%'
   },
   {
-    title: 'Категория',
+    title: 'Category',
     key: 'category',
     align: 'center' as const,
     sortable: true,
@@ -178,14 +178,14 @@ const tableHeaders = computed(() => [
     width: '15%'
   },
   {
-    title: 'Измерение',
+    title: 'Unit',
     key: 'unit',
     align: 'center' as const,
     sortable: true,
     width: '12%'
   },
   {
-    title: 'Стоимость',
+    title: 'Cost',
     key: 'costPerUnit',
     align: 'end' as const,
     sortable: true,
@@ -199,14 +199,14 @@ const tableHeaders = computed(() => [
     width: '10%'
   },
   {
-    title: 'Статус',
+    title: 'Status',
     key: 'isActive',
     align: 'center' as const,
     sortable: true,
     width: '13%'
   },
   {
-    title: 'Действия',
+    title: 'Actions',
     key: 'actions',
     align: 'center' as const,
     sortable: false,
@@ -214,24 +214,24 @@ const tableHeaders = computed(() => [
   }
 ])
 
-// ✅ ИСПРАВЛЕННЫЕ МЕТОДЫ с защитой от undefined
+// ✅ CORRECTED METHODS with undefined protection
 const getCategoryLabel = (category: string): string => {
   return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
 }
 
 /**
- * ✅ ИСПРАВЛЕНО: Безопасное форматирование единиц измерения
+ * ✅ CORRECTED: Safe measurement unit formatting
  */
 const formatUnit = (product: Product): string => {
-  // Проверяем разные возможные поля для единицы измерения
+  // Check different possible fields for measurement unit
   const unit = product.unit || (product as any).baseUnit || (product as any).measurementUnit
 
   if (!unit) {
-    // Если нет единицы измерения, возвращаем placeholder
-    return 'н/д'
+    // If no measurement unit, return placeholder
+    return 'N/A'
   }
 
-  // Используем безопасную функцию getUnitShortName
+  // Use safe getUnitShortName function
   return getUnitShortName(unit)
 }
 
@@ -273,7 +273,7 @@ const getYieldColor = (percentage: number | undefined | null): string => {
   return 'error'
 }
 
-// ✅ ДОБАВИТЬ эти функции
+// Add these functions
 const getDepartmentColor = (dept: Department): string => {
   return dept === 'kitchen' ? 'success' : 'primary'
 }

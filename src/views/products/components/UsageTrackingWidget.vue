@@ -3,11 +3,11 @@
   <v-card>
     <v-card-title class="d-flex align-center pb-2">
       <v-icon start color="primary">mdi-sitemap</v-icon>
-      <span>Где используется</span>
+      <span>Usage Overview</span>
       <v-spacer />
       <div class="d-flex align-center ga-2">
         <v-chip v-if="totalUsageCount > 0" color="primary" size="small" variant="tonal">
-          {{ totalUsageCount }} мест
+          {{ totalUsageCount }} locations
         </v-chip>
         <v-btn
           size="small"
@@ -17,7 +17,7 @@
           @click="generateMockUsage"
         >
           <v-icon start size="small">mdi-refresh</v-icon>
-          Обновить
+          Refresh
         </v-btn>
       </div>
     </v-card-title>
@@ -27,7 +27,7 @@
     <!-- Loading state -->
     <div v-if="loading" class="text-center pa-6">
       <v-progress-circular size="32" color="primary" indeterminate />
-      <div class="text-body-2 text-medium-emphasis mt-2">Анализ использования продукта...</div>
+      <div class="text-body-2 text-medium-emphasis mt-2">Analyzing product usage...</div>
     </div>
 
     <!-- Error state -->
@@ -52,8 +52,8 @@
               <div class="usage-metric__value text-h6 primary--text">
                 {{ usage.usedInRecipes.length }}
               </div>
-              <div class="usage-metric__label">Рецепты</div>
-              <div class="text-caption text-medium-emphasis">{{ activeRecipesCount }} активных</div>
+              <div class="usage-metric__label">Recipes</div>
+              <div class="text-caption text-medium-emphasis">{{ activeRecipesCount }} active</div>
             </div>
           </v-col>
 
@@ -62,9 +62,9 @@
               <div class="usage-metric__value text-h6 secondary--text">
                 {{ usage.usedInPreparations.length }}
               </div>
-              <div class="usage-metric__label">Полуфабрикаты</div>
+              <div class="usage-metric__label">Preparations</div>
               <div class="text-caption text-medium-emphasis">
-                {{ activePreparationsCount }} активных
+                {{ activePreparationsCount }} active
               </div>
             </div>
           </v-col>
@@ -74,9 +74,9 @@
               <div class="usage-metric__value text-h6 success--text">
                 {{ usage.directMenuItems?.length || 0 }}
               </div>
-              <div class="usage-metric__label">Меню</div>
+              <div class="usage-metric__label">Menu</div>
               <div class="text-caption text-medium-emphasis">
-                {{ product.canBeSold ? 'Прямые продажи' : 'Не продается' }}
+                {{ product.canBeSold ? 'Direct Sales' : 'Not for sale' }}
               </div>
             </div>
           </v-col>
@@ -86,7 +86,7 @@
               <div class="usage-metric__value text-h6 info--text">
                 {{ formatQuantity(totalDailyUsage) }}
               </div>
-              <div class="usage-metric__label">В день</div>
+              <div class="usage-metric__label">Per day</div>
               <div class="text-caption text-medium-emphasis">
                 {{ formatUnit(product.unit) }}
               </div>
@@ -102,7 +102,7 @@
         <div class="d-flex align-center justify-space-between mb-3">
           <div class="section-title">
             <v-icon color="primary" class="me-2">mdi-chef-hat</v-icon>
-            <span class="text-subtitle-1 font-weight-medium">Рецепты</span>
+            <span class="text-subtitle-1 font-weight-medium">Recipes</span>
             <v-chip color="primary" size="x-small" variant="outlined" class="ms-2">
               {{ usage.usedInRecipes.length }}
             </v-chip>
@@ -113,7 +113,7 @@
             color="primary"
             @click="expandedSections.recipes = !expandedSections.recipes"
           >
-            {{ expandedSections.recipes ? 'Скрыть' : 'Показать все' }}
+            {{ expandedSections.recipes ? 'Hide' : 'Show all' }}
           </v-btn>
         </div>
 
@@ -140,7 +140,7 @@
                   variant="outlined"
                   class="ms-2"
                 >
-                  Неактивен
+                  Inactive
                 </v-chip>
               </div>
               <div class="usage-item__details">
@@ -167,7 +167,7 @@
                 @click="$emit('view-recipe', recipe.recipeId)"
               >
                 <v-icon>mdi-eye</v-icon>
-                <v-tooltip activator="parent">Открыть рецепт</v-tooltip>
+                <v-tooltip activator="parent">Open Recipe</v-tooltip>
               </v-btn>
             </div>
           </div>
@@ -181,7 +181,7 @@
         <div class="d-flex align-center justify-space-between mb-3">
           <div class="section-title">
             <v-icon color="secondary" class="me-2">mdi-food-variant</v-icon>
-            <span class="text-subtitle-1 font-weight-medium">Полуфабрикаты</span>
+            <span class="text-subtitle-1 font-weight-medium">Preparations</span>
             <v-chip color="secondary" size="x-small" variant="outlined" class="ms-2">
               {{ usage.usedInPreparations.length }}
             </v-chip>
@@ -192,7 +192,7 @@
             color="secondary"
             @click="expandedSections.preparations = !expandedSections.preparations"
           >
-            {{ expandedSections.preparations ? 'Скрыть' : 'Показать все' }}
+            {{ expandedSections.preparations ? 'Hide' : 'Show all' }}
           </v-btn>
         </div>
 
@@ -219,7 +219,7 @@
                   variant="outlined"
                   class="ms-2"
                 >
-                  Неактивен
+                  Inactive
                 </v-chip>
               </div>
               <div class="usage-item__details">
@@ -245,7 +245,7 @@
                 @click="$emit('view-preparation', prep.preparationId)"
               >
                 <v-icon>mdi-eye</v-icon>
-                <v-tooltip activator="parent">Открыть полуфабрикат</v-tooltip>
+                <v-tooltip activator="parent">Open Preparation</v-tooltip>
               </v-btn>
             </div>
           </div>
@@ -259,7 +259,7 @@
         <div class="d-flex align-center justify-space-between mb-3">
           <div class="section-title">
             <v-icon color="success" class="me-2">mdi-silverware-fork-knife</v-icon>
-            <span class="text-subtitle-1 font-weight-medium">Прямые продажи</span>
+            <span class="text-subtitle-1 font-weight-medium">Direct Sales</span>
             <v-chip color="success" size="x-small" variant="outlined" class="ms-2">
               {{ usage.directMenuItems.length }}
             </v-chip>
@@ -292,11 +292,12 @@
                   variant="outlined"
                   class="ms-1"
                 >
-                  Неактивен
+                  Inactive
                 </v-chip>
               </div>
               <div class="usage-item__details">
-                {{ formatQuantity(item.quantityPerItem) }} {{ formatUnit(product.unit) }} на порцию
+                {{ formatQuantity(item.quantityPerItem) }} {{ formatUnit(product.unit) }} per
+                serving
               </div>
             </div>
 
@@ -316,7 +317,7 @@
                 @click="$emit('view-menu-item', item.menuItemId, item.variantId)"
               >
                 <v-icon>mdi-eye</v-icon>
-                <v-tooltip activator="parent">Открыть в меню</v-tooltip>
+                <v-tooltip activator="parent">Open in Menu</v-tooltip>
               </v-btn>
             </div>
           </div>
@@ -326,9 +327,9 @@
       <!-- No Usage State -->
       <div v-if="!hasAnyUsage" class="text-center pa-8">
         <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-package-variant-closed</v-icon>
-        <h3 class="text-h6 text-medium-emphasis mb-2">Продукт не используется</h3>
+        <h3 class="text-h6 text-medium-emphasis mb-2">Product Not Used</h3>
         <p class="text-body-2 text-medium-emphasis mb-4">
-          Этот продукт пока не используется ни в одном рецепте, полуфабрикате или позиции меню
+          This product is not yet used in any recipe, preparation, or menu item
         </p>
 
         <div class="d-flex justify-center ga-2">
@@ -339,7 +340,7 @@
             prepend-icon="mdi-plus"
             @click="$emit('add-to-menu', product)"
           >
-            Добавить в меню
+            Add to Menu
           </v-btn>
           <v-btn
             v-else
@@ -348,7 +349,7 @@
             prepend-icon="mdi-plus"
             @click="$emit('add-to-recipe', product)"
           >
-            Добавить в рецепт
+            Add to Recipe
           </v-btn>
         </div>
       </div>
@@ -361,8 +362,8 @@
             <v-icon>mdi-alert-triangle</v-icon>
           </template>
           <span class="text-body-2">
-            Продукт используется в {{ activeDependenciesCount }} активных позициях. Деактивация
-            может повлиять на доступность блюд.
+            Product is used in {{ activeDependenciesCount }} active items. Deactivation may affect
+            dish availability.
           </span>
         </v-alert>
       </div>
@@ -490,7 +491,7 @@ const generateMockUsage = async (): Promise<void> => {
 
     usage.value = mockUsage
   } catch (err) {
-    error.value = 'Ошибка загрузки данных об использовании'
+    error.value = 'Error loading usage data'
   } finally {
     loading.value = false
   }
@@ -499,14 +500,14 @@ const generateMockUsage = async (): Promise<void> => {
 // Mock data helpers
 const getRecipeNamesForProduct = (product: Product): string[] => {
   const recipesByCategory = {
-    meat: ['Стейк Рибай', 'Говяжий гуляш', 'Бургер Классик'],
-    vegetables: ['Овощное рагу', 'Картофель фри', 'Салат Цезарь', 'Томатный соус'],
-    dairy: ['Соус Альфредо', 'Крем-суп', 'Десерт Тирамису'],
-    spices: ['Маринад универсальный', 'Соус Барбекю', 'Приправа для мяса'],
-    other: ['Салатная заправка', 'Маринад для овощей']
+    meat: ['Ribeye Steak', 'Beef Goulash', 'Classic Burger'],
+    vegetables: ['Vegetable Stew', 'French Fries', 'Caesar Salad', 'Tomato Sauce'],
+    dairy: ['Alfredo Sauce', 'Cream Soup', 'Tiramisu Dessert'],
+    spices: ['Universal Marinade', 'BBQ Sauce', 'Meat Seasoning'],
+    other: ['Salad Dressing', 'Vegetable Marinade']
   }
 
-  const available = recipesByCategory[product.category] || ['Фирменное блюдо']
+  const available = recipesByCategory[product.category] || ['Signature Dish']
   const count = Math.min(available.length, Math.floor(Math.random() * 3) + 1)
 
   return available.slice(0, count)
@@ -514,11 +515,11 @@ const getRecipeNamesForProduct = (product: Product): string[] => {
 
 const getPreparationNamesForProduct = (product: Product): string[] => {
   const prepsByCategory = {
-    meat: ['Фарш домашний'],
-    vegetables: ['Овощная нарезка', 'Соус томатный'],
-    dairy: ['Соус сливочный'],
-    spices: ['Смесь специй'],
-    other: ['Заготовка базовая']
+    meat: ['Homemade Minced Meat'],
+    vegetables: ['Vegetable Slicing', 'Tomato Sauce'],
+    dairy: ['Cream Sauce'],
+    spices: ['Spice Mix'],
+    other: ['Basic Preparation']
   }
 
   const available = prepsByCategory[product.category] || []
@@ -530,18 +531,18 @@ const getMenuItemsForProduct = (
 ): Array<{ name: string; variant: string; quantity: number }> => {
   const menuByCategory = {
     beverages: [
-      { name: 'Пиво разливное', variant: 'Малое', quantity: 1 },
-      { name: 'Пиво разливное', variant: 'Большое', quantity: 1 }
+      { name: 'Draft Beer', variant: 'Small', quantity: 1 },
+      { name: 'Draft Beer', variant: 'Large', quantity: 1 }
     ],
     other: [
-      { name: 'Торт на заказ', variant: 'Классический', quantity: 1 },
-      { name: 'Хлебная корзина', variant: 'Микс', quantity: 2 }
+      { name: 'Custom Cake', variant: 'Classic', quantity: 1 },
+      { name: 'Bread Basket', variant: 'Mix', quantity: 2 }
     ]
   }
 
   return (
     menuByCategory[product.category] || [
-      { name: `${product.name} порционно`, variant: 'Стандарт', quantity: 1 }
+      { name: `${product.name} by portion`, variant: 'Standard', quantity: 1 }
     ]
   )
 }

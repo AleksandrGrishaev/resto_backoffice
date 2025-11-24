@@ -1,30 +1,30 @@
-<!-- src/views/products/components/ProductsFilters.vue - Упрощенная версия -->
+<!-- src/views/products/components/ProductsFilters.vue - Simplified version -->
 <template>
   <v-card class="mb-4">
     <v-card-text class="py-4">
       <v-row align="center">
-        <!-- Поиск -->
+        <!-- Search -->
         <v-col cols="12" md="5">
           <v-text-field
             v-model="localFilters.search"
-            label="Поиск продуктов"
+            label="Search products"
             prepend-inner-icon="mdi-magnify"
             variant="outlined"
             density="compact"
             clearable
             :loading="loading"
-            placeholder="Введите название продукта..."
+            placeholder="Enter product name..."
             hide-details
             @input="debouncedUpdate"
           />
         </v-col>
 
-        <!-- Категория -->
+        <!-- Category -->
         <v-col cols="12" md="3">
           <v-select
             v-model="localFilters.category"
             :items="categoryOptions"
-            label="Категория"
+            label="Category"
             variant="outlined"
             density="compact"
             :loading="loading"
@@ -54,12 +54,12 @@
           </v-select>
         </v-col>
 
-        <!-- Статус активности -->
+        <!-- Status -->
         <v-col cols="12" md="2">
           <v-select
             v-model="localFilters.isActive"
             :items="statusOptions"
-            label="Статус"
+            label="Status"
             variant="outlined"
             density="compact"
             :loading="loading"
@@ -72,7 +72,7 @@
           </v-select>
         </v-col>
 
-        <!-- Кнопка сброса -->
+        <!-- Reset Button -->
         <v-col cols="12" md="2">
           <v-btn
             variant="outlined"
@@ -82,16 +82,16 @@
             @click="resetFilters"
           >
             <v-icon start>mdi-refresh</v-icon>
-            Сбросить
+            Reset
           </v-btn>
         </v-col>
       </v-row>
 
-      <!-- Индикатор активных фильтров -->
+      <!-- Active filters indicator -->
       <v-row v-if="hasActiveFilters" class="mt-2">
         <v-col>
           <div class="d-flex align-center flex-wrap ga-2">
-            <span class="text-caption text-medium-emphasis">Активные фильтры:</span>
+            <span class="text-caption text-medium-emphasis">Active filters:</span>
 
             <v-chip
               v-if="localFilters.search"
@@ -101,7 +101,7 @@
               closable
               @click:close="clearSearchFilter"
             >
-              Поиск: "{{ localFilters.search }}"
+              Search: "{{ localFilters.search }}"
             </v-chip>
 
             <v-chip
@@ -135,7 +135,7 @@
               @click:close="clearDepartmentFilter"
             >
               {{ getDepartmentLabel(localFilters.department) }}
-              <!-- ✅ Динамическое значение -->
+              <!-- Dynamic value -->
             </v-chip>
           </div>
         </v-col>
@@ -157,7 +157,7 @@ type SimpleFilters = {
   category: ProductCategory | 'all'
   isActive: boolean | 'all'
   search: string
-  department: Department | 'all' // ✅ ДОБАВИТЬ
+  department: Department | 'all' // Department filter methods
 }
 
 // Props
@@ -178,12 +178,12 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 
-// Локальное состояние
+// Local state
 const localFilters = ref<SimpleFilters>({
   category: 'all',
   isActive: 'all',
   search: '',
-  department: 'all' // ✅ ДОБАВИТЬ
+  department: 'all' // Department filter methods
 })
 
 // Debounced update for search
@@ -195,16 +195,16 @@ const debouncedUpdate = () => {
   }, 300)
 }
 
-// ✅ ДОБАВИТЬ: Department options
+// Department options
 const departmentOptions = computed(() => [
   { title: 'All Departments', value: 'all' },
   { title: 'Kitchen', value: 'kitchen' },
   { title: 'Bar', value: 'bar' }
 ])
 
-// Опции для селектов
+// Options for selects
 const categoryOptions = computed(() => [
-  { title: 'Все категории', value: 'all' },
+  { title: 'All categories', value: 'all' },
   ...Object.entries(PRODUCT_CATEGORIES).map(([value, title]) => ({
     title,
     value
@@ -212,12 +212,12 @@ const categoryOptions = computed(() => [
 ])
 
 const statusOptions = computed(() => [
-  { title: 'Все', value: 'all' },
-  { title: 'Активные', value: true },
-  { title: 'Неактивные', value: false }
+  { title: 'All', value: 'all' },
+  { title: 'Active', value: true },
+  { title: 'Inactive', value: false }
 ])
 
-// Проверка наличия активных фильтров
+// Check for active filters
 const hasActiveFilters = computed(() => {
   return (
     localFilters.value.search !== '' ||
@@ -227,7 +227,7 @@ const hasActiveFilters = computed(() => {
   )
 })
 
-// Отслеживание изменений в props
+// Track changes in props
 watch(
   () => props.filters,
   newFilters => {
@@ -241,9 +241,9 @@ watch(
   { deep: true, immediate: true }
 )
 
-// Методы
+// Methods
 const updateFilters = (): void => {
-  console.log('📤 ProductsFilters: emitting filters', { ...localFilters.value }) // ✅ ДОБАВИТЬ
+  console.log('📤 ProductsFilters: emitting filters', { ...localFilters.value }) // Department filter methods
   emit('update:filters', { ...localFilters.value })
   DebugUtils.debug(MODULE_NAME, 'Filters updated', { filters: localFilters.value })
 }
@@ -259,19 +259,19 @@ const resetFilters = (): void => {
   DebugUtils.debug(MODULE_NAME, 'Filters reset')
 }
 
-// ✅ ДОБАВИТЬ
+// Department filter methods
 const clearDepartmentFilter = (): void => {
   localFilters.value.department = 'all'
   updateFilters()
 }
 
-// ✅ ДОБАВИТЬ
+// Department filter methods
 const getDepartmentLabel = (department: Department | 'all'): string => {
   if (department === 'all') return 'All Departments'
   return department === 'kitchen' ? 'Kitchen' : 'Bar'
 }
 
-// Методы очистки отдельных фильтров
+// Methods очистки отдельных фильтров
 const clearSearchFilter = (): void => {
   localFilters.value.search = ''
   updateFilters()
@@ -287,18 +287,18 @@ const clearStatusFilter = (): void => {
   updateFilters()
 }
 
-// Вспомогательные методы для отображения
+// Display helper methods
 const getCategoryLabel = (category: ProductCategory | 'all'): string => {
-  if (category === 'all') return 'Все категории'
+  if (category === 'all') return 'All categories'
   return PRODUCT_CATEGORIES[category] || category
 }
 
 const getStatusLabel = (status: boolean | 'all'): string => {
-  if (status === 'all') return 'Все'
-  return status ? 'Активные' : 'Неактивные'
+  if (status === 'all') return 'All'
+  return status ? 'Active' : 'Inactive'
 }
 
-// ✅ ДОБАВИТЬ helper для иконок
+// Department filter methods helper для иконок
 const getDepartmentIcon = (dept: Department | 'all'): string => {
   if (dept === 'kitchen') return 'mdi-silverware-fork-knife'
   if (dept === 'bar') return 'mdi-coffee'
@@ -307,5 +307,5 @@ const getDepartmentIcon = (dept: Department | 'all'): string => {
 </script>
 
 <style scoped>
-/* Минимальные стили */
+/* Minimal styles */
 </style>

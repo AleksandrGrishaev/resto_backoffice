@@ -8,16 +8,16 @@
           <div class="d-flex align-center ga-3">
             <v-icon size="40" color="primary">mdi-package-variant</v-icon>
             <div>
-              <h1 class="text-h4">Продукты</h1>
+              <h1 class="text-h4">Products</h1>
               <p class="text-subtitle-1 text-medium-emphasis mt-1">
-                Управление продуктами и ингредиентами
+                Manage products and ingredients
               </p>
             </div>
           </div>
         </v-col>
         <v-col cols="auto">
           <v-btn color="primary" prepend-icon="mdi-plus" size="large" @click="showCreateDialog">
-            Добавить продукт
+            Add Product
           </v-btn>
         </v-col>
       </v-row>
@@ -29,7 +29,7 @@
         <v-icon>mdi-database-outline</v-icon>
       </template>
       <div class="d-flex align-center justify-space-between">
-        <span class="text-body-2">Режим разработки: используются координированные mock-данные</span>
+        <span class="text-body-2">Development mode: using coordinated mock data</span>
         <!-- DEV: Simple test button -->
         <v-btn
           v-if="isDev"
@@ -39,7 +39,7 @@
           @click="testStockRecommendations"
         >
           <v-icon start size="small">mdi-calculator</v-icon>
-          Тест расчетов
+          Test Calculations
         </v-btn>
       </div>
     </v-alert>
@@ -56,7 +56,7 @@
     <v-card>
       <v-card-title class="d-flex align-center pa-4">
         <v-icon start>mdi-format-list-bulleted</v-icon>
-        Список продуктов
+        Products List
         <v-spacer />
         <div class="d-flex align-center ga-2">
           <v-chip
@@ -64,7 +64,7 @@
             variant="outlined"
             size="small"
           >
-            {{ store.filteredProducts.length }} из {{ store.products.length }}
+            {{ store.filteredProducts.length }} of {{ store.products.length }}
           </v-chip>
 
           <v-progress-circular
@@ -88,7 +88,7 @@
         closable
         @click:close="store.clearError()"
       >
-        <template #title>Ошибка загрузки данных</template>
+        <template #title>Error loading data</template>
         {{ store.error }}
       </v-alert>
 
@@ -216,7 +216,7 @@ const toggleProductActive = async (product: Product): Promise<void> => {
     await store.updateProduct(updateData)
 
     showNotification(
-      `Продукт "${product.name}" ${!product.isActive ? 'активирован' : 'деактивирован'}`,
+      `Product "${product.name}" ${!product.isActive ? 'activated' : 'deactivated'}`,
       'success'
     )
 
@@ -225,7 +225,7 @@ const toggleProductActive = async (product: Product): Promise<void> => {
       newStatus: !product.isActive
     })
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Ошибка при изменении статуса'
+    const errorMessage = err instanceof Error ? err.message : 'Error changing status'
     showNotification(errorMessage, 'error')
     DebugUtils.error(MODULE_NAME, 'Error toggling product status', { error: err, id: product.id })
   } finally {
@@ -400,11 +400,11 @@ onMounted(async () => {
   })
 
   if (store.products.length > 0) {
-    showNotification(`Продукты загружены (${store.products.length})`, 'success')
+    showNotification(`Products loaded (${store.products.length})`, 'success')
   } else if (store.error) {
-    showNotification('Ошибка загрузки продуктов', 'error')
+    showNotification('Error loading products', 'error')
   } else if (store.loading) {
-    showNotification('Загрузка продуктов...', 'warning')
+    showNotification('Loading products...', 'warning')
   }
 })
 </script>

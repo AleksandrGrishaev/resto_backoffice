@@ -24,7 +24,7 @@
       </span>
     </div>
 
-    <!-- Заголовок карточки -->
+    <!-- Card Header -->
     <v-card-title class="pb-2">
       <div class="d-flex align-center justify-space-between w-100">
         <div class="flex-grow-1">
@@ -40,11 +40,11 @@
               size="x-small"
               variant="outlined"
             >
-              {{ product.canBeSold ? 'Продажа' : 'Сырье' }}
+              {{ product.canBeSold ? 'For Sale' : 'Raw Material' }}
             </v-chip>
 
             <v-chip :color="product.isActive ? 'success' : 'error'" size="x-small" variant="tonal">
-              {{ product.isActive ? 'Активен' : 'Неактивен' }}
+              {{ product.isActive ? 'Active' : 'Inactive' }}
             </v-chip>
           </div>
         </div>
@@ -61,19 +61,19 @@
       </div>
     </v-card-title>
 
-    <!-- Основная информация -->
+    <!-- Basic Information -->
     <v-card-text class="py-2">
       <div v-if="product.description" class="text-body-2 text-medium-emphasis mb-3">
         {{ product.description }}
       </div>
 
-      <!-- Основная информация -->
+      <!-- Basic Information -->
       <div class="product-info">
         <v-row dense>
           <v-col cols="6">
             <div class="info-item">
               <v-icon size="small" color="primary" class="me-2">mdi-scale</v-icon>
-              <span class="text-caption">Единица:</span>
+              <span class="text-caption">Unit:</span>
               <span class="font-weight-medium ms-1">
                 {{ formatUnit(product.unit) }}
               </span>
@@ -82,7 +82,7 @@
           <v-col cols="6">
             <div class="info-item">
               <v-icon size="small" color="success" class="me-2">mdi-currency-usd</v-icon>
-              <span class="text-caption">Цена:</span>
+              <span class="text-caption">Price:</span>
               <span class="font-weight-medium ms-1">
                 {{ formatCurrency(product.costPerUnit) }}
               </span>
@@ -94,7 +94,7 @@
           <v-col cols="6">
             <div class="info-item">
               <v-icon size="small" color="primary" class="me-2">mdi-percent</v-icon>
-              <span class="text-caption">Выход:</span>
+              <span class="text-caption">Yield:</span>
               <v-chip
                 :color="getYieldColor(product.yieldPercentage)"
                 size="x-small"
@@ -121,14 +121,14 @@
           <v-divider class="mb-2" />
           <div class="text-caption text-medium-emphasis mb-2">
             <v-icon size="small" class="me-1">mdi-chart-timeline-variant</v-icon>
-            Рекомендации по заказу:
+            Order Recommendations:
           </div>
 
           <v-row dense>
             <v-col cols="6">
               <div class="info-item">
                 <v-icon size="small" color="warning" class="me-2">mdi-clock-outline</v-icon>
-                <span class="text-caption">Дней до заказа:</span>
+                <span class="text-caption">Days to reorder:</span>
                 <v-chip
                   :color="stockRecommendation.daysUntilReorder <= 0 ? 'error' : 'success'"
                   size="x-small"
@@ -142,7 +142,7 @@
             <v-col cols="6">
               <div class="info-item">
                 <v-icon size="small" color="info" class="me-2">mdi-package-variant</v-icon>
-                <span class="text-caption">Заказать:</span>
+                <span class="text-caption">Order amount:</span>
                 <span class="font-weight-medium ms-1 text-caption">
                   {{ Math.round(stockRecommendation.recommendedOrderQuantity * 10) / 10 }}
                   {{ formatUnit(product.unit) }}
@@ -155,7 +155,7 @@
             <v-col cols="12">
               <div class="info-item">
                 <v-icon size="small" color="orange" class="me-2">mdi-trending-up</v-icon>
-                <span class="text-caption">Расход в день:</span>
+                <span class="text-caption">Daily usage:</span>
                 <span class="font-weight-medium ms-1 text-caption">
                   {{ stockRecommendation.factors.averageDailyUsage }}
                   {{ formatUnit(product.unit) }}
@@ -165,19 +165,19 @@
           </v-row>
         </div>
 
-        <!-- Дополнительная информация (только если нет рекомендаций) -->
+        <!-- Additional Information (only if no recommendations) -->
         <v-row v-else-if="product.shelfLife || product.minStock" dense class="mt-1">
           <v-col v-if="product.shelfLife" cols="6">
             <div class="info-item">
               <v-icon size="small" color="warning" class="me-2">mdi-calendar-clock</v-icon>
-              <span class="text-caption">Срок:</span>
-              <span class="font-weight-medium ms-1">{{ product.shelfLife }} дн.</span>
+              <span class="text-caption">Shelf life:</span>
+              <span class="font-weight-medium ms-1">{{ product.shelfLife }} days</span>
             </div>
           </v-col>
           <v-col v-if="product.minStock" cols="6">
             <div class="info-item">
               <v-icon size="small" color="info" class="me-2">mdi-package-down</v-icon>
-              <span class="text-caption">Мин.:</span>
+              <span class="text-caption">Min. stock:</span>
               <span class="font-weight-medium ms-1">
                 {{ product.minStock }} {{ formatUnit(product.unit) }}
               </span>
@@ -185,12 +185,12 @@
           </v-col>
         </v-row>
 
-        <!-- Условия хранения (сократили) -->
+        <!-- Storage Conditions (shortened) -->
         <div v-if="product.storageConditions && !stockRecommendation" class="mt-3">
           <div class="d-flex align-start">
             <v-icon size="small" color="info" class="me-2 mt-1">mdi-thermometer</v-icon>
             <div>
-              <div class="text-caption text-medium-emphasis">Хранение:</div>
+              <div class="text-caption text-medium-emphasis">Storage:</div>
               <div class="text-caption">{{ truncateText(product.storageConditions, 40) }}</div>
             </div>
           </div>
@@ -198,7 +198,7 @@
       </div>
     </v-card-text>
 
-    <!-- Действия -->
+    <!-- Actions -->
     <v-card-actions>
       <!-- 🆕 Stock Action Button -->
       <v-btn
@@ -209,7 +209,7 @@
         prepend-icon="mdi-cart-plus"
         @click="$emit('create-order', product, stockRecommendation)"
       >
-        Заказать
+        Order
       </v-btn>
 
       <v-btn
@@ -220,7 +220,7 @@
         prepend-icon="mdi-eye"
         @click="$emit('view-details', product)"
       >
-        Подробнее
+        View Details
       </v-btn>
 
       <v-spacer />
@@ -233,7 +233,7 @@
         @click="$emit('edit', product)"
       >
         <v-icon>mdi-pencil</v-icon>
-        <v-tooltip activator="parent">Редактировать</v-tooltip>
+        <v-tooltip activator="parent">Edit</v-tooltip>
       </v-btn>
 
       <v-btn
@@ -246,15 +246,15 @@
       >
         <v-icon>{{ product.isActive ? 'mdi-pause' : 'mdi-play' }}</v-icon>
         <v-tooltip activator="parent">
-          {{ product.isActive ? 'Деактивировать' : 'Активировать' }}
+          {{ product.isActive ? 'Deactivate' : 'Activate' }}
         </v-tooltip>
       </v-btn>
     </v-card-actions>
 
-    <!-- Дата создания в footer -->
+    <!-- Creation date in footer -->
     <v-divider />
     <div class="text-caption text-center pa-2 text-medium-emphasis">
-      Создан: {{ formatDate(product.createdAt) }}
+      Created: {{ formatDate(product.createdAt) }}
     </div>
   </v-card>
 </template>
@@ -325,10 +325,10 @@ const getUrgencyIconSize = (urgency: string): string => {
 
 const getUrgencyMessage = (urgency: string): string => {
   const messages = {
-    critical: 'Срочно заказать!',
-    high: 'Требует заказа',
-    medium: 'Планировать заказ',
-    low: 'Достаточно'
+    critical: 'Order urgently!',
+    high: 'Order needed',
+    medium: 'Plan order',
+    low: 'Sufficient stock'
   }
   return messages[urgency] || ''
 }

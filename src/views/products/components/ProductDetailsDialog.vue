@@ -2,10 +2,10 @@
 <template>
   <v-dialog v-model="localModelValue" max-width="800px" scrollable>
     <v-card v-if="product">
-      <!-- Заголовок -->
+      <!-- Header -->
       <v-card-title class="d-flex align-center">
         <v-icon start color="info">mdi-information</v-icon>
-        <span>Детали продукта</span>
+        <span>Product Details</span>
         <v-spacer />
 
         <!-- 🆕 Stock Status Indicator -->
@@ -27,9 +27,9 @@
 
       <v-divider />
 
-      <!-- Основная информация -->
+      <!-- Basic Information -->
       <v-card-text class="pa-0">
-        <!-- Заголовок продукта -->
+        <!-- Product Header -->
         <div class="pa-6 pb-4">
           <div class="d-flex align-center justify-space-between mb-4">
             <div>
@@ -50,20 +50,20 @@
                 </v-chip>
 
                 <v-chip :color="product.canBeSold ? 'success' : 'orange'" variant="outlined">
-                  {{ product.canBeSold ? 'Для продажи' : 'Сырье' }}
+                  {{ product.canBeSold ? 'For Sale' : 'Raw Material' }}
                 </v-chip>
                 <v-chip :color="product.isActive ? 'success' : 'error'" variant="tonal">
-                  {{ product.isActive ? 'Активен' : 'Неактивен' }}
+                  {{ product.isActive ? 'Active' : 'Inactive' }}
                 </v-chip>
                 <v-chip :color="getYieldColor(product.yieldPercentage)" variant="tonal">
-                  Выход: {{ product.yieldPercentage }}%
+                  Yield: {{ product.yieldPercentage }}%
                 </v-chip>
               </div>
             </div>
           </div>
 
           <div v-if="product.description" class="mb-4">
-            <h3 class="text-h6 mb-2">Описание</h3>
+            <h3 class="text-h6 mb-2">Description</h3>
             <p class="text-body-1">{{ product.description }}</p>
           </div>
         </div>
@@ -78,7 +78,7 @@
               <v-icon start :color="getUrgencyColor(stockRecommendation.urgencyLevel)">
                 mdi-chart-timeline-variant
               </v-icon>
-              Рекомендации по заказу
+              Order Recommendations
               <v-spacer />
               <v-chip
                 :color="getUrgencyColor(stockRecommendation.urgencyLevel)"
@@ -99,12 +99,12 @@
                     >
                       {{ Math.max(0, Math.round(stockRecommendation.daysUntilReorder)) }}
                     </div>
-                    <div class="recommendation-stat__label">Дней до заказа</div>
+                    <div class="recommendation-stat__label">Days to reorder</div>
                     <div class="text-caption text-medium-emphasis">
                       {{
                         stockRecommendation.daysUntilReorder <= 0
-                          ? 'Заказать срочно'
-                          : 'Можно планировать'
+                          ? 'Order urgently'
+                          : 'Can be planned'
                       }}
                     </div>
                   </div>
@@ -116,10 +116,10 @@
                       {{ Math.round(stockRecommendation.recommendedOrderQuantity * 10) / 10 }}
                     </div>
                     <div class="recommendation-stat__label">
-                      Заказать {{ formatUnit(product.unit) }}
+                      Order {{ formatUnit(product.unit) }}
                     </div>
                     <div class="text-caption text-medium-emphasis">
-                      На {{ stockRecommendation.factors.leadTimeDays + 14 }} дней
+                      For {{ stockRecommendation.factors.leadTimeDays + 14 }} days
                     </div>
                   </div>
                 </v-col>
@@ -130,9 +130,9 @@
                       {{ stockRecommendation.factors.averageDailyUsage }}
                     </div>
                     <div class="recommendation-stat__label">
-                      Расход в день ({{ formatUnit(product.unit) }})
+                      Daily usage ({{ formatUnit(product.unit) }})
                     </div>
-                    <div class="text-caption text-medium-emphasis">Среднее потребление</div>
+                    <div class="text-caption text-medium-emphasis">Average consumption</div>
                   </div>
                 </v-col>
               </v-row>
@@ -142,24 +142,22 @@
               <v-row>
                 <v-col cols="6">
                   <div class="text-body-2 mb-1">
-                    <strong>Минимальный запас:</strong>
+                    <strong>Minimum stock:</strong>
                     {{ Math.round(stockRecommendation.recommendedMinStock * 10) / 10 }}
                     {{ formatUnit(product.unit) }}
                   </div>
                   <div class="text-caption text-medium-emphasis">
-                    {{ stockRecommendation.factors.safetyDays }} дня безопасности +
-                    {{ stockRecommendation.factors.leadTimeDays }} дней доставка
+                    {{ stockRecommendation.factors.safetyDays }} safety days +
+                    {{ stockRecommendation.factors.leadTimeDays }} days delivery
                   </div>
                 </v-col>
                 <v-col cols="6">
                   <div class="text-body-2 mb-1">
-                    <strong>Максимальный запас:</strong>
+                    <strong>Maximum stock:</strong>
                     {{ Math.round(stockRecommendation.recommendedMaxStock * 10) / 10 }}
                     {{ formatUnit(product.unit) }}
                   </div>
-                  <div class="text-caption text-medium-emphasis">
-                    Оптимальный уровень для закупок
-                  </div>
+                  <div class="text-caption text-medium-emphasis">Optimal level for purchasing</div>
                 </v-col>
               </v-row>
 
@@ -171,7 +169,7 @@
                   prepend-icon="mdi-cart-plus"
                   @click="$emit('create-order', product, stockRecommendation)"
                 >
-                  Создать заказ
+                  Create Order
                 </v-btn>
               </div>
             </v-card-text>
@@ -180,36 +178,36 @@
 
         <v-divider />
 
-        <!-- Детальная информация -->
+        <!-- Detailed Information -->
         <div class="pa-6">
-          <h3 class="text-h6 mb-4">Характеристики</h3>
+          <h3 class="text-h6 mb-4">Specifications</h3>
 
           <v-row>
-            <!-- Основные параметры -->
+            <!-- Basic Parameters -->
             <v-col cols="12" md="6">
               <v-card variant="outlined" class="h-100">
                 <v-card-title class="text-subtitle-1">
                   <v-icon start color="primary">mdi-information-outline</v-icon>
-                  Основные параметры
+                  Basic Parameters
                 </v-card-title>
                 <v-card-text>
                   <div class="detail-items">
                     <div class="detail-item">
-                      <span class="detail-label">Единица измерения:</span>
+                      <span class="detail-label">Measurement Unit:</span>
                       <v-chip size="small" variant="outlined">
                         {{ formatUnit(product.unit) }}
                       </v-chip>
                     </div>
 
                     <div class="detail-item">
-                      <span class="detail-label">Себестоимость:</span>
+                      <span class="detail-label">Unit Cost:</span>
                       <v-chip color="success" size="small" variant="tonal">
                         {{ formatCurrency(product.costPerUnit) }}
                       </v-chip>
                     </div>
 
                     <div class="detail-item">
-                      <span class="detail-label">Процент выхода:</span>
+                      <span class="detail-label">Yield Percentage:</span>
                       <v-chip
                         :color="getYieldColor(product.yieldPercentage)"
                         size="small"
@@ -220,24 +218,24 @@
                     </div>
 
                     <div class="detail-item">
-                      <span class="detail-label">Тип продукта:</span>
+                      <span class="detail-label">Product Type:</span>
                       <v-chip
                         :color="product.canBeSold ? 'success' : 'orange'"
                         size="small"
                         variant="tonal"
                       >
-                        {{ product.canBeSold ? 'Для продажи' : 'Сырье' }}
+                        {{ product.canBeSold ? 'For Sale' : 'Raw Material' }}
                       </v-chip>
                     </div>
 
                     <div class="detail-item">
-                      <span class="detail-label">Статус:</span>
+                      <span class="detail-label">Status:</span>
                       <v-chip
                         :color="product.isActive ? 'success' : 'error'"
                         size="small"
                         variant="tonal"
                       >
-                        {{ product.isActive ? 'Активен' : 'Неактивен' }}
+                        {{ product.isActive ? 'Active' : 'Inactive' }}
                       </v-chip>
                     </div>
                   </div>
@@ -245,27 +243,27 @@
               </v-card>
             </v-col>
 
-            <!-- Хранение и учет -->
+            <!-- Storage & Accounting -->
             <v-col cols="12" md="6">
               <v-card variant="outlined" class="h-100">
                 <v-card-title class="text-subtitle-1">
                   <v-icon start color="warning">mdi-package-variant</v-icon>
-                  Хранение и учет
+                  Storage & Accounting
                 </v-card-title>
                 <v-card-text>
                   <div class="detail-items">
                     <div v-if="product.storageConditions" class="detail-item">
-                      <span class="detail-label">Условия хранения:</span>
+                      <span class="detail-label">Storage Conditions:</span>
                       <span class="detail-value">{{ product.storageConditions }}</span>
                     </div>
 
                     <div v-if="product.shelfLife" class="detail-item">
-                      <span class="detail-label">Срок годности:</span>
-                      <span class="detail-value">{{ product.shelfLife }} дней</span>
+                      <span class="detail-label">Shelf Life:</span>
+                      <span class="detail-value">{{ product.shelfLife }} days</span>
                     </div>
 
                     <div v-if="product.minStock" class="detail-item">
-                      <span class="detail-label">Минимальный остаток:</span>
+                      <span class="detail-label">Minimum Stock:</span>
                       <span class="detail-value">
                         {{ product.minStock }} {{ formatUnit(product.unit) }}
                       </span>
@@ -273,12 +271,12 @@
 
                     <!-- 🆕 Enhanced fields if available -->
                     <div v-if="(product as any).leadTimeDays" class="detail-item">
-                      <span class="detail-label">Время доставки:</span>
-                      <span class="detail-value">{{ (product as any).leadTimeDays }} дней</span>
+                      <span class="detail-label">Delivery Time:</span>
+                      <span class="detail-value">{{ (product as any).leadTimeDays }} days</span>
                     </div>
 
                     <div v-if="(product as any).tags?.length" class="detail-item">
-                      <span class="detail-label">Теги:</span>
+                      <span class="detail-label">Tags:</span>
                       <div class="d-flex flex-wrap ga-1">
                         <v-chip
                           v-for="tag in (product as any).tags"
@@ -296,7 +294,7 @@
                       class="text-center text-medium-emphasis"
                     >
                       <v-icon>mdi-information-outline</v-icon>
-                      <div class="text-caption mt-2">Дополнительная информация не указана</div>
+                      <div class="text-caption mt-2">No additional information provided</div>
                     </div>
                   </div>
                 </v-card-text>
@@ -304,13 +302,13 @@
             </v-col>
           </v-row>
 
-          <!-- Расчетная информация -->
+          <!-- Cost Analysis -->
           <v-row class="mt-4">
             <v-col cols="12">
               <v-card variant="outlined">
                 <v-card-title class="text-subtitle-1">
                   <v-icon start color="info">mdi-calculator</v-icon>
-                  Расчетная информация
+                  Cost Analysis
                 </v-card-title>
                 <v-card-text>
                   <v-row>
@@ -319,7 +317,7 @@
                         <div class="text-h6 success--text">
                           {{ formatCurrency(product.costPerUnit) }}
                         </div>
-                        <div class="text-caption">Цена за {{ formatUnit(product.unit) }}</div>
+                        <div class="text-caption">Price per {{ formatUnit(product.unit) }}</div>
                       </div>
                     </v-col>
                     <v-col cols="12" md="4">
@@ -327,19 +325,19 @@
                         <div class="text-h6 info--text">
                           {{ formatCurrency(calculateEffectiveCost()) }}
                         </div>
-                        <div class="text-caption">Эффективная стоимость*</div>
+                        <div class="text-caption">Effective Cost*</div>
                       </div>
                     </v-col>
                     <v-col cols="12" md="4">
                       <div class="text-center">
                         <div class="text-h6 warning--text">{{ product.yieldPercentage }}%</div>
-                        <div class="text-caption">Выход продукта</div>
+                        <div class="text-caption">Product Yield</div>
                       </div>
                     </v-col>
                   </v-row>
                   <v-divider class="my-3" />
                   <div class="text-caption text-medium-emphasis">
-                    * Эффективная стоимость учитывает процент выхода продукта после обработки
+                    * Effective cost considers the product yield percentage after processing
                   </div>
                 </v-card-text>
               </v-card>
@@ -347,9 +345,9 @@
           </v-row>
         </div>
 
-        <!-- Упаковки продукта -->
+        <!-- Packages продукта -->
         <div v-if="product.packageOptions?.length" class="pa-6">
-          <h3 class="text-h6 mb-4">Упаковки</h3>
+          <h3 class="text-h6 mb-4">Packages</h3>
 
           <v-row>
             <v-col v-for="pkg in product.packageOptions" :key="pkg.id" cols="12" md="6">
@@ -366,7 +364,7 @@
                       color="success"
                       variant="tonal"
                     >
-                      Рекомендуемая
+                      Recommended
                     </v-chip>
                   </div>
 
@@ -394,17 +392,17 @@
         <!-- 🆕 Enhanced Analytics Sections -->
         <v-divider />
         <div class="pa-6">
-          <h3 class="text-h6 mb-4">Аналитика и использование</h3>
+          <h3 class="text-h6 mb-4">Analytics & Usage</h3>
 
           <!-- Tabs for different analytics -->
           <v-tabs v-model="activeTab" color="primary" class="mb-4">
             <v-tab value="usage">
               <v-icon start>mdi-sitemap</v-icon>
-              Использование
+              Usage
             </v-tab>
             <v-tab value="price-history">
               <v-icon start>mdi-chart-line</v-icon>
-              История цен
+              Price History
             </v-tab>
           </v-tabs>
 
@@ -430,16 +428,16 @@
 
         <v-divider />
 
-        <!-- Временные метки -->
+        <!-- Timestamps -->
         <div class="pa-6">
-          <h3 class="text-h6 mb-4">История</h3>
+          <h3 class="text-h6 mb-4">History</h3>
 
           <v-row>
             <v-col cols="12" md="6">
               <div class="d-flex align-center">
                 <v-icon color="success" class="me-3">mdi-calendar-plus</v-icon>
                 <div>
-                  <div class="text-body-2 font-weight-medium">Создан</div>
+                  <div class="text-body-2 font-weight-medium">Created</div>
                   <div class="text-caption text-medium-emphasis">
                     {{ formatDateTime(product.createdAt) }}
                   </div>
@@ -451,7 +449,7 @@
               <div class="d-flex align-center">
                 <v-icon color="info" class="me-3">mdi-calendar-edit</v-icon>
                 <div>
-                  <div class="text-body-2 font-weight-medium">Последнее изменение</div>
+                  <div class="text-body-2 font-weight-medium">Last Modified</div>
                   <div class="text-caption text-medium-emphasis">
                     {{ formatDateTime(product.updatedAt) }}
                   </div>
@@ -462,7 +460,7 @@
         </div>
       </v-card-text>
 
-      <!-- Действия -->
+      <!-- Actions -->
       <v-divider />
       <v-card-actions class="px-6 py-4">
         <v-btn
@@ -472,10 +470,10 @@
           prepend-icon="mdi-cart-plus"
           @click="$emit('create-order', product, stockRecommendation)"
         >
-          Создать заказ
+          Create Order
         </v-btn>
         <v-spacer />
-        <v-btn variant="text" @click="closeDialog">Закрыть</v-btn>
+        <v-btn variant="text" @click="closeDialog">Close</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -554,10 +552,10 @@ const getUrgencyIcon = (urgency: string): string => {
 
 const getUrgencyLabel = (urgency: string): string => {
   const labels = {
-    critical: 'Критично',
-    high: 'Высокий',
-    medium: 'Средний',
-    low: 'Низкий'
+    critical: 'Critical',
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low'
   }
   return labels[urgency] || urgency
 }
@@ -588,7 +586,7 @@ const handleAddToRecipe = (product: Product): void => {
   // TODO: Open add to recipe dialog
 }
 
-// Методы
+// Methods
 const closeDialog = (): void => {
   emit('update:modelValue', false)
 }
