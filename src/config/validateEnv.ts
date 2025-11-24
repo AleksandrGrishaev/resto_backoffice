@@ -27,12 +27,12 @@ export function validateEnvironment(): void {
   // Check required variables
   const requiredVars = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']
 
-  const missingVars = requiredVars.filter((key) => !import.meta.env[key])
+  const missingVars = requiredVars.filter(key => !import.meta.env[key])
 
   if (missingVars.length > 0) {
     errors.push({
       type: 'missing',
-      message: `Missing required environment variables: ${missingVars.join(', ')}`,
+      message: `Missing required environment variables: ${missingVars.join(', ')}`
     })
   }
 
@@ -47,7 +47,7 @@ export function validateEnvironment(): void {
         message:
           '🚨 CRITICAL SECURITY ERROR: SERVICE_KEY cannot be used in production! ' +
           'This bypasses Row Level Security policies and is a major security risk.',
-        variable: 'VITE_SUPABASE_USE_SERVICE_KEY',
+        variable: 'VITE_SUPABASE_USE_SERVICE_KEY'
       })
     }
 
@@ -58,7 +58,7 @@ export function validateEnvironment(): void {
         message:
           '🚨 CRITICAL: VITE_SUPABASE_SERVICE_KEY should not be set in production build! ' +
           'Remove this variable from .env.production',
-        variable: 'VITE_SUPABASE_SERVICE_KEY',
+        variable: 'VITE_SUPABASE_SERVICE_KEY'
       })
     }
 
@@ -69,7 +69,7 @@ export function validateEnvironment(): void {
         message:
           '⚠️ Debug logging is enabled in production. ' +
           'This may impact performance and expose sensitive data in console.',
-        variable: 'VITE_DEBUG_ENABLED',
+        variable: 'VITE_DEBUG_ENABLED'
       })
     }
 
@@ -80,7 +80,7 @@ export function validateEnvironment(): void {
         message:
           '⚠️ POS offline-first mode is disabled in production. ' +
           'This may cause issues when internet connection is lost.',
-        variable: 'VITE_POS_OFFLINE_FIRST',
+        variable: 'VITE_POS_OFFLINE_FIRST'
       })
     }
 
@@ -90,7 +90,7 @@ export function validateEnvironment(): void {
       warnings.push({
         type: 'invalid',
         message: '⚠️ Supabase URL should use HTTPS in production',
-        variable: 'VITE_SUPABASE_URL',
+        variable: 'VITE_SUPABASE_URL'
       })
     }
   }
@@ -114,7 +114,7 @@ export function validateEnvironment(): void {
         message:
           '⚠️ Firebase is enabled. This is legacy and should be removed. ' +
           'Use VITE_USE_SUPABASE=true instead.',
-        variable: 'VITE_USE_FIREBASE',
+        variable: 'VITE_USE_FIREBASE'
       })
     }
   }
@@ -122,7 +122,7 @@ export function validateEnvironment(): void {
   // Display warnings
   if (warnings.length > 0) {
     console.group('⚠️ Environment Warnings')
-    warnings.forEach((warning) => {
+    warnings.forEach(warning => {
       console.warn(`  ${warning.message}`)
       if (warning.variable) {
         console.warn(`  Variable: ${warning.variable}`)
@@ -134,7 +134,7 @@ export function validateEnvironment(): void {
   // Handle errors
   if (errors.length > 0) {
     console.group('❌ Environment Validation Failed')
-    errors.forEach((error) => {
+    errors.forEach(error => {
       console.error(`  ${error.message}`)
       if (error.variable) {
         console.error(`  Variable: ${error.variable}`)
@@ -143,32 +143,22 @@ export function validateEnvironment(): void {
     console.groupEnd()
 
     // Throw error to prevent app startup with invalid config
-    const errorMessage = errors.map((e) => e.message).join('\n')
+    const errorMessage = errors.map(e => e.message).join('\n')
     throw new Error(`Environment validation failed:\n${errorMessage}`)
   }
 
   // Success
   const mode = import.meta.env.MODE
   const env = import.meta.env.PROD ? 'production' : 'development'
-  console.log(
-    `✅ Environment validation passed (mode: ${mode}, env: ${env})`
-  )
+  console.log(`✅ Environment validation passed (mode: ${mode}, env: ${env})`)
 
   // Display key configuration
   console.group('📋 Environment Configuration')
-  console.log(
-    `  App Title: ${import.meta.env.VITE_APP_TITLE || 'Kitchen App'}`
-  )
+  console.log(`  App Title: ${import.meta.env.VITE_APP_TITLE || 'Kitchen App'}`)
   console.log(`  Platform: ${import.meta.env.VITE_PLATFORM || 'web'}`)
-  console.log(
-    `  Supabase: ${import.meta.env.VITE_USE_SUPABASE === 'true' ? '✅' : '❌'}`
-  )
-  console.log(
-    `  Debug: ${import.meta.env.VITE_DEBUG_ENABLED === 'true' ? '✅' : '❌'}`
-  )
-  console.log(
-    `  Offline-first: ${import.meta.env.VITE_POS_OFFLINE_FIRST === 'true' ? '✅' : '❌'}`
-  )
+  console.log(`  Supabase: ${import.meta.env.VITE_USE_SUPABASE === 'true' ? '✅' : '❌'}`)
+  console.log(`  Debug: ${import.meta.env.VITE_DEBUG_ENABLED === 'true' ? '✅' : '❌'}`)
+  console.log(`  Offline-first: ${import.meta.env.VITE_POS_OFFLINE_FIRST === 'true' ? '✅' : '❌'}`)
   console.groupEnd()
 }
 

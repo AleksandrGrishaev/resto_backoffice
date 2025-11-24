@@ -22,7 +22,7 @@ const colors = {
   red: '\x1b[31m',
   green: '\x1b[32m',
   yellow: '\x1b[33m',
-  blue: '\x1b[34m',
+  blue: '\x1b[34m'
 }
 
 function log(message: string, color: string = colors.reset) {
@@ -34,10 +34,7 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL
 const supabaseServiceKey = process.env.VITE_SUPABASE_SERVICE_KEY
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  log(
-    '❌ Error: Missing environment variables!',
-    colors.red + colors.bright
-  )
+  log('❌ Error: Missing environment variables!', colors.red + colors.bright)
   log('\nRequired:', colors.yellow)
   log('  - VITE_SUPABASE_URL')
   log('  - VITE_SUPABASE_SERVICE_KEY (for admin operations only)')
@@ -50,19 +47,19 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
-    persistSession: false,
-  },
+    persistSession: false
+  }
 })
 
 // Create readline interface for user input
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout,
+  output: process.stdout
 })
 
 function question(prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(prompt, (answer) => {
+  return new Promise(resolve => {
+    rl.question(prompt, answer => {
       resolve(answer.trim())
     })
   })
@@ -120,8 +117,8 @@ async function createAdminUser() {
       password,
       email_confirm: true,
       user_metadata: {
-        name,
-      },
+        name
+      }
     })
 
     if (authError) {
@@ -140,22 +137,17 @@ async function createAdminUser() {
       name,
       email,
       roles: ['admin', 'manager'],
-      is_active: true,
+      is_active: true
     })
 
     if (profileError) {
       // If profile creation fails, try to delete the auth user
-      log(
-        `⚠️  Profile creation failed: ${profileError.message}`,
-        colors.yellow
-      )
+      log(`⚠️  Profile creation failed: ${profileError.message}`, colors.yellow)
       log('🔄 Attempting to cleanup auth user...', colors.yellow)
 
       await supabase.auth.admin.deleteUser(authData.user.id)
 
-      throw new Error(
-        `Failed to create user profile: ${profileError.message}`
-      )
+      throw new Error(`Failed to create user profile: ${profileError.message}`)
     }
 
     log('✅ User profile created', colors.green)
@@ -191,10 +183,7 @@ async function createAdminUser() {
 
 // Check if users table exists
 async function checkUsersTable() {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id')
-    .limit(1)
+  const { data, error } = await supabase.from('users').select('id').limit(1)
 
   if (error && error.message.includes('does not exist')) {
     log('\n❌ Error: "users" table does not exist!', colors.red + colors.bright)

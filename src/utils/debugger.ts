@@ -165,12 +165,15 @@ export class DebugUtils {
       return false
     }
 
-    if (!this.isDev) return level === 'error'
-
+    // Используем debugLevel из ENV вместо жесткой проверки isDev
+    // Это позволяет управлять логами через .env файлы в dev и prod
     const debugLevel = this.debugLevel
     if (debugLevel === 'silent') return level === 'error'
     if (debugLevel === 'standard') return ['info', 'warn', 'error'].includes(level)
-    return true
+    if (debugLevel === 'verbose') return true
+
+    // Fallback: если debugLevel не задан, используем старую логику
+    return this.isDev ? true : level === 'error'
   }
 
   static log(level: LogLevel, module: string, message: string, data?: LogData) {

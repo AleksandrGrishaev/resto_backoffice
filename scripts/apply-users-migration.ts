@@ -78,7 +78,6 @@ async function applyMigration() {
     console.log('   1. Create test users with: pnpm seed:users')
     console.log('   2. Update authStore to use new authentication methods')
     console.log('   3. Update LoginView UI with three tabs')
-
   } catch (error) {
     console.error('❌ Unexpected error:', error)
     process.exit(1)

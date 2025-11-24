@@ -98,15 +98,13 @@ async function createEmailUser(email: string, password: string, name: string, ro
     }
 
     // 2. Create profile in users table
-    const { error: profileError } = await supabase
-      .from('users')
-      .insert({
-        id: authData.user.id,
-        name,
-        email,
-        roles,
-        is_active: true
-      })
+    const { error: profileError } = await supabase.from('users').insert({
+      id: authData.user.id,
+      name,
+      email,
+      roles,
+      is_active: true
+    })
 
     if (profileError) {
       throw profileError
@@ -216,7 +214,7 @@ async function seedUsers() {
 }
 
 // Run seeding
-seedUsers().catch((error) => {
+seedUsers().catch(error => {
   console.error('❌ Seeding failed:', error)
   process.exit(1)
 })
