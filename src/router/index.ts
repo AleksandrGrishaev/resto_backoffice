@@ -331,6 +331,13 @@ router.beforeEach(async (to, from, next) => {
   try {
     const authStore = useAuthStore()
 
+    console.log('[Router Guard]', {
+      to: to.path,
+      from: from.path,
+      isAuthenticated: authStore.isAuthenticated,
+      requiresAuth: to.meta.requiresAuth
+    })
+
     // Проверка dev режима для debug роутов
     if (to.meta.requiresDev && !import.meta.env.DEV) {
       console.warn('Debug routes are only available in development mode')
@@ -343,15 +350,18 @@ router.beforeEach(async (to, from, next) => {
       // Если пользователь авторизован и идет на login - переадресуем на главную
       if (to.name === 'login' && authStore.isAuthenticated) {
         const defaultRoute = authStore.getDefaultRoute() // 🔄 ИСПОЛЬЗУЕМ МЕТОД STORE
+        console.log('[Router Guard] Redirecting from login to default route:', defaultRoute)
         next(defaultRoute)
         return
       }
+      console.log('[Router Guard] No auth required, allowing navigation')
       next()
       return
     }
 
     // Проверка авторизации
     if (!authStore.isAuthenticated) {
+      console.log('[Router Guard] Not authenticated, redirecting to login')
       next({
         name: 'login',
         query: { redirect: to.fullPath }
@@ -363,14 +373,16 @@ router.beforeEach(async (to, from, next) => {
     if (to.meta.allowedRoles) {
       const { hasAnyRole } = usePermissions()
       if (!hasAnyRole(to.meta.allowedRoles)) {
+        console.log('[Router Guard] No required roles, redirecting to unauthorized')
         next('/unauthorized')
         return
       }
     }
 
+    console.log('[Router Guard] All checks passed, allowing navigation')
     next()
   } catch (error) {
-    console.error('Navigation guard error:', error)
+    console.error('[Router Guard] Navigation guard error:', error)
     next('/auth/login')
   }
 })
