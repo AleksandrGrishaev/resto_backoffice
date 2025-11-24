@@ -483,9 +483,11 @@
 import { computed, ref } from 'vue'
 import type { Product, Department } from '@/stores/productsStore/types'
 import type { StockRecommendation } from '@/stores/productsStore/types'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import { useProductsStore } from '@/stores/productsStore'
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 import { Formatter } from '@/utils'
+
+const productsStore = useProductsStore()
 
 // 🆕 Import new widgets
 import UsageTrackingWidget from './UsageTrackingWidget.vue'
@@ -591,8 +593,9 @@ const closeDialog = (): void => {
   emit('update:modelValue', false)
 }
 
-const getCategoryLabel = (category: string): string => {
-  return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
+// ✅ UPDATED: Get category from store
+const getCategoryLabel = (categoryId: string): string => {
+  return productsStore.getCategoryName(categoryId)
 }
 
 const formatUnit = (unit: string): string => {

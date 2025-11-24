@@ -138,6 +138,50 @@ export class ProductsService {
   }
 
   /**
+   * ✅ NEW: Get all product categories from database
+   */
+  async getCategories(): Promise<ProductCategory[]> {
+    if (!isSupabaseAvailable()) {
+      DebugUtils.warn(MODULE_NAME, '⚠️ Supabase not available, returning empty categories')
+      return []
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('product_categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to load categories from Supabase:', error)
+        throw error
+      }
+
+      // Map from snake_case to camelCase
+      const categories: ProductCategory[] = (data || []).map(row => ({
+        id: row.id,
+        key: row.key,
+        name: row.name,
+        color: row.color,
+        icon: row.icon,
+        sortOrder: row.sort_order,
+        isActive: row.is_active,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }))
+
+      DebugUtils.info(MODULE_NAME, '✅ Categories loaded from Supabase', {
+        count: categories.length
+      })
+
+      return categories
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting categories:', error)
+      throw error
+    }
+  }
+
+  /**
    * Get active products
    */
   async getActiveProducts(): Promise<Product[]> {

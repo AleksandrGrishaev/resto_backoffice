@@ -538,19 +538,9 @@ function getCategoryColor(category: ProductCategory): string {
   return colors[category] || 'grey'
 }
 
-function getCategoryLabel(category: ProductCategory): string {
-  const labels: Record<ProductCategory, string> = {
-    meat: 'Meat & Poultry',
-    vegetables: 'Vegetables',
-    fruits: 'Fruits',
-    beverages: 'Beverages',
-    dairy: 'Dairy Products',
-    cereals: 'Grains & Cereals',
-    spices: 'Spices & Seasonings',
-    seafood: 'Seafood',
-    other: 'Other Products'
-  }
-  return labels[category] || category.charAt(0).toUpperCase() + category.slice(1)
+// ✅ UPDATED: Get category label from store
+function getCategoryLabel(categoryId: string): string {
+  return productsStore.getCategoryName(categoryId)
 }
 
 function getEstimatedPrice(product: Product): number {

@@ -146,15 +146,16 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { ProductCategory, Department } from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import type { Department } from '@/stores/productsStore'
+import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'ProductsFilters'
+const productsStore = useProductsStore()
 
 // Simplified filters type
 type SimpleFilters = {
-  category: ProductCategory | 'all'
+  category: string | 'all' // UUID of category or 'all'
   isActive: boolean | 'all'
   search: string
   department: Department | 'all' // Department filter methods
@@ -202,12 +203,12 @@ const departmentOptions = computed(() => [
   { title: 'Bar', value: 'bar' }
 ])
 
-// Options for selects
+// ✅ UPDATED: Options for selects - load from store
 const categoryOptions = computed(() => [
   { title: 'All categories', value: 'all' },
-  ...Object.entries(PRODUCT_CATEGORIES).map(([value, title]) => ({
-    title,
-    value
+  ...productsStore.activeCategories.map(cat => ({
+    title: cat.name,
+    value: cat.id
   }))
 ])
 
@@ -287,10 +288,10 @@ const clearStatusFilter = (): void => {
   updateFilters()
 }
 
-// Display helper methods
-const getCategoryLabel = (category: ProductCategory | 'all'): string => {
+// ✅ UPDATED: Display helper methods - use store
+const getCategoryLabel = (category: string | 'all'): string => {
   if (category === 'all') return 'All categories'
-  return PRODUCT_CATEGORIES[category] || category
+  return productsStore.getCategoryName(category)
 }
 
 const getStatusLabel = (status: boolean | 'all'): string => {

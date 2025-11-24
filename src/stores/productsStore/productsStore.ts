@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import type {
   ProductsState,
   Product,
+  ProductCategory,
   CreateProductData,
   UpdateProductData,
   PackageOption,
@@ -23,6 +24,7 @@ const MODULE_NAME = 'ProductsStore'
 export const useProductsStore = defineStore('products', {
   state: (): ProductsState => ({
     products: [],
+    categories: [], // ✅ NEW: Categories from database
     loading: false,
     error: null,
     selectedProduct: null,
@@ -73,7 +75,18 @@ export const useProductsStore = defineStore('products', {
 
     rawMaterials: (state): Product[] => {
       return state.products.filter(product => product.isActive && !product.canBeSold)
-    }
+    },
+
+    // ✅ NEW: Category getters
+    activeCategories: state =>
+      state.categories.filter(c => c.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
+
+    getCategoryById: state => (id: string) => state.categories.find(c => c.id === id),
+
+    getCategoryName: state => (id: string) => state.categories.find(c => c.id === id)?.name || id,
+
+    getCategoryColor: state => (id: string) =>
+      state.categories.find(c => c.id === id)?.color || 'grey'
   },
 
   actions: {
@@ -87,6 +100,9 @@ export const useProductsStore = defineStore('products', {
         this.error = null
 
         DebugUtils.info(MODULE_NAME, '🛍️ Loading products from Supabase')
+
+        // ✅ Load categories first (needed for product display)
+        await this.loadCategories()
 
         // Load from Supabase only (no mock data)
         const { productsService } = await import('./productsService')
@@ -105,6 +121,24 @@ export const useProductsStore = defineStore('products', {
         throw error
       } finally {
         this.loading = false
+      }
+    },
+
+    // ✅ NEW: Load categories from database
+    async loadCategories(): Promise<void> {
+      try {
+        DebugUtils.info(MODULE_NAME, '📂 Loading categories from Supabase')
+
+        const { productsService } = await import('./productsService')
+        this.categories = await productsService.getCategories()
+
+        DebugUtils.info(MODULE_NAME, '✅ Categories loaded from Supabase', {
+          count: this.categories.length
+        })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, '❌ Error loading categories', { error })
+        // Don't throw - categories are optional for basic functionality
+        this.categories = []
       }
     },
 

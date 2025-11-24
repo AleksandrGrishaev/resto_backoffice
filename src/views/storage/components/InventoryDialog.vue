@@ -306,7 +306,6 @@ import { useInventory } from '@/stores/storage' // ✅ ДОБАВЛЕНО
 import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
 import type { CreateInventoryData, InventoryItem, InventoryDocument } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 
 // Components
 import InventoryItemRow from './InventoryItemRow.vue'
@@ -423,8 +422,8 @@ const categoriesWithCount = computed(() => {
   try {
     inventoryItems.value.forEach(item => {
       const product = productsStore.products.find(p => p.id === item.itemId)
-      const category = product?.category || 'other'
-      const categoryName = PRODUCT_CATEGORIES[category] || 'Other'
+      const category = product?.category || ''
+      const categoryName = category ? productsStore.getCategoryName(category) : 'Other'
 
       if (!categoryMap.has(category)) {
         categoryMap.set(category, { count: 0, name: categoryName })

@@ -262,10 +262,12 @@
 <script setup lang="ts">
 import type { Product } from '@/stores/productsStore'
 import type { StockRecommendation } from '@/stores/productsStore/types'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import { useProductsStore } from '@/stores/productsStore'
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 import { Formatter } from '@/utils'
 import { computed } from 'vue'
+
+const productsStore = useProductsStore()
 
 // Props
 interface Props {
@@ -333,9 +335,9 @@ const getUrgencyMessage = (urgency: string): string => {
   return messages[urgency] || ''
 }
 
-// Existing methods
-const getCategoryLabel = (category: string): string => {
-  return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
+// ✅ UPDATED: Get category from store
+const getCategoryLabel = (categoryId: string): string => {
+  return productsStore.getCategoryName(categoryId)
 }
 
 const formatUnit = (unit: string): string => {

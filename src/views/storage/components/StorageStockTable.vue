@@ -104,7 +104,7 @@
           color="primary"
           @click:close="selectedCategory = null"
         >
-          {{ PRODUCT_CATEGORIES[selectedCategory] || selectedCategory }}
+          {{ productsStore.getCategoryName(selectedCategory) }}
         </v-chip>
 
         <v-chip
@@ -412,7 +412,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
 import type { StorageBalance, StorageDepartment } from '@/stores/storage'
 import { DebugUtils } from '@/utils/debugger'
 
@@ -564,7 +563,7 @@ const categoryOptions = computed(() => {
   return Array.from(categories)
     .sort()
     .map(category => ({
-      title: PRODUCT_CATEGORIES[category] || category,
+      title: productsStore.getCategoryName(category),
       value: category
     }))
 })
@@ -775,7 +774,7 @@ function getProductCategory(productId: string): string {
     const product = productsStore.products.find(p => p.id === productId)
     if (!product || !product.category) return ''
 
-    return PRODUCT_CATEGORIES[product.category] || product.category
+    return product.category // Return UUID for filtering
   } catch (error) {
     console.warn('Error getting product category:', error)
     return ''
@@ -787,7 +786,7 @@ function getProductCategoryDisplay(productId: string): string {
     const product = productsStore.products.find(p => p.id === productId)
     if (!product || !product.category) return 'Other'
 
-    return PRODUCT_CATEGORIES[product.category] || product.category
+    return productsStore.getCategoryName(product.category)
   } catch (error) {
     console.warn('Error getting product category display:', error)
     return 'Other'

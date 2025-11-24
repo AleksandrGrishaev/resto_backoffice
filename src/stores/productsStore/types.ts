@@ -6,7 +6,21 @@ import type { MeasurementUnit } from '@/types/measurementUnits'
 // ✅ NEW: Department Type
 export type Department = 'kitchen' | 'bar'
 
-export type ProductCategory =
+// ✅ NEW: ProductCategory Interface (from database table)
+export interface ProductCategory {
+  id: string
+  key: string
+  name: string
+  color?: string
+  icon?: string
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Legacy type for old category keys (deprecated, will be removed)
+export type ProductCategoryKey =
   | 'meat'
   | 'vegetables'
   | 'fruits'
@@ -45,7 +59,7 @@ export interface PackageOption {
 export interface Product extends BaseEntity {
   name: string
   description?: string
-  category: ProductCategory
+  category: string // UUID foreign key to product_categories table
   yieldPercentage: number
   usedInDepartments: Department[] // ['kitchen'] | ['bar'] | ['kitchen', 'bar']
 
@@ -98,13 +112,14 @@ export interface UpdatePackageOptionDto {
 // ✅ UPDATED: ProductsState (removed useMockMode)
 export interface ProductsState {
   products: Product[]
+  categories: ProductCategory[] // ✅ NEW: Categories loaded from database
   loading: boolean
   error: string | null
   selectedProduct: Product | null
 
   // 🆕 ENHANCED: Extended filters
   filters: {
-    category: ProductCategory | 'all'
+    category: string | 'all' // UUID of category or 'all'
     isActive: boolean | 'all'
     canBeSold: boolean | 'all'
     search: string
@@ -142,18 +157,8 @@ export interface UpdateProductData extends Partial<CreateProductData> {
   recommendedPackageId?: string
 }
 
-// Константы для категорий
-export const PRODUCT_CATEGORIES: Record<ProductCategory, string> = {
-  meat: 'Мясо и птица',
-  vegetables: 'Овощи',
-  fruits: 'Фрукты',
-  dairy: 'Молочные продукты',
-  cereals: 'Крупы и злаки',
-  spices: 'Специи и приправы',
-  seafood: 'Морепродукты',
-  beverages: 'Напитки',
-  other: 'Прочее'
-}
+// ❌ REMOVED: PRODUCT_CATEGORIES constant (now loaded from database via productsStore.categories)
+// Use productsStore.getCategoryName(id) and productsStore.getCategoryColor(id) instead
 
 // Константы для единиц измерения
 import { PRODUCT_UNITS, getUnitName } from '@/types/measurementUnits'

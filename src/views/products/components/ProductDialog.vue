@@ -396,11 +396,12 @@ import type {
   UpdatePackageOptionDto,
   Department
 } from '@/stores/productsStore/types'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore/types'
+import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 import PackageOptionDialog from './package/PackageOptionDialog.vue'
 
 const MODULE_NAME = 'ProductDialog'
+const productsStore = useProductsStore()
 
 // Props
 interface Props {
@@ -453,7 +454,7 @@ const isEdit = computed(() => !!props.product?.id)
 // Form Data
 const formData = ref<CreateProductData & { id?: string }>({
   name: '',
-  category: 'other' as ProductCategory,
+  category: '', // Will be set to first category or 'other' on mount
   baseUnit: 'gram' as BaseUnit,
   baseCostPerUnit: 0,
   yieldPercentage: 100,
@@ -466,11 +467,11 @@ const formData = ref<CreateProductData & { id?: string }>({
   minStock: undefined
 })
 
-// Options
+// ✅ UPDATED: Options from store
 const categoryOptions = computed(() =>
-  Object.entries(PRODUCT_CATEGORIES).map(([value, title]) => ({
-    title,
-    value
+  productsStore.activeCategories.map(cat => ({
+    title: cat.name,
+    value: cat.id
   }))
 )
 

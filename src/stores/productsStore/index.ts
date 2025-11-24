@@ -14,7 +14,8 @@ export type {
 } from './types'
 
 // Export constants
-export { PRODUCT_CATEGORIES, MEASUREMENT_UNITS } from './types'
+export { MEASUREMENT_UNITS } from './types'
+// ❌ PRODUCT_CATEGORIES removed - use productsStore.getCategoryName() instead
 
 // Export service
 export { productsService } from './productsService'

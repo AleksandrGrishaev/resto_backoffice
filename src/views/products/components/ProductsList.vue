@@ -134,8 +134,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Product, Department } from '@/stores/productsStore'
-import { PRODUCT_CATEGORIES } from '@/stores/productsStore'
+import { useProductsStore } from '@/stores/productsStore'
 import { getUnitShortName } from '@/types/measurementUnits'
+
+const productsStore = useProductsStore()
 
 // Props
 interface Props {
@@ -214,9 +216,9 @@ const tableHeaders = computed(() => [
   }
 ])
 
-// ✅ CORRECTED METHODS with undefined protection
-const getCategoryLabel = (category: string): string => {
-  return PRODUCT_CATEGORIES[category as keyof typeof PRODUCT_CATEGORIES] || category
+// ✅ UPDATED: Get category label from store
+const getCategoryLabel = (categoryId: string): string => {
+  return productsStore.getCategoryName(categoryId)
 }
 
 /**
@@ -248,19 +250,9 @@ const formatCurrency = (amount: number | undefined | null): string => {
   }).format(amount)
 }
 
-const getCategoryColor = (category: string): string => {
-  const colors: Record<string, string> = {
-    meat: 'red',
-    vegetables: 'green',
-    fruits: 'orange',
-    dairy: 'blue',
-    cereals: 'amber',
-    spices: 'purple',
-    seafood: 'cyan',
-    beverages: 'indigo',
-    other: 'grey'
-  }
-  return colors[category] || 'grey'
+// ✅ UPDATED: Get category color from store
+const getCategoryColor = (categoryId: string): string => {
+  return productsStore.getCategoryColor(categoryId)
 }
 
 const getYieldColor = (percentage: number | undefined | null): string => {
