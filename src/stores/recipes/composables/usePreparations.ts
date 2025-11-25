@@ -160,31 +160,19 @@ export function usePreparations() {
       loading.value = true
       error.value = null
 
-      // Генерируем код, если он не предоставлен
-      let code = data.code
-      if (!code) {
-        code = getNextAvailableCode(data.type)
-      } else {
-        // Проверяем уникальность кода, если он предоставлен
-        if (checkCodeExists(code)) {
-          const message = `Preparation with code ${code} already exists`
-          error.value = message
-          DebugUtils.error(MODULE_NAME, message, { code, data })
-          throw new Error(message)
-        }
+      // Check code uniqueness if provided
+      if (data.code && checkCodeExists(data.code)) {
+        const message = `Preparation with code ${data.code} already exists`
+        error.value = message
+        DebugUtils.error(MODULE_NAME, message, { code: data.code, data })
+        throw new Error(message)
       }
 
-      const preparation: Preparation = {
-        ...data,
-        code, // Используем сгенерированный или предоставленный код
-        id: generateId(),
-        isActive: true,
-        costPerPortion: 0,
-        recipe: data.recipe || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+      // Create via recipesService (saves to Supabase)
+      const { recipesService } = await import('../recipesService')
+      const preparation = await recipesService.createPreparation(data)
 
+      // Add to local state
       preparations.value.push(preparation)
 
       DebugUtils.info(MODULE_NAME, `✅ Preparation created: ${preparation.name}`, {
@@ -270,6 +258,12 @@ export function usePreparations() {
       }
 
       const preparationName = preparations.value[index].name
+
+      // Delete from Supabase via recipesService
+      const { recipesService } = await import('../recipesService')
+      await recipesService.deletePreparation(id)
+
+      // Remove from local state after successful Supabase delete
       preparations.value.splice(index, 1)
 
       DebugUtils.info(MODULE_NAME, `✅ Preparation deleted: ${preparationName}`, { id })

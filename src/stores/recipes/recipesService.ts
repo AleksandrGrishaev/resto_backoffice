@@ -340,11 +340,15 @@ export class RecipesService {
           )
           throw new Error(`Failed to create preparation ingredients: ${ingredientsError.message}`)
         }
+
+        // Add ingredients to the preparation object
+        newPreparation.recipe = data.recipe
       }
 
       DebugUtils.info(MODULE_NAME, '✅ Preparation saved to Supabase', {
         id: newPreparation.id,
-        name: newPreparation.name
+        name: newPreparation.name,
+        ingredientsCount: newPreparation.recipe.length
       })
 
       // Invalidate cache to force fresh read
