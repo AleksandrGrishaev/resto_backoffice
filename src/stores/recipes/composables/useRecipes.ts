@@ -36,16 +36,14 @@ let getPreparationCostCallback: GetPreparationCostCallback | null = null
 export const activeRecipes = computed(() => recipes.value.filter(r => r.isActive))
 
 export const recipesByCategory = computed(() => {
-  const categories: Record<RecipeCategory, Recipe[]> = {
-    main_dish: [],
-    side_dish: [],
-    dessert: [],
-    appetizer: [],
-    beverage: [],
-    sauce: []
-  }
+  // ✅ FIXED: Use UUID-based grouping instead of hardcoded text keys
+  const categories: Record<string, Recipe[]> = {}
 
   activeRecipes.value.forEach(recipe => {
+    // Create array for category if it doesn't exist
+    if (!categories[recipe.category]) {
+      categories[recipe.category] = []
+    }
     categories[recipe.category].push(recipe)
   })
 
@@ -221,12 +219,10 @@ export function useRecipes() {
         }
       }
 
-      const updatedRecipe = {
-        ...recipes.value[index],
-        ...data,
-        updatedAt: new Date().toISOString()
-      }
+      // ✅ FIXED: Save to Supabase first
+      const updatedRecipe = await recipesService.updateRecipe({ id, ...data })
 
+      // Update local state after successful Supabase update
       recipes.value[index] = updatedRecipe
 
       DebugUtils.info(MODULE_NAME, `✅ Recipe updated: ${updatedRecipe.name}`, {

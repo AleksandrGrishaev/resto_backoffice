@@ -91,11 +91,12 @@ const dialogModel = computed({
 })
 
 // Form data - универсальная структура
+// ✅ NOTE: Initial category will be set by resetForm() or from props.item when dialog opens
 const formData = ref<any>({
   name: '',
   code: '',
   description: '',
-  category: props.type === 'preparation' ? 'sauce' : 'main_dish',
+  category: '', // ✅ FIXED: Will be set to UUID when dialog opens
   outputQuantity: 1,
   outputUnit: 'gram',
   portionSize: 1,
@@ -262,11 +263,17 @@ function handleCancel() {
 }
 
 function resetForm() {
+  // ✅ FIXED: Use UUID from first category instead of text key
+  const defaultCategory =
+    props.type === 'preparation'
+      ? recipesStore.activePreparationCategories[0]?.id || ''
+      : recipesStore.activeRecipeCategories[0]?.id || ''
+
   formData.value = {
     name: '',
     code: generateNextCode(props.type), // ✅ AUTO-GENERATE: Set next available code
     description: '',
-    category: props.type === 'preparation' ? 'sauce' : 'main_dish',
+    category: defaultCategory, // ✅ FIXED: Use UUID instead of text key
     department: 'kitchen', // ✅ ADD: Default department for new preparations
     outputQuantity: 1,
     outputUnit: 'gram',

@@ -761,6 +761,127 @@ export class RecipesService {
     }
   }
 
+  /**
+   * Update existing recipe
+   */
+  async updateRecipe(data: { id: string } & Partial<Recipe>): Promise<Recipe> {
+    try {
+      DebugUtils.info(MODULE_NAME, '🔄 Updating recipe', { id: data.id, name: data.name })
+
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase is not available. Cannot update recipe.')
+      }
+
+      // Get existing recipe
+      const existingRecipe = await this.getRecipeById(data.id)
+      if (!existingRecipe) {
+        throw new Error(`Recipe not found: ${data.id}`)
+      }
+
+      const { id, components, steps, ...updateData } = data
+      const updatedRecipe: Recipe = {
+        ...existingRecipe,
+        ...updateData,
+        components: components || existingRecipe.components,
+        steps: steps || existingRecipe.steps,
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // Update recipe in Supabase
+      const { error: recipeError } = await supabase
+        .from('recipes')
+        .update(recipeToSupabaseUpdate(updatedRecipe))
+        .eq('id', id)
+
+      if (recipeError) {
+        DebugUtils.error(MODULE_NAME, '❌ Failed to update recipe in Supabase:', recipeError)
+        throw new Error(`Failed to update recipe: ${recipeError.message}`)
+      }
+
+      // Update components if provided
+      if (components !== undefined) {
+        // Delete existing components
+        const { error: deleteError } = await supabase
+          .from('recipe_components')
+          .delete()
+          .eq('recipe_id', id)
+
+        if (deleteError) {
+          DebugUtils.error(MODULE_NAME, '❌ Failed to delete old recipe components:', deleteError)
+          throw new Error(`Failed to update recipe components: ${deleteError.message}`)
+        }
+
+        // Insert new components
+        if (components.length > 0) {
+          const componentsToInsert = components.map((component, index) =>
+            recipeComponentToSupabaseInsert(
+              {
+                ...component,
+                sortOrder: index
+              },
+              id
+            )
+          )
+
+          const { error: insertError } = await supabase
+            .from('recipe_components')
+            .insert(componentsToInsert)
+
+          if (insertError) {
+            DebugUtils.error(MODULE_NAME, '❌ Failed to insert new recipe components:', insertError)
+            throw new Error(`Failed to update recipe components: ${insertError.message}`)
+          }
+        }
+      }
+
+      // Update steps if provided
+      if (steps !== undefined) {
+        // Delete existing steps
+        const { error: deleteError } = await supabase
+          .from('recipe_steps')
+          .delete()
+          .eq('recipe_id', id)
+
+        if (deleteError) {
+          DebugUtils.error(MODULE_NAME, '❌ Failed to delete old recipe steps:', deleteError)
+          throw new Error(`Failed to update recipe steps: ${deleteError.message}`)
+        }
+
+        // Insert new steps
+        if (steps.length > 0) {
+          const stepsToInsert = steps.map((step, index) =>
+            recipeStepToSupabaseInsert(
+              {
+                ...step,
+                stepNumber: index + 1
+              },
+              id
+            )
+          )
+
+          const { error: insertError } = await supabase.from('recipe_steps').insert(stepsToInsert)
+
+          if (insertError) {
+            DebugUtils.error(MODULE_NAME, '❌ Failed to insert new recipe steps:', insertError)
+            throw new Error(`Failed to update recipe steps: ${insertError.message}`)
+          }
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Recipe updated in Supabase', {
+        id: updatedRecipe.id,
+        name: updatedRecipe.name
+      })
+
+      // Clear cache and return updated recipe
+      localStorage.removeItem('recipes_cache')
+      return await this.getRecipeById(id)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '❌ Error in updateRecipe:', error)
+      throw error
+    }
+  }
+
   // =============================================
   // LEGACY RECIPE WRITE OPERATIONS (TODO: Remove when migration complete)
   // =============================================
