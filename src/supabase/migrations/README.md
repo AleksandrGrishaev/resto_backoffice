@@ -26,7 +26,9 @@ Migrations are numbered sequentially: `NNN_descriptive_name.sql`
 | 009 | `009_migrate_preparations_type_to_uuid.sql`      | Migrate preparations type | ✅ Applied |
 | 009 | `009_migrate_products_category.sql`              | Migrate products category | ✅ Applied |
 | 010 | `010_cleanup_preparations_category_id.sql`       | Cleanup preparations      | ✅ Applied |
-| 011 | `011_make_recipe_preparation_codes_required.sql` | Make codes required       | 🔄 Pending |
+| 011 | `011_create_recipe_categories.sql`               | Create recipe categories  | ✅ Applied |
+| 011 | `011_make_recipe_preparation_codes_required.sql` | Make codes required       | ✅ Applied |
+| 012 | `012_migrate_recipes_category_to_uuid.sql`       | Migrate recipes category  | ✅ Applied |
 
 ## How to Apply Migrations to Production
 
