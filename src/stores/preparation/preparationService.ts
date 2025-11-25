@@ -297,8 +297,13 @@ export class PreparationService {
 
       let batches = [...this.batches]
 
+      // ✅ FIXED: Filter by preparation department, not batch department
       if (department && department !== 'all') {
-        batches = batches.filter(b => b.department === department)
+        const recipesStore = useRecipesStore()
+        const departmentPreparationIds = new Set(
+          recipesStore.activePreparations.filter(p => p.department === department).map(p => p.id)
+        )
+        batches = batches.filter(b => departmentPreparationIds.has(b.preparationId))
       }
 
       return batches
@@ -318,8 +323,13 @@ export class PreparationService {
 
       let batches = [...this.batches]
 
+      // ✅ FIXED: Filter by preparation department, not batch department
       if (department && department !== 'all') {
-        batches = batches.filter(b => b.department === department)
+        const recipesStore = useRecipesStore()
+        const departmentPreparationIds = new Set(
+          recipesStore.activePreparations.filter(p => p.department === department).map(p => p.id)
+        )
+        batches = batches.filter(b => departmentPreparationIds.has(b.preparationId))
       }
 
       return batches.sort(
@@ -1215,7 +1225,10 @@ export class PreparationService {
 
       try {
         const recipesStore = useRecipesStore()
-        departmentPreparations = recipesStore.activePreparations.filter(p => p.isActive)
+        // ✅ FIXED: Filter preparations by their department field
+        departmentPreparations = recipesStore.activePreparations.filter(
+          p => p.isActive && p.department === department
+        )
 
         DebugUtils.info(
           MODULE_NAME,
@@ -1231,9 +1244,15 @@ export class PreparationService {
         departmentPreparations = []
       }
 
-      // Get active batches for this department
+      // ✅ FIXED: Get preparation IDs for this department from recipes store
+      const departmentPreparationIds = new Set(departmentPreparations.map(p => p.id))
+
+      // ✅ FIXED: Filter batches by preparation department, not batch department
       const activeBatches = this.batches.filter(
-        b => b.department === department && b.status === 'active' && b.currentQuantity > 0
+        b =>
+          departmentPreparationIds.has(b.preparationId) &&
+          b.status === 'active' &&
+          b.currentQuantity > 0
       )
 
       // Group batches by preparationId
@@ -1246,9 +1265,9 @@ export class PreparationService {
         preparationGroups.get(key)!.push(batch)
       }
 
-      // Calculate actual balances from batches
+      // ✅ FIXED: Calculate actual balances from batches using preparation department
       const actualBalances = new Map<string, number>()
-      const allBatches = this.batches.filter(b => b.department === department)
+      const allBatches = this.batches.filter(b => departmentPreparationIds.has(b.preparationId))
 
       allBatches.forEach(batch => {
         if (batch.status === 'active') {
