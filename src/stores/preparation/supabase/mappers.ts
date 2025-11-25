@@ -107,6 +107,7 @@ export function operationToSupabase(operation: PreparationOperation): Record<str
     total_value: operation.totalValue,
     status: operation.status,
     related_inventory_id: operation.relatedInventoryId || null,
+    related_storage_operation_ids: operation.relatedStorageOperationIds || null, // ✨ NEW: Array of storage operation IDs
     notes: operation.notes || null,
     created_at: operation.createdAt,
     updated_at: operation.updatedAt
@@ -134,6 +135,7 @@ export function operationFromSupabase(row: any): PreparationOperation {
     totalValue: Number(row.total_value),
     status: row.status,
     relatedInventoryId: row.related_inventory_id,
+    relatedStorageOperationIds: row.related_storage_operation_ids, // ✨ NEW: Array of storage operation IDs
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at

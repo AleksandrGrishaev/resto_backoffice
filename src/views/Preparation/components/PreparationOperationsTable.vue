@@ -175,6 +175,28 @@
           <div v-else class="text-medium-emphasis">-</div>
         </template>
 
+        <!-- ✨ NEW: Linked Storage Write-offs -->
+        <template #[`item.linked`]="{ item }">
+          <v-tooltip
+            v-if="item.relatedStorageOperationIds?.length"
+            location="top"
+            text="Raw products automatically written off"
+          >
+            <template #activator="{ props: tooltipProps }">
+              <v-chip
+                v-bind="tooltipProps"
+                size="small"
+                color="primary"
+                variant="tonal"
+                prepend-icon="mdi-link-variant"
+              >
+                {{ item.relatedStorageOperationIds.length }}
+              </v-chip>
+            </template>
+          </v-tooltip>
+          <div v-else class="text-medium-emphasis text-caption">-</div>
+        </template>
+
         <!-- Responsible Person -->
         <template #[`item.responsiblePerson`]="{ item }">
           <div class="d-flex align-center">
@@ -314,6 +336,47 @@
                 <div v-else-if="selectedOperation.sourceType">
                   <div class="font-weight-medium">
                     {{ formatSourceType(selectedOperation.sourceType) }}
+                  </div>
+                </div>
+              </v-card-text>
+            </v-card>
+          </div>
+
+          <!-- ✨ NEW: Linked Storage Write-offs Section -->
+          <div v-if="selectedOperation.relatedStorageOperationIds?.length" class="mb-4">
+            <div class="text-subtitle-2 mb-2">
+              <v-icon icon="mdi-link-variant" size="16" class="mr-1" />
+              Linked Storage Write-offs
+            </div>
+            <v-card variant="tonal" color="primary">
+              <v-card-text>
+                <div class="d-flex align-center justify-space-between">
+                  <div>
+                    <div class="font-weight-medium">
+                      {{ selectedOperation.relatedStorageOperationIds.length }} Raw Product
+                      Write-off{{
+                        selectedOperation.relatedStorageOperationIds.length !== 1 ? 's' : ''
+                      }}
+                    </div>
+                    <div class="text-caption mt-1">
+                      Raw products were automatically written off during production
+                    </div>
+                  </div>
+                  <v-icon icon="mdi-check-circle" size="32" color="success" />
+                </div>
+                <v-divider class="my-3" />
+                <div class="text-caption">
+                  <strong>Operation IDs:</strong>
+                  <div class="mt-1">
+                    <v-chip
+                      v-for="(opId, index) in selectedOperation.relatedStorageOperationIds"
+                      :key="index"
+                      size="x-small"
+                      variant="outlined"
+                      class="mr-1 mb-1"
+                    >
+                      {{ opId.substring(0, 8) }}...
+                    </v-chip>
                   </div>
                 </div>
               </v-card-text>
@@ -483,6 +546,7 @@ const headers = computed(() => [
   { title: 'Document', key: 'documentNumber', sortable: true },
   { title: 'Preparations', key: 'items', sortable: false },
   { title: 'Details', key: 'usageDetails', sortable: false },
+  { title: 'Linked', key: 'linked', sortable: false }, // ✨ NEW: Linked storage write-offs
   { title: 'Responsible', key: 'responsiblePerson', sortable: true },
   { title: 'Value', key: 'totalValue', sortable: true },
   { title: 'Status', key: 'status', sortable: true },

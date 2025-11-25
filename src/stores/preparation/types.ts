@@ -86,6 +86,7 @@ export interface PreparationOperation extends BaseEntity {
   }
 
   relatedInventoryId?: string
+  relatedStorageOperationIds?: string[] // ✨ NEW: Link to storage_operations when raw products are written off for production
   status: 'draft' | 'confirmed'
   notes?: string
 }

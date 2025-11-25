@@ -1,6 +1,8 @@
 // src/stores/preparation/preparationService.ts - UPDATED: Supabase Integration
 import { DebugUtils, TimeUtils } from '@/utils'
 import { useRecipesStore } from '@/stores/recipes'
+import { storageService } from '@/stores/storage/storageService' // ✨ NEW: For auto write-off
+import { useProductsStore } from '@/stores/productsStore' // ✨ NEW: For product names
 import { supabase } from '@/supabase/client'
 import {
   batchFromSupabase,
@@ -31,6 +33,10 @@ import type {
 
 // ✅ UPDATED: Import write-off helper function
 import { doesPreparationWriteOffAffectKPI } from './types'
+
+// ✨ NEW: Import storage types for auto write-off
+import type { WriteOffItem } from '@/stores/storage/types'
+import { DEFAULT_WAREHOUSE } from '@/stores/storage/types'
 
 const MODULE_NAME = 'PreparationService'
 
@@ -653,6 +659,71 @@ export class PreparationService {
       const operationItems = []
       let totalValue = 0
       const now = TimeUtils.getCurrentLocalISO()
+      const storageWriteOffIds: string[] = [] // ✨ NEW: Track write-off operations
+      const recipesStore = useRecipesStore()
+      const productsStore = useProductsStore()
+
+      // ✨ NEW: Step 0 - Auto write-off raw products for each preparation
+      for (const item of data.items) {
+        // Get preparation with recipe
+        const preparation = recipesStore.preparations.find(p => p.id === item.preparationId)
+
+        if (!preparation) {
+          throw new Error(
+            `Preparation not found: ${item.preparationId}. Cannot create receipt without valid preparation.`
+          )
+        }
+
+        if (!preparation.recipe || preparation.recipe.length === 0) {
+          DebugUtils.warn(MODULE_NAME, 'Preparation has no recipe, skipping auto write-off', {
+            preparationId: item.preparationId,
+            preparationName: preparation.name
+          })
+          continue // Skip write-off if no recipe (optional)
+        }
+
+        // Calculate raw product quantities needed
+        const multiplier = item.quantity / preparation.outputQuantity
+        const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
+          const product = productsStore.getProductById(ingredient.id)
+          return {
+            itemId: ingredient.id,
+            itemName: product?.name || `Product ${ingredient.id}`,
+            itemType: 'product' as const,
+            quantity: ingredient.quantity * multiplier,
+            unit: ingredient.unit,
+            notes: `Production: ${preparation.name} (${item.quantity}${preparation.outputUnit})`
+          }
+        })
+
+        DebugUtils.info(MODULE_NAME, 'Auto write-off raw products for preparation', {
+          preparation: preparation.name,
+          quantity: item.quantity,
+          rawProducts: writeOffItems.length
+        })
+
+        // ✨ Call storageService to write-off raw products
+        const writeOffResult = await storageService.createWriteOff({
+          warehouseId: DEFAULT_WAREHOUSE.id,
+          department: data.department,
+          responsiblePerson: data.responsiblePerson,
+          reason: 'production_consumption', // ✨ NEW reason type
+          items: writeOffItems,
+          notes: `Auto write-off for preparation production: ${preparation.name}`
+        })
+
+        if (!writeOffResult.success || !writeOffResult.data) {
+          throw new Error(
+            `Failed to write-off raw products for ${preparation.name}: ${writeOffResult.error}`
+          )
+        }
+
+        storageWriteOffIds.push(writeOffResult.data.id)
+        DebugUtils.info(MODULE_NAME, 'Raw products written off successfully', {
+          writeOffId: writeOffResult.data.id,
+          items: writeOffItems.length
+        })
+      }
 
       // Step 1: Create batches and insert into Supabase
       for (const item of data.items) {
@@ -716,6 +787,7 @@ export class PreparationService {
         responsiblePerson: data.responsiblePerson,
         items: operationItems,
         totalValue,
+        relatedStorageOperationIds: storageWriteOffIds.length > 0 ? storageWriteOffIds : undefined, // ✨ NEW: Link to storage write-offs
         status: 'confirmed',
         notes: data.notes,
         createdAt: now,

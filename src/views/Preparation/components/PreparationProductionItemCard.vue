@@ -38,20 +38,28 @@
           />
         </v-col>
 
-        <!-- Cost per Unit -->
+        <!-- ✅ UPDATED: Cost per Unit (Read-only, calculated automatically) -->
         <v-col cols="12" md="4">
           <v-text-field
             :model-value="modelValue.costPerUnit"
-            label="Cost per gram"
+            label="Cost per unit (auto)"
             type="number"
-            min="0"
-            step="1"
-            :rules="costRules"
             variant="outlined"
             density="compact"
             prefix="Rp"
-            @update:model-value="updateCostPerUnit"
-          />
+            readonly
+            :hint="`Calculated from recipe`"
+            persistent-hint
+          >
+            <template #append-inner>
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" icon="mdi-information-outline" size="small" color="info" />
+                </template>
+                <span>Auto-calculated from current product prices</span>
+              </v-tooltip>
+            </template>
+          </v-text-field>
         </v-col>
 
         <!-- Expiry Date -->
@@ -128,7 +136,7 @@ const quantityRules = computed(() => [
   (v: number) => v > 0 || 'Quantity must be greater than 0'
 ])
 
-const costRules = computed(() => [(v: number) => v >= 0 || 'Cost cannot be negative'])
+// ✅ REMOVED: costRules - no longer needed as costPerUnit is auto-calculated
 
 const expiryRules = computed(() => [
   (v: string) => {
@@ -167,13 +175,7 @@ function updateQuantity(value: string | number) {
   })
 }
 
-function updateCostPerUnit(value: string | number) {
-  const costPerUnit = typeof value === 'string' ? parseFloat(value) : value
-  emit('update:modelValue', {
-    ...props.modelValue,
-    costPerUnit: costPerUnit || 0
-  })
-}
+// ✅ REMOVED: updateCostPerUnit - costPerUnit is now auto-calculated and read-only
 
 function updateExpiryDate(value: string) {
   emit('update:modelValue', {

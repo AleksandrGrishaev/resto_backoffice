@@ -156,6 +156,21 @@
         />
       </v-col>
 
+      <!-- Shelf Life (Preparations only) -->
+      <v-col v-if="type === 'preparation'" cols="12" md="6">
+        <v-text-field
+          :model-value="formData.shelfLife"
+          label="Shelf Life (days)"
+          type="number"
+          min="1"
+          :rules="[rules.positiveNumber]"
+          variant="outlined"
+          density="comfortable"
+          hint="How many days this preparation can be stored"
+          @update:model-value="updateField('shelfLife', Number($event))"
+        />
+      </v-col>
+
       <!-- Recipe-specific fields -->
       <template v-if="type === 'recipe'">
         <v-col cols="12" md="6">
@@ -228,6 +243,7 @@ interface FormData {
   difficulty: string
   tags: string[]
   instructions: string
+  shelfLife?: number // ✅ NEW: Shelf life in days for preparations
 }
 
 interface Props {

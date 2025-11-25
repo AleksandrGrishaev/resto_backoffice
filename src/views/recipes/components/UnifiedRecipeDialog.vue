@@ -106,7 +106,8 @@ const formData = ref<any>({
   difficulty: 'easy',
   tags: [],
   instructions: '',
-  components: []
+  components: [],
+  shelfLife: 2 // ✅ NEW: Default shelf life for preparations (days)
 })
 
 // Computed
@@ -198,6 +199,7 @@ async function handleSubmit() {
         outputUnit: formData.value.outputUnit,
         preparationTime: formData.value.preparationTime,
         instructions: formData.value.instructions,
+        shelfLife: formData.value.shelfLife, // ✅ NEW: Include shelf life
         recipe: validComponents.map((comp: any) => ({
           type: 'product' as const,
           id: comp.componentId,
@@ -284,7 +286,8 @@ function resetForm() {
     difficulty: 'easy',
     tags: [],
     instructions: '',
-    components: []
+    components: [],
+    shelfLife: 2 // ✅ NEW: Default shelf life for preparations (days)
   }
   form.value?.resetValidation()
 }
@@ -308,6 +311,7 @@ watch(dialogModel, async newVal => {
           outputUnit: prep.outputUnit,
           preparationTime: prep.preparationTime,
           instructions: prep.instructions,
+          shelfLife: prep.shelfLife || 2, // ✅ NEW: Include shelf life with default
           components: (prep.recipe || []).map(ingredient => ({
             id: generateId(),
             componentId: ingredient.id,

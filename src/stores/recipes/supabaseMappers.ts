@@ -55,6 +55,7 @@ export function preparationToSupabaseInsert(preparation: Preparation): SupabaseP
     output_unit: preparation.outputUnit,
     preparation_time: preparation.preparationTime || null,
     instructions: preparation.instructions || null,
+    shelf_life: preparation.shelfLife || null, // ✅ NEW: Shelf life in days
     is_active: preparation.isActive,
     cost_per_portion: preparation.costPerPortion || null,
     updated_at: preparation.updatedAt
@@ -90,6 +91,7 @@ export function preparationFromSupabase(
     outputUnit: row.output_unit as any, // MeasurementUnit
     preparationTime: row.preparation_time || undefined,
     instructions: row.instructions || undefined,
+    shelfLife: row.shelf_life || undefined, // ✅ NEW: Shelf life in days
     isActive: row.is_active ?? true,
     costPerPortion: row.cost_per_portion ? Number(row.cost_per_portion) : undefined,
     recipe: ingredients, // Ingredients from separate query

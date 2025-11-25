@@ -43,6 +43,12 @@
             {{ getTimeText() }}
           </div>
 
+          <!-- Shelf Life (Preparations only) -->
+          <div v-if="type === 'preparation' && getShelfLife()" class="recipe-item__shelf-life">
+            <v-icon icon="mdi-calendar-clock" size="14" class="mr-1" />
+            <span>Shelf life: {{ getShelfLife() }} days</span>
+          </div>
+
           <!-- ✅ ИСПРАВЛЕНО: Enhanced Cost Display с IDR -->
           <div v-if="hasCostData" class="recipe-item__cost">
             <v-icon icon="mdi-currency-try" size="14" class="mr-1" />
@@ -408,6 +414,14 @@ function getMissingCostsCount(): number {
 
 // ✅ УБРАНО: getInstructionsPreview - больше не показываем инструкции
 
+function getShelfLife(): number | null {
+  if (props.type === 'preparation') {
+    const prep = props.item as Preparation
+    return prep.shelfLife || null
+  }
+  return null
+}
+
 function getLastUpdated(): string {
   const updatedAt = new Date(props.item.updatedAt)
   const now = new Date()
@@ -497,6 +511,7 @@ function getLastUpdated(): string {
 
   &__output,
   &__time,
+  &__shelf-life,
   &__components {
     display: flex;
     align-items: center;
@@ -504,6 +519,11 @@ function getLastUpdated(): string {
 
   &__output {
     color: var(--color-info);
+    font-weight: 500;
+  }
+
+  &__shelf-life {
+    color: var(--color-secondary);
     font-weight: 500;
   }
 

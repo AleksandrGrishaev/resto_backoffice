@@ -20,6 +20,9 @@
           @click="showProductionDialog = true"
         >
           Add Production
+          <v-tooltip activator="parent" location="bottom">
+            Create new preparation batch with automatic raw product write-off
+          </v-tooltip>
         </v-btn>
 
         <v-btn

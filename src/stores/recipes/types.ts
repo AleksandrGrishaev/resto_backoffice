@@ -263,6 +263,7 @@ export interface CreatePreparationData {
   outputUnit: 'gram' | 'ml' // Только базовые единицы
   preparationTime: number
   instructions: string
+  shelfLife?: number // ✅ NEW: Shelf life in days
   recipe?: PreparationIngredient[]
 }
 

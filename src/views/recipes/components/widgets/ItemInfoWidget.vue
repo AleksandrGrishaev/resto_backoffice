@@ -35,6 +35,13 @@
               <span class="info-label">Total Time:</span>
               <span class="info-value">{{ getTotalTime() }} minutes</span>
             </div>
+
+            <!-- Shelf Life for preparations -->
+            <div v-if="type === 'preparation' && getShelfLife()" class="info-item">
+              <v-icon icon="mdi-calendar-clock" size="18" class="mr-2" />
+              <span class="info-label">Shelf Life:</span>
+              <span class="info-value">{{ getShelfLife() }} days</span>
+            </div>
           </div>
         </div>
       </v-col>
@@ -135,6 +142,14 @@ function getTotalTime(): number | null {
   const prep = recipe.prepTime || 0
   const cook = recipe.cookTime || 0
   return prep + cook > 0 ? prep + cook : null
+}
+
+function getShelfLife(): number | null {
+  if (props.type === 'preparation') {
+    const prep = props.item as Preparation
+    return prep.shelfLife || null
+  }
+  return null
 }
 </script>
 

@@ -11,7 +11,14 @@ export type BatchSourceType = 'purchase' | 'correction' | 'opening_balance' | 'i
 export type BatchStatus = 'active' | 'expired' | 'consumed' | 'in_transit'
 
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
-export type WriteOffReason = 'expired' | 'spoiled' | 'other' | 'education' | 'test'
+export type WriteOffReason =
+  | 'expired'
+  | 'spoiled'
+  | 'other'
+  | 'education'
+  | 'test'
+  | 'production_consumption' // ✨ NEW: Raw products consumed for preparation production
+  | 'sales_consumption' // ✨ NEW: Preparations/products consumed for sales (Sprint 2)
 
 export interface Warehouse extends BaseEntity {
   id: string
@@ -96,6 +103,7 @@ export interface StorageOperation extends BaseEntity {
   }
 
   relatedInventoryId?: string
+  relatedPreparationOperationId?: string // ✨ NEW: Link to preparation_operations when write-off is triggered by prep production
   status: 'draft' | 'confirmed'
   notes?: string
 }
@@ -335,7 +343,12 @@ export const DEFAULT_WAREHOUSE: Warehouse = {
 // ✅ ДОБАВЛЕНЫ: Write-off Helper Functions и Constants
 export const WRITE_OFF_CLASSIFICATION = {
   KPI_AFFECTING: ['expired', 'spoiled', 'other'] as WriteOffReason[],
-  NON_KPI_AFFECTING: ['education', 'test'] as WriteOffReason[]
+  NON_KPI_AFFECTING: [
+    'education',
+    'test',
+    'production_consumption', // ✨ Production consumption is normal operations, not waste
+    'sales_consumption' // ✨ Sales consumption is normal operations, not waste
+  ] as WriteOffReason[]
 } as const
 
 /**
@@ -376,6 +389,20 @@ export const WRITE_OFF_REASON_OPTIONS = [
     description: 'Recipe development and testing',
     affectsKPI: false,
     color: 'success'
+  },
+  {
+    value: 'production_consumption' as WriteOffReason,
+    title: 'Production Consumption',
+    description: 'Raw products consumed for preparation production',
+    affectsKPI: false,
+    color: 'primary'
+  },
+  {
+    value: 'sales_consumption' as WriteOffReason,
+    title: 'Sales Consumption',
+    description: 'Products/preparations consumed for sales',
+    affectsKPI: false,
+    color: 'secondary'
   }
 ] as const
 
