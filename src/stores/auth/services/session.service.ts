@@ -1,4 +1,14 @@
 // src/stores/auth/services/session.service.ts - Управление сессиями
+
+/**
+ * @deprecated This service is deprecated as of 2025-11-25
+ *
+ * All session management is now handled by Supabase Auth.
+ * This file is kept for reference only and will be removed in a future version.
+ *
+ * DO NOT USE THIS SERVICE IN NEW CODE.
+ */
+
 import type { User, UserSession, LoginAttempt } from '../types'
 import { DebugUtils } from '@/utils'
 

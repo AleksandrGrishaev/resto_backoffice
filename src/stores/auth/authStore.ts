@@ -4,13 +4,20 @@ import { ref, computed } from 'vue'
 import type { User, UserRole } from './auth'
 import { CoreUserService } from '@/core/users'
 import { DebugUtils } from '@/utils'
-import { AuthSessionService } from './services'
 import { supabase } from '@/supabase'
 import { ENV } from '@/config/environment'
+import { useRouter } from 'vue-router'
+import { resetAllStores } from '@/core/storeResetService'
 
 const MODULE_NAME = 'AuthStore'
 
+// Cross-tab synchronization constants
+const LOGOUT_BROADCAST_KEY = 'kitchen_app_logout_broadcast'
+const SESSION_CHECK_INTERVAL = 5000 // 5 seconds
+
 export const useAuthStore = defineStore('auth', () => {
+  const router = useRouter()
+
   const state = ref({
     currentUser: null as User | null,
     isAuthenticated: false,
@@ -50,10 +57,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (session) {
       state.value.session = session
       await loadUserProfile(session.user.id)
-    } else {
-      // Try to restore PIN session from localStorage
-      restorePinSession()
     }
+    // Note: No longer trying to restore PIN sessions - using only Supabase sessions
 
     // Listen to auth state changes
     supabase.auth.onAuthStateChange(async (event, newSession) => {
@@ -67,7 +72,55 @@ export const useAuthStore = defineStore('auth', () => {
       }
     })
 
+    // ✅ NEW: Setup cross-tab synchronization
+    setupCrossTabSync()
+
     DebugUtils.info(MODULE_NAME, 'AuthStore initialized')
+  }
+
+  /**
+   * Setup cross-tab synchronization for logout events
+   * Listens for storage changes in other tabs and reacts to logout
+   */
+  function setupCrossTabSync() {
+    // Listen for storage events (fired only in OTHER tabs, not the one that made the change)
+    window.addEventListener('storage', (event: StorageEvent) => {
+      // Case 1: Supabase token removed (direct logout)
+      if (event.key?.startsWith('sb-') && event.key.includes('auth-token') && !event.newValue) {
+        DebugUtils.info(MODULE_NAME, '🔄 Logout detected in another tab (Supabase token removed)')
+        handleCrossTabLogout()
+      }
+
+      // Case 2: Explicit logout broadcast
+      if (event.key === LOGOUT_BROADCAST_KEY && event.newValue) {
+        DebugUtils.info(MODULE_NAME, '🔄 Logout broadcast received from another tab')
+        handleCrossTabLogout()
+      }
+    })
+
+    DebugUtils.info(MODULE_NAME, '✅ Cross-tab synchronization enabled')
+  }
+
+  /**
+   * Handle logout detected in another tab
+   */
+  async function handleCrossTabLogout() {
+    if (!state.value.isAuthenticated) {
+      // Already logged out, ignore
+      return
+    }
+
+    DebugUtils.info(MODULE_NAME, '⚠️ Session ended in another tab, logging out...')
+
+    // Reset local state immediately (no API calls needed)
+    await resetAllStores()
+    resetState()
+
+    // Redirect to login
+    router.push('/auth/login')
+
+    // Show notification (optional)
+    // toast.info('Session ended in another tab')
   }
 
   // Load user profile from Supabase users table
@@ -139,8 +192,14 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       DebugUtils.info(MODULE_NAME, 'PIN login attempt')
 
-      // Security: Check if locked
-      if (AuthSessionService.isSecurityLocked()) {
+      // Security: Simple rate limiting (5 attempts per minute)
+      const attemptKey = 'pin_login_attempts'
+      const attempts = JSON.parse(localStorage.getItem(attemptKey) || '[]')
+      const recentAttempts = attempts.filter(
+        (timestamp: number) => Date.now() - timestamp < 60000 // Last minute
+      )
+
+      if (recentAttempts.length >= 5) {
         throw new Error('Too many failed attempts. Please try later.')
       }
 
@@ -170,16 +229,11 @@ export const useAuthStore = defineStore('auth', () => {
         throw error
       }
       if (!data || data.length === 0) {
-        // Log failed attempt
-        AuthSessionService.logLoginAttempt({
-          timestamp: new Date().toISOString(),
-          userId: 'unknown',
-          pin: '***',
-          success: false,
-          appType: 'backoffice',
-          ip: window.location.hostname
-        })
+        // Track failed attempt
+        attempts.push(Date.now())
+        localStorage.setItem(attemptKey, JSON.stringify(attempts))
 
+        DebugUtils.info(MODULE_NAME, 'PIN validation failed', { pinLength: pin.length })
         throw new Error('Invalid PIN')
       }
 
@@ -213,15 +267,8 @@ export const useAuthStore = defineStore('auth', () => {
         hasAuthSession: !!authData.session
       })
 
-      // Log successful attempt
-      AuthSessionService.logLoginAttempt({
-        timestamp: new Date().toISOString(),
-        userId: authData.user.id,
-        pin: '***',
-        success: true,
-        appType: 'backoffice',
-        ip: window.location.hostname
-      })
+      // Clear failed attempts on successful login
+      localStorage.removeItem(attemptKey)
 
       // Note: User data will be loaded via onAuthStateChange listener
       // No need to manually set state here
@@ -250,21 +297,8 @@ export const useAuthStore = defineStore('auth', () => {
 
       DebugUtils.info(MODULE_NAME, 'Login attempt (legacy)', { pin: '***' })
 
-      if (AuthSessionService.isSecurityLocked()) {
-        throw new Error('Too many failed attempts. Try again later.')
-      }
-
       const userData = CoreUserService.findByPin(pin)
       if (!userData) {
-        AuthSessionService.logLoginAttempt({
-          timestamp: new Date().toISOString(),
-          userId: 'unknown',
-          pin: '***',
-          success: false,
-          appType: 'backoffice',
-          ip: window.location.hostname
-        })
-
         throw new Error('Invalid PIN')
       }
 
@@ -279,16 +313,6 @@ export const useAuthStore = defineStore('auth', () => {
       state.value.currentUser = user
       state.value.isAuthenticated = true
       state.value.lastLoginAt = user.lastLoginAt
-
-      AuthSessionService.saveSession(user, 'backoffice')
-      AuthSessionService.logLoginAttempt({
-        timestamp: new Date().toISOString(),
-        userId: user.id,
-        pin: '***',
-        success: true,
-        appType: 'backoffice',
-        ip: window.location.hostname
-      })
 
       DebugUtils.info(MODULE_NAME, 'Login successful (legacy)', {
         userId: user.id,
@@ -307,22 +331,57 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ===== LOGOUT =====
+  /**
+   * Logout user and broadcast to all tabs
+   *
+   * Steps:
+   * 1. Broadcast logout to other tabs
+   * 2. Sign out from Supabase
+   * 3. Reset all application stores
+   * 4. Reset auth state
+   * 5. Redirect to login
+   */
   async function logout() {
     try {
       DebugUtils.info(MODULE_NAME, 'Logging out', { userId: userId.value })
 
-      // Clear Supabase session (if exists)
+      // Step 1: Broadcast logout to other tabs FIRST
+      // This ensures other tabs know about logout before Supabase token is cleared
+      localStorage.setItem(LOGOUT_BROADCAST_KEY, Date.now().toString())
+
+      // Step 2: Sign out from Supabase (clears token from localStorage)
       if (state.value.session) {
         await supabase.auth.signOut()
       }
 
-      // Clear PIN session
-      localStorage.removeItem('pin_session')
-      AuthSessionService.clearSession()
+      // Step 3: Reset all application stores
+      await resetAllStores()
 
+      // Step 4: Clear legacy session storage
+      localStorage.removeItem('pin_session')
+
+      // Step 5: Reset auth state
       resetState()
+
+      // Step 6: Clean up broadcast key
+      localStorage.removeItem(LOGOUT_BROADCAST_KEY)
+
+      // Step 7: Redirect to login
+      await router.push('/auth/login')
+
+      DebugUtils.info(MODULE_NAME, '✅ Logout complete')
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
+
+      // Even if logout fails, try to clean up local state
+      try {
+        await resetAllStores()
+        resetState()
+        await router.push('/auth/login')
+      } catch (cleanupError) {
+        DebugUtils.error(MODULE_NAME, 'Cleanup after failed logout also failed', { cleanupError })
+      }
+
       throw error
     }
   }
@@ -348,29 +407,25 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ===== SESSION CHECK =====
-  function checkSession(): boolean {
+  async function checkSession(): Promise<boolean> {
     try {
-      // Check Supabase session
-      if (state.value.session) {
+      // First check if already authenticated
+      if (state.value.isAuthenticated && state.value.currentUser !== null) {
+        DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: true, source: 'state' })
         return true
       }
 
-      // Check PIN session
-      const session = AuthSessionService.getSession()
-      if (session && session.user) {
-        state.value.currentUser = session.user
-        state.value.isAuthenticated = true
-        state.value.lastLoginAt = session.user.lastLoginAt
+      // If not authenticated in state, check Supabase directly
+      const {
+        data: { session }
+      } = await supabase.auth.getSession()
 
-        DebugUtils.info(MODULE_NAME, 'Session restored', {
-          userId: session.user.id,
-          roles: session.user.roles
-        })
-
+      if (session) {
+        DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: true, source: 'supabase' })
         return true
       }
 
-      DebugUtils.debug(MODULE_NAME, 'No valid session found')
+      DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: false, source: 'none' })
       return false
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Session check failed', { error })
@@ -379,9 +434,6 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ===== OTHER METHODS =====
-  function getSessionInfo() {
-    return AuthSessionService.getSessionInfo()
-  }
 
   async function initializeDefaultUsers(): Promise<void> {
     try {
@@ -449,9 +501,7 @@ export const useAuthStore = defineStore('auth', () => {
     clearError,
     resetState,
     checkSession,
-    restorePinSession,
     initializeDefaultUsers,
-    getSessionInfo,
     initialize
   }
 })

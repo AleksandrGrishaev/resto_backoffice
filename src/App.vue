@@ -1,125 +1,163 @@
-<!-- src/App.vue - КОНТРОЛЛЕР авторизации и загрузки -->
 <template>
   <v-app>
-    <!-- Загрузка stores после авторизации -->
-    <div v-if="isLoadingStores" class="app-loading">
-      <v-container fluid class="fill-height">
-        <v-row justify="center" align="center">
-          <v-col cols="12" class="text-center">
-            <v-progress-circular indeterminate size="64" color="primary" />
-            <h3 class="mt-4">{{ loadingMessage }}</h3>
-            <p class="text-medium-emphasis">{{ loadingDetail }}</p>
-          </v-col>
-        </v-row>
-      </v-container>
-    </div>
+    <!-- Global loading overlay -->
+    <v-overlay v-model="isLoading" class="align-center justify-center" persistent :scrim="true">
+      <v-card class="pa-8 text-center" elevation="8" rounded="lg">
+        <v-progress-circular indeterminate size="64" width="6" color="primary" class="mb-4" />
+        <div class="text-h6 mb-2">{{ loadingMessage }}</div>
+        <div class="text-caption text-medium-emphasis">Please wait...</div>
+      </v-card>
+    </v-overlay>
 
-    <!-- Основное приложение -->
-    <router-view v-else />
+    <!-- Main app content -->
+    <router-view v-if="!isLoading" />
   </v-app>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAppInitializer } from '@/core/appInitializer'
 import { DebugUtils } from '@/utils'
+import { useRouter } from 'vue-router'
 
 const MODULE_NAME = 'App'
-
-// ===== СОСТОЯНИЕ =====
-const router = useRouter()
 const authStore = useAuthStore()
-const isLoadingStores = ref(false)
-const loadingMessage = ref('Инициализация...')
-const loadingDetail = ref('Подготовка системы')
-const storesLoaded = ref(false)
+const router = useRouter()
+const appInitializer = useAppInitializer()
 
-// ===== МЕТОДЫ =====
+// Loading states
+const isLoadingAuth = ref(true)
+const isLoadingStores = ref(false)
+const storesLoaded = ref(false)
+const loadingMessage = ref('Checking session...')
 
 /**
- * Загрузка всех stores после успешной авторизации
+ * Validate session before loading any stores
+ * This prevents loading stale data with an invalid session
+ */
+async function validateSessionAndLoadStores() {
+  try {
+    isLoadingAuth.value = true
+    loadingMessage.value = 'Validating session...'
+
+    // Check if session exists and is valid
+    const hasValidSession = await authStore.checkSession()
+
+    if (!hasValidSession) {
+      DebugUtils.info(MODULE_NAME, 'No valid session, redirecting to login')
+      isLoadingAuth.value = false
+
+      if (!router.currentRoute.value.path.startsWith('/auth')) {
+        await router.push('/auth/login')
+      }
+      return
+    }
+
+    // Session is valid, proceed to load stores
+    // Note: authStore.isAuthenticated might still be false if auth state hasn't updated yet
+    // That's fine since we have a valid Supabase session
+    DebugUtils.info(MODULE_NAME, '✅ Session valid, loading stores...')
+    await loadStoresAfterAuth()
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Session validation failed', { error })
+    await router.push('/auth/login')
+  } finally {
+    isLoadingAuth.value = false
+  }
+}
+
+/**
+ * Load stores based on user roles after authentication
  */
 async function loadStoresAfterAuth() {
   if (storesLoaded.value || isLoadingStores.value) {
-    DebugUtils.debug(MODULE_NAME, 'Stores already loaded or loading')
+    DebugUtils.info(MODULE_NAME, 'Stores already loaded or loading')
     return
   }
 
   try {
     isLoadingStores.value = true
-    loadingMessage.value = 'Загрузка данных...'
-    loadingDetail.value = 'Инициализация хранилищ данных'
+    loadingMessage.value = 'Loading application data...'
 
-    DebugUtils.info(MODULE_NAME, '🗄️ Starting stores initialization after auth')
-    DebugUtils.info(MODULE_NAME, '👤 User authenticated', {
-      userId: authStore.currentUser?.id,
-      roles: authStore.userRoles,
-      redirectTo: router.currentRoute.value.path
+    // Wait for user to be loaded in authStore (in case of async auth state changes)
+    let user = authStore.currentUser
+    let attempts = 0
+    const maxAttempts = 10 // Wait up to 1 second (10 * 100ms)
+
+    while (!user && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      user = authStore.currentUser
+      attempts++
+    }
+
+    if (!user) {
+      throw new Error('No authenticated user found after waiting')
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Loading stores for user', {
+      userId: user.id,
+      roles: user.roles,
+      attempts: attempts
     })
-    const appInitializer = useAppInitializer()
 
-    // Показываем прогресс
-    loadingDetail.value = 'Загрузка продуктов и рецептов...'
-    await new Promise(resolve => setTimeout(resolve, 500)) // Небольшая задержка для UX
-
-    const userRoles = authStore.userRoles
-    await appInitializer.initialize(userRoles)
+    // Initialize stores based on user roles
+    await appInitializer.initialize(user.roles || [])
 
     storesLoaded.value = true
+    DebugUtils.info(MODULE_NAME, '✅ Stores loaded successfully')
 
-    DebugUtils.info(MODULE_NAME, '✅ All stores loaded successfully')
+    // Check if we need to redirect after successful store loading
+    const redirectPath = router.currentRoute.value.query.redirect as string
+    if (redirectPath && !redirectPath.startsWith('/auth')) {
+      DebugUtils.info(MODULE_NAME, `Redirecting to saved path: ${redirectPath}`)
+      await router.replace(redirectPath)
+    } else if (router.currentRoute.value.path.startsWith('/auth')) {
+      // If on auth page but no redirect specified, go to default route
+      const defaultRoute = authStore.getDefaultRoute()
+      DebugUtils.info(MODULE_NAME, `Redirecting to default route: ${defaultRoute}`)
+      await router.replace(defaultRoute)
+    }
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, '❌ Failed to load stores', { error })
-
-    // Не блокируем приложение если stores не загрузились
-    storesLoaded.value = true
-    loadingDetail.value = 'Приложение запущено с ограниченным функционалом'
-
-    setTimeout(() => {
-      isLoadingStores.value = false
-    }, 2000)
+    DebugUtils.error(MODULE_NAME, 'Failed to load stores', { error })
+    throw error
   } finally {
-    setTimeout(() => {
-      isLoadingStores.value = false
-    }, 500) // Небольшая задержка чтобы показать завершение
+    isLoadingStores.value = false
   }
 }
 
-// ===== WATCHERS =====
-
-// Следим за авторизацией - загружаем stores после входа
+/**
+ * Watch for authentication changes
+ * Only load stores when authenticated (no immediate execution)
+ */
 watch(
   () => authStore.isAuthenticated,
   async isAuthenticated => {
     if (isAuthenticated && !isLoadingStores.value && !storesLoaded.value) {
-      // Принудительно инициализируем через appInitializer для ВСЕХ ролей
+      DebugUtils.info(MODULE_NAME, 'User authenticated, loading stores...')
       await loadStoresAfterAuth()
-    }
-  },
-  { immediate: true }
-)
-
-// ===== LIFECYCLE =====
-
-onMounted(async () => {
-  DebugUtils.info(MODULE_NAME, '🚀 App mounted')
-
-  // Проверяем есть ли сохраненная сессия
-  const hasSession = authStore.checkSession()
-
-  if (hasSession && authStore.isAuthenticated) {
-    DebugUtils.info(MODULE_NAME, '🔑 Existing session found, loading stores')
-    await loadStoresAfterAuth()
-  } else {
-    DebugUtils.info(MODULE_NAME, '🔓 No session found, waiting for login')
-    // Переадресуем на логин если не на странице авторизации
-    if (!router.currentRoute.value.path.startsWith('/auth')) {
-      router.push('/auth/login')
+    } else if (!isAuthenticated && storesLoaded.value) {
+      // User logged out, reset loaded flag
+      storesLoaded.value = false
+      DebugUtils.info(MODULE_NAME, 'User logged out, reset stores loaded flag')
     }
   }
+  // ✅ REMOVED: { immediate: true }
+  // This prevents loading stores before session validation
+)
+
+/**
+ * App initialization on mount
+ */
+onMounted(async () => {
+  DebugUtils.info(MODULE_NAME, '🚀 App mounted, starting initialization...')
+
+  // Validate session and load stores if authenticated
+  await validateSessionAndLoadStores()
 })
+
+// Loading state computed property
+const isLoading = computed(() => isLoadingAuth.value || isLoadingStores.value)
 </script>
 
 <style lang="scss" scoped>

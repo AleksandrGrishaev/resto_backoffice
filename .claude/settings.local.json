@@ -36,7 +36,8 @@
       "Bash(pnpm lint:*)",
       "Bash(mkdir:*)",
       "Bash(pnpm seed:users:*)",
-      "Bash(pnpm seed:users:prod:*)"
+      "Bash(pnpm seed:users:prod:*)",
+      "Bash(pnpm dev)"
     ]
   },
   "enableAllProjectMcpServers": true,
