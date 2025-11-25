@@ -376,7 +376,7 @@
       :product-id="'temp'"
       :base-unit="getBaseUnitName()"
       :package="editingPackage"
-      :product-base-cost="formData.baseCostPerUnit"
+      :product-base-cost="Number(formData.baseCostPerUnit) || 0"
       :loading="false"
       @save="handleSaveLocalPackage"
     />
@@ -384,7 +384,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import type {
   Product,
   CreateProductData,
@@ -505,9 +505,12 @@ const yieldRules = [
 
 // Methods
 const resetForm = (): void => {
+  // Get first available category UUID or empty string
+  const defaultCategory = categoryOptions.value.length > 0 ? categoryOptions.value[0].value : ''
+
   formData.value = {
     name: '',
-    category: 'other',
+    category: defaultCategory,
     baseUnit: 'gram',
     baseCostPerUnit: 0,
     yieldPercentage: 100,
@@ -670,6 +673,13 @@ function getDepartmentColor(dept: Department): string {
 function getDepartmentIcon(dept: Department): string {
   return dept === 'kitchen' ? 'mdi-silverware-fork-knife' : 'mdi-coffee'
 }
+
+// Initialize default category on mount
+onMounted(() => {
+  if (!props.product && categoryOptions.value.length > 0) {
+    formData.value.category = categoryOptions.value[0].value
+  }
+})
 </script>
 
 <style scoped>
