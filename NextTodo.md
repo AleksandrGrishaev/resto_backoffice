@@ -1,298 +1,281 @@
-# Next Sprint - Preparation & Recipe Categories Refactoring
+# Next Sprint - Authentication & Session Management Refactoring
 
-**Created:** 2025-11-24
-**Priority:** High
-**Status:** ✅ Phase 1 Complete | ✅ Phase 2 Complete | 🎉 Ready for Production
+**Created:** 2025-11-25
+**Priority:** Critical
+**Status:** 📋 Planning Phase | ⚠️ Blocking Production Issues
 
 ---
 
 ## 🎯 Sprint Goal
 
-> **Refactor preparation types and recipe categories to use database tables (following product_categories pattern)**
->
-> Two-phase approach:
->
-> 1. **Phase 1:** Integrate existing `preparation_categories` table (already exists!)
-> 2. **Phase 2:** Create `recipe_categories` table and migrate
+> **Refactor authentication and session management to fix critical bugs with logout, session persistence, and cross-tab synchronization**
 >
 > **Key principles:**
 >
-> - ✅ All UI text in English (no Cyrillic)
-> - ✅ Use UUID foreign keys (data integrity)
-> - ✅ Follow product categories pattern exactly
-> - ✅ Load categories from database (not hardcoded constants)
+> - ✅ Single source of truth for sessions (Supabase only)
+> - ✅ Proper cross-tab synchronization
+> - ✅ Complete state cleanup on logout
+> - ✅ No race conditions in initialization
+> - ✅ Support both Email and PIN authentication
 
 ---
 
-## 📊 Current State Analysis
+## 🔍 Problem Statement
 
-### Preparation Categories
+### Current Issues
 
-- ✅ **Database table exists:** `preparation_categories` (7 categories)
-- ❌ **Code still uses hardcoded constants** with Cyrillic text
-- ❌ **Mismatch:** DB has (sauce, base, garnish, marinade, dough, filling, other)
-  Code has (sauce, garnish, marinade, semifinished, seasoning)
-- 🎯 **Decision:** Keep DB categories (7 categories) and update code
+1. **Ghost Data on Page Reload**
 
-### Recipe Categories
+   - User sees previous data briefly before redirect to login
+   - Race condition: stores load before session validation completes
+   - File: `src/App.vue` lines 90-122
 
-- ❌ **No database table** - need to create
-- ❌ **Hardcoded constants** with Cyrillic text
-- 🎯 **Action:** Create table, seed data, migrate column
+2. **Cross-Tab Logout Not Working**
 
----
+   - Logout in one tab doesn't affect other tabs
+   - No `StorageEvent` listener for localStorage changes
+   - File: `src/stores/auth/authStore.ts` lines 310-328
 
-## 📋 PHASE 1: Preparation Categories Integration
+3. **Incomplete Logout State Cleanup**
 
-### Task 1.1: Update TypeScript Types
+   - Only authStore is reset, other stores remain populated
+   - Supabase query cache not cleared
+   - No automatic redirect after logout
 
-**File:** `src/stores/recipes/types.ts`
+4. **Triple Session Storage Causes Conflicts**
 
-**Actions:**
+   - Supabase session (browser localStorage)
+   - PIN session (`localStorage['pin_session']`)
+   - Session service (`localStorage['kitchen_app_session']`)
+   - File: `src/stores/auth/services/session.service.ts`
 
-1. **Add PreparationCategory interface** (line ~310, before PREPARATION_TYPES):
-
-```typescript
-// Preparation Category (from database)
-export interface PreparationCategory {
-  id: string
-  key: string
-  name: string
-  description?: string
-  icon?: string
-  emoji?: string
-  color?: string
-  sortOrder: number
-  isActive: boolean
-  createdAt: string
-  updatedAt: string
-}
-```
-
-2. **Update PreparationType** (replace existing type):
-
-```typescript
-// Updated to match database keys
-export type PreparationType =
-  | 'sauce'
-  | 'base'
-  | 'garnish'
-  | 'marinade'
-  | 'dough'
-  | 'filling'
-  | 'other'
-```
-
-3. **Delete PREPARATION_TYPES constant** (lines 310-317):
-
-```typescript
-// ❌ DELETE THIS:
-export const PREPARATION_TYPES = [
-  { value: 'sauce', text: 'Соусы', prefix: 'P' },
-  { value: 'garnish', text: 'Гарниры', prefix: 'P' }
-  // ... rest
-] as const
-```
-
-4. **Update Preparation interface** (around line 302):
-
-```typescript
-export interface Preparation {
-  id: string
-  name: string
-  nameEn?: string
-  type: string // UUID (FK to preparation_categories), will migrate from TEXT
-  servings?: number
-  cookingTime?: number
-  instructions?: string
-  ingredients: RecipeIngredient[]
-  outputProduct?: string
-  outputQuantity?: number
-  outputUnit?: MeasurementUnit
-  isActive: boolean
-  createdAt: string
-  updatedAt: string
-}
-```
+5. **No Token Refresh Monitoring**
+   - Session expires but user not notified
+   - No automatic token refresh before expiry
 
 ---
 
-### Task 1.2: Add Categories to RecipesStore
+## 📊 Current Architecture Analysis
 
-**File:** `src/stores/recipes/recipesStore.ts`
+### Session Storage (Before Refactoring)
 
-**Actions:**
+```
+┌─────────────────────────────────────────────────┐
+│              Current Session Storage             │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  1. Supabase Session (localStorage)             │
+│     Key: sb-*-auth-token                        │
+│     Managed by: @supabase/supabase-js           │
+│                                                  │
+│  2. PIN Session (localStorage)                  │
+│     Key: pin_session                            │
+│     Managed by: authStore                       │
+│                                                  │
+│  3. Session Service (localStorage)              │
+│     Key: kitchen_app_session                    │
+│     Managed by: AuthSessionService              │
+│                                                  │
+└─────────────────────────────────────────────────┘
+```
 
-1. **Update RecipesState interface** (line ~40):
+**Problems:**
+
+- Multiple sources of truth
+- No clear hierarchy
+- Can get out of sync
+- Complex restoration logic
+
+### Target Architecture (After Refactoring)
+
+```
+┌─────────────────────────────────────────────────┐
+│              New Session Storage                 │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  ✅ Supabase Session (localStorage)             │
+│     Key: sb-*-auth-token                        │
+│     Managed by: @supabase/supabase-js           │
+│     Single source of truth                      │
+│                                                  │
+│  ✅ Cross-Tab Sync (localStorage event)         │
+│     Key: kitchen_app_logout_broadcast           │
+│     Managed by: authStore                       │
+│     Coordinates logout across tabs              │
+│                                                  │
+└─────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+
+- Single source of truth (Supabase)
+- Simple restoration logic
+- Cross-tab synchronization
+- Both Email and PIN use same session mechanism
+
+---
+
+## 📋 PHASE 1: Critical Fixes
+
+### Task 1.1: Implement Cross-Tab Logout Synchronization
+
+**Priority:** Critical
+**Estimated Time:** 1 hour
+
+**File:** `src/stores/auth/authStore.ts`
+
+**Current Problem:**
+
+- Logout in Tab A doesn't affect Tab B
+- No event listener for storage changes
+- Each tab has independent session state
+
+**Solution:**
+Add `StorageEvent` listener to detect logout in other tabs.
+
+**Implementation:**
+
+1. **Add cross-tab constants** (after imports, line ~15):
 
 ```typescript
-interface RecipesState {
-  recipes: Recipe[]
-  preparations: Preparation[]
-  preparationCategories: PreparationCategory[] // ✅ ADD THIS
-  recipeCategories: RecipeCategory[] // ✅ ADD THIS (Phase 2)
-  loading: boolean
-  error: string | null
-  initialized: boolean
+// Cross-tab synchronization constants
+const LOGOUT_BROADCAST_KEY = 'kitchen_app_logout_broadcast'
+const SESSION_CHECK_INTERVAL = 5000 // 5 seconds
+```
+
+2. **Add setupCrossTabSync() method** (after initialize(), line ~75):
+
+```typescript
+/**
+ * Setup cross-tab synchronization for logout events
+ * Listens for storage changes in other tabs and reacts to logout
+ */
+function setupCrossTabSync() {
+  // Listen for storage events (fired only in OTHER tabs, not the one that made the change)
+  window.addEventListener('storage', (event: StorageEvent) => {
+    // Case 1: Supabase token removed (direct logout)
+    if (event.key?.startsWith('sb-') && event.key.includes('auth-token') && !event.newValue) {
+      DebugUtils.info(MODULE_NAME, '🔄 Logout detected in another tab (Supabase token removed)')
+      handleCrossTabLogout()
+    }
+
+    // Case 2: Explicit logout broadcast
+    if (event.key === LOGOUT_BROADCAST_KEY && event.newValue) {
+      DebugUtils.info(MODULE_NAME, '🔄 Logout broadcast received from another tab')
+      handleCrossTabLogout()
+    }
+  })
+
+  DebugUtils.info(MODULE_NAME, '✅ Cross-tab synchronization enabled')
+}
+
+/**
+ * Handle logout detected in another tab
+ */
+async function handleCrossTabLogout() {
+  if (!state.value.isAuthenticated) {
+    // Already logged out, ignore
+    return
+  }
+
+  DebugUtils.info(MODULE_NAME, '⚠️ Session ended in another tab, logging out...')
+
+  // Reset local state immediately (no API calls needed)
+  await resetAllStores()
+  resetState()
+
+  // Redirect to login
+  router.push('/auth/login')
+
+  // Show notification (optional)
+  // toast.info('Session ended in another tab')
 }
 ```
 
-2. **Update state initialization** (line ~50):
+3. **Update logout() method** (replace existing, line ~310):
 
 ```typescript
-state: (): RecipesState => ({
-  recipes: [],
-  preparations: [],
-  preparationCategories: [], // ✅ ADD THIS
-  recipeCategories: [],      // ✅ ADD THIS (Phase 2)
-  loading: false,
-  error: null,
-  initialized: false
-}),
+/**
+ * Logout user and broadcast to all tabs
+ */
+async function logout() {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Logging out...')
+
+    // Step 1: Broadcast logout to other tabs FIRST
+    // This ensures other tabs know about logout before Supabase token is cleared
+    localStorage.setItem(LOGOUT_BROADCAST_KEY, Date.now().toString())
+
+    // Step 2: Sign out from Supabase (clears token)
+    if (state.value.session) {
+      await supabase.auth.signOut()
+    }
+
+    // Step 3: Clean up all local state
+    await resetAllStores()
+
+    // Step 4: Reset auth state
+    resetState()
+
+    // Step 5: Clean up broadcast key (no longer needed)
+    localStorage.removeItem(LOGOUT_BROADCAST_KEY)
+
+    // Step 6: Redirect to login
+    router.push('/auth/login')
+
+    DebugUtils.info(MODULE_NAME, '✅ Logout complete')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
+    throw error
+  }
+}
 ```
 
-3. **Add getters for preparation categories** (after existing getters, around line ~100):
+4. **Call setupCrossTabSync() in initialize()** (update line ~65):
 
 ```typescript
-getters: {
-  // ... existing getters
-
-  // ✅ ADD: Preparation category getters
-  activePreparationCategories: state =>
-    state.preparationCategories
-      .filter(c => c.isActive)
-      .sort((a, b) => a.sortOrder - b.sortOrder),
-
-  getPreparationCategoryById: state => (id: string) =>
-    state.preparationCategories.find(c => c.id === id),
-
-  getPreparationCategoryName: state => (id: string) =>
-    state.preparationCategories.find(c => c.id === id)?.name || id,
-
-  getPreparationCategoryColor: state => (id: string) =>
-    state.preparationCategories.find(c => c.id === id)?.color || 'grey',
-
-  getPreparationCategoryEmoji: state => (id: string) =>
-    state.preparationCategories.find(c => c.id === id)?.emoji || '👨‍🍳',
-
-  // Group preparations by category
-  preparationsByCategory: state => {
-    const grouped: Record<string, Preparation[]> = {}
-    state.preparations.forEach(prep => {
-      if (!grouped[prep.type]) {
-        grouped[prep.type] = []
-      }
-      grouped[prep.type].push(prep)
-    })
-    return grouped
-  },
-},
-```
-
-4. **Update initialize() method** (around line ~150):
-
-```typescript
-async initialize() {
-  if (this.initialized) {
+async function initialize() {
+  if (state.value.initialized) {
     DebugUtils.info(MODULE_NAME, 'Already initialized')
     return
   }
 
   try {
-    this.loading = true
+    DebugUtils.info(MODULE_NAME, 'Initializing auth store...')
 
-    // ✅ ADD: Load categories first
-    await this.loadPreparationCategories()
-    await this.loadRecipeCategories() // Phase 2
+    // Check for existing Supabase session
+    const {
+      data: { session }
+    } = await supabase.auth.getSession()
 
-    // Then load recipes and preparations
-    await Promise.all([
-      this.loadRecipes(),
-      this.loadPreparations()
-    ])
-
-    this.initialized = true
-    DebugUtils.info(MODULE_NAME, 'Initialized successfully', {
-      recipes: this.recipes.length,
-      preparations: this.preparations.length,
-      preparationCategories: this.preparationCategories.length
-    })
-  } catch (error) {
-    this.error = (error as Error).message
-    DebugUtils.error(MODULE_NAME, 'Initialization failed', error)
-  } finally {
-    this.loading = false
-  }
-},
-```
-
-5. **Add loadPreparationCategories() action** (after loadPreparations, around line ~200):
-
-```typescript
-async loadPreparationCategories(): Promise<void> {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Loading preparation categories...')
-    const categories = await recipesService.getPreparationCategories()
-    this.preparationCategories = categories
-    DebugUtils.store(MODULE_NAME, 'Loaded preparation categories', {
-      count: categories.length
-    })
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to load preparation categories', error)
-    throw error
-  }
-},
-```
-
----
-
-### Task 1.3: Add Service Methods
-
-**File:** `src/stores/recipes/recipesService.ts`
-
-**Actions:**
-
-1. **Add getPreparationCategories() method** (after getPreparations, around line ~100):
-
-```typescript
-async getPreparationCategories(): Promise<PreparationCategory[]> {
-  if (!isSupabaseAvailable()) {
-    DebugUtils.info(MODULE_NAME, 'Supabase not available, returning empty categories')
-    return []
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('preparation_categories')
-      .select('*')
-      .order('sort_order', { ascending: true })
-
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load preparation categories', error)
-      throw error
+    if (session) {
+      state.value.session = session
+      await loadUserProfile(session.user.id)
     }
 
-    const categories = (data || []).map(row => ({
-      id: row.id,
-      key: row.key,
-      name: row.name,
-      description: row.description,
-      icon: row.icon,
-      emoji: row.emoji,
-      color: row.color,
-      sortOrder: row.sort_order,
-      isActive: row.is_active,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    }))
+    // Setup auth state listener
+    supabase.auth.onAuthStateChange(async (event, newSession) => {
+      DebugUtils.info(MODULE_NAME, `Auth state changed: ${event}`)
 
-    DebugUtils.info(MODULE_NAME, 'Loaded preparation categories', {
-      count: categories.length
+      state.value.session = newSession
+
+      if (event === 'SIGNED_OUT') {
+        await resetAllStores()
+        resetState()
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (newSession?.user) {
+          await loadUserProfile(newSession.user.id)
+        }
+      }
     })
 
-    return categories
+    // ✅ NEW: Setup cross-tab synchronization
+    setupCrossTabSync()
+
+    state.value.initialized = true
+    DebugUtils.info(MODULE_NAME, '✅ Auth store initialized')
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Error loading preparation categories', error)
+    DebugUtils.error(MODULE_NAME, 'Initialization failed', { error })
     throw error
   }
 }
@@ -300,509 +283,582 @@ async getPreparationCategories(): Promise<PreparationCategory[]> {
 
 ---
 
-### Task 1.4: Migrate preparations.type to UUID
+### Task 1.2: Create Centralized Store Reset Service
 
-**File:** `src/supabase/migrations/009_migrate_preparations_type_to_uuid.sql`
+**Priority:** Critical
+**Estimated Time:** 45 minutes
 
-**Migration SQL:**
+**File:** `src/core/storeResetService.ts` (NEW FILE)
 
-```sql
--- Migration: Migrate preparations.type from TEXT to UUID foreign key
--- Created: 2025-11-24
--- Description: Convert preparations.type column to reference preparation_categories table
+**Current Problem:**
 
--- Step 1: Add new column with UUID type
-ALTER TABLE preparations ADD COLUMN type_new UUID;
+- Logout only resets authStore
+- Other stores (products, recipes, menu, etc.) remain populated
+- User sees stale data if they login again with different account
 
--- Step 2: Populate new column by matching keys
--- Map old TEXT keys to new UUID from preparation_categories
-UPDATE preparations
-SET type_new = pc.id
-FROM preparation_categories pc
-WHERE preparations.type = pc.key;
+**Solution:**
+Create centralized service to reset all Pinia stores.
 
--- Step 3: Handle unmapped values (if any)
--- Check for preparations with NULL type_new (no match found)
-DO $$
-DECLARE
-  unmapped_count INTEGER;
-BEGIN
-  SELECT COUNT(*) INTO unmapped_count
-  FROM preparations
-  WHERE type_new IS NULL;
-
-  IF unmapped_count > 0 THEN
-    -- Map unmapped preparations to 'other' category
-    UPDATE preparations
-    SET type_new = (SELECT id FROM preparation_categories WHERE key = 'other')
-    WHERE type_new IS NULL;
-
-    RAISE NOTICE 'Mapped % unmapped preparations to "other" category', unmapped_count;
-  END IF;
-END $$;
-
--- Step 4: Drop old column and rename new column
-ALTER TABLE preparations DROP COLUMN type;
-ALTER TABLE preparations RENAME COLUMN type_new TO type;
-
--- Step 5: Add NOT NULL constraint
-ALTER TABLE preparations ALTER COLUMN type SET NOT NULL;
-
--- Step 6: Add foreign key constraint
-ALTER TABLE preparations
-  ADD CONSTRAINT fk_preparations_type
-  FOREIGN KEY (type) REFERENCES preparation_categories(id)
-  ON DELETE RESTRICT;
-
--- Step 7: Add index for performance
-CREATE INDEX idx_preparations_type ON preparations(type);
-
--- Add comment
-COMMENT ON COLUMN preparations.type IS 'Reference to preparation_categories.id (formerly TEXT key)';
-```
-
-**Apply migration:**
-
-```bash
-# Use MCP tool to apply migration
-mcp__supabase__apply_migration({
-  name: "migrate_preparations_type_to_uuid",
-  query: "... SQL above ..."
-})
-```
-
----
-
-### Task 1.5: Update Components
-
-#### File: `src/views/recipes/RecipesView.vue`
-
-**Current code (lines ~50-60):**
+**Implementation:**
 
 ```typescript
-// ❌ DELETE: Hardcoded preparation types
-const preparationTypes = [
-  { value: 'all', text: 'All Types' },
-  { value: 'sauce', text: 'Соусы' },
-  { value: 'garnish', text: 'Гарниры' }
-  // ...
-]
-```
+/**
+ * Centralized Store Reset Service
+ *
+ * Provides utility to reset all Pinia stores to initial state.
+ * Used during logout to ensure complete state cleanup.
+ */
 
-**Replace with:**
-
-```typescript
+import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
+import { useMenuStore } from '@/stores/menu'
+import { useStorageStore } from '@/stores/storage'
+import { useSuppliersStore } from '@/stores/supplier_2'
+import { useCounteragentsStore } from '@/stores/counteragents'
+import { usePreparationStore } from '@/stores/preparation'
+import { useAccountStore } from '@/stores/account'
+import { usePosStore } from '@/stores/pos'
+import { useOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useTablesStore } from '@/stores/pos/tables/tablesStore'
+import { usePaymentsStore } from '@/stores/pos/payments/paymentsStore'
+import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
+import { DebugUtils } from '@/utils'
 
-const recipesStore = useRecipesStore()
+const MODULE_NAME = 'StoreResetService'
 
-// ✅ NEW: Load from store
-const preparationTypes = computed(() => [
-  { value: 'all', text: 'All Types' },
-  ...recipesStore.activePreparationCategories.map(cat => ({
-    value: cat.id,
-    text: cat.name
-  }))
-])
+/**
+ * Reset all Pinia stores to initial state
+ *
+ * IMPORTANT: This should be called during logout to ensure
+ * complete cleanup of all application state.
+ *
+ * @returns Promise<void>
+ */
+export async function resetAllStores(): Promise<void> {
+  try {
+    DebugUtils.info(MODULE_NAME, '🧹 Resetting all stores...')
 
-// ✅ Helper functions
-const getPreparationCategoryName = (categoryId: string) =>
-  recipesStore.getPreparationCategoryName(categoryId)
+    // Backoffice stores
+    const backofficeStores = [
+      { name: 'Products', store: useProductsStore() },
+      { name: 'Recipes', store: useRecipesStore() },
+      { name: 'Menu', store: useMenuStore() },
+      { name: 'Storage', store: useStorageStore() },
+      { name: 'Suppliers', store: useSuppliersStore() },
+      { name: 'Counteragents', store: useCounteragentsStore() },
+      { name: 'Preparation', store: usePreparationStore() },
+      { name: 'Account', store: useAccountStore() }
+    ]
 
-const getPreparationCategoryColor = (categoryId: string) =>
-  recipesStore.getPreparationCategoryColor(categoryId)
+    // POS stores
+    const posStores = [
+      { name: 'POS', store: usePosStore() },
+      { name: 'Orders', store: useOrdersStore() },
+      { name: 'Tables', store: useTablesStore() },
+      { name: 'Payments', store: usePaymentsStore() },
+      { name: 'Shifts', store: useShiftsStore() }
+    ]
 
-const getPreparationCategoryEmoji = (categoryId: string) =>
-  recipesStore.getPreparationCategoryEmoji(categoryId)
-```
+    // Reset all stores
+    const allStores = [...backofficeStores, ...posStores]
 
-**Update template** (replace Cyrillic with English labels):
+    for (const { name, store } of allStores) {
+      try {
+        // Use $reset() if available (standard Pinia method)
+        if ('$reset' in store && typeof store.$reset === 'function') {
+          store.$reset()
+          DebugUtils.info(MODULE_NAME, `✅ Reset ${name} store`)
+        }
+        // Fallback: manually reset common properties
+        else {
+          if ('initialized' in store) {
+            ;(store as any).initialized = false
+          }
+          DebugUtils.info(MODULE_NAME, `⚠️ Manually reset ${name} store (no $reset method)`)
+        }
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, `❌ Failed to reset ${name} store`, { error })
+      }
+    }
 
-```vue
-<template>
-  <!-- Filter section -->
-  <v-select
-    v-model="selectedPrepType"
-    :items="preparationTypes"
-    label="Preparation Type"
-    density="compact"
-  />
+    DebugUtils.info(MODULE_NAME, '✅ All stores reset complete')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, '❌ Store reset failed', { error })
+    throw error
+  }
+}
 
-  <!-- Preparation display -->
-  <v-chip :color="getPreparationCategoryColor(prep.type)" size="small">
-    {{ getPreparationCategoryEmoji(prep.type) }}
-    {{ getPreparationCategoryName(prep.type) }}
-  </v-chip>
-</template>
-```
-
-#### File: `src/views/Preparation/components/PreparationStockTable.vue`
-
-**Update category display** (around line ~80):
-
-```typescript
-// ✅ Import store
-import { useRecipesStore } from '@/stores/recipes'
-
-const recipesStore = useRecipesStore()
-
-// ✅ Replace hardcoded type labels
-const getTypeLabel = (typeId: string) => recipesStore.getPreparationCategoryName(typeId)
-const getTypeColor = (typeId: string) => recipesStore.getPreparationCategoryColor(typeId)
-```
-
-```vue
-<template>
-  <!-- Replace hardcoded text with store getters -->
-  <v-chip :color="getTypeColor(item.type)" size="small">
-    {{ getTypeLabel(item.type) }}
-  </v-chip>
-</template>
-```
-
-#### Files to update similarly:
-
-- `src/stores/recipes/composables/usePreparations.ts`
-- `src/stores/recipes/supabaseMappers.ts` (if it has type mapping logic)
-- Any other components that display preparation types
-
----
-
-## 📋 PHASE 2: Recipe Categories Migration
-
-### Task 2.1: Create recipe_categories Table
-
-**File:** `src/supabase/migrations/010_create_recipe_categories.sql`
-
-**Migration SQL:**
-
-```sql
--- Migration: Create recipe_categories table
--- Created: 2025-11-24
--- Description: Create normalized recipe categories table (following product_categories pattern)
-
--- Create recipe_categories table
-CREATE TABLE recipe_categories (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  key TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  color TEXT,
-  icon TEXT,
-  sort_order INTEGER DEFAULT 0,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Create indexes for performance
-CREATE UNIQUE INDEX idx_recipe_categories_key ON recipe_categories(key);
-CREATE INDEX idx_recipe_categories_sort ON recipe_categories(sort_order);
-CREATE INDEX idx_recipe_categories_active ON recipe_categories(is_active);
-
--- Enable Row Level Security
-ALTER TABLE recipe_categories ENABLE ROW LEVEL SECURITY;
-
--- RLS Policy: Allow read for all authenticated users
-CREATE POLICY "Allow read for authenticated users"
-  ON recipe_categories FOR SELECT
-  TO authenticated
-  USING (true);
-
--- RLS Policy: Allow all operations for admins
-CREATE POLICY "Allow all for admins"
-  ON recipe_categories FOR ALL
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND 'admin' = ANY(users.roles)
-    )
-  );
-
--- Seed initial categories (migrated from RECIPE_CATEGORIES constant)
-INSERT INTO recipe_categories (key, name, description, color, icon, sort_order) VALUES
-  ('main_dish', 'Main Dishes', 'Primary courses and entrees', 'red-darken-2', 'mdi-food-steak', 1),
-  ('side_dish', 'Side Dishes', 'Accompaniments and sides', 'green-darken-2', 'mdi-food-variant', 2),
-  ('dessert', 'Desserts', 'Sweet dishes and treats', 'pink-darken-2', 'mdi-cake', 3),
-  ('appetizer', 'Appetizers', 'Starters and small plates', 'orange-darken-2', 'mdi-food-apple', 4),
-  ('beverage', 'Beverages', 'Drinks and cocktails', 'blue-darken-2', 'mdi-glass-cocktail', 5),
-  ('sauce', 'Sauces', 'Sauces and condiments', 'purple-darken-2', 'mdi-bottle-tonic', 6);
-
--- Add comments to table
-COMMENT ON TABLE recipe_categories IS 'Recipe categories with localization and UI properties';
-COMMENT ON COLUMN recipe_categories.key IS 'Unique English key for programmatic access';
-COMMENT ON COLUMN recipe_categories.name IS 'Display name for UI';
-COMMENT ON COLUMN recipe_categories.color IS 'Vuetify color name for UI chips';
-COMMENT ON COLUMN recipe_categories.icon IS 'Material Design icon name';
-COMMENT ON COLUMN recipe_categories.sort_order IS 'Display order in UI';
-```
-
-**Apply migration:**
-
-```bash
-mcp__supabase__apply_migration({
-  name: "create_recipe_categories",
-  query: "... SQL above ..."
-})
-```
-
----
-
-### Task 2.2: Migrate recipes.category to UUID
-
-**File:** `src/supabase/migrations/011_migrate_recipes_category_to_uuid.sql`
-
-**Migration SQL:**
-
-```sql
--- Migration: Migrate recipes.category from TEXT to UUID foreign key
--- Created: 2025-11-24
--- Description: Convert recipes.category column to reference recipe_categories table
-
--- Step 1: Add new column with UUID type
-ALTER TABLE recipes ADD COLUMN category_new UUID;
-
--- Step 2: Populate new column by matching keys
--- Map old TEXT keys to new UUID from recipe_categories
-UPDATE recipes
-SET category_new = rc.id
-FROM recipe_categories rc
-WHERE recipes.category = rc.key;
-
--- Step 3: Handle unmapped values (if any)
-DO $$
-DECLARE
-  unmapped_count INTEGER;
-BEGIN
-  SELECT COUNT(*) INTO unmapped_count
-  FROM recipes
-  WHERE category_new IS NULL;
-
-  IF unmapped_count > 0 THEN
-    -- Map unmapped recipes to 'main_dish' category (default)
-    UPDATE recipes
-    SET category_new = (SELECT id FROM recipe_categories WHERE key = 'main_dish')
-    WHERE category_new IS NULL;
-
-    RAISE NOTICE 'Mapped % unmapped recipes to "main_dish" category', unmapped_count;
-  END IF;
-END $$;
-
--- Step 4: Drop old column and rename new column
-ALTER TABLE recipes DROP COLUMN category;
-ALTER TABLE recipes RENAME COLUMN category_new TO category;
-
--- Step 5: Add NOT NULL constraint
-ALTER TABLE recipes ALTER COLUMN category SET NOT NULL;
-
--- Step 6: Add foreign key constraint
-ALTER TABLE recipes
-  ADD CONSTRAINT fk_recipes_category
-  FOREIGN KEY (category) REFERENCES recipe_categories(id)
-  ON DELETE RESTRICT;
-
--- Step 7: Add index for performance
-CREATE INDEX idx_recipes_category ON recipes(category);
-
--- Add comment
-COMMENT ON COLUMN recipes.category IS 'Reference to recipe_categories.id (formerly TEXT key)';
-```
-
-**Apply migration:**
-
-```bash
-mcp__supabase__apply_migration({
-  name: "migrate_recipes_category_to_uuid",
-  query: "... SQL above ..."
-})
-```
-
----
-
-### Task 2.3: Update TypeScript Types for Recipe Categories
-
-**File:** `src/stores/recipes/types.ts`
-
-**Actions:**
-
-1. **Add RecipeCategory interface** (around line ~328):
-
-```typescript
-// Recipe Category (from database)
-export interface RecipeCategory {
-  id: string
-  key: string
-  name: string
-  description?: string
-  color?: string
-  icon?: string
-  sortOrder: number
-  isActive: boolean
-  createdAt: string
-  updatedAt: string
+/**
+ * Check if all stores are properly reset
+ * Useful for debugging and testing
+ *
+ * @returns Object with store names and their initialization status
+ */
+export function getStoreResetStatus(): Record<string, boolean> {
+  return {
+    products: !useProductsStore().initialized,
+    recipes: !useRecipesStore().initialized,
+    menu: !useMenuStore().initialized,
+    storage: !useStorageStore().initialized,
+    suppliers: !useSuppliersStore().initialized,
+    counteragents: !useCounteragentsStore().initialized,
+    preparation: !usePreparationStore().initialized,
+    account: !useAccountStore().initialized,
+    pos: !usePosStore().initialized,
+    orders: !useOrdersStore().initialized,
+    tables: !useTablesStore().initialized,
+    payments: !usePaymentsStore().initialized,
+    shifts: !useShiftsStore().initialized
+  }
 }
 ```
 
-2. **Update RecipeCategoryType** (replace existing type):
+**Update authStore.ts to use resetAllStores:**
 
 ```typescript
-// Updated to match database keys
-export type RecipeCategoryType =
-  | 'main_dish'
-  | 'side_dish'
-  | 'dessert'
-  | 'appetizer'
-  | 'beverage'
-  | 'sauce'
+// Add import at top
+import { resetAllStores } from '@/core/storeResetService'
+
+// Update resetState() to call resetAllStores (line ~400)
+function resetState() {
+  state.value = {
+    currentUser: null,
+    isAuthenticated: false,
+    session: null,
+    lastLoginAt: null,
+    initialized: false
+  }
+}
+
+// logout() already calls resetAllStores() (see Task 1.1)
 ```
 
-3. **Delete RECIPE_CATEGORIES constant** (lines ~319-326):
+---
+
+### Task 1.3: Fix App.vue Race Condition
+
+**Priority:** Critical
+**Estimated Time:** 45 minutes
+
+**File:** `src/App.vue`
+
+**Current Problem:**
+
+- Watcher runs with `immediate: true`
+- Stores load before async session validation completes
+- User sees stale data briefly before redirect
+
+**Solution:**
+
+- Remove `immediate: true` from watcher
+- Add async session validation in `onMounted` BEFORE loading stores
+- Show loading screen during validation
+
+**Implementation:**
+
+1. **Update script section** (lines 44-122):
+
+```typescript
+<script setup lang="ts">
+import { ref, onMounted, watch, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { AppInitializer } from '@/core/appInitializer'
+import { DebugUtils } from '@/utils'
+import { useRouter } from 'vue-router'
+
+const MODULE_NAME = 'App'
+const authStore = useAuthStore()
+const router = useRouter()
+
+// Loading states
+const isLoadingAuth = ref(true)
+const isLoadingStores = ref(false)
+const storesLoaded = ref(false)
+const loadingMessage = ref('Checking session...')
+
+/**
+ * Validate session before loading any stores
+ * This prevents loading stale data with an invalid session
+ */
+async function validateSessionAndLoadStores() {
+  try {
+    isLoadingAuth.value = true
+    loadingMessage.value = 'Validating session...'
+
+    // Check if session exists and is valid
+    const hasValidSession = authStore.checkSession()
+
+    if (!hasValidSession || !authStore.isAuthenticated) {
+      DebugUtils.info(MODULE_NAME, 'No valid session, redirecting to login')
+      isLoadingAuth.value = false
+
+      if (!router.currentRoute.value.path.startsWith('/auth')) {
+        await router.push('/auth/login')
+      }
+      return
+    }
+
+    // Session is valid, proceed to load stores
+    DebugUtils.info(MODULE_NAME, '✅ Session valid, loading stores...')
+    await loadStoresAfterAuth()
+
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Session validation failed', { error })
+    await router.push('/auth/login')
+  } finally {
+    isLoadingAuth.value = false
+  }
+}
+
+/**
+ * Load stores based on user roles after authentication
+ */
+async function loadStoresAfterAuth() {
+  if (storesLoaded.value || isLoadingStores.value) {
+    DebugUtils.info(MODULE_NAME, 'Stores already loaded or loading')
+    return
+  }
+
+  try {
+    isLoadingStores.value = true
+    loadingMessage.value = 'Loading application data...'
+
+    const user = authStore.currentUser
+    if (!user) {
+      throw new Error('No authenticated user')
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Loading stores for user', {
+      userId: user.id,
+      roles: user.roles
+    })
+
+    // Initialize stores based on user roles
+    await AppInitializer.initialize(user.roles || [])
+
+    storesLoaded.value = true
+    DebugUtils.info(MODULE_NAME, '✅ Stores loaded successfully')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load stores', { error })
+    throw error
+  } finally {
+    isLoadingStores.value = false
+  }
+}
+
+/**
+ * Watch for authentication changes
+ * Only load stores when authenticated (no immediate execution)
+ */
+watch(
+  () => authStore.isAuthenticated,
+  async (isAuthenticated) => {
+    if (isAuthenticated && !isLoadingStores.value && !storesLoaded.value) {
+      DebugUtils.info(MODULE_NAME, 'User authenticated, loading stores...')
+      await loadStoresAfterAuth()
+    } else if (!isAuthenticated && storesLoaded.value) {
+      // User logged out, reset loaded flag
+      storesLoaded.value = false
+      DebugUtils.info(MODULE_NAME, 'User logged out, reset stores loaded flag')
+    }
+  }
+  // ✅ REMOVED: { immediate: true }
+  // This prevents loading stores before session validation
+)
+
+/**
+ * App initialization on mount
+ */
+onMounted(async () => {
+  DebugUtils.info(MODULE_NAME, '🚀 App mounted, starting initialization...')
+
+  // Validate session and load stores if authenticated
+  await validateSessionAndLoadStores()
+})
+
+// Loading state computed property
+const isLoading = computed(() => isLoadingAuth.value || isLoadingStores.value)
+</script>
+```
+
+2. **Update template to show loading state** (lines 1-42):
+
+```vue
+<template>
+  <v-app>
+    <!-- Global loading overlay -->
+    <v-overlay v-model="isLoading" class="align-center justify-center" persistent :scrim="true">
+      <v-card class="pa-8 text-center" elevation="8" rounded="lg">
+        <v-progress-circular indeterminate size="64" width="6" color="primary" class="mb-4" />
+        <div class="text-h6 mb-2">{{ loadingMessage }}</div>
+        <div class="text-caption text-medium-emphasis">Please wait...</div>
+      </v-card>
+    </v-overlay>
+
+    <!-- Main app content -->
+    <router-view v-if="!isLoading" />
+  </v-app>
+</template>
+```
+
+---
+
+## 📋 PHASE 2: Session Consolidation
+
+### Task 2.1: Remove AuthSessionService
+
+**Priority:** High
+**Estimated Time:** 30 minutes
+
+**Files to modify:**
+
+- `src/stores/auth/authStore.ts`
+- `src/stores/auth/services/session.service.ts` (mark deprecated or delete)
+
+**Current Problem:**
+
+- AuthSessionService duplicates Supabase session
+- Adds complexity without benefit
+- Can get out of sync with Supabase
+
+**Solution:**
+Remove all references to AuthSessionService, use only Supabase.
+
+**Implementation:**
+
+1. **Update authStore.ts - Remove AuthSessionService imports** (line ~10):
 
 ```typescript
 // ❌ DELETE THIS:
-export const RECIPE_CATEGORIES = [
-  { value: 'main_dish', text: 'Основные блюда' },
-  { value: 'side_dish', text: 'Гарниры' }
-  // ... rest
-] as const
+import { AuthSessionService } from './services/session.service'
+
+// ✅ Keep only Supabase
+import { supabase } from '@/supabase/client'
 ```
 
-4. **Update Recipe interface** (around line ~280):
+2. **Update loginWithEmail() method** (line ~104, remove AuthSessionService.saveSession):
 
 ```typescript
-export interface Recipe {
-  id: string
-  name: string
-  nameEn?: string
-  category: string // UUID (FK to recipe_categories)
-  servings?: number
-  cookingTime?: number
-  cookingSteps?: string[]
-  ingredients: RecipeIngredient[]
-  preparationIds: string[]
-  isActive: boolean
-  canBeSold: boolean
-  price?: number
-  createdAt: string
-  updatedAt: string
-}
-```
-
----
-
-### Task 2.4: Add Recipe Categories to Store
-
-**File:** `src/stores/recipes/recipesStore.ts`
-
-**Actions:**
-
-1. **Add recipe category getters** (after preparation category getters):
-
-```typescript
-getters: {
-  // ... existing getters
-  // ... preparation category getters
-
-  // ✅ ADD: Recipe category getters
-  activeRecipeCategories: state =>
-    state.recipeCategories
-      .filter(c => c.isActive)
-      .sort((a, b) => a.sortOrder - b.sortOrder),
-
-  getRecipeCategoryById: state => (id: string) =>
-    state.recipeCategories.find(c => c.id === id),
-
-  getRecipeCategoryName: state => (id: string) =>
-    state.recipeCategories.find(c => c.id === id)?.name || id,
-
-  getRecipeCategoryColor: state => (id: string) =>
-    state.recipeCategories.find(c => c.id === id)?.color || 'grey',
-
-  getRecipeCategoryIcon: state => (id: string) =>
-    state.recipeCategories.find(c => c.id === id)?.icon || 'mdi-food',
-
-  // Group recipes by category
-  recipesByCategory: state => {
-    const grouped: Record<string, Recipe[]> = {}
-    state.recipes.forEach(recipe => {
-      if (!grouped[recipe.category]) {
-        grouped[recipe.category] = []
-      }
-      grouped[recipe.category].push(recipe)
-    })
-    return grouped
-  },
-},
-```
-
-2. **Add loadRecipeCategories() action**:
-
-```typescript
-async loadRecipeCategories(): Promise<void> {
+async function loginWithEmail(email: string, password: string): Promise<void> {
   try {
-    DebugUtils.info(MODULE_NAME, 'Loading recipe categories...')
-    const categories = await recipesService.getRecipeCategories()
-    this.recipeCategories = categories
-    DebugUtils.store(MODULE_NAME, 'Loaded recipe categories', {
-      count: categories.length
+    DebugUtils.info(MODULE_NAME, 'Logging in with email...', { email })
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
     })
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to load recipe categories', error)
-    throw error
-  }
-},
-```
-
----
-
-### Task 2.5: Add Recipe Categories Service Methods
-
-**File:** `src/stores/recipes/recipesService.ts`
-
-**Actions:**
-
-1. **Add getRecipeCategories() method**:
-
-```typescript
-async getRecipeCategories(): Promise<RecipeCategory[]> {
-  if (!isSupabaseAvailable()) {
-    DebugUtils.info(MODULE_NAME, 'Supabase not available, returning empty categories')
-    return []
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from('recipe_categories')
-      .select('*')
-      .order('sort_order', { ascending: true })
 
     if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load recipe categories', error)
+      DebugUtils.error(MODULE_NAME, 'Email login failed', { error })
       throw error
     }
 
-    const categories = (data || []).map(row => ({
-      id: row.id,
-      key: row.key,
-      name: row.name,
-      description: row.description,
-      color: row.color,
-      icon: row.icon,
-      sortOrder: row.sort_order,
-      isActive: row.is_active,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    }))
+    if (!data.user) {
+      throw new Error('No user data returned from Supabase')
+    }
 
-    DebugUtils.info(MODULE_NAME, 'Loaded recipe categories', {
-      count: categories.length
+    // Session is automatically stored by Supabase
+    state.value.session = data.session
+
+    // Load user profile
+    await loadUserProfile(data.user.id)
+
+    // ❌ DELETE THIS:
+    // AuthSessionService.saveSession(user, 'backoffice')
+
+    DebugUtils.info(MODULE_NAME, '✅ Email login successful')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Email login failed', { error })
+    throw error
+  }
+}
+```
+
+3. **Update loginWithPin() method** (line ~135, remove AuthSessionService.saveSession):
+
+```typescript
+async function loginWithPin(pin: string): Promise<void> {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Logging in with PIN...')
+
+    // Find user by PIN
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('pin', pin)
+      .single()
+
+    if (userError || !userData) {
+      throw new Error('Invalid PIN')
+    }
+
+    // Convert PIN to email for Supabase auth
+    const email = userData.email || `${userData.id}@pin.local`
+
+    // Sign in with Supabase (PIN is stored as password for PIN users)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pin
     })
 
-    return categories
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'PIN login failed', { error })
+      throw error
+    }
+
+    // Session is automatically stored by Supabase
+    state.value.session = data.session
+
+    // Load user profile
+    await loadUserProfile(userData.id)
+
+    // ❌ DELETE THIS:
+    // AuthSessionService.saveSession(user, 'backoffice')
+    // localStorage.setItem('pin_session', JSON.stringify(user))
+
+    DebugUtils.info(MODULE_NAME, '✅ PIN login successful')
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Error loading recipe categories', error)
+    DebugUtils.error(MODULE_NAME, 'PIN login failed', { error })
+    throw error
+  }
+}
+```
+
+4. **Remove restorePinSession() method** (line ~330):
+
+```typescript
+// ❌ DELETE THIS ENTIRE METHOD:
+function restorePinSession(): boolean {
+  const pinSession = localStorage.getItem('pin_session')
+  if (pinSession) {
+    try {
+      const user = JSON.parse(pinSession)
+      state.value.currentUser = user
+      state.value.isAuthenticated = true
+      state.value.lastLoginAt = user.lastLoginAt
+      return true
+    } catch (error) {
+      localStorage.removeItem('pin_session')
+    }
+  }
+  return false
+}
+```
+
+5. **Update checkSession() method** (line ~350):
+
+```typescript
+/**
+ * Check if user has valid session
+ * Only checks Supabase session (no legacy session support)
+ */
+function checkSession(): boolean {
+  try {
+    // Only check if we have authenticated user
+    const hasSession = state.value.isAuthenticated && state.value.currentUser !== null
+
+    DebugUtils.info(MODULE_NAME, 'Session check', { hasSession })
+    return hasSession
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Session check failed', { error })
+    return false
+  }
+}
+```
+
+6. **Mark session.service.ts as deprecated** (or delete):
+
+Option A - Add deprecation notice:
+
+```typescript
+// src/stores/auth/services/session.service.ts (line 1)
+
+/**
+ * @deprecated This service is deprecated as of 2025-11-25
+ *
+ * All session management is now handled by Supabase Auth.
+ * This file is kept for reference only and will be removed in a future version.
+ *
+ * DO NOT USE THIS SERVICE IN NEW CODE.
+ */
+
+// ... rest of file
+```
+
+Option B - Delete the file entirely (recommended):
+
+```bash
+# Delete the file
+rm src/stores/auth/services/session.service.ts
+```
+
+---
+
+### Task 2.2: Cleanup Logout Implementation
+
+**Priority:** High
+**Estimated Time:** 15 minutes
+
+**File:** `src/stores/auth/authStore.ts`
+
+**Current Problem:**
+
+- Logout has redundant code
+- Still references PIN session and AuthSessionService
+
+**Solution:**
+Simplify logout to only handle Supabase session.
+
+**Implementation:**
+
+```typescript
+/**
+ * Logout user and broadcast to all tabs
+ *
+ * Steps:
+ * 1. Broadcast logout to other tabs
+ * 2. Sign out from Supabase
+ * 3. Reset all application stores
+ * 4. Reset auth state
+ * 5. Redirect to login
+ */
+async function logout() {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Logging out...')
+
+    // Step 1: Broadcast logout to other tabs FIRST
+    localStorage.setItem(LOGOUT_BROADCAST_KEY, Date.now().toString())
+
+    // Step 2: Sign out from Supabase (clears token from localStorage)
+    if (state.value.session) {
+      await supabase.auth.signOut()
+    }
+
+    // Step 3: Reset all application stores
+    await resetAllStores()
+
+    // Step 4: Reset auth state
+    resetState()
+
+    // Step 5: Clean up broadcast key
+    localStorage.removeItem(LOGOUT_BROADCAST_KEY)
+
+    // Step 6: Redirect to login
+    await router.push('/auth/login')
+
+    DebugUtils.info(MODULE_NAME, '✅ Logout complete')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
+
+    // Even if logout fails, try to clean up local state
+    try {
+      await resetAllStores()
+      resetState()
+      await router.push('/auth/login')
+    } catch (cleanupError) {
+      DebugUtils.error(MODULE_NAME, 'Cleanup after failed logout also failed', { cleanupError })
+    }
+
     throw error
   }
 }
@@ -810,152 +866,206 @@ async getRecipeCategories(): Promise<RecipeCategory[]> {
 
 ---
 
-### Task 2.6: Update Components for Recipe Categories
+## 📋 PHASE 3: Router Guard Improvements (Optional)
 
-#### File: `src/views/recipes/RecipesView.vue`
+### Task 3.1: Add Async Session Validation to Router Guard
 
-**Replace hardcoded categories** (around line ~40):
+**Priority:** Medium
+**Estimated Time:** 30 minutes
+
+**File:** `src/router/index.ts`
+
+**Current Problem:**
+
+- Router guard only checks `isAuthenticated` flag (synchronous)
+- Doesn't validate if Supabase token is actually valid
+- No loading state during validation
+
+**Solution:**
+Add async session validation in router guard.
+
+**Implementation:**
 
 ```typescript
-// ❌ DELETE: Hardcoded recipe categories
-const recipeCategories = [
-  { value: 'all', text: 'All Categories' },
-  { value: 'main_dish', text: 'Основные блюда' }
-  // ...
-]
+// src/router/index.ts (lines 331-390)
+
+router.beforeEach(async (to, from, next) => {
+  try {
+    const authStore = useAuthStore()
+
+    // Skip auth check for non-protected routes
+    if (!to.meta.requiresAuth) {
+      // If going to login page while authenticated, redirect to default route
+      if (to.name === 'login' && authStore.isAuthenticated) {
+        const defaultRoute = authStore.getDefaultRoute()
+        next(defaultRoute)
+        return
+      }
+      next()
+      return
+    }
+
+    // ✅ NEW: Async session validation for protected routes
+    if (authStore.isAuthenticated) {
+      // Validate that Supabase session is still valid
+      try {
+        const {
+          data: { session },
+          error
+        } = await supabase.auth.getSession()
+
+        if (error || !session) {
+          // Session invalid, force logout
+          DebugUtils.info('Router', 'Session invalid, forcing logout')
+          await authStore.logout()
+          next({
+            name: 'login',
+            query: { redirect: to.fullPath, reason: 'session_expired' }
+          })
+          return
+        }
+      } catch (error) {
+        DebugUtils.error('Router', 'Session validation error', { error })
+        next({
+          name: 'login',
+          query: { redirect: to.fullPath, reason: 'session_error' }
+        })
+        return
+      }
+    }
+
+    // Check authentication
+    if (!authStore.isAuthenticated) {
+      next({
+        name: 'login',
+        query: { redirect: to.fullPath }
+      })
+      return
+    }
+
+    // Check role-based access
+    if (to.meta.allowedRoles) {
+      const { hasAnyRole } = usePermissions()
+      if (!hasAnyRole(to.meta.allowedRoles)) {
+        next('/unauthorized')
+        return
+      }
+    }
+
+    next()
+  } catch (error) {
+    console.error('[Router Guard] Navigation guard error:', error)
+    next('/auth/login')
+  }
+})
 ```
-
-**Replace with:**
-
-```typescript
-const recipesStore = useRecipesStore()
-
-// ✅ NEW: Load from store
-const recipeCategories = computed(() => [
-  { value: 'all', text: 'All Categories' },
-  ...recipesStore.activeRecipeCategories.map(cat => ({
-    value: cat.id,
-    text: cat.name
-  }))
-])
-
-// ✅ Helper functions
-const getRecipeCategoryName = (categoryId: string) => recipesStore.getRecipeCategoryName(categoryId)
-
-const getRecipeCategoryColor = (categoryId: string) =>
-  recipesStore.getRecipeCategoryColor(categoryId)
-
-const getRecipeCategoryIcon = (categoryId: string) => recipesStore.getRecipeCategoryIcon(categoryId)
-```
-
-**Update template:**
-
-```vue
-<template>
-  <!-- Filter section -->
-  <v-select
-    v-model="selectedCategory"
-    :items="recipeCategories"
-    label="Recipe Category"
-    density="compact"
-  />
-
-  <!-- Recipe display -->
-  <v-chip
-    :color="getRecipeCategoryColor(recipe.category)"
-    size="small"
-    :prepend-icon="getRecipeCategoryIcon(recipe.category)"
-  >
-    {{ getRecipeCategoryName(recipe.category) }}
-  </v-chip>
-</template>
-```
-
-#### Update these components similarly:
-
-- `src/views/recipes/components/UnifiedRecipeItem.vue` (category display)
-- `src/views/recipes/components/UnifiedViewDialog.vue` (detail view)
-- `src/views/recipes/components/UnifiedRecipeDialog.vue` (edit dialog)
-- `src/stores/recipes/composables/useRecipes.ts`
-- `src/stores/recipes/supabaseMappers.ts`
 
 ---
 
 ## 🧪 Testing Checklist
 
-### Phase 1: Preparation Categories
+### Phase 1: Critical Fixes
 
-- [ ] Run migration 009 on DEV database
-- [ ] Verify preparations.type is UUID column
-- [ ] Test preparation categories load in store
-- [ ] Test RecipesView shows preparation categories
-- [ ] Test PreparationStockTable shows correct categories
-- [ ] Verify no TypeScript errors
-- [ ] Test filtering by preparation type works
-- [ ] Run migration 009 on PROD database
+- [ ] **Test Cross-Tab Logout**
 
-### Phase 2: Recipe Categories
+  - [ ] Open app in Tab A and Tab B
+  - [ ] Login in both tabs
+  - [ ] Logout in Tab A
+  - [ ] Verify Tab B immediately logs out and redirects to login
+  - [ ] Verify no ghost data shown in Tab B
 
-- [ ] Run migrations 010 & 011 on DEV database
-- [ ] Verify recipe_categories table created with 6 categories
-- [ ] Verify recipes.category is UUID column
-- [ ] Test recipe categories load in store
-- [ ] Test RecipesView shows recipe categories
-- [ ] Test recipe filtering by category works
-- [ ] Test recipe dialogs show correct categories
-- [ ] Verify no TypeScript errors
-- [ ] Run migrations 010 & 011 on PROD database
+- [ ] **Test Store Reset on Logout**
 
----
+  - [ ] Login and load data (products, recipes, etc.)
+  - [ ] Logout
+  - [ ] Login with different account
+  - [ ] Verify no stale data from previous account
 
-## 🎯 Success Criteria
+- [ ] **Test App.vue Race Condition Fix**
 
-### Phase 1 Complete When:
+  - [ ] Login and use app normally
+  - [ ] Close tab/browser
+  - [ ] Re-open app (page reload)
+  - [ ] Verify loading screen shows immediately
+  - [ ] Verify no ghost data visible before redirect (if session invalid)
+  - [ ] Verify smooth loading if session valid
 
-- [ ] preparation_categories integrated into recipesStore
-- [ ] All preparation type displays use store getters
-- [ ] preparations.type column is UUID foreign key
-- [ ] No Cyrillic text in UI
-- [ ] No TypeScript errors
-- [ ] Works in both DEV and PROD
+- [ ] **Test Email Login**
 
-### Phase 2 Complete When:
+  - [ ] Login with email/password
+  - [ ] Verify session stored in Supabase localStorage
+  - [ ] Verify no duplicate session keys
+  - [ ] Reload page
+  - [ ] Verify session restored correctly
 
-- [ ] recipe_categories table created with 6 categories
-- [ ] All recipe category displays use store getters
-- [ ] recipes.category column is UUID foreign key
-- [ ] No Cyrillic text in UI
-- [ ] No TypeScript errors
-- [ ] Works in both DEV and PROD
+- [ ] **Test PIN Login**
+  - [ ] Login with PIN
+  - [ ] Verify session stored in Supabase localStorage (not pin_session)
+  - [ ] Verify no duplicate session keys
+  - [ ] Reload page
+  - [ ] Verify session restored correctly
+
+### Phase 2: Session Consolidation
+
+- [ ] **Test AuthSessionService Removal**
+
+  - [ ] Verify no references to AuthSessionService in code
+  - [ ] Verify no `kitchen_app_session` key in localStorage after login
+  - [ ] Verify no `pin_session` key in localStorage after PIN login
+  - [ ] Verify only Supabase session key exists
+
+- [ ] **Test Logout Cleanup**
+  - [ ] Login
+  - [ ] Inspect localStorage (should see only Supabase key)
+  - [ ] Logout
+  - [ ] Inspect localStorage (should be clean, no session keys)
+
+### Phase 3: Router Guard (Optional)
+
+- [ ] **Test Router Guard Session Validation**
+  - [ ] Login
+  - [ ] Manually delete Supabase token from localStorage
+  - [ ] Navigate to protected route
+  - [ ] Verify immediate redirect to login
+  - [ ] Verify no error shown
 
 ---
 
 ## 📝 Files to Modify
 
-### Phase 1: Preparation Categories
+### Phase 1: Critical Fixes
 
-- `src/supabase/migrations/009_migrate_preparations_type_to_uuid.sql` (NEW)
-- `src/stores/recipes/types.ts` (ADD PreparationCategory interface, UPDATE PreparationType)
-- `src/stores/recipes/recipesStore.ts` (ADD preparationCategories state + getters + actions)
-- `src/stores/recipes/recipesService.ts` (ADD getPreparationCategories())
-- `src/views/recipes/RecipesView.vue` (REMOVE hardcoded types, USE store getters)
-- `src/views/Preparation/components/PreparationStockTable.vue` (USE store getters)
-- `src/stores/recipes/composables/usePreparations.ts` (USE store getters)
-- `src/stores/recipes/supabaseMappers.ts` (UPDATE if needed)
+1. **src/stores/auth/authStore.ts** (MODIFY)
 
-### Phase 2: Recipe Categories
+   - Add cross-tab sync logic
+   - Update logout() method
+   - Add setupCrossTabSync() and handleCrossTabLogout()
 
-- `src/supabase/migrations/010_create_recipe_categories.sql` (NEW)
-- `src/supabase/migrations/011_migrate_recipes_category_to_uuid.sql` (NEW)
-- `src/stores/recipes/types.ts` (ADD RecipeCategory interface, UPDATE RecipeCategoryType)
-- `src/stores/recipes/recipesStore.ts` (ADD recipeCategories state + getters + actions)
-- `src/stores/recipes/recipesService.ts` (ADD getRecipeCategories())
-- `src/views/recipes/RecipesView.vue` (REMOVE hardcoded categories, USE store getters)
-- `src/views/recipes/components/UnifiedRecipeItem.vue` (USE store getters)
-- `src/views/recipes/components/UnifiedViewDialog.vue` (USE store getters)
-- `src/views/recipes/components/UnifiedRecipeDialog.vue` (USE store getters)
-- `src/stores/recipes/composables/useRecipes.ts` (USE store getters)
-- `src/stores/recipes/supabaseMappers.ts` (UPDATE if needed)
+2. **src/core/storeResetService.ts** (NEW FILE)
+
+   - Create resetAllStores() function
+   - Create getStoreResetStatus() helper
+
+3. **src/App.vue** (MODIFY)
+   - Remove `immediate: true` from watcher
+   - Add async session validation
+   - Add loading overlay
+
+### Phase 2: Session Consolidation
+
+4. **src/stores/auth/authStore.ts** (MODIFY)
+
+   - Remove AuthSessionService imports
+   - Remove restorePinSession() method
+   - Update loginWithEmail(), loginWithPin(), checkSession()
+
+5. **src/stores/auth/services/session.service.ts** (DELETE or DEPRECATE)
+   - Mark as deprecated or delete entirely
+
+### Phase 3: Router Guard (Optional)
+
+6. **src/router/index.ts** (MODIFY)
+   - Add async session validation in beforeEach guard
 
 ---
 
@@ -963,345 +1073,211 @@ const getRecipeCategoryIcon = (categoryId: string) => recipesStore.getRecipeCate
 
 **Recommended sequence:**
 
-1. **Phase 1 - Steps 1.1 to 1.3** (TypeScript + Store, 30 min)
-2. **Phase 1 - Step 1.4** (Migration, 15 min)
-3. **Phase 1 - Step 1.5** (Components, 45 min)
-4. **Test Phase 1** (30 min)
-5. **Phase 2 - Steps 2.1 to 2.2** (Migrations, 30 min)
-6. **Phase 2 - Steps 2.3 to 2.5** (TypeScript + Store, 45 min)
-7. **Phase 2 - Step 2.6** (Components, 60 min)
-8. **Test Phase 2** (30 min)
-9. **Deploy to PROD** (30 min)
+### Day 1 (4-5 hours)
 
-**Total estimated time:** 5-6 hours
+1. **Task 1.2: Create StoreResetService** (45 min)
 
----
+   - Create new file
+   - Implement resetAllStores()
+   - Test manually
 
-## ✅ PHASE 1 COMPLETED (2025-11-24)
+2. **Task 1.1: Cross-Tab Logout** (1 hour)
 
-### Summary of Changes:
+   - Add setupCrossTabSync()
+   - Add handleCrossTabLogout()
+   - Update logout() to broadcast
+   - Test in multiple tabs
 
-**1. TypeScript Types Updated:**
+3. **Task 1.3: Fix App.vue Race Condition** (45 min)
 
-- ✅ Removed `PREPARATION_TYPES` constant from `types.ts`
-- ✅ Added `PreparationCategory` interface
-- ✅ Updated `PreparationType` to use new keys
+   - Update watcher (remove immediate)
+   - Add validateSessionAndLoadStores()
+   - Add loading overlay
+   - Test page reload scenarios
 
-**2. Store Integration:**
+4. **Testing Phase 1** (1.5 hours)
+   - Test all scenarios from checklist
+   - Fix any issues found
 
-- ✅ Added `preparationCategories` state to recipesStore
-- ✅ Added getters: `activePreparationCategories`, `getPreparationCategoryName`, etc.
-- ✅ Added `loadPreparationCategories()` action
-- ✅ Fixed `preparationsByType` to use UUID instead of text keys
+### Day 2 (2-3 hours)
 
-**3. Service Methods:**
+5. **Task 2.1: Remove AuthSessionService** (30 min)
 
-- ✅ Added `getPreparationCategories()` in recipesService
-- ✅ Fixed `updatePreparation()` to save to Supabase
+   - Update authStore methods
+   - Remove imports
+   - Mark service as deprecated
 
-**4. Components Updated:**
+6. **Task 2.2: Cleanup Logout** (15 min)
 
-- ✅ `UnifiedRecipeItem.vue` - replaced PREPARATION_TYPES with store getters
-- ✅ `UnifiedViewDialog.vue` - replaced PREPARATION_TYPES with store getters
-- ✅ `RecipeBasicInfoWidget.vue` - replaced PREPARATION_TYPES with store getters
-- ✅ `RecipeFilters.vue` - added safe navigation for statistics
-- ✅ `UnifiedRecipeDialog.vue` - fixed department field handling
+   - Simplify logout() method
+   - Remove redundant code
 
-**5. Bug Fixes:**
+7. **Testing Phase 2** (1 hour)
 
-- ✅ Fixed `RecipesService` import in recipesStore
-- ✅ Fixed `preparationIngredientToSupabaseInsert` to generate id
-- ✅ Fixed department field not saving/loading
+   - Test login flows (email + PIN)
+   - Test logout cleanup
+   - Verify localStorage state
 
-**6. Database Cleanup:**
+8. **(Optional) Task 3.1: Router Guard** (30 min)
 
-- ✅ Removed duplicate `category_id` column (migration 010)
+   - Add async validation
+   - Test protected routes
 
-### Migration Files Created/Restored:
+9. **Final Testing** (1 hour)
+   - Full regression testing
+   - Test all user flows
+   - Test edge cases
 
-- ✅ Migration 009: `009_migrate_preparations_type_to_uuid.sql` (RESTORED from DB)
-- ✅ Migration 010: `010_cleanup_preparations_category_id.sql` (NEW)
-
-### Migrations Applied (DEV):
-
-- ✅ Migration 009: `migrate_preparations_type_to_uuid` (version 20251124122314)
-- ✅ Migration 010: `cleanup_preparations_category_id` (version 20251124222905)
+**Total estimated time:** 6-8 hours
 
 ---
 
-## 🚀 PRODUCTION DEPLOYMENT
+## 🎯 Success Criteria
 
-### ⚠️ IMPORTANT: Apply migrations to PROD before deploying code!
+### Phase 1 Complete When:
 
-**Migrations to apply on PROD (in order):**
-
-1. **Migration 009 - Migrate preparations.type to UUID**:
-
-   - **File:** `src/supabase/migrations/009_migrate_preparations_type_to_uuid.sql`
-   - **Status:** Check if already applied on PROD
-   - **What it does:** Converts `preparations.type` from TEXT to UUID foreign key
-   - **Verification:** Check if `preparations.type` is already UUID type
-
-2. **Migration 010 - Cleanup category_id column**:
-   - **File:** `src/supabase/migrations/010_cleanup_preparations_category_id.sql`
-   - **Status:** ⚠️ PENDING - must be applied after migration 009
-   - **What it does:** Removes duplicate `category_id` column
-   - **Verification:** Check if `category_id` column exists
-
-**Steps to apply:**
-
-```bash
-# Method 1: Using MCP Supabase tool (if connected to PROD)
-# Switch MCP connection to PROD database first!
-# Then use mcp__supabase__apply_migration with SQL from files
-
-# Method 2: Using Supabase CLI
-npx supabase db push --db-url "postgresql://postgres:[PASSWORD]@[PROD-HOST]:6543/postgres"
-
-# Method 3: Manual via Supabase Dashboard
-# Copy SQL from migration files → SQL Editor → Run
-```
-
-**Pre-migration verification (check what's already applied):**
-
-```sql
--- Check if migration 009 is needed (is type still TEXT?)
-SELECT column_name, data_type
-FROM information_schema.columns
-WHERE table_name = 'preparations' AND column_name = 'type';
--- If data_type = 'text' → Migration 009 needed
--- If data_type = 'uuid' → Migration 009 already applied
-
--- Check if migration 010 is needed (does category_id still exist?)
-SELECT column_name
-FROM information_schema.columns
-WHERE table_name = 'preparations' AND column_name = 'category_id';
--- If returns row → Migration 010 needed
--- If no rows → Migration 010 already applied
-```
-
-**Post-migration verification:**
-
-```sql
--- Verify preparations.type is UUID
-SELECT column_name, data_type, is_nullable
-FROM information_schema.columns
-WHERE table_name = 'preparations' AND column_name = 'type';
--- Expected: data_type = 'uuid', is_nullable = 'NO'
-
--- Verify category_id is removed
-SELECT column_name
-FROM information_schema.columns
-WHERE table_name = 'preparations'
-  AND column_name IN ('type', 'category_id');
--- Expected: only 'type' should exist
-
--- Check data integrity
-SELECT COUNT(*) FROM preparations WHERE type IS NULL;
--- Expected: 0
-
--- Check foreign key constraint exists
-SELECT constraint_name, column_name
-FROM information_schema.key_column_usage
-WHERE table_name = 'preparations' AND column_name = 'type';
--- Expected: fk_preparations_type
-
--- Check data distribution by category
-SELECT pc.name, COUNT(p.id) as prep_count
-FROM preparation_categories pc
-LEFT JOIN preparations p ON p.type = pc.id
-GROUP BY pc.id, pc.name
-ORDER BY prep_count DESC;
-```
-
----
-
-## ✅ PHASE 2 COMPLETED (2025-11-25)
-
-### Summary of Changes:
-
-**1. Database Migrations:**
-
-- ✅ Migration 011: Created `recipe_categories` table with 6 categories
-- ✅ Migration 012: Migrated `recipes.category` from TEXT to UUID foreign key
-- ✅ All migrations applied successfully to DEV database
-
-**2. TypeScript Types Updated:**
-
-- ✅ Added `RecipeCategory` interface
-- ✅ Renamed `RecipeCategory` type to `RecipeCategoryType`
-- ✅ Removed `RECIPE_CATEGORIES` constant
-- ✅ Updated `Recipe.category` to `string` (UUID)
-- ✅ Updated `CreateRecipeData.category` to `string` (UUID)
-
-**3. Store Integration:**
-
-- ✅ Added `recipeCategories` state to recipesStore
-- ✅ Added getters: `activeRecipeCategories`, `getRecipeCategoryById`, `getRecipeCategoryName`, `getRecipeCategoryColor`, `getRecipeCategoryIcon`
-- ✅ Updated `loadRecipeCategories()` to load from database
-- ✅ Removed duplicate `recipesByCategory` (already exists in composable)
-
-**4. Service Methods:**
-
-- ✅ Added `getRecipeCategories()` in RecipesService
-- ✅ Maps database columns to TypeScript interfaces
-
-**5. Components Updated:**
-
-- ✅ `RecipesView.vue` - replaced hardcoded categories with store getters
-- ✅ `UnifiedRecipeItem.vue` - replaced RECIPE_CATEGORIES with store getters
-- ✅ `UnifiedViewDialog.vue` - replaced RECIPE_CATEGORIES with store getters
-- ✅ `RecipeBasicInfoWidget.vue` - replaced RECIPE_CATEGORIES with store getters
-
-### Database Verification:
-
-```sql
--- ✅ recipe_categories table created with 6 categories
-SELECT * FROM recipe_categories ORDER BY sort_order;
--- Results: main_dish, side_dish, dessert, appetizer, beverage, sauce
-
--- ✅ recipes.category is UUID foreign key
-SELECT column_name, data_type FROM information_schema.columns
-WHERE table_name = 'recipes' AND column_name = 'category';
--- Result: category | uuid
-
--- ✅ Foreign key constraint exists
-SELECT constraint_name FROM information_schema.key_column_usage
-WHERE table_name = 'recipes' AND column_name = 'category';
--- Result: fk_recipes_category
-
--- ✅ Data distribution correct
-SELECT rc.name, COUNT(r.id) as recipe_count
-FROM recipe_categories rc
-LEFT JOIN recipes r ON r.category = rc.id
-GROUP BY rc.id, rc.name;
--- Results: Side Dishes (2), Main Dishes (2), others (0)
-```
-
-### Migration Files Created:
-
-- ✅ Migration 011: `011_create_recipe_categories.sql`
-- ✅ Migration 012: `012_migrate_recipes_category_to_uuid.sql`
-
-### Migrations Applied (DEV):
-
-- ✅ Migration 011: `create_recipe_categories` (version: auto-generated)
-- ✅ Migration 012: `migrate_recipes_category_to_uuid` (version: auto-generated)
-
----
-
-## 🎉 SPRINT COMPLETE!
-
-### Both Phases Completed Successfully:
-
-✅ **Phase 1:** Preparation Categories Integration
-✅ **Phase 2:** Recipe Categories Migration
-
-### Key Achievements:
-
-1. **Database normalization:** Both preparation and recipe categories now use proper database tables
-2. **Type safety:** All category references use UUID foreign keys
-3. **No hardcoded data:** Categories loaded from database (not constants)
-4. **English UI:** All category names in English
-5. **Consistent pattern:** Both systems follow product_categories pattern
-
-### Next Steps - Production Deployment:
-
-⚠️ **IMPORTANT:** Apply migrations to PROD database before deploying code!
-
-**Migrations to apply on PROD (in order):**
-
-1. Migration 009 (if not already applied) - `migrate_preparations_type_to_uuid`
-2. Migration 010 (if not already applied) - `cleanup_preparations_category_id`
-3. **Migration 011 (NEW)** - `create_recipe_categories`
-4. **Migration 012 (NEW)** - `migrate_recipes_category_to_uuid`
-
-**Pre-migration checks on PROD:**
-
-```sql
--- Check if migration 009 needed (is preparations.type still TEXT?)
-SELECT data_type FROM information_schema.columns
-WHERE table_name = 'preparations' AND column_name = 'type';
-
--- Check if migration 010 needed (does category_id still exist?)
-SELECT column_name FROM information_schema.columns
-WHERE table_name = 'preparations' AND column_name = 'category_id';
-
--- Check current recipes.category type (should be TEXT before migration)
-SELECT data_type FROM information_schema.columns
-WHERE table_name = 'recipes' AND column_name = 'category';
-```
-
-**Apply migrations:**
-
-```bash
-# Method 1: Using Supabase SQL Editor (recommended for PROD)
-# 1. Open Supabase Dashboard → SQL Editor
-# 2. Copy SQL from migration files → Run
-# 3. Verify with post-migration checks
-
-# Method 2: Using Supabase CLI
-npx supabase db push --db-url "postgresql://postgres:[PASSWORD]@[PROD-HOST]:6543/postgres"
-```
-
-**Post-migration verification:**
-
-```sql
--- Verify recipe_categories table exists with 6 categories
-SELECT COUNT(*) FROM recipe_categories;
--- Expected: 6
-
--- Verify recipes.category is UUID
-SELECT data_type FROM information_schema.columns
-WHERE table_name = 'recipes' AND column_name = 'category';
--- Expected: uuid
-
--- Verify no NULL categories
-SELECT COUNT(*) FROM recipes WHERE category IS NULL;
--- Expected: 0
-
--- Check data integrity
-SELECT rc.name, COUNT(r.id) as recipe_count
-FROM recipe_categories rc
-LEFT JOIN recipes r ON r.category = rc.id
-GROUP BY rc.id, rc.name
-ORDER BY recipe_count DESC;
-```
-
----
-
-## 📝 Success Criteria Met:
-
-### Phase 1:
-
-- [x] preparation_categories integrated into recipesStore
-- [x] All preparation type displays use store getters
-- [x] preparations.type column is UUID foreign key
-- [x] No Cyrillic text in UI
+- [x] Logout in one tab immediately logs out all tabs
+- [x] No ghost data visible during page reload
+- [x] All stores properly reset on logout
+- [x] Loading screen shows during session validation
 - [x] No TypeScript errors
-- [x] Works in DEV database
+- [x] All tests passing
 
-### Phase 2:
+### Phase 2 Complete When:
 
-- [x] recipe_categories table created with 6 categories
-- [x] All recipe category displays use store getters
-- [x] recipes.category column is UUID foreign key
-- [x] No Cyrillic text in UI
-- [x] No TypeScript errors
-- [x] Works in DEV database
+- [x] Only Supabase session exists in localStorage
+- [x] No `pin_session` or `kitchen_app_session` keys
+- [x] Both Email and PIN login work correctly
+- [x] Session restoration works from Supabase only
+- [x] No references to AuthSessionService
+- [x] All tests passing
 
-### Ready for Production:
+### Phase 3 Complete When (Optional):
 
-- [x] All migrations tested on DEV
-- [x] All components updated
-- [x] Application runs without errors
-- [x] Migration files documented
-- [ ] **TODO:** Apply migrations to PROD
-- [ ] **TODO:** Deploy code to Vercel
-- [ ] **TODO:** Verify in production
+- [x] Router guard validates session asynchronously
+- [x] Invalid tokens cause immediate redirect
+- [x] No errors shown to user on invalid session
 
 ---
 
-## 🚀 DEPLOYMENT READY
+## ⚠️ IMPORTANT NOTES
 
-The sprint is complete and ready for production deployment! Apply the migrations to PROD database, then deploy the code to Vercel.
+### Breaking Changes
+
+1. **localStorage keys changed:**
+
+   - ❌ Removed: `pin_session`
+   - ❌ Removed: `kitchen_app_session`
+   - ✅ Kept: `sb-*-auth-token` (Supabase session)
+
+2. **AuthSessionService deprecated:**
+
+   - All methods no longer used
+   - File can be deleted after migration
+
+3. **Session restoration:**
+   - No longer supports legacy PIN sessions
+   - Users with old `pin_session` will need to login again
+
+### Migration Notes
+
+**After deployment:**
+
+1. Users will be logged out (expected)
+2. They need to login again with email or PIN
+3. New session will be stored in Supabase only
+4. Cross-tab sync will work immediately
+
+**Rollback plan:**
+
+If critical issues found:
+
+1. Revert commits
+2. Restore old session logic
+3. Users keep their sessions
+
+---
+
+## 📚 Reference Documents
+
+### Related Files
+
+- **Authentication:** `src/stores/auth/authStore.ts`
+- **Session Service:** `src/stores/auth/services/session.service.ts`
+- **App Init:** `src/App.vue`
+- **Router:** `src/router/index.ts`
+- **Supabase Client:** `src/supabase/client.ts`
+
+### Analysis Document
+
+Full analysis with root causes and sequence diagrams available in:
+
+- Task agent output (2025-11-25)
+- See "Authentication and Session Management Analysis" section
+
+---
+
+## 🎉 NEXT STEPS AFTER COMPLETION
+
+### Immediate (Sprint +1)
+
+1. Monitor production for session issues
+2. Collect user feedback on login experience
+3. Check error logs for auth failures
+
+### Future Improvements (Backlog)
+
+1. **Token Refresh Monitoring**
+
+   - Add UI notification when session about to expire
+   - Auto-refresh tokens in background
+   - Show countdown before auto-logout
+
+2. **Multi-Device Session Management**
+
+   - Track active sessions per user
+   - Show "Active Sessions" page in settings
+   - Allow "Logout All Devices" feature
+
+3. **Session Analytics**
+
+   - Track session duration
+   - Monitor login/logout patterns
+   - Detect suspicious activity
+
+4. **Offline Session Handling (POS)**
+   - Handle session expiry while offline
+   - Queue auth state changes
+   - Graceful degradation
+
+---
+
+## ✅ DEPLOYMENT CHECKLIST
+
+### Pre-Deployment
+
+- [ ] All code changes committed
+- [ ] All tests passing
+- [ ] No TypeScript errors
+- [ ] No console errors in DEV
+- [ ] Code reviewed
+
+### Deployment
+
+- [ ] Deploy to Vercel (dev branch first)
+- [ ] Test on dev deployment
+- [ ] Deploy to production (main branch)
+- [ ] Monitor for errors
+
+### Post-Deployment
+
+- [ ] Verify cross-tab logout works
+- [ ] Verify page reload works
+- [ ] Verify both Email and PIN login work
+- [ ] Check error logs
+- [ ] Monitor user feedback
+
+---
+
+**Status:** 📋 Ready for Implementation
+**Next Action:** Start with Phase 1, Task 1.2 (StoreResetService)
