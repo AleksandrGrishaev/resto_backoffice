@@ -15,6 +15,7 @@ import NotFoundView from '@/views/NotFoundView.vue'
 // ===== BACKOFFICE VIEWS =====
 import MenuView from '@/views/menu/MenuView.vue'
 import ProductsView from '@/views/products/ProductsView.vue'
+import RecipesView from '@/views/recipes/RecipesView.vue'
 import StorageView from '@/views/storage/StorageView.vue'
 import PreparationView from '@/views/Preparation/PreparationView.vue'
 import SupplierView from '@/views/supplier_2/SupplierView.vue'
@@ -59,7 +60,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/pos',
     name: 'pos',
-    component: () => import('@/views/pos/PosMainView.vue'),
+    component: PosMainView,
     meta: {
       requiresAuth: true,
       allowedRoles: ['admin', 'cashier'],
@@ -123,7 +124,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'recipes',
         name: 'recipes',
-        component: () => import('@/views/recipes/RecipesView.vue'),
+        component: RecipesView,
         meta: {
           title: 'Recipes',
           allowedRoles: ['admin', 'manager']
