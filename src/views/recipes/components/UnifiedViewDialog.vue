@@ -131,7 +131,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
-import { RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
+import { DIFFICULTY_LEVELS } from '@/stores/recipes/types'
 import type {
   Recipe,
   Preparation,
@@ -261,8 +261,8 @@ function getCategoryText(): string {
     return store.getPreparationCategoryName(prep.type)
   } else {
     const recipe = props.item as Recipe
-    const category = RECIPE_CATEGORIES.find(c => c.value === recipe.category)
-    return category?.text || recipe.category
+    // ✅ Use store getter instead of RECIPE_CATEGORIES constant
+    return store.getRecipeCategoryName(recipe.category)
   }
 }
 

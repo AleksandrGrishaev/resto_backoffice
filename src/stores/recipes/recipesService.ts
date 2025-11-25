@@ -3,6 +3,7 @@
 import type {
   Preparation,
   PreparationCategory,
+  RecipeCategory,
   Recipe,
   MenuRecipeLink,
   Unit,
@@ -264,6 +265,50 @@ export class RecipesService {
       return categories
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error loading preparation categories', error)
+      throw error
+    }
+  }
+
+  /**
+   * ✅ NEW: Get recipe categories from database (Phase 2)
+   */
+  async getRecipeCategories(): Promise<RecipeCategory[]> {
+    if (!isSupabaseAvailable()) {
+      DebugUtils.info(MODULE_NAME, 'Supabase not available, returning empty categories')
+      return []
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('recipe_categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load recipe categories', error)
+        throw error
+      }
+
+      const categories = (data || []).map(row => ({
+        id: row.id,
+        key: row.key,
+        name: row.name,
+        description: row.description,
+        color: row.color,
+        icon: row.icon,
+        sortOrder: row.sort_order,
+        isActive: row.is_active,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }))
+
+      DebugUtils.info(MODULE_NAME, 'Loaded recipe categories', {
+        count: categories.length
+      })
+
+      return categories
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error loading recipe categories', error)
       throw error
     }
   }

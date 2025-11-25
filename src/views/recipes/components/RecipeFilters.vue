@@ -178,36 +178,34 @@ const localActiveTab = computed({
   set: value => emit('update:activeTab', value)
 })
 
-// ✅ ИСПРАВЛЕНО: Правильный подсчет количества с защитой от undefined
+// ✅ ИСПРАВЛЕНО: Используем фактическое количество рецептов
 const recipesCount = computed(() => {
-  const stats = store.statistics.recipes
-  if (!stats) return 0
+  const allRecipes = store.recipes
 
   switch (localFilters.value.status) {
     case 'active':
-      return stats.active || 0
+      return allRecipes.filter(r => r.isActive).length
     case 'archived':
-      return stats.inactive || 0
+      return allRecipes.filter(r => !r.isActive).length
     case 'all':
-      return stats.total || 0
+      return allRecipes.length
     default:
-      return stats.active || 0
+      return allRecipes.filter(r => r.isActive).length
   }
 })
 
 const preparationsCount = computed(() => {
-  const stats = store.statistics.preparations
-  if (!stats) return 0
+  const allPreparations = store.preparations
 
   switch (localFilters.value.status) {
     case 'active':
-      return stats.active || 0
+      return allPreparations.filter(p => p.isActive).length
     case 'archived':
-      return stats.inactive || 0
+      return allPreparations.filter(p => !p.isActive).length
     case 'all':
-      return stats.total || 0
+      return allPreparations.length
     default:
-      return stats.active || 0
+      return allPreparations.filter(p => p.isActive).length
   }
 })
 

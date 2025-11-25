@@ -303,7 +303,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
-import type { Recipe, Preparation, RecipeCategory, PreparationType } from '@/stores/recipes/types'
+import type { Recipe, Preparation, PreparationType } from '@/stores/recipes/types'
 import { DebugUtils } from '@/utils'
 import UnifiedRecipeItem from './components/UnifiedRecipeItem.vue'
 import UnifiedRecipeDialog from './components/UnifiedRecipeDialog.vue'
@@ -354,15 +354,12 @@ const rules = {
 }
 
 // ✅ NEW: Load categories from store
-const recipeCategories = computed(() => [
-  // TODO Phase 2: Use store.activeRecipeCategories
-  { value: 'main_dish', text: 'Main Dishes' },
-  { value: 'side_dish', text: 'Side Dishes' },
-  { value: 'dessert', text: 'Desserts' },
-  { value: 'beverage', text: 'Beverages' },
-  { value: 'appetizer', text: 'Appetizers' },
-  { value: 'sauce', text: 'Sauces' }
-])
+const recipeCategories = computed(() =>
+  store.activeRecipeCategories.map(cat => ({
+    value: cat.id,
+    text: cat.name
+  }))
+)
 
 const preparationTypes = computed(() => [
   { value: 'all', text: 'All Types' },
@@ -381,6 +378,13 @@ const getPreparationCategoryColor = (categoryId: string) =>
 
 const getPreparationCategoryEmoji = (categoryId: string) =>
   store.getPreparationCategoryEmoji(categoryId)
+
+// ✅ Helper functions for recipe categories
+const getRecipeCategoryName = (categoryId: string) => store.getRecipeCategoryName(categoryId)
+
+const getRecipeCategoryColor = (categoryId: string) => store.getRecipeCategoryColor(categoryId)
+
+const getRecipeCategoryIcon = (categoryId: string) => store.getRecipeCategoryIcon(categoryId)
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -470,8 +474,8 @@ function getTotalCount(): number {
 // METHODS FOR CATEGORIZED DATA
 // =============================================
 
-function getCategoryRecipes(category: RecipeCategory): Recipe[] {
-  return filteredRecipes.value.filter(recipe => recipe.category === category)
+function getCategoryRecipes(categoryId: string): Recipe[] {
+  return filteredRecipes.value.filter(recipe => recipe.category === categoryId)
 }
 
 function getTypePreparations(type: string): Preparation[] {

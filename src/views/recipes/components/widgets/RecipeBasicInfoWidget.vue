@@ -210,7 +210,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { RECIPE_CATEGORIES, DIFFICULTY_LEVELS } from '@/stores/recipes/types'
+import { DIFFICULTY_LEVELS } from '@/stores/recipes/types'
 import { useRecipesStore } from '@/stores/recipes'
 
 interface FormData {
@@ -266,7 +266,11 @@ const categoryItems = computed(() => {
       text: cat.name
     }))
   } else {
-    return RECIPE_CATEGORIES
+    // ✅ Use store getters instead of RECIPE_CATEGORIES constant
+    return recipesStore.activeRecipeCategories.map(cat => ({
+      value: cat.id,
+      text: cat.name
+    }))
   }
 })
 

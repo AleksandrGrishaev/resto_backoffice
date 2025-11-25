@@ -101,7 +101,7 @@ export interface Recipe extends BaseEntity {
   name: string
   code: string // ✅ UPDATED: Required field (auto-generated)
   description?: string
-  category: RecipeCategory
+  category: string // UUID (FK to recipe_categories)
   portionSize: number
   portionUnit: string
 
@@ -131,7 +131,8 @@ export interface RecipeComponent {
   notes?: string
 }
 
-export type RecipeCategory =
+// ✅ Updated to match database keys
+export type RecipeCategoryType =
   | 'main_dish'
   | 'side_dish'
   | 'dessert'
@@ -243,7 +244,7 @@ export interface CreateRecipeData {
   name: string
   code: string // ✅ UPDATED: Required field (auto-generated)
   description?: string
-  category: RecipeCategory
+  category: string // UUID (FK to recipe_categories)
   portionSize: number
   portionUnit: string
   prepTime?: number
@@ -331,19 +332,28 @@ export interface PreparationCategory {
 }
 
 // =============================================
+// RECIPE CATEGORY (from database)
+// =============================================
+
+export interface RecipeCategory {
+  id: string
+  key: string
+  name: string
+  description?: string
+  color?: string
+  icon?: string
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// =============================================
 // CONSTANTS
 // =============================================
 
 // ❌ PREPARATION_TYPES removed - now loaded from database via preparation_categories table
-
-export const RECIPE_CATEGORIES = [
-  { value: 'main_dish', text: 'Основные блюда' },
-  { value: 'side_dish', text: 'Гарниры' },
-  { value: 'dessert', text: 'Десерты' },
-  { value: 'beverage', text: 'Напитки' },
-  { value: 'appetizer', text: 'Закуски' },
-  { value: 'sauce', text: 'Соусы' }
-] as const
+// ❌ RECIPE_CATEGORIES removed - now loaded from database via recipe_categories table
 
 export const DIFFICULTY_LEVELS = [
   { value: 'easy', text: 'Легко', color: 'success' },

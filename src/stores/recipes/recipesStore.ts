@@ -19,7 +19,8 @@ import {
   RecipeService,
   MenuRecipeLinkService,
   UnitService,
-  RecipesService
+  RecipesService,
+  recipesService
 } from './recipesService'
 
 import type {
@@ -133,6 +134,27 @@ export const useRecipesStore = defineStore('recipes', () => {
     })
     return grouped
   })
+
+  // ✅ NEW: Recipe category getters
+  const activeRecipeCategories = computed(() =>
+    recipeCategories.value.filter(c => c.isActive).sort((a, b) => a.sortOrder - b.sortOrder)
+  )
+
+  const getRecipeCategoryById = computed(
+    () => (id: string) => recipeCategories.value.find(c => c.id === id)
+  )
+
+  const getRecipeCategoryName = computed(
+    () => (id: string) => recipeCategories.value.find(c => c.id === id)?.name || id
+  )
+
+  const getRecipeCategoryColor = computed(
+    () => (id: string) => recipeCategories.value.find(c => c.id === id)?.color || 'grey'
+  )
+
+  const getRecipeCategoryIcon = computed(
+    () => (id: string) => recipeCategories.value.find(c => c.id === id)?.icon || 'mdi-food'
+  )
 
   // =============================================
   // MAIN ACTIONS
@@ -567,8 +589,7 @@ export const useRecipesStore = defineStore('recipes', () => {
   async function loadRecipeCategories(): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Loading recipe categories...')
-      // TODO: Implement in Phase 2
-      const categories: RecipeCategory[] = []
+      const categories = await recipesService.getRecipeCategories()
       recipeCategories.value = categories
       DebugUtils.store(MODULE_NAME, 'Loaded recipe categories', {
         count: categories.length
@@ -659,13 +680,20 @@ export const useRecipesStore = defineStore('recipes', () => {
     preparationsByType,
     statistics,
 
-    // ✅ NEW: Category computed
+    // ✅ NEW: Preparation category computed
     activePreparationCategories,
     getPreparationCategoryById,
     getPreparationCategoryName,
     getPreparationCategoryColor,
     getPreparationCategoryEmoji,
     preparationsByCategory,
+
+    // ✅ NEW: Recipe category computed
+    activeRecipeCategories,
+    getRecipeCategoryById,
+    getRecipeCategoryName,
+    getRecipeCategoryColor,
+    getRecipeCategoryIcon,
 
     // Main actions
     initialize,
