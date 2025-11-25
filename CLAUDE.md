@@ -55,6 +55,103 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    pnpm seed:products:prod  # PROD database
    ```
 
+## ⚠️ CRITICAL: Database Migrations Policy
+
+**MANDATORY: All database schema changes MUST be accompanied by migration files.**
+
+### Migration Workflow
+
+**When making ANY database changes (DDL operations), you MUST follow this process:**
+
+1. **Test changes on DEV database first** using MCP tools:
+
+   ```typescript
+   mcp__supabase__apply_migration({
+     name: 'descriptive_name',
+     query: 'ALTER TABLE ...'
+   })
+   ```
+
+2. **Create migration file** in `src/supabase/migrations/`:
+
+   - Naming: `NNN_descriptive_name.sql` (e.g., `011_make_codes_required.sql`)
+   - Include full DDL statements
+   - Add validation and rollback logic where possible
+   - Document the purpose and context
+
+3. **Migration file structure:**
+
+   ```sql
+   -- Migration: NNN_descriptive_name
+   -- Description: What this migration does
+   -- Date: YYYY-MM-DD
+   -- Author: Your name
+
+   -- CONTEXT: Why this change is needed
+
+   -- PRE-MIGRATION VALIDATION (if applicable)
+   -- Check data integrity before making changes
+
+   -- ACTUAL CHANGES
+   -- DDL statements here
+
+   -- POST-MIGRATION VALIDATION
+   -- Verify changes were applied correctly
+   ```
+
+4. **Apply to production:**
+   - Review the migration file
+   - Test on a staging/dev branch if possible
+   - Apply manually to production database using Supabase SQL Editor or CLI
+   - Never rely on MCP for production changes (it's connected to DEV only)
+
+### Examples of Changes Requiring Migrations
+
+✅ **ALWAYS create migration files for:**
+
+- Creating/altering/dropping tables
+- Adding/removing/modifying columns
+- Adding/removing constraints (NOT NULL, UNIQUE, FOREIGN KEY, CHECK)
+- Creating/modifying indexes
+- Creating/modifying database functions (RPC)
+- Creating/modifying triggers
+- Updating RLS policies
+- Any other DDL operations
+
+❌ **Do NOT create migration files for:**
+
+- Data seeding (use seed scripts instead)
+- Temporary development queries
+- SELECT queries for data exploration
+
+### Migration File Location
+
+```
+src/supabase/migrations/
+├── 001_initial_schema.sql
+├── 002_add_missing_shift_fields.sql
+├── 003_update_orders_payments_schema.sql
+├── ...
+└── NNN_your_new_migration.sql
+```
+
+### Why This Is Critical
+
+1. **Production Sync**: Production database must stay in sync with development
+2. **Version Control**: All schema changes are tracked in git
+3. **Reproducibility**: New environments can be set up from migration files
+4. **Rollback Capability**: Easier to understand and potentially reverse changes
+5. **Team Collaboration**: Other developers can see what changed and why
+6. **Audit Trail**: Complete history of database evolution
+
+### Common Mistake to Avoid
+
+❌ **BAD**: Use `mcp__supabase__apply_migration` on DEV → forget to create migration file → production gets out of sync
+
+✅ **GOOD**: Use `mcp__supabase__apply_migration` on DEV → create migration file → apply to production using the file
+
+**Remember: MCP tools are for DEV testing only. Migration files are for production deployment.**
+
 ## Documentation Structure
 
 The project uses a structured approach to documentation and task management:

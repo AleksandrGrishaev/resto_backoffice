@@ -49,7 +49,7 @@ const routes: RouteRecordRaw[] = [
         component: LoginView,
         meta: {
           requiresAuth: false,
-          title: 'Вход в систему'
+          title: 'Login'
         }
       }
     ]
@@ -63,7 +63,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       allowedRoles: ['admin', 'cashier'],
-      title: 'POS система'
+      title: 'POS System'
     }
   },
   {
@@ -105,7 +105,7 @@ const routes: RouteRecordRaw[] = [
         name: 'menu',
         component: MenuView,
         meta: {
-          title: 'Управление меню',
+          title: 'Menu Management',
           allowedRoles: ['admin', 'manager']
         }
       },
@@ -115,7 +115,7 @@ const routes: RouteRecordRaw[] = [
         name: 'products',
         component: ProductsView,
         meta: {
-          title: 'Продукты',
+          title: 'Products',
           allowedRoles: ['admin', 'manager']
         }
       },
@@ -125,7 +125,7 @@ const routes: RouteRecordRaw[] = [
         name: 'recipes',
         component: () => import('@/views/recipes/RecipesView.vue'),
         meta: {
-          title: 'Рецепты',
+          title: 'Recipes',
           allowedRoles: ['admin', 'manager']
         }
       },
@@ -135,7 +135,7 @@ const routes: RouteRecordRaw[] = [
         name: 'preparations',
         component: PreparationView,
         meta: {
-          title: 'Полуфабрикаты',
+          title: 'Preparations',
           allowedRoles: ['admin', 'manager']
         }
       },
@@ -145,7 +145,7 @@ const routes: RouteRecordRaw[] = [
         name: 'storage',
         component: StorageView,
         meta: {
-          title: 'Склад',
+          title: 'Storage',
           allowedRoles: ['admin', 'manager']
         }
       },
@@ -155,7 +155,7 @@ const routes: RouteRecordRaw[] = [
         name: 'suppliers',
         component: SupplierView,
         meta: {
-          title: 'Поставщики',
+          title: 'Suppliers',
           allowedRoles: ['admin', 'manager']
         }
       },
@@ -165,7 +165,7 @@ const routes: RouteRecordRaw[] = [
         name: 'counteragents',
         component: CounteragentsView,
         meta: {
-          title: 'Контрагенты',
+          title: 'Counteragents',
           allowedRoles: ['admin', 'manager']
         }
       },
@@ -181,7 +181,7 @@ const routes: RouteRecordRaw[] = [
             name: 'accounts-list',
             component: AccountListView,
             meta: {
-              title: 'Счета'
+              title: 'Accounts'
             }
           },
           {
@@ -189,7 +189,7 @@ const routes: RouteRecordRaw[] = [
             name: 'account-detail',
             component: AccountDetailView,
             meta: {
-              title: 'Детали счета'
+              title: 'Account Details'
             }
           }
         ]
@@ -200,7 +200,7 @@ const routes: RouteRecordRaw[] = [
         name: 'payment-settings',
         component: PaymentSettingsView,
         meta: {
-          title: 'Настройки платежей',
+          title: 'Payment Settings',
           allowedRoles: ['admin']
         }
       },
@@ -305,7 +305,7 @@ const routes: RouteRecordRaw[] = [
     component: UnauthorizedView,
     meta: {
       requiresAuth: true,
-      title: 'Доступ запрещен'
+      title: 'Access Denied'
     }
   },
   {
@@ -313,7 +313,7 @@ const routes: RouteRecordRaw[] = [
     name: 'not-found',
     component: NotFoundView,
     meta: {
-      title: 'Страница не найдена'
+      title: 'Page Not Found'
     }
   }
 ]

@@ -19,12 +19,13 @@
       <v-col cols="12" md="4">
         <v-text-field
           :model-value="formData.code"
-          :label="type === 'preparation' ? 'Code (Required)' : 'Code (Optional)'"
+          label="Code (Required)"
           :placeholder="type === 'preparation' ? 'P-001' : 'R-001'"
-          :rules="type === 'preparation' ? [rules.required, rules.codeFormat] : []"
-          :required="type === 'preparation'"
+          :rules="[rules.required, rules.codeFormat]"
+          required
           variant="outlined"
           density="comfortable"
+          hint="Auto-generated, but can be edited"
           @input="handleCodeInput"
         />
       </v-col>

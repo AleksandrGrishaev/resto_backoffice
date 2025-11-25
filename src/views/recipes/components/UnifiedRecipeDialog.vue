@@ -144,19 +144,28 @@ function updateComponent(index: number, field: string, value: unknown) {
   }
 }
 
+// ✅ NEW: Generate next available code for preparations or recipes
+function generateNextCode(type: 'recipe' | 'preparation'): string {
+  const prefix = type === 'preparation' ? 'P' : 'R'
+  const items =
+    type === 'preparation' ? recipesStore.activePreparations : recipesStore.activeRecipes
+
+  const existingCodes = items
+    .map(item => item.code)
+    .filter(code => code && code.startsWith(`${prefix}-`))
+    .map(code => parseInt(code.split('-')[1]))
+    .filter(num => !isNaN(num))
+
+  const nextNumber = existingCodes.length > 0 ? Math.max(...existingCodes) + 1 : 1
+  return `${prefix}-${String(nextNumber).padStart(3, '0')}`
+}
+
 function handleCategoryChange(category: string) {
   formData.value.category = category
 
-  // Auto-suggest code prefix for preparations
-  if (props.type === 'preparation' && !formData.value.code) {
-    const existingCodes = recipesStore.activePreparations
-      .map(prep => prep.code)
-      .filter(code => code.startsWith('P-'))
-      .map(code => parseInt(code.split('-')[1]))
-      .filter(num => !isNaN(num))
-
-    const nextNumber = existingCodes.length > 0 ? Math.max(...existingCodes) + 1 : 1
-    formData.value.code = `P-${nextNumber}`
+  // Auto-generate code if not in edit mode and code is empty
+  if (!isEditing.value && !formData.value.code) {
+    formData.value.code = generateNextCode(props.type)
   }
 }
 
@@ -255,7 +264,7 @@ function handleCancel() {
 function resetForm() {
   formData.value = {
     name: '',
-    code: '',
+    code: generateNextCode(props.type), // ✅ AUTO-GENERATE: Set next available code
     description: '',
     category: props.type === 'preparation' ? 'sauce' : 'main_dish',
     department: 'kitchen', // ✅ ADD: Default department for new preparations

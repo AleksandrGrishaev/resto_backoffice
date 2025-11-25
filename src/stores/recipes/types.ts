@@ -99,7 +99,7 @@ export type PreparationType =
 
 export interface Recipe extends BaseEntity {
   name: string
-  code?: string
+  code: string // ✅ UPDATED: Required field (auto-generated)
   description?: string
   category: RecipeCategory
   portionSize: number
@@ -241,7 +241,7 @@ export interface PreparationUsageInRecipe {
 
 export interface CreateRecipeData {
   name: string
-  code?: string
+  code: string // ✅ UPDATED: Required field (auto-generated)
   description?: string
   category: RecipeCategory
   portionSize: number

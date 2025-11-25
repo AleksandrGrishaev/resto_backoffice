@@ -39,18 +39,18 @@ export interface PackageOption {
   productId: string
 
   // PACKAGE DESCRIPTION
-  packageName: string // "Пачка 100г", "Бутылка 1л", "Коробка 24шт"
-  packageSize: number // Количество базовых единиц в упаковке
-  packageUnit: MeasurementUnit // Единица упаковки ('pack', 'bottle', 'box')
+  packageName: string // "Pack 100g", "Bottle 1l", "Box 24pcs"
+  packageSize: number // Number of base units in package
+  packageUnit: MeasurementUnit // Package unit ('pack', 'bottle', 'box')
   brandName?: string // "Anchor", "Local Brand"
 
   // ЦЕНЫ (могут быть пустыми при создании)
-  packagePrice?: number // Цена за упаковку (IDR)
+  packagePrice?: number // Price per package (IDR)
   baseCostPerUnit: number // Эталонная цена за базовую единицу (IDR)
 
   // МЕТАДАННЫЕ
   isActive: boolean
-  notes?: string // "Самая выгодная", "Только оптом"
+  notes?: string // "Best value", "Wholesale only"
   createdAt: string
   updatedAt: string
 }
