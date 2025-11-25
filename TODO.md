@@ -1,9 +1,539 @@
 # Kitchen App - TODO
 
-**Last Updated:** 2025-11-25
+**Last Updated:** 2025-01-25
 **Current Branch:** `dev`
 **Project Version:** 0.0.320
-**Current Sprint:** Sprint 2 - Production Readiness (see NextTodo.md)
+**Current Sprint:** Preparation Inventory System (see NextTodo.md)
+
+---
+
+## 🏗️ SYSTEM ARCHITECTURE - Inventory & Sales Flow
+
+### Complete Hierarchy (4 Levels)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ LEVEL 1: RAW PRODUCTS (Сырьё)                                   │
+│ - Purchased from suppliers                                       │
+│ - Stored in warehouse with FIFO batches                         │
+│ - Can be sold directly (if canBeSold = true)                    │
+│ - Examples: Tomatoes, Beef, Rice, Drinks                        │
+└──────────────────────────────────────────────────────────────────┘
+                        ↓ Used in recipes
+┌──────────────────────────────────────────────────────────────────┐
+│ LEVEL 2: PREPARATIONS (Полуфабрикаты)                           │
+│ - Made from Products (recipe = list of products)                │
+│ - Stored in preparation batches with FIFO                       │
+│ - Have shelf life (kitchen: 2 days, bar: 7 days)                │
+│ - Cannot be sold directly                                        │
+│ - Examples: Burger Sauce, Pizza Dough, Marinated Meat           │
+└──────────────────────────────────────────────────────────────────┘
+                        ↓ Used in recipes
+┌──────────────────────────────────────────────────────────────────┐
+│ LEVEL 3: DISHES (Блюда)                                         │
+│ - Made from Preparations + Products                              │
+│ - Recipe composition can include both:                           │
+│   • Preparations (e.g., 100g Burger Sauce)                      │
+│   • Products (e.g., 200g Beef Patty)                            │
+│ - Cannot be sold directly (not in sales system)                 │
+│ - Examples: Burger, Pizza Margherita, Caesar Salad              │
+└──────────────────────────────────────────────────────────────────┘
+                        ↓ Used in menu
+┌──────────────────────────────────────────────────────────────────┐
+│ LEVEL 4: MENU ITEMS (Позиции меню)                              │
+│ - Created from Dishes + Products (canBeSold = true)             │
+│ - This is what customers see and order                           │
+│ - Examples:                                                      │
+│   • "Classic Burger" (dish) + "Coke" (product)                  │
+│   • "Pizza Margherita" (dish) + "Extra Cheese" (product)        │
+│ - Sold through POS system                                        │
+└──────────────────────────────────────────────────────────────────┘
+                        ↓ Order placed
+┌──────────────────────────────────────────────────────────────────┐
+│ REVERSE DECOMPOSITION (POS Sales)                               │
+│                                                                  │
+│ Customer orders "Classic Burger"                                 │
+│         ↓                                                        │
+│ Menu Item → Dish ("Burger") + Product ("Coke")                  │
+│         ↓                                                        │
+│ Dish → Preparations + Products                                   │
+│   • Burger Sauce (100g preparation)                             │
+│   • Beef Patty (200g product)                                   │
+│   • Bun (2 pcs product)                                         │
+│         ↓                                                        │
+│ WRITE-OFF DECISION:                                             │
+│                                                                  │
+│ Option A (Current/Simple):                                      │
+│   - Decompose preparations → raw products                        │
+│   - Write off only raw products                                  │
+│   - Preparation batches not consumed                             │
+│                                                                  │
+│ Option B (Future/Ideal):                                        │
+│   - Check preparation stock                                      │
+│   - If available → consume from prep batches (FIFO)             │
+│   - If not → decompose to raw products                          │
+│                                                                  │
+│ Result: Storage/Preparation batches updated (FIFO)              │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Key Rules
+
+1. **Production Flow (Forward):**
+
+   ```
+   Products → Preparations → Dishes → Menu Items
+   ```
+
+2. **Sales Flow (Reverse Decomposition):**
+
+   ```
+   Menu Item → Dish + Products → Preparations + Products → Raw Products
+   ```
+
+3. **Write-off Points:**
+
+   - **Production:** Products written off when making Preparations ✅ (Sprint 1)
+   - **Sales:** Products/Preparations written off when selling Menu Items 🔄 (Sprint 2)
+
+4. **Direct Sales Exceptions:**
+   - Products with `canBeSold = true` can be added to menu directly
+   - Examples: Drinks, Desserts, Packaged items
+   - These skip Dish/Preparation levels
+
+---
+
+## 🎯 SPRINT 1: Preparation Production with Auto Write-off
+
+**Status:** 🚀 In Progress
+**Duration:** 2 days
+**Goal:** Implement automatic raw product write-off when producing preparations + UI for batch creation
+
+### Sprint 1 Scope
+
+**What we're building:**
+
+- Products → Preparations (forward flow only)
+- Auto write-off of raw products when making prep batches
+- Dynamic expiry calculation (production_date + shelf_life)
+- UI for creating new preparation batches with preview
+
+**What we're NOT building (Sprint 2):**
+
+- Menu Item decomposition
+- Sales consumption tracking (reverse flow)
+- POS integration
+- WriteOffHistoryView integration
+
+### Sprint 1 Phases
+
+#### Phase 0: Database Migration ✅
+
+- [x] Create migration file `012_add_preparation_shelf_life.sql`
+- [ ] Apply to DEV database via MCP
+- [ ] Test migration on production
+- [ ] Verify data integrity
+
+**Changes:**
+
+- Add `shelf_life` column to `preparations` table
+- Add `related_preparation_operation_id` to `storage_operations`
+- Create performance index
+- Backfill shelf_life (kitchen: 2 days, bar: 7 days)
+
+#### Phase 1: Auto Write-off + UI 🔥
+
+- [ ] Update `preparationService.createReceipt()` with auto write-off logic
+- [ ] Update `storageService.createWriteOff()` to support `production_consumption` reason
+- [ ] Update `AddPreparationProductionItemDialog.vue`:
+  - [ ] Auto-calculate expiry based on shelf_life
+  - [ ] Show raw products preview (what will be written off)
+  - [ ] Add warning if no recipe defined
+- [ ] Update TypeScript types (`WriteOffReason`, `StorageOperation`, `Preparation`)
+- [ ] Add error handling and transaction rollback
+- [ ] Test with real recipes
+
+**Key Features:**
+
+- Decompose preparation recipe → raw products
+- Auto write-off products from storage (FIFO)
+- Create preparation batch
+- Link operations via `related_preparation_operation_id`
+
+#### Phase 2: Dynamic Expiry Calculation
+
+- [ ] Update `preparationStore` getters to calculate expiry dynamically
+- [ ] Add `calculateExpiryDate()` helper
+- [ ] Add `calculateRemainingShelfLife()` helper
+- [ ] Add `isBatchExpired()` helper
+- [ ] Add `getBatchesExpiringSoon()` helper
+- [ ] Update all UI components to use computed expiry
+- [ ] Remove hardcoded expiry calculations
+
+**Formula:** `expiry_date = production_date + preparation.shelf_life days`
+
+### Sprint 1 Success Criteria
+
+1. ✅ **Auto write-off on production:** Raw products automatically deducted when making preparations
+2. ✅ **No double write-off:** Products written off once (during production, not again during sales)
+3. ✅ **Recipe decomposition:** Preparation recipes properly decomposed to raw products
+4. ✅ **Linked operations:** Storage write-offs linked to prep operations for audit trail
+5. ✅ **Dynamic expiry:** Expiry calculated on-the-fly, not stored in database
+6. ✅ **UI preview:** Users see what products will be written off before confirming
+7. ✅ **Type safety:** All TypeScript types updated and synchronized
+
+### Sprint 1 Deliverables
+
+**Database:**
+
+- Migration applied to DEV and production
+- `preparations.shelf_life` column populated
+- `storage_operations.related_preparation_operation_id` ready
+
+**Backend:**
+
+- `preparationService.createReceipt()` with auto write-off
+- `storageService.createWriteOff()` supporting new reasons
+- Dynamic expiry calculation in `preparationStore`
+
+**Frontend:**
+
+- Enhanced `AddPreparationProductionItemDialog` with preview
+- Auto-calculated expiry dates
+- Warning for preparations without recipes
+
+**Types:**
+
+- `WriteOffReason` type updated (+ `production_consumption`)
+- `StorageOperation` interface updated (+ `related_preparation_operation_id`)
+- `Preparation` interface updated (+ `shelfLife`)
+
+---
+
+## 🎯 SPRINT 2: Sales Consumption via Reverse Decomposition
+
+**Status:** 📋 Planned
+**Duration:** 3-4 days
+**Goal:** Implement Menu → Dish → Prep/Products decomposition for POS sales with hybrid consumption
+
+### Sprint 2 Context
+
+**The Problem:**
+Currently when selling through POS, we decompose all the way to raw products:
+
+```
+Menu Item → Dish → Preparation → Raw Products (write-off)
+```
+
+But preparations exist as batches! We should consume from prep batches when available:
+
+```
+Menu Item → Dish → Preparation (check stock) → Consume prep batch OR decompose to products
+```
+
+**The Solution:**
+Implement **reverse decomposition** with **hybrid consumption strategy**:
+
+- If preparation batch available → consume from prep_batches (FIFO)
+- If not available → decompose prep → consume raw products (FIFO)
+
+### Sprint 2 Architecture
+
+#### Current Flow (Needs Update)
+
+```typescript
+// src/stores/pos/orders/composables/useKitchenDecomposition.ts
+Menu Item → Dish composition → Preparations → Products
+                                      ↓
+                              Recursively decompose prep.recipe
+                                      ↓
+                              Final result: Only raw products
+```
+
+**Problem:** Preparations always decomposed, batches never consumed
+
+#### Target Flow (Sprint 2)
+
+```typescript
+Menu Item → Dish + Direct Products
+    ↓
+Dish → Preparations + Products
+    ↓
+For each Preparation:
+  - Check prep batch stock (preparationStore.getBalance())
+  - If available: Consume from preparation_batches (FIFO)
+  - If not: Decompose to raw products → Consume from storage (FIFO)
+
+For each Product:
+  - Consume from storage_batches (FIFO)
+```
+
+### Sprint 2 Phases
+
+#### Phase 1: Menu Item Decomposition (Day 1)
+
+**Goal:** Update decomposition logic to handle Menu Items
+
+**Tasks:**
+
+- [ ] Analyze current `useKitchenDecomposition.ts` structure
+- [ ] Add Menu Item support to decomposition
+- [ ] Separate decomposition layers:
+  - [ ] Menu Item → Dish + Products
+  - [ ] Dish → Preparations + Products
+  - [ ] Preparation → (stock check) → Prep batch OR Products
+- [ ] Update `DecompositionItem` interface to track entity type
+- [ ] Add tests for multi-level decomposition
+
+**Files:**
+
+- `src/stores/pos/orders/composables/useKitchenDecomposition.ts`
+- `src/stores/menu/types.ts` (if needed)
+
+#### Phase 2: Preparation Stock Checking (Day 1-2)
+
+**Goal:** Add real-time preparation batch stock checking
+
+**Tasks:**
+
+- [ ] Create `usePreparationStockCheck.ts` composable:
+  - [ ] `checkPreparationStock(prepId, quantity, department)` → boolean
+  - [ ] `getAvailableBatches(prepId, department)` → PreparationBatch[]
+  - [ ] `canFulfillFromStock(prepId, quantity)` → { available: boolean, shortage: number }
+- [ ] Integrate with `preparationStore.getBalance()`
+- [ ] Add department filtering (kitchen/bar)
+- [ ] Handle edge cases (negative balance, expired batches)
+
+**Files:**
+
+- `src/stores/preparation/composables/usePreparationStockCheck.ts` (NEW)
+- `src/stores/preparation/preparationStore.ts`
+
+#### Phase 3: Hybrid Consumption Logic (Day 2)
+
+**Goal:** Implement smart consumption (prep batches OR raw products)
+
+**Tasks:**
+
+- [ ] Create `useHybridConsumption.ts` composable:
+  - [ ] `consumePreparation(prepId, quantity, orderId)` → ConsumptionResult
+  - [ ] Try prep batches first (FIFO)
+  - [ ] Fallback to raw product decomposition if needed
+  - [ ] Track consumption source (prep_batch vs raw_products)
+- [ ] Create consumption operations:
+  - [ ] `preparation_operations` (type: consumption) when using batches
+  - [ ] `storage_operations` (type: write_off, reason: sales_consumption) when using products
+- [ ] Link consumption to order (for audit trail)
+- [ ] Handle partial stock scenarios
+
+**Files:**
+
+- `src/stores/preparation/composables/useHybridConsumption.ts` (NEW)
+- `src/stores/preparation/preparationService.ts`
+- `src/stores/storage/storageService.ts`
+
+**Consumption Decision Tree:**
+
+```typescript
+async function consumePreparation(prepId: string, quantity: number, orderId: string) {
+  // 1. Check prep batch stock
+  const { available, shortage } = await checkPreparationStock(prepId, quantity)
+
+  if (available) {
+    // 2a. Consume from prep batches (FIFO)
+    return await consumeFromPrepBatches(prepId, quantity, orderId)
+  } else if (shortage === quantity) {
+    // 2b. No stock at all → decompose to raw products
+    return await consumeFromRawProducts(prepId, quantity, orderId)
+  } else {
+    // 2c. Partial stock → hybrid approach
+    // Use what's available from batches, rest from raw products
+    const fromBatches = await consumeFromPrepBatches(prepId, available, orderId)
+    const fromProducts = await consumeFromRawProducts(prepId, shortage, orderId)
+    return { ...fromBatches, ...fromProducts }
+  }
+}
+```
+
+#### Phase 4: POS Integration (Day 3)
+
+**Goal:** Integrate hybrid consumption with POS order flow
+
+**Tasks:**
+
+- [ ] Update `ordersStore.confirmOrder()`:
+  - [ ] Decompose order items
+  - [ ] Group by entity type (preparations vs products)
+  - [ ] Consume preparations via `useHybridConsumption`
+  - [ ] Consume products via existing logic
+- [ ] Add consumption tracking to order metadata
+- [ ] Show consumption details in order view
+- [ ] Handle consumption errors gracefully
+- [ ] Test with real POS orders
+
+**Files:**
+
+- `src/stores/pos/orders/ordersStore.ts`
+- `src/views/pos/order/OrderSection.vue`
+
+#### Phase 5: WriteOffHistoryView Integration (Day 3-4)
+
+**Goal:** Show all write-offs in unified view
+
+**Tasks:**
+
+- [ ] Update `WriteOffHistoryView.vue`:
+  - [ ] Add "Source" filter (Sales, Production, Storage, Preparations)
+  - [ ] Add "Reason" filter (dynamic based on source)
+  - [ ] Fetch from multiple tables:
+    - [ ] `recipe_writeoffs` (existing sales)
+    - [ ] `storage_operations` (production + sales consumption)
+    - [ ] `preparation_operations` (preparation consumption)
+  - [ ] Unified data model for display
+  - [ ] Sort by date (most recent first)
+- [ ] Update `WriteOffDetailDialog.vue`:
+  - [ ] Show linked operations (prep operation → storage write-off)
+  - [ ] Show consumption source (prep_batch vs raw_products)
+  - [ ] Show FIFO allocation details
+  - [ ] Cost breakdown
+- [ ] Add color coding for write-off types
+- [ ] Add export functionality
+
+**Files:**
+
+- `src/views/backoffice/inventory/WriteOffHistoryView.vue`
+- `src/views/backoffice/inventory/components/WriteOffDetailDialog.vue`
+
+**Unified Write-off Interface:**
+
+```typescript
+interface UnifiedWriteOffRecord {
+  id: string
+  date: string
+  source: 'sales' | 'production' | 'storage' | 'preparation'
+  reason: WriteOffReason
+  affectsKPI: boolean
+  department: string
+  totalCost: number
+  items: WriteOffItem[]
+  relatedTo?: {
+    type: 'order' | 'preparation_operation' | 'storage_operation'
+    id: string
+    reference: string // Order number, document number, etc.
+  }
+}
+```
+
+#### Phase 6: Testing & Validation (Day 4)
+
+**Goal:** Ensure no double write-offs, correct FIFO behavior
+
+**Tasks:**
+
+- [ ] Integration tests:
+  - [ ] Production flow: products → prep batch (Sprint 1)
+  - [ ] Sales flow: menu → dish → prep/products → consumption
+  - [ ] Hybrid consumption: partial prep stock scenario
+  - [ ] FIFO allocation: oldest batches used first
+  - [ ] No double write-off: products written off once
+- [ ] Manual testing:
+  - [ ] Create prep batch (verify auto write-off)
+  - [ ] Sell menu item with prep (verify consumption)
+  - [ ] Sell when no prep stock (verify fallback to products)
+  - [ ] Check WriteOffHistoryView (verify all sources visible)
+- [ ] Edge case testing:
+  - [ ] Expired prep batches (skip in FIFO)
+  - [ ] Negative balance handling
+  - [ ] Concurrent orders (race conditions)
+  - [ ] Order cancellation (rollback consumption)
+
+### Sprint 2 Success Criteria
+
+1. ✅ **Menu decomposition:** Menu Items correctly decomposed to Dishes + Products
+2. ✅ **Hybrid consumption:** System checks prep stock first, falls back to raw products
+3. ✅ **FIFO allocation:** Both prep batches and raw products consumed in FIFO order
+4. ✅ **No double write-off:** Products written off during production, NOT again during sales
+5. ✅ **Linked operations:** All consumptions linked to orders for audit trail
+6. ✅ **Unified history:** WriteOffHistoryView shows all write-off types
+7. ✅ **Real-time stock:** Prep batches and raw products updated immediately on sale
+8. ✅ **Error handling:** Graceful fallback if prep stock runs out mid-order
+
+### Sprint 2 Deliverables
+
+**Backend:**
+
+- `useHybridConsumption.ts` composable
+- `usePreparationStockCheck.ts` composable
+- Updated `useKitchenDecomposition.ts` (Menu Item support)
+- Consumption operations creation (prep + storage)
+
+**Frontend:**
+
+- Updated `WriteOffHistoryView.vue` (unified view)
+- Updated `WriteOffDetailDialog.vue` (linked operations)
+- POS order view with consumption details
+
+**Database:**
+
+- New operation types: `preparation_operations.type = 'consumption'`
+- New write-off reason: `storage_operations.write_off_details.reason = 'sales_consumption'`
+
+**Testing:**
+
+- Integration test suite
+- Manual test scenarios
+- Edge case coverage
+
+### Sprint 2 Technical Challenges
+
+**Challenge 1: FIFO Allocation Complexity**
+
+- Need to allocate across multiple batches
+- Handle partial quantities
+- Skip expired batches
+- Solution: Reuse existing FIFO logic from `preparationService.ts`
+
+**Challenge 2: Atomic Operations**
+
+- Multiple write-offs in single order
+- Need transaction-like behavior
+- Rollback on failure
+- Solution: Wrap in try/catch, revert on error
+
+**Challenge 3: Performance**
+
+- Real-time stock checking on every order
+- Multiple database queries
+- Solution: Batch queries, cache prep balances
+
+**Challenge 4: Mixed Consumption Tracking**
+
+- Some orders use prep batches, some use products
+- Need clear audit trail
+- Solution: Store consumption_source in operation metadata
+
+### Sprint 2 Migration Path
+
+**From Current State:**
+
+```
+Menu Item → Dish → Prep → Products (recursive) → Write-off products
+```
+
+**To Target State:**
+
+```
+Menu Item → Dish → Prep (check stock) → {
+  IF stock: Write-off prep batch
+  ELSE: Write-off products
+}
+```
+
+**Backward Compatibility:**
+
+- Old orders: Continue to work (already decomposed)
+- New orders: Use hybrid consumption
+- No data migration needed
 
 ---
 

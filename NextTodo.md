@@ -1,1369 +1,778 @@
-# Next Sprint - Authentication & Session Management Refactoring
+# 📋 SPRINT 1: Preparation Production with Auto Write-off
 
-**Created:** 2025-11-25
-**Priority:** Critical
-**Status:** ✅ COMPLETED | 🎉 All Critical Issues Fixed
+**Sprint Goal:** Implement automatic raw product write-off when producing preparations + UI for batch creation.
 
----
+**Status:** 🎯 FINAL SPECIFICATION | Ready for Implementation
 
-## 🎯 Sprint Goal
-
-> **Refactor authentication and session management to fix critical bugs with logout, session persistence, and cross-tab synchronization**
->
-> **Key principles:**
->
-> - ✅ Single source of truth for sessions (Supabase only)
-> - ✅ Proper cross-tab synchronization
-> - ✅ Complete state cleanup on logout
-> - ✅ No race conditions in initialization
-> - ✅ Support both Email and PIN authentication
+**Scope:** Production flow only (Products → Preparations). Sales consumption in Sprint 2.
 
 ---
 
-## 🔍 Problem Statement
+## 🔍 EXECUTIVE SUMMARY
 
-### Issues RESOLVED ✅
+### Critical Findings from Deep Analysis
 
-1. **✅ Ghost Data on Page Reload** - FIXED
+✅ **Database Infrastructure:** Fully ready
 
-   - Added proper loading overlay during session validation
-   - Removed `immediate: true` from authentication watcher
-   - Async session validation before store loading
-   - No more race conditions
+- `preparation_ingredients` table EXISTS with recipe data
+- `preparation_batches` with FIFO tracking EXISTS
+- `preparation_operations` with write-off support EXISTS
+- FIFO allocation logic IMPLEMENTED in `preparationService.ts`
 
-2. **✅ Cross-Tab Logout Not Working** - FIXED
+❌ **Missing Auto Write-off on Production**
 
-   - Implemented `StorageEvent` listener for localStorage changes
-   - Added logout broadcast mechanism via `kitchen_app_logout_broadcast`
-   - Detects both Supabase token removal and explicit broadcasts
-   - All tabs now logout synchronously
+- Raw products NOT automatically written off when producing preparations
+- Manual process creates data inconsistency
+- **This is THE priority fix**
 
-3. **✅ Incomplete Logout State Cleanup** - FIXED
+❌ **No Preparation Consumption in POS**
 
-   - Created centralized `resetAllStores()` function
-   - Resets all 15 Pinia stores (backoffice, POS, kitchen)
-   - Complete state cleanup before redirect
-   - Proper cross-tab logout synchronization
+- Orders decompose preparations → raw products (again)
+- Would cause double write-off if production auto-write-off enabled
+- Need hybrid approach: consume prep stock OR fallback to raw products
 
-4. **✅ Triple Session Storage Conflicts** - FIXED
+✅ **WriteOffHistoryView Integration Point**
 
-   - Removed AuthSessionService dependencies completely
-   - Only Supabase session remains in localStorage
-   - Deprecated legacy session services
-   - Single source of truth for authentication
-
-5. **No Token Refresh Monitoring**
-   - Session expires but user not notified
-   - No automatic token refresh before expiry
+- Existing view at `/inventory/write-offs` shows sales decomposition
+- Can integrate preparation consumption records
+- Detail dialog shows decomposition items
 
 ---
 
-## 📊 Current Architecture Analysis
+## 📊 CURRENT SYSTEM ARCHITECTURE
 
-### Session Storage (Before Refactoring)
-
-```
-┌─────────────────────────────────────────────────┐
-│              Current Session Storage             │
-├─────────────────────────────────────────────────┤
-│                                                  │
-│  1. Supabase Session (localStorage)             │
-│     Key: sb-*-auth-token                        │
-│     Managed by: @supabase/supabase-js           │
-│                                                  │
-│  2. PIN Session (localStorage)                  │
-│     Key: pin_session                            │
-│     Managed by: authStore                       │
-│                                                  │
-│  3. Session Service (localStorage)              │
-│     Key: kitchen_app_session                    │
-│     Managed by: AuthSessionService              │
-│                                                  │
-└─────────────────────────────────────────────────┘
-```
-
-**Problems:**
-
-- Multiple sources of truth
-- No clear hierarchy
-- Can get out of sync
-- Complex restoration logic
-
-### Target Architecture (After Refactoring)
+### Three-Tier Inventory System
 
 ```
-┌─────────────────────────────────────────────────┐
-│              New Session Storage                 │
-├─────────────────────────────────────────────────┤
-│                                                  │
-│  ✅ Supabase Session (localStorage)             │
-│     Key: sb-*-auth-token                        │
-│     Managed by: @supabase/supabase-js           │
-│     Single source of truth                      │
-│                                                  │
-│  ✅ Cross-Tab Sync (localStorage event)         │
-│     Key: kitchen_app_logout_broadcast           │
-│     Managed by: authStore                       │
-│     Coordinates logout across tabs              │
-│                                                  │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ TIER 1: RAW PRODUCTS (storage_operations)               │
+│ ✅ Incoming receipts from suppliers                      │
+│ ✅ Manual write-offs (expired, damaged)                  │
+│ ❌ Auto write-offs for prep production (MISSING!)        │
+│ ✅ FIFO batch tracking (storage_batches)                 │
+└──────────────────────────────────────────────────────────┘
+                     ↓ Consumed by production
+┌──────────────────────────────────────────────────────────┐
+│ TIER 2: PREPARATIONS (preparation_operations)           │
+│ ✅ Production receipts (batch creation)                  │
+│ ✅ Manual write-offs (expired, spoiled)                  │
+│ ❌ Consumption from orders (MISSING!)                    │
+│ ✅ FIFO batch tracking (preparation_batches)             │
+└──────────────────────────────────────────────────────────┘
+                     ↓ Consumed by orders (future)
+┌──────────────────────────────────────────────────────────┐
+│ TIER 3: SALES (recipe_writeoffs)                        │
+│ ✅ Auto write-offs on order fulfillment                  │
+│ ✅ Decomposition from menu → preparations/products       │
+│ ✅ Tracked in WriteOffHistoryView                        │
+└──────────────────────────────────────────────────────────┘
 ```
 
-**Benefits:**
+### Database Schema (Verified via MCP)
 
-- Single source of truth (Supabase)
-- Simple restoration logic
-- Cross-tab synchronization
-- Both Email and PIN use same session mechanism
+**preparation_ingredients** (recipe storage):
+
+```sql
+✅ id: text (PK)
+✅ preparation_id: uuid → FK to preparations
+✅ type: text (always 'product')
+✅ product_id: uuid → FK to products
+✅ quantity: numeric
+✅ unit: text
+✅ sort_order: integer
+```
+
+**preparations** table:
+
+```sql
+✅ id, name, code, description
+✅ output_quantity, output_unit
+✅ cost_per_portion (calculated from recipe)
+✅ department (kitchen/bar)
+❌ shelf_life (MISSING - only in TypeScript)
+```
+
+**preparation_batches** table:
+
+```sql
+✅ production_date, expiry_date
+✅ initial_quantity, current_quantity
+✅ cost_per_unit
+✅ status (active, expired, depleted, written_off)
+✅ department (kitchen/bar)
+```
+
+**preparation_operations** table:
+
+```sql
+✅ operation_type (receipt, correction, inventory, write_off)
+✅ items: jsonb (FIFO allocations)
+✅ write_off_details: jsonb
+✅ total_value, document_number
+```
 
 ---
 
-## 📋 PHASE 1: Critical Fixes
+## 🏗️ SYSTEM CONTEXT
 
-### Task 1.1: Implement Cross-Tab Logout Synchronization
+See `todo.md` for complete system architecture (4 levels: Products → Preparations → Dishes → Menu Items).
 
-**Priority:** Critical
-**Estimated Time:** 1 hour
+**This Sprint:** Focus on Level 1 → Level 2 (Products → Preparations)
 
-**File:** `src/stores/auth/authStore.ts`
+**Production Flow:**
 
-**Current Problem:**
+```
+Raw Products (storage) → Make Preparation → Preparation Batch (FIFO)
+                ↓
+        Auto write-off products (FIFO)
+```
 
-- Logout in Tab A doesn't affect Tab B
-- No event listener for storage changes
-- Each tab has independent session state
+**Next Sprint:** Level 4 → Level 1/2 (Menu Items → Products/Preparations via reverse decomposition)
 
-**Solution:**
-Add `StorageEvent` listener to detect logout in other tabs.
+---
 
-**Implementation:**
+## 🎯 SPRINT 1 SCOPE
 
-1. **Add cross-tab constants** (after imports, line ~15):
+### User Requirements (From Discussion)
+
+1. ✅ **Dynamic expiry calculation:** `production_date + base_shelf_life` (not stored separately)
+2. ✅ **Auto write-off raw products:** When producing preparation
+3. ✅ **UI for batch creation:** Button to add new preparation batch with preview
+4. ✅ **Keep logic under the hood:** Centralize in services/composables
+
+### Out of Scope (Sprint 2)
+
+- ❌ Menu Item decomposition
+- ❌ Sales consumption tracking
+- ❌ WriteOffHistoryView integration (will add in Sprint 2)
+- ❌ POS integration
+
+---
+
+## Phase 0: Database Schema Updates ⏳
+
+**Goal:** Add `shelf_life` column, prepare for auto write-off integration
+
+### Migration: `012_add_preparation_shelf_life.sql`
+
+```sql
+-- Migration: 012_add_preparation_shelf_life
+-- Description: Add shelf_life column and prepare for auto write-off integration
+-- Date: 2025-01-25
+-- Author: Kitchen App Team
+
+-- 1. Add shelf_life column to preparations
+ALTER TABLE preparations
+ADD COLUMN shelf_life INTEGER NOT NULL DEFAULT 2;
+
+COMMENT ON COLUMN preparations.shelf_life IS
+'Base shelf life in days after production. Used to calculate expiry_date dynamically: production_date + shelf_life days.';
+
+-- 2. Backfill with sensible defaults
+UPDATE preparations SET shelf_life = 2 WHERE department = 'kitchen';
+UPDATE preparations SET shelf_life = 7 WHERE department = 'bar';
+
+-- 3. Add related_operation_id to storage_operations (link prep production to raw product write-off)
+ALTER TABLE storage_operations
+ADD COLUMN related_preparation_operation_id uuid REFERENCES preparation_operations(id);
+
+COMMENT ON COLUMN storage_operations.related_preparation_operation_id IS
+'Link to preparation_operations when storage write-off is triggered by preparation production.';
+
+-- 4. Add index for performance
+CREATE INDEX idx_storage_operations_related_prep
+ON storage_operations(related_preparation_operation_id)
+WHERE related_preparation_operation_id IS NOT NULL;
+
+-- 5. Update write_off_details to support new reasons (application logic only, no schema change)
+-- New reasons: 'production_consumption', 'sales_consumption'
+```
+
+### TypeScript Type Updates
+
+**File:** `src/stores/storage/types.ts`
 
 ```typescript
-// Cross-tab synchronization constants
-const LOGOUT_BROADCAST_KEY = 'kitchen_app_logout_broadcast'
-const SESSION_CHECK_INTERVAL = 5000 // 5 seconds
+export type WriteOffReason =
+  | 'expired'
+  | 'spoiled'
+  | 'damaged'
+  | 'theft'
+  | 'production_consumption' // ✨ NEW - raw products consumed for prep production
+  | 'sales_consumption' // ✨ NEW - preparations/products consumed for sales
+  | 'other'
+  | 'education'
+  | 'test'
+
+export const WRITE_OFF_CLASSIFICATION = {
+  KPI_AFFECTING: ['expired', 'spoiled', 'damaged', 'theft', 'other'],
+  NON_KPI_AFFECTING: ['production_consumption', 'sales_consumption', 'education', 'test']
+}
+
+export interface StorageOperation {
+  // Existing fields...
+  related_preparation_operation_id?: string // ✨ NEW - link to prep operation
+}
 ```
 
-2. **Add setupCrossTabSync() method** (after initialize(), line ~75):
+**File:** `src/stores/preparation/types.ts`
 
 ```typescript
-/**
- * Setup cross-tab synchronization for logout events
- * Listens for storage changes in other tabs and reacts to logout
- */
-function setupCrossTabSync() {
-  // Listen for storage events (fired only in OTHER tabs, not the one that made the change)
-  window.addEventListener('storage', (event: StorageEvent) => {
-    // Case 1: Supabase token removed (direct logout)
-    if (event.key?.startsWith('sb-') && event.key.includes('auth-token') && !event.newValue) {
-      DebugUtils.info(MODULE_NAME, '🔄 Logout detected in another tab (Supabase token removed)')
-      handleCrossTabLogout()
+export interface Preparation {
+  // Existing fields...
+  shelfLife: number // ✨ Now backed by database column
+}
+
+export interface PreparationBatch {
+  // Existing fields...
+  // Note: expiry_date calculated dynamically, not separate field
+  expiryDate: string // Computed: production_date + preparation.shelf_life days
+}
+```
+
+### Tasks:
+
+- [ ] Create migration file
+- [ ] Apply to DEV database via MCP `mcp__supabase__apply_migration`
+- [ ] Test on production (manual via Supabase SQL Editor)
+- [ ] Update TypeScript types
+- [ ] Verify existing data integrity
+
+### Deliverables:
+
+- ✅ Migration file created and documented
+- ✅ Applied to DEV database
+- ✅ Applied to production database
+- ✅ TypeScript types synchronized
+- ✅ No data corruption
+
+---
+
+## Phase 1: Auto Write-off on Preparation Production 🔥 PRIORITY
+
+**Goal:** When preparation is produced, automatically write off raw products from storage using recipe decomposition.
+
+### 1.1 Update preparationService.ts
+
+**File:** `src/stores/preparation/preparationService.ts`
+
+**Current flow:**
+
+```typescript
+createReceipt(data) {
+  // 1. Create preparation_batches entries
+  // 2. Create preparation_operations (type: receipt)
+  // ❌ Does NOT write off raw products
+}
+```
+
+**New flow:**
+
+```typescript
+async function createReceipt(data: CreatePreparationReceiptData) {
+  const operations: PreparationOperation[] = []
+  const storageWriteOffIds: string[] = []
+
+  for (const item of data.items) {
+    // 1. Get preparation with recipe
+    const preparation = await recipesStore.getPreparation(item.preparationId)
+    if (!preparation || !preparation.recipe || preparation.recipe.length === 0) {
+      throw new Error(`No recipe found for preparation ${item.preparationId}`)
     }
 
-    // Case 2: Explicit logout broadcast
-    if (event.key === LOGOUT_BROADCAST_KEY && event.newValue) {
-      DebugUtils.info(MODULE_NAME, '🔄 Logout broadcast received from another tab')
-      handleCrossTabLogout()
-    }
+    // 2. Calculate raw product quantities needed
+    const multiplier = item.quantity / preparation.outputQuantity
+    const rawProductItems = preparation.recipe.map(ingredient => ({
+      itemId: ingredient.id, // product_id from preparation_ingredients
+      itemType: 'product' as const,
+      quantity: ingredient.quantity * multiplier,
+      unit: ingredient.unit,
+      notes: `Production: ${preparation.name} (${item.quantity}${preparation.outputUnit})`
+    }))
+
+    // 3. ✨ NEW: Auto write-off raw products from storage
+    const storageWriteOff = await storageService.createWriteOff({
+      department: data.department,
+      responsiblePerson: data.responsiblePerson,
+      operationDate: data.operationDate,
+      reason: 'production_consumption', // ✨ NEW reason type
+      items: rawProductItems,
+      notes: `Auto write-off for preparation production: ${preparation.name}`,
+      affectsKPI: false // Production consumption is not waste
+    })
+
+    storageWriteOffIds.push(storageWriteOff.id)
+
+    // 4. Create preparation batch (existing logic)
+    const batch = await createBatch({
+      preparationId: item.preparationId,
+      quantity: item.quantity,
+      unit: item.unit,
+      costPerUnit: item.costPerUnit,
+      productionDate: data.operationDate,
+      // ✨ Calculate expiry dynamically (not stored)
+      expiryDate: calculateExpiryDate(data.operationDate, preparation.shelfLife),
+      department: data.department,
+      producedBy: data.responsiblePerson,
+      sourceType: 'production'
+    })
+
+    // 5. Create preparation operation (existing logic)
+    const operation = await createOperation({
+      ...item,
+      operationType: 'receipt',
+      department: data.department,
+      relatedStorageOperationId: storageWriteOff.id // ✨ Link to storage write-off
+    })
+
+    operations.push(operation)
+  }
+
+  DebugUtils.info('preparationService', 'Created receipt with auto write-offs', {
+    operations: operations.length,
+    storageWriteOffs: storageWriteOffIds.length
   })
 
-  DebugUtils.info(MODULE_NAME, '✅ Cross-tab synchronization enabled')
+  return operations
 }
 
-/**
- * Handle logout detected in another tab
- */
-async function handleCrossTabLogout() {
-  if (!state.value.isAuthenticated) {
-    // Already logged out, ignore
-    return
-  }
-
-  DebugUtils.info(MODULE_NAME, '⚠️ Session ended in another tab, logging out...')
-
-  // Reset local state immediately (no API calls needed)
-  await resetAllStores()
-  resetState()
-
-  // Redirect to login
-  router.push('/auth/login')
-
-  // Show notification (optional)
-  // toast.info('Session ended in another tab')
+// ✨ NEW: Helper function
+function calculateExpiryDate(productionDate: string, shelfLifeDays: number): string {
+  const expiry = new Date(productionDate)
+  expiry.setDate(expiry.getDate() + shelfLifeDays)
+  return expiry.toISOString()
 }
 ```
 
-3. **Update logout() method** (replace existing, line ~310):
+### 1.2 Update storageService to Support Auto Write-off
+
+**File:** `src/stores/storage/storageService.ts`
+
+Add support for `production_consumption` reason:
 
 ```typescript
-/**
- * Logout user and broadcast to all tabs
- */
-async function logout() {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Logging out...')
+async function createWriteOff(data: CreateStorageWriteOffData) {
+  // Validate new reason types
+  const validReasons: WriteOffReason[] = [
+    'expired',
+    'spoiled',
+    'damaged',
+    'theft',
+    'production_consumption', // ✨ NEW
+    'sales_consumption', // ✨ NEW
+    'other',
+    'education',
+    'test'
+  ]
 
-    // Step 1: Broadcast logout to other tabs FIRST
-    // This ensures other tabs know about logout before Supabase token is cleared
-    localStorage.setItem(LOGOUT_BROADCAST_KEY, Date.now().toString())
-
-    // Step 2: Sign out from Supabase (clears token)
-    if (state.value.session) {
-      await supabase.auth.signOut()
-    }
-
-    // Step 3: Clean up all local state
-    await resetAllStores()
-
-    // Step 4: Reset auth state
-    resetState()
-
-    // Step 5: Clean up broadcast key (no longer needed)
-    localStorage.removeItem(LOGOUT_BROADCAST_KEY)
-
-    // Step 6: Redirect to login
-    router.push('/auth/login')
-
-    DebugUtils.info(MODULE_NAME, '✅ Logout complete')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
-    throw error
+  if (!validReasons.includes(data.reason)) {
+    throw new Error(`Invalid write-off reason: ${data.reason}`)
   }
+
+  // Existing FIFO allocation logic...
+  // Existing batch update logic...
+
+  return operation
 }
 ```
 
-4. **Call setupCrossTabSync() in initialize()** (update line ~65):
+### 1.3 Update AddPreparationProductionItemDialog
 
-```typescript
-async function initialize() {
-  if (state.value.initialized) {
-    DebugUtils.info(MODULE_NAME, 'Already initialized')
-    return
-  }
+**File:** `src/views/Preparation/components/AddPreparationProductionItemDialog.vue`
 
-  try {
-    DebugUtils.info(MODULE_NAME, 'Initializing auth store...')
+**Changes:**
 
-    // Check for existing Supabase session
-    const {
-      data: { session }
-    } = await supabase.auth.getSession()
-
-    if (session) {
-      state.value.session = session
-      await loadUserProfile(session.user.id)
-    }
-
-    // Setup auth state listener
-    supabase.auth.onAuthStateChange(async (event, newSession) => {
-      DebugUtils.info(MODULE_NAME, `Auth state changed: ${event}`)
-
-      state.value.session = newSession
-
-      if (event === 'SIGNED_OUT') {
-        await resetAllStores()
-        resetState()
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (newSession?.user) {
-          await loadUserProfile(newSession.user.id)
-        }
-      }
-    })
-
-    // ✅ NEW: Setup cross-tab synchronization
-    setupCrossTabSync()
-
-    state.value.initialized = true
-    DebugUtils.info(MODULE_NAME, '✅ Auth store initialized')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Initialization failed', { error })
-    throw error
-  }
-}
-```
-
----
-
-### Task 1.2: Create Centralized Store Reset Service
-
-**Priority:** Critical
-**Estimated Time:** 45 minutes
-
-**File:** `src/core/storeResetService.ts` (NEW FILE)
-
-**Current Problem:**
-
-- Logout only resets authStore
-- Other stores (products, recipes, menu, etc.) remain populated
-- User sees stale data if they login again with different account
-
-**Solution:**
-Create centralized service to reset all Pinia stores.
-
-**Implementation:**
-
-```typescript
-/**
- * Centralized Store Reset Service
- *
- * Provides utility to reset all Pinia stores to initial state.
- * Used during logout to ensure complete state cleanup.
- */
-
-import { useProductsStore } from '@/stores/productsStore'
-import { useRecipesStore } from '@/stores/recipes'
-import { useMenuStore } from '@/stores/menu'
-import { useStorageStore } from '@/stores/storage'
-import { useSuppliersStore } from '@/stores/supplier_2'
-import { useCounteragentsStore } from '@/stores/counteragents'
-import { usePreparationStore } from '@/stores/preparation'
-import { useAccountStore } from '@/stores/account'
-import { usePosStore } from '@/stores/pos'
-import { useOrdersStore } from '@/stores/pos/orders/ordersStore'
-import { useTablesStore } from '@/stores/pos/tables/tablesStore'
-import { usePaymentsStore } from '@/stores/pos/payments/paymentsStore'
-import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
-import { DebugUtils } from '@/utils'
-
-const MODULE_NAME = 'StoreResetService'
-
-/**
- * Reset all Pinia stores to initial state
- *
- * IMPORTANT: This should be called during logout to ensure
- * complete cleanup of all application state.
- *
- * @returns Promise<void>
- */
-export async function resetAllStores(): Promise<void> {
-  try {
-    DebugUtils.info(MODULE_NAME, '🧹 Resetting all stores...')
-
-    // Backoffice stores
-    const backofficeStores = [
-      { name: 'Products', store: useProductsStore() },
-      { name: 'Recipes', store: useRecipesStore() },
-      { name: 'Menu', store: useMenuStore() },
-      { name: 'Storage', store: useStorageStore() },
-      { name: 'Suppliers', store: useSuppliersStore() },
-      { name: 'Counteragents', store: useCounteragentsStore() },
-      { name: 'Preparation', store: usePreparationStore() },
-      { name: 'Account', store: useAccountStore() }
-    ]
-
-    // POS stores
-    const posStores = [
-      { name: 'POS', store: usePosStore() },
-      { name: 'Orders', store: useOrdersStore() },
-      { name: 'Tables', store: useTablesStore() },
-      { name: 'Payments', store: usePaymentsStore() },
-      { name: 'Shifts', store: useShiftsStore() }
-    ]
-
-    // Reset all stores
-    const allStores = [...backofficeStores, ...posStores]
-
-    for (const { name, store } of allStores) {
-      try {
-        // Use $reset() if available (standard Pinia method)
-        if ('$reset' in store && typeof store.$reset === 'function') {
-          store.$reset()
-          DebugUtils.info(MODULE_NAME, `✅ Reset ${name} store`)
-        }
-        // Fallback: manually reset common properties
-        else {
-          if ('initialized' in store) {
-            ;(store as any).initialized = false
-          }
-          DebugUtils.info(MODULE_NAME, `⚠️ Manually reset ${name} store (no $reset method)`)
-        }
-      } catch (error) {
-        DebugUtils.error(MODULE_NAME, `❌ Failed to reset ${name} store`, { error })
-      }
-    }
-
-    DebugUtils.info(MODULE_NAME, '✅ All stores reset complete')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, '❌ Store reset failed', { error })
-    throw error
-  }
-}
-
-/**
- * Check if all stores are properly reset
- * Useful for debugging and testing
- *
- * @returns Object with store names and their initialization status
- */
-export function getStoreResetStatus(): Record<string, boolean> {
-  return {
-    products: !useProductsStore().initialized,
-    recipes: !useRecipesStore().initialized,
-    menu: !useMenuStore().initialized,
-    storage: !useStorageStore().initialized,
-    suppliers: !useSuppliersStore().initialized,
-    counteragents: !useCounteragentsStore().initialized,
-    preparation: !usePreparationStore().initialized,
-    account: !useAccountStore().initialized,
-    pos: !usePosStore().initialized,
-    orders: !useOrdersStore().initialized,
-    tables: !useTablesStore().initialized,
-    payments: !usePaymentsStore().initialized,
-    shifts: !useShiftsStore().initialized
-  }
-}
-```
-
-**Update authStore.ts to use resetAllStores:**
-
-```typescript
-// Add import at top
-import { resetAllStores } from '@/core/storeResetService'
-
-// Update resetState() to call resetAllStores (line ~400)
-function resetState() {
-  state.value = {
-    currentUser: null,
-    isAuthenticated: false,
-    session: null,
-    lastLoginAt: null,
-    initialized: false
-  }
-}
-
-// logout() already calls resetAllStores() (see Task 1.1)
-```
-
----
-
-### Task 1.3: Fix App.vue Race Condition
-
-**Priority:** Critical
-**Estimated Time:** 45 minutes
-
-**File:** `src/App.vue`
-
-**Current Problem:**
-
-- Watcher runs with `immediate: true`
-- Stores load before async session validation completes
-- User sees stale data briefly before redirect
-
-**Solution:**
-
-- Remove `immediate: true` from watcher
-- Add async session validation in `onMounted` BEFORE loading stores
-- Show loading screen during validation
-
-**Implementation:**
-
-1. **Update script section** (lines 44-122):
-
-```typescript
-<script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { AppInitializer } from '@/core/appInitializer'
-import { DebugUtils } from '@/utils'
-import { useRouter } from 'vue-router'
-
-const MODULE_NAME = 'App'
-const authStore = useAuthStore()
-const router = useRouter()
-
-// Loading states
-const isLoadingAuth = ref(true)
-const isLoadingStores = ref(false)
-const storesLoaded = ref(false)
-const loadingMessage = ref('Checking session...')
-
-/**
- * Validate session before loading any stores
- * This prevents loading stale data with an invalid session
- */
-async function validateSessionAndLoadStores() {
-  try {
-    isLoadingAuth.value = true
-    loadingMessage.value = 'Validating session...'
-
-    // Check if session exists and is valid
-    const hasValidSession = authStore.checkSession()
-
-    if (!hasValidSession || !authStore.isAuthenticated) {
-      DebugUtils.info(MODULE_NAME, 'No valid session, redirecting to login')
-      isLoadingAuth.value = false
-
-      if (!router.currentRoute.value.path.startsWith('/auth')) {
-        await router.push('/auth/login')
-      }
-      return
-    }
-
-    // Session is valid, proceed to load stores
-    DebugUtils.info(MODULE_NAME, '✅ Session valid, loading stores...')
-    await loadStoresAfterAuth()
-
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Session validation failed', { error })
-    await router.push('/auth/login')
-  } finally {
-    isLoadingAuth.value = false
-  }
-}
-
-/**
- * Load stores based on user roles after authentication
- */
-async function loadStoresAfterAuth() {
-  if (storesLoaded.value || isLoadingStores.value) {
-    DebugUtils.info(MODULE_NAME, 'Stores already loaded or loading')
-    return
-  }
-
-  try {
-    isLoadingStores.value = true
-    loadingMessage.value = 'Loading application data...'
-
-    const user = authStore.currentUser
-    if (!user) {
-      throw new Error('No authenticated user')
-    }
-
-    DebugUtils.info(MODULE_NAME, 'Loading stores for user', {
-      userId: user.id,
-      roles: user.roles
-    })
-
-    // Initialize stores based on user roles
-    await AppInitializer.initialize(user.roles || [])
-
-    storesLoaded.value = true
-    DebugUtils.info(MODULE_NAME, '✅ Stores loaded successfully')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to load stores', { error })
-    throw error
-  } finally {
-    isLoadingStores.value = false
-  }
-}
-
-/**
- * Watch for authentication changes
- * Only load stores when authenticated (no immediate execution)
- */
-watch(
-  () => authStore.isAuthenticated,
-  async (isAuthenticated) => {
-    if (isAuthenticated && !isLoadingStores.value && !storesLoaded.value) {
-      DebugUtils.info(MODULE_NAME, 'User authenticated, loading stores...')
-      await loadStoresAfterAuth()
-    } else if (!isAuthenticated && storesLoaded.value) {
-      // User logged out, reset loaded flag
-      storesLoaded.value = false
-      DebugUtils.info(MODULE_NAME, 'User logged out, reset stores loaded flag')
-    }
-  }
-  // ✅ REMOVED: { immediate: true }
-  // This prevents loading stores before session validation
-)
-
-/**
- * App initialization on mount
- */
-onMounted(async () => {
-  DebugUtils.info(MODULE_NAME, '🚀 App mounted, starting initialization...')
-
-  // Validate session and load stores if authenticated
-  await validateSessionAndLoadStores()
-})
-
-// Loading state computed property
-const isLoading = computed(() => isLoadingAuth.value || isLoadingStores.value)
-</script>
-```
-
-2. **Update template to show loading state** (lines 1-42):
+1. Auto-calculate expiry based on `preparation.shelfLife`
+2. Show warning if preparation has no recipe
+3. Preview raw product write-offs before confirmation
 
 ```vue
 <template>
-  <v-app>
-    <!-- Global loading overlay -->
-    <v-overlay v-model="isLoading" class="align-center justify-center" persistent :scrim="true">
-      <v-card class="pa-8 text-center" elevation="8" rounded="lg">
-        <v-progress-circular indeterminate size="64" width="6" color="primary" class="mb-4" />
-        <div class="text-h6 mb-2">{{ loadingMessage }}</div>
-        <div class="text-caption text-medium-emphasis">Please wait...</div>
-      </v-card>
-    </v-overlay>
+  <v-dialog v-model="dialog" max-width="600">
+    <v-card>
+      <v-card-title>Add Preparation Production</v-card-title>
 
-    <!-- Main app content -->
-    <router-view v-if="!isLoading" />
-  </v-app>
+      <v-card-text>
+        <!-- Preparation selector -->
+        <v-autocomplete
+          v-model="selectedPreparationId"
+          :items="availablePreparations"
+          label="Select Preparation"
+          @update:model-value="onPreparationSelected"
+        />
+
+        <!-- Quantity input -->
+        <v-text-field
+          v-model.number="quantity"
+          label="Quantity"
+          type="number"
+          :suffix="selectedPreparation?.outputUnit"
+        />
+
+        <!-- ✨ NEW: Expiry date (auto-calculated, editable) -->
+        <v-text-field
+          v-model="expiryDate"
+          label="Expiry Date"
+          type="datetime-local"
+          :hint="expiryHint"
+          persistent-hint
+        />
+
+        <!-- ✨ NEW: Raw products preview -->
+        <v-expansion-panels v-if="rawProductsPreview.length > 0" class="mt-4">
+          <v-expansion-panel>
+            <v-expansion-panel-title>
+              Raw Products to Write Off ({{ rawProductsPreview.length }} items)
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <v-list density="compact">
+                <v-list-item v-for="item in rawProductsPreview" :key="item.productId">
+                  <v-list-item-title>{{ item.productName }}</v-list-item-title>
+                  <v-list-item-subtitle>{{ item.quantity }} {{ item.unit }}</v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
+
+        <!-- ✨ NEW: Warning if no recipe -->
+        <v-alert
+          v-if="selectedPreparation && !selectedPreparation.recipe?.length"
+          type="warning"
+          class="mt-4"
+        >
+          This preparation has no recipe defined. Raw products will NOT be written off
+          automatically.
+        </v-alert>
+      </v-card-text>
+
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="dialog = false">Cancel</v-btn>
+        <v-btn color="primary" @click="addProduction" :disabled="!isValid">Add Production</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
+
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { usePreparationStore } from '@/stores/preparation'
+import { useProductsStore } from '@/stores/productsStore'
+
+const preparationStore = usePreparationStore()
+const productsStore = useProductsStore()
+
+const selectedPreparationId = ref<string>('')
+const quantity = ref<number>(500)
+const expiryDate = ref<string>('')
+
+const selectedPreparation = computed(() => preparationStore.getById(selectedPreparationId.value))
+
+// ✨ Auto-calculate expiry when preparation selected
+function onPreparationSelected(prepId: string) {
+  const prep = preparationStore.getById(prepId)
+  if (prep?.shelfLife) {
+    const now = new Date()
+    now.setDate(now.getDate() + prep.shelfLife)
+    expiryDate.value = now.toISOString().slice(0, 16) // Format for datetime-local
+  }
+}
+
+// ✨ Expiry hint
+const expiryHint = computed(() => {
+  if (!selectedPreparation.value) return ''
+  return `Auto-calculated: ${selectedPreparation.value.shelfLife} days shelf life`
+})
+
+// ✨ Preview raw products that will be written off
+const rawProductsPreview = computed(() => {
+  if (!selectedPreparation.value?.recipe || !quantity.value) return []
+
+  const multiplier = quantity.value / selectedPreparation.value.outputQuantity
+
+  return selectedPreparation.value.recipe.map(ingredient => {
+    const product = productsStore.getById(ingredient.id)
+    return {
+      productId: ingredient.id,
+      productName: product?.name || 'Unknown',
+      quantity: (ingredient.quantity * multiplier).toFixed(2),
+      unit: ingredient.unit
+    }
+  })
+})
+
+const isValid = computed(() => {
+  return selectedPreparationId.value && quantity.value > 0 && expiryDate.value
+})
+
+function addProduction() {
+  emit('add-item', {
+    preparationId: selectedPreparationId.value,
+    quantity: quantity.value,
+    expiryDate: expiryDate.value,
+    costPerUnit:
+      selectedPreparation.value?.costPerPortion / selectedPreparation.value?.outputQuantity
+  })
+  dialog.value = false
+}
+</script>
 ```
+
+### Tasks:
+
+- [ ] Update `preparationService.createReceipt()` with auto write-off logic
+- [ ] Add `calculateExpiryDate()` helper function
+- [ ] Update `storageService.createWriteOff()` to support new reasons
+- [ ] Update `AddPreparationProductionItemDialog.vue` with preview
+- [ ] Add error handling for missing recipes
+- [ ] Add transaction rollback if write-off fails
+- [ ] Update TypeScript types
+
+### Deliverables:
+
+- ✅ Auto write-off functional
+- ✅ Raw products deducted from storage on production
+- ✅ Preparation batches created correctly
+- ✅ Operations linked via `related_preparation_operation_id`
+- ✅ Error handling for edge cases
 
 ---
 
-## 📋 PHASE 2: Session Consolidation
+## Phase 2: Dynamic Expiry Calculation ⏳
 
-### Task 2.1: Remove AuthSessionService
+**Goal:** Calculate expiry dates dynamically from `production_date + shelf_life`, not store separately.
 
-**Priority:** High
-**Estimated Time:** 30 minutes
+### 2.1 Update preparationStore Getters
 
-**Files to modify:**
-
-- `src/stores/auth/authStore.ts`
-- `src/stores/auth/services/session.service.ts` (mark deprecated or delete)
-
-**Current Problem:**
-
-- AuthSessionService duplicates Supabase session
-- Adds complexity without benefit
-- Can get out of sync with Supabase
-
-**Solution:**
-Remove all references to AuthSessionService, use only Supabase.
-
-**Implementation:**
-
-1. **Update authStore.ts - Remove AuthSessionService imports** (line ~10):
+**File:** `src/stores/preparation/preparationStore.ts`
 
 ```typescript
-// ❌ DELETE THIS:
-import { AuthSessionService } from './services/session.service'
+export const usePreparationStore = defineStore('preparation', () => {
+  // ... existing state
 
-// ✅ Keep only Supabase
-import { supabase } from '@/supabase/client'
-```
+  // ✨ Update getters to calculate expiry dynamically
+  const allBatches = computed(() => {
+    return state.batches.map(batch => {
+      const preparation = getById(batch.preparationId)
 
-2. **Update loginWithEmail() method** (line ~104, remove AuthSessionService.saveSession):
-
-```typescript
-async function loginWithEmail(email: string, password: string): Promise<void> {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Logging in with email...', { email })
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
+      return {
+        ...batch,
+        // ✨ Calculate expiry dynamically
+        expiryDate: calculateExpiryDate(batch.productionDate, preparation?.shelfLife || 2),
+        // ✨ Calculate remaining shelf life
+        remainingShelfLifeHours: calculateRemainingShelfLife(
+          batch.productionDate,
+          preparation?.shelfLife || 2
+        )
+      }
     })
+  })
 
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'Email login failed', { error })
-      throw error
-    }
-
-    if (!data.user) {
-      throw new Error('No user data returned from Supabase')
-    }
-
-    // Session is automatically stored by Supabase
-    state.value.session = data.session
-
-    // Load user profile
-    await loadUserProfile(data.user.id)
-
-    // ❌ DELETE THIS:
-    // AuthSessionService.saveSession(user, 'backoffice')
-
-    DebugUtils.info(MODULE_NAME, '✅ Email login successful')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Email login failed', { error })
-    throw error
+  function calculateExpiryDate(productionDate: string, shelfLifeDays: number): string {
+    const expiry = new Date(productionDate)
+    expiry.setDate(expiry.getDate() + shelfLifeDays)
+    return expiry.toISOString()
   }
-}
-```
 
-3. **Update loginWithPin() method** (line ~135, remove AuthSessionService.saveSession):
+  function calculateRemainingShelfLife(productionDate: string, shelfLifeDays: number): number {
+    const now = new Date()
+    const production = new Date(productionDate)
+    const expiry = new Date(production)
+    expiry.setDate(expiry.getDate() + shelfLifeDays)
 
-```typescript
-async function loginWithPin(pin: string): Promise<void> {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Logging in with PIN...')
+    const remainingMs = expiry.getTime() - now.getTime()
+    return Math.max(0, Math.floor(remainingMs / (1000 * 60 * 60))) // hours
+  }
 
-    // Find user by PIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('pin', pin)
-      .single()
+  // ✨ Helper to check if batch is expired
+  function isBatchExpired(batch: PreparationBatch): boolean {
+    const preparation = getById(batch.preparationId)
+    const expiryDate = calculateExpiryDate(batch.productionDate, preparation?.shelfLife || 2)
+    return new Date(expiryDate) <= new Date()
+  }
 
-    if (userError || !userData) {
-      throw new Error('Invalid PIN')
-    }
+  // ✨ Helper to get batches expiring soon (within 24h)
+  function getBatchesExpiringSoon(): PreparationBatch[] {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
 
-    // Convert PIN to email for Supabase auth
-    const email = userData.email || `${userData.id}@pin.local`
-
-    // Sign in with Supabase (PIN is stored as password for PIN users)
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: pin
+    return allBatches.value.filter(batch => {
+      const expiry = new Date(batch.expiryDate)
+      const now = new Date()
+      return expiry <= tomorrow && expiry > now && batch.status === 'active'
     })
-
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'PIN login failed', { error })
-      throw error
-    }
-
-    // Session is automatically stored by Supabase
-    state.value.session = data.session
-
-    // Load user profile
-    await loadUserProfile(userData.id)
-
-    // ❌ DELETE THIS:
-    // AuthSessionService.saveSession(user, 'backoffice')
-    // localStorage.setItem('pin_session', JSON.stringify(user))
-
-    DebugUtils.info(MODULE_NAME, '✅ PIN login successful')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'PIN login failed', { error })
-    throw error
   }
-}
-```
 
-4. **Remove restorePinSession() method** (line ~330):
-
-```typescript
-// ❌ DELETE THIS ENTIRE METHOD:
-function restorePinSession(): boolean {
-  const pinSession = localStorage.getItem('pin_session')
-  if (pinSession) {
-    try {
-      const user = JSON.parse(pinSession)
-      state.value.currentUser = user
-      state.value.isAuthenticated = true
-      state.value.lastLoginAt = user.lastLoginAt
-      return true
-    } catch (error) {
-      localStorage.removeItem('pin_session')
-    }
-  }
-  return false
-}
-```
-
-5. **Update checkSession() method** (line ~350):
-
-```typescript
-/**
- * Check if user has valid session
- * Only checks Supabase session (no legacy session support)
- */
-function checkSession(): boolean {
-  try {
-    // Only check if we have authenticated user
-    const hasSession = state.value.isAuthenticated && state.value.currentUser !== null
-
-    DebugUtils.info(MODULE_NAME, 'Session check', { hasSession })
-    return hasSession
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Session check failed', { error })
-    return false
-  }
-}
-```
-
-6. **Mark session.service.ts as deprecated** (or delete):
-
-Option A - Add deprecation notice:
-
-```typescript
-// src/stores/auth/services/session.service.ts (line 1)
-
-/**
- * @deprecated This service is deprecated as of 2025-11-25
- *
- * All session management is now handled by Supabase Auth.
- * This file is kept for reference only and will be removed in a future version.
- *
- * DO NOT USE THIS SERVICE IN NEW CODE.
- */
-
-// ... rest of file
-```
-
-Option B - Delete the file entirely (recommended):
-
-```bash
-# Delete the file
-rm src/stores/auth/services/session.service.ts
-```
-
----
-
-### Task 2.2: Cleanup Logout Implementation
-
-**Priority:** High
-**Estimated Time:** 15 minutes
-
-**File:** `src/stores/auth/authStore.ts`
-
-**Current Problem:**
-
-- Logout has redundant code
-- Still references PIN session and AuthSessionService
-
-**Solution:**
-Simplify logout to only handle Supabase session.
-
-**Implementation:**
-
-```typescript
-/**
- * Logout user and broadcast to all tabs
- *
- * Steps:
- * 1. Broadcast logout to other tabs
- * 2. Sign out from Supabase
- * 3. Reset all application stores
- * 4. Reset auth state
- * 5. Redirect to login
- */
-async function logout() {
-  try {
-    DebugUtils.info(MODULE_NAME, 'Logging out...')
-
-    // Step 1: Broadcast logout to other tabs FIRST
-    localStorage.setItem(LOGOUT_BROADCAST_KEY, Date.now().toString())
-
-    // Step 2: Sign out from Supabase (clears token from localStorage)
-    if (state.value.session) {
-      await supabase.auth.signOut()
-    }
-
-    // Step 3: Reset all application stores
-    await resetAllStores()
-
-    // Step 4: Reset auth state
-    resetState()
-
-    // Step 5: Clean up broadcast key
-    localStorage.removeItem(LOGOUT_BROADCAST_KEY)
-
-    // Step 6: Redirect to login
-    await router.push('/auth/login')
-
-    DebugUtils.info(MODULE_NAME, '✅ Logout complete')
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
-
-    // Even if logout fails, try to clean up local state
-    try {
-      await resetAllStores()
-      resetState()
-      await router.push('/auth/login')
-    } catch (cleanupError) {
-      DebugUtils.error(MODULE_NAME, 'Cleanup after failed logout also failed', { cleanupError })
-    }
-
-    throw error
-  }
-}
-```
-
----
-
-## 📋 PHASE 3: Router Guard Improvements (Optional)
-
-### Task 3.1: Add Async Session Validation to Router Guard
-
-**Priority:** Medium
-**Estimated Time:** 30 minutes
-
-**File:** `src/router/index.ts`
-
-**Current Problem:**
-
-- Router guard only checks `isAuthenticated` flag (synchronous)
-- Doesn't validate if Supabase token is actually valid
-- No loading state during validation
-
-**Solution:**
-Add async session validation in router guard.
-
-**Implementation:**
-
-```typescript
-// src/router/index.ts (lines 331-390)
-
-router.beforeEach(async (to, from, next) => {
-  try {
-    const authStore = useAuthStore()
-
-    // Skip auth check for non-protected routes
-    if (!to.meta.requiresAuth) {
-      // If going to login page while authenticated, redirect to default route
-      if (to.name === 'login' && authStore.isAuthenticated) {
-        const defaultRoute = authStore.getDefaultRoute()
-        next(defaultRoute)
-        return
-      }
-      next()
-      return
-    }
-
-    // ✅ NEW: Async session validation for protected routes
-    if (authStore.isAuthenticated) {
-      // Validate that Supabase session is still valid
-      try {
-        const {
-          data: { session },
-          error
-        } = await supabase.auth.getSession()
-
-        if (error || !session) {
-          // Session invalid, force logout
-          DebugUtils.info('Router', 'Session invalid, forcing logout')
-          await authStore.logout()
-          next({
-            name: 'login',
-            query: { redirect: to.fullPath, reason: 'session_expired' }
-          })
-          return
-        }
-      } catch (error) {
-        DebugUtils.error('Router', 'Session validation error', { error })
-        next({
-          name: 'login',
-          query: { redirect: to.fullPath, reason: 'session_error' }
-        })
-        return
-      }
-    }
-
-    // Check authentication
-    if (!authStore.isAuthenticated) {
-      next({
-        name: 'login',
-        query: { redirect: to.fullPath }
-      })
-      return
-    }
-
-    // Check role-based access
-    if (to.meta.allowedRoles) {
-      const { hasAnyRole } = usePermissions()
-      if (!hasAnyRole(to.meta.allowedRoles)) {
-        next('/unauthorized')
-        return
-      }
-    }
-
-    next()
-  } catch (error) {
-    console.error('[Router Guard] Navigation guard error:', error)
-    next('/auth/login')
+  return {
+    // ... existing exports
+    allBatches,
+    isBatchExpired,
+    getBatchesExpiringSoon
   }
 })
 ```
 
----
+### 2.2 Update UI Components
 
-## 🧪 Testing Checklist
+**Update all components displaying expiry:**
 
-### Phase 1: Critical Fixes
+- `PreparationBatchesView.vue` - show calculated expiry
+- `AddPreparationProductionItemDialog.vue` - use dynamic calculation
+- Dashboard widgets - use calculated expiry
 
-- [ ] **Test Cross-Tab Logout**
+### Tasks:
 
-  - [ ] Open app in Tab A and Tab B
-  - [ ] Login in both tabs
-  - [ ] Logout in Tab A
-  - [ ] Verify Tab B immediately logs out and redirects to login
-  - [ ] Verify no ghost data shown in Tab B
+- [ ] Update `allBatches` computed to calculate expiry dynamically
+- [ ] Add `calculateExpiryDate()` helper
+- [ ] Add `calculateRemainingShelfLife()` helper
+- [ ] Add `isBatchExpired()` helper
+- [ ] Add `getBatchesExpiringSoon()` helper
+- [ ] Update all UI components to use computed expiry
+- [ ] Remove any hardcoded expiry calculations
 
-- [ ] **Test Store Reset on Logout**
+### Deliverables:
 
-  - [ ] Login and load data (products, recipes, etc.)
-  - [ ] Logout
-  - [ ] Login with different account
-  - [ ] Verify no stale data from previous account
-
-- [ ] **Test App.vue Race Condition Fix**
-
-  - [ ] Login and use app normally
-  - [ ] Close tab/browser
-  - [ ] Re-open app (page reload)
-  - [ ] Verify loading screen shows immediately
-  - [ ] Verify no ghost data visible before redirect (if session invalid)
-  - [ ] Verify smooth loading if session valid
-
-- [ ] **Test Email Login**
-
-  - [ ] Login with email/password
-  - [ ] Verify session stored in Supabase localStorage
-  - [ ] Verify no duplicate session keys
-  - [ ] Reload page
-  - [ ] Verify session restored correctly
-
-- [ ] **Test PIN Login**
-  - [ ] Login with PIN
-  - [ ] Verify session stored in Supabase localStorage (not pin_session)
-  - [ ] Verify no duplicate session keys
-  - [ ] Reload page
-  - [ ] Verify session restored correctly
-
-### Phase 2: Session Consolidation
-
-- [ ] **Test AuthSessionService Removal**
-
-  - [ ] Verify no references to AuthSessionService in code
-  - [ ] Verify no `kitchen_app_session` key in localStorage after login
-  - [ ] Verify no `pin_session` key in localStorage after PIN login
-  - [ ] Verify only Supabase session key exists
-
-- [ ] **Test Logout Cleanup**
-  - [ ] Login
-  - [ ] Inspect localStorage (should see only Supabase key)
-  - [ ] Logout
-  - [ ] Inspect localStorage (should be clean, no session keys)
-
-### Phase 3: Router Guard (Optional)
-
-- [ ] **Test Router Guard Session Validation**
-  - [ ] Login
-  - [ ] Manually delete Supabase token from localStorage
-  - [ ] Navigate to protected route
-  - [ ] Verify immediate redirect to login
-  - [ ] Verify no error shown
+- ✅ Expiry calculated dynamically everywhere
+- ✅ Consistent shelf life logic
+- ✅ Performance optimized (computed)
 
 ---
 
-## 📝 Files to Modify
+## 📊 SUCCESS CRITERIA
 
-### Phase 1: Critical Fixes
-
-1. **src/stores/auth/authStore.ts** (MODIFY)
-
-   - Add cross-tab sync logic
-   - Update logout() method
-   - Add setupCrossTabSync() and handleCrossTabLogout()
-
-2. **src/core/storeResetService.ts** (NEW FILE)
-
-   - Create resetAllStores() function
-   - Create getStoreResetStatus() helper
-
-3. **src/App.vue** (MODIFY)
-   - Remove `immediate: true` from watcher
-   - Add async session validation
-   - Add loading overlay
-
-### Phase 2: Session Consolidation
-
-4. **src/stores/auth/authStore.ts** (MODIFY)
-
-   - Remove AuthSessionService imports
-   - Remove restorePinSession() method
-   - Update loginWithEmail(), loginWithPin(), checkSession()
-
-5. **src/stores/auth/services/session.service.ts** (DELETE or DEPRECATE)
-   - Mark as deprecated or delete entirely
-
-### Phase 3: Router Guard (Optional)
-
-6. **src/router/index.ts** (MODIFY)
-   - Add async session validation in beforeEach guard
+1. ✅ **Auto write-off on production:** Raw products automatically written off when producing preparations
+2. ✅ **No double write-off:** Raw products only written off once (during production, not again during sales)
+3. ✅ **Recipe decomposition:** Preparation recipes properly decomposed to raw products
+4. ✅ **Linked operations:** Storage write-offs linked to preparation operations via `related_preparation_operation_id`
+5. ✅ **Dynamic expiry:** Expiry dates calculated from `production_date + shelf_life`, not stored
+6. ✅ **Unified history:** WriteOffHistoryView shows all write-off types (sales, production, storage, preparations)
+7. ✅ **Type safety:** All TypeScript types updated and synchronized
 
 ---
 
-## 🚀 Implementation Order
+## 📁 FILES TO CREATE/MODIFY
 
-**Recommended sequence:**
+### NEW FILES:
 
-### Day 1 (4-5 hours)
+- `src/supabase/migrations/012_add_preparation_shelf_life.sql`
 
-1. **Task 1.2: Create StoreResetService** (45 min)
+### MODIFIED FILES:
 
-   - Create new file
-   - Implement resetAllStores()
-   - Test manually
+- `src/stores/preparation/preparationService.ts` (auto write-off logic)
+- `src/stores/preparation/preparationStore.ts` (dynamic expiry calculation)
+- `src/stores/preparation/types.ts` (updated types)
+- `src/stores/storage/storageService.ts` (new write-off reasons)
+- `src/stores/storage/types.ts` (updated write-off reasons)
+- `src/views/Preparation/components/AddPreparationProductionItemDialog.vue` (preview, auto-expiry)
+- `src/views/backoffice/inventory/WriteOffHistoryView.vue` (unified view)
+- `src/views/backoffice/inventory/components/WriteOffDetailDialog.vue` (production links)
 
-2. **Task 1.1: Cross-Tab Logout** (1 hour)
+### NO CHANGES NEEDED:
 
-   - Add setupCrossTabSync()
-   - Add handleCrossTabLogout()
-   - Update logout() to broadcast
-   - Test in multiple tabs
-
-3. **Task 1.3: Fix App.vue Race Condition** (45 min)
-
-   - Update watcher (remove immediate)
-   - Add validateSessionAndLoadStores()
-   - Add loading overlay
-   - Test page reload scenarios
-
-4. **Testing Phase 1** (1.5 hours)
-   - Test all scenarios from checklist
-   - Fix any issues found
-
-### Day 2 (2-3 hours)
-
-5. **Task 2.1: Remove AuthSessionService** (30 min)
-
-   - Update authStore methods
-   - Remove imports
-   - Mark service as deprecated
-
-6. **Task 2.2: Cleanup Logout** (15 min)
-
-   - Simplify logout() method
-   - Remove redundant code
-
-7. **Testing Phase 2** (1 hour)
-
-   - Test login flows (email + PIN)
-   - Test logout cleanup
-   - Verify localStorage state
-
-8. **(Optional) Task 3.1: Router Guard** (30 min)
-
-   - Add async validation
-   - Test protected routes
-
-9. **Final Testing** (1 hour)
-   - Full regression testing
-   - Test all user flows
-   - Test edge cases
-
-**Total estimated time:** 6-8 hours
+- `src/stores/pos/orders/composables/useKitchenDecomposition.ts` (keep current decomposition)
+- POS order flow (Phase 2 - use Approach A)
 
 ---
 
-## 🎯 Success Criteria
+## 🎯 SPRINT 1 IMPLEMENTATION SEQUENCE
 
-### ✅ PHASE 1 COMPLETE: Critical Fixes
+**Focus:** Production flow only (Products → Preparations)
 
-- [x] **Cross-Tab Logout**: Logout in one tab immediately logs out all tabs
-- [x] **No Ghost Data**: No ghost data visible during page reload
-- [x] **Complete Store Reset**: All stores properly reset on logout
-- [x] **Loading Screen**: Loading screen shows during session validation
-- [x] **TypeScript**: No TypeScript errors
-- [x] **Testing**: All critical functionality working
+1. **Phase 0 (Day 1):** Database migration - add shelf_life column ⚡
+2. **Phase 1 (Day 1-2):** Auto write-off on production + UI for batch creation 🔥 PRIORITY
+3. **Phase 2 (Day 2):** Dynamic expiry calculation
 
-### ✅ PHASE 2 COMPLETE: Session Consolidation
+**Total Estimated Time:** 2 days
+**Priority:** 🔥 HIGH - Blocks accurate inventory tracking
 
-- [x] **Single Session**: Only Supabase session exists in localStorage
-- [x] **Clean Storage**: No `pin_session` or `kitchen_app_session` keys
-- [x] **Login Works**: Both Email and PIN login work correctly
-- [x] **Session Restoration**: Session restoration works from Supabase only after page reload
-- [x] **Legacy Removed**: No references to AuthSessionService in code
-- [x] **Navigation**: Proper redirect after successful login/session restoration
+**Sprint 2 (Future):**
 
-### Phase 3 Complete When (Optional):
-
-- [x] Router guard validates session asynchronously
-- [x] Invalid tokens cause immediate redirect
-- [x] No errors shown to user on invalid session
+- Menu Item decomposition
+- Reverse decomposition for sales (Menu → Dish → Prep/Products)
+- WriteOffHistoryView integration
+- POS consumption tracking
 
 ---
 
-## ⚠️ IMPORTANT NOTES
+## 🔄 SPRINT 2 SCOPE (Future)
 
-### Breaking Changes
+### Sales Consumption via Reverse Decomposition
 
-1. **localStorage keys changed:**
+**Goal:** Implement Menu → Dish → Prep/Products decomposition for POS sales
 
-   - ❌ Removed: `pin_session`
-   - ❌ Removed: `kitchen_app_session`
-   - ✅ Kept: `sb-*-auth-token` (Supabase session)
+**Flow:**
 
-2. **AuthSessionService deprecated:**
+```
+Menu Item ordered → Decompose to Dish + Products →
+  Dish → Decompose to Preparations + Products →
+    Preparations → Check stock:
+      • If available: Consume from prep batches (FIFO)
+      • If not: Decompose to raw products → Use raw products
+    Products → Write off from storage (FIFO)
+```
 
-   - All methods no longer used
-   - File can be deleted after migration
+**Tasks:**
 
-3. **Session restoration:**
-   - No longer supports legacy PIN sessions
-   - Users with old `pin_session` will need to login again
-
-### Migration Notes
-
-**After deployment:**
-
-1. Users will be logged out (expected)
-2. They need to login again with email or PIN
-3. New session will be stored in Supabase only
-4. Cross-tab sync will work immediately
-
-**Rollback plan:**
-
-If critical issues found:
-
-1. Revert commits
-2. Restore old session logic
-3. Users keep their sessions
+1. Update `useKitchenDecomposition` to handle Menu Items
+2. Add preparation stock checking
+3. Implement hybrid consumption (prep batches OR raw products)
+4. Integrate with WriteOffHistoryView
+5. Add "sales_consumption" write-off reason
+6. Test with real POS orders
 
 ---
 
-## 📚 Reference Documents
+## 🔄 FUTURE ENHANCEMENTS (Long-term)
 
-### Related Files
-
-- **Authentication:** `src/stores/auth/authStore.ts`
-- **Session Service:** `src/stores/auth/services/session.service.ts`
-- **App Init:** `src/App.vue`
-- **Router:** `src/router/index.ts`
-- **Supabase Client:** `src/supabase/client.ts`
-
-### Analysis Document
-
-Full analysis with root causes and sequence diagrams available in:
-
-- Task agent output (2025-11-25)
-- See "Authentication and Session Management Analysis" section
+- **Kitchen Monitor:** Real-time preparation status display
+- **Expiry Alerts UI:** Badge/banner in Storage View for expiring preparations
+- **Automatic Cost Recalculation:** Update prep costs when raw product prices change
+- **Advanced Analytics:** Turnover rate, waste tracking, slow-moving alerts
+- **Preparation Consumption Sync:** Queued consumption via SyncService (offline-first)
 
 ---
 
-## 🎉 NEXT STEPS AFTER COMPLETION
+## ✅ CHECKLIST FOR IMPLEMENTATION
 
-### Immediate (Sprint +1)
+### Pre-Implementation
 
-1. Monitor production for session issues
-2. Collect user feedback on login experience
-3. Check error logs for auth failures
+- [ ] Review specification with team
+- [ ] Confirm database migration safety
+- [ ] Backup production database
+- [ ] Verify recipe data completeness
 
-### Future Improvements (Backlog)
+### Phase 0: Database
 
-1. **Token Refresh Monitoring**
+- [ ] Create migration file
+- [ ] Test on DEV database
+- [ ] Apply to production
+- [ ] Verify data integrity
 
-   - Add UI notification when session about to expire
-   - Auto-refresh tokens in background
-   - Show countdown before auto-logout
+### Phase 1: Auto Write-off
 
-2. **Multi-Device Session Management**
+- [ ] Update preparationService.createReceipt()
+- [ ] Update storageService.createWriteOff()
+- [ ] Update AddPreparationProductionItemDialog
+- [ ] Add error handling
+- [ ] Test with various recipes
+- [ ] Test transaction rollback
 
-   - Track active sessions per user
-   - Show "Active Sessions" page in settings
-   - Allow "Logout All Devices" feature
+### Phase 2: Dynamic Expiry
 
-3. **Session Analytics**
+- [ ] Update preparationStore getters
+- [ ] Add calculation helpers
+- [ ] Update UI components
+- [ ] Test expiry calculations
 
-   - Track session duration
-   - Monitor login/logout patterns
-   - Detect suspicious activity
+### Post-Implementation
 
-4. **Offline Session Handling (POS)**
-   - Handle session expiry while offline
-   - Queue auth state changes
-   - Graceful degradation
-
----
-
-## ✅ DEPLOYMENT CHECKLIST
-
-### Pre-Deployment
-
-- [ ] All code changes committed
-- [ ] All tests passing
-- [ ] No TypeScript errors
-- [ ] No console errors in DEV
-- [ ] Code reviewed
-
-### Deployment
-
-- [ ] Deploy to Vercel (dev branch first)
-- [ ] Test on dev deployment
-- [ ] Deploy to production (main branch)
-- [ ] Monitor for errors
-
-### Post-Deployment
-
-- [ ] Verify cross-tab logout works
-- [ ] Verify page reload works
-- [ ] Verify both Email and PIN login work
-- [ ] Check error logs
-- [ ] Monitor user feedback
+- [ ] Integration testing
+- [ ] User acceptance testing
+- [ ] Documentation updates
+- [ ] Training materials
 
 ---
 
-**Status:** ✅ COMPLETED | 🎉 Sprint Successful!
-**Implementation Date:** 2025-11-25
-**Total Time:** ~4 hours (vs 6-8 hours estimated)
-
----
-
-## 📋 Sprint Summary
-
-### 🏆 Achievements
-
-**Phase 1: Critical Fixes (100% Complete)**
-
-1. ✅ **Cross-Tab Logout Synchronization**
-
-   - Implemented localStorage broadcast mechanism
-   - All tabs logout simultaneously
-   - Storage event listeners for Supabase token changes
-
-2. ✅ **Complete Store Reset Service**
-
-   - Created `src/core/storeResetService.ts`
-   - Resets all 15 Pinia stores on logout
-   - Proper cleanup for cross-tab scenarios
-
-3. ✅ **Fixed App.vue Race Conditions**
-   - Removed `immediate: true` from authentication watcher
-   - Added proper loading overlay
-   - Async session validation before store loading
-
-**Phase 2: Session Consolidation (100% Complete)** 4. ✅ **Removed AuthSessionService Dependencies**
-
-- Eliminated all legacy session storage
-- Simplified authentication logic
-- Single source of truth: Supabase only
-
-5. ✅ **Navigation & Session Persistence**
-   - Fixed page reload session detection
-   - Proper redirect after authentication
-   - Resolved AppInitializer initialization issues
-
-### 📊 Technical Improvements
-
-**Session Management:**
-
-- ❌ Before: 3 session sources → ✅ After: 1 session source (Supabase)
-- ❌ Before: Race conditions → ✅ After: Proper async validation
-- ❌ Before: Inconsistent logout → ✅ After: Cross-tab synchronization
-- ❌ Before: Ghost data on reload → ✅ After: Clean loading experience
-
-**Code Quality:**
-
-- Removed ~50 lines of AuthSessionService code
-- Added proper error handling and logging
-- Improved type safety with async session validation
-- Added comprehensive documentation
-
-### 🔧 Key Files Modified
-
-1. `src/stores/auth/authStore.ts` - Core authentication logic
-2. `src/core/storeResetService.ts` - Store reset service (NEW)
-3. `src/App.vue` - Session validation and navigation
-4. `src/stores/auth/services/session.service.ts` - Deprecated
-
-### 🚀 Impact
-
-**For Users:**
-
-- ✅ Seamless page reload experience
-- ✅ Instant cross-tab logout
-- ✅ No more ghost data or login loops
-- ✅ Consistent session behavior
-
-**For Developers:**
-
-- ✅ Simplified authentication codebase
-- ✅ Single session source to maintain
-- ✅ Better error handling and debugging
-- ✅ Type-safe session validation
-
-**Production Ready:**
-
-- ✅ All critical bugs fixed
-- ✅ Session persistence working
-- ✅ Cross-tab functionality verified
-- ✅ Build and tests passing
+**SPECIFICATION COMPLETE ✅**
+**Ready for Implementation 🚀**
