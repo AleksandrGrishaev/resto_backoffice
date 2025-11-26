@@ -198,8 +198,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { usePreparationStore } from '@/stores/preparation'
+import { useAuthStore } from '@/stores/auth'
 import type {
   PreparationDepartment,
   CreatePreparationInventoryData,
@@ -231,8 +232,9 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
-// Store
+// Stores
 const preparationStore = usePreparationStore()
+const authStore = useAuthStore()
 
 // State
 const form = ref()
@@ -242,6 +244,15 @@ const responsiblePerson = ref('')
 const filterType = ref('all')
 const inventoryItems = ref<PreparationInventoryItem[]>([])
 const currentInventory = ref<PreparationInventoryDocument | null>(null)
+
+// Initialize with current user's name
+onMounted(() => {
+  if (authStore.user?.displayName) {
+    responsiblePerson.value = authStore.user.displayName
+  } else if (authStore.user?.email) {
+    responsiblePerson.value = authStore.user.email
+  }
+})
 
 // Computed
 const availableBalances = computed(() =>
@@ -354,10 +365,21 @@ function updateInventoryItem(updatedItem: PreparationInventoryItem) {
 
 async function initializeInventoryItems() {
   try {
+    // Set default responsible person if not already set
+    if (!responsiblePerson.value) {
+      if (authStore.user?.displayName) {
+        responsiblePerson.value = authStore.user.displayName
+      } else if (authStore.user?.email) {
+        responsiblePerson.value = authStore.user.email
+      } else {
+        responsiblePerson.value = 'Default User'
+      }
+    }
+
     // ✅ Use store method to get ALL preparations (including 0 stock)
     const inventoryData: CreatePreparationInventoryData = {
       department: props.department,
-      responsiblePerson: responsiblePerson.value || 'Default User'
+      responsiblePerson: responsiblePerson.value
     }
 
     const inventory = await preparationStore.startInventory(inventoryData)
@@ -504,7 +526,15 @@ function handleClose() {
 }
 
 function resetForm() {
-  responsiblePerson.value = ''
+  // Reset to current user's name instead of empty string
+  if (authStore.user?.displayName) {
+    responsiblePerson.value = authStore.user.displayName
+  } else if (authStore.user?.email) {
+    responsiblePerson.value = authStore.user.email
+  } else {
+    responsiblePerson.value = ''
+  }
+
   filterType.value = 'all'
   inventoryItems.value = []
   currentInventory.value = null

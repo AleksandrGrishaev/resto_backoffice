@@ -662,65 +662,71 @@ export class PreparationService {
       const recipesStore = useRecipesStore()
       const productsStore = useProductsStore()
 
-      // ✨ NEW: Step 0 - Auto write-off raw products for each preparation
-      for (const item of data.items) {
-        // Get preparation with recipe
-        const preparation = recipesStore.preparations.find(p => p.id === item.preparationId)
+      // ✨ NEW: Step 0 - Auto write-off raw products for each preparation (unless skipped)
+      if (!data.skipAutoWriteOff) {
+        for (const item of data.items) {
+          // Get preparation with recipe
+          const preparation = recipesStore.preparations.find(p => p.id === item.preparationId)
 
-        if (!preparation) {
-          throw new Error(
-            `Preparation not found: ${item.preparationId}. Cannot create receipt without valid preparation.`
-          )
-        }
-
-        if (!preparation.recipe || preparation.recipe.length === 0) {
-          DebugUtils.warn(MODULE_NAME, 'Preparation has no recipe, skipping auto write-off', {
-            preparationId: item.preparationId,
-            preparationName: preparation.name
-          })
-          continue // Skip write-off if no recipe (optional)
-        }
-
-        // Calculate raw product quantities needed
-        const multiplier = item.quantity / preparation.outputQuantity
-        const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
-          const product = productsStore.getProductById(ingredient.id)
-          return {
-            itemId: ingredient.id,
-            itemName: product?.name || `Product ${ingredient.id}`,
-            itemType: 'product' as const,
-            quantity: ingredient.quantity * multiplier,
-            unit: ingredient.unit,
-            notes: `Production: ${preparation.name} (${item.quantity}${preparation.outputUnit})`
+          if (!preparation) {
+            throw new Error(
+              `Preparation not found: ${item.preparationId}. Cannot create receipt without valid preparation.`
+            )
           }
-        })
 
-        DebugUtils.info(MODULE_NAME, 'Auto write-off raw products for preparation', {
-          preparation: preparation.name,
-          quantity: item.quantity,
-          rawProducts: writeOffItems.length
-        })
+          if (!preparation.recipe || preparation.recipe.length === 0) {
+            DebugUtils.warn(MODULE_NAME, 'Preparation has no recipe, skipping auto write-off', {
+              preparationId: item.preparationId,
+              preparationName: preparation.name
+            })
+            continue // Skip write-off if no recipe (optional)
+          }
 
-        // ✨ Call storageService to write-off raw products
-        const writeOffResult = await storageService.createWriteOff({
-          warehouseId: DEFAULT_WAREHOUSE.id,
-          department: data.department,
-          responsiblePerson: data.responsiblePerson,
-          reason: 'production_consumption', // ✨ NEW reason type
-          items: writeOffItems,
-          notes: `Auto write-off for preparation production: ${preparation.name}`
-        })
+          // Calculate raw product quantities needed
+          const multiplier = item.quantity / preparation.outputQuantity
+          const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
+            const product = productsStore.getProductById(ingredient.id)
+            return {
+              itemId: ingredient.id,
+              itemName: product?.name || `Product ${ingredient.id}`,
+              itemType: 'product' as const,
+              quantity: ingredient.quantity * multiplier,
+              unit: ingredient.unit,
+              notes: `Production: ${preparation.name} (${item.quantity}${preparation.outputUnit})`
+            }
+          })
 
-        if (!writeOffResult.success || !writeOffResult.data) {
-          throw new Error(
-            `Failed to write-off raw products for ${preparation.name}: ${writeOffResult.error}`
-          )
+          DebugUtils.info(MODULE_NAME, 'Auto write-off raw products for preparation', {
+            preparation: preparation.name,
+            quantity: item.quantity,
+            rawProducts: writeOffItems.length
+          })
+
+          // ✨ Call storageService to write-off raw products
+          const writeOffResult = await storageService.createWriteOff({
+            warehouseId: DEFAULT_WAREHOUSE.id,
+            department: data.department,
+            responsiblePerson: data.responsiblePerson,
+            reason: 'production_consumption', // ✨ NEW reason type
+            items: writeOffItems,
+            notes: `Auto write-off for preparation production: ${preparation.name}`
+          })
+
+          if (!writeOffResult.success || !writeOffResult.data) {
+            throw new Error(
+              `Failed to write-off raw products for ${preparation.name}: ${writeOffResult.error}`
+            )
+          }
+
+          storageWriteOffIds.push(writeOffResult.data.id)
+          DebugUtils.info(MODULE_NAME, 'Raw products written off successfully', {
+            writeOffId: writeOffResult.data.id,
+            items: writeOffItems.length
+          })
         }
-
-        storageWriteOffIds.push(writeOffResult.data.id)
-        DebugUtils.info(MODULE_NAME, 'Raw products written off successfully', {
-          writeOffId: writeOffResult.data.id,
-          items: writeOffItems.length
+      } else {
+        DebugUtils.info(MODULE_NAME, 'Skipping auto write-off (inventory correction)', {
+          itemCount: data.items.length
         })
       }
 
@@ -976,26 +982,93 @@ export class PreparationService {
       }
 
       const inventory = this.inventories[inventoryIndex]
-      inventory.status = 'confirmed'
-      inventory.updatedAt = TimeUtils.getCurrentLocalISO()
 
-      // ✅ SIMPLIFIED: Just recalculate balances after inventory confirmation
-      // No separate correction operations needed - inventory adjustments are applied directly
+      if (inventory.status === 'confirmed') {
+        throw new Error('Inventory already finalized')
+      }
+
+      // Find items with discrepancies
       const itemsWithDiscrepancies = inventory.items.filter(
         item => Math.abs(item.difference) > 0.01
       )
 
+      const correctionOperations: PreparationOperation[] = []
+
+      // Create write-off operations for negative discrepancies (actualQuantity < systemQuantity)
       if (itemsWithDiscrepancies.length > 0) {
-        DebugUtils.info(MODULE_NAME, 'Applying inventory adjustments', {
+        DebugUtils.info(MODULE_NAME, 'Creating write-off operations for inventory discrepancies', {
           count: itemsWithDiscrepancies.length,
           inventoryId: inventory.id
         })
 
-        // Recalculate balances to reflect confirmed inventory
-        await this.recalculateBalances(inventory.department)
+        // Group items by sign (negative = shortage, positive = surplus)
+        const shortageItems = itemsWithDiscrepancies.filter(item => item.difference < 0)
+        const surplusItems = itemsWithDiscrepancies.filter(item => item.difference > 0)
+
+        // Handle shortages (write-off needed)
+        if (shortageItems.length > 0) {
+          const writeOffData: CreatePreparationWriteOffData = {
+            department: inventory.department,
+            responsiblePerson: inventory.responsiblePerson,
+            reason: 'other', // Inventory adjustment
+            items: shortageItems.map(item => ({
+              preparationId: item.preparationId,
+              quantity: Math.abs(item.difference), // Use absolute value for write-off
+              notes: `Inventory adjustment: ${inventory.documentNumber}`
+            })),
+            notes: `Inventory adjustment: ${inventory.documentNumber}`
+          }
+
+          // Create write-off operation (this will update batches via FIFO)
+          const writeOffOperation = await this.createWriteOff(writeOffData)
+          correctionOperations.push(writeOffOperation)
+
+          DebugUtils.info(MODULE_NAME, 'Write-off operation created for inventory shortages', {
+            operationId: writeOffOperation.id,
+            itemCount: shortageItems.length,
+            totalValue: writeOffOperation.totalValue
+          })
+        }
+
+        // Handle surpluses (receipt/correction needed)
+        if (surplusItems.length > 0) {
+          DebugUtils.info(MODULE_NAME, 'Surplus items found in inventory', {
+            count: surplusItems.length,
+            totalValue: surplusItems.reduce((sum, item) => sum + item.valueDifference, 0)
+          })
+
+          // Create receipt for surplus items
+          const receiptData: CreatePreparationReceiptData = {
+            department: inventory.department,
+            responsiblePerson: inventory.responsiblePerson,
+            sourceType: 'inventory_adjustment',
+            items: surplusItems.map(item => ({
+              preparationId: item.preparationId,
+              quantity: item.difference, // Positive value
+              costPerUnit: item.averageCost,
+              expiryDate: TimeUtils.getDateDaysFromNow(2), // 2 days default
+              notes: `Inventory adjustment: ${inventory.documentNumber} (surplus found)`
+            })),
+            notes: `Inventory adjustment: ${inventory.documentNumber} (surplus)`,
+            skipAutoWriteOff: true // ✨ Skip auto write-off for inventory corrections
+          }
+
+          const receiptOperation = await this.createReceipt(receiptData)
+          correctionOperations.push(receiptOperation)
+
+          DebugUtils.info(MODULE_NAME, 'Receipt operation created for inventory surplus', {
+            operationId: receiptOperation.id,
+            itemCount: surplusItems.length,
+            totalValue: receiptOperation.totalValue
+          })
+        }
       }
 
-      // ✅ UPDATE inventory document status in Supabase (status → 'confirmed')
+      // Update inventory status
+      inventory.status = 'confirmed'
+      inventory.updatedAt = TimeUtils.getCurrentLocalISO()
+
+      // ✅ UPDATE inventory document status in Supabase
       const { error: updateError } = await supabase
         .from('preparation_inventory_documents')
         .update({
@@ -1012,14 +1085,19 @@ export class PreparationService {
         throw updateError
       }
 
-      DebugUtils.info(MODULE_NAME, 'Inventory finalized in Supabase', {
+      this.inventories[inventoryIndex] = inventory
+
+      // Recalculate balances after all operations
+      await this.recalculateBalances(inventory.department)
+
+      DebugUtils.info(MODULE_NAME, 'Inventory finalized successfully', {
         inventoryId,
         documentNumber: inventory.documentNumber,
-        discrepancies: itemsWithDiscrepancies.length
+        discrepancies: itemsWithDiscrepancies.length,
+        correctionOperations: correctionOperations.length
       })
 
-      this.inventories[inventoryIndex] = inventory
-      return [] // No correction operations - adjustments applied directly
+      return correctionOperations
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to finalize preparation inventory', {
         error,

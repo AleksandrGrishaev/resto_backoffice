@@ -5,7 +5,11 @@ export type PreparationDepartment = 'kitchen' | 'bar' | 'all'
 // ✅ SIMPLIFIED: Only production, inventory, and write_off operations
 export type PreparationOperationType = 'receipt' | 'inventory' | 'write_off'
 // ✅ SIMPLIFIED: Only production and inventory_adjustment sources
-export type BatchSourceType = 'production' | 'inventory_adjustment'
+export type BatchSourceType =
+  | 'production'
+  | 'correction'
+  | 'opening_balance'
+  | 'inventory_adjustment'
 export type BatchStatus = 'active' | 'expired' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
@@ -139,6 +143,7 @@ export interface CreatePreparationReceiptData {
   items: PreparationReceiptItem[]
   sourceType: BatchSourceType
   notes?: string
+  skipAutoWriteOff?: boolean // ✨ NEW: Skip auto write-off for inventory corrections
 }
 
 export interface PreparationReceiptItem {

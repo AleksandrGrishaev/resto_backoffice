@@ -259,9 +259,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { usePreparationWriteOff } from '@/stores/preparation'
 import { usePreparationStore } from '@/stores/preparation'
+import { useAuthStore } from '@/stores/auth'
 import { formatIDR } from '@/utils/currency'
 import { DebugUtils } from '@/utils'
 import PreparationSelectorWidget from './PreparationSelectorWidget.vue'
@@ -311,12 +312,24 @@ const formRef = ref()
 const loading = ref(false)
 
 // Form data
+// Stores
+const authStore = useAuthStore()
+
 const formData = ref<WriteOffFormData>({
   department: props.department,
   responsiblePerson: '',
   reason: 'other',
   items: [],
   notes: ''
+})
+
+// Initialize with current user's name
+onMounted(() => {
+  if (authStore.user?.displayName) {
+    formData.value.responsiblePerson = authStore.user.displayName
+  } else if (authStore.user?.email) {
+    formData.value.responsiblePerson = authStore.user.email
+  }
 })
 
 // Computed
@@ -499,6 +512,21 @@ function handleCancel() {
   formRef.value?.resetValidation()
   emit('update:model-value', false)
 }
+
+// Watch for dialog open/close
+watch(
+  () => props.modelValue,
+  isOpen => {
+    if (isOpen && !formData.value.responsiblePerson) {
+      // Auto-fill responsible person when dialog opens
+      if (authStore.user?.displayName) {
+        formData.value.responsiblePerson = authStore.user.displayName
+      } else if (authStore.user?.email) {
+        formData.value.responsiblePerson = authStore.user.email
+      }
+    }
+  }
+)
 
 // Watch for preselected preparations
 watch(
