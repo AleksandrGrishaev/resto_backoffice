@@ -5,7 +5,7 @@
       <v-card class="pa-8 text-center" elevation="8" rounded="lg">
         <v-progress-circular indeterminate size="64" width="6" color="primary" class="mb-4" />
         <div class="text-h6 mb-2">{{ loadingMessage }}</div>
-        <div class="text-caption text-medium-emphasis">Please wait...</div>
+        <div class="text-caption text-medium-emphasis">Loading application...</div>
       </v-card>
     </v-overlay>
 

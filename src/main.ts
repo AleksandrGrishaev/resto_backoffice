@@ -22,6 +22,7 @@ import { ENV } from '@/config/environment'
 
 const MODULE_NAME = 'Main'
 
+// HMR Test: Force full reload
 // ===== МИНИМАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ =====
 function initializeApp() {
   try {

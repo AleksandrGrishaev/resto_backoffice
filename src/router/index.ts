@@ -29,6 +29,7 @@ import PosMainView from '@/views/pos/PosMainView.vue'
 
 // ===== DEBUG VIEWS (DEV ONLY) =====
 import DebugView from '@/views/debug/DebugView.vue'
+import HMRTestView from '@/views/debug/HMRTestView.vue'
 
 // ===== AUTH SYSTEM =====
 import { useAuthStore } from '@/stores/auth'
@@ -288,6 +289,16 @@ const routes: RouteRecordRaw[] = [
                   component: () => import('@/views/debug/SupabaseTestView.vue'),
                   meta: {
                     title: 'Supabase Test',
+                    requiresDev: true,
+                    allowedRoles: ['admin'] as UserRole[]
+                  }
+                },
+                {
+                  path: 'hmr',
+                  name: 'debug-hmr',
+                  component: HMRTestView,
+                  meta: {
+                    title: 'HMR Test',
                     requiresDev: true,
                     allowedRoles: ['admin'] as UserRole[]
                   }

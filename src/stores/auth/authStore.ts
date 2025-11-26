@@ -8,6 +8,7 @@ import { supabase } from '@/supabase'
 import { ENV } from '@/config/environment'
 import { useRouter } from 'vue-router'
 import { resetAllStores } from '@/core/storeResetService'
+import { clearHMRState } from '@/core/hmrState'
 
 const MODULE_NAME = 'AuthStore'
 
@@ -114,6 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Reset local state immediately (no API calls needed)
     await resetAllStores()
+    clearHMRState()
     resetState()
 
     // Redirect to login
@@ -357,13 +359,16 @@ export const useAuthStore = defineStore('auth', () => {
       // Step 3: Reset all application stores
       await resetAllStores()
 
-      // Step 4: Clear legacy session storage
+      // Step 4: Clear HMR state (prevent stale store data on next login)
+      clearHMRState()
+
+      // Step 5: Clear legacy session storage
       localStorage.removeItem('pin_session')
 
-      // Step 5: Reset auth state
+      // Step 6: Reset auth state
       resetState()
 
-      // Step 6: Clean up broadcast key
+      // Step 7: Clean up broadcast key
       localStorage.removeItem(LOGOUT_BROADCAST_KEY)
 
       // Step 7: Redirect to login
@@ -376,6 +381,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Even if logout fails, try to clean up local state
       try {
         await resetAllStores()
+        clearHMRState()
         resetState()
         await router.push('/auth/login')
       } catch (cleanupError) {

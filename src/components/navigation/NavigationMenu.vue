@@ -192,6 +192,13 @@
           </template>
         </v-list-item>
 
+        <!-- HMR Test -->
+        <v-list-item to="/debug/hmr" prepend-icon="mdi-fire" color="warning" class="ps-8">
+          <template #title>
+            <span>HMR Test</span>
+          </template>
+        </v-list-item>
+
         <!-- :TODO Future debug tools -->
         <!--
         <v-list-item

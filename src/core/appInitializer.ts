@@ -13,6 +13,7 @@ import { AppInitializerTests } from './appInitializerTests'
 import { DebugUtils } from '@/utils'
 import { usePlatform } from '@/composables/usePlatform'
 import { ENV } from '@/config/environment'
+import { isHotReload, shouldReinitializeStores, saveHMRState, getHMRState } from './hmrState'
 
 // Для summary и utilities
 import { useProductsStore } from '@/stores/productsStore'
@@ -66,11 +67,38 @@ export class AppInitializer {
     try {
       const finalUserRoles = (userRoles || this.config.userRoles || []) as UserRole[]
 
+      // 🔥 HMR Optimization: Skip initialization if stores are already loaded
+      const isHMR = isHotReload()
+      const hmrState = getHMRState()
+      const shouldSkipInit = !shouldReinitializeStores(finalUserRoles)
+
+      if (shouldSkipInit && isHMR && hmrState) {
+        DebugUtils.info(MODULE_NAME, '🔥 Hot reload detected - skipping store initialization', {
+          isHMR,
+          storesInitialized: hmrState.storesInitialized,
+          userRoles: finalUserRoles,
+          cachedRoles: hmrState.userRoles,
+          timestamp: new Date(hmrState.timestamp).toISOString()
+        })
+
+        // Return cached summary
+        return {
+          timestamp: new Date().toISOString(),
+          platform: this.platform.platform.value,
+          userRoles: finalUserRoles,
+          storesLoaded: 0, // Skipped
+          totalTime: 0,
+          results: []
+        }
+      }
+
       DebugUtils.info(MODULE_NAME, '🚀 Starting app initialization', {
         strategy: this.strategy.getName(),
         userRoles: finalUserRoles,
         platform: this.platform.platform.value,
-        enableDebug: this.config.enableDebug
+        enableDebug: this.config.enableDebug,
+        isHotReload: isHMR,
+        skipInit: shouldSkipInit
       })
 
       // Phase 1: Критические stores (для всех ролей)
@@ -104,10 +132,14 @@ export class AppInitializer {
 
       this.showInitializationSummary(finalUserRoles)
 
+      // 🔥 Save HMR state for next hot reload
+      saveHMRState(true, finalUserRoles)
+
       DebugUtils.info(MODULE_NAME, '✅ App initialization completed successfully', {
         totalStores: allResults.length,
         successfulStores: allResults.filter(r => r.success).length,
-        totalTime: summary.totalTime + 'ms'
+        totalTime: summary.totalTime + 'ms',
+        hmrStateSaved: true
       })
 
       return summary

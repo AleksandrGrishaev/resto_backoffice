@@ -39,6 +39,20 @@ export default defineConfig({
     host: true,
     fs: {
       strict: true
+    },
+    hmr: {
+      // Debounce HMR updates to reduce reload frequency
+      overlay: true
+    },
+    watch: {
+      // Reduce filesystem watching overhead
+      ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
+      // Debounce watcher events (milliseconds)
+      // This prevents multiple rapid reloads when files are saved
+      awaitWriteFinish: {
+        stabilityThreshold: 500, // Wait 500ms after last change
+        pollInterval: 100
+      }
     }
   }
 })
