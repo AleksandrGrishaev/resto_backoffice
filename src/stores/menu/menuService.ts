@@ -2,7 +2,7 @@
 import type { Category, MenuItem, CreateCategoryDto, CreateMenuItemDto } from './types'
 import { createTimestamp } from './types'
 import { generateId } from '@/utils/id'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, executeSupabaseQuery } from '@/utils'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
 import {
@@ -19,21 +19,6 @@ const MODULE_NAME = 'MenuService'
 // Helper: Check if Supabase is available
 function isSupabaseAvailable(): boolean {
   return ENV.useSupabase && !!supabase
-}
-
-// Helper: Timeout wrapper for Supabase requests
-const SUPABASE_TIMEOUT = 5000 // 5 seconds
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number = SUPABASE_TIMEOUT
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('Supabase request timeout')), timeoutMs)
-    )
-  ])
 }
 
 export class CategoryService {
@@ -60,27 +45,25 @@ export class CategoryService {
   // Получение всех категорий с сортировкой
   async getAllSorted(): Promise<Category[]> {
     try {
-      // Try Supabase first (if online)
+      // Try Supabase first (if online) with retry logic
       if (isSupabaseAvailable()) {
         try {
-          const { data, error } = await withTimeout(
-            supabase.from('menu_categories').select('*').order('sort_order', { ascending: true })
+          const data = await executeSupabaseQuery(
+            supabase.from('menu_categories').select('*').order('sort_order', { ascending: true }),
+            `${MODULE_NAME}.getAllSorted`
           )
 
-          if (!error && data) {
-            const categories = data.map(categoryFromSupabase)
-            // Cache to localStorage for offline
-            localStorage.setItem('menu_categories_cache', JSON.stringify(categories))
-            DebugUtils.info(MODULE_NAME, '✅ Categories loaded from Supabase', {
-              count: categories.length
-            })
-            return categories
-          } else {
-            DebugUtils.error(MODULE_NAME, 'Failed to load from Supabase:', error)
-          }
-        } catch (timeoutError) {
-          DebugUtils.warn(MODULE_NAME, '⚠️ Supabase timeout or network error, using cache', {
-            error: timeoutError instanceof Error ? timeoutError.message : 'Unknown error'
+          const categories = data.map(categoryFromSupabase)
+          // Cache to localStorage for offline
+          localStorage.setItem('menu_categories_cache', JSON.stringify(categories))
+          DebugUtils.info(MODULE_NAME, '✅ Categories loaded from Supabase', {
+            count: categories.length
+          })
+          return categories
+        } catch (error) {
+          // All retries failed - fallback to cache
+          DebugUtils.warn(MODULE_NAME, '⚠️ Supabase request failed after retries, using cache', {
+            error: error instanceof Error ? error.message : 'Unknown error'
           })
         }
       }
@@ -313,31 +296,29 @@ export class MenuItemService {
   // Получение всех позиций с сортировкой
   async getAllSorted(): Promise<MenuItem[]> {
     try {
-      // Try Supabase first (if online)
+      // Try Supabase first (if online) with retry logic
       if (isSupabaseAvailable()) {
         try {
-          const { data, error } = await withTimeout(
+          const data = await executeSupabaseQuery(
             supabase
               .from('menu_items')
               .select('*')
               .order('category_id', { ascending: true })
-              .order('sort_order', { ascending: true })
+              .order('sort_order', { ascending: true }),
+            `${MODULE_NAME}.MenuItemService.getAllSorted`
           )
 
-          if (!error && data) {
-            const menuItems = data.map(menuItemFromSupabase)
-            // Cache to localStorage for offline
-            localStorage.setItem('menu_items_cache', JSON.stringify(menuItems))
-            DebugUtils.info(MODULE_NAME, '✅ Menu items loaded from Supabase', {
-              count: menuItems.length
-            })
-            return menuItems
-          } else {
-            DebugUtils.error(MODULE_NAME, 'Failed to load menu items from Supabase:', error)
-          }
-        } catch (timeoutError) {
-          DebugUtils.warn(MODULE_NAME, '⚠️ Supabase timeout or network error, using cache', {
-            error: timeoutError instanceof Error ? timeoutError.message : 'Unknown error'
+          const menuItems = data.map(menuItemFromSupabase)
+          // Cache to localStorage for offline
+          localStorage.setItem('menu_items_cache', JSON.stringify(menuItems))
+          DebugUtils.info(MODULE_NAME, '✅ Menu items loaded from Supabase', {
+            count: menuItems.length
+          })
+          return menuItems
+        } catch (error) {
+          // All retries failed - fallback to cache
+          DebugUtils.warn(MODULE_NAME, '⚠️ Supabase request failed after retries, using cache', {
+            error: error instanceof Error ? error.message : 'Unknown error'
           })
         }
       }

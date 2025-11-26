@@ -9,7 +9,7 @@ import type {
   CreatePackageOptionDto,
   UpdatePackageOptionDto
 } from './types'
-import { DebugUtils, TimeUtils, generateId } from '@/utils'
+import { DebugUtils, TimeUtils, generateId, executeSupabaseQuery } from '@/utils'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
 import {
@@ -29,21 +29,6 @@ function isSupabaseAvailable(): boolean {
   return ENV.useSupabase && !!supabase
 }
 
-// Helper: Timeout wrapper for Supabase requests
-const SUPABASE_TIMEOUT = 5000 // 5 seconds
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number = SUPABASE_TIMEOUT
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('Supabase request timeout')), timeoutMs)
-    )
-  ])
-}
-
 /**
  * ProductsService - Supabase-only implementation
  * Pattern: Supabase-first with localStorage cache fallback
@@ -58,49 +43,47 @@ export class ProductsService {
    */
   async getAll(): Promise<Product[]> {
     try {
-      // Try Supabase first (if online)
+      // Try Supabase first (if online) with retry logic
       if (isSupabaseAvailable()) {
         try {
           // Fetch products and their package options in parallel
-          const [productsResult, packagesResult] = await Promise.all([
-            withTimeout(supabase.from('products').select('*').order('name', { ascending: true })),
-            withTimeout(supabase.from('package_options').select('*'))
+          const [productsData, packagesData] = await Promise.all([
+            executeSupabaseQuery(
+              supabase.from('products').select('*').order('name', { ascending: true }),
+              `${MODULE_NAME}.getAll.products`
+            ),
+            executeSupabaseQuery(
+              supabase.from('package_options').select('*'),
+              `${MODULE_NAME}.getAll.packages`
+            )
           ])
 
-          if (!productsResult.error && productsResult.data && !packagesResult.error) {
-            // Group package options by product_id
-            const packageOptionsMap = new Map<string, PackageOption[]>()
-            if (packagesResult.data) {
-              packagesResult.data.forEach(pkg => {
-                const productId = pkg.product_id
-                if (!packageOptionsMap.has(productId)) {
-                  packageOptionsMap.set(productId, [])
-                }
-                packageOptionsMap.get(productId)!.push(packageOptionFromSupabase(pkg))
-              })
+          // Group package options by product_id
+          const packageOptionsMap = new Map<string, PackageOption[]>()
+          packagesData.forEach(pkg => {
+            const productId = pkg.product_id
+            if (!packageOptionsMap.has(productId)) {
+              packageOptionsMap.set(productId, [])
             }
+            packageOptionsMap.get(productId)!.push(packageOptionFromSupabase(pkg))
+          })
 
-            // Map products with their package options
-            const products = productsResult.data.map(row =>
-              productFromSupabase(row, packageOptionsMap.get(row.id) || [])
-            )
+          // Map products with their package options
+          const products = productsData.map(row =>
+            productFromSupabase(row, packageOptionsMap.get(row.id) || [])
+          )
 
-            // Cache to localStorage for offline
-            localStorage.setItem('products_cache', JSON.stringify(products))
-            DebugUtils.info(MODULE_NAME, '✅ Products loaded from Supabase', {
-              count: products.length,
-              withPackages: products.filter(p => p.packageOptions.length > 0).length
-            })
-            return products
-          } else {
-            DebugUtils.error(MODULE_NAME, 'Failed to load from Supabase:', {
-              productsError: productsResult.error,
-              packagesError: packagesResult.error
-            })
-          }
-        } catch (timeoutError) {
-          DebugUtils.warn(MODULE_NAME, '⚠️ Supabase timeout or network error, using cache', {
-            error: timeoutError instanceof Error ? timeoutError.message : 'Unknown error'
+          // Cache to localStorage for offline
+          localStorage.setItem('products_cache', JSON.stringify(products))
+          DebugUtils.info(MODULE_NAME, '✅ Products loaded from Supabase', {
+            count: products.length,
+            withPackages: products.filter(p => p.packageOptions.length > 0).length
+          })
+          return products
+        } catch (error) {
+          // All retries failed - fallback to cache
+          DebugUtils.warn(MODULE_NAME, '⚠️ Supabase request failed after retries, using cache', {
+            error: error instanceof Error ? error.message : 'Unknown error'
           })
         }
       }

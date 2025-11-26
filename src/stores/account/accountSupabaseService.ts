@@ -38,9 +38,15 @@ function isSupabaseAvailable(): boolean {
   return ENV.useSupabase && !!supabase
 }
 
-// Helper: Timeout wrapper for Supabase requests
-const SUPABASE_TIMEOUT = 5000 // 5 seconds
+// Helper: Timeout wrapper for Supabase requests with retry logic
+// ⚠️ QUICK FIX: Increased from 5s to 15s to fix timeout issues
+const SUPABASE_TIMEOUT = 15000 // 15 seconds (was 5 seconds - too short!)
+const MAX_RETRIES = 3
+const RETRY_BASE_DELAY = 1000 // 1 second
 
+/**
+ * Execute promise with timeout
+ */
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number = SUPABASE_TIMEOUT
@@ -51,6 +57,74 @@ async function withTimeout<T>(
       setTimeout(() => reject(new Error('Supabase request timeout')), timeoutMs)
     )
   ])
+}
+
+/**
+ * Execute request with retry logic (exponential backoff)
+ * ⚠️ QUICK FIX: Added retry to handle transient network issues
+ */
+async function withRetry<T>(operation: () => Promise<T>, operationName: string): Promise<T> {
+  let lastError: any = null
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Execute with timeout
+      const result = await withTimeout(operation())
+
+      // Success - log if this was a retry
+      if (attempt > 0) {
+        DebugUtils.info(MODULE_NAME, `✅ ${operationName} succeeded after retry`, {
+          attempt: attempt + 1,
+          totalAttempts: attempt + 1
+        })
+      }
+
+      return result
+    } catch (error: any) {
+      lastError = error
+      const isLastAttempt = attempt === MAX_RETRIES
+
+      // Check if error is retryable (timeout or network error)
+      const errorMessage = error?.message || String(error)
+      const isRetryable =
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('ECONNRESET') ||
+        errorMessage.includes('ETIMEDOUT') ||
+        errorMessage.includes('Failed to fetch')
+
+      if (!isRetryable || isLastAttempt) {
+        // Don't retry or exhausted retries
+        DebugUtils.error(MODULE_NAME, `❌ ${operationName} failed (no retry)`, {
+          attempt: attempt + 1,
+          maxRetries: MAX_RETRIES,
+          error: {
+            message: errorMessage,
+            code: error?.code,
+            stack: error?.stack
+          }
+        })
+        throw error
+      }
+
+      // Calculate delay with exponential backoff + jitter
+      const delay = RETRY_BASE_DELAY * Math.pow(2, attempt)
+      const jitter = Math.random() * 1000
+
+      DebugUtils.warn(MODULE_NAME, `⏳ ${operationName} failed, retrying...`, {
+        attempt: attempt + 1,
+        maxRetries: MAX_RETRIES,
+        retryIn: Math.floor(delay + jitter) + 'ms',
+        error: errorMessage
+      })
+
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, delay + jitter))
+    }
+  }
+
+  // All retries exhausted
+  throw lastError
 }
 
 /**
@@ -65,17 +139,17 @@ export class AccountSupabaseService {
    * Get all accounts
    */
   async getAllAccounts(): Promise<Account[]> {
-    try {
-      if (!isSupabaseAvailable()) {
-        throw new Error('Supabase not available')
-      }
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
 
-      const { data, error } = await withTimeout(
-        supabase.from('accounts').select('*').order('name', { ascending: true })
-      )
+    return withRetry(async () => {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('*')
+        .order('name', { ascending: true })
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch accounts:', error)
         throw error
       }
 
@@ -86,10 +160,7 @@ export class AccountSupabaseService {
       })
 
       return accounts
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading accounts:', error)
-      throw error
-    }
+    }, 'getAllAccounts')
   }
 
   /**
@@ -225,17 +296,17 @@ export class AccountSupabaseService {
    * Get all transactions
    */
   async getAllTransactions(): Promise<Transaction[]> {
-    try {
-      if (!isSupabaseAvailable()) {
-        throw new Error('Supabase not available')
-      }
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
 
-      const { data, error } = await withTimeout(
-        supabase.from('transactions').select('*').order('created_at', { ascending: false })
-      )
+    return withRetry(async () => {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('created_at', { ascending: false })
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch transactions:', error)
         throw error
       }
 
@@ -246,10 +317,7 @@ export class AccountSupabaseService {
       })
 
       return transactions
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading transactions:', error)
-      throw error
-    }
+    }, 'getAllTransactions')
   }
 
   /**
@@ -386,17 +454,17 @@ export class AccountSupabaseService {
    * Get all pending payments
    */
   async getAllPendingPayments(): Promise<PendingPayment[]> {
-    try {
-      if (!isSupabaseAvailable()) {
-        throw new Error('Supabase not available')
-      }
+    if (!isSupabaseAvailable()) {
+      throw new Error('Supabase not available')
+    }
 
-      const { data, error } = await withTimeout(
-        supabase.from('pending_payments').select('*').order('due_date', { ascending: true })
-      )
+    return withRetry(async () => {
+      const { data, error } = await supabase
+        .from('pending_payments')
+        .select('*')
+        .order('due_date', { ascending: true })
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch pending payments:', error)
         throw error
       }
 
@@ -407,10 +475,7 @@ export class AccountSupabaseService {
       })
 
       return payments
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading pending payments:', error)
-      throw error
-    }
+    }, 'getAllPendingPayments')
   }
 
   /**

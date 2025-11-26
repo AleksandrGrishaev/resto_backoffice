@@ -79,6 +79,13 @@ interface EnvironmentConfig {
     enabled: boolean
     useServiceKey: boolean
   }
+
+  // Supabase Request Configuration
+  supabaseRequest: {
+    timeout: number // Request timeout in milliseconds
+    maxRetries: number // Max retry attempts on failure
+    retryDelay: number // Base delay between retries (exponential backoff)
+  }
 }
 
 /**
@@ -160,6 +167,13 @@ function createEnvironmentConfig(): EnvironmentConfig {
       serviceKey: import.meta.env.VITE_SUPABASE_SERVICE_KEY || '',
       enabled: import.meta.env.VITE_USE_SUPABASE === 'true',
       useServiceKey: import.meta.env.VITE_SUPABASE_USE_SERVICE_KEY === 'true'
+    },
+
+    // Supabase Request Configuration
+    supabaseRequest: {
+      timeout: Number(import.meta.env.VITE_SUPABASE_TIMEOUT) || 15000, // 15 seconds default
+      maxRetries: Number(import.meta.env.VITE_SUPABASE_MAX_RETRIES) || 3, // 3 retries default
+      retryDelay: Number(import.meta.env.VITE_SUPABASE_RETRY_DELAY) || 1000 // 1 second default
     }
   }
 }
