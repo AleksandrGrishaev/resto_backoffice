@@ -22,7 +22,6 @@ import type {
   PreparationBalance,
   PreparationDepartment,
   CreatePreparationReceiptData,
-  CreatePreparationCorrectionData,
   CreatePreparationInventoryData,
   CreatePreparationWriteOffData,
   PreparationInventoryDocument,
@@ -824,167 +823,7 @@ export class PreparationService {
     }
   }
 
-  // ===========================
-  // ✅ CORRECTION OPERATIONS WITH PROPER ROUNDING
-  // ===========================
-
-  async createCorrection(data: CreatePreparationCorrectionData): Promise<PreparationOperation> {
-    try {
-      DebugUtils.info(MODULE_NAME, 'Creating preparation correction operation', { data })
-
-      const operationItems = []
-      let totalValue = 0
-
-      for (const item of data.items) {
-        const preparationInfo = this.getPreparationInfo(item.preparationId)
-
-        if (item.quantity > 0) {
-          // Positive correction (surplus) - create new batch
-          const batch: PreparationBatch = {
-            id: crypto.randomUUID(),
-            batchNumber: this.generateBatchNumber(
-              preparationInfo.name,
-              TimeUtils.getCurrentLocalISO()
-            ),
-            preparationId: item.preparationId,
-            department: data.department,
-            initialQuantity: item.quantity,
-            currentQuantity: item.quantity,
-            unit: preparationInfo.unit,
-            costPerUnit: preparationInfo.costPerPortion,
-            totalValue: Math.round(item.quantity * preparationInfo.costPerPortion * 100) / 100,
-            productionDate: TimeUtils.getCurrentLocalISO(),
-            sourceType: 'correction',
-            notes: `Correction surplus: ${item.notes || ''}`,
-            status: 'active',
-            isActive: true,
-            createdAt: TimeUtils.getCurrentLocalISO(),
-            updatedAt: TimeUtils.getCurrentLocalISO()
-          }
-
-          // ✅ INSERT new batch into Supabase
-          const { error: batchError } = await supabase
-            .from('preparation_batches')
-            .insert(batchToSupabase(batch))
-
-          if (batchError) {
-            DebugUtils.error(MODULE_NAME, 'Failed to insert batch into Supabase', { batchError })
-            throw batchError
-          }
-
-          this.batches.push(batch)
-          totalValue += batch.totalValue
-        } else {
-          // Negative correction (shortage) - write off from existing batches
-          const positiveQuantity = Math.abs(item.quantity)
-          const { allocations, remainingQuantity } = this.calculateFifoAllocation(
-            item.preparationId,
-            data.department,
-            positiveQuantity
-          )
-
-          if (remainingQuantity > 0) {
-            throw new Error(
-              `Insufficient stock for correction of ${preparationInfo.name}. Missing: ${remainingQuantity} ${preparationInfo.unit}`
-            )
-          }
-
-          const totalCost = allocations.reduce(
-            (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
-            0
-          )
-
-          // Update batches with proper precision AND save to Supabase
-          for (const allocation of allocations) {
-            const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
-            if (batchIndex !== -1) {
-              const batch = this.batches[batchIndex]
-
-              const newQuantity = batch.currentQuantity - allocation.quantity
-              batch.currentQuantity = Math.round(newQuantity * 10000) / 10000
-              batch.totalValue = Math.round(batch.currentQuantity * batch.costPerUnit * 100) / 100
-              batch.updatedAt = TimeUtils.getCurrentLocalISO()
-
-              if (batch.currentQuantity <= 0.0001) {
-                batch.currentQuantity = 0
-                batch.totalValue = 0
-                batch.status = 'depleted'
-                batch.isActive = false
-              }
-
-              // ✅ UPDATE batch in Supabase
-              const { error: batchUpdateError } = await supabase
-                .from('preparation_batches')
-                .update(batchToSupabaseUpdate(batch))
-                .eq('id', batch.id)
-
-              if (batchUpdateError) {
-                DebugUtils.error(MODULE_NAME, 'Failed to update batch in Supabase', {
-                  batchUpdateError
-                })
-                throw batchUpdateError
-              }
-
-              this.batches[batchIndex] = batch
-            }
-          }
-
-          totalValue += totalCost
-        }
-
-        operationItems.push({
-          id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          preparationId: item.preparationId,
-          preparationName: preparationInfo.name,
-          quantity: Math.abs(item.quantity),
-          unit: preparationInfo.unit,
-          totalCost: Math.abs(item.quantity) * preparationInfo.costPerPortion,
-          notes: item.notes
-        })
-      }
-
-      const operation: PreparationOperation = {
-        id: crypto.randomUUID(),
-        operationType: 'correction',
-        documentNumber: `PREP-COR-${String(this.operations.length + 1).padStart(3, '0')}`,
-        operationDate: TimeUtils.getCurrentLocalISO(),
-        department: data.department,
-        responsiblePerson: data.responsiblePerson,
-        items: operationItems,
-        totalValue,
-        correctionDetails: data.correctionDetails,
-        status: 'confirmed',
-        notes: data.notes,
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-
-      // ✅ INSERT operation into Supabase
-      const { error: operationError } = await supabase
-        .from('preparation_operations')
-        .insert(operationToSupabase(operation))
-
-      if (operationError) {
-        DebugUtils.error(MODULE_NAME, 'Failed to insert operation into Supabase', {
-          operationError
-        })
-        throw operationError
-      }
-
-      this.operations.push(operation)
-      await this.recalculateBalances(data.department)
-
-      DebugUtils.info(MODULE_NAME, 'Preparation correction operation created', {
-        operationId: operation.id,
-        totalValue
-      })
-
-      return operation
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create preparation correction', { error })
-      throw error
-    }
-  }
+  // ✅ REMOVED: createCorrection - No longer needed (only Recipe Production now)
 
   // ===========================
   // INVENTORY OPERATIONS
@@ -1140,31 +979,20 @@ export class PreparationService {
       inventory.status = 'confirmed'
       inventory.updatedAt = TimeUtils.getCurrentLocalISO()
 
-      const correctionOperations: PreparationOperation[] = []
+      // ✅ SIMPLIFIED: Just recalculate balances after inventory confirmation
+      // No separate correction operations needed - inventory adjustments are applied directly
       const itemsWithDiscrepancies = inventory.items.filter(
         item => Math.abs(item.difference) > 0.01
       )
 
-      // ✅ Create correction operations for discrepancies (if any)
       if (itemsWithDiscrepancies.length > 0) {
-        const correctionData: CreatePreparationCorrectionData = {
-          department: inventory.department,
-          responsiblePerson: inventory.responsiblePerson,
-          items: itemsWithDiscrepancies.map(item => ({
-            preparationId: item.preparationId,
-            quantity: item.difference,
-            notes: `Inventory adjustment: ${item.notes || 'No specific reason'}`
-          })),
-          correctionDetails: {
-            reason: 'other',
-            relatedId: inventory.id,
-            relatedName: `Inventory ${inventory.documentNumber}`
-          },
-          notes: `Inventory corrections from ${inventory.documentNumber}`
-        }
+        DebugUtils.info(MODULE_NAME, 'Applying inventory adjustments', {
+          count: itemsWithDiscrepancies.length,
+          inventoryId: inventory.id
+        })
 
-        const correctionOperation = await this.createCorrection(correctionData)
-        correctionOperations.push(correctionOperation)
+        // Recalculate balances to reflect confirmed inventory
+        await this.recalculateBalances(inventory.department)
       }
 
       // ✅ UPDATE inventory document status in Supabase (status → 'confirmed')
@@ -1187,12 +1015,11 @@ export class PreparationService {
       DebugUtils.info(MODULE_NAME, 'Inventory finalized in Supabase', {
         inventoryId,
         documentNumber: inventory.documentNumber,
-        discrepancies: itemsWithDiscrepancies.length,
-        correctionsCreated: correctionOperations.length
+        discrepancies: itemsWithDiscrepancies.length
       })
 
       this.inventories[inventoryIndex] = inventory
-      return correctionOperations
+      return [] // No correction operations - adjustments applied directly
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to finalize preparation inventory', {
         error,

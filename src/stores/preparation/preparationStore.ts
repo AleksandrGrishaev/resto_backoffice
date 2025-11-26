@@ -13,7 +13,6 @@ import type {
   PreparationInventoryItem,
   PreparationDepartment,
   CreatePreparationReceiptData,
-  CreatePreparationCorrectionData,
   CreatePreparationInventoryData,
   CreatePreparationWriteOffData
 } from './types'
@@ -260,30 +259,7 @@ export const usePreparationStore = defineStore('preparation', () => {
   // CORE OPERATIONS (with batch sync)
   // ===========================
 
-  async function createCorrection(
-    data: CreatePreparationCorrectionData
-  ): Promise<PreparationOperation> {
-    try {
-      state.value.loading.consumption = true
-      state.value.error = null
-
-      const operation = await preparationService.createCorrection(data)
-      state.value.operations.unshift(operation)
-
-      // ✅ FIXED: Sync both balances AND batches
-      await fetchBalances(data.department)
-
-      return operation
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to create preparation correction'
-      state.value.error = message
-      DebugUtils.error(MODULE_NAME, message, { error })
-      throw error
-    } finally {
-      state.value.loading.consumption = false
-    }
-  }
+  // ✅ REMOVED: createCorrection method - no longer needed (only Recipe Production now)
 
   async function createReceipt(data: CreatePreparationReceiptData): Promise<PreparationOperation> {
     try {
@@ -681,7 +657,6 @@ export const usePreparationStore = defineStore('preparation', () => {
     fetchInventories,
 
     // Operations
-    createCorrection,
     createReceipt,
 
     // ✅ Write-off support (with batch sync)

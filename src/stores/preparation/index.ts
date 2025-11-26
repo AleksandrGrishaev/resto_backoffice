@@ -22,8 +22,6 @@ export type {
   PreparationInventoryItem,
   CreatePreparationReceiptData,
   PreparationReceiptItem,
-  CreatePreparationCorrectionData,
-  PreparationCorrectionItem,
   CreatePreparationInventoryData,
   PreparationState,
   // ✅ NEW: Write-off types

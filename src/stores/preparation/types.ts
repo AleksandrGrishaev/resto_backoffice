@@ -2,13 +2,10 @@
 import { BaseEntity } from '@/types/common'
 
 export type PreparationDepartment = 'kitchen' | 'bar' | 'all'
-// ✅ UPDATED: Added write_off operation type
-export type PreparationOperationType = 'receipt' | 'correction' | 'inventory' | 'write_off'
-export type BatchSourceType =
-  | 'production'
-  | 'correction'
-  | 'opening_balance'
-  | 'inventory_adjustment'
+// ✅ SIMPLIFIED: Only production, inventory, and write_off operations
+export type PreparationOperationType = 'receipt' | 'inventory' | 'write_off'
+// ✅ SIMPLIFIED: Only production and inventory_adjustment sources
+export type BatchSourceType = 'production' | 'inventory_adjustment'
 export type BatchStatus = 'active' | 'expired' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
@@ -72,13 +69,7 @@ export interface PreparationOperation extends BaseEntity {
   items: PreparationOperationItem[]
   totalValue?: number
 
-  correctionDetails?: {
-    reason: 'waste' | 'expired' | 'damage' | 'theft' | 'other'
-    relatedId?: string
-    relatedName?: string
-  }
-
-  // ✅ NEW: Write-off Details
+  // ✅ Write-off Details (only for write_off operations)
   writeOffDetails?: {
     reason: PreparationWriteOffReason
     affectsKPI: boolean
@@ -168,24 +159,6 @@ export interface CreatePreparationWriteOffData {
 }
 
 export interface PreparationWriteOffItem {
-  preparationId: string
-  quantity: number
-  notes?: string
-}
-
-export interface CreatePreparationCorrectionData {
-  department: PreparationDepartment
-  responsiblePerson: string
-  items: PreparationCorrectionItem[]
-  correctionDetails: {
-    reason: 'waste' | 'expired' | 'damage' | 'theft' | 'other'
-    relatedId?: string
-    relatedName?: string
-  }
-  notes?: string
-}
-
-export interface PreparationCorrectionItem {
   preparationId: string
   quantity: number
   notes?: string

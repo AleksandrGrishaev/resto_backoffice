@@ -40,25 +40,21 @@ export { default as PreparationOperationsTable } from './PreparationOperationsTa
 // ========================
 
 /**
- * PreparationProductionDialog - Production dialog for new preparations
- * Handles production of new preparation batches from recipes.
- * Creates new FIFO batches with cost tracking and short expiry date management.
+ * DirectPreparationProductionDialog - ✅ SIMPLIFIED: Direct production dialog
+ * Standalone dialog that handles complete production workflow in one step:
+ * - Auto-fills responsible person from current user
+ * - Only "Recipe Production" mode (correction/opening balance removed)
+ * - Selects preparation and quantity
+ * - Auto-calculates costs from recipes
+ * - Creates production with automatic raw product write-off
+ * - No intermediate steps or dialogs
+ *
+ * Replaces the old 3-dialog workflow:
+ * - PreparationProductionDialog (removed)
+ * - PreparationProductionItemCard (removed)
+ * - AddPreparationProductionItemDialog (removed)
  */
-export { default as PreparationProductionDialog } from './PreparationProductionDialog.vue'
-
-/**
- * PreparationProductionItemCard - Individual item card in production dialog
- * Input form for quantity, cost per unit, expiry date, and notes.
- * Shows total cost calculation and validation rules for preparations.
- */
-export { default as PreparationProductionItemCard } from './PreparationProductionItemCard.vue'
-
-/**
- * AddPreparationProductionItemDialog - Item selection dialog for production
- * Simple dialog to select preparations and set initial quantity
- * and cost before adding to production. Based on recipe data.
- */
-export { default as AddPreparationProductionItemDialog } from './AddPreparationProductionItemDialog.vue'
+export { default as DirectPreparationProductionDialog } from './DirectPreparationProductionDialog.vue'
 
 // ========================
 // INVENTORY MANAGEMENT
@@ -126,9 +122,7 @@ export { default as InventoryDetailsDialog } from './InventoryDetailsDialog.vue'
  * ├── PreparationStockTable (Stock overview)
  * │   └── PreparationItemDetailsDialog (Item details modal)
  * ├── PreparationOperationsTable (Operations history)
- * ├── PreparationProductionDialog (Production workflow)
- * │   ├── PreparationProductionItemCard (Item cards)
- * │   └── AddPreparationProductionItemDialog (Add items)
+ * ├── DirectPreparationProductionDialog (✅ Simplified production workflow)
  * ├── PreparationInventoryDialog (Inventory workflow)
  * │   └── PreparationInventoryItemRow (Item rows)
  * ├── PreparationInventoriesTable (Inventory history)

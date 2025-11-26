@@ -187,7 +187,7 @@
     </v-tabs-window>
 
     <!-- Dialogs -->
-    <preparation-production-dialog
+    <direct-preparation-production-dialog
       v-model="showProductionDialog"
       :department="selectedDepartment"
       @success="handleOperationSuccess"
@@ -230,7 +230,7 @@ import PreparationAlerts from './components/PreparationAlerts.vue'
 import PreparationStockTable from './components/PreparationStockTable.vue'
 import PreparationOperationsTable from './components/PreparationOperationsTable.vue'
 import PreparationInventoriesTable from './components/PreparationInventoriesTable.vue'
-import PreparationProductionDialog from './components/PreparationProductionDialog.vue'
+import DirectPreparationProductionDialog from './components/DirectPreparationProductionDialog.vue'
 import PreparationInventoryDialog from './components/PreparationInventoryDialog.vue'
 
 // ✅ NEW: Write-off Widget

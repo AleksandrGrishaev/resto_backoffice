@@ -1,8 +1,9 @@
-<!-- src/views/preparation/components/AddPreparationProductionItemDialog.vue - SIMPLIFIED VERSION -->
+<!-- src/views/preparation/components/DirectPreparationProductionDialog.vue - SIMPLIFIED PRODUCTION DIALOG -->
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="600px"
+    max-width="700px"
+    persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card>
@@ -10,15 +11,39 @@
         <div>
           <h3>Add Preparation to Production</h3>
           <div class="text-caption text-medium-emphasis">
-            Select preparation and specify quantity
+            Record new preparation production with automatic raw product write-off
           </div>
         </div>
+        <v-btn icon="mdi-close" variant="text" @click="handleClose" />
       </v-card-title>
 
       <v-divider />
 
       <v-card-text class="pa-6">
         <v-form ref="form" v-model="isFormValid">
+          <!-- Responsible Person -->
+          <v-text-field
+            v-model="formData.responsiblePerson"
+            label="Responsible Person"
+            :rules="[v => !!v || 'Required field']"
+            prepend-inner-icon="mdi-account"
+            variant="outlined"
+            class="mb-4"
+            readonly
+          >
+            <template #append-inner>
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" icon="mdi-lock" size="small" color="success" />
+                </template>
+                <span>Auto-filled from current user</span>
+              </v-tooltip>
+            </template>
+          </v-text-field>
+
+          <!-- Source Type - Hidden, always 'production' -->
+          <input v-model="formData.sourceType" type="hidden" value="production" />
+
           <!-- Preparation Selection -->
           <v-select
             v-model="selectedPreparationId"
@@ -80,7 +105,7 @@
             persistent-hint
           />
 
-          <!-- ✅ AUTO-CALCULATED: Total Cost Display -->
+          <!-- Total Cost Display -->
           <v-card
             v-if="selectedPreparation && hasRecipe && calculatedCost > 0"
             variant="outlined"
@@ -109,7 +134,7 @@
             </v-card-text>
           </v-card>
 
-          <!-- ✅ NEW: Raw Products Preview -->
+          <!-- Raw Products Preview -->
           <v-expansion-panels v-if="hasRecipe && rawProductsPreview.length > 0" class="mb-4">
             <v-expansion-panel>
               <v-expansion-panel-title>
@@ -141,7 +166,7 @@
             </v-expansion-panel>
           </v-expansion-panels>
 
-          <!-- ✅ NEW: Shelf Life Display -->
+          <!-- Shelf Life Display -->
           <v-alert
             v-if="selectedPreparation"
             type="info"
@@ -160,7 +185,7 @@
             </div>
           </v-alert>
 
-          <!-- ✅ WARNING: No Recipe -->
+          <!-- WARNING: No Recipe -->
           <v-alert
             v-if="selectedPreparation && !hasRecipe"
             type="warning"
@@ -172,6 +197,16 @@
             This preparation has no recipe defined. Raw products will NOT be written off
             automatically.
           </v-alert>
+
+          <!-- Production Notes -->
+          <v-textarea
+            v-model="formData.notes"
+            label="Production Notes (optional)"
+            variant="outlined"
+            rows="2"
+            class="mb-4"
+            placeholder="e.g., Recipe batch #123, Special occasion prep..."
+          />
         </v-form>
       </v-card-text>
 
@@ -181,13 +216,14 @@
         <v-spacer />
         <v-btn variant="outlined" @click="handleClose">Cancel</v-btn>
         <v-btn
-          color="primary"
+          color="success"
           variant="flat"
+          :loading="loading"
           :disabled="!canSubmit"
-          prepend-icon="mdi-plus"
+          prepend-icon="mdi-chef-hat"
           @click="handleSubmit"
         >
-          Add to Production
+          Confirm Production
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -195,57 +231,72 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { usePreparationStore } from '@/stores/preparation'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
-import type { PreparationReceiptItem } from '@/stores/preparation'
+import { useAuthStore } from '@/stores/auth'
+import type {
+  PreparationDepartment,
+  CreatePreparationReceiptData,
+  PreparationReceiptItem
+} from '@/stores/preparation'
 import { DebugUtils } from '@/utils'
 
-const MODULE_NAME = 'AddPreparationProductionItemDialog'
+const MODULE_NAME = 'DirectPreparationProductionDialog'
 
 // Props
 interface Props {
   modelValue: boolean
+  department: PreparationDepartment
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 // Emits
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  'add-item': [item: PreparationReceiptItem]
+  success: [message: string]
+  error: [message: string]
 }>()
 
 // Stores
 const preparationStore = usePreparationStore()
 const recipesStore = useRecipesStore()
 const productsStore = useProductsStore()
+const authStore = useAuthStore()
 
 // State
 const form = ref()
 const isFormValid = ref(false)
+const loading = ref(false)
 const selectedPreparationId = ref('')
 const quantity = ref(0)
 
-// ✅ Get selected preparation details
+const formData = ref<CreatePreparationReceiptData>({
+  department: props.department,
+  responsiblePerson: '',
+  sourceType: 'production',
+  items: [],
+  notes: ''
+})
+
+// Computed - sourceType is always 'production'
+
 const selectedPreparation = computed(() => {
   if (!selectedPreparationId.value) return null
   return recipesStore.preparations.find(p => p.id === selectedPreparationId.value)
 })
 
-// ✅ Check if preparation has recipe
 const hasRecipe = computed(() => {
   return selectedPreparation.value?.recipe && selectedPreparation.value.recipe.length > 0
 })
 
-// ✅ Calculate multiplier based on desired quantity vs recipe output
 const multiplier = computed(() => {
   if (!selectedPreparation.value || !quantity.value) return 1
   return quantity.value / selectedPreparation.value.outputQuantity
 })
 
-// ✅ AUTO-CALCULATE: Cost per unit based on current product prices
 const calculatedCostPerUnit = computed(() => {
   if (!selectedPreparation.value || !hasRecipe.value) return 0
 
@@ -254,21 +305,17 @@ const calculatedCostPerUnit = computed(() => {
     const product = productsStore.getProductById(ingredient.id)
     if (!product || !product.isActive) continue
 
-    // Use base cost per unit from product
     const ingredientCost = ingredient.quantity * product.baseCostPerUnit
     totalCost += ingredientCost
   }
 
-  // Calculate cost per output unit
   return totalCost / selectedPreparation.value.outputQuantity
 })
 
-// ✅ AUTO-CALCULATE: Total cost for the desired quantity
 const calculatedCost = computed(() => {
   return calculatedCostPerUnit.value * (quantity.value || 0)
 })
 
-// ✅ Preview raw products that will be written off
 const rawProductsPreview = computed(() => {
   if (!selectedPreparation.value?.recipe || !quantity.value) return []
 
@@ -293,7 +340,6 @@ const rawProductsPreview = computed(() => {
     .filter(item => item !== null)
 })
 
-// ✅ Quantity hint
 const quantityHint = computed(() => {
   if (!selectedPreparation.value) return ''
   const recipeOutput = selectedPreparation.value.outputQuantity
@@ -303,10 +349,8 @@ const quantityHint = computed(() => {
   return `${multiplier.value.toFixed(2)}× recipe (standard: ${recipeOutput} ${selectedPreparation.value.outputUnit})`
 })
 
-// ✅ Calculate expiry date based on shelf life
 const calculatedExpiryDate = computed(() => {
   if (!selectedPreparation.value?.shelfLife) {
-    // Default: 2 days
     const expiry = new Date()
     expiry.setDate(expiry.getDate() + 2)
     return expiry
@@ -317,17 +361,14 @@ const calculatedExpiryDate = computed(() => {
   return expiry
 })
 
-// ✅ Shelf life display
 const shelfLifeText = computed(() => {
   if (!selectedPreparation.value?.shelfLife) return '2 days (default)'
   return `${selectedPreparation.value.shelfLife} days`
 })
 
-// Computed
 const availablePreparations = computed(() => {
   try {
     const preparations = preparationStore.getAvailablePreparations()
-    // Add additional fields for display
     return preparations.map(p => {
       const prep = recipesStore.preparations.find(rp => rp.id === p.id)
       return {
@@ -348,11 +389,12 @@ const canSubmit = computed(() => {
     isFormValid.value &&
     selectedPreparationId.value &&
     quantity.value > 0 &&
-    calculatedCostPerUnit.value >= 0
+    calculatedCostPerUnit.value >= 0 &&
+    !loading.value
   )
 })
 
-// ✅ Watch preparation selection to auto-set quantity to recipe output
+// Watchers
 watch(selectedPreparationId, newId => {
   if (!newId) {
     quantity.value = 0
@@ -361,7 +403,6 @@ watch(selectedPreparationId, newId => {
 
   const prep = recipesStore.preparations.find(p => p.id === newId)
   if (prep) {
-    // Set default quantity to recipe output
     quantity.value = prep.outputQuantity
     DebugUtils.info(MODULE_NAME, `Selected preparation: ${prep.name}`, {
       outputQuantity: prep.outputQuantity,
@@ -380,31 +421,51 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!canSubmit.value) return
 
-  // ✅ Use calculated expiry date based on shelf life
-  const expiryDate = calculatedExpiryDate.value
-  expiryDate.setHours(20, 0, 0, 0) // Set to 8 PM on expiry date
+  try {
+    loading.value = true
 
-  const receiptItem: PreparationReceiptItem = {
-    preparationId: selectedPreparationId.value,
-    quantity: quantity.value,
-    costPerUnit: calculatedCostPerUnit.value, // ✅ AUTO-CALCULATED
-    expiryDate: expiryDate.toISOString().slice(0, 16), // Format for datetime-local
-    notes: ''
+    // Calculate expiry date
+    const expiryDate = calculatedExpiryDate.value
+    expiryDate.setHours(20, 0, 0, 0)
+
+    // Create receipt item
+    const receiptItem: PreparationReceiptItem = {
+      preparationId: selectedPreparationId.value,
+      quantity: quantity.value,
+      costPerUnit: calculatedCostPerUnit.value,
+      expiryDate: expiryDate.toISOString().slice(0, 16),
+      notes: ''
+    }
+
+    // Build receipt data
+    const receiptData: CreatePreparationReceiptData = {
+      department: props.department,
+      responsiblePerson: formData.value.responsiblePerson,
+      sourceType: formData.value.sourceType,
+      items: [receiptItem],
+      notes: formData.value.notes
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Submitting preparation production', { receiptData })
+
+    // Create receipt through store
+    await preparationStore.createReceipt(receiptData)
+
+    DebugUtils.info(MODULE_NAME, 'Preparation production created successfully')
+
+    const prepName = selectedPreparation.value?.name || 'preparation'
+    const message = `Produced ${quantity.value}${selectedPreparation.value?.outputUnit} of ${prepName} successfully`
+    emit('success', message)
+    handleClose()
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to create preparation production', { error })
+    emit('error', error instanceof Error ? error.message : 'Failed to record production')
+  } finally {
+    loading.value = false
   }
-
-  DebugUtils.info(MODULE_NAME, 'Adding preparation to production', {
-    preparationId: receiptItem.preparationId,
-    quantity: receiptItem.quantity,
-    costPerUnit: receiptItem.costPerUnit,
-    totalCost: calculatedCost.value,
-    multiplier: multiplier.value
-  })
-
-  emit('add-item', receiptItem)
-  handleClose()
 }
 
 function handleClose() {
@@ -415,11 +476,34 @@ function handleClose() {
 function resetForm() {
   selectedPreparationId.value = ''
   quantity.value = 0
+  formData.value = {
+    department: props.department,
+    responsiblePerson: authStore.userName,
+    sourceType: 'production',
+    items: [],
+    notes: ''
+  }
 
   if (form.value) {
     form.value.resetValidation()
   }
 }
+
+// Auto-fill responsible person on mount and when dialog opens
+onMounted(() => {
+  formData.value.responsiblePerson = authStore.userName
+})
+
+watch(
+  () => props.modelValue,
+  newValue => {
+    if (newValue) {
+      // Auto-fill user when dialog opens
+      formData.value.responsiblePerson = authStore.userName
+      formData.value.department = props.department
+    }
+  }
+)
 </script>
 
 <style lang="scss" scoped>
