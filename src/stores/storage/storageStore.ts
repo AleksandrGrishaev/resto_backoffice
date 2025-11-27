@@ -506,6 +506,19 @@ export const useStorageStore = defineStore('storage', () => {
       // Reload balances after operation
       await loadBalances()
 
+      // ✅ FIXED: Reload preparation batches if any preparations were written off
+      const hasPreparations = data.items.some(item => item.itemType === 'preparation')
+      if (hasPreparations) {
+        try {
+          const { usePreparationStore } = await import('@/stores/preparation/preparationStore')
+          const preparationStore = usePreparationStore()
+          await preparationStore.fetchBalances(data.department as any)
+          DebugUtils.info(MODULE_NAME, '✅ Preparation batches reloaded after write-off')
+        } catch (error) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to reload preparation batches', { error })
+        }
+      }
+
       DebugUtils.info(MODULE_NAME, '✅ Write-off created successfully')
       return response.data
     } catch (error) {

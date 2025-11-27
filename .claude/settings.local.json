@@ -43,7 +43,8 @@
       "Bash(do echo \"=== $f ===\")",
       "Bash(done)",
       "WebSearch",
-      "WebFetch(domain:supabase.com)"
+      "WebFetch(domain:supabase.com)",
+      "Bash(git add:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

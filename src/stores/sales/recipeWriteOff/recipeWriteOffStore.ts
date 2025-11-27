@@ -97,30 +97,32 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
         return null
       }
 
-      console.log(`📋 [${MODULE_NAME}] Decomposed to ${decomposedItems.length} products`)
+      console.log(`📋 [${MODULE_NAME}] Decomposed to ${decomposedItems.length} items`)
 
-      // 3. Prepare write-off items
+      // 3. Prepare write-off items (✅ FIXED: Support both product and preparation)
       const writeOffItems: RecipeWriteOffItem[] = decomposedItems.map(item => ({
-        type: 'product',
-        itemId: item.productId,
-        itemName: item.productName,
+        type: item.type, // ✅ Use actual type from decomposition
+        itemId: item.type === 'product' ? item.productId! : item.preparationId!,
+        itemName: item.type === 'product' ? item.productName! : item.preparationName!,
         quantityPerPortion: item.quantity / billItem.quantity,
         totalQuantity: item.quantity,
         unit: item.unit,
-        costPerUnit: item.costPerUnit,
+        costPerUnit: item.costPerUnit || 0,
         totalCost: item.totalCost,
         batchIds: [] // Will be filled by storage operation
       }))
 
-      // 4. Create storage write-off operation
+      // 4. Create storage write-off operation (✅ FIXED: Support both types)
       const writeOffData: CreateWriteOffData = {
         department: menuItem.department,
         responsiblePerson: 'system',
         reason: 'other', // Используем 'other' для автоматических списаний
         items: writeOffItems.map(item => ({
           itemId: item.itemId,
-          itemType: 'product',
+          itemName: item.itemName, // ✅ Added
+          itemType: item.type, // ✅ Use actual type (product or preparation)
           quantity: item.totalQuantity,
+          unit: item.unit, // ✅ Added
           notes: undefined
         })),
         notes: `Auto sales write-off: ${menuItem.name} - ${variant.name} (${billItem.quantity} portion${billItem.quantity > 1 ? 's' : ''})`
@@ -130,20 +132,42 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
 
       console.log(`✅ [${MODULE_NAME}] Storage operation created:`, storageOperation.id)
 
-      // 5. Extract batch IDs from storage operation
+      // 5. Extract batch IDs and actual costs from storage operation
       const batchMap = new Map<string, string[]>()
+      const costMap = new Map<string, { costPerUnit: number; totalCost: number }>()
+
       storageOperation.items.forEach(opItem => {
         if (opItem.batchAllocations) {
           batchMap.set(
             opItem.itemId,
             opItem.batchAllocations.map(b => b.batchId)
           )
+
+          // ✅ FIXED: Calculate actual average cost from batch allocations
+          const totalCost = opItem.batchAllocations.reduce(
+            (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
+            0
+          )
+          const totalQty = opItem.batchAllocations.reduce((sum, alloc) => sum + alloc.quantity, 0)
+          const avgCost = totalQty > 0 ? totalCost / totalQty : 0
+
+          costMap.set(opItem.itemId, {
+            costPerUnit: avgCost,
+            totalCost: totalCost
+          })
         }
       })
 
-      // Update write-off items with actual batch IDs
+      // Update write-off items with actual batch IDs and costs
       writeOffItems.forEach(item => {
         item.batchIds = batchMap.get(item.itemId) || []
+
+        // ✅ FIXED: Update with actual costs from FIFO allocation
+        const actualCost = costMap.get(item.itemId)
+        if (actualCost) {
+          item.costPerUnit = actualCost.costPerUnit
+          item.totalCost = actualCost.totalCost
+        }
       })
 
       // 6. Create recipe write-off record

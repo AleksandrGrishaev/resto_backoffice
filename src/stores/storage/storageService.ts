@@ -303,6 +303,90 @@ export class StorageService {
     }
   }
 
+  /**
+   * FIFO allocation for preparations - fetches preparation batches and allocates quantities
+   * ✅ NEW: Support for preparation write-offs
+   */
+  private async allocatePreparationFIFO(
+    preparationId: string,
+    department: string,
+    neededQuantity: number
+  ): Promise<ServiceResponse<BatchAllocation[]>> {
+    try {
+      // Fetch batches in FIFO order (oldest first)
+      const batches = await executeSupabaseQuery(
+        supabase
+          .from('preparation_batches')
+          .select('*')
+          .eq('preparation_id', preparationId)
+          .eq('department', department)
+          .eq('status', 'active')
+          .gt('current_quantity', 0)
+          .order('production_date', { ascending: true })
+          .order('created_at', { ascending: true }),
+        `${MODULE_NAME}.allocatePreparationFIFO`
+      )
+
+      if (!batches || batches.length === 0) {
+        throw new Error('No active batches available for this item')
+      }
+
+      // Allocate quantities using FIFO logic
+      let remaining = neededQuantity
+      const allocations: BatchAllocation[] = []
+
+      for (const batch of batches) {
+        if (remaining <= 0) break
+
+        const allocatedQty = Math.min(remaining, Number(batch.current_quantity))
+
+        allocations.push({
+          batchId: batch.id,
+          batchNumber: batch.batch_number,
+          quantity: allocatedQty,
+          costPerUnit: Number(batch.cost_per_unit),
+          batchDate: batch.production_date || batch.created_at
+        })
+
+        remaining -= allocatedQty
+      }
+
+      // Check if we have enough quantity
+      if (remaining > 0) {
+        const available = neededQuantity - remaining
+        DebugUtils.warn(
+          MODULE_NAME,
+          '⚠️ Insufficient preparation quantity - allowing negative stock',
+          {
+            preparationId,
+            department,
+            needed: neededQuantity,
+            available,
+            shortage: remaining
+          }
+        )
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Preparation FIFO allocation complete', {
+        preparationId,
+        department,
+        needed: neededQuantity,
+        batchesUsed: allocations.length,
+        hasShortage: remaining > 0
+      })
+
+      return {
+        success: true,
+        data: allocations
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
   // ===========================
   // BASIC OPERATIONS
   // ===========================
@@ -730,44 +814,92 @@ export class StorageService {
       let totalValue = 0
 
       for (const item of data.items) {
-        const productInfo = await this.getProductInfo(item.itemId)
+        let allocations: BatchAllocation[] = []
+        let allocationResult: ServiceResponse<BatchAllocation[]>
 
-        // Allocate quantities using FIFO
-        const allocationResult = await this.allocateFIFO(item.itemId, warehouseId, item.quantity)
-
-        if (!allocationResult.success || !allocationResult.data) {
-          throw new Error(allocationResult.error || 'FIFO allocation failed')
-        }
-
-        const allocations = allocationResult.data
-
-        // Update batch quantities in database
-        for (const allocation of allocations) {
-          const batchData = await executeSupabaseSingle(
-            supabase.from('storage_batches').select('*').eq('id', allocation.batchId),
-            `${MODULE_NAME}.createWriteOff.fetchBatch`
+        // ✅ FIXED: Handle both products and preparations
+        if (item.itemType === 'preparation') {
+          // Allocate from preparation_batches
+          allocationResult = await this.allocatePreparationFIFO(
+            item.itemId,
+            data.department,
+            item.quantity
           )
 
-          if (!batchData) throw new Error(`Batch ${allocation.batchId} not found`)
+          if (!allocationResult.success || !allocationResult.data) {
+            throw new Error(allocationResult.error || 'Preparation FIFO allocation failed')
+          }
 
-          const newQuantity = Number(batchData.current_quantity) - allocation.quantity
-          const newStatus = newQuantity <= 0 ? 'consumed' : 'active'
-          const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
+          allocations = allocationResult.data
 
-          await executeSupabaseMutation(async () => {
-            const { error: updateError } = await supabase
-              .from('storage_batches')
-              .update({
-                current_quantity: newQuantity,
-                total_value: newTotalValue,
-                status: newStatus,
-                is_active: newQuantity > 0,
-                updated_at: operationDate
-              })
-              .eq('id', allocation.batchId)
+          // Update preparation batch quantities
+          for (const allocation of allocations) {
+            const batchData = await executeSupabaseSingle(
+              supabase.from('preparation_batches').select('*').eq('id', allocation.batchId),
+              `${MODULE_NAME}.createWriteOff.fetchPreparationBatch`
+            )
 
-            if (updateError) throw updateError
-          }, `${MODULE_NAME}.createWriteOff.updateBatch`)
+            if (!batchData) throw new Error(`Preparation batch ${allocation.batchId} not found`)
+
+            const newQuantity = Number(batchData.current_quantity) - allocation.quantity
+            const newStatus = newQuantity <= 0 ? 'depleted' : 'active' // ✅ FIXED: 'depleted' not 'consumed'
+            const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
+
+            await executeSupabaseMutation(async () => {
+              const { error: updateError } = await supabase
+                .from('preparation_batches')
+                .update({
+                  current_quantity: newQuantity,
+                  total_value: newTotalValue,
+                  status: newStatus,
+                  is_active: newQuantity > 0,
+                  updated_at: operationDate
+                })
+                .eq('id', allocation.batchId)
+
+              if (updateError) throw updateError
+            }, `${MODULE_NAME}.createWriteOff.updatePreparationBatch`)
+          }
+        } else {
+          // Allocate from storage_batches (original logic for products)
+          const productInfo = await this.getProductInfo(item.itemId)
+
+          allocationResult = await this.allocateFIFO(item.itemId, warehouseId, item.quantity)
+
+          if (!allocationResult.success || !allocationResult.data) {
+            throw new Error(allocationResult.error || 'FIFO allocation failed')
+          }
+
+          allocations = allocationResult.data
+
+          // Update storage batch quantities
+          for (const allocation of allocations) {
+            const batchData = await executeSupabaseSingle(
+              supabase.from('storage_batches').select('*').eq('id', allocation.batchId),
+              `${MODULE_NAME}.createWriteOff.fetchBatch`
+            )
+
+            if (!batchData) throw new Error(`Batch ${allocation.batchId} not found`)
+
+            const newQuantity = Number(batchData.current_quantity) - allocation.quantity
+            const newStatus = newQuantity <= 0 ? 'consumed' : 'active'
+            const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
+
+            await executeSupabaseMutation(async () => {
+              const { error: updateError } = await supabase
+                .from('storage_batches')
+                .update({
+                  current_quantity: newQuantity,
+                  total_value: newTotalValue,
+                  status: newStatus,
+                  is_active: newQuantity > 0,
+                  updated_at: operationDate
+                })
+                .eq('id', allocation.batchId)
+
+              if (updateError) throw updateError
+            }, `${MODULE_NAME}.createWriteOff.updateBatch`)
+          }
         }
 
         // Calculate total cost from allocations
@@ -780,7 +912,7 @@ export class StorageService {
         operationItems.push({
           id: generateId(),
           itemId: item.itemId,
-          itemType: 'product',
+          itemType: item.itemType, // ✅ FIXED: Use actual type
           itemName: item.itemName,
           quantity: item.quantity,
           unit: item.unit,

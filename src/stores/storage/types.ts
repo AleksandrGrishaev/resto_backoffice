@@ -234,7 +234,7 @@ export interface CorrectionItem {
 }
 
 export interface CreateWriteOffData {
-  warehouseId: string
+  warehouseId?: string // ✅ FIXED: Optional for preparations (they use department instead)
   department: Department
   responsiblePerson: string
   reason: WriteOffReason
@@ -245,7 +245,7 @@ export interface CreateWriteOffData {
 export interface WriteOffItem {
   itemId: string
   itemName: string
-  itemType: 'product'
+  itemType: 'product' | 'preparation' // ✅ FIXED: Support preparations
   quantity: number
   unit: string
   notes?: string

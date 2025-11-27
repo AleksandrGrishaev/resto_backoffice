@@ -91,16 +91,17 @@
 - Автосписание сырья при создании полуфабрикатов
 - P&L отчеты с правильным COGS и Gross Profit
 
-#### ФАЗА 1: Исправление базовой логики (Спринты 1-2)
+#### ✅ ФАЗА 1: Исправление базовой логики (Спринты 1-2) - ЗАВЕРШЕНА (Nov 27, 2025)
 
-**Sprint 1: Устранение двойного списания (2 недели)**
+**✅ Sprint 1: Устранение двойного списания (2 недели) - COMPLETED**
 
 Цель: Исправить декомпозицию - полуфабрикаты НЕ разворачиваются до сырых продуктов.
 
 Файлы:
 
-- `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts` - остановить рекурсию
-- `src/stores/sales/recipeWriteOff/types.ts` - добавить type: 'preparation'
+- ✅ `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts` - остановить рекурсию
+- ✅ `src/stores/sales/recipeWriteOff/types.ts` - добавить type: 'preparation'
+- ✅ `src/stores/sales/types.ts` - DecomposedItem с type: 'preparation' | 'product'
 
 Критерии:
 
@@ -108,20 +109,21 @@
 - ✅ Нет рекурсивного разворачивания preparation → products
 - ✅ Тесты проходят (создать preparation → recipe → продажа)
 
-**Sprint 2: FIFO Allocation для фактической себестоимости (2-3 недели)**
+**✅ Sprint 2: FIFO Allocation для фактической себестоимости (2-3 недели) - COMPLETED**
 
 Цель: Внедрить расчет actualCost через FIFO allocation из batches.
 
 Новые файлы:
 
-- `src/stores/sales/composables/useActualCostCalculation.ts`
-- `src/supabase/migrations/020_create_sales_transactions.sql`
+- ✅ `src/stores/sales/composables/useActualCostCalculation.ts` - FIFO allocation logic
+- ✅ `src/supabase/migrations/017_create_sales_transactions.sql` - sales_transactions table
+- ✅ `src/supabase/migrations/018_add_actual_cost_to_sales_transactions.sql` - actual_cost column
 
 Изменяемые:
 
-- `src/stores/sales/types.ts` - ActualCostBreakdown
-- `src/stores/sales/salesStore.ts` - использовать calculateActualCost()
-- `src/stores/sales/composables/useProfitCalculation.ts` - actualCost.totalCost
+- ✅ `src/stores/sales/types.ts` - ActualCostBreakdown, BatchAllocation types
+- ✅ `src/stores/sales/salesStore.ts` - использовать calculateActualCost()
+- ✅ `src/stores/sales/composables/useProfitCalculation.ts` - actualCost.totalCost
 
 Критерии:
 
@@ -129,23 +131,52 @@
 - ✅ SalesTransaction сохраняет actualCost
 - ✅ Прибыль рассчитывается корректно (revenue - actualCost)
 
-#### ФАЗА 2: Автоматизация производства (Спринты 3-4)
+**✅ Phase 1 Completion Fixes (Nov 27, 2025) - COMPLETED**
 
-**Sprint 3: Автосписание при создании полуфабрикатов (2 недели)**
+Исправлена недоработка Phase 1 - поддержка preparations в write-off:
+
+Файлы:
+
+- ✅ `src/stores/sales/recipeWriteOff/recipeWriteOffStore.ts` - правильный itemType для preparations
+- ✅ `src/stores/storage/types.ts` - WriteOffItem.itemType: 'preparation' | 'product'
+- ✅ `src/stores/storage/storageService.ts` - allocatePreparationFIFO() метод
+- ✅ `src/stores/storage/storageService.ts` - обработка preparations в createWriteOff()
+- ✅ `src/stores/storage/storageStore.ts` - reload preparation batches после write-off
+
+Исправленные баги:
+
+- ✅ Cost/Unit = Rp 0 для preparations → вычисляется из batch allocations
+- ✅ UI не обновлялся после write-off → добавлен reload preparation batches
+- ✅ preparation_batches.status constraint → используется 'depleted' вместо 'consumed'
+
+Критерии:
+
+- ✅ Preparations списываются из preparation_batches через FIFO
+- ✅ Products списываются из storage_batches через FIFO
+- ✅ Mixed write-offs (preparation + product) работают корректно
+- ✅ UI обновляется после write-off
+- ✅ Actual costs отображаются правильно в write-off details
+
+#### ФАЗА 2: Автоматизация производства (Спринты 3-4) - В ПРОЦЕССЕ
+
+**✅ Sprint 3: Автосписание при создании полуфабрикатов (2 недели) - COMPLETED (Nov 25-26, 2025)**
 
 Цель: Автоматически списывать сырье при production preparations.
 
 Файлы:
 
-- `src/stores/preparation/preparationStore.ts` - createReceipt() + auto write-off
-- `src/stores/storage/storageStore.ts` - relatedPreparationOperationId
-- `src/supabase/migrations/021_add_operation_links.sql`
+- ✅ `src/stores/preparation/preparationService.ts` - auto write-off logic (lines 692-758)
+- ✅ `src/stores/preparation/types.ts` - relatedStorageOperationIds, skipAutoWriteOff
+- ✅ `src/stores/storage/types.ts` - WriteOffReason: 'production_consumption'
+- ✅ `src/supabase/migrations/015_add_operation_links_for_auto_writeoff.sql` - operation links
 
 Критерии:
 
 - ✅ При createReceipt() автоматически создается StorageOperation (write_off)
 - ✅ relatedStorageOperationIds заполняется
 - ✅ Остатки продуктов уменьшаются
+- ✅ cost_per_unit рассчитывается правильно из consumed raw materials
+- ✅ skipAutoWriteOff флаг работает для inventory corrections
 
 **Sprint 4: Улучшение расчета себестоимости (2 недели)**
 

@@ -5,6 +5,7 @@ import { SalesService } from './services'
 import { useRecipeWriteOffStore } from './recipeWriteOff'
 import { useProfitCalculation } from './composables/useProfitCalculation'
 import { useDecomposition } from './recipeWriteOff/composables/useDecomposition'
+import { useActualCostCalculation } from './composables/useActualCostCalculation' // ✅ SPRINT 2
 import { useMenuStore } from '@/stores/menu/menuStore'
 import type { PosPayment, PosBillItem } from '@/stores/pos/types'
 
@@ -16,6 +17,7 @@ export const useSalesStore = defineStore('sales', () => {
   const menuStore = useMenuStore()
   const { calculateItemProfit, allocateBillDiscount } = useProfitCalculation()
   const { decomposeMenuItem, calculateTotalCost } = useDecomposition()
+  const { calculateActualCost } = useActualCostCalculation() // ✅ SPRINT 2: FIFO cost calculation
 
   // State
   const state = ref({
@@ -167,7 +169,7 @@ export const useSalesStore = defineStore('sales', () => {
           continue
         }
 
-        // 2. Decompose item to get cost
+        // 2. Decompose menu item (initializes stores if needed)
         const decomposedItems = await decomposeMenuItem(
           billItem.menuItemId,
           billItem.variantId || variant.id,
@@ -176,14 +178,26 @@ export const useSalesStore = defineStore('sales', () => {
 
         const totalCost = calculateTotalCost(decomposedItems)
 
+        // 2b. Calculate actual cost from FIFO batches (✅ SPRINT 2: NEW LOGIC)
+        // Must be called AFTER decomposeMenuItem to ensure stores are initialized
+        const actualCost = await calculateActualCost(
+          billItem.menuItemId,
+          billItem.variantId || variant.id,
+          billItem.quantity
+        )
+
         // 3. Calculate allocated bill discount for this item
         const itemsWithDiscount = allocateBillDiscount([billItem], billDiscountAmount)
         const allocatedDiscount = itemsWithDiscount[0]?.allocatedBillDiscount || 0
 
-        // 4. Calculate profit
-        const profitCalculation = calculateItemProfit(billItem, decomposedItems, allocatedDiscount)
+        // 4. Calculate profit using ACTUAL cost (✅ SPRINT 2: Use actualCost instead of decomposition)
+        const profitCalculation = calculateItemProfit(
+          billItem,
+          actualCost.totalCost, // ✅ Use FIFO cost instead of decomposition
+          allocatedDiscount
+        )
 
-        // 5. Create decomposition summary
+        // 5. Create decomposition summary (DEPRECATED: kept for backward compatibility)
         // ✅ SPRINT 1: Count products and preparations separately
         const decompositionSummary: DecompositionSummary = {
           totalProducts: decomposedItems.filter(item => item.type === 'product').length,
@@ -212,8 +226,9 @@ export const useSalesStore = defineStore('sales', () => {
           processedBy: payment.processedBy,
           recipeId: undefined, // Can be set if applicable
           recipeWriteOffId: undefined, // Will be set after write-off
-          profitCalculation,
-          decompositionSummary,
+          actualCost, // ✅ SPRINT 2: Actual cost from FIFO batches
+          profitCalculation, // ✅ SPRINT 2: Now uses actualCost
+          decompositionSummary, // DEPRECATED: kept for backward compatibility
           syncedToBackoffice: true,
           syncedAt: new Date().toISOString(),
           department: menuItem.department,

@@ -57,6 +57,68 @@ export interface DecomposedItem {
 }
 
 /**
+ * Batch Allocation
+ * Allocation from specific batch (FIFO)
+ * ✅ SPRINT 2: FIFO batch tracking
+ */
+export interface BatchAllocation {
+  batchId: string
+  batchNumber?: string
+  allocatedQuantity: number
+  costPerUnit: number
+  totalCost: number
+  batchCreatedAt: string
+}
+
+/**
+ * Product Cost Item
+ * Product cost from FIFO batches
+ * ✅ SPRINT 2: Actual cost calculation for products
+ */
+export interface ProductCostItem {
+  productId: string
+  productName: string
+  quantity: number
+  unit: string
+
+  // FIFO allocation
+  batchAllocations: BatchAllocation[]
+  averageCostPerUnit: number
+  totalCost: number
+}
+
+/**
+ * Preparation Cost Item
+ * Preparation cost from FIFO batches
+ * ✅ SPRINT 2: Actual cost calculation for preparations
+ */
+export interface PreparationCostItem {
+  preparationId: string
+  preparationName: string
+  quantity: number
+  unit: string
+
+  // FIFO allocation
+  batchAllocations: BatchAllocation[]
+  averageCostPerUnit: number
+  totalCost: number
+}
+
+/**
+ * Actual Cost Breakdown
+ * Actual cost from FIFO batches
+ * ✅ SPRINT 2: Replaces decomposition-based cost calculation
+ */
+export interface ActualCostBreakdown {
+  totalCost: number
+  preparationCosts: PreparationCostItem[]
+  productCosts: ProductCostItem[]
+
+  method: 'FIFO' | 'LIFO' | 'WeightedAverage'
+  calculatedAt: string
+}
+
+/**
  * Sales Transaction
  * Unified sales record для backoffice
  */
@@ -88,10 +150,15 @@ export interface SalesTransaction extends BaseEntity {
   recipeId?: string // If menu item has recipe
   recipeWriteOffId?: string // Link to write-off operation
 
+  // ✅ SPRINT 2: NEW FIELDS
+  actualCost?: ActualCostBreakdown // Actual cost from FIFO batches
+  preparationWriteOffIds?: string[] // Preparation write-offs
+  productWriteOffIds?: string[] // Product write-offs (direct sale)
+
   // Profit data
   profitCalculation: ProfitCalculation
 
-  // Decomposition summary
+  // Decomposition summary (DEPRECATED: will be replaced by actualCost)
   decompositionSummary: DecompositionSummary
 
   // Sync status (для будущей синхронизации с API)

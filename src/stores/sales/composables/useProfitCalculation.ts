@@ -114,11 +114,12 @@ export function useProfitCalculation() {
 
   /**
    * Calculate profit for a single item
+   * ✅ SPRINT 2: Updated to accept actualCost (number) OR decomposedItems (array)
    * Рассчитывает прибыль для одной позиции
    */
   function calculateItemProfit(
     billItem: PosBillItem,
-    decomposedItems: DecomposedItem[],
+    costOrDecomposedItems: number | DecomposedItem[], // ✅ Accept both types
     allocatedBillDiscount: number
   ): ProfitCalculation {
     // 1. Revenue calculation
@@ -127,7 +128,11 @@ export function useProfitCalculation() {
     const finalRevenue = originalPrice - itemOwnDiscount - allocatedBillDiscount
 
     // 2. Cost calculation
-    const ingredientsCost = decomposedItems.reduce((sum, item) => sum + item.totalCost, 0)
+    // ✅ SPRINT 2: Support both actualCost (number) and decomposedItems (array)
+    const ingredientsCost =
+      typeof costOrDecomposedItems === 'number'
+        ? costOrDecomposedItems // ✅ Direct actualCost from FIFO
+        : costOrDecomposedItems.reduce((sum, item) => sum + item.totalCost, 0) // Backward compatibility
 
     // 3. Profit calculation
     const profit = finalRevenue - ingredientsCost
@@ -141,7 +146,8 @@ export function useProfitCalculation() {
       finalRevenue,
       ingredientsCost,
       profit,
-      profitMargin: profitMargin.toFixed(2) + '%'
+      profitMargin: profitMargin.toFixed(2) + '%',
+      costType: typeof costOrDecomposedItems === 'number' ? 'FIFO (actualCost)' : 'decomposition'
     })
 
     return {

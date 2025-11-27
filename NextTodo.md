@@ -8,30 +8,76 @@ Implement correct cost accounting, inventory tracking, and profit calculation fo
 
 ## 📊 IMPLEMENTATION STATUS
 
-### ✅ ALREADY IMPLEMENTED
+### ✅ COMPLETED SPRINTS (Phase 1)
 
-#### 1. Preparation Auto Write-Off (Sprint 3) - PARTIALLY COMPLETE
+#### ✅ Sprint 1: Eliminate Double Write-Off - COMPLETED (Nov 2025)
+
+**Status:** Preparations no longer recursively decompose to products during sales.
 
 **Files:**
 
-- `src/stores/preparation/composables/usePreparationWriteOff.ts` - preparation write-off
-- `src/stores/productsStore/composables/useProductConsumption.ts` - consumption calculation
-- `src/views/Preparation/components/DirectPreparationProductionDialog.vue` - raw products preview
+- `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts` - stops at preparation level
+- `src/stores/sales/recipeWriteOff/types.ts` - supports type: 'preparation'
 
-**What works:**
+**Verified:**
 
-- ✅ Preview of raw products for write-off (lines 319-341)
-- ✅ Calculation of preparation cost from recipe (lines 300-317)
-- ✅ Creation of PreparationBatch via `preparationStore.createReceipt()`
-
-**What doesn't work:**
-
-- ❌ Automatic creation of `StorageOperation (write_off)` during production
-- ❌ Populating `relatedStorageOperationIds` in PreparationOperation
+- ✅ Preparations returned as final elements (not decomposed to products)
+- ✅ No double write-off of raw products
 
 ---
 
-#### 2. Counteragents Balance Tracking (Sprint 7) - FULLY COMPLETE
+#### ✅ Sprint 2: FIFO Allocation for Actual Cost - COMPLETED (Nov 27, 2025)
+
+**Status:** Actual cost calculation from FIFO batches fully implemented and tested.
+
+**Files:**
+
+- `src/stores/sales/types.ts` - ActualCostBreakdown, BatchAllocation types
+- `src/stores/sales/composables/useActualCostCalculation.ts` - FIFO allocation logic
+- `src/stores/sales/salesStore.ts` - integrated calculateActualCost()
+- `src/stores/sales/composables/useProfitCalculation.ts` - uses actualCost
+- `src/supabase/migrations/017_create_sales_transactions.sql` - sales_transactions table
+- `src/supabase/migrations/018_add_actual_cost_to_sales_transactions.sql` - actual_cost column
+
+**Verified:**
+
+- ✅ FIFO allocation works correctly (finds batches, allocates quantities)
+- ✅ SalesTransaction.actualCost saved to database
+- ✅ Profit calculated from actualCost (not decomposition)
+- ✅ Enhanced logging shows batch allocations and costs
+
+**Known Issue:**
+
+- Old batches created before Sprint 3 have `cost_per_unit = 0` (data issue, not code bug)
+- New batches created with Sprint 3 have correct costs
+
+---
+
+#### ✅ Sprint 3: Auto Write-Off Raw Products on Production - COMPLETED (Nov 25-26, 2025)
+
+**Status:** Automatic write-off of raw products fully implemented.
+
+**Files:**
+
+- `src/stores/preparation/preparationService.ts` - auto write-off logic (lines 692-758)
+- `src/stores/preparation/types.ts` - relatedStorageOperationIds, skipAutoWriteOff
+- `src/stores/storage/types.ts` - WriteOffReason: 'production_consumption'
+- `src/supabase/migrations/015_add_operation_links_for_auto_writeoff.sql` - operation links
+
+**Verified (via database query):**
+
+- ✅ Auto write-off creates StorageOperation for each preparation production
+- ✅ relatedStorageOperationIds populated in PreparationOperation
+- ✅ cost_per_unit calculated correctly from consumed raw materials
+  - Example: "Garlic Sauce Spread 1" → 8.33 IDR/g
+  - Example: "Маринад для мяса" → 51.13 IDR/ml
+- ✅ skipAutoWriteOff flag works for inventory corrections
+
+---
+
+### ✅ ALREADY IMPLEMENTED (Other Features)
+
+#### 1. Counteragents Balance Tracking (Sprint 7) - FULLY COMPLETE
 
 **Files:**
 
@@ -55,7 +101,7 @@ Implement correct cost accounting, inventory tracking, and profit calculation fo
 
 ---
 
-#### 3. Account Transactions with Categories (Sprint 5 foundation) - FULLY COMPLETE
+#### 2. Account Transactions with Categories (Sprint 5 foundation) - FULLY COMPLETE
 
 **Files:**
 
@@ -82,11 +128,11 @@ Implement correct cost accounting, inventory tracking, and profit calculation fo
 
 ## 🚀 REVISED PLAN (6 Sprints instead of 8)
 
-### **PHASE 1: Fix Core Logic** (Sprints 1-2)
+### **PHASE 1: Fix Core Logic** (Sprints 1-2) - ✅ COMPLETED
 
 ---
 
-## SPRINT 1: Eliminate Double Write-Off (2 weeks)
+## ✅ SPRINT 1: Eliminate Double Write-Off - COMPLETED
 
 ### Goal
 
@@ -260,11 +306,13 @@ interface DecompositionSummary {
 
 ---
 
-## SPRINT 2: FIFO Allocation for Actual Cost (2-3 weeks)
+## ✅ SPRINT 2: FIFO Allocation for Actual Cost - COMPLETED (Nov 27, 2025)
 
 ### Goal
 
 Calculate actual cost of sales through FIFO allocation from batches (instead of product decomposition).
+
+**Status:** ✅ FULLY IMPLEMENTED AND TESTED
 
 ### Architecture
 
@@ -699,15 +747,17 @@ CREATE POLICY "Enable insert for authenticated users"
 
 ---
 
-### **PHASE 2: Automation & Enhancement** (Sprints 3-4)
+### **PHASE 2: Automation & Enhancement** (Sprints 3-4) - ✅ Sprint 3 COMPLETED, Sprint 4 TODO
 
 ---
 
-## SPRINT 3: Auto Write-Off Raw Products on Production (1-2 weeks)
+## ✅ SPRINT 3: Auto Write-Off Raw Products on Production - COMPLETED (Nov 25-26, 2025)
 
 ### Goal
 
 Automatically write off raw products from Storage when creating preparations (production).
+
+**Status:** ✅ FULLY IMPLEMENTED (verified via database)
 
 ### Current State
 
