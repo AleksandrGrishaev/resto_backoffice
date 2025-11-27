@@ -97,12 +97,39 @@ export class PreparationService {
   private getPreparationInfo(preparationId: string) {
     try {
       const recipesStore = useRecipesStore()
-      const preparation = recipesStore.preparations.find(p => p.id === preparationId)
+
+      // ✅ FIX: Initialize recipesStore if not initialized (similar to decomposition engine)
+      if (!recipesStore.initialized) {
+        console.warn('⚠️ [PrepService] RecipesStore not initialized, using fallback')
+        // Can't await here (sync method), so return fallback
+        return {
+          name: `[Not loaded] ${preparationId.substring(0, 8)}...`,
+          unit: 'gram',
+          outputQuantity: 1000,
+          outputUnit: 'gram',
+          costPerPortion: 0,
+          shelfLife: 2
+        }
+      }
+
+      // ✅ DEBUG: Log recipesStore state
+      console.log('🔍 [PrepService] getPreparationInfo called:', {
+        preparationId,
+        recipesStoreInitialized: recipesStore.initialized,
+        preparationsCount: recipesStore.preparations?.length || 0,
+        allPreparationIds: recipesStore.preparations?.map(p => p.id).slice(0, 5) || []
+      })
+
+      const preparation = recipesStore.preparations?.find(p => p.id === preparationId)
 
       if (!preparation) {
-        DebugUtils.warn(MODULE_NAME, 'Preparation not found', { preparationId })
+        DebugUtils.warn(MODULE_NAME, 'Preparation not found in recipesStore', {
+          preparationId,
+          recipesStoreInitialized: recipesStore.initialized,
+          availablePreparations: recipesStore.preparations?.length || 0
+        })
         return {
-          name: preparationId,
+          name: preparationId, // ❌ FALLBACK: Shows UUID when preparation not found
           unit: 'gram',
           outputQuantity: 1000,
           outputUnit: 'gram',
