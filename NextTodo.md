@@ -1047,11 +1047,36 @@ const varianceColor = computed(() => {
 
 ---
 
-## SPRINT 5: P&L Report + Food Cost Dashboard (3-4 weeks)
+## 🔄 SPRINT 5: P&L Report + Food Cost Dashboard - IN PROGRESS (Started Nov 28, 2025)
 
 ### Goal
 
 Create UI for P&L report and Food Cost analysis with expense integration.
+
+**Current Status:** 🔄 Backend Infrastructure Complete (30% done)
+
+### Progress Summary
+
+**✅ Completed:**
+
+- ✅ Created analytics store structure (`src/stores/analytics/`)
+- ✅ Defined all analytics types (PLReport, FoodCostDashboard, InventoryValuation)
+- ✅ Implemented PLReportStore with P&L calculation logic
+- ✅ Added `getTransactionsByDateRange()` to salesStore
+- ✅ Added `getExpensesByDateRange()` to accountStore
+- ✅ P&L calculation logic working (revenue, COGS, gross profit, OPEX, net profit)
+
+**🔄 In Progress:**
+
+- 🔄 PLReportView.vue UI component
+
+**📋 TODO:**
+
+- ⏳ FoodCostDashboardView.vue
+- ⏳ InventoryValuationView.vue
+- ⏳ Update router with analytics routes
+- ⏳ Test with real data
+- ⏳ Create charts and visualizations
 
 ### P&L Architecture
 

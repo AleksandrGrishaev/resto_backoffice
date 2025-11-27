@@ -310,6 +310,17 @@ export const useSalesStore = defineStore('sales', () => {
     return result.success ? result.data : null
   }
 
+  /**
+   * ✅ SPRINT 5: Get transactions by date range
+   * Helper method for P&L report generation
+   */
+  async function getTransactionsByDateRange(dateFrom: string, dateTo: string) {
+    return await fetchTransactions({
+      dateFrom,
+      dateTo
+    })
+  }
+
   return {
     // State
     state,
@@ -329,6 +340,7 @@ export const useSalesStore = defineStore('sales', () => {
     recordSalesTransaction,
     fetchTransactions,
     getStatistics,
-    getTransactionById
+    getTransactionById,
+    getTransactionsByDateRange // ✅ SPRINT 5
   }
 })
