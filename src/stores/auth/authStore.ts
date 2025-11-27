@@ -3,12 +3,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, UserRole } from './auth'
 import { CoreUserService } from '@/core/users'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, extractErrorDetails } from '@/utils'
 import { supabase } from '@/supabase'
 import { ENV } from '@/config/environment'
 import { useRouter } from 'vue-router'
 import { resetAllStores } from '@/core/storeResetService'
 import { clearHMRState } from '@/core/hmrState'
+import { executeSupabaseSingle } from '@/utils/supabase'
 
 const MODULE_NAME = 'AuthStore'
 
@@ -128,9 +129,14 @@ export const useAuthStore = defineStore('auth', () => {
   // Load user profile from Supabase users table
   async function loadUserProfile(userId: string) {
     try {
-      const { data, error } = await supabase.from('users').select('*').eq('id', userId).single()
+      const data = await executeSupabaseSingle(
+        supabase.from('users').select('*').eq('id', userId),
+        `${MODULE_NAME}.loadUserProfile`
+      )
 
-      if (error) throw error
+      if (!data) {
+        throw new Error('User profile not found')
+      }
 
       state.value.currentUser = {
         id: data.id,
@@ -150,7 +156,7 @@ export const useAuthStore = defineStore('auth', () => {
         roles: data.roles
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load profile', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to load profile', extractErrorDetails(error))
       throw error
     }
   }

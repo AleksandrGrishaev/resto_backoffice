@@ -1,5 +1,20 @@
 <template>
   <div class="account-list-view">
+    <!-- Error banner -->
+    <v-alert
+      v-if="errorMessage"
+      type="error"
+      variant="tonal"
+      closable
+      class="ma-4"
+      @click:close="errorMessage = null"
+    >
+      {{ errorMessage }}
+      <template #append>
+        <v-btn size="small" variant="text" :loading="loading" @click="fetchAccounts">Retry</v-btn>
+      </template>
+    </v-alert>
+
     <account-list-toolbar
       @create-account="showAccountDialog"
       @create-operation="showOperationDialog"
@@ -48,6 +63,7 @@ const authStore = useAuthStore()
 
 // State
 const loading = ref(true)
+const errorMessage = ref<string | null>(null)
 const dialogs = ref({
   account: false,
   operation: false
@@ -93,10 +109,14 @@ function handleOperationSuccess() {
 // Data fetching
 async function fetchAccounts() {
   loading.value = true
+  errorMessage.value = null
+
   try {
     await store.fetchAccounts()
   } catch (error) {
     console.error('Failed to fetch accounts:', error)
+    errorMessage.value =
+      error instanceof Error ? error.message : 'Failed to load accounts. Please try again.'
   } finally {
     loading.value = false
   }

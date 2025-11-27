@@ -13,7 +13,12 @@ import type {
   RecipeComponent,
   PreparationIngredient
 } from './types'
-import { DebugUtils, TimeUtils, generateId } from '@/utils'
+import { DebugUtils, TimeUtils, generateId, extractErrorDetails } from '@/utils'
+import {
+  executeSupabaseQuery,
+  executeSupabaseSingle,
+  executeSupabaseMutation
+} from '@/utils/supabase'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
 import {
@@ -44,24 +49,22 @@ function isSupabaseAvailable(): boolean {
 // Helper: Generate next preparation code (P-001, P-002, etc.)
 async function getNextPreparationCode(): Promise<string> {
   try {
-    const { data, error } = await supabase
-      .from('preparations')
-      .select('code')
-      .not('code', 'is', null)
-      .order('code', { ascending: false })
-      .limit(1)
-
-    if (error) {
-      console.error('Error fetching last preparation code:', error)
-      return 'P-001' // Fallback
-    }
+    const data = await executeSupabaseQuery(
+      supabase
+        .from('preparations')
+        .select('code')
+        .not('code', 'is', null)
+        .order('code', { ascending: false })
+        .limit(1),
+      'getNextPreparationCode'
+    )
 
     const lastCode = data?.[0]?.code || 'P-000'
     const lastNumber = parseInt(lastCode.split('-')[1]) || 0
 
     return `P-${(lastNumber + 1).toString().padStart(3, '0')}`
   } catch (error) {
-    console.error('Error generating preparation code:', error)
+    console.error('Error generating preparation code:', extractErrorDetails(error))
     return 'P-001' // Fallback
   }
 }
@@ -69,24 +72,22 @@ async function getNextPreparationCode(): Promise<string> {
 // Helper: Generate next recipe code (R-001, R-002, etc.)
 async function getNextRecipeCode(): Promise<string> {
   try {
-    const { data, error } = await supabase
-      .from('recipes')
-      .select('code')
-      .not('code', 'is', null)
-      .order('code', { ascending: false })
-      .limit(1)
-
-    if (error) {
-      console.error('Error fetching last recipe code:', error)
-      return 'R-001' // Fallback
-    }
+    const data = await executeSupabaseQuery(
+      supabase
+        .from('recipes')
+        .select('code')
+        .not('code', 'is', null)
+        .order('code', { ascending: false })
+        .limit(1),
+      'getNextRecipeCode'
+    )
 
     const lastCode = data?.[0]?.code || 'R-000'
     const lastNumber = parseInt(lastCode.split('-')[1]) || 0
 
     return `R-${(lastNumber + 1).toString().padStart(3, '0')}`
   } catch (error) {
-    console.error('Error generating recipe code:', error)
+    console.error('Error generating recipe code:', extractErrorDetails(error))
     return 'R-001' // Fallback
   }
 }
@@ -234,17 +235,15 @@ export class RecipesService {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('preparation_categories')
-        .select('*')
-        .order('sort_order', { ascending: true })
+      const data = await executeSupabaseQuery(
+        supabase
+          .from('preparation_categories')
+          .select('*')
+          .order('sort_order', { ascending: true }),
+        `${MODULE_NAME}.getPreparationCategories`
+      )
 
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to load preparation categories', error)
-        throw error
-      }
-
-      const categories = (data || []).map(row => ({
+      const categories = data.map(row => ({
         id: row.id,
         key: row.key,
         name: row.name,
@@ -264,7 +263,11 @@ export class RecipesService {
 
       return categories
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading preparation categories', error)
+      DebugUtils.error(
+        MODULE_NAME,
+        'Error loading preparation categories',
+        extractErrorDetails(error)
+      )
       throw error
     }
   }
@@ -279,17 +282,12 @@ export class RecipesService {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('recipe_categories')
-        .select('*')
-        .order('sort_order', { ascending: true })
+      const data = await executeSupabaseQuery(
+        supabase.from('recipe_categories').select('*').order('sort_order', { ascending: true }),
+        `${MODULE_NAME}.getRecipeCategories`
+      )
 
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to load recipe categories', error)
-        throw error
-      }
-
-      const categories = (data || []).map(row => ({
+      const categories = data.map(row => ({
         id: row.id,
         key: row.key,
         name: row.name,
@@ -308,7 +306,7 @@ export class RecipesService {
 
       return categories
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading recipe categories', error)
+      DebugUtils.error(MODULE_NAME, 'Error loading recipe categories', extractErrorDetails(error))
       throw error
     }
   }
@@ -432,36 +430,26 @@ export class RecipesService {
       }
 
       // Update preparation in Supabase
-      const { error: preparationError } = await supabase
-        .from('preparations')
-        .update(preparationToSupabaseUpdate(updatedPreparation))
-        .eq('id', id)
+      await executeSupabaseMutation(async () => {
+        const { error: preparationError } = await supabase
+          .from('preparations')
+          .update(preparationToSupabaseUpdate(updatedPreparation))
+          .eq('id', id)
 
-      if (preparationError) {
-        DebugUtils.error(
-          MODULE_NAME,
-          '❌ Failed to update preparation in Supabase:',
-          preparationError
-        )
-        throw new Error(`Failed to update preparation: ${preparationError.message}`)
-      }
+        if (preparationError) throw preparationError
+      }, `${MODULE_NAME}.updatePreparation.updateMain`)
 
       // Update ingredients if provided
       if (recipe !== undefined) {
         // Delete existing ingredients
-        const { error: deleteError } = await supabase
-          .from('preparation_ingredients')
-          .delete()
-          .eq('preparation_id', id)
+        await executeSupabaseMutation(async () => {
+          const { error: deleteError } = await supabase
+            .from('preparation_ingredients')
+            .delete()
+            .eq('preparation_id', id)
 
-        if (deleteError) {
-          DebugUtils.error(
-            MODULE_NAME,
-            '❌ Failed to delete old preparation ingredients:',
-            deleteError
-          )
-          throw new Error(`Failed to update preparation ingredients: ${deleteError.message}`)
-        }
+          if (deleteError) throw deleteError
+        }, `${MODULE_NAME}.updatePreparation.deleteOldIngredients`)
 
         // Insert new ingredients
         if (recipe.length > 0) {
@@ -475,18 +463,13 @@ export class RecipesService {
             )
           )
 
-          const { error: insertError } = await supabase
-            .from('preparation_ingredients')
-            .insert(ingredientsToInsert)
+          await executeSupabaseMutation(async () => {
+            const { error: insertError } = await supabase
+              .from('preparation_ingredients')
+              .insert(ingredientsToInsert)
 
-          if (insertError) {
-            DebugUtils.error(
-              MODULE_NAME,
-              '❌ Failed to insert new preparation ingredients:',
-              insertError
-            )
-            throw new Error(`Failed to update preparation ingredients: ${insertError.message}`)
-          }
+            if (insertError) throw insertError
+          }, `${MODULE_NAME}.updatePreparation.insertNewIngredients`)
         }
       }
 
@@ -495,7 +478,10 @@ export class RecipesService {
       // Invalidate cache
       localStorage.removeItem('preparations_cache')
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error updating preparation', { error, data })
+      DebugUtils.error(MODULE_NAME, 'Error updating preparation', {
+        ...extractErrorDetails(error),
+        data
+      })
       throw error
     }
   }
@@ -512,38 +498,33 @@ export class RecipesService {
       }
 
       // Delete ingredients first (foreign key constraint)
-      const { error: ingredientsError } = await supabase
-        .from('preparation_ingredients')
-        .delete()
-        .eq('preparation_id', id)
+      await executeSupabaseMutation(async () => {
+        const { error: ingredientsError } = await supabase
+          .from('preparation_ingredients')
+          .delete()
+          .eq('preparation_id', id)
 
-      if (ingredientsError) {
-        DebugUtils.error(
-          MODULE_NAME,
-          '❌ Failed to delete preparation ingredients:',
-          ingredientsError
-        )
-        throw new Error(`Failed to delete preparation ingredients: ${ingredientsError.message}`)
-      }
+        if (ingredientsError) throw ingredientsError
+      }, `${MODULE_NAME}.deletePreparation.deleteIngredients`)
 
       // Delete preparation
-      const { error: preparationError } = await supabase.from('preparations').delete().eq('id', id)
-
-      if (preparationError) {
-        DebugUtils.error(
-          MODULE_NAME,
-          '❌ Failed to delete preparation from Supabase:',
-          preparationError
-        )
-        throw new Error(`Failed to delete preparation: ${preparationError.message}`)
-      }
+      await executeSupabaseMutation(async () => {
+        const { error: preparationError } = await supabase
+          .from('preparations')
+          .delete()
+          .eq('id', id)
+        if (preparationError) throw preparationError
+      }, `${MODULE_NAME}.deletePreparation.deleteMain`)
 
       DebugUtils.info(MODULE_NAME, '✅ Preparation deleted from Supabase', { id })
 
       // Invalidate cache
       localStorage.removeItem('preparations_cache')
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error deleting preparation', { error, id })
+      DebugUtils.error(MODULE_NAME, 'Error deleting preparation', {
+        ...extractErrorDetails(error),
+        id
+      })
       throw error
     }
   }
@@ -788,28 +769,26 @@ export class RecipesService {
       }
 
       // Update recipe in Supabase
-      const { error: recipeError } = await supabase
-        .from('recipes')
-        .update(recipeToSupabaseUpdate(updatedRecipe))
-        .eq('id', id)
+      await executeSupabaseMutation(async () => {
+        const { error: recipeError } = await supabase
+          .from('recipes')
+          .update(recipeToSupabaseUpdate(updatedRecipe))
+          .eq('id', id)
 
-      if (recipeError) {
-        DebugUtils.error(MODULE_NAME, '❌ Failed to update recipe in Supabase:', recipeError)
-        throw new Error(`Failed to update recipe: ${recipeError.message}`)
-      }
+        if (recipeError) throw recipeError
+      }, `${MODULE_NAME}.updateRecipe.updateMain`)
 
       // Update components if provided
       if (components !== undefined) {
         // Delete existing components
-        const { error: deleteError } = await supabase
-          .from('recipe_components')
-          .delete()
-          .eq('recipe_id', id)
+        await executeSupabaseMutation(async () => {
+          const { error: deleteError } = await supabase
+            .from('recipe_components')
+            .delete()
+            .eq('recipe_id', id)
 
-        if (deleteError) {
-          DebugUtils.error(MODULE_NAME, '❌ Failed to delete old recipe components:', deleteError)
-          throw new Error(`Failed to update recipe components: ${deleteError.message}`)
-        }
+          if (deleteError) throw deleteError
+        }, `${MODULE_NAME}.updateRecipe.deleteOldComponents`)
 
         // Insert new components
         if (components.length > 0) {
@@ -823,29 +802,27 @@ export class RecipesService {
             )
           )
 
-          const { error: insertError } = await supabase
-            .from('recipe_components')
-            .insert(componentsToInsert)
+          await executeSupabaseMutation(async () => {
+            const { error: insertError } = await supabase
+              .from('recipe_components')
+              .insert(componentsToInsert)
 
-          if (insertError) {
-            DebugUtils.error(MODULE_NAME, '❌ Failed to insert new recipe components:', insertError)
-            throw new Error(`Failed to update recipe components: ${insertError.message}`)
-          }
+            if (insertError) throw insertError
+          }, `${MODULE_NAME}.updateRecipe.insertNewComponents`)
         }
       }
 
       // Update steps if provided
       if (steps !== undefined) {
         // Delete existing steps
-        const { error: deleteError } = await supabase
-          .from('recipe_steps')
-          .delete()
-          .eq('recipe_id', id)
+        await executeSupabaseMutation(async () => {
+          const { error: deleteError } = await supabase
+            .from('recipe_steps')
+            .delete()
+            .eq('recipe_id', id)
 
-        if (deleteError) {
-          DebugUtils.error(MODULE_NAME, '❌ Failed to delete old recipe steps:', deleteError)
-          throw new Error(`Failed to update recipe steps: ${deleteError.message}`)
-        }
+          if (deleteError) throw deleteError
+        }, `${MODULE_NAME}.updateRecipe.deleteOldSteps`)
 
         // Insert new steps
         if (steps.length > 0) {
@@ -859,12 +836,10 @@ export class RecipesService {
             )
           )
 
-          const { error: insertError } = await supabase.from('recipe_steps').insert(stepsToInsert)
-
-          if (insertError) {
-            DebugUtils.error(MODULE_NAME, '❌ Failed to insert new recipe steps:', insertError)
-            throw new Error(`Failed to update recipe steps: ${insertError.message}`)
-          }
+          await executeSupabaseMutation(async () => {
+            const { error: insertError } = await supabase.from('recipe_steps').insert(stepsToInsert)
+            if (insertError) throw insertError
+          }, `${MODULE_NAME}.updateRecipe.insertNewSteps`)
         }
       }
 
@@ -877,7 +852,7 @@ export class RecipesService {
       localStorage.removeItem('recipes_cache')
       return await this.getRecipeById(id)
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Error in updateRecipe:', error)
+      DebugUtils.error(MODULE_NAME, '❌ Error in updateRecipe:', extractErrorDetails(error))
       throw error
     }
   }

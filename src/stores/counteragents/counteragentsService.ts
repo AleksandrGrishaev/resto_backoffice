@@ -13,7 +13,9 @@ import type {
 } from './types'
 import type { ProductCategory } from '@/stores/productsStore/types'
 import { supabase } from '@/supabase/client'
-import { generateId, TimeUtils, DebugUtils } from '@/utils'
+import { generateId, TimeUtils, DebugUtils, extractErrorDetails } from '@/utils'
+import { executeSupabaseSingle, executeSupabaseMutation } from '@/utils/supabase'
+import { withRetry } from '@/core/request/SupabaseRetryHandler'
 import { mapCounteragentFromDB, mapCounteragentToDB } from './supabaseMappers'
 
 const MODULE_NAME = 'CounteragentsService'
@@ -40,72 +42,81 @@ export class CounteragentsService {
     try {
       DebugUtils.debug(MODULE_NAME, 'Fetching counteragents from Supabase', { filters })
 
-      // Build query
-      let query = supabase.from('counteragents').select('*', { count: 'exact' })
+      // ✅ FIX: Wrap Supabase query with retry logic
+      const result = await withRetry(async () => {
+        // Build query
+        let query = supabase.from('counteragents').select('*', { count: 'exact' })
 
-      // Apply filters
-      if (filters) {
-        if (filters.search) {
-          query = query.or(
-            `name.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%,contact_person.ilike.%${filters.search}%`
-          )
+        // Apply filters
+        if (filters) {
+          if (filters.search) {
+            query = query.or(
+              `name.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%,contact_person.ilike.%${filters.search}%`
+            )
+          }
+
+          if (filters.type && filters.type !== 'all') {
+            query = query.eq('type', filters.type)
+          }
+
+          if (typeof filters.isActive === 'boolean') {
+            query = query.eq('is_active', filters.isActive)
+          }
+
+          if (typeof filters.isPreferred === 'boolean') {
+            query = query.eq('is_preferred', filters.isPreferred)
+          }
+
+          if (filters.productCategories && filters.productCategories.length > 0) {
+            query = query.overlaps('product_categories', filters.productCategories)
+          }
+
+          if (filters.paymentTerms && filters.paymentTerms !== 'all') {
+            query = query.eq('payment_terms', filters.paymentTerms)
+          }
         }
 
-        if (filters.type && filters.type !== 'all') {
-          query = query.eq('type', filters.type)
-        }
+        // Apply sorting
+        const sortBy = filters?.sortBy || 'name'
+        const sortOrder = filters?.sortOrder || 'asc'
+        const dbSortBy = sortBy.replace(/([A-Z])/g, '_$1').toLowerCase() // camelCase to snake_case
+        query = query.order(dbSortBy, { ascending: sortOrder === 'asc' })
 
-        if (typeof filters.isActive === 'boolean') {
-          query = query.eq('is_active', filters.isActive)
-        }
+        // Apply pagination
+        const page = filters?.page || 1
+        const limit = filters?.limit || 100
+        const offset = (page - 1) * limit
+        query = query.range(offset, offset + limit - 1)
 
-        if (typeof filters.isPreferred === 'boolean') {
-          query = query.eq('is_preferred', filters.isPreferred)
-        }
+        const { data, error, count } = await query
 
-        if (filters.productCategories && filters.productCategories.length > 0) {
-          query = query.overlaps('product_categories', filters.productCategories)
-        }
+        if (error) throw error
 
-        if (filters.paymentTerms && filters.paymentTerms !== 'all') {
-          query = query.eq('payment_terms', filters.paymentTerms)
-        }
-      }
+        return { data: data || [], count: count || 0 }
+      }, `${MODULE_NAME}.fetchCounterAgents`)
 
-      // Apply sorting
-      const sortBy = filters?.sortBy || 'name'
-      const sortOrder = filters?.sortOrder || 'asc'
-      const dbSortBy = sortBy.replace(/([A-Z])/g, '_$1').toLowerCase() // camelCase to snake_case
-      query = query.order(dbSortBy, { ascending: sortOrder === 'asc' })
-
-      // Apply pagination
-      const page = filters?.page || 1
-      const limit = filters?.limit || 100
-      const offset = (page - 1) * limit
-      query = query.range(offset, offset + limit - 1)
-
-      const { data, error, count } = await query
-
-      if (error) throw error
-
-      const counteragents = (data || []).map(mapCounteragentFromDB)
+      const counteragents = result.data.map(mapCounteragentFromDB)
 
       DebugUtils.info(MODULE_NAME, 'Counteragents fetched from Supabase', {
-        total: count || 0,
+        total: result.count,
         returned: counteragents.length
       })
 
+      const page = filters?.page || 1
+      const limit = filters?.limit || 100
+
       return {
         data: counteragents,
-        total: count || 0,
+        total: result.count,
         page,
         limit
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch counteragents from Supabase', {
-        error,
-        filters
-      })
+      DebugUtils.error(
+        MODULE_NAME,
+        'Failed to fetch counteragents from Supabase',
+        extractErrorDetails(error)
+      )
       throw new Error('Failed to fetch counteragents')
     }
   }
@@ -114,14 +125,15 @@ export class CounteragentsService {
     try {
       DebugUtils.debug(MODULE_NAME, 'Getting counteragent by ID from Supabase', { id })
 
-      const { data, error } = await supabase.from('counteragents').select('*').eq('id', id).single()
+      // ✅ FIX: Use executeSupabaseSingle with retry logic
+      const data = await executeSupabaseSingle(
+        supabase.from('counteragents').select('*').eq('id', id),
+        `${MODULE_NAME}.getCounteragentById`
+      )
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          DebugUtils.warn(MODULE_NAME, 'Counteragent not found', { id })
-          throw new Error(`Counteragent with id ${id} not found`)
-        }
-        throw error
+      if (!data) {
+        DebugUtils.warn(MODULE_NAME, 'Counteragent not found', { id })
+        throw new Error(`Counteragent with id ${id} not found`)
       }
 
       const counteragent = mapCounteragentFromDB(data)
@@ -134,7 +146,7 @@ export class CounteragentsService {
 
       return { data: counteragent }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get counteragent by ID', { error, id })
+      DebugUtils.error(MODULE_NAME, 'Failed to get counteragent by ID', extractErrorDetails(error))
       throw error
     }
   }
@@ -276,17 +288,22 @@ export class CounteragentsService {
       // Get counteragent first for logging
       const { data: counteragent } = await this.getCounteragentById(id)
 
-      // Delete from Supabase
-      const { error } = await supabase.from('counteragents').delete().eq('id', id)
-
-      if (error) throw error
+      // ✅ FIX: Use executeSupabaseMutation with retry logic
+      await executeSupabaseMutation(async () => {
+        const { error } = await supabase.from('counteragents').delete().eq('id', id)
+        if (error) throw error
+      }, `${MODULE_NAME}.deleteCounteragent`)
 
       DebugUtils.info(MODULE_NAME, 'Counteragent deleted successfully from Supabase', {
         id,
         name: counteragent.name
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to delete counteragent from Supabase', { error, id })
+      DebugUtils.error(
+        MODULE_NAME,
+        'Failed to delete counteragent from Supabase',
+        extractErrorDetails(error)
+      )
       throw error
     }
   }

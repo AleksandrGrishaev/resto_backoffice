@@ -4,7 +4,8 @@
 import { supabase } from '@/supabase/client'
 import { fromSupabase as orderFromSupabase } from '@/stores/pos/orders/supabaseMappers'
 import type { PosOrder, OrderStatus, ItemStatus } from '@/stores/pos/types'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, extractErrorDetails } from '@/utils'
+import { executeSupabaseMutation } from '@/utils/supabase'
 
 const MODULE_NAME = 'KitchenService'
 
@@ -178,23 +179,29 @@ export async function checkAndUpdateOrderStatus(orderId: string): Promise<void> 
         updates.actual_ready_time = new Date().toISOString()
       }
 
-      const { error: updateError } = await supabase.from('orders').update(updates).eq('id', orderId)
+      try {
+        await executeSupabaseMutation(async () => {
+          const { error: updateError } = await supabase
+            .from('orders')
+            .update(updates)
+            .eq('id', orderId)
+          if (updateError) throw updateError
+        }, `${MODULE_NAME}.autoUpdateOrderStatus`)
 
-      if (updateError) {
+        DebugUtils.info(MODULE_NAME, 'Order status auto-updated', {
+          orderNumber: order.order_number,
+          oldStatus: order.status,
+          newStatus: calculatedStatus,
+          itemsCount: items.length
+        })
+      } catch (updateError) {
         DebugUtils.error(MODULE_NAME, 'Failed to auto-update order status', {
           orderId,
           calculatedStatus,
-          error: updateError
+          ...extractErrorDetails(updateError)
         })
         return
       }
-
-      DebugUtils.info(MODULE_NAME, 'Order status auto-updated', {
-        orderNumber: order.order_number,
-        oldStatus: order.status,
-        newStatus: calculatedStatus,
-        itemsCount: items.length
-      })
     }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Exception checking order status', { orderId, error })

@@ -10,11 +10,12 @@ import type {
   ItemPaymentStatus
 } from '../types'
 import type { MenuItemVariant, SelectedModifier } from '@/stores/menu'
-import { TimeUtils, generateId } from '@/utils'
+import { TimeUtils, generateId, extractErrorDetails } from '@/utils'
 import { departmentNotificationService } from '../service/DepartmentNotificationService'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
 import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
+import { executeSupabaseMutation } from '@/utils/supabase'
 
 /**
  * Order service - handles storage operations
@@ -285,13 +286,16 @@ export class OrdersService {
       // Try Supabase first (if online)
       if (this.isSupabaseAvailable()) {
         const supabaseRow = toSupabaseInsert(newOrder)
-        const { error } = await supabase.from('orders').insert(supabaseRow)
 
-        if (error) {
-          console.error('❌ Supabase save failed:', error.message)
-          // Continue to localStorage (offline fallback)
-        } else {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('orders').insert(supabaseRow)
+            if (error) throw error
+          }, 'OrdersService.createOrder')
           console.log('✅ Order saved to Supabase:', newOrder.orderNumber)
+        } catch (error) {
+          console.error('❌ Supabase save failed:', extractErrorDetails(error))
+          // Continue to localStorage (offline fallback)
         }
       }
 
@@ -623,16 +627,19 @@ export class OrdersService {
       // Try Supabase first (if online)
       if (this.isSupabaseAvailable()) {
         const supabaseRow = toSupabaseUpdate(order)
-        const { error } = await supabase.from('orders').update(supabaseRow).eq('id', order.id)
 
-        if (error) {
-          console.error('❌ Supabase update failed:', error.message)
-          // Continue to localStorage (offline fallback)
-        } else {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('orders').update(supabaseRow).eq('id', order.id)
+            if (error) throw error
+          }, 'OrdersService.updateOrder')
           console.log('✅ Order updated in Supabase:', order.orderNumber, {
             billsCount: order.bills.length,
             totalItems: order.bills.reduce((sum, b) => sum + b.items.length, 0)
           })
+        } catch (error) {
+          console.error('❌ Supabase update failed:', extractErrorDetails(error))
+          // Continue to localStorage (offline fallback)
         }
       }
 

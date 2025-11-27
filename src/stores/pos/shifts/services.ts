@@ -14,6 +14,8 @@ import { supabase } from '@/supabase'
 import { getSupabaseErrorMessage } from '@/supabase/config'
 import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
 import { ENV } from '@/config/environment'
+import { extractErrorDetails } from '@/utils'
+import { executeSupabaseMutation } from '@/utils/supabase'
 
 /**
  * Сервис для работы с данными смен
@@ -161,17 +163,20 @@ export class ShiftsService {
       // Try to save to Supabase first
       if (this.isSupabaseAvailable()) {
         const supabaseShift = toSupabaseInsert(newShift)
-        const { error } = await supabase.from('shifts').insert(supabaseShift)
 
-        if (error) {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('shifts').insert(supabaseShift)
+            if (error) throw error
+          }, 'ShiftsService.createShift')
+          console.log('✅ Смена создана в Supabase:', shiftNumber)
+        } catch (error) {
           console.warn(
             '⚠️ Supabase insert failed, saving to localStorage only:',
-            getSupabaseErrorMessage(error)
+            extractErrorDetails(error)
           )
           newShift.syncStatus = 'pending'
           newShift.pendingSync = true
-        } else {
-          console.log('✅ Смена создана в Supabase:', shiftNumber)
         }
       } else {
         // Offline mode - mark for sync
@@ -262,17 +267,23 @@ export class ShiftsService {
       // Try to update in Supabase first
       if (this.isSupabaseAvailable()) {
         const supabaseUpdate = toSupabaseUpdate(updatedShift)
-        const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shift.id)
 
-        if (error) {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase
+              .from('shifts')
+              .update(supabaseUpdate)
+              .eq('id', shift.id)
+            if (error) throw error
+          }, 'ShiftsService.endShift')
+          console.log('✅ Смена закрыта и обновлена в Supabase:', updatedShift.shiftNumber)
+        } catch (error) {
           console.warn(
             '⚠️ Supabase update failed when closing shift, saving to localStorage only:',
-            getSupabaseErrorMessage(error)
+            extractErrorDetails(error)
           )
           updatedShift.syncStatus = 'pending'
           updatedShift.pendingSync = true
-        } else {
-          console.log('✅ Смена закрыта и обновлена в Supabase:', updatedShift.shiftNumber)
         }
       } else {
         // Offline mode - mark for sync
@@ -312,17 +323,20 @@ export class ShiftsService {
       // Try to update in Supabase first
       if (this.isSupabaseAvailable()) {
         const supabaseUpdate = toSupabaseUpdate(updatedShift)
-        const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shiftId)
 
-        if (error) {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shiftId)
+            if (error) throw error
+          }, 'ShiftsService.updateShift')
+          console.log('✅ Смена обновлена в Supabase:', shiftId)
+        } catch (error) {
           console.warn(
             '⚠️ Supabase update failed, saving to localStorage only:',
-            getSupabaseErrorMessage(error)
+            extractErrorDetails(error)
           )
           updatedShift.syncStatus = 'pending'
           updatedShift.pendingSync = true
-        } else {
-          console.log('✅ Смена обновлена в Supabase:', shiftId)
         }
       } else {
         // Offline mode - mark for sync

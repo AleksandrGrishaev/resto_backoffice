@@ -1,5 +1,31 @@
 <template>
   <v-card class="pending-payments-widget mb-6" elevation="2">
+    <!-- Error banners -->
+    <v-alert
+      v-if="paymentsError"
+      type="warning"
+      variant="tonal"
+      closable
+      class="ma-4 mb-0"
+      @click:close="paymentsError = null"
+    >
+      {{ paymentsError }}
+      <template #append>
+        <v-btn size="small" variant="text" @click="refreshPayments">Retry</v-btn>
+      </template>
+    </v-alert>
+
+    <v-alert
+      v-if="accountsError"
+      type="warning"
+      variant="tonal"
+      closable
+      class="ma-4 mb-0"
+      @click:close="accountsError = null"
+    >
+      {{ accountsError }}
+    </v-alert>
+
     <!-- Header -->
     <v-card-title class="d-flex align-center justify-space-between">
       <div class="d-flex align-items-center">
@@ -113,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAccountStore } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
 import type { PendingPayment } from '@/stores/account'
@@ -125,6 +151,10 @@ const emit = defineEmits<{
 // Stores
 const accountStore = useAccountStore()
 
+// Error state
+const paymentsError = ref<string | null>(null)
+const accountsError = ref<string | null>(null)
+
 // Computed
 const loading = computed(() => accountStore.state.loading.payments)
 const paymentStatistics = computed(() => accountStore.paymentStatistics)
@@ -133,6 +163,7 @@ const displayedPayments = computed(() => {
   // Показываем все pending платежи
   return accountStore.pendingPayments
 })
+
 // Methods
 function getPaymentItemClass(payment: PendingPayment) {
   return {
@@ -141,16 +172,42 @@ function getPaymentItemClass(payment: PendingPayment) {
 }
 
 async function refreshPayments() {
+  paymentsError.value = null
   try {
     await accountStore.fetchPayments(true)
   } catch (error) {
     console.error('Failed to refresh payments:', error)
+    paymentsError.value = error instanceof Error ? error.message : 'Failed to load payments'
+  }
+}
+
+async function loadInitialData() {
+  paymentsError.value = null
+  accountsError.value = null
+
+  // ✅ FIX: Independent error handling - don't use Promise.all
+  // Fetch payments
+  try {
+    await accountStore.fetchPayments()
+  } catch (error) {
+    console.error('Failed to fetch payments:', error)
+    paymentsError.value = error instanceof Error ? error.message : 'Failed to load payments'
+    // Continue - don't crash component
+  }
+
+  // Fetch accounts
+  try {
+    await accountStore.fetchAccounts()
+  } catch (error) {
+    console.error('Failed to fetch accounts:', error)
+    accountsError.value = error instanceof Error ? error.message : 'Failed to load accounts'
+    // Continue - don't crash component
   }
 }
 
 // Lifecycle
 onMounted(async () => {
-  await Promise.all([accountStore.fetchPayments(), accountStore.fetchAccounts()])
+  await loadInitialData()
 })
 </script>
 

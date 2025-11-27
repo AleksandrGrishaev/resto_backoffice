@@ -18,7 +18,12 @@ import {
   mapReceiptItemToDB
 } from './supabaseMappers'
 
-import { DebugUtils } from '@/utils'
+import { DebugUtils, extractErrorDetails } from '@/utils'
+import {
+  executeSupabaseQuery,
+  executeSupabaseSingle,
+  executeSupabaseMutation
+} from '@/utils/supabase'
 import type {
   ProcurementRequest,
   PurchaseOrder,
@@ -72,18 +77,16 @@ class SupplierService {
       DebugUtils.info(MODULE_NAME, 'Fetching requests from Supabase...')
 
       // Fetch requests with items in a single query
-      const { data, error } = await supabase
-        .from('supplierstore_requests')
-        .select('*, supplierstore_request_items(*)')
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch requests from Supabase', { error })
-        throw error
-      }
+      const data = await executeSupabaseQuery(
+        supabase
+          .from('supplierstore_requests')
+          .select('*, supplierstore_request_items(*)')
+          .order('created_at', { ascending: false }),
+        `${MODULE_NAME}.getRequests`
+      )
 
       // Map database rows to TypeScript objects
-      const requests = (data || []).map(dbRequest =>
+      const requests = data.map(dbRequest =>
         mapRequestFromDB(dbRequest, dbRequest.supplierstore_request_items || [])
       )
 
@@ -93,7 +96,7 @@ class SupplierService {
 
       return requests
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error fetching requests', { error })
+      DebugUtils.error(MODULE_NAME, 'Error fetching requests', extractErrorDetails(error))
       throw error
     }
   }
@@ -103,20 +106,17 @@ class SupplierService {
       DebugUtils.info(MODULE_NAME, 'Fetching request by ID from Supabase', { id })
 
       // Fetch request with items
-      const { data, error } = await supabase
-        .from('supplierstore_requests')
-        .select('*, supplierstore_request_items(*)')
-        .eq('id', id)
-        .single()
+      const data = await executeSupabaseSingle(
+        supabase
+          .from('supplierstore_requests')
+          .select('*, supplierstore_request_items(*)')
+          .eq('id', id),
+        `${MODULE_NAME}.getRequestById`
+      )
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // Not found
-          DebugUtils.warn(MODULE_NAME, 'Request not found', { id })
-          return null
-        }
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch request by ID', { id, error })
-        throw error
+      if (!data) {
+        DebugUtils.warn(MODULE_NAME, 'Request not found', { id })
+        return null
       }
 
       const request = mapRequestFromDB(data, data.supplierstore_request_items || [])
@@ -128,7 +128,10 @@ class SupplierService {
 
       return request
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error fetching request by ID', { id, error })
+      DebugUtils.error(MODULE_NAME, 'Error fetching request by ID', {
+        id,
+        ...extractErrorDetails(error)
+      })
       throw error
     }
   }
@@ -166,29 +169,42 @@ class SupplierService {
       }
 
       // Insert request (main record)
-      const { data: insertedRequest, error: requestError } = await supabase
-        .from('supplierstore_requests')
-        .insert([mapRequestToDB(newRequest)])
-        .select()
-        .single()
+      await executeSupabaseMutation(async () => {
+        const { data: insertedRequest, error: requestError } = await supabase
+          .from('supplierstore_requests')
+          .insert([mapRequestToDB(newRequest)])
+          .select()
+          .single()
 
-      if (requestError) {
-        DebugUtils.error(MODULE_NAME, 'Failed to insert request', { requestError })
-        throw requestError
-      }
+        if (requestError) throw requestError
+      }, `${MODULE_NAME}.createRequest.insertRequest`)
 
       // Insert request items
       if (newRequest.items.length > 0) {
         const itemsToInsert = newRequest.items.map(item => mapRequestItemToDB(item, requestId))
 
-        const { error: itemsError } = await supabase
-          .from('supplierstore_request_items')
-          .insert(itemsToInsert)
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error: itemsError } = await supabase
+              .from('supplierstore_request_items')
+              .insert(itemsToInsert)
 
-        if (itemsError) {
-          DebugUtils.error(MODULE_NAME, 'Failed to insert request items', { itemsError })
+            if (itemsError) throw itemsError
+          }, `${MODULE_NAME}.createRequest.insertItems`)
+        } catch (itemsError) {
+          DebugUtils.error(
+            MODULE_NAME,
+            'Failed to insert request items',
+            extractErrorDetails(itemsError)
+          )
           // Rollback: delete the request
-          await supabase.from('supplierstore_requests').delete().eq('id', requestId)
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase
+              .from('supplierstore_requests')
+              .delete()
+              .eq('id', requestId)
+            if (error) throw error
+          }, `${MODULE_NAME}.createRequest.rollback`)
           throw itemsError
         }
       }
@@ -201,7 +217,7 @@ class SupplierService {
 
       return newRequest
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error creating request', { error })
+      DebugUtils.error(MODULE_NAME, 'Error creating request', extractErrorDetails(error))
       throw error
     }
   }
@@ -222,28 +238,26 @@ class SupplierService {
       if (data.notes !== undefined) updateData.notes = data.notes
       if (data.purchaseOrderIds !== undefined) updateData.purchase_order_ids = data.purchaseOrderIds
 
-      const { error: requestError } = await supabase
-        .from('supplierstore_requests')
-        .update(updateData)
-        .eq('id', id)
+      await executeSupabaseMutation(async () => {
+        const { error: requestError } = await supabase
+          .from('supplierstore_requests')
+          .update(updateData)
+          .eq('id', id)
 
-      if (requestError) {
-        DebugUtils.error(MODULE_NAME, 'Failed to update request', { id, requestError })
-        throw requestError
-      }
+        if (requestError) throw requestError
+      }, `${MODULE_NAME}.updateRequest.updateMain`)
 
       // If items are updated, replace all items
       if (data.items) {
         // Delete old items
-        const { error: deleteError } = await supabase
-          .from('supplierstore_request_items')
-          .delete()
-          .eq('request_id', id)
+        await executeSupabaseMutation(async () => {
+          const { error: deleteError } = await supabase
+            .from('supplierstore_request_items')
+            .delete()
+            .eq('request_id', id)
 
-        if (deleteError) {
-          DebugUtils.error(MODULE_NAME, 'Failed to delete old request items', { deleteError })
-          throw deleteError
-        }
+          if (deleteError) throw deleteError
+        }, `${MODULE_NAME}.updateRequest.deleteOldItems`)
 
         // Insert new items
         if (data.items.length > 0) {
@@ -255,14 +269,13 @@ class SupplierService {
             return mapRequestItemToDB(itemWithId, id)
           })
 
-          const { error: itemsError } = await supabase
-            .from('supplierstore_request_items')
-            .insert(itemsToInsert)
+          await executeSupabaseMutation(async () => {
+            const { error: itemsError } = await supabase
+              .from('supplierstore_request_items')
+              .insert(itemsToInsert)
 
-          if (itemsError) {
-            DebugUtils.error(MODULE_NAME, 'Failed to insert new request items', { itemsError })
-            throw itemsError
-          }
+            if (itemsError) throw itemsError
+          }, `${MODULE_NAME}.updateRequest.insertNewItems`)
         }
       }
 
@@ -275,7 +288,7 @@ class SupplierService {
       DebugUtils.info(MODULE_NAME, 'Request updated successfully', { id })
       return updatedRequest
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error updating request', { id, error })
+      DebugUtils.error(MODULE_NAME, 'Error updating request', { id, ...extractErrorDetails(error) })
       throw error
     }
   }
@@ -285,16 +298,14 @@ class SupplierService {
       DebugUtils.info(MODULE_NAME, 'Deleting request from Supabase', { id })
 
       // Delete request (CASCADE will auto-delete items)
-      const { error } = await supabase.from('supplierstore_requests').delete().eq('id', id)
-
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to delete request', { id, error })
-        throw error
-      }
+      await executeSupabaseMutation(async () => {
+        const { error } = await supabase.from('supplierstore_requests').delete().eq('id', id)
+        if (error) throw error
+      }, `${MODULE_NAME}.deleteRequest`)
 
       DebugUtils.info(MODULE_NAME, 'Request deleted successfully', { id })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error deleting request', { id, error })
+      DebugUtils.error(MODULE_NAME, 'Error deleting request', { id, ...extractErrorDetails(error) })
       throw error
     }
   }
@@ -305,14 +316,15 @@ class SupplierService {
 
   async getOrders(): Promise<PurchaseOrder[]> {
     try {
-      const { data, error } = await supabase
-        .from('supplierstore_orders')
-        .select('*, supplierstore_order_items(*)')
-        .order('created_at', { ascending: false })
+      const data = await executeSupabaseQuery(
+        supabase
+          .from('supplierstore_orders')
+          .select('*, supplierstore_order_items(*)')
+          .order('created_at', { ascending: false }),
+        `${MODULE_NAME}.getOrders`
+      )
 
-      if (error) throw error
-
-      const orders = (data || []).map(dbOrder =>
+      const orders = data.map(dbOrder =>
         mapOrderFromDB(dbOrder, dbOrder.supplierstore_order_items || [])
       )
 
@@ -322,26 +334,26 @@ class SupplierService {
 
       return orders
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error fetching orders from Supabase', { error })
+      DebugUtils.error(
+        MODULE_NAME,
+        'Error fetching orders from Supabase',
+        extractErrorDetails(error)
+      )
       throw error
     }
   }
 
   async getOrderById(id: string): Promise<PurchaseOrder | null> {
     try {
-      const { data, error } = await supabase
-        .from('supplierstore_orders')
-        .select('*, supplierstore_order_items(*)')
-        .eq('id', id)
-        .single()
+      const data = await executeSupabaseSingle(
+        supabase
+          .from('supplierstore_orders')
+          .select('*, supplierstore_order_items(*)')
+          .eq('id', id),
+        `${MODULE_NAME}.getOrderById`
+      )
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // No rows returned
-          return null
-        }
-        throw error
-      }
+      if (!data) return null
 
       const order = mapOrderFromDB(data, data.supplierstore_order_items || [])
 
@@ -352,7 +364,10 @@ class SupplierService {
 
       return order
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error fetching order by id from Supabase', { id, error })
+      DebugUtils.error(MODULE_NAME, 'Error fetching order by id from Supabase', {
+        id,
+        ...extractErrorDetails(error)
+      })
       throw error
     }
   }
@@ -492,25 +507,34 @@ class SupplierService {
 
     try {
       // ✅ INSERT ORDER TO SUPABASE
-      const { data: insertedOrder, error: orderError } = await supabase
-        .from('supplierstore_orders')
-        .insert([mapOrderToDB(newOrder)])
-        .select()
-        .single()
+      await executeSupabaseMutation(async () => {
+        const { data: insertedOrder, error: orderError } = await supabase
+          .from('supplierstore_orders')
+          .insert([mapOrderToDB(newOrder)])
+          .select()
+          .single()
 
-      if (orderError) throw orderError
+        if (orderError) throw orderError
+      }, `${MODULE_NAME}.createOrder.insertOrder`)
 
       // ✅ INSERT ORDER ITEMS TO SUPABASE
       if (orderItems.length > 0) {
         const itemsToInsert = orderItems.map(item => mapOrderItemToDB(item, orderId))
 
-        const { error: itemsError } = await supabase
-          .from('supplierstore_order_items')
-          .insert(itemsToInsert)
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error: itemsError } = await supabase
+              .from('supplierstore_order_items')
+              .insert(itemsToInsert)
 
-        if (itemsError) {
+            if (itemsError) throw itemsError
+          }, `${MODULE_NAME}.createOrder.insertItems`)
+        } catch (itemsError) {
           // Rollback: delete the order
-          await supabase.from('supplierstore_orders').delete().eq('id', orderId)
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('supplierstore_orders').delete().eq('id', orderId)
+            if (error) throw error
+          }, `${MODULE_NAME}.createOrder.rollback`)
           throw itemsError
         }
       }
@@ -518,38 +542,41 @@ class SupplierService {
       // ✅ UPDATE RELATED REQUESTS IN SUPABASE (link to order)
       if (data.requestIds && data.requestIds.length > 0) {
         for (const requestId of data.requestIds) {
-          // Fetch the request
-          const { data: dbRequest, error: fetchError } = await supabase
-            .from('supplierstore_requests')
-            .select('purchase_order_ids')
-            .eq('id', requestId)
-            .single()
+          try {
+            // Fetch the request
+            const dbRequest = await executeSupabaseSingle(
+              supabase
+                .from('supplierstore_requests')
+                .select('purchase_order_ids')
+                .eq('id', requestId),
+              `${MODULE_NAME}.createOrder.fetchRequest`
+            )
 
-          if (fetchError) {
-            DebugUtils.warn(MODULE_NAME, 'Failed to fetch request for linking', {
-              requestId,
-              error: fetchError
-            })
-            continue
-          }
+            if (!dbRequest) {
+              DebugUtils.warn(MODULE_NAME, 'Request not found for linking', { requestId })
+              continue
+            }
 
-          // Add order ID to purchase_order_ids array
-          const updatedOrderIds = [...(dbRequest.purchase_order_ids || []), orderId]
+            // Add order ID to purchase_order_ids array
+            const updatedOrderIds = [...(dbRequest.purchase_order_ids || []), orderId]
 
-          // Update the request
-          const { error: updateError } = await supabase
-            .from('supplierstore_requests')
-            .update({
-              purchase_order_ids: updatedOrderIds,
-              updated_at: timestamp
-            })
-            .eq('id', requestId)
+            // Update the request
+            await executeSupabaseMutation(async () => {
+              const { error: updateError } = await supabase
+                .from('supplierstore_requests')
+                .update({
+                  purchase_order_ids: updatedOrderIds,
+                  updated_at: timestamp
+                })
+                .eq('id', requestId)
 
-          if (updateError) {
+              if (updateError) throw updateError
+            }, `${MODULE_NAME}.createOrder.linkRequest`)
+          } catch (error) {
             DebugUtils.warn(MODULE_NAME, 'Failed to link request to order', {
               requestId,
               orderId,
-              error: updateError
+              ...extractErrorDetails(error)
             })
           }
         }
@@ -568,7 +595,7 @@ class SupplierService {
 
       return newOrder
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error creating order in Supabase', { error })
+      DebugUtils.error(MODULE_NAME, 'Error creating order in Supabase', extractErrorDetails(error))
       throw error
     }
   }
@@ -589,32 +616,38 @@ class SupplierService {
       }
 
       // Update order in Supabase
-      const { error: orderError } = await supabase
-        .from('supplierstore_orders')
-        .update(mapOrderToDB(updatedOrder))
-        .eq('id', id)
+      await executeSupabaseMutation(async () => {
+        const { error: orderError } = await supabase
+          .from('supplierstore_orders')
+          .update(mapOrderToDB(updatedOrder))
+          .eq('id', id)
 
-      if (orderError) throw orderError
+        if (orderError) throw orderError
+      }, `${MODULE_NAME}.updateOrder.updateMain`)
 
       // If items are being updated, replace them
       if (data.items) {
         // Delete existing items
-        const { error: deleteError } = await supabase
-          .from('supplierstore_order_items')
-          .delete()
-          .eq('order_id', id)
+        await executeSupabaseMutation(async () => {
+          const { error: deleteError } = await supabase
+            .from('supplierstore_order_items')
+            .delete()
+            .eq('order_id', id)
 
-        if (deleteError) throw deleteError
+          if (deleteError) throw deleteError
+        }, `${MODULE_NAME}.updateOrder.deleteOldItems`)
 
         // Insert new items
         if (data.items.length > 0) {
           const itemsToInsert = data.items.map(item => mapOrderItemToDB(item, id))
 
-          const { error: insertError } = await supabase
-            .from('supplierstore_order_items')
-            .insert(itemsToInsert)
+          await executeSupabaseMutation(async () => {
+            const { error: insertError } = await supabase
+              .from('supplierstore_order_items')
+              .insert(itemsToInsert)
 
-          if (insertError) throw insertError
+            if (insertError) throw insertError
+          }, `${MODULE_NAME}.updateOrder.insertNewItems`)
         }
       }
 
@@ -626,7 +659,10 @@ class SupplierService {
 
       return updatedOrder
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error updating order in Supabase', { id, error })
+      DebugUtils.error(MODULE_NAME, 'Error updating order in Supabase', {
+        id,
+        ...extractErrorDetails(error)
+      })
       throw error
     }
   }
@@ -634,15 +670,19 @@ class SupplierService {
   async deleteOrder(id: string): Promise<void> {
     try {
       // Delete order from Supabase (CASCADE will delete order items)
-      const { error } = await supabase.from('supplierstore_orders').delete().eq('id', id)
-
-      if (error) throw error
+      await executeSupabaseMutation(async () => {
+        const { error } = await supabase.from('supplierstore_orders').delete().eq('id', id)
+        if (error) throw error
+      }, `${MODULE_NAME}.deleteOrder`)
 
       DebugUtils.info(MODULE_NAME, 'Purchase order deleted from Supabase (with CASCADE)', {
         orderId: id
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error deleting order from Supabase', { id, error })
+      DebugUtils.error(MODULE_NAME, 'Error deleting order from Supabase', {
+        id,
+        ...extractErrorDetails(error)
+      })
       throw error
     }
   }
@@ -652,42 +692,53 @@ class SupplierService {
   // =============================================
 
   async getReceipts(): Promise<Receipt[]> {
-    // ✅ FETCH FROM SUPABASE (Phase 3)
-    const { data, error } = await supabase
-      .from('supplierstore_receipts')
-      .select('*, supplierstore_receipt_items(*)')
-      .order('delivery_date', { ascending: false })
+    try {
+      // ✅ FETCH FROM SUPABASE (Phase 3)
+      const data = await executeSupabaseQuery(
+        supabase
+          .from('supplierstore_receipts')
+          .select('*, supplierstore_receipt_items(*)')
+          .order('delivery_date', { ascending: false }),
+        `${MODULE_NAME}.getReceipts`
+      )
 
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch receipts from Supabase', { error })
+      const receipts = data.map(dbReceipt =>
+        mapReceiptFromDB(dbReceipt, dbReceipt.supplierstore_receipt_items || [])
+      )
+
+      DebugUtils.info(MODULE_NAME, '✅ Receipts loaded from Supabase', { count: receipts.length })
+      return receipts
+    } catch (error) {
+      DebugUtils.error(
+        MODULE_NAME,
+        'Failed to fetch receipts from Supabase',
+        extractErrorDetails(error)
+      )
       throw error
     }
-
-    const receipts = (data || []).map(dbReceipt =>
-      mapReceiptFromDB(dbReceipt, dbReceipt.supplierstore_receipt_items || [])
-    )
-
-    DebugUtils.info(MODULE_NAME, '✅ Receipts loaded from Supabase', { count: receipts.length })
-    return receipts
   }
 
   async getReceiptById(id: string): Promise<Receipt | null> {
-    // ✅ FETCH FROM SUPABASE (Phase 3)
-    const { data, error } = await supabase
-      .from('supplierstore_receipts')
-      .select('*, supplierstore_receipt_items(*)')
-      .eq('id', id)
-      .single()
+    try {
+      // ✅ FETCH FROM SUPABASE (Phase 3)
+      const data = await executeSupabaseSingle(
+        supabase
+          .from('supplierstore_receipts')
+          .select('*, supplierstore_receipt_items(*)')
+          .eq('id', id),
+        `${MODULE_NAME}.getReceiptById`
+      )
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null // Not found
-      }
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch receipt from Supabase', { error, id })
+      if (!data) return null
+
+      return mapReceiptFromDB(data, data.supplierstore_receipt_items || [])
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch receipt from Supabase', {
+        error: extractErrorDetails(error),
+        id
+      })
       throw error
     }
-
-    return mapReceiptFromDB(data, data.supplierstore_receipt_items || [])
   }
 
   async createReceipt(data: CreateReceiptData): Promise<Receipt> {
@@ -751,30 +802,38 @@ class SupplierService {
     }
 
     // ✅ INSERT TO SUPABASE (Phase 3)
-    const { data: dbReceipt, error: receiptError } = await supabase
-      .from('supplierstore_receipts')
-      .insert([mapReceiptToDB(newReceipt)])
-      .select()
-      .single()
+    await executeSupabaseMutation(async () => {
+      const { data: dbReceipt, error: receiptError } = await supabase
+        .from('supplierstore_receipts')
+        .insert([mapReceiptToDB(newReceipt)])
+        .select()
+        .single()
 
-    if (receiptError) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create receipt in Supabase', { error: receiptError })
-      throw receiptError
-    }
+      if (receiptError) throw receiptError
+    }, `${MODULE_NAME}.createReceipt.insertReceipt`)
 
     // ✅ INSERT ITEMS TO SUPABASE
     const itemsToInsert = receiptItems.map(item => mapReceiptItemToDB(item, receiptId))
 
-    const { error: itemsError } = await supabase
-      .from('supplierstore_receipt_items')
-      .insert(itemsToInsert)
+    try {
+      await executeSupabaseMutation(async () => {
+        const { error: itemsError } = await supabase
+          .from('supplierstore_receipt_items')
+          .insert(itemsToInsert)
 
-    if (itemsError) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create receipt items in Supabase', {
-        error: itemsError
-      })
+        if (itemsError) throw itemsError
+      }, `${MODULE_NAME}.createReceipt.insertItems`)
+    } catch (itemsError) {
+      DebugUtils.error(
+        MODULE_NAME,
+        'Failed to create receipt items in Supabase',
+        extractErrorDetails(itemsError)
+      )
       // Rollback: delete the receipt
-      await supabase.from('supplierstore_receipts').delete().eq('id', receiptId)
+      await executeSupabaseMutation(async () => {
+        const { error } = await supabase.from('supplierstore_receipts').delete().eq('id', receiptId)
+        if (error) throw error
+      }, `${MODULE_NAME}.createReceipt.rollback`)
       throw itemsError
     }
 
@@ -881,21 +940,20 @@ class SupplierService {
     }
 
     // ✅ UPDATE RECEIPT IN SUPABASE (Phase 3)
-    const { error: receiptError } = await supabase
-      .from('supplierstore_receipts')
-      .update({
-        status: receipt.status,
-        notes: receipt.notes,
-        closed_at: receipt.closedAt,
-        updated_at: receipt.updatedAt,
-        storage_operation_id: receipt.storageOperationId ?? null
-      })
-      .eq('id', id)
+    await executeSupabaseMutation(async () => {
+      const { error: receiptError } = await supabase
+        .from('supplierstore_receipts')
+        .update({
+          status: receipt.status,
+          notes: receipt.notes,
+          closed_at: receipt.closedAt,
+          updated_at: receipt.updatedAt,
+          storage_operation_id: receipt.storageOperationId ?? null
+        })
+        .eq('id', id)
 
-    if (receiptError) {
-      DebugUtils.error(MODULE_NAME, 'Failed to update receipt in Supabase', { error: receiptError })
-      throw receiptError
-    }
+      if (receiptError) throw receiptError
+    }, `${MODULE_NAME}.completeReceipt.updateReceipt`)
 
     // ✅ UPDATE ORDER IN SUPABASE (already implemented in Phase 2)
     await this.updateOrder(order.id, {
@@ -944,31 +1002,34 @@ class SupplierService {
     if (data.status !== undefined) updateData.status = data.status
     if (data.hasDiscrepancies !== undefined) updateData.has_discrepancies = data.hasDiscrepancies
 
-    const { error } = await supabase.from('supplierstore_receipts').update(updateData).eq('id', id)
-
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to update receipt in Supabase', { error, id })
-      throw error
-    }
+    await executeSupabaseMutation(async () => {
+      const { error } = await supabase
+        .from('supplierstore_receipts')
+        .update(updateData)
+        .eq('id', id)
+      if (error) throw error
+    }, `${MODULE_NAME}.updateReceipt.updateMain`)
 
     // If items provided, update them (delete old, insert new)
     if (data.items) {
       // Delete old items
-      await supabase.from('supplierstore_receipt_items').delete().eq('receipt_id', id)
+      await executeSupabaseMutation(async () => {
+        const { error } = await supabase
+          .from('supplierstore_receipt_items')
+          .delete()
+          .eq('receipt_id', id)
+        if (error) throw error
+      }, `${MODULE_NAME}.updateReceipt.deleteOldItems`)
 
       // Insert new items
       const itemsToInsert = data.items.map(item => mapReceiptItemToDB(item, id))
-      const { error: itemsError } = await supabase
-        .from('supplierstore_receipt_items')
-        .insert(itemsToInsert)
+      await executeSupabaseMutation(async () => {
+        const { error: itemsError } = await supabase
+          .from('supplierstore_receipt_items')
+          .insert(itemsToInsert)
 
-      if (itemsError) {
-        DebugUtils.error(MODULE_NAME, 'Failed to update receipt items in Supabase', {
-          error: itemsError,
-          id
-        })
-        throw itemsError
-      }
+        if (itemsError) throw itemsError
+      }, `${MODULE_NAME}.updateReceipt.insertNewItems`)
 
       receipt.items = data.items
     }
@@ -1053,9 +1114,8 @@ class SupplierService {
       return filteredSuggestions
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get order suggestions', {
-        error,
-        department,
-        errorMessage: error instanceof Error ? error.message : String(error)
+        ...extractErrorDetails(error),
+        department
       })
 
       // ✅ При ошибке возвращаем пустой массив, НЕ fallback на mock
@@ -1084,14 +1144,12 @@ class SupplierService {
         query = query.eq('department', department)
       }
 
-      const { data, error } = await query
+      const data = await executeSupabaseQuery(
+        query,
+        `${MODULE_NAME}.filterSuggestionsWithExistingRequests`
+      )
 
-      if (error) {
-        DebugUtils.warn(MODULE_NAME, 'Failed to fetch active requests, skipping filter', { error })
-        return suggestions
-      }
-
-      const relevantRequests = (data || []).map(dbRequest =>
+      const relevantRequests = data.map(dbRequest =>
         mapRequestFromDB(dbRequest, dbRequest.supplierstore_request_items || [])
       )
 
@@ -1167,7 +1225,7 @@ class SupplierService {
         MODULE_NAME,
         'Error filtering existing requests, returning original suggestions',
         {
-          error,
+          ...extractErrorDetails(error),
           suggestionsCount: suggestions.length
         }
       )
@@ -1220,7 +1278,10 @@ class SupplierService {
 
       return combinedPrices
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get latest prices', { error, itemIds })
+      DebugUtils.error(MODULE_NAME, 'Failed to get latest prices', {
+        ...extractErrorDetails(error),
+        itemIds
+      })
       return {}
     }
   }
@@ -1249,7 +1310,10 @@ class SupplierService {
 
       return suggestions
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to refresh suggestions', { error, department })
+      DebugUtils.error(MODULE_NAME, 'Failed to refresh suggestions', {
+        ...extractErrorDetails(error),
+        department
+      })
       return []
     }
   }
@@ -1264,17 +1328,15 @@ class SupplierService {
       })
 
       // Fetch requests from Supabase
-      const { data, error } = await supabase
-        .from('supplierstore_requests')
-        .select('*, supplierstore_request_items(*)')
-        .in('id', requestIds)
+      const data = await executeSupabaseQuery(
+        supabase
+          .from('supplierstore_requests')
+          .select('*, supplierstore_request_items(*)')
+          .in('id', requestIds),
+        `${MODULE_NAME}.createSupplierBaskets`
+      )
 
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch requests for baskets', { error })
-        throw error
-      }
-
-      const requests = (data || []).map(dbRequest =>
+      const requests = data.map(dbRequest =>
         mapRequestFromDB(dbRequest, dbRequest.supplierstore_request_items || [])
       )
 
@@ -1375,7 +1437,7 @@ class SupplierService {
 
       return baskets
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to create supplier baskets', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to create supplier baskets', extractErrorDetails(error))
       throw error
     }
   }

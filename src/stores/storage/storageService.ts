@@ -1,7 +1,12 @@
 // src/stores/storage/storageService.ts - Updated for Supabase integration
 // Migrated from mock data to Supabase database
 
-import { DebugUtils, TimeUtils, generateId } from '@/utils'
+import { DebugUtils, TimeUtils, generateId, extractErrorDetails } from '@/utils'
+import {
+  executeSupabaseQuery,
+  executeSupabaseSingle,
+  executeSupabaseMutation
+} from '@/utils/supabase'
 import { useProductsStore } from '@/stores/productsStore'
 import { supabase } from '@/supabase'
 
@@ -146,11 +151,9 @@ export class StorageService {
         query = query.eq('status', status)
       }
 
-      const { data, error } = await query
+      const data = await executeSupabaseQuery(query, `${MODULE_NAME}.getBatches`)
 
-      if (error) throw error
-
-      const batches = (data || []).map(mapBatchFromDB)
+      const batches = data.map(mapBatchFromDB)
 
       DebugUtils.info(MODULE_NAME, `Fetched ${batches.length} batches`, {
         warehouseId,
@@ -166,7 +169,7 @@ export class StorageService {
         }
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch batches', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch batches', extractErrorDetails(error))
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -200,11 +203,9 @@ export class StorageService {
         query = query.eq('operation_type', operationType)
       }
 
-      const { data, error } = await query
+      const data = await executeSupabaseQuery(query, `${MODULE_NAME}.getOperationsFromDB`)
 
-      if (error) throw error
-
-      const operations = (data || []).map(mapOperationFromDB)
+      const operations = data.map(mapOperationFromDB)
 
       return {
         success: true,
@@ -215,7 +216,7 @@ export class StorageService {
         }
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to fetch operations', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch operations', extractErrorDetails(error))
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -233,17 +234,18 @@ export class StorageService {
   ): Promise<ServiceResponse<BatchAllocation[]>> {
     try {
       // Fetch batches in FIFO order (oldest first)
-      const { data: batches, error } = await supabase
-        .from('storage_batches')
-        .select('*')
-        .eq('item_id', itemId)
-        .eq('warehouse_id', warehouseId)
-        .eq('status', 'active')
-        .gt('current_quantity', 0)
-        .order('receipt_date', { ascending: true })
-        .order('created_at', { ascending: true })
-
-      if (error) throw error
+      const batches = await executeSupabaseQuery(
+        supabase
+          .from('storage_batches')
+          .select('*')
+          .eq('item_id', itemId)
+          .eq('warehouse_id', warehouseId)
+          .eq('status', 'active')
+          .gt('current_quantity', 0)
+          .order('receipt_date', { ascending: true })
+          .order('created_at', { ascending: true }),
+        `${MODULE_NAME}.allocateFIFO`
+      )
 
       if (!batches || batches.length === 0) {
         throw new Error('No active batches available for this item')
@@ -629,16 +631,10 @@ export class StorageService {
         const dbBatch = mapBatchToDB(batch)
 
         // Insert batch into database
-        const { error: batchError } = await supabase.from('storage_batches').insert([dbBatch])
-
-        if (batchError) {
-          DebugUtils.error(MODULE_NAME, '❌ Failed to insert batch', {
-            error: batchError,
-            itemId: item.itemId,
-            batchNumber
-          })
-          throw batchError
-        }
+        await executeSupabaseMutation(async () => {
+          const { error: batchError } = await supabase.from('storage_batches').insert([dbBatch])
+          if (batchError) throw batchError
+        }, `${MODULE_NAME}.createReceipt.insertBatch`)
 
         // Prepare operation item
         operationItems.push({
@@ -674,13 +670,15 @@ export class StorageService {
         updatedAt: operationDate
       }
 
-      const { data: opData, error: opError } = await supabase
-        .from('storage_operations')
-        .insert([mapOperationToDB(operation)])
-        .select()
-        .single()
+      const opData = await executeSupabaseSingle(
+        supabase
+          .from('storage_operations')
+          .insert([mapOperationToDB(operation)])
+          .select(),
+        `${MODULE_NAME}.createReceipt.insertOperation`
+      )
 
-      if (opError) throw opError
+      if (!opData) throw new Error('Failed to create operation')
 
       DebugUtils.info(MODULE_NAME, '✅ Receipt created successfully', {
         documentNumber,
@@ -697,7 +695,7 @@ export class StorageService {
         }
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to create receipt', { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create receipt', extractErrorDetails(error))
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -745,30 +743,31 @@ export class StorageService {
 
         // Update batch quantities in database
         for (const allocation of allocations) {
-          const { data: batchData, error: fetchError } = await supabase
-            .from('storage_batches')
-            .select('*')
-            .eq('id', allocation.batchId)
-            .single()
+          const batchData = await executeSupabaseSingle(
+            supabase.from('storage_batches').select('*').eq('id', allocation.batchId),
+            `${MODULE_NAME}.createWriteOff.fetchBatch`
+          )
 
-          if (fetchError) throw fetchError
+          if (!batchData) throw new Error(`Batch ${allocation.batchId} not found`)
 
           const newQuantity = Number(batchData.current_quantity) - allocation.quantity
           const newStatus = newQuantity <= 0 ? 'consumed' : 'active'
           const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
 
-          const { error: updateError } = await supabase
-            .from('storage_batches')
-            .update({
-              current_quantity: newQuantity,
-              total_value: newTotalValue,
-              status: newStatus,
-              is_active: newQuantity > 0,
-              updated_at: operationDate
-            })
-            .eq('id', allocation.batchId)
+          await executeSupabaseMutation(async () => {
+            const { error: updateError } = await supabase
+              .from('storage_batches')
+              .update({
+                current_quantity: newQuantity,
+                total_value: newTotalValue,
+                status: newStatus,
+                is_active: newQuantity > 0,
+                updated_at: operationDate
+              })
+              .eq('id', allocation.batchId)
 
-          if (updateError) throw updateError
+            if (updateError) throw updateError
+          }, `${MODULE_NAME}.createWriteOff.updateBatch`)
         }
 
         // Calculate total cost from allocations
@@ -815,13 +814,15 @@ export class StorageService {
         updatedAt: operationDate
       }
 
-      const { data: opData, error: opError } = await supabase
-        .from('storage_operations')
-        .insert([mapOperationToDB(operation)])
-        .select()
-        .single()
+      const opData = await executeSupabaseSingle(
+        supabase
+          .from('storage_operations')
+          .insert([mapOperationToDB(operation)])
+          .select(),
+        `${MODULE_NAME}.createWriteOff.insertOperation`
+      )
 
-      if (opError) throw opError
+      if (!opData) throw new Error('Failed to create operation')
 
       DebugUtils.info(MODULE_NAME, '✅ Write-off created successfully', {
         documentNumber,
@@ -843,7 +844,7 @@ export class StorageService {
         }
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to create write-off', { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create write-off', extractErrorDetails(error))
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -908,11 +909,13 @@ export class StorageService {
             updatedAt: operationDate
           }
 
-          const { error: batchError } = await supabase
-            .from('storage_batches')
-            .insert([mapBatchToDB(batch)])
+          await executeSupabaseMutation(async () => {
+            const { error: batchError } = await supabase
+              .from('storage_batches')
+              .insert([mapBatchToDB(batch)])
 
-          if (batchError) throw batchError
+            if (batchError) throw batchError
+          }, `${MODULE_NAME}.createCorrection.insertBatch`)
 
           itemTotalCost = batch.totalValue!
         } else if (item.quantity < 0) {
@@ -931,30 +934,31 @@ export class StorageService {
 
           // Update batch quantities in database
           for (const allocation of allocations) {
-            const { data: batchData, error: fetchError } = await supabase
-              .from('storage_batches')
-              .select('*')
-              .eq('id', allocation.batchId)
-              .single()
+            const batchData = await executeSupabaseSingle(
+              supabase.from('storage_batches').select('*').eq('id', allocation.batchId),
+              `${MODULE_NAME}.createCorrection.fetchBatch`
+            )
 
-            if (fetchError) throw fetchError
+            if (!batchData) throw new Error(`Batch ${allocation.batchId} not found`)
 
             const newQuantity = Number(batchData.current_quantity) - allocation.quantity
             const newStatus = newQuantity <= 0 ? 'consumed' : 'active'
             const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
 
-            const { error: updateError } = await supabase
-              .from('storage_batches')
-              .update({
-                current_quantity: newQuantity,
-                total_value: newTotalValue,
-                status: newStatus,
-                is_active: newQuantity > 0,
-                updated_at: operationDate
-              })
-              .eq('id', allocation.batchId)
+            await executeSupabaseMutation(async () => {
+              const { error: updateError } = await supabase
+                .from('storage_batches')
+                .update({
+                  current_quantity: newQuantity,
+                  total_value: newTotalValue,
+                  status: newStatus,
+                  is_active: newQuantity > 0,
+                  updated_at: operationDate
+                })
+                .eq('id', allocation.batchId)
 
-            if (updateError) throw updateError
+              if (updateError) throw updateError
+            }, `${MODULE_NAME}.createCorrection.updateBatch`)
           }
 
           itemTotalCost = allocations.reduce(
@@ -997,13 +1001,15 @@ export class StorageService {
         updatedAt: operationDate
       }
 
-      const { data: opData, error: opError } = await supabase
-        .from('storage_operations')
-        .insert([mapOperationToDB(operation)])
-        .select()
-        .single()
+      const opData = await executeSupabaseSingle(
+        supabase
+          .from('storage_operations')
+          .insert([mapOperationToDB(operation)])
+          .select(),
+        `${MODULE_NAME}.createCorrection.insertOperation`
+      )
 
-      if (opError) throw opError
+      if (!opData) throw new Error('Failed to create operation')
 
       DebugUtils.info(MODULE_NAME, '✅ Correction created successfully', {
         documentNumber,
@@ -1020,7 +1026,7 @@ export class StorageService {
         }
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Failed to create correction', { error })
+      DebugUtils.error(MODULE_NAME, '❌ Failed to create correction', extractErrorDetails(error))
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -1350,13 +1356,17 @@ export class StorageService {
     try {
       DebugUtils.debug(MODULE_NAME, 'Deleting batch from Supabase', { batchId })
 
-      const { error } = await supabase.from('storage_batches').delete().eq('id', batchId)
-
-      if (error) throw error
+      await executeSupabaseMutation(async () => {
+        const { error } = await supabase.from('storage_batches').delete().eq('id', batchId)
+        if (error) throw error
+      }, `${MODULE_NAME}.deleteBatch`)
 
       DebugUtils.info(MODULE_NAME, 'Batch deleted', { batchId })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to delete batch', { batchId, error })
+      DebugUtils.error(MODULE_NAME, 'Failed to delete batch', {
+        batchId,
+        ...extractErrorDetails(error)
+      })
       throw error
     }
   }

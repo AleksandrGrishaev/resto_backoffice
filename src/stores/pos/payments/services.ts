@@ -1,9 +1,10 @@
 // src/stores/pos/payments/services.ts
 import type { PosPayment, ServiceResponse, PaymentMethod } from '../types'
-import { TimeUtils, generateId } from '@/utils'
+import { TimeUtils, generateId, extractErrorDetails } from '@/utils'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
 import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
+import { executeSupabaseMutation } from '@/utils/supabase'
 
 /**
  * Payment service - handles storage operations
@@ -66,13 +67,16 @@ export class PaymentsService {
       // Try Supabase first (if online)
       if (this.isSupabaseAvailable()) {
         const supabaseRow = toSupabaseInsert(payment)
-        const { error } = await supabase.from('payments').insert(supabaseRow)
 
-        if (error) {
-          console.error('❌ Supabase save failed:', error.message)
-          // Continue to localStorage (offline fallback)
-        } else {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('payments').insert(supabaseRow)
+            if (error) throw error
+          }, 'PaymentsService.savePayment')
           console.log('✅ Payment saved to Supabase:', payment.paymentNumber)
+        } catch (error) {
+          console.error('❌ Supabase save failed:', extractErrorDetails(error))
+          // Continue to localStorage (offline fallback)
         }
       }
 
@@ -104,13 +108,19 @@ export class PaymentsService {
       // Try Supabase first (if online)
       if (this.isSupabaseAvailable()) {
         const supabaseRow = toSupabaseUpdate(payment)
-        const { error } = await supabase.from('payments').update(supabaseRow).eq('id', payment.id)
 
-        if (error) {
-          console.error('❌ Supabase update failed:', error.message)
-          // Continue to localStorage (offline fallback)
-        } else {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase
+              .from('payments')
+              .update(supabaseRow)
+              .eq('id', payment.id)
+            if (error) throw error
+          }, 'PaymentsService.updatePayment')
           console.log('✅ Payment updated in Supabase:', payment.paymentNumber)
+        } catch (error) {
+          console.error('❌ Supabase update failed:', extractErrorDetails(error))
+          // Continue to localStorage (offline fallback)
         }
       }
 

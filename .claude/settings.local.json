@@ -38,7 +38,10 @@
       "Bash(pnpm seed:users:*)",
       "Bash(pnpm seed:users:prod:*)",
       "Bash(pnpm dev)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(while read f)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(done)"
     ]
   },
   "enableAllProjectMcpServers": true,

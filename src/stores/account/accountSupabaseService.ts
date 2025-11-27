@@ -13,7 +13,7 @@ import type {
   PaymentFilters,
   PaymentStatistics
 } from './types'
-import { DebugUtils, generateId } from '@/utils'
+import { DebugUtils, generateId, extractErrorDetails } from '@/utils'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
 import {
@@ -84,25 +84,24 @@ async function withRetry<T>(operation: () => Promise<T>, operationName: string):
       lastError = error
       const isLastAttempt = attempt === MAX_RETRIES
 
+      // Extract error details for better logging
+      const errorDetails = extractErrorDetails(error)
+
       // Check if error is retryable (timeout or network error)
-      const errorMessage = error?.message || String(error)
+      const errorMessage = errorDetails.message.toLowerCase()
       const isRetryable =
         errorMessage.includes('timeout') ||
         errorMessage.includes('network') ||
-        errorMessage.includes('ECONNRESET') ||
-        errorMessage.includes('ETIMEDOUT') ||
-        errorMessage.includes('Failed to fetch')
+        errorMessage.includes('econnreset') ||
+        errorMessage.includes('etimedout') ||
+        errorMessage.includes('failed to fetch')
 
       if (!isRetryable || isLastAttempt) {
         // Don't retry or exhausted retries
         DebugUtils.error(MODULE_NAME, `❌ ${operationName} failed (no retry)`, {
           attempt: attempt + 1,
           maxRetries: MAX_RETRIES,
-          error: {
-            message: errorMessage,
-            code: error?.code,
-            stack: error?.stack
-          }
+          error: errorDetails
         })
         throw error
       }
@@ -115,7 +114,7 @@ async function withRetry<T>(operation: () => Promise<T>, operationName: string):
         attempt: attempt + 1,
         maxRetries: MAX_RETRIES,
         retryIn: Math.floor(delay + jitter) + 'ms',
-        error: errorMessage
+        error: errorDetails.message
       })
 
       // Wait before retry
@@ -180,7 +179,7 @@ export class AccountSupabaseService {
         if (error.code === 'PGRST116') {
           return null // Record not found
         }
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch account:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to fetch account', extractErrorDetails(error))
         throw error
       }
 
@@ -193,7 +192,7 @@ export class AccountSupabaseService {
 
       return account
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading account:', error)
+      DebugUtils.error(MODULE_NAME, 'Error loading account', extractErrorDetails(error))
       throw error
     }
   }
@@ -222,7 +221,7 @@ export class AccountSupabaseService {
       )
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to create account:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to create account', extractErrorDetails(error))
         throw error
       }
 
@@ -235,7 +234,7 @@ export class AccountSupabaseService {
 
       return account
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error creating account:', error)
+      DebugUtils.error(MODULE_NAME, 'Error creating account', extractErrorDetails(error))
       throw error
     }
   }
@@ -262,13 +261,13 @@ export class AccountSupabaseService {
       )
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to update account:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to update account', extractErrorDetails(error))
         throw error
       }
 
       DebugUtils.info(MODULE_NAME, '✅ Account updated in Supabase', { id })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error updating account:', error)
+      DebugUtils.error(MODULE_NAME, 'Error updating account', extractErrorDetails(error))
       throw error
     }
   }
@@ -283,7 +282,7 @@ export class AccountSupabaseService {
         lastTransactionDate: new Date().toISOString()
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error updating account balance:', error)
+      DebugUtils.error(MODULE_NAME, 'Error updating account balance', extractErrorDetails(error))
       throw error
     }
   }
@@ -338,7 +337,11 @@ export class AccountSupabaseService {
       )
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch account transactions:', error)
+        DebugUtils.error(
+          MODULE_NAME,
+          'Failed to fetch account transactions',
+          extractErrorDetails(error)
+        )
         throw error
       }
 
@@ -351,7 +354,11 @@ export class AccountSupabaseService {
 
       return transactions
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading account transactions:', error)
+      DebugUtils.error(
+        MODULE_NAME,
+        'Error loading account transactions',
+        extractErrorDetails(error)
+      )
       throw error
     }
   }
@@ -423,7 +430,7 @@ export class AccountSupabaseService {
       )
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to create transaction:', error)
+        DebugUtils.error(MODULE_NAME, 'Failed to create transaction', extractErrorDetails(error))
         throw error
       }
 
@@ -441,7 +448,7 @@ export class AccountSupabaseService {
 
       return createdTransaction
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error creating transaction:', error)
+      DebugUtils.error(MODULE_NAME, 'Error creating transaction', extractErrorDetails(error))
       throw error
     }
   }
@@ -505,7 +512,11 @@ export class AccountSupabaseService {
       const { data, error } = await withTimeout(query)
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch filtered payments:', error)
+        DebugUtils.error(
+          MODULE_NAME,
+          'Failed to fetch filtered payments',
+          extractErrorDetails(error)
+        )
         throw error
       }
 
@@ -518,7 +529,7 @@ export class AccountSupabaseService {
 
       return payments
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error loading filtered payments:', error)
+      DebugUtils.error(MODULE_NAME, 'Error loading filtered payments', extractErrorDetails(error))
       throw error
     }
   }
@@ -567,7 +578,11 @@ export class AccountSupabaseService {
       )
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to create pending payment:', error)
+        DebugUtils.error(
+          MODULE_NAME,
+          'Failed to create pending payment',
+          extractErrorDetails(error)
+        )
         throw error
       }
 
@@ -583,7 +598,7 @@ export class AccountSupabaseService {
 
       return createdPayment
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error creating pending payment:', error)
+      DebugUtils.error(MODULE_NAME, 'Error creating pending payment', extractErrorDetails(error))
       throw error
     }
   }
@@ -609,7 +624,11 @@ export class AccountSupabaseService {
         overdueCount: overdue.length
       }
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error calculating payment statistics:', error)
+      DebugUtils.error(
+        MODULE_NAME,
+        'Error calculating payment statistics',
+        extractErrorDetails(error)
+      )
       throw error
     }
   }
