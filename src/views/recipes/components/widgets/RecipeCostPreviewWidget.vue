@@ -18,10 +18,11 @@
         <v-row class="cost-display">
           <v-col cols="6">
             <div class="cost-item">
-              <div class="cost-label">Total Cost</div>
+              <div class="cost-label">Planned Cost</div>
               <div class="cost-value cost-value--success">
                 {{ formatIDR(estimatedCost.totalCost) }}
               </div>
+              <div class="cost-sublabel">from recipe</div>
             </div>
           </v-col>
           <v-col cols="6">
@@ -30,6 +31,29 @@
               <div class="cost-value cost-value--primary">
                 {{ formatIDR(estimatedCost.costPerUnit) }}
               </div>
+              <div class="cost-sublabel">planned</div>
+            </div>
+          </v-col>
+        </v-row>
+
+        <!-- ✅ SPRINT 4: Actual Cost Display -->
+        <v-row v-if="actualCost.loaded" class="cost-display mt-3">
+          <v-col cols="6">
+            <div class="cost-item cost-item--actual">
+              <div class="cost-label">Actual Cost (FIFO)</div>
+              <div class="cost-value cost-value--warning">
+                {{ formatIDR(actualCost.totalCost) }}
+              </div>
+              <div class="cost-sublabel">from batches</div>
+            </div>
+          </v-col>
+          <v-col cols="6">
+            <div class="cost-item cost-item--variance">
+              <div class="cost-label">Variance</div>
+              <div class="cost-value" :class="varianceColorClass">
+                {{ variance > 0 ? '+' : '' }}{{ variance.toFixed(1) }}%
+              </div>
+              <div class="cost-sublabel">{{ varianceLabel }}</div>
             </div>
           </v-col>
         </v-row>
@@ -38,7 +62,11 @@
         <div class="cost-info mt-3">
           <v-icon icon="mdi-information-outline" size="14" class="mr-1" />
           <span class="text-caption text-medium-emphasis">
-            Updates automatically using base unit prices
+            {{
+              actualCost.loaded
+                ? 'Planned cost from recipe, actual cost from FIFO batches'
+                : 'Updates automatically using base unit prices'
+            }}
           </span>
         </div>
       </v-card-text>
@@ -47,11 +75,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { DebugUtils } from '@/utils'
 // ✅ ИСПРАВЛЕНО: Используем правильные импорты
 import { formatIDR } from '@/utils/currency'
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
+import {
+  useCostCalculation,
+  type CostCalculationMode
+} from '@/stores/recipes/composables/useCostCalculation' // ✅ SPRINT 4
 
 interface Props {
   formData: any
@@ -65,6 +97,14 @@ let productsStore: any = null
 let recipesStore: any = null
 
 const { convertUnits, areUnitsCompatible } = useMeasurementUnits()
+const { calculateRecipeCost, calculatePreparationCost } = useCostCalculation() // ✅ SPRINT 4
+
+// ✅ SPRINT 4: Actual cost state
+const actualCost = ref({
+  loaded: false,
+  totalCost: 0,
+  costPerUnit: 0
+})
 
 async function getStores() {
   if (!productsStore) {
@@ -167,8 +207,98 @@ function getCostPerLabel(): string {
   return props.type === 'preparation' ? 'Cost per Unit' : 'Cost per Portion'
 }
 
+// ✅ SPRINT 4: Calculate actual cost from FIFO batches
+async function loadActualCost() {
+  try {
+    await getStores()
+
+    // Only calculate actual cost if we have an ID (existing recipe/preparation)
+    if (!props.formData.id) {
+      actualCost.value.loaded = false
+      return
+    }
+
+    let result: any = null
+
+    if (props.type === 'preparation') {
+      const preparation = recipesStore?.preparations?.find((p: any) => p.id === props.formData.id)
+      if (!preparation) {
+        actualCost.value.loaded = false
+        return
+      }
+
+      result = await calculatePreparationCost(preparation, 'actual')
+    } else if (props.type === 'recipe') {
+      const recipe = recipesStore?.recipes?.find((r: any) => r.id === props.formData.id)
+      if (!recipe) {
+        actualCost.value.loaded = false
+        return
+      }
+
+      result = await calculateRecipeCost(recipe, 'actual')
+    }
+
+    if (result && result.success && result.cost) {
+      actualCost.value = {
+        loaded: true,
+        totalCost: result.cost.totalCost,
+        costPerUnit: result.cost.costPerOutputUnit || result.cost.costPerPortion || 0
+      }
+
+      DebugUtils.info('RecipeCostPreviewWidget', 'Actual cost loaded', {
+        type: props.type,
+        plannedCost: estimatedCost.value.totalCost,
+        actualCost: actualCost.value.totalCost,
+        variance: variance.value
+      })
+    } else {
+      actualCost.value.loaded = false
+      DebugUtils.warn('RecipeCostPreviewWidget', 'Failed to load actual cost', { result })
+    }
+  } catch (error) {
+    DebugUtils.error('RecipeCostPreviewWidget', 'Error loading actual cost', { error })
+    actualCost.value.loaded = false
+  }
+}
+
+// ✅ SPRINT 4: Calculate variance between planned and actual costs
+const variance = computed(() => {
+  if (!actualCost.value.loaded || estimatedCost.value.totalCost === 0) return 0
+  return (
+    ((actualCost.value.totalCost - estimatedCost.value.totalCost) / estimatedCost.value.totalCost) *
+    100
+  )
+})
+
+// ✅ SPRINT 4: Variance color class
+const varianceColorClass = computed(() => {
+  const v = variance.value
+  if (v > 10) return 'cost-value--error'
+  if (v < -10) return 'cost-value--success'
+  return 'cost-value--info'
+})
+
+// ✅ SPRINT 4: Variance label
+const varianceLabel = computed(() => {
+  const v = variance.value
+  if (v > 10) return 'over budget'
+  if (v < -10) return 'under budget'
+  return 'on target'
+})
+
+// ✅ SPRINT 4: Watch for changes to formData.id and reload actual cost
+watch(
+  () => props.formData.id,
+  () => {
+    loadActualCost()
+  },
+  { immediate: false }
+)
+
 onMounted(async () => {
   await getStores()
+  // ✅ SPRINT 4: Load actual cost on mount
+  await loadActualCost()
 })
 </script>
 
@@ -213,6 +343,39 @@ onMounted(async () => {
       &.cost-value--primary {
         color: #1976d2; // Material Blue 700
       }
+
+      // ✅ SPRINT 4: Additional variance color classes
+      &.cost-value--warning {
+        color: #ff9800; // Material Orange 500
+      }
+
+      &.cost-value--error {
+        color: #f44336; // Material Red 500
+      }
+
+      &.cost-value--info {
+        color: #2196f3; // Material Blue 500
+      }
+    }
+
+    // ✅ SPRINT 4: Cost sublabel style
+    .cost-sublabel {
+      font-size: 0.75rem;
+      color: var(--v-theme-on-surface-variant);
+      margin-top: 4px;
+      opacity: 0.7;
+    }
+
+    // ✅ SPRINT 4: Actual cost item style
+    &.cost-item--actual {
+      border-color: #ff9800;
+      background: rgba(255, 152, 0, 0.05);
+    }
+
+    // ✅ SPRINT 4: Variance item style
+    &.cost-item--variance {
+      border: 2px solid var(--v-theme-outline-variant);
+      background: rgba(var(--v-theme-primary), 0.05);
     }
   }
 }

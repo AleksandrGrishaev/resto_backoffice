@@ -2,6 +2,7 @@
 
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
+import { useActualCostCalculation } from '@/stores/sales/composables/useActualCostCalculation' // ✅ SPRINT 4
 import type {
   Preparation,
   Recipe,
@@ -15,6 +16,9 @@ import type {
 } from '../types'
 
 const MODULE_NAME = 'useCostCalculation'
+
+// ✅ SPRINT 4: Cost calculation mode type
+export type CostCalculationMode = 'planned' | 'actual'
 
 // =============================================
 // STATE
@@ -96,9 +100,63 @@ export function useCostCalculation() {
   // ✅ УПРОЩЕННЫЙ РАСЧЕТ ПОЛУФАБРИКАТОВ
   // =============================================
 
+  /**
+   * ✅ SPRINT 4: Calculate preparation cost with mode support
+   * @param preparation - Preparation to calculate cost for
+   * @param mode - 'planned' (from recipe, theoretical) or 'actual' (from FIFO batches)
+   */
   async function calculatePreparationCost(
-    preparation: Preparation
+    preparation: Preparation,
+    mode: CostCalculationMode = 'planned'
   ): Promise<CostCalculationResult> {
+    // ✅ SPRINT 4: For actual cost, use FIFO allocation
+    if (mode === 'actual') {
+      try {
+        const { allocateFromPreparationBatches } = useActualCostCalculation()
+
+        // Calculate actual cost from FIFO batches (for preparation output quantity)
+        const actualCost = await allocateFromPreparationBatches(
+          preparation.id,
+          preparation.outputQuantity,
+          'kitchen' // Default to kitchen, can be parameterized later
+        )
+
+        if (!actualCost || actualCost.totalCost === 0) {
+          return {
+            success: false,
+            error: 'No batches available for actual cost calculation'
+          }
+        }
+
+        const costPerOutputUnit = actualCost.totalCost / preparation.outputQuantity
+
+        const result: PreparationPlanCost = {
+          preparationId: preparation.id,
+          type: 'plan', // Keep type as 'plan' for compatibility
+          totalCost: actualCost.totalCost,
+          costPerOutputUnit,
+          componentCosts: [], // Actual cost doesn't break down by components
+          calculatedAt: new Date(),
+          note: 'Based on actual FIFO batch costs'
+        }
+
+        return { success: true, cost: result }
+      } catch (err) {
+        DebugUtils.error(
+          MODULE_NAME,
+          `Failed to calculate actual preparation cost: ${preparation.name}`,
+          {
+            err
+          }
+        )
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'Unknown error'
+        }
+      }
+    }
+
+    // ✅ PLANNED MODE (existing logic)
     if (!getProductCallback) {
       return { success: false, error: 'Product provider not available' }
     }
@@ -196,7 +254,113 @@ export function useCostCalculation() {
   // ✅ УПРОЩЕННЫЙ РАСЧЕТ РЕЦЕПТОВ
   // =============================================
 
-  async function calculateRecipeCost(recipe: Recipe): Promise<CostCalculationResult> {
+  /**
+   * ✅ SPRINT 4: Calculate recipe cost with mode support
+   * @param recipe - Recipe to calculate cost for
+   * @param mode - 'planned' (from recipe, theoretical) or 'actual' (from FIFO batches)
+   */
+  async function calculateRecipeCost(
+    recipe: Recipe,
+    mode: CostCalculationMode = 'planned'
+  ): Promise<CostCalculationResult> {
+    // ✅ SPRINT 4: For actual cost, use FIFO allocation
+    if (mode === 'actual') {
+      try {
+        const { allocateFromPreparationBatches, allocateFromStorageBatches } =
+          useActualCostCalculation()
+
+        if (!recipe.components || recipe.components.length === 0) {
+          return { success: false, error: 'Recipe has no components' }
+        }
+
+        // Import storageStore to get default warehouse
+        const { useStorageStore } = await import('@/stores/storage/storageStore')
+        const storageStore = useStorageStore()
+        const defaultWarehouse = storageStore.getDefaultWarehouse()
+
+        let totalCost = 0
+        const componentCosts: ComponentPlanCost[] = []
+
+        // Process each component with FIFO allocation
+        for (const component of recipe.components) {
+          if (component.componentType === 'preparation') {
+            const prepCost = await allocateFromPreparationBatches(
+              component.componentId,
+              component.quantity,
+              'kitchen' // Default to kitchen
+            )
+
+            totalCost += prepCost.totalCost
+
+            componentCosts.push({
+              componentId: component.componentId,
+              componentType: 'preparation',
+              componentName: prepCost.preparationName,
+              quantity: component.quantity,
+              unit: prepCost.unit as any, // Type cast since batch unit might not match MeasurementUnit exactly
+              planUnitCost: prepCost.averageCostPerUnit,
+              totalPlanCost: prepCost.totalCost,
+              percentage: 0
+            })
+          } else if (component.componentType === 'product') {
+            const prodCost = await allocateFromStorageBatches(
+              component.componentId,
+              component.quantity,
+              defaultWarehouse.id
+            )
+
+            totalCost += prodCost.totalCost
+
+            componentCosts.push({
+              componentId: component.componentId,
+              componentType: 'product',
+              componentName: prodCost.productName,
+              quantity: component.quantity,
+              unit: prodCost.unit as any, // Type cast since batch unit might not match MeasurementUnit exactly
+              planUnitCost: prodCost.averageCostPerUnit,
+              totalPlanCost: prodCost.totalCost,
+              percentage: 0
+            })
+          }
+        }
+
+        if (totalCost === 0) {
+          return {
+            success: false,
+            error: 'No batches available for actual cost calculation'
+          }
+        }
+
+        // Calculate percentages
+        componentCosts.forEach(component => {
+          component.percentage = (component.totalPlanCost / totalCost) * 100
+        })
+
+        const costPerPortion = totalCost / recipe.portionSize
+
+        const result: RecipePlanCost = {
+          recipeId: recipe.id,
+          type: 'plan', // Keep type as 'plan' for compatibility
+          totalCost,
+          costPerPortion,
+          componentCosts,
+          calculatedAt: new Date(),
+          note: 'Based on actual FIFO batch costs'
+        }
+
+        return { success: true, cost: result }
+      } catch (err) {
+        DebugUtils.error(MODULE_NAME, `Failed to calculate actual recipe cost: ${recipe.name}`, {
+          err
+        })
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'Unknown error'
+        }
+      }
+    }
+
+    // ✅ PLANNED MODE (existing logic)
     if (!getProductCallback || !getPreparationCostCallback) {
       return { success: false, error: 'Integration callbacks not available' }
     }
@@ -542,13 +706,18 @@ export function useCostCalculation() {
           packagePrice: pkg.packagePrice,
           isRecommended: pkg.id === product.recommendedPackageId
         }))
-        .sort((a, b) => {
-          // Рекомендуемая упаковка первой
-          if (a.isRecommended && !b.isRecommended) return -1
-          if (!a.isRecommended && b.isRecommended) return 1
-          // Затем по цене за базовую единицу
-          return a.baseCostPerUnit - b.baseCostPerUnit
-        })
+        .sort(
+          (
+            a: { baseCostPerUnit: number; isRecommended: boolean },
+            b: { baseCostPerUnit: number; isRecommended: boolean }
+          ) => {
+            // Рекомендуемая упаковка первой
+            if (a.isRecommended && !b.isRecommended) return -1
+            if (!a.isRecommended && b.isRecommended) return 1
+            // Затем по цене за базовую единицу
+            return a.baseCostPerUnit - b.baseCostPerUnit
+          }
+        )
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, `Failed to get package options: ${productId}`, { error })
       return []

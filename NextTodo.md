@@ -747,7 +747,7 @@ CREATE POLICY "Enable insert for authenticated users"
 
 ---
 
-### **PHASE 2: Automation & Enhancement** (Sprints 3-4) - ✅ Sprint 3 COMPLETED, Sprint 4 TODO
+### **PHASE 2: Automation & Enhancement** (Sprints 3-4) - ✅ COMPLETED (Nov 27, 2025)
 
 ---
 
@@ -908,11 +908,13 @@ CREATE INDEX IF NOT EXISTS idx_storage_operations_related_prep_op
 
 ---
 
-## SPRINT 4: Cost Calculation Improvement (1 week)
+## ✅ SPRINT 4: Cost Calculation Improvement - COMPLETED (Nov 27, 2025)
 
 ### Goal
 
 Display planned vs actual cost in UI for recipes and menu items.
+
+**Status:** ✅ FULLY IMPLEMENTED
 
 ### Tasks
 
@@ -1014,6 +1016,30 @@ const varianceColor = computed(() => {
 - ✅ Actual cost calculated from FIFO batches
 - ✅ Variance displayed in UI
 - ✅ Variance color: red (>10%), green (<-10%), neutral (otherwise)
+
+### Implementation Summary
+
+**Files Modified:**
+
+- ✅ `src/stores/recipes/composables/useCostCalculation.ts` - Added mode parameter ('planned' | 'actual')
+
+  - Updated `calculatePreparationCost()` to support both modes
+  - Updated `calculateRecipeCost()` to support both modes
+  - Uses `allocateFromPreparationBatches()` and `allocateFromStorageBatches()` for actual cost
+
+- ✅ `src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue` - Enhanced UI
+  - Shows both planned cost and actual cost (FIFO) side by side
+  - Calculates and displays variance percentage
+  - Color-coded variance: red (>10%), blue (neutral), green (<-10%)
+  - Auto-loads actual cost when viewing existing recipes/preparations
+  - Gracefully handles cases where no batches exist
+
+**Verified:**
+
+- ✅ Mode parameter works correctly for both preparations and recipes
+- ✅ UI displays planned vs actual costs with variance
+- ✅ Color coding works as expected
+- ✅ Handles edge cases (no batches, no data, etc.)
 
 ---
 
