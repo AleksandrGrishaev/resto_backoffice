@@ -61,6 +61,9 @@ export class PaymentsService {
   /**
    * Save payment to storage
    * Dual-write: Supabase (if online) + localStorage (always)
+   *
+   * ✅ FIX: Uses UPSERT instead of INSERT to handle idempotency
+   * This prevents duplicate payments when timeout causes retry
    */
   async savePayment(payment: PosPayment): Promise<ServiceResponse<PosPayment>> {
     try {
@@ -69,10 +72,34 @@ export class PaymentsService {
         const supabaseRow = toSupabaseInsert(payment)
 
         try {
-          await executeSupabaseMutation(async () => {
-            const { error } = await supabase.from('payments').insert(supabaseRow)
-            if (error) throw error
-          }, 'PaymentsService.savePayment')
+          await executeSupabaseMutation(
+            async () => {
+              // ✅ FIX: Use UPSERT instead of INSERT for idempotency
+              // If payment with same ID already exists (from previous timeout), update it
+              // This prevents duplicate key violations (error code 23505)
+              const { error } = await supabase.from('payments').upsert(supabaseRow, {
+                onConflict: 'id', // If ID exists, update
+                ignoreDuplicates: false // Allow updates on conflict
+              })
+
+              if (error) {
+                // Log but don't throw on duplicate - it means payment was already saved
+                if (error.code === '23505') {
+                  console.warn('⚠️ Payment already exists (duplicate from retry), skipping', {
+                    paymentId: payment.id,
+                    paymentNumber: payment.paymentNumber
+                  })
+                  return // Success - payment is already in database
+                }
+                throw error
+              }
+            },
+            'PaymentsService.savePayment',
+            {
+              maxRetries: 2, // Reduce retries for mutations to prevent duplicates
+              timeout: 10000 // Reduce timeout to 10s for faster failure detection
+            }
+          )
           console.log('✅ Payment saved to Supabase:', payment.paymentNumber)
         } catch (error) {
           console.error('❌ Supabase save failed:', extractErrorDetails(error))

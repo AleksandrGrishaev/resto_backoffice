@@ -15,16 +15,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch, computed, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAppInitializer } from '@/core/appInitializer'
 import { DebugUtils } from '@/utils'
 import { useRouter } from 'vue-router'
+import { usePosStore } from '@/stores/pos'
+import { useKitchenStore } from '@/stores/kitchen'
+import { getConnectionHealthMonitor } from '@/core/connection/ConnectionHealthMonitor'
 
 const MODULE_NAME = 'App'
 const authStore = useAuthStore()
 const router = useRouter()
 const appInitializer = useAppInitializer()
+
+// ✅ FIX: Initialize connection health monitor
+console.log('🔍 [App.vue] Initializing connection health monitor...')
+const connectionMonitor = getConnectionHealthMonitor()
+console.log('✅ [App.vue] Connection health monitor initialized:', connectionMonitor)
 
 // Loading states
 const isLoadingAuth = ref(true)
@@ -150,7 +158,23 @@ watch(
  * App initialization on mount
  */
 onMounted(async () => {
+  console.log('🚀 [App.vue] onMounted() called')
   DebugUtils.info(MODULE_NAME, '🚀 App mounted, starting initialization...')
+
+  // ✅ FIX: Start connection health monitoring
+  try {
+    console.log('🏥 [App] Starting connection health monitoring...')
+    console.log('🔍 [App] connectionMonitor =', connectionMonitor)
+
+    if (connectionMonitor && typeof connectionMonitor.start === 'function') {
+      connectionMonitor.start()
+      console.log('✅ [App] Connection health monitoring started')
+    } else {
+      console.error('❌ [App] connectionMonitor is invalid:', connectionMonitor)
+    }
+  } catch (error) {
+    console.error('❌ [App] Failed to start connection health monitoring:', error)
+  }
 
   // Validate session and load stores if authenticated
   await validateSessionAndLoadStores()
@@ -158,6 +182,66 @@ onMounted(async () => {
 
 // Loading state computed property
 const isLoading = computed(() => isLoadingAuth.value || isLoadingStores.value)
+
+/**
+ * ✅ FIX: Cleanup Realtime subscriptions on unmount
+ * This prevents subscription leaks during HMR and when app is destroyed
+ */
+onUnmounted(() => {
+  DebugUtils.info(MODULE_NAME, '🧹 App unmounting, cleaning up Realtime subscriptions...')
+
+  try {
+    // Stop connection health monitoring
+    console.log('🛑 [App] Stopping connection health monitoring...')
+    connectionMonitor.stop()
+
+    // Cleanup POS store (if initialized)
+    const posStore = usePosStore()
+    if (posStore.isInitialized) {
+      DebugUtils.info(MODULE_NAME, 'Cleaning up POS store...')
+      posStore.cleanup()
+    }
+
+    // Cleanup Kitchen store (if initialized)
+    const kitchenStore = useKitchenStore()
+    if (kitchenStore.initialized) {
+      DebugUtils.info(MODULE_NAME, 'Cleaning up Kitchen store...')
+      kitchenStore.cleanup()
+    }
+
+    DebugUtils.info(MODULE_NAME, '✅ Cleanup complete')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Cleanup failed', { error })
+  }
+})
+
+/**
+ * ✅ FIX: HMR cleanup for development
+ * Prevents Realtime subscription leaks during hot module replacement
+ */
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    DebugUtils.info(MODULE_NAME, '🔄 HMR dispose, cleaning up Realtime subscriptions...')
+
+    try {
+      // Cleanup POS store
+      const posStore = usePosStore()
+      if (posStore.isInitialized) {
+        posStore.cleanup()
+      }
+
+      // Cleanup Kitchen store
+      const kitchenStore = useKitchenStore()
+      if (kitchenStore.initialized) {
+        kitchenStore.cleanup()
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ HMR cleanup complete')
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'HMR cleanup failed', { error })
+    }
+  })
+}
 </script>
 
 <style lang="scss" scoped>

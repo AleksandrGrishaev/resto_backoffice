@@ -18,6 +18,7 @@ let supabaseInstance: SupabaseClient<Database> | null = null
 export function getSupabaseClient(): SupabaseClient<Database> {
   // Return existing instance if available
   if (supabaseInstance) {
+    console.log('♻️ [SupabaseClient] Returning existing instance')
     return supabaseInstance
   }
 
@@ -30,12 +31,19 @@ export function getSupabaseClient(): SupabaseClient<Database> {
 
   // Create new instance
   const apiKey = supabaseConfig.getApiKey()
+
+  console.log('🔧 [SupabaseClient] Creating new Supabase client...', {
+    url: supabaseConfig.url,
+    timestamp: new Date().toISOString()
+  })
+
   supabaseInstance = createClient<Database>(supabaseConfig.url, apiKey, supabaseConfig.options)
 
-  console.log('✅ Supabase client initialized:', {
+  console.log('✅ [SupabaseClient] Supabase client initialized:', {
     url: supabaseConfig.url,
     hasAnonKey: !!supabaseConfig.anonKey,
-    usingServiceKey: apiKey === supabaseConfig.serviceKey
+    usingServiceKey: apiKey === supabaseConfig.serviceKey,
+    timestamp: new Date().toISOString()
   })
 
   return supabaseInstance

@@ -1,7 +1,7 @@
 // src/stores/pos/orders/useOrdersRealtime.ts
 // POS Orders Realtime Composable - Subscribe to order updates from Kitchen
 
-import { ref, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { supabase } from '@/supabase/client'
 import { usePosOrdersStore } from './ordersStore'
 import { fromSupabase } from './supabaseMappers'
@@ -13,6 +13,10 @@ const MODULE_NAME = 'POSOrdersRealtime'
 /**
  * POS Orders Realtime Subscription
  * Listens for order updates from Kitchen (item status changes)
+ *
+ * IMPORTANT: This composable is used in Pinia stores, not Vue components.
+ * DO NOT use onUnmounted() here - it won't work in stores!
+ * Cleanup must be handled manually via unsubscribe() method.
  */
 export function useOrdersRealtime() {
   const channel = ref<RealtimeChannel | null>(null)
@@ -108,6 +112,7 @@ export function useOrdersRealtime() {
 
   /**
    * Unsubscribe from realtime updates
+   * IMPORTANT: Must be called manually by the parent store (e.g., posStore.cleanup())
    */
   function unsubscribe() {
     if (channel.value) {
@@ -117,11 +122,6 @@ export function useOrdersRealtime() {
       isConnected.value = false
     }
   }
-
-  // Cleanup on component unmount
-  onUnmounted(() => {
-    unsubscribe()
-  })
 
   return {
     subscribe,

@@ -39,15 +39,11 @@ export const supabaseConfig = {
     global: {
       headers: {
         'X-Client-Info': 'kitchen-app-web'
-      },
-      // Add timeout for fetch requests (30 seconds)
-      // This helps prevent silent timeouts on Vercel deployment
-      fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
-        return fetch(url, {
-          ...options,
-          signal: options.signal || AbortSignal.timeout(30000) // 30 second timeout
-        })
       }
+      // ✅ FIX: REMOVED fetch timeout wrapper
+      // Timeout is now handled ONLY by SupabaseRetryHandler (15s)
+      // Having two timeouts (30s here + 15s in RetryHandler) causes conflicts
+      // and prevents proper retry logic from working
     },
     // Real-time subscriptions (disabled for MVP, can enable later)
     realtime: {

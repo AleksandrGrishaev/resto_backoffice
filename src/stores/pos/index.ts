@@ -79,6 +79,9 @@ export const usePosStore = defineStore('pos', () => {
     startingCash: number
   } | null>(null)
 
+  // ✅ FIX: Store reference to Realtime subscription for cleanup
+  let ordersRealtime: ReturnType<typeof useOrdersRealtime> | null = null
+
   // ===== STORES =====
   const tablesStore = usePosTablesStore()
   const ordersStore = usePosOrdersStore()
@@ -214,7 +217,7 @@ export const usePosStore = defineStore('pos', () => {
       // ✅ Sprint 7: Initialize Realtime for Kitchen updates
       if (ENV.useSupabase) {
         platform.debugLog('POS', '📡 Initializing Realtime for Kitchen updates...')
-        const ordersRealtime = useOrdersRealtime()
+        ordersRealtime = useOrdersRealtime()
         ordersRealtime.subscribe()
         platform.debugLog('POS', '✅ POS Realtime subscription active')
       }
@@ -366,6 +369,29 @@ export const usePosStore = defineStore('pos', () => {
     lastSync.value = null
   }
 
+  /**
+   * ✅ FIX: Cleanup method to unsubscribe from Realtime channels
+   * IMPORTANT: Call this when navigating away from POS view or during HMR cleanup
+   */
+  function cleanup(): void {
+    platform.debugLog('POS', '🧹 Cleaning up POS store...')
+
+    // Unsubscribe from Realtime channels
+    if (ordersRealtime) {
+      platform.debugLog('POS', '📡 Unsubscribing from POS Realtime...')
+      ordersRealtime.unsubscribe()
+      ordersRealtime = null
+      platform.debugLog('POS', '✅ POS Realtime cleanup complete')
+    }
+
+    // Stop SyncService auto-processing
+    const syncService = useSyncService()
+    syncService.stop()
+    platform.debugLog('POS', '✅ SyncService stopped')
+
+    platform.debugLog('POS', '✅ POS cleanup complete')
+  }
+
   // ===== WATCHERS =====
 
   // Следим за статусом сети
@@ -435,6 +461,7 @@ export const usePosStore = defineStore('pos', () => {
     endShift,
     syncWithServer,
     clearError,
-    reset
+    reset,
+    cleanup // ✅ FIX: Add cleanup method to exports
   }
 })

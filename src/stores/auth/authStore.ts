@@ -29,6 +29,10 @@ export const useAuthStore = defineStore('auth', () => {
     session: null as any // Supabase session for email auth
   })
 
+  // ✅ FIX: Track last userId to detect real login vs token refresh
+  // This prevents the "SIGNED_IN every 6 minutes blocks all connections for 60s" issue
+  let lastUserId: string | null = null
+
   // ===== GETTERS =====
   const currentUser = computed(() => state.value.currentUser)
   const isAuthenticated = computed(() => state.value.isAuthenticated)
@@ -59,17 +63,76 @@ export const useAuthStore = defineStore('auth', () => {
     if (session) {
       state.value.session = session
       await loadUserProfile(session.user.id)
+      // ✅ FIX: Track userId to detect login vs token refresh
+      lastUserId = session.user.id
     }
     // Note: No longer trying to restore PIN sessions - using only Supabase sessions
 
     // Listen to auth state changes
+    // ✅ FIX: Filter events to prevent unnecessary profile reloads that block connection pool
     supabase.auth.onAuthStateChange(async (event, newSession) => {
-      DebugUtils.info(MODULE_NAME, 'Auth state changed', { event })
+      // 🔍 DIAGNOSTIC: Log ALL auth events with detailed info
+      console.log('🔐 [AuthStore] Auth state changed:', {
+        event,
+        hasSession: !!newSession,
+        hasUser: !!newSession?.user,
+        userId: newSession?.user?.id,
+        timestamp: new Date().toISOString()
+      })
+
       state.value.session = newSession
 
-      if (newSession?.user) {
-        await loadUserProfile(newSession.user.id)
+      // ✅ FIX: Detect real login vs token refresh by checking userId change
+      // - SIGNED_IN with SAME userId = token refresh → SKIP reload
+      // - SIGNED_IN with DIFFERENT userId = real login → RELOAD profile
+      // - USER_UPDATED = profile changed → RELOAD profile
+      const currentUserId = newSession?.user?.id
+      const isUserIdChanged = currentUserId && currentUserId !== lastUserId
+      const isInitialSession = event === 'INITIAL_SESSION'
+      const isUserUpdated = event === 'USER_UPDATED'
+
+      // Determine if we should reload profile
+      const shouldReload =
+        newSession?.user && // Has user
+        !isInitialSession && // Not initial session (already loaded in initialize())
+        (isUserIdChanged || isUserUpdated) // Either user changed OR profile updated
+
+      console.log('🔍 [AuthStore] Should reload profile?', {
+        event,
+        currentUserId: currentUserId?.substring(0, 8) + '...',
+        lastUserId: lastUserId?.substring(0, 8) + '...',
+        isUserIdChanged,
+        isInitialSession,
+        isUserUpdated,
+        shouldReload,
+        hasUser: !!newSession?.user
+      })
+
+      if (shouldReload) {
+        console.log('✅ [AuthStore] Reloading profile - user changed or profile updated:', {
+          event,
+          reason: isUserIdChanged ? 'userId changed' : 'USER_UPDATED event'
+        })
+        DebugUtils.info(MODULE_NAME, 'Reloading profile after auth event', { event })
+        await loadUserProfile(currentUserId!)
+        lastUserId = currentUserId! // Update last userId
+      } else if (newSession?.user && !isUserIdChanged && event === 'SIGNED_IN') {
+        // Same user, SIGNED_IN event = token refresh
+        console.log('🔄 [AuthStore] Token refresh detected - skipping profile reload', {
+          event,
+          userId: currentUserId?.substring(0, 8) + '...'
+        })
+        DebugUtils.debug(MODULE_NAME, 'Token refresh, skipping profile reload', { event })
+        // Update lastUserId even on token refresh to keep tracking
+        lastUserId = currentUserId!
+      } else if (newSession?.user) {
+        // Other events - session is valid, but no need to reload profile
+        console.log('⏭️ [AuthStore] Skipping profile reload for event:', event)
+        DebugUtils.debug(MODULE_NAME, 'Auth event, skipping profile reload', { event })
       } else {
+        // No session - user logged out
+        console.log('🚪 [AuthStore] User logged out, resetting state')
+        lastUserId = null // Clear last userId
         resetState()
       }
     })

@@ -339,9 +339,34 @@ const router = createRouter({
 
 // ===== NAVIGATION GUARDS =====
 
+/**
+ * ✅ FIX: Cleanup Realtime subscriptions when leaving POS or Kitchen views
+ * This prevents subscription leaks during navigation
+ */
 router.beforeEach(async (to, from, next) => {
   try {
     const authStore = useAuthStore()
+
+    // ✅ FIX: Cleanup stores when navigating away from POS or Kitchen
+    if (from.path.startsWith('/pos') && !to.path.startsWith('/pos')) {
+      // Leaving POS view, cleanup POS store
+      const { usePosStore } = await import('@/stores/pos')
+      const posStore = usePosStore()
+      if (posStore.isInitialized) {
+        console.log('🧹 [Router] Cleaning up POS store on navigation away from POS')
+        posStore.cleanup()
+      }
+    }
+
+    if (from.path.startsWith('/kitchen') && !to.path.startsWith('/kitchen')) {
+      // Leaving Kitchen view, cleanup Kitchen store
+      const { useKitchenStore } = await import('@/stores/kitchen')
+      const kitchenStore = useKitchenStore()
+      if (kitchenStore.initialized) {
+        console.log('🧹 [Router] Cleaning up Kitchen store on navigation away from Kitchen')
+        kitchenStore.cleanup()
+      }
+    }
 
     // Проверка dev режима для debug роутов
     if (to.meta.requiresDev && !import.meta.env.DEV) {
