@@ -17,20 +17,41 @@ export function useDecomposition() {
 
   /**
    * Проверка инициализации необходимых stores
+   * ✅ IMPROVED: Lazy initialization if stores are not initialized
    */
-  function checkStoresInitialized(): void {
+  async function checkStoresInitialized(): Promise<void> {
+    // Check recipesStore
     if (!recipesStore.initialized) {
-      throw new Error(
-        '❌ RecipesStore is not initialized! Decomposition requires recipes and preparations data. ' +
-          'Ensure appInitializer loads recipesStore before processing payments.'
-      )
+      console.warn('⚠️ [DecompositionEngine] RecipesStore not initialized, initializing now...')
+
+      try {
+        if (recipesStore.initialize) {
+          await recipesStore.initialize()
+          console.log('✅ [DecompositionEngine] RecipesStore initialized successfully')
+        } else {
+          throw new Error('RecipesStore.initialize() method not found')
+        }
+      } catch (error) {
+        throw new Error(
+          '❌ Failed to initialize RecipesStore! Decomposition requires recipes and preparations data. ' +
+            `Error: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
     }
 
+    // Check productsStore
     if (!productsStore.products || productsStore.products.length === 0) {
-      throw new Error(
-        '❌ ProductsStore has no data! Decomposition requires products catalog. ' +
-          'Ensure appInitializer loads productsStore before processing payments.'
-      )
+      console.warn('⚠️ [DecompositionEngine] ProductsStore empty, loading now...')
+
+      try {
+        await productsStore.loadProducts()
+        console.log('✅ [DecompositionEngine] ProductsStore loaded successfully')
+      } catch (error) {
+        throw new Error(
+          '❌ Failed to load ProductsStore! Decomposition requires products catalog. ' +
+            `Error: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
     }
 
     console.log('✅ [DecompositionEngine] Stores initialized check passed', {
@@ -50,8 +71,8 @@ export function useDecomposition() {
     variantId: string,
     soldQuantity: number
   ): Promise<DecomposedItem[]> {
-    // 🆕 Проверка инициализации stores перед декомпозицией
-    checkStoresInitialized()
+    // 🆕 Проверка инициализации stores перед декомпозицией (с lazy initialization)
+    await checkStoresInitialized()
 
     console.log(`🔍 [${MODULE_NAME}] Decomposing menu item:`, {
       menuItemId,
