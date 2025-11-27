@@ -1,17 +1,3 @@
-## ✅ Recently Completed
-
-### Sprint 1: Authentication & Session Management Refactoring (2025-11-25) ✅ COMPLETED
-
-- ✅ Cross-tab logout synchronization (localStorage broadcast mechanism)
-- ✅ Complete store reset service (resets all 15 Pinia stores on logout)
-- ✅ Fixed App.vue race conditions (removed immediate watcher, added loading overlay)
-- ✅ Session consolidation (removed AuthSessionService, Supabase-only sessions)
-- ✅ Navigation & session persistence (fixed page reload detection)
-- ✅ Eliminated ghost data on page reload
-- ✅ Single source of truth for authentication
-
-### Previous Achievements
-
 - ✅ Supabase integration (dev + prod databases, 36 tables migrated)
 - ✅ Authentication system (Email + PIN auth for POS/Kitchen)
 - ✅ RLS policies fixed (infinite recursion, RPC permissions)
@@ -87,6 +73,168 @@
 ---
 
 ## 🚀 Future Phases
+
+### PHASE: P&L & Food Cost Implementation (8 Sprints, 16-24 weeks)
+
+**Цель:** Внедрить корректный учет себестоимости, остатков и прибыли для расчета P&L бизнеса с устранением двойного списания продуктов.
+
+**Критическая проблема:** Двойное списание продуктов:
+
+- При создании полуфабрикатов списываются сырые продукты
+- При продаже через POS полуфабрикаты декомпозируются обратно в сырые продукты и списываются повторно
+- Food cost рассчитывается неправильно (из декомпозиции вместо FIFO batches)
+
+**Решение:**
+
+- Полуфабрикаты НЕ декомпозируются до продуктов при продаже
+- Фактическая себестоимость рассчитывается из FIFO allocation batches
+- Автосписание сырья при создании полуфабрикатов
+- P&L отчеты с правильным COGS и Gross Profit
+
+#### ФАЗА 1: Исправление базовой логики (Спринты 1-2)
+
+**Sprint 1: Устранение двойного списания (2 недели)**
+
+Цель: Исправить декомпозицию - полуфабрикаты НЕ разворачиваются до сырых продуктов.
+
+Файлы:
+
+- `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts` - остановить рекурсию
+- `src/stores/sales/recipeWriteOff/types.ts` - добавить type: 'preparation'
+
+Критерии:
+
+- ✅ Полуфабрикаты возвращаются как конечные элементы
+- ✅ Нет рекурсивного разворачивания preparation → products
+- ✅ Тесты проходят (создать preparation → recipe → продажа)
+
+**Sprint 2: FIFO Allocation для фактической себестоимости (2-3 недели)**
+
+Цель: Внедрить расчет actualCost через FIFO allocation из batches.
+
+Новые файлы:
+
+- `src/stores/sales/composables/useActualCostCalculation.ts`
+- `src/supabase/migrations/020_create_sales_transactions.sql`
+
+Изменяемые:
+
+- `src/stores/sales/types.ts` - ActualCostBreakdown
+- `src/stores/sales/salesStore.ts` - использовать calculateActualCost()
+- `src/stores/sales/composables/useProfitCalculation.ts` - actualCost.totalCost
+
+Критерии:
+
+- ✅ ActualCostBreakdown рассчитывается из FIFO batches
+- ✅ SalesTransaction сохраняет actualCost
+- ✅ Прибыль рассчитывается корректно (revenue - actualCost)
+
+#### ФАЗА 2: Автоматизация производства (Спринты 3-4)
+
+**Sprint 3: Автосписание при создании полуфабрикатов (2 недели)**
+
+Цель: Автоматически списывать сырье при production preparations.
+
+Файлы:
+
+- `src/stores/preparation/preparationStore.ts` - createReceipt() + auto write-off
+- `src/stores/storage/storageStore.ts` - relatedPreparationOperationId
+- `src/supabase/migrations/021_add_operation_links.sql`
+
+Критерии:
+
+- ✅ При createReceipt() автоматически создается StorageOperation (write_off)
+- ✅ relatedStorageOperationIds заполняется
+- ✅ Остатки продуктов уменьшаются
+
+**Sprint 4: Улучшение расчета себестоимости (2 недели)**
+
+Цель: Использовать фактическую себестоимость из batches вместо планируемой.
+
+Файлы:
+
+- `src/stores/recipes/composables/useCostCalculation.ts` - режимы 'planned' | 'actual'
+- `src/views/backoffice/recipes/RecipeCard.vue` - показывать planned vs actual
+- `src/views/backoffice/menu/MenuItemCard.vue` - показывать variance
+
+Критерии:
+
+- ✅ Planned cost рассчитывается из recipe
+- ✅ Actual cost рассчитывается из FIFO batches
+- ✅ Variance отображается в UI
+
+#### ФАЗА 3: Аналитика и отчетность (Спринты 5-6)
+
+**Sprint 5: P&L Report (2-3 недели)**
+
+Цель: Создать интерфейс Profit & Loss отчета.
+
+Новые файлы:
+
+- `src/stores/analytics/plReportStore.ts`
+- `src/views/backoffice/analytics/PLReportView.vue`
+- `src/views/backoffice/analytics/components/PLSummaryCard.vue`
+
+Критерии:
+
+- ✅ P&L Summary (Revenue, COGS, Gross Profit, Net Profit)
+- ✅ Breakdown by department
+- ✅ Date range filtering
+
+**Sprint 6: Food Cost Dashboard (2-3 недели)**
+
+Цель: Дашборд для анализа food cost и остатков.
+
+Новые файлы:
+
+- `src/stores/analytics/foodCostStore.ts`
+- `src/views/backoffice/analytics/FoodCostDashboardView.vue`
+- `src/views/backoffice/inventory/InventoryValuationView.vue`
+
+Критерии:
+
+- ✅ Food Cost % dashboard (KPI, trends, top items)
+- ✅ Inventory Valuation (products + preparations)
+- ✅ Charts and visualizations
+
+#### ФАЗА 4: Расширенная аналитика (Спринты 7-8)
+
+**Sprint 7: Дебиторка и кредиторка поставщикам (2 недели)**
+
+Цель: Учет задолженности перед поставщиками.
+
+Файлы:
+
+- `src/stores/counteragents/counteragentsStore.ts` - balance, debt, payments
+- `src/views/backoffice/finance/PayablesView.vue`
+- `src/views/backoffice/finance/ReceivablesView.vue`
+
+Критерии:
+
+- ✅ Counteragent balance tracking
+- ✅ Payables view (кредиторка)
+- ✅ Payment recording
+
+**Sprint 8: Variance Analysis и оптимизация (2-3 недели)**
+
+Цель: Анализ отклонений, оптимизация производительности.
+
+Новые файлы:
+
+- `src/stores/analytics/costVarianceStore.ts`
+- `src/views/backoffice/analytics/CostVarianceReportView.vue`
+
+Изменяемые:
+
+- `src/views/backoffice/sales/SalesAnalyticsView.vue` - использовать actualCost
+
+Критерии:
+
+- ✅ Variance analysis (planned vs actual)
+- ✅ Performance optimization (caching, indexes)
+- ✅ Все аналитические views работают
+
+---
 
 ### Sprint 2: POS Printer Integration (First Production Update)
 

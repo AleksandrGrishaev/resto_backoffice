@@ -1,1 +1,49 @@
-Check src/About/todo.md and grab next task from sprint and start working on it. Once done update src/About/todo.md and write our sprint to backlog src/About/backlog.md. Always ask if you would like change type.ts files or interface.
+> Можешь составить Техническое задание для разработки пока стратегический и тактический уровень без примеров
+> кода, но с действующими файлами и новыми файлами и методами, которые будут
+> задействованы в изменениях. Мне надо структурировать все по спринтам и
+> фазам выполнения, чтобы поэтапно мы могли проверить реализацию.
+
+запиши новую задачу в NextTodo.md пиши на английской языке.
+
+что мне надо сделать:
+
+Мне надо приблизить к тому, чтобы я мог посчитать P&L бизнеса, сейчас мне надо посчитать food cost и текущие остатки, которые есть по полуфабрикатам и продуктам.
+
+как это сейчас реализовано:
+
+1. У нас нет расчета стоимости остатков полуфабрикатов и продуктов. У нас есть 2 store.
+2. у нас реаилзовано списание продуктов, когда мы создаем полуфабрикаты.
+3. У нас реализована функция декомпозиции продаж из Pos системы и списание продуктов, но сейчас она работает дублируя функцию списания продуктов, когда декомпозируем полуфабрикаты. Так как это новая функция.
+
+как правильно:
+
+1. у нас есть продукты, из них мы создаем полуфабрикаты. Дальше мы создаем рецепты.
+2. У нас есть меню с ценами продажи, где мы привязываем рецепты и продукты, которые могут быть просто проданы, например пиво, кофе, минеральная вода (can be sold = true)
+3. Дальше когда есть продажа (оплата, мы списываем продукты) и формируется food cost по продаже с учетом всех скидок на чек. Сейчас есть дублирование мы списываем и когда делаем полуфабрикаты и декомпозируем когда списываем продукты... Двойное списание.
+
+У нас нет интерфейса, который показывал бы прибыли и убытки, нет интерфейса который бы показывал текущие остатки продуктов и дебеторку перед поставщиками, это тоже важно знать при анализе.
+
+Так какие у нас есть файлы, которые за это отвечают
+src/views/pos/order/OrderSection.vue
+src/views/pos/payment/PaymentDialog.vue
+
+где мы отображаем продажи
+src/views/pos
+src/views/backoffice/sales/SalesAnalyticsView.vue
+src/views/backoffice/sales/SalesTransactionsView.vue
+src/views/backoffice/sales/ShiftHistoryView.vue
+
+декомпозиция в POS (внимание не учитывает новый функционал, двойное списание продуктов, когда делаем preparation и когда продаем, два раза списываются продукты)
+src/stores/sales/recipeWriteOff
+src/stores/sales/recipeWriteOff/composables/useDecomposition.ts
+src/stores/sales/recipeWriteOff/supabase
+src/stores/sales/recipeWriteOff/index.ts
+src/stores/sales/recipeWriteOff/recipeWriteOffStore.ts
+src/stores/sales/recipeWriteOff/services.ts
+src/stores/sales/recipeWriteOff/types.ts
+
+src/stores/sales/composables/useProfitCalculation.ts
+src/stores/sales/salesStore.ts
+src/stores/sales/services.ts
+src/stores/sales/types.ts
+src/stores/sales/index.ts
