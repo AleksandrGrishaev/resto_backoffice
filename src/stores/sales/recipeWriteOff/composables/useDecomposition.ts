@@ -163,6 +163,7 @@ export function useDecomposition() {
 
     return [
       {
+        type: 'product', // ✅ SPRINT 1: Added type discriminator
         productId: comp.id,
         productName: product.name,
         quantity: totalQuantity,
@@ -215,7 +216,9 @@ export function useDecomposition() {
   }
 
   /**
-   * Decompose Preparation (рекурсия)
+   * Decompose Preparation
+   * ✅ SPRINT 1: STOP! Don't decompose to products - return preparation as final element
+   * This prevents double write-off (products already written off during preparation production)
    */
   async function decomposePreparation(
     comp: MenuComposition,
@@ -228,35 +231,34 @@ export function useDecomposition() {
       return []
     }
 
-    console.log(`  🧪 [${MODULE_NAME}] Decomposing preparation:`, {
+    const totalQuantity = comp.quantity * quantity
+
+    console.log(`  ✅ [${MODULE_NAME}] Preparation as final element (no decomposition):`, {
       name: preparation.name,
-      ingredients: preparation.recipe.length
+      quantity: totalQuantity,
+      unit: preparation.outputUnit,
+      note: 'Cost will be calculated from FIFO batches in Sprint 2'
     })
 
-    const results: DecomposedItem[] = []
-
-    // Рекурсивно разворачиваем каждый ингредиент полуфабриката
-    for (const prepIngredient of preparation.recipe) {
-      // Convert PreparationIngredient to MenuComposition format
-      const menuComp: MenuComposition = {
-        type: prepIngredient.type, // always 'product'
-        id: prepIngredient.id,
-        quantity: prepIngredient.quantity,
-        unit: prepIngredient.unit
+    // ✅ Return preparation as final element (NOT decomposed to products!)
+    return [
+      {
+        type: 'preparation', // ✅ Type: preparation (not product!)
+        preparationId: comp.id,
+        preparationName: preparation.name,
+        quantity: totalQuantity,
+        unit: preparation.outputUnit,
+        costPerUnit: null, // ✅ null until Sprint 2 (FIFO calculation)
+        totalCost: 0, // ✅ Will be calculated from FIFO batches in Sprint 2
+        path: [...path, preparation.name]
       }
-
-      // FIX: Don't multiply by comp.quantity here - it's already in menuComp.quantity
-      // quantity = soldQuantity (number of portions sold)
-      const items = await decomposeComposition(menuComp, quantity, [...path, preparation.name])
-      results.push(...items)
-    }
-
-    return results
+    ]
   }
 
   /**
-   * Merge duplicate products
-   * Группирует дубликаты продуктов и суммирует количества
+   * Merge duplicate items (products AND preparations)
+   * ✅ SPRINT 1: Updated to handle both products and preparations
+   * Группирует дубликаты и суммирует количества
    */
   function mergeDecomposedItems(items: DecomposedItem[]): DecomposedItem[] {
     console.log(`  🔀 [${MODULE_NAME}] Merging ${items.length} items...`)
@@ -264,8 +266,9 @@ export function useDecomposition() {
     const grouped = new Map<string, DecomposedItem>()
 
     for (const item of items) {
-      // Key: productId + unit (чтобы разные единицы не смешивались)
-      const key = `${item.productId}_${item.unit}`
+      // ✅ Key: type + id + unit (чтобы products и preparations не смешивались)
+      const id = item.type === 'product' ? item.productId : item.preparationId
+      const key = `${item.type}_${id}_${item.unit}`
 
       if (grouped.has(key)) {
         const existing = grouped.get(key)!
@@ -280,7 +283,13 @@ export function useDecomposition() {
 
     const merged = Array.from(grouped.values())
 
-    console.log(`  ✅ [${MODULE_NAME}] Merged to ${merged.length} unique products`)
+    const productCount = merged.filter(item => item.type === 'product').length
+    const preparationCount = merged.filter(item => item.type === 'preparation').length
+
+    console.log(`  ✅ [${MODULE_NAME}] Merged to ${merged.length} unique items`, {
+      products: productCount,
+      preparations: preparationCount
+    })
 
     return merged
   }
@@ -293,10 +302,17 @@ export function useDecomposition() {
   }
 
   /**
-   * Get product names from decomposed items
+   * Get item names from decomposed items (products + preparations)
+   * ✅ SPRINT 1: Updated to handle both products and preparations
    */
   function getProductNames(items: DecomposedItem[]): string[] {
-    return items.map(item => item.productName)
+    return items.map(item => {
+      if (item.type === 'product') {
+        return item.productName || 'Unknown Product'
+      } else {
+        return item.preparationName || 'Unknown Preparation'
+      }
+    })
   }
 
   return {

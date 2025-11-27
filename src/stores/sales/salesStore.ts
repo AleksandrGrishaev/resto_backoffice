@@ -184,8 +184,10 @@ export const useSalesStore = defineStore('sales', () => {
         const profitCalculation = calculateItemProfit(billItem, decomposedItems, allocatedDiscount)
 
         // 5. Create decomposition summary
+        // ✅ SPRINT 1: Count products and preparations separately
         const decompositionSummary: DecompositionSummary = {
-          totalProducts: decomposedItems.length,
+          totalProducts: decomposedItems.filter(item => item.type === 'product').length,
+          totalPreparations: decomposedItems.filter(item => item.type === 'preparation').length,
           totalCost,
           decomposedItems
         }

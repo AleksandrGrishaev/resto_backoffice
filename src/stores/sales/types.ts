@@ -25,22 +25,32 @@ export interface ProfitCalculation {
  * Краткая информация о составе проданной позиции
  */
 export interface DecompositionSummary {
-  totalProducts: number // Количество конечных продуктов
+  totalProducts: number // Количество конечных продуктов (can_be_sold = true)
+  totalPreparations: number // ✅ NEW: Количество полуфабрикатов
   totalCost: number // Общая себестоимость
-  decomposedItems: DecomposedItem[] // Список продуктов
+  decomposedItems: DecomposedItem[] // Список продуктов и полуфабрикатов (mixed)
 }
 
 /**
  * Decomposed Item
- * Конечный продукт после декомпозиции рецепта/полуфабриката
+ * Конечный элемент после декомпозиции рецепта (продукт ИЛИ полуфабрикат)
+ * ✅ SPRINT 1: Added support for preparations (type: 'preparation')
  */
 export interface DecomposedItem {
-  productId: string // ID конечного продукта
-  productName: string
+  type: 'product' | 'preparation' // ✅ NEW: Type discriminator
+
+  // Product fields (if type === 'product')
+  productId?: string // ID конечного продукта
+  productName?: string
+
+  // Preparation fields (if type === 'preparation')
+  preparationId?: string // ✅ NEW: ID полуфабриката
+  preparationName?: string // ✅ NEW: Название полуфабриката
+
   quantity: number // Итоговое количество
   unit: string // gram, ml, piece
-  costPerUnit: number // Себестоимость за единицу
-  totalCost: number // quantity * costPerUnit
+  costPerUnit: number | null // ✅ CHANGED: nullable - null if not yet calculated (FIFO in Sprint 2)
+  totalCost: number // quantity * costPerUnit (or 0 if costPerUnit is null)
 
   // Trace path для debug (путь декомпозиции)
   path: string[] // ['MenuItem', 'Recipe', 'Preparation', 'Product']
