@@ -352,23 +352,22 @@ const productOptions = computed(() => {
   }> = []
 
   try {
-    const activeProducts = productsStore.activeProducts || []
+    // ✅ FIX: Use sellableProducts instead of activeProducts (which doesn't exist)
+    const sellableProducts = productsStore.sellableProducts || []
     console.log('🔍 [MenuItemDialog] Building productOptions:', {
-      totalActiveProducts: activeProducts.length,
-      productsWithCanBeSold: activeProducts.filter(p => p.canBeSold).length
+      totalSellableProducts: sellableProducts.length
     })
 
-    activeProducts
-      .filter(product => product.canBeSold) // ✅ Только продукты на прямую продажу
-      .forEach(product => {
-        options.push({
-          id: product.id,
-          name: product.name,
-          category: product.category,
-          unit: product.baseUnit, // ✅ Используем baseUnit вместо unit
-          costPerUnit: product.baseCostPerUnit // ✅ Используем baseCostPerUnit вместо costPerUnit
-        })
+    // No need to filter by canBeSold - sellableProducts already filtered
+    sellableProducts.forEach(product => {
+      options.push({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        unit: product.baseUnit,
+        costPerUnit: product.baseCostPerUnit
       })
+    })
 
     console.log('✅ [MenuItemDialog] productOptions built:', options.length, options)
   } catch (error) {
