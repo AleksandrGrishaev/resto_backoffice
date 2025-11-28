@@ -240,6 +240,31 @@ const routes: RouteRecordRaw[] = [
           }
         ]
       },
+      // === Analytics (Sprint 5) ===
+      {
+        path: 'analytics',
+        meta: {
+          allowedRoles: ['admin', 'manager']
+        },
+        children: [
+          {
+            path: 'pl-report',
+            name: 'pl-report',
+            component: () => import('@/views/backoffice/analytics/PLReportView.vue'),
+            meta: {
+              title: 'P&L Report'
+            }
+          },
+          {
+            path: 'food-cost',
+            name: 'food-cost-dashboard',
+            component: () => import('@/views/backoffice/analytics/FoodCostDashboardView.vue'),
+            meta: {
+              title: 'Food Cost Dashboard'
+            }
+          }
+        ]
+      },
       // === Inventory Write-offs (Sprint 2) ===
       {
         path: 'inventory',
@@ -253,6 +278,14 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/backoffice/inventory/WriteOffHistoryView.vue'),
             meta: {
               title: 'Write-off History'
+            }
+          },
+          {
+            path: 'valuation',
+            name: 'inventory-valuation',
+            component: () => import('@/views/backoffice/inventory/InventoryValuationView.vue'),
+            meta: {
+              title: 'Inventory Valuation'
             }
           }
         ]

@@ -44,6 +44,11 @@ export function toSupabase(transaction: SalesTransaction): Record<string, any> {
     // JSONB fields
     profit_calculation: transaction.profitCalculation,
     decomposition_summary: transaction.decompositionSummary,
+    actual_cost: transaction.actualCost || null, // ✅ SPRINT 2: FIFO actual cost
+
+    // ✅ SPRINT 2: Write-off IDs
+    preparation_write_off_ids: transaction.preparationWriteOffIds || null,
+    product_write_off_ids: transaction.productWriteOffIds || null,
 
     // Sync status
     synced_to_backoffice: transaction.syncedToBackoffice,
@@ -93,6 +98,11 @@ export function fromSupabase(row: any): SalesTransaction {
     // JSONB fields (already parsed by Supabase client)
     profitCalculation: row.profit_calculation as ProfitCalculation,
     decompositionSummary: row.decomposition_summary as DecompositionSummary,
+    actualCost: row.actual_cost, // ✅ SPRINT 2: FIFO actual cost
+
+    // ✅ SPRINT 2: Write-off IDs
+    preparationWriteOffIds: row.preparation_write_off_ids,
+    productWriteOffIds: row.product_write_off_ids,
 
     // Sync status
     syncedToBackoffice: row.synced_to_backoffice,

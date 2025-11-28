@@ -145,6 +145,7 @@ export interface InventoryValuation {
   byDepartment: {
     kitchen: number
     bar: number
+    kitchenAndBar: number // Items used in both departments
   }
 
   // Breakdown by warehouse (for products)
@@ -157,11 +158,12 @@ export interface InventoryValuation {
     }
   >
 
-  // Top items by value
+  // All inventory items sorted by value (not limited to top N)
   topItems: Array<{
     itemId: string
     itemName: string
     itemType: 'product' | 'preparation'
+    department: 'kitchen' | 'bar' | 'kitchenAndBar' | 'unknown' // Department classification
     quantity: number
     unit: string
     averageCostPerUnit: number

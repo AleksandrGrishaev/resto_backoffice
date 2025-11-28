@@ -113,6 +113,53 @@
         </v-list-item>
       </v-list-group>
 
+      <!-- ✅ SPRINT 5: Reports Section -->
+      <v-list-group value="reports" class="mb-2">
+        <template #activator="{ props }">
+          <v-list-item v-bind="props" prepend-icon="mdi-chart-box" color="primary">
+            <template #title>
+              <span>Reports</span>
+            </template>
+          </v-list-item>
+        </template>
+
+        <!-- P&L Report -->
+        <v-list-item
+          to="/analytics/pl-report"
+          prepend-icon="mdi-finance"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>P&L Report</span>
+          </template>
+        </v-list-item>
+
+        <!-- Food Cost Dashboard -->
+        <v-list-item
+          to="/analytics/food-cost"
+          prepend-icon="mdi-food-apple"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Food Cost</span>
+          </template>
+        </v-list-item>
+
+        <!-- Inventory Valuation -->
+        <v-list-item
+          to="/inventory/valuation"
+          prepend-icon="mdi-package-variant-closed"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Inventory Valuation</span>
+          </template>
+        </v-list-item>
+      </v-list-group>
+
       <!-- Catalogs Section -->
       <v-list-group value="catalogs" class="mb-2">
         <template #activator="{ props }">

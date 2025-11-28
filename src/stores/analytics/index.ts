@@ -3,3 +3,5 @@
 
 export * from './types'
 export { usePLReportStore } from './plReportStore'
+export { useFoodCostStore } from './foodCostStore'
+export { useInventoryValuationStore } from './inventoryValuationStore'
