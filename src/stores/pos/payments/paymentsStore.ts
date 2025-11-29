@@ -71,11 +71,18 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
   // ===== ACTIONS (POS Operations) =====
 
   /**
-   * Process payment (POS only)
-   * 1. Save payment to storage
-   * 2. Link to order/items
-   * 3. Update item payment status
-   * 4. Add shiftId from current shift
+   * Process payment (POS only) - OPTIMISTIC UI VERSION
+   *
+   * **Optimizations:**
+   * - Critical operations (payment save, order update) run synchronously
+   * - Heavy operations (sales transaction, decomposition, write-off) run in background
+   * - Returns immediately after critical operations complete (~500ms instead of 6s)
+   *
+   * **Flow:**
+   * 1. Validate shift and payment method
+   * 2. Save payment + update order/shift (CRITICAL - fast)
+   * 3. Queue background tasks (sales recording, write-offs) (BACKGROUND - slow)
+   * 4. Return success immediately
    */
   async function processSimplePayment(
     orderId: string,
@@ -88,6 +95,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     loading.value = true
 
     try {
+      // ===== VALIDATION (Pre-flight checks) =====
+
       // Get current shift from shiftsStore
       const { useShiftsStore } = await import('../shifts/shiftsStore')
       const shiftsStore = useShiftsStore()
@@ -121,6 +130,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
 
       const accountId = paymentMethodMapping.accountId
 
+      // ===== CRITICAL OPERATIONS (Fast, synchronous) =====
+
       // 1. Create payment with shiftId
       const paymentData = {
         orderId,
@@ -144,68 +155,37 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       // 2. Add to in-memory store
       payments.value.push(payment)
 
-      // 3. Link payment to order and items
+      // 3. Link payment to order and items (updates UI immediately)
       await linkPaymentToOrder(orderId, payment.id, itemIds)
 
       // 4. Add transaction to shift with correct accountId
       await shiftsStore.addShiftTransaction(
         orderId,
         payment.id,
-        accountId, // ✅ Use accountId from payment method mapping
+        accountId,
         amount,
         `Payment ${payment.paymentNumber} - ${method}`
       )
 
-      // ✅ Update payment methods in shift (now guaranteed to work)
+      // 5. Update payment methods in shift (for shift totals)
       await shiftsStore.updatePaymentMethods(payment.method, amount)
 
-      // 5. 🆕 Record sales transaction (Sprint 2)
-      try {
-        const { useSalesStore } = await import('@/stores/sales')
-
-        const salesStore = useSalesStore()
-        const ordersStore = usePosOrdersStore()
-
-        // Ensure sales store is initialized
-        if (!salesStore.initialized) {
-          await salesStore.initialize()
-        }
-
-        // Get order to access bills and items
-        const order = ordersStore.orders.find(o => o.id === orderId)
-        if (order && order.bills.length > 0) {
-          // Get bill items from paid bills
-          const billItems = order.bills
-            .filter(bill => billIds.includes(bill.id))
-            .flatMap(bill => bill.items.filter(item => itemIds.includes(item.id)))
-
-          // Get bill discount (if any)
-          const billDiscountAmount = order.bills
-            .filter(bill => billIds.includes(bill.id))
-            .reduce((sum, bill) => sum + (bill.discountAmount || 0), 0)
-
-          if (billItems.length > 0) {
-            console.log('📊 [paymentsStore] Recording sales transaction:', {
-              itemsCount: billItems.length,
-              billDiscount: billDiscountAmount
-            })
-
-            await salesStore.recordSalesTransaction(payment, billItems, billDiscountAmount)
-            console.log('✅ [paymentsStore] Sales transaction recorded successfully')
-          }
-        }
-      } catch (salesErr) {
-        // Don't fail the payment if sales recording fails
-        console.error('⚠️ [paymentsStore] Failed to record sales transaction:', salesErr)
-      }
-
-      console.log('💳 Payment processed:', payment.paymentNumber, {
+      console.log('💳 Payment processed (critical operations):', payment.paymentNumber, {
         shiftId: payment.shiftId,
         accountId,
         amount,
         method
       })
 
+      // ===== BACKGROUND OPERATIONS (Heavy, asynchronous) =====
+      // Run in background without blocking UI
+
+      // 🔄 Queue background task for sales recording + write-offs
+      queueBackgroundSalesRecording(payment, orderId, billIds, itemIds).catch(err => {
+        console.error('⚠️ [paymentsStore] Background sales recording failed:', err)
+      })
+
+      // ✅ Return immediately after critical operations
       return { success: true, data: payment }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Payment processing failed'
@@ -213,6 +193,70 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       return { success: false, error: message }
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * Background task: Record sales transaction + decomposition + write-offs
+   * Runs asynchronously without blocking the payment confirmation
+   */
+  async function queueBackgroundSalesRecording(
+    payment: PosPayment,
+    orderId: string,
+    billIds: string[],
+    itemIds: string[]
+  ): Promise<void> {
+    try {
+      console.log('🔄 [paymentsStore] Starting background sales recording...')
+
+      const { useSalesStore } = await import('@/stores/sales')
+      const salesStore = useSalesStore()
+      const ordersStore = usePosOrdersStore()
+
+      // Ensure sales store is initialized
+      if (!salesStore.initialized) {
+        await salesStore.initialize()
+      }
+
+      // Get order to access bills and items
+      const order = ordersStore.orders.find(o => o.id === orderId)
+      if (!order || order.bills.length === 0) {
+        console.warn('⚠️ [paymentsStore] Order not found or has no bills')
+        return
+      }
+
+      // Get bill items from paid bills
+      const billItems = order.bills
+        .filter(bill => billIds.includes(bill.id))
+        .flatMap(bill => bill.items.filter(item => itemIds.includes(item.id)))
+
+      // Get bill discount (if any)
+      const billDiscountAmount = order.bills
+        .filter(bill => billIds.includes(bill.id))
+        .reduce((sum, bill) => sum + (bill.discountAmount || 0), 0)
+
+      if (billItems.length === 0) {
+        console.warn('⚠️ [paymentsStore] No bill items found for recording')
+        return
+      }
+
+      console.log('📊 [paymentsStore] Recording sales transaction:', {
+        itemsCount: billItems.length,
+        billDiscount: billDiscountAmount
+      })
+
+      // 🔄 This triggers the heavy operations:
+      // - Decomposition (2 times in logs)
+      // - FIFO allocation
+      // - Write-off creation
+      // - Batch updates
+      await salesStore.recordSalesTransaction(payment, billItems, billDiscountAmount)
+
+      console.log('✅ [paymentsStore] Background sales recording completed successfully')
+    } catch (salesErr) {
+      // Don't fail silently - log the error for debugging
+      console.error('❌ [paymentsStore] Background sales recording failed:', salesErr)
+      throw salesErr
     }
   }
 
