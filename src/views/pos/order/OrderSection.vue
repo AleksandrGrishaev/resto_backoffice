@@ -70,6 +70,8 @@
             @print="handlePrint"
             @move="handleMoveFromActions"
             @checkout="handleCheckoutFromActions"
+            @release-table="handleReleaseTable"
+            @complete-order="handleCompleteOrder"
           />
         </div>
       </div>
@@ -772,6 +774,91 @@ const handlePaymentCancel = (): void => {
 const handleCheckoutFromActions = (itemIds: string[], amount: number): void => {
   if (activeBillId.value) {
     handleCheckout(itemIds, activeBillId.value)
+  }
+}
+
+const handleReleaseTable = async (): Promise<void> => {
+  if (!currentOrder.value) {
+    showError('No active order')
+    return
+  }
+
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Releasing table...'
+
+    console.log('🍽️ [OrderSection] Releasing table for order:', {
+      orderId: currentOrder.value.id,
+      tableId: currentOrder.value.tableId,
+      orderType: currentOrder.value.type,
+      paymentStatus: currentOrder.value.paymentStatus
+    })
+
+    // Call the releaseTable method from ordersStore
+    const result = await ordersStore.releaseTable(currentOrder.value.id)
+
+    if (result.success) {
+      showSuccess('Table released successfully. Guests can now leave.')
+
+      // Clear current order selection (table is now free)
+      currentOrderId.value = null
+      activeBillId.value = null
+      ordersStore.currentOrderId = null
+      ordersStore.activeBillId = null
+    } else {
+      showError(result.error || 'Failed to release table')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to release table'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+    loadingMessage.value = ''
+  }
+}
+
+const handleCompleteOrder = async (): Promise<void> => {
+  if (!currentOrder.value) {
+    showError('No active order')
+    return
+  }
+
+  try {
+    loading.value.actions = true
+    const orderType = currentOrder.value.type
+    loadingMessage.value =
+      orderType === 'delivery' ? 'Marking as delivered...' : 'Marking as collected...'
+
+    console.log('📦 [OrderSection] Completing order:', {
+      orderId: currentOrder.value.id,
+      orderType,
+      paymentStatus: currentOrder.value.paymentStatus
+    })
+
+    // Call the completeOrder method from ordersStore
+    const result = await ordersStore.completeOrder(currentOrder.value.id)
+
+    if (result.success) {
+      const message =
+        orderType === 'delivery'
+          ? 'Order marked as delivered successfully!'
+          : 'Order marked as collected successfully!'
+      showSuccess(message)
+
+      // Clear current order selection (order is now complete)
+      currentOrderId.value = null
+      activeBillId.value = null
+      ordersStore.currentOrderId = null
+      ordersStore.activeBillId = null
+    } else {
+      showError(result.error || 'Failed to complete order')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to complete order'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+    loadingMessage.value = ''
   }
 }
 

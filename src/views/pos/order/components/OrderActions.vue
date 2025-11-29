@@ -43,8 +43,9 @@
           <span v-if="hasUnsavedChanges" class="unsaved-indicator">*</span>
         </BaseButton>
 
-        <!-- Checkout Button -->
+        <!-- Checkout / Release Table / Complete Order Button -->
         <BaseButton
+          v-if="!isOrderFullyPaid"
           color="success"
           variant="flat"
           size="large"
@@ -58,6 +59,36 @@
           <template v-if="ordersStore.selectedItemsCount > 0">
             ({{ ordersStore.selectedItemsCount }})
           </template>
+        </BaseButton>
+
+        <!-- Release Table Button (shown when dine-in order is fully paid) -->
+        <BaseButton
+          v-else-if="canReleaseTable"
+          color="primary"
+          variant="flat"
+          size="large"
+          class="flex-grow-1"
+          :disabled="!canReleaseTable"
+          :loading="processing"
+          start-icon="mdi-table-chair"
+          @click="handleReleaseTable"
+        >
+          Release Table
+        </BaseButton>
+
+        <!-- Complete Order Button (shown when delivery/takeaway order is fully paid) -->
+        <BaseButton
+          v-else-if="canCompleteOrder"
+          color="primary"
+          variant="flat"
+          size="large"
+          class="flex-grow-1"
+          :disabled="!canCompleteOrder"
+          :loading="processing"
+          :start-icon="order?.type === 'delivery' ? 'mdi-bike-fast' : 'mdi-package-variant'"
+          @click="handleCompleteOrder"
+        >
+          {{ order?.type === 'delivery' ? 'Mark Delivered' : 'Mark Collected' }}
         </BaseButton>
 
         <!-- Move Items Button -->
@@ -114,6 +145,8 @@ const emit = defineEmits<{
   save: []
   move: []
   checkout: [items: string[], amount: number]
+  releaseTable: []
+  completeOrder: []
 }>()
 
 // State
@@ -136,6 +169,29 @@ const canCheckout = computed((): boolean => {
   const hasItems = props.bills.some(bill => bill.items.length > 0)
   const hasUnpaidBills = props.bills.some(bill => bill.paymentStatus !== 'paid')
   return hasItems && hasUnpaidBills
+})
+
+// Check if order is fully paid
+const isOrderFullyPaid = computed((): boolean => {
+  if (!props.order) return false
+  return props.order.paymentStatus === 'paid'
+})
+
+// Can release table (order is paid and it's a dine-in order with a table)
+const canReleaseTable = computed((): boolean => {
+  if (!props.order) return false
+  return (
+    props.order.paymentStatus === 'paid' && props.order.type === 'dine_in' && !!props.order.tableId
+  )
+})
+
+// Can complete order (order is paid and it's delivery/takeaway)
+const canCompleteOrder = computed((): boolean => {
+  if (!props.order) return false
+  return (
+    props.order.paymentStatus === 'paid' &&
+    (props.order.type === 'delivery' || props.order.type === 'takeaway')
+  )
 })
 
 // Computed - Amounts
@@ -278,6 +334,54 @@ const handleCheckout = async (): Promise<void> => {
     emit('checkout', itemsToCheckout, checkoutAmount.value)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to process checkout'
+    showError(message)
+  } finally {
+    processing.value = false
+  }
+}
+
+const handleReleaseTable = async (): Promise<void> => {
+  if (!canReleaseTable.value) return
+
+  try {
+    processing.value = true
+    clearError()
+
+    console.log('🍽️ [OrderActions] Releasing table:', {
+      orderId: props.order?.id,
+      tableId: props.order?.tableId,
+      paymentStatus: props.order?.paymentStatus
+    })
+
+    emit('releaseTable')
+    showSuccess('Table released successfully')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to release table'
+    showError(message)
+  } finally {
+    processing.value = false
+  }
+}
+
+const handleCompleteOrder = async (): Promise<void> => {
+  if (!canCompleteOrder.value) return
+
+  try {
+    processing.value = true
+    clearError()
+
+    console.log('📦 [OrderActions] Completing order:', {
+      orderId: props.order?.id,
+      orderType: props.order?.type,
+      paymentStatus: props.order?.paymentStatus
+    })
+
+    emit('completeOrder')
+    const message =
+      props.order?.type === 'delivery' ? 'Order marked as delivered' : 'Order marked as collected'
+    showSuccess(message)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to complete order'
     showError(message)
   } finally {
     processing.value = false

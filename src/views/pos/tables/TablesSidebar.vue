@@ -157,9 +157,11 @@ const deliveryOrders = computed((): PosOrder[] => {
   return ordersStore.orders
     .filter(order => {
       const isDeliveryOrTakeaway = ['takeaway', 'delivery'].includes(order.type)
-      const isNotCompletedOrCancelled = !['cancelled', 'paid'].includes(order.status)
+      const isNotCompleted = !['cancelled', 'delivered', 'collected', 'served'].includes(
+        order.status
+      )
 
-      return isDeliveryOrTakeaway && isNotCompletedOrCancelled
+      return isDeliveryOrTakeaway && isNotCompleted
     })
     .sort((a, b) => {
       // Сортируем по времени создания (старые первыми)

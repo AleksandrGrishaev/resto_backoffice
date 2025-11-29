@@ -98,7 +98,7 @@ const statusConfig = {
   },
   occupied_paid: {
     icon: 'mdi-cash',
-    color: 'primary'
+    color: 'info'
   },
   reserved: {
     icon: 'mdi-calendar-clock',
@@ -193,14 +193,14 @@ const handleClick = () => {
 }
 
 .table-item--occupied-paid {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  border-color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 6%, transparent);
 }
 
 .table-item--occupied-paid:hover {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  box-shadow: 0 8px 24px rgba(163, 149, 233, 0.3);
+  border-color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
+  box-shadow: 0 8px 24px rgba(118, 176, 255, 0.3);
 }
 
 .table-item--reserved {
@@ -215,25 +215,26 @@ const handleClick = () => {
 }
 
 /* === АКТИВНОЕ СОСТОЯНИЕ (выбранный стол) === */
+/* Используем box-shadow для двойной рамки: внутренняя = статус, внешняя = выбран */
 .table-item--active {
-  border-width: 4px;
-  border-color: var(--color-primary) !important;
-  background: color-mix(in srgb, var(--color-primary) 15%, transparent) !important;
-  box-shadow:
-    0 0 0 2px rgba(163, 149, 233, 0.4),
-    0 8px 24px rgba(163, 149, 233, 0.3);
+  border-width: 3px;
+  /* border-color сохраняется из статуса (не переопределяем!) */
   transform: scale(1.05);
+  /* Двойная рамка: 4px фиолетовая (выбран) поверх цветной рамки статуса */
+  box-shadow:
+    0 0 0 4px var(--color-primary),
+    0 8px 24px rgba(163, 149, 233, 0.4);
 }
 
 .table-item--active:hover {
   box-shadow:
-    0 0 0 2px rgba(163, 149, 233, 0.6),
-    0 12px 32px rgba(163, 149, 233, 0.4);
+    0 0 0 4px var(--color-primary),
+    0 12px 32px rgba(163, 149, 233, 0.5);
   transform: scale(1.05) translateY(-2px);
 }
 
 .table-item--active .table-number {
-  color: var(--color-primary);
+  font-weight: 800;
   text-shadow: 0 2px 8px rgba(163, 149, 233, 0.5);
 }
 

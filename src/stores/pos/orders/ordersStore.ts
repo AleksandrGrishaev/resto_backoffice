@@ -513,6 +513,139 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Complete order after payment (for delivery/takeaway orders)
+   *
+   * Workflow:
+   * 1. Verify order is paid and is delivery or takeaway
+   * 2. Set order status to 'delivered' or 'collected' (final status)
+   * 3. Keep order in history with paymentStatus 'paid'
+   */
+  async function completeOrder(orderId: string): Promise<ServiceResponse<PosOrder>> {
+    try {
+      const order = orders.value.find(o => o.id === orderId)
+
+      if (!order) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      if (order.type === 'dine_in') {
+        return { success: false, error: 'Use releaseTable for dine-in orders' }
+      }
+
+      if (order.paymentStatus !== 'paid') {
+        return { success: false, error: 'Order must be fully paid before completing' }
+      }
+
+      console.log('📦 [ordersStore] Completing order:', {
+        orderId,
+        orderType: order.type,
+        currentStatus: order.status,
+        paymentStatus: order.paymentStatus
+      })
+
+      // Update order status to final status based on type
+      if (order.type === 'delivery') {
+        order.status = 'delivered'
+      } else if (order.type === 'takeaway') {
+        order.status = 'collected'
+      }
+      order.updatedAt = new Date().toISOString()
+
+      // Save updated order
+      const updateResponse = await updateOrder(order)
+      if (!updateResponse.success) {
+        return updateResponse
+      }
+
+      console.log('✅ [ordersStore] Order completed successfully:', {
+        orderId,
+        newStatus: order.status
+      })
+
+      return {
+        success: true,
+        data: order
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to complete order'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * Release table after order is paid (manual table release)
+   *
+   * Workflow:
+   * 1. Verify order is paid and is dine-in with a table
+   * 2. Set order status to 'served' (guests have left)
+   * 3. Free the table (set status to 'free', clear currentOrderId)
+   * 4. Keep order in history with paymentStatus 'paid'
+   */
+  async function releaseTable(orderId: string): Promise<ServiceResponse<PosOrder>> {
+    try {
+      const order = orders.value.find(o => o.id === orderId)
+
+      if (!order) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      if (order.type !== 'dine_in') {
+        return { success: false, error: 'Only dine-in orders can release tables' }
+      }
+
+      if (!order.tableId) {
+        return { success: false, error: 'Order has no table assigned' }
+      }
+
+      if (order.paymentStatus !== 'paid') {
+        return { success: false, error: 'Order must be fully paid before releasing table' }
+      }
+
+      console.log('🍽️ [ordersStore] Releasing table:', {
+        orderId,
+        tableId: order.tableId,
+        currentStatus: order.status,
+        paymentStatus: order.paymentStatus
+      })
+
+      // Update order status to 'served' (final status for dine-in)
+      order.status = 'served'
+      order.updatedAt = new Date().toISOString()
+
+      // Save updated order
+      const updateResponse = await updateOrder(order)
+      if (!updateResponse.success) {
+        return updateResponse
+      }
+
+      // Free the table
+      const tableResponse = await tablesStore.freeTable(order.tableId)
+      if (!tableResponse.success) {
+        return {
+          success: false,
+          error: `Failed to free table: ${tableResponse.error}`
+        }
+      }
+
+      console.log('✅ [ordersStore] Table released successfully:', {
+        orderId,
+        tableId: order.tableId,
+        newStatus: order.status
+      })
+
+      return {
+        success: true,
+        data: order
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to release table'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Update order in storage
    * Used by payment system to persist order changes
    */
@@ -838,6 +971,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     removeItemFromBill,
     sendOrderToKitchen,
     closeOrder,
+    releaseTable,
+    completeOrder,
     updateOrder,
     recalculateOrderTotals,
     setFilters,

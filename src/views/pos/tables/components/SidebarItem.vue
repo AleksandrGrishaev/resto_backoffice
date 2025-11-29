@@ -24,6 +24,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PosTable, PosOrder, TableStatus, OrderStatus, OrderType } from '@/stores/pos/types'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+
+// Get ordersStore for checking payment status
+const ordersStore = usePosOrdersStore()
 
 // =============================================
 // PROPS & EMITS
@@ -107,11 +111,36 @@ const displayIcon = computed((): string => {
 })
 
 /**
+ * Display status for table (with payment status check)
+ */
+const tableDisplayStatus = computed(
+  (): 'free' | 'occupied_unpaid' | 'occupied_paid' | 'reserved' => {
+    if (!props.table) return 'free'
+
+    if (props.table.status === 'free') return 'free'
+    if (props.table.status === 'reserved') return 'reserved'
+
+    // For occupied tables, check payment status of associated order
+    if (props.table.status === 'occupied' && props.table.currentOrderId) {
+      const order = ordersStore.orders.find(o => o.id === props.table?.currentOrderId)
+
+      if (order?.paymentStatus === 'paid') {
+        return 'occupied_paid'
+      }
+
+      return 'occupied_unpaid'
+    }
+
+    return 'free'
+  }
+)
+
+/**
  * Цвет иконки
  */
 const iconColor = computed((): string | undefined => {
   if (isTable.value && props.table) {
-    return getTableStatusColor(props.table.status)
+    return getTableStatusColor(tableDisplayStatus.value)
   }
 
   if (isOrder.value && props.order) {
@@ -198,14 +227,15 @@ function getTableStatusIcon(status: TableStatus): string {
 /**
  * Получить цвет статуса стола
  */
-function getTableStatusColor(status: TableStatus): string {
+function getTableStatusColor(status: TableStatus | 'occupied_unpaid' | 'occupied_paid'): string {
   const colors = {
     free: 'success',
+    occupied: 'warning',
     occupied_unpaid: 'warning',
-    occupied_paid: 'primary',
-    reserved: 'info'
+    occupied_paid: 'info',
+    reserved: 'secondary'
   }
-  return colors[status] || 'grey'
+  return colors[status as keyof typeof colors] || 'grey'
 }
 
 /**
