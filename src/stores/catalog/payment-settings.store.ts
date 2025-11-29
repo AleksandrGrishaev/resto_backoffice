@@ -1,8 +1,8 @@
-// src/stores/payment-settings.store.ts
+// src/stores/catalog/payment-settings.store.ts
 import { defineStore } from 'pinia'
 import type { PaymentMethod } from '@/types/payment'
 import type { Tax } from '@/types/tax'
-import { paymentMethodService } from '@/services/payment-method.service'
+import { paymentMethodService } from '@/stores/catalog/payment-methods.service'
 import { taxService } from '@/services/tax.service'
 import { DebugUtils } from '@/utils'
 

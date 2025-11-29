@@ -1,4 +1,4 @@
-<!-- src/views/PaymentSettingsView.vue -->
+<!-- src/views/catalog/PaymentSettingsView.vue -->
 <template>
   <div class="payment-settings-view">
     <div class="settings-toolbar">
@@ -40,13 +40,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { usePaymentSettingsStore } from '@/stores/payment-settings.store'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type { PaymentMethod } from '@/types/payment'
 import type { Tax } from '@/types/tax'
 import { DebugUtils } from '@/utils'
-import PaymentMethodList from '@/components/payment-settings/PaymentMethodList.vue'
+import PaymentMethodList from '@/views/catalog/payment-methods/PaymentMethodList.vue'
 import TaxList from '@/components/payment-settings/TaxList.vue'
-import PaymentMethodDialog from '@/components/payment-settings/PaymentMethodDialog.vue'
+import PaymentMethodDialog from '@/views/catalog/payment-methods/PaymentMethodDialog.vue'
 import TaxDialog from '@/components/payment-settings/TaxDialog.vue'
 
 const MODULE_NAME = 'PaymentSettingsView'

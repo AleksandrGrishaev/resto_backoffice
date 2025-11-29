@@ -40,7 +40,7 @@
 import { computed } from 'vue'
 import type { Tax } from '@/types/tax'
 import { useDialogForm } from '@/composables/useDialogForm'
-import { usePaymentSettingsStore } from '@/stores/payment-settings.store'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 
 const MODULE_NAME = 'TaxDialog'

@@ -22,7 +22,7 @@ import SupplierView from '@/views/supplier_2/SupplierView.vue'
 import CounteragentsView from '@/views/counteragents/CounteragentsView.vue'
 import AccountListView from '@/views/accounts/AccountListView.vue'
 import AccountDetailView from '@/views/accounts/AccountDetailView.vue'
-import PaymentSettingsView from '@/views/PaymentSettingsView.vue'
+import PaymentSettingsView from '@/views/catalog/PaymentSettingsView.vue'
 
 // ===== POS VIEWS =====
 import PosMainView from '@/views/pos/PosMainView.vue'

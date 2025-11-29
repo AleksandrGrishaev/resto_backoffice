@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
-import { usePaymentSettingsStore } from '@/stores/payment-settings.store'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type { PaymentMethod } from '@/types/payment'
 import { useDialogForm } from '@/composables/useDialogForm'
 import type { AccountType } from '@/types/account'

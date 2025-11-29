@@ -1,4 +1,4 @@
-// src/components/payment-settings/PaymentMethodList.vue
+// src/views/catalog/payment-methods/PaymentMethodList.vue
 <template>
   <v-card class="payment-method-list">
     <v-card-title class="text-h6 px-4 py-3">Методы оплаты</v-card-title>

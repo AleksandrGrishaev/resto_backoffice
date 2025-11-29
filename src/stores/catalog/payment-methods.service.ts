@@ -1,5 +1,5 @@
-// src/services/payment-method.service.ts
-import { supabase } from '@/config/supabase'
+// src/stores/catalog/payment-methods.service.ts
+import { supabase } from '@/supabase'
 import type { PaymentMethod, CreatePaymentMethodDto, UpdatePaymentMethodDto } from '@/types/payment'
 import { DebugUtils } from '@/utils'
 

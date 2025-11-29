@@ -102,7 +102,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       }
 
       // ✅ Sprint: Get payment method mapping to find accountId
-      const { paymentMethodService } = await import('@/services/payment-method.service')
+      const { paymentMethodService } = await import('@/stores/catalog/payment-methods.service')
       const paymentMethodMapping = await paymentMethodService.getByCode(method)
 
       if (!paymentMethodMapping) {
