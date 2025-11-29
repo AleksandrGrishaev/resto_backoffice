@@ -1,7 +1,7 @@
 // src/views/catalog/payment-methods/PaymentMethodList.vue
 <template>
   <v-card class="payment-method-list">
-    <v-card-title class="text-h6 px-4 py-3">Методы оплаты</v-card-title>
+    <v-card-title class="text-h6 px-4 py-3">Payment Methods</v-card-title>
 
     <v-list class="py-2">
       <v-list-item
@@ -26,7 +26,7 @@
               variant="flat"
               class="mr-2"
             >
-              Неактивен
+              Inactive
             </v-chip>
 
             <v-btn
@@ -44,7 +44,7 @@
 
       <v-list-item v-if="methods.length === 0">
         <v-list-item-title class="text-center text-medium-emphasis">
-          Нет методов оплаты
+          No payment methods
         </v-list-item-title>
       </v-list-item>
     </v-list>

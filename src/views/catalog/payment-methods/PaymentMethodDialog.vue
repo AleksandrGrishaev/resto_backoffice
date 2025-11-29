@@ -1,7 +1,7 @@
 <template>
   <base-dialog
     :model-value="modelValue"
-    :title="method ? 'Редактировать метод оплаты' : 'Новый метод оплаты'"
+    :title="method ? 'Edit Payment Method' : 'New Payment Method'"
     :loading="loading"
     :disabled="!isFormValid"
     @update:model-value="emit('update:modelValue', $event)"
@@ -11,27 +11,27 @@
     <v-form ref="form" v-model="formState.isValid" @submit.prevent>
       <v-text-field
         v-model="formData.name"
-        label="Название"
-        :rules="[v => !!v || 'Обязательное поле']"
+        label="Name"
+        :rules="[v => !!v || 'Required field']"
         required
       />
 
       <v-select
         v-model="formData.type"
-        label="Тип"
+        label="Type"
         :items="accountTypes"
-        :rules="[v => !!v || 'Обязательное поле']"
+        :rules="[v => !!v || 'Required field']"
         required
       />
 
       <v-switch
         v-model="formData.requiresDetails"
-        label="Требуются детали"
+        label="Requires details"
         color="primary"
         hide-details
       />
 
-      <v-switch v-model="formData.isActive" label="Активен" color="primary" hide-details />
+      <v-switch v-model="formData.isActive" label="Active" color="primary" hide-details />
     </v-form>
   </base-dialog>
 </template>
@@ -47,10 +47,10 @@ import type { AccountType } from '@/types/account'
 const MODULE_NAME = 'PaymentMethodDialog'
 
 const accountTypes = [
-  { title: 'Наличные', value: 'cash' },
-  { title: 'Банковская карта', value: 'card' },
-  { title: 'Банковский счет', value: 'bank' },
-  { title: 'Электронный кошелек', value: 'ewallet' },
+  { title: 'Cash', value: 'cash' },
+  { title: 'Bank Card', value: 'card' },
+  { title: 'Bank Account', value: 'bank' },
+  { title: 'E-Wallet', value: 'ewallet' },
   { title: 'Gojek', value: 'gojeck' },
   { title: 'Grab', value: 'grab' }
 ] as const

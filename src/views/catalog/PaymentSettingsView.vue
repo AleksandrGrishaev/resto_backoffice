@@ -5,13 +5,13 @@
       <!-- Payment Methods Section -->
       <div class="settings-toolbar__section">
         <v-btn color="primary" prepend-icon="mdi-plus" @click="showPaymentMethodDialog">
-          Добавить метод оплаты
+          Add Payment Method
         </v-btn>
       </div>
 
       <!-- Tax Section -->
       <div class="settings-toolbar__section">
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="showTaxDialog">Добавить налог</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="showTaxDialog">Add Tax</v-btn>
       </div>
     </div>
 
