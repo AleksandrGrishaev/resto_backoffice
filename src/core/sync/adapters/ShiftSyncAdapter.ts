@@ -176,9 +176,24 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
   }
 
   async validate(shift: PosShift): Promise<boolean> {
-    console.log(`🔍 Validating shift ${shift.shiftNumber} for sync:`, {
+    console.log(`🔍 Validating shift ${shift.shiftNumber} for sync`)
+
+    // ✅ NEW: Log detailed shift state
+    const cashMethod = shift.paymentMethods.find(pm => pm.methodType === 'cash')
+    const cardMethod = shift.paymentMethods.find(pm => pm.methodType === 'card')
+    const qrMethod = shift.paymentMethods.find(pm => pm.methodType === 'qr')
+
+    console.log(`📊 Shift details:`, {
       status: shift.status,
-      syncedToAccount: shift.syncedToAccount
+      syncedToAccount: shift.syncedToAccount,
+      totalSales: shift.totalSales,
+      paymentMethods: {
+        cash: cashMethod?.amount || 0,
+        card: cardMethod?.amount || 0,
+        qr: qrMethod?.amount || 0
+      },
+      corrections: shift.corrections?.length || 0,
+      expenseOperations: shift.expenseOperations?.length || 0
     })
 
     // Check if shift is completed
@@ -189,8 +204,24 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
     // Check if already synced
     if (shift.syncedToAccount) {
-      console.warn('⚠️ Shift validation failed: already synced')
+      console.warn('⚠️ Shift validation failed: already synced', {
+        syncedAt: shift.syncedAt,
+        accountTransactionIds: shift.accountTransactionIds
+      })
       return false
+    }
+
+    // ✅ CRITICAL: Check payment methods have values
+    const totalPayments = shift.paymentMethods.reduce((sum, pm) => sum + pm.amount, 0)
+    if (totalPayments === 0 && shift.totalSales > 0) {
+      console.error('❌ Shift validation failed: payment_methods have no amounts!', {
+        totalSales: shift.totalSales,
+        paymentMethodsTotal: totalPayments,
+        paymentMethods: shift.paymentMethods
+      })
+      // ✅ Don't fail validation, but log warning
+      // This is a data corruption issue that needs separate fix
+      console.warn('⚠️ Continuing sync despite payment_methods issue...')
     }
 
     // Check if account store is available
@@ -198,13 +229,18 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
     const accountsCount = accountStore.accounts?.length || 0
 
     console.log(`💰 Account Store check:`, {
-      accountsAvailable: accountsCount,
-      hasAccounts: accountsCount > 0
+      initialized: !!accountStore.accounts,
+      accountsCount,
+      hasMainCashRegister: accountStore.accounts?.some(a => a.id === 'acc_1')
     })
 
     if (accountsCount === 0) {
-      console.warn('⚠️ Shift validation failed: account store not initialized', {
-        accountsCount
+      console.error('❌ Shift validation failed: Account Store not initialized', {
+        accountsCount,
+        accountStoreState: {
+          accounts: accountStore.accounts,
+          initialized: accountStore.initialized
+        }
       })
       return false
     }

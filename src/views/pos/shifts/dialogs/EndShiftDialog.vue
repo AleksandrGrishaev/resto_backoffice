@@ -23,6 +23,17 @@
 
       <!-- Content -->
       <v-card-text v-if="currentShift && shiftReport" class="pa-4">
+        <!-- ✅ NEW: Account Store Warning -->
+        <div v-if="!isAccountStoreReady" class="mb-4">
+          <v-alert color="error" variant="tonal">
+            <div class="font-weight-bold mb-2">Account Store Not Ready</div>
+            <div>Account Store is not initialized. Shift cannot be closed until it's ready.</div>
+            <div v-if="accountStoreError" class="mt-2 text-caption">
+              {{ accountStoreError }}
+            </div>
+          </v-alert>
+        </div>
+
         <!-- Validation Warnings -->
         <div v-if="validationWarnings.length > 0" class="mb-4">
           <v-alert color="warning" variant="tonal">
@@ -273,6 +284,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useShiftsComposables } from '@/stores/pos/shifts/composables'
+import { useAccountStore } from '@/stores/account'
 import type {
   EndShiftDto,
   ShiftCorrection,
@@ -299,6 +311,7 @@ const emit = defineEmits<{
 // Stores
 const shiftsStore = useShiftsStore()
 const paymentsStore = usePosPaymentsStore()
+const accountStore = useAccountStore()
 const {
   formatShiftDuration,
   formatCurrency,
@@ -310,6 +323,7 @@ const {
 const dialog = ref(props.modelValue)
 const loading = ref(false)
 const showAddCorrection = ref(false)
+const accountStoreError = ref('')
 
 const form = ref<Omit<EndShiftDto, 'shiftId' | 'performedBy'>>({
   endingCash: 0,
@@ -352,7 +366,14 @@ const validationCheck = computed(() =>
 
 const validationWarnings = computed(() => validationCheck.value.warnings || [])
 
-const canEndShift = computed(() => validationCheck.value.canEnd && form.value.endingCash > 0)
+// ✅ NEW: Check if Account Store is ready
+const isAccountStoreReady = computed(() => {
+  return accountStore.accounts && accountStore.accounts.length > 0
+})
+
+const canEndShift = computed(
+  () => validationCheck.value.canEnd && form.value.endingCash > 0 && isAccountStoreReady.value
+)
 
 // ✅ FIX: Get real payments for this shift
 const shiftPayments = computed(() => {
@@ -527,11 +548,48 @@ function removeCorrection(index: number) {
 }
 
 async function endShift() {
-  if (!currentShift.value || !canEndShift.value) return
+  if (!currentShift.value) return
+
+  // ✅ NEW: Validate Account Store before proceeding
+  if (!isAccountStoreReady.value) {
+    console.error('❌ Cannot close shift: Account Store not initialized')
+    accountStoreError.value = 'Account Store is not ready. Attempting to initialize...'
+
+    // Try to initialize
+    console.log('🔄 Attempting to initialize Account Store...')
+    try {
+      await accountStore.initializeStore()
+
+      if (!isAccountStoreReady.value) {
+        console.error('❌ Account Store initialization failed')
+        accountStoreError.value =
+          'Account Store failed to initialize. Please refresh the page and try again.'
+        return
+      }
+
+      console.log('✅ Account Store initialized successfully')
+      accountStoreError.value = ''
+    } catch (error) {
+      console.error('❌ Error initializing Account Store:', error)
+      accountStoreError.value =
+        'Failed to initialize Account Store. Please refresh the page and try again.'
+      return
+    }
+  }
+
+  if (!canEndShift.value) return
 
   loading.value = true
 
   try {
+    // ✅ NEW: Log state before closing
+    console.log('📊 Closing shift with state:', {
+      shiftId: currentShift.value.id,
+      totalSales: currentShift.value.totalSales,
+      paymentMethods: currentShift.value.paymentMethods,
+      accountStoreAccounts: accountStore.accounts?.length || 0
+    })
+
     const performer: TransactionPerformer = {
       type: 'user',
       id: currentShift.value.cashierId,
@@ -564,10 +622,12 @@ async function endShift() {
       // TODO: Add toast notification
     } else {
       console.error('❌ Failed to end shift:', result.error)
+      accountStoreError.value = result.error || 'Failed to end shift'
       throw new Error(result.error || 'Failed to end shift')
     }
   } catch (error) {
     console.error('❌ Error ending shift:', error)
+    accountStoreError.value = error instanceof Error ? error.message : 'Failed to end shift'
     // TODO: Show error dialog or toast
   } finally {
     loading.value = false

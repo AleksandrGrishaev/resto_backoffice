@@ -93,10 +93,33 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       const shiftsStore = useShiftsStore()
       const currentShift = shiftsStore.currentShift
 
-      // Warn if no active shift
-      if (!currentShift) {
-        console.warn('⚠️ [paymentsStore] Processing payment without active shift')
+      // ✅ CRITICAL: BLOCK payment if no active shift
+      if (!currentShift || currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot process payment: No active shift. Please start a shift first.'
+        }
       }
+
+      // ✅ Sprint: Get payment method mapping to find accountId
+      const { paymentMethodService } = await import('@/services/payment-method.service')
+      const paymentMethodMapping = await paymentMethodService.getByCode(method)
+
+      if (!paymentMethodMapping) {
+        return {
+          success: false,
+          error: `Payment method '${method}' not configured. Please contact administrator.`
+        }
+      }
+
+      if (!paymentMethodMapping.accountId) {
+        return {
+          success: false,
+          error: `Payment method '${method}' is not mapped to an account. Please contact administrator.`
+        }
+      }
+
+      const accountId = paymentMethodMapping.accountId
 
       // 1. Create payment with shiftId
       const paymentData = {
@@ -107,7 +130,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         amount,
         receivedAmount,
         processedBy: 'Current User', // TODO: Get from authStore
-        shiftId: currentShift?.id // 🆕 Add shiftId from current shift
+        shiftId: currentShift.id // ✅ Now guaranteed to exist
       }
 
       const result = await paymentsService.processPayment(paymentData)
@@ -124,19 +147,17 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       // 3. Link payment to order and items
       await linkPaymentToOrder(orderId, payment.id, itemIds)
 
-      // 4. Add transaction to shift (if shift exists)
-      if (currentShift && payment.shiftId) {
-        await shiftsStore.addShiftTransaction(
-          orderId,
-          payment.id,
-          'account_cash', // TODO: Get accountId from payment method
-          amount,
-          `Payment ${payment.paymentNumber} - ${method}`
-        )
+      // 4. Add transaction to shift with correct accountId
+      await shiftsStore.addShiftTransaction(
+        orderId,
+        payment.id,
+        accountId, // ✅ Use accountId from payment method mapping
+        amount,
+        `Payment ${payment.paymentNumber} - ${method}`
+      )
 
-        // ✅ Sprint 7: Update payment methods in shift
-        await shiftsStore.updatePaymentMethods(payment.method, amount)
-      }
+      // ✅ Update payment methods in shift (now guaranteed to work)
+      await shiftsStore.updatePaymentMethods(payment.method, amount)
 
       // 5. 🆕 Record sales transaction (Sprint 2)
       try {
@@ -180,6 +201,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
 
       console.log('💳 Payment processed:', payment.paymentNumber, {
         shiftId: payment.shiftId,
+        accountId,
         amount,
         method
       })
@@ -204,6 +226,18 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     amount?: number
   ): Promise<ServiceResponse<PosPayment>> {
     try {
+      // ✅ CRITICAL: Check for active shift before processing refund
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+      const currentShift = shiftsStore.currentShift
+
+      if (!currentShift || currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot process refund: No active shift. Please start a shift first.'
+        }
+      }
+
       // Find original payment
       const originalPayment = payments.value.find(p => p.id === originalPaymentId)
       if (!originalPayment) {

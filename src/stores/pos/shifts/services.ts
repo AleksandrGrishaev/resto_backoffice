@@ -313,7 +313,13 @@ export class ShiftsService {
    * Sprint 7: Updates in Supabase + localStorage
    * ИСПРАВЛЕНО: Не перезагружает смены, просто обновляет переданную смену
    */
-  async updateShift(shiftId: string, shift: PosShift): Promise<ServiceResponse<PosShift>> {
+  async updateShift(
+    shiftId: string,
+    shift: PosShift,
+    retryCount: number = 0
+  ): Promise<ServiceResponse<PosShift>> {
+    const MAX_RETRIES = 3
+
     try {
       const updatedShift: PosShift = {
         ...shift,
@@ -325,10 +331,12 @@ export class ShiftsService {
         const supabaseUpdate = toSupabaseUpdate(updatedShift)
 
         try {
-          await executeSupabaseMutation(async () => {
-            const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shiftId)
-            if (error) throw error
-          }, 'ShiftsService.updateShift')
+          // ✅ SIMPLIFIED: Remove optimistic locking to avoid infinite loops
+          // Just update the shift - conflicts are rare and localStorage is source of truth
+          const { error } = await supabase.from('shifts').update(supabaseUpdate).eq('id', shiftId)
+
+          if (error) throw error
+
           console.log('✅ Смена обновлена в Supabase:', shiftId)
         } catch (error) {
           console.warn(
@@ -533,34 +541,100 @@ export class ShiftsService {
         throw new Error('Shift not found')
       }
 
-      console.log(`📊 Current payment methods:`, shift.paymentMethods)
+      // ✅ NEW: Log current state BEFORE update
+      console.log(`📊 Payment methods BEFORE update:`, {
+        methods: shift.paymentMethods.map(pm => ({
+          type: pm.methodType,
+          amount: pm.amount,
+          count: pm.count
+        }))
+      })
+
+      const oldTotalSales = shift.totalSales
 
       // Find matching payment method summary by methodType
       const methodSummary = shift.paymentMethods.find(pm => pm.methodType === paymentMethodType)
 
-      if (methodSummary) {
-        // Update existing method
-        const oldAmount = methodSummary.amount
-        methodSummary.amount += amount
-        methodSummary.count += 1
-        console.log(
-          `✅ Updated ${paymentMethodType}: ${oldAmount} → ${methodSummary.amount} (+${amount})`
-        )
-      } else {
-        console.warn(`⚠️ Payment method ${paymentMethodType} not found in shift payment methods`, {
-          availableTypes: shift.paymentMethods.map(pm => pm.methodType)
-        })
+      if (!methodSummary) {
+        // ✅ NEW: Better error with available methods
+        const availableMethods = shift.paymentMethods.map(pm => pm.methodType).join(', ')
+        const error = `Payment method '${paymentMethodType}' not found. Available: ${availableMethods}`
+        console.error(`❌ ${error}`)
+        return { success: false, error }
       }
 
-      // Recalculate total sales
-      const oldTotalSales = shift.totalSales
+      // ✅ NEW: Log the specific method being updated
+      console.log(`💰 Updating method '${paymentMethodType}':`, {
+        currentAmount: methodSummary.amount,
+        addingAmount: amount,
+        newAmount: methodSummary.amount + amount
+      })
+
+      // Update amount
+      methodSummary.amount += amount
+
+      // Update count
+      if (!methodSummary.count) {
+        methodSummary.count = 0
+      }
+      methodSummary.count += 1
+
+      // Recalculate total sales and percentages
       shift.totalSales = shift.paymentMethods.reduce((sum, pm) => sum + pm.amount, 0)
       shift.totalTransactions = shift.paymentMethods.reduce((sum, pm) => sum + pm.count, 0)
 
+      // ✅ NEW: Recalculate percentages
+      const totalAmount = shift.paymentMethods.reduce((sum, pm) => sum + pm.amount, 0)
+      shift.paymentMethods.forEach(pm => {
+        pm.percentage = totalAmount > 0 ? (pm.amount / totalAmount) * 100 : 0
+      })
+
+      // ✅ NEW: Log state AFTER update (before save)
+      console.log(`📊 Payment methods AFTER update (before save):`, {
+        methods: shift.paymentMethods.map(pm => ({
+          type: pm.methodType,
+          amount: pm.amount,
+          count: pm.count,
+          percentage: pm.percentage?.toFixed(2)
+        })),
+        totalSales: shift.totalSales
+      })
+
       console.log(`📈 Total sales: ${oldTotalSales} → ${shift.totalSales}`)
 
-      // Update shift
-      await this.updateShift(shiftId, shift)
+      // ✅ CRITICAL: Update shift with updated_at timestamp
+      shift.updatedAt = new Date().toISOString()
+
+      // Update shift (saves to Supabase + localStorage)
+      const updateResult = await this.updateShift(shiftId, shift)
+
+      if (!updateResult.success) {
+        throw new Error(updateResult.error || 'Failed to update shift')
+      }
+
+      // ✅ NEW: Verify the update was saved
+      const verifyResult = await this.loadShifts()
+      if (verifyResult.success && verifyResult.data) {
+        const verifiedShift = verifyResult.data.find(s => s.id === shiftId)
+        if (verifiedShift) {
+          const verifiedMethod = verifiedShift.paymentMethods.find(
+            pm => pm.methodType === paymentMethodType
+          )
+          console.log(`✅ VERIFIED payment method after save:`, {
+            type: paymentMethodType,
+            amount: verifiedMethod?.amount,
+            expectedAmount: methodSummary.amount,
+            matches: verifiedMethod?.amount === methodSummary.amount
+          })
+
+          if (verifiedMethod?.amount !== methodSummary.amount) {
+            console.error(`❌ VERIFICATION FAILED: Amounts don't match!`, {
+              saved: verifiedMethod?.amount,
+              expected: methodSummary.amount
+            })
+          }
+        }
+      }
 
       console.log(
         `✅ Updated payment methods in shift ${shift.shiftNumber}: ${paymentMethodType} +${amount}`

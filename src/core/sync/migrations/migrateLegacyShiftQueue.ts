@@ -69,7 +69,8 @@ export async function migrateLegacyShiftQueue(): Promise<void> {
 
       // Add to new sync queue with remaining attempts
       const remainingAttempts = Math.max(10 - item.attempts, 1) // At least 1 attempt
-      syncService.addToQueue({
+      // ✅ FIX: await addToQueue
+      await syncService.addToQueue({
         entityType: 'shift',
         entityId: shift.id,
         operation: 'update',

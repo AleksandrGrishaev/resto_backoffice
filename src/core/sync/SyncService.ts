@@ -55,14 +55,14 @@ export class SyncService {
 
   // ===== QUEUE MANAGEMENT =====
 
-  addToQueue<T>(params: {
+  async addToQueue<T>(params: {
     entityType: SyncEntityType
     entityId: string
     operation: SyncOperation
     priority: SyncPriority
     data: T
     maxAttempts?: number
-  }): string {
+  }): Promise<string> {
     const item: SyncQueueItem<T> = {
       id: generateId(),
       entityType: params.entityType,
@@ -77,11 +77,10 @@ export class SyncService {
       backoffMultiplier: 2
     }
 
-    // Get current queue and add item
-    this.storage.getQueue().then(queue => {
-      queue.push(item)
-      this.storage.saveQueue(queue)
-    })
+    // ✅ FIX: await the storage operation to avoid race condition
+    const queue = await this.storage.getQueue()
+    queue.push(item)
+    await this.storage.saveQueue(queue)
 
     console.log(`📥 Added ${params.entityType} to sync queue (ID: ${item.id})`)
     return item.id

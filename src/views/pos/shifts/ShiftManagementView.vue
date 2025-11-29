@@ -623,6 +623,13 @@ const handlePaymentRejected = async (paymentId: string) => {
 
 // Sprint 3: Lifecycle hooks
 onMounted(async () => {
+  // ✅ Ensure paymentsStore is initialized (for Shift History view from Backoffice)
+  if (!paymentsStore.initialized) {
+    console.log('📦 [ShiftManagementView] Initializing paymentsStore...')
+    await paymentsStore.initialize()
+    console.log('✅ [ShiftManagementView] PaymentsStore initialized')
+  }
+
   if (currentShift.value) {
     // Load pending payments on mount
     await shiftsStore.loadPendingPayments()

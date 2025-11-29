@@ -173,6 +173,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       loading.value.create = true
       error.value = null
 
+      // ✅ CRITICAL: Check for active shift before creating order
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+
+      if (!shiftsStore.currentShift || shiftsStore.currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot create order: No active shift. Please start a shift first.'
+        }
+      }
+
       const response = await ordersService.createOrder(type, tableId, customerName)
 
       if (response.success && response.data) {
@@ -295,6 +306,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     selectedModifiers?: import('@/stores/menu/types').SelectedModifier[] // NEW: модификаторы из menu system
   ): Promise<ServiceResponse<PosBillItem>> {
     try {
+      // ✅ CRITICAL: Check for active shift before adding items
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+
+      if (!shiftsStore.currentShift || shiftsStore.currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot add items: No active shift. Please start a shift first.'
+        }
+      }
+
       const response = await ordersService.addItemToBill(
         orderId,
         billId,
@@ -335,6 +357,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     quantity: number
   ): Promise<ServiceResponse<PosBillItem>> {
     try {
+      // ✅ CRITICAL: Check for active shift before updating items
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+
+      if (!shiftsStore.currentShift || shiftsStore.currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot update items: No active shift. Please start a shift first.'
+        }
+      }
+
       // Проверяем минимальное количество
       if (quantity < 1) {
         return {
@@ -378,6 +411,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     itemId: string
   ): Promise<ServiceResponse<void>> {
     try {
+      // ✅ CRITICAL: Check for active shift before removing items
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+
+      if (!shiftsStore.currentShift || shiftsStore.currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot remove items: No active shift. Please start a shift first.'
+        }
+      }
+
       const response = await ordersService.removeItemFromBill(itemId)
 
       if (response.success) {

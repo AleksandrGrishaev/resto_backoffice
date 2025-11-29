@@ -44,8 +44,40 @@
       </v-container>
     </div>
 
+    <!-- ✅ CRITICAL: No Active Shift Guard -->
+    <div v-else-if="showMainInterface && !hasActiveShift" class="no-shift-overlay">
+      <v-container fluid class="fill-height">
+        <v-row justify="center" align="center">
+          <v-col cols="12" sm="6">
+            <v-card class="mx-auto" max-width="500">
+              <v-card-title class="text-h5 text-center py-6">
+                <v-icon size="48" color="warning" class="mr-2">mdi-clock-alert-outline</v-icon>
+                <br />
+                No Active Shift
+              </v-card-title>
+              <v-card-text class="text-center pb-2">
+                <p class="text-body-1 mb-4">
+                  You must start a shift before processing orders and payments.
+                </p>
+                <p class="text-medium-emphasis">
+                  Starting a shift helps track your sales, cash flow, and ensures accurate
+                  reporting.
+                </p>
+              </v-card-text>
+              <v-card-actions class="justify-center pb-6">
+                <v-btn color="primary" size="large" @click="goToShiftManagement">
+                  <v-icon left>mdi-play-circle</v-icon>
+                  Start Shift
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-container>
+    </div>
+
     <!-- Основной POS интерфейс -->
-    <PosLayout v-else-if="showMainInterface">
+    <PosLayout v-else-if="showMainInterface && hasActiveShift">
       <!-- Sidebar: Tables and Orders -->
       <template #sidebar>
         <TablesSidebar :has-unsaved-changes="hasUnsavedChanges" @select="handleOrderSelect" />
@@ -82,6 +114,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router' // ✅ ADDED for navigation
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosStore } from '@/stores/pos'
@@ -98,9 +131,10 @@ import OrderSection from './order/OrderSection.vue'
 const MODULE_NAME = 'PosMainView'
 
 // =============================================
-// STORES
+// STORES & ROUTER
 // =============================================
 
+const router = useRouter() // ✅ ADDED
 const tablesStore = usePosTablesStore()
 const ordersStore = usePosOrdersStore()
 const posStore = usePosStore()
@@ -175,6 +209,13 @@ const hasUnsavedChanges = computed(() => {
  * Текущая смена
  */
 const currentShift = computed(() => shiftsStore.currentShift)
+
+/**
+ * ✅ CRITICAL: Есть ли активная смена
+ */
+const hasActiveShift = computed(() => {
+  return shiftsStore.currentShift?.status === 'active'
+})
 
 /**
  * Есть ли активный заказ
@@ -253,6 +294,13 @@ const initializePOS = async (): Promise<void> => {
  */
 const retryInitialization = (): void => {
   initializePOS()
+}
+
+/**
+ * ✅ CRITICAL: Перейти к управлению сменами
+ */
+const goToShiftManagement = (): void => {
+  router.push('/pos/shifts')
 }
 
 // СУЩЕСТВУЮЩИЕ МЕТОДЫ (сохранены без изменений)

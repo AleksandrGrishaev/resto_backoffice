@@ -175,7 +175,8 @@ export const useShiftsStore = defineStore('posShifts', () => {
       const { useSyncService } = await import('@/core/sync/SyncService')
       const syncService = useSyncService()
 
-      syncService.addToQueue({
+      // ✅ FIX: await addToQueue to avoid race condition
+      await syncService.addToQueue({
         entityType: 'shift',
         entityId: closedShift.id,
         operation: 'update',
