@@ -22,14 +22,24 @@
       </div>
     </div>
 
-    <!-- No Active Shift Message -->
+    <!-- No Active Shift Message with Start Button -->
     <v-alert v-if="!currentShift" type="warning" variant="tonal" class="mb-4">
-      <div class="d-flex align-center">
-        <v-icon start>mdi-alert</v-icon>
-        <div>
-          <div class="font-weight-bold">No Active Shift</div>
-          <div class="text-caption">Start a shift to view management details</div>
+      <div class="d-flex align-center justify-space-between">
+        <div class="d-flex align-center">
+          <v-icon start>mdi-alert</v-icon>
+          <div>
+            <div class="font-weight-bold">No Active Shift</div>
+            <div class="text-caption">Start a shift to view management details</div>
+          </div>
         </div>
+        <v-btn
+          color="success"
+          variant="flat"
+          prepend-icon="mdi-play-circle"
+          @click="handleStartShift"
+        >
+          Start Shift
+        </v-btn>
       </div>
     </v-alert>
 
@@ -285,6 +295,9 @@
       </v-expansion-panels>
     </template>
 
+    <!-- ✅ NEW: Start Shift Dialog -->
+    <StartShiftDialog v-model="showStartShiftDialog" @shift-started="handleShiftStarted" />
+
     <!-- End Shift Dialog -->
     <EndShiftDialog v-model="showEndShiftDialog" @shift-ended="handleShiftEnded" />
 
@@ -326,6 +339,7 @@ import { useAccountStore } from '@/stores/account'
 import { POS_CASH_ACCOUNT_ID } from '@/stores/account/types'
 import type { PosShift, PosPayment } from '@/stores/pos/types'
 import type { PendingPayment } from '@/stores/account/types'
+import StartShiftDialog from './dialogs/StartShiftDialog.vue'
 import EndShiftDialog from './dialogs/EndShiftDialog.vue'
 import PaymentDetailsDialog from './dialogs/PaymentDetailsDialog.vue'
 import ExpenseOperationDialog from './dialogs/ExpenseOperationDialog.vue'
@@ -357,6 +371,7 @@ const accountStore = useAccountStore()
 
 // State
 const search = ref('')
+const showStartShiftDialog = ref(false) // ✅ NEW: Start Shift dialog
 const showEndShiftDialog = ref(false)
 const showPaymentDetailsDialog = ref(false)
 const selectedPaymentId = ref<string | null>(null)
@@ -506,6 +521,17 @@ const paymentHeaders = [
 // Methods
 const handleBack = () => {
   router.push('/pos')
+}
+
+// ✅ NEW: Handle Start Shift button click
+const handleStartShift = () => {
+  showStartShiftDialog.value = true
+}
+
+// ✅ NEW: Handle shift started event
+const handleShiftStarted = () => {
+  showStartShiftDialog.value = false
+  // Shift is now active, view will update automatically via computed currentShift
 }
 
 const handleEndShift = () => {

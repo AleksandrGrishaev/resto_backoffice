@@ -2,9 +2,147 @@
 
 **Created:** 2025-11-29
 **Priority:** HIGH
-**Status:** Planning
+**Status:** ✅ COMPLETED + BUGFIX
 
 ---
+
+## Bug Fix: Multi-Payment Method Sync (2025-11-29)
+
+### Problem
+
+При закрытии смены транзакции создавались только для CASH метода в основной кассе. Платежи картой и QR-кодом не синхронизировались в их целевые счета.
+
+### Root Cause
+
+Функции `syncShiftToAccount()` в shiftsStore и ShiftSyncAdapter обрабатывали только `cash` метод оплаты:
+
+```typescript
+const cashPaymentMethod = shift.paymentMethods.find(pm => pm.methodType === 'cash')
+const cashReceived = cashPaymentMethod?.amount || 0
+```
+
+### Solution
+
+Обновлена логика синхронизации для обработки ВСЕХ методов оплаты:
+
+1. **Цикл по всем payment methods** в смене
+2. **Маппинг к аккаунтам** через `paymentMethodService.getAll()`
+3. **Корректировки и возвраты** применяются только к POS cash register
+4. **Отдельная транзакция** для каждого метода в его целевой счёт
+
+**Файлы изменены:**
+
+- `src/stores/pos/shifts/shiftsStore.ts` (syncShiftToAccount)
+- `src/core/sync/adapters/ShiftSyncAdapter.ts` (sync method)
+
+**Логика:**
+
+```typescript
+for (const pmSummary of shift.paymentMethods) {
+  const paymentMethod = allPaymentMethods.find(pm => pm.id === pmSummary.methodId)
+  const isCashMethod = paymentMethod.isPosСashRegister
+
+  // Корректировки только для cash
+  let netAmount = isCashMethod
+    ? pmSummary.amount - cashRefunds + totalCorrections
+    : pmSummary.amount
+
+  // Транзакция в целевой счёт метода
+  await accountStore.createOperation({
+    accountId: paymentMethod.accountId,
+    amount: netAmount,
+    description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Income`
+  })
+}
+```
+
+**Результат:**
+
+- ✅ Cash → acc_1 (Main Cash Register) с учётом возвратов и корректировок
+- ✅ Card → acc_3 (Card Terminal) полная сумма
+- ✅ QR/QRIS → acc_2 (Bank Account) полная сумма
+- ✅ Прямые расходы вычитаются из POS cash register
+
+### Second Bug Fix: Payment Methods Not Saved on Shift Close
+
+**Problem:**
+`currentShift.value.paymentMethods` был пустым (все amounts = 0) при закрытии смены, хотя реальные платежи существовали.
+
+**Root Cause:**
+EndShiftDialog вычислял `topPaymentMethods` из реальных платежей, но **не обновлял** `currentShift.value.paymentMethods` перед вызовом `endShift()`.
+
+**Solution:**
+Добавлено обновление `paymentMethods` перед закрытием смены:
+
+```typescript
+// EndShiftDialog.vue:585-593
+currentShift.value.paymentMethods = Array.from(topPaymentMethods.value.values()).map(pm => ({
+  methodId: pm.methodId,
+  methodName: pm.methodName,
+  methodType: pm.methodType,
+  count: pm.count,
+  amount: pm.amount
+}))
+```
+
+**File Changed:**
+
+- `src/views/pos/shifts/dialogs/EndShiftDialog.vue:585-593`
+
+---
+
+## Completed Tasks
+
+✅ **Phase 1: Database Schema Update**
+
+- Создана и применена миграция 020_add_pos_cash_register_flag.sql
+- Добавлено поле is_pos_cash_register с уникальным индексом
+- Создан триггер для автоматического снятия флага с других записей
+- Установлен флаг для 'cash' метода по умолчанию
+
+✅ **Optional Migration**
+
+- Создан файл 021_simplify_payment_type.sql (не применен)
+- Готов для будущего упрощения типов на 'cash' | 'bank'
+
+✅ **Phase 2: TypeScript Types Update**
+
+- Добавлен новый тип PaymentType = 'cash' | 'bank'
+- Обновлен интерфейс PaymentMethod с полем isPosСashRegister
+- Обновлены DTOs (CreatePaymentMethodDto, UpdatePaymentMethodDto)
+- Файл: src/types/payment.ts
+
+✅ **Phase 3: Service Layer Update**
+
+- Добавлено поле is_pos_cash_register в transformFromDb()
+- Добавлено поле в методы create() и update()
+- Добавлен новый метод getPosСashRegister() для получения основной кассы POS
+- Файл: src/stores/catalog/payment-methods.service.ts
+
+✅ **Phase 4: UI Updates**
+
+- Обновлен PaymentMethodDialog.vue:
+  - Упрощенный селектор типа (Cash/Bank)
+  - Добавлен селектор аккаунта с иконками и балансами
+  - Добавлен чекбокс "Use as main POS cash register"
+- Обновлен PaymentMethodList.vue:
+  - Показывается имя связанного аккаунта
+  - Добавлен бейдж "POS Cash" для основной кассы
+- Файлы: src/views/catalog/payment-methods/
+
+✅ **Phase 5: POS Integration Update**
+
+- Добавлена функция getPosCashRegisterAccountId() в shiftsStore
+- Обновлены функции syncShiftToAccount() и loadPendingPayments()
+- Динамическое получение account ID из payment methods вместо хардкода
+- Файл: src/stores/pos/shifts/shiftsStore.ts
+- Файл: src/core/sync/adapters/ShiftSyncAdapter.ts
+
+✅ **Phase 6: Build Verification**
+
+- Успешно прошла сборка проекта (pnpm build)
+- Нет ошибок типизации
+- Все изменения интегрированы корректно
 
 ## Problem Analysis
 

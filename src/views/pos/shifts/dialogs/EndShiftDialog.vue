@@ -582,6 +582,16 @@ async function endShift() {
   loading.value = true
 
   try {
+    // ✅ CRITICAL FIX: Update currentShift paymentMethods from real payments before closing
+    // Convert topPaymentMethods (computed from real payments) to PaymentMethodSummary[]
+    currentShift.value.paymentMethods = Array.from(topPaymentMethods.value.values()).map(pm => ({
+      methodId: pm.methodId,
+      methodName: pm.methodName,
+      methodType: pm.methodType as any, // Will be 'cash' | 'card' | 'qr'
+      count: pm.count,
+      amount: pm.amount
+    }))
+
     // ✅ NEW: Log state before closing
     console.log('📊 Closing shift with state:', {
       shiftId: currentShift.value.id,

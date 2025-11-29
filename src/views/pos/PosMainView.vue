@@ -44,43 +44,15 @@
       </v-container>
     </div>
 
-    <!-- ✅ CRITICAL: No Active Shift Guard -->
-    <div v-else-if="showMainInterface && !hasActiveShift" class="no-shift-overlay">
-      <v-container fluid class="fill-height">
-        <v-row justify="center" align="center">
-          <v-col cols="12" sm="6">
-            <v-card class="mx-auto" max-width="500">
-              <v-card-title class="text-h5 text-center py-6">
-                <v-icon size="48" color="warning" class="mr-2">mdi-clock-alert-outline</v-icon>
-                <br />
-                No Active Shift
-              </v-card-title>
-              <v-card-text class="text-center pb-2">
-                <p class="text-body-1 mb-4">
-                  You must start a shift before processing orders and payments.
-                </p>
-                <p class="text-medium-emphasis">
-                  Starting a shift helps track your sales, cash flow, and ensures accurate
-                  reporting.
-                </p>
-              </v-card-text>
-              <v-card-actions class="justify-center pb-6">
-                <v-btn color="primary" size="large" @click="goToShiftManagement">
-                  <v-icon left>mdi-play-circle</v-icon>
-                  Start Shift
-                </v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-col>
-        </v-row>
-      </v-container>
-    </div>
-
-    <!-- Основной POS интерфейс -->
-    <PosLayout v-else-if="showMainInterface && hasActiveShift">
+    <!-- Основной POS интерфейс (всегда показываем, если инициализирован) -->
+    <PosLayout v-else-if="showMainInterface">
       <!-- Sidebar: Tables and Orders -->
       <template #sidebar>
-        <TablesSidebar :has-unsaved-changes="hasUnsavedChanges" @select="handleOrderSelect" />
+        <TablesSidebar
+          :has-unsaved-changes="hasUnsavedChanges"
+          @select="handleOrderSelect"
+          @error="handleSidebarError"
+        />
       </template>
 
       <!-- Menu Section -->
@@ -109,6 +81,47 @@
         </v-row>
       </v-container>
     </div>
+
+    <!-- ✅ NEW: No Active Shift Dialog (non-blocking) -->
+    <v-dialog v-model="showNoShiftDialog" max-width="500" persistent>
+      <v-card>
+        <v-card-title class="text-h5 text-center py-6 bg-warning">
+          <v-icon size="48" color="white" class="mr-2">mdi-clock-alert-outline</v-icon>
+          <br />
+          <span class="text-white">No Active Shift</span>
+        </v-card-title>
+        <v-card-text class="text-center py-6">
+          <p class="text-body-1 mb-4">
+            You must start a shift before processing orders and payments.
+          </p>
+          <p class="text-medium-emphasis">
+            Starting a shift helps track your sales, cash flow, and ensures accurate reporting.
+          </p>
+        </v-card-text>
+        <v-card-actions class="justify-center pb-6">
+          <v-btn color="grey" variant="text" @click="showNoShiftDialog = false">
+            Continue Without Shift
+          </v-btn>
+          <v-btn color="primary" size="large" @click="goToShiftManagement">
+            <v-icon left>mdi-play-circle</v-icon>
+            Start Shift
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ✅ Snackbar for notifications (same style as ProductsView) -->
+    <v-snackbar
+      v-model="notification.show"
+      :color="notification.color"
+      timeout="5000"
+      location="top right"
+    >
+      {{ notification.message }}
+      <template #actions>
+        <v-btn icon="mdi-close" size="small" @click="notification.show = false" />
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
@@ -151,6 +164,14 @@ const orderSectionRef = ref<InstanceType<typeof OrderSection> | null>(null)
 const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
+const showNoShiftDialog = ref(false) // ✅ NEW: Dialog instead of overlay
+
+// ✅ Snackbar notification system (same pattern as ProductsView)
+const notification = ref({
+  show: false,
+  message: '',
+  color: 'success' as 'success' | 'error' | 'warning' | 'info'
+})
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -209,13 +230,6 @@ const hasUnsavedChanges = computed(() => {
  * Текущая смена
  */
 const currentShift = computed(() => shiftsStore.currentShift)
-
-/**
- * ✅ CRITICAL: Есть ли активная смена
- */
-const hasActiveShift = computed(() => {
-  return shiftsStore.currentShift?.status === 'active'
-})
 
 /**
  * Есть ли активный заказ
@@ -300,7 +314,21 @@ const retryInitialization = (): void => {
  * ✅ CRITICAL: Перейти к управлению сменами
  */
 const goToShiftManagement = (): void => {
-  router.push('/pos/shifts')
+  router.push('/pos/shift-management')
+}
+
+/**
+ * ✅ Show notification to user (same pattern as ProductsView)
+ */
+const showNotification = (
+  message: string,
+  color: 'success' | 'error' | 'warning' | 'info' = 'error'
+): void => {
+  notification.value = {
+    show: true,
+    message,
+    color
+  }
 }
 
 // СУЩЕСТВУЮЩИЕ МЕТОДЫ (сохранены без изменений)
@@ -334,7 +362,21 @@ const handleOrderSelect = async (orderId: string): Promise<void> => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to select order'
     DebugUtils.error(MODULE_NAME, 'Error selecting order', { error: message, orderId })
-    console.error('Failed to select order:', message)
+
+    // ✅ Show error notification to user
+    showNotification(message, 'error')
+  }
+}
+
+/**
+ * ✅ Handle errors from TablesSidebar
+ */
+const handleSidebarError = (message: string, type: 'error' | 'warning' | 'info'): void => {
+  showNotification(message, type)
+
+  // If it's a shift warning, also show the shift dialog
+  if (type === 'warning' && message.includes('shift')) {
+    showNoShiftDialog.value = true
   }
 }
 
@@ -390,8 +432,9 @@ const handleAddItemToOrder = async (
 
     // Проверяем есть ли активный заказ
     if (!currentOrder.value) {
-      console.error('❌ No active order. Please select a table first.')
-      alert('No active order. Please select a table first.')
+      const errorMsg = 'No active order. Please select a table first.'
+      console.error('❌', errorMsg)
+      showNotification(errorMsg, 'warning')
       return
     }
 
@@ -475,8 +518,8 @@ const handleAddItemToOrder = async (
       billName: activeBill.value?.name
     })
 
-    // Показываем уведомление об успехе
-    console.log(`✅ ${item.name} added to ${activeBill.value?.name || 'order'}`)
+    // ✅ Show success notification
+    showNotification(`${item.name} added to ${activeBill.value?.name || 'order'}`, 'success')
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to add item to order'
     DebugUtils.error(MODULE_NAME, 'Error adding item to order', {
@@ -486,10 +529,16 @@ const handleAddItemToOrder = async (
       hasCurrentOrder: !!currentOrder.value,
       currentOrderId: currentOrder.value?.id
     })
-    console.error('Failed to add item to order:', message)
 
-    // Показываем уведомление об ошибке
-    alert(`Error: ${message}`)
+    // ✅ Show user-friendly error notification
+    // Check if it's a shift validation error
+    if (message.includes('No active shift')) {
+      showNotification('⚠️ Please start a shift before adding items to orders', 'warning')
+      // Also show the shift dialog
+      showNoShiftDialog.value = true
+    } else {
+      showNotification(message, 'error')
+    }
   }
 }
 
@@ -524,19 +573,22 @@ watch(
   { deep: true }
 )
 
-// Отслеживание статуса смены
+// ✅ UPDATED: Отслеживание статуса смены с показом диалога
 watch(
   currentShift,
   shift => {
-    if (!shift) {
+    if (!shift && isInitialized.value) {
+      // Только показываем диалог если инициализация завершена
       DebugUtils.warn(MODULE_NAME, 'No active shift detected')
-      console.log('⚠️ No active shift - start shift to continue')
-      // TODO: Показать toast notification
-    } else {
+      console.log('⚠️ No active shift - showing dialog')
+      showNoShiftDialog.value = true
+    } else if (shift) {
       DebugUtils.debug(MODULE_NAME, 'Active shift detected', {
         shiftId: shift.id,
         cashierName: shift.cashierName
       })
+      // Закрываем диалог если смена стала активной
+      showNoShiftDialog.value = false
     }
   },
   { immediate: true } // Проверить сразу при загрузке

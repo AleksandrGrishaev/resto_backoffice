@@ -15,7 +15,21 @@
           <v-icon :icon="getMethodIcon(method.type)" size="24" />
         </template>
 
-        <v-list-item-title>{{ method.name }}</v-list-item-title>
+        <v-list-item-title>
+          {{ method.name }}
+          <v-chip
+            v-if="method.isPosСashRegister"
+            size="x-small"
+            color="primary"
+            variant="flat"
+            class="ml-2"
+          >
+            <v-icon left size="x-small">mdi-cash-register</v-icon>
+            POS Cash
+          </v-chip>
+        </v-list-item-title>
+
+        <v-list-item-subtitle>Account: {{ getAccountName(method.accountId) }}</v-list-item-subtitle>
 
         <template #append>
           <div class="d-flex align-center">
@@ -53,6 +67,7 @@
 
 <script setup lang="ts">
 import type { PaymentMethod } from '@/types/payment'
+import { useAccountStore } from '@/stores/account'
 
 defineProps<{
   methods: PaymentMethod[]
@@ -62,14 +77,20 @@ const emit = defineEmits<{
   edit: [method: PaymentMethod]
 }>()
 
+const accountStore = useAccountStore()
+
 function getMethodIcon(type: PaymentMethod['type']): string {
   const icons: Record<PaymentMethod['type'], string> = {
     cash: 'mdi-cash',
-    card: 'mdi-credit-card',
-    bank: 'mdi-bank',
-    ewallet: 'mdi-wallet'
+    bank: 'mdi-bank'
   }
-  return icons[type] || 'mdi-help-circle'
+  return icons[type] || 'mdi-wallet'
+}
+
+function getAccountName(accountId: string | null): string {
+  if (!accountId) return 'Not assigned'
+  const account = accountStore.accounts.find(a => a.id === accountId)
+  return account?.name || 'Unknown'
 }
 </script>
 

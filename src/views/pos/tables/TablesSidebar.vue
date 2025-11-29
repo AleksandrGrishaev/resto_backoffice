@@ -120,6 +120,7 @@ const ordersStore = usePosOrdersStore()
 
 const emit = defineEmits<{
   select: [orderId: string]
+  error: [message: string, type: 'error' | 'warning' | 'info']
 }>()
 
 // =============================================
@@ -370,7 +371,13 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
       error: message,
       tableId: table.id
     })
-    console.error('Failed to select table:', message)
+
+    // ✅ Emit error to parent for user notification
+    if (message.includes('No active shift')) {
+      emit('error', '⚠️ Please start a shift before creating orders', 'warning')
+    } else {
+      emit('error', message, 'error')
+    }
   }
 }
 

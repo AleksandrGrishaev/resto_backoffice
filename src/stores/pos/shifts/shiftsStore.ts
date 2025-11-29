@@ -73,6 +73,27 @@ export const useShiftsStore = defineStore('posShifts', () => {
   // ===== ACTIONS =====
 
   /**
+   * Get POS cash register account ID from payment methods
+   * Returns the account ID of the payment method marked as POS cash register
+   */
+  async function getPosCashRegisterAccountId(): Promise<string | null> {
+    try {
+      const { paymentMethodService } = await import('@/stores/catalog/payment-methods.service')
+      const posCashRegister = await paymentMethodService.getPosСashRegister()
+
+      if (!posCashRegister || !posCashRegister.accountId) {
+        console.error('❌ No POS cash register configured or no account assigned')
+        return null
+      }
+
+      return posCashRegister.accountId
+    } catch (error) {
+      console.error('❌ Failed to get POS cash register account:', error)
+      return null
+    }
+  }
+
+  /**
    * Загрузить смены
    */
   async function loadShifts(): Promise<ServiceResponse<PosShift[]>> {
@@ -508,19 +529,23 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
     try {
       // Получить платежи из Account Store, требующие подтверждения
-      // Используем POS_CASH_ACCOUNT_ID - ID основной кассы POS системы
-      const { POS_CASH_ACCOUNT_ID } = await import('@/stores/account/types')
+      // Используем POS cash register account из payment methods
+      const posCashAccountId = await getPosCashRegisterAccountId()
+      if (!posCashAccountId) {
+        console.error('❌ No POS cash register configured')
+        return
+      }
 
       const pendingPayments = await accountStore.getPendingPaymentsForConfirmation(
         currentShift.value.id,
-        POS_CASH_ACCOUNT_ID
+        posCashAccountId
       )
 
       // Обновить список ожидающих платежей в смене
       currentShift.value.pendingPayments = pendingPayments.map(p => p.id)
 
       console.log(
-        `✅ Loaded ${pendingPayments.length} pending payments for shift ${currentShift.value.shiftNumber} (account: ${POS_CASH_ACCOUNT_ID})`
+        `✅ Loaded ${pendingPayments.length} pending payments for shift ${currentShift.value.shiftNumber} (account: ${posCashAccountId})`
       )
     } catch (err) {
       console.error('❌ Failed to load pending payments:', err)
@@ -800,14 +825,21 @@ export const useShiftsStore = defineStore('posShifts', () => {
         return { success: false, error }
       }
 
-      const { POS_CASH_ACCOUNT_ID } = await import('@/stores/account/types')
+      // ✅ Get POS cash register account dynamically from payment methods
+      const posCashAccountId = await getPosCashRegisterAccountId()
+      if (!posCashAccountId) {
+        const error = 'No POS cash register configured. Please set up payment methods.'
+        updateShiftSyncError(shift, error)
+        return { success: false, error }
+      }
+
       const transactionIds: string[] = []
 
-      // 1. Рассчитать итоговую статистику смены
-      const cashPaymentMethod = shift.paymentMethods.find(pm => pm.methodType === 'cash')
-      const cashReceived = cashPaymentMethod?.amount || 0
+      // ✅ NEW: Get payment methods service to map payment methods to accounts
+      const { paymentMethodService } = await import('@/stores/catalog/payment-methods.service')
+      const allPaymentMethods = await paymentMethodService.getAll()
 
-      // Рассчитать возвраты
+      // 1. Рассчитать возвраты (применяются только к CASH методу)
       const cashRefunds = shift.corrections
         .filter(c => c.type === 'refund')
         .reduce((sum, c) => sum + c.amount, 0)
@@ -819,32 +851,53 @@ export const useShiftsStore = defineStore('posShifts', () => {
       )
       const totalDirectExpenses = directExpenses.reduce((sum, exp) => sum + exp.amount, 0)
 
-      // Рассчитать корректировки
+      // 3. Рассчитать корректировки (применяются только к CASH методу)
       const totalCorrections = shift.corrections
         .filter(c => c.type === 'cash_adjustment')
         .reduce((sum, c) => sum + c.amount, 0)
 
-      // Чистый доход (cash received - refunds)
-      const netIncome = cashReceived - cashRefunds
-
       console.log(
         `💰 Shift ${shift.shiftNumber} sync stats:
-        - Cash received: ${cashReceived}
+        - Payment methods: ${shift.paymentMethods.length}
         - Cash refunds: ${cashRefunds}
-        - Net income: ${netIncome}
         - Direct expenses: ${totalDirectExpenses}
         - Corrections: ${totalCorrections}`
       )
 
-      // 3. Создать транзакции в acc_1
+      // 4. ✅ NEW: Создать транзакции для ВСЕХ методов оплаты
+      for (const pmSummary of shift.paymentMethods) {
+        if (pmSummary.amount <= 0) continue // Skip empty payment methods
 
-      // Транзакция #1: Итоговый приход за смену
-      if (netIncome > 0) {
+        // Find payment method configuration
+        const paymentMethod = allPaymentMethods.find(pm => pm.id === pmSummary.methodId)
+        if (!paymentMethod || !paymentMethod.accountId) {
+          console.warn(
+            `⚠️ Payment method ${pmSummary.methodName} (${pmSummary.methodId}) has no account mapping, skipping`
+          )
+          continue
+        }
+
+        // Calculate net amount (only for CASH - apply refunds and corrections)
+        let netAmount = pmSummary.amount
+        const isCashMethod = paymentMethod.isPosСashRegister
+
+        if (isCashMethod) {
+          netAmount = pmSummary.amount - cashRefunds + totalCorrections
+          console.log(
+            `  💵 ${pmSummary.methodName}: ${pmSummary.amount} - refunds(${cashRefunds}) + corrections(${totalCorrections}) = ${netAmount}`
+          )
+        } else {
+          console.log(`  💳 ${pmSummary.methodName}: ${pmSummary.amount}`)
+        }
+
+        if (netAmount <= 0) continue // Skip if no income after adjustments
+
+        // Create income transaction for this payment method
         const incomeTransaction = await accountStore.createOperation({
-          accountId: POS_CASH_ACCOUNT_ID,
+          accountId: paymentMethod.accountId,
           type: 'income',
-          amount: netIncome,
-          description: `POS Shift ${shift.shiftNumber} - Net Income`,
+          amount: netAmount,
+          description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Income`,
           performedBy: {
             type: 'user',
             id: shift.cashierId,
@@ -853,13 +906,15 @@ export const useShiftsStore = defineStore('posShifts', () => {
         })
 
         transactionIds.push(incomeTransaction.id)
-        console.log(`✅ Income transaction created: ${incomeTransaction.id}`)
+        console.log(
+          `✅ Income transaction created for ${pmSummary.methodName}: ${incomeTransaction.id} (${netAmount} → ${paymentMethod.accountId})`
+        )
       }
 
-      // Транзакция #2: Прямые расходы (если есть)
+      // 5. ✅ Прямые расходы (вычитаются из POS cash register)
       if (totalDirectExpenses > 0) {
         const expenseTransaction = await accountStore.createOperation({
-          accountId: POS_CASH_ACCOUNT_ID,
+          accountId: posCashAccountId,
           type: 'expense',
           amount: totalDirectExpenses,
           description: `POS Shift ${shift.shiftNumber} - Direct Expenses`,
@@ -878,23 +933,8 @@ export const useShiftsStore = defineStore('posShifts', () => {
         console.log(`✅ Expense transaction created: ${expenseTransaction.id}`)
       }
 
-      // Транзакция #3: Корректировки (если есть)
-      if (totalCorrections !== 0) {
-        const correctionTransaction = await accountStore.createOperation({
-          accountId: POS_CASH_ACCOUNT_ID,
-          type: 'correction',
-          amount: Math.abs(totalCorrections),
-          description: `POS Shift ${shift.shiftNumber} - Cash Corrections (${totalCorrections > 0 ? 'Overage' : 'Shortage'})`,
-          performedBy: {
-            type: 'user',
-            id: shift.cashierId,
-            name: shift.cashierName
-          }
-        })
-
-        transactionIds.push(correctionTransaction.id)
-        console.log(`✅ Correction transaction created: ${correctionTransaction.id}`)
-      }
+      // NOTE: Corrections and refunds are already applied to cash income above (line 885)
+      // No separate transaction needed
 
       // 4. Пометить смену как синхронизированную
       shift.syncedToAccount = true
@@ -922,7 +962,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
       }
 
       console.log(
-        `✅ Sprint 4+5: Shift ${shift.shiftNumber} synced to account ${POS_CASH_ACCOUNT_ID}. Created ${transactionIds.length} transactions.`
+        `✅ Sprint 4+5: Shift ${shift.shiftNumber} synced to account ${posCashAccountId}. Created ${transactionIds.length} transactions.`
       )
 
       return { success: true }

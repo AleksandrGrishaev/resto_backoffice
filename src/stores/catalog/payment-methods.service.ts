@@ -102,6 +102,20 @@ class PaymentMethodService {
   }
 
   /**
+   * Get the main POS cash register payment method
+   * Used for shift management - only one payment method can be the POS cash register
+   */
+  async getPosСashRegister(): Promise<PaymentMethod | null> {
+    try {
+      const methods = await this.getAll()
+      return methods.find(m => m.isPosСashRegister && m.isActive) || null
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch POS cash register', { error })
+      throw error
+    }
+  }
+
+  /**
    * Create new payment method
    */
   async create(dto: CreatePaymentMethodDto): Promise<PaymentMethod> {
@@ -115,6 +129,7 @@ class PaymentMethodService {
           code: dto.code,
           type: dto.type,
           account_id: dto.accountId,
+          is_pos_cash_register: dto.isPosСashRegister || false,
           requires_details: dto.requiresDetails || false,
           display_order: dto.displayOrder || 0,
           icon: dto.icon || null,
@@ -145,7 +160,10 @@ class PaymentMethodService {
       const updateData: any = {}
       if (dto.name !== undefined) updateData.name = dto.name
       if (dto.accountId !== undefined) updateData.account_id = dto.accountId
+      if (dto.type !== undefined) updateData.type = dto.type
       if (dto.isActive !== undefined) updateData.is_active = dto.isActive
+      if (dto.isPosСashRegister !== undefined)
+        updateData.is_pos_cash_register = dto.isPosСashRegister
       if (dto.requiresDetails !== undefined) updateData.requires_details = dto.requiresDetails
       if (dto.displayOrder !== undefined) updateData.display_order = dto.displayOrder
       if (dto.icon !== undefined) updateData.icon = dto.icon
@@ -211,6 +229,7 @@ class PaymentMethodService {
       type: row.type,
       accountId: row.account_id,
       isActive: row.is_active,
+      isPosСashRegister: row.is_pos_cash_register || false,
       requiresDetails: row.requires_details,
       displayOrder: row.display_order,
       icon: row.icon,

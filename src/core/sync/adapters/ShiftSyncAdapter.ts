@@ -9,7 +9,6 @@
 import type { ISyncAdapter, SyncQueueItem, SyncResult, ConflictResolution } from '../types'
 import type { PosShift } from '@/stores/pos/shifts/types'
 import { useAccountStore } from '@/stores/account'
-import { POS_CASH_ACCOUNT_ID } from '@/stores/account/types'
 import { supabase } from '@/supabase'
 import { getSupabaseErrorMessage } from '@/supabase/config'
 import { toSupabaseUpdate } from '@/stores/pos/shifts/supabaseMappers'
@@ -17,6 +16,26 @@ import { ENV } from '@/config/environment'
 
 export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
   entityType = 'shift' as const
+
+  /**
+   * Get POS cash register account ID from payment methods
+   */
+  private async getPosCashRegisterAccountId(): Promise<string | null> {
+    try {
+      const { paymentMethodService } = await import('@/stores/catalog/payment-methods.service')
+      const posCashRegister = await paymentMethodService.getPosСashRegister()
+
+      if (!posCashRegister || !posCashRegister.accountId) {
+        console.error('❌ No POS cash register configured or no account assigned')
+        return null
+      }
+
+      return posCashRegister.accountId
+    } catch (error) {
+      console.error('❌ Failed to get POS cash register account:', error)
+      return null
+    }
+  }
 
   async sync(item: SyncQueueItem<PosShift>): Promise<SyncResult> {
     const shift = item.data
@@ -32,46 +51,79 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         return { success: false, error: 'Shift already synced to account' }
       }
 
+      // Get POS cash register account dynamically
+      const posCashAccountId = await this.getPosCashRegisterAccountId()
+      if (!posCashAccountId) {
+        return {
+          success: false,
+          error: 'No POS cash register configured. Please set up payment methods.'
+        }
+      }
+
       const transactionIds: string[] = []
+
+      // ✅ Get payment methods service to map payment methods to accounts
+      const { paymentMethodService } = await import('@/stores/catalog/payment-methods.service')
+      const allPaymentMethods = await paymentMethodService.getAll()
 
       // ===== CALCULATE SHIFT TOTALS =====
 
-      // 1. Net income from cash payments (cash received - refunds)
-      const cashPaymentMethod = shift.paymentMethods.find(pm => pm.methodType === 'cash')
-      const cashReceived = cashPaymentMethod?.amount || 0
-
+      // 1. Cash refunds (applied only to CASH method)
       const cashRefunds = shift.corrections
         .filter(c => c.type === 'refund')
         .reduce((sum, c) => sum + c.amount, 0)
-
-      const netIncome = cashReceived - cashRefunds
 
       // 2. Direct expenses (completed only)
       const totalDirectExpenses = shift.expenseOperations
         .filter(exp => exp.type === 'direct_expense' && exp.status === 'completed')
         .reduce((sum, exp) => sum + exp.amount, 0)
 
-      // 3. Cash corrections
+      // 3. Cash corrections (applied only to CASH method)
       const totalCorrections = shift.corrections
         .filter(c => c.type === 'cash_adjustment')
         .reduce((sum, c) => sum + c.amount, 0)
 
       console.log(`🔄 Syncing shift ${shift.shiftNumber} to account:
-        - Cash received: ${cashReceived}
+        - Payment methods: ${shift.paymentMethods.length}
         - Cash refunds: ${cashRefunds}
-        - Net income: ${netIncome}
         - Direct expenses: ${totalDirectExpenses}
         - Corrections: ${totalCorrections}`)
 
-      // ===== CREATE TRANSACTIONS IN acc_1 =====
+      // ===== CREATE TRANSACTIONS FOR ALL PAYMENT METHODS =====
 
-      // Transaction #1: Net income (if positive)
-      if (netIncome > 0) {
+      for (const pmSummary of shift.paymentMethods) {
+        if (pmSummary.amount <= 0) continue // Skip empty payment methods
+
+        // Find payment method configuration
+        const paymentMethod = allPaymentMethods.find(pm => pm.id === pmSummary.methodId)
+        if (!paymentMethod || !paymentMethod.accountId) {
+          console.warn(
+            `⚠️ Payment method ${pmSummary.methodName} (${pmSummary.methodId}) has no account mapping, skipping`
+          )
+          continue
+        }
+
+        // Calculate net amount (only for CASH - apply refunds and corrections)
+        let netAmount = pmSummary.amount
+        const isCashMethod = paymentMethod.isPosСashRegister
+
+        if (isCashMethod) {
+          netAmount = pmSummary.amount - cashRefunds + totalCorrections
+          console.log(
+            `  💵 ${pmSummary.methodName}: ${pmSummary.amount} - refunds(${cashRefunds}) + corrections(${totalCorrections}) = ${netAmount}`
+          )
+        } else {
+          console.log(`  💳 ${pmSummary.methodName}: ${pmSummary.amount}`)
+        }
+
+        if (netAmount <= 0) continue // Skip if no income after adjustments
+
+        // Create income transaction for this payment method
         const incomeTransaction = await accountStore.createOperation({
-          accountId: POS_CASH_ACCOUNT_ID,
+          accountId: paymentMethod.accountId,
           type: 'income',
-          amount: netIncome,
-          description: `POS Shift ${shift.shiftNumber} - Net Income`,
+          amount: netAmount,
+          description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Income`,
           performedBy: {
             type: 'user',
             id: shift.cashierId,
@@ -80,13 +132,15 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         })
 
         transactionIds.push(incomeTransaction.id)
-        console.log(`✅ Income transaction created: ${incomeTransaction.id}`)
+        console.log(
+          `✅ Income transaction created for ${pmSummary.methodName}: ${incomeTransaction.id} (${netAmount} → ${paymentMethod.accountId})`
+        )
       }
 
-      // Transaction #2: Direct expenses (if any)
+      // Direct expenses (deducted from POS cash register)
       if (totalDirectExpenses > 0) {
         const expenseTransaction = await accountStore.createOperation({
-          accountId: POS_CASH_ACCOUNT_ID,
+          accountId: posCashAccountId,
           type: 'expense',
           amount: totalDirectExpenses,
           description: `POS Shift ${shift.shiftNumber} - Direct Expenses`,
@@ -105,23 +159,8 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         console.log(`✅ Expense transaction created: ${expenseTransaction.id}`)
       }
 
-      // Transaction #3: Corrections (if non-zero)
-      if (totalCorrections !== 0) {
-        const correctionTransaction = await accountStore.createOperation({
-          accountId: POS_CASH_ACCOUNT_ID,
-          type: 'correction',
-          amount: Math.abs(totalCorrections),
-          description: `POS Shift ${shift.shiftNumber} - Cash Corrections (${totalCorrections > 0 ? 'Overage' : 'Shortage'})`,
-          performedBy: {
-            type: 'user',
-            id: shift.cashierId,
-            name: shift.cashierName
-          }
-        })
-
-        transactionIds.push(correctionTransaction.id)
-        console.log(`✅ Correction transaction created: ${correctionTransaction.id}`)
-      }
+      // NOTE: Corrections and refunds are already applied to cash income above (line 108)
+      // No separate transaction needed
 
       // ===== UPDATE SHIFT WITH SYNC INFO =====
 
