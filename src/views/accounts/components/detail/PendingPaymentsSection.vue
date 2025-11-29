@@ -8,6 +8,17 @@
         <v-chip color="warning" variant="flat" size="small">
           {{ pendingPayments.length }} pending
         </v-chip>
+        <!-- ✅ NEW: Refresh button -->
+        <v-btn
+          icon="mdi-refresh"
+          size="small"
+          variant="text"
+          class="ml-2"
+          @click="$emit('refresh')"
+        >
+          <v-icon>mdi-refresh</v-icon>
+          <v-tooltip activator="parent" location="bottom">Refresh pending payments</v-tooltip>
+        </v-btn>
       </v-card-title>
 
       <v-card-text>
@@ -95,6 +106,7 @@ defineProps<Props>()
 
 defineEmits<{
   (e: 'view-payment', payment: PendingPayment): void
+  (e: 'refresh'): void
 }>()
 
 // Форматирование даты

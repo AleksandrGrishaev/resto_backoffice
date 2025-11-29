@@ -9,16 +9,16 @@ Clean all temporary test data from the database:
 2. Delete sales transactions (linked to orders)
 3. Delete all payments
 4. Delete all orders
-5. Reset all tables to 'available' status
-6. Clear table order references
+5. Delete all shifts (created during testing)
+6. Reset all tables to 'available' status
+7. Clear table order references
 
 Execute the cleanup SQL and show summary of deleted records.
 
-**IMPORTANT:** This only cleans temporary POS data (orders, payments, table status, sales transactions). It does NOT delete:
+**IMPORTANT:** This only cleans temporary POS data (orders, payments, shifts, table status, sales transactions). It does NOT delete:
 
 - Menu items
 - Products
-- Shifts
 - Users
 - Recipes
 - Suppliers
@@ -37,6 +37,7 @@ SELECT
   (SELECT COUNT(*) FROM sales_transactions) as sales_transactions_before,
   (SELECT COUNT(*) FROM payments) as payments_before,
   (SELECT COUNT(*) FROM orders) as orders_before,
+  (SELECT COUNT(*) FROM shifts) as shifts_before,
   (SELECT COUNT(*) FROM tables WHERE status != 'available') as occupied_tables_before;
 
 -- Complete cleanup in correct order (respecting foreign key constraints)
@@ -56,7 +57,10 @@ DELETE FROM payments;
 -- Step 5: Delete all orders
 DELETE FROM orders;
 
--- Step 6: Reset all tables to available status
+-- Step 6: Delete all shifts
+DELETE FROM shifts;
+
+-- Step 7: Reset all tables to available status
 UPDATE tables
 SET status = 'available',
     current_order_id = NULL,
@@ -69,6 +73,7 @@ SELECT
   (SELECT COUNT(*) FROM sales_transactions) as sales_transactions_after,
   (SELECT COUNT(*) FROM orders) as orders_after,
   (SELECT COUNT(*) FROM payments) as payments_after,
+  (SELECT COUNT(*) FROM shifts) as shifts_after,
   (SELECT COUNT(*) FROM tables WHERE status = 'available') as available_tables,
   (SELECT COUNT(*) FROM tables WHERE status != 'available') as occupied_tables,
   (SELECT COUNT(*) FROM tables) as total_tables;
@@ -84,6 +89,8 @@ The cleanup respects the following dependency chain:
 recipe_write_offs ←→ sales_transactions → orders → payments
                                               ↓
                                           tables (current_order_id)
+
+shifts (independent, no FK dependencies)
 ```
 
-**Note:** There's a circular dependency between `recipe_write_offs` and `sales_transactions`, so we first clear the reference in `sales_transactions` before deleting.
+**Note:** There's a circular dependency between `recipe_write_offs` and `sales_transactions`, so we first clear the reference in `sales_transactions` before deleting. Shifts can be deleted independently as they have no foreign key dependencies with other temporary data.

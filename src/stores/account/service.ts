@@ -304,7 +304,50 @@ export class PaymentService {
     }
   }
 
-  async processPayment(data: ProcessPaymentDto): Promise<void> {
+  /**
+   * ✅ Sprint 8: Assign payment to account
+   * Sets assignedToAccount field and requiresCashierConfirmation if needed
+   */
+  async assignToAccount(paymentId: string, accountId: string): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Assigning payment to account', { paymentId, accountId })
+
+      if (shouldUseSupabase()) {
+        await accountSupabaseService.assignPaymentToAccount(paymentId, accountId)
+        DebugUtils.info(MODULE_NAME, 'Payment assigned successfully')
+      } else {
+        throw new Error('Supabase not available - cannot assign payment')
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to assign payment:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update an existing payment
+   */
+  async update(paymentId: string, updates: Partial<PendingPayment>): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating payment', { paymentId, updates })
+
+      if (shouldUseSupabase()) {
+        await accountSupabaseService.updatePendingPayment(paymentId, updates)
+        DebugUtils.info(MODULE_NAME, 'Payment updated successfully')
+      } else {
+        throw new Error('Supabase not available - cannot update payment')
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment:', error)
+      throw error
+    }
+  }
+
+  /**
+   * ✅ Sprint 8: Process payment and return transaction ID
+   * ⚠️ FIX: Preserve all payment data in transaction (amount, counteragent, category, etc.)
+   */
+  async processPayment(data: ProcessPaymentDto): Promise<string> {
     try {
       DebugUtils.info(MODULE_NAME, 'Processing payment', data)
 
@@ -313,22 +356,62 @@ export class PaymentService {
         throw new Error('Account not found')
       }
 
-      const actualAmount = data.actualAmount || 0
+      // ✅ FIX: Get original payment to preserve all data
+      const payments = await this.getAll()
+      const payment = payments.find(p => p.id === data.paymentId)
+
+      if (!payment) {
+        throw new Error(`Payment not found: ${data.paymentId}`)
+      }
+
+      // ✅ FIX: Use actualAmount if provided, otherwise use payment.amount
+      const actualAmount = data.actualAmount !== undefined ? data.actualAmount : payment.amount
+
       if (account.balance < actualAmount) {
         throw new Error('Insufficient funds')
       }
 
-      // Create expense transaction
-      await transactionService.createTransaction({
+      // ✅ FIX: Determine expense category from payment.category
+      const expenseCategory =
+        payment.category === 'supplier' || payment.category === 'product'
+          ? { type: 'daily' as const, category: 'product' as const }
+          : { type: 'daily' as const, category: 'other' as const }
+
+      // ✅ ENHANCEMENT: Build detailed description with order/payment info
+      let enhancedDescription = data.notes || payment.description
+
+      // Add linked order info if available
+      if (payment.linkedOrders && payment.linkedOrders.length > 0) {
+        const activeOrders = payment.linkedOrders.filter(o => o.isActive)
+        if (activeOrders.length > 0) {
+          const orderNumbers = activeOrders.map(o => o.orderNumber || o.orderId).join(', ')
+          enhancedDescription += ` | Orders: ${orderNumbers}`
+        }
+      }
+
+      // Add invoice number if available
+      if (payment.invoiceNumber) {
+        enhancedDescription += ` | Invoice: ${payment.invoiceNumber}`
+      }
+
+      // ✅ FIX: Create expense transaction with ALL payment data preserved
+      const transaction = await transactionService.createTransaction({
         accountId: data.accountId,
         type: 'expense',
         amount: actualAmount,
-        description: `Payment processing`,
+        description: enhancedDescription,
         performedBy: data.performedBy,
-        expenseCategory: { type: 'daily', category: 'other' }
+        expenseCategory,
+        counteragentId: payment.counteragentId,
+        counteragentName: payment.counteragentName,
+        relatedPaymentId: payment.id
       })
 
-      DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
+      DebugUtils.info(MODULE_NAME, 'Payment processed successfully', {
+        transactionId: transaction.id
+      })
+
+      return transaction.id
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to process payment:', error)
       throw error

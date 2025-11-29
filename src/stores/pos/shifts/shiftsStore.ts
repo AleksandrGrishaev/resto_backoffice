@@ -519,14 +519,10 @@ export const useShiftsStore = defineStore('posShifts', () => {
   // ============ SPRINT 3: EXPENSE OPERATIONS ============
 
   /**
-   * Загрузить ожидающие подтверждения платежи для текущей смены
+   * ✅ Sprint 8: Загрузить ожидающие подтверждения платежи
+   * Работает даже без активной смены
    */
   async function loadPendingPayments(): Promise<void> {
-    if (!currentShift.value) {
-      console.warn('No active shift to load pending payments')
-      return
-    }
-
     try {
       // Получить платежи из Account Store, требующие подтверждения
       // Используем POS cash register account из payment methods
@@ -536,17 +532,24 @@ export const useShiftsStore = defineStore('posShifts', () => {
         return
       }
 
-      const pendingPayments = await accountStore.getPendingPaymentsForConfirmation(
-        currentShift.value.id,
-        posCashAccountId
-      )
+      // Если есть активная смена - привязываем к ней
+      if (currentShift.value) {
+        const pendingPayments = await accountStore.getPendingPaymentsForConfirmation(
+          currentShift.value.id,
+          posCashAccountId
+        )
 
-      // Обновить список ожидающих платежей в смене
-      currentShift.value.pendingPayments = pendingPayments.map(p => p.id)
+        // Обновить список ожидающих платежей в смене
+        currentShift.value.pendingPayments = pendingPayments.map(p => p.id)
 
-      console.log(
-        `✅ Loaded ${pendingPayments.length} pending payments for shift ${currentShift.value.shiftNumber} (account: ${posCashAccountId})`
-      )
+        console.log(
+          `✅ Loaded ${pendingPayments.length} pending payments for shift ${currentShift.value.shiftNumber} (account: ${posCashAccountId})`
+        )
+      } else {
+        // Если нет смены - просто загружаем pending payments в Account Store
+        await accountStore.fetchPayments(true)
+        console.log(`✅ Loaded pending payments (no active shift)`)
+      }
     } catch (err) {
       console.error('❌ Failed to load pending payments:', err)
     }
@@ -589,20 +592,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
       // Добавить в смену
       currentShift.value.expenseOperations.push(expenseOperation)
 
-      // Создать транзакцию в Account Store
-      await accountStore.createOperation({
-        accountId: data.accountId,
-        type: 'expense',
-        amount: data.amount,
-        description: data.description,
-        expenseCategory: {
-          type: 'daily',
-          category: data.category as any
-        },
-        performedBy: data.performedBy,
-        counteragentId: data.counteragentId,
-        counteragentName: data.counteragentName
-      })
+      // ✅ Sprint 8: DO NOT create transaction here!
+      // Transactions will be created during shift sync (ShiftSyncAdapter)
+      // This prevents expense duplication
 
       // Обновить баланс в смене
       const accountBalance = currentShift.value.accountBalances.find(
@@ -663,11 +655,21 @@ export const useShiftsStore = defineStore('posShifts', () => {
       loading.value.sync = true
       error.value = null
 
-      // Подтвердить платеж в Account Store
-      await accountStore.confirmPayment(data.paymentId, data.performedBy, data.actualAmount)
+      // ⚠️ FIX: Get payment data BEFORE confirmation (status will change to 'completed')
+      const payment = accountStore.pendingPayments.find(p => p.id === data.paymentId)
+      if (!payment) {
+        console.warn(`⚠️ Payment ${data.paymentId} not found in pending payments`)
+        return { success: false, error: `Payment ${data.paymentId} not found` }
+      }
+
+      // ✅ Sprint 8: Подтвердить платеж в Account Store (создает транзакцию!)
+      const transactionId = await accountStore.confirmPayment(
+        data.paymentId,
+        data.performedBy,
+        data.actualAmount
+      )
 
       // Создать запись расходной операции в смене
-      const payment = accountStore.pendingPayments.find(p => p.id === data.paymentId)
       if (payment) {
         const expenseOperation: ShiftExpenseOperation = {
           id: `exp-${Date.now()}`,
@@ -684,8 +686,10 @@ export const useShiftsStore = defineStore('posShifts', () => {
           confirmedBy: data.performedBy,
           confirmedAt: new Date().toISOString(),
           relatedPaymentId: data.paymentId,
+          relatedTransactionId: transactionId, // ✅ Sprint 8: Link to transaction
           relatedAccountId: payment.assignedToAccount!,
-          syncStatus: 'synced',
+          syncStatus: 'synced', // Already synced because transaction created
+          lastSyncAt: new Date().toISOString(),
           notes: data.notes,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -710,9 +714,12 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
         // Сохранить смену
         await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+        console.log(
+          `✅ Supplier payment confirmed: ${data.paymentId}, transaction: ${transactionId}, expense: ${expenseOperation.id}`
+        )
       }
 
-      console.log('Expense confirmed:', data.paymentId)
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to confirm expense'

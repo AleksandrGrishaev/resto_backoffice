@@ -5,7 +5,16 @@
       <v-icon icon="mdi-cash-minus" color="error" class="me-3" />
       <span>Expense History</span>
       <v-spacer />
-      <v-chip color="error" variant="tonal">Total: Rp {{ formatCurrency(totalExpenses) }}</v-chip>
+      <div class="d-flex align-center gap-2">
+        <!-- ✅ Sprint 8: Category breakdown -->
+        <v-chip v-if="productExpenses > 0" color="purple" size="small" variant="tonal">
+          Product: Rp {{ formatCurrency(productExpenses) }}
+        </v-chip>
+        <v-chip v-if="otherExpenses > 0" color="blue" size="small" variant="tonal">
+          Other: Rp {{ formatCurrency(otherExpenses) }}
+        </v-chip>
+        <v-chip color="error" variant="tonal">Total: Rp {{ formatCurrency(totalExpenses) }}</v-chip>
+      </div>
     </v-card-title>
 
     <v-divider />
@@ -32,11 +41,20 @@
               <span class="font-weight-medium">
                 {{ expense.counteragentName || 'Direct Expense' }}
               </span>
-              <!-- ✅ Sprint 4: Type indicator -->
+              <!-- ✅ Sprint 8: Category chip -->
+              <v-chip
+                size="x-small"
+                :color="getCategoryColor(expense.category)"
+                variant="tonal"
+                class="ml-2"
+              >
+                {{ getCategoryLabel(expense.category) }}
+              </v-chip>
+              <!-- Type indicator -->
               <v-chip
                 size="x-small"
                 :color="expense.relatedPaymentId ? 'purple' : 'blue'"
-                variant="tonal"
+                variant="flat"
                 class="ml-2"
               >
                 <v-icon
@@ -45,7 +63,7 @@
                   size="x-small"
                   icon="mdi-file-document-check"
                 />
-                {{ expense.relatedPaymentId ? 'Supplier Payment' : 'Direct Expense' }}
+                {{ expense.relatedPaymentId ? 'Supplier' : 'Direct' }}
               </v-chip>
               <!-- Status chip -->
               <v-chip size="x-small" :color="getStatusColor(expense.status)" class="ml-2">
@@ -81,6 +99,23 @@ const totalExpenses = computed(() => {
     .reduce((sum, e) => sum + e.amount, 0)
 })
 
+// ✅ Sprint 8: Category breakdown
+const productExpenses = computed(() => {
+  return props.expenses
+    .filter(
+      e => (e.status === 'completed' || e.status === 'confirmed') && e.category === 'supplier'
+    )
+    .reduce((sum, e) => sum + e.amount, 0)
+})
+
+const otherExpenses = computed(() => {
+  return props.expenses
+    .filter(
+      e => (e.status === 'completed' || e.status === 'confirmed') && e.category !== 'supplier'
+    )
+    .reduce((sum, e) => sum + e.amount, 0)
+})
+
 const sortedExpenses = computed(() => {
   return [...props.expenses].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -94,6 +129,16 @@ function getExpenseIcon(expense: ShiftExpenseOperation): string {
     incoming_transfer: 'mdi-bank-transfer-in'
   }
   return icons[expense.type] || 'mdi-cash'
+}
+
+// ✅ Sprint 8: Category functions
+function getCategoryLabel(category?: string): string {
+  if (category === 'supplier') return 'Product'
+  return 'Other'
+}
+
+function getCategoryColor(category?: string): string {
+  return category === 'supplier' ? 'purple' : 'blue'
 }
 
 function getStatusColor(status: string): string {

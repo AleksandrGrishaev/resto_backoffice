@@ -62,8 +62,24 @@ export function toSupabaseInsert(shift: PosShift): SupabaseShiftInsert {
     })),
     expense_operations: shift.expenseOperations.map(e => ({
       id: e.id,
-      description: e.description || e.type,
+      type: e.type,
+      description: e.description,
       amount: e.amount,
+      category: e.category,
+      counteragentId: e.counteragentId,
+      counteragentName: e.counteragentName,
+      invoiceNumber: e.invoiceNumber,
+      status: e.status,
+      performedBy: e.performedBy,
+      confirmedBy: e.confirmedBy,
+      confirmedAt: e.confirmedAt,
+      rejectionReason: e.rejectionReason,
+      relatedPaymentId: e.relatedPaymentId,
+      relatedTransactionId: e.relatedTransactionId,
+      relatedAccountId: e.relatedAccountId,
+      syncStatus: e.syncStatus,
+      lastSyncAt: e.lastSyncAt,
+      notes: e.notes,
       timestamp: e.createdAt
     })),
     account_balances: shift.accountBalances.map(ab => ({
@@ -144,14 +160,27 @@ export function fromSupabase(supabaseShift: SupabaseShift): PosShift {
   }))
 
   // Convert expense operations back to app format
-  const expenseOperations = supabaseShift.expense_operations.map(e => ({
+  const expenseOperations = supabaseShift.expense_operations.map((e: any) => ({
     id: e.id,
     shiftId: supabaseShift.id,
-    type: e.description as any, // TODO: map properly
+    type: e.type || 'direct_expense',
     description: e.description,
     amount: e.amount,
-    accountId: '',
-    status: 'completed' as const,
+    category: e.category,
+    counteragentId: e.counteragentId,
+    counteragentName: e.counteragentName,
+    invoiceNumber: e.invoiceNumber,
+    status: e.status || 'completed',
+    performedBy: e.performedBy,
+    confirmedBy: e.confirmedBy,
+    confirmedAt: e.confirmedAt,
+    rejectionReason: e.rejectionReason,
+    relatedPaymentId: e.relatedPaymentId,
+    relatedTransactionId: e.relatedTransactionId,
+    relatedAccountId: e.relatedAccountId || '',
+    syncStatus: e.syncStatus || 'pending',
+    lastSyncAt: e.lastSyncAt,
+    notes: e.notes,
     createdAt: e.timestamp,
     updatedAt: e.timestamp
   }))

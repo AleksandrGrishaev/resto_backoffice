@@ -73,20 +73,20 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         .filter(c => c.type === 'refund')
         .reduce((sum, c) => sum + c.amount, 0)
 
-      // 2. Direct expenses (completed only)
-      const totalDirectExpenses = shift.expenseOperations
-        .filter(exp => exp.type === 'direct_expense' && exp.status === 'completed')
-        .reduce((sum, exp) => sum + exp.amount, 0)
-
-      // 3. Cash corrections (applied only to CASH method)
+      // 2. Cash corrections (applied only to CASH method)
       const totalCorrections = shift.corrections
         .filter(c => c.type === 'cash_adjustment')
         .reduce((sum, c) => sum + c.amount, 0)
 
+      // 3. Count expenses for logging
+      const directExpensesCount = shift.expenseOperations.filter(
+        exp => exp.type === 'direct_expense' && exp.status === 'completed'
+      ).length
+
       console.log(`🔄 Syncing shift ${shift.shiftNumber} to account:
         - Payment methods: ${shift.paymentMethods.length}
         - Cash refunds: ${cashRefunds}
-        - Direct expenses: ${totalDirectExpenses}
+        - Direct expenses: ${directExpensesCount} operations (will be synced individually)
         - Corrections: ${totalCorrections}`)
 
       // ===== CREATE TRANSACTIONS FOR ALL PAYMENT METHODS =====
@@ -94,14 +94,18 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
       for (const pmSummary of shift.paymentMethods) {
         if (pmSummary.amount <= 0) continue // Skip empty payment methods
 
-        // Find payment method configuration
-        const paymentMethod = allPaymentMethods.find(pm => pm.id === pmSummary.methodId)
+        // Find payment method configuration by CODE (methodId contains code like 'cash', 'card', 'qr')
+        const paymentMethod = allPaymentMethods.find(pm => pm.code === pmSummary.methodId)
         if (!paymentMethod || !paymentMethod.accountId) {
           console.warn(
             `⚠️ Payment method ${pmSummary.methodName} (${pmSummary.methodId}) has no account mapping, skipping`
           )
           continue
         }
+
+        console.log(
+          `💰 Found payment method: ${paymentMethod.name} (code: ${paymentMethod.code}) → Account: ${paymentMethod.accountId}`
+        )
 
         // Calculate net amount (only for CASH - apply refunds and corrections)
         let netAmount = pmSummary.amount
@@ -137,26 +141,78 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         )
       }
 
-      // Direct expenses (deducted from POS cash register)
-      if (totalDirectExpenses > 0) {
+      // ===== SPRINT 8: CREATE INDIVIDUAL EXPENSE TRANSACTIONS =====
+
+      // Process each expense operation individually
+      for (const expense of shift.expenseOperations) {
+        // Only process completed direct expenses
+        if (expense.status !== 'completed' || expense.type !== 'direct_expense') {
+          console.log(
+            `⏭️ Skipping expense ${expense.id}: status=${expense.status}, type=${expense.type}`
+          )
+          continue
+        }
+
+        // Check if already synced (has relatedTransactionId)
+        if (expense.relatedTransactionId) {
+          console.log(
+            `⏭️ Expense ${expense.id} already has transaction ${expense.relatedTransactionId}, skipping`
+          )
+          transactionIds.push(expense.relatedTransactionId)
+          continue
+        }
+
+        // ✅ FIX: Validate relatedAccountId before creating transaction
+        if (!expense.relatedAccountId || expense.relatedAccountId.trim() === '') {
+          console.error(
+            `❌ Expense ${expense.id} has empty relatedAccountId, skipping. This is a data integrity issue!`
+          )
+          continue
+        }
+
+        // Create individual expense transaction
         const expenseTransaction = await accountStore.createOperation({
-          accountId: posCashAccountId,
+          accountId: expense.relatedAccountId,
           type: 'expense',
-          amount: totalDirectExpenses,
-          description: `POS Shift ${shift.shiftNumber} - Direct Expenses`,
+          amount: expense.amount,
+          description: `${shift.shiftNumber} - ${expense.description}`,
           expenseCategory: {
             type: 'daily',
-            category: 'other'
+            category: expense.category as any
           },
-          performedBy: {
-            type: 'user',
-            id: shift.cashierId,
-            name: shift.cashierName
-          }
+          performedBy: expense.performedBy,
+          counteragentId: expense.counteragentId,
+          counteragentName: expense.counteragentName
         })
 
         transactionIds.push(expenseTransaction.id)
-        console.log(`✅ Expense transaction created: ${expenseTransaction.id}`)
+
+        // Link transaction to expense
+        expense.relatedTransactionId = expenseTransaction.id
+        expense.syncStatus = 'synced'
+        expense.lastSyncAt = new Date().toISOString()
+
+        console.log(
+          `✅ Expense transaction created: ${expenseTransaction.id} for expense ${expense.id} (${expense.amount})`
+        )
+      }
+
+      // Also process supplier payments that might be in expenseOperations
+      const supplierPayments = shift.expenseOperations.filter(
+        exp => exp.status === 'confirmed' && exp.type === 'supplier_payment'
+      )
+
+      if (supplierPayments.length > 0) {
+        console.log(
+          `📦 Found ${supplierPayments.length} supplier payments in shift (already synced via confirmExpense)`
+        )
+
+        // Add their transaction IDs if they exist
+        for (const payment of supplierPayments) {
+          if (payment.relatedTransactionId) {
+            transactionIds.push(payment.relatedTransactionId)
+          }
+        }
       }
 
       // NOTE: Corrections and refunds are already applied to cash income above (line 108)

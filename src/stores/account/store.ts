@@ -589,13 +589,34 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
-  async function processPayment(data: ProcessPaymentDto) {
+  /**
+   * ✅ Sprint 8: Process payment and return transaction ID
+   * ⚠️ FIX: Update payment status to 'completed' after processing
+   */
+  async function processPayment(data: ProcessPaymentDto): Promise<string> {
     try {
       clearError()
       state.value.loading.payments = true
       DebugUtils.info(MODULE_NAME, 'Processing payment', { data })
 
-      await paymentService.processPayment(data)
+      // ✅ FIX: Get payment before processing to check status
+      const payment = state.value.pendingPayments.find(p => p.id === data.paymentId)
+      if (!payment) {
+        throw new Error(`Payment not found: ${data.paymentId}`)
+      }
+
+      const transactionId = await paymentService.processPayment(data)
+
+      // ✅ FIX: Update payment status to 'completed' in service BEFORE fetching
+      await paymentService.update(data.paymentId, {
+        status: 'completed',
+        paidAmount: data.actualAmount !== undefined ? data.actualAmount : payment.amount,
+        paidDate: new Date().toISOString()
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment status updated to completed', {
+        paymentId: data.paymentId
+      })
 
       // Обновляем локальное состояние
       await Promise.all([
@@ -623,7 +644,8 @@ export const useAccountStore = defineStore('account', () => {
         console.warn('Failed to trigger payment processing automation:', error)
       }
 
-      DebugUtils.info(MODULE_NAME, 'Payment processed successfully')
+      DebugUtils.info(MODULE_NAME, 'Payment processed successfully', { transactionId })
+      return transactionId
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to process payment', { error })
       setError(error)
@@ -1021,11 +1043,14 @@ export const useAccountStore = defineStore('account', () => {
    * @param performer - Кто подтверждает (кассир)
    * @param actualAmount - Фактическая сумма (если отличается от запланированной)
    */
+  /**
+   * ✅ Sprint 8: Confirm payment and return transaction ID
+   */
   async function confirmPayment(
     paymentId: string,
     performer: TransactionPerformer,
     actualAmount?: number
-  ): Promise<void> {
+  ): Promise<string> {
     try {
       clearError()
       state.value.loading.payments = true
@@ -1065,17 +1090,31 @@ export const useAccountStore = defineStore('account', () => {
 
       // Обрабатываем платеж (создаем транзакцию)
       // Теперь processPayment увидит confirmationStatus='confirmed' и создаст транзакцию
+
+      // ✅ ENHANCEMENT: Get current shift info for description
+      let shiftInfo = ''
+      try {
+        const { useShiftsStore } = await import('@/stores/pos/shifts')
+        const shiftsStore = useShiftsStore()
+        if (shiftsStore.currentShift) {
+          shiftInfo = ` | Shift: ${shiftsStore.currentShift.shiftNumber}`
+        }
+      } catch (error) {
+        // Shifts store not available (backoffice mode) - skip shift info
+      }
+
       const processData: ProcessPaymentDto = {
         paymentId,
         accountId: payment.assignedToAccount!,
         actualAmount,
-        notes: `Подтверждено кассиром: ${performer.name}`,
+        notes: `Подтверждено кассиром: ${performer.name}${shiftInfo}`,
         performedBy: performer
       }
 
-      await processPayment(processData)
+      const transactionId = await processPayment(processData)
 
-      DebugUtils.info(MODULE_NAME, 'Payment confirmed successfully', { paymentId })
+      DebugUtils.info(MODULE_NAME, 'Payment confirmed successfully', { paymentId, transactionId })
+      return transactionId
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to confirm payment', { error })
       setError(error)

@@ -582,9 +582,17 @@ async function endShift() {
   loading.value = true
 
   try {
+    // ✅ DEBUG: Log source data
+    console.log('🔍 EndShiftDialog - Source data:', {
+      shiftPaymentsCount: shiftPayments.value.length,
+      topPaymentMethodsCount: topPaymentMethods.value.length,
+      topPaymentMethods: topPaymentMethods.value,
+      currentShiftPaymentMethods: currentShift.value.paymentMethods
+    })
+
     // ✅ CRITICAL FIX: Update currentShift paymentMethods from real payments before closing
     // Convert topPaymentMethods (computed from real payments) to PaymentMethodSummary[]
-    currentShift.value.paymentMethods = Array.from(topPaymentMethods.value.values()).map(pm => ({
+    currentShift.value.paymentMethods = topPaymentMethods.value.map(pm => ({
       methodId: pm.methodId,
       methodName: pm.methodName,
       methodType: pm.methodType as any, // Will be 'cash' | 'card' | 'qr'

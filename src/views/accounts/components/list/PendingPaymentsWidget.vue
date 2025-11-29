@@ -109,7 +109,16 @@
             </td>
             <td class="text-center">
               <v-chip
-                v-if="payment.status === 'processing'"
+                v-if="payment.confirmationStatus === 'rejected'"
+                color="error"
+                size="small"
+                variant="tonal"
+              >
+                <v-icon start size="small">mdi-close-circle</v-icon>
+                Отклонен
+              </v-chip>
+              <v-chip
+                v-else-if="payment.status === 'processing'"
                 color="info"
                 size="small"
                 variant="tonal"
@@ -157,11 +166,32 @@ const accountsError = ref<string | null>(null)
 
 // Computed
 const loading = computed(() => accountStore.state.loading.payments)
-const paymentStatistics = computed(() => accountStore.paymentStatistics)
 
 const displayedPayments = computed(() => {
-  // Показываем все pending платежи
-  return accountStore.pendingPayments
+  // ✅ FIX: Показываем платежи которые:
+  // 1. Еще НЕ назначены на account (новые платежи)
+  // 2. ИЛИ были отклонены кассиром (rejected) - нужно повторно обработать
+  return accountStore.pendingPayments.filter(p => {
+    // Если платеж не назначен - показываем
+    if (!p.assignedToAccount && !p.requiresCashierConfirmation) {
+      return true
+    }
+    // Если платеж отклонен - тоже показываем (для повторной обработки)
+    if (p.confirmationStatus === 'rejected') {
+      return true
+    }
+    // Остальные (pending confirmation) - скрываем, показываются только в POS
+    return false
+  })
+})
+
+// ✅ FIX: Статистика на основе ОТФИЛЬТРОВАННЫХ платежей (displayedPayments)
+const paymentStatistics = computed(() => {
+  const total = displayedPayments.value.reduce((sum, p) => sum + p.amount, 0)
+  return {
+    totalAmount: total,
+    totalPending: displayedPayments.value.length
+  }
 })
 
 // Methods

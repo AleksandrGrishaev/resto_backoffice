@@ -55,6 +55,7 @@
         <PendingPaymentsSection
           :pending-payments="pendingPaymentsForAccount"
           @view-payment="viewPaymentDetails"
+          @refresh="refreshPendingPayments"
         />
       </template>
 
@@ -427,6 +428,16 @@ async function handleTransferSuccess() {
 async function handleCorrectionSuccess() {
   dialogs.value.correction = false
   await refreshAfterTransaction()
+}
+
+// ✅ Sprint 8: Refresh pending payments manually
+async function refreshPendingPayments() {
+  try {
+    await accountStore.fetchPayments(true) // force refresh
+    console.log('✅ Pending payments refreshed')
+  } catch (error) {
+    console.error('❌ Failed to refresh pending payments:', error)
+  }
 }
 
 // Utility functions

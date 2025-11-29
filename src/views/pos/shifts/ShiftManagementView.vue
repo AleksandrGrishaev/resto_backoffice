@@ -173,16 +173,6 @@
         </div>
       </v-alert>
 
-      <!-- Sprint 3: Pending Confirmations -->
-      <!-- ✅ Sprint 5: Hide pending payments in read-only mode -->
-      <div v-if="pendingPayments.length > 0 && !readOnly" class="mt-4">
-        <PendingSupplierPaymentsList
-          :pending-payments="pendingPayments"
-          @confirm-payment="handleConfirmPaymentClick"
-          @reject-payment="handleRejectPaymentClick"
-        />
-      </div>
-
       <!-- Sprint 3: Expense Operations -->
       <div class="mt-4">
         <v-card>
@@ -295,6 +285,18 @@
       </v-expansion-panels>
     </template>
 
+    <!-- ✅ Sprint 8: Pending Confirmations (shown even without active shift) -->
+    <div v-if="pendingPayments.length > 0 && !readOnly" class="mt-4">
+      <PendingSupplierPaymentsList
+        :pending-payments="pendingPayments"
+        :has-active-shift="!!currentShift"
+        :loading="loading"
+        @confirm-payment="handleConfirmPaymentClick"
+        @reject-payment="handleRejectPaymentClick"
+        @refresh="refreshPendingPayments"
+      />
+    </div>
+
     <!-- ✅ NEW: Start Shift Dialog -->
     <StartShiftDialog v-model="showStartShiftDialog" @shift-started="handleShiftStarted" />
 
@@ -375,6 +377,7 @@ const showStartShiftDialog = ref(false) // ✅ NEW: Start Shift dialog
 const showEndShiftDialog = ref(false)
 const showPaymentDetailsDialog = ref(false)
 const selectedPaymentId = ref<string | null>(null)
+const loading = ref(false) // ✅ Sprint 8: Loading state for pending payments refresh
 
 // Sprint 3: Expense operations state
 const showExpenseDialog = ref(false)
@@ -469,8 +472,9 @@ const cashAccount = computed(() => {
 })
 
 // Sprint 3: Pending payments requiring confirmation
+// ✅ Sprint 8: Show pending payments even without active shift
 const pendingPayments = computed(() => {
-  if (!currentShift.value || !cashAccount.value) return []
+  if (!cashAccount.value) return []
 
   return accountStore.pendingPayments.filter(
     p =>
@@ -647,6 +651,19 @@ const handlePaymentRejected = async (paymentId: string) => {
   }
 }
 
+// ✅ Sprint 8: Refresh pending payments manually
+const refreshPendingPayments = async () => {
+  loading.value = true
+  try {
+    await shiftsStore.loadPendingPayments()
+    console.log('✅ Pending payments refreshed')
+  } catch (error) {
+    console.error('❌ Failed to refresh pending payments:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
 // Sprint 3: Lifecycle hooks
 onMounted(async () => {
   // ✅ Ensure paymentsStore is initialized (for Shift History view from Backoffice)
@@ -656,10 +673,10 @@ onMounted(async () => {
     console.log('✅ [ShiftManagementView] PaymentsStore initialized')
   }
 
-  if (currentShift.value) {
-    // Load pending payments on mount
-    await shiftsStore.loadPendingPayments()
+  // ✅ Sprint 8: Load pending payments ALWAYS (even without active shift)
+  await shiftsStore.loadPendingPayments()
 
+  if (currentShift.value) {
     // Start expense operations sync (polling every 30 sec)
     // TODO: Replace with WebSocket/Firebase Realtime/SSE
     const syncCallback = async () => {

@@ -604,6 +604,115 @@ export class AccountSupabaseService {
   }
 
   /**
+   * ✅ Sprint 8: Assign payment to account
+   */
+  async assignPaymentToAccount(paymentId: string, accountId: string): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      const { error } = await withTimeout(
+        supabase
+          .from('pending_payments')
+          .update({
+            assigned_to_account: accountId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', paymentId)
+      )
+
+      if (error) {
+        DebugUtils.error(
+          MODULE_NAME,
+          'Failed to assign payment to account',
+          extractErrorDetails(error)
+        )
+        throw error
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Payment assigned to account in Supabase', {
+        paymentId,
+        accountId
+      })
+    } catch (error) {
+      DebugUtils.error(
+        MODULE_NAME,
+        'Error assigning payment to account',
+        extractErrorDetails(error)
+      )
+      throw error
+    }
+  }
+
+  /**
+   * ✅ Sprint 8: Update pending payment
+   * ⚠️ FIX: Support all payment fields (status, paidAmount, paidDate, etc.)
+   */
+  async updatePendingPayment(paymentId: string, updates: Partial<PendingPayment>): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      // Convert app types to Supabase column names
+      const supabaseUpdates: any = {
+        updated_at: new Date().toISOString()
+      }
+
+      if (updates.requiresCashierConfirmation !== undefined) {
+        supabaseUpdates.requires_cashier_confirmation = updates.requiresCashierConfirmation
+      }
+      if (updates.confirmationStatus !== undefined) {
+        supabaseUpdates.confirmation_status = updates.confirmationStatus
+      }
+      if (updates.status !== undefined) {
+        supabaseUpdates.status = updates.status
+      }
+      if (updates.priority !== undefined) {
+        supabaseUpdates.priority = updates.priority
+      }
+      if (updates.assignedToAccount !== undefined) {
+        supabaseUpdates.assigned_to_account = updates.assignedToAccount
+      }
+      // ✅ FIX: Add payment completion fields
+      if (updates.paidAmount !== undefined) {
+        supabaseUpdates.paid_amount = updates.paidAmount
+      }
+      if (updates.paidDate !== undefined) {
+        supabaseUpdates.paid_date = updates.paidDate
+      }
+      if (updates.confirmedBy !== undefined) {
+        supabaseUpdates.confirmed_by = updates.confirmedBy
+      }
+      if (updates.confirmedAt !== undefined) {
+        supabaseUpdates.confirmed_at = updates.confirmedAt
+      }
+
+      const { error } = await withTimeout(
+        supabase.from('pending_payments').update(supabaseUpdates).eq('id', paymentId)
+      )
+
+      if (error) {
+        DebugUtils.error(
+          MODULE_NAME,
+          'Failed to update pending payment',
+          extractErrorDetails(error)
+        )
+        throw error
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Pending payment updated in Supabase', {
+        paymentId,
+        updates: Object.keys(supabaseUpdates)
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error updating pending payment', extractErrorDetails(error))
+      throw error
+    }
+  }
+
+  /**
    * Get payment statistics
    */
   async getPaymentStatistics(): Promise<PaymentStatistics> {
