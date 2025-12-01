@@ -214,6 +214,8 @@ export const usePLReportStore = defineStore('plReport', () => {
           cleaning: sumByExpenseCategory(opexTransactions, 'cleaning'),
           security: sumByExpenseCategory(opexTransactions, 'security'),
           renovation: sumByExpenseCategory(opexTransactions, 'renovation'),
+          trainingEducation: sumByExpenseCategory(opexTransactions, 'training_education'),
+          recipeDevelopment: sumByExpenseCategory(opexTransactions, 'recipe_development'),
           other: sumByExpenseCategory(opexTransactions, 'other')
         },
         total: 0

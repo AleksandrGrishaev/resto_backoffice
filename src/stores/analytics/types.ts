@@ -65,6 +65,8 @@ export interface PLReport {
       cleaning: number
       security: number
       renovation: number
+      trainingEducation: number // Education write-offs (category: 'training_education')
+      recipeDevelopment: number // Recipe testing write-offs (category: 'recipe_development')
       other: number
     }
   }

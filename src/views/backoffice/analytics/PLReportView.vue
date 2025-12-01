@@ -483,6 +483,26 @@
                     </td>
                   </tr>
                   <tr>
+                    <td class="pl-8">Other Goods Write-off</td>
+                    <td class="text-right">
+                      {{
+                        formatIDR(
+                          report.opex.byCategory.trainingEducation +
+                            report.opex.byCategory.recipeDevelopment
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          report.opex.byCategory.trainingEducation +
+                            report.opex.byCategory.recipeDevelopment,
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+                  <tr>
                     <td class="pl-8">Other</td>
                     <td class="text-right">{{ formatIDR(report.opex.byCategory.other) }}</td>
                     <td class="text-right">

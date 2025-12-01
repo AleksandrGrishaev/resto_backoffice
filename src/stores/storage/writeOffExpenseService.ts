@@ -1,4 +1,5 @@
 import { useAccountStore } from '@/stores/account'
+import type { DailyExpenseCategory } from '@/stores/account/types'
 import type { StorageBatch, WriteOffReason, StorageOperationItem } from './types'
 import { doesWriteOffAffectKPI } from './types'
 import type { PreparationBatch } from '@/stores/preparation/types'
@@ -271,8 +272,11 @@ class WriteOffExpenseService {
 
   /**
    * Record expense transaction when manual write-off is created
-   * Only records for KPI-affecting write-offs (expired, spoiled, other)
-   * Non-KPI write-offs (education, test, production_consumption, sales_consumption) are skipped
+   * Maps write-off reasons to appropriate expense categories:
+   * - KPI write-offs (expired, spoiled, other) → inventory_adjustment (Food Cost)
+   * - Education write-offs → training_education (OPEX)
+   * - Test write-offs → recipe_development (OPEX)
+   * - Production/Sales consumption → not recorded (normal operations)
    *
    * @param params - Write-off details
    * @throws Error if no default account found or validation fails
@@ -283,12 +287,34 @@ class WriteOffExpenseService {
     description: string
     items: StorageOperationItem[]
   }): Promise<void> {
-    // Only record if affects KPI (automatically excludes education, test, etc.)
-    if (!doesWriteOffAffectKPI(params.reason)) {
-      console.info(
-        `⏭️  Skipping expense for non-KPI write-off (${params.reason}): ${params.description}`
-      )
-      return
+    // Determine expense category based on write-off reason
+    let expenseCategory: DailyExpenseCategory | null = null
+
+    if (doesWriteOffAffectKPI(params.reason)) {
+      // KPI-affecting write-offs go to Food Cost
+      expenseCategory = 'inventory_adjustment'
+    } else {
+      // Non-KPI write-offs go to OPEX or are skipped
+      switch (params.reason) {
+        case 'education':
+          expenseCategory = 'training_education'
+          break
+        case 'test':
+          expenseCategory = 'recipe_development'
+          break
+        case 'production_consumption':
+        case 'sales_consumption':
+          // Normal operations - don't record as expense
+          console.info(
+            `⏭️  Skipping expense for consumption write-off (${params.reason}): ${params.description}`
+          )
+          return
+        default:
+          console.warn(
+            `⚠️  Unknown write-off reason (${params.reason}), skipping expense recording`
+          )
+          return
+      }
     }
 
     const accountStore = useAccountStore()
@@ -321,7 +347,7 @@ class WriteOffExpenseService {
       description: params.description,
       expenseCategory: {
         type: 'daily',
-        category: 'inventory_adjustment' // For spoilage/shortage in P&L
+        category: expenseCategory // inventory_adjustment, training_education, or recipe_development
       },
       performedBy: {
         type: 'api',
@@ -331,7 +357,7 @@ class WriteOffExpenseService {
     })
 
     console.info(
-      `✅ Recorded write-off expense (${params.reason}): Rp ${params.totalValue.toLocaleString()}`
+      `✅ Recorded write-off expense (${params.reason} → ${expenseCategory}): Rp ${params.totalValue.toLocaleString()}`
     )
   }
 }

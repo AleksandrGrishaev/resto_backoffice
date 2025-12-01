@@ -31,6 +31,8 @@ export type DailyExpenseCategory =
   | 'food_cost' // Negative batch write-offs (expense)
   | 'inventory_variance' // Reconciliation corrections (income/expense)
   | 'inventory_adjustment' // Monthly physical count, spoilage (income/expense)
+  | 'training_education' // Education write-offs (OPEX)
+  | 'recipe_development' // Recipe testing write-offs (OPEX)
   | 'takeaway'
   | 'ayu_cake'
   | 'utilities'
