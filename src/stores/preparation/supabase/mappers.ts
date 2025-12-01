@@ -61,6 +61,14 @@ export function batchToSupabaseUpdate(batch: PreparationBatch): Record<string, a
     status: batch.status,
     is_active: batch.isActive,
     notes: batch.notes || null,
+    // ✅ FIX: Include negative batch fields
+    is_negative: batch.isNegative || false,
+    source_batch_id: batch.sourceBatchId || null,
+    negative_created_at: batch.negativeCreatedAt || null,
+    negative_reason: batch.negativeReason || null,
+    source_operation_type: batch.sourceOperationType || null,
+    affected_recipe_ids: batch.affectedRecipeIds || null,
+    reconciled_at: batch.reconciledAt || null,
     updated_at: batch.updatedAt
   }
 }
