@@ -262,6 +262,14 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'Food Cost Dashboard'
             }
+          },
+          {
+            path: 'negative-inventory',
+            name: 'negative-inventory-report',
+            component: () => import('@/views/backoffice/analytics/NegativeInventoryReport.vue'),
+            meta: {
+              title: 'Negative Inventory Report'
+            }
           }
         ]
       },

@@ -645,6 +645,38 @@ export class StorageService {
   }
 
   /**
+   * Get ALL negative batches (including reconciled) for reporting purposes
+   * This method queries the database directly and does NOT filter by is_active
+   *
+   * @returns Array of all negative batches (both reconciled and unreconciled)
+   */
+  async getAllNegativeBatches(): Promise<StorageBatch[]> {
+    try {
+      const data = await executeSupabaseQuery(
+        supabase
+          .from('storage_batches')
+          .select('*')
+          .eq('warehouse_id', 'warehouse-winter')
+          .eq('is_negative', true)
+          .order('negative_created_at', { ascending: false }),
+        `${MODULE_NAME}.getAllNegativeBatches`
+      )
+
+      const batches = data.map(mapBatchFromDB)
+
+      DebugUtils.info(
+        MODULE_NAME,
+        `Fetched ${batches.length} negative batches (including reconciled)`
+      )
+
+      return batches
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get all negative batches', { error })
+      throw error
+    }
+  }
+
+  /**
    * Get operations from Supabase
    */
   async getOperations(department?: Department | 'all'): Promise<StorageOperation[]> {

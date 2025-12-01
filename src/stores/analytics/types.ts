@@ -36,6 +36,23 @@ export interface PLReport {
     margin: number // Percentage
   }
 
+  // ✅ SPRINT 3: Inventory Adjustments Section
+  inventoryAdjustments: {
+    losses: number // Total losses (always positive number for display)
+    gains: number // Total gains (always positive number for display)
+    total: number // Net impact (negative = losses > gains, positive = gains > losses)
+    byCategory: {
+      spoilage: number // Spoilage/expired items
+      shortage: number // Physical count shortages
+      negativeBatch: number // Negative batch write-offs (food_cost category)
+      surplus: number // Physical count surplus
+      reconciliation: number // Auto-reconciliation corrections (inventory_variance)
+    }
+  }
+
+  // Real Food Cost (Sales COGS + Inventory Adjustments)
+  realFoodCost: number
+
   // Operating Expenses (OPEX)
   opex: {
     total: number
@@ -201,6 +218,76 @@ export interface ExpenseSummary {
     description?: string
     counteragentName?: string
   }>
+}
+
+/**
+ * ✅ SPRINT 3: Negative Inventory Report
+ * Shows all negative batch events and their financial impact
+ */
+export interface NegativeInventoryReport {
+  period: {
+    dateFrom: string
+    dateTo: string
+  }
+
+  // Summary metrics
+  summary: {
+    totalItems: number // Unique items with negative batches
+    totalEvents: number // Total negative batch events
+    totalCostImpact: number // Total cost from negative batches
+    unreconciledBatches: number // Batches still negative (not reconciled)
+  }
+
+  // Detailed breakdown
+  items: Array<{
+    itemId: string
+    itemName: string
+    itemType: 'product' | 'preparation'
+    category: string // Product category or preparation type
+    department: 'kitchen' | 'bar' | 'kitchenAndBar' | 'unknown'
+
+    // Batch information
+    batchId: string
+    batchNumber: string
+    batchDate: string // When batch was created
+
+    // Negative event details
+    eventDate: string // When it went negative
+    negativeQuantity: number // How much negative (absolute value)
+    unit: string
+    costPerUnit: number
+    totalCost: number // negativeQuantity * costPerUnit
+
+    // Status
+    status: 'unreconciled' | 'reconciled' | 'written_off'
+    reconciledAt?: string
+    reconciledBy?: string
+
+    // Context
+    reason: string // Why it went negative (sales, production, etc.)
+    notes?: string
+  }>
+
+  // Aggregations
+  byDepartment: {
+    kitchen: { count: number; cost: number }
+    bar: { count: number; cost: number }
+    kitchenAndBar: { count: number; cost: number }
+  }
+
+  byStatus: {
+    unreconciled: { count: number; cost: number }
+    reconciled: { count: number; cost: number }
+    written_off: { count: number; cost: number }
+  }
+
+  byItemType: {
+    products: { count: number; cost: number }
+    preparations: { count: number; cost: number }
+  }
+
+  // Metadata
+  generatedAt: string
 }
 
 /**

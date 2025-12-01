@@ -208,6 +208,201 @@
 
                   <tr><td colspan="3" class="py-2"></td></tr>
 
+                  <!-- ============================================ -->
+                  <!-- ✅ SPRINT 3: INVENTORY ADJUSTMENTS SECTION -->
+                  <!-- ============================================ -->
+                  <tr class="section-header">
+                    <td colspan="3" class="font-weight-bold text-warning">
+                      INVENTORY ADJUSTMENTS
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="small" class="ml-2">
+                            mdi-information
+                          </v-icon>
+                        </template>
+                        <span>
+                          Inventory variances from negative batches, physical counts, and
+                          reconciliations
+                        </span>
+                      </v-tooltip>
+                    </td>
+                  </tr>
+
+                  <!-- Losses Subsection -->
+                  <tr>
+                    <td class="pl-4 font-weight-medium text-error">Losses:</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                  <tr v-if="report.inventoryAdjustments.byCategory.spoilage > 0">
+                    <td class="pl-8">Spoilage/Expired</td>
+                    <td class="text-right text-error">
+                      {{ formatIDR(report.inventoryAdjustments.byCategory.spoilage) }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          report.inventoryAdjustments.byCategory.spoilage,
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+                  <tr v-if="report.inventoryAdjustments.byCategory.shortage > 0">
+                    <td class="pl-8">Inventory Shortage</td>
+                    <td class="text-right text-error">
+                      {{ formatIDR(report.inventoryAdjustments.byCategory.shortage) }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          report.inventoryAdjustments.byCategory.shortage,
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+                  <tr v-if="report.inventoryAdjustments.byCategory.negativeBatch > 0">
+                    <td class="pl-8">
+                      Negative Batch Variance
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1">
+                            mdi-information
+                          </v-icon>
+                        </template>
+                        <span>Cost from negative batches during sales/production</span>
+                      </v-tooltip>
+                    </td>
+                    <td class="text-right text-error">
+                      {{ formatIDR(report.inventoryAdjustments.byCategory.negativeBatch) }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          report.inventoryAdjustments.byCategory.negativeBatch,
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+
+                  <!-- Gains Subsection -->
+                  <tr>
+                    <td class="pl-4 font-weight-medium text-success">Gains:</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                  <tr v-if="report.inventoryAdjustments.byCategory.surplus > 0">
+                    <td class="pl-8">Inventory Surplus</td>
+                    <td class="text-right text-success">
+                      +{{ formatIDR(report.inventoryAdjustments.byCategory.surplus) }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          report.inventoryAdjustments.byCategory.surplus,
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+                  <tr v-if="report.inventoryAdjustments.byCategory.reconciliation !== 0">
+                    <td class="pl-8">
+                      Reconciliation Corrections
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1">
+                            mdi-information
+                          </v-icon>
+                        </template>
+                        <span>Auto-corrections when new stock reconciles negative batches</span>
+                      </v-tooltip>
+                    </td>
+                    <td class="text-right" :class="reconciliationClass">
+                      {{ report.inventoryAdjustments.byCategory.reconciliation > 0 ? '+' : ''
+                      }}{{
+                        formatIDR(Math.abs(report.inventoryAdjustments.byCategory.reconciliation))
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          Math.abs(report.inventoryAdjustments.byCategory.reconciliation),
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+
+                  <!-- Total Adjustments -->
+                  <tr class="font-weight-bold">
+                    <td>Total Adjustments</td>
+                    <td class="text-right" :class="adjustmentsClass">
+                      {{ formatIDR(report.inventoryAdjustments.total) }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          Math.abs(report.inventoryAdjustments.total),
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+
+                  <!-- Warning Alert for Negative Inventory -->
+                  <tr v-if="hasNegativeInventory">
+                    <td colspan="3" class="pa-2">
+                      <v-alert type="warning" variant="tonal" density="compact">
+                        <div class="d-flex align-center justify-space-between">
+                          <div class="text-caption">
+                            <v-icon size="small" class="mr-1">mdi-alert</v-icon>
+                            Negative inventory detected in this period
+                          </div>
+                          <v-btn
+                            color="warning"
+                            variant="text"
+                            size="x-small"
+                            @click="navigateToNegativeInventoryReport"
+                          >
+                            View Details
+                          </v-btn>
+                        </div>
+                      </v-alert>
+                    </td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-2"></td></tr>
+
+                  <!-- Real Food Cost -->
+                  <tr class="font-weight-bold bg-surface-variant">
+                    <td>
+                      REAL FOOD COST
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" size="small" class="ml-2">
+                            mdi-information
+                          </v-icon>
+                        </template>
+                        <span>Sales COGS + Inventory Adjustments</span>
+                      </v-tooltip>
+                    </td>
+                    <td class="text-right text-error">{{ formatIDR(report.realFoodCost) }}</td>
+                    <td class="text-right">
+                      {{ calculatePercentage(report.realFoodCost, report.revenue.total) }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="3" class="text-caption text-medium-emphasis px-4">
+                      = Sales COGS ({{ formatIDR(report.cogs.total) }}) + Adjustments ({{
+                        formatIDR(report.inventoryAdjustments.total)
+                      }})
+                    </td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-2"></td></tr>
+
                   <!-- OPEX Section -->
                   <tr class="section-header">
                     <td colspan="3" class="font-weight-bold text-error">
@@ -341,10 +536,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePLReportStore } from '@/stores/analytics/plReportStore'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
 import type { PLReport } from '@/stores/analytics/types'
+
+// Router
+const router = useRouter()
 
 // Store
 const plReportStore = usePLReportStore()
@@ -413,6 +612,29 @@ const netProfitClass = computed(() => {
   if (!report.value) return ''
   return report.value.netProfit.amount >= 0 ? 'text-success' : 'text-error'
 })
+
+// ✅ SPRINT 3: Inventory Adjustments computed properties
+const hasNegativeInventory = computed(() => {
+  if (!report.value) return false
+  return report.value.inventoryAdjustments.byCategory.negativeBatch > 0
+})
+
+const adjustmentsClass = computed(() => {
+  if (!report.value) return ''
+  return report.value.inventoryAdjustments.total < 0 ? 'text-error' : 'text-success'
+})
+
+const reconciliationClass = computed(() => {
+  if (!report.value) return ''
+  return report.value.inventoryAdjustments.byCategory.reconciliation > 0
+    ? 'text-success'
+    : 'text-error'
+})
+
+// ✅ SPRINT 3: Navigation to Negative Inventory Report
+function navigateToNegativeInventoryReport() {
+  router.push('/analytics/negative-inventory')
+}
 </script>
 
 <style scoped lang="scss">

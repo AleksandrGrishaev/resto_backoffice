@@ -487,6 +487,11 @@ export const useStorageStore = defineStore('storage', () => {
         }
 
         DebugUtils.info(MODULE_NAME, '✅ Negative batch reconciliation completed')
+
+        // ✅ FIX: Refresh batches after reconciliation to update UI
+        // This ensures reconciled batches show correct status in UI
+        await fetchBalances(data.department)
+        DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after reconciliation')
       } catch (reconciliationError) {
         // Log error but don't fail the receipt creation
         DebugUtils.warn(MODULE_NAME, 'Failed to auto-reconcile negative batches', {

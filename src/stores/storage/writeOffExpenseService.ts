@@ -232,6 +232,41 @@ class WriteOffExpenseService {
 
     return income.reduce((sum, t) => sum + t.amount, 0)
   }
+
+  /**
+   * Delete reconciliation income transaction for a batch
+   * Used when undoing reconciliation - removes the correction income that was created
+   *
+   * @param batchId - UUID of the negative batch
+   * @param productName - Name of the product (for matching description)
+   * @throws Error if deletion fails
+   */
+  async deleteReconciliationIncome(batchId: string, productName: string): Promise<void> {
+    const accountStore = useAccountStore()
+
+    // Find the correction income transaction for this batch
+    // Match by description pattern containing product name and "reconciliation"
+    const transaction = accountStore.transactions.find(
+      t =>
+        t.type === 'income' &&
+        t.expenseCategory?.category === 'inventory_variance' &&
+        t.description.includes(productName) &&
+        t.description.includes('reconciliation')
+    )
+
+    if (!transaction) {
+      console.warn(`⚠️  No reconciliation income found for batch ${batchId}`)
+      // Don't throw - batch can still be undone even if transaction not found
+      return
+    }
+
+    // Delete the transaction
+    await accountStore.deleteTransaction(transaction.id)
+
+    console.info(
+      `✅ Deleted reconciliation income transaction: Rp ${transaction.amount.toLocaleString()} (${productName})`
+    )
+  }
 }
 
 export const writeOffExpenseService = new WriteOffExpenseService()

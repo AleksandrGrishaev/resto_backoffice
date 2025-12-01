@@ -1,6 +1,7 @@
 import { supabase } from '@/supabase'
 import type { StorageBatch } from './types'
 import { generateId } from '@/utils/id'
+import { mapBatchFromDB } from './supabaseMappers'
 
 /**
  * Service for managing negative inventory batches for products
@@ -39,7 +40,8 @@ class NegativeBatchService {
       return null
     }
 
-    return data
+    // ✅ FIX: Use mapper function for snake_case to camelCase conversion
+    return data ? mapBatchFromDB(data) : null
   }
 
   /**
@@ -226,7 +228,8 @@ class NegativeBatchService {
       return []
     }
 
-    return data || []
+    // ✅ FIX: Use mapper function for snake_case to camelCase conversion
+    return data ? data.map(mapBatchFromDB) : []
   }
 
   /**
@@ -237,9 +240,15 @@ class NegativeBatchService {
    * @throws Error if update fails
    */
   async markAsReconciled(batchId: string): Promise<void> {
+    const now = new Date().toISOString()
+
     const { error } = await supabase
       .from('storage_batches')
-      .update({ reconciled_at: new Date().toISOString() })
+      .update({
+        reconciled_at: now,
+        status: 'consumed', // ✅ FIX: Set status to consumed (DB constraint doesn't allow 'reconciled')
+        is_active: false // ✅ FIX: Mark as inactive
+      })
       .eq('id', batchId)
 
     if (error) {
@@ -247,6 +256,44 @@ class NegativeBatchService {
     }
 
     console.info(`✅ Marked negative batch as reconciled: ${batchId}`)
+  }
+
+  /**
+   * Undo reconciliation for a negative batch
+   * Reverts reconciled batch back to active state
+   *
+   * @param batchId - UUID of the negative batch to undo reconciliation
+   * @throws Error if update fails or batch not found
+   */
+  async undoReconciliation(batchId: string): Promise<void> {
+    // Verify batch exists and is reconciled
+    const { data: batch, error: fetchError } = await supabase
+      .from('storage_batches')
+      .select('*')
+      .eq('id', batchId)
+      .eq('is_negative', true)
+      .not('reconciled_at', 'is', null)
+      .single()
+
+    if (fetchError || !batch) {
+      throw new Error(`Reconciled negative batch not found: ${batchId}`)
+    }
+
+    // Revert to active state
+    const { error } = await supabase
+      .from('storage_batches')
+      .update({
+        reconciled_at: null,
+        status: 'active',
+        is_active: true
+      })
+      .eq('id', batchId)
+
+    if (error) {
+      throw new Error(`Failed to undo reconciliation: ${error.message}`)
+    }
+
+    console.info(`✅ Undone reconciliation for negative batch: ${batchId}`)
   }
 
   /**
@@ -289,7 +336,8 @@ class NegativeBatchService {
       return null
     }
 
-    return data
+    // ✅ FIX: Use mapper function for snake_case to camelCase conversion
+    return data ? mapBatchFromDB(data) : null
   }
 
   /**
@@ -348,35 +396,8 @@ class NegativeBatchService {
       `✅ Updated existing negative batch: ${batch.batch_number} (${previousQty} → ${newQty}, +${additionalShortage} shortage)`
     )
 
-    // Convert updated batch from snake_case to camelCase
-    const updatedBatch = updatedBatchData as any
-    return {
-      id: updatedBatch.id,
-      batchNumber: updatedBatch.batch_number,
-      itemId: updatedBatch.item_id,
-      itemType: updatedBatch.item_type,
-      warehouseId: updatedBatch.warehouse_id,
-      initialQuantity: updatedBatch.initial_quantity,
-      currentQuantity: updatedBatch.current_quantity,
-      unit: updatedBatch.unit,
-      costPerUnit: updatedBatch.cost_per_unit,
-      totalValue: updatedBatch.total_value,
-      receiptDate: updatedBatch.receipt_date,
-      expiryDate: updatedBatch.expiry_date,
-      sourceType: updatedBatch.source_type,
-      status: updatedBatch.status,
-      isActive: updatedBatch.is_active,
-      notes: updatedBatch.notes,
-      isNegative: updatedBatch.is_negative,
-      sourceBatchId: updatedBatch.source_batch_id,
-      negativeCreatedAt: updatedBatch.negative_created_at,
-      negativeReason: updatedBatch.negative_reason,
-      sourceOperationType: updatedBatch.source_operation_type,
-      affectedRecipeIds: updatedBatch.affected_recipe_ids,
-      reconciledAt: updatedBatch.reconciled_at,
-      createdAt: updatedBatch.created_at,
-      updatedAt: updatedBatch.updated_at
-    }
+    // ✅ FIX: Use mapper function for snake_case to camelCase conversion
+    return mapBatchFromDB(updatedBatchData)
   }
 }
 

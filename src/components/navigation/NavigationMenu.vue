@@ -158,6 +158,18 @@
             <span>Inventory Valuation</span>
           </template>
         </v-list-item>
+
+        <!-- ✅ SPRINT 3: Negative Inventory Report -->
+        <v-list-item
+          to="/analytics/negative-inventory"
+          prepend-icon="mdi-alert-circle"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Negative Inventory</span>
+          </template>
+        </v-list-item>
       </v-list-group>
 
       <!-- Catalogs Section -->

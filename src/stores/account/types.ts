@@ -227,6 +227,9 @@ export const POS_CASH_ACCOUNT_ID = 'acc_1'
 export const EXPENSE_CATEGORIES = {
   daily: {
     product: 'Products',
+    food_cost: 'Food Cost (Negative Batches)',
+    inventory_variance: 'Inventory Variance (Reconciliation)',
+    inventory_adjustment: 'Inventory Adjustment (Physical Count)',
     takeaway: 'Takeaway',
     ayu_cake: 'Ayu cake',
     utilities: 'Utilities',

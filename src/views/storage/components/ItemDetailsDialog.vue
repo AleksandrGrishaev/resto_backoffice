@@ -67,20 +67,23 @@
             <div class="mb-4">
               <h4 class="mb-2">Current Batches (FIFO Order)</h4>
               <p class="text-body-2 text-medium-emphasis">
-                Oldest batches are consumed first. Total: {{ item.batches.length }} batch{{
-                  item.batches.length !== 1 ? 'es' : ''
+                Oldest batches are consumed first. Total: {{ activeBatchesOnly.length }} batch{{
+                  activeBatchesOnly.length !== 1 ? 'es' : ''
                 }}
               </p>
             </div>
 
-            <div v-if="item.batches.length === 0" class="text-center py-8 text-medium-emphasis">
+            <div
+              v-if="activeBatchesOnly.length === 0"
+              class="text-center py-8 text-medium-emphasis"
+            >
               <v-icon icon="mdi-package-variant-closed" size="48" class="mb-2" />
               <div>No active batches</div>
             </div>
 
             <div v-else class="batches-list">
               <v-card
-                v-for="(batch, index) in item.batches"
+                v-for="(batch, index) in activeBatchesOnly"
                 :key="batch.id"
                 variant="outlined"
                 class="mb-3"
@@ -252,8 +255,8 @@
                   <div class="text-body-1">{{ calculateStockAge(item.oldestBatchDate) }} days</div>
                 </v-col>
                 <v-col cols="12" md="6">
-                  <div class="text-subtitle-2 mb-1">Total Batches</div>
-                  <div class="text-body-1">{{ item.batches.length }}</div>
+                  <div class="text-subtitle-2 mb-1">Total Active Batches</div>
+                  <div class="text-body-1">{{ activeBatchesOnly.length }}</div>
                 </v-col>
               </v-row>
             </div>
@@ -363,6 +366,19 @@ const totalTransitQuantity = computed(() => {
     (sum: number, batch: StorageBatch) => sum + batch.currentQuantity,
     0
   )
+})
+
+// ✅ FIX: Filter out reconciled negative batches (only show active/unreconciled batches)
+const activeBatchesOnly = computed(() => {
+  if (!props.item) return []
+
+  return props.item.batches.filter((batch: StorageBatch) => {
+    // Show all positive batches
+    if (!batch.isNegative && batch.currentQuantity >= 0) return true
+
+    // For negative batches, only show unreconciled ones
+    return !batch.reconciledAt
+  })
 })
 
 // ===========================

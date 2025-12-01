@@ -72,6 +72,11 @@ class ReconciliationService {
         console.info(
           `✅ Reconciled negative batch: ${product.name} (+${quantity} ${negativeBatch.unit} @ ${costPerUnit})`
         )
+
+        // 6. ✅ FIX: Refresh balances cache to ensure reconciled status is reflected
+        const { useStorageStore } = await import('@/stores/storage')
+        const storageStore = useStorageStore()
+        await storageStore.fetchBalances()
       } catch (error) {
         console.error(`❌ Failed to reconcile negative batch ${negativeBatch.id}:`, error)
         // Continue with other batches even if one fails

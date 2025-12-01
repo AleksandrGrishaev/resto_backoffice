@@ -811,6 +811,39 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  /**
+   * ✅ SPRINT 3: Get all transactions (expenses and income) by date range
+   * Returns all transactions (both positive and negative amounts) for inventory adjustments
+   */
+  async function getTransactionsByDateRange(
+    dateFrom: string,
+    dateTo: string
+  ): Promise<Transaction[]> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Fetching all transactions by date range', { dateFrom, dateTo })
+
+      // Get all transactions from cache or fetch
+      const allTransactions = getAllTransactions.value
+
+      // Filter by date range only (include both income and expenses)
+      const transactions = allTransactions.filter(t => {
+        const transactionDate = t.createdAt.split('T')[0] // Extract date part
+        return transactionDate >= dateFrom && transactionDate <= dateTo
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Transactions filtered', {
+        total: transactions.length,
+        expenseCount: transactions.filter(t => t.amount < 0).length,
+        incomeCount: transactions.filter(t => t.amount > 0).length
+      })
+
+      return transactions
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get transactions by date range', { error })
+      return []
+    }
+  }
+
   // Payment link
   // ✅ НОВЫЙ метод: привязка платежа к заказу с указанием суммы
 
@@ -1235,6 +1268,7 @@ export const useAccountStore = defineStore('account', () => {
     cancelPayment,
     setPaymentFilters,
     getExpensesByDateRange, // ✅ SPRINT 5
+    getTransactionsByDateRange, // ✅ SPRINT 3
     linkPaymentToOrder,
     unlinkPaymentFromOrder,
     getPaymentsByOrder,

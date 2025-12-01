@@ -207,9 +207,15 @@ class NegativeBatchService {
    * @throws Error if update fails
    */
   async markAsReconciled(batchId: string): Promise<void> {
+    const now = new Date().toISOString()
+
     const { error } = await supabase
       .from('preparation_batches')
-      .update({ reconciledAt: new Date().toISOString() })
+      .update({
+        reconciledAt: now,
+        status: 'depleted', // ✅ FIX: Set status to depleted (preparation constraint: active|depleted|expired|written_off)
+        isActive: false // ✅ FIX: Mark as inactive
+      })
       .eq('id', batchId)
 
     if (error) {
@@ -217,6 +223,44 @@ class NegativeBatchService {
     }
 
     console.info(`✅ Marked negative batch as reconciled: ${batchId}`)
+  }
+
+  /**
+   * Undo reconciliation for a negative preparation batch
+   * Reverts reconciled batch back to active state
+   *
+   * @param batchId - UUID of the negative batch to undo reconciliation
+   * @throws Error if update fails or batch not found
+   */
+  async undoReconciliation(batchId: string): Promise<void> {
+    // Verify batch exists and is reconciled
+    const { data: batch, error: fetchError } = await supabase
+      .from('preparation_batches')
+      .select('*')
+      .eq('id', batchId)
+      .eq('is_negative', true)
+      .not('reconciled_at', 'is', null)
+      .single()
+
+    if (fetchError || !batch) {
+      throw new Error(`Reconciled negative batch not found: ${batchId}`)
+    }
+
+    // Revert to active state
+    const { error } = await supabase
+      .from('preparation_batches')
+      .update({
+        reconciledAt: null,
+        status: 'active', // Restore to active status
+        isActive: true
+      })
+      .eq('id', batchId)
+
+    if (error) {
+      throw new Error(`Failed to undo reconciliation: ${error.message}`)
+    }
+
+    console.info(`✅ Undone reconciliation for negative batch: ${batchId}`)
   }
 
   /**

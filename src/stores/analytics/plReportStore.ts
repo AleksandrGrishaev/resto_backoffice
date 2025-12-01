@@ -86,26 +86,135 @@ export const usePLReportStore = defineStore('plReport', () => {
         margin: grossProfit.margin
       })
 
-      // 4. Calculate OPEX from account_transactions
-      DebugUtils.info(MODULE_NAME, 'Calculating OPEX from account transactions')
-      const expenseTransactions = await accountStore.getExpensesByDateRange(dateFrom, dateTo)
+      // 4. Get all transactions (expenses and income) for inventory adjustments
+      DebugUtils.info(MODULE_NAME, 'Loading all account transactions')
+      const allTransactions = await accountStore.getTransactionsByDateRange(dateFrom, dateTo)
 
-      DebugUtils.info(MODULE_NAME, 'Expense transactions loaded', {
-        count: expenseTransactions.length,
-        totalExpenses: expenseTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+      DebugUtils.info(MODULE_NAME, 'All transactions loaded', {
+        count: allTransactions.length
+      })
+
+      // ============================================
+      // ✅ SPRINT 3: INVENTORY ADJUSTMENTS SECTION
+      // ============================================
+
+      // 4a. Filter inventory adjustment transactions
+      const inventoryAdjustmentCategories = [
+        'food_cost',
+        'inventory_variance',
+        'inventory_adjustment'
+      ]
+      const inventoryTransactions = allTransactions.filter(t => {
+        if (!t.expenseCategory) return false
+        const category = t.expenseCategory.category
+        return inventoryAdjustmentCategories.includes(category)
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Inventory adjustment transactions filtered', {
+        count: inventoryTransactions.length,
+        totalAmount: inventoryTransactions.reduce((sum, t) => sum + t.amount, 0)
+      })
+
+      // 4b. Calculate losses (expenses - negative amounts)
+      const lossTransactions = inventoryTransactions.filter(t => t.amount < 0)
+      const inventoryLosses = lossTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+      // 4c. Calculate gains (income - positive amounts)
+      const gainTransactions = inventoryTransactions.filter(t => t.amount > 0)
+      const inventoryGains = gainTransactions.reduce((sum, t) => sum + t.amount, 0)
+
+      // 4d. Calculate net impact (negative = more losses, positive = more gains)
+      const totalAdjustments = -inventoryLosses + inventoryGains
+
+      // 4e. Calculate breakdown by category
+      const spoilage = inventoryTransactions
+        .filter(
+          t =>
+            (t.description?.toLowerCase().includes('spoilage') ||
+              t.description?.toLowerCase().includes('expired')) &&
+            t.amount < 0
+        )
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+      const shortage = inventoryTransactions
+        .filter(
+          t =>
+            t.expenseCategory?.category === 'inventory_adjustment' &&
+            t.amount < 0 &&
+            !t.description?.toLowerCase().includes('spoilage') &&
+            !t.description?.toLowerCase().includes('expired')
+        )
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+      const negativeBatch = inventoryTransactions
+        .filter(t => t.expenseCategory?.category === 'food_cost')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+      const surplus = inventoryTransactions
+        .filter(t => t.expenseCategory?.category === 'inventory_adjustment' && t.amount > 0)
+        .reduce((sum, t) => sum + t.amount, 0)
+
+      const reconciliation = inventoryTransactions
+        .filter(t => t.expenseCategory?.category === 'inventory_variance')
+        .reduce((sum, t) => sum + t.amount, 0)
+
+      const inventoryAdjustments = {
+        losses: inventoryLosses,
+        gains: inventoryGains,
+        total: totalAdjustments,
+        byCategory: {
+          spoilage,
+          shortage,
+          negativeBatch,
+          surplus,
+          reconciliation
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Inventory adjustments calculated', {
+        losses: inventoryLosses,
+        gains: inventoryGains,
+        total: totalAdjustments,
+        byCategory: inventoryAdjustments.byCategory
+      })
+
+      // 4f. Calculate Real Food Cost
+      const realFoodCost = cogs.total + totalAdjustments
+
+      DebugUtils.info(MODULE_NAME, 'Real food cost calculated', {
+        salesCOGS: cogs.total,
+        adjustments: totalAdjustments,
+        realFoodCost
+      })
+
+      // ============================================
+      // 5. Calculate OPEX (excluding inventory adjustments)
+      // ============================================
+      DebugUtils.info(MODULE_NAME, 'Calculating OPEX (excluding inventory adjustments)')
+
+      const opexTransactions = allTransactions.filter(t => {
+        if (!t.expenseCategory) return false
+        const category = t.expenseCategory.category
+        // Exclude inventory adjustment categories
+        return !inventoryAdjustmentCategories.includes(category) && t.amount < 0
+      })
+
+      DebugUtils.info(MODULE_NAME, 'OPEX transactions filtered', {
+        count: opexTransactions.length,
+        totalExpenses: opexTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0)
       })
 
       const opex = {
         byCategory: {
-          suppliersPayments: sumByExpenseCategory(expenseTransactions, 'product'),
-          utilities: sumByExpenseCategory(expenseTransactions, 'utilities'),
-          salary: sumByExpenseCategory(expenseTransactions, 'salary'),
-          rent: sumByExpenseCategory(expenseTransactions, 'rent'),
-          transport: sumByExpenseCategory(expenseTransactions, 'transport'),
-          cleaning: sumByExpenseCategory(expenseTransactions, 'cleaning'),
-          security: sumByExpenseCategory(expenseTransactions, 'security'),
-          renovation: sumByExpenseCategory(expenseTransactions, 'renovation'),
-          other: sumByExpenseCategory(expenseTransactions, 'other')
+          suppliersPayments: sumByExpenseCategory(opexTransactions, 'product'),
+          utilities: sumByExpenseCategory(opexTransactions, 'utilities'),
+          salary: sumByExpenseCategory(opexTransactions, 'salary'),
+          rent: sumByExpenseCategory(opexTransactions, 'rent'),
+          transport: sumByExpenseCategory(opexTransactions, 'transport'),
+          cleaning: sumByExpenseCategory(opexTransactions, 'cleaning'),
+          security: sumByExpenseCategory(opexTransactions, 'security'),
+          renovation: sumByExpenseCategory(opexTransactions, 'renovation'),
+          other: sumByExpenseCategory(opexTransactions, 'other')
         },
         total: 0
       }
@@ -116,10 +225,13 @@ export const usePLReportStore = defineStore('plReport', () => {
         byCategory: opex.byCategory
       })
 
-      // 5. Calculate Net Profit
+      // 6. Calculate Net Profit (using Real Food Cost)
       const netProfit = {
-        amount: grossProfit.amount - opex.total,
-        margin: revenue.total > 0 ? ((grossProfit.amount - opex.total) / revenue.total) * 100 : 0
+        amount: revenue.total - realFoodCost - opex.total,
+        margin:
+          revenue.total > 0
+            ? ((revenue.total - realFoodCost - opex.total) / revenue.total) * 100
+            : 0
       }
 
       DebugUtils.info(MODULE_NAME, 'Net profit calculated', {
@@ -127,12 +239,14 @@ export const usePLReportStore = defineStore('plReport', () => {
         margin: netProfit.margin
       })
 
-      // 6. Create report
+      // 7. Create report
       const report: PLReport = {
         period: { dateFrom, dateTo },
         revenue,
         cogs,
         grossProfit,
+        inventoryAdjustments,
+        realFoodCost,
         opex,
         netProfit,
         generatedAt: TimeUtils.getCurrentLocalISO()

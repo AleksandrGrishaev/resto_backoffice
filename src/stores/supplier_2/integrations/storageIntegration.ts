@@ -247,6 +247,50 @@ export class SupplierStorageIntegration {
       const department = this.getDepartmentFromOrder(order)
       const storageStore = await this.getStorageStore()
 
+      // ✅ FIX: Check if active batches already exist for this order (from transit conversion)
+      // If they do, skip creating new batches to avoid duplicates
+      const existingBatches = storageStore.state.activeBatches.filter(
+        b => b.purchaseOrderId === order.id
+      )
+
+      if (existingBatches.length > 0) {
+        DebugUtils.info(MODULE_NAME, '✅ Active batches already exist (from transit conversion)', {
+          orderId: order.id,
+          batchCount: existingBatches.length
+        })
+
+        // ✅ FIX: Trigger auto-reconciliation for negative batches
+        // Even though batches were created via transit conversion,
+        // we still need to reconcile any negative batches for these products
+        const { reconciliationService } = await import('@/stores/storage/reconciliationService')
+
+        for (const batch of existingBatches) {
+          if (batch.itemType === 'product') {
+            DebugUtils.info(MODULE_NAME, 'Triggering reconciliation for product', {
+              productId: batch.itemId,
+              batchNumber: batch.batchNumber
+            })
+            await reconciliationService.autoReconcileOnNewBatch(batch.itemId)
+          }
+        }
+
+        // Return first batch ID as operation reference (for compatibility)
+        const operationId = existingBatches[0].id
+
+        DebugUtils.info(MODULE_NAME, 'Storage operation skipped (batches from transit)', {
+          operationId,
+          receiptId: receipt.id,
+          itemsCount: receipt.items.length
+        })
+
+        return operationId
+      }
+
+      // ✅ No transit batches found - create new batches via receipt
+      DebugUtils.info(MODULE_NAME, 'No transit batches found - creating new active batches', {
+        orderId: order.id
+      })
+
       const storageData: CreateReceiptData = {
         warehouseId: 'warehouse-winter', // Default warehouse (TODO: make configurable)
         department,

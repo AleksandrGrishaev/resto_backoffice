@@ -259,7 +259,8 @@ export function useReceipts() {
         console.warn('Receipts: Failed to convert transit batches:', transitError)
       }
 
-      // ✅ ШАГ 2: СОЗДАЕМ STORAGE OPERATION (это добавит новый active batch)
+      // ✅ ШАГ 2: СОЗДАЕМ STORAGE OPERATION (только если нет transit batches)
+      // If transit batches exist, they're already converted to active, no new batches needed
       let operationId: string | undefined
       try {
         operationId = await storageIntegration.createReceiptOperation(receipt, order)
