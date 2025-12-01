@@ -478,6 +478,22 @@ export const useStorageStore = defineStore('storage', () => {
       // Reload balances after operation
       await loadBalances()
 
+      // ✅ NEW: Auto-reconcile negative batches for each product
+      try {
+        const { reconciliationService } = await import('./reconciliationService')
+
+        for (const item of data.items) {
+          await reconciliationService.autoReconcileOnNewBatch(item.itemId)
+        }
+
+        DebugUtils.info(MODULE_NAME, '✅ Negative batch reconciliation completed')
+      } catch (reconciliationError) {
+        // Log error but don't fail the receipt creation
+        DebugUtils.warn(MODULE_NAME, 'Failed to auto-reconcile negative batches', {
+          error: reconciliationError
+        })
+      }
+
       DebugUtils.info(MODULE_NAME, '✅ Receipt created successfully')
       return response.data
     } catch (error) {

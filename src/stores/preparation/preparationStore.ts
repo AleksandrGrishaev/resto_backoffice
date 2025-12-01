@@ -272,6 +272,22 @@ export const usePreparationStore = defineStore('preparation', () => {
       // ✅ FIXED: Sync both balances AND batches
       await fetchBalances(data.department)
 
+      // ✅ NEW: Auto-reconcile negative batches for each preparation
+      try {
+        const { reconciliationService } = await import('./reconciliationService')
+
+        for (const item of data.items) {
+          await reconciliationService.autoReconcileOnNewBatch(item.preparationId)
+        }
+
+        DebugUtils.info(MODULE_NAME, '✅ Negative batch reconciliation completed')
+      } catch (reconciliationError) {
+        // Log error but don't fail the receipt creation
+        DebugUtils.warn(MODULE_NAME, 'Failed to auto-reconcile negative batches', {
+          error: reconciliationError
+        })
+      }
+
       return operation
     } catch (error) {
       const message =
