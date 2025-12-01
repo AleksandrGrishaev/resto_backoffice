@@ -969,12 +969,7 @@ export class StorageService {
                 cost
               )
 
-              // Record expense for additional shortage only
-              await writeOffExpenseService.recordNegativeBatchExpense(
-                updatedBatch,
-                item.itemName || preparation.name,
-                shortage
-              )
+              // NOTE: No account transaction created - negative batches are technical records only
 
               DebugUtils.info(MODULE_NAME, '✅ Updated existing negative batch for preparation', {
                 batchNumber: updatedBatch.batchNumber,
@@ -997,11 +992,7 @@ export class StorageService {
                 shiftId: undefined
               })
 
-              // Record expense transaction
-              await writeOffExpenseService.recordNegativeBatchExpense(
-                negativeBatch,
-                item.itemName || preparation.name
-              )
+              // NOTE: No account transaction created - negative batches are technical records only
 
               DebugUtils.info(MODULE_NAME, '✅ Created new negative batch for preparation', {
                 batchNumber: negativeBatch.batchNumber,
@@ -1094,12 +1085,7 @@ export class StorageService {
                 cost
               )
 
-              // Record expense for additional shortage only
-              await writeOffExpenseService.recordNegativeBatchExpense(
-                updatedBatch,
-                item.itemName || productInfo.name,
-                shortage
-              )
+              // NOTE: No account transaction created - negative batches are technical records only
 
               DebugUtils.info(MODULE_NAME, '✅ Updated existing negative batch', {
                 batchNumber: updatedBatch.batchNumber,
@@ -1122,11 +1108,7 @@ export class StorageService {
                 shiftId: undefined
               })
 
-              // Record expense transaction
-              await writeOffExpenseService.recordNegativeBatchExpense(
-                negativeBatch,
-                item.itemName || productInfo.name
-              )
+              // NOTE: No account transaction created - negative batches are technical records only
 
               DebugUtils.info(MODULE_NAME, '✅ Created new negative batch', {
                 batchNumber: negativeBatch.batchNumber,

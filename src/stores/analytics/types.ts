@@ -37,16 +37,16 @@ export interface PLReport {
   }
 
   // ✅ SPRINT 3: Inventory Adjustments Section
+  // NOTE: Only manual adjustments (inventory_adjustment category)
+  // Negative batches do NOT create account transactions
   inventoryAdjustments: {
     losses: number // Total losses (always positive number for display)
     gains: number // Total gains (always positive number for display)
     total: number // Net impact (negative = losses > gains, positive = gains > losses)
     byCategory: {
-      spoilage: number // Spoilage/expired items
-      shortage: number // Physical count shortages
-      negativeBatch: number // Negative batch write-offs (food_cost category)
-      surplus: number // Physical count surplus
-      reconciliation: number // Auto-reconciliation corrections (inventory_variance)
+      spoilage: number // Manual write-offs (reason: spoilage/loss/theft)
+      shortage: number // Manual write-offs (reason: inventory_adjustment)
+      surplus: number // Manual additions (reason: inventory_adjustment)
     }
   }
 
@@ -67,6 +67,7 @@ export interface PLReport {
       renovation: number
       trainingEducation: number // Education write-offs (category: 'training_education')
       recipeDevelopment: number // Recipe testing write-offs (category: 'recipe_development')
+      marketing: number // Marketing expenses (category: 'marketing')
       other: number
     }
   }

@@ -2,41 +2,53 @@
 
 /**
  * Форматирует сумму в IDR с префиксом "Rp" и точками как разделителями тысяч
+ * Поддерживает отрицательные числа
  * Примеры:
  * - 7500 -> "Rp 7.500"
  * - 1250000 -> "Rp 1.250.000"
+ * - -17955101 -> "-Rp 17.955.101"
  * - 2500000000 -> "Rp 2.5M" (сокращенный формат)
  */
 export function formatIDR(amount: number, options: FormatOptions = {}): string {
-  if (isNaN(amount) || amount < 0) {
+  if (isNaN(amount)) {
     return 'Rp 0'
   }
 
+  // Handle negative numbers
+  const isNegative = amount < 0
+  const absoluteAmount = Math.abs(amount)
+
   // Округляем до целого числа
-  const roundedAmount = Math.round(amount)
+  const roundedAmount = Math.round(absoluteAmount)
   const { compact = false, maxWidth } = options
 
   // Определяем нужно ли сокращение
   const shouldUseCompact = compact || shouldUseCompactFormat(roundedAmount, maxWidth)
 
+  let formatted: string
   if (shouldUseCompact && roundedAmount >= 1000000) {
-    return formatCompactIDR(roundedAmount)
+    formatted = formatCompactIDR(roundedAmount)
+  } else {
+    // Обычный формат с точками
+    formatted = `Rp ${formatWithDots(roundedAmount)}`
   }
 
-  // Обычный формат с точками
-  return `Rp ${formatWithDots(roundedAmount)}`
+  // Add negative sign if needed
+  return isNegative ? `-${formatted}` : formatted
 }
 
 /**
  * Краткое форматирование IDR с сокращениями (K/M/B)
  */
 export function formatIDRCompact(amount: number): string {
-  if (isNaN(amount) || amount < 0) {
+  if (isNaN(amount)) {
     return 'Rp 0'
   }
 
-  const roundedAmount = Math.round(amount)
-  return formatCompactIDR(roundedAmount)
+  const isNegative = amount < 0
+  const roundedAmount = Math.round(Math.abs(amount))
+  const formatted = formatCompactIDR(roundedAmount)
+  return isNegative ? `-${formatted}` : formatted
 }
 
 /**

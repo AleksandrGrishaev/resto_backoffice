@@ -14,7 +14,8 @@ import type {
   PreparationDepartment,
   CreatePreparationReceiptData,
   CreatePreparationInventoryData,
-  CreatePreparationWriteOffData
+  CreatePreparationWriteOffData,
+  PreparationWriteOffReason
 } from './types'
 
 const MODULE_NAME = 'PreparationStore'
@@ -711,6 +712,57 @@ export const usePreparationStore = defineStore('preparation', () => {
     }
   }
 
+  /**
+   * Get preparation operations filtered by criteria
+   * Used by plDataStore for COGS calculation (Sprint 4)
+   *
+   * @param filter - Filter criteria for operations
+   * @returns Filtered array of preparation operations
+   */
+  async function getOperationsByFilter(filter: {
+    type?: 'write_off' | 'correction' | 'receipt'
+    reasons?: PreparationWriteOffReason[]
+    correctionReason?: string
+    dateRange: { start: string; end: string }
+  }): Promise<PreparationOperation[]> {
+    DebugUtils.info(MODULE_NAME, 'Getting operations by filter', { filter })
+
+    // Get all operations in date range
+    const ops = state.value.operations.filter(op => {
+      const inDateRange =
+        op.operationDate >= filter.dateRange.start && op.operationDate <= filter.dateRange.end
+
+      if (!inDateRange) return false
+
+      // Filter by operation type
+      if (filter.type && op.operationType !== filter.type) {
+        return false
+      }
+
+      // Filter by write-off reasons
+      if (filter.reasons && op.operationType === 'write_off') {
+        if (!op.writeOffDetails?.reason) return false
+        return filter.reasons.includes(op.writeOffDetails.reason as PreparationWriteOffReason)
+      }
+
+      // Filter by correction reason
+      if (filter.correctionReason && op.operationType === 'correction') {
+        if (!op.correctionDetails?.reason) return false
+        return op.correctionDetails.reason === filter.correctionReason
+      }
+
+      return true
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Filtered operations result', {
+      totalOperations: state.value.operations.length,
+      filteredCount: ops.length,
+      totalValue: ops.reduce((sum, op) => sum + (op.totalValue || 0), 0)
+    })
+
+    return ops
+  }
+
   // ===========================
   // RETURN PUBLIC API
   // ===========================
@@ -779,6 +831,9 @@ export const usePreparationStore = defineStore('preparation', () => {
     // ✅ Negative Inventory methods (Sprint 1)
     updatePreparationLastKnownCost,
     canGoNegative,
+
+    // ✅ P&L Data methods (Sprint 4)
+    getOperationsByFilter,
 
     // Initialize
     initialize

@@ -202,16 +202,6 @@
                     variant="text"
                     @click="showItemDetails(item)"
                   />
-                  <!-- ✅ FIX: Add Undo Reconcile button for reconciled batches -->
-                  <v-btn
-                    v-if="item.status === 'reconciled'"
-                    icon="mdi-undo-variant"
-                    size="x-small"
-                    variant="text"
-                    color="warning"
-                    title="Undo Reconciliation"
-                    @click="handleUndoReconcile(item)"
-                  />
                 </div>
               </template>
             </v-data-table>
@@ -352,53 +342,6 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-
-    <!-- ✅ FIX: Undo Reconciliation Confirmation Dialog -->
-    <v-dialog v-model="undoReconcileDialog" max-width="500">
-      <v-card v-if="itemToUndo">
-        <v-card-title class="text-warning">
-          <v-icon icon="mdi-alert" class="mr-2" />
-          Undo Reconciliation?
-        </v-card-title>
-        <v-divider />
-        <v-card-text>
-          <p class="mb-3">
-            This will revert the reconciliation for
-            <strong>{{ itemToUndo.itemName }}</strong>
-            .
-          </p>
-          <v-alert type="warning" variant="tonal" density="compact" class="mb-3">
-            <strong>Warning:</strong>
-            This action will:
-            <ul class="ml-4 mt-2">
-              <li>Mark the negative batch as active again</li>
-              <li>Delete the associated reconciliation income transaction</li>
-              <li>Affect your financial reports</li>
-            </ul>
-          </v-alert>
-          <p class="text-caption text-medium-emphasis">
-            Batch: {{ itemToUndo.batchNumber }}
-            <br />
-            Negative Quantity: -{{ itemToUndo.negativeQuantity }} {{ itemToUndo.unit }}
-            <br />
-            Cost Impact: {{ formatIDR(itemToUndo.totalCost) }}
-          </p>
-        </v-card-text>
-        <v-divider />
-        <v-card-actions>
-          <v-spacer />
-          <v-btn color="grey" variant="text" @click="undoReconcileDialog = false">Cancel</v-btn>
-          <v-btn
-            color="warning"
-            variant="flat"
-            :loading="undoReconcileLoading"
-            @click="confirmUndoReconcile"
-          >
-            Undo Reconciliation
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
@@ -408,13 +351,9 @@ import { useNegativeInventoryReportStore } from '@/stores/analytics/negativeInve
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
 import type { NegativeInventoryReport } from '@/stores/analytics/types'
-import { negativeBatchService } from '@/stores/storage/negativeBatchService'
-import { writeOffExpenseService } from '@/stores/storage/writeOffExpenseService'
-import { useStorageStore } from '@/stores/storage'
 
 // Stores
 const reportStore = useNegativeInventoryReportStore()
-const storageStore = useStorageStore()
 
 // State
 const dateFrom = ref('')
@@ -426,11 +365,6 @@ const loading = computed(() => reportStore.loading)
 const error = ref<string | null>(null)
 const detailsDialog = ref(false)
 const selectedItem = ref<NegativeInventoryReport['items'][0] | null>(null)
-
-// ✅ FIX: State for undo reconcile dialog
-const undoReconcileDialog = ref(false)
-const itemToUndo = ref<NegativeInventoryReport['items'][0] | null>(null)
-const undoReconcileLoading = ref(false)
 
 // Options
 const statusOptions = [
@@ -515,48 +449,6 @@ function handleExportCSV() {
 function showItemDetails(item: NegativeInventoryReport['items'][0]) {
   selectedItem.value = item
   detailsDialog.value = true
-}
-
-// ✅ FIX: Undo reconciliation handler
-function handleUndoReconcile(item: NegativeInventoryReport['items'][0]) {
-  itemToUndo.value = item
-  undoReconcileDialog.value = true
-}
-
-// ✅ FIX: Confirm undo reconciliation
-async function confirmUndoReconcile() {
-  if (!itemToUndo.value) return
-
-  try {
-    undoReconcileLoading.value = true
-    error.value = null
-
-    // 1. Undo reconciliation in database (mark as active again)
-    await negativeBatchService.undoReconciliation(itemToUndo.value.batchId)
-
-    // 2. Delete the reconciliation income transaction
-    await writeOffExpenseService.deleteReconciliationIncome(
-      itemToUndo.value.batchId,
-      itemToUndo.value.itemName
-    )
-
-    // 3. Refresh storage store batches
-    await storageStore.fetchBatches()
-
-    // 4. Refresh the report
-    await reportStore.generateReport(dateFrom.value, dateTo.value)
-
-    // 5. Close dialog
-    undoReconcileDialog.value = false
-    itemToUndo.value = null
-
-    console.info(`✅ Successfully undone reconciliation for ${itemToUndo.value?.itemName}`)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to undo reconciliation'
-    console.error('❌ Error undoing reconciliation:', err)
-  } finally {
-    undoReconcileLoading.value = false
-  }
 }
 
 function formatDate(dateString: string): string {

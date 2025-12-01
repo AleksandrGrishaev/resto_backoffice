@@ -72,7 +72,7 @@
       <v-row v-if="report && !loading">
         <v-col cols="12">
           <!-- Period Info -->
-          <v-card class="mb-4" variant="outlined">
+          <v-card class="mb-4">
             <v-card-text>
               <div class="text-subtitle-1">
                 <strong>Period:</strong>
@@ -123,7 +123,7 @@
           </v-row>
 
           <!-- Detailed P&L Table -->
-          <v-card variant="outlined">
+          <v-card>
             <v-card-title>Detailed P&L Statement</v-card-title>
             <v-divider />
             <v-card-text>
@@ -200,7 +200,7 @@
                   <tr><td colspan="3" class="py-2"></td></tr>
 
                   <!-- Gross Profit -->
-                  <tr class="font-weight-bold bg-surface-variant">
+                  <tr class="font-weight-bold">
                     <td>GROSS PROFIT</td>
                     <td class="text-right">{{ formatIDR(report.grossProfit.amount) }}</td>
                     <td class="text-right">{{ report.grossProfit.margin.toFixed(1) }}%</td>
@@ -262,30 +262,6 @@
                       }}
                     </td>
                   </tr>
-                  <tr v-if="report.inventoryAdjustments.byCategory.negativeBatch > 0">
-                    <td class="pl-8">
-                      Negative Batch Variance
-                      <v-tooltip location="top">
-                        <template #activator="{ props: tooltipProps }">
-                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1">
-                            mdi-information
-                          </v-icon>
-                        </template>
-                        <span>Cost from negative batches during sales/production</span>
-                      </v-tooltip>
-                    </td>
-                    <td class="text-right text-error">
-                      {{ formatIDR(report.inventoryAdjustments.byCategory.negativeBatch) }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          report.inventoryAdjustments.byCategory.negativeBatch,
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
 
                   <!-- Gains Subsection -->
                   <tr>
@@ -302,33 +278,6 @@
                       {{
                         calculatePercentage(
                           report.inventoryAdjustments.byCategory.surplus,
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
-                  <tr v-if="report.inventoryAdjustments.byCategory.reconciliation !== 0">
-                    <td class="pl-8">
-                      Reconciliation Corrections
-                      <v-tooltip location="top">
-                        <template #activator="{ props: tooltipProps }">
-                          <v-icon v-bind="tooltipProps" size="x-small" class="ml-1">
-                            mdi-information
-                          </v-icon>
-                        </template>
-                        <span>Auto-corrections when new stock reconciles negative batches</span>
-                      </v-tooltip>
-                    </td>
-                    <td class="text-right" :class="reconciliationClass">
-                      {{ report.inventoryAdjustments.byCategory.reconciliation > 0 ? '+' : ''
-                      }}{{
-                        formatIDR(Math.abs(report.inventoryAdjustments.byCategory.reconciliation))
-                      }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          Math.abs(report.inventoryAdjustments.byCategory.reconciliation),
                           report.revenue.total
                         )
                       }}
@@ -376,7 +325,7 @@
                   <tr><td colspan="3" class="py-2"></td></tr>
 
                   <!-- Real Food Cost -->
-                  <tr class="font-weight-bold bg-surface-variant">
+                  <tr class="font-weight-bold">
                     <td>
                       REAL FOOD COST
                       <v-tooltip location="top">
@@ -503,6 +452,15 @@
                     </td>
                   </tr>
                   <tr>
+                    <td class="pl-8">Marketing</td>
+                    <td class="text-right">{{ formatIDR(report.opex.byCategory.marketing) }}</td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(report.opex.byCategory.marketing, report.revenue.total)
+                      }}
+                    </td>
+                  </tr>
+                  <tr>
                     <td class="pl-8">Other</td>
                     <td class="text-right">{{ formatIDR(report.opex.byCategory.other) }}</td>
                     <td class="text-right">
@@ -520,7 +478,7 @@
                   <tr><td colspan="3" class="py-2"></td></tr>
 
                   <!-- Net Profit -->
-                  <tr class="font-weight-bold bg-surface-variant">
+                  <tr class="font-weight-bold">
                     <td class="text-h6">NET PROFIT</td>
                     <td class="text-right text-h6" :class="netProfitClass">
                       {{ formatIDR(report.netProfit.amount) }}
@@ -644,13 +602,6 @@ const adjustmentsClass = computed(() => {
   return report.value.inventoryAdjustments.total < 0 ? 'text-error' : 'text-success'
 })
 
-const reconciliationClass = computed(() => {
-  if (!report.value) return ''
-  return report.value.inventoryAdjustments.byCategory.reconciliation > 0
-    ? 'text-success'
-    : 'text-error'
-})
-
 // ✅ SPRINT 3: Navigation to Negative Inventory Report
 function navigateToNegativeInventoryReport() {
   router.push('/analytics/negative-inventory')
@@ -659,10 +610,6 @@ function navigateToNegativeInventoryReport() {
 
 <style scoped lang="scss">
 .pl-report-view {
-  .section-header {
-    background-color: rgba(var(--v-theme-surface-variant), 0.5);
-  }
-
   .v-table {
     tr.section-header td {
       padding-top: 12px;

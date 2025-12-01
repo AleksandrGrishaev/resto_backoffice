@@ -1,5 +1,4 @@
 import { negativeBatchService } from './negativeBatchService'
-import { writeOffExpenseService } from './writeOffExpenseService'
 import { useProductsStore } from '@/stores/productsStore'
 
 /**
@@ -9,18 +8,21 @@ import { useProductsStore } from '@/stores/productsStore'
  * @description
  * When new inventory arrives for a product that has unreconciled negative batches:
  * 1. Detects all unreconciled negative batches for the product
- * 2. Creates income transactions to offset the original expenses
- * 3. Marks negative batches as reconciled
+ * 2. Marks negative batches as reconciled (technical records only)
+ *
+ * NOTE: Negative batches are technical records for inventory tracking.
+ * They do NOT create account transactions as they represent inventory variances,
+ * not real cash movements.
  *
  * This ensures that:
- * - P&L reports accurately reflect inventory movements
- * - Negative batch expenses are offset when stock arrives
+ * - Negative batches are tracked for monitoring purposes
  * - Full audit trail of reconciliation events
+ * - Real cash accounts (acc_1) are NOT affected by inventory adjustments
  */
 class ReconciliationService {
   /**
    * Auto-reconcile negative batches when new batch is added
-   * Creates income transactions to offset negative batch expenses
+   * Marks negative batches as reconciled (tracking only, no account transactions)
    *
    * @param productId - UUID of the product
    * @returns Promise that resolves when reconciliation is complete
@@ -56,17 +58,10 @@ class ReconciliationService {
       const costPerUnit = negativeBatch.costPerUnit
 
       try {
-        // 4. Create inventory correction INCOME transaction
-        // This offsets the expense created when negative batch was made
-        // IMPORTANT: Use cost from negative batch (NOT new batch cost!)
-        await writeOffExpenseService.recordCorrectionIncome({
-          productName: product.name,
-          quantity: quantity,
-          costPerUnit: costPerUnit,
-          unit: negativeBatch.unit
-        })
-
-        // 5. Mark negative batch as reconciled
+        // 4. Mark negative batch as reconciled
+        // NOTE: We do NOT create account transactions for negative batches
+        // Negative batches are technical records for inventory tracking only
+        // They should NOT affect real cash accounts
         await negativeBatchService.markAsReconciled(negativeBatch.id)
 
         console.info(

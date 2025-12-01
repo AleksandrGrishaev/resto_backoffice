@@ -967,6 +967,57 @@ export const useStorageStore = defineStore('storage', () => {
     return product?.allowNegativeInventory ?? true
   }
 
+  /**
+   * Get storage operations filtered by criteria
+   * Used by plDataStore for COGS calculation (Sprint 4)
+   *
+   * @param filter - Filter criteria for operations
+   * @returns Filtered array of storage operations
+   */
+  async function getOperationsByFilter(filter: {
+    type?: 'write_off' | 'correction' | 'receipt'
+    reasons?: WriteOffReason[]
+    correctionReason?: string
+    dateRange: { start: string; end: string }
+  }): Promise<StorageOperation[]> {
+    DebugUtils.info(MODULE_NAME, 'Getting operations by filter', { filter })
+
+    // Get all operations in date range
+    const ops = state.value.operations.filter(op => {
+      const inDateRange =
+        op.operationDate >= filter.dateRange.start && op.operationDate <= filter.dateRange.end
+
+      if (!inDateRange) return false
+
+      // Filter by operation type
+      if (filter.type && op.operationType !== filter.type) {
+        return false
+      }
+
+      // Filter by write-off reasons
+      if (filter.reasons && op.operationType === 'write_off') {
+        if (!op.writeOffDetails?.reason) return false
+        return filter.reasons.includes(op.writeOffDetails.reason)
+      }
+
+      // Filter by correction reason
+      if (filter.correctionReason && op.operationType === 'correction') {
+        if (!op.correctionDetails?.reason) return false
+        return op.correctionDetails.reason === filter.correctionReason
+      }
+
+      return true
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Filtered operations result', {
+      totalOperations: state.value.operations.length,
+      filteredCount: ops.length,
+      totalValue: ops.reduce((sum, op) => sum + (op.totalValue || 0), 0)
+    })
+
+    return ops
+  }
+
   const productsStore = useProductsStore()
 
   return {
@@ -1051,6 +1102,9 @@ export const useStorageStore = defineStore('storage', () => {
     // ✅ Negative Inventory methods (Sprint 1)
     updateProductLastKnownCost,
     canGoNegative,
+
+    // ✅ P&L Data methods (Sprint 4)
+    getOperationsByFilter,
 
     // External stores
     productsStore

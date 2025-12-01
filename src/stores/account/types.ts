@@ -33,6 +33,7 @@ export type DailyExpenseCategory =
   | 'inventory_adjustment' // Monthly physical count, spoilage (income/expense)
   | 'training_education' // Education write-offs (OPEX)
   | 'recipe_development' // Recipe testing write-offs (OPEX)
+  | 'marketing' // Marketing expenses (OPEX)
   | 'takeaway'
   | 'ayu_cake'
   | 'utilities'
@@ -232,6 +233,9 @@ export const EXPENSE_CATEGORIES = {
     food_cost: 'Food Cost (Negative Batches)',
     inventory_variance: 'Inventory Variance (Reconciliation)',
     inventory_adjustment: 'Inventory Adjustment (Physical Count)',
+    training_education: 'Training & Education',
+    recipe_development: 'Recipe Development',
+    marketing: 'Marketing',
     takeaway: 'Takeaway',
     ayu_cake: 'Ayu cake',
     utilities: 'Utilities',
