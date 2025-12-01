@@ -40,7 +40,7 @@ class ReconciliationService {
     // 2. Get preparation info for transaction description
     const { data: preparation, error } = await supabase
       .from('preparations')
-      .select('id, name, unit')
+      .select('id, name')
       .eq('id', preparationId)
       .single()
 
@@ -48,6 +48,9 @@ class ReconciliationService {
       console.error(`❌ Preparation not found for reconciliation: ${preparationId}`, error)
       return
     }
+
+    // Get unit from negative batch (unit is stored in batches, not preparations table)
+    const unit = negativeBatches[0]?.unit || 'ml'
 
     console.info(
       `🔄 Auto-reconciling ${negativeBatches.length} negative batches for ${preparation.name}`

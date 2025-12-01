@@ -468,7 +468,14 @@ export type DailyExpenseCategory =
 
 ## Implementation Plan (4 Sprints)
 
-### Sprint 1: Foundation - Database & Services (5 days)
+**Sprint Status:**
+
+- ✅ Sprint 1: COMPLETE (Database & Services)
+- ✅ Sprint 2: COMPLETE (Write-Off Logic + Auto-Reconciliation + Bugfixes)
+- 🟢 Sprint 3: IN PROGRESS (P&L Report + Negative Inventory Report MVP)
+- ⏳ Sprint 4: PENDING (Deployment & Migration)
+
+### Sprint 1: Foundation - Database & Services ✅ COMPLETE (5 days)
 
 **Phase 1.1: Database Schema**
 
@@ -569,7 +576,60 @@ canGoNegative(productId: string): boolean {
 
 ---
 
-### Sprint 2: Write-Off Logic + Auto-Reconciliation (7 days)
+### Sprint 2: Write-Off Logic + Auto-Reconciliation ✅ COMPLETE (7 days + 6 bugfixes)
+
+**Completion Date:** December 1, 2025
+
+**Summary:**
+Sprint 2 successfully implemented the enhanced write-off logic with automatic negative batch creation and auto-reconciliation for both products and preparations. All critical bugs were identified and fixed during implementation, resulting in a fully functional negative inventory management system.
+
+**What Was Accomplished:**
+
+1. **Enhanced Write-Off Logic (Phase 2.1)**
+
+   - ✅ Modified `storageService.createWriteOff()` for automatic shortage detection
+   - ✅ Handles both products and preparations
+   - ✅ Creates negative batches with last known cost when stock insufficient
+   - ✅ Records expense transactions automatically in Account Store
+   - ✅ Consolidates negative batches (updates existing instead of creating duplicates)
+
+2. **Auto-Reconciliation (Phase 2.2-2.4)**
+
+   - ✅ reconciliationService created for both products and preparations
+   - ✅ Auto-triggers when new batches are added via createReceipt()
+   - ✅ Creates income transactions to offset negative batch expenses
+   - ✅ Marks negative batches as reconciled with timestamp
+
+3. **Critical Bugfixes (6 total)**
+   - ✅ **Bug #1:** Preparation costs showing Rp 0 - Fixed FIFO allocation to use negative batch costs
+   - ✅ **Bug #2:** Negative batch consolidation - Updates existing batches instead of creating duplicates
+   - ✅ **Bug #3:** Mapper missing 7 fields - Added all negative batch fields to `supabaseMappers.ts`
+   - ✅ **Bug #4:** PostgREST schema cache - Refreshed cache to recognize `reconciled_at` column
+   - ✅ **Bug #5:** Snake/camel case mismatch - Fixed database field access in `negativeBatchService`
+   - ✅ **Bug #6:** UI consistency - Rewrote `ItemDetailsDialog` to match preparation item details style
+
+**Files Modified:**
+
+- `src/stores/storage/storageService.ts` (lines 836-1081)
+- `src/stores/sales/composables/useActualCostCalculation.ts`
+- `src/stores/preparation/supabaseMappers.ts`
+- `src/stores/storage/supabaseMappers.ts`
+- `src/stores/preparation/negativeBatchService.ts`
+- `src/stores/storage/negativeBatchService.ts`
+- `src/views/storage/components/ItemDetailsDialog.vue` (complete rewrite)
+- `src/views/backoffice/inventory/WriteOffHistoryView.vue`
+
+**Testing Results:**
+
+- ✅ Sales transactions show correct preparation costs (not Rp 0)
+- ✅ Negative batches created for both products and preparations
+- ✅ Only ONE negative batch per (item, location) pair (consolidated)
+- ✅ Write-off history displays accurate FIFO costs
+- ✅ UI displays negative batches with red borders and "⚠️ NEG" chips
+- ✅ Auto-reconciliation works when new stock arrives
+- ✅ Expense and income transactions recorded correctly
+
+**Sprint 2 Details (Historical):**
 
 **Phase 2.1: Enhanced Write-Off Logic**
 
@@ -876,9 +936,227 @@ await useWriteOff().writeOffProducts(rawProductItems, writeOffContext)
 
 ---
 
-### Sprint 3: Negative Inventory Report (4 days)
+### Sprint 3: P&L Report + Negative Inventory Report MVP 🟢 IN PROGRESS (6.5 days)
 
-**Phase 3.1: Report Data Store**
+**Objectives:**
+
+- Add new expense categories for inventory adjustments
+- Enhance P&L Report with "Inventory Adjustments" section showing Real Food Cost
+- Create MVP Negative Inventory Report (basic list, filters, export)
+
+**Duration:** 6.5 days (0.5 + 3 + 3)
+
+---
+
+#### Phase 3.1: Add Expense Categories (0.5 days) ⏳ PENDING
+
+**Priority:** CRITICAL - Foundation for P&L reporting
+
+**Task:** Add 3 new categories to Account Store types
+
+**File:** `src/stores/account/types.ts`
+
+**Implementation:**
+
+```typescript
+export type DailyExpenseCategory =
+  | 'product'
+  | 'food_cost' // NEW - Negative batch write-offs
+  | 'inventory_variance' // NEW - Reconciliation corrections (income/expense)
+  | 'inventory_adjustment' // NEW - Monthly physical count, spoilage
+  | 'takeaway'
+  | 'ayu_cake'
+  | 'utilities'
+  | 'salary'
+  | 'renovation'
+  | 'transport'
+  | 'cleaning'
+  | 'security'
+  | 'village'
+  | 'rent'
+  | 'other'
+```
+
+**Notes:**
+
+- No database migration needed (categories are enum values)
+- Already used in `writeOffExpenseService.ts` from Sprint 2
+- Foundation for both P&L Report and Negative Inventory Report
+
+**Testing:**
+
+- [ ] Verify type safety in Account Store
+- [ ] Verify expense transactions can use new categories
+- [ ] Check category dropdown in transaction creation UI (if exists)
+
+---
+
+#### Phase 3.2: P&L Report - Inventory Adjustments Section (3 days) ⏳ PENDING
+
+**Priority:** HIGH - Critical business requirement (Issue 3)
+
+**Objective:** Show accurate "Real Food Cost" including inventory adjustments
+
+**Business Logic:**
+
+```
+Real Food Cost = Pure Sales Food Cost + All Losses - All Surplus
+
+Example:
+  Pure Sales Food Cost:    -1,000,000₽  (normal POS orders)
+  + Spoilage/Expired:        -200,000₽  (rotten products written off)
+  + Inventory Shortage:      -150,000₽  (недостача при инвентаризации)
+  + Negative Batch:           -40,000₽  (category: food_cost)
+  - Inventory Surplus:        +60,000₽  (излишки при инвентаризации)
+  - Reconciliation:           +40,000₽  (category: inventory_variance)
+  ────────────────────────────────────────
+  Real Food Cost:          -1,290,000₽
+```
+
+**Task 3.2.1: Update P&L Calculation Logic**
+
+**File:** `src/stores/analytics/plReportStore.ts` (or equivalent)
+
+**Implementation:**
+
+```typescript
+// 1. Get inventory adjustment transactions
+const inventoryAdjustments = allTransactions.filter(t => {
+  if (!t.expenseCategory) return false
+  return ['food_cost', 'inventory_variance', 'inventory_adjustment'].includes(
+    t.expenseCategory.category
+  )
+})
+
+// 2. Separate losses and gains
+const inventoryLosses = inventoryAdjustments
+  .filter(t => t.amount < 0)
+  .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+const inventoryGains = inventoryAdjustments
+  .filter(t => t.amount > 0)
+  .reduce((sum, t) => sum + t.amount, 0)
+
+// 3. Calculate Real Food Cost
+const realFoodCost = salesCOGS + (-inventoryLosses + inventoryGains)
+
+// 4. Return new P&L structure
+return {
+  revenue,
+  salesCOGS,
+  grossProfit: revenue - salesCOGS,
+
+  // NEW SECTION
+  inventoryAdjustments: {
+    losses: inventoryLosses,
+    gains: inventoryGains,
+    total: -inventoryLosses + inventoryGains
+  },
+
+  realFoodCost,
+  opex,
+  netProfit: revenue - realFoodCost - opex
+}
+```
+
+**Task 3.2.2: Update P&L Report UI**
+
+**File:** `src/views/backoffice/analytics/PLReportView.vue` (or equivalent)
+
+**Add new section between Gross Profit and OPEX:**
+
+```vue
+<!-- Inventory Adjustments Section -->
+<section class="inventory-adjustments">
+  <h3>Inventory Adjustments</h3>
+
+  <div class="subsection">
+    <h4>Losses:</h4>
+    <div class="line-item">
+      <span>Spoilage/Expired:</span>
+      <span class="negative">{{ formatIDR(report.adjustments.spoilage) }}</span>
+    </div>
+    <div class="line-item">
+      <span>Inventory Shortage:</span>
+      <span class="negative">{{ formatIDR(report.adjustments.shortage) }}</span>
+    </div>
+    <div class="line-item">
+      <span>Negative Batch Variance:</span>
+      <span class="negative">{{ formatIDR(report.adjustments.negativeBatch) }}</span>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <h4>Gains:</h4>
+    <div class="line-item">
+      <span>Inventory Surplus:</span>
+      <span class="positive">{{ formatIDR(report.adjustments.surplus) }}</span>
+    </div>
+    <div class="line-item">
+      <span>Reconciliation Corrections:</span>
+      <span class="positive">{{ formatIDR(report.adjustments.reconciliation) }}</span>
+    </div>
+  </div>
+
+  <div class="total">
+    <span>Total Adjustments:</span>
+    <span :class="{ negative: report.adjustments.total < 0 }">
+      {{ formatIDR(report.adjustments.total) }}
+    </span>
+  </div>
+
+  <!-- Alert if negative inventory detected -->
+  <v-alert v-if="hasNegativeInventory" type="warning" class="mt-4">
+    <div class="d-flex align-center justify-space-between">
+      <span>Negative inventory detected in this period</span>
+      <v-btn color="warning" variant="outlined" size="small"
+             @click="$router.push('/reports/negative-inventory')">
+        View Details
+      </v-btn>
+    </div>
+  </v-alert>
+</section>
+
+<!-- Real Food Cost -->
+<div class="real-food-cost">
+  <h3>Real Food Cost</h3>
+  <div class="amount negative">{{ formatIDR(report.realFoodCost) }}</div>
+  <div class="formula">
+    Sales COGS ({{ formatIDR(report.salesCOGS) }}) +
+    Adjustments ({{ formatIDR(report.adjustments.total) }})
+  </div>
+</div>
+```
+
+**Testing:**
+
+- [ ] Verify inventory adjustments calculate correctly
+- [ ] Test with various transaction types (food_cost, inventory_variance, inventory_adjustment)
+- [ ] Validate formula: Real Food Cost = Sales COGS + Adjustments
+- [ ] Check negative/positive number formatting
+- [ ] Verify link to Negative Inventory Report works
+
+---
+
+#### Phase 3.3: Negative Inventory Report - MVP (3 days) ⏳ PENDING
+
+**Priority:** MEDIUM - Operational insights (basic version first)
+
+**MVP Scope:**
+
+- List all items with negative batches
+- Summary cards (total items, cost impact)
+- Basic filters (date range, category, entity type)
+- CSV export
+- Link from P&L Report
+
+**Advanced features deferred to Sprint 4:**
+
+- Recipe analysis (identify problematic recipes)
+- Root cause tracking (detailed source operation analysis)
+- Reconciliation history timeline
+
+**Task 3.3.1: Report Data Store**
 
 **New File**: `src/stores/reports/negativeInventoryReportStore.ts`
 

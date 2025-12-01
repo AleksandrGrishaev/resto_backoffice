@@ -39,6 +39,14 @@ export function mapBatchFromDB(dbBatch: DBStorageBatch): StorageBatch {
     supplierName: dbBatch.supplier_name ?? undefined,
     plannedDeliveryDate: dbBatch.planned_delivery_date ?? undefined,
     actualDeliveryDate: dbBatch.actual_delivery_date ?? undefined,
+    // ✅ ДОБАВЛЕНО: Поля для негативных батчей (Sprint 1 Phase 2.5)
+    isNegative: (dbBatch as any).is_negative ?? false,
+    sourceBatchId: (dbBatch as any).source_batch_id ?? undefined,
+    negativeCreatedAt: (dbBatch as any).negative_created_at ?? undefined,
+    negativeReason: (dbBatch as any).negative_reason ?? undefined,
+    sourceOperationType: (dbBatch as any).source_operation_type ?? undefined,
+    affectedRecipeIds: (dbBatch as any).affected_recipe_ids ?? undefined,
+    reconciledAt: (dbBatch as any).reconciled_at ?? undefined,
     createdAt: dbBatch.created_at,
     updatedAt: dbBatch.updated_at
   }
@@ -48,7 +56,7 @@ export function mapBatchFromDB(dbBatch: DBStorageBatch): StorageBatch {
  * Maps TypeScript StorageBatch to database format
  */
 export function mapBatchToDB(batch: Partial<StorageBatch>): Partial<DBStorageBatch> {
-  return {
+  const result: any = {
     id: batch.id,
     batch_number: batch.batchNumber,
     item_id: batch.itemId,
@@ -70,9 +78,18 @@ export function mapBatchToDB(batch: Partial<StorageBatch>): Partial<DBStorageBat
     supplier_name: batch.supplierName ?? null,
     planned_delivery_date: batch.plannedDeliveryDate ?? null,
     actual_delivery_date: batch.actualDeliveryDate ?? null,
+    // ✅ ДОБАВЛЕНО: Поля для негативных батчей (Sprint 1 Phase 2.5)
+    is_negative: batch.isNegative ?? null,
+    source_batch_id: batch.sourceBatchId ?? null,
+    negative_created_at: batch.negativeCreatedAt ?? null,
+    negative_reason: batch.negativeReason ?? null,
+    source_operation_type: batch.sourceOperationType ?? null,
+    affected_recipe_ids: batch.affectedRecipeIds ?? null,
+    reconciled_at: batch.reconciledAt ?? null,
     created_at: batch.createdAt,
     updated_at: batch.updatedAt
   }
+  return result
 }
 
 /**

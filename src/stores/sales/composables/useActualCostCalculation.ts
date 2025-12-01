@@ -332,9 +332,9 @@ export function useActualCostCalculation() {
     })
 
     // Get active batches for this product, sorted by FIFO (oldest first)
+    // NOTE: Don't filter out negative batches - they're handled in the loop below (lines 361-383)
     const batches = (storageStore.activeBatches.value || storageStore.activeBatches)
       .filter(b => b.itemId === productId && b.warehouseId === warehouseId)
-      .filter(b => b.currentQuantity > 0)
       .sort((a, b) => new Date(a.receiptDate).getTime() - new Date(b.receiptDate).getTime())
 
     DebugUtils.debug(MODULE_NAME, 'Available storage batches', {

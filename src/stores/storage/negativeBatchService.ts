@@ -1,5 +1,6 @@
 import { supabase } from '@/supabase'
 import type { StorageBatch } from './types'
+import { generateId } from '@/utils/id'
 
 /**
  * Service for managing negative inventory batches for products
@@ -109,37 +110,40 @@ class NegativeBatchService {
 
     const now = new Date().toISOString()
 
-    // Generate batch number
+    // Generate batch number and ID
     const batchNumber = `NEG-${Date.now()}`
+    const batchId = generateId()
 
-    const negativeBatch: Partial<StorageBatch> = {
-      batchNumber,
-      itemId: params.productId,
-      itemType: 'product',
-      warehouseId: params.warehouseId,
-      initialQuantity: params.quantity, // negative value
-      currentQuantity: params.quantity, // negative value
+    // Map to snake_case for Supabase (database uses snake_case column names)
+    const negativeBatchData = {
+      id: batchId,
+      batch_number: batchNumber,
+      item_id: params.productId,
+      item_type: 'product',
+      warehouse_id: params.warehouseId,
+      initial_quantity: params.quantity, // negative value
+      current_quantity: params.quantity, // negative value
       unit: params.unit,
-      costPerUnit: params.cost,
-      totalValue: params.quantity * params.cost, // negative total
-      receiptDate: now,
-      sourceType: 'correction', // Negative batches are a type of correction
+      cost_per_unit: params.cost,
+      total_value: params.quantity * params.cost, // negative total
+      receipt_date: now,
+      source_type: 'correction', // Negative batches are a type of correction
       status: 'active',
-      isActive: true,
-      isNegative: true,
-      sourceBatchId: lastBatch?.id || undefined,
-      negativeCreatedAt: now,
-      negativeReason: params.reason,
-      sourceOperationType: params.sourceOperationType,
-      affectedRecipeIds: params.affectedRecipeIds || [],
-      reconciledAt: undefined,
-      createdAt: now,
-      updatedAt: now
+      is_active: true,
+      is_negative: true,
+      source_batch_id: lastBatch?.id || null,
+      negative_created_at: now,
+      negative_reason: params.reason,
+      source_operation_type: params.sourceOperationType,
+      affected_recipe_ids: params.affectedRecipeIds || null,
+      reconciled_at: null,
+      created_at: now,
+      updated_at: now
     }
 
     const { data, error } = await supabase
       .from('storage_batches')
-      .insert(negativeBatch)
+      .insert(negativeBatchData)
       .select()
       .single()
 
@@ -151,7 +155,36 @@ class NegativeBatchService {
       `✅ Created negative batch: ${batchNumber} (${params.quantity} ${params.unit}, cost: ${params.cost}/unit)`
     )
 
-    return data
+    // Map from snake_case to camelCase for TypeScript
+    const batch: StorageBatch = {
+      id: data.id,
+      batchNumber: data.batch_number,
+      itemId: data.item_id,
+      itemType: data.item_type,
+      warehouseId: data.warehouse_id,
+      initialQuantity: data.initial_quantity,
+      currentQuantity: data.current_quantity,
+      unit: data.unit,
+      costPerUnit: data.cost_per_unit,
+      totalValue: data.total_value,
+      receiptDate: data.receipt_date,
+      expiryDate: data.expiry_date,
+      sourceType: data.source_type,
+      status: data.status,
+      isActive: data.is_active,
+      notes: data.notes,
+      isNegative: data.is_negative,
+      sourceBatchId: data.source_batch_id,
+      negativeCreatedAt: data.negative_created_at,
+      negativeReason: data.negative_reason,
+      sourceOperationType: data.source_operation_type,
+      affectedRecipeIds: data.affected_recipe_ids,
+      reconciledAt: data.reconciled_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    }
+
+    return batch
   }
 
   /**
@@ -206,7 +239,7 @@ class NegativeBatchService {
   async markAsReconciled(batchId: string): Promise<void> {
     const { error } = await supabase
       .from('storage_batches')
-      .update({ reconciledAt: new Date().toISOString() })
+      .update({ reconciled_at: new Date().toISOString() })
       .eq('id', batchId)
 
     if (error) {
@@ -275,25 +308,28 @@ class NegativeBatchService {
     costPerUnit: number
   ): Promise<StorageBatch> {
     // 1. Get current batch
-    const { data: batch, error: fetchError } = await supabase
+    const { data: batchData, error: fetchError } = await supabase
       .from('storage_batches')
       .select('*')
       .eq('id', batchId)
       .single()
 
-    if (fetchError || !batch) {
+    if (fetchError || !batchData) {
       throw new Error(`Negative batch not found: ${batchId}`)
     }
 
+    // Use type assertion for database row (Supabase types may not include storage_batches)
+    const batch = batchData as any
+
     // 2. Calculate new quantities
-    const previousQty = batch.currentQuantity // e.g., -100
+    const previousQty = batch.current_quantity // e.g., -100 (use snake_case from DB)
     const newQty = previousQty - additionalShortage // e.g., -100 - 100 = -200 (more negative)
-    const newTotalValue = newQty * batch.costPerUnit
+    const newTotalValue = newQty * batch.cost_per_unit // use snake_case from DB
 
     const now = new Date().toISOString()
 
     // 3. Update batch in database
-    const { data: updatedBatch, error: updateError } = await supabase
+    const { data: updatedBatchData, error: updateError } = await supabase
       .from('storage_batches')
       .update({
         current_quantity: newQty,
@@ -309,10 +345,38 @@ class NegativeBatchService {
     }
 
     console.info(
-      `✅ Updated existing negative batch: ${batch.batchNumber} (${previousQty} → ${newQty}, +${additionalShortage} shortage)`
+      `✅ Updated existing negative batch: ${batch.batch_number} (${previousQty} → ${newQty}, +${additionalShortage} shortage)`
     )
 
-    return updatedBatch!
+    // Convert updated batch from snake_case to camelCase
+    const updatedBatch = updatedBatchData as any
+    return {
+      id: updatedBatch.id,
+      batchNumber: updatedBatch.batch_number,
+      itemId: updatedBatch.item_id,
+      itemType: updatedBatch.item_type,
+      warehouseId: updatedBatch.warehouse_id,
+      initialQuantity: updatedBatch.initial_quantity,
+      currentQuantity: updatedBatch.current_quantity,
+      unit: updatedBatch.unit,
+      costPerUnit: updatedBatch.cost_per_unit,
+      totalValue: updatedBatch.total_value,
+      receiptDate: updatedBatch.receipt_date,
+      expiryDate: updatedBatch.expiry_date,
+      sourceType: updatedBatch.source_type,
+      status: updatedBatch.status,
+      isActive: updatedBatch.is_active,
+      notes: updatedBatch.notes,
+      isNegative: updatedBatch.is_negative,
+      sourceBatchId: updatedBatch.source_batch_id,
+      negativeCreatedAt: updatedBatch.negative_created_at,
+      negativeReason: updatedBatch.negative_reason,
+      sourceOperationType: updatedBatch.source_operation_type,
+      affectedRecipeIds: updatedBatch.affected_recipe_ids,
+      reconciledAt: updatedBatch.reconciled_at,
+      createdAt: updatedBatch.created_at,
+      updatedAt: updatedBatch.updated_at
+    }
   }
 }
 

@@ -247,8 +247,17 @@ export class StorageService {
         `${MODULE_NAME}.allocateFIFO`
       )
 
+      // Allow empty batches - negative batch will be created later
       if (!batches || batches.length === 0) {
-        throw new Error('No active batches available for this item')
+        DebugUtils.warn(MODULE_NAME, '⚠️ No active batches - will create negative batch', {
+          itemId,
+          needed: neededQuantity
+        })
+        // Return empty allocations - shortage will be handled by caller
+        return {
+          success: true,
+          data: []
+        }
       }
 
       // Allocate quantities using FIFO logic
