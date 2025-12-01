@@ -212,9 +212,9 @@ class NegativeBatchService {
     const { error } = await supabase
       .from('preparation_batches')
       .update({
-        reconciledAt: now,
+        reconciled_at: now, // ✅ FIX: Use snake_case for Supabase
         status: 'depleted', // ✅ FIX: Set status to depleted (preparation constraint: active|depleted|expired|written_off)
-        isActive: false // ✅ FIX: Mark as inactive
+        is_active: false // ✅ FIX: Mark as inactive (snake_case)
       })
       .eq('id', batchId)
 
@@ -250,9 +250,9 @@ class NegativeBatchService {
     const { error } = await supabase
       .from('preparation_batches')
       .update({
-        reconciledAt: null,
+        reconciled_at: null, // ✅ FIX: Use snake_case for Supabase
         status: 'active', // Restore to active status
-        isActive: true
+        is_active: true // ✅ FIX: Use snake_case for Supabase
       })
       .eq('id', batchId)
 
