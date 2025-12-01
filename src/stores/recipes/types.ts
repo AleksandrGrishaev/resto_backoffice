@@ -70,6 +70,10 @@ export interface Preparation extends BaseEntity {
   isActive: boolean
   costPerPortion?: number // Себестоимость за грамм/мл
   shelfLife?: number // Срок хранения в днях
+
+  // ✨ NEW: Negative inventory config (Sprint 1)
+  allowNegativeInventory?: boolean
+  lastKnownCost?: number
 }
 
 /**

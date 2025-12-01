@@ -40,6 +40,15 @@ export interface PreparationBatch extends BaseEntity {
   notes?: string
   status: BatchStatus
   isActive: boolean
+
+  // ✨ NEW: Negative inventory fields (Sprint 1)
+  isNegative?: boolean
+  sourceBatchId?: string
+  negativeCreatedAt?: string
+  negativeReason?: string
+  sourceOperationType?: 'pos_order' | 'preparation_production' | 'manual_writeoff'
+  affectedRecipeIds?: string[]
+  reconciledAt?: string
 }
 
 export interface BatchAllocation {

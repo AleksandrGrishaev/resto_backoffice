@@ -898,6 +898,54 @@ export const useStorageStore = defineStore('storage', () => {
   // PINIA STORE RETURN - ТОЧНОЕ СООТВЕТСТВИЕ ОРИГИНАЛЬНОМУ API
   // ===========================
 
+  // ===========================
+  // NEGATIVE INVENTORY METHODS (Sprint 1)
+  // ===========================
+
+  /**
+   * Update cached last_known_cost for a product
+   * Called after batch creation/update to maintain cost cache
+   *
+   * @param productId - UUID of the product
+   */
+  async function updateProductLastKnownCost(productId: string): Promise<void> {
+    const { negativeBatchService } = await import('./negativeBatchService')
+
+    try {
+      const lastBatch = await negativeBatchService.getLastActiveBatch(productId)
+      if (lastBatch) {
+        const { supabase } = await import('@/supabase')
+        const { error } = await supabase
+          .from('products')
+          .update({ last_known_cost: lastBatch.costPerUnit })
+          .eq('id', productId)
+
+        if (error) {
+          console.error('❌ Failed to update last_known_cost:', error)
+        } else {
+          DebugUtils.info(MODULE_NAME, 'Updated last_known_cost', {
+            productId,
+            cost: lastBatch.costPerUnit
+          })
+        }
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error updating last_known_cost', { error, productId })
+    }
+  }
+
+  /**
+   * Check if product allows negative inventory
+   * Configurable per product (default: true)
+   *
+   * @param productId - UUID of the product
+   * @returns True if product allows negative inventory
+   */
+  function canGoNegative(productId: string): boolean {
+    const product = productsStore.products.find(p => p.id === productId)
+    return product?.allowNegativeInventory ?? true
+  }
+
   const productsStore = useProductsStore()
 
   return {
@@ -978,6 +1026,10 @@ export const useStorageStore = defineStore('storage', () => {
     getWarehouse,
     getDefaultWarehouse,
     getAllWarehouses,
+
+    // ✅ Negative Inventory methods (Sprint 1)
+    updateProductLastKnownCost,
+    canGoNegative,
 
     // External stores
     productsStore

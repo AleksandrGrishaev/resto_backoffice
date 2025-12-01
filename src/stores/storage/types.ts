@@ -27,7 +27,7 @@ export interface Warehouse extends BaseEntity {
   isActive: boolean
 }
 
-// ✅ РАСШИРЕН: StorageBatch с полями для транзита
+// ✅ РАСШИРЕН: StorageBatch с полями для транзита и негативного инвентаря
 export interface StorageBatch extends BaseEntity {
   batchNumber: string
   itemId: string
@@ -54,6 +54,15 @@ export interface StorageBatch extends BaseEntity {
   supplierName?: string
   plannedDeliveryDate?: string
   actualDeliveryDate?: string
+
+  // ✨ NEW: Negative inventory fields (Sprint 1)
+  isNegative?: boolean
+  sourceBatchId?: string
+  negativeCreatedAt?: string
+  negativeReason?: string
+  sourceOperationType?: 'pos_order' | 'preparation_production' | 'manual_writeoff'
+  affectedRecipeIds?: string[]
+  reconciledAt?: string
 }
 
 // Остальные существующие интерфейсы остаются без изменений...

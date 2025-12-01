@@ -28,6 +28,9 @@ export type OperationType = 'income' | 'expense' | 'transfer' | 'correction'
 
 export type DailyExpenseCategory =
   | 'product'
+  | 'food_cost' // Negative batch write-offs (expense)
+  | 'inventory_variance' // Reconciliation corrections (income/expense)
+  | 'inventory_adjustment' // Monthly physical count, spoilage (income/expense)
   | 'takeaway'
   | 'ayu_cake'
   | 'utilities'

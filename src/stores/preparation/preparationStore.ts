@@ -633,6 +633,69 @@ export const usePreparationStore = defineStore('preparation', () => {
   })
 
   // ===========================
+  // NEGATIVE INVENTORY METHODS (Sprint 1)
+  // ===========================
+
+  /**
+   * Update cached last_known_cost for a preparation
+   * Called after batch creation/update to maintain cost cache
+   *
+   * @param preparationId - UUID of the preparation
+   */
+  async function updatePreparationLastKnownCost(preparationId: string): Promise<void> {
+    const { negativeBatchService } = await import('./negativeBatchService')
+
+    try {
+      const lastBatch = await negativeBatchService.getLastActiveBatch(preparationId)
+      if (lastBatch) {
+        const { supabase } = await import('@/supabase')
+        const { error } = await supabase
+          .from('preparations')
+          .update({ last_known_cost: lastBatch.costPerUnit })
+          .eq('id', preparationId)
+
+        if (error) {
+          console.error('❌ Failed to update last_known_cost:', error)
+        } else {
+          console.info(
+            `✅ Updated last_known_cost for preparation ${preparationId}: ${lastBatch.costPerUnit}`
+          )
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error updating last_known_cost:', error)
+    }
+  }
+
+  /**
+   * Check if preparation allows negative inventory
+   * Configurable per preparation (default: true)
+   *
+   * @param preparationId - UUID of the preparation
+   * @returns True if preparation allows negative inventory
+   */
+  async function canGoNegative(preparationId: string): Promise<boolean> {
+    try {
+      const { supabase } = await import('@/supabase')
+      const { data, error } = await supabase
+        .from('preparations')
+        .select('allow_negative_inventory')
+        .eq('id', preparationId)
+        .single()
+
+      if (error) {
+        console.error('❌ Error checking allow_negative_inventory:', error)
+        return true // Default to true on error
+      }
+
+      return data?.allow_negative_inventory ?? true
+    } catch (error) {
+      console.error('❌ Error in canGoNegative:', error)
+      return true // Default to true on error
+    }
+  }
+
+  // ===========================
   // RETURN PUBLIC API
   // ===========================
 
@@ -696,6 +759,10 @@ export const usePreparationStore = defineStore('preparation', () => {
     getBalance,
     getOperation,
     getInventory,
+
+    // ✅ Negative Inventory methods (Sprint 1)
+    updatePreparationLastKnownCost,
+    canGoNegative,
 
     // Initialize
     initialize

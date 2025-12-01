@@ -83,6 +83,10 @@ export interface Product extends BaseEntity {
   leadTimeDays?: number
   primarySupplierId?: string
   tags?: string[]
+
+  // ✨ NEW: Negative inventory config (Sprint 1)
+  allowNegativeInventory?: boolean
+  lastKnownCost?: number
 }
 
 // ✅ НОВЫЕ DTO для CRUD операций с упаковками
