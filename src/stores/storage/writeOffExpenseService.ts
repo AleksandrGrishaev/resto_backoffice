@@ -1,5 +1,6 @@
 import { useAccountStore } from '@/stores/account'
-import type { StorageBatch } from './types'
+import type { StorageBatch, WriteOffReason, StorageOperationItem } from './types'
+import { doesWriteOffAffectKPI } from './types'
 import type { PreparationBatch } from '@/stores/preparation/types'
 
 /**
@@ -265,6 +266,72 @@ class WriteOffExpenseService {
 
     console.info(
       `✅ Deleted reconciliation income transaction: Rp ${transaction.amount.toLocaleString()} (${productName})`
+    )
+  }
+
+  /**
+   * Record expense transaction when manual write-off is created
+   * Only records for KPI-affecting write-offs (expired, spoiled, other)
+   * Non-KPI write-offs (education, test, production_consumption, sales_consumption) are skipped
+   *
+   * @param params - Write-off details
+   * @throws Error if no default account found or validation fails
+   */
+  async recordManualWriteOff(params: {
+    reason: WriteOffReason
+    totalValue: number
+    description: string
+    items: StorageOperationItem[]
+  }): Promise<void> {
+    // Only record if affects KPI (automatically excludes education, test, etc.)
+    if (!doesWriteOffAffectKPI(params.reason)) {
+      console.info(
+        `⏭️  Skipping expense for non-KPI write-off (${params.reason}): ${params.description}`
+      )
+      return
+    }
+
+    const accountStore = useAccountStore()
+
+    // Get default expense account (acc_1 or first available)
+    const defaultAccount =
+      accountStore.accounts.find(a => a.name === 'acc_1') || accountStore.accounts[0]
+
+    if (!defaultAccount) {
+      console.error('❌ No default account found for write-off recording')
+      throw new Error('No default account available for write-off recording')
+    }
+
+    // Validate total value
+    if (typeof params.totalValue !== 'number' || isNaN(params.totalValue)) {
+      console.error('❌ Invalid totalValue:', params.totalValue)
+      throw new Error(`Invalid totalValue: ${params.totalValue}`)
+    }
+
+    if (params.totalValue <= 0) {
+      console.error('❌ Write-off totalValue must be positive:', params.totalValue)
+      throw new Error(`Write-off totalValue must be positive: ${params.totalValue}`)
+    }
+
+    // Create expense transaction
+    await accountStore.createOperation({
+      accountId: defaultAccount.id,
+      type: 'expense',
+      amount: -params.totalValue, // negative amount for expense
+      description: params.description,
+      expenseCategory: {
+        type: 'daily',
+        category: 'inventory_adjustment' // For spoilage/shortage in P&L
+      },
+      performedBy: {
+        type: 'api',
+        id: 'system',
+        name: 'Inventory System'
+      }
+    })
+
+    console.info(
+      `✅ Recorded write-off expense (${params.reason}): Rp ${params.totalValue.toLocaleString()}`
     )
   }
 }

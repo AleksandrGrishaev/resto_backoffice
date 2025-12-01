@@ -1192,6 +1192,29 @@ export class StorageService {
 
       if (!opData) throw new Error('Failed to create operation')
 
+      const createdOperation = mapOperationFromDB(opData)
+
+      // ✅ NEW: Record financial transaction for KPI-affecting write-offs
+      if (operation.writeOffDetails && totalValue > 0) {
+        try {
+          const { writeOffExpenseService } = await import('./writeOffExpenseService')
+          await writeOffExpenseService.recordManualWriteOff({
+            reason: data.reason,
+            totalValue: totalValue,
+            description: `Write-off: ${data.reason} (${documentNumber})${data.notes ? ' - ' + data.notes : ''}`,
+            items: operationItems
+          })
+        } catch (expenseError) {
+          // Don't fail entire operation if expense recording fails
+          // Financial transaction can be backfilled later if needed
+          DebugUtils.error(
+            MODULE_NAME,
+            '❌ Failed to record write-off expense (operation created successfully)',
+            extractErrorDetails(expenseError)
+          )
+        }
+      }
+
       DebugUtils.info(MODULE_NAME, '✅ Write-off created successfully', {
         documentNumber,
         reason: data.reason,
@@ -1205,7 +1228,7 @@ export class StorageService {
 
       return {
         success: true,
-        data: mapOperationFromDB(opData),
+        data: createdOperation,
         metadata: {
           timestamp: operationDate,
           source: 'api'
