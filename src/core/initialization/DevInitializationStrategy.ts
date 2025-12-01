@@ -445,15 +445,15 @@ export class DevInitializationStrategy implements InitializationStrategy {
   private async initializeBackofficeStores(): Promise<StoreInitResult[]> {
     DebugUtils.info(MODULE_NAME, '🏢 [DEV] Initializing backoffice stores...')
 
-    // Параллельная загрузка независимых stores
-    // NOTE: storage уже загружен в критических stores
-    const results = await Promise.all([
-      this.loadAccounts(),
-      this.loadPreparations(),
-      this.loadSuppliers()
-    ])
+    // ✅ FIX: Preparations depend on recipes, so load sequentially
+    // Load preparations first (depends on recipes from critical stores)
+    const preparationsResult = await this.loadPreparations()
 
-    return results
+    // Then load independent stores in parallel
+    // NOTE: storage уже загружен в критических stores
+    const parallelResults = await Promise.all([this.loadAccounts(), this.loadSuppliers()])
+
+    return [preparationsResult, ...parallelResults]
   }
 
   private async loadAccounts(): Promise<StoreInitResult> {

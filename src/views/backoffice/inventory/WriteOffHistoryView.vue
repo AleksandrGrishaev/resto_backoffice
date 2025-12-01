@@ -118,7 +118,7 @@
             <div>
               <div class="font-weight-bold">{{ getMenuItemName(item.menuItemId) }}</div>
               <div v-if="item.variantId" class="text-caption text-grey">
-                Variant: {{ item.variantId }}
+                Variant: {{ getVariantName(item.menuItemId, item.variantId) }}
               </div>
             </div>
           </template>
@@ -220,10 +220,30 @@
           <v-divider class="my-4" />
 
           <!-- Write-off Items -->
-          <h3 class="text-h6 mb-3">Written Off Items</h3>
+          <h3 class="text-h6 mb-3">
+            Written Off Items
+            <v-chip
+              v-if="actualCostData"
+              size="small"
+              color="success"
+              class="ml-2"
+              title="Using actual FIFO costs from batches"
+            >
+              FIFO Cost
+            </v-chip>
+            <v-chip
+              v-else
+              size="small"
+              color="warning"
+              class="ml-2"
+              title="Using estimated costs from recipe decomposition"
+            >
+              Estimated Cost
+            </v-chip>
+          </h3>
           <v-data-table
             :headers="itemHeaders"
-            :items="selectedWriteOff.writeOffItems"
+            :items="displayItems"
             density="compact"
             :items-per-page="20"
           >
@@ -309,9 +329,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRecipeWriteOffStore } from '@/stores/sales'
 import { useMenuStore } from '@/stores/menu/menuStore'
+import { supabase } from '@/supabase'
 import type { RecipeWriteOff, WriteOffFilters, WriteOffSummary } from '@/stores/sales'
 
 const recipeWriteOffStore = useRecipeWriteOffStore()
@@ -325,6 +346,8 @@ const writeOffs = ref<RecipeWriteOff[]>([])
 const summary = ref<WriteOffSummary | null>(null)
 const detailsDialog = ref(false)
 const selectedWriteOff = ref<RecipeWriteOff | null>(null)
+const actualCostData = ref<any>(null) // Store actual_cost from sales_transactions (for details dialog)
+const actualCostCache = ref<Map<string, number>>(new Map()) // Cache actual costs for table display
 
 // Filters
 const filters = ref<WriteOffFilters>({
@@ -404,8 +427,131 @@ function getMenuItemName(menuItemId: string): string {
   return menuItem?.name || menuItemId
 }
 
+function getVariantName(menuItemId: string, variantId: string): string {
+  const menuItem = menuStore.menuItems.find(item => item.id === menuItemId)
+  if (!menuItem) return variantId
+
+  const variant = menuItem.variants?.find((v: any) => v.id === variantId)
+  return variant?.name || variantId
+}
+
+// Computed property for displaying items with actual FIFO costs
+const displayItems = computed(() => {
+  if (!selectedWriteOff.value || !actualCostData.value) {
+    // Fallback to old decomposed data if actual_cost is not available
+    return selectedWriteOff.value?.writeOffItems || []
+  }
+
+  const actualCost = actualCostData.value
+  const items: any[] = []
+
+  // Map preparation costs
+  if (actualCost.preparationCosts) {
+    for (const prep of actualCost.preparationCosts) {
+      items.push({
+        itemName: prep.preparationName,
+        quantityPerPortion: prep.quantity / (selectedWriteOff.value?.soldQuantity || 1),
+        totalQuantity: prep.quantity,
+        unit: prep.unit,
+        costPerUnit: prep.averageCostPerUnit,
+        totalCost: prep.totalCost,
+        batchIds: prep.batchAllocations?.map((a: any) => a.batchId) || [],
+        itemType: 'preparation'
+      })
+    }
+  }
+
+  // Map product costs
+  if (actualCost.productCosts) {
+    for (const prod of actualCost.productCosts) {
+      items.push({
+        itemName: prod.productName,
+        quantityPerPortion: prod.quantity / (selectedWriteOff.value?.soldQuantity || 1),
+        totalQuantity: prod.quantity,
+        unit: prod.unit,
+        costPerUnit: prod.averageCostPerUnit,
+        totalCost: prod.totalCost,
+        batchIds: prod.batchAllocations?.map((a: any) => a.batchId) || [],
+        itemType: 'product'
+      })
+    }
+  }
+
+  return items
+})
+
 function getTotalCost(writeOff: RecipeWriteOff): number {
-  return writeOff.writeOffItems.reduce((sum, item) => sum + item.totalCost, 0)
+  // If this is the selected write-off and we have actual cost data, use it
+  if (selectedWriteOff.value?.id === writeOff.id && actualCostData.value) {
+    return actualCostData.value.totalCost || 0
+  }
+
+  // Check cache for actual cost
+  if (actualCostCache.value.has(writeOff.id)) {
+    return actualCostCache.value.get(writeOff.id) || 0
+  }
+
+  // Otherwise fallback to decomposed data
+  return writeOff.writeOffItems.reduce((sum: number, item: any) => sum + item.totalCost, 0)
+}
+
+async function loadActualCost(salesTransactionId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('sales_transactions')
+      .select('actual_cost')
+      .eq('id', salesTransactionId)
+      .single()
+
+    if (error) {
+      console.error('Error loading actual cost:', error)
+      actualCostData.value = null
+      return
+    }
+
+    actualCostData.value = data?.actual_cost || null
+    console.log('✅ Loaded actual cost from sales_transactions:', actualCostData.value)
+  } catch (err) {
+    console.error('Failed to load actual cost:', err)
+    actualCostData.value = null
+  }
+}
+
+async function loadActualCostsForAll(writeOffs: RecipeWriteOff[]) {
+  // Get all sales transaction IDs
+  const transactionIds = writeOffs.filter(w => w.salesTransactionId).map(w => w.salesTransactionId)
+
+  if (transactionIds.length === 0) return
+
+  try {
+    // Load actual costs in batch
+    const { data, error } = await supabase
+      .from('sales_transactions')
+      .select('id, actual_cost')
+      .in('id', transactionIds)
+
+    if (error) {
+      console.error('Error loading actual costs:', error)
+      return
+    }
+
+    // Build cache: writeOffId -> totalCost
+    const newCache = new Map<string, number>()
+
+    for (const writeOff of writeOffs) {
+      if (!writeOff.salesTransactionId) continue
+
+      const transaction = data?.find(t => t.id === writeOff.salesTransactionId)
+      if (transaction?.actual_cost?.totalCost) {
+        newCache.set(writeOff.id, transaction.actual_cost.totalCost)
+      }
+    }
+
+    actualCostCache.value = newCache
+    console.log(`✅ Loaded actual costs for ${newCache.size} write-offs`)
+  } catch (err) {
+    console.error('Failed to load actual costs:', err)
+  }
 }
 
 async function applyFilters() {
@@ -419,6 +565,9 @@ async function applyFilters() {
 
     if (result.success && result.data) {
       writeOffs.value = result.data
+
+      // Load actual costs for table display
+      await loadActualCostsForAll(result.data)
     }
 
     // Load summary
@@ -443,9 +592,15 @@ function clearFilters() {
   applyFilters()
 }
 
-function showDetails(writeOff: RecipeWriteOff) {
+async function showDetails(writeOff: RecipeWriteOff) {
   selectedWriteOff.value = writeOff
   detailsDialog.value = true
+  actualCostData.value = null // Reset
+
+  // Load actual cost from sales_transactions if available
+  if (writeOff.salesTransactionId) {
+    await loadActualCost(writeOff.salesTransactionId)
+  }
 }
 
 function viewSalesTransaction() {

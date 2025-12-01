@@ -29,6 +29,14 @@ export function batchToSupabase(batch: PreparationBatch): Record<string, any> {
     status: batch.status,
     is_active: batch.isActive,
     notes: batch.notes || null,
+    // Negative batch fields
+    is_negative: batch.isNegative || false,
+    source_batch_id: batch.sourceBatchId || null,
+    negative_created_at: batch.negativeCreatedAt || null,
+    negative_reason: batch.negativeReason || null,
+    source_operation_type: batch.sourceOperationType || null,
+    affected_recipe_ids: batch.affectedRecipeIds || null,
+    reconciled_at: batch.reconciledAt || null,
     created_at: batch.createdAt,
     updated_at: batch.updatedAt
   }
@@ -77,6 +85,14 @@ export function batchFromSupabase(row: any): PreparationBatch {
     status: row.status,
     isActive: row.is_active,
     notes: row.notes,
+    // Negative batch fields
+    isNegative: row.is_negative || false,
+    sourceBatchId: row.source_batch_id,
+    negativeCreatedAt: row.negative_created_at,
+    negativeReason: row.negative_reason,
+    sourceOperationType: row.source_operation_type,
+    affectedRecipeIds: row.affected_recipe_ids,
+    reconciledAt: row.reconciled_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

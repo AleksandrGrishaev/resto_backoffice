@@ -89,16 +89,28 @@
                     <div class="d-flex align-center">
                       <v-chip
                         size="small"
-                        :color="index === 0 ? 'primary' : 'default'"
+                        :color="
+                          batch.isNegative || batch.currentQuantity < 0
+                            ? 'error'
+                            : index === 0
+                              ? 'primary'
+                              : 'default'
+                        "
                         variant="flat"
                         class="mr-2"
                       >
-                        #{{ index + 1 }}
+                        {{
+                          batch.isNegative || batch.currentQuantity < 0 ? '⚠️ NEG' : `#${index + 1}`
+                        }}
                       </v-chip>
                       <div>
                         <div class="font-weight-medium">{{ batch.batchNumber }}</div>
                         <div class="text-caption text-medium-emphasis">
-                          Produced {{ formatDate(batch.productionDate) }}
+                          {{
+                            batch.isNegative || batch.currentQuantity < 0
+                              ? 'Negative stock created'
+                              : `Produced ${formatDate(batch.productionDate)}`
+                          }}
                         </div>
                       </div>
                     </div>
@@ -407,6 +419,9 @@ function getHoursUntilExpiry(expiryDate: string): number {
 }
 
 function getBatchCardClass(batch: any): string {
+  // ✅ Negative batches get special styling
+  if (batch.isNegative || batch.currentQuantity < 0) return 'negative-batch'
+
   if (!batch.expiryDate) return ''
   if (isExpired(batch.expiryDate)) return 'expired-batch'
   if (isExpiringSoon(batch.expiryDate)) return 'expiring-batch'
@@ -504,5 +519,11 @@ function calculateStockAge(oldestDate: string): number {
 .expired-batch {
   border-left: 4px solid rgb(var(--v-theme-error));
   background-color: rgba(var(--v-theme-error), 0.05);
+}
+
+.negative-batch {
+  border-left: 4px solid rgb(var(--v-theme-error));
+  background-color: rgba(var(--v-theme-error), 0.1);
+  border: 2px dashed rgb(var(--v-theme-error));
 }
 </style>

@@ -1,5 +1,6 @@
 import { supabase } from '@/supabase'
 import type { PreparationBatch } from './types'
+import { batchToSupabase, batchFromSupabase } from './supabase/mappers'
 
 /**
  * Service for managing negative inventory batches for preparations
@@ -37,7 +38,8 @@ class NegativeBatchService {
       return null
     }
 
-    return data
+    // ✅ Convert snake_case to camelCase
+    return data ? batchFromSupabase(data) : null
   }
 
   /**
@@ -135,9 +137,12 @@ class NegativeBatchService {
       updatedAt: now
     }
 
+    // ✅ FIX: Use mapper to convert camelCase to snake_case
+    const dbBatch = batchToSupabase(negativeBatch as PreparationBatch)
+
     const { data, error } = await supabase
       .from('preparation_batches')
-      .insert(negativeBatch)
+      .insert(dbBatch)
       .select()
       .single()
 
@@ -149,7 +154,8 @@ class NegativeBatchService {
       `✅ Created negative batch: ${batchNumber} (${params.quantity} ${params.unit}, cost: ${params.cost}/unit)`
     )
 
-    return data
+    // ✅ Convert snake_case to camelCase
+    return batchFromSupabase(data)
   }
 
   /**
@@ -189,7 +195,8 @@ class NegativeBatchService {
       return []
     }
 
-    return data || []
+    // ✅ Convert snake_case to camelCase for all batches
+    return data ? data.map(batchFromSupabase) : []
   }
 
   /**
@@ -221,6 +228,97 @@ class NegativeBatchService {
   async getTotalNegativeQuantity(preparationId: string): Promise<number> {
     const batches = await this.getNegativeBatches(preparationId)
     return batches.reduce((sum, batch) => sum + Math.abs(batch.currentQuantity), 0)
+  }
+
+  /**
+   * Get active (unreconciled) negative batch for a preparation in a department
+   * Used to consolidate negative batches instead of creating duplicates
+   *
+   * @param preparationId - UUID of the preparation
+   * @param department - Department where the preparation is used
+   * @returns The most recent unreconciled negative batch or null
+   */
+  async getActiveNegativeBatch(
+    preparationId: string,
+    department: 'kitchen' | 'bar'
+  ): Promise<PreparationBatch | null> {
+    const { data, error } = await supabase
+      .from('preparation_batches')
+      .select('*')
+      .eq('preparation_id', preparationId)
+      .eq('department', department)
+      .eq('is_negative', true)
+      .is('reconciled_at', null)
+      .order('negative_created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('❌ Error fetching active negative batch:', error)
+      return null
+    }
+
+    // ✅ Convert snake_case to camelCase
+    return data ? batchFromSupabase(data) : null
+  }
+
+  /**
+   * Update existing negative batch with additional shortage
+   * Consolidates shortages into a single negative batch instead of creating duplicates
+   *
+   * @param batchId - UUID of the negative batch to update
+   * @param additionalShortage - Additional shortage to add (positive number)
+   * @param costPerUnit - Cost per unit (for validation/logging)
+   * @returns Updated negative batch
+   * @throws Error if batch not found or update fails
+   */
+  async updateNegativeBatch(
+    batchId: string,
+    additionalShortage: number,
+    costPerUnit: number
+  ): Promise<PreparationBatch> {
+    // 1. Get current batch
+    const { data: currentBatch, error: fetchError } = await supabase
+      .from('preparation_batches')
+      .select('*')
+      .eq('id', batchId)
+      .single()
+
+    if (fetchError || !currentBatch) {
+      throw new Error(`Negative batch not found: ${batchId}`)
+    }
+
+    const batch = batchFromSupabase(currentBatch)
+
+    // 2. Calculate new quantities
+    const previousQty = batch.currentQuantity // e.g., -100
+    const newQty = previousQty - additionalShortage // e.g., -100 - 100 = -200 (more negative)
+    const newTotalValue = newQty * batch.costPerUnit
+
+    const now = new Date().toISOString()
+
+    // 3. Update batch in database
+    const { data: updatedData, error: updateError } = await supabase
+      .from('preparation_batches')
+      .update({
+        current_quantity: newQty,
+        total_value: newTotalValue,
+        updated_at: now
+      })
+      .eq('id', batchId)
+      .select()
+      .single()
+
+    if (updateError) {
+      throw new Error(`Failed to update negative batch: ${updateError.message}`)
+    }
+
+    console.info(
+      `✅ Updated existing negative batch: ${batch.batchNumber} (${previousQty} → ${newQty}, +${additionalShortage} shortage)`
+    )
+
+    // ✅ Convert snake_case to camelCase
+    return batchFromSupabase(updatedData)
   }
 }
 

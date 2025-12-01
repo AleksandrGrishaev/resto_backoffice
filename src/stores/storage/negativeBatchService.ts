@@ -226,6 +226,94 @@ class NegativeBatchService {
     const batches = await this.getNegativeBatches(productId)
     return batches.reduce((sum, batch) => sum + Math.abs(batch.currentQuantity), 0)
   }
+
+  /**
+   * Get active (unreconciled) negative batch for a product in a warehouse
+   * Used to consolidate negative batches instead of creating duplicates
+   *
+   * @param productId - UUID of the product
+   * @param warehouseId - Warehouse ID where the product is stored
+   * @returns The most recent unreconciled negative batch or null
+   */
+  async getActiveNegativeBatch(
+    productId: string,
+    warehouseId: string
+  ): Promise<StorageBatch | null> {
+    const { data, error } = await supabase
+      .from('storage_batches')
+      .select('*')
+      .eq('item_id', productId)
+      .eq('item_type', 'product')
+      .eq('warehouse_id', warehouseId)
+      .eq('is_negative', true)
+      .is('reconciled_at', null)
+      .order('negative_created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('❌ Error fetching active negative batch:', error)
+      return null
+    }
+
+    return data
+  }
+
+  /**
+   * Update existing negative batch with additional shortage
+   * Consolidates shortages into a single negative batch instead of creating duplicates
+   *
+   * @param batchId - UUID of the negative batch to update
+   * @param additionalShortage - Additional shortage to add (positive number)
+   * @param costPerUnit - Cost per unit (for validation/logging)
+   * @returns Updated negative batch
+   * @throws Error if batch not found or update fails
+   */
+  async updateNegativeBatch(
+    batchId: string,
+    additionalShortage: number,
+    costPerUnit: number
+  ): Promise<StorageBatch> {
+    // 1. Get current batch
+    const { data: batch, error: fetchError } = await supabase
+      .from('storage_batches')
+      .select('*')
+      .eq('id', batchId)
+      .single()
+
+    if (fetchError || !batch) {
+      throw new Error(`Negative batch not found: ${batchId}`)
+    }
+
+    // 2. Calculate new quantities
+    const previousQty = batch.currentQuantity // e.g., -100
+    const newQty = previousQty - additionalShortage // e.g., -100 - 100 = -200 (more negative)
+    const newTotalValue = newQty * batch.costPerUnit
+
+    const now = new Date().toISOString()
+
+    // 3. Update batch in database
+    const { data: updatedBatch, error: updateError } = await supabase
+      .from('storage_batches')
+      .update({
+        current_quantity: newQty,
+        total_value: newTotalValue,
+        updated_at: now
+      })
+      .eq('id', batchId)
+      .select()
+      .single()
+
+    if (updateError) {
+      throw new Error(`Failed to update negative batch: ${updateError.message}`)
+    }
+
+    console.info(
+      `✅ Updated existing negative batch: ${batch.batchNumber} (${previousQty} → ${newQty}, +${additionalShortage} shortage)`
+    )
+
+    return updatedBatch!
+  }
 }
 
 export const negativeBatchService = new NegativeBatchService()

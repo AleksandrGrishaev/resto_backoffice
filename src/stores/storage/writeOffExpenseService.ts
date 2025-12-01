@@ -37,8 +37,29 @@ class WriteOffExpenseService {
       throw new Error('No default account available for expense recording')
     }
 
+    // ✅ Validate batch data before calculation
+    if (typeof batch.currentQuantity !== 'number' || isNaN(batch.currentQuantity)) {
+      console.error('❌ Invalid batch.currentQuantity:', batch.currentQuantity)
+      throw new Error(`Invalid batch.currentQuantity: ${batch.currentQuantity}`)
+    }
+
+    if (typeof batch.costPerUnit !== 'number' || isNaN(batch.costPerUnit)) {
+      console.error('❌ Invalid batch.costPerUnit:', batch.costPerUnit, 'batch:', batch)
+      throw new Error(`Invalid batch.costPerUnit: ${batch.costPerUnit} for ${productName}`)
+    }
+
     // Calculate total cost (will be negative)
     const totalCost = Math.abs(batch.currentQuantity) * batch.costPerUnit
+
+    // ✅ Final validation before sending to DB
+    if (isNaN(totalCost)) {
+      console.error('❌ Calculated totalCost is NaN:', {
+        currentQuantity: batch.currentQuantity,
+        costPerUnit: batch.costPerUnit,
+        totalCost
+      })
+      throw new Error(`Invalid totalCost calculation for ${productName}`)
+    }
 
     // Create expense transaction
     await accountStore.createOperation({

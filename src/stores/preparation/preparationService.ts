@@ -174,9 +174,21 @@ export class PreparationService {
 
       const recipesStore = useRecipesStore()
 
+      // ✅ FIX: Ensure recipes store is initialized BEFORE loading preparations
+      if (!recipesStore.initialized) {
+        DebugUtils.warn(MODULE_NAME, 'RecipesStore not initialized - initializing now...')
+        await recipesStore.initialize()
+      }
+
       if (recipesStore.preparations.length === 0) {
+        DebugUtils.info(MODULE_NAME, 'No preparations in recipesStore - fetching...')
         await recipesStore.fetchPreparations()
       }
+
+      DebugUtils.info(MODULE_NAME, 'RecipesStore ready', {
+        initialized: recipesStore.initialized,
+        preparations: recipesStore.preparations.length
+      })
 
       // Load data from Supabase
       await this.loadBatchesFromSupabase()
@@ -1252,11 +1264,12 @@ export class PreparationService {
       const departmentPreparationIds = new Set(departmentPreparations.map(p => p.id))
 
       // ✅ FIXED: Filter batches by preparation department, not batch department
+      // ⚠️ Include negative batches (currentQuantity < 0) for display
       const activeBatches = this.batches.filter(
         b =>
           departmentPreparationIds.has(b.preparationId) &&
           b.status === 'active' &&
-          b.currentQuantity > 0
+          b.currentQuantity !== 0 // Include both positive and negative quantities
       )
 
       // Group batches by preparationId
@@ -1362,6 +1375,13 @@ export class PreparationService {
           const actualBalance = Math.round((actualBalances.get(preparationId) || 0) * 10000) / 10000
           const preparationInfo = this.getPreparationInfo(preparationId)
 
+          // ✅ Get batches for this preparation (including negative batches)
+          const preparationBatches = activeBatches
+            .filter(b => b.preparationId === preparationId)
+            .sort(
+              (a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
+            )
+
           const balance: PreparationBalance = {
             preparationId,
             preparationName: preparationInfo.name,
@@ -1372,9 +1392,13 @@ export class PreparationService {
             averageCost: preparationInfo.costPerPortion,
             latestCost: preparationInfo.costPerPortion,
             costTrend: 'stable',
-            batches: [],
-            oldestBatchDate: '',
-            newestBatchDate: '',
+            batches: preparationBatches, // ✅ Include all batches (positive and negative)
+            oldestBatchDate:
+              preparationBatches.length > 0 ? preparationBatches[0].productionDate : '',
+            newestBatchDate:
+              preparationBatches.length > 0
+                ? preparationBatches[preparationBatches.length - 1].productionDate
+                : '',
             hasExpired: false,
             hasNearExpiry: false,
             belowMinStock: true,

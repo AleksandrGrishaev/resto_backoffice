@@ -327,8 +327,18 @@ export class StorageService {
         `${MODULE_NAME}.allocatePreparationFIFO`
       )
 
+      // ✅ FIX: Don't throw error when no batches - return empty allocations
+      // This allows negative batch creation logic to work
       if (!batches || batches.length === 0) {
-        throw new Error('No active batches available for this item')
+        DebugUtils.warn(MODULE_NAME, '⚠️ No active batches found - will need negative batch', {
+          preparationId,
+          department,
+          neededQuantity
+        })
+        return {
+          success: true,
+          data: [] // Empty allocations - will trigger negative batch creation
+        }
       }
 
       // Allocate quantities using FIFO logic
@@ -832,6 +842,10 @@ export class StorageService {
 
           allocations = allocationResult.data
 
+          // ✅ NEW: Calculate allocated quantity vs requested
+          const allocatedQuantity = allocations.reduce((sum, a) => sum + a.quantity, 0)
+          const shortage = item.quantity - allocatedQuantity
+
           // Update preparation batch quantities
           for (const allocation of allocations) {
             const batchData = await executeSupabaseSingle(
@@ -860,6 +874,102 @@ export class StorageService {
               if (updateError) throw updateError
             }, `${MODULE_NAME}.createWriteOff.updatePreparationBatch`)
           }
+
+          // ✅ NEW: Create or update negative batch if there's a shortage
+          if (shortage > 0) {
+            DebugUtils.warn(
+              MODULE_NAME,
+              '⚠️ Shortage detected for preparation - checking for existing negative batch',
+              {
+                itemId: item.itemId,
+                itemName: item.itemName,
+                shortage,
+                allocated: allocatedQuantity,
+                requested: item.quantity
+              }
+            )
+
+            // Import services
+            const { negativeBatchService } = await import(
+              '@/stores/preparation/negativeBatchService'
+            )
+            const { writeOffExpenseService } = await import('./writeOffExpenseService')
+
+            // Get preparation info from recipesStore (preparations are stored there)
+            const { useRecipesStore } = await import('@/stores/recipes')
+            const recipesStore = useRecipesStore()
+            const preparation = recipesStore.preparations?.find(p => p.id === item.itemId)
+
+            if (!preparation) {
+              DebugUtils.error(MODULE_NAME, 'Preparation not found for negative batch', {
+                itemId: item.itemId,
+                preparationsAvailable: recipesStore.preparations?.length || 0
+              })
+              throw new Error(`Preparation ${item.itemId} not found in recipesStore`)
+            }
+
+            // Calculate cost for negative batch (use last known cost)
+            const cost = await negativeBatchService.calculateNegativeBatchCost(
+              item.itemId,
+              shortage
+            )
+
+            // Check if there's already an unreconciled negative batch
+            const existingNegative = await negativeBatchService.getActiveNegativeBatch(
+              item.itemId,
+              data.department
+            )
+
+            if (existingNegative) {
+              // Update existing negative batch
+              const updatedBatch = await negativeBatchService.updateNegativeBatch(
+                existingNegative.id,
+                shortage,
+                cost
+              )
+
+              // Record expense for additional shortage only
+              await writeOffExpenseService.recordNegativeBatchExpense(
+                updatedBatch,
+                item.itemName || preparation.name,
+                shortage
+              )
+
+              DebugUtils.info(MODULE_NAME, '✅ Updated existing negative batch for preparation', {
+                batchNumber: updatedBatch.batchNumber,
+                additionalShortage: shortage,
+                totalNegativeQty: updatedBatch.currentQuantity,
+                cost
+              })
+            } else {
+              // Create new negative batch
+              const negativeBatch = await negativeBatchService.createNegativeBatch({
+                preparationId: item.itemId,
+                department: data.department,
+                quantity: -shortage,
+                unit: item.unit || preparation.unit,
+                cost: cost,
+                reason: item.notes || data.notes || 'Automatic negative batch creation',
+                sourceOperationType: 'manual_writeoff',
+                affectedRecipeIds: [],
+                userId: undefined,
+                shiftId: undefined
+              })
+
+              // Record expense transaction
+              await writeOffExpenseService.recordNegativeBatchExpense(
+                negativeBatch,
+                item.itemName || preparation.name
+              )
+
+              DebugUtils.info(MODULE_NAME, '✅ Created new negative batch for preparation', {
+                batchNumber: negativeBatch.batchNumber,
+                quantity: -shortage,
+                cost,
+                totalCost: shortage * cost
+              })
+            }
+          }
         } else {
           // Allocate from storage_batches (original logic for products)
           const productInfo = await this.getProductInfo(item.itemId)
@@ -871,6 +981,10 @@ export class StorageService {
           }
 
           allocations = allocationResult.data
+
+          // ✅ NEW: Calculate allocated quantity vs requested
+          const allocatedQuantity = allocations.reduce((sum, a) => sum + a.quantity, 0)
+          const shortage = item.quantity - allocatedQuantity
 
           // Update storage batch quantities
           for (const allocation of allocations) {
@@ -899,6 +1013,87 @@ export class StorageService {
 
               if (updateError) throw updateError
             }, `${MODULE_NAME}.createWriteOff.updateBatch`)
+          }
+
+          // ✅ NEW: Create or update negative batch if there's a shortage
+          if (shortage > 0) {
+            DebugUtils.warn(
+              MODULE_NAME,
+              '⚠️ Shortage detected - checking for existing negative batch',
+              {
+                itemId: item.itemId,
+                itemName: item.itemName,
+                shortage,
+                allocated: allocatedQuantity,
+                requested: item.quantity
+              }
+            )
+
+            // Import services
+            const { negativeBatchService } = await import('./negativeBatchService')
+            const { writeOffExpenseService } = await import('./writeOffExpenseService')
+
+            // Calculate cost for negative batch (use last known cost)
+            const cost = await negativeBatchService.calculateNegativeBatchCost(
+              item.itemId,
+              shortage
+            )
+
+            // Check if there's already an unreconciled negative batch
+            const existingNegative = await negativeBatchService.getActiveNegativeBatch(
+              item.itemId,
+              warehouseId
+            )
+
+            if (existingNegative) {
+              // Update existing negative batch
+              const updatedBatch = await negativeBatchService.updateNegativeBatch(
+                existingNegative.id,
+                shortage,
+                cost
+              )
+
+              // Record expense for additional shortage only
+              await writeOffExpenseService.recordNegativeBatchExpense(
+                updatedBatch,
+                item.itemName || productInfo.name,
+                shortage
+              )
+
+              DebugUtils.info(MODULE_NAME, '✅ Updated existing negative batch', {
+                batchNumber: updatedBatch.batchNumber,
+                additionalShortage: shortage,
+                totalNegativeQty: updatedBatch.currentQuantity,
+                cost
+              })
+            } else {
+              // Create new negative batch
+              const negativeBatch = await negativeBatchService.createNegativeBatch({
+                productId: item.itemId,
+                warehouseId: warehouseId,
+                quantity: -shortage,
+                unit: item.unit || productInfo.unit,
+                cost: cost,
+                reason: item.notes || data.notes || 'Automatic negative batch creation',
+                sourceOperationType: 'manual_writeoff',
+                affectedRecipeIds: [],
+                userId: undefined,
+                shiftId: undefined
+              })
+
+              // Record expense transaction
+              await writeOffExpenseService.recordNegativeBatchExpense(
+                negativeBatch,
+                item.itemName || productInfo.name
+              )
+
+              DebugUtils.info(MODULE_NAME, '✅ Created new negative batch', {
+                batchNumber: negativeBatch.batchNumber,
+                quantity: -shortage,
+                cost,
+                totalCost: shortage * cost
+              })
+            }
           }
         }
 

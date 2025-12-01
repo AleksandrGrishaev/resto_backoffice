@@ -222,8 +222,35 @@ export function useActualCostCalculation() {
 
     for (const batch of batches) {
       if (remainingQuantity <= 0) break
-      if (batch.currentQuantity <= 0) continue
 
+      // Skip only zero batches, not negative ones
+      if (batch.currentQuantity === 0) continue
+
+      // Handle negative batches - use their cost (last known cost)
+      if (batch.currentQuantity < 0) {
+        const allocatedQty = Math.min(remainingQuantity, Math.abs(batch.currentQuantity))
+
+        allocations.push({
+          batchId: batch.id,
+          batchNumber: batch.batchNumber,
+          allocatedQuantity: allocatedQty,
+          costPerUnit: batch.costPerUnit,
+          totalCost: allocatedQty * batch.costPerUnit,
+          batchCreatedAt: batch.productionDate
+        })
+
+        remainingQuantity -= allocatedQty
+
+        DebugUtils.warn(MODULE_NAME, 'Using negative batch for cost calculation', {
+          batchNumber: batch.batchNumber,
+          quantity: allocatedQty,
+          costPerUnit: batch.costPerUnit,
+          preparationId
+        })
+        continue
+      }
+
+      // Handle positive batches (normal FIFO)
       const allocatedQty = Math.min(batch.currentQuantity, remainingQuantity)
 
       allocations.push({
@@ -327,8 +354,35 @@ export function useActualCostCalculation() {
 
     for (const batch of batches) {
       if (remainingQuantity <= 0) break
-      if (batch.currentQuantity <= 0) continue
 
+      // Skip only zero batches, not negative ones
+      if (batch.currentQuantity === 0) continue
+
+      // Handle negative batches - use their cost (last known cost)
+      if (batch.currentQuantity < 0) {
+        const allocatedQty = Math.min(remainingQuantity, Math.abs(batch.currentQuantity))
+
+        allocations.push({
+          batchId: batch.id,
+          batchNumber: batch.batchNumber,
+          allocatedQuantity: allocatedQty,
+          costPerUnit: batch.costPerUnit,
+          totalCost: allocatedQty * batch.costPerUnit,
+          batchCreatedAt: batch.receiptDate
+        })
+
+        remainingQuantity -= allocatedQty
+
+        DebugUtils.warn(MODULE_NAME, 'Using negative batch for cost calculation', {
+          batchNumber: batch.batchNumber,
+          quantity: allocatedQty,
+          costPerUnit: batch.costPerUnit,
+          productId
+        })
+        continue
+      }
+
+      // Handle positive batches (normal FIFO)
       const allocatedQty = Math.min(batch.currentQuantity, remainingQuantity)
 
       allocations.push({

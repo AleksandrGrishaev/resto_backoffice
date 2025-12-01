@@ -271,10 +271,10 @@
           <v-divider class="my-4" />
 
           <!-- Decomposition -->
-          <h3 class="text-h6 mb-3">Ingredients Used</h3>
+          <h3 class="text-h6 mb-3">Ingredients Used (FIFO Cost)</h3>
           <v-data-table
             :headers="ingredientHeaders"
-            :items="selectedTransaction.decompositionSummary.decomposedItems"
+            :items="actualCostItems"
             density="compact"
             :items-per-page="10"
           >
@@ -306,7 +306,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useSalesStore } from '@/stores/sales'
 import type { SalesTransaction, SalesFilters } from '@/stores/sales'
 
@@ -319,6 +319,47 @@ const errorMessage = ref('')
 const transactions = ref<SalesTransaction[]>([])
 const detailsDialog = ref(false)
 const selectedTransaction = ref<SalesTransaction | null>(null)
+
+// ✅ Computed: Combine actualCost items for display
+const actualCostItems = computed(() => {
+  if (!selectedTransaction.value?.actualCost) {
+    // Fallback to decomposition summary for old transactions
+    return selectedTransaction.value?.decompositionSummary?.decomposedItems || []
+  }
+
+  const actualCost = selectedTransaction.value.actualCost
+  const items: any[] = []
+
+  // Add preparation costs
+  if (actualCost.preparationCosts) {
+    actualCost.preparationCosts.forEach(prep => {
+      items.push({
+        productName: prep.preparationName,
+        quantity: prep.quantity,
+        unit: prep.unit,
+        costPerUnit: prep.averageCostPerUnit,
+        totalCost: prep.totalCost,
+        type: 'preparation'
+      })
+    })
+  }
+
+  // Add product costs
+  if (actualCost.productCosts) {
+    actualCost.productCosts.forEach(product => {
+      items.push({
+        productName: product.productName,
+        quantity: product.quantity,
+        unit: product.unit,
+        costPerUnit: product.averageCostPerUnit,
+        totalCost: product.totalCost,
+        type: 'product'
+      })
+    })
+  }
+
+  return items
+})
 
 // Filters
 const filters = ref<SalesFilters>({

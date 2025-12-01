@@ -72,13 +72,18 @@ export class AppInitializer {
       const hmrState = getHMRState()
       const shouldSkipInit = !shouldReinitializeStores(finalUserRoles)
 
-      if (shouldSkipInit && isHMR && hmrState) {
+      // ✅ FIX: Always verify critical stores are actually initialized
+      // Even during HMR, some stores might be in invalid state
+      const criticalStoresReady = this.verifyCriticalStoresInitialized()
+
+      if (shouldSkipInit && isHMR && hmrState && criticalStoresReady) {
         DebugUtils.info(MODULE_NAME, '🔥 Hot reload detected - skipping store initialization', {
           isHMR,
           storesInitialized: hmrState.storesInitialized,
           userRoles: finalUserRoles,
           cachedRoles: hmrState.userRoles,
-          timestamp: new Date(hmrState.timestamp).toISOString()
+          timestamp: new Date(hmrState.timestamp).toISOString(),
+          criticalStoresReady
         })
 
         // Return cached summary
@@ -90,6 +95,15 @@ export class AppInitializer {
           totalTime: 0,
           results: []
         }
+      }
+
+      // If HMR detected but critical stores not ready, force full reinit
+      if (isHMR && !criticalStoresReady) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          '⚠️ HMR detected but critical stores not ready - forcing full reinitialization',
+          { criticalStoresReady }
+        )
       }
 
       DebugUtils.info(MODULE_NAME, '🚀 Starting app initialization', {
@@ -228,6 +242,40 @@ export class AppInitializer {
       return count !== undefined && count > 0 ? `${count} ${unit}` : 'Empty'
     } catch {
       return 'Failed'
+    }
+  }
+
+  /**
+   * ✅ NEW: Verify critical stores are actually initialized
+   * Used to prevent HMR from skipping initialization when stores are in invalid state
+   */
+  private verifyCriticalStoresInitialized(): boolean {
+    try {
+      // Check products store
+      const productsStore = useProductsStore()
+      if (!productsStore.products || productsStore.products.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'Products store not initialized')
+        return false
+      }
+
+      // Check storage service
+      const storageStore = useStorageStore()
+      if (!storageStore.initialized) {
+        DebugUtils.warn(MODULE_NAME, 'Storage store not initialized')
+        return false
+      }
+
+      // Check recipes store
+      const recipesStore = useRecipesStore()
+      if (!recipesStore.recipes || recipesStore.recipes.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'Recipes store not initialized')
+        return false
+      }
+
+      return true
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to verify critical stores', { error })
+      return false
     }
   }
 
