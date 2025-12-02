@@ -4,6 +4,41 @@
 import type { DailyExpenseCategory } from '@/stores/account/types'
 
 /**
+ * ✅ SPRINT 4: COGS Calculation Methods
+ */
+export type COGSMethod = 'accrual' | 'cash'
+
+/**
+ * ✅ SPRINT 4: COGS Calculation with multiple methods
+ */
+export interface COGSCalculation {
+  method: COGSMethod
+
+  // Accrual method details (current implementation)
+  accrual?: {
+    salesCOGS: number // From sales transactions (actualCost)
+    spoilage: number // Spoilage/loss write-offs
+    shortage: number // Inventory adjustment write-offs
+    surplus: number // Inventory adjustment additions
+    total: number // salesCOGS + spoilage + shortage - surplus
+  }
+
+  // Cash method details (new in Sprint 4)
+  cash?: {
+    openingInventory: number // Start of period (for internal calculation)
+    closingInventory: number // End of period (for internal calculation)
+    inventoryChange: number // Closing - Opening (shown in report)
+    purchases: number // Payments to suppliers
+    openingAccountsPayable: number // AP at start of period
+    closingAccountsPayable: number // AP at end of period
+    accountsPayableDelta: number // Closing AP - Opening AP (increase = more credit)
+    total: number // openingInventory + purchases - apDelta - closingInventory
+  }
+
+  total: number // Final COGS value (based on selected method)
+}
+
+/**
  * P&L Report
  * Profit and Loss statement for a specific period
  */
@@ -23,12 +58,9 @@ export interface PLReport {
     byCategory: Record<string, number> // Group by menu category
   }
 
-  // Cost of Goods Sold (COGS)
-  cogs: {
-    total: number
-    foodCost: number // Kitchen department actual costs
-    beverageCost: number // Bar department actual costs
-  }
+  // ✅ SPRINT 4: Cost of Goods Sold with multiple calculation methods
+  cogs: COGSCalculation
+  cogsMethod: COGSMethod // Selected method for P&L calculations
 
   // Gross Profit
   grossProfit: {

@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { DebugUtils, TimeUtils } from '@/utils'
-import type { PLReport } from './types'
+import type { PLReport, COGSMethod, COGSCalculation } from './types'
 import { useSalesStore } from '@/stores/sales/salesStore'
 import { useAccountStore } from '@/stores/account'
 import type { DailyExpenseCategory } from '@/stores/account/types'
@@ -22,8 +22,13 @@ export const usePLReportStore = defineStore('plReport', () => {
   /**
    * Generate P&L Report for a specific period
    * ✅ SPRINT 5: Main entry point for P&L calculation
+   * ✅ SPRINT 4: Supports multiple COGS calculation methods
    */
-  async function generateReport(dateFrom: string, dateTo: string): Promise<PLReport> {
+  async function generateReport(
+    dateFrom: string,
+    dateTo: string,
+    method: COGSMethod = 'accrual'
+  ): Promise<PLReport> {
     try {
       loading.value = true
       error.value = null
@@ -77,7 +82,8 @@ export const usePLReportStore = defineStore('plReport', () => {
         total: cogs.total
       })
 
-      // 3. Calculate Gross Profit
+      // 3. Calculate Gross Profit (will be updated after COGS calculation)
+      // NOTE: This is a preliminary calculation, will be updated after selecting COGS method
       const grossProfit = {
         amount: revenue.total - cogs.total,
         margin: revenue.total > 0 ? ((revenue.total - cogs.total) / revenue.total) * 100 : 0
@@ -186,6 +192,39 @@ export const usePLReportStore = defineStore('plReport', () => {
       })
 
       // ============================================
+      // ✅ SPRINT 4: Calculate COGS using both methods
+      // ============================================
+      DebugUtils.info(MODULE_NAME, 'Calculating COGS using both Accrual and Cash Basis methods')
+
+      // Accrual method (current implementation)
+      const accrualCOGS = {
+        salesCOGS: cogs.total,
+        spoilage: inventoryAdjustments.byCategory.spoilage,
+        shortage: inventoryAdjustments.byCategory.shortage,
+        surplus: inventoryAdjustments.byCategory.surplus,
+        total: realFoodCost
+      }
+
+      // Cash method (new)
+      const cashCOGS = await calculateCOGSCashBasis(dateFrom, dateTo)
+
+      // Create COGSCalculation with both methods
+      const cogsCalculation: COGSCalculation = {
+        method,
+        accrual: accrualCOGS,
+        cash: cashCOGS,
+        total: method === 'accrual' ? accrualCOGS.total : cashCOGS.total
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Both COGS methods calculated', {
+        accrualTotal: accrualCOGS.total,
+        cashTotal: cashCOGS.total,
+        selectedMethod: method,
+        selectedTotal: cogsCalculation.total,
+        difference: Math.abs(accrualCOGS.total - cashCOGS.total)
+      })
+
+      // ============================================
       // 5. Calculate OPEX from accountStore (real expenses only)
       // ============================================
       DebugUtils.info(MODULE_NAME, 'Calculating OPEX from account transactions')
@@ -235,32 +274,50 @@ export const usePLReportStore = defineStore('plReport', () => {
         byCategory: opex.byCategory
       })
 
-      // 6. Calculate Net Profit (using Real Food Cost)
+      // ============================================
+      // 6. Recalculate Gross and Net Profit using selected COGS method
+      // ============================================
+      const selectedCOGS = cogsCalculation.total
+
+      // Update Gross Profit based on selected method
+      grossProfit.amount = revenue.total - selectedCOGS
+      grossProfit.margin =
+        revenue.total > 0 ? ((revenue.total - selectedCOGS) / revenue.total) * 100 : 0
+
+      DebugUtils.info(MODULE_NAME, 'Gross profit recalculated with selected COGS method', {
+        method,
+        selectedCOGS,
+        amount: grossProfit.amount,
+        margin: grossProfit.margin
+      })
+
+      // Calculate Net Profit using selected COGS method
       const netProfit = {
-        amount: revenue.total - realFoodCost - opex.total,
+        amount: revenue.total - selectedCOGS - opex.total,
         margin:
           revenue.total > 0
-            ? ((revenue.total - realFoodCost - opex.total) / revenue.total) * 100
+            ? ((revenue.total - selectedCOGS - opex.total) / revenue.total) * 100
             : 0
       }
 
       DebugUtils.info(MODULE_NAME, 'Net profit calculated', {
         revenue: revenue.total,
-        realFoodCost,
+        selectedCOGS,
         opex: opex.total,
-        calculation: `${revenue.total} - ${realFoodCost} - ${opex.total}`,
+        calculation: `${revenue.total} - ${selectedCOGS} - ${opex.total}`,
         amount: netProfit.amount,
         margin: netProfit.margin
       })
 
-      // 7. Create report
+      // 7. Create report with new COGS structure
       const report: PLReport = {
         period: { dateFrom, dateTo },
         revenue,
-        cogs,
+        cogs: cogsCalculation, // ✅ SPRINT 4: New COGSCalculation structure
+        cogsMethod: method, // ✅ SPRINT 4: Selected method
         grossProfit,
         inventoryAdjustments,
-        realFoodCost,
+        realFoodCost, // Keep for backward compatibility (Accrual method)
         opex,
         netProfit,
         generatedAt: TimeUtils.getCurrentLocalISO()
@@ -270,7 +327,10 @@ export const usePLReportStore = defineStore('plReport', () => {
 
       DebugUtils.info(MODULE_NAME, 'P&L report generated successfully', {
         revenue: revenue.total,
-        cogs: cogs.total,
+        cogsMethod: method,
+        cogs: cogsCalculation.total,
+        cogsAccrual: accrualCOGS.total,
+        cogsCash: cashCOGS.total,
         grossProfit: grossProfit.amount,
         opex: opex.total,
         netProfit: netProfit.amount
@@ -338,6 +398,186 @@ export const usePLReportStore = defineStore('plReport', () => {
     })
 
     return total
+  }
+
+  /**
+   * ✅ SPRINT 4: Calculate COGS using Cash Basis method
+   * Formula: Opening Inventory + Purchases - Δ Accounts Payable - Closing Inventory
+   *
+   * NOTE: For now, uses current inventory value (not historical)
+   * TODO: Implement historical inventory valuation for accurate opening/closing inventory
+   */
+  async function calculateCOGSCashBasis(
+    dateFrom: string,
+    dateTo: string
+  ): Promise<COGSCalculation['cash']> {
+    DebugUtils.info(MODULE_NAME, 'Calculating Cash Basis COGS', { dateFrom, dateTo })
+
+    const accountStore = useAccountStore()
+    const { useInventoryValuationStore } = await import('./inventoryValuationStore')
+    const inventoryValuationStore = useInventoryValuationStore()
+
+    // 1. Opening inventory (start of period)
+    // NOTE: Using current valuation as proxy
+    // TODO: Calculate historical inventory value at dateFrom
+    const openingValuation = await inventoryValuationStore.calculateValuation()
+    const openingInventory = openingValuation.totalValue
+
+    DebugUtils.info(MODULE_NAME, 'Opening inventory (current value used)', {
+      openingInventory,
+      note: 'Using current inventory as proxy for opening inventory'
+    })
+
+    // 2. Payments to suppliers (real cash)
+    const supplierTransactions = await accountStore.getTransactionsByDateRange(dateFrom, dateTo)
+    const purchases = supplierTransactions
+      .filter(t => t.type === 'expense' && t.expenseCategory?.category === 'product')
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+    DebugUtils.info(MODULE_NAME, 'Supplier payments calculated', {
+      transactionsCount: supplierTransactions.filter(
+        t => t.type === 'expense' && t.expenseCategory?.category === 'product'
+      ).length,
+      purchases
+    })
+
+    // 3. Accounts Payable (кредиторская задолженность)
+    // Opening AP (at start of period)
+    // NOTE: Using current account balance as proxy
+    // TODO: Calculate historical AP at dateFrom
+    const openingAccountsPayable = await calculateAccountsPayable(dateFrom)
+
+    DebugUtils.info(MODULE_NAME, 'Opening Accounts Payable calculated', {
+      openingAccountsPayable,
+      note: 'Using current supplier balances as proxy for opening AP'
+    })
+
+    // Closing AP (at end of period)
+    // NOTE: Using current account balance
+    const closingAccountsPayable = await calculateAccountsPayable(dateTo)
+
+    DebugUtils.info(MODULE_NAME, 'Closing Accounts Payable calculated', {
+      closingAccountsPayable
+    })
+
+    // Δ AP = Closing AP - Opening AP
+    // Positive delta means credit increased (we received goods but didn't pay yet)
+    // This should REDUCE cash-based COGS (we didn't pay cash yet)
+    const accountsPayableDelta = closingAccountsPayable - openingAccountsPayable
+
+    DebugUtils.info(MODULE_NAME, 'Accounts Payable delta calculated', {
+      openingAP: openingAccountsPayable,
+      closingAP: closingAccountsPayable,
+      delta: accountsPayableDelta,
+      interpretation:
+        accountsPayableDelta > 0
+          ? 'Credit increased - received goods without payment'
+          : 'Credit decreased - paid more than received'
+    })
+
+    // 4. Closing inventory (end of period)
+    // NOTE: Using current valuation (same as opening for now)
+    // TODO: Calculate historical inventory value at dateTo
+    const closingInventory = openingInventory
+
+    DebugUtils.info(MODULE_NAME, 'Closing inventory (current value used)', {
+      closingInventory,
+      note: 'Using current inventory as proxy for closing inventory'
+    })
+
+    // 5. Calculate inventory change (Closing - Opening)
+    const inventoryChange = closingInventory - openingInventory
+
+    DebugUtils.info(MODULE_NAME, 'Inventory change calculated', {
+      openingInventory,
+      closingInventory,
+      inventoryChange,
+      interpretation:
+        inventoryChange > 0
+          ? 'Inventory increased - purchased more than consumed'
+          : inventoryChange < 0
+            ? 'Inventory decreased - consumed more than purchased'
+            : 'No inventory change'
+    })
+
+    // Formula: COGS = Opening Inventory + Purchases - Δ AP - Closing Inventory
+    const total = openingInventory + purchases - accountsPayableDelta - closingInventory
+
+    DebugUtils.info(MODULE_NAME, 'Cash basis COGS calculated', {
+      openingInventory,
+      purchases,
+      openingAccountsPayable,
+      closingAccountsPayable,
+      accountsPayableDelta,
+      closingInventory,
+      inventoryChange,
+      total,
+      formula: `${openingInventory} + ${purchases} - ${accountsPayableDelta} - ${closingInventory} = ${total}`,
+      warning: 'Opening and closing inventory/AP use current values, not historical'
+    })
+
+    return {
+      openingInventory,
+      closingInventory,
+      inventoryChange,
+      purchases,
+      openingAccountsPayable,
+      closingAccountsPayable,
+      accountsPayableDelta,
+      total
+    }
+  }
+
+  /**
+   * Calculate Accounts Payable (кредиторская задолженность) at a specific date
+   * Returns net balance with suppliers (positive = we owe, negative = they owe us)
+   *
+   * Formula: Sum of all currentBalance for supplier counteragents
+   * Positive balance = we owe the supplier (Accounts Payable)
+   * Negative balance = supplier owes us (prepayment/overpayment)
+   * Net result = total AP minus total prepayments
+   *
+   * NOTE: Currently uses current balances (not historical)
+   * TODO: Implement historical balance tracking at specific dates
+   */
+  async function calculateAccountsPayable(date: string): Promise<number> {
+    try {
+      const { useCounteragentsStore } = await import('@/stores/counteragents/counteragentsStore')
+      const counteragentsStore = useCounteragentsStore()
+
+      // Get all supplier counteragents
+      const suppliers = counteragentsStore.supplierCounterAgents
+
+      // Sum ALL balances (positive and negative)
+      const totalAP = suppliers.reduce((sum, supplier) => {
+        const balance = supplier.currentBalance || 0
+        return sum + balance
+      }, 0)
+
+      const positiveBalances = suppliers.filter(s => (s.currentBalance || 0) > 0)
+      const negativeBalances = suppliers.filter(s => (s.currentBalance || 0) < 0)
+
+      const totalDebt = positiveBalances.reduce((sum, s) => sum + (s.currentBalance || 0), 0)
+      const totalPrepayment = Math.abs(
+        negativeBalances.reduce((sum, s) => sum + (s.currentBalance || 0), 0)
+      )
+
+      DebugUtils.info(MODULE_NAME, 'Accounts Payable calculated', {
+        date,
+        suppliersCount: suppliers.length,
+        suppliersWithDebt: positiveBalances.length,
+        suppliersWithPrepayment: negativeBalances.length,
+        totalDebt,
+        totalPrepayment,
+        netAP: totalAP,
+        note: 'Using current balances as proxy for historical AP'
+      })
+
+      return totalAP
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to calculate Accounts Payable', { error, date })
+      return 0
+    }
   }
 
   /**

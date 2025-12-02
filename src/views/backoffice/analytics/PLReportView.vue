@@ -84,9 +84,73 @@
             </v-card-text>
           </v-card>
 
+          <!-- ✅ SPRINT 4: COGS Method Selector -->
+          <v-card class="mb-4">
+            <v-card-title>
+              COGS Calculation Method
+              <v-tooltip location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <v-icon v-bind="tooltipProps" size="small" class="ml-2">mdi-information</v-icon>
+                </template>
+                <div class="text-caption">
+                  <strong>Accrual Basis:</strong>
+                  FIFO + Spoilage + Adjustments
+                  <br />
+                  <strong>Cash Basis:</strong>
+                  Supplier Payments + Inventory Δ
+                </div>
+              </v-tooltip>
+            </v-card-title>
+            <v-card-text>
+              <v-radio-group v-model="cogsMethod" inline @update:model-value="handleMethodChange">
+                <v-radio value="accrual">
+                  <template #label>
+                    <div>
+                      <strong>Accrual Basis</strong>
+                      <div class="text-caption text-medium-emphasis">
+                        FIFO + Spoilage + Adjustments
+                      </div>
+                    </div>
+                  </template>
+                </v-radio>
+
+                <v-radio value="cash">
+                  <template #label>
+                    <div>
+                      <strong>Cash Basis</strong>
+                      <div class="text-caption text-medium-emphasis">Payments + Inventory Δ</div>
+                    </div>
+                  </template>
+                </v-radio>
+              </v-radio-group>
+
+              <!-- Method Comparison Alert -->
+              <v-alert
+                v-if="showMethodComparison"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mt-4"
+              >
+                <div class="text-caption">
+                  <strong>Methods Comparison:</strong>
+                  <br />
+                  Accrual: {{ formatIDR(report.cogs.accrual.total) }} | Cash:
+                  {{ formatIDR(report.cogs.cash.total) }} | Difference:
+                  {{ formatIDR(methodDifference) }}
+                  <br />
+                  <span class="text-medium-emphasis">
+                    Difference may indicate accounts payable, goods in transit, or timing
+                    differences.
+                  </span>
+                </div>
+              </v-alert>
+            </v-card-text>
+          </v-card>
+
           <!-- Summary Cards -->
           <v-row class="mb-4">
-            <v-col cols="12" md="3">
+            <v-col cols="12" :md="cogsMethod === 'accrual' ? 3 : 4">
               <v-card color="primary" variant="tonal">
                 <v-card-text>
                   <div class="text-caption">Total Revenue</div>
@@ -94,15 +158,17 @@
                 </v-card-text>
               </v-card>
             </v-col>
-            <v-col cols="12" md="3">
+            <v-col cols="12" :md="cogsMethod === 'accrual' ? 3 : 4">
               <v-card color="warning" variant="tonal">
                 <v-card-text>
-                  <div class="text-caption">COGS</div>
+                  <div class="text-caption">
+                    COGS ({{ cogsMethod === 'accrual' ? 'Accrual' : 'Cash' }})
+                  </div>
                   <div class="text-h5">{{ formatIDR(report.cogs.total) }}</div>
                 </v-card-text>
               </v-card>
             </v-col>
-            <v-col cols="12" md="3">
+            <v-col v-if="cogsMethod === 'accrual'" cols="12" md="3">
               <v-card color="info" variant="tonal">
                 <v-card-text>
                   <div class="text-caption">Gross Profit</div>
@@ -111,7 +177,7 @@
                 </v-card-text>
               </v-card>
             </v-col>
-            <v-col cols="12" md="3">
+            <v-col cols="12" :md="cogsMethod === 'accrual' ? 3 : 4">
               <v-card :color="netProfitColor" variant="tonal">
                 <v-card-text>
                   <div class="text-caption">Net Profit</div>
@@ -169,184 +235,116 @@
 
                   <tr><td colspan="3" class="py-2"></td></tr>
 
-                  <!-- COGS Section -->
+                  <!-- ✅ SPRINT 4: COGS Section with Method Breakdown -->
                   <tr class="section-header">
                     <td colspan="3" class="font-weight-bold text-warning">
-                      COST OF GOODS SOLD (COGS)
+                      COST OF GOODS SOLD (COGS) -
+                      {{ cogsMethod === 'accrual' ? 'Accrual Basis' : 'Cash Basis' }}
                     </td>
                   </tr>
-                  <tr>
-                    <td class="pl-8">Food Cost</td>
-                    <td class="text-right">{{ formatIDR(report.cogs.foodCost) }}</td>
-                    <td class="text-right">
-                      {{ calculatePercentage(report.cogs.foodCost, report.revenue.total) }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Beverage Cost</td>
-                    <td class="text-right">{{ formatIDR(report.cogs.beverageCost) }}</td>
-                    <td class="text-right">
-                      {{ calculatePercentage(report.cogs.beverageCost, report.revenue.total) }}
-                    </td>
-                  </tr>
+
+                  <!-- Accrual Method Breakdown -->
+                  <template v-if="cogsMethod === 'accrual'">
+                    <tr>
+                      <td class="pl-8">Sales COGS (FIFO)</td>
+                      <td class="text-right">{{ formatIDR(report.cogs.accrual.salesCOGS) }}</td>
+                      <td class="text-right">
+                        {{
+                          calculatePercentage(report.cogs.accrual.salesCOGS, report.revenue.total)
+                        }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="pl-8">+ Spoilage & Losses</td>
+                      <td class="text-right">{{ formatIDR(report.cogs.accrual.spoilage) }}</td>
+                      <td class="text-right">
+                        {{
+                          calculatePercentage(report.cogs.accrual.spoilage, report.revenue.total)
+                        }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="pl-8">+ Shortage</td>
+                      <td class="text-right">{{ formatIDR(report.cogs.accrual.shortage) }}</td>
+                      <td class="text-right">
+                        {{
+                          calculatePercentage(report.cogs.accrual.shortage, report.revenue.total)
+                        }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="pl-8">- Surplus</td>
+                      <td class="text-right text-success">
+                        -{{ formatIDR(report.cogs.accrual.surplus) }}
+                      </td>
+                      <td class="text-right">
+                        -{{
+                          calculatePercentage(report.cogs.accrual.surplus, report.revenue.total)
+                        }}
+                      </td>
+                    </tr>
+                  </template>
+
+                  <!-- Cash Method Breakdown -->
+                  <template v-else>
+                    <tr>
+                      <td class="pl-8">Purchases (Payments to Suppliers)</td>
+                      <td class="text-right">{{ formatIDR(report.cogs.cash.purchases) }}</td>
+                      <td class="text-right">
+                        {{ calculatePercentage(report.cogs.cash.purchases, report.revenue.total) }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="pl-8">- Δ Accounts Payable</td>
+                      <td class="text-right" :class="apDeltaClass">
+                        {{ apDeltaSign
+                        }}{{ formatIDR(Math.abs(report.cogs.cash.accountsPayableDelta)) }}
+                      </td>
+                      <td class="text-right">
+                        {{ apDeltaSign
+                        }}{{
+                          calculatePercentage(
+                            Math.abs(report.cogs.cash.accountsPayableDelta),
+                            report.revenue.total
+                          )
+                        }}
+                      </td>
+                    </tr>
+                    <tr class="text-caption">
+                      <td colspan="3" class="pl-12 text-medium-emphasis">
+                        Opening AP: {{ formatIDR(report.cogs.cash.openingAccountsPayable) }} →
+                        Closing AP: {{ formatIDR(report.cogs.cash.closingAccountsPayable) }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="pl-8">- Inventory Change</td>
+                      <td class="text-right" :class="inventoryChangeClass">
+                        {{ inventoryChangeSign
+                        }}{{ formatIDR(Math.abs(report.cogs.cash.inventoryChange)) }}
+                      </td>
+                      <td class="text-right">
+                        {{ inventoryChangeSign
+                        }}{{
+                          calculatePercentage(
+                            Math.abs(report.cogs.cash.inventoryChange),
+                            report.revenue.total
+                          )
+                        }}
+                      </td>
+                    </tr>
+                    <tr class="text-caption">
+                      <td colspan="3" class="pl-12 text-medium-emphasis">
+                        Opening: {{ formatIDR(report.cogs.cash.openingInventory) }} → Closing:
+                        {{ formatIDR(report.cogs.cash.closingInventory) }}
+                      </td>
+                    </tr>
+                  </template>
+
                   <tr class="font-weight-bold">
                     <td>Total COGS</td>
                     <td class="text-right">{{ formatIDR(report.cogs.total) }}</td>
                     <td class="text-right">
                       {{ calculatePercentage(report.cogs.total, report.revenue.total) }}
-                    </td>
-                  </tr>
-
-                  <tr><td colspan="3" class="py-2"></td></tr>
-
-                  <!-- Gross Profit -->
-                  <tr class="font-weight-bold">
-                    <td>GROSS PROFIT</td>
-                    <td class="text-right">{{ formatIDR(report.grossProfit.amount) }}</td>
-                    <td class="text-right">{{ report.grossProfit.margin.toFixed(1) }}%</td>
-                  </tr>
-
-                  <tr><td colspan="3" class="py-2"></td></tr>
-
-                  <!-- ============================================ -->
-                  <!-- ✅ SPRINT 3: INVENTORY ADJUSTMENTS SECTION -->
-                  <!-- ============================================ -->
-                  <tr class="section-header">
-                    <td colspan="3" class="font-weight-bold text-warning">
-                      INVENTORY ADJUSTMENTS
-                      <v-tooltip location="top">
-                        <template #activator="{ props: tooltipProps }">
-                          <v-icon v-bind="tooltipProps" size="small" class="ml-2">
-                            mdi-information
-                          </v-icon>
-                        </template>
-                        <span>
-                          Inventory variances from negative batches, physical counts, and
-                          reconciliations
-                        </span>
-                      </v-tooltip>
-                    </td>
-                  </tr>
-
-                  <!-- Losses Subsection -->
-                  <tr>
-                    <td class="pl-4 font-weight-medium text-error">Losses:</td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                  <tr v-if="report.inventoryAdjustments.byCategory.spoilage > 0">
-                    <td class="pl-8">Spoilage/Expired</td>
-                    <td class="text-right text-error">
-                      {{ formatIDR(report.inventoryAdjustments.byCategory.spoilage) }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          report.inventoryAdjustments.byCategory.spoilage,
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
-                  <tr v-if="report.inventoryAdjustments.byCategory.shortage > 0">
-                    <td class="pl-8">Inventory Shortage</td>
-                    <td class="text-right text-error">
-                      {{ formatIDR(report.inventoryAdjustments.byCategory.shortage) }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          report.inventoryAdjustments.byCategory.shortage,
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
-
-                  <!-- Gains Subsection -->
-                  <tr>
-                    <td class="pl-4 font-weight-medium text-success">Gains:</td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                  <tr v-if="report.inventoryAdjustments.byCategory.surplus > 0">
-                    <td class="pl-8">Inventory Surplus</td>
-                    <td class="text-right text-success">
-                      +{{ formatIDR(report.inventoryAdjustments.byCategory.surplus) }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          report.inventoryAdjustments.byCategory.surplus,
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
-
-                  <!-- Total Adjustments -->
-                  <tr class="font-weight-bold">
-                    <td>Total Adjustments</td>
-                    <td class="text-right" :class="adjustmentsClass">
-                      {{ formatIDR(report.inventoryAdjustments.total) }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          Math.abs(report.inventoryAdjustments.total),
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
-
-                  <!-- Warning Alert for Negative Inventory -->
-                  <tr v-if="hasNegativeInventory">
-                    <td colspan="3" class="pa-2">
-                      <v-alert type="warning" variant="tonal" density="compact">
-                        <div class="d-flex align-center justify-space-between">
-                          <div class="text-caption">
-                            <v-icon size="small" class="mr-1">mdi-alert</v-icon>
-                            Negative inventory detected in this period
-                          </div>
-                          <v-btn
-                            color="warning"
-                            variant="text"
-                            size="x-small"
-                            @click="navigateToNegativeInventoryReport"
-                          >
-                            View Details
-                          </v-btn>
-                        </div>
-                      </v-alert>
-                    </td>
-                  </tr>
-
-                  <tr><td colspan="3" class="py-2"></td></tr>
-
-                  <!-- Real Food Cost -->
-                  <tr class="font-weight-bold">
-                    <td>
-                      REAL FOOD COST
-                      <v-tooltip location="top">
-                        <template #activator="{ props: tooltipProps }">
-                          <v-icon v-bind="tooltipProps" size="small" class="ml-2">
-                            mdi-information
-                          </v-icon>
-                        </template>
-                        <span>Sales COGS + Inventory Adjustments</span>
-                      </v-tooltip>
-                    </td>
-                    <td class="text-right text-error">{{ formatIDR(report.realFoodCost) }}</td>
-                    <td class="text-right">
-                      {{ calculatePercentage(report.realFoodCost, report.revenue.total) }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colspan="3" class="text-caption text-medium-emphasis px-4">
-                      = Sales COGS ({{ formatIDR(report.cogs.total) }}) + Adjustments ({{
-                        formatIDR(report.inventoryAdjustments.total)
-                      }})
                     </td>
                   </tr>
 
@@ -518,7 +516,7 @@ import { useRouter } from 'vue-router'
 import { usePLReportStore } from '@/stores/analytics/plReportStore'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
-import type { PLReport } from '@/stores/analytics/types'
+import type { PLReport, COGSMethod } from '@/stores/analytics/types'
 
 // Router
 const router = useRouter()
@@ -532,6 +530,9 @@ const dateTo = ref('')
 const report = computed(() => plReportStore.currentReport)
 const loading = computed(() => plReportStore.loading)
 const error = ref<string | null>(null)
+
+// ✅ SPRINT 4: COGS Method Selection
+const cogsMethod = ref<COGSMethod>('accrual')
 
 // Lifecycle
 onMounted(() => {
@@ -548,9 +549,21 @@ onMounted(() => {
 async function handleGenerateReport() {
   try {
     error.value = null
-    await plReportStore.generateReport(dateFrom.value, dateTo.value)
+    await plReportStore.generateReport(dateFrom.value, dateTo.value, cogsMethod.value)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to generate report'
+  }
+}
+
+// ✅ SPRINT 4: Handle COGS method change
+async function handleMethodChange(newMethod: COGSMethod) {
+  if (!dateFrom.value || !dateTo.value) return
+
+  try {
+    error.value = null
+    await plReportStore.generateReport(dateFrom.value, dateTo.value, newMethod)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to regenerate report'
   }
 }
 
@@ -591,21 +604,49 @@ const netProfitClass = computed(() => {
   return report.value.netProfit.amount >= 0 ? 'text-success' : 'text-error'
 })
 
-// ✅ SPRINT 3: Inventory Adjustments computed properties
-const hasNegativeInventory = computed(() => {
-  if (!report.value) return false
-  return report.value.inventoryAdjustments.byCategory.negativeBatch > 0
+// ✅ SPRINT 4: COGS Method Comparison computed properties
+const methodDifference = computed(() => {
+  if (!report.value?.cogs.accrual || !report.value?.cogs.cash) return 0
+  return Math.abs(report.value.cogs.accrual.total - report.value.cogs.cash.total)
 })
 
-const adjustmentsClass = computed(() => {
-  if (!report.value) return ''
-  return report.value.inventoryAdjustments.total < 0 ? 'text-error' : 'text-success'
+const showMethodComparison = computed(() => {
+  return !!report.value?.cogs.accrual && !!report.value?.cogs.cash
 })
 
-// ✅ SPRINT 3: Navigation to Negative Inventory Report
-function navigateToNegativeInventoryReport() {
-  router.push('/analytics/negative-inventory')
-}
+// ✅ SPRINT 4: Accounts Payable Delta display helpers
+const apDeltaSign = computed(() => {
+  if (!report.value?.cogs.cash) return ''
+  const delta = report.value.cogs.cash.accountsPayableDelta
+  if (delta > 0) return '-' // Positive delta = credit increased = reduce COGS
+  if (delta < 0) return '+' // Negative delta = credit decreased = increase COGS
+  return ''
+})
+
+const apDeltaClass = computed(() => {
+  if (!report.value?.cogs.cash) return ''
+  const delta = report.value.cogs.cash.accountsPayableDelta
+  if (delta > 0) return 'text-success' // Credit increased (good for cash flow)
+  if (delta < 0) return 'text-error' // Credit decreased (paid off debt)
+  return ''
+})
+
+// ✅ SPRINT 4: Inventory Change display helpers
+const inventoryChangeSign = computed(() => {
+  if (!report.value?.cogs.cash) return ''
+  const change = report.value.cogs.cash.inventoryChange
+  if (change > 0) return '-' // Positive change = inventory increased = reduce COGS
+  if (change < 0) return '+' // Negative change = inventory decreased = increase COGS
+  return ''
+})
+
+const inventoryChangeClass = computed(() => {
+  if (!report.value?.cogs.cash) return ''
+  const change = report.value.cogs.cash.inventoryChange
+  if (change > 0) return 'text-success' // Inventory increased
+  if (change < 0) return 'text-error' // Inventory decreased
+  return ''
+})
 </script>
 
 <style scoped lang="scss">

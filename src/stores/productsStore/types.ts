@@ -79,6 +79,7 @@ export interface Product extends BaseEntity {
   shelfLife?: number
   minStock?: number
   maxStock?: number
+  currentStock?: number // ✨ NEW: Current stock quantity (enriched from storageStore)
   nameEn?: string
   leadTimeDays?: number
   primarySupplierId?: string

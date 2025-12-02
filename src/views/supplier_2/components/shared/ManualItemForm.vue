@@ -6,72 +6,93 @@
     </v-card-title>
 
     <v-card-text class="pa-4">
+      <!-- Step 1: Product Search -->
+      <v-expansion-panels v-model="expandedPanels" variant="accordion" class="mb-4">
+        <v-expansion-panel value="search">
+          <v-expansion-panel-title>
+            <div class="d-flex align-center">
+              <v-icon icon="mdi-numeric-1-circle" color="primary" class="mr-2" />
+              <span class="font-weight-bold">Select Product</span>
+              <v-chip
+                v-if="selectedProduct"
+                size="small"
+                color="success"
+                variant="flat"
+                class="ml-3"
+              >
+                <v-icon icon="mdi-check" size="16" class="mr-1" />
+                {{ selectedProduct.name }}
+              </v-chip>
+            </div>
+          </v-expansion-panel-title>
+          <v-expansion-panel-text>
+            <ItemSearchWidget
+              :products="availableProductsForSearch"
+              :existing-item-ids="existingItemIds"
+              :show-supplier-filter="false"
+              :show-stock-filter="true"
+              :show-stock-info="true"
+              :items-per-page="10"
+              @product-selected="handleProductSelection"
+            />
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
+
+      <!-- Step 2: Configure Order (shown after product selected) -->
+      <v-expand-transition>
+        <v-card v-if="localItem.itemId && selectedProduct" variant="outlined" class="mb-4">
+          <v-card-title class="text-subtitle-2 pa-3 bg-grey-lighten-4 d-flex align-center">
+            <v-icon icon="mdi-numeric-2-circle" color="primary" class="mr-2" />
+            Configure Order
+          </v-card-title>
+          <v-card-text class="pa-4">
+            <v-row>
+              <!-- Package Selector -->
+              <v-col cols="12">
+                <PackageSelector
+                  :product-id="localItem.itemId"
+                  :required-base-quantity="estimatedBaseQuantity"
+                  :selected-package-id="localItem.packageId"
+                  mode="optional"
+                  @package-selected="handlePackageSelected"
+                  @update:selected-package-id="localItem.packageId = $event"
+                />
+              </v-col>
+
+              <!-- Base Quantity Input -->
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model.number="localItem.requestedQuantity"
+                  label="Quantity *"
+                  type="number"
+                  min="1"
+                  step="1"
+                  variant="outlined"
+                  :suffix="baseUnitLabel"
+                  hint="Enter quantity in base units"
+                  persistent-hint
+                  prepend-inner-icon="mdi-counter"
+                />
+              </v-col>
+
+              <!-- Notes -->
+              <v-col cols="12">
+                <v-textarea
+                  v-model="localItem.notes"
+                  label="Notes (optional)"
+                  variant="outlined"
+                  rows="2"
+                  prepend-inner-icon="mdi-note-text"
+                  placeholder="Add any special requirements or notes..."
+                />
+              </v-col>
+            </v-row>
+          </v-card-text>
+        </v-card>
+      </v-expand-transition>
+
       <v-row>
-        <!-- Product Selection -->
-        <v-col cols="12">
-          <v-select
-            v-model="localItem.itemId"
-            :items="availableProducts"
-            item-title="name"
-            item-value="id"
-            label="Product *"
-            placeholder="Select a product"
-            variant="outlined"
-            prepend-inner-icon="mdi-package-variant"
-            :loading="loading"
-            @update:model-value="handleProductChange"
-          >
-            <template #item="{ props: itemProps, item }">
-              <v-list-item v-bind="itemProps">
-                <template #append>
-                  <v-chip size="x-small" variant="tonal">
-                    {{ item.raw.baseUnit }}
-                  </v-chip>
-                </template>
-              </v-list-item>
-            </template>
-          </v-select>
-        </v-col>
-
-        <!-- Package Selector (shown after product selected) -->
-        <v-col v-if="localItem.itemId && selectedProduct" cols="12">
-          <PackageSelector
-            :product-id="localItem.itemId"
-            :required-base-quantity="estimatedBaseQuantity"
-            :selected-package-id="localItem.packageId"
-            mode="optional"
-            @package-selected="handlePackageSelected"
-            @update:selected-package-id="localItem.packageId = $event"
-          />
-        </v-col>
-
-        <!-- Base Quantity Input (always in base units) -->
-        <v-col v-if="localItem.itemId" cols="12">
-          <v-text-field
-            v-model.number="localItem.requestedQuantity"
-            label="Quantity *"
-            type="number"
-            min="1"
-            step="1"
-            variant="outlined"
-            :suffix="baseUnitLabel"
-            hint="Enter quantity in base units"
-            persistent-hint
-            prepend-inner-icon="mdi-counter"
-          />
-        </v-col>
-
-        <!-- Notes -->
-        <v-col cols="12">
-          <v-textarea
-            v-model="localItem.notes"
-            label="Notes (optional)"
-            variant="outlined"
-            rows="2"
-            prepend-inner-icon="mdi-note-text"
-          />
-        </v-col>
-
         <!-- Preview Card -->
         <v-col v-if="localItem.itemId && localItem.requestedQuantity > 0" cols="12">
           <v-card variant="tonal" color="info">
@@ -140,8 +161,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
+import { useStorageStore } from '@/stores/storage/storageStore'
 import type { Product } from '@/stores/productsStore/types'
 import PackageSelector from './package/PackageSelector.vue'
+import ItemSearchWidget from '../procurement/ItemSearchWidget.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -180,10 +203,13 @@ const emits = defineEmits<Emits>()
 // =============================================
 
 const productsStore = useProductsStore()
+const storageStore = useStorageStore()
 
 // =============================================
 // LOCAL STATE
 // =============================================
+
+const expandedPanels = ref<string[]>(['search'])
 
 const localItem = ref<ManualItem>({
   itemId: '',
@@ -204,15 +230,19 @@ const selectedPackageData = ref<{
 // COMPUTED
 // =============================================
 
-const availableProducts = computed(() => {
-  return productsStore.products
-    .filter(p => p.isActive)
-    .map(p => ({
-      id: p.id,
-      name: p.name,
-      baseUnit: getBaseUnitLabel(p),
-      isActive: p.isActive
-    }))
+const availableProductsForSearch = computed(() => {
+  const activeProducts = productsStore.products.filter(p => p.isActive)
+
+  // Enrich products with currentStock from storageStore
+  return activeProducts.map(product => {
+    const balance = storageStore.state.balances.find(b => b.itemId === product.id)
+
+    return {
+      ...product,
+      currentStock: balance?.totalQuantity || 0,
+      minStock: product.minStock || 0
+    }
+  })
 })
 
 const selectedProduct = computed((): Product | null => {
@@ -314,26 +344,26 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-function handleProductChange() {
-  if (!localItem.value.itemId) return
+function handleProductSelection(product: Product) {
+  // Update local item with selected product
+  localItem.value.itemId = product.id
+  localItem.value.itemName = product.name
+  localItem.value.unit = getBaseUnitLabel(product)
 
-  const product = selectedProduct.value
-  if (product) {
-    localItem.value.itemName = product.name
-    localItem.value.unit = getBaseUnitLabel(product)
+  // Reset package selection when product changes
+  localItem.value.packageId = undefined
+  localItem.value.packageName = undefined
+  localItem.value.packageQuantity = undefined
+  selectedPackageData.value = null
 
-    // Reset package selection when product changes
-    localItem.value.packageId = undefined
-    localItem.value.packageName = undefined
-    localItem.value.packageQuantity = undefined
-    selectedPackageData.value = null
-
-    // Set recommended package as default
-    const recommendedPackage = productsStore.getRecommendedPackage(product.id)
-    if (recommendedPackage) {
-      localItem.value.packageId = recommendedPackage.id
-    }
+  // Set recommended package as default
+  const recommendedPackage = productsStore.getRecommendedPackage(product.id)
+  if (recommendedPackage) {
+    localItem.value.packageId = recommendedPackage.id
   }
+
+  // Collapse the search panel after selection
+  expandedPanels.value = []
 }
 
 function handlePackageSelected(data: {
@@ -383,6 +413,7 @@ function resetForm() {
     notes: ''
   }
   selectedPackageData.value = null
+  expandedPanels.value = ['search']
 }
 
 // =============================================

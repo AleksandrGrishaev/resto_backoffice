@@ -7,6 +7,19 @@
       </v-card-title>
 
       <v-card-text class="pa-4">
+        <!-- Success Alert -->
+        <v-alert
+          v-if="showSuccess"
+          type="success"
+          variant="tonal"
+          closable
+          class="mb-4"
+          @click:close="showSuccess = false"
+        >
+          <template #title>Item Added Successfully</template>
+          {{ successMessage }}
+        </v-alert>
+
         <v-row>
           <!-- Category Filter -->
           <v-col cols="12">
@@ -238,6 +251,8 @@ const quantity = ref(1)
 const notes = ref('')
 const selectedCategory = ref<ProductCategory | 'all' | null>(null)
 const adding = ref(false)
+const successMessage = ref<string | null>(null)
+const showSuccess = ref(false)
 
 // =============================================
 // COMPUTED
@@ -402,6 +417,8 @@ watch(isOpen, newValue => {
   if (newValue) {
     resetForm()
     ensureProductsLoaded()
+    showSuccess.value = false
+    successMessage.value = null
   }
 })
 
@@ -477,8 +494,22 @@ async function addItem() {
       notes: notes.value || undefined
     }
 
+    // Emit the item added event
     emits('item-added', newItem)
-    isOpen.value = false
+
+    // Show success message
+    successMessage.value = `Added ${selectedItem.value!.name} (${quantity.value} ${getDisplayUnit(selectedItem.value!)})`
+    showSuccess.value = true
+
+    // Reset form for next item (keep category filter)
+    const currentCategory = selectedCategory.value
+    resetForm()
+    selectedCategory.value = currentCategory
+
+    // Auto-hide success message after 3 seconds
+    setTimeout(() => {
+      showSuccess.value = false
+    }, 3000)
   } catch (error) {
     console.error('Error adding item:', error)
   } finally {

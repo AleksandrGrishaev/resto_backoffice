@@ -161,6 +161,20 @@
           Create Request
         </v-btn>
       </v-card-actions>
+
+      <!-- Success Snackbar (inside dialog) -->
+      <v-snackbar
+        v-model="showItemAddedSnackbar"
+        :timeout="2000"
+        color="success"
+        location="top"
+        contained
+      >
+        <div class="d-flex align-center">
+          <v-icon icon="mdi-check-circle" class="mr-2" />
+          {{ itemAddedMessage }}
+        </div>
+      </v-snackbar>
     </v-card>
   </v-dialog>
 </template>
@@ -212,6 +226,8 @@ const isCreating = ref(false)
 const requestedBy = ref('Chef Maria')
 const priority = ref<'normal' | 'urgent'>('normal')
 const selectedDepartmentIndex = ref<Department>('kitchen')
+const showItemAddedSnackbar = ref(false)
+const itemAddedMessage = ref('')
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -340,8 +356,13 @@ function handleAddManualItem(item: {
     })
   }
 
-  activeTab.value = 'summary'
-  emits('success', `Added ${item.itemName} to request`)
+  // Show success notification
+  itemAddedMessage.value = `Added ${item.itemName} to request`
+  showItemAddedSnackbar.value = true
+
+  // Note: Don't switch to summary tab to allow quick addition of multiple items
+  // User can manually switch to summary tab when ready to review
+  // Don't emit 'success' here as it would close the entire dialog
 }
 
 function handleUpdateQuantity(itemId: string, quantity: number): void {

@@ -41,7 +41,7 @@ export class SupplierStorageIntegration {
 
   async getSuggestionsFromStock(department?: StorageDepartment): Promise<OrderSuggestion[]> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Generating suggestions from storage with all order statuses', {
+      DebugUtils.info(MODULE_NAME, '🆕 Generating smart suggestions with consumption tracking', {
         department
       })
 
@@ -56,6 +56,16 @@ export class SupplierStorageIntegration {
         return []
       }
 
+      // Get consumption data from database
+      const consumptionData = await this.getConsumptionData()
+
+      DebugUtils.debug(MODULE_NAME, 'Consumption data retrieved', {
+        productsWithConsumption: consumptionData.size,
+        sampleData: Array.from(consumptionData.entries())
+          .slice(0, 3)
+          .map(([id, consumption]) => ({ id, consumption }))
+      })
+
       const pendingOrderQuantities = await this.calculatePendingOrderQuantities(department)
 
       DebugUtils.debug(MODULE_NAME, 'Pending order quantities calculated', {
@@ -64,6 +74,10 @@ export class SupplierStorageIntegration {
       })
 
       const suggestions: OrderSuggestion[] = []
+
+      // Configuration constants
+      const SAFETY_STOCK_MULTIPLIER = 1.5 // 150% of min stock
+      const REVIEW_PERIOD_DAYS = 7 // Weekly review cycle
 
       for (const balance of balancesWithTransit) {
         // ✅ Фильтруем через Product.usedInDepartments
@@ -80,40 +94,96 @@ export class SupplierStorageIntegration {
         }
 
         const minStock = product.minStock || 0
+        const leadTimeDays = product.leadTimeDays || 3 // Default 3 days if not set
+        const shelfLife = product.shelfLife
         const pendingQuantity = pendingOrderQuantities[balance.itemId] || 0
         const effectiveStock = balance.totalWithTransit + pendingQuantity
 
-        DebugUtils.debug(MODULE_NAME, 'Stock calculation for item', {
+        // Get 7-day average consumption
+        const avgDailyConsumption = consumptionData.get(balance.itemId) || 0
+
+        // Calculate reorder point: (avg daily consumption × lead time) + safety stock
+        const safetyStock = minStock * SAFETY_STOCK_MULTIPLIER
+        const reorderPoint = avgDailyConsumption * leadTimeDays + safetyStock
+
+        // Calculate days until stockout (if consumption > 0)
+        const daysUntilStockout =
+          avgDailyConsumption > 0 ? effectiveStock / avgDailyConsumption : 999
+
+        // Determine if we need to reorder
+        const needsReorder = effectiveStock <= reorderPoint || effectiveStock <= minStock
+
+        if (!needsReorder) {
+          continue
+        }
+
+        // Calculate suggested quantity: (avg daily × review period) + safety stock - effective stock
+        let suggestedQuantity = Math.max(
+          avgDailyConsumption * REVIEW_PERIOD_DAYS + safetyStock - effectiveStock,
+          minStock
+        )
+
+        // Apply shelf life limit for perishable items
+        if (shelfLife && shelfLife > 0) {
+          const maxQuantityByShelfLife = avgDailyConsumption * shelfLife * 0.7 // 70% of shelf life
+          if (maxQuantityByShelfLife > 0 && suggestedQuantity > maxQuantityByShelfLife) {
+            suggestedQuantity = maxQuantityByShelfLife
+            DebugUtils.debug(MODULE_NAME, 'Applied shelf life limit', {
+              itemName: balance.itemName,
+              originalSuggestion: suggestedQuantity,
+              limitedTo: maxQuantityByShelfLife,
+              shelfLife
+            })
+          }
+        }
+
+        // Determine urgency based on days until stockout vs lead time
+        let urgency: 'high' | 'medium' | 'low' = 'low'
+        let reason = 'below_minimum'
+
+        if (effectiveStock <= 0) {
+          urgency = 'high'
+          reason = 'out_of_stock'
+        } else if (avgDailyConsumption > 0 && daysUntilStockout < leadTimeDays) {
+          urgency = 'high'
+          reason = 'will_stockout_before_delivery'
+        } else if (avgDailyConsumption > 0 && daysUntilStockout < leadTimeDays + 3) {
+          urgency = 'medium'
+          reason = 'approaching_stockout'
+        } else if (effectiveStock <= minStock * 0.5) {
+          urgency = 'medium'
+          reason = 'critically_low'
+        }
+
+        DebugUtils.debug(MODULE_NAME, '📊 Smart recommendation calculated', {
+          itemName: balance.itemName,
+          currentStock: balance.totalQuantity,
+          effectiveStock,
+          avgDailyConsumption,
+          leadTimeDays,
+          daysUntilStockout: daysUntilStockout.toFixed(1),
+          reorderPoint: reorderPoint.toFixed(2),
+          suggestedQuantity: suggestedQuantity.toFixed(2),
+          urgency,
+          reason
+        })
+
+        suggestions.push({
           itemId: balance.itemId,
           itemName: balance.itemName,
           currentStock: balance.totalQuantity,
           transitStock: balance.transitQuantity,
-          pendingOrders: pendingQuantity,
+          pendingOrderStock: pendingQuantity,
           effectiveStock: effectiveStock,
-          minStock: minStock
+          nearestDelivery: balance.nearestDelivery,
+          minStock,
+          suggestedQuantity: Math.round(suggestedQuantity * 100) / 100, // Round to 2 decimals
+          urgency,
+          reason
         })
-
-        if (effectiveStock <= minStock) {
-          const suggestedQuantity = Math.max(minStock * 2 - effectiveStock, minStock)
-
-          suggestions.push({
-            itemId: balance.itemId,
-            itemName: balance.itemName,
-            currentStock: balance.totalQuantity,
-            transitStock: balance.transitQuantity,
-            pendingOrderStock: pendingQuantity,
-            effectiveStock: effectiveStock,
-            nearestDelivery: balance.nearestDelivery,
-            minStock,
-            suggestedQuantity,
-            urgency:
-              effectiveStock <= 0 ? 'high' : effectiveStock <= minStock * 0.5 ? 'medium' : 'low',
-            reason: effectiveStock <= 0 ? 'out_of_stock' : 'below_minimum'
-            // ✅ FIX 1: Removed estimatedPrice (not in OrderSuggestion type)
-          })
-        }
       }
 
+      // Sort by urgency and then by days until stockout
       suggestions.sort((a, b) => {
         const urgencyOrder = { high: 3, medium: 2, low: 1 }
         const aUrgency = urgencyOrder[a.urgency as keyof typeof urgencyOrder] || 0
@@ -126,12 +196,13 @@ export class SupplierStorageIntegration {
         return (a.effectiveStock || 0) - (b.effectiveStock || 0)
       })
 
-      DebugUtils.info(MODULE_NAME, 'Suggestions generated successfully with pending orders', {
+      DebugUtils.info(MODULE_NAME, '✅ Smart suggestions generated successfully', {
         department,
         totalSuggestions: suggestions.length,
         highUrgency: suggestions.filter(s => s.urgency === 'high').length,
         mediumUrgency: suggestions.filter(s => s.urgency === 'medium').length,
         lowUrgency: suggestions.filter(s => s.urgency === 'low').length,
+        withConsumptionData: suggestions.filter(s => consumptionData.has(s.itemId)).length,
         totalPendingItems: Object.keys(pendingOrderQuantities).length
       })
 
@@ -142,6 +213,41 @@ export class SupplierStorageIntegration {
         department
       })
       return []
+    }
+  }
+
+  /**
+   * Get 7-day average consumption data for all products from database
+   */
+  private async getConsumptionData(): Promise<Map<string, number>> {
+    try {
+      const consumptionMap = new Map<string, number>()
+
+      // Call Supabase RPC function to get consumption stats
+      const { supabase } = await import('@/supabase')
+      const { data, error } = await supabase.rpc('get_products_consumption_stats', {
+        days_back: 7
+      })
+
+      if (error) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to fetch consumption data from database', { error })
+        return consumptionMap
+      }
+
+      if (data && Array.isArray(data)) {
+        for (const row of data) {
+          consumptionMap.set(row.product_id, row.avg_daily_consumption || 0)
+        }
+
+        DebugUtils.debug(MODULE_NAME, 'Consumption data loaded from database', {
+          productsCount: consumptionMap.size
+        })
+      }
+
+      return consumptionMap
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error loading consumption data', { error })
+      return new Map()
     }
   }
 

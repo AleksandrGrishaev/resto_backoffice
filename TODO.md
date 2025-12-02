@@ -1,266 +1,195 @@
-# PLN Кассовый метод
+# Sprint: Configurable Tax & Service Charge System
 
-Давай еще внесем в PLN альтернативу, то есть у нас будут два метода подсчета
-расходов на продукты GOGS + списания и метода оплаты поставщикам и подсчет
-кредиторской задолженности и остатков. Понимаешь о чем я? Можем считать
-фактически сколько ушло, а можем считать сколько заплатили и сколько товаров
-было на начало периода и сколько на конец. Насколько это сложно реализовать?
+## =� Overview
 
-⏺ Отлично! Понимаю о чем ты. Это два разных метода расчета Food Cost:
+Transform hardcoded tax rates (10% government tax, 5% service charge) into a fully configurable system with detailed tax accounting, P&L integration, and separate tax collection reporting.
 
-Два метода расчета Food Cost в P&L
+## <� Goals
 
-Метод 1: Accrual Basis (Метод начисления) - ТЕКУЩИЙ
+1.  Make taxes configurable via PaymentSettingsView.vue
+2.  Cache tax settings at POS initialization for offline use
+3.  Remove all hardcoded tax values
+4.  Track tax amounts separately in orders, bills, payments, and transactions
+5.  Update P&L to show gross revenue (before tax) vs net revenue (after tax)
+6.  Create dedicated Tax Collection report
 
-Food Cost = COGS (фактические продажи) + Списания
+## =� Implementation Phases
 
-- Основан на фактическом потреблении продуктов
-- Считает когда продукты использованы
-- Точнее отражает реальную прибыльность продаж
+### **Phase 1: Tax Settings Database Infrastructure** �
 
-Метод 2: Cash Basis + Inventory Changes (Кассовый метод)
+**Files to create/modify:**
 
-Food Cost = Purchases (оплаченные поставщикам) + Opening Inventory - Closing
-Inventory
-или
-Food Cost = Purchases + (Opening Inventory - Closing Inventory)
+- `src/supabase/migrations/0XX_create_taxes_table.sql` (NEW)
+- `src/stores/catalog/services/tax.service.ts` (MODIFY - add Supabase integration)
+- `src/stores/catalog/payment-settings.store.ts` (VERIFY - should already work)
 
-- Основан на фактических платежах поставщикам
-- Учитывает изменение запасов на складе
-- Показывает реальное движение денег
+**Tasks:**
 
----
+1.  Create `taxes` table migration
+2. � Update TaxService to use Supabase (mirror PaymentMethodService pattern)
+3. � Seed default taxes: Service (5%) and Government (10%)
+4. � Test tax CRUD in PaymentSettingsView.vue
 
-Как это работает на примере
+**Migration SQL:**
 
-Данные за период:
+```sql
+CREATE TABLE taxes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  name TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL CHECK (code IN ('service', 'government')),
+  percentage NUMERIC(5,2) NOT NULL CHECK (percentage >= 0 AND percentage <= 100),
+  is_active BOOLEAN DEFAULT true,
+  display_order INTEGER DEFAULT 0,
+  description TEXT
+);
 
-- Opening Inventory (начальный остаток): Rp 5,000,000
-- Purchases (закупки у поставщиков): Rp 10,000,000
-- Closing Inventory (конечный остаток): Rp 4,000,000
-
-Метод 1 (Accrual - текущий):
-COGS от продаж = Rp 8,500,000
-Списания = Rp 2,156,735
-Total Food Cost = Rp 10,656,735
-
-Метод 2 (Cash Basis):
-Purchases = Rp 10,000,000
-
-- Opening Inventory = Rp 5,000,000
-
-* Closing Inventory = Rp 4,000,000
-  Total Food Cost = Rp 11,000,000
-
-Разница: Rp 343,265 - это может быть связано с:
-
-- Кредиторская задолженность (accounts payable)
-- Товары в пути
-- Расхождения в учете
+INSERT INTO taxes (name, code, percentage, display_order) VALUES
+  ('Service Charge', 'service', 5.00, 1),
+  ('Government Tax', 'government', 10.00, 2);
+```
 
 ---
 
-Сложность реализации
+### **Phase 2: POS Integration & Settings Cache** =�
 
-✅ ЛЕГКО - У нас уже есть почти все данные!
+**Files to modify:**
 
-Что уже есть:
+- `src/stores/pos/index.ts` (POS initialization)
+- `src/stores/pos/composables/useTaxSettings.ts` (NEW)
+- `src/stores/catalog/payment-settings.store.ts` (localStorage cache)
 
-1. ✅ storage_batches - текущий инвентарь (Closing Inventory)
-2. ✅ storage_operations - приходы от поставщиков (Purchases)
-3. ✅ supplierstore_receipts + supplierstore_receipt_items - детальные
-   приходы
-4. ✅ counteragents - поставщики
-5. ✅ transactions - оплаты поставщикам
+**Tasks:**
 
-Что нужно добавить:
-
-1. ⏳ Метод расчета Opening Inventory (остаток на начало периода)
-2. ⏳ Метод расчета Purchases (закупки за период)
-3. ⏳ Метод расчета Accounts Payable (кредиторская задолженность)
-4. ⏳ Toggle в P&L Report для выбора метода расчета
+1. Add tax settings loading to `initializePOS()` (after Account Store init)
+2. Create `useTaxSettings()` composable for POS access to tax rates
+3. Implement localStorage caching (key: `pos_tax_settings_cache`)
+4. Cache invalidation: on POS restart only
+5. Add fallback to defaults if settings not loaded
 
 ---
 
-План реализации
+### **Phase 3: Remove Tax Hardcoding** =�
 
-Step 1: Добавить методы расчета инвентаря
+**Files to modify:**
 
-File: src/stores/analytics/inventoryValuationStore.ts (уже существует!)
+- `src/stores/pos/orders/composables/useOrderCalculations.ts`
+- `src/views/pos/order/OrderSection.vue`
+- `src/views/pos/order/components/OrderTotals.vue`
+- `src/views/pos/order/components/OrderInfo.vue`
 
-// Метод уже есть! getInventoryValue()
-// Нужно добавить поддержку исторических дат:
+**Tasks:**
 
-async getInventoryValueAtDate(date: string): Promise<number> {
-// Рассчитать стоимость всех storage_batches на указанную дату
-// WHERE created_at <= date AND (consumed_at > date OR consumed_at IS NULL)
-}
-
-Step 2: Добавить метод расчета закупок
-
-File: src/stores/analytics/purchasesStore.ts (новый!)
-
-async getPurchasesForPeriod(from: string, to: string): Promise<{
-totalPurchases: number
-paidAmount: number
-unpaidAmount: number // Кредиторская задолженность
-bySupplier: Array<{
-supplierId: string
-supplierName: string
-totalPurchases: number
-paidAmount: number
-unpaidAmount: number
-}>
-}> {
-// Query supplierstore_receipts за период
-// Join с transactions для определения оплат
-}
-
-Step 3: Обновить P&L Report Store
-
-File: src/stores/analytics/plReportStore.ts
-
-// Добавить новое поле в PLReport:
-interface PLReport {
-// ... existing fields ...
-
-    foodCostCalculationMethod: 'accrual' | 'cash' // NEW
-
-    // Метод 1 (Accrual) - текущий
-    accrualFoodCost: {
-      cogs: number
-      adjustments: number
-      total: number
-    }
-
-    // Метод 2 (Cash Basis) - NEW
-    cashFoodCost: {
-      openingInventory: number
-      purchases: number
-      closingInventory: number
-      total: number
-      accountsPayable: number
-    }
-
-}
-
-Step 4: Обновить UI
-
-File: src/views/backoffice/analytics/PLReportView.vue
-
-  <!-- Добавить toggle для выбора метода -->
-
-<v-switch
-v-model="useAccrualMethod"
-label="Calculation Method"
-:true-value="true"
-:false-value="false"
-color="primary"
-
->
-
-    <template #label>
-      <span v-if="useAccrualMethod">Accrual Basis (COGS + Write-offs)</span>
-      <span v-else>Cash Basis (Purchases + Inventory Changes)</span>
-    </template>
-
-  </v-switch>
-
-  <!-- Показывать оба метода для сравнения -->
-  <v-row>
-    <v-col cols="6">
-      <v-card title="Method 1: Accrual Basis">
-        <template #text>
-          <div>COGS: {{ formatIDR(report.accrualFoodCost.cogs) }}</div>
-          <div>Adjustments: {{ formatIDR(report.accrualFoodCost.adjustments)
-  }}</div>
-          <div><strong>Total: {{ formatIDR(report.accrualFoodCost.total)
-  }}</strong></div>
-        </template>
-      </v-card>
-    </v-col>
-
-    <v-col cols="6">
-      <v-card title="Method 2: Cash Basis">
-        <template #text>
-          <div>Opening Inventory: {{
-
-formatIDR(report.cashFoodCost.openingInventory) }}</div>
-
-<div>+ Purchases: {{ formatIDR(report.cashFoodCost.purchases)
-  }}</div>
-<div>- Closing Inventory: {{
-  formatIDR(report.cashFoodCost.closingInventory) }}</div>
-<div><strong>Total: {{ formatIDR(report.cashFoodCost.total)
-  }}</strong></div>
-<v-divider class="my-2" />
-<div class="text-warning">Accounts Payable: {{
-  formatIDR(report.cashFoodCost.accountsPayable) }}</div>
-</template>
-</v-card>
-</v-col>
-</v-row>
+1. Update `useOrderCalculations()` to require tax rates from options
+2. Remove hardcoded `serviceTaxRate = 5` and `governmentTaxRate = 10`
+3. Update all components to pass tax rates from `useTaxSettings()`
+4. Add validation: fail if tax rates not provided
+5. Update `includeServiceTax` / `includeGovernmentTax` to use `isActive` from settings
 
 ---
 
-Оценка сложности
+### **Phase 4: Tax Amount Tracking in Orders/Bills** =�
 
-| Задача | Сложность | Время | Причина
-|
-|---------------------------|-----------|-------|----------------------------
---|
-| getInventoryValueAtDate() | 🟢 Легко | 1-2 ч | SQL query с фильтром по
-дате |
-| getPurchasesForPeriod() | 🟡 Средне | 2-3 ч | Join нескольких таблиц
-|
-| Обновить plReportStore | 🟢 Легко | 1-2 ч | Добавить новые поля
-|
-| UI Toggle + Display | 🟢 Легко | 1-2 ч | Vuetify components
-|
-| TOTAL | 🟢 Легко | 5-9 ч | Данные уже есть!
-|
+**Files to modify:**
 
----
+- `src/stores/pos/orders/ordersStore.ts`
+- `src/stores/pos/types.ts`
+- `src/stores/pos/orders/composables/useOrderCalculations.ts`
 
-Польза от реализации
+**Tasks:**
 
-✅ Преимущества:
-
-1. Cash Flow Analysis - видно сколько реально заплачено поставщикам
-2. Accounts Payable Tracking - контроль кредиторской задолженности
-3. Inventory Turnover - насколько эффективно используется склад
-4. Fraud Detection - расхождения между методами могут указывать на проблемы
-5. Tax Compliance - некоторые налоговые системы требуют кассовый метод
-
-📊 Метрики которые появятся:
-
-- Inventory Turnover Ratio = COGS / Average Inventory
-- Days Inventory Outstanding = (Average Inventory / COGS) × Days
-- Accounts Payable Days = (Accounts Payable / Purchases) × Days
+1. Add fields to PosOrder: `serviceTaxAmount`, `governmentTaxAmount`, `totalTaxAmount`
+2. Update `recalculateOrderTotals()` to store calculated tax amounts
+3. Add same fields to PosBill
+4. Ensure tax amounts recalculated on every order change
+5. Persist tax amounts when saving order to Supabase
 
 ---
 
-Вопросы перед стартом
+### **Phase 5: Tax Tracking in Payments & Transactions** =�
 
-1. Какой метод использовать по умолчанию?
+**Files to modify:**
 
-   - Accrual (текущий) - для операционного управления
-   - Cash - для cash flow planning
+- `src/stores/pos/payments/paymentsStore.ts`
+- `src/stores/pos/payments/types.ts`
+- `src/stores/sales/salesStore.ts`
+- `src/stores/sales/types.ts`
 
-2. Показывать оба метода одновременно или toggle?
+**Tasks:**
 
-   - Рекомендую: показывать оба, highlight разницу
+1. Add tax breakdown to PosPayment
+2. Update `processSimplePayment()` to extract tax amounts
+3. Add tax fields to SalesTransaction type
+4. Update `recordSalesTransaction()` to store taxes separately
+5. **CRITICAL:** Ensure profit calculations exclude taxes
 
-3. Как учитывать частичные оплаты?
+---
 
-   - Если поставка на Rp 10M, оплачено Rp 7M → Accounts Payable = Rp 3M
+### **Phase 6: P&L Report Enhancement** =�
 
-4. Какой период для Opening/Closing Inventory?
+**Files to modify:**
 
-   - Текущий период P&L (from-to dates)
+- `src/stores/analytics/plReportStore.ts`
+- `src/stores/analytics/types.ts`
 
-Хочешь начать реализацию? Это действительно несложно и очень полезно для
-бизнес-аналитики!
+**Tasks:**
+
+1. Add tax section to PLReport type
+2. Update revenue calculation (gross vs net)
+3. Add tax breakdown (service vs government)
+4. Update P&L view to display tax section
+5. Ensure gross profit excludes taxes
+
+---
+
+### **Phase 7: Tax Collection Report** =�
+
+**Files to create:**
+
+- `src/views/backoffice/analytics/TaxReportView.vue`
+- `src/stores/analytics/taxReportStore.ts`
+
+**Tasks:**
+
+1. Create Tax Collection report view
+2. Show breakdown: Service Tax vs Government Tax
+3. Filter by date range, shift, payment method
+4. Show daily/weekly/monthly aggregations
+5. Export to CSV/Excel
+6. Add to Analytics menu
+
+---
+
+## =� Critical Points
+
+1. **Database migration first** - Must create `taxes` table before anything else
+2. **Profit calculations** - NEVER include taxes in COGS or profit calculations
+3. **Backwards compatibility** - Ensure existing orders without tax breakdown still work
+4. **Validation** - POS should not allow checkout if tax settings not loaded
+5. **Migration script** - May need to backfill `taxAmount` for existing orders
+
+---
+
+## � Progress Tracker
+
+- **Phase 1:** � In Progress
+- **Phase 2:** =� Pending
+- **Phase 3:** =� Pending
+- **Phase 4:** =� Pending
+- **Phase 5:** =� Pending
+- **Phase 6:** =� Pending
+- **Phase 7:** =� Pending
+
+---
+
+## =� Notes
+
+- Tax settings will be loaded once at POS initialization and cached locally
+- Changes to tax settings require POS restart to take effect
+- Only 2 tax types supported: Service Charge and Government Tax
+- Taxes calculated per order, not per bill
+- All existing orders will have `taxAmount = 0` until recalculated
 
 # другие правки
 
