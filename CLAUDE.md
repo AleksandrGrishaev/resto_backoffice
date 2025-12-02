@@ -24,17 +24,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Important Notes
 
-1. **MCP Tools (`mcp__supabase__*`) always use DEV database**
+1. **MCP Tools (`mcp__supabase__*`) default to DEV database**
 
-   - `mcp__supabase__execute_sql` → DEV database
-   - `mcp__supabase__apply_migration` → DEV database
-   - Cannot switch MCP connection dynamically
+   - `mcp__supabase__execute_sql` → DEV database (by default)
+   - `mcp__supabase__apply_migration` → DEV database (by default)
+   - **CAN** be switched by editing `.mcp.json` (see below)
 
 2. **For Production Operations:**
 
    - Use seed scripts with `.env.seed.production` (contains service key)
    - Seed scripts use direct SQL, not PostgREST API
    - Never commit `.env.seed.production` to git (already in `.gitignore`)
+   - **OR** switch MCP to production temporarily (see Switching MCP section)
 
 3. **PostgREST Schema Cache Issue:**
 
@@ -54,6 +55,82 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    pnpm seed:users:prod     # PROD database
    pnpm seed:products:prod  # PROD database
    ```
+
+### 🔄 Switching MCP Between DEV and Production
+
+**MCP configuration file:** `.mcp.json` (in project root)
+
+#### Current Configuration:
+
+```json
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=fjkfckjpnbcyuknsnchy"
+      //                                                   ↑ DEV database
+    }
+  }
+}
+```
+
+#### Switching to Production:
+
+**⚠️ WARNING: Use with extreme caution! All MCP operations will affect production!**
+
+1. **Edit `.mcp.json`:**
+
+   ```json
+   {
+     "mcpServers": {
+       "supabase": {
+         "type": "http",
+         "url": "https://mcp.supabase.com/mcp?project_ref=bkntdcvzatawencxghob"
+         //                                                   ↑ PRODUCTION database
+       }
+     }
+   }
+   ```
+
+2. **Restart Claude Code** (close and reopen) to apply changes
+
+3. **Verify connection:**
+
+   ```typescript
+   mcp__supabase__list_tables({ schemas: ['public'] })
+   // Should show production tables
+   ```
+
+4. **⚠️ CRITICAL: Switch back to DEV when done!**
+
+   ```json
+   {
+     "mcpServers": {
+       "supabase": {
+         "type": "http",
+         "url": "https://mcp.supabase.com/mcp?project_ref=fjkfckjpnbcyuknsnchy"
+       }
+     }
+   }
+   ```
+
+5. **Restart Claude Code again** to apply changes
+
+#### Best Practices:
+
+- ✅ **Always test migrations on DEV first** before applying to production
+- ✅ **Create migration files** for all schema changes (see Migration Policy below)
+- ✅ **Switch back to DEV immediately** after production work
+- ✅ **Use Supabase SQL Editor** for production migrations when possible
+- ❌ **Never leave MCP pointed at production** for daily development
+- ❌ **Never commit `.mcp.json` with production ref** to git
+
+#### Quick Reference:
+
+| Database | Project Ref            | URL                                        |
+| -------- | ---------------------- | ------------------------------------------ |
+| DEV      | `fjkfckjpnbcyuknsnchy` | `https://fjkfckjpnbcyuknsnchy.supabase.co` |
+| PROD     | `bkntdcvzatawencxghob` | `https://bkntdcvzatawencxghob.supabase.co` |
 
 ## ⚠️ CRITICAL: Database Migrations Policy
 
