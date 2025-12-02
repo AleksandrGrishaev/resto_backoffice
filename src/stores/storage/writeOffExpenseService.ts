@@ -1,4 +1,5 @@
 import { useAccountStore } from '@/stores/account'
+import { getPOSCashAccountId } from '@/stores/account'
 import type { DailyExpenseCategory } from '@/stores/account/types'
 import type { WriteOffReason, StorageOperationItem } from './types'
 import { doesWriteOffAffectKPI } from './types'
@@ -35,12 +36,20 @@ class WriteOffExpenseService {
   }): Promise<void> {
     const accountStore = useAccountStore()
 
-    const defaultAccount =
-      accountStore.accounts.find(a => a.name === 'acc_1') || accountStore.accounts[0]
+    // Get POS cash account ID dynamically (supports both string and UUID)
+    let defaultAccountId: string
+    try {
+      defaultAccountId = getPOSCashAccountId()
+    } catch (error) {
+      console.error('❌ Account config not initialized')
+      throw new Error('Account config not initialized. Cannot record adjustment.')
+    }
+
+    const defaultAccount = accountStore.accounts.find(a => a.id === defaultAccountId)
 
     if (!defaultAccount) {
-      console.error('❌ No default account found for adjustment recording')
-      throw new Error('No default account available for adjustment recording')
+      console.error('❌ POS cash account not found', { defaultAccountId })
+      throw new Error(`POS cash account (${defaultAccountId}) not found`)
     }
 
     const totalCost = params.quantity * params.costPerUnit
@@ -115,13 +124,20 @@ class WriteOffExpenseService {
 
     const accountStore = useAccountStore()
 
-    // Get default expense account (acc_1 or first available)
-    const defaultAccount =
-      accountStore.accounts.find(a => a.name === 'acc_1') || accountStore.accounts[0]
+    // Get POS cash account ID dynamically (supports both string and UUID)
+    let defaultAccountId: string
+    try {
+      defaultAccountId = getPOSCashAccountId()
+    } catch (error) {
+      console.error('❌ Account config not initialized')
+      throw new Error('Account config not initialized. Cannot record write-off.')
+    }
+
+    const defaultAccount = accountStore.accounts.find(a => a.id === defaultAccountId)
 
     if (!defaultAccount) {
-      console.error('❌ No default account found for write-off recording')
-      throw new Error('No default account available for write-off recording')
+      console.error('❌ POS cash account not found', { defaultAccountId })
+      throw new Error(`POS cash account (${defaultAccountId}) not found`)
     }
 
     // Validate total value

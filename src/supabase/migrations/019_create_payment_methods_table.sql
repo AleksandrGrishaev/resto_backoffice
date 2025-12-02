@@ -79,19 +79,39 @@ CREATE TRIGGER payment_methods_updated_at
 -- 4. SEED DATA: Default Payment Methods
 -- ==============================================================================
 
--- Insert default payment methods
--- Note: We use ON CONFLICT DO NOTHING to make migration idempotent
-INSERT INTO payment_methods (name, code, type, account_id, is_active, requires_details, display_order, icon, description) VALUES
-  -- Cash payments → Main Cash Register (acc_1)
-  ('Cash', 'cash', 'cash', 'acc_1', true, false, 1, 'mdi-cash', 'Cash payments - Main cash register'),
+-- Insert default payment methods with dynamic account lookup
+-- This approach works with both string IDs (dev) and UUID (production)
+-- Queries accounts by name instead of hardcoded IDs
+DO $$
+DECLARE
+  cash_account_id TEXT;
+  bank_account_id TEXT;
+  card_account_id TEXT;
+BEGIN
+  -- Find accounts by name (works in both dev and production)
+  SELECT id INTO cash_account_id FROM accounts WHERE name = 'Main Cash Register' LIMIT 1;
+  SELECT id INTO bank_account_id FROM accounts WHERE name = 'Bank Account - BCA' LIMIT 1;
+  SELECT id INTO card_account_id FROM accounts WHERE name = 'Card Terminal' LIMIT 1;
 
-  -- Card payments → Card Terminal Account (acc_3)
-  ('Credit/Debit Card', 'card', 'card', 'acc_3', true, true, 2, 'mdi-credit-card', 'Card payments via terminal'),
+  -- Insert payment methods with found account IDs
+  INSERT INTO payment_methods (name, code, type, account_id, is_active, requires_details, display_order, icon, description) VALUES
+    -- Cash payments → Main Cash Register
+    ('Cash', 'cash', 'cash', cash_account_id, true, false, 1, 'mdi-cash', 'Cash payments - Main cash register'),
 
-  -- QR Code payments → Bank Account - BCA (acc_2)
-  ('QR Code (QRIS)', 'qr', 'bank', 'acc_2', true, false, 3, 'mdi-qrcode', 'QR code payments to bank account')
+    -- Card payments → Card Terminal Account
+    ('Credit/Debit Card', 'card', 'card', card_account_id, true, true, 2, 'mdi-credit-card', 'Card payments via terminal'),
 
-ON CONFLICT (code) DO NOTHING;
+    -- QR Code payments → Bank Account - BCA
+    ('QR Code (QRIS)', 'qr', 'bank', bank_account_id, true, false, 3, 'mdi-qrcode', 'QR code payments to bank account')
+
+  ON CONFLICT (code) DO NOTHING;
+
+  -- Log results
+  RAISE NOTICE 'Payment methods created with account mappings:';
+  RAISE NOTICE '  Cash → %', cash_account_id;
+  RAISE NOTICE '  Card → %', card_account_id;
+  RAISE NOTICE '  QR → %', bank_account_id;
+END $$;
 
 -- ==============================================================================
 -- 5. RLS POLICIES

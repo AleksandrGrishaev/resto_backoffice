@@ -9,6 +9,7 @@
 import type { ISyncAdapter, SyncQueueItem, SyncResult, ConflictResolution } from '../types'
 import type { PosShift } from '@/stores/pos/shifts/types'
 import { useAccountStore } from '@/stores/account'
+import { getPOSCashAccountId } from '@/stores/account'
 import { supabase } from '@/supabase'
 import { getSupabaseErrorMessage } from '@/supabase/config'
 import { toSupabaseUpdate } from '@/stores/pos/shifts/supabaseMappers'
@@ -323,10 +324,22 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
     const accountStore = useAccountStore()
     const accountsCount = accountStore.accounts?.length || 0
 
+    // Get POS cash account ID dynamically
+    let posCashId: string | null = null
+    try {
+      posCashId = getPOSCashAccountId()
+    } catch (error) {
+      // Account config might not be initialized yet
+      console.warn('⚠️ Account config not initialized, cannot verify POS cash account')
+    }
+
     console.log(`💰 Account Store check:`, {
       initialized: !!accountStore.accounts,
       accountsCount,
-      hasMainCashRegister: accountStore.accounts?.some(a => a.id === 'acc_1')
+      hasMainCashRegister: posCashId
+        ? accountStore.accounts?.some(a => a.id === posCashId)
+        : 'unknown',
+      posCashId
     })
 
     if (accountsCount === 0) {

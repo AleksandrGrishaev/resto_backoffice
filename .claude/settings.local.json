@@ -44,7 +44,8 @@
       "Bash(done)",
       "WebSearch",
       "WebFetch(domain:supabase.com)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(awk:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -3,6 +3,22 @@
 // ============ TYPES ============
 export * from './types'
 
+// ============ CONSTANTS ============
+export * from './constants'
+
+// ============ ACCOUNT CONFIGURATION ============
+export {
+  initializeAccountConfig,
+  getPOSCashAccountId,
+  getBankAccountId,
+  getCardAccountId,
+  getPOSCashAccountWithFallback,
+  isAccountConfigInitialized,
+  isUUID,
+  normalizeAccountId,
+  ACCOUNT_CONFIG
+} from './accountConfig'
+
 // ============ SERVICES ============
 export {
   accountService,
@@ -48,11 +64,5 @@ export type {
   UpdatePaymentAmountDto
 } from './types'
 
-export {
-  EXPENSE_CATEGORIES,
-  OPERATION_TYPES,
-  PAYMENT_PRIORITIES,
-  PAYMENT_STATUSES,
-  PAYMENT_CATEGORIES,
-  AMOUNT_CHANGE_REASONS
-} from './types'
+// Re-export constants for backward compatibility
+// (they are now in './constants.ts' but we export them here too)

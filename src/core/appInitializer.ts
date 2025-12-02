@@ -14,6 +14,8 @@ import { DebugUtils } from '@/utils'
 import { usePlatform } from '@/composables/usePlatform'
 import { ENV } from '@/config/environment'
 import { isHotReload, shouldReinitializeStores, saveHMRState, getHMRState } from './hmrState'
+import { initializeAccountConfig } from '@/stores/account'
+import { supabase } from '@/supabase/client'
 
 // Для summary и utilities
 import { useProductsStore } from '@/stores/productsStore'
@@ -121,6 +123,10 @@ export class AppInitializer {
         count: criticalResults.length,
         success: criticalResults.filter(r => r.success).length
       })
+
+      // Initialize account configuration (loads account IDs from database)
+      // This must happen after stores are initialized but before POS/account operations
+      await initializeAccountConfig(supabase)
 
       // Phase 2: Role-based stores
       const roleBasedResults = await this.strategy.initializeRoleBasedStores(finalUserRoles)

@@ -220,71 +220,21 @@ export interface PaymentStatistics {
   overdueCount: number
 }
 
-// ============ CONSTANTS ============
-
-// ✅ Sprint 3: POS Cash Account Configuration
-// ID счета "Основная касса" - используется в POS системе для кассовых операций
-// Этот счет отличается от других cash счетов (резервная касса, сейф и т.д.)
-export const POS_CASH_ACCOUNT_ID = 'acc_1'
-
-export const EXPENSE_CATEGORIES = {
-  daily: {
-    product: 'Products',
-    food_cost: 'Food Cost (Negative Batches)',
-    inventory_variance: 'Inventory Variance (Reconciliation)',
-    inventory_adjustment: 'Inventory Adjustment (Physical Count)',
-    training_education: 'Training & Education',
-    recipe_development: 'Recipe Development',
-    marketing: 'Marketing',
-    takeaway: 'Takeaway',
-    ayu_cake: 'Ayu cake',
-    utilities: 'Utilities',
-    salary: 'Salary',
-    renovation: 'Renovation',
-    transport: 'Products Transport',
-    cleaning: 'Cleaning',
-    security: 'Security',
-    village: 'Village',
-    rent: 'Rent',
-    other: 'Other'
-  },
-  investment: {
-    shares: 'Shares',
-    other: 'Other Investments'
-  }
-} as const
-
-export const OPERATION_TYPES = {
-  income: 'Income',
-  expense: 'Expense',
-  transfer: 'Transfer',
-  correction: 'Correction'
-} as const
-
-export const PAYMENT_PRIORITIES = {
-  low: 'Низкий',
-  medium: 'Средний',
-  high: 'Высокий',
-  urgent: 'Срочный'
-} as const
-
-export const PAYMENT_STATUSES = {
-  pending: 'Ожидает оплаты',
-  processing: 'В обработке',
-  completed: 'Оплачен',
-  failed: 'Ошибка',
-  cancelled: 'Отменен'
-} as const
-
-export const PAYMENT_CATEGORIES = {
-  supplier: 'Supplier Payment',
-  service: 'Service Payment',
-  utilities: 'Utilities',
-  salary: 'Salary',
-  rent: 'Rent',
-  maintenance: 'Maintenance',
-  other: 'Other'
-} as const
+// ============ NOTE ============
+// Constants have been moved to './constants.ts'
+// Runtime account configuration is in './accountConfig.ts'
+// This file now contains only types and interfaces
+//
+// Re-export constants for backwards compatibility
+export {
+  POS_CASH_ACCOUNT_ID,
+  EXPENSE_CATEGORIES,
+  OPERATION_TYPES,
+  PAYMENT_PRIORITIES,
+  PAYMENT_STATUSES,
+  PAYMENT_CATEGORIES,
+  AMOUNT_CHANGE_REASONS
+} from './constants'
 
 // ============ STORE TYPES ============
 
@@ -333,17 +283,6 @@ export type AmountChangeReason =
   | 'payment_split' // Разделение платежа
   | 'order_cancellation' // Отмена заказа
   | 'other' // Другая причина
-
-// ✅ ДОБАВИТЬ константы
-export const AMOUNT_CHANGE_REASONS: Record<AmountChangeReason, string> = {
-  original_order: 'Original Order Amount',
-  receipt_discrepancy: 'Receipt Discrepancy Adjustment',
-  manual_adjustment: 'Manual Adjustment',
-  supplier_credit: 'Supplier Credit',
-  payment_split: 'Payment Split',
-  order_cancellation: 'Order Cancellation',
-  other: 'Other'
-}
 
 // ✅ НОВЫЙ: DTO для обновления суммы платежа
 export interface UpdatePaymentAmountDto {

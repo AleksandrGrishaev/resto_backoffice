@@ -680,7 +680,10 @@ class DebugService {
           getters.allTransactionsCount = storeInstance.getAllTransactions?.length || 0
 
           // ✅ НОВОЕ: getAccountTransactions примеры
-          const sampleAccountIds = ['acc_1', 'acc_2', 'acc_3']
+          // Use actual account IDs from the store instead of hardcoded values
+          const sampleAccountIds = (storeInstance.accounts || [])
+            .slice(0, 3)
+            .map((acc: any) => acc.id)
           getters.accountTransactionsSample = {}
           sampleAccountIds.forEach(accId => {
             try {
