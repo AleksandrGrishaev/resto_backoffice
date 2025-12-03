@@ -172,7 +172,6 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { useShiftsComposables } from '@/stores/pos/shifts/composables'
 import { useAccountStore } from '@/stores/account'
-import { POS_CASH_ACCOUNT_ID } from '@/stores/account/types'
 import type { CreateShiftDto } from '@/stores/pos/shifts/types'
 import { formatIDR } from '@/utils'
 
@@ -203,11 +202,12 @@ const formRef = ref()
 const dialog = ref(props.modelValue)
 const loading = ref(false)
 const formValid = ref(false)
+const posCashAccountId = ref<string | null>(null) // ✅ Sprint: Store POS cash account ID
 
 const form = ref<CreateShiftDto & { deviceId: string; location: string }>({
   cashierId: '', // TODO: Get from auth store
   cashierName: 'Current Cashier', // TODO: Get from auth store
-  startingCash: 0, // Will be set from acc_1 balance on mount
+  startingCash: 0, // Will be set from POS cash account balance on mount
   notes: '',
   deviceId: 'pos_terminal_main',
   location: 'Main Counter'
@@ -226,10 +226,18 @@ const validationCheck = computed(() => checkCanStartShift(shiftsStore.currentShi
 
 const canStartShift = computed(() => validationCheck.value.canStart && formValid.value)
 
-// ✅ Sprint 4: Get expected cash from acc_1 balance
+// ✅ Get expected cash from POS cash register account balance
 const expectedCashInRegister = computed(() => {
-  const cashAccount = accountStore.accounts.find(acc => acc.id === POS_CASH_ACCOUNT_ID)
-  return cashAccount?.balance || 0
+  if (!posCashAccountId.value) {
+    console.warn('⚠️ POS cash account ID not loaded yet')
+    return 0
+  }
+  const cashAccount = accountStore.accounts.find(acc => acc.id === posCashAccountId.value)
+  if (!cashAccount) {
+    console.error(`❌ POS cash account not found: ${posCashAccountId.value}`)
+    return 0
+  }
+  return cashAccount.balance || 0
 })
 
 // Check if starting cash matches expected amount
@@ -344,19 +352,46 @@ function formatDateTime(date: Date): string {
 }
 
 async function checkCurrentState() {
-  // Load shifts to check current state
-  if (shiftsStore.shifts.length === 0) {
-    await shiftsStore.loadShifts()
-  }
+  try {
+    // Load shifts to check current state
+    if (shiftsStore.shifts.length === 0) {
+      await shiftsStore.loadShifts()
+    }
 
-  // ✅ Sprint 4: Load accounts to get acc_1 balance
-  if (accountStore.accounts.length === 0) {
-    await accountStore.fetchAccounts()
-  }
+    // ✅ Load POS cash account ID from payment methods
+    if (!posCashAccountId.value) {
+      const { paymentMethodService } = await import('@/stores/catalog/payment-methods.service')
+      const posCashRegister = await paymentMethodService.getPosСashRegister()
 
-  // Set initial starting cash from expected amount
-  if (form.value.startingCash === 0) {
-    form.value.startingCash = expectedCashInRegister.value || 50000
+      if (!posCashRegister || !posCashRegister.accountId) {
+        console.error('❌ No POS cash register configured or no account assigned')
+        // Fallback: try to find by account name
+        const fallbackAccount = accountStore.accounts.find(
+          acc => acc.name === 'Main Cash Register' && acc.isActive
+        )
+        if (fallbackAccount) {
+          posCashAccountId.value = fallbackAccount.id
+          console.log('✅ Using fallback POS cash account:', fallbackAccount.id)
+        } else {
+          console.error('❌ Could not find POS cash account')
+        }
+      } else {
+        posCashAccountId.value = posCashRegister.accountId
+        console.log('✅ POS cash account loaded:', posCashAccountId.value)
+      }
+    }
+
+    // Load accounts to get balance
+    if (accountStore.accounts.length === 0) {
+      await accountStore.fetchAccounts()
+    }
+
+    // Set initial starting cash from expected amount
+    if (form.value.startingCash === 0) {
+      form.value.startingCash = expectedCashInRegister.value || 50000
+    }
+  } catch (error) {
+    console.error('❌ Failed to check current state:', error)
   }
 }
 
