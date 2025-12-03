@@ -209,6 +209,24 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     try {
       console.log('🔄 [paymentsStore] Starting background sales recording...')
 
+      // ✅ CRITICAL: Verify auth session before background operations
+      // Background operations may lose JWT token context, causing RLS policy failures
+      const { ensureAuthSession } = await import('@/supabase')
+      const hasAuth = await ensureAuthSession()
+
+      if (!hasAuth) {
+        console.error(
+          '❌ [paymentsStore] No auth session in background operation - discount events may fail to save'
+        )
+        console.error(
+          '⚠️ [paymentsStore] This is a known issue with background operations losing JWT context'
+        )
+        // Continue anyway - payment was already processed successfully
+        // Discount events will fail but won't block the payment
+      } else {
+        console.log('✅ [paymentsStore] Auth session verified for background operations')
+      }
+
       const { useSalesStore } = await import('@/stores/sales')
       const salesStore = useSalesStore()
       const ordersStore = usePosOrdersStore()
@@ -225,15 +243,38 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         return
       }
 
-      // Get bill items from paid bills
-      const billItems = order.bills
-        .filter(bill => billIds.includes(bill.id))
-        .flatMap(bill => bill.items.filter(item => itemIds.includes(item.id)))
+      // Get paid bills
+      const paidBills = order.bills.filter(bill => billIds.includes(bill.id))
 
-      // Get bill discount (if any)
-      const billDiscountAmount = order.bills
-        .filter(bill => billIds.includes(bill.id))
-        .reduce((sum, bill) => sum + (bill.discountAmount || 0), 0)
+      // Get bill items from paid bills
+      const billItems = paidBills.flatMap(bill =>
+        bill.items.filter(item => itemIds.includes(item.id))
+      )
+
+      // Get bill discount information from order bills (stored in bill.discountAmount)
+      // This discount will be allocated proportionally in useProfitCalculation
+      const billDiscountAmount = paidBills.reduce(
+        (sum, bill) => sum + (bill.discountAmount || 0),
+        0
+      )
+
+      // Get bill discount metadata (for discount_events creation)
+      const billDiscountInfo = paidBills
+        .filter(bill => bill.discountAmount && bill.discountAmount > 0)
+        .map(bill => ({
+          billId: bill.id,
+          billNumber: bill.billNumber,
+          amount: bill.discountAmount || 0,
+          reason: bill.discountReason || 'other'
+        }))
+
+      console.log('💰 [paymentsStore] Bill discount for payment:', {
+        billIds,
+        billDiscountAmount,
+        billDiscountInfo,
+        itemsCount: billItems.length,
+        note: 'Bill discount will be allocated proportionally in profit calculation'
+      })
 
       if (billItems.length === 0) {
         console.warn('⚠️ [paymentsStore] No bill items found for recording')
@@ -242,7 +283,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
 
       console.log('📊 [paymentsStore] Recording sales transaction:', {
         itemsCount: billItems.length,
-        billDiscount: billDiscountAmount
+        billDiscount: billDiscountAmount,
+        billDiscountInfo
       })
 
       // 🔄 This triggers the heavy operations:
@@ -250,7 +292,13 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       // - FIFO allocation
       // - Write-off creation
       // - Batch updates
-      await salesStore.recordSalesTransaction(payment, billItems, billDiscountAmount)
+      // - Discount event creation (for bill discounts)
+      await salesStore.recordSalesTransaction(
+        payment,
+        billItems,
+        billDiscountAmount,
+        billDiscountInfo
+      )
 
       console.log('✅ [paymentsStore] Background sales recording completed successfully')
     } catch (salesErr) {

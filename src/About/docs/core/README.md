@@ -12,6 +12,15 @@ Core system architecture, internal mechanisms, and foundational patterns.
   - Vite HMR debounce configuration
   - Interactive test interface at `/debug/hmr`
 
+### Architecture & Authentication
+
+- **[Supabase Authentication](./supabase-auth.md)** - RLS policies and authentication best practices
+  - Auth context in foreground vs background operations
+  - `auth.role()` vs `auth.uid()` comparison
+  - Best practices for RLS policies
+  - Common patterns and debugging
+  - Real-world example: discount events RLS fix
+
 ## Coming Soon
 
 ### Architecture
@@ -19,7 +28,6 @@ Core system architecture, internal mechanisms, and foundational patterns.
 - App initialization flow
 - Store architecture patterns
 - Router configuration
-- Authentication system
 
 ### State Management
 

@@ -50,6 +50,17 @@ export {
   MODULE_NAME as DISCOUNT_MODULE_NAME
 } from './constants'
 
-// Services (to be implemented in Task 3)
-// export { discountService } from './services/discountService'
-// export { supabaseService } from './services/supabaseService'
+// Services
+export {
+  discountService,
+  discountSupabaseService,
+  DiscountService,
+  DiscountSupabaseService
+} from './services'
+
+export type {
+  ApplyItemDiscountParams,
+  ApplyBillDiscountParams,
+  DiscountResult,
+  ValidationResult
+} from './services'

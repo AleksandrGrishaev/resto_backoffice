@@ -2,12 +2,12 @@
 
 ## 📈 Sprint Progress
 
-### Phase 1: Core Discount System (Sprint 7.1)
+### Phase 1: Core Discount System (Sprint 7.1) ✅ COMPLETED
 
-- [ ] Task 1: Setup Discount Store Structure
-- [ ] Task 2: Database Migrations
-- [ ] Task 3: Discount Service Layer
-- [ ] Task 4: Integrate with Orders Store
+- [x] Task 1: Setup Discount Store Structure ✅
+- [x] Task 2: Database Migrations ✅
+- [x] Task 3: Discount Service Layer ✅
+- [x] Task 4: Integrate with Orders Store ✅
 
 ### Phase 2: UI Components (Sprint 7.2)
 
@@ -28,8 +28,8 @@
 - [ ] Task 12: Data Migration
 - [ ] Task 13: Documentation
 
-**Current Phase:** Not Started
-**Overall Progress:** 0% (0/13 tasks completed)
+**Current Phase:** Phase 1 Completed ✅ → Ready for Phase 2 (UI Components)
+**Overall Progress:** 31% (4/13 tasks completed)
 
 ---
 
@@ -735,28 +735,28 @@ COMMENT ON COLUMN orders.revenue_breakdown IS 'Full RevenueBreakdown object (JSO
 
 ## 📋 Implementation Tasks - Sprint 7
 
-### Phase 1: Core Discount System (Sprint 7.1)
+### Phase 1: Core Discount System (Sprint 7.1) ✅ COMPLETED
 
-#### Task 1: Setup Discount Store Structure
+#### Task 1: Setup Discount Store Structure ✅
 
-- [ ] Create `src/stores/discounts/` directory
-- [ ] Create `types.ts` with:
-  - [ ] `DiscountEvent` interface (with `allocationDetails`)
-  - [ ] `DiscountReason` type
-  - [ ] `DISCOUNT_REASON_LABELS` constant
-  - [ ] `RevenueBreakdown` interface
-  - [ ] `DailyRevenueReport` interface
-  - [ ] `DiscountSummary` interface (simple analytics)
-  - [ ] `DiscountTransactionView` interface (transaction with order context)
-  - [ ] `DiscountFilterOptions` interface (for filtering)
-- [ ] Create `constants.ts` with:
-  - [ ] Discount reason options
-  - [ ] Tax rate defaults (5%, 10%)
-  - [ ] Default date ranges (last 7 days, 30 days, custom)
-- [ ] Create `discountsStore.ts` with:
-  - [ ] State: `discountEvents`, `initialized`, `loading`
-  - [ ] Actions: `initialize()`, `addDiscountEvent()`, `getDiscountsByOrder()`
-  - [ ] Getters: `getDiscountStats()`, `getTodayDiscounts()`
+- [x] Create `src/stores/discounts/` directory
+- [x] Create `types.ts` with:
+  - [x] `DiscountEvent` interface (with `allocationDetails`)
+  - [x] `DiscountReason` type
+  - [x] `DISCOUNT_REASON_LABELS` constant
+  - [x] `RevenueBreakdown` interface
+  - [x] `DailyRevenueReport` interface
+  - [x] `DiscountSummary` interface (simple analytics)
+  - [x] `DiscountTransactionView` interface (transaction with order context)
+  - [x] `DiscountFilterOptions` interface (for filtering)
+- [x] Create `constants.ts` with:
+  - [x] Discount reason options
+  - [x] Tax rate defaults (5%, 10%)
+  - [x] Default date ranges (last 7 days, 30 days, custom)
+- [x] Create `discountsStore.ts` with:
+  - [x] State: `discountEvents`, `initialized`, `loading`
+  - [x] Actions: `initialize()`, `addDiscountEvent()`, `getDiscountsByOrder()`
+  - [x] Getters: `getDiscountStats()`, `getTodayDiscounts()`
 
 **Example Code:**
 
@@ -800,37 +800,37 @@ export const useDiscountsStore = defineStore('discounts', () => {
 })
 ```
 
-#### Task 2: Database Migrations
+#### Task 2: Database Migrations ✅
 
-- [ ] Create migration `007_create_discount_events_table.sql`
-- [ ] Test migration on DEV database using MCP: `mcp__supabase__apply_migration()`
-- [ ] Verify table structure: `mcp__supabase__list_tables()`
-- [ ] Create migration `008_add_revenue_breakdown_to_orders.sql`
-- [ ] Test migration on DEV database
-- [ ] Run security advisor: `mcp__supabase__get_advisors({ type: 'security' })`
+- [x] Create migration `034_create_discount_events_table.sql`
+- [x] Test migration on DEV database using MCP: `mcp__supabase__apply_migration()`
+- [x] Verify table structure: `mcp__supabase__list_tables()`
+- [x] Create migration `035_add_revenue_breakdown_to_orders.sql`
+- [x] Test migration on DEV database
+- [x] Run security advisor: `mcp__supabase__get_advisors({ type: 'security' })`
 
-#### Task 3: Discount Service Layer
+#### Task 3: Discount Service Layer ✅
 
-- [ ] Create `src/stores/discounts/services/discountService.ts`
-- [ ] Implement `applyItemDiscount()`:
-  - [ ] Validate discount value
-  - [ ] Create DiscountEvent
-  - [ ] Update item in ordersStore
-  - [ ] Return updated item
-- [ ] Implement `applyBillDiscount()`:
-  - [ ] Validate discount value
-  - [ ] Calculate proportional allocation for all items
-  - [ ] Create DiscountEvent with `allocationDetails`
-  - [ ] Update bill in ordersStore
-  - [ ] Recalculate order totals
-  - [ ] Return updated bill
-- [ ] Implement `removeDiscount()`:
-  - [ ] Soft delete DiscountEvent
-  - [ ] Recalculate affected order/bill
-- [ ] Implement `validateDiscount()`:
-  - [ ] Check discount limits
-  - [ ] Check user permissions
-  - [ ] Return validation result
+- [x] Create `src/stores/discounts/services/discountService.ts`
+- [x] Implement `applyItemDiscount()`:
+  - [x] Validate discount value
+  - [x] Create DiscountEvent
+  - [x] Update item in ordersStore
+  - [x] Return updated item
+- [x] Implement `applyBillDiscount()`:
+  - [x] Validate discount value
+  - [x] Calculate proportional allocation for all items
+  - [x] Create DiscountEvent with `allocationDetails`
+  - [x] Update bill in ordersStore
+  - [x] Recalculate order totals
+  - [x] Return updated bill
+- [x] Implement `removeDiscount()`:
+  - [x] Soft delete DiscountEvent
+  - [x] Recalculate affected order/bill
+- [x] Implement `validateDiscount()`:
+  - [x] Check discount limits
+  - [x] Check user permissions
+  - [x] Return validation result
 
 **Example: Bill Discount with Allocation**
 
@@ -901,21 +901,21 @@ export async function applyBillDiscount(params: {
 }
 ```
 
-#### Task 4: Integrate with Orders Store
+#### Task 4: Integrate with Orders Store ✅
 
-- [ ] Update `useOrderCalculations.ts`:
-  - [ ] Add `calculateRevenueBreakdown()` function
-  - [ ] Return `RevenueBreakdown` object
-  - [ ] Include tax calculations
-  - [ ] Document proportional allocation logic
-- [ ] Update `ordersStore.ts`:
-  - [ ] Add `applyItemDiscount()` method
-  - [ ] Add `applyBillDiscount()` method
-  - [ ] Update `recalculateOrderTotals()` to populate `revenueBreakdown`
-  - [ ] Update `finalAmount` to be `totalCollected` (with taxes)
-- [ ] Update `services.ts`:
-  - [ ] Save `revenueBreakdown` when persisting orders
-  - [ ] Save discount events to Supabase
+- [x] Update `useOrderCalculations.ts`:
+  - [x] Add `calculateRevenueBreakdown()` function
+  - [x] Return `RevenueBreakdown` object
+  - [x] Include tax calculations
+  - [x] Document proportional allocation logic
+- [x] Update `ordersStore.ts`:
+  - [x] Add `applyItemDiscount()` method
+  - [x] Add `applyBillDiscount()` method
+  - [x] Update `recalculateOrderTotals()` to populate `revenueBreakdown`
+  - [x] Update `finalAmount` to be `totalCollected` (with taxes)
+- [x] Update `services.ts`:
+  - [x] Save `revenueBreakdown` when persisting orders
+  - [x] Save discount events to Supabase
 
 ### Phase 2: UI Components (Sprint 7.2)
 

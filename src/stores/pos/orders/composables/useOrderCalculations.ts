@@ -9,6 +9,8 @@ import type {
   OrderType,
   OrderPaymentStatus
 } from '@/stores/pos/types'
+import type { RevenueBreakdown, TaxBreakdown } from '@/stores/discounts/types'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 
 /**
  * Composable for order calculations with selection support
@@ -94,40 +96,15 @@ export function useOrderCalculations(
 
   /**
    * Calculate bill-level discounts (proportional for selected items)
+   *
+   * ✅ FIX: bill.discountAmount is now just a SUM of item.discounts[]
+   * So we should NOT use it here - it would double-count discounts!
+   * All discounts are already counted in itemDiscounts computed above.
    */
   const billDiscounts = computed((): number => {
-    const selectedIds = getSelectedItemIds()
-    const allBills = getBills()
-
-    // If no items selected, include all bill discounts
-    if (selectedIds.length === 0) {
-      const activeId = getActiveBillId()
-      if (activeId) {
-        const activeBill = allBills.find(bill => bill.id === activeId)
-        return activeBill?.discountAmount || 0
-      }
-      return allBills.reduce((sum, bill) => sum + (bill.discountAmount || 0), 0)
-    }
-
-    // If items are selected, calculate proportional bill discounts
-    let totalBillDiscounts = 0
-
-    for (const bill of allBills) {
-      const billItems = bill.items.filter(item => item.status !== 'cancelled')
-      const selectedBillItems = billItems.filter(item => selectedIds.includes(item.id))
-
-      if (selectedBillItems.length > 0 && bill.discountAmount) {
-        const billSubtotal = billItems.reduce((sum, item) => sum + item.totalPrice, 0)
-        const selectedSubtotal = selectedBillItems.reduce((sum, item) => sum + item.totalPrice, 0)
-
-        if (billSubtotal > 0) {
-          const proportion = selectedSubtotal / billSubtotal
-          totalBillDiscounts += bill.discountAmount * proportion
-        }
-      }
-    }
-
-    return totalBillDiscounts
+    // Always return 0 - all discounts are in item.discounts[] now
+    // bill.discountAmount is just a cached sum for convenience
+    return 0
   })
 
   /**
@@ -390,8 +367,8 @@ export function useOrderCalculations(
  * Переносится из ordersStore
  */
 export function recalculateOrderTotals(order: PosOrder): void {
-  let totalAmount = 0
-  let discountAmount = 0
+  let orderSubtotal = 0 // Sum of all bill subtotals (BEFORE discounts)
+  let orderDiscountAmount = 0 // Sum of all discounts
 
   // Пересчитать каждый счет
   order.bills.forEach(bill => {
@@ -418,15 +395,20 @@ export function recalculateOrderTotals(order: PosOrder): void {
       }
     })
 
-    // Скидка на весь счет
-    if (bill.discountAmount) {
-      billDiscountAmount += bill.discountAmount
-    }
+    // ✅ NEW ARCHITECTURE (Sprint 7, Phase 2):
+    // bill.discountAmount = bill-level discount (applied to entire bill) - NOT overwritten
+    // billDiscountAmount = sum of item-level discounts (from item.discounts[])
+    // Total discount = item discounts + bill discount
+
+    const itemLevelDiscounts = billDiscountAmount
+    const billLevelDiscount = bill.discountAmount || 0 // Preserve existing bill discount
+    const totalDiscount = itemLevelDiscounts + billLevelDiscount
 
     // Обновляем суммы счета
     bill.subtotal = billSubtotal
-    bill.discountAmount = billDiscountAmount
-    bill.total = Math.max(0, billSubtotal - billDiscountAmount)
+    // DON'T overwrite bill.discountAmount - it stores bill-level discount
+    // bill.discountAmount is set manually via saveBillDiscount()
+    bill.total = Math.max(0, billSubtotal - totalDiscount)
 
     // Пересчитать статус оплаты счета на основе статусов позиций
     const activeItems = bill.items.filter(item => item.status !== 'cancelled')
@@ -446,18 +428,33 @@ export function recalculateOrderTotals(order: PosOrder): void {
       }
     }
 
-    // Добавляем к общей сумме заказа (только активные счета)
+    // ✅ FIX: Sum subtotals (BEFORE discounts), not bill.total (AFTER discounts)
+    // This ensures order.totalAmount represents the original price
     if (bill.status !== 'cancelled') {
-      totalAmount += bill.total
-      discountAmount += billDiscountAmount
+      orderSubtotal += billSubtotal // Subtotal BEFORE discounts
+      orderDiscountAmount += totalDiscount // Item discounts + bill discount
     }
   })
 
-  // Обновляем суммы заказа
-  order.totalAmount = totalAmount
-  order.discountAmount = discountAmount
-  order.taxAmount = 0 // TODO: Add tax calculation if needed
-  order.finalAmount = totalAmount
+  // ✅ FIX: totalAmount = subtotal BEFORE discounts, not after
+  // This is the original amount before any discounts
+  order.totalAmount = orderSubtotal // Changed from totalAmount to orderSubtotal
+  order.discountAmount = orderDiscountAmount
+
+  // =============================================
+  // CALCULATE REVENUE BREAKDOWN (Sprint 7)
+  // =============================================
+  const revenueBreakdown = calculateRevenueBreakdown(order)
+
+  // Populate revenue fields
+  order.plannedRevenue = revenueBreakdown.plannedRevenue
+  order.actualRevenue = revenueBreakdown.actualRevenue
+  order.totalCollected = revenueBreakdown.totalCollected
+  order.revenueBreakdown = revenueBreakdown
+
+  // Update tax and final amounts
+  order.taxAmount = revenueBreakdown.totalTaxes
+  order.finalAmount = revenueBreakdown.totalCollected // IMPORTANT: finalAmount now includes taxes!
 
   // Пересчитать payment status
   const calculateOrderPaymentStatus = (bills: PosBill[]): OrderPaymentStatus => {
@@ -551,4 +548,109 @@ export function determineStatusByOrderType(
   if (allInFinalStatus) return finalStatus
 
   return 'draft'
+}
+
+/**
+ * Calculate revenue breakdown for an order
+ * Provides three views of revenue:
+ * - Planned: Original prices before discounts
+ * - Actual: After discounts, before taxes
+ * - Total: With taxes included (final collected amount)
+ *
+ * IMPORTANT: Bill discounts are proportionally allocated to items.
+ * Each item's discount = (item price / bill subtotal) × bill discount
+ *
+ * @param order - The order to calculate revenue breakdown for
+ * @returns RevenueBreakdown object with all revenue metrics
+ */
+export function calculateRevenueBreakdown(order: PosOrder): RevenueBreakdown {
+  // =============================================
+  // 1. CALCULATE PLANNED REVENUE (original prices)
+  // =============================================
+  let plannedRevenue = 0
+
+  for (const bill of order.bills) {
+    if (bill.status === 'cancelled') continue
+
+    for (const item of bill.items) {
+      if (item.status === 'cancelled') continue
+      plannedRevenue += item.totalPrice
+    }
+  }
+
+  // =============================================
+  // 2. CALCULATE ITEM-LEVEL DISCOUNTS
+  // =============================================
+  let itemDiscounts = 0
+
+  for (const bill of order.bills) {
+    if (bill.status === 'cancelled') continue
+
+    for (const item of bill.items) {
+      if (item.status === 'cancelled') continue
+
+      // Sum up all item-level discounts
+      if (item.discounts && item.discounts.length > 0) {
+        for (const discount of item.discounts) {
+          if (discount.type === 'percentage') {
+            itemDiscounts += item.totalPrice * (discount.value / 100)
+          } else {
+            itemDiscounts += discount.value
+          }
+        }
+      }
+    }
+  }
+
+  // =============================================
+  // 3. CALCULATE BILL-LEVEL DISCOUNTS
+  // =============================================
+  // ✅ FIX: Bill-level discounts are now stored in item.discounts[] after proportional allocation
+  // So bill.discountAmount is just a sum of all item discounts (already counted in Step 2)
+  // We should NOT count bill.discountAmount again here - it would double-count discounts!
+  const billDiscounts = 0 // Always 0 - all discounts are in item.discounts[]
+
+  // =============================================
+  // 4. CALCULATE TOTALS
+  // =============================================
+  const totalDiscounts = itemDiscounts + billDiscounts
+  const actualRevenue = Math.max(0, plannedRevenue - totalDiscounts)
+
+  // =============================================
+  // 5. CALCULATE TAXES FROM PAYMENT SETTINGS
+  // =============================================
+  const paymentSettingsStore = usePaymentSettingsStore()
+  const activeTaxes = paymentSettingsStore.activeTaxes
+
+  let totalTaxes = 0
+  const taxBreakdown: TaxBreakdown[] = activeTaxes.map(tax => {
+    const amount = actualRevenue * (tax.percentage / 100)
+    totalTaxes += amount
+
+    return {
+      taxId: tax.id,
+      name: tax.name,
+      percentage: tax.percentage,
+      amount
+    }
+  })
+
+  // =============================================
+  // 6. CALCULATE TOTAL COLLECTED
+  // =============================================
+  const totalCollected = actualRevenue + totalTaxes
+
+  // =============================================
+  // 7. RETURN REVENUE BREAKDOWN
+  // =============================================
+  return {
+    plannedRevenue,
+    itemDiscounts,
+    billDiscounts,
+    totalDiscounts,
+    actualRevenue,
+    taxes: taxBreakdown,
+    totalTaxes,
+    totalCollected
+  }
 }

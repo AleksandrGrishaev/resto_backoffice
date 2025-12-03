@@ -126,6 +126,12 @@ export interface PosOrder extends BaseEntity {
   // Payment references (Sprint 1: Payment Architecture)
   paymentIds: string[] // Links to PosPayment records
   paidAmount: number // Computed from payments
+
+  // Revenue breakdown (Sprint 7: Discount System)
+  plannedRevenue?: number // Original revenue before discounts
+  actualRevenue?: number // Revenue after discounts
+  totalCollected?: number // Revenue after discounts + taxes
+  revenueBreakdown?: import('@/stores/discounts/types').RevenueBreakdown
 }
 
 // ===== BILL TYPES =====
@@ -139,6 +145,8 @@ export interface PosBill extends BaseEntity {
   items: PosBillItem[]
   subtotal: number
   discountAmount: number
+  discountReason?: string // Reason for bill-level discount
+  discountType?: 'percentage' | 'fixed' // Type of bill-level discount
   taxAmount: number
   total: number
   paymentStatus: 'unpaid' | 'partial' | 'paid'
@@ -154,7 +162,7 @@ export interface PosBillItem extends BaseEntity {
   variantName?: string
   quantity: number
   unitPrice: number // базовая цена варианта
-  totalPrice: number // итоговая цена (unitPrice + modifiersTotal) * quantity - discounts
+  totalPrice: number // итоговая цена (unitPrice + modifiersTotal) * quantity БЕЗ скидок (скидки в discounts[])
   discounts: PosItemDiscount[]
 
   // DEPRECATED: старая структура модификаторов (для обратной совместимости)

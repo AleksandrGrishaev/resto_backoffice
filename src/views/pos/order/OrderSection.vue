@@ -41,6 +41,7 @@
             @modify-item="handleModifyItem"
             @cancel-item="handleCancelItem"
             @add-note="handleAddNote"
+            @apply-discount="handleApplyDiscount"
             @send-to-kitchen="handleSendToKitchen"
             @move-items="handleMoveItems"
             @checkout="handleCheckout"
@@ -134,6 +135,15 @@
       @save="handleSaveNote"
       @cancel="handleCancelNote"
     />
+
+    <!-- Item Discount Dialog -->
+    <ItemDiscountDialog
+      v-model="showItemDiscountDialog"
+      :item="discountingItem"
+      :bill-id="discountingBillId"
+      @success="handleDiscountSuccess"
+      @cancel="handleDiscountCancel"
+    />
   </div>
 </template>
 
@@ -155,6 +165,7 @@ import OrderTotals from './components/OrderTotals.vue'
 import OrderActions from './components/OrderActions.vue'
 import PaymentDialog from '../payment/PaymentDialog.vue'
 import AddNoteDialog from './dialogs/AddNoteDialog.vue'
+import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
 
 const MODULE_NAME = 'OrderSection'
 
@@ -218,6 +229,19 @@ const showAddNoteDialog = ref(false)
 const editingItemId = ref<string | null>(null)
 const editingItemNote = ref('')
 const editingItemReadonly = ref(false)
+
+// Item Discount Dialog State
+const showItemDiscountDialog = ref(false)
+const discountingItemId = ref<string | null>(null)
+const discountingBillId = ref<string>('')
+const discountingItem = computed(() => {
+  if (!discountingItemId.value) return null
+  return (
+    currentOrder.value?.bills
+      .flatMap(bill => bill.items)
+      .find(i => i.id === discountingItemId.value) || null
+  )
+})
 
 // Computed - Main Data
 const currentOrder = computed((): PosOrder | null => {
@@ -559,6 +583,57 @@ const handleCancelNote = (): void => {
   editingItemReadonly.value = false
 }
 
+const handleApplyDiscount = async (itemId: string): Promise<void> => {
+  try {
+    console.log('💰 Apply discount to item:', itemId)
+
+    // Find the item and its bill
+    const bill = currentOrder.value?.bills.find(b => b.items.some(i => i.id === itemId))
+
+    if (!bill) {
+      showError('Bill not found')
+      return
+    }
+
+    const item = bill.items.find(i => i.id === itemId)
+
+    if (!item) {
+      showError('Item not found')
+      return
+    }
+
+    discountingItemId.value = itemId
+    discountingBillId.value = bill.id
+    showItemDiscountDialog.value = true
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to open discount dialog'
+    showError(message)
+  }
+}
+
+const handleDiscountSuccess = async (): Promise<void> => {
+  try {
+    showSuccess('Discount applied successfully')
+    hasUnsavedChanges.value = true
+
+    // Recalculate order totals
+    if (currentOrder.value) {
+      await ordersStore.recalculateOrderTotals(currentOrder.value.id)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to recalculate totals'
+    showError(message)
+  } finally {
+    discountingItemId.value = null
+    discountingBillId.value = ''
+  }
+}
+
+const handleDiscountCancel = (): void => {
+  discountingItemId.value = null
+  discountingBillId.value = ''
+}
+
 // Methods - Actions
 const handleSave = async (): Promise<void> => {
   if (!currentOrder.value) return
@@ -791,11 +866,27 @@ const handlePaymentConfirm = async (paymentData: {
   amount: number
   receivedAmount?: number
   change?: number
+  billDiscount?: {
+    amount: number
+    reason: string
+    type: string
+    value: number
+  }
 }): Promise<void> => {
   try {
     if (!currentOrder.value) {
       showError('No active order')
       return
+    }
+
+    // Save bill discount to order (NOT as item discounts)
+    if (paymentData.billDiscount && paymentData.billDiscount.amount > 0) {
+      console.log('💰 Saving bill discount to order:', paymentData.billDiscount)
+      await ordersStore.saveBillDiscount(
+        paymentDialogData.value.billIds[0],
+        paymentData.billDiscount.amount,
+        paymentData.billDiscount.reason
+      )
     }
 
     // ✅ OPTIMISTIC UI: Close dialog immediately

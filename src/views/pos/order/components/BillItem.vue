@@ -28,12 +28,52 @@
               {{ group.variantName }}
             </div>
 
-            <!-- Третья строка: счетчик и цена -->
+            <!-- Третья строка: счетчик, скидки и цена -->
             <div class="group-meta-line">
               <div class="group-badges">
                 <span class="count-badge">{{ group.items.length }}</span>
+
+                <!-- Discount indicator for group -->
+                <v-tooltip v-if="hasGroupDiscounts(group)" location="top">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-chip size="x-small" color="error" variant="flat" v-bind="tooltipProps">
+                      <v-icon size="12" start>mdi-tag-percent</v-icon>
+                      -{{ formatPrice(calculateGroupDiscounts(group)) }}
+                    </v-chip>
+                  </template>
+                  <div class="discount-tooltip">
+                    <div class="text-caption font-weight-bold mb-1">Discounts Applied:</div>
+                    <div v-for="(item, idx) in group.items" :key="idx">
+                      <div v-for="discount in item.discounts" :key="discount.id" class="mb-1">
+                        <div class="text-caption">
+                          {{
+                            discount.type === 'percentage'
+                              ? `${discount.value}%`
+                              : formatPrice(discount.value)
+                          }}
+                          - {{ discount.reason }}
+                        </div>
+                        <div class="text-caption text-medium-emphasis">
+                          by {{ discount.appliedBy }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </v-tooltip>
               </div>
-              <span class="group-price-inline">{{ formatPrice(group.totalPrice) }}</span>
+              <!-- Price with discount indicator -->
+              <div v-if="hasGroupDiscounts(group)" class="price-with-discount">
+                <span class="old-price">{{ formatPrice(calculateGroupOriginalPrice(group)) }}</span>
+                <span class="discount-badge">
+                  -{{
+                    Math.round(
+                      (calculateGroupDiscounts(group) / calculateGroupOriginalPrice(group)) * 100
+                    )
+                  }}%
+                </span>
+                <span class="new-price">{{ formatPrice(group.totalPrice) }}</span>
+              </div>
+              <span v-else class="group-price-inline">{{ formatPrice(group.totalPrice) }}</span>
             </div>
 
             <!-- Четвертая строка: модификации (если есть) -->
@@ -134,6 +174,21 @@
                     </v-list-item-title>
                   </v-list-item>
 
+                  <v-list-item
+                    :disabled="item.paymentStatus === 'paid'"
+                    @click="item.paymentStatus !== 'paid' ? handleApplyDiscount(item.id) : null"
+                  >
+                    <template #prepend>
+                      <v-icon size="small" color="primary">mdi-tag-percent</v-icon>
+                    </template>
+                    <v-list-item-title>
+                      Apply Discount
+                      <span v-if="item.paymentStatus === 'paid'" class="text-caption text-grey">
+                        (Paid)
+                      </span>
+                    </v-list-item-title>
+                  </v-list-item>
+
                   <v-divider />
 
                   <v-list-item class="text-error" @click="handleCancel(item.id)">
@@ -177,7 +232,7 @@
             {{ group.variantName }}
           </div>
 
-          <!-- Третья строка: статус, заметки и цена -->
+          <!-- Третья строка: статус, заметки, скидки и цена -->
           <div class="item-meta-line">
             <div class="item-badges">
               <v-chip
@@ -206,7 +261,25 @@
               </v-tooltip>
             </div>
 
-            <span class="item-price-inline">{{ formatPrice(group.items[0].totalPrice) }}</span>
+            <!-- Price with discount indicator -->
+            <div v-if="hasItemDiscounts(group.items[0])" class="price-with-discount">
+              <span class="old-price">{{ formatPrice(group.items[0].totalPrice) }}</span>
+              <span class="discount-badge">
+                -{{
+                  Math.round(
+                    (calculateItemDiscounts(group.items[0]) / group.items[0].totalPrice) * 100
+                  )
+                }}%
+              </span>
+              <span class="new-price">
+                {{
+                  formatPrice(group.items[0].totalPrice - calculateItemDiscounts(group.items[0]))
+                }}
+              </span>
+            </div>
+            <span v-else class="item-price-inline">
+              {{ formatPrice(group.items[0].totalPrice) }}
+            </span>
           </div>
 
           <!-- Четвертая строка: модификации (если есть) -->
@@ -244,6 +317,25 @@
               </v-list-item-title>
             </v-list-item>
 
+            <v-list-item
+              :disabled="group.items[0].paymentStatus === 'paid'"
+              @click="
+                group.items[0].paymentStatus !== 'paid'
+                  ? handleApplyDiscount(group.items[0].id)
+                  : null
+              "
+            >
+              <template #prepend>
+                <v-icon size="small" color="primary">mdi-tag-percent</v-icon>
+              </template>
+              <v-list-item-title>
+                Apply Discount
+                <span v-if="group.items[0].paymentStatus === 'paid'" class="text-caption text-grey">
+                  (Paid)
+                </span>
+              </v-list-item-title>
+            </v-list-item>
+
             <v-divider />
 
             <v-list-item class="text-error" @click="handleCancel(group.items[0].id)">
@@ -260,7 +352,12 @@
 </template>
 
 <script setup lang="ts">
-import type { PosBillItem, ItemStatus, ItemPaymentStatus } from '@/stores/pos/types'
+import type {
+  PosBillItem,
+  PosItemDiscount,
+  ItemStatus,
+  ItemPaymentStatus
+} from '@/stores/pos/types'
 import { formatIDR } from '@/utils/currency'
 import { computed, ref } from 'vue'
 import { useOrdersComposables } from '@/stores/pos/orders/composables'
@@ -300,7 +397,20 @@ const emit = defineEmits<{
   cancel: [itemId: string]
   'add-note': [itemId: string]
   'add-one-more': [group: GroupedBillItems]
+  'apply-discount': [itemId: string]
 }>()
+
+// Helper function to calculate item discounts (moved up before groupedItems computed)
+const calculateItemDiscounts = (item: PosBillItem): number => {
+  if (!item.discounts || item.discounts.length === 0) return 0
+  return item.discounts.reduce((sum: number, discount: PosItemDiscount) => {
+    if (discount.type === 'percentage') {
+      return sum + (item.totalPrice * discount.value) / 100
+    } else {
+      return sum + discount.value
+    }
+  }, 0)
+}
 
 // Состояние сворачивания групп
 const expandedGroups = ref<Set<string>>(new Set())
@@ -354,7 +464,13 @@ const groupedItems = computed(() => {
 
     const group = groups.get(key)!
     group.items.push(item)
-    group.totalPrice += item.totalPrice
+    // ✅ FIX: Use final price after discounts, not base totalPrice
+    // item.totalPrice is base price (before discounts)
+    // We need to subtract discounts to get the actual price displayed
+    const itemDiscountAmount = calculateItemDiscounts(item)
+    const itemFinalPrice = item.totalPrice - itemDiscountAmount
+
+    group.totalPrice += itemFinalPrice
   })
 
   return Array.from(groups.values())
@@ -412,6 +528,38 @@ const handleAddNote = (itemId: string): void => {
 
 const handleAddOneMore = (group: GroupedBillItems): void => {
   emit('add-one-more', group)
+}
+
+const handleApplyDiscount = (itemId: string): void => {
+  emit('apply-discount', itemId)
+}
+
+// Discount helpers
+const hasItemDiscounts = (item: PosBillItem): boolean => {
+  return item.discounts && item.discounts.length > 0
+}
+
+// calculateItemDiscounts moved up before groupedItems computed (line 380)
+
+const hasGroupDiscounts = (group: GroupedBillItems): boolean => {
+  return group.items.some(item => hasItemDiscounts(item))
+}
+
+const calculateGroupDiscounts = (group: GroupedBillItems): number => {
+  const totalDiscounts = group.items.reduce((sum, item) => {
+    const itemDiscounts = calculateItemDiscounts(item)
+    return sum + itemDiscounts
+  }, 0)
+
+  return totalDiscounts
+}
+
+/**
+ * Calculate original price for a group (BEFORE any discounts)
+ * Simply sum up item.totalPrice which already contains (unitPrice + modifiersTotal) * quantity
+ */
+const calculateGroupOriginalPrice = (group: GroupedBillItems): number => {
+  return group.items.reduce((sum, item) => sum + item.totalPrice, 0)
 }
 </script>
 
@@ -736,6 +884,53 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
 
 .item-paid :deep(.v-selection-control--disabled) {
   opacity: 0.4;
+}
+
+/* =============================================
+   DISCOUNT TOOLTIP
+   ============================================= */
+
+.discount-tooltip {
+  max-width: 300px;
+  padding: 4px;
+}
+
+.discount-tooltip .text-caption {
+  line-height: 1.4;
+}
+
+/* =============================================
+   PRICE WITH DISCOUNT
+   ============================================= */
+
+.price-with-discount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.old-price {
+  font-size: 0.75rem;
+  color: rgb(var(--v-theme-on-surface-variant));
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.discount-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgb(var(--v-theme-error));
+  background: rgba(var(--v-theme-error), 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.new-price {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgb(var(--v-theme-on-surface));
+  font-variant-numeric: tabular-nums;
 }
 
 /* =============================================

@@ -23,19 +23,37 @@
             <span>{{ formatPrice(amount) }}</span>
           </div>
 
-          <div v-if="discount > 0" class="summary-row">
-            <span class="text-medium-emphasis">Discount:</span>
-            <span class="text-success">-{{ formatPrice(discount) }}</span>
+          <!-- Item Discounts (already applied to items) -->
+          <div v-if="itemDiscounts > 0" class="summary-row">
+            <span class="text-medium-emphasis">
+              <v-icon size="14" class="mr-1">mdi-tag</v-icon>
+              Product Discount:
+            </span>
+            <span class="text-success">-{{ formatPrice(itemDiscounts) }}</span>
           </div>
 
-          <div v-if="serviceTax > 0" class="summary-row">
+          <!-- Bill Discount (applied to whole bill) -->
+          <div v-if="localDiscount > 0" class="summary-row">
+            <div class="d-flex flex-column">
+              <span class="text-medium-emphasis">
+                <v-icon size="14" class="mr-1">mdi-tag-multiple</v-icon>
+                Bill Discount:
+              </span>
+              <span v-if="localDiscountReason" class="text-caption text-medium-emphasis ml-5">
+                {{ getDiscountReasonLabel(localDiscountReason) }}
+              </span>
+            </div>
+            <span class="text-success">-{{ formatPrice(localDiscount) }}</span>
+          </div>
+
+          <div v-if="recalculatedServiceTax > 0" class="summary-row">
             <span class="text-medium-emphasis">Service Tax (5%):</span>
-            <span>{{ formatPrice(serviceTax) }}</span>
+            <span>{{ formatPrice(recalculatedServiceTax) }}</span>
           </div>
 
-          <div v-if="governmentTax > 0" class="summary-row">
+          <div v-if="recalculatedGovernmentTax > 0" class="summary-row">
             <span class="text-medium-emphasis">Government Tax (10%):</span>
-            <span>{{ formatPrice(governmentTax) }}</span>
+            <span>{{ formatPrice(recalculatedGovernmentTax) }}</span>
           </div>
 
           <v-divider class="my-3" />
@@ -161,6 +179,17 @@
 
       <!-- Actions -->
       <v-card-actions class="px-6 pb-4">
+        <!-- Add/Update Discount Button (left side) -->
+        <v-btn
+          v-if="currentBill"
+          variant="outlined"
+          color="primary"
+          prepend-icon="mdi-tag-percent"
+          @click="handleOpenDiscountDialog"
+        >
+          {{ localDiscount > 0 ? 'Update Discount' : 'Add Discount' }}
+        </v-btn>
+
         <v-spacer />
         <v-btn variant="text" @click="handleClose">Cancel</v-btn>
         <v-btn
@@ -176,13 +205,25 @@
         </v-btn>
       </v-card-actions>
     </v-card>
+
+    <!-- Bill Discount Dialog (preview mode - don't save to order) -->
+    <BillDiscountDialog
+      v-model="showBillDiscountDialog"
+      :bill="currentBill"
+      :apply-to-order="false"
+      @success="handleDiscountSuccess"
+      @cancel="handleDiscountCancel"
+    />
   </v-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { PosBillItem } from '@/stores/pos/types'
+import type { PosBillItem, PosBill } from '@/stores/pos/types'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
+import BillDiscountDialog from '../order/dialogs/BillDiscountDialog.vue'
 
 interface Props {
   modelValue: boolean
@@ -204,11 +245,20 @@ const props = withDefaults(defineProps<Props>(), {
   items: () => []
 })
 
+// Store
+const ordersStore = usePosOrdersStore()
+
 interface PaymentData {
   method: 'cash' | 'card' | 'qr'
   amount: number
   receivedAmount?: number
   change?: number
+  billDiscount?: {
+    amount: number
+    reason: string
+    type: string
+    value: number
+  }
 }
 
 const emit = defineEmits<{
@@ -221,10 +271,66 @@ const emit = defineEmits<{
 const selectedMethod = ref<'cash' | 'card' | 'qr'>('cash')
 const cashReceived = ref<number>(0)
 const processing = ref(false)
+const localDiscount = ref<number>(0) // Temporary bill discount (not saved to order)
+const localDiscountReason = ref<string>('') // Reason for bill discount
+const showBillDiscountDialog = ref(false)
 
 // Computed
+const currentBill = computed((): PosBill | null => {
+  if (!props.billIds || props.billIds.length === 0) return null
+  const order = ordersStore.currentOrder
+  if (!order) return null
+  // Get the original bill
+  const originalBill = order.bills.find((b: any) => b.id === props.billIds[0])
+  if (!originalBill) return null
+
+  // Create a temporary bill with ONLY the items being paid (props.items)
+  // This excludes already paid items and cancelled items
+  return {
+    ...originalBill,
+    items: props.items.filter(item => item.paymentStatus !== 'paid' && item.status !== 'cancelled')
+  }
+})
+
+// Calculate total item discounts from items
+const itemDiscounts = computed(() => {
+  if (!props.items || props.items.length === 0) return 0
+
+  return props.items.reduce((total, item) => {
+    if (!item.discounts || item.discounts.length === 0) return total
+
+    const itemDiscountAmount = item.discounts.reduce((sum: number, discount: any) => {
+      if (discount.type === 'percentage') {
+        return sum + (item.totalPrice * discount.value) / 100
+      } else {
+        return sum + discount.value
+      }
+    }, 0)
+
+    return total + itemDiscountAmount
+  }, 0)
+})
+
+// Amount after item discounts (this is the base for bill discount)
+const amountAfterItemDiscounts = computed(() => {
+  return Math.max(0, props.amount - itemDiscounts.value)
+})
+
+// Recalculate taxes based on amount after ALL discounts (item + bill)
+const amountAfterDiscount = computed(() => {
+  return Math.max(0, amountAfterItemDiscounts.value - localDiscount.value)
+})
+
+const recalculatedServiceTax = computed(() => {
+  return amountAfterDiscount.value * 0.05 // 5%
+})
+
+const recalculatedGovernmentTax = computed(() => {
+  return amountAfterDiscount.value * 0.1 // 10%
+})
+
 const totalAmount = computed(() => {
-  return props.amount - props.discount + props.serviceTax + props.governmentTax
+  return amountAfterDiscount.value + recalculatedServiceTax.value + recalculatedGovernmentTax.value
 })
 
 const change = computed(() => {
@@ -276,6 +382,18 @@ const handleConfirm = () => {
     paymentData.change = change.value
   }
 
+  // Include bill discount if applied
+  if (localDiscount.value > 0) {
+    paymentData.billDiscount = {
+      amount: localDiscount.value,
+      reason: localDiscountReason.value,
+      type: 'bill', // Mark as bill-level discount
+      value: localDiscount.value // For now, store the calculated amount
+    }
+
+    console.log('💰 Bill discount included in payment:', paymentData.billDiscount)
+  }
+
   emit('confirm', paymentData)
 
   // Reset form (will be closed by parent)
@@ -288,6 +406,36 @@ const handleConfirm = () => {
 const resetForm = () => {
   selectedMethod.value = 'cash'
   cashReceived.value = 0
+  localDiscount.value = 0
+  localDiscountReason.value = ''
+}
+
+const handleOpenDiscountDialog = () => {
+  if (!currentBill.value) {
+    console.warn('No bill selected for discount')
+    return
+  }
+  showBillDiscountDialog.value = true
+}
+
+const handleDiscountSuccess = async (discountData: { amount: number; reason: string }) => {
+  // Bill discount applied successfully via BillDiscountDialog
+  // Store temporarily in PaymentDialog (NOT saved to order yet)
+  localDiscount.value = discountData.amount
+  localDiscountReason.value = discountData.reason
+  console.log('💰 Temporary bill discount set in PaymentDialog:', {
+    amount: localDiscount.value,
+    reason: localDiscountReason.value
+  })
+  showBillDiscountDialog.value = false
+}
+
+const handleDiscountCancel = () => {
+  showBillDiscountDialog.value = false
+}
+
+const getDiscountReasonLabel = (reason: string): string => {
+  return DISCOUNT_REASON_LABELS[reason as keyof typeof DISCOUNT_REASON_LABELS] || reason
 }
 
 // Watchers

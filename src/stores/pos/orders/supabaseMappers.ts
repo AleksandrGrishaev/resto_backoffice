@@ -256,6 +256,12 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     payment_ids: order.paymentIds?.length > 0 ? order.paymentIds : null,
     paid_amount: order.paidAmount || 0,
 
+    // Revenue breakdown (Sprint 7)
+    planned_revenue: order.plannedRevenue || null,
+    actual_revenue: order.actualRevenue || null,
+    total_collected: order.totalCollected || null,
+    revenue_breakdown: order.revenueBreakdown ? (order.revenueBreakdown as any) : null,
+
     // Waiter & timing
     waiter_name: order.waiterName || null,
     estimated_ready_time: order.estimatedReadyTime || null,
@@ -327,6 +333,12 @@ export function fromSupabase(supabaseOrder: SupabaseOrder): PosOrder {
     discountAmount: supabaseOrder.discount_amount || 0,
     taxAmount: supabaseOrder.tax_amount || 0,
     finalAmount: supabaseOrder.final_amount || 0,
+
+    // Revenue breakdown (Sprint 7)
+    plannedRevenue: supabaseOrder.planned_revenue || undefined,
+    actualRevenue: supabaseOrder.actual_revenue || undefined,
+    totalCollected: supabaseOrder.total_collected || undefined,
+    revenueBreakdown: (supabaseOrder.revenue_breakdown as any) || undefined,
 
     // Payment tracking
     paymentIds: supabaseOrder.payment_ids || [],

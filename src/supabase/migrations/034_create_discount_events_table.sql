@@ -3,6 +3,11 @@
 -- Date: 2024-12-03
 -- Phase: Sprint 7.1, Task 2
 -- Context: Centralized discount tracking system with full audit trail and proportional allocation
+--
+-- IMPORTANT: This is the CORRECTED version of the migration
+-- Original migration had issues with applied_by NOT NULL and RLS policy
+-- Historical fixes applied in migrations 098-102 (now in deprecated/ folder)
+-- This version includes all corrections for future deployments
 
 -- ============================================================================
 -- TABLE: discount_events
@@ -44,7 +49,7 @@ CREATE TABLE IF NOT EXISTS discount_events (
   allocation_details JSONB,
 
   -- Metadata and Audit Trail
-  applied_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  applied_by UUID REFERENCES users(id) ON DELETE RESTRICT, -- Nullable for system-generated discounts
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
   approved_at TIMESTAMPTZ,
@@ -135,11 +140,14 @@ CREATE POLICY discount_events_view_all ON discount_events
     )
   );
 
--- Policy: Users can create discount events (will be their own)
+-- Policy: Authenticated users can create discount events
+-- Uses auth.uid() IS NOT NULL for reliability in async/background contexts
+-- Note: More robust than auth.role() = 'authenticated' which fails in background operations
 CREATE POLICY discount_events_create ON discount_events
   FOR INSERT
+  TO public
   WITH CHECK (
-    applied_by = auth.uid()
+    auth.uid() IS NOT NULL
   );
 
 -- Policy: Only managers and admins can update discount events (e.g., approve)
@@ -193,7 +201,7 @@ COMMENT ON COLUMN discount_events.discount_type IS 'Discount value type: percent
 COMMENT ON COLUMN discount_events.value IS 'Discount value: percentage (0-100) or fixed amount in IDR';
 COMMENT ON COLUMN discount_events.reason IS 'Reason for discount application (required for transparency)';
 COMMENT ON COLUMN discount_events.allocation_details IS 'For bill discounts: JSONB with totalBillAmount and itemAllocations array showing proportional distribution';
-COMMENT ON COLUMN discount_events.applied_by IS 'User who applied the discount (for accountability)';
+COMMENT ON COLUMN discount_events.applied_by IS 'User who applied the discount (for accountability). NULL indicates system-generated discount during background processing.';
 COMMENT ON COLUMN discount_events.approved_by IS 'User who approved the discount (for future approval workflow)';
 COMMENT ON COLUMN discount_events.original_amount IS 'Original amount before discount in IDR';
 COMMENT ON COLUMN discount_events.discount_amount IS 'Actual discount amount in IDR (calculated)';

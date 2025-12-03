@@ -37,6 +37,7 @@
           @cancel="handleCancelItem"
           @add-note="handleAddNote"
           @add-one-more="handleAddOneMore"
+          @apply-discount="handleApplyDiscount"
         />
       </div>
     </div>
@@ -100,6 +101,7 @@ const emit = defineEmits<{
   'cancel-item': [itemId: string]
   'add-note': [itemId: string]
   'add-item': [itemData: any] // Добавить эту строку
+  'apply-discount': [itemId: string]
 }>()
 
 // Computed
@@ -188,6 +190,10 @@ const handleCancelItem = (itemId: string): void => {
 
 const handleAddNote = (itemId: string): void => {
   emit('add-note', itemId)
+}
+
+const handleApplyDiscount = (itemId: string): void => {
+  emit('apply-discount', itemId)
 }
 </script>
 

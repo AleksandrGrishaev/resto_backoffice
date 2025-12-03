@@ -145,15 +145,118 @@ export const useSalesStore = defineStore('sales', () => {
   async function recordSalesTransaction(
     payment: PosPayment,
     billItems: PosBillItem[],
-    billDiscountAmount: number = 0
+    billDiscountAmount: number = 0,
+    billDiscountInfo?: Array<{
+      billId: string
+      billNumber: string
+      amount: number
+      reason: string
+    }>
   ) {
     console.log(`🔄 [${MODULE_NAME}] Recording sales transaction:`, {
       paymentId: payment.id,
       itemsCount: billItems.length,
-      amount: payment.amount
+      amount: payment.amount,
+      billDiscountAmount,
+      billDiscountInfo
     })
 
     try {
+      // ✅ Verify auth session at entry point
+      const { ensureAuthSession } = await import('@/supabase')
+      const hasAuth = await ensureAuthSession()
+
+      if (!hasAuth) {
+        console.error('❌ [salesStore] No auth session - discount events may fail with RLS error')
+      }
+      // Create discount_events for bill discounts
+      if (billDiscountInfo && billDiscountInfo.length > 0) {
+        const { discountSupabaseService } = await import('@/stores/discounts/services')
+        const { generateId } = await import('@/utils')
+        const { TimeUtils } = await import('@/utils')
+
+        for (const billDiscount of billDiscountInfo) {
+          // Calculate allocation details for this bill's items
+          const billItemsForThisBill = billItems.filter(item => item.billId === billDiscount.billId)
+
+          const itemsWithDiscount = allocateBillDiscount(billItemsForThisBill, billDiscount.amount)
+
+          // Calculate bill totals
+          const totalBillAmount = billItemsForThisBill.reduce(
+            (sum, item) => sum + item.totalPrice,
+            0
+          )
+
+          // Build allocation details matching AllocationDetails interface
+          const allocationDetails = {
+            totalBillAmount,
+            itemAllocations: itemsWithDiscount.map(itemWithDiscount => {
+              // Find the original bill item to get full data
+              const billItem = billItemsForThisBill.find(i => i.id === itemWithDiscount.id)!
+              return {
+                itemId: itemWithDiscount.id,
+                itemName: billItem.menuItemName,
+                itemAmount: billItem.totalPrice,
+                proportion: billItem.totalPrice / totalBillAmount,
+                allocatedDiscount: itemWithDiscount.allocatedBillDiscount
+              }
+            })
+          }
+
+          // Get current user ID from Supabase session (more reliable in background)
+          const { getCurrentUserId } = await import('@/supabase')
+          const currentUserId = await getCurrentUserId() // Returns null if no session
+
+          // Create discount event matching DiscountEvent interface
+          const discountEvent = {
+            id: generateId(),
+            type: 'bill' as const,
+            discountType: 'fixed' as const, // Always fixed amount after calculation
+            value: billDiscount.amount,
+            reason: billDiscount.reason as any,
+            orderId: payment.orderId,
+            billId: billDiscount.billId,
+            shiftId: payment.shiftId,
+            originalAmount: totalBillAmount,
+            discountAmount: billDiscount.amount,
+            finalAmount: totalBillAmount - billDiscount.amount,
+            allocationDetails,
+            appliedBy: currentUserId, // UUID or null
+            appliedAt: TimeUtils.getCurrentLocalISO(),
+            notes: `Bill discount (${billDiscount.billNumber}) - distributed proportionally across ${allocationDetails.itemAllocations.length} items`
+          }
+
+          console.log('💾 [salesStore] Creating discount_event for bill discount:', {
+            eventId: discountEvent.id,
+            billId: billDiscount.billId,
+            amount: billDiscount.amount,
+            itemsCount: allocationDetails.length
+          })
+
+          // Save to database
+          const saveResult = await discountSupabaseService.saveDiscountEvent(discountEvent)
+          if (!saveResult.success) {
+            console.warn('⚠️ [salesStore] Failed to save bill discount event:', saveResult.error)
+            // Continue anyway - discount is already applied
+          } else {
+            console.log('✅ [salesStore] Bill discount event saved:', discountEvent.id)
+          }
+        }
+      }
+
+      // ✅ Calculate allocated bill discount for ALL items ONCE (before loop)
+      // This ensures proportional distribution across all items
+      const itemsWithDiscount = allocateBillDiscount(billItems, billDiscountAmount)
+
+      console.log('📊 [salesStore] Bill discount allocated across items:', {
+        billDiscountAmount,
+        itemsCount: billItems.length,
+        allocations: itemsWithDiscount.map(i => ({
+          name: i.menuItemName,
+          allocated: i.allocatedBillDiscount
+        }))
+      })
+
       // Process each item
       for (const billItem of billItems) {
         // 1. Get menu item details
@@ -186,9 +289,9 @@ export const useSalesStore = defineStore('sales', () => {
           billItem.quantity
         )
 
-        // 3. Calculate allocated bill discount for this item
-        const itemsWithDiscount = allocateBillDiscount([billItem], billDiscountAmount)
-        const allocatedDiscount = itemsWithDiscount[0]?.allocatedBillDiscount || 0
+        // 3. Get allocated bill discount for THIS specific item
+        const itemWithDiscount = itemsWithDiscount.find(i => i.id === billItem.id)
+        const allocatedDiscount = itemWithDiscount?.allocatedBillDiscount || 0
 
         // 4. Calculate profit using ACTUAL cost (✅ SPRINT 2: Use actualCost instead of decomposition)
         const profitCalculation = calculateItemProfit(

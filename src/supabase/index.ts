@@ -4,7 +4,9 @@ export {
   supabase,
   getSupabaseClient,
   resetSupabaseClient,
-  isSupabaseClientInitialized
+  isSupabaseClientInitialized,
+  ensureAuthSession,
+  getCurrentUserId
 } from './client'
 export { supabaseConfig, isSupabaseConfigured, getSupabaseErrorMessage } from './config'
 export type {

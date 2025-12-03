@@ -8,6 +8,9 @@ import type {
 } from './types'
 import { DISCOUNT_REASON_LABELS } from './types'
 
+// Re-export for convenience
+export { DISCOUNT_REASON_LABELS }
+
 /**
  * Discount reason options for dropdowns
  * Each option includes value, label, and optional description

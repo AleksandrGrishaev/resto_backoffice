@@ -9,37 +9,119 @@
 
     <!-- Totals Content -->
     <div v-else class="totals-content">
-      <!-- Subtotal -->
-      <div class="total-line">
-        <span class="total-label">Subtotal</span>
-        <span class="total-value">{{ formatPrice(totals.subtotal) }}</span>
-      </div>
+      <!-- Revenue Breakdown (Expandable) -->
+      <v-expansion-panels
+        v-if="revenueBreakdown"
+        variant="accordion"
+        class="revenue-breakdown-panel mb-2"
+      >
+        <v-expansion-panel>
+          <v-expansion-panel-title class="breakdown-title">
+            <div class="d-flex align-center">
+              <v-icon size="small" class="mr-2">mdi-chart-bar</v-icon>
+              <span class="text-caption font-weight-medium">Revenue Breakdown</span>
+            </div>
+          </v-expansion-panel-title>
+          <v-expansion-panel-text class="breakdown-content">
+            <!-- Planned Revenue -->
+            <div class="breakdown-row">
+              <span class="breakdown-label">Planned Revenue</span>
+              <span class="breakdown-value">
+                {{ formatPrice(revenueBreakdown.plannedRevenue) }}
+              </span>
+            </div>
 
-      <!-- Discounts (if any) -->
-      <div v-if="totals.totalDiscounts > 0" class="total-line discount-line">
-        <span class="total-label">
-          <v-icon size="14" class="mr-1">mdi-tag</v-icon>
-          Discount
-        </span>
-        <span class="total-value discount-value">-{{ formatPrice(totals.totalDiscounts) }}</span>
-      </div>
+            <!-- Item Discounts -->
+            <div
+              v-if="revenueBreakdown.itemDiscounts > 0"
+              class="breakdown-row text-medium-emphasis"
+            >
+              <span class="breakdown-label">
+                <v-icon size="12" class="mr-1">mdi-tag</v-icon>
+                Item Discounts ({{ itemDiscountCount }})
+              </span>
+              <span class="breakdown-value text-error">
+                -{{ formatPrice(revenueBreakdown.itemDiscounts) }}
+              </span>
+            </div>
 
-      <!-- Service Tax -->
-      <div v-if="showTaxes" class="total-line">
-        <span class="total-label">Service Tax ({{ serviceTaxRate }}%)</span>
-        <span class="total-value">{{ formatPrice(totals.serviceTax) }}</span>
-      </div>
+            <!-- Bill Discounts -->
+            <div
+              v-if="revenueBreakdown.billDiscounts > 0"
+              class="breakdown-row text-medium-emphasis"
+            >
+              <span class="breakdown-label">
+                <v-icon size="12" class="mr-1">mdi-tag-multiple</v-icon>
+                Bill Discounts ({{ billDiscountCount }})
+              </span>
+              <span class="breakdown-value text-error">
+                -{{ formatPrice(revenueBreakdown.billDiscounts) }}
+              </span>
+            </div>
 
-      <!-- Government Tax -->
-      <div v-if="showTaxes" class="total-line">
-        <span class="total-label">Government Tax ({{ governmentTaxRate }}%)</span>
-        <span class="total-value">{{ formatPrice(totals.governmentTax) }}</span>
-      </div>
+            <!-- Actual Revenue -->
+            <div class="breakdown-row breakdown-divider">
+              <span class="breakdown-label font-weight-medium">Actual Revenue</span>
+              <span class="breakdown-value font-weight-medium">
+                {{ formatPrice(revenueBreakdown.actualRevenue) }}
+              </span>
+            </div>
 
-      <!-- Divider -->
-      <div class="divider"></div>
+            <!-- Tax Breakdown -->
+            <div
+              v-for="tax in revenueBreakdown.taxes"
+              :key="tax.taxId"
+              class="breakdown-row text-caption"
+            >
+              <span class="breakdown-label">{{ tax.name }} ({{ tax.percentage }}%)</span>
+              <span class="breakdown-value">+{{ formatPrice(tax.amount) }}</span>
+            </div>
 
-      <!-- Final Total -->
+            <!-- Total to Collect -->
+            <div class="breakdown-row breakdown-divider font-weight-bold">
+              <span class="breakdown-label">Total to Collect</span>
+              <span class="breakdown-value">
+                {{ formatPrice(revenueBreakdown.totalCollected) }}
+              </span>
+            </div>
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
+
+      <!-- Simple View (when no revenue breakdown) -->
+      <template v-else>
+        <!-- Subtotal -->
+        <div class="total-line">
+          <span class="total-label">Subtotal</span>
+          <span class="total-value">{{ formatPrice(totals.subtotal) }}</span>
+        </div>
+
+        <!-- Discounts (if any) -->
+        <div v-if="totals.totalDiscounts > 0" class="total-line discount-line">
+          <span class="total-label">
+            <v-icon size="14" class="mr-1">mdi-tag</v-icon>
+            Discount
+          </span>
+          <span class="total-value discount-value">-{{ formatPrice(totals.totalDiscounts) }}</span>
+        </div>
+
+        <!-- Service Tax -->
+        <div v-if="showTaxes" class="total-line">
+          <span class="total-label">Service Tax ({{ serviceTaxRate }}%)</span>
+          <span class="total-value">{{ formatPrice(totals.serviceTax) }}</span>
+        </div>
+
+        <!-- Government Tax -->
+        <div v-if="showTaxes" class="total-line">
+          <span class="total-label">Government Tax ({{ governmentTaxRate }}%)</span>
+          <span class="total-value">{{ formatPrice(totals.governmentTax) }}</span>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider"></div>
+      </template>
+
+      <!-- Final Total (Always visible) -->
       <div class="total-line final-total">
         <span class="total-label">Total</span>
         <span class="total-value">{{ formatPrice(totals.finalTotal) }}</span>
@@ -55,7 +137,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { formatIDR } from '@/utils/currency'
+import type { RevenueBreakdown } from '@/stores/discounts/types'
 
 // Alias для удобства
 const formatPrice = formatIDR
@@ -72,6 +156,7 @@ interface OrderTotals {
 // Props
 interface Props {
   totals: OrderTotals
+  revenueBreakdown?: RevenueBreakdown | null
   showTaxes?: boolean
   serviceTaxRate?: number
   governmentTaxRate?: number
@@ -88,12 +173,26 @@ const props = withDefaults(defineProps<Props>(), {
     governmentTax: 0,
     finalTotal: 0
   }),
+  revenueBreakdown: null,
   showTaxes: true,
   serviceTaxRate: 5,
   governmentTaxRate: 10,
   loading: false,
   hasSelection: false,
   selectedItemsCount: 0
+})
+
+// Computed
+const itemDiscountCount = computed(() => {
+  // TODO: Count actual item discounts from order
+  // For now, return 0 if no item discounts
+  return props.revenueBreakdown && props.revenueBreakdown.itemDiscounts > 0 ? 1 : 0
+})
+
+const billDiscountCount = computed(() => {
+  // TODO: Count actual bill discounts from order
+  // For now, return 0 if no bill discounts
+  return props.revenueBreakdown && props.revenueBreakdown.billDiscounts > 0 ? 1 : 0
 })
 </script>
 
@@ -181,6 +280,54 @@ const props = withDefaults(defineProps<Props>(), {
   height: 1px;
   background: rgba(var(--v-theme-on-surface), 0.12);
   margin: 4px 0;
+}
+
+/* =============================================
+   REVENUE BREAKDOWN PANEL
+   ============================================= */
+
+.revenue-breakdown-panel {
+  background: transparent;
+}
+
+.revenue-breakdown-panel :deep(.v-expansion-panel) {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border-radius: 8px;
+}
+
+.revenue-breakdown-panel :deep(.v-expansion-panel-title) {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.breakdown-content {
+  padding-top: 8px !important;
+}
+
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 0.8125rem;
+}
+
+.breakdown-label {
+  display: flex;
+  align-items: center;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.breakdown-value {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.breakdown-divider {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  padding-top: 8px;
+  margin-top: 4px;
 }
 
 /* =============================================

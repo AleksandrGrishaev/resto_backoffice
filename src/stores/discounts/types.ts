@@ -82,7 +82,7 @@ export interface DiscountEvent extends BaseEntity {
   allocationDetails?: AllocationDetails
 
   // Metadata
-  appliedBy: string // User ID who applied discount
+  appliedBy: string | null // User ID who applied discount, NULL for system-generated
   appliedAt: string // ISO timestamp
   approvedBy?: string // User ID who approved (for future approval workflow)
   approvedAt?: string // ISO timestamp (for future approval workflow)

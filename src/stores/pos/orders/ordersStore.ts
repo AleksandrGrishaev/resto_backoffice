@@ -20,6 +20,13 @@ import {
   determineStatusByOrderType as determineStatus
 } from './composables'
 import { usePosTablesStore } from '../tables/tablesStore'
+import {
+  discountService,
+  discountSupabaseService,
+  type ApplyItemDiscountParams,
+  type ApplyBillDiscountParams,
+  type DiscountResult
+} from '@/stores/discounts/services'
 
 export const usePosOrdersStore = defineStore('posOrders', () => {
   // ===== STATE =====
@@ -970,6 +977,248 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     selectedBills.value = new Set(selectedBills.value)
   }
 
+  // ===== DISCOUNT METHODS (Sprint 7) =====
+
+  /**
+   * Apply discount to a single item
+   * Creates a discount event and updates the item's discount array
+   *
+   * @param itemId - Item ID to apply discount to
+   * @param discountParams - Discount parameters (type, value, reason, notes)
+   * @returns Discount result with success status
+   */
+  async function applyItemDiscount(
+    itemId: string,
+    discountParams: Omit<ApplyItemDiscountParams, 'item'>
+  ): Promise<DiscountResult> {
+    try {
+      // Find the item and its order
+      let foundItem: PosBillItem | null = null
+      let foundOrder: PosOrder | null = null
+
+      for (const order of orders.value) {
+        for (const bill of order.bills) {
+          const item = bill.items.find(i => i.id === itemId)
+          if (item) {
+            foundItem = item
+            foundOrder = order
+            break
+          }
+        }
+        if (foundItem) break
+      }
+
+      if (!foundItem || !foundOrder) {
+        return {
+          success: false,
+          error: 'Item not found'
+        }
+      }
+
+      // Apply discount using discount service
+      const result = await discountService.applyItemDiscount(
+        {
+          item: foundItem,
+          ...discountParams
+        },
+        foundOrder.id
+      )
+
+      if (!result.success || !result.discountEvent) {
+        return result
+      }
+
+      // Update item in state
+      if (!foundItem.discounts) {
+        foundItem.discounts = []
+      }
+
+      // Add discount to item
+      foundItem.discounts.push({
+        id: result.discountEvent.id,
+        type: result.discountEvent.discountType,
+        value: result.discountEvent.value,
+        reason: result.discountEvent.reason,
+        appliedBy: result.discountEvent.appliedBy,
+        appliedAt: result.discountEvent.appliedAt
+      })
+
+      // Save discount event to Supabase
+      const saveResult = await discountSupabaseService.saveDiscountEvent(result.discountEvent)
+      if (!saveResult.success) {
+        console.warn('⚠️ Failed to save discount event to Supabase:', saveResult.error)
+        // Continue anyway - discount is applied in memory and will be in order
+      }
+
+      // Recalculate order totals (will populate revenue breakdown)
+      await recalculateOrderTotals(foundOrder.id)
+
+      // Save order to persistence
+      await updateOrder(foundOrder)
+
+      return result
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Apply discount to entire bill (proportionally allocated to items)
+   * Creates a discount event with allocation details
+   *
+   * @param billId - Bill ID to apply discount to
+   * @param discountParams - Discount parameters (type, value, reason, notes)
+   * @returns Discount result with success status
+   */
+  async function applyBillDiscount(
+    billId: string,
+    discountParams: Omit<ApplyBillDiscountParams, 'bill'>
+  ): Promise<DiscountResult> {
+    try {
+      // Find the bill and its order
+      let foundBill: PosBill | null = null
+      let foundOrder: PosOrder | null = null
+
+      for (const order of orders.value) {
+        const bill = order.bills.find(b => b.id === billId)
+        if (bill) {
+          foundBill = bill
+          foundOrder = order
+          break
+        }
+      }
+
+      if (!foundBill || !foundOrder) {
+        return {
+          success: false,
+          error: 'Bill not found'
+        }
+      }
+
+      // Apply discount using discount service
+      const result = await discountService.applyBillDiscount(
+        {
+          bill: foundBill,
+          ...discountParams
+        },
+        foundOrder.id
+      )
+
+      if (!result.success || !result.discountEvent) {
+        return result
+      }
+
+      // ✅ FIX: Apply proportional allocation to each item
+      // Bill-level discounts are distributed proportionally across items
+      // This ensures recalculateOrderTotals will pick them up from item.discounts
+      const discountEvent = result.discountEvent
+      if (discountEvent.allocationDetails) {
+        for (const allocation of discountEvent.allocationDetails.itemAllocations) {
+          const item = foundBill.items.find(i => i.id === allocation.itemId)
+          if (item) {
+            if (!item.discounts) {
+              item.discounts = []
+            }
+            // Add allocated bill discount to item's discounts
+            // Note: allocated discount is always 'fixed' amount (result of proportional calculation)
+            item.discounts.push({
+              id: discountEvent.id,
+              type: 'fixed', // Always fixed - it's the calculated proportional amount
+              value: allocation.allocatedDiscount, // Use allocated amount, not original value
+              reason: discountEvent.reason,
+              appliedBy: discountEvent.appliedBy,
+              appliedAt: discountEvent.appliedAt,
+              notes: `Bill discount allocation (${(allocation.proportion * 100).toFixed(1)}% of ${discountEvent.value}${discountEvent.discountType === 'percentage' ? '%' : ''})`
+            })
+          }
+        }
+      }
+
+      // Save discount event to Supabase
+      const saveResult = await discountSupabaseService.saveDiscountEvent(result.discountEvent)
+      if (!saveResult.success) {
+        console.warn('⚠️ Failed to save discount event to Supabase:', saveResult.error)
+        // Continue anyway - discount is applied in memory and will be in order
+      }
+
+      // Recalculate order totals (will populate revenue breakdown and sum up all item discounts including allocated bill discounts)
+      await recalculateOrderTotals(foundOrder.id)
+
+      // Save order to persistence
+      await updateOrder(foundOrder)
+
+      return result
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Save bill discount to order (without applying to items)
+   * Used in PaymentDialog to temporarily store bill discount until payment confirmation
+   *
+   * @param billId - Bill ID to save discount to
+   * @param discountAmount - Calculated discount amount (in currency)
+   * @param discountReason - Reason for discount
+   * @returns Service response with success status
+   */
+  async function saveBillDiscount(
+    billId: string,
+    discountAmount: number,
+    discountReason: string
+  ): Promise<ServiceResponse<void>> {
+    try {
+      // Find the bill and its order
+      let foundBill: PosBill | null = null
+      let foundOrder: PosOrder | null = null
+
+      for (const order of orders.value) {
+        const bill = order.bills.find(b => b.id === billId)
+        if (bill) {
+          foundBill = bill
+          foundOrder = order
+          break
+        }
+      }
+
+      if (!foundBill || !foundOrder) {
+        return {
+          success: false,
+          error: 'Bill not found'
+        }
+      }
+
+      // Update bill with discount information (NOT applying to items)
+      foundBill.discountAmount = discountAmount
+      foundBill.discountReason = discountReason
+
+      console.log('✅ [ordersStore] Bill discount saved to order:', {
+        billId,
+        discountAmount,
+        discountReason,
+        note: 'Discount stored in bill, NOT applied to items yet'
+      })
+
+      // Save order to persistence
+      await updateOrder(foundOrder)
+
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save bill discount'
+      console.error('❌ [ordersStore] Failed to save bill discount:', message)
+      return {
+        success: false,
+        error: message
+      }
+    }
+  }
+
   // ===== COMPOSABLES =====
   const {
     canAddItemToOrder,
@@ -1042,6 +1291,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     hasItemsInOrder,
     hasItemsInBill,
     updateTableStatusForOrder,
+
+    // Discount Methods (Sprint 7)
+    applyItemDiscount,
+    applyBillDiscount,
+    saveBillDiscount,
 
     // Composables (существующие)
     canAddItemToOrder,

@@ -25,7 +25,27 @@
         <!-- Quantity & Price -->
         <div class="item-price">
           <div class="quantity-badge">{{ item.quantity }}x</div>
-          <div class="price text-body-2 font-weight-medium">{{ formatPrice(item.totalPrice) }}</div>
+          <div class="price-info">
+            <!-- Show discount info if item has discounts -->
+            <div v-if="hasItemDiscounts(item)" class="price-with-discount">
+              <div
+                class="original-price text-caption text-decoration-line-through text-medium-emphasis"
+              >
+                {{ formatPrice(item.totalPrice) }}
+              </div>
+              <div class="discount-info text-caption text-error">
+                <v-icon size="12" class="mr-1">mdi-tag</v-icon>
+                {{ getDiscountReasonLabel(item.discounts![0].reason) }}
+              </div>
+              <div class="final-price text-body-2 font-weight-medium">
+                {{ formatPrice(getItemFinalPrice(item)) }}
+              </div>
+            </div>
+            <!-- No discount - just show price -->
+            <div v-else class="price text-body-2 font-weight-medium">
+              {{ formatPrice(item.totalPrice) }}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -35,6 +55,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { PosBillItem } from '@/stores/pos/types'
+import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
 
 interface Props {
   items: PosBillItem[]
@@ -53,6 +74,28 @@ const formatPrice = (price: number): string => {
     currency: 'IDR',
     minimumFractionDigits: 0
   }).format(price)
+}
+
+const hasItemDiscounts = (item: PosBillItem): boolean => {
+  return !!item.discounts && item.discounts.length > 0
+}
+
+const getItemFinalPrice = (item: PosBillItem): number => {
+  if (!hasItemDiscounts(item)) return item.totalPrice
+
+  const discountAmount = item.discounts!.reduce((sum: number, discount: any) => {
+    if (discount.type === 'percentage') {
+      return sum + (item.totalPrice * discount.value) / 100
+    } else {
+      return sum + discount.value
+    }
+  }, 0)
+
+  return Math.max(0, item.totalPrice - discountAmount)
+}
+
+const getDiscountReasonLabel = (reason: string): string => {
+  return DISCOUNT_REASON_LABELS[reason as keyof typeof DISCOUNT_REASON_LABELS] || reason
 }
 </script>
 
@@ -121,6 +164,33 @@ const formatPrice = (price: number): string => {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.price-info {
+  min-width: 100px;
+}
+
+.price-with-discount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.original-price {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+.discount-info {
+  display: flex;
+  align-items: center;
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.final-price {
+  font-variant-numeric: tabular-nums;
 }
 
 .quantity-badge {

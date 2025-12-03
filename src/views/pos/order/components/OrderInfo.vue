@@ -37,6 +37,22 @@
           {{ paymentStatusLabel }}
         </v-chip>
 
+        <!-- Discount Summary Chip (if discounts exist) -->
+        <v-chip
+          v-if="hasDiscounts"
+          color="error"
+          variant="flat"
+          size="small"
+          class="mr-2"
+          @click="showDiscountDetails = !showDiscountDetails"
+        >
+          <v-icon start size="16">mdi-tag-percent</v-icon>
+          {{ totalDiscountCount }} discount{{ totalDiscountCount > 1 ? 's' : '' }}
+          <v-tooltip activator="parent" location="bottom">
+            Total: -{{ formatPrice(totalDiscountAmount) }}
+          </v-tooltip>
+        </v-chip>
+
         <!-- Edit Button -->
         <v-btn icon variant="text" size="small" :disabled="!canEdit" @click="handleEdit">
           <v-icon>mdi-pencil</v-icon>
@@ -44,16 +60,55 @@
         </v-btn>
       </div>
     </div>
+
+    <!-- Discount Details (Expandable) -->
+    <v-expand-transition>
+      <div v-if="showDiscountDetails && hasDiscounts" class="discount-details pa-3">
+        <div class="text-caption font-weight-bold mb-2">Discount Breakdown</div>
+
+        <!-- Item Discounts -->
+        <div v-if="itemDiscountCount > 0" class="discount-row">
+          <div class="d-flex align-center">
+            <v-icon size="14" class="mr-1" color="error">mdi-tag</v-icon>
+            <span class="text-caption">Item Discounts ({{ itemDiscountCount }})</span>
+          </div>
+          <span class="text-caption font-weight-medium text-error">
+            -{{ formatPrice(itemDiscountAmount) }}
+          </span>
+        </div>
+
+        <!-- Bill Discounts -->
+        <div v-if="billDiscountCount > 0" class="discount-row">
+          <div class="d-flex align-center">
+            <v-icon size="14" class="mr-1" color="error">mdi-tag-multiple</v-icon>
+            <span class="text-caption">Bill Discounts ({{ billDiscountCount }})</span>
+          </div>
+          <span class="text-caption font-weight-medium text-error">
+            -{{ formatPrice(billDiscountAmount) }}
+          </span>
+        </div>
+
+        <!-- Total -->
+        <div class="discount-row discount-total">
+          <span class="text-caption font-weight-bold">Total Discounts</span>
+          <span class="text-caption font-weight-bold text-error">
+            -{{ formatPrice(totalDiscountAmount) }}
+          </span>
+        </div>
+      </div>
+    </v-expand-transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import type { PosOrder } from '@/stores/pos/types'
 import { useOrdersComposables } from '@/stores/pos/orders/composables'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { formatIDR } from '@/utils/currency'
 
 const ordersStore = usePosOrdersStore()
+const formatPrice = formatIDR
 
 // Получить функции из composables:
 const {
@@ -63,6 +118,9 @@ const {
   getOrderPaymentStatusColor,
   getOrderPaymentStatusText
 } = useOrdersComposables()
+
+// Local state
+const showDiscountDetails = ref(false)
 
 // Props
 interface Props {
@@ -171,6 +229,65 @@ const paymentStatusColor = computed((): string => {
 const paymentStatusLabel = computed((): string => {
   if (!props.order) return 'Unpaid'
   return getOrderPaymentStatusText(props.order.paymentStatus || 'unpaid')
+})
+
+// Computed - Discount Summary
+const hasDiscounts = computed((): boolean => {
+  if (!props.order) return false
+  return props.order.bills.some(bill =>
+    bill.items.some(item => item.discounts && item.discounts.length > 0)
+  )
+})
+
+const itemDiscountCount = computed((): number => {
+  if (!props.order) return 0
+  let count = 0
+  props.order.bills.forEach(bill => {
+    bill.items.forEach(item => {
+      if (item.discounts && item.discounts.length > 0) {
+        count += item.discounts.length
+      }
+    })
+  })
+  return count
+})
+
+const billDiscountCount = computed((): number => {
+  // TODO: Count bill-level discounts when implemented
+  // For now return 0
+  return 0
+})
+
+const itemDiscountAmount = computed((): number => {
+  if (!props.order) return 0
+  let total = 0
+  props.order.bills.forEach(bill => {
+    bill.items.forEach(item => {
+      if (item.discounts && item.discounts.length > 0) {
+        item.discounts.forEach(discount => {
+          if (discount.type === 'percentage') {
+            total += (item.totalPrice * discount.value) / 100
+          } else {
+            total += discount.value
+          }
+        })
+      }
+    })
+  })
+  return total
+})
+
+const billDiscountAmount = computed((): number => {
+  // TODO: Calculate bill-level discount amounts when implemented
+  return 0
+})
+
+const totalDiscountCount = computed((): number => {
+  return itemDiscountCount.value + billDiscountCount.value
+})
+
+const totalDiscountAmount = computed((): number => {
+  return itemDiscountAmount.value + billDiscountAmount.value
 })
 
 // Methods
@@ -364,5 +481,27 @@ const handleEdit = (): void => {
 /* Индикаторы ожидания */
 .order-actions .v-chip.v-chip--variant-flat[style*='warning'] {
   box-shadow: 0 0 0 1px rgba(var(--v-theme-warning), 0.2);
+}
+
+/* =============================================
+   DISCOUNT DETAILS
+   ============================================= */
+
+.discount-details {
+  background: rgba(var(--v-theme-error), 0.05);
+  border-top: 1px solid rgba(var(--v-theme-error), 0.12);
+}
+
+.discount-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.discount-total {
+  border-top: 1px solid rgba(var(--v-theme-error), 0.12);
+  padding-top: 8px;
+  margin-top: 4px;
 }
 </style>
