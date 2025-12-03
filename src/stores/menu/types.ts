@@ -15,11 +15,10 @@ export interface Category extends BaseEntity {
 
 export type Department = 'kitchen' | 'bar'
 
-// ✨ NEW: Тип блюда (определяет UI и логику модификаторов)
-export type DishType = 'simple' | 'component-based' | 'addon-based'
-
-// ✨ NEW: Стиль группы модификаторов
-export type ModifierGroupStyle = 'component' | 'addon'
+// ✨ UPDATED: Упрощенный тип блюда (2 типа вместо 3)
+export type DishType = 'simple' | 'modifiable'
+// simple: фиксированная композиция, нет модификаторов
+// modifiable: есть модификаторы (обязательные или опциональные)
 
 export interface MenuItem extends BaseEntity {
   categoryId: string
@@ -85,9 +84,11 @@ export interface ModifierGroup {
   name: string // "Choose your bread", "Extra proteins", "Sauces"
   description?: string
   type: ModifierType
-  groupStyle: ModifierGroupStyle // ✨ NEW: component (замена) vs addon (добавление)
+  // ✅ groupStyle удалено - логика определяется через isRequired
+  // isRequired=true → обязательный выбор (бывший "component")
+  // isRequired=false → опциональное добавление (бывший "addon")
   isRequired: boolean
-  minSelection?: number // минимум выбрать (для addon)
+  minSelection?: number // минимум выбрать
   maxSelection?: number // максимум выбрать (0 = без ограничений)
   options: ModifierOption[]
   sortOrder?: number
@@ -135,11 +136,11 @@ export interface TemplateModifierSelection {
 export interface SelectedModifier {
   groupId: string
   groupName: string
-  groupStyle: ModifierGroupStyle // ✨ NEW: component vs addon
+  // ✅ groupStyle удалено - не нужен для расчета композиции
   optionId: string
   optionName: string
   priceAdjustment: number
-  composition?: MenuComposition[] // что добавилось
+  composition?: MenuComposition[] // что добавилось к базовой композиции
 }
 
 // =============================================
@@ -239,7 +240,7 @@ export const DEFAULT_MODIFIER_GROUP: Omit<ModifierGroup, 'id'> = {
   name: '',
   description: '',
   type: 'addon',
-  groupStyle: 'addon', // ✨ NEW: по умолчанию addon
+  // ✅ groupStyle удалено
   isRequired: false,
   minSelection: 0,
   maxSelection: 0,
@@ -292,30 +293,23 @@ export const COMPONENT_ROLES: Record<ComponentRole, string> = {
   addon: 'Дополнение'
 }
 
-// ✨ NEW: Константы для типов блюд
+// ✨ UPDATED: Константы для упрощенных типов блюд
 export const DISH_TYPES: Record<DishType, string> = {
-  simple: 'Простое блюдо',
-  'component-based': 'Составное блюдо',
-  'addon-based': 'Блюдо с дополнениями'
+  simple: 'Simple Dish',
+  modifiable: 'Customizable Dish'
 }
 
 export const DISH_TYPE_DESCRIPTIONS: Record<DishType, string> = {
-  simple: 'Без модификаторов (фиксированная композиция)',
-  'component-based': 'С заменяемыми компонентами (гарнир, соус)',
-  'addon-based': 'Только дополнительные опции'
+  simple: 'Fixed composition, no modifiers',
+  modifiable: 'With required/optional modifiers (sides, add-ons, etc.)'
 }
 
 export const DISH_TYPE_ICONS: Record<DishType, string> = {
   simple: 'mdi-food',
-  'component-based': 'mdi-food-variant',
-  'addon-based': 'mdi-plus-box-multiple'
+  modifiable: 'mdi-food-variant'
 }
 
-// ✨ NEW: Константы для стилей групп модификаторов
-export const MODIFIER_GROUP_STYLES: Record<ModifierGroupStyle, string> = {
-  component: 'Компонент (замена части блюда)',
-  addon: 'Дополнение (добавление к блюду)'
-}
+// ✅ MODIFIER_GROUP_STYLES удалено - groupStyle больше не используется
 
 export const MODIFIER_TYPES: Record<ModifierType, string> = {
   replacement: 'Замена',

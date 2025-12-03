@@ -125,6 +125,15 @@
       @confirm="handlePaymentConfirm"
       @cancel="handlePaymentCancel"
     />
+
+    <!-- Add Note Dialog -->
+    <AddNoteDialog
+      v-model="showAddNoteDialog"
+      :existing-note="editingItemNote"
+      :readonly="editingItemReadonly"
+      @save="handleSaveNote"
+      @cancel="handleCancelNote"
+    />
   </div>
 </template>
 
@@ -145,6 +154,7 @@ import BillsManager from './components/BillsManager.vue'
 import OrderTotals from './components/OrderTotals.vue'
 import OrderActions from './components/OrderActions.vue'
 import PaymentDialog from '../payment/PaymentDialog.vue'
+import AddNoteDialog from './dialogs/AddNoteDialog.vue'
 
 const MODULE_NAME = 'OrderSection'
 
@@ -202,6 +212,12 @@ const paymentDialogData = ref({
   itemIds: [] as string[],
   items: [] as PosBillItem[]
 })
+
+// Add Note Dialog State
+const showAddNoteDialog = ref(false)
+const editingItemId = ref<string | null>(null)
+const editingItemNote = ref('')
+const editingItemReadonly = ref(false)
 
 // Computed - Main Data
 const currentOrder = computed((): PosOrder | null => {
@@ -476,13 +492,71 @@ const handleCancelItem = async (itemId: string): Promise<void> => {
 
 const handleAddNote = async (itemId: string): Promise<void> => {
   try {
-    // TODO: Implement add note dialog
     console.log('📝 Add note to item:', itemId)
-    showSuccess('Note dialog opened')
+
+    // Find the item to get existing note and status
+    const item = currentOrder.value?.bills.flatMap(bill => bill.items).find(i => i.id === itemId)
+
+    if (!item) {
+      showError('Item not found')
+      return
+    }
+
+    editingItemId.value = itemId
+    editingItemNote.value = item.kitchenNotes || ''
+    // Set readonly if item has been sent to kitchen (status !== 'draft')
+    editingItemReadonly.value = item.status !== 'draft'
+    showAddNoteDialog.value = true
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to add note'
+    const message = err instanceof Error ? err.message : 'Failed to open note dialog'
     showError(message)
   }
+}
+
+const handleSaveNote = async (note: string): Promise<void> => {
+  try {
+    if (!editingItemId.value || !currentOrder.value) {
+      showError('No item selected')
+      return
+    }
+
+    console.log('💾 Saving note for item:', editingItemId.value, note)
+
+    // Find the bill that contains this item
+    const bill = currentOrder.value.bills.find(b => b.items.some(i => i.id === editingItemId.value))
+
+    if (!bill) {
+      showError('Bill not found')
+      return
+    }
+
+    // Update the item with the new note
+    const result = await ordersStore.updateItemNote(
+      currentOrder.value.id,
+      bill.id,
+      editingItemId.value,
+      note
+    )
+
+    if (result.success) {
+      showSuccess('Note saved successfully')
+    } else {
+      showError(result.error || 'Failed to save note')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to save note'
+    showError(message)
+  } finally {
+    editingItemId.value = null
+    editingItemNote.value = ''
+    editingItemReadonly.value = false
+  }
+}
+
+const handleCancelNote = (): void => {
+  editingItemId.value = null
+  editingItemNote.value = ''
+  editingItemReadonly.value = false
 }
 
 // Methods - Actions

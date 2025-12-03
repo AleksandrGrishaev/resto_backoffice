@@ -21,25 +21,12 @@ const MODULE_NAME = 'MenuStore'
 function validateMenuItem(data: CreateMenuItemDto | UpdateMenuItemDto): string[] {
   const errors: string[] = []
 
-  // Component-based dishes must have at least one component group
-  if (data.dishType === 'component-based') {
-    const modifierGroups = data.modifierGroups || [] // ✅ Check at MenuItem level
-    const hasComponentGroup = modifierGroups.some(group => group.groupStyle === 'component')
+  // Modifiable dishes must have at least one modifier group
+  if (data.dishType === 'modifiable') {
+    const modifierGroups = data.modifierGroups || []
 
-    if (!hasComponentGroup) {
-      errors.push(
-        'Component-based dishes must have at least one modifier group with groupStyle="component"'
-      )
-    }
-  }
-
-  // Addon-based dishes should have at least one addon group
-  if (data.dishType === 'addon-based') {
-    const modifierGroups = data.modifierGroups || [] // ✅ Check at MenuItem level
-    const hasAddonGroup = modifierGroups.length > 0
-
-    if (!hasAddonGroup) {
-      errors.push('Addon-based dishes should have at least one modifier group')
+    if (modifierGroups.length === 0) {
+      errors.push('Modifiable dishes must have at least one modifier group')
     }
   }
 

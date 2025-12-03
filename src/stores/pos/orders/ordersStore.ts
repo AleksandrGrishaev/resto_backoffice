@@ -403,6 +403,52 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Обновить заметку к товару в счете
+   */
+  async function updateItemNote(
+    orderId: string,
+    billId: string,
+    itemId: string,
+    note: string
+  ): Promise<ServiceResponse<PosBillItem>> {
+    try {
+      // ✅ CRITICAL: Check for active shift before updating items
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+
+      if (!shiftsStore.currentShift || shiftsStore.currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot update items: No active shift. Please start a shift first.'
+        }
+      }
+
+      const response = await ordersService.updateItemNote(itemId, note)
+
+      if (response.success && response.data) {
+        const orderIndex = orders.value.findIndex(o => o.id === orderId)
+        if (orderIndex !== -1) {
+          const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
+          if (billIndex !== -1) {
+            const itemIndex = orders.value[orderIndex].bills[billIndex].items.findIndex(
+              i => i.id === itemId
+            )
+            if (itemIndex !== -1) {
+              orders.value[orderIndex].bills[billIndex].items[itemIndex] = response.data
+            }
+          }
+        }
+      }
+
+      return response
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update item note'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Удалить товар из счета - ОБНОВЛЕНО
    */
   async function removeItemFromBill(
@@ -968,6 +1014,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     addBillToOrder,
     addItemToBill,
     updateItemQuantity,
+    updateItemNote,
     removeItemFromBill,
     sendOrderToKitchen,
     closeOrder,

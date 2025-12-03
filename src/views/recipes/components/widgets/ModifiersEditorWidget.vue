@@ -66,16 +66,7 @@
                     variant="outlined"
                   />
                 </v-col>
-                <!-- ✨ NEW: Group Style (только для component-based блюд) -->
-                <v-col v-if="dishType === 'component-based'" cols="12" md="6">
-                  <v-select
-                    v-model="group.groupStyle"
-                    :items="groupStyleOptions"
-                    label="Group Style *"
-                    density="compact"
-                    variant="outlined"
-                  />
-                </v-col>
+                <!-- ✅ Group Style удалено - логика определяется через isRequired -->
                 <v-col cols="12">
                   <v-textarea
                     v-model="group.description"
@@ -163,9 +154,9 @@
                       </v-col>
                       <v-col cols="12" md="3">
                         <div class="d-flex align-center ga-2 pa-2">
-                          <!-- ✨ UPDATED: isDefault только для component groups -->
+                          <!-- ✅ isDefault для required groups (заменяемые компоненты) -->
                           <v-switch
-                            v-if="group.groupStyle === 'component'"
+                            v-if="group.isRequired"
                             v-model="option.isDefault"
                             label="Default"
                             density="compact"
@@ -200,12 +191,83 @@
                           hide-details
                         />
                       </v-col>
+                      <!-- ✅ Composition Editor -->
                       <v-col cols="12">
-                        <v-alert type="info" density="compact" variant="tonal" class="text-caption">
-                          <strong>Composition:</strong>
-                          Configure product/recipe/preparation composition for this option (TODO:
-                          Add composition editor)
-                        </v-alert>
+                        <div class="composition-editor pa-3 bg-grey-lighten-5 rounded">
+                          <div class="d-flex align-center justify-space-between mb-2">
+                            <span class="text-caption font-weight-bold">Composition</span>
+                            <div class="d-flex ga-1">
+                              <v-btn
+                                size="x-small"
+                                variant="text"
+                                color="primary"
+                                @click="showDishSelector(groupIndex, optionIndex)"
+                              >
+                                <v-icon icon="mdi-chef-hat" size="14" class="mr-1" />
+                                Dish
+                              </v-btn>
+                              <v-btn
+                                size="x-small"
+                                variant="text"
+                                color="secondary"
+                                @click="showProductSelector(groupIndex, optionIndex)"
+                              >
+                                <v-icon icon="mdi-package-variant" size="14" class="mr-1" />
+                                Product
+                              </v-btn>
+                            </div>
+                          </div>
+
+                          <!-- Empty state -->
+                          <div
+                            v-if="!option.composition || option.composition.length === 0"
+                            class="text-caption text-grey text-center pa-2"
+                            style="border: 1px dashed #ccc; border-radius: 4px"
+                          >
+                            No composition defined (modifier won't affect inventory)
+                          </div>
+
+                          <!-- Composition items -->
+                          <div v-else class="composition-list">
+                            <div
+                              v-for="(comp, compIndex) in option.composition"
+                              :key="compIndex"
+                              class="composition-item d-flex align-center ga-2 pa-2 mb-1 bg-white rounded"
+                            >
+                              <v-icon
+                                :icon="getCompositionIcon(comp.type)"
+                                size="14"
+                                :color="getCompositionColor(comp.type)"
+                              />
+                              <span class="text-caption flex-grow-1">
+                                {{ getCompositionName(comp) }}
+                              </span>
+                              <v-text-field
+                                v-model.number="comp.quantity"
+                                type="number"
+                                density="compact"
+                                variant="outlined"
+                                hide-details
+                                style="width: 60px"
+                              />
+                              <v-select
+                                v-model="comp.unit"
+                                :items="unitOptions"
+                                density="compact"
+                                variant="outlined"
+                                hide-details
+                                style="width: 80px"
+                              />
+                              <v-btn
+                                icon="mdi-delete"
+                                variant="text"
+                                size="x-small"
+                                color="error"
+                                @click="removeComposition(groupIndex, optionIndex, compIndex)"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </v-col>
                     </v-row>
                   </v-list-item>
@@ -277,23 +339,109 @@
         </v-alert>
       </div>
     </v-card-text>
+
+    <!-- Диалог выбора блюда -->
+    <v-dialog v-model="dishSelectorDialog.show" max-width="600">
+      <v-card>
+        <v-card-title>Add Dish to Composition</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="dishSearchQuery"
+            label="Search Dish"
+            prepend-inner-icon="mdi-magnify"
+            hide-details="auto"
+            class="mb-3"
+          />
+          <v-list style="max-height: 400px; overflow-y: auto">
+            <v-list-item
+              v-for="dish in filteredDishes"
+              :key="dish.id"
+              @click="addDishToComposition(dish)"
+            >
+              <template #prepend>
+                <v-icon
+                  :icon="dish.type === 'recipe' ? 'mdi-chef-hat' : 'mdi-food-variant'"
+                  :color="dish.type === 'recipe' ? 'primary' : 'secondary'"
+                />
+              </template>
+              <v-list-item-title>{{ dish.name }}</v-list-item-title>
+              <v-list-item-subtitle>
+                {{ dish.type === 'recipe' ? 'Recipe' : 'Semi-finished' }} •
+                {{ dish.outputQuantity }} {{ dish.unit }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="dishSelectorDialog.show = false">Cancel</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Диалог выбора продукта -->
+    <v-dialog v-model="productSelectorDialog.show" max-width="600">
+      <v-card>
+        <v-card-title>Add Product to Composition</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="productSearchQuery"
+            label="Search Product"
+            prepend-inner-icon="mdi-magnify"
+            hide-details="auto"
+            class="mb-3"
+          />
+          <v-list style="max-height: 400px; overflow-y: auto">
+            <v-list-item
+              v-for="product in filteredProducts"
+              :key="product.id"
+              @click="addProductToComposition(product)"
+            >
+              <template #prepend>
+                <v-icon icon="mdi-package-variant" color="info" />
+              </template>
+              <v-list-item-title>{{ product.name }}</v-list-item-title>
+              <v-list-item-subtitle>
+                {{ product.category }} • {{ product.unit }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="productSelectorDialog.show = false">Cancel</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { ModifierGroup, ModifierOption, VariantTemplate, DishType } from '@/stores/menu/types'
+import type {
+  ModifierGroup,
+  ModifierOption,
+  VariantTemplate,
+  DishType,
+  MenuComposition,
+  DishOption,
+  ProductOption
+} from '@/stores/menu/types'
 
 interface Props {
   modifierGroups: ModifierGroup[]
   templates: VariantTemplate[]
   dishType: DishType // ✨ NEW: тип блюда
+  dishOptions?: DishOption[] // ✅ NEW: Опции для блюд (рецепты + полуфабрикаты)
+  productOptions?: ProductOption[] // ✅ NEW: Опции для продуктов
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modifierGroups: () => [],
   templates: () => [],
-  dishType: 'simple'
+  dishType: 'simple',
+  dishOptions: () => [],
+  productOptions: () => []
 })
 
 const emit = defineEmits<{
@@ -304,6 +452,39 @@ const emit = defineEmits<{
 // State
 const openPanels = ref<number[]>([])
 
+// ✅ NEW: Dialog state for composition selectors
+const dishSelectorDialog = ref<{
+  show: boolean
+  groupIndex: number | null
+  optionIndex: number | null
+}>({
+  show: false,
+  groupIndex: null,
+  optionIndex: null
+})
+
+const productSelectorDialog = ref<{
+  show: boolean
+  groupIndex: number | null
+  optionIndex: number | null
+}>({
+  show: false,
+  groupIndex: null,
+  optionIndex: null
+})
+
+const dishSearchQuery = ref('')
+const productSearchQuery = ref('')
+
+// Unit options for composition
+const unitOptions = [
+  { title: 'Grams', value: 'gram' },
+  { title: 'Milliliters', value: 'ml' },
+  { title: 'Pieces', value: 'piece' },
+  { title: 'Liters', value: 'liter' },
+  { title: 'Kilograms', value: 'kg' }
+]
+
 // Constants
 const modifierTypes = [
   { title: 'Add-on (adds to base)', value: 'addon' },
@@ -311,14 +492,25 @@ const modifierTypes = [
   { title: 'Removal (removes from base)', value: 'removal' }
 ]
 
-// ✨ NEW: Константы для groupStyle
-const groupStyleOptions = [
-  { title: 'Component (замена части блюда)', value: 'component' },
-  { title: 'Add-on (дополнение к блюду)', value: 'addon' }
-]
+// ✅ groupStyleOptions удалено - groupStyle больше не используется
 
 // Computed
 const hasModifiers = computed(() => props.modifierGroups.length > 0)
+
+// ✅ NEW: Filtered dishes for search
+const filteredDishes = computed(() => {
+  const query = dishSearchQuery.value.toLowerCase()
+  return (props.dishOptions || []).filter(dish => dish.name.toLowerCase().includes(query))
+})
+
+// ✅ NEW: Filtered products for search
+const filteredProducts = computed(() => {
+  const query = productSearchQuery.value.toLowerCase()
+  return (props.productOptions || []).filter(
+    product =>
+      product.name.toLowerCase().includes(query) || product.category.toLowerCase().includes(query)
+  )
+})
 
 // Methods
 function addModifierGroup(): void {
@@ -327,7 +519,7 @@ function addModifierGroup(): void {
     name: 'New Modifier Group',
     description: '',
     type: 'addon',
-    groupStyle: props.dishType === 'component-based' ? 'component' : 'addon', // ✨ NEW: по умолчанию зависит от dishType
+    // ✅ groupStyle удалено
     isRequired: false,
     minSelection: 0,
     maxSelection: 1,
@@ -366,6 +558,119 @@ function removeOption(groupIndex: number, optionIndex: number): void {
   const updated = [...props.modifierGroups]
   updated[groupIndex].options.splice(optionIndex, 1)
   emit('update:modifierGroups', updated)
+}
+
+// ✅ NEW: Composition editor methods
+function showDishSelector(groupIndex: number, optionIndex: number): void {
+  dishSelectorDialog.value = {
+    show: true,
+    groupIndex,
+    optionIndex
+  }
+  dishSearchQuery.value = ''
+}
+
+function showProductSelector(groupIndex: number, optionIndex: number): void {
+  productSelectorDialog.value = {
+    show: true,
+    groupIndex,
+    optionIndex
+  }
+  productSearchQuery.value = ''
+}
+
+function addDishToComposition(dish: DishOption): void {
+  const { groupIndex, optionIndex } = dishSelectorDialog.value
+  if (groupIndex === null || optionIndex === null) return
+
+  const updated = [...props.modifierGroups]
+  const option = updated[groupIndex].options[optionIndex]
+
+  if (!option.composition) {
+    option.composition = []
+  }
+
+  const newComp: MenuComposition = {
+    type: dish.type,
+    id: dish.id,
+    quantity: dish.outputQuantity,
+    unit: dish.unit,
+    role: 'addon'
+  }
+
+  option.composition.push(newComp)
+  emit('update:modifierGroups', updated)
+  dishSelectorDialog.value.show = false
+}
+
+function addProductToComposition(product: ProductOption): void {
+  const { groupIndex, optionIndex } = productSelectorDialog.value
+  if (groupIndex === null || optionIndex === null) return
+
+  const updated = [...props.modifierGroups]
+  const option = updated[groupIndex].options[optionIndex]
+
+  if (!option.composition) {
+    option.composition = []
+  }
+
+  const newComp: MenuComposition = {
+    type: 'product',
+    id: product.id,
+    quantity: 1,
+    unit: product.unit,
+    role: 'addon'
+  }
+
+  option.composition.push(newComp)
+  emit('update:modifierGroups', updated)
+  productSelectorDialog.value.show = false
+}
+
+function removeComposition(groupIndex: number, optionIndex: number, compIndex: number): void {
+  const updated = [...props.modifierGroups]
+  const option = updated[groupIndex].options[optionIndex]
+  if (option.composition) {
+    option.composition.splice(compIndex, 1)
+    emit('update:modifierGroups', updated)
+  }
+}
+
+// ✅ NEW: Helper functions for composition display
+function getCompositionIcon(type: 'product' | 'recipe' | 'preparation'): string {
+  switch (type) {
+    case 'recipe':
+      return 'mdi-chef-hat'
+    case 'preparation':
+      return 'mdi-food-variant'
+    case 'product':
+      return 'mdi-package-variant'
+    default:
+      return 'mdi-help-circle'
+  }
+}
+
+function getCompositionColor(type: 'product' | 'recipe' | 'preparation'): string {
+  switch (type) {
+    case 'recipe':
+      return 'primary'
+    case 'preparation':
+      return 'secondary'
+    case 'product':
+      return 'info'
+    default:
+      return 'grey'
+  }
+}
+
+function getCompositionName(comp: MenuComposition): string {
+  if (comp.type === 'product') {
+    const product = props.productOptions?.find(p => p.id === comp.id)
+    return product?.name || 'Unknown product'
+  } else {
+    const dish = props.dishOptions?.find(d => d.id === comp.id && d.type === comp.type)
+    return dish?.name || 'Unknown dish'
+  }
 }
 </script>
 

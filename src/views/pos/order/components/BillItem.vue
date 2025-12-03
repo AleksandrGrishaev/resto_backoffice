@@ -21,20 +21,27 @@
             <!-- Первая строка: только название -->
             <div class="item-name-full">
               {{ group.menuItemName }}
-              <span v-if="group.variantName" class="variant-name-inline">
-                {{ group.variantName }}
-              </span>
             </div>
 
-            <!-- Вторая строка: счетчик, модификации и цена -->
+            <!-- Вторая строка: вариант (если есть) -->
+            <div v-if="group.variantName" class="variant-name-line">
+              {{ group.variantName }}
+            </div>
+
+            <!-- Третья строка: счетчик и цена -->
             <div class="group-meta-line">
               <div class="group-badges">
                 <span class="count-badge">{{ group.items.length }}</span>
-                <span v-for="mod in group.modifications" :key="mod" class="mod-chip">
-                  +{{ mod }}
-                </span>
               </div>
               <span class="group-price-inline">{{ formatPrice(group.totalPrice) }}</span>
+            </div>
+
+            <!-- Четвертая строка: модификации (если есть) -->
+            <div
+              v-if="group.modifications && group.modifications.length > 0"
+              class="group-modifications"
+            >
+              <span v-for="mod in group.modifications" :key="mod" class="mod-chip">+{{ mod }}</span>
             </div>
           </div>
 
@@ -90,10 +97,12 @@
                 {{ getItemPaymentStatusText(item.paymentStatus || 'unpaid') }}
               </v-chip>
 
-              <div v-if="item.kitchenNotes" class="notes-inline">
-                <v-icon size="16" color="warning">mdi-note-text</v-icon>
-                <span class="note-text">{{ item.kitchenNotes }}</span>
-              </div>
+              <v-tooltip v-if="item.kitchenNotes" location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <v-icon size="18" color="warning" v-bind="tooltipProps">mdi-note-text</v-icon>
+                </template>
+                <span>{{ item.kitchenNotes }}</span>
+              </v-tooltip>
 
               <div class="spacer"></div>
 
@@ -108,11 +117,21 @@
                 </template>
 
                 <v-list density="compact">
-                  <v-list-item @click="handleAddNote(item.id)">
+                  <v-list-item
+                    :disabled="item.status !== 'draft'"
+                    @click="item.status === 'draft' ? handleAddNote(item.id) : null"
+                  >
                     <template #prepend>
-                      <v-icon size="small">mdi-note-plus</v-icon>
+                      <v-icon size="small">
+                        {{ item.kitchenNotes ? 'mdi-note-edit' : 'mdi-note-plus' }}
+                      </v-icon>
                     </template>
-                    <v-list-item-title>Add Note</v-list-item-title>
+                    <v-list-item-title>
+                      {{ item.kitchenNotes ? 'Edit Note' : 'Add Note' }}
+                      <span v-if="item.status !== 'draft'" class="text-caption text-grey">
+                        (Sent)
+                      </span>
+                    </v-list-item-title>
                   </v-list-item>
 
                   <v-divider />
@@ -151,12 +170,14 @@
           <!-- Первая строка: только название -->
           <div class="item-name-single">
             {{ group.menuItemName }}
-            <span v-if="group.variantName" class="variant-name-inline">
-              {{ group.variantName }}
-            </span>
           </div>
 
-          <!-- Вторая строка: статус, модификации, заметки и цена -->
+          <!-- Вторая строка: вариант (если есть) -->
+          <div v-if="group.variantName" class="variant-name-line">
+            {{ group.variantName }}
+          </div>
+
+          <!-- Третья строка: статус, заметки и цена -->
           <div class="item-meta-line">
             <div class="item-badges">
               <v-chip
@@ -177,15 +198,23 @@
                 {{ getItemPaymentStatusText(group.items[0].paymentStatus) }}
               </v-chip>
 
-              <span v-for="mod in group.modifications" :key="mod" class="mod-chip">+{{ mod }}</span>
-
-              <div v-if="group.items[0].kitchenNotes" class="notes-inline">
-                <v-icon size="14" color="warning">mdi-note-text</v-icon>
-                <span class="note-text">{{ group.items[0].kitchenNotes }}</span>
-              </div>
+              <v-tooltip v-if="group.items[0].kitchenNotes" location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <v-icon size="18" color="warning" v-bind="tooltipProps">mdi-note-text</v-icon>
+                </template>
+                <span>{{ group.items[0].kitchenNotes }}</span>
+              </v-tooltip>
             </div>
 
             <span class="item-price-inline">{{ formatPrice(group.items[0].totalPrice) }}</span>
+          </div>
+
+          <!-- Четвертая строка: модификации (если есть) -->
+          <div
+            v-if="group.modifications && group.modifications.length > 0"
+            class="item-modifications"
+          >
+            <span v-for="mod in group.modifications" :key="mod" class="mod-chip">+{{ mod }}</span>
           </div>
         </div>
 
@@ -198,11 +227,21 @@
           </template>
 
           <v-list density="compact">
-            <v-list-item @click="handleAddNote(group.items[0].id)">
+            <v-list-item
+              :disabled="group.items[0].status !== 'draft'"
+              @click="group.items[0].status === 'draft' ? handleAddNote(group.items[0].id) : null"
+            >
               <template #prepend>
-                <v-icon size="small">mdi-note-plus</v-icon>
+                <v-icon size="small">
+                  {{ group.items[0].kitchenNotes ? 'mdi-note-edit' : 'mdi-note-plus' }}
+                </v-icon>
               </template>
-              <v-list-item-title>Add Note</v-list-item-title>
+              <v-list-item-title>
+                {{ group.items[0].kitchenNotes ? 'Edit Note' : 'Add Note' }}
+                <span v-if="group.items[0].status !== 'draft'" class="text-caption text-grey">
+                  (Sent)
+                </span>
+              </v-list-item-title>
             </v-list-item>
 
             <v-divider />
@@ -271,25 +310,40 @@ const groupedItems = computed(() => {
   const groups = new Map<string, GroupedBillItems>()
 
   props.items.forEach(item => {
-    // Создаем ключ с учетом модификаций
-    const modificationsKey = item.modifications
-      ? item.modifications
-          .map(m => m.name)
-          .sort()
-          .join('-')
-      : 'no-mods'
+    // ✨ NEW: Создаем ключ с учетом НОВОЙ системы модификаторов (selectedModifiers)
+    let modificationsKey = 'no-mods'
+
+    if (item.selectedModifiers && item.selectedModifiers.length > 0) {
+      // Используем новую систему модификаторов
+      modificationsKey = item.selectedModifiers
+        .map(m => m.optionName)
+        .sort()
+        .join('-')
+    } else if (item.modifications && item.modifications.length > 0) {
+      // Fallback на старую систему для обратной совместимости
+      modificationsKey = item.modifications
+        .map(m => m.name)
+        .sort()
+        .join('-')
+    }
 
     // Включаем variantId в ключ группировки для разделения модификаций
     const key = `${item.menuItemId}-${item.variantId || 'default'}-${modificationsKey}`
 
     if (!groups.has(key)) {
+      // ✨ NEW: Приоритет новой системе модификаторов
+      const modificationsDisplay =
+        item.selectedModifiers && item.selectedModifiers.length > 0
+          ? item.selectedModifiers.map(m => m.optionName)
+          : item.modifications?.map(m => m.name)
+
       groups.set(key, {
         key,
         menuItemId: item.menuItemId,
         menuItemName: item.menuItemName,
         variantId: item.variantId,
         variantName: item.variantName,
-        modifications: item.modifications?.map(m => m.name),
+        modifications: modificationsDisplay,
         items: [],
         totalPrice: 0
       })
@@ -399,6 +453,9 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
 .group-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .item-name-full {
@@ -412,7 +469,6 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
 }
 
 .group-meta-line {
@@ -434,6 +490,15 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
   color: rgb(var(--v-theme-on-surface));
   flex-shrink: 0;
   margin-left: 8px;
+}
+
+.group-modifications {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  min-height: 32px;
 }
 
 .group-actions {
@@ -481,6 +546,9 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
 .item-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .item-name-single {
@@ -494,7 +562,6 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
 }
 
 .item-meta-line {
@@ -520,6 +587,15 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
   margin-left: 8px;
 }
 
+.item-modifications {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  min-height: 32px;
+}
+
 /* =============================================
    SHARED STYLES
    ============================================= */
@@ -531,13 +607,22 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
   flex-shrink: 0;
 }
 
-.mod-chip {
-  font-size: 0.75rem;
-  color: rgb(var(--v-theme-info));
-  background: rgba(var(--v-theme-info), 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
+.variant-name-line {
+  font-size: 0.875rem;
+  color: rgb(var(--v-theme-on-surface-variant));
   font-weight: 500;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.mod-chip {
+  font-size: 0.8125rem;
+  color: rgb(var(--v-theme-info));
+  background: rgba(var(--v-theme-info), 0.12);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .count-badge {
@@ -555,22 +640,6 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
   height: 24px !important;
   font-size: 0.75rem !important;
   flex-shrink: 0;
-}
-
-.notes-inline {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.note-text {
-  font-size: 0.8125rem;
-  color: rgb(var(--v-theme-warning));
-  font-style: italic;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 120px;
 }
 
 /* =============================================
@@ -695,12 +764,14 @@ const handleAddOneMore = (group: GroupedBillItems): void => {
   }
 
   .mod-chip {
-    font-size: 0.7rem;
-    padding: 1px 4px;
+    font-size: 0.75rem;
+    padding: 3px 8px;
   }
 
-  .note-text {
-    max-width: 80px;
+  .group-modifications,
+  .item-modifications {
+    gap: 6px;
+    min-height: 28px;
   }
 }
 </style>

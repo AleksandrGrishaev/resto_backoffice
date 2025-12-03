@@ -98,11 +98,8 @@
             >
               <div class="text-body-2">
                 <strong>Dish Type:</strong>
-                <template v-if="formData.dishType === 'component-based'">
-                  Component-based Dish (with replaceable components)
-                </template>
-                <template v-else-if="formData.dishType === 'addon-based'">
-                  Dish with Add-ons
+                <template v-if="formData.dishType === 'modifiable'">
+                  Customizable Dish (with required/optional modifiers)
                 </template>
               </div>
             </v-alert>
@@ -180,12 +177,16 @@
             <v-alert type="info" variant="tonal" density="compact" class="mb-4">
               <div class="text-body-2">
                 Modifiers apply to all variants of the dish.
-                <template v-if="formData.dishType === 'component-based'">
-                  Use groupStyle="component" to replace components (side, sauce).
-                </template>
-                <template v-else-if="formData.dishType === 'addon-based'">
-                  Use groupStyle="addon" to add options (toppings, syrups).
-                </template>
+                <ul class="mt-2 mb-0">
+                  <li>
+                    <strong>Required modifiers:</strong>
+                    Customer must choose (e.g., side dish, sauce)
+                  </li>
+                  <li>
+                    <strong>Optional modifiers:</strong>
+                    Customer can add (e.g., toppings, syrups)
+                  </li>
+                </ul>
               </div>
             </v-alert>
 
@@ -595,11 +596,39 @@ watch(
       currentDishType: formData.value.dishType
     })
 
-    if (isOpen && !props.item && !props.dishType) {
-      console.log('🔄 [MenuItemDialog] Resetting form (dialog opened, no item, no dishType)')
-      resetForm()
-    } else if (isOpen) {
-      console.log('✅ [MenuItemDialog] Dialog opened, preserving state')
+    if (isOpen) {
+      // При каждом открытии диалога загружаем данные
+      if (props.item) {
+        console.log('📝 [MenuItemDialog] Loading existing item on dialog open:', {
+          name: props.item.name,
+          dishType: props.item.dishType
+        })
+        formData.value = {
+          categoryId: props.item.categoryId,
+          name: props.item.name,
+          description: props.item.description || '',
+          type: props.item.type,
+          dishType: props.item.dishType || 'simple',
+          isActive: props.item.isActive,
+          sortOrder: props.item.sortOrder,
+          variants: props.item.variants.map(variant => ({
+            ...variant,
+            composition: variant.composition || []
+          })),
+          modifierGroups: props.item.modifierGroups || [],
+          templates: props.item.templates || []
+        }
+      } else if (props.dishType) {
+        console.log(
+          '✨ [MenuItemDialog] Creating new item with dishType on dialog open:',
+          props.dishType
+        )
+        resetForm()
+        formData.value.dishType = props.dishType
+      } else {
+        console.log('🔄 [MenuItemDialog] Resetting form (dialog opened, no item, no dishType)')
+        resetForm()
+      }
     }
   }
 )

@@ -29,6 +29,49 @@
 
       <v-divider />
 
+      <!-- Variant Info & Base Composition -->
+      <v-card-text class="py-3 px-4 bg-grey-darken-4">
+        <div class="text-overline text-grey-lighten-1 mb-1">Base Composition</div>
+        <div class="text-subtitle-2 mb-2">
+          {{ variant.name }} - {{ formatPrice(variant.price) }}
+        </div>
+
+        <div v-if="variant.composition && variant.composition.length > 0">
+          <div
+            v-for="(comp, index) in variant.composition"
+            :key="index"
+            class="d-flex align-center text-body-2 text-grey-lighten-2 mb-1"
+          >
+            <v-icon
+              :icon="
+                comp.type === 'recipe'
+                  ? 'mdi-food'
+                  : comp.type === 'preparation'
+                    ? 'mdi-chef-hat'
+                    : 'mdi-cube-outline'
+              "
+              size="16"
+              class="mr-2"
+              color="grey-lighten-2"
+            />
+            <span>{{ getCompositionItemName(comp) }}</span>
+            <span class="ml-1 text-grey-lighten-1">({{ comp.quantity }} {{ comp.unit }})</span>
+            <v-chip
+              v-if="comp.role"
+              size="x-small"
+              variant="outlined"
+              color="grey-lighten-1"
+              class="ml-2"
+            >
+              {{ comp.role }}
+            </v-chip>
+          </div>
+        </div>
+        <div v-else class="text-body-2 text-grey-lighten-1">No base composition defined</div>
+      </v-card-text>
+
+      <v-divider />
+
       <!-- Modifier Groups -->
       <v-card-text class="pa-0" style="max-height: 60vh">
         <div v-if="!menuItem?.modifierGroups || menuItem.modifierGroups.length === 0" class="pa-4">
@@ -64,55 +107,55 @@
               </div>
 
               <!-- Options (Radio only for component groups) -->
-              <v-list class="pa-0">
-                <v-list-item
-                  v-for="option in group.options"
-                  :key="option.id"
-                  :disabled="!option.isActive"
-                  class="px-0"
-                  @click="toggleOption(group, option)"
-                >
-                  <template #prepend>
-                    <v-radio
-                      :model-value="isOptionSelected(group.id, option.id)"
-                      :value="true"
-                      color="primary"
-                      hide-details
-                      @click.stop="toggleOption(group, option)"
-                    />
-                  </template>
+              <v-radio-group
+                :model-value="getSelectedOptionId(group.id)"
+                hide-details
+                @update:model-value="value => handleRadioChange(group, value)"
+              >
+                <v-list class="pa-0">
+                  <v-list-item
+                    v-for="option in group.options"
+                    :key="option.id"
+                    :disabled="!option.isActive"
+                    class="px-0"
+                    @click="!option.isActive ? null : selectRadioOption(group, option.id)"
+                  >
+                    <template #prepend>
+                      <v-radio :value="option.id" color="primary" hide-details />
+                    </template>
 
-                  <v-list-item-title>
-                    <div class="d-flex align-center justify-space-between">
-                      <div>
-                        <span>{{ option.name }}</span>
-                        <v-chip
-                          v-if="option.isDefault"
-                          size="x-small"
-                          color="success"
-                          variant="outlined"
-                          class="ml-2"
-                        >
-                          Included
-                        </v-chip>
+                    <v-list-item-title>
+                      <div class="d-flex align-center justify-space-between">
+                        <div>
+                          <span>{{ option.name }}</span>
+                          <v-chip
+                            v-if="option.isDefault"
+                            size="x-small"
+                            color="success"
+                            variant="outlined"
+                            class="ml-2"
+                          >
+                            Included
+                          </v-chip>
+                        </div>
+                        <div class="text-body-2">
+                          <span v-if="option.priceAdjustment === 0" class="text-success">Free</span>
+                          <span v-else-if="option.priceAdjustment > 0" class="text-primary">
+                            +{{ formatPrice(option.priceAdjustment) }}
+                          </span>
+                          <span v-else class="text-error">
+                            {{ formatPrice(option.priceAdjustment) }}
+                          </span>
+                        </div>
                       </div>
-                      <div class="text-body-2">
-                        <span v-if="option.priceAdjustment === 0" class="text-success">Free</span>
-                        <span v-else-if="option.priceAdjustment > 0" class="text-primary">
-                          +{{ formatPrice(option.priceAdjustment) }}
-                        </span>
-                        <span v-else class="text-error">
-                          {{ formatPrice(option.priceAdjustment) }}
-                        </span>
-                      </div>
-                    </div>
-                  </v-list-item-title>
+                    </v-list-item-title>
 
-                  <v-list-item-subtitle v-if="option.description">
-                    {{ option.description }}
-                  </v-list-item-subtitle>
-                </v-list-item>
-              </v-list>
+                    <v-list-item-subtitle v-if="option.description">
+                      {{ option.description }}
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                </v-list>
+              </v-radio-group>
             </div>
           </div>
 
@@ -150,9 +193,13 @@
                 <v-list-item
                   v-for="option in group.options"
                   :key="option.id"
-                  :disabled="!option.isActive"
+                  :disabled="!option.isActive || isOptionDisabled(group, option)"
                   class="px-0"
-                  @click="toggleOption(group, option)"
+                  @click="
+                    !option.isActive || isOptionDisabled(group, option)
+                      ? null
+                      : toggleOption(group, option)
+                  "
                 >
                   <template #prepend>
                     <v-checkbox
@@ -160,7 +207,6 @@
                       :disabled="isOptionDisabled(group, option)"
                       color="primary"
                       hide-details
-                      @click.stop="toggleOption(group, option)"
                     />
                   </template>
 
@@ -238,8 +284,11 @@ import type {
   ModifierGroup,
   ModifierOption,
   VariantTemplate,
-  SelectedModifier
+  SelectedModifier,
+  MenuComposition
 } from '@/stores/menu/types'
+import { useProductsStore } from '@/stores/productsStore'
+import { useRecipesStore } from '@/stores/recipes'
 
 interface Props {
   modelValue: boolean
@@ -255,19 +304,24 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+// Stores
+const productsStore = useProductsStore()
+const recipesStore = useRecipesStore()
+
 // State
 const selectedModifiers = ref<Map<string, Set<string>>>(new Map())
 const selectedTemplateId = ref<string | null>(null)
 
 // ✨ UPDATED: Read modifierGroups from menuItem (not variant)
+// ✅ Architecture v2: Use isRequired instead of groupStyle
 const componentGroups = computed(() => {
   if (!props.menuItem?.modifierGroups) return []
-  return props.menuItem.modifierGroups.filter(group => group.groupStyle === 'component')
+  return props.menuItem.modifierGroups.filter(group => group.isRequired)
 })
 
 const addonGroups = computed(() => {
   if (!props.menuItem?.modifierGroups) return []
-  return props.menuItem.modifierGroups.filter(group => group.groupStyle === 'addon')
+  return props.menuItem.modifierGroups.filter(group => !group.isRequired)
 })
 
 // Computed
@@ -324,9 +378,30 @@ function formatPrice(price: number): string {
   }).format(price)
 }
 
+function getCompositionItemName(comp: MenuComposition): string {
+  if (comp.type === 'product') {
+    const product = productsStore.products.find(p => p.id === comp.id)
+    return product?.name || 'Unknown product'
+  } else if (comp.type === 'recipe') {
+    const recipe = recipesStore.recipes.find(r => r.id === comp.id)
+    return recipe?.name || 'Unknown recipe'
+  } else if (comp.type === 'preparation') {
+    const preparation = recipesStore.preparations.find(p => p.id === comp.id)
+    return preparation?.name || 'Unknown preparation'
+  }
+  return 'Unknown'
+}
+
 function isOptionSelected(groupId: string, optionId: string): boolean {
   const selectedOptions = selectedModifiers.value.get(groupId)
   return selectedOptions ? selectedOptions.has(optionId) : false
+}
+
+function getSelectedOptionId(groupId: string): string | null {
+  const selectedOptions = selectedModifiers.value.get(groupId)
+  if (!selectedOptions || selectedOptions.size === 0) return null
+  // Return the first (and should be only) selected option for radio groups
+  return Array.from(selectedOptions)[0]
 }
 
 function getSelectedCount(group: ModifierGroup): number {
@@ -347,6 +422,26 @@ function isOptionDisabled(group: ModifierGroup, option: ModifierOption): boolean
   }
 
   return false
+}
+
+function selectRadioOption(group: ModifierGroup, optionId: string): void {
+  const groupSelections = new Set<string>([optionId])
+  selectedModifiers.value.set(group.id, groupSelections)
+  selectedTemplateId.value = null
+
+  console.log('📻 Radio option selected:', {
+    groupName: group.name,
+    optionId,
+    selectedModifiers: Array.from(selectedModifiers.value.entries()).map(([gId, opts]) => ({
+      groupId: gId,
+      options: Array.from(opts)
+    }))
+  })
+}
+
+function handleRadioChange(group: ModifierGroup, optionId: string | null): void {
+  if (!optionId) return
+  selectRadioOption(group, optionId)
 }
 
 function toggleOption(group: ModifierGroup, option: ModifierOption): void {
@@ -397,7 +492,6 @@ function handleAddToBill(): void {
           modifiers.push({
             groupId: group.id,
             groupName: group.name,
-            groupStyle: group.groupStyle, // ✨ NEW: передаем groupStyle
             optionId: option.id,
             optionName: option.name,
             priceAdjustment: option.priceAdjustment,
@@ -406,6 +500,18 @@ function handleAddToBill(): void {
         }
       })
     }
+  })
+
+  console.log('🔧 CustomizationDialog: Adding to bill', {
+    itemName: props.menuItem?.name,
+    variantName: props.variant.name,
+    basePrice: props.variant.price,
+    modifiers: modifiers.map(m => ({
+      name: m.optionName,
+      priceAdjustment: m.priceAdjustment
+    })),
+    modifiersTotal: modifiersTotalPrice.value,
+    totalPrice: totalPrice.value
   })
 
   emit('add-to-bill', modifiers)
@@ -422,9 +528,11 @@ function initializeDefaults(): void {
   selectedModifiers.value.clear()
   selectedTemplateId.value = null
 
-  // ✨ NEW: Apply defaults for component groups (they always need a selection)
+  // ✨ NEW: Apply defaults for required groups (they always need a selection)
+  // ✅ Architecture v2: Use isRequired instead of groupStyle
   props.menuItem.modifierGroups.forEach(group => {
-    if (group.groupStyle === 'component') {
+    if (group.isRequired) {
+      // For required groups, always select default or first active
       const defaultOption = group.options.find((o: ModifierOption) => o.isDefault && o.isActive)
       if (defaultOption) {
         const groupSelections = new Set<string>([defaultOption.id])
@@ -437,14 +545,8 @@ function initializeDefaults(): void {
           selectedModifiers.value.set(group.id, groupSelections)
         }
       }
-    } else if (group.isRequired) {
-      // For addon groups, only apply defaults if required
-      const defaultOption = group.options.find((o: ModifierOption) => o.isDefault && o.isActive)
-      if (defaultOption) {
-        const groupSelections = new Set<string>([defaultOption.id])
-        selectedModifiers.value.set(group.id, groupSelections)
-      }
     }
+    // For optional groups, no defaults are applied (user must opt-in)
   })
 }
 
@@ -467,5 +569,14 @@ watch(
 
 .modifier-group:last-child {
   border-bottom: none;
+}
+
+/* Make list items clickable with proper cursor */
+.v-list-item:not(.v-list-item--disabled) {
+  cursor: pointer;
+}
+
+.v-list-item:not(.v-list-item--disabled):hover {
+  background-color: rgba(var(--v-theme-primary), 0.08);
 }
 </style>

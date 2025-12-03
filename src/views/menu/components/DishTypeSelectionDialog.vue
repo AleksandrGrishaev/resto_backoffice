@@ -71,7 +71,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-// Dish types configuration
+// ✅ Architecture v2: Only 2 dish types (simple | modifiable)
 const dishTypes = [
   {
     value: 'simple' as DishType,
@@ -80,16 +80,10 @@ const dishTypes = [
     icon: DISH_TYPE_ICONS.simple
   },
   {
-    value: 'component-based' as DishType,
-    title: DISH_TYPES['component-based'],
-    description: DISH_TYPE_DESCRIPTIONS['component-based'],
-    icon: DISH_TYPE_ICONS['component-based']
-  },
-  {
-    value: 'addon-based' as DishType,
-    title: DISH_TYPES['addon-based'],
-    description: DISH_TYPE_DESCRIPTIONS['addon-based'],
-    icon: DISH_TYPE_ICONS['addon-based']
+    value: 'modifiable' as DishType,
+    title: DISH_TYPES.modifiable,
+    description: DISH_TYPE_DESCRIPTIONS.modifiable,
+    icon: DISH_TYPE_ICONS.modifiable
   }
 ]
 

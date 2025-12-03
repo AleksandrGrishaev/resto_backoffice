@@ -102,6 +102,28 @@ export class OrdersService {
         throw new Error('Order not found')
       }
 
+      // ✅ CRITICAL FIX: Load items from localStorage to get fresh kitchenNotes
+      const allLocalItems = this.getAllStoredItems()
+      console.log('📦 Merging items from localStorage before save:', {
+        supabaseItems: order.bills.flatMap(b => b.items).length,
+        localStorageItems: allLocalItems.length
+      })
+
+      // Merge kitchenNotes from localStorage into order.bills
+      order.bills.forEach(bill => {
+        bill.items.forEach(item => {
+          const localItem = allLocalItems.find(i => i.id === item.id)
+          if (localItem?.kitchenNotes) {
+            item.kitchenNotes = localItem.kitchenNotes
+            console.log('✅ Restored kitchenNotes from localStorage:', {
+              itemId: item.id,
+              itemName: item.menuItemName,
+              note: localItem.kitchenNotes
+            })
+          }
+        })
+      })
+
       // 2. Находим новые позиции (status: 'draft')
       const newItems: PosBillItem[] = []
       order.bills.forEach(bill => {
@@ -425,6 +447,51 @@ export class OrdersService {
     }
   }
 
+  async updateItemNote(itemId: string, note: string): Promise<ServiceResponse<PosBillItem>> {
+    try {
+      // Найти товар во всех счетах
+      const allItems = this.getAllStoredItems()
+      const itemIndex = allItems.findIndex(item => item.id === itemId)
+
+      if (itemIndex === -1) {
+        throw new Error('Item not found')
+      }
+
+      const item = allItems[itemIndex]
+
+      const updatedItem: PosBillItem = {
+        ...item,
+        kitchenNotes: note.trim() || undefined,
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      console.log('📝 Updating item note:', {
+        itemId,
+        itemName: item.menuItemName,
+        oldNote: item.kitchenNotes,
+        newNote: note,
+        updatedItem
+      })
+
+      // Сохраняем обновленный товар
+      allItems[itemIndex] = updatedItem
+      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+
+      console.log('✅ Item note saved successfully:', {
+        itemId,
+        hasNote: !!updatedItem.kitchenNotes,
+        noteLength: updatedItem.kitchenNotes?.length
+      })
+
+      return { success: true, data: updatedItem }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update item note'
+      }
+    }
+  }
+
   async updateItemQuantity(
     itemId: string,
     quantity: number
@@ -547,13 +614,44 @@ export class OrdersService {
       }
 
       // Обновить статус всех товаров в заказе
+      const allItems = this.getAllStoredItems()
       for (const bill of updatedOrder.bills) {
         for (const item of bill.items) {
           if (item.status === 'draft') {
-            item.sentToKitchenAt = TimeUtils.getCurrentLocalISO()
+            const sentToKitchenAt = TimeUtils.getCurrentLocalISO()
+
+            // ✅ CRITICAL FIX: Find existing item in localStorage to preserve kitchenNotes
+            const itemIndex = allItems.findIndex(i => i.id === item.id)
+            if (itemIndex !== -1) {
+              const existingItem = allItems[itemIndex]
+
+              // Update only status fields, preserve kitchenNotes and other local data
+              allItems[itemIndex] = {
+                ...existingItem, // Keep all existing data (including kitchenNotes!)
+                status: 'waiting',
+                sentToKitchenAt,
+                updatedAt: TimeUtils.getCurrentLocalISO()
+              }
+
+              // Also update the item in updatedOrder.bills to reflect changes
+              item.status = 'waiting'
+              item.sentToKitchenAt = sentToKitchenAt
+              item.kitchenNotes = existingItem.kitchenNotes // Preserve note in memory
+
+              console.log('📤 Item sent to kitchen:', {
+                itemId: item.id,
+                itemName: item.menuItemName,
+                status: item.status,
+                hasNote: !!existingItem.kitchenNotes,
+                note: existingItem.kitchenNotes
+              })
+            }
           }
         }
       }
+
+      // ✅ FIX: Save updated items to localStorage
+      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
 
       orders.data[orderIndex] = updatedOrder
       localStorage.setItem(
