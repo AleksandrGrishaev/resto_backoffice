@@ -1,0 +1,92 @@
+{
+  "comment": "Maps product codes to preparation codes based on quantity matching",
+  "replacements": {
+    "M-2": [
+      { "quantity": 100, "unit": "gram", "prepCode": "P-15", "prepName": "Tuna portion 100g" },
+      { "quantity": 150, "unit": "gram", "prepCode": "P-16", "prepName": "Tuna portion 150g" }
+    ],
+    "M-3": [
+      { "quantity": 30, "unit": "gram", "prepCode": "P-13", "prepName": "Tuna portion 30g" },
+      { "quantity": 70, "unit": "gram", "prepCode": "P-14", "prepName": "Tuna portion 70g" }
+    ],
+    "M-4": [
+      { "quantity": 22, "unit": "gram", "prepCode": "P-17", "prepName": "Salmon portion 22g" },
+      { "quantity": 30, "unit": "gram", "prepCode": "P-18", "prepName": "Salmon portion 30g" },
+      { "quantity": 44, "unit": "gram", "prepCode": "P-19", "prepName": "Salmon portion 44g" }
+    ],
+    "M-9": [
+      { "quantity": 4, "unit": "piece", "prepCode": "P-20", "prepName": "Shrimp thawed 4pc" }
+    ],
+    "M-10": [
+      { "quantity": 70, "unit": "gram", "prepCode": "P-21", "prepName": "Squid rings thawed 70g" }
+    ],
+    "M-1": [
+      { "quantity": 30, "unit": "gram", "prepCode": "P-22", "prepName": "Beef slices 30g" },
+      { "quantity": 88, "unit": "gram", "prepCode": "P-23", "prepName": "Beef slices 88g" }
+    ],
+    "M-7": [{ "quantity": 210, "unit": "gram", "prepCode": "P-24", "prepName": "Beef steak 210g" }],
+    "M-8": [
+      {
+        "quantity": 150,
+        "unit": "gram",
+        "prepCode": "P-25",
+        "prepName": "Chicken breast thawed 150g"
+      }
+    ],
+    "M-5": [{ "quantity": 30, "unit": "gram", "prepCode": "P-26", "prepName": "Ham slices 30g" }],
+    "M-6": [{ "quantity": 30, "unit": "gram", "prepCode": "P-27", "prepName": "Bacon slices 30g" }],
+    "V-2": [{ "quantity": 50, "unit": "gram", "prepCode": "P-28", "prepName": "Mushroom sliced" }],
+    "V-27": [{ "quantity": 10, "unit": "gram", "prepCode": "P-29", "prepName": "Garlic peeled" }],
+    "V-29": [{ "quantity": 20, "unit": "gram", "prepCode": "P-30", "prepName": "Onion sliced" }],
+    "V-8": [{ "quantity": 20, "unit": "gram", "prepCode": "P-34", "prepName": "Cucumber rolls" }],
+    "V-3": [{ "quantity": 100, "unit": "gram", "prepCode": "P-35", "prepName": "Grated potato" }],
+    "V-9": [{ "quantity": 100, "unit": "gram", "prepCode": "P-36", "prepName": "Grated zukini" }],
+    "V-15": [{ "quantity": 50, "unit": "gram", "prepCode": "P-37", "prepName": "Edamame cooked" }],
+    "V-24": [
+      { "quantity": 130, "unit": "gram", "prepCode": "P-38", "prepName": "Avocado half cleaned" }
+    ],
+    "V-36": [
+      { "quantity": 150, "unit": "gram", "prepCode": "P-39", "prepName": "Banana frozen 150g" }
+    ],
+    "V-38": [
+      { "quantity": 100, "unit": "gram", "prepCode": "P-40", "prepName": "Mango frozen 100g" }
+    ],
+    "V-42": [
+      { "quantity": 100, "unit": "gram", "prepCode": "P-41", "prepName": "Papaya frozen 100g" }
+    ],
+    "V-37": [
+      { "quantity": 30, "unit": "gram", "prepCode": "P-42", "prepName": "Dragon fruit frozen 30g" }
+    ],
+    "V-45": [
+      { "quantity": 40, "unit": "gram", "prepCode": "P-43", "prepName": "Pineapple frozen 40g" }
+    ],
+    "F-1": [
+      { "quantity": 100, "unit": "gram", "prepCode": "P-44", "prepName": "Strawberry frozen 100g" }
+    ],
+    "F-2": [
+      {
+        "quantity": 100,
+        "unit": "gram",
+        "prepCode": "P-45",
+        "prepName": "French fries portion 100g"
+      }
+    ],
+    "V-18": [
+      { "quantity": 150, "unit": "gram", "prepCode": "P-49", "prepName": "Pumpkin cooked 150g" }
+    ],
+    "V-28": [
+      { "quantity": 45, "unit": "gram", "prepCode": "P-33", "prepName": "Eggplant slices grilled" }
+    ]
+  },
+  "specialCombos": {
+    "comment": "Special multi-product combinations that should be replaced with a single prep",
+    "tomyum_seafood": {
+      "products": [
+        { "code": "M-9", "quantity": 4, "unit": "piece" },
+        { "code": "M-10", "quantity": 70, "unit": "gram" }
+      ],
+      "prepCode": "P-46",
+      "prepName": "Tom yam seafood pack"
+    }
+  }
+}

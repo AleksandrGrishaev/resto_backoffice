@@ -1,0 +1,16 @@
+{
+  "meat": "a4d98a6b-05b4-4c25-a6a3-e07be9ce9c50",
+  "vegetables": "3ea64d6a-5b47-4da4-b068-40b6e9078c29",
+  "fruits": "1c4fc4da-820b-4514-80ea-482212ba1201",
+  "dairy": "42cd1588-b643-460f-b0ce-8aa239dd17d2",
+  "cereals": "2bf2e446-8bfe-4c22-865e-9a2509d9ad04",
+  "spices": "72fcfb7a-7f7d-4a18-a7d5-4c3abeec84a3",
+  "seafood": "350c4896-db61-4c57-a096-752cba4bbd25",
+  "beverages": "b5e3b23a-bcf8-46d4-895b-88a5d47c3725",
+  "other": "3b09bb8f-ec57-48a0-9420-ffbd3a671432",
+  "bread": "2c3dbdf0-6a8a-45f3-a770-a3ad9372450d",
+  "seeds": "5c3f9ca6-a9cc-4ca3-996f-0f1c10c61089",
+  "nuts": "effe093d-4eab-44d6-9c31-766a726b7a88",
+  "pastry": "cf214bab-9635-49f5-9e26-31c6b34b3980",
+  "sauce": "4499ee6d-baac-467c-b6c8-a2648c5ac6f5"
+}

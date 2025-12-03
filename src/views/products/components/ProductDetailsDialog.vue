@@ -116,7 +116,7 @@
                       {{ Math.round(stockRecommendation.recommendedOrderQuantity * 10) / 10 }}
                     </div>
                     <div class="recommendation-stat__label">
-                      Order {{ formatUnit(product.unit) }}
+                      Order {{ formatUnit(product.baseUnit) }}
                     </div>
                     <div class="text-caption text-medium-emphasis">
                       For {{ stockRecommendation.factors.leadTimeDays + 14 }} days
@@ -130,7 +130,7 @@
                       {{ stockRecommendation.factors.averageDailyUsage }}
                     </div>
                     <div class="recommendation-stat__label">
-                      Daily usage ({{ formatUnit(product.unit) }})
+                      Daily usage ({{ formatUnit(product.baseUnit) }})
                     </div>
                     <div class="text-caption text-medium-emphasis">Average consumption</div>
                   </div>
@@ -144,7 +144,7 @@
                   <div class="text-body-2 mb-1">
                     <strong>Minimum stock:</strong>
                     {{ Math.round(stockRecommendation.recommendedMinStock * 10) / 10 }}
-                    {{ formatUnit(product.unit) }}
+                    {{ formatUnit(product.baseUnit) }}
                   </div>
                   <div class="text-caption text-medium-emphasis">
                     {{ stockRecommendation.factors.safetyDays }} safety days +
@@ -155,7 +155,7 @@
                   <div class="text-body-2 mb-1">
                     <strong>Maximum stock:</strong>
                     {{ Math.round(stockRecommendation.recommendedMaxStock * 10) / 10 }}
-                    {{ formatUnit(product.unit) }}
+                    {{ formatUnit(product.baseUnit) }}
                   </div>
                   <div class="text-caption text-medium-emphasis">Optimal level for purchasing</div>
                 </v-col>
@@ -195,14 +195,14 @@
                     <div class="detail-item">
                       <span class="detail-label">Measurement Unit:</span>
                       <v-chip size="small" variant="outlined">
-                        {{ formatUnit(product.unit) }}
+                        {{ formatUnit(product.baseUnit) }}
                       </v-chip>
                     </div>
 
                     <div class="detail-item">
                       <span class="detail-label">Unit Cost:</span>
                       <v-chip color="success" size="small" variant="tonal">
-                        {{ formatCurrency(product.costPerUnit) }}
+                        {{ formatCurrency(product.baseCostPerUnit) }}
                       </v-chip>
                     </div>
 
@@ -265,7 +265,7 @@
                     <div v-if="product.minStock" class="detail-item">
                       <span class="detail-label">Minimum Stock:</span>
                       <span class="detail-value">
-                        {{ product.minStock }} {{ formatUnit(product.unit) }}
+                        {{ product.minStock }} {{ formatUnit(product.baseUnit) }}
                       </span>
                     </div>
 
@@ -315,9 +315,9 @@
                     <v-col cols="12" md="4">
                       <div class="text-center">
                         <div class="text-h6 success--text">
-                          {{ formatCurrency(product.costPerUnit) }}
+                          {{ formatCurrency(product.baseCostPerUnit) }}
                         </div>
-                        <div class="text-caption">Price per {{ formatUnit(product.unit) }}</div>
+                        <div class="text-caption">Price per {{ formatUnit(product.baseUnit) }}</div>
                       </div>
                     </v-col>
                     <v-col cols="12" md="4">
@@ -637,7 +637,7 @@ const formatDateTime = (dateString: string): string => {
 
 const calculateEffectiveCost = (): number => {
   if (!props.product) return 0
-  return props.product.costPerUnit / (props.product.yieldPercentage / 100)
+  return props.product.baseCostPerUnit / (props.product.yieldPercentage / 100)
 }
 
 // ✅ ADD: Department helper functions

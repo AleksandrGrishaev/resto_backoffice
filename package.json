@@ -44,6 +44,7 @@
     "@mdi/font": "^7.0.0",
     "@supabase/supabase-js": "^2.81.1",
     "bcryptjs": "^3.0.3",
+    "csv-parse": "^6.1.0",
     "date-fns": "^2.30.0",
     "date-fns-tz": "^2.0.0",
     "lodash": "^4.17.21",

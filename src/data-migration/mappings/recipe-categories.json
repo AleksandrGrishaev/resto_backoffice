@@ -1,0 +1,16 @@
+{
+  "breakfast": "304c60ed-f44c-442e-aa05-2ced2d24ca45",
+  "steak": "b861514a-a630-4beb-8ff5-e0afeebded87",
+  "pasta": "76bfd5c0-684a-4af0-9fd8-157d057c3a29",
+  "poke_bowl": "e64c54a0-491b-4edb-bb17-f99d8474d878",
+  "salad": "4f231ea8-0cdf-47c3-912e-a1c131ad252d",
+  "soup": "b77c2717-25b6-40ca-a420-e75cbf204522",
+  "sandwich": "8107fe6e-e432-4315-9c46-ae52b4f267c9",
+  "smoothie": "2c64178a-6566-4793-a039-d69e795eebbf",
+  "dessert": "b92abfd9-7617-4509-bc54-bda6e1180b5a",
+  "main_dish": "4329123c-bfc9-4eb7-9a0b-0eefa8543bdc",
+  "side_dish": "f3c9f6ce-e012-4359-995f-9f3c87f8571d",
+  "appetizer": "77de59df-6976-4522-875d-477b8850c8a9",
+  "beverage": "be93beec-4cc3-4f1a-ba2e-30eeb21c35ee",
+  "sauce": "3d48ed91-110d-4482-b48d-b4cc00e28160"
+}
