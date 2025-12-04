@@ -72,8 +72,8 @@
         </v-col>
       </v-row>
 
-      <!-- Third row: Department Filter (Preparations only) -->
-      <v-row v-if="localActiveTab === 'preparations'" align="center" class="mt-2">
+      <!-- Third row: Department Filter (Both recipes and preparations) -->
+      <v-row align="center" class="mt-2">
         <v-col cols="12" md="6">
           <div class="d-flex align-center">
             <v-icon class="mr-2">mdi-domain</v-icon>
@@ -220,6 +220,11 @@ const filteredRecipes = computed(() => {
     recipes = recipes.filter(r => !r.isActive)
   }
   // 'all' shows everything
+
+  // ✅ NEW: Filter by department
+  if (localFilters.value.department && localFilters.value.department !== 'all') {
+    recipes = recipes.filter(r => r.department === localFilters.value.department)
+  }
 
   // Filter by search
   if (localFilters.value.search.trim()) {

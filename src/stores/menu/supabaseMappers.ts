@@ -76,6 +76,9 @@ export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert
     // Type: food or beverage
     type: item.type,
 
+    // Department: kitchen or bar
+    department: item.department,
+
     // Pricing: Use first variant price as base price
     price: item.variants?.[0]?.price || 0,
     cost: calculateMenuItemCost(item),
