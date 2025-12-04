@@ -270,6 +270,22 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'Negative Inventory Report'
             }
+          },
+          {
+            path: 'revenue-dashboard',
+            name: 'revenue-dashboard',
+            component: () => import('@/views/backoffice/analytics/RevenueDashboardView.vue'),
+            meta: {
+              title: 'Revenue Dashboard'
+            }
+          },
+          {
+            path: 'discount-analytics',
+            name: 'discount-analytics',
+            component: () => import('@/views/backoffice/analytics/DiscountAnalyticsView.vue'),
+            meta: {
+              title: 'Discount Analytics'
+            }
           }
         ]
       },

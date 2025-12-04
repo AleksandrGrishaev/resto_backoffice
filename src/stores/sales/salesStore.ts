@@ -213,7 +213,7 @@ export const useSalesStore = defineStore('sales', () => {
             type: 'bill' as const,
             discountType: 'fixed' as const, // Always fixed amount after calculation
             value: billDiscount.amount,
-            reason: billDiscount.reason as any,
+            reason: billDiscount.reason, // Properly typed as DiscountReason
             orderId: payment.orderId,
             billId: billDiscount.billId,
             shiftId: payment.shiftId,

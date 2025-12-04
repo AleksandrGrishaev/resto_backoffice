@@ -27,29 +27,102 @@ export class DiscountSupabaseService {
   private readonly tableName = 'discount_events'
 
   /**
-   * Save a discount event to database
+   * Save a discount event to database with retry logic for token refresh race condition
    *
    * Inserts a new discount event record into the discount_events table.
    * Converts DiscountEvent to database format.
    *
+   * Implements retry logic with exponential backoff for RLS errors caused by
+   * JWT token refresh timing issues (Sprint 7 Bug Fix).
+   *
    * @param event - Discount event to save
+   * @param maxRetries - Maximum number of retry attempts (default: 3)
    * @returns Service response with saved event or error
    */
-  async saveDiscountEvent(event: DiscountEvent): Promise<ServiceResponse<DiscountEvent>> {
+  async saveDiscountEvent(
+    event: DiscountEvent,
+    maxRetries: number = 3
+  ): Promise<ServiceResponse<DiscountEvent>> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const result = await this.attemptSaveDiscountEvent(event, attempt)
+
+      if (result.success) {
+        return result
+      }
+
+      // Check if it's an RLS error (auth issue) that might be due to token refresh
+      const isRLSError =
+        result.error?.includes('row-level security policy') ||
+        result.error?.includes('RLS') ||
+        result.error?.includes('42501') ||
+        result.error?.includes('Authentication required')
+
+      // If it's an RLS error and we have retries left, wait and retry
+      if (isRLSError && attempt < maxRetries - 1) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, attempt) * 1000
+
+        DebugUtils.info(MODULE_NAME, `🔄 Retry ${attempt + 1}/${maxRetries} after token refresh`, {
+          eventId: event.id,
+          delayMs: delay,
+          reason: 'RLS error - likely JWT token refresh race condition'
+        })
+
+        // Wait for token refresh to complete
+        await new Promise(resolve => setTimeout(resolve, delay))
+
+        // Re-verify auth session before retry
+        try {
+          const { ensureAuthSession } = await import('@/supabase')
+          await ensureAuthSession()
+        } catch (authErr) {
+          DebugUtils.error(MODULE_NAME, 'Auth session verification failed during retry', {
+            authErr
+          })
+        }
+
+        // Continue to next retry attempt
+        continue
+      }
+
+      // If it's not an RLS error or we're out of retries, return the error
+      return result
+    }
+
+    // Should never reach here, but TypeScript needs a return
+    return {
+      success: false,
+      error: `Failed after ${maxRetries} retry attempts`
+    }
+  }
+
+  /**
+   * Internal method: Single attempt to save discount event
+   *
+   * @param event - Discount event to save
+   * @param attemptNumber - Current attempt number (for logging)
+   * @returns Service response with saved event or error
+   */
+  private async attemptSaveDiscountEvent(
+    event: DiscountEvent,
+    attemptNumber: number
+  ): Promise<ServiceResponse<DiscountEvent>> {
     try {
       // Log warning for system-generated discounts (no user ID)
       if (!event.appliedBy) {
         DebugUtils.info(MODULE_NAME, '⚠️ Saving system-generated discount (no user ID)', {
           eventId: event.id,
           type: event.type,
-          discountAmount: event.discountAmount
+          discountAmount: event.discountAmount,
+          attempt: attemptNumber + 1
         })
       } else {
         DebugUtils.info(MODULE_NAME, 'Saving discount event to database', {
           eventId: event.id,
           type: event.type,
           discountAmount: event.discountAmount,
-          appliedBy: event.appliedBy
+          appliedBy: event.appliedBy,
+          attempt: attemptNumber + 1
         })
       }
 
@@ -72,7 +145,8 @@ export class DiscountSupabaseService {
             eventId: event.id,
             type: event.type,
             hasAppliedBy: !!event.appliedBy,
-            solution: 'Verify auth session exists in background operations'
+            attempt: attemptNumber + 1,
+            solution: 'Will retry after token refresh completes'
           })
 
           return {
@@ -93,7 +167,8 @@ export class DiscountSupabaseService {
       const savedEvent = this.fromDbFormat(data)
 
       DebugUtils.store(MODULE_NAME, 'Discount event saved successfully', {
-        eventId: savedEvent.id
+        eventId: savedEvent.id,
+        attempt: attemptNumber + 1
       })
 
       return {

@@ -437,15 +437,22 @@ const groupedItems = computed(() => {
         .join('-')
     }
 
-    // Включаем variantId в ключ группировки для разделения модификаций
-    const key = `${item.menuItemId}-${item.variantId || 'default'}-${modificationsKey}`
+    // ✅ FIX: Include discount amount and payment status in grouping key
+    // Items with different discounts or payment statuses should NOT be grouped
+    const discountAmount = calculateItemDiscounts(item)
+    const discountKey = discountAmount > 0 ? `discount-${discountAmount}` : 'no-discount'
+    const paymentStatusKey = item.paymentStatus || 'unpaid'
+    const notesKey = item.kitchenNotes ? `notes-${item.kitchenNotes}` : 'no-notes'
+
+    // Включаем variantId, discounts, payment status, and notes в ключ группировки
+    const key = `${item.menuItemId}-${item.variantId || 'default'}-${modificationsKey}-${discountKey}-${paymentStatusKey}-${notesKey}`
 
     if (!groups.has(key)) {
       // ✨ NEW: Приоритет новой системе модификаторов
       const modificationsDisplay =
         item.selectedModifiers && item.selectedModifiers.length > 0
-          ? item.selectedModifiers.map(m => m.optionName)
-          : item.modifications?.map(m => m.name)
+          ? item.selectedModifiers.map((m: any) => m.optionName)
+          : item.modifications?.map((m: any) => m.name)
 
       groups.set(key, {
         key,

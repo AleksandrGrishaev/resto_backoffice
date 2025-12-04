@@ -45,6 +45,32 @@
           />
         </v-col>
         <v-col cols="12" md="2">
+          <v-switch
+            v-model="includeTaxes"
+            label="Include Taxes"
+            color="primary"
+            density="compact"
+            hide-details
+            @update:model-value="handleToggleTaxes"
+          >
+            <template #label>
+              <span class="text-body-2">Include Taxes</span>
+              <v-tooltip location="top">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" size="small" class="ml-1">mdi-information-outline</v-icon>
+                </template>
+                <span>
+                  Toggle to include taxes in revenue for food cost % calculation.
+                  <br />
+                  Off: Cost / Actual Revenue (after discounts, before tax)
+                  <br />
+                  On: Cost / Total Collected (with taxes)
+                </span>
+              </v-tooltip>
+            </template>
+          </v-switch>
+        </v-col>
+        <v-col cols="12" md="2">
           <v-btn
             color="primary"
             size="large"
@@ -87,8 +113,15 @@
             <v-col cols="12" md="3">
               <v-card color="primary" variant="tonal">
                 <v-card-text>
-                  <div class="text-caption">Total Revenue</div>
+                  <div class="text-caption">
+                    {{
+                      includeTaxes ? 'Total Revenue (with taxes)' : 'Actual Revenue (before tax)'
+                    }}
+                  </div>
                   <div class="text-h5">{{ formatIDR(dashboard.summary.revenue) }}</div>
+                  <div class="text-caption">
+                    {{ includeTaxes ? 'Including all taxes' : 'Excluding taxes' }}
+                  </div>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -280,6 +313,7 @@ const foodCostStore = useFoodCostStore()
 const dateFrom = ref('')
 const dateTo = ref('')
 const targetPercentage = ref(30) // Default target: 30%
+const includeTaxes = ref(false) // Toggle for including taxes in revenue
 const dashboard = computed(() => foodCostStore.currentDashboard)
 const loading = computed(() => foodCostStore.loading)
 const error = ref<string | null>(null)
@@ -302,6 +336,14 @@ async function handleGenerateDashboard() {
     await foodCostStore.generateDashboard(dateFrom.value, dateTo.value, targetPercentage.value)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to generate dashboard'
+  }
+}
+
+function handleToggleTaxes() {
+  foodCostStore.setIncludeTaxesInRevenue(includeTaxes.value)
+  // Regenerate dashboard if already generated
+  if (dashboard.value) {
+    handleGenerateDashboard()
   }
 }
 

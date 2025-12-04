@@ -1,5 +1,6 @@
 // src/stores/pos/types.ts
 import type { SelectedModifier } from '@/stores/menu/types'
+import type { DiscountReason } from '@/stores/discounts/types'
 
 export interface BaseEntity {
   id: string
@@ -145,7 +146,7 @@ export interface PosBill extends BaseEntity {
   items: PosBillItem[]
   subtotal: number
   discountAmount: number
-  discountReason?: string // Reason for bill-level discount
+  discountReason?: DiscountReason // Reason for bill-level discount (properly typed)
   discountType?: 'percentage' | 'fixed' // Type of bill-level discount
   taxAmount: number
   total: number

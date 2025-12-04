@@ -170,6 +170,30 @@
             <span>Negative Inventory</span>
           </template>
         </v-list-item>
+
+        <!-- ✅ SPRINT 7: Revenue Dashboard -->
+        <v-list-item
+          to="/analytics/revenue-dashboard"
+          prepend-icon="mdi-chart-line-variant"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Revenue Dashboard</span>
+          </template>
+        </v-list-item>
+
+        <!-- ✅ SPRINT 7: Discount Analytics -->
+        <v-list-item
+          to="/analytics/discount-analytics"
+          prepend-icon="mdi-sale"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Discount Analytics</span>
+          </template>
+        </v-list-item>
       </v-list-group>
 
       <!-- Catalogs Section -->

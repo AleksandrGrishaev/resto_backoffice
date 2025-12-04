@@ -64,3 +64,6 @@ export type {
   DiscountResult,
   ValidationResult
 } from './services'
+
+// Composables
+export { useDiscountAnalytics } from './composables'

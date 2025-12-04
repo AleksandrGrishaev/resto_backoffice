@@ -1,387 +1,1 @@
-# Active Bugs and Issues - Sprint 7 (Discount System)
-
-**Last Updated:** 2025-12-03
-
----
-
-## CRITICAL Issues
-
-### 1. Item Grouping with Discounts (UI Display Bug)
-
-**Status:** CRITICAL - Needs immediate fix
-**Found:** 2025-12-03
-**Component:** POS UI - BillItem.vue, BillsManager.vue (item grouping logic)
-
-**Description:**
-UI groups items with the same name/variant together (e.g., showing "2x Build Your Own Breakfast"). However, when one item in the group has a discount and another doesn't, they should NOT be grouped. Currently, they are still grouped, causing confusion about which item has the discount and displaying prices in a confusing way.
-
-**Reproduction:**
-
-1. Add same menu item multiple times to an order (e.g., 2x "Build Your Own Breakfast, Standard Portion")
-2. Apply item discount to ONE of them (e.g., 20% loyalty discount on first item)
-3. Pay for one item (it becomes "Paid")
-4. UI incorrectly groups them together showing "2x" quantity
-5. Discount shows as "-Rp 10.000" or "-10%" but it's unclear which item it applies to
-6. Display is confusing about which item is paid and which has discount
-
-**Example from Image #1:**
-
-```
-Build Your Own Breakfast
-Standard Portion
-[2]  -Rp 10.000  [-10%]  [Status: Paid + Draft mixed]
-Rp 90.000
-```
-
-**Problem:**
-
-- Shows as "2x" quantity (grouped)
-- One item: Paid, has 20% discount (Rp 50,000 - Rp 10,000 = Rp 40,000)
-- Other item: Draft, no discount (Rp 50,000)
-- Math is correct: Rp 90,000 total
-- But UI presentation is confusing - looks like both have same status/discount
-
-**Expected Behavior:**
-Items should NOT be grouped if they have:
-
-- Different discount amounts
-- Different payment status (one paid, one draft)
-- Different notes
-
-Show separately:
-
-```
-Build Your Own Breakfast (Standard Portion)
-1x  -Rp 10.000 [-20%]  [Paid]
-Rp 40.000
-
-Build Your Own Breakfast (Standard Portion)
-1x  [Draft]
-Rp 50.000
-```
-
-**Grouping Rules Should Be:**
-Group items ONLY if ALL of these match:
-
-- Same menu item ID
-- Same variant ID
-- Same unit price
-- Same discount amount (or both have no discount)
-- Same payment status (both draft, or both paid)
-- Same notes (or both have no notes)
-
-**Root Cause:**
-Item grouping logic doesn't check discount amounts and payment status before grouping.
-
-**Files to Fix:**
-
-- `src/views/pos/order/components/BillsManager.vue` (grouping logic)
-- `src/views/pos/order/components/BillItem.vue` (display logic)
-- Check where items are grouped (likely in composable or computed property)
-
-**Fix Strategy:**
-
-1. Update grouping logic to compare:
-   - `item.discountAmount` or `item.appliedDiscount`
-   - `item.paymentStatus` or `item.isPaid`
-   - `item.notes` or `item.kitchenNotes`
-2. Only group items if ALL fields match exactly
-3. Add test cases for grouped items with different discounts/statuses
-4. Verify display shows correct individual prices and statuses
-
----
-
-### 2. Discount Reason Field Mapping Bug
-
-**Status:** HIGH - Data integrity issue
-**Found:** 2025-12-03
-**Component:** salesStore.ts - Bill discount event creation
-
-**Description:**
-When applying bill discount with reason "Manager Decision", the reason is saved as "other" in the database instead of "manager_decision". This breaks discount analytics and reporting.
-
-**Reproduction:**
-
-1. Apply bill discount in POS
-2. Select reason: "Manager Decision" from dropdown
-3. Complete payment
-4. Check discount_events table
-5. Reason stored as "other" instead of "manager_decision"
-
-**Evidence:**
-
-**Logs:**
-
-```javascript
-OrderSection.vue:880 Saving bill discount to order:
-{amount: 6800, reason: 'manager_decision', type: 'bill', value: 6800}
-
-salesStore.ts:234 [salesStore] Creating discount_event for bill discount:
-{eventId: '05f7ef04-488b-411b-b462-160815242475', billId: '...', amount: 6800}
-```
-
-**Database:**
-
-```json
-{
-  "id": "05f7ef04-488b-411b-b462-160815242475",
-  "type": "bill",
-  "reason": "other", // ERROR: Should be "manager_decision"
-  "discount_amount": "6800.00"
-}
-```
-
-**Root Cause:**
-`src/stores/sales/salesStore.ts:221`
-
-```typescript
-reason: billDiscount.reason as any,  // Type casting loses type safety
-```
-
-The `billDiscountInfo` array from `paymentsStore.ts` passes `reason` as a string, but somewhere in the chain it gets mapped incorrectly or defaults to "other".
-
-**Possible Causes:**
-
-1. `billDiscount.reason` is not a valid `DiscountReason` type
-2. The reason is being transformed somewhere in the payment flow
-3. Type casting `as any` bypasses validation
-4. Possible default fallback to "other" in supabaseService
-
-**Files to Investigate:**
-
-- `src/stores/sales/salesStore.ts:221` (where reason is used)
-- `src/stores/pos/payments/paymentsStore.ts:241-248` (where billDiscountInfo is created)
-- `src/stores/pos/orders/ordersStore.ts` (where bill.discountReason is set)
-- `src/stores/discounts/services/supabaseService.ts:toDbFormat()` (DB mapping)
-
-**Fix Strategy:**
-
-1. Add validation for `reason` field before creating discount event
-2. Remove `as any` type casting - use proper type
-3. Add logging to trace reason value through the chain:
-   - OrderSection -> ordersStore -> paymentsStore -> salesStore -> supabaseService
-4. Ensure `DiscountReason` type is properly used everywhere
-5. Add enum validation in supabaseService
-
-**Impact:**
-
-- Discount analytics show wrong reasons
-- Manager reports are inaccurate
-- Audit trail is broken
-- Cannot properly analyze discount patterns
-
----
-
-### 3. Token Refresh Race Condition
-
-**Status:** HIGH - Intermittent failures
-**Found:** 2025-12-03
-**Component:** Background operations, Auth session management
-
-**Description:**
-When Supabase JWT token refresh occurs during payment processing, background operations (like saving discount events) fail with 403 RLS policy violations. This is a race condition between token refresh and background task execution.
-
-**Reproduction:**
-This is a **timing-based bug** - hard to reproduce consistently:
-
-1. User completes payment
-2. Supabase triggers automatic token refresh (JWT expires ~1 hour)
-3. Background task `queueBackgroundSalesRecording()` starts
-4. Old JWT token is invalidated mid-execution
-5. New token not yet applied to Supabase client
-6. `saveDiscountEvent()` executes with no auth context
-7. RLS policy check fails: `auth.uid() IS NOT NULL` returns FALSE
-8. Database returns 403 Forbidden
-9. Discount event is NOT saved (data loss)
-
-**Evidence:**
-
-**First Payment Attempt (FAILED):**
-
-```
-OrderSection.vue:895 Payment confirmed: {...}
-[NO ensureAuthSession logs - didn't reach background task]
-
-authStore.ts:75 Auth state changed:
-{event: 'SIGNED_IN', hasSession: true, userId: '345bd6f1...'}
-^ TOKEN REFRESH happened right after payment started
-
-[Background task failed - no discount events saved]
-```
-
-**Second Payment Attempt (SUCCESS):**
-
-```
-OrderSection.vue:895 Payment confirmed: {...}
-paymentsStore.ts:210 [paymentsStore] Starting background sales recording...
-client.ts:114 [ensureAuthSession] Valid session found:
-{userId: '345bd6f1...', expiresAt: 1764782319, hasToken: true}
-paymentsStore.ts:227 [paymentsStore] Auth session verified
-salesStore.ts:247 [salesStore] Bill discount event saved: 6e113a69...
-```
-
-**Timeline:**
-
-```
-Time 0ms:    User clicks Pay -> processSimplePayment()
-Time 50ms:   Token refresh starts -> old token invalidated
-Time 100ms:  queueBackgroundSalesRecording() -> ensureAuthSession()
-Time 150ms:  Auth check sees "no valid session" (mid-refresh)
-Time 200ms:  New token arrives
-Time 250ms:  saveDiscountEvent() -> uses old/invalid session -> 403 Forbidden
-```
-
-**Root Cause:**
-Background async operations lose authentication context during the ~200ms token refresh window.
-
-**Current Mitigation:**
-Added `ensureAuthSession()` check in:
-
-- `paymentsStore.ts:214-228`
-- `salesStore.ts:165-171`
-
-BUT this only warns - doesn't retry!
-
-**Fix Required:**
-Add retry logic with exponential backoff for RLS errors.
-
-**Option A: Retry in supabaseService (RECOMMENDED)**
-
-```typescript
-// In discountSupabaseService.saveDiscountEvent()
-async saveDiscountEvent(event: DiscountEvent, retries = 3) {
-  for (let attempt = 0; attempt < retries; attempt++) {
-    const result = await this.attemptSave(event)
-
-    if (result.success) return result
-
-    // Check if it's an RLS error (auth issue)
-    const isRLSError =
-      result.error?.includes('row-level security policy') ||
-      result.error?.includes('RLS') ||
-      result.error?.code === '42501'
-
-    if (isRLSError && attempt < retries - 1) {
-      // Wait for token refresh to complete: 1s, 2s, 4s
-      const delay = Math.pow(2, attempt) * 1000
-      console.log(`[Retry ${attempt + 1}/${retries}] Waiting ${delay}ms for token refresh...`)
-      await new Promise(resolve => setTimeout(resolve, delay))
-
-      // Re-check auth session before retry
-      const { ensureAuthSession } = await import('@/supabase')
-      await ensureAuthSession()
-
-      continue
-    }
-
-    return result // Give up after retries or non-RLS error
-  }
-}
-```
-
-**Option B: Wait for token refresh in ensureAuthSession()**
-
-```typescript
-// In ensureAuthSession()
-if (tokenRefreshInProgress) {
-  // Wait up to 5 seconds for refresh to complete
-  await waitForTokenRefresh({ timeout: 5000 })
-}
-```
-
-**Option C: Queue for later processing**
-
-```typescript
-// If auth fails, queue for retry via SyncService
-if (!hasAuth) {
-  await syncService.addToQueue({
-    entityType: 'discount_event',
-    entityId: discountEvent.id,
-    operation: 'create',
-    priority: 'high',
-    data: discountEvent
-  })
-  return
-}
-```
-
-**Files to Fix:**
-
-- `src/stores/discounts/services/supabaseService.ts` (add retry logic) - PRIMARY
-- `src/supabase/client.ts` (improve ensureAuthSession) - SECONDARY
-- `src/stores/sales/salesStore.ts` (handle retry on failure) - OPTIONAL
-
-**Priority:**
-HIGH - Intermittent data loss (discount events not saved)
-
-**Frequency:**
-Rare (happens ~1-2 times per hour when JWT expires), but 100% reproducible during refresh window.
-
----
-
-## Resolved Issues
-
-### Bill Discount RLS Policy Violation (FIXED 2025-12-03)
-
-**Status:** RESOLVED
-**Fixed:** 2025-12-03
-
-**Original Problem:**
-Bill discounts failed to save due to RLS policy violation when auth context was missing in background operations.
-
-**Solution Implemented:**
-
-1. Added `ensureAuthSession()` helper in `src/supabase/client.ts`
-2. Added `getCurrentUserId()` helper for reliable user ID retrieval
-3. Added auth verification in `paymentsStore.ts` before background operations
-4. Added auth verification in `salesStore.ts` before discount event creation
-5. Enhanced RLS error handling in `supabaseService.ts`
-
-**Verification:**
-
-- Bill discounts now save successfully (with valid auth)
-- Auth session verification logs show in console
-- Database records show `applied_by` populated correctly
-
-**Related:**
-This fix helps with Token Refresh issue but doesn't fully solve it (still needs retry logic).
-
----
-
-## Summary
-
-| Issue                        | Severity | Status | Impact                              |
-| ---------------------------- | -------- | ------ | ----------------------------------- |
-| Item Grouping with Discounts | CRITICAL | Open   | Confusing UI, unclear pricing       |
-| Discount Reason Mapping Bug  | HIGH     | Open   | Broken analytics, audit trail       |
-| Token Refresh Race Condition | HIGH     | Open   | Intermittent data loss (~1-2x/hour) |
-| Bill Discount RLS Violation  | RESOLVED | Fixed  | -                                   |
-
----
-
-## Next Steps
-
-1. **Immediate (Critical):**
-
-   - Fix item grouping logic to not group items with different discounts/statuses
-   - Add UI tests for grouped vs ungrouped items
-
-2. **High Priority:**
-
-   - Fix discount reason field mapping bug (add validation, remove `as any`)
-   - Add retry logic for token refresh race condition in supabaseService
-
-3. **Testing:**
-   - Test item grouping with mixed discounts
-   - Test item grouping with mixed payment statuses
-   - Test discount system during token refresh window
-   - Verify discount analytics accuracy
-
----
-
-## Notes
-
-- Cost calculation showing $0 is expected (no batch cost data in database yet)
-- All discount events save successfully when auth context is valid
-- Token refresh issue is rare but needs handling for production reliability
-- Payment amounts are calculated correctly (verified in DB)
+# Transaction Flow Analysis - Critical Issues Found**Date:** 2025-12-04**Transaction ID:** ORD-20251204-5024**Payment ID:** PAY-20251204-483124**Analysis Status:** =4 **4 CRITICAL ISSUES IDENTIFIED**---## =� Transaction Summary### From UI (Screenshot)- **Subtotal:** Rp 105,000- **Product Discount:** -Rp 12,000 (Customer Loyalty - 20% on item 1)- **Bill Discount:** -Rp 9,300 (Food Quality)- **Service Tax (5%):** Rp 4,185- **Government Tax (10%):** Rp 8,370- **Total Paid:** Rp 96,255### Items Sold1. Build Your Own Breakfast (Standard Portion) - 1x   - Original: Rp 60,000   - Item Discount: -Rp 12,000 (Customer Loyalty)   - Bill Discount Allocated: -Rp 4,800   - Final Price: Rp 43,2002. Build Your Own Breakfast (Var 2) - 1x   - Original: Rp 45,000   - Bill Discount Allocated: -Rp 4,500   - Final Price: Rp 40,500---##  What's Working Correctly### 1. Revenue Recording (sales_transactions)- Revenue correctly recorded as **finalRevenue** (after ALL discounts)- Item 1: Rp 43,200 - Item 2: Rp 40,500 - **Total Revenue: Rp 83,700** ### 2. Discount Allocation (discount_events)**Item Discount (Customer Loyalty):**- Event ID: `79978dfb-2f8a-48d8-a099-9394bf006fc6`- Type: `item`, Discount: 20%, Amount: Rp 12,000 **Bill Discount (Food Quality):**- Event ID: `920654b6-fc9d-4658-b405-cafd4c1d396c`- Type: `bill`, Amount: Rp 9,300 - **Proportional Allocation:**  - Item 1 (57.14%): Rp 4,800   - Item 2 (42.86%): Rp 4,500 ### 3. Payment Amount- Payment record: **Rp 96,255** (correct with taxes) ### 4. Cost Tracking (FIFO)- Item 1: Rp 7,000 from batch `PREP-2025-11-0010` - Write-off operations created correctly - Negative batches created for out-of-stock items ---## =4 CRITICAL ISSUE #1: Tax Data Completely Missing**Severity:** =4 **HIGH PRIORITY****Impact:** Compliance risk, audit trail incomplete, cannot generate tax reports### ProblemTaxes are calculated in UI (Rp 12,555 total) but **NOT STORED** in database.### Evidence| Location                           | Expected                       | Actual        | Status || ---------------------------------- | ------------------------------ | ------------- | ------ || `orders.tax_amount`                | 12,555                         | **0**         | L      || `orders.revenue_breakdown.taxes[]` | [{service: 4185}, {gov: 8370}] | **[]**        | L      || `sales_transactions` (tax fields)  | 4,185 & 8,370 per item         | **No fields** | L      || `payments.details.taxes`           | Tax breakdown                  | **{}**        | L      |### Database Records**orders table:**```sqlSELECT  order_number,  tax_amount,        -- 0.00 L  revenue_breakdown  -- taxes: [] LFROM ordersWHERE order_number = 'ORD-20251204-5024'```**Result:**- `tax_amount`: **0.00** (should be 12,555)- `revenue_breakdown.taxes`: **[]** (should have 2 entries)**payments table:**```sqlSELECT  payment_number,  amount,     -- 96,255   details     -- {} LFROM paymentsWHERE payment_number = 'PAY-20251204-483124'```**Result:**- `amount`: **96,255**  Correct- `details`: **{}** L No tax breakdown### Tax Calculation (UI only)```Subtotal after discounts: 105,000 - 12,000 - 9,300 = 83,700Service Tax (5%): 83,700 � 0.05 = 4,185 Government Tax (10%): 83,700 � 0.10 = 8,370 Total with tax: 83,700 + 4,185 + 8,370 = 96,255 But these values are NEVER saved! L```### Impact- L Cannot generate tax reports for government- L Cannot reconcile why paid (96,255) > order total (93,000)- L Audit trail incomplete- L Compliance risk (tax authorities may require breakdown)- L Cannot analyze tax collection over time### Root CauseSchema missing tax storage fields:- `sales_transactions` table has no tax columns- `orders.revenue_breakdown.taxes` array never populated- `payments.details` object unused---## =4 CRITICAL ISSUE #2: Orders Revenue Breakdown Incorrect**Severity:** =4 **HIGH PRIORITY****Impact:** Financial reports show wrong figures, analytics unreliable### Problem`orders.revenue_breakdown` JSONB contains incorrect values.### Database Record```sqlSELECT revenue_breakdownFROM ordersWHERE order_number = 'ORD-20251204-5024'```**Current (WRONG):**```json{  "plannedRevenue": 105000, //  Correct  "itemDiscounts": 12000, //  Correct  "billDiscounts": 0, // L Should be 9,300  "totalDiscounts": 12000, // L Should be 21,300  "totalTaxes": 0, // L Should be 12,555  "taxes": [], // L Should have 2 entries  "actualRevenue": 93000, // L Should be 83,700 (before tax)  "totalCollected": 93000 // L Should be 96,255 (with tax)}```**Expected (CORRECT):**```json{  "plannedRevenue": 105000,  "itemDiscounts": 12000,  "billDiscounts": 9300,  "totalDiscounts": 21300,  "totalTaxes": 12555,  "taxes": [    {      "taxId": "service_tax",      "name": "Service Tax",      "rate": 0.05,      "amount": 4185    },    {      "taxId": "government_tax",      "name": "Government Tax",      "rate": 0.1,      "amount": 8370    }  ],  "actualRevenue": 83700,  "totalCollected": 96255}```### Impact- L Dashboard analytics show wrong revenue- L Discount reports incorrect (missing 9,300)- L Financial statements unreliable- L Cannot reconcile revenue with payments- L Management decisions based on wrong data### Root CauseOrder update logic doesn't:- Populate bill discount in revenue_breakdown- Calculate and store tax amounts- Update actualRevenue correctly- Sync totalCollected with payment.amount---## =4 CRITICAL ISSUE #3: Order Amount Fields Mismatch**Severity:** =4 **HIGH PRIORITY****Impact:** Order summary doesn't match payment, unexplained difference### ProblemMultiple order amount fields inconsistent with payment.### Database Comparison**orders table:**```sqlSELECT  order_number,  subtotal,      -- 105,000   discount,      -- 21,300   tax,           -- 0 L  total,         -- 93,000 L  final_amount,  -- 93,000 L  paid_amount    -- 96,255 FROM ordersWHERE order_number = 'ORD-20251204-5024'```**Analysis:**| Field          | Value   | Should Be  | Note                        | Status || -------------- | ------- | ---------- | --------------------------- | ------ || `subtotal`     | 105,000 | 105,000    | Before any adjustments      |        || `discount`     | 21,300  | 21,300     | Item + Bill discounts       |        || `tax`          | **0**   | **12,555** | Service + Gov tax           | L      || `total`        | 93,000  | 83,700     | After discounts, before tax | L      || `final_amount` | 93,000  | 96,255     | Should match paid_amount    | L      || `paid_amount`  | 96,255  | 96,255     | Correct with taxes          |        |### Calculation Error**Current (Wrong):**```total = subtotal - discount      = 105,000 - 21,300      = 83,700  (accidentally correct)BUT: orders.total shows 93,000 L```**Expected (Correct):**```total = subtotal - discount (before tax)      = 105,000 - 21,300      = 83,700final_amount = total + tax             = 83,700 + 12,555             = 96,255final_amount === paid_amount ```### Impact- L Order summary confusing- L Difference of Rp 3,255 unexplained- L Cannot validate payment against order- L Reports show wrong totals### Root CauseOrder calculation logic:- Doesn't update `tax` field- Doesn't calculate `final_amount` correctly- Doesn't sync with payment amount---## =� ISSUE #4: Negative Batch Cost Not Applied to Profit**Severity:** =� **MEDIUM PRIORITY****Impact:** Profit overstated, food cost analysis incorrect### ProblemWhen negative batch is created with estimated cost, that cost is NOT backfilled into sales transaction.### Evidence**Item 2 (Var 2) Components:**- Sweet and Sour Sauce: 20ml- 0@B>D5;L D@8: 150g**Negative Batches Created:**```sqlSELECT * FROM storage_batchesWHERE batch_number IN (  'NEG-PREP-1764815488083',  'NEG-PREP-1764815489135')```**Results:**1. `NEG-PREP-1764815488083` (Sweet and Sour Sauce)   - Quantity: -20 ml   - Cost per unit: 35   - **Total cost: 700**  Estimated from last batch2. `NEG-PREP-1764815489135` (0@B>D5;L D@8)   - Quantity: -150 gram   - Cost per unit: 0   - Total cost: 0 (no history available)**sales_transactions record:**```sqlSELECT  menu_item_name,  actual_cost,  profit_calculationFROM sales_transactionsWHERE transaction_id = 'st-1764815487306-jcdxecito'```**Result:**```json{  "actual_cost": {    "totalCost": 0, // L Should be 700    "preparationItems": 2,    "productItems": 0  },  "profit_calculation": {    "originalPrice": 45000,    "finalRevenue": 40500,    "ingredientsCost": 0, // L Should be 700    "profit": 40500, // L Should be 39,800    "profitMargin": 100 // L Should be 98.3%  }}```### Timeline1.  Sales transaction created with cost = 0 (no batches available)2.  Write-off operation triggered3.  Negative batch created with estimated cost = 7004. L Sales transaction NOT updated with new cost### Impact- L Profit overstated by Rp 700 per transaction- L Food cost % understated- L When aggregated across many orders, significant distortion- L Cannot accurately track item profitability### Root CauseMissing backfill mechanism:- Negative batch creation doesn't trigger update- Sales transaction is immutable after creation- No reconciliation process for estimated costs---## =� How the System Currently Works### Revenue Flow```Original Price (105,000)  �- Item Discounts (12,000)  � [stored in discount_events ]= After Item Discounts (93,000)  �- Bill Discount (9,300) allocated proportionally   � [stored in discount_events ]= Final Revenue (83,700) � Stored in sales_transactions   �+ Service Tax 5% (4,185) � Calculated but NOT stored L+ Government Tax 10% (8,370) � Calculated but NOT stored L  �= Total to Collect (96,255) � Only in payment.amount L```### Profit Calculation```finalRevenue (43,200 + 40,500 = 83,700)  �- actualCost (7,000 + 0 = 7,000) � Issue: Missing 700 L  �= grossProfit (76,700) � Overstated by 700 L```### Data Flow by Table**discount_events table:**  Working- Stores both item and bill discounts- Includes allocation details for bill discounts- Linked to orders, items, bills**sales_transactions table:** � Partially working- Stores finalRevenue correctly - Stores profit_calculation correctly (if costs available) - Missing tax fields L- Missing cost backfill for negative batches L**orders table:** L Issues- revenue_breakdown incomplete- tax fields = 0- final_amount doesn't match paid_amount**payments table:** � Partially working- Amount correct - Details empty (no tax breakdown) L---## <� Root Causes Summary### 1. Schema Gaps- `sales_transactions` table: No tax columns- `payments.details`: JSONB unused- No validation constraints### 2. Logic Gaps- Order update doesn't populate all revenue_breakdown fields- Tax calculation happens in UI only- No backfill mechanism for negative batches- No validation: final_amount === paid_amount### 3. Architectural Issues- Taxes treated as "UI concern" not "data concern"- Sales transaction immutable (no updates after creation)- Missing reconciliation processes---## =� Affected Tables Summary| Table                  | Status | Issues                                               | Fix Priority || ---------------------- | ------ | ---------------------------------------------------- | ------------ || **sales_transactions** | �      | No tax fields, missing cost backfill                 | =4 High      || **discount_events**    |        | Working correctly                                    | -            || **orders**             | L      | tax=0, revenue_breakdown incomplete, amount mismatch | =4 High      || **payments**           | �      | Amount correct but details={}                        | =4 High      || **storage_operations** |        | Working correctly                                    | -            || **storage_batches**    |        | Negative batches created correctly                   | -            || **recipe_write_offs**  |        | Working correctly                                    | -            |---## =SQL Queries for Debugging### Check Tax Storage```sql-- Should show tax_amount and taxes arraySELECT  order_number,  tax_amount,  revenue_breakdown->'taxes' as taxes,  revenue_breakdown->'totalTaxes' as total_taxesFROM ordersWHERE order_number = 'ORD-20251204-5024';```### Check Revenue Breakdown```sql-- Should show all discount and tax detailsSELECT  order_number,  revenue_breakdown->'billDiscounts' as bill_discounts,  revenue_breakdown->'totalDiscounts' as total_discounts,  revenue_breakdown->'actualRevenue' as actual_revenue,  revenue_breakdown->'totalCollected' as total_collectedFROM ordersWHERE order_number = 'ORD-20251204-5024';```### Check Payment Tax Details```sql-- Should show tax breakdown in detailsSELECT  payment_number,  amount,  details->'taxes' as tax_detailsFROM paymentsWHERE payment_number = 'PAY-20251204-483124';```### Check Sales Transaction Costs```sql-- Should show actual costs including estimatesSELECT  transaction_id,  menu_item_name,  (actual_cost->>'totalCost')::numeric as total_cost,  (profit_calculation->>'ingredientsCost')::numeric as ingredients_cost,  (profit_calculation->>'profit')::numeric as profitFROM sales_transactionsWHERE order_id = '0b2d3868-650d-4b3c-8f63-f28652dc75cd';```### Check Negative Batches```sql-- Find negative batches with estimated costsSELECT  batch_number,  preparation_id,  quantity_remaining,  cost_per_unit,  created_atFROM storage_batchesWHERE batch_number LIKE 'NEG-PREP-%'  AND created_at >= '2025-12-04'ORDER BY created_at DESC;```---## =� Expected vs Actual Comparison| Metric                   | Expected (Screenshot) | Database   | Status         || ------------------------ | --------------------- | ---------- | -------------- || Subtotal                 | 105,000               | 105,000    |                || Item Discount            | -12,000               | -12,000    |                || Bill Discount            | -9,300                | -9,300     |                || Subtotal After Discounts | 83,700                | 93,000     | L              || Service Tax (5%)         | 4,185                 | 0          | L              || Government Tax (10%)     | 8,370                 | 0          | L              || **Total Paid**           | **96,255**            | **96,255** | **** (payment) || orders.final_amount      | 96,255                | 93,000     | L              || Item 1 Cost              | 7,000                 | 7,000      |                || Item 2 Cost              | 700                   | 0          | L              || Item 1 Revenue           | 43,200                | 43,200     |                || Item 2 Revenue           | 40,500                | 40,500     |                || Item 1 Profit            | 36,200                | 36,200     |                || Item 2 Profit            | 39,800                | 40,500     | L              |---## =� Next StepsSee **NextTodo.md** for detailed implementation plan to fix these issues.**Fix Priority:**1. =4 **HIGH**: Add tax storage to schema (Issue #1)2. =4 **HIGH**: Fix revenue_breakdown calculation (Issue #2)3. =4 **HIGH**: Fix order amount fields (Issue #3)4. =� **MEDIUM**: Implement negative batch cost backfill (Issue #4)---_Analysis Date: 2025-12-04__Analyzed By: Claude Code__Transaction: ORD-20251204-5024__Status: 4 Critical Issues Identified_

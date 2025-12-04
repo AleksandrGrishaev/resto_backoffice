@@ -14,6 +14,7 @@ export const useFoodCostStore = defineStore('foodCost', () => {
   const currentDashboard = ref<FoodCostDashboard | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const includeTaxesInRevenue = ref(false) // Toggle: include taxes in denominator
 
   /**
    * Generate Food Cost Dashboard for a specific period
@@ -42,7 +43,25 @@ export const useFoodCostStore = defineStore('foodCost', () => {
       DebugUtils.info(MODULE_NAME, 'Transactions loaded', { count: transactions.length })
 
       // 2. Calculate summary
-      const revenue = transactions.reduce((sum, t) => sum + t.profitCalculation.finalRevenue, 0)
+      /**
+       * Revenue Calculation:
+       * - Default: Use actualRevenue (after discounts, before tax)
+       * - With taxes toggle: Use totalCollected (with taxes)
+       *
+       * This affects the food cost percentage denominator:
+       * - Food Cost % = Cost / Actual Revenue × 100 (default)
+       * - Food Cost % = Cost / Total Collected × 100 (with taxes)
+       */
+      const revenue = transactions.reduce((sum, t) => {
+        // Use actualRevenue (after discounts, before tax) by default
+        // Or use totalCollected (with taxes) if toggle is enabled
+        const revenueAmount = includeTaxesInRevenue.value
+          ? t.order?.totalCollected || t.profitCalculation.finalRevenue
+          : t.order?.actualRevenue || t.profitCalculation.finalRevenue
+
+        return sum + revenueAmount
+      }, 0)
+
       const foodCost = transactions.reduce((sum, t) => sum + (t.actualCost?.totalCost || 0), 0)
       const foodCostPercentage = revenue > 0 ? (foodCost / revenue) * 100 : 0
       const variance = foodCostPercentage - targetFoodCostPercentage
@@ -71,7 +90,10 @@ export const useFoodCostStore = defineStore('foodCost', () => {
         }
 
         const day = dailyMap.get(date)!
-        day.revenue += tx.profitCalculation.finalRevenue
+        const revenueAmount = includeTaxesInRevenue.value
+          ? tx.order?.totalCollected || tx.profitCalculation.finalRevenue
+          : tx.order?.actualRevenue || tx.profitCalculation.finalRevenue
+        day.revenue += revenueAmount
         day.foodCost += tx.actualCost?.totalCost || 0
         day.count++
       }
@@ -118,7 +140,10 @@ export const useFoodCostStore = defineStore('foodCost', () => {
 
         const item = itemsMap.get(key)!
         item.quantitySold += tx.quantity
-        item.totalRevenue += tx.profitCalculation.finalRevenue
+        const revenueAmount = includeTaxesInRevenue.value
+          ? tx.order?.totalCollected || tx.profitCalculation.finalRevenue
+          : tx.order?.actualRevenue || tx.profitCalculation.finalRevenue
+        item.totalRevenue += revenueAmount
         item.totalCost += tx.actualCost?.totalCost || 0
       }
 
@@ -135,14 +160,24 @@ export const useFoodCostStore = defineStore('foodCost', () => {
       // 5. Calculate department breakdown
       const kitchenRevenue = transactions
         .filter(t => t.department === 'kitchen')
-        .reduce((sum, t) => sum + t.profitCalculation.finalRevenue, 0)
+        .reduce((sum, t) => {
+          const revenueAmount = includeTaxesInRevenue.value
+            ? t.order?.totalCollected || t.profitCalculation.finalRevenue
+            : t.order?.actualRevenue || t.profitCalculation.finalRevenue
+          return sum + revenueAmount
+        }, 0)
       const kitchenCost = transactions
         .filter(t => t.department === 'kitchen')
         .reduce((sum, t) => sum + (t.actualCost?.totalCost || 0), 0)
 
       const barRevenue = transactions
         .filter(t => t.department === 'bar')
-        .reduce((sum, t) => sum + t.profitCalculation.finalRevenue, 0)
+        .reduce((sum, t) => {
+          const revenueAmount = includeTaxesInRevenue.value
+            ? t.order?.totalCollected || t.profitCalculation.finalRevenue
+            : t.order?.actualRevenue || t.profitCalculation.finalRevenue
+          return sum + revenueAmount
+        }, 0)
       const barCost = transactions
         .filter(t => t.department === 'bar')
         .reduce((sum, t) => sum + (t.actualCost?.totalCost || 0), 0)
@@ -206,15 +241,31 @@ export const useFoodCostStore = defineStore('foodCost', () => {
     error.value = null
   }
 
+  /**
+   * Set whether to include taxes in revenue calculations
+   * This affects the food cost percentage denominator
+   *
+   * @param include - true to include taxes (use totalCollected), false to exclude (use actualRevenue)
+   */
+  function setIncludeTaxesInRevenue(include: boolean): void {
+    includeTaxesInRevenue.value = include
+    DebugUtils.info(MODULE_NAME, 'Tax inclusion toggled', {
+      include,
+      note: include ? 'Using Total Collected (with taxes)' : 'Using Actual Revenue (before tax)'
+    })
+  }
+
   return {
     // State
     currentDashboard,
     loading,
     error,
+    includeTaxesInRevenue,
 
     // Actions
     generateDashboard,
     exportDashboardToJSON,
-    clearDashboard
+    clearDashboard,
+    setIncludeTaxesInRevenue
   }
 })
