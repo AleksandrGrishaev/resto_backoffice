@@ -298,6 +298,7 @@ export function useRecipes() {
       code: newCode,
       description: original.description,
       category: original.category,
+      department: original.department, // ✅ NEW: Copy department from original
       portionSize: original.portionSize,
       portionUnit: original.portionUnit,
       prepTime: original.prepTime,

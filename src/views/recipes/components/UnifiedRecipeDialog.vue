@@ -223,6 +223,7 @@ async function handleSubmit() {
         code: formData.value.code,
         description: formData.value.description,
         category: formData.value.category,
+        department: formData.value.department, // ✅ NEW: Include department
         portionSize: formData.value.portionSize,
         portionUnit: formData.value.portionUnit,
         prepTime: formData.value.preparationTime,
@@ -328,6 +329,7 @@ watch(dialogModel, async newVal => {
           code: recipe.code || '',
           description: recipe.description || '',
           category: recipe.category,
+          department: recipe.department || 'kitchen', // ✅ NEW: Include department with fallback
           portionSize: recipe.portionSize,
           portionUnit: recipe.portionUnit,
           preparationTime: recipe.prepTime,
