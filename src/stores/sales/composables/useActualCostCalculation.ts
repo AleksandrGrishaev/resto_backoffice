@@ -205,17 +205,33 @@ export function useActualCostCalculation() {
     // Get batches sorted by FIFO (oldest first) - using preparationStore method
     const batches = preparationStore.getPreparationBatches(preparationId, department)
 
+    // ✅ DEBUG: Log batch allocation details
+    const positiveBatches = batches.filter(b => b.currentQuantity > 0)
+    const negativeBatches = batches.filter(b => b.currentQuantity < 0)
+
     DebugUtils.debug(MODULE_NAME, 'Available preparation batches', {
       preparationId,
       batchCount: batches.length,
+      positiveBatches: positiveBatches.length,
+      negativeBatches: negativeBatches.length,
       totalAvailable: batches.reduce((sum, b) => sum + b.currentQuantity, 0),
       batches: batches.map(b => ({
         id: b.id.substring(0, 8),
+        batchNumber: b.batchNumber,
         qty: b.currentQuantity,
         cost: b.costPerUnit,
+        isNegative: b.isNegative,
+        reconciled: b.reconciledAt ? 'yes' : 'no',
         date: b.productionDate.substring(0, 10)
       }))
     })
+
+    // ✅ DEBUG: Warning if using negative batches when positive batches exist
+    if (negativeBatches.length > 0 && positiveBatches.length > 0) {
+      console.warn(
+        `⚠️ [ActualCostCalculation] Both positive and negative batches exist for ${preparationId}. Positive batches will be prioritized.`
+      )
+    }
 
     let remainingQuantity = requiredQuantity
     const allocations: BatchAllocation[] = []

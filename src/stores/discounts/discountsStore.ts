@@ -117,10 +117,13 @@ export const useDiscountsStore = defineStore('discounts', {
         // Apply filters if provided
         if (filterOptions) {
           if (filterOptions.startDate) {
-            events = events.filter(e => e.appliedAt >= filterOptions.startDate!)
+            events = events.filter(e => e.appliedAt.split('T')[0] >= filterOptions.startDate!)
           }
           if (filterOptions.endDate) {
-            events = events.filter(e => e.appliedAt <= filterOptions.endDate!)
+            events = events.filter(e => e.appliedAt.split('T')[0] <= filterOptions.endDate!)
+          }
+          if (filterOptions.reason) {
+            events = events.filter(e => e.reason === filterOptions.reason)
           }
           if (filterOptions.type) {
             events = events.filter(e => e.type === filterOptions.type)
@@ -168,10 +171,10 @@ export const useDiscountsStore = defineStore('discounts', {
         // Apply filters
         if (filterOptions) {
           if (filterOptions.startDate) {
-            events = events.filter(e => e.appliedAt >= filterOptions.startDate!)
+            events = events.filter(e => e.appliedAt.split('T')[0] >= filterOptions.startDate!)
           }
           if (filterOptions.endDate) {
-            events = events.filter(e => e.appliedAt <= filterOptions.endDate!)
+            events = events.filter(e => e.appliedAt.split('T')[0] <= filterOptions.endDate!)
           }
           if (filterOptions.reason) {
             events = events.filter(e => e.reason === filterOptions.reason)

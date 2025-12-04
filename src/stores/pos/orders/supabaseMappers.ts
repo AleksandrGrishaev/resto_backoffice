@@ -68,6 +68,7 @@ interface FlattenedItem {
   bill_notes?: string
   bill_subtotal: number
   bill_discountAmount: number
+  bill_discountReason?: string // ✅ FIX: Store discount reason
   bill_taxAmount: number
   bill_total: number
   bill_paymentStatus: string
@@ -126,6 +127,7 @@ export function flattenBillsToItems(order: PosOrder): FlattenedItem[] {
         bill_notes: bill.notes,
         bill_subtotal: bill.subtotal,
         bill_discountAmount: bill.discountAmount,
+        bill_discountReason: bill.discountReason, // ✅ FIX: Include discount reason
         bill_taxAmount: bill.taxAmount,
         bill_total: bill.total,
         bill_paymentStatus: bill.paymentStatus,
@@ -162,6 +164,7 @@ export function reconstructBillsFromItems(items: FlattenedItem[]): PosBill[] {
         // Use bill metadata from flattened item
         subtotal: item.bill_subtotal,
         discountAmount: item.bill_discountAmount,
+        discountReason: item.bill_discountReason, // ✅ FIX: Restore discount reason
         taxAmount: item.bill_taxAmount,
         total: item.bill_total,
         paymentStatus: item.bill_paymentStatus as 'unpaid' | 'partial' | 'paid',

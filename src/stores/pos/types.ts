@@ -240,6 +240,9 @@ export interface PosPayment extends BaseEntity {
   receiptPrinted: boolean
   receiptNumber?: string
 
+  // ✅ SPRINT 8: Payment details (tax breakdown, etc.)
+  details?: Record<string, any> // Flexible storage for payment breakdown
+
   // Sync status (for future backend sync)
   syncedAt?: string
   syncStatus?: 'pending' | 'synced' | 'failed'

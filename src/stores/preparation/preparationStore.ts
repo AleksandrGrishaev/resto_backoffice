@@ -282,6 +282,10 @@ export const usePreparationStore = defineStore('preparation', () => {
         }
 
         DebugUtils.info(MODULE_NAME, '✅ Negative batch reconciliation completed')
+
+        // ✅ FIX: Refresh batches AFTER reconciliation to update in-memory state
+        await fetchBalances(data.department)
+        DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after reconciliation')
       } catch (reconciliationError) {
         // Log error but don't fail the receipt creation
         DebugUtils.warn(MODULE_NAME, 'Failed to auto-reconcile negative batches', {
@@ -499,12 +503,55 @@ export const usePreparationStore = defineStore('preparation', () => {
     preparationId: string,
     department: PreparationDepartment
   ): PreparationBatch[] {
-    return state.value.batches
+    // ✅ DEBUG: Get all batches for this preparation (before filtering)
+    const allBatches = state.value.batches.filter(
+      b => b.preparationId === preparationId && b.department === department
+    )
+
+    // ✅ DEBUG: Filter and log reconciled batches
+    const reconciledBatches = allBatches.filter(b => b.reconciledAt)
+    if (reconciledBatches.length > 0) {
+      console.log(
+        `[PreparationStore] Filtered out ${reconciledBatches.length} reconciled batches:`,
+        reconciledBatches.map(b => ({
+          batchNumber: b.batchNumber,
+          reconciledAt: b.reconciledAt,
+          status: b.status
+        }))
+      )
+    }
+
+    const filteredBatches = state.value.batches
       .filter(
         b =>
-          b.preparationId === preparationId && b.department === department && b.status === 'active'
+          b.preparationId === preparationId &&
+          b.department === department &&
+          b.status === 'active' &&
+          !b.reconciledAt // ✅ FIX: Exclude reconciled negative batches
       )
-      .sort((a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime())
+      .sort((a, b) => {
+        // ✅ FIX: Prioritize positive batches over negative batches
+        if (a.currentQuantity > 0 && b.currentQuantity < 0) return -1
+        if (a.currentQuantity < 0 && b.currentQuantity > 0) return 1
+        // Then by production date (FIFO)
+        return new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
+      })
+
+    // ✅ DEBUG: Log final batch selection
+    console.log(`[PreparationStore] Selected ${filteredBatches.length} batches for allocation:`, {
+      preparationId,
+      department,
+      totalInMemory: allBatches.length,
+      reconciled: reconciledBatches.length,
+      active: filteredBatches.length,
+      batches: filteredBatches.map(b => ({
+        batchNumber: b.batchNumber,
+        qty: b.currentQuantity,
+        cost: b.costPerUnit
+      }))
+    })
+
+    return filteredBatches
   }
 
   function getBatchById(batchId: string): PreparationBatch | undefined {

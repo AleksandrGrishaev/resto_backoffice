@@ -1,7 +1,6 @@
 // src/stores/discounts/composables/useDiscountAnalytics.ts
 import { useDiscountsStore } from '../discountsStore'
-// TODO: Replace with useSalesStore for sales_transactions data
-// import { useSalesStore } from '@/stores/sales'
+import { useSalesStore } from '@/stores/sales'
 import type {
   DailyRevenueReport,
   DiscountSummary,
@@ -39,8 +38,7 @@ const MODULE_NAME = 'DiscountAnalytics'
  */
 export function useDiscountAnalytics() {
   const discountsStore = useDiscountsStore()
-  // TODO: Add salesStore when implementing sales_transactions integration
-  // const salesStore = useSalesStore()
+  const salesStore = useSalesStore()
 
   /**
    * Generate daily revenue report for a date range
@@ -63,49 +61,97 @@ export function useDiscountAnalytics() {
   ): Promise<DailyRevenueReport> {
     DebugUtils.info(MODULE_NAME, '📊 Generating daily revenue report', { startDate, endDate })
 
-    // TODO: Replace with sales_transactions data source
-    // Current implementation uses empty orders array (placeholder)
-    const orders: any[] = []
+    // 1. Filter sales_transactions by date range
+    const transactions = salesStore.transactions.filter(tx => {
+      const txDate = tx.soldAt.split('T')[0]
+      return txDate >= startDate && txDate <= endDate
+    })
 
-    DebugUtils.error(
-      MODULE_NAME,
-      '⚠️ DEPRECATED: Using orders as data source. Should use sales_transactions!'
+    DebugUtils.info(MODULE_NAME, '📦 Transactions filtered', {
+      total: salesStore.transactions.length,
+      filtered: transactions.length
+    })
+
+    // 2. Calculate Planned Revenue (before discounts)
+    const plannedRevenue = transactions.reduce((sum, tx) => sum + tx.unitPrice * tx.quantity, 0)
+
+    // 3. Calculate Actual Revenue (after item discounts, before tax)
+    // Use finalRevenue from profitCalculation (after all discounts)
+    const actualRevenue = transactions.reduce(
+      (sum, tx) => sum + tx.profitCalculation.finalRevenue,
+      0
     )
 
-    // 2. Aggregate revenue metrics
-    const plannedRevenue = orders.reduce((sum, o) => sum + (o.plannedRevenue || 0), 0)
-    const actualRevenue = orders.reduce((sum, o) => sum + (o.actualRevenue || 0), 0)
-    const totalCollected = orders.reduce((sum, o) => sum + (o.totalCollected || 0), 0)
+    // 4. Calculate Total Collected (with taxes)
+    // Total Collected = finalRevenue (after discounts) + taxes
+    const totalCollected = transactions.reduce(
+      (sum, tx) =>
+        sum +
+        tx.profitCalculation.finalRevenue +
+        (tx.serviceTaxAmount || 0) +
+        (tx.governmentTaxAmount || 0),
+      0
+    )
 
-    // 3. Get discount events for period
+    // 5. Calculate Total Discounts from profit_calculation
+    const totalDiscounts = transactions.reduce((sum, tx) => {
+      const itemDiscount = tx.profitCalculation?.itemOwnDiscount || 0
+      const billDiscount = tx.profitCalculation?.allocatedBillDiscount || 0
+      return sum + itemDiscount + billDiscount
+    }, 0)
+
+    // 6. Get discount events count (from DiscountsStore)
     const discountEvents = discountsStore.discountEvents.filter(event => {
       const eventDate = event.appliedAt.split('T')[0]
       return eventDate >= startDate && eventDate <= endDate
     })
-
-    const totalDiscounts = discountEvents.reduce((sum, e) => sum + e.discountAmount, 0)
     const discountCount = discountEvents.length
 
-    // 4. Calculate taxes from orders
-    const taxBreakdown = orders.reduce((acc, order) => {
-      const breakdown = order.revenueBreakdown
-      if (breakdown && breakdown.taxes) {
-        breakdown.taxes.forEach(tax => {
-          const existing = acc.find(t => t.taxId === tax.taxId)
-          if (existing) {
-            existing.amount += tax.amount
-          } else {
-            acc.push({ ...tax })
-          }
-        })
+    // 6b. Calculate unique orders with discounts
+    const uniqueOrdersWithDiscounts = new Set(discountEvents.map(event => event.orderId))
+    const ordersWithDiscountCount = uniqueOrdersWithDiscounts.size
+
+    // 7. Calculate tax breakdown
+    const taxBreakdown = transactions.reduce((acc, tx) => {
+      // Service tax
+      if (tx.serviceTaxAmount && tx.serviceTaxRate) {
+        const serviceTax = acc.find(t => t.name === 'Service Tax')
+        if (serviceTax) {
+          serviceTax.amount += tx.serviceTaxAmount
+        } else {
+          acc.push({
+            taxId: 'service_tax',
+            name: 'Service Tax',
+            percentage: tx.serviceTaxRate * 100, // Convert to percentage
+            amount: tx.serviceTaxAmount
+          })
+        }
       }
+
+      // Government tax
+      if (tx.governmentTaxAmount && tx.governmentTaxRate) {
+        const govTax = acc.find(t => t.name === 'Government Tax')
+        if (govTax) {
+          govTax.amount += tx.governmentTaxAmount
+        } else {
+          acc.push({
+            taxId: 'government_tax',
+            name: 'Government Tax',
+            percentage: tx.governmentTaxRate * 100, // Convert to percentage
+            amount: tx.governmentTaxAmount
+          })
+        }
+      }
+
       return acc
     }, [] as TaxBreakdown[])
 
     const totalTaxes = taxBreakdown.reduce((sum, t) => sum + t.amount, 0)
 
-    // 5. Calculate statistics
-    const orderCount = orders.length
+    // 8. Calculate order-level statistics
+    // Group transactions by payment_id to count unique orders
+    const uniquePayments = new Set(transactions.map(tx => tx.paymentId))
+    const orderCount = uniquePayments.size
     const averageOrderValue = orderCount > 0 ? totalCollected / orderCount : 0
 
     const report: DailyRevenueReport = {
@@ -115,18 +161,20 @@ export function useDiscountAnalytics() {
       totalCollected,
       totalDiscounts,
       discountCount,
+      ordersWithDiscountCount,
       totalTaxes,
       taxBreakdown,
       orderCount,
       averageOrderValue
     }
 
-    DebugUtils.store(MODULE_NAME, 'Daily revenue report generated', {
+    DebugUtils.store(MODULE_NAME, '✅ Daily revenue report generated from sales_transactions', {
       plannedRevenue,
       actualRevenue,
       totalCollected,
       discountCount,
-      orderCount
+      orderCount,
+      transactionsProcessed: transactions.length
     })
 
     return report
@@ -182,14 +230,20 @@ export function useDiscountAnalytics() {
 
     const events = discountsStore.getFilteredDiscounts(filterOptions)
 
-    // TODO: Enrich with sales_transactions context instead of orders
-    // For now, use basic discount event data without order enrichment
+    // Enrich with sales_transactions context
     const transactions: DiscountTransactionView[] = events.map(event => {
+      // Find related sales transaction
+      const salesTx = salesStore.transactions.find(
+        tx => tx.orderId === event.orderId && tx.billId === event.billId
+      )
+
       return {
         ...event,
-        orderNumber: `ORD-${event.orderId.substring(0, 8)}`, // Fallback order number
-        tableName: undefined,
-        orderType: undefined,
+        orderNumber: salesTx?.orderId
+          ? `ORD-${salesTx.orderId.substring(0, 8)}`
+          : `ORD-${event.orderId.substring(0, 8)}`,
+        tableName: undefined, // Not available in sales_transactions
+        orderType: undefined, // Not available in sales_transactions
         appliedByName: event.appliedBy || 'System',
         approvedByName: event.approvedBy || undefined
       }

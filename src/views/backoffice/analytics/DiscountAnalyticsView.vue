@@ -4,14 +4,25 @@
 <template>
   <div class="discount-analytics-view">
     <v-container fluid>
-      <!-- Header -->
-      <v-row>
-        <v-col cols="12">
-          <h1 class="text-h4 mb-4">Discount Analytics</h1>
-          <p class="text-body-2 text-grey">
+      <!-- Header with Refresh Button -->
+      <v-row class="align-center">
+        <v-col cols="12" md="8">
+          <h1 class="text-h4 mb-2">Discount Analytics</h1>
+          <p class="text-body-2 text-grey mb-0">
             Comprehensive discount tracking with filtering, breakdown by reason, and transaction
             details
           </p>
+        </v-col>
+        <v-col cols="12" md="4" class="text-right">
+          <v-btn
+            color="primary"
+            size="large"
+            :loading="loading"
+            prepend-icon="mdi-refresh"
+            @click="handleApplyFilters"
+          >
+            Refresh
+          </v-btn>
         </v-col>
       </v-row>
 
@@ -436,9 +447,8 @@ const { getDiscountSummary, getDiscountTransactions, getDateRangeFromPreset } =
 
 // Options for filters
 const datePresetOptions = DATE_RANGE_PRESETS
-const reasonOptions = [{ label: 'All Reasons', value: undefined }, ...DISCOUNT_REASON_OPTIONS]
+const reasonOptions = DISCOUNT_REASON_OPTIONS // Remove "All Reasons" - use clearable instead
 const typeOptions = [
-  { label: 'All Types', value: undefined },
   { label: 'Item Discount', value: 'item' },
   { label: 'Bill Discount', value: 'bill' }
 ]
@@ -489,7 +499,18 @@ async function handleApplyFilters() {
     loading.value = true
     error.value = null
 
-    DebugUtils.info(MODULE_NAME, '🚀 Applying filters', { filters: filters.value })
+    // Clean up undefined/null values from filters (from clearable selects)
+    const cleanedFilters: DiscountFilterOptions = {}
+    Object.entries(filters.value).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        cleanedFilters[key as keyof DiscountFilterOptions] = value
+      }
+    })
+
+    DebugUtils.info(MODULE_NAME, '🚀 Applying filters', {
+      originalFilters: filters.value,
+      cleanedFilters
+    })
 
     // DEBUG: Check stores availability
     const discountsStore = useDiscountsStore()
@@ -500,8 +521,8 @@ async function handleApplyFilters() {
       discountEventsCount: discountsStore?.discountEvents?.length || 0
     })
 
-    summary.value = await getDiscountSummary(filters.value)
-    transactions.value = await getDiscountTransactions(filters.value)
+    summary.value = await getDiscountSummary(cleanedFilters)
+    transactions.value = await getDiscountTransactions(cleanedFilters)
 
     currentPage.value = 1
 
@@ -570,21 +591,33 @@ function handleExportCSV() {
     // Breakdown by Reason
     rows.push('Breakdown by Reason')
     rows.push('Reason,Count,Total Amount,Percentage')
-    summary.value.forEach(item => {
-      rows.push(
-        `${item.reasonLabel},${item.count},${item.totalAmount},${item.percentage.toFixed(2)}%`
-      )
-    })
+    summary.value.forEach(
+      (item: { reasonLabel: string; count: number; totalAmount: number; percentage: number }) => {
+        rows.push(
+          `${item.reasonLabel},${item.count},${item.totalAmount},${item.percentage.toFixed(2)}%`
+        )
+      }
+    )
     rows.push('')
 
     // Transactions
     rows.push('Discount Transactions')
     rows.push('Date/Time,Order #,Type,Reason,Amount,Applied By,Notes')
-    filteredTransactions.value.forEach(t => {
-      rows.push(
-        `${t.appliedAt},${t.orderNumber},${t.type},${DISCOUNT_REASON_LABELS[t.reason]},${t.discountAmount},${t.appliedByName},"${t.notes || ''}"`
-      )
-    })
+    filteredTransactions.value.forEach(
+      (t: {
+        appliedAt: string
+        orderNumber: string
+        type: string
+        reason: string
+        discountAmount: number
+        appliedByName: string
+        notes?: string
+      }) => {
+        rows.push(
+          `${t.appliedAt},${t.orderNumber},${t.type},${DISCOUNT_REASON_LABELS[t.reason]},${t.discountAmount},${t.appliedByName},"${t.notes || ''}"`
+        )
+      }
+    )
 
     const csvContent = rows.join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

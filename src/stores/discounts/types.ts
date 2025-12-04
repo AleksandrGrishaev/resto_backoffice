@@ -136,7 +136,8 @@ export interface DailyRevenueReport {
 
   // Discount metrics
   totalDiscounts: number
-  discountCount: number
+  discountCount: number // Total number of discount events
+  ordersWithDiscountCount: number // Number of unique orders with discounts
 
   // Tax metrics
   totalTaxes: number

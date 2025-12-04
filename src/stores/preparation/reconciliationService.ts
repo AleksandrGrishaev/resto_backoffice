@@ -35,7 +35,8 @@ class ReconciliationService {
     // 1. Check for unreconciled negative batches
     const negativeBatches = await negativeBatchService.getNegativeBatches(preparationId)
     if (negativeBatches.length === 0) {
-      // No negative batches to reconcile
+      // ✅ DEBUG: No negative batches found
+      console.log(`[ReconciliationService] No negative batches to reconcile for ${preparationId}`)
       return
     }
 
@@ -55,7 +56,19 @@ class ReconciliationService {
     const unit = negativeBatches[0]?.unit || 'ml'
 
     console.info(
-      `🔄 Auto-reconciling ${negativeBatches.length} negative batches for ${preparation.name}`
+      `🔄 [ReconciliationService] Auto-reconciling ${negativeBatches.length} negative batches for ${preparation.name}`
+    )
+
+    // ✅ DEBUG: Log batches before reconciliation
+    console.log(
+      `[ReconciliationService] Batches to reconcile:`,
+      negativeBatches.map(b => ({
+        id: b.id,
+        batchNumber: b.batchNumber,
+        quantity: b.currentQuantity,
+        costPerUnit: b.costPerUnit,
+        status: b.status
+      }))
     )
 
     // 3. Process each negative batch for reconciliation
@@ -64,6 +77,9 @@ class ReconciliationService {
       const costPerUnit = negativeBatch.costPerUnit
 
       try {
+        // ✅ DEBUG: Log before marking as reconciled
+        console.log(`[ReconciliationService] Reconciling batch ${negativeBatch.batchNumber}...`)
+
         // 4. Mark negative batch as reconciled
         // NOTE: We do NOT create account transactions for negative batches
         // Negative batches are technical records for inventory tracking only
@@ -71,10 +87,13 @@ class ReconciliationService {
         await negativeBatchService.markAsReconciled(negativeBatch.id)
 
         console.info(
-          `✅ Reconciled negative batch: ${preparation.name} (+${quantity} ${negativeBatch.unit} @ ${costPerUnit})`
+          `✅ [ReconciliationService] Reconciled negative batch: ${preparation.name} (+${quantity} ${negativeBatch.unit} @ ${costPerUnit})`
         )
       } catch (error) {
-        console.error(`❌ Failed to reconcile negative batch ${negativeBatch.id}:`, error)
+        console.error(
+          `❌ [ReconciliationService] Failed to reconcile negative batch ${negativeBatch.id}:`,
+          error
+        )
         // Continue with other batches even if one fails
       }
     }
@@ -82,7 +101,7 @@ class ReconciliationService {
     // 6. Log summary
     const totalQty = negativeBatches.reduce((sum, b) => sum + Math.abs(b.currentQuantity), 0)
     console.info(
-      `✅ Auto-reconciled ${negativeBatches.length} negative batches for ${preparation.name} (total: ${totalQty} ${negativeBatches[0]?.unit || ''})`
+      `✅ [ReconciliationService] Auto-reconciled ${negativeBatches.length} negative batches for ${preparation.name} (total: ${totalQty} ${negativeBatches[0]?.unit || ''})`
     )
   }
 

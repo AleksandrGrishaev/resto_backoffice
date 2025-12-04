@@ -1,5 +1,33 @@
 # Task: Refactor Revenue Dashboard to use sales_transactions instead of orders
 
+**Status:** 🟡 IN PROGRESS - Phase 1 Complete (Cleanup Done)
+**Updated:** 2025-12-04
+**Priority:** HIGH
+
+---
+
+## Progress Summary
+
+### ✅ Phase 1: Cleanup & Preparation (COMPLETE)
+
+- [x] Reverted manager role from shouldLoadPOSStores()
+- [x] Removed OrdersStore dependencies from analytics components
+- [x] Added DiscountsStore initialization and database loading
+- [x] Documented complete implementation plan
+- [x] Committed changes: `refactor: revert OrdersStore usage`
+
+### ⏳ Phase 2: Implementation (NEXT SESSION)
+
+- [ ] Import useSalesStore in useDiscountAnalytics
+- [ ] Replace getDailyRevenueReport to use sales_transactions
+- [ ] Update getDiscountTransactions to enrich from sales data
+- [ ] Test with real data and verify metrics
+- [ ] Update components to check SalesStore status
+
+**See SESSION-NOTES.md for detailed implementation guide**
+
+---
+
 ## Problem Description
 
 **Current Implementation (INCORRECT):**

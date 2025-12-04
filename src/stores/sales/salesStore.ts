@@ -309,7 +309,15 @@ export const useSalesStore = defineStore('sales', () => {
           decomposedItems
         }
 
-        // 6. Create sales transaction
+        // 6. Calculate taxes (✅ SPRINT 8: Tax storage)
+        // Taxes are calculated from finalRevenue (after all discounts)
+        const serviceTaxRate = 0.05 // 5% service tax (TODO: Get from config)
+        const governmentTaxRate = 0.1 // 10% government tax (TODO: Get from config)
+        const serviceTaxAmount = Math.round(profitCalculation.finalRevenue * serviceTaxRate)
+        const governmentTaxAmount = Math.round(profitCalculation.finalRevenue * governmentTaxRate)
+        const totalTaxAmount = serviceTaxAmount + governmentTaxAmount
+
+        // 7. Create sales transaction
         const transaction: SalesTransaction = {
           id: `st-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           paymentId: payment.id,
@@ -331,6 +339,12 @@ export const useSalesStore = defineStore('sales', () => {
           recipeWriteOffId: undefined, // Will be set after write-off
           actualCost, // ✅ SPRINT 2: Actual cost from FIFO batches
           profitCalculation, // ✅ SPRINT 2: Now uses actualCost
+          // ✅ SPRINT 8: Tax storage
+          serviceTaxRate,
+          serviceTaxAmount,
+          governmentTaxRate,
+          governmentTaxAmount,
+          totalTaxAmount,
           decompositionSummary, // DEPRECATED: kept for backward compatibility
           syncedToBackoffice: true,
           syncedAt: new Date().toISOString(),
@@ -345,7 +359,7 @@ export const useSalesStore = defineStore('sales', () => {
           state.value.transactions.push(saveResult.data)
           console.log(`✅ [${MODULE_NAME}] Transaction saved:`, saveResult.data.id)
 
-          // 8. Trigger write-off
+          // 8. Trigger write-off (creates negative batches if needed)
           const writeOff = await recipeWriteOffStore.processItemWriteOff(
             billItem,
             saveResult.data.id
@@ -354,6 +368,36 @@ export const useSalesStore = defineStore('sales', () => {
           if (writeOff) {
             // Update transaction with write-off ID
             transaction.recipeWriteOffId = writeOff.id
+
+            // ✅ FIX: Recalculate actual cost AFTER write-off (negative batches now exist)
+            // This ensures we capture cost from negative batches created during write-off
+            const actualCostAfterWriteOff = await calculateActualCost(
+              billItem.menuItemId,
+              billItem.variantId || variant.id,
+              billItem.quantity
+            )
+
+            // Check if cost changed (negative batches were created)
+            if (actualCostAfterWriteOff.totalCost !== actualCost.totalCost) {
+              console.log(
+                `🔄 [${MODULE_NAME}] Cost recalculated after write-off:`,
+                `${actualCost.totalCost} → ${actualCostAfterWriteOff.totalCost}`
+              )
+
+              // Recalculate profit with new cost
+              const itemWithDiscount = itemsWithDiscount.find(i => i.id === billItem.id)
+              const allocatedDiscount = itemWithDiscount?.allocatedBillDiscount || 0
+              const updatedProfitCalculation = calculateItemProfit(
+                billItem,
+                actualCostAfterWriteOff.totalCost,
+                allocatedDiscount
+              )
+
+              // Update transaction with new cost and profit
+              transaction.actualCost = actualCostAfterWriteOff
+              transaction.profitCalculation = updatedProfitCalculation
+            }
+
             await SalesService.saveSalesTransaction(transaction)
             console.log(`✅ [${MODULE_NAME}] Transaction updated with write-off ID`)
           }

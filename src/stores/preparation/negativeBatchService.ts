@@ -44,46 +44,184 @@ class NegativeBatchService {
 
   /**
    * Calculate cost for negative batch
-   * Uses last known cost from most recent batch, or cached cost from preparation
+   * Uses last known cost from most recent batch, depleted batches, or recipe decomposition
    *
    * @param preparationId - UUID of the preparation
    * @param requestedQty - Quantity needed (used for logging only)
-   * @returns Cost per unit for the negative batch
+   * @returns Cost per unit for the negative batch (never returns 0)
    */
   async calculateNegativeBatchCost(preparationId: string, requestedQty: number): Promise<number> {
-    // Try to get cost from most recent batch
+    // Try to get cost from most recent active batch
     const lastBatch = await this.getLastActiveBatch(preparationId)
-    if (lastBatch?.costPerUnit) {
+    if (lastBatch?.costPerUnit && lastBatch.costPerUnit > 0) {
       console.info(
-        `✅ Using last batch cost: ${lastBatch.costPerUnit} (batch: ${lastBatch.batchNumber})`
+        `✅ Using last active batch cost: ${lastBatch.costPerUnit} (batch: ${lastBatch.batchNumber})`
       )
       return lastBatch.costPerUnit
+    }
+
+    // Try to get cost from depleted batches (historical cost)
+    const { data: depletedBatches, error: depletedError } = await supabase
+      .from('preparation_batches')
+      .select('cost_per_unit, batch_number, production_date')
+      .eq('preparation_id', preparationId)
+      .or('is_negative.eq.false,is_negative.is.null')
+      .eq('status', 'depleted')
+      .not('cost_per_unit', 'is', null)
+      .gt('cost_per_unit', 0)
+      .order('production_date', { ascending: false })
+      .limit(5) // Get last 5 depleted batches for average
+
+    if (!depletedError && depletedBatches && depletedBatches.length > 0) {
+      // Calculate average cost from recent depleted batches
+      const totalCost = depletedBatches.reduce((sum, b) => sum + (b.cost_per_unit || 0), 0)
+      const avgCost = totalCost / depletedBatches.length
+
+      console.info(
+        `✅ Using average cost from ${depletedBatches.length} depleted batches: ${avgCost.toFixed(2)} (most recent: ${depletedBatches[0].batch_number})`
+      )
+      return avgCost
     }
 
     // Fallback to cached last_known_cost from preparation
     const { data: preparation, error } = await supabase
       .from('preparations')
-      .select('last_known_cost, name')
+      .select('last_known_cost, name, recipe_id')
       .eq('id', preparationId)
       .single()
 
     if (error) {
       console.error('❌ Error fetching preparation:', error)
-      return 0
+      // Still don't return 0, continue to recipe decomposition
     }
 
-    if (preparation?.last_known_cost) {
+    if (preparation?.last_known_cost && preparation.last_known_cost > 0) {
       console.info(
         `✅ Using cached last_known_cost: ${preparation.last_known_cost} for ${preparation.name}`
       )
       return preparation.last_known_cost
     }
 
-    // Default to 0 if no cost history exists (should log warning)
-    console.warn(
-      `⚠️  No cost history found for preparation ${preparationId} (${preparation?.name || 'Unknown'}). Using cost = 0 for negative batch (${requestedQty} units).`
+    // Try to calculate cost from recipe decomposition
+    if (preparation?.recipe_id) {
+      try {
+        const recipeCost = await this.calculateCostFromRecipe(preparation.recipe_id, preparationId)
+        if (recipeCost > 0) {
+          console.info(
+            `✅ Using calculated recipe cost: ${recipeCost.toFixed(2)} for ${preparation.name}`
+          )
+          return recipeCost
+        }
+      } catch (recipeError) {
+        console.error('❌ Error calculating recipe cost:', recipeError)
+      }
+    }
+
+    // Last resort: try to get ANY batch with cost (even old ones)
+    const { data: anyBatch, error: anyBatchError } = await supabase
+      .from('preparation_batches')
+      .select('cost_per_unit, batch_number')
+      .eq('preparation_id', preparationId)
+      .or('is_negative.eq.false,is_negative.is.null')
+      .not('cost_per_unit', 'is', null)
+      .gt('cost_per_unit', 0)
+      .order('production_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!anyBatchError && anyBatch && anyBatch.cost_per_unit > 0) {
+      console.warn(
+        `⚠️  Using historical batch cost: ${anyBatch.cost_per_unit} (batch: ${anyBatch.batch_number}) - no recent cost data available`
+      )
+      return anyBatch.cost_per_unit
+    }
+
+    // If absolutely no cost data found anywhere, use estimated cost based on unit
+    const estimatedCost = this.getEstimatedCostByUnit(requestedQty, preparation?.name || 'Unknown')
+    console.error(
+      `❌ NO COST DATA FOUND for preparation ${preparationId} (${preparation?.name || 'Unknown'}). Using estimated cost: ${estimatedCost} for ${requestedQty} units. THIS SHOULD BE FIXED!`
     )
-    return 0
+    return estimatedCost
+  }
+
+  /**
+   * Calculate cost from recipe decomposition
+   * @private
+   */
+  private async calculateCostFromRecipe(recipeId: string, preparationId: string): Promise<number> {
+    // Get recipe details
+    const { data: recipe, error: recipeError } = await supabase
+      .from('recipes')
+      .select('ingredients, yield_quantity, yield_unit')
+      .eq('id', recipeId)
+      .single()
+
+    if (recipeError || !recipe) {
+      return 0
+    }
+
+    // Calculate total cost from ingredients
+    let totalCost = 0
+    const ingredients = (recipe.ingredients as any[]) || []
+
+    for (const ingredient of ingredients) {
+      if (ingredient.type === 'product') {
+        // Get product cost
+        const { data: product } = await supabase
+          .from('products')
+          .select('last_known_cost')
+          .eq('id', ingredient.id)
+          .single()
+
+        if (product?.last_known_cost) {
+          totalCost += product.last_known_cost * (ingredient.quantity || 0)
+        }
+      } else if (ingredient.type === 'preparation') {
+        // Recursively get preparation cost (prevent infinite loop)
+        if (ingredient.id !== preparationId) {
+          const prepCost = await this.calculateNegativeBatchCost(
+            ingredient.id,
+            ingredient.quantity || 0
+          )
+          totalCost += prepCost * (ingredient.quantity || 0)
+        }
+      }
+    }
+
+    // Calculate cost per unit
+    const yieldQuantity = recipe.yield_quantity || 1
+    return totalCost / yieldQuantity
+  }
+
+  /**
+   * Get estimated cost based on typical unit values
+   * This is a last resort fallback to avoid returning 0
+   * @private
+   */
+  private getEstimatedCostByUnit(quantity: number, preparationName: string): number {
+    // Rough estimates based on typical preparation costs (IDR per unit)
+    // This is better than 0 but should trigger investigation
+    const estimates: Record<string, number> = {
+      gram: 50, // ~50 IDR per gram for typical preparations
+      ml: 10, // ~10 IDR per ml for sauces/liquids
+      piece: 5000, // ~5000 IDR per piece for complex items
+      portion: 8000 // ~8000 IDR per portion
+    }
+
+    // Try to detect unit from preparation name or use default
+    let estimatedCostPerUnit = 100 // Default fallback
+
+    // Simple unit detection (could be improved)
+    if (preparationName.toLowerCase().includes('sauce')) {
+      estimatedCostPerUnit = estimates.ml
+    } else if (
+      preparationName.toLowerCase().includes('fries') ||
+      preparationName.toLowerCase().includes('фри')
+    ) {
+      estimatedCostPerUnit = estimates.gram
+    }
+
+    return estimatedCostPerUnit
   }
 
   /**

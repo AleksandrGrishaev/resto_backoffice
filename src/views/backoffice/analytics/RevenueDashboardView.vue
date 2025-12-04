@@ -249,6 +249,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useDiscountAnalytics } from '@/stores/discounts'
 import { useDiscountsStore } from '@/stores/discounts'
+import { useSalesStore } from '@/stores/sales'
 import type { DailyRevenueReport } from '@/stores/discounts'
 import { formatIDR } from '@/utils'
 import { DebugUtils, TimeUtils } from '@/utils'
@@ -278,7 +279,7 @@ const averageDiscount = computed(() => {
 
 const ordersWithDiscountRate = computed(() => {
   if (!report.value || report.value.orderCount === 0) return 0
-  return (report.value.discountCount / report.value.orderCount) * 100
+  return (report.value.ordersWithDiscountCount / report.value.orderCount) * 100
 })
 
 // Methods
@@ -303,6 +304,14 @@ async function handleGenerateReport() {
       storeExists: !!discountsStore,
       initialized: discountsStore?.initialized,
       eventsCount: discountsStore?.discountEvents?.length || 0
+    })
+
+    // DEBUG: Check if salesStore is available
+    const salesStore = useSalesStore()
+    DebugUtils.info(MODULE_NAME, '📦 SalesStore check', {
+      storeExists: !!salesStore,
+      initialized: salesStore?.initialized,
+      transactionsCount: salesStore?.transactions?.length || 0
     })
 
     report.value = await getDailyRevenueReport(dateFrom.value, dateTo.value)

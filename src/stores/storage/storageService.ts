@@ -961,6 +961,8 @@ export class StorageService {
               data.department
             )
 
+            let negativeBatchForAllocation: any
+
             if (existingNegative) {
               // Update existing negative batch
               const updatedBatch = await negativeBatchService.updateNegativeBatch(
@@ -968,6 +970,8 @@ export class StorageService {
                 shortage,
                 cost
               )
+
+              negativeBatchForAllocation = updatedBatch
 
               // NOTE: No account transaction created - negative batches are technical records only
 
@@ -992,6 +996,8 @@ export class StorageService {
                 shiftId: undefined
               })
 
+              negativeBatchForAllocation = negativeBatch
+
               // NOTE: No account transaction created - negative batches are technical records only
 
               DebugUtils.info(MODULE_NAME, '✅ Created new negative batch for preparation', {
@@ -1001,6 +1007,25 @@ export class StorageService {
                 totalCost: shortage * cost
               })
             }
+
+            // ✅ FIX: Add negative batch to allocations array for traceability
+            // This ensures batchAllocations includes negative batches
+            allocations.push({
+              batchId: negativeBatchForAllocation.id,
+              batchNumber: negativeBatchForAllocation.batchNumber,
+              quantity: shortage, // Positive quantity for allocation (consumed amount)
+              costPerUnit: cost,
+              isNegative: true, // Flag to indicate this is from negative batch
+              batchCreatedAt:
+                negativeBatchForAllocation.negativeCreatedAt ||
+                negativeBatchForAllocation.productionDate
+            })
+
+            DebugUtils.info(MODULE_NAME, '✅ Added negative batch to allocations', {
+              batchId: negativeBatchForAllocation.id,
+              shortage,
+              cost
+            })
           }
         } else {
           // Allocate from storage_batches (original logic for products)
@@ -1077,6 +1102,8 @@ export class StorageService {
               warehouseId
             )
 
+            let negativeBatchForAllocation: any
+
             if (existingNegative) {
               // Update existing negative batch
               const updatedBatch = await negativeBatchService.updateNegativeBatch(
@@ -1084,6 +1111,8 @@ export class StorageService {
                 shortage,
                 cost
               )
+
+              negativeBatchForAllocation = updatedBatch
 
               // NOTE: No account transaction created - negative batches are technical records only
 
@@ -1108,6 +1137,8 @@ export class StorageService {
                 shiftId: undefined
               })
 
+              negativeBatchForAllocation = negativeBatch
+
               // NOTE: No account transaction created - negative batches are technical records only
 
               DebugUtils.info(MODULE_NAME, '✅ Created new negative batch', {
@@ -1117,6 +1148,25 @@ export class StorageService {
                 totalCost: shortage * cost
               })
             }
+
+            // ✅ FIX: Add negative batch to allocations array for traceability
+            // This ensures batchAllocations includes negative batches
+            allocations.push({
+              batchId: negativeBatchForAllocation.id,
+              batchNumber: negativeBatchForAllocation.batchNumber,
+              quantity: shortage, // Positive quantity for allocation (consumed amount)
+              costPerUnit: cost,
+              isNegative: true, // Flag to indicate this is from negative batch
+              batchCreatedAt:
+                negativeBatchForAllocation.negativeCreatedAt ||
+                negativeBatchForAllocation.receiptDate
+            })
+
+            DebugUtils.info(MODULE_NAME, '✅ Added negative batch to allocations', {
+              batchId: negativeBatchForAllocation.id,
+              shortage,
+              cost
+            })
           }
         }
 

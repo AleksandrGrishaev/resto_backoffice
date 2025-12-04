@@ -132,6 +132,10 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
 
       // ===== CRITICAL OPERATIONS (Fast, synchronous) =====
 
+      // Get order for tax calculations (✅ SPRINT 8)
+      const ordersStore = usePosOrdersStore()
+      const order = ordersStore.orders.find(o => o.id === orderId)
+
       // 1. Create payment with shiftId
       const paymentData = {
         orderId,
@@ -141,7 +145,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         amount,
         receivedAmount,
         processedBy: 'Current User', // TODO: Get from authStore
-        shiftId: currentShift.id // ✅ Now guaranteed to exist
+        shiftId: currentShift.id, // ✅ Now guaranteed to exist
+        order // ✅ SPRINT 8: Pass order for tax calculations
       }
 
       const result = await paymentsService.processPayment(paymentData)

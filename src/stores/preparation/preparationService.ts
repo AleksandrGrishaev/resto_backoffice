@@ -395,12 +395,20 @@ export class PreparationService {
           b.preparationId === preparationId &&
           b.department === department &&
           b.status === 'active' &&
-          b.currentQuantity > 0
+          !b.reconciledAt // ✅ FIX: Exclude reconciled negative batches
+        // ✅ FIX: Include negative batches for cost calculation
+        // Negative batches have cost information needed for accurate COGS
+        // Removed: && b.currentQuantity > 0
       )
 
-      return batches.sort(
-        (a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
-      )
+      // ✅ FIX: Prioritize positive batches over negative batches, then FIFO
+      return batches.sort((a, b) => {
+        // Positive batches first
+        if (a.currentQuantity > 0 && b.currentQuantity < 0) return -1
+        if (a.currentQuantity < 0 && b.currentQuantity > 0) return 1
+        // Then by production date (FIFO)
+        return new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get preparation batches', { error, preparationId })
       throw error

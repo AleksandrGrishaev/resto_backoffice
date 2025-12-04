@@ -185,9 +185,26 @@ export class PaymentsService {
     receivedAmount?: number
     processedBy: string
     shiftId?: string // 🆕 Add shiftId parameter
+    order?: any // ✅ SPRINT 8: Pass order for tax calculations
   }): Promise<ServiceResponse<PosPayment>> {
     try {
       const paymentNumber = this.generatePaymentNumber()
+
+      // ✅ SPRINT 8: Calculate payment details with tax breakdown
+      let details: Record<string, any> = {}
+
+      if (paymentData.order && paymentData.order.revenueBreakdown) {
+        const rb = paymentData.order.revenueBreakdown
+        details = {
+          subtotal: rb.plannedRevenue,
+          itemDiscounts: rb.itemDiscounts,
+          billDiscount: rb.billDiscounts,
+          subtotalAfterDiscounts: rb.actualRevenue,
+          taxes: rb.taxes || [], // Array of {taxId, name, percentage, amount}
+          totalTaxes: rb.totalTaxes,
+          totalAmount: paymentData.amount
+        }
+      }
 
       const newPayment: PosPayment = {
         id: generateId(), // UUID for Supabase compatibility
@@ -205,6 +222,7 @@ export class PaymentsService {
         receiptPrinted: false,
         processedBy: paymentData.processedBy,
         shiftId: paymentData.shiftId, // 🆕 Add shiftId to payment
+        details, // ✅ SPRINT 8: Add tax breakdown details
         processedAt: TimeUtils.getCurrentLocalISO(),
         createdAt: TimeUtils.getCurrentLocalISO(),
         updatedAt: TimeUtils.getCurrentLocalISO()

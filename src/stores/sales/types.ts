@@ -158,6 +158,13 @@ export interface SalesTransaction extends BaseEntity {
   // Profit data
   profitCalculation: ProfitCalculation
 
+  // ✅ SPRINT 8: Tax storage fields
+  serviceTaxRate?: number // Service tax rate (e.g., 0.05 = 5%)
+  serviceTaxAmount?: number // Service tax amount in IDR
+  governmentTaxRate?: number // Government tax rate (e.g., 0.10 = 10%)
+  governmentTaxAmount?: number // Government tax amount in IDR
+  totalTaxAmount?: number // Total tax amount (sum of all taxes)
+
   // Decomposition summary (DEPRECATED: will be replaced by actualCost)
   decompositionSummary: DecompositionSummary
 

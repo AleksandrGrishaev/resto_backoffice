@@ -299,7 +299,13 @@ const dialogModel = computed({
   set: value => emit('update:modelValue', value)
 })
 
+// ✅ NEW: Current menu item department
+const currentMenuItemDepartment = computed<'kitchen' | 'bar'>(() => {
+  return formData.value.type === 'food' ? 'kitchen' : 'bar'
+})
+
 // Опции для блюд (рецепты + полуфабрикаты)
+// ✅ FILTERED by menu item department
 const dishOptions = computed(() => {
   const options: Array<{
     id: string
@@ -310,9 +316,14 @@ const dishOptions = computed(() => {
   }> = []
 
   try {
-    // Рецепты
+    const menuDepartment = currentMenuItemDepartment.value
+
+    // ✅ Рецепты - только из того же департамента
     const activeRecipes = recipesStore.activeRecipes || []
-    activeRecipes.forEach(recipe => {
+    const recipesBeforeFilter = activeRecipes.length
+    const filteredRecipes = activeRecipes.filter(recipe => recipe.department === menuDepartment)
+
+    filteredRecipes.forEach(recipe => {
       options.push({
         id: recipe.id,
         name: recipe.name,
@@ -322,10 +333,19 @@ const dishOptions = computed(() => {
       })
     })
 
-    // Полуфабрикаты
+    // ✅ Полуфабрикаты - только из того же департамента
     const activePreparations = recipesStore.activePreparations || []
+    let preparationsBeforeFilter = 0
+    let preparationsAfterFilter = 0
+
     if (Array.isArray(activePreparations)) {
-      activePreparations.forEach(prep => {
+      preparationsBeforeFilter = activePreparations.length
+      const filteredPreparations = activePreparations.filter(
+        prep => prep.department === menuDepartment
+      )
+      preparationsAfterFilter = filteredPreparations.length
+
+      filteredPreparations.forEach(prep => {
         options.push({
           id: prep.id,
           name: prep.name,
@@ -335,6 +355,13 @@ const dishOptions = computed(() => {
         })
       })
     }
+
+    console.log('🔍 [MenuItemDialog] Dish options filtering:', {
+      menuDepartment,
+      recipes: { total: recipesBeforeFilter, filtered: filteredRecipes.length },
+      preparations: { total: preparationsBeforeFilter, filtered: preparationsAfterFilter },
+      totalDishOptions: options.length
+    })
   } catch (error) {
     console.warn('Error building dish options:', error)
   }
@@ -343,6 +370,7 @@ const dishOptions = computed(() => {
 })
 
 // Опции для продуктов (только с canBeSold = true)
+// ✅ FILTERED by menu item department
 const productOptions = computed(() => {
   const options: Array<{
     id: string
@@ -353,14 +381,18 @@ const productOptions = computed(() => {
   }> = []
 
   try {
+    const menuDepartment = currentMenuItemDepartment.value
+
     // ✅ FIX: Use sellableProducts instead of activeProducts (which doesn't exist)
     const sellableProducts = productsStore.sellableProducts || []
-    console.log('🔍 [MenuItemDialog] Building productOptions:', {
-      totalSellableProducts: sellableProducts.length
-    })
+    const productsBeforeFilter = sellableProducts.length
 
-    // No need to filter by canBeSold - sellableProducts already filtered
-    sellableProducts.forEach(product => {
+    // ✅ FILTER: Only products used in current menu item's department
+    const filteredProducts = sellableProducts.filter(
+      product => product.usedInDepartments && product.usedInDepartments.includes(menuDepartment)
+    )
+
+    filteredProducts.forEach(product => {
       options.push({
         id: product.id,
         name: product.name,
@@ -370,7 +402,11 @@ const productOptions = computed(() => {
       })
     })
 
-    console.log('✅ [MenuItemDialog] productOptions built:', options.length, options)
+    console.log('🔍 [MenuItemDialog] Product options filtering:', {
+      menuDepartment,
+      products: { total: productsBeforeFilter, filtered: filteredProducts.length },
+      totalProductOptions: options.length
+    })
   } catch (error) {
     console.warn('Error building product options:', error)
   }

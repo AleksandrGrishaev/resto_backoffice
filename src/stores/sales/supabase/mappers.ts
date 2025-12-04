@@ -46,6 +46,13 @@ export function toSupabase(transaction: SalesTransaction): Record<string, any> {
     decomposition_summary: transaction.decompositionSummary,
     actual_cost: transaction.actualCost || null, // ✅ SPRINT 2: FIFO actual cost
 
+    // ✅ SPRINT 8: Tax storage
+    service_tax_rate: transaction.serviceTaxRate || null,
+    service_tax_amount: transaction.serviceTaxAmount || null,
+    government_tax_rate: transaction.governmentTaxRate || null,
+    government_tax_amount: transaction.governmentTaxAmount || null,
+    total_tax_amount: transaction.totalTaxAmount || null,
+
     // ✅ SPRINT 2: Write-off IDs
     preparation_write_off_ids: transaction.preparationWriteOffIds || null,
     product_write_off_ids: transaction.productWriteOffIds || null,
@@ -99,6 +106,13 @@ export function fromSupabase(row: any): SalesTransaction {
     profitCalculation: row.profit_calculation as ProfitCalculation,
     decompositionSummary: row.decomposition_summary as DecompositionSummary,
     actualCost: row.actual_cost, // ✅ SPRINT 2: FIFO actual cost
+
+    // ✅ SPRINT 8: Tax storage
+    serviceTaxRate: row.service_tax_rate ? Number(row.service_tax_rate) : undefined,
+    serviceTaxAmount: row.service_tax_amount ? Number(row.service_tax_amount) : undefined,
+    governmentTaxRate: row.government_tax_rate ? Number(row.government_tax_rate) : undefined,
+    governmentTaxAmount: row.government_tax_amount ? Number(row.government_tax_amount) : undefined,
+    totalTaxAmount: row.total_tax_amount ? Number(row.total_tax_amount) : undefined,
 
     // ✅ SPRINT 2: Write-off IDs
     preparationWriteOffIds: row.preparation_write_off_ids,

@@ -456,6 +456,41 @@ export function recalculateOrderTotals(order: PosOrder): void {
   order.taxAmount = revenueBreakdown.totalTaxes
   order.finalAmount = revenueBreakdown.totalCollected // IMPORTANT: finalAmount now includes taxes!
 
+  // ✅ SPRINT 8: Validate revenue breakdown for consistency
+  if (import.meta.env.DEV) {
+    const rbValidation = validateRevenueBreakdown(revenueBreakdown)
+    if (!rbValidation.valid) {
+      console.error('❌ [useOrderCalculations] Revenue breakdown validation failed:', {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        errors: rbValidation.errors,
+        warnings: rbValidation.warnings,
+        revenueBreakdown
+      })
+    } else if (rbValidation.warnings.length > 0) {
+      console.warn('⚠️ [useOrderCalculations] Revenue breakdown warnings:', {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        warnings: rbValidation.warnings
+      })
+    }
+
+    const orderValidation = validateOrderAmounts(order)
+    if (!orderValidation.valid) {
+      console.error('❌ [useOrderCalculations] Order amounts validation failed:', {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        errors: orderValidation.errors,
+        order: {
+          totalAmount: order.totalAmount,
+          discountAmount: order.discountAmount,
+          taxAmount: order.taxAmount,
+          finalAmount: order.finalAmount
+        }
+      })
+    }
+  }
+
   // Пересчитать payment status
   const calculateOrderPaymentStatus = (bills: PosBill[]): OrderPaymentStatus => {
     const activeBills = bills.filter(bill => bill.status !== 'cancelled')
@@ -605,10 +640,18 @@ export function calculateRevenueBreakdown(order: PosOrder): RevenueBreakdown {
   // =============================================
   // 3. CALCULATE BILL-LEVEL DISCOUNTS
   // =============================================
-  // ✅ FIX: Bill-level discounts are now stored in item.discounts[] after proportional allocation
-  // So bill.discountAmount is just a sum of all item discounts (already counted in Step 2)
-  // We should NOT count bill.discountAmount again here - it would double-count discounts!
-  const billDiscounts = 0 // Always 0 - all discounts are in item.discounts[]
+  // ✅ SPRINT 8 FIX: Get actual bill discount amounts from bills
+  // Bill discounts are stored separately from item discounts for tracking/analytics
+  let billDiscounts = 0
+
+  for (const bill of order.bills) {
+    if (bill.status === 'cancelled') continue
+
+    // Add bill discount amount (this is the total discount applied to the bill)
+    if (bill.discountAmount) {
+      billDiscounts += bill.discountAmount
+    }
+  }
 
   // =============================================
   // 4. CALCULATE TOTALS
@@ -652,5 +695,207 @@ export function calculateRevenueBreakdown(order: PosOrder): RevenueBreakdown {
     taxes: taxBreakdown,
     totalTaxes,
     totalCollected
+  }
+}
+
+// =============================================
+// VALIDATION FUNCTIONS (Sprint 8)
+// =============================================
+
+export interface RevenueBreakdownValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+/**
+ * Validate revenue breakdown for mathematical consistency
+ * ✅ SPRINT 8: Validation function to catch calculation errors
+ *
+ * Checks:
+ * 1. plannedRevenue = actualRevenue + totalDiscounts
+ * 2. totalDiscounts = itemDiscounts + billDiscounts
+ * 3. totalCollected = actualRevenue + totalTaxes
+ * 4. All values >= 0
+ * 5. Tax breakdown sum matches totalTaxes
+ */
+export function validateRevenueBreakdown(
+  rb: import('@/stores/discounts/types').RevenueBreakdown
+): RevenueBreakdownValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+  const tolerance = 1 // 1 IDR tolerance for rounding errors
+
+  // =============================================
+  // Rule 1: Non-negative values
+  // =============================================
+  if (rb.plannedRevenue < 0) {
+    errors.push(`plannedRevenue is negative: ${rb.plannedRevenue}`)
+  }
+  if (rb.itemDiscounts < 0) {
+    errors.push(`itemDiscounts is negative: ${rb.itemDiscounts}`)
+  }
+  if (rb.billDiscounts < 0) {
+    errors.push(`billDiscounts is negative: ${rb.billDiscounts}`)
+  }
+  if (rb.actualRevenue < 0) {
+    errors.push(`actualRevenue is negative: ${rb.actualRevenue}`)
+  }
+  if (rb.totalTaxes < 0) {
+    errors.push(`totalTaxes is negative: ${rb.totalTaxes}`)
+  }
+  if (rb.totalCollected < 0) {
+    errors.push(`totalCollected is negative: ${rb.totalCollected}`)
+  }
+
+  // =============================================
+  // Rule 2: totalDiscounts = itemDiscounts + billDiscounts
+  // =============================================
+  const expectedTotalDiscounts = rb.itemDiscounts + rb.billDiscounts
+  if (Math.abs(rb.totalDiscounts - expectedTotalDiscounts) > tolerance) {
+    errors.push(
+      `totalDiscounts mismatch: ${rb.totalDiscounts} !== ${rb.itemDiscounts} + ${rb.billDiscounts} (${expectedTotalDiscounts})`
+    )
+  }
+
+  // =============================================
+  // Rule 3: plannedRevenue = actualRevenue + totalDiscounts
+  // =============================================
+  const expectedPlannedRevenue = rb.actualRevenue + rb.totalDiscounts
+  if (Math.abs(rb.plannedRevenue - expectedPlannedRevenue) > tolerance) {
+    errors.push(
+      `plannedRevenue mismatch: ${rb.plannedRevenue} !== ${rb.actualRevenue} + ${rb.totalDiscounts} (${expectedPlannedRevenue})`
+    )
+  }
+
+  // =============================================
+  // Rule 4: totalCollected = actualRevenue + totalTaxes
+  // =============================================
+  const expectedTotalCollected = rb.actualRevenue + rb.totalTaxes
+  if (Math.abs(rb.totalCollected - expectedTotalCollected) > tolerance) {
+    errors.push(
+      `totalCollected mismatch: ${rb.totalCollected} !== ${rb.actualRevenue} + ${rb.totalTaxes} (${expectedTotalCollected})`
+    )
+  }
+
+  // =============================================
+  // Rule 5: Tax breakdown sum matches totalTaxes
+  // =============================================
+  if (rb.taxes && rb.taxes.length > 0) {
+    const taxSum = rb.taxes.reduce((sum, tax) => sum + tax.amount, 0)
+    if (Math.abs(taxSum - rb.totalTaxes) > tolerance) {
+      errors.push(`Tax breakdown sum mismatch: ${taxSum} !== ${rb.totalTaxes}`)
+    }
+  }
+
+  // =============================================
+  // Warnings (non-critical)
+  // =============================================
+  if (rb.totalDiscounts > rb.plannedRevenue) {
+    warnings.push(`Discounts (${rb.totalDiscounts}) exceed planned revenue (${rb.plannedRevenue})`)
+  }
+
+  if (rb.actualRevenue === 0 && rb.plannedRevenue > 0) {
+    warnings.push(
+      `Actual revenue is 0 but planned revenue is ${rb.plannedRevenue} (100% discount?)`
+    )
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  }
+}
+
+/**
+ * Validate order amounts consistency with revenue breakdown
+ * ✅ SPRINT 8: Ensure order.totalAmount, taxAmount, etc. match revenueBreakdown
+ */
+export function validateOrderAmounts(order: PosOrder): RevenueBreakdownValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+  const tolerance = 1
+
+  if (!order.revenueBreakdown) {
+    errors.push('Order has no revenueBreakdown')
+    return { valid: false, errors, warnings }
+  }
+
+  const rb = order.revenueBreakdown
+
+  // =============================================
+  // Check order fields match revenueBreakdown
+  // =============================================
+
+  // totalAmount should equal plannedRevenue
+  if (
+    order.totalAmount !== undefined &&
+    Math.abs(order.totalAmount - rb.plannedRevenue) > tolerance
+  ) {
+    errors.push(
+      `order.totalAmount (${order.totalAmount}) !== plannedRevenue (${rb.plannedRevenue})`
+    )
+  }
+
+  // discountAmount should equal totalDiscounts
+  if (
+    order.discountAmount !== undefined &&
+    Math.abs(order.discountAmount - rb.totalDiscounts) > tolerance
+  ) {
+    errors.push(
+      `order.discountAmount (${order.discountAmount}) !== totalDiscounts (${rb.totalDiscounts})`
+    )
+  }
+
+  // taxAmount should equal totalTaxes
+  if (order.taxAmount !== undefined && Math.abs(order.taxAmount - rb.totalTaxes) > tolerance) {
+    errors.push(`order.taxAmount (${order.taxAmount}) !== totalTaxes (${rb.totalTaxes})`)
+  }
+
+  // finalAmount should equal totalCollected
+  if (
+    order.finalAmount !== undefined &&
+    Math.abs(order.finalAmount - rb.totalCollected) > tolerance
+  ) {
+    errors.push(
+      `order.finalAmount (${order.finalAmount}) !== totalCollected (${rb.totalCollected})`
+    )
+  }
+
+  // plannedRevenue field
+  if (
+    order.plannedRevenue !== undefined &&
+    Math.abs(order.plannedRevenue - rb.plannedRevenue) > tolerance
+  ) {
+    errors.push(
+      `order.plannedRevenue (${order.plannedRevenue}) !== revenueBreakdown.plannedRevenue (${rb.plannedRevenue})`
+    )
+  }
+
+  // actualRevenue field
+  if (
+    order.actualRevenue !== undefined &&
+    Math.abs(order.actualRevenue - rb.actualRevenue) > tolerance
+  ) {
+    errors.push(
+      `order.actualRevenue (${order.actualRevenue}) !== revenueBreakdown.actualRevenue (${rb.actualRevenue})`
+    )
+  }
+
+  // totalCollected field
+  if (
+    order.totalCollected !== undefined &&
+    Math.abs(order.totalCollected - rb.totalCollected) > tolerance
+  ) {
+    errors.push(
+      `order.totalCollected (${order.totalCollected}) !== revenueBreakdown.totalCollected (${rb.totalCollected})`
+    )
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
   }
 }

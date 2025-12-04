@@ -46,46 +46,117 @@ class NegativeBatchService {
 
   /**
    * Calculate cost for negative batch
-   * Uses last known cost from most recent batch, or cached cost from product
+   * Uses last known cost from most recent batch, depleted batches, or historical data
    *
    * @param productId - UUID of the product
    * @param requestedQty - Quantity needed (used for logging only)
-   * @returns Cost per unit for the negative batch
+   * @returns Cost per unit for the negative batch (never returns 0)
    */
   async calculateNegativeBatchCost(productId: string, requestedQty: number): Promise<number> {
-    // Try to get cost from most recent batch
+    // Try to get cost from most recent active batch
     const lastBatch = await this.getLastActiveBatch(productId)
-    if (lastBatch?.costPerUnit) {
+    if (lastBatch?.costPerUnit && lastBatch.costPerUnit > 0) {
       console.info(
-        `✅ Using last batch cost: ${lastBatch.costPerUnit} (batch: ${lastBatch.batchNumber})`
+        `✅ Using last active batch cost: ${lastBatch.costPerUnit} (batch: ${lastBatch.batchNumber})`
       )
       return lastBatch.costPerUnit
+    }
+
+    // Try to get cost from depleted/consumed batches (historical cost)
+    const { data: depletedBatches, error: depletedError } = await supabase
+      .from('storage_batches')
+      .select('cost_per_unit, batch_number, receipt_date')
+      .eq('item_id', productId)
+      .eq('item_type', 'product')
+      .or('is_negative.eq.false,is_negative.is.null')
+      .in('status', ['consumed', 'depleted'])
+      .not('cost_per_unit', 'is', null)
+      .gt('cost_per_unit', 0)
+      .order('receipt_date', { ascending: false })
+      .limit(5) // Get last 5 depleted batches for average
+
+    if (!depletedError && depletedBatches && depletedBatches.length > 0) {
+      // Calculate average cost from recent depleted batches
+      const totalCost = depletedBatches.reduce((sum, b) => sum + (b.cost_per_unit || 0), 0)
+      const avgCost = totalCost / depletedBatches.length
+
+      console.info(
+        `✅ Using average cost from ${depletedBatches.length} depleted batches: ${avgCost.toFixed(2)} (most recent: ${depletedBatches[0].batch_number})`
+      )
+      return avgCost
     }
 
     // Fallback to cached last_known_cost from product
     const { data: product, error } = await supabase
       .from('products')
-      .select('last_known_cost, name')
+      .select('last_known_cost, name, unit')
       .eq('id', productId)
       .single()
 
     if (error) {
       console.error('❌ Error fetching product:', error)
-      return 0
+      // Still don't return 0, continue to fallback
     }
 
-    if (product?.last_known_cost) {
+    if (product?.last_known_cost && product.last_known_cost > 0) {
       console.info(
         `✅ Using cached last_known_cost: ${product.last_known_cost} for ${product.name}`
       )
       return product.last_known_cost
     }
 
-    // Default to 0 if no cost history exists (should log warning)
-    console.warn(
-      `⚠️  No cost history found for product ${productId} (${product?.name || 'Unknown'}). Using cost = 0 for negative batch (${requestedQty} units).`
+    // Last resort: try to get ANY batch with cost (even old ones)
+    const { data: anyBatch, error: anyBatchError } = await supabase
+      .from('storage_batches')
+      .select('cost_per_unit, batch_number')
+      .eq('item_id', productId)
+      .eq('item_type', 'product')
+      .or('is_negative.eq.false,is_negative.is.null')
+      .not('cost_per_unit', 'is', null)
+      .gt('cost_per_unit', 0)
+      .order('receipt_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!anyBatchError && anyBatch && anyBatch.cost_per_unit > 0) {
+      console.warn(
+        `⚠️  Using historical batch cost: ${anyBatch.cost_per_unit} (batch: ${anyBatch.batch_number}) - no recent cost data available`
+      )
+      return anyBatch.cost_per_unit
+    }
+
+    // If absolutely no cost data found anywhere, use estimated cost based on unit
+    const estimatedCost = this.getEstimatedCostByUnit(
+      product?.unit || 'gram',
+      product?.name || 'Unknown'
     )
-    return 0
+    console.error(
+      `❌ NO COST DATA FOUND for product ${productId} (${product?.name || 'Unknown'}). Using estimated cost: ${estimatedCost} for ${requestedQty} ${product?.unit || 'units'}. THIS SHOULD BE FIXED!`
+    )
+    return estimatedCost
+  }
+
+  /**
+   * Get estimated cost based on typical unit values
+   * This is a last resort fallback to avoid returning 0
+   * @private
+   */
+  private getEstimatedCostByUnit(unit: string, productName: string): number {
+    // Rough estimates based on typical product costs (IDR per unit)
+    // This is better than 0 but should trigger investigation
+    const estimates: Record<string, number> = {
+      gram: 20, // ~20 IDR per gram for typical products
+      kg: 20000, // ~20,000 IDR per kg
+      ml: 5, // ~5 IDR per ml for liquids
+      liter: 5000, // ~5,000 IDR per liter
+      piece: 1000, // ~1,000 IDR per piece
+      bottle: 15000 // ~15,000 IDR per bottle
+    }
+
+    // Use unit-based estimate or default
+    const estimatedCost = estimates[unit.toLowerCase()] || 100
+
+    return estimatedCost
   }
 
   /**
