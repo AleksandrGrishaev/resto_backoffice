@@ -40,6 +40,21 @@
         >
           <v-icon icon="mdi-pencil" size="20" />
         </v-btn>
+
+        <!-- Menu actions (только для composition блюд) -->
+        <v-menu v-if="hasComposition">
+          <template #activator="{ props: menuProps }">
+            <v-btn size="small" variant="text" icon="mdi-dots-vertical" v-bind="menuProps" />
+          </template>
+          <v-list>
+            <v-list-item @click="$emit('duplicate', item)">
+              <template #prepend>
+                <v-icon icon="mdi-content-copy" />
+              </template>
+              <v-list-item-title>Duplicate</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </div>
     </div>
 
@@ -102,10 +117,16 @@ const props = defineProps<Props>()
 
 defineEmits<{
   (e: 'edit', item: MenuItem): void
+  (e: 'duplicate', item: MenuItem): void
 }>()
 
 const sortedVariants = computed(() => {
   return [...props.item.variants].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+})
+
+// Проверяем есть ли композиция у блюда
+const hasComposition = computed(() => {
+  return props.item.variants.some(v => v.composition && v.composition.length > 0)
 })
 
 // Определяем тип блюда для индикатора

@@ -158,7 +158,7 @@
               </template>
               <v-list-item-title>Edit</v-list-item-title>
             </v-list-item>
-            <v-list-item v-if="type === 'recipe'" @click="$emit('duplicate', item)">
+            <v-list-item @click="$emit('duplicate', item)">
               <template #prepend>
                 <v-icon icon="mdi-content-copy" />
               </template>

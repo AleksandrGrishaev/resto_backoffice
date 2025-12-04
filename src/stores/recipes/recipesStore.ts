@@ -341,6 +341,42 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
+  async function duplicatePreparation(
+    preparationId: string,
+    newName: string,
+    newCode?: string
+  ): Promise<Preparation> {
+    try {
+      loading.value = true
+      const preparation = await preparationsComposable.duplicatePreparation(
+        preparationId,
+        newName,
+        newCode
+      )
+
+      // Рассчитываем стоимость нового полуфабриката
+      await costCalculationComposable.calculatePreparationCost(preparation)
+
+      // Обновляем usage в Product Store
+      await integrationComposable.updateUsageForAllProducts()
+
+      DebugUtils.info(MODULE_NAME, 'Preparation duplicated with cost calculation', {
+        original: preparationId,
+        new: preparation.id,
+        name: preparation.name
+      })
+
+      return preparation
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to duplicate preparation'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   // =============================================
   // RECIPE ACTIONS
   // =============================================
@@ -708,6 +744,7 @@ export const useRecipesStore = defineStore('recipes', () => {
     updatePreparation,
     deletePreparation,
     togglePreparationStatus,
+    duplicatePreparation,
 
     // Recipe actions
     fetchRecipes,
