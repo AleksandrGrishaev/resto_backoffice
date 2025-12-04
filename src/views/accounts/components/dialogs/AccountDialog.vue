@@ -1,11 +1,11 @@
 <template>
   <base-dialog
     v-model="dialogModel"
-    :title="isEdit ? 'Редактировать счет' : 'Создать счет'"
+    :title="isEdit ? 'Edit Account' : 'Create Account'"
     :loading="loading"
     :disabled="!isFormValid"
-    cancel-text="Отмена"
-    confirm-text="Сохранить"
+    cancel-text="Cancel"
+    confirm-text="Save"
     @cancel="handleCancel"
     @confirm="handleSubmit"
   >
@@ -13,8 +13,8 @@
       <v-form ref="form" v-model="formState.isValid" @submit.prevent="handleSubmit">
         <v-text-field
           v-model="formData.name"
-          label="Название счета"
-          :rules="[v => !!v || 'Обязательное поле']"
+          label="Account Name"
+          :rules="[v => !!v || 'Required field']"
           required
           class="mb-4"
           hide-details="auto"
@@ -23,8 +23,8 @@
         <v-select
           v-model="formData.type"
           :items="accountTypes"
-          label="Тип счета"
-          :rules="[v => !!v || 'Обязательное поле']"
+          label="Account Type"
+          :rules="[v => !!v || 'Required field']"
           required
           class="mb-4"
           hide-details="auto"
@@ -32,7 +32,7 @@
 
         <v-textarea
           v-model="formData.description"
-          label="Описание"
+          label="Description"
           rows="3"
           class="mb-4"
           hide-details="auto"
@@ -40,7 +40,7 @@
 
         <v-text-field
           v-model.number="formData.balance"
-          label="Начальный баланс"
+          label="Initial Balance"
           type="number"
           :rules="balanceRules"
           class="mb-4"
@@ -55,8 +55,8 @@
             color="primary"
             class="w-100"
           >
-            <v-btn :value="true" class="flex-grow-1">Активен</v-btn>
-            <v-btn :value="false" class="flex-grow-1">Неактивен</v-btn>
+            <v-btn :value="true" class="flex-grow-1">Active</v-btn>
+            <v-btn :value="false" class="flex-grow-1">Inactive</v-btn>
           </v-btn-toggle>
         </div>
       </v-form>
@@ -101,15 +101,15 @@ const dialogModel = computed({
 
 // Account types
 const accountTypes = [
-  { title: 'Наличные', value: 'cash' },
-  { title: 'Банковский счет', value: 'bank' },
-  { title: 'Карта', value: 'card' },
+  { title: 'Cash', value: 'cash' },
+  { title: 'Bank Account', value: 'bank' },
+  { title: 'Card', value: 'card' },
   { title: 'Gojek', value: 'gojeck' },
   { title: 'Grab', value: 'grab' }
 ] as Array<{ title: string; value: AccountType }>
 
 // Validation rules
-const balanceRules = [(v: number) => v >= 0 || 'Баланс не может быть отрицательным']
+const balanceRules = [(v: number) => v >= 0 || 'Balance cannot be negative']
 
 // Form handling
 const { form, loading, formState, formData, isFormValid, handleSubmit, handleCancel, resetForm } =

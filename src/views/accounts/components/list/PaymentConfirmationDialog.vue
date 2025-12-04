@@ -7,7 +7,7 @@
           :color="getPriorityColor(payment.priority)"
           class="mr-2"
         />
-        Подтверждение платежа
+        Payment Confirmation
         <v-spacer />
         <v-btn icon="mdi-close" variant="text" size="small" @click="handleCancel" />
       </v-card-title>
@@ -26,7 +26,7 @@
                     {{ payment.description }}
                   </p>
                   <div v-if="payment.invoiceNumber" class="text-caption">
-                    <strong>Счет:</strong>
+                    <strong>Invoice:</strong>
                     {{ payment.invoiceNumber }}
                   </div>
                 </div>
@@ -43,15 +43,13 @@
               <div v-if="payment.dueDate" class="d-flex align-center mb-2">
                 <v-icon icon="mdi-calendar" size="small" class="mr-2" />
                 <span class="text-body-2">
-                  Срок оплаты: {{ formatDate(payment.dueDate) }}
-                  <span v-if="isOverdue" class="text-error font-weight-bold ml-2">
-                    (ПРОСРОЧЕНО)
-                  </span>
+                  Due Date: {{ formatDate(payment.dueDate) }}
+                  <span v-if="isOverdue" class="text-error font-weight-bold ml-2">(OVERDUE)</span>
                 </span>
               </div>
 
               <div v-if="payment.notes" class="mt-3">
-                <div class="text-caption text-medium-emphasis mb-1">Примечания:</div>
+                <div class="text-caption text-medium-emphasis mb-1">Notes:</div>
                 <div class="text-body-2">{{ payment.notes }}</div>
               </div>
             </v-card-text>
@@ -69,15 +67,15 @@
 
         <!-- Выбор счета для списания -->
         <div class="account-selection">
-          <h4 class="text-h6 mb-3">Выберите счет для списания</h4>
+          <h4 class="text-h6 mb-3">Select Account for Payment</h4>
 
           <v-select
             v-model="selectedAccountId"
             :items="accountItems"
             item-title="label"
             item-value="value"
-            label="Счет для списания"
-            :rules="[v => !!v || 'Выберите счет']"
+            label="Payment Account"
+            :rules="[v => !!v || 'Select an account']"
             required
           >
             <template #item="{ props: itemProps, item }">
@@ -92,7 +90,7 @@
                       class="text-caption"
                       :class="item.raw.balance >= payment.amount ? 'text-success' : 'text-error'"
                     >
-                      {{ item.raw.balance >= payment.amount ? 'Достаточно' : 'Недостаточно' }}
+                      {{ item.raw.balance >= payment.amount ? 'Sufficient' : 'Insufficient' }}
                     </div>
                   </div>
                 </template>
@@ -106,13 +104,13 @@
               <v-card-text>
                 <div class="d-flex justify-space-between align-center">
                   <div>
-                    <div class="text-body-2 text-medium-emphasis">Будет списано с счета:</div>
+                    <div class="text-body-2 text-medium-emphasis">Will be charged from:</div>
                     <div class="font-weight-bold">{{ selectedAccount.name }}</div>
                   </div>
                   <div class="text-right">
                     <div class="text-h6 font-weight-bold">{{ formatIDR(payment.amount) }}</div>
                     <div class="text-caption text-medium-emphasis">
-                      Остаток: {{ formatIDR(selectedAccount.balance - payment.amount) }}
+                      Remaining: {{ formatIDR(selectedAccount.balance - payment.amount) }}
                     </div>
                   </div>
                 </div>
@@ -125,7 +123,7 @@
       <v-divider />
 
       <v-card-actions class="px-4 py-3">
-        <v-btn variant="text" @click="handleCancel">Отмена</v-btn>
+        <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
 
         <v-spacer />
 
@@ -137,7 +135,7 @@
           @click="handleConfirm"
         >
           <v-icon icon="mdi-credit-card-check" class="mr-2" />
-          Подтвердить платеж
+          Confirm Payment
         </v-btn>
       </v-card-actions>
     </v-card>

@@ -162,7 +162,7 @@
                     :cost-calculation="getCostCalculation(recipe.id)"
                     @view="viewItem"
                     @edit="editItem"
-                    @duplicate="duplicateRecipe"
+                    @duplicate="duplicateItem"
                     @calculate-cost="calculateCost"
                     @toggle-status="toggleStatus"
                   />
@@ -228,6 +228,7 @@
                     :cost-calculation="getCostCalculation(preparation.id)"
                     @view="viewItem"
                     @edit="editItem"
+                    @duplicate="duplicateItem"
                     @calculate-cost="calculateCost"
                     @toggle-status="toggleStatus"
                   />
@@ -276,11 +277,13 @@
     <!-- Duplicate dialog -->
     <v-dialog v-model="dialogs.duplicate" max-width="400px">
       <v-card>
-        <v-card-title class="text-h6">Duplicate Recipe</v-card-title>
+        <v-card-title class="text-h6">
+          Duplicate {{ duplicateItemType === 'recipe' ? 'Recipe' : 'Preparation' }}
+        </v-card-title>
         <v-card-text>
           <v-text-field
             v-model="duplicateName"
-            label="New Recipe Name"
+            :label="`New ${duplicateItemType === 'recipe' ? 'Recipe' : 'Preparation'} Name`"
             :rules="[rules.required]"
             variant="outlined"
             autofocus
@@ -338,7 +341,8 @@ const dialogs = ref({
 const editingItem = ref<Recipe | Preparation | null>(null)
 const viewingItem = ref<Recipe | Preparation | null>(null)
 const viewingItemType = ref<'recipe' | 'preparation'>('recipe')
-const duplicateRecipeRef = ref<Recipe | null>(null)
+const duplicateItemRef = ref<Recipe | Preparation | null>(null)
+const duplicateItemType = ref<'recipe' | 'preparation'>('recipe')
 const duplicateName = ref('')
 
 // Snackbar
@@ -593,24 +597,33 @@ function editItem(item: Recipe | Preparation) {
   dialogs.value.create = true
 }
 
-async function duplicateRecipe(recipe: Recipe) {
-  duplicateRecipeRef.value = recipe
-  duplicateName.value = `${recipe.name} (Copy)`
+async function duplicateItem(item: Recipe | Preparation) {
+  duplicateItemRef.value = item
+  // Определяем тип элемента
+  duplicateItemType.value = 'components' in item ? 'recipe' : 'preparation'
+  duplicateName.value = `${item.name} (Copy)`
   dialogs.value.duplicate = true
 }
 
 async function confirmDuplicate() {
-  if (!duplicateRecipeRef.value || !duplicateName.value.trim()) return
+  if (!duplicateItemRef.value || !duplicateName.value.trim()) return
 
   try {
-    await store.duplicateRecipe(duplicateRecipeRef.value.id, duplicateName.value.trim())
-    showSnackbar(`Recipe "${duplicateName.value}" created successfully`, 'success')
+    if (duplicateItemType.value === 'recipe') {
+      await store.duplicateRecipe(duplicateItemRef.value.id, duplicateName.value.trim())
+      showSnackbar(`Recipe "${duplicateName.value}" created successfully`, 'success')
+    } else {
+      await store.duplicatePreparation(duplicateItemRef.value.id, duplicateName.value.trim())
+      showSnackbar(`Preparation "${duplicateName.value}" created successfully`, 'success')
+    }
+
     dialogs.value.duplicate = false
-    duplicateRecipeRef.value = null
+    duplicateItemRef.value = null
     duplicateName.value = ''
   } catch (error) {
-    showSnackbar('Failed to duplicate recipe', 'error')
-    DebugUtils.error(MODULE_NAME, 'Failed to duplicate recipe', error)
+    const itemType = duplicateItemType.value === 'recipe' ? 'recipe' : 'preparation'
+    showSnackbar(`Failed to duplicate ${itemType}`, 'error')
+    DebugUtils.error(MODULE_NAME, `Failed to duplicate ${itemType}`, error)
   }
 }
 

@@ -341,76 +341,43 @@
     </v-card-text>
 
     <!-- Диалог выбора блюда -->
-    <v-dialog v-model="dishSelectorDialog.show" max-width="600">
+    <v-dialog v-model="dishSelectorDialog.show" max-width="800">
       <v-card>
-        <v-card-title>Add Dish to Composition</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="dishSearchQuery"
-            label="Search Dish"
-            prepend-inner-icon="mdi-magnify"
-            hide-details="auto"
-            class="mb-3"
+        <v-card-title class="d-flex align-center justify-space-between">
+          <span>Add Dish to Composition</span>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            @click="dishSelectorDialog.show = false"
           />
-          <v-list style="max-height: 400px; overflow-y: auto">
-            <v-list-item
-              v-for="dish in filteredDishes"
-              :key="dish.id"
-              @click="addDishToComposition(dish)"
-            >
-              <template #prepend>
-                <v-icon
-                  :icon="dish.type === 'recipe' ? 'mdi-chef-hat' : 'mdi-food-variant'"
-                  :color="dish.type === 'recipe' ? 'primary' : 'secondary'"
-                />
-              </template>
-              <v-list-item-title>{{ dish.name }}</v-list-item-title>
-              <v-list-item-subtitle>
-                {{ dish.type === 'recipe' ? 'Recipe' : 'Semi-finished' }} •
-                {{ dish.outputQuantity }} {{ dish.unit }}
-              </v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <dish-search-widget :dishes="dishOptions" @dish-selected="addDishToComposition" />
         </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="dishSelectorDialog.show = false">Cancel</v-btn>
-        </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- Диалог выбора продукта -->
-    <v-dialog v-model="productSelectorDialog.show" max-width="600">
+    <v-dialog v-model="productSelectorDialog.show" max-width="800">
       <v-card>
-        <v-card-title>Add Product to Composition</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="productSearchQuery"
-            label="Search Product"
-            prepend-inner-icon="mdi-magnify"
-            hide-details="auto"
-            class="mb-3"
+        <v-card-title class="d-flex align-center justify-space-between">
+          <span>Add Product to Composition</span>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            @click="productSelectorDialog.show = false"
           />
-          <v-list style="max-height: 400px; overflow-y: auto">
-            <v-list-item
-              v-for="product in filteredProducts"
-              :key="product.id"
-              @click="addProductToComposition(product)"
-            >
-              <template #prepend>
-                <v-icon icon="mdi-package-variant" color="info" />
-              </template>
-              <v-list-item-title>{{ product.name }}</v-list-item-title>
-              <v-list-item-subtitle>
-                {{ product.category }} • {{ product.unit }}
-              </v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <product-search-widget
+            :products="productOptions"
+            @product-selected="addProductToComposition"
+          />
         </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="productSelectorDialog.show = false">Cancel</v-btn>
-        </v-card-actions>
       </v-card>
     </v-dialog>
   </v-card>
@@ -427,6 +394,8 @@ import type {
   DishOption,
   ProductOption
 } from '@/stores/menu/types'
+import DishSearchWidget from '@/views/menu/components/widgets/DishSearchWidget.vue'
+import ProductSearchWidget from '@/views/menu/components/widgets/ProductSearchWidget.vue'
 
 interface Props {
   modifierGroups: ModifierGroup[]
@@ -473,9 +442,6 @@ const productSelectorDialog = ref<{
   optionIndex: null
 })
 
-const dishSearchQuery = ref('')
-const productSearchQuery = ref('')
-
 // Unit options for composition
 const unitOptions = [
   { title: 'Grams', value: 'gram' },
@@ -496,21 +462,6 @@ const modifierTypes = [
 
 // Computed
 const hasModifiers = computed(() => props.modifierGroups.length > 0)
-
-// ✅ NEW: Filtered dishes for search
-const filteredDishes = computed(() => {
-  const query = dishSearchQuery.value.toLowerCase()
-  return (props.dishOptions || []).filter(dish => dish.name.toLowerCase().includes(query))
-})
-
-// ✅ NEW: Filtered products for search
-const filteredProducts = computed(() => {
-  const query = productSearchQuery.value.toLowerCase()
-  return (props.productOptions || []).filter(
-    product =>
-      product.name.toLowerCase().includes(query) || product.category.toLowerCase().includes(query)
-  )
-})
 
 // Methods
 function addModifierGroup(): void {
@@ -567,7 +518,6 @@ function showDishSelector(groupIndex: number, optionIndex: number): void {
     groupIndex,
     optionIndex
   }
-  dishSearchQuery.value = ''
 }
 
 function showProductSelector(groupIndex: number, optionIndex: number): void {
@@ -576,7 +526,6 @@ function showProductSelector(groupIndex: number, optionIndex: number): void {
     groupIndex,
     optionIndex
   }
-  productSearchQuery.value = ''
 }
 
 function addDishToComposition(dish: DishOption): void {

@@ -363,9 +363,9 @@ export interface RecipeCategory {
 // ❌ RECIPE_CATEGORIES removed - now loaded from database via recipe_categories table
 
 export const DIFFICULTY_LEVELS = [
-  { value: 'easy', text: 'Легко', color: 'success' },
-  { value: 'medium', text: 'Средне', color: 'warning' },
-  { value: 'hard', text: 'Сложно', color: 'error' }
+  { value: 'easy', text: 'Easy', color: 'success' },
+  { value: 'medium', text: 'Medium', color: 'warning' },
+  { value: 'hard', text: 'Hard', color: 'error' }
 ] as const
 
 // =============================================

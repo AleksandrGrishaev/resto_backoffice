@@ -1,7 +1,7 @@
 <template>
   <base-dialog
     v-model="dialogModel"
-    title="Перевод между счетами"
+    title="Transfer Between Accounts"
     :loading="loading"
     :disabled="!isFormValid"
     @confirm="handleSubmit"
@@ -9,44 +9,44 @@
     <v-form ref="form" v-model="formState.isValid" @submit.prevent>
       <v-select
         v-model="formData.fromAccountId"
-        label="Счет отправитель"
+        label="Source Account"
         :items="accountItems"
         item-title="name"
         item-value="id"
         :rules="[
-          v => !!v || 'Обязательное поле',
-          v => v !== formData.toAccountId || 'Выберите разные счета'
+          v => !!v || 'Required field',
+          v => v !== formData.toAccountId || 'Select different accounts'
         ]"
         required
       />
       <v-select
         v-model="formData.toAccountId"
-        label="Счет получатель"
+        label="Destination Account"
         :items="accountItems"
         item-title="name"
         item-value="id"
         :rules="[
-          v => !!v || 'Обязательное поле',
-          v => v !== formData.fromAccountId || 'Выберите разные счета'
+          v => !!v || 'Required field',
+          v => v !== formData.fromAccountId || 'Select different accounts'
         ]"
         required
       />
       <v-text-field
         v-model.number="formData.amount"
-        label="Сумма"
+        label="Amount"
         type="number"
         :rules="[
-          v => !!v || 'Обязательное поле',
-          v => v > 0 || 'Сумма должна быть больше 0',
+          v => !!v || 'Required field',
+          v => v > 0 || 'Amount must be greater than 0',
           validateTransferAmount
         ]"
         required
       />
       <v-textarea
         v-model="formData.description"
-        label="Описание"
+        label="Description"
         rows="3"
-        :rules="[v => !!v || 'Обязательное поле']"
+        :rules="[v => !!v || 'Required field']"
         required
       />
     </v-form>
@@ -117,6 +117,6 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
 function validateTransferAmount(value: number) {
   const fromAccount = accountStore.getAccountById(formData.value.fromAccountId)
   if (!fromAccount) return true
-  return value <= fromAccount.balance || 'Недостаточно средств для перевода'
+  return value <= fromAccount.balance || 'Insufficient funds for transfer'
 }
 </script>

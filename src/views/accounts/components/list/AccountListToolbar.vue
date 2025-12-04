@@ -7,7 +7,7 @@
         prepend-icon="mdi-plus-circle"
         @click="emit('create-account')"
       >
-        Создать счет
+        Create Account
       </v-btn>
     </div>
 
@@ -16,7 +16,7 @@
     <v-text-field
       v-model="search"
       append-inner-icon="mdi-magnify"
-      label="Поиск"
+      label="Search"
       single-line
       hide-details
       density="compact"

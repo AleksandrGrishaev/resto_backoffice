@@ -13,19 +13,19 @@
     <!-- Основная таблица счетов -->
     <v-card>
       <v-card-title>
-        <span class="text-h6">Счета</span>
+        <span class="text-h6">Accounts</span>
       </v-card-title>
       <v-card-text>
         <v-table>
           <thead>
             <tr>
-              <th>Тип</th>
-              <th>Название</th>
-              <th>Описание</th>
-              <th>Баланс</th>
-              <th>Последняя операция</th>
-              <th>Статус</th>
-              <th v-if="canEdit">Действия</th>
+              <th>Type</th>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Balance</th>
+              <th>Last Transaction</th>
+              <th>Status</th>
+              <th v-if="canEdit">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -68,7 +68,7 @@
                   size="small"
                   variant="tonal"
                 >
-                  {{ account.isActive ? 'Активен' : 'Неактивен' }}
+                  {{ account.isActive ? 'Active' : 'Inactive' }}
                 </v-chip>
               </td>
               <td v-if="canEdit">
@@ -84,7 +84,7 @@
             </tr>
             <tr v-if="loading || accounts.length === 0">
               <td :colspan="canEdit ? 7 : 6" class="text-center py-4">
-                {{ loading ? 'Загрузка...' : 'Нет счетов' }}
+                {{ loading ? 'Loading...' : 'No accounts' }}
               </td>
             </tr>
           </tbody>
@@ -149,9 +149,9 @@ function getAccountTypeIcon(type: Account['type']): string {
 
 function getAccountTypeLabel(type: Account['type']): string {
   const labels = {
-    cash: 'Наличные',
-    bank: 'Банковский счет',
-    card: 'Карта',
+    cash: 'Cash',
+    bank: 'Bank Account',
+    card: 'Card',
     gojeck: 'Gojek',
     grab: 'Grab'
   }
