@@ -248,6 +248,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useDiscountAnalytics } from '@/stores/discounts'
+import { useDiscountsStore } from '@/stores/discounts'
 import type { DailyRevenueReport } from '@/stores/discounts'
 import { formatIDR } from '@/utils'
 import { DebugUtils, TimeUtils } from '@/utils'
@@ -291,21 +292,40 @@ async function handleGenerateReport() {
     loading.value = true
     error.value = null
 
-    DebugUtils.info(MODULE_NAME, 'Generating revenue report', {
+    DebugUtils.info(MODULE_NAME, '🚀 Starting revenue report generation', {
       dateFrom: dateFrom.value,
       dateTo: dateTo.value
     })
 
+    // DEBUG: Check if discountsStore is available
+    const discountsStore = useDiscountsStore()
+    DebugUtils.info(MODULE_NAME, '💰 DiscountsStore check', {
+      storeExists: !!discountsStore,
+      initialized: discountsStore?.initialized,
+      eventsCount: discountsStore?.discountEvents?.length || 0
+    })
+
     report.value = await getDailyRevenueReport(dateFrom.value, dateTo.value)
 
-    DebugUtils.store(MODULE_NAME, 'Revenue report generated', {
+    DebugUtils.store(MODULE_NAME, '✅ Revenue report generated successfully', {
       plannedRevenue: report.value.plannedRevenue,
       actualRevenue: report.value.actualRevenue,
       totalCollected: report.value.totalCollected,
-      orderCount: report.value.orderCount
+      orderCount: report.value.orderCount,
+      discountCount: report.value.discountCount,
+      totalDiscounts: report.value.totalDiscounts,
+      reportObject: report.value
     })
+
+    if (report.value.orderCount === 0) {
+      DebugUtils.error(MODULE_NAME, '⚠️ REPORT HAS ZERO ORDERS!', {
+        dateFrom: dateFrom.value,
+        dateTo: dateTo.value,
+        report: report.value
+      })
+    }
   } catch (err) {
-    DebugUtils.error(MODULE_NAME, 'Failed to generate revenue report', { error: err })
+    DebugUtils.error(MODULE_NAME, '❌ Failed to generate revenue report', { error: err })
     error.value = err instanceof Error ? err.message : 'Failed to generate report'
   } finally {
     loading.value = false

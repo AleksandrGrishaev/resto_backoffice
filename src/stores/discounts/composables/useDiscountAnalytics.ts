@@ -1,6 +1,7 @@
 // src/stores/discounts/composables/useDiscountAnalytics.ts
 import { useDiscountsStore } from '../discountsStore'
-import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+// TODO: Replace with useSalesStore for sales_transactions data
+// import { useSalesStore } from '@/stores/sales'
 import type {
   DailyRevenueReport,
   DiscountSummary,
@@ -38,7 +39,8 @@ const MODULE_NAME = 'DiscountAnalytics'
  */
 export function useDiscountAnalytics() {
   const discountsStore = useDiscountsStore()
-  const ordersStore = usePosOrdersStore()
+  // TODO: Add salesStore when implementing sales_transactions integration
+  // const salesStore = useSalesStore()
 
   /**
    * Generate daily revenue report for a date range
@@ -59,13 +61,16 @@ export function useDiscountAnalytics() {
     startDate: string,
     endDate: string
   ): Promise<DailyRevenueReport> {
-    DebugUtils.info(MODULE_NAME, 'Generating daily revenue report', { startDate, endDate })
+    DebugUtils.info(MODULE_NAME, '📊 Generating daily revenue report', { startDate, endDate })
 
-    // 1. Filter completed orders in date range
-    const orders = ordersStore.orders.filter(order => {
-      const orderDate = order.createdAt.split('T')[0]
-      return orderDate >= startDate && orderDate <= endDate && order.status === 'completed'
-    })
+    // TODO: Replace with sales_transactions data source
+    // Current implementation uses empty orders array (placeholder)
+    const orders: any[] = []
+
+    DebugUtils.error(
+      MODULE_NAME,
+      '⚠️ DEPRECATED: Using orders as data source. Should use sales_transactions!'
+    )
 
     // 2. Aggregate revenue metrics
     const plannedRevenue = orders.reduce((sum, o) => sum + (o.plannedRevenue || 0), 0)
@@ -177,15 +182,14 @@ export function useDiscountAnalytics() {
 
     const events = discountsStore.getFilteredDiscounts(filterOptions)
 
-    // Enrich with order context
+    // TODO: Enrich with sales_transactions context instead of orders
+    // For now, use basic discount event data without order enrichment
     const transactions: DiscountTransactionView[] = events.map(event => {
-      const order = ordersStore.orders.find(o => o.id === event.orderId)
-
       return {
         ...event,
-        orderNumber: order?.orderNumber || `ORD-${event.orderId.substring(0, 8)}`,
-        tableName: order?.tableId || undefined,
-        orderType: order?.type || undefined,
+        orderNumber: `ORD-${event.orderId.substring(0, 8)}`, // Fallback order number
+        tableName: undefined,
+        orderType: undefined,
         appliedByName: event.appliedBy || 'System',
         approvedByName: event.approvedBy || undefined
       }

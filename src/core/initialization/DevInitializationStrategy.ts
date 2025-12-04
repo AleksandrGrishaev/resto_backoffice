@@ -28,6 +28,7 @@ import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
 import { usePosStore } from '@/stores/pos'
 import { useKitchenStore } from '@/stores/kitchen'
 import { useDebugStore } from '@/stores/debug'
+import { useDiscountsStore } from '@/stores/discounts'
 
 const MODULE_NAME = 'DevInitStrategy'
 
@@ -451,7 +452,11 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
     // Then load independent stores in parallel
     // NOTE: storage уже загружен в критических stores
-    const parallelResults = await Promise.all([this.loadAccounts(), this.loadSuppliers()])
+    const parallelResults = await Promise.all([
+      this.loadAccounts(),
+      this.loadSuppliers(),
+      this.loadDiscounts() // ✅ Sprint 7: Add discounts store for revenue analytics
+    ])
 
     return [preparationsResult, ...parallelResults]
   }
@@ -574,6 +579,37 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       return {
         name: 'suppliers',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadDiscounts(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useDiscountsStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading discounts...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'discounts',
+        success: true,
+        count: store.discountEvents.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load discounts'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'discounts',
         success: false,
         error: message,
         duration: Date.now() - start

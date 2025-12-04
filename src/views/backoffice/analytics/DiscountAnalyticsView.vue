@@ -400,6 +400,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useDiscountAnalytics } from '@/stores/discounts'
+import { useDiscountsStore } from '@/stores/discounts'
 import {
   DISCOUNT_REASON_OPTIONS,
   DATE_RANGE_PRESETS,
@@ -488,19 +489,37 @@ async function handleApplyFilters() {
     loading.value = true
     error.value = null
 
-    DebugUtils.info(MODULE_NAME, 'Applying filters', { filters: filters.value })
+    DebugUtils.info(MODULE_NAME, '🚀 Applying filters', { filters: filters.value })
+
+    // DEBUG: Check stores availability
+    const discountsStore = useDiscountsStore()
+
+    DebugUtils.info(MODULE_NAME, '📦 Stores check', {
+      discountsStoreExists: !!discountsStore,
+      discountsInitialized: discountsStore?.initialized,
+      discountEventsCount: discountsStore?.discountEvents?.length || 0
+    })
 
     summary.value = await getDiscountSummary(filters.value)
     transactions.value = await getDiscountTransactions(filters.value)
 
     currentPage.value = 1
 
-    DebugUtils.store(MODULE_NAME, 'Filters applied', {
+    DebugUtils.store(MODULE_NAME, '✅ Filters applied successfully', {
       summaryCount: summary.value.length,
-      transactionCount: transactions.value.length
+      transactionCount: transactions.value.length,
+      summary: summary.value,
+      transactions: transactions.value.slice(0, 5) // First 5 for debugging
     })
+
+    if (summary.value.length === 0 && transactions.value.length === 0) {
+      DebugUtils.error(MODULE_NAME, '⚠️ NO DATA RETURNED!', {
+        filters: filters.value,
+        discountEventsInStore: discountsStore?.discountEvents?.length || 0
+      })
+    }
   } catch (err) {
-    DebugUtils.error(MODULE_NAME, 'Failed to apply filters', { error: err })
+    DebugUtils.error(MODULE_NAME, '❌ Failed to apply filters', { error: err })
     error.value = err instanceof Error ? err.message : 'Failed to load discount data'
   } finally {
     loading.value = false

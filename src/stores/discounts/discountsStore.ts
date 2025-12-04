@@ -9,6 +9,7 @@ import type {
   DiscountReason
 } from './types'
 import { DISCOUNT_REASON_LABELS, MODULE_NAME } from './constants'
+import { discountSupabaseService as supabaseService } from './services'
 
 interface State {
   discountEvents: DiscountEvent[]
@@ -230,7 +231,7 @@ export const useDiscountsStore = defineStore('discounts', {
   actions: {
     /**
      * Initialize the discount store
-     * In Phase 1, this is a placeholder for future data loading
+     * Loads discount events from database (Supabase)
      */
     async initialize() {
       if (this.initialized) {
@@ -240,19 +241,33 @@ export const useDiscountsStore = defineStore('discounts', {
 
       try {
         this.loading = true
-        DebugUtils.info(MODULE_NAME, 'Initializing discount store')
+        DebugUtils.info(MODULE_NAME, '🔄 Initializing discount store - loading from database')
 
-        // Phase 1: Initialize with empty state
-        // Phase 2+: Load discount events from database
-        this.discountEvents = []
+        // ✅ Sprint 7: Load discount events from database
+        const response = await supabaseService.loadDiscountEvents()
+
+        if (response.success && response.data) {
+          this.discountEvents = response.data
+          DebugUtils.store(MODULE_NAME, '✅ Discount events loaded from database', {
+            eventsLoaded: this.discountEvents.length,
+            source: response.metadata?.source
+          })
+        } else {
+          // Failed to load from database, start with empty state
+          DebugUtils.error(MODULE_NAME, '❌ Failed to load discount events from database', {
+            error: response.error
+          })
+          this.discountEvents = []
+        }
 
         this.initialized = true
-        DebugUtils.store(MODULE_NAME, 'Initialization complete', {
+        DebugUtils.store(MODULE_NAME, '✅ Initialization complete', {
           eventsLoaded: this.discountEvents.length
         })
       } catch (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to initialize', { error })
+        DebugUtils.error(MODULE_NAME, '❌ Failed to initialize', { error })
         this.error = error as Error
+        this.discountEvents = [] // Fallback to empty state
         throw error
       } finally {
         this.loading = false

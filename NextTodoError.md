@@ -1,1 +1,253 @@
-# Transaction Flow Analysis - Critical Issues Found**Date:** 2025-12-04**Transaction ID:** ORD-20251204-5024**Payment ID:** PAY-20251204-483124**Analysis Status:** =4 **4 CRITICAL ISSUES IDENTIFIED**---## =� Transaction Summary### From UI (Screenshot)- **Subtotal:** Rp 105,000- **Product Discount:** -Rp 12,000 (Customer Loyalty - 20% on item 1)- **Bill Discount:** -Rp 9,300 (Food Quality)- **Service Tax (5%):** Rp 4,185- **Government Tax (10%):** Rp 8,370- **Total Paid:** Rp 96,255### Items Sold1. Build Your Own Breakfast (Standard Portion) - 1x   - Original: Rp 60,000   - Item Discount: -Rp 12,000 (Customer Loyalty)   - Bill Discount Allocated: -Rp 4,800   - Final Price: Rp 43,2002. Build Your Own Breakfast (Var 2) - 1x   - Original: Rp 45,000   - Bill Discount Allocated: -Rp 4,500   - Final Price: Rp 40,500---##  What's Working Correctly### 1. Revenue Recording (sales_transactions)- Revenue correctly recorded as **finalRevenue** (after ALL discounts)- Item 1: Rp 43,200 - Item 2: Rp 40,500 - **Total Revenue: Rp 83,700** ### 2. Discount Allocation (discount_events)**Item Discount (Customer Loyalty):**- Event ID: `79978dfb-2f8a-48d8-a099-9394bf006fc6`- Type: `item`, Discount: 20%, Amount: Rp 12,000 **Bill Discount (Food Quality):**- Event ID: `920654b6-fc9d-4658-b405-cafd4c1d396c`- Type: `bill`, Amount: Rp 9,300 - **Proportional Allocation:**  - Item 1 (57.14%): Rp 4,800   - Item 2 (42.86%): Rp 4,500 ### 3. Payment Amount- Payment record: **Rp 96,255** (correct with taxes) ### 4. Cost Tracking (FIFO)- Item 1: Rp 7,000 from batch `PREP-2025-11-0010` - Write-off operations created correctly - Negative batches created for out-of-stock items ---## =4 CRITICAL ISSUE #1: Tax Data Completely Missing**Severity:** =4 **HIGH PRIORITY****Impact:** Compliance risk, audit trail incomplete, cannot generate tax reports### ProblemTaxes are calculated in UI (Rp 12,555 total) but **NOT STORED** in database.### Evidence| Location                           | Expected                       | Actual        | Status || ---------------------------------- | ------------------------------ | ------------- | ------ || `orders.tax_amount`                | 12,555                         | **0**         | L      || `orders.revenue_breakdown.taxes[]` | [{service: 4185}, {gov: 8370}] | **[]**        | L      || `sales_transactions` (tax fields)  | 4,185 & 8,370 per item         | **No fields** | L      || `payments.details.taxes`           | Tax breakdown                  | **{}**        | L      |### Database Records**orders table:**```sqlSELECT  order_number,  tax_amount,        -- 0.00 L  revenue_breakdown  -- taxes: [] LFROM ordersWHERE order_number = 'ORD-20251204-5024'```**Result:**- `tax_amount`: **0.00** (should be 12,555)- `revenue_breakdown.taxes`: **[]** (should have 2 entries)**payments table:**```sqlSELECT  payment_number,  amount,     -- 96,255   details     -- {} LFROM paymentsWHERE payment_number = 'PAY-20251204-483124'```**Result:**- `amount`: **96,255**  Correct- `details`: **{}** L No tax breakdown### Tax Calculation (UI only)```Subtotal after discounts: 105,000 - 12,000 - 9,300 = 83,700Service Tax (5%): 83,700 � 0.05 = 4,185 Government Tax (10%): 83,700 � 0.10 = 8,370 Total with tax: 83,700 + 4,185 + 8,370 = 96,255 But these values are NEVER saved! L```### Impact- L Cannot generate tax reports for government- L Cannot reconcile why paid (96,255) > order total (93,000)- L Audit trail incomplete- L Compliance risk (tax authorities may require breakdown)- L Cannot analyze tax collection over time### Root CauseSchema missing tax storage fields:- `sales_transactions` table has no tax columns- `orders.revenue_breakdown.taxes` array never populated- `payments.details` object unused---## =4 CRITICAL ISSUE #2: Orders Revenue Breakdown Incorrect**Severity:** =4 **HIGH PRIORITY****Impact:** Financial reports show wrong figures, analytics unreliable### Problem`orders.revenue_breakdown` JSONB contains incorrect values.### Database Record```sqlSELECT revenue_breakdownFROM ordersWHERE order_number = 'ORD-20251204-5024'```**Current (WRONG):**```json{  "plannedRevenue": 105000, //  Correct  "itemDiscounts": 12000, //  Correct  "billDiscounts": 0, // L Should be 9,300  "totalDiscounts": 12000, // L Should be 21,300  "totalTaxes": 0, // L Should be 12,555  "taxes": [], // L Should have 2 entries  "actualRevenue": 93000, // L Should be 83,700 (before tax)  "totalCollected": 93000 // L Should be 96,255 (with tax)}```**Expected (CORRECT):**```json{  "plannedRevenue": 105000,  "itemDiscounts": 12000,  "billDiscounts": 9300,  "totalDiscounts": 21300,  "totalTaxes": 12555,  "taxes": [    {      "taxId": "service_tax",      "name": "Service Tax",      "rate": 0.05,      "amount": 4185    },    {      "taxId": "government_tax",      "name": "Government Tax",      "rate": 0.1,      "amount": 8370    }  ],  "actualRevenue": 83700,  "totalCollected": 96255}```### Impact- L Dashboard analytics show wrong revenue- L Discount reports incorrect (missing 9,300)- L Financial statements unreliable- L Cannot reconcile revenue with payments- L Management decisions based on wrong data### Root CauseOrder update logic doesn't:- Populate bill discount in revenue_breakdown- Calculate and store tax amounts- Update actualRevenue correctly- Sync totalCollected with payment.amount---## =4 CRITICAL ISSUE #3: Order Amount Fields Mismatch**Severity:** =4 **HIGH PRIORITY****Impact:** Order summary doesn't match payment, unexplained difference### ProblemMultiple order amount fields inconsistent with payment.### Database Comparison**orders table:**```sqlSELECT  order_number,  subtotal,      -- 105,000   discount,      -- 21,300   tax,           -- 0 L  total,         -- 93,000 L  final_amount,  -- 93,000 L  paid_amount    -- 96,255 FROM ordersWHERE order_number = 'ORD-20251204-5024'```**Analysis:**| Field          | Value   | Should Be  | Note                        | Status || -------------- | ------- | ---------- | --------------------------- | ------ || `subtotal`     | 105,000 | 105,000    | Before any adjustments      |        || `discount`     | 21,300  | 21,300     | Item + Bill discounts       |        || `tax`          | **0**   | **12,555** | Service + Gov tax           | L      || `total`        | 93,000  | 83,700     | After discounts, before tax | L      || `final_amount` | 93,000  | 96,255     | Should match paid_amount    | L      || `paid_amount`  | 96,255  | 96,255     | Correct with taxes          |        |### Calculation Error**Current (Wrong):**```total = subtotal - discount      = 105,000 - 21,300      = 83,700  (accidentally correct)BUT: orders.total shows 93,000 L```**Expected (Correct):**```total = subtotal - discount (before tax)      = 105,000 - 21,300      = 83,700final_amount = total + tax             = 83,700 + 12,555             = 96,255final_amount === paid_amount ```### Impact- L Order summary confusing- L Difference of Rp 3,255 unexplained- L Cannot validate payment against order- L Reports show wrong totals### Root CauseOrder calculation logic:- Doesn't update `tax` field- Doesn't calculate `final_amount` correctly- Doesn't sync with payment amount---## =� ISSUE #4: Negative Batch Cost Not Applied to Profit**Severity:** =� **MEDIUM PRIORITY****Impact:** Profit overstated, food cost analysis incorrect### ProblemWhen negative batch is created with estimated cost, that cost is NOT backfilled into sales transaction.### Evidence**Item 2 (Var 2) Components:**- Sweet and Sour Sauce: 20ml- 0@B>D5;L D@8: 150g**Negative Batches Created:**```sqlSELECT * FROM storage_batchesWHERE batch_number IN (  'NEG-PREP-1764815488083',  'NEG-PREP-1764815489135')```**Results:**1. `NEG-PREP-1764815488083` (Sweet and Sour Sauce)   - Quantity: -20 ml   - Cost per unit: 35   - **Total cost: 700**  Estimated from last batch2. `NEG-PREP-1764815489135` (0@B>D5;L D@8)   - Quantity: -150 gram   - Cost per unit: 0   - Total cost: 0 (no history available)**sales_transactions record:**```sqlSELECT  menu_item_name,  actual_cost,  profit_calculationFROM sales_transactionsWHERE transaction_id = 'st-1764815487306-jcdxecito'```**Result:**```json{  "actual_cost": {    "totalCost": 0, // L Should be 700    "preparationItems": 2,    "productItems": 0  },  "profit_calculation": {    "originalPrice": 45000,    "finalRevenue": 40500,    "ingredientsCost": 0, // L Should be 700    "profit": 40500, // L Should be 39,800    "profitMargin": 100 // L Should be 98.3%  }}```### Timeline1.  Sales transaction created with cost = 0 (no batches available)2.  Write-off operation triggered3.  Negative batch created with estimated cost = 7004. L Sales transaction NOT updated with new cost### Impact- L Profit overstated by Rp 700 per transaction- L Food cost % understated- L When aggregated across many orders, significant distortion- L Cannot accurately track item profitability### Root CauseMissing backfill mechanism:- Negative batch creation doesn't trigger update- Sales transaction is immutable after creation- No reconciliation process for estimated costs---## =� How the System Currently Works### Revenue Flow```Original Price (105,000)  �- Item Discounts (12,000)  � [stored in discount_events ]= After Item Discounts (93,000)  �- Bill Discount (9,300) allocated proportionally   � [stored in discount_events ]= Final Revenue (83,700) � Stored in sales_transactions   �+ Service Tax 5% (4,185) � Calculated but NOT stored L+ Government Tax 10% (8,370) � Calculated but NOT stored L  �= Total to Collect (96,255) � Only in payment.amount L```### Profit Calculation```finalRevenue (43,200 + 40,500 = 83,700)  �- actualCost (7,000 + 0 = 7,000) � Issue: Missing 700 L  �= grossProfit (76,700) � Overstated by 700 L```### Data Flow by Table**discount_events table:**  Working- Stores both item and bill discounts- Includes allocation details for bill discounts- Linked to orders, items, bills**sales_transactions table:** � Partially working- Stores finalRevenue correctly - Stores profit_calculation correctly (if costs available) - Missing tax fields L- Missing cost backfill for negative batches L**orders table:** L Issues- revenue_breakdown incomplete- tax fields = 0- final_amount doesn't match paid_amount**payments table:** � Partially working- Amount correct - Details empty (no tax breakdown) L---## <� Root Causes Summary### 1. Schema Gaps- `sales_transactions` table: No tax columns- `payments.details`: JSONB unused- No validation constraints### 2. Logic Gaps- Order update doesn't populate all revenue_breakdown fields- Tax calculation happens in UI only- No backfill mechanism for negative batches- No validation: final_amount === paid_amount### 3. Architectural Issues- Taxes treated as "UI concern" not "data concern"- Sales transaction immutable (no updates after creation)- Missing reconciliation processes---## =� Affected Tables Summary| Table                  | Status | Issues                                               | Fix Priority || ---------------------- | ------ | ---------------------------------------------------- | ------------ || **sales_transactions** | �      | No tax fields, missing cost backfill                 | =4 High      || **discount_events**    |        | Working correctly                                    | -            || **orders**             | L      | tax=0, revenue_breakdown incomplete, amount mismatch | =4 High      || **payments**           | �      | Amount correct but details={}                        | =4 High      || **storage_operations** |        | Working correctly                                    | -            || **storage_batches**    |        | Negative batches created correctly                   | -            || **recipe_write_offs**  |        | Working correctly                                    | -            |---## =SQL Queries for Debugging### Check Tax Storage```sql-- Should show tax_amount and taxes arraySELECT  order_number,  tax_amount,  revenue_breakdown->'taxes' as taxes,  revenue_breakdown->'totalTaxes' as total_taxesFROM ordersWHERE order_number = 'ORD-20251204-5024';```### Check Revenue Breakdown```sql-- Should show all discount and tax detailsSELECT  order_number,  revenue_breakdown->'billDiscounts' as bill_discounts,  revenue_breakdown->'totalDiscounts' as total_discounts,  revenue_breakdown->'actualRevenue' as actual_revenue,  revenue_breakdown->'totalCollected' as total_collectedFROM ordersWHERE order_number = 'ORD-20251204-5024';```### Check Payment Tax Details```sql-- Should show tax breakdown in detailsSELECT  payment_number,  amount,  details->'taxes' as tax_detailsFROM paymentsWHERE payment_number = 'PAY-20251204-483124';```### Check Sales Transaction Costs```sql-- Should show actual costs including estimatesSELECT  transaction_id,  menu_item_name,  (actual_cost->>'totalCost')::numeric as total_cost,  (profit_calculation->>'ingredientsCost')::numeric as ingredients_cost,  (profit_calculation->>'profit')::numeric as profitFROM sales_transactionsWHERE order_id = '0b2d3868-650d-4b3c-8f63-f28652dc75cd';```### Check Negative Batches```sql-- Find negative batches with estimated costsSELECT  batch_number,  preparation_id,  quantity_remaining,  cost_per_unit,  created_atFROM storage_batchesWHERE batch_number LIKE 'NEG-PREP-%'  AND created_at >= '2025-12-04'ORDER BY created_at DESC;```---## =� Expected vs Actual Comparison| Metric                   | Expected (Screenshot) | Database   | Status         || ------------------------ | --------------------- | ---------- | -------------- || Subtotal                 | 105,000               | 105,000    |                || Item Discount            | -12,000               | -12,000    |                || Bill Discount            | -9,300                | -9,300     |                || Subtotal After Discounts | 83,700                | 93,000     | L              || Service Tax (5%)         | 4,185                 | 0          | L              || Government Tax (10%)     | 8,370                 | 0          | L              || **Total Paid**           | **96,255**            | **96,255** | **** (payment) || orders.final_amount      | 96,255                | 93,000     | L              || Item 1 Cost              | 7,000                 | 7,000      |                || Item 2 Cost              | 700                   | 0          | L              || Item 1 Revenue           | 43,200                | 43,200     |                || Item 2 Revenue           | 40,500                | 40,500     |                || Item 1 Profit            | 36,200                | 36,200     |                || Item 2 Profit            | 39,800                | 40,500     | L              |---## =� Next StepsSee **NextTodo.md** for detailed implementation plan to fix these issues.**Fix Priority:**1. =4 **HIGH**: Add tax storage to schema (Issue #1)2. =4 **HIGH**: Fix revenue_breakdown calculation (Issue #2)3. =4 **HIGH**: Fix order amount fields (Issue #3)4. =� **MEDIUM**: Implement negative batch cost backfill (Issue #4)---_Analysis Date: 2025-12-04__Analyzed By: Claude Code__Transaction: ORD-20251204-5024__Status: 4 Critical Issues Identified_
+# Task: Refactor Revenue Dashboard to use sales_transactions instead of orders
+
+## Problem Description
+
+**Current Implementation (INCORRECT):**
+
+- Revenue Dashboard uses `ordersStore` (POS orders) for financial analytics
+- Added `manager` role to `shouldLoadPOSStores()` to load orders for analytics
+- OrdersStore tracks order **preparation status** (draft � waiting � cooking � served)
+- OrdersStore is NOT designed for financial reporting
+
+**Why this is wrong:**
+
+1. OrdersStore contains operational data (kitchen workflow), not financial data
+2. Orders don't have final revenue breakdown with taxes and discounts applied
+3. Loading POS stores for backoffice analytics is architectural violation
+4. Manager role shouldn't need POS system just for reports
+
+**Correct Approach:**
+Use **SalesStore (sales_transactions)** which tracks:
+
+-  Final revenue per item (with taxes, discounts applied)
+-  Discount allocations (item + bill level)
+-  Payment methods and amounts
+-  Profit calculations with actual costs
+-  Write-off references
+
+## Evidence from Logs
+
+**SalesStore has all needed data:**
+
+```javascript
+[SalesStore] Recording sales transaction: {
+  amount: 43987.5,           // Total collected (with taxes)
+  billDiscountAmount: 6750,  // Bill-level discounts
+  itemsCount: 1,
+  profit_calculation: {...}, // Item price, discounts, costs
+  service_tax_amount: ...,   // Tax breakdown
+  government_tax_amount: ...
+}
+```
+
+**DiscountEvents already tracked:**
+
+```javascript
+[DiscountSupabaseService]: Saving discount event to database {
+  discountAmount: 6750,
+  type: 'bill',
+  reason: 'service_issue',
+  applied_at: '...'
+}
+```
+
+## Required Changes
+
+### 1.  Revert manager role change (DONE MANUALLY)
+
+**File:** `src/core/initialization/dependencies.ts:151`
+
+```typescript
+// REVERT THIS:
+export function shouldLoadPOSStores(userRoles: UserRole[]): boolean {
+  return userRoles.some(role => ['admin', 'manager', 'cashier', 'waiter'].includes(role))
+  //                                      ^^^^^^^^ REMOVE!
+}
+
+// TO:
+export function shouldLoadPOSStores(userRoles: UserRole[]): boolean {
+  return userRoles.some(role => ['admin', 'cashier', 'waiter'].includes(role))
+}
+```
+
+### 2. Refactor useDiscountAnalytics.ts
+
+**File:** `src/stores/discounts/composables/useDiscountAnalytics.ts`
+
+**Change imports:**
+
+```typescript
+// OLD:
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+const ordersStore = usePosOrdersStore()
+
+// NEW:
+import { useSalesStore } from '@/stores/sales'
+const salesStore = useSalesStore()
+```
+
+**Change data source:**
+
+```typescript
+// OLD: Filter orders by payment_status
+const orders = ordersStore.orders.filter(order => {
+  const orderDate = order.createdAt.split('T')[0]
+  return orderDate >= startDate && orderDate <= endDate && order.paymentStatus === 'paid'
+})
+
+// NEW: Group sales_transactions by payment_id
+const transactions = salesStore.transactions.filter(tx => {
+  const txDate = tx.sold_at.split('T')[0]
+  return txDate >= startDate && txDate <= endDate
+})
+
+// Group by payment_id to get order-level metrics
+const groupedByPayment = transactions.reduce((acc, tx) => {
+  const key = tx.payment_id
+  if (!acc[key]) {
+    acc[key] = {
+      payment_id: key,
+      items: [],
+      total_revenue: 0,
+      total_discounts: 0,
+      total_taxes: 0
+    }
+  }
+
+  acc[key].items.push(tx)
+  acc[key].total_revenue += tx.total_price
+
+  // Sum discounts from profit_calculation
+  const itemDiscount = tx.profit_calculation?.item_own_discount || 0
+  const billDiscount = tx.profit_calculation?.allocated_bill_discount || 0
+  acc[key].total_discounts += itemDiscount + billDiscount
+
+  // Sum taxes
+  acc[key].total_taxes += (tx.service_tax_amount || 0) + (tx.government_tax_amount || 0)
+
+  return acc
+}, {})
+```
+
+**Recalculate metrics:**
+
+```typescript
+// Planned Revenue = sum of (unit_price * quantity) before discounts
+const plannedRevenue = transactions.reduce((sum, tx) => sum + tx.unit_price * tx.quantity, 0)
+
+// Actual Revenue = sum of total_price (after item discounts, before taxes)
+const actualRevenue = transactions.reduce((sum, tx) => sum + tx.total_price, 0)
+
+// Total Collected = sum of (total_price + taxes)
+const totalCollected = transactions.reduce(
+  (sum, tx) =>
+    sum + tx.total_price + (tx.service_tax_amount || 0) + (tx.government_tax_amount || 0),
+  0
+)
+
+// Total Discounts = from profit_calculation
+const totalDiscounts = transactions.reduce((sum, tx) => {
+  const itemDiscount = tx.profit_calculation?.item_own_discount || 0
+  const billDiscount = tx.profit_calculation?.allocated_bill_discount || 0
+  return sum + itemDiscount + billDiscount
+}, 0)
+```
+
+### 3. Update Revenue Dashboard component
+
+**File:** `src/views/backoffice/analytics/RevenueDashboardView.vue`
+
+**Remove OrdersStore import:**
+
+```typescript
+// Remove this:
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+
+// Keep only:
+import { useDiscountsStore } from '@/stores/discounts'
+```
+
+**Update store checks:**
+
+```typescript
+// Remove ordersStore check
+const ordersStore = usePosOrdersStore() // DELETE
+
+// Add salesStore check
+const salesStore = useSalesStore()
+DebugUtils.info(MODULE_NAME, '=� SalesStore check', {
+  storeExists: !!salesStore,
+  initialized: salesStore?.initialized,
+  transactionsCount: salesStore?.transactions?.length || 0
+})
+```
+
+### 4. Ensure SalesStore loads for backoffice roles
+
+**File:** `src/core/initialization/DevInitializationStrategy.ts`
+
+SalesStore is already loaded in `initializePOSStores()` for admin role.
+But we need to ensure it loads for **manager** role in backoffice context.
+
+**Option A:** Load SalesStore in `initializeBackofficeStores()` for analytics
+**Option B:** Keep SalesStore in POS section, ensure admin loads it (current behavior)
+
+**Recommended:** Option B - admin role already loads POS stores including sales.
+Manager can view reports via shared data or RPC functions.
+
+### 5. Database View Alternative (Optional - Future Enhancement)
+
+Create a SQL view for revenue analytics:
+
+```sql
+CREATE VIEW revenue_analytics AS
+SELECT
+  DATE(st.sold_at) as transaction_date,
+  st.payment_id,
+  st.shift_id,
+  -- Planned revenue (before discounts)
+  SUM(st.unit_price * st.quantity) as planned_revenue,
+  -- Actual revenue (after discounts, before tax)
+  SUM(st.total_price) as actual_revenue,
+  -- Total collected (with taxes)
+  SUM(st.total_price + COALESCE(st.service_tax_amount, 0) + COALESCE(st.government_tax_amount, 0)) as total_collected,
+  -- Discount breakdown
+  SUM((st.profit_calculation->>'item_own_discount')::numeric) as item_discounts,
+  SUM((st.profit_calculation->>'allocated_bill_discount')::numeric) as bill_discounts,
+  -- Tax breakdown
+  SUM(COALESCE(st.service_tax_amount, 0)) as service_tax,
+  SUM(COALESCE(st.government_tax_amount, 0)) as government_tax,
+  -- Item count
+  COUNT(*) as items_count
+FROM sales_transactions st
+GROUP BY DATE(st.sold_at), st.payment_id, st.shift_id;
+```
+
+This would make analytics queries much faster and simpler.
+
+## Testing Plan
+
+1.  Verify SalesStore loads for admin role
+2.  Check sales_transactions table has data
+3.  Update analytics composable to use sales_transactions
+4.  Test Revenue Dashboard shows correct metrics
+5.  Verify discount events match sales_transactions
+6.  Test date range filtering
+7.  Test CSV export
+
+## Priority
+
+**HIGH** - Current implementation loads unnecessary POS stores for backoffice users and uses wrong data source.
+
+## Files to Change
+
+1. `src/core/initialization/dependencies.ts` - Revert manager role
+2. `src/stores/discounts/composables/useDiscountAnalytics.ts` - Use sales_transactions
+3. `src/views/backoffice/analytics/RevenueDashboardView.vue` - Remove orders dependency
+4. Optional: Create SQL view for performance
+
+---
+
+**Status:** Ready to implement
+**Assigned:** Developer
+**Estimated Time:** 2-3 hours
