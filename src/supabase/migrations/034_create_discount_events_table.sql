@@ -8,6 +8,8 @@
 -- Original migration had issues with applied_by NOT NULL and RLS policy
 -- Historical fixes applied in migrations 098-102 (now in deprecated/ folder)
 -- This version includes all corrections for future deployments
+--
+-- FIX (2024-12-04): Changed users.role to users.roles (ARRAY column) in RLS policies
 
 -- ============================================================================
 -- TABLE: discount_events
@@ -130,13 +132,14 @@ CREATE POLICY discount_events_view_own ON discount_events
   );
 
 -- Policy: Managers and admins can view all discount events
+-- FIX: Changed users.role IN to 'admin' = ANY(users.roles) OR 'manager' = ANY(users.roles)
 CREATE POLICY discount_events_view_all ON discount_events
   FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-      AND users.role IN ('admin', 'manager')
+      AND ('admin' = ANY(users.roles) OR 'manager' = ANY(users.roles))
     )
   );
 
@@ -151,17 +154,19 @@ CREATE POLICY discount_events_create ON discount_events
   );
 
 -- Policy: Only managers and admins can update discount events (e.g., approve)
+-- FIX: Changed users.role IN to 'admin' = ANY(users.roles) OR 'manager' = ANY(users.roles)
 CREATE POLICY discount_events_update ON discount_events
   FOR UPDATE
   USING (
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-      AND users.role IN ('admin', 'manager')
+      AND ('admin' = ANY(users.roles) OR 'manager' = ANY(users.roles))
     )
   );
 
 -- Policy: Only admins can delete (soft delete) discount events
+-- FIX: Changed users.role = 'admin' to 'admin' = ANY(users.roles)
 CREATE POLICY discount_events_delete ON discount_events
   FOR UPDATE
   USING (
@@ -169,7 +174,7 @@ CREATE POLICY discount_events_delete ON discount_events
     AND EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-      AND users.role = 'admin'
+      AND 'admin' = ANY(users.roles)
     )
   );
 

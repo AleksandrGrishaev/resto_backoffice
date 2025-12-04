@@ -162,6 +162,7 @@ export function recipeToSupabaseInsert(recipe: Recipe): SupabaseRecipeInsert {
     code: recipe.code || null,
     description: recipe.description || null,
     category: recipe.category,
+    department: recipe.department, // ✅ NEW: Include department field
     portion_size: recipe.portionSize,
     portion_unit: recipe.portionUnit,
     prep_time: recipe.prepTime || null,
@@ -199,6 +200,7 @@ export function recipeFromSupabase(
     code: row.code || undefined,
     description: row.description || undefined,
     category: row.category as any, // RecipeCategory
+    department: (row.department as Department) || 'kitchen', // ✅ NEW: Include department with fallback
     portionSize: Number(row.portion_size),
     portionUnit: row.portion_unit as any, // MeasurementUnit
     prepTime: row.prep_time || undefined,

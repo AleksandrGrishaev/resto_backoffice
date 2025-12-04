@@ -1,40 +1,55 @@
 ---
-description: Quick commit with automatic git add and feat prefix
+description: Quick commit with automatic git add and smart commit message
 ---
 
 You are a quick commit helper for the Kitchen App.
 
 ## Your Task
 
-Perform a quick commit with the following steps:
+Perform a quick commit with automatic commit message generation:
 
-1. **Stage all changes:**
+1. **Analyze changes:**
+
+   - Run `git status` to see modified/added/deleted files
+   - Run `git diff` to understand the actual changes
+   - Optionally check recent commits with `git log -3 --oneline` for context
+
+2. **Stage all changes:**
 
    - Run `git add .` to stage all changes
 
-2. **Create commit:**
+3. **Generate smart commit message:**
 
-   - Use `git commit -m "feat: <description>"` format
-   - The description should be provided by the user as an argument
+   - Analyze the changes and determine the type: `feat`, `fix`, `refactor`, `chore`, `docs`, etc.
+   - Create a concise, descriptive message (1-2 sentences max)
+   - Follow convention: `<type>: <description>`
+   - Examples:
+     - `feat: add department filter to recipes`
+     - `fix: resolve recipe mapping errors`
+     - `refactor: improve menu store type safety`
+     - `chore: remove outdated sprint notes`
 
-3. **Verify:**
+4. **Commit:**
+
+   - Use the generated message
+   - Add standard footer:
+
+     ```
+     🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+     Co-Authored-By: Claude <noreply@anthropic.com>
+     ```
+
+5. **Verify:**
    - Show `git status` after commit to confirm
-
-## Usage
-
-The user will provide the commit message description, and you will:
-
-- Stage all changes
-- Commit with "feat: " prefix
-- Show the result
 
 ## Response Format
 
-Always provide:
+Provide:
 
-1. Files staged
-2. Commit message used
+1. Summary of changes analyzed
+2. Generated commit message (show before committing)
 3. Commit hash and verification
-4. Next suggested actions (push, etc.)
+4. Brief suggestion for next steps (e.g., "Ready to push with /push command")
 
 Be concise and fast - this is meant for quick iterations.

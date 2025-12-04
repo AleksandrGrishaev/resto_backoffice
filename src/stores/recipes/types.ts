@@ -106,6 +106,7 @@ export interface Recipe extends BaseEntity {
   code: string // ✅ UPDATED: Required field (auto-generated)
   description?: string
   category: string // UUID (FK to recipe_categories)
+  department: Department // ✅ NEW: Department that prepares this recipe ('kitchen' | 'bar')
   portionSize: number
   portionUnit: string
 
@@ -249,6 +250,7 @@ export interface CreateRecipeData {
   code: string // ✅ UPDATED: Required field (auto-generated)
   description?: string
   category: string // UUID (FK to recipe_categories)
+  department: Department // ✅ NEW: Department that prepares this recipe
   portionSize: number
   portionUnit: string
   prepTime?: number

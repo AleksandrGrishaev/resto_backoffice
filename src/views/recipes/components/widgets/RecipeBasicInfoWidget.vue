@@ -58,8 +58,8 @@
         />
       </v-col>
 
-      <!-- Department (Preparations only) -->
-      <v-col v-if="type === 'preparation'" cols="12" md="4">
+      <!-- Department (Both recipes and preparations) -->
+      <v-col cols="12" md="4">
         <v-select
           :model-value="formData.department"
           :items="departmentItems"
@@ -70,7 +70,11 @@
           required
           variant="outlined"
           density="comfortable"
-          hint="Which department prepares this item"
+          :hint="
+            type === 'preparation'
+              ? 'Which department prepares this item'
+              : 'Which department prepares this recipe'
+          "
           @update:model-value="updateField('department', $event)"
         />
       </v-col>

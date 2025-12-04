@@ -8,6 +8,15 @@
             {{ type === 'preparation' ? 'Preparation Information' : 'Recipe Information' }}
           </h4>
           <div class="info-grid">
+            <!-- Department -->
+            <div class="info-item">
+              <v-icon :icon="getDepartmentIcon()" size="18" class="mr-2" />
+              <span class="info-label">Department:</span>
+              <v-chip size="small" :color="getDepartmentColor()" variant="tonal" class="ml-1">
+                {{ getDepartmentLabel() }}
+              </v-chip>
+            </div>
+
             <!-- Output/Portion info -->
             <div class="info-item">
               <v-icon :icon="getOutputIcon()" size="18" class="mr-2" />
@@ -100,6 +109,21 @@ const props = defineProps<Props>()
 defineEmits<Emits>()
 
 // Methods for different types
+function getDepartmentIcon(): string {
+  const department = (props.item as any).department
+  return department === 'bar' ? 'mdi-glass-cocktail' : 'mdi-chef-hat'
+}
+
+function getDepartmentColor(): string {
+  const department = (props.item as any).department
+  return department === 'bar' ? 'info' : 'success'
+}
+
+function getDepartmentLabel(): string {
+  const department = (props.item as any).department
+  return department === 'bar' ? 'Bar' : 'Kitchen'
+}
+
 function getOutputIcon(): string {
   return props.type === 'preparation' ? 'mdi-package-variant' : 'mdi-account-group'
 }

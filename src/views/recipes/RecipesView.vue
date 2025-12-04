@@ -402,6 +402,11 @@ const filteredRecipes = computed(() => {
   }
   // 'all' shows everything
 
+  // ✅ NEW: Filter by department
+  if (currentFilters.value.department && currentFilters.value.department !== 'all') {
+    recipes = recipes.filter(r => r.department === currentFilters.value.department)
+  }
+
   // Filter by search
   if (currentFilters.value.search.trim()) {
     const searchText = currentFilters.value.search.toLowerCase()
