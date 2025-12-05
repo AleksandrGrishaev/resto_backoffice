@@ -22,6 +22,7 @@ import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import { useAccountStore } from '@/stores/account'
 import { useMenuStore } from '@/stores/menu'
+import { useStorageStore } from '@/stores/storage'
 import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
 import { usePosStore } from '@/stores/pos'
 import { useKitchenStore } from '@/stores/kitchen'
@@ -104,6 +105,9 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
       results.push(await this.loadProductsFromAPI())
       results.push(await this.loadRecipesFromAPI())
       results.push(await this.loadMenuFromAPI())
+
+      // Storage нужен для write-off операций при продажах (критичен!)
+      results.push(await this.loadStorageFromAPI())
 
       DebugUtils.info(MODULE_NAME, '✅ [PROD] Critical stores initialized', {
         count: results.length,
@@ -313,6 +317,48 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     }
   }
 
+  /**
+   * TODO: Загрузить storage через API
+   */
+  private async loadStorageFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useStorageStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading storage from API...')
+
+      // TODO: Заменить на API вызов
+      // const response = await fetch('/api/v1/storage')
+      // const storage = await response.json()
+      // store.setStorage(storage)
+
+      // Сейчас используем существующий метод
+      if (!store.initialized) {
+        await store.initialize()
+      } else {
+        await store.fetchBalances()
+      }
+
+      return {
+        name: 'storage',
+        success: true,
+        count: store.state?.balances?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load storage'
+      DebugUtils.error(MODULE_NAME, `❌ [PROD] ${message}`, { error })
+
+      return {
+        name: 'storage',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
   // ===== ROLE-BASED LOADING (PLACEHOLDERS) =====
 
   private async initializePOSStores(): Promise<StoreInitResult[]> {
@@ -486,7 +532,7 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
       return {
         name: 'accounts',
         success: true,
-        count: store.state?.value?.accounts?.length || 0,
+        count: store.state?.accounts?.length || 0,
         duration: Date.now() - start
       }
     } catch (error) {
