@@ -306,6 +306,7 @@ const currentMenuItemDepartment = computed<'kitchen' | 'bar'>(() => {
 
 // Опции для блюд (рецепты + полуфабрикаты)
 // ✅ FILTERED by menu item department
+// ⭐ PHASE 2: Include portionType and portionSize
 const dishOptions = computed(() => {
   const options: Array<{
     id: string
@@ -313,6 +314,9 @@ const dishOptions = computed(() => {
     type: 'recipe' | 'preparation'
     unit: string
     outputQuantity: number
+    category?: string
+    portionType?: 'weight' | 'portion'
+    portionSize?: number
   }> = []
 
   try {
@@ -334,6 +338,7 @@ const dishOptions = computed(() => {
     })
 
     // ✅ Полуфабрикаты - только из того же департамента
+    // ⭐ PHASE 2: Include portionType and portionSize
     const activePreparations = recipesStore.activePreparations || []
     let preparationsBeforeFilter = 0
     let preparationsAfterFilter = 0
@@ -351,7 +356,11 @@ const dishOptions = computed(() => {
           name: prep.name,
           type: 'preparation',
           unit: prep.outputUnit || 'gram',
-          outputQuantity: prep.outputQuantity || 1
+          outputQuantity: prep.outputQuantity || 1,
+          category: prep.type,
+          // ⭐ PHASE 2: Portion type support
+          portionType: prep.portionType,
+          portionSize: prep.portionSize
         })
       })
     }
@@ -415,12 +424,14 @@ const productOptions = computed(() => {
 })
 
 // Опции для единиц измерения
+// ⭐ PHASE 2: Added 'portion' for portion-type preparations
 const unitOptions = computed(() => [
   { title: 'Grams', value: 'gram' },
   { title: 'Milliliters', value: 'ml' },
   { title: 'Pieces', value: 'piece' },
   { title: 'Liters', value: 'liter' },
-  { title: 'Kilograms', value: 'kg' }
+  { title: 'Kilograms', value: 'kg' },
+  { title: 'Portions', value: 'portion' }
 ])
 
 // Опции для ролей компонентов

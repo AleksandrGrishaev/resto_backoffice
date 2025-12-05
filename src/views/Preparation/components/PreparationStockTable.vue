@@ -211,8 +211,19 @@
           <div class="d-flex align-center">
             <div>
               <div class="font-weight-medium" :class="getStockQuantityClass(item)">
-                {{ formatQuantity(item.totalQuantity, item.unit) }}
+                {{ formatQuantity(item.totalQuantity, item.unit, item.preparationId) }}
               </div>
+              <!-- ⭐ PHASE 2: Show portion info chip for portion-type preparations -->
+              <v-chip
+                v-if="getPreparationPortionInfo(item.preparationId).isPortionType"
+                size="x-small"
+                color="secondary"
+                variant="tonal"
+                class="mt-1"
+              >
+                <v-icon icon="mdi-silverware-fork-knife" size="10" class="mr-1" />
+                {{ getPreparationPortionInfo(item.preparationId).portionSize }}g per portion
+              </v-chip>
               <div class="text-caption text-medium-emphasis">
                 <template v-if="item.totalQuantity < 0">
                   <span class="text-error">Critical: Negative stock!</span>
@@ -233,7 +244,18 @@
         <template #[`item.cost`]="{ item }">
           <div>
             <div class="font-weight-medium" :class="getCostDisplayClass(item)">
-              <template v-if="item.totalQuantity <= 0">
+              <!-- ⭐ PHASE 2: Show cost per portion for portion-type -->
+              <template v-if="getPreparationPortionInfo(item.preparationId).isPortionType">
+                {{
+                  formatCurrency(
+                    item.averageCost * getPreparationPortionInfo(item.preparationId).portionSize
+                  )
+                }}/portion
+                <div v-if="item.totalQuantity <= 0" class="text-caption text-medium-emphasis">
+                  (last known)
+                </div>
+              </template>
+              <template v-else-if="item.totalQuantity <= 0">
                 {{ formatCurrency(item.averageCost) }}/{{ item.unit }}
                 <div class="text-caption text-medium-emphasis">(last known)</div>
               </template>
@@ -600,6 +622,20 @@ function getPreparationIcon(preparationId: string): string {
   return getPreparationCategoryEmoji(categoryId)
 }
 
+// ⭐ PHASE 2: Get portion info for a preparation
+function getPreparationPortionInfo(preparationId: string): {
+  isPortionType: boolean
+  portionSize: number | null
+} {
+  const preparation = recipesStore.preparations.find(p => p.id === preparationId)
+  if (!preparation) return { isPortionType: false, portionSize: null }
+
+  return {
+    isPortionType: preparation.portionType === 'portion' && !!preparation.portionSize,
+    portionSize: preparation.portionSize || null
+  }
+}
+
 function getCategoryIcon(category: string): string {
   const iconMap: Record<string, string> = {
     sauce: 'mdi-bottle-tonic',
@@ -617,7 +653,16 @@ function getCategoryColor(categoryId: string): string {
   return getPreparationCategoryColor(categoryId)
 }
 
-function formatQuantity(quantity: number, unit: string): string {
+function formatQuantity(quantity: number, unit: string, preparationId?: string): string {
+  // ⭐ PHASE 2: If preparationId provided, check for portion type
+  if (preparationId) {
+    const portionInfo = getPreparationPortionInfo(preparationId)
+    if (portionInfo.isPortionType && portionInfo.portionSize) {
+      const portions = Math.floor(quantity / portionInfo.portionSize)
+      // Show only portions count (no grams)
+      return `${portions} portions`
+    }
+  }
   return `${quantity.toLocaleString()} ${unit}`
 }
 

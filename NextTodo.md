@@ -1,1 +1,339 @@
-# Next Sprint Tasks##  COMPLETED: Yield Percentage Implementation (Session 2025-12-05)### =� SummaryImplemented yield percentage support for recipe components and preparation ingredients to accurately calculate costs accounting for product waste (peeling, trimming, etc.).### <� What We Built**Feature:** Toggle "Account for Yield %" for each product in recipes/preparations- **Auto-enables** when product's yield < 100%- **Shows gross quantity** hint: `"Purchase: 200.0g (50% yield)"`- **Saves to database** via `use_yield_percentage` boolean column- **Live Cost Preview** correctly calculates costs with yield adjustment**Formula:** `grossQuantity = netQuantity / (yieldPercentage / 100)`**Example:**- Recipe needs: 100g banana (net)- Product yield: 65%- Gross quantity: 100g � 0.65 = 154g- Cost: 154g � price = **CORRECT** ---### = Bugs Fixed#### 1. **Vue Warning: `persistent-hint` expects Boolean****Problem:**```vue:persistent-hint="component.useYieldPercentage && component.componentType === 'product' &&component.componentId"```Returned `string` (UUID) instead of `boolean`, causing Vue warning.**Fix:** src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue:163```vue:persistent-hint="!!(component.useYieldPercentage && component.componentType === 'product' &&component.componentId)"```---#### 2. **Cost Preview Widget Not Showing****Problem:**`productsStore` and `recipesStore` were regular `let` variables, not reactive refs.Widget condition `v-if="estimatedCost.totalCost > 0"` always returned 0.**Fix:** src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue:96-97```typescript// Before:let productsStore: any = nulllet recipesStore: any = null// After:const productsStore = ref<any>(null)const recipesStore = ref<any>(null)```Updated all references to use `.value`:- Line 127: `if (!productsStore.value || !recipesStore.value)`- Line 138: `productsStore.value?.getProductForRecipe(...)`- Line 150: `recipesStore.value?.getPreparationCostCalculation(...)`- Line 246-247, 256: `recipesStore.value?.preparations/recipes?.find(...)`---#### 3. **Missing `yieldPercentage` in ProductForRecipe****Problem:**`getProductForRecipe()` didn't return `yieldPercentage` field, so cost calculations couldn't access product's yield.**Fix:** src/stores/productsStore/productsStore.ts:279```typescriptreturn {  id: product.id,  name: product.name,  nameEn: product.nameEn || product.name,  baseUnit: product.baseUnit,  baseCostPerUnit: product.baseCostPerUnit,  yieldPercentage: product.yieldPercentage, //  NEW  category: product.category,  isActive: product.isActive  // ...}```---### =� Files Modified#### Type Definitions1. **src/stores/recipes/types.ts**   - Line 134: Added `useYieldPercentage?: boolean` to `RecipeComponent`   - Line 22: Added `yieldPercentage?: number` to `ProductForRecipe`   - Line 88-90: Added `useYieldPercentage?: boolean` and `sortOrder?: number` to `PreparationIngredient`#### UI Components2. **src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue**   - Line 162-163: Fixed `persistent-hint` boolean conversion   - Line 201-224: Replaced large yield card with compact switch   - Line 635-678: Added helper functions:     - `getQuantityHint()` - Shows gross quantity in field hint     - `shouldShowYieldToggle()` - Shows switch only if yield < 100%     - `getProductYield()` - Gets product's yield percentage   - Line 605-612: Auto-enable yield toggle when product selected with yield < 100%   - Line 695: Load `yieldPercentage` from products store#### Cost Calculation3. **src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue**   - Line 96-97: Changed stores to reactive refs   - Line 110-118: Updated `getStores()` to use `.value`   - Line 127-130: Added stores loaded check   - Line 138, 150: Updated to use `productsStore.value` and `recipesStore.value`   - Line 190-196: Added yield adjustment to `calculateProductCost()`:     ```typescript     if (component.useYieldPercentage && product.yieldPercentage) {       yieldPercentage = product.yieldPercentage       adjustedQuantity = baseQuantity / (yieldPercentage / 100)     }     ```   - Line 246-247, 256: Updated actual cost loading to use `.value`4. **src/stores/recipes/composables/useCostCalculation.ts**   - Line 85-98: Updated `calculateDirectCost()` to accept `useYield` parameter:     ```typescript     function calculateDirectCost(       quantity: number,       product: ProductForRecipe,       useYield: boolean = false     ): number {       let adjustedQuantity = quantity       if (useYield && product.yieldPercentage && product.yieldPercentage < 100) {         adjustedQuantity = quantity / (product.yieldPercentage / 100)       }       return adjustedQuantity * product.baseCostPerUnit     }     ```   - Line 418-422: Updated recipe cost calculation to pass `useYieldPercentage` flag#### Data Persistence5. **src/stores/productsStore/productsStore.ts**   - Line 279: Added `yieldPercentage` to `getProductForRecipe()` return value6. **src/stores/recipes/supabaseMappers.ts**   - Line 241: Added `use_yield_percentage` to `recipeComponentToSupabaseInsert()`   - Line 255: Added `useYieldPercentage` to `recipeComponentFromSupabase()`   - Line 124: Added `use_yield_percentage` to `preparationIngredientToSupabaseInsert()`   - Line 139: Added `useYieldPercentage` to `preparationIngredientFromSupabase()`---### =� Database Changes#### DEV Database ( Applied via MCP)```sqlALTER TABLE recipe_componentsADD COLUMN use_yield_percentage BOOLEAN DEFAULT false;ALTER TABLE preparation_ingredientsADD COLUMN use_yield_percentage BOOLEAN DEFAULT false;-- Indexes for performanceCREATE INDEX idx_recipe_components_use_yieldON recipe_components(use_yield_percentage)WHERE use_yield_percentage = true;CREATE INDEX idx_preparation_ingredients_use_yieldON preparation_ingredients(use_yield_percentage)WHERE use_yield_percentage = true;```#### Production Database (� PENDING - Manual Migration Required)**Migration file created:** `src/supabase/migrations/039_add_use_yield_percentage.sql`**TODO:** Apply to production via Supabase SQL Editor:1. Open: https://supabase.com/dashboard/project/bkntdcvzatawencxghob2. Go to SQL Editor3. Copy/paste content from `039_add_use_yield_percentage.sql`4. Run migration5. Verify: `NOTICE: Migration 039 completed successfully`---### <� UI/UX Improvements**Before:**- Large tonal card with checkbox- Separate section for gross quantity- Always visible (even for yield = 100%)- Took up ~3 rows of vertical space**After:**- Compact switch (1 row)- Only shows if yield < 100%- Gross quantity in field hint: `"Purchase: 200.0g (50% yield)"`- ~70% less screen space---### >� Testing Checklist- [x] UI shows yield toggle only for products with yield < 100%- [x] Toggle auto-enables when adding product with yield < 100%- [x] Gross quantity hint displays correctly under Quantity field- [x] Cost Preview widget shows correct cost with yield adjustment- [x] Save recipe/preparation persists `use_yield_percentage` to DB- [x] Load recipe/preparation restores `use_yield_percentage` from DB- [x] No Vue warnings in console- [x] Build completes successfully- [ ] **PENDING:** Production migration applied and verified---### =� Notes for Next Session1. **Test on DEV:** Create several recipes with yield-enabled products, verify calculations2. **Apply to PROD:** Run migration `039_add_use_yield_percentage.sql` via Supabase SQL Editor3. **Verify PROD:** Check that columns exist and indexes created4. **Monitor:** Watch for any errors in production after deployment---### =Key Insights**Why Yield Matters:**- Products lose weight during preparation (peeling, trimming, bones, etc.)- Example: 1kg whole chicken � 600g usable meat (60% yield)- Without yield adjustment: Recipe shows 600g cost when actually need 1kg- With yield adjustment: Correctly calculates cost for 1kg purchase**Architecture Decision:**- Store `useYieldPercentage` as boolean (not the percentage value itself)- Always read percentage from `products.yieldPercentage` (single source of truth)- This prevents data inconsistency if product yield changes**Backward Compatibility:**- Existing recipes default to `use_yield_percentage = false`- No automatic migration of existing data- New recipes auto-enable if yield < 100%---## =� Next Tasks### High Priority- [ ] Apply production migration `039_add_use_yield_percentage.sql`- [ ] Test yield calculations on production data- [ ] Update any existing recipes that should use yield### Medium Priority- [ ] Add yield percentage display in recipe cost breakdown- [ ] Consider adding "Why is cost higher?" tooltip explaining yield- [ ] Add yield percentage to batch calculations (if applicable)### Low Priority- [ ] Analytics: Track which products most commonly use yield adjustment- [ ] Bulk edit: Enable yield for all recipes using specific products
+# NextTodo - PHASE 2: Portion Type Support
+
+**Start Date**: 2025-12-05
+**Duration**: 1 week
+**Estimate**: 15 Story Points
+
+---
+
+## Phase 2 Goal
+
+Add "portion" as an alternative to weight-based quantities for preparations.
+
+**Business Need**:
+
+- Kitchen staff thinks in portions, not grams
+- "10 fish portions" is clearer than "300g of fish preparation"
+- Cost calculation stays accurate via weight conversion
+
+**Example**:
+
+```
+Before (Phase 1): "Fish Portion: 300g"
+After (Phase 2):  "Fish Portion: 10 portions × 30g = 300g"
+```
+
+---
+
+## What We're Adding
+
+1. **Database**: `portion_type` field ('weight' | 'portion'), `portion_size` field
+2. **Types**: Update `Preparation` interface
+3. **UI**: Radio buttons for type selection + portion size input
+4. **Display**: Show "10 portions (30g each)" format
+5. **Production**: Create batches with portion quantities
+6. **FIFO**: Convert portions ↔ weight for allocation
+
+**NOT Adding** (deferred to Phase 3):
+
+- Tree view for nested ingredients
+- Visual badges and icons
+- Cost breakdown drill-down
+
+---
+
+## Stage 1: Database Schema (3 SP)
+
+### 1.1. Database Migration
+
+**File**: `src/supabase/migrations/041_add_portion_type.sql` ⭐ NEW
+
+```sql
+-- Migration: 041_add_portion_type
+-- Description: Add portion type support to preparations
+-- Date: 2025-12-05
+
+-- Add portion_type column to preparations table
+ALTER TABLE preparations
+ADD COLUMN IF NOT EXISTS portion_type TEXT DEFAULT 'weight'
+CHECK (portion_type IN ('weight', 'portion'));
+
+-- Add portion_size column (grams per portion, only used when portion_type = 'portion')
+ALTER TABLE preparations
+ADD COLUMN IF NOT EXISTS portion_size NUMERIC DEFAULT NULL;
+
+-- Add portion_type to preparation_batches for tracking
+ALTER TABLE preparation_batches
+ADD COLUMN IF NOT EXISTS portion_type TEXT DEFAULT 'weight'
+CHECK (portion_type IN ('weight', 'portion'));
+
+ALTER TABLE preparation_batches
+ADD COLUMN IF NOT EXISTS portion_size NUMERIC DEFAULT NULL;
+
+-- Add portion_quantity to batches (number of portions, when applicable)
+ALTER TABLE preparation_batches
+ADD COLUMN IF NOT EXISTS portion_quantity NUMERIC DEFAULT NULL;
+
+-- Comments for documentation
+COMMENT ON COLUMN preparations.portion_type IS
+'How quantities are measured: weight (grams) or portion (fixed-size pieces)';
+
+COMMENT ON COLUMN preparations.portion_size IS
+'Size of one portion in grams. Only used when portion_type = portion';
+
+COMMENT ON COLUMN preparation_batches.portion_quantity IS
+'Number of portions in this batch. Only used when portion_type = portion';
+
+-- Validation
+DO $$
+BEGIN
+  RAISE NOTICE 'Migration 041: Portion type support added';
+END $$;
+```
+
+**Apply on DEV**:
+
+```typescript
+mcp__supabase__apply_migration({
+  name: '041_add_portion_type',
+  query: '...' // SQL above
+})
+```
+
+---
+
+## Stage 2: Type Definitions (2 SP)
+
+### 2.1. Update Types
+
+**File**: `src/stores/recipes/types.ts` ✏️ MODIFY
+
+```typescript
+// ⭐ NEW: Portion type enum
+export type PortionType = 'weight' | 'portion'
+
+// Update Preparation interface
+export interface Preparation extends BaseEntity {
+  // ... existing fields ...
+
+  // ⭐ PHASE 2: Portion type support
+  portionType: PortionType // 'weight' (default) or 'portion'
+  portionSize?: number // Size of one portion in grams (only for portionType='portion')
+}
+
+// Update CreatePreparationData
+export interface CreatePreparationData {
+  // ... existing fields ...
+
+  // ⭐ PHASE 2: Portion type support
+  portionType?: PortionType // Default: 'weight'
+  portionSize?: number // Required if portionType='portion'
+}
+```
+
+### 2.2. Add Batch Type Updates
+
+**File**: `src/stores/preparation/types.ts` ✏️ MODIFY (if exists) or update in relevant file
+
+```typescript
+// Update PreparationBatch interface
+export interface PreparationBatch {
+  // ... existing fields ...
+
+  // ⭐ PHASE 2: Portion type support
+  portionType: PortionType
+  portionSize?: number
+  portionQuantity?: number // Number of portions (when portionType='portion')
+}
+```
+
+---
+
+## Stage 3: Mappers & Service (3 SP)
+
+### 3.1. Update Supabase Mappers
+
+**File**: `src/stores/recipes/supabaseMappers.ts` ✏️ MODIFY
+
+Add `portion_type` and `portion_size` to:
+
+- `preparationToSupabase()` - when saving
+- `preparationFromSupabase()` - when loading
+
+### 3.2. Update Recipes Service
+
+**File**: `src/stores/recipes/recipesService.ts` ✏️ MODIFY
+
+- Validate `portionSize` is provided when `portionType='portion'`
+- Default `portionType` to 'weight' when not specified
+
+---
+
+## Stage 4: Production Logic (3 SP)
+
+### 4.1. Update Preparation Service
+
+**File**: `src/stores/preparation/preparationService.ts` ✏️ MODIFY
+
+When creating production receipt:
+
+```typescript
+// Calculate portion quantity from total weight
+if (preparation.portionType === 'portion' && preparation.portionSize) {
+  const portionQuantity = Math.floor(totalWeight / preparation.portionSize)
+
+  batch.portionType = 'portion'
+  batch.portionSize = preparation.portionSize
+  batch.portionQuantity = portionQuantity
+  batch.quantity = totalWeight // Still track weight for FIFO
+}
+```
+
+### 4.2. Update FIFO Allocation
+
+When allocating from batches:
+
+- Always work in weight internally
+- Convert portions to weight: `portions × portionSize = weight`
+- Display in portions when `portionType='portion'`
+
+---
+
+## Stage 5: UI Components (4 SP)
+
+### 5.1. Update Unified Recipe Dialog
+
+**File**: `src/views/recipes/components/UnifiedRecipeDialog.vue` ✏️ MODIFY
+
+Add portion type selection:
+
+```vue
+<!-- Portion Type Selection (only for preparations) -->
+<v-radio-group
+  v-if="type === 'preparation'"
+  v-model="formData.portionType"
+  inline
+  label="Quantity Type"
+>
+  <v-radio label="Weight (grams)" value="weight" />
+  <v-radio label="Portions" value="portion" />
+</v-radio-group>
+
+<!-- Portion Size Input (only when portionType='portion') -->
+<v-text-field
+  v-if="formData.portionType === 'portion'"
+  v-model.number="formData.portionSize"
+  type="number"
+  label="Portion Size (grams)"
+  hint="Weight of one portion in grams"
+  :rules="[v => v > 0 || 'Must be greater than 0']"
+/>
+```
+
+### 5.2. Update Display Components
+
+Show quantities appropriately:
+
+```typescript
+// Helper function
+function formatQuantity(batch: PreparationBatch): string {
+  if (batch.portionType === 'portion' && batch.portionQuantity) {
+    return `${batch.portionQuantity} portions (${batch.quantity}g total)`
+  }
+  return `${batch.quantity}g`
+}
+```
+
+---
+
+## Testing (Phase 1 + Phase 2)
+
+### Test Cases - Phase 1 (Nested Preparations)
+
+- [ ] Can create preparation using another preparation as ingredient
+- [ ] Circular dependency detection prevents A→B→A
+- [ ] Cost calculation includes nested prep costs via `lastKnownCost`
+- [ ] Production writes off preparation ingredients via FIFO
+- [ ] UI shows type badges (product/preparation)
+
+### Test Cases - Phase 2 (Portion Types)
+
+- [ ] Can create preparation with `portionType='weight'` (default)
+- [ ] Can create preparation with `portionType='portion'`
+- [ ] `portionSize` is required when `portionType='portion'`
+- [ ] Production creates batches with correct portion quantities
+- [ ] Display shows "X portions (Yg each)" format
+- [ ] FIFO allocation works correctly with portions
+
+### Integration Tests
+
+- [ ] Nested preparation + portion type works together
+- [ ] Multi-level nesting with mixed portion types
+- [ ] Cost calculation correct for portion-based preparations
+
+---
+
+## Affected Files Summary
+
+**Total: 5 files** (1 new, 4 modified)
+
+### NEW Files (1)
+
+1. `src/supabase/migrations/041_add_portion_type.sql` ✅ CREATED & APPLIED
+
+### MODIFIED Files (4)
+
+2. `src/stores/recipes/types.ts` ✅ UPDATED (added PortionType, updated Preparation interface)
+3. `src/stores/recipes/supabaseMappers.ts` ✅ UPDATED (added portion_type/portion_size handling)
+4. `src/views/recipes/components/UnifiedRecipeDialog.vue` ✅ UPDATED (portionType in form data)
+5. `src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue` ✅ UPDATED (portion type UI)
+
+### PENDING Files (Stage 4: Production Logic)
+
+6. `src/stores/preparation/preparationService.ts` - Batch creation with portion quantities
+
+---
+
+## Story Points Breakdown
+
+| Stage     | Task               | SP     | Status                          |
+| --------- | ------------------ | ------ | ------------------------------- |
+| 1         | Database Migration | 3      | ✅ COMPLETE                     |
+| 2         | Type Definitions   | 2      | ✅ COMPLETE                     |
+| 3         | Mappers & Service  | 3      | ✅ COMPLETE                     |
+| 4         | Production Logic   | 3      | ⏳ Pending (for batch creation) |
+| 5         | UI Components      | 4      | ✅ COMPLETE                     |
+| **Total** | **Phase 2**        | **15** | **🔄 IN PROGRESS**              |
+
+---
+
+## Success Criteria
+
+### Must Have
+
+- [x] Can create preparation with portion type (weight or portion)
+- [x] Portion size configurable for portion-type preparations
+- [ ] Production creates batches with correct quantities (Stage 4 pending)
+- [x] Display shows user-friendly format ("10 portions (30g each)")
+- [ ] FIFO works correctly (converts to weight internally) (Stage 4 pending)
+- [x] Database migration applied successfully
+
+### Should Have
+
+- [x] Clear validation messages
+- [x] Default to 'weight' for backward compatibility
+- [x] Existing preparations still work (no breaking changes)
+
+---
+
+## Next Steps After Phase 2
+
+1. **Test Phase 1 + Phase 2 together** - full integration testing
+2. **Apply migrations to PROD** - both 012 and 041
+3. **Demo to stakeholders** - show complete nested + portion functionality
+4. **Plan Phase 3** - UI polish (tree view, badges)
+
+---
+
+**Last Updated**: 2025-12-05
+**Status**: Stages 1-3, 5 COMPLETE. Stage 4 (Production Logic) pending.

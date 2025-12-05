@@ -85,11 +85,12 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
         return null
       }
 
-      // 2. Decompose menu item to final products
+      // 2. Decompose menu item to final products (⭐ PHASE 2: include selectedModifiers)
       const decomposedItems = await decomposeMenuItem(
         billItem.menuItemId,
         billItem.variantId || variant.id,
-        billItem.quantity
+        billItem.quantity,
+        billItem.selectedModifiers // ⭐ NEW: Pass selected modifiers for write-off
       )
 
       if (decomposedItems.length === 0) {

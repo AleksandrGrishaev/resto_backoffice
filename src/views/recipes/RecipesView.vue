@@ -299,6 +299,14 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Usage Warning Dialog -->
+    <usage-warning-dialog
+      v-model="dialogs.usageWarning"
+      :item-name="usageWarning.itemName"
+      :item-type="usageWarning.itemType"
+      :usage-locations="usageWarning.usageLocations"
+    />
   </div>
 </template>
 
@@ -306,16 +314,20 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
+import { useUsageCheck } from '@/stores/recipes/composables/useUsageCheck'
 import type { Recipe, Preparation, PreparationType } from '@/stores/recipes/types'
+import type { UsageLocation } from '@/stores/recipes/composables/useUsageCheck'
 import { DebugUtils } from '@/utils'
 import UnifiedRecipeItem from './components/UnifiedRecipeItem.vue'
 import UnifiedRecipeDialog from './components/UnifiedRecipeDialog.vue'
 import UnifiedViewDialog from './components/UnifiedViewDialog.vue'
 import RecipeFilters from './components/RecipeFilters.vue'
+import UsageWarningDialog from './components/UsageWarningDialog.vue'
 
 const MODULE_NAME = 'RecipesView'
 const store = useRecipesStore()
 const productsStore = useProductsStore()
+const { checkRecipeUsage, checkPreparationUsage } = useUsageCheck()
 
 // =============================================
 // STATE
@@ -335,7 +347,15 @@ const currentFilters = ref({
 const dialogs = ref({
   create: false,
   view: false,
-  duplicate: false
+  duplicate: false,
+  usageWarning: false
+})
+
+// Usage warning state
+const usageWarning = ref({
+  itemName: '',
+  itemType: 'Recipe' as 'Recipe' | 'Preparation',
+  usageLocations: [] as UsageLocation[]
 })
 
 const editingItem = ref<Recipe | Preparation | null>(null)
@@ -416,10 +436,10 @@ const filteredRecipes = computed(() => {
     const searchText = currentFilters.value.search.toLowerCase()
     recipes = recipes.filter(
       recipe =>
-        recipe.name.toLowerCase().includes(searchText) ||
+        recipe.name?.toLowerCase().includes(searchText) ||
         recipe.code?.toLowerCase().includes(searchText) ||
         recipe.description?.toLowerCase().includes(searchText) ||
-        recipe.tags?.some(tag => tag.toLowerCase().includes(searchText))
+        recipe.tags?.some(tag => tag?.toLowerCase().includes(searchText))
     )
   }
 
@@ -447,8 +467,8 @@ const filteredPreparations = computed(() => {
     const searchText = currentFilters.value.search.toLowerCase()
     preparations = preparations.filter(
       prep =>
-        prep.name.toLowerCase().includes(searchText) ||
-        prep.code.toLowerCase().includes(searchText) ||
+        prep.name?.toLowerCase().includes(searchText) ||
+        prep.code?.toLowerCase().includes(searchText) ||
         prep.description?.toLowerCase().includes(searchText)
     )
   }
@@ -656,6 +676,30 @@ async function calculateCost(item: Recipe | Preparation) {
 
 async function toggleStatus(item: Recipe | Preparation) {
   try {
+    // Если пытаемся архивировать (item.isActive === true), проверяем использование
+    if (item.isActive) {
+      const isRecipe = 'components' in item
+      const usageResult = isRecipe ? checkRecipeUsage(item.id) : checkPreparationUsage(item.id)
+
+      // Если элемент используется, показываем предупреждение
+      if (!usageResult.canArchive) {
+        usageWarning.value = {
+          itemName: item.name,
+          itemType: isRecipe ? 'Recipe' : 'Preparation',
+          usageLocations: usageResult.usageLocations
+        }
+        dialogs.value.usageWarning = true
+
+        DebugUtils.info(MODULE_NAME, `Cannot archive ${isRecipe ? 'recipe' : 'preparation'}`, {
+          itemName: item.name,
+          usageCount: usageResult.usageLocations.length,
+          usageLocations: usageResult.usageLocations
+        })
+        return // Прерываем архивирование
+      }
+    }
+
+    // Если не используется или восстанавливаем, продолжаем
     if ('components' in item) {
       // Recipe
       await store.toggleRecipeStatus(item.id)

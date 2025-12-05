@@ -7,7 +7,7 @@ import { useProfitCalculation } from './composables/useProfitCalculation'
 import { useDecomposition } from './recipeWriteOff/composables/useDecomposition'
 import { useActualCostCalculation } from './composables/useActualCostCalculation' // ✅ SPRINT 2
 import { useMenuStore } from '@/stores/menu/menuStore'
-import { usePreparationStore } from '@/stores/preparation' // ✅ For reloading batches after write-off
+import { usePreparationStore, preparationService } from '@/stores/preparation' // ✅ For reloading batches after write-off
 import type { PosPayment, PosBillItem } from '@/stores/pos/types'
 
 const MODULE_NAME = 'SalesStore'
@@ -273,21 +273,24 @@ export const useSalesStore = defineStore('sales', () => {
           continue
         }
 
-        // 2. Decompose menu item (initializes stores if needed)
+        // 2. Decompose menu item (initializes stores if needed) - ⭐ PHASE 2: include modifiers
         const decomposedItems = await decomposeMenuItem(
           billItem.menuItemId,
           billItem.variantId || variant.id,
-          billItem.quantity
+          billItem.quantity,
+          billItem.selectedModifiers // ⭐ NEW: Pass selected modifiers for write-off
         )
 
         const totalCost = calculateTotalCost(decomposedItems)
 
         // 2b. Calculate actual cost from FIFO batches (✅ SPRINT 2: NEW LOGIC)
         // Must be called AFTER decomposeMenuItem to ensure stores are initialized
+        // ⭐ PHASE 2: Include modifiers in cost calculation
         const actualCost = await calculateActualCost(
           billItem.menuItemId,
           billItem.variantId || variant.id,
-          billItem.quantity
+          billItem.quantity,
+          billItem.selectedModifiers // ⭐ NEW: Pass selected modifiers for cost
         )
 
         // 3. Get allocated bill discount for THIS specific item
@@ -373,15 +376,18 @@ export const useSalesStore = defineStore('sales', () => {
             // ✅ FIX: Recalculate actual cost AFTER write-off (negative batches now exist)
             // This ensures we capture cost from negative batches created during write-off
 
-            // ⚡ IMPORTANT: Reload batches from DB to get updated costs
-            // (negative batch cost may have been updated during write-off)
+            // ⚡ IMPORTANT: Refresh batches cache to include newly created negative batches
+            // preparationService.getBatches() uses an in-memory cache that doesn't auto-update
+            await preparationService.refreshBatches()
+
             const preparationStore = usePreparationStore()
             await preparationStore.fetchBalances('kitchen')
 
             const actualCostAfterWriteOff = await calculateActualCost(
               billItem.menuItemId,
               billItem.variantId || variant.id,
-              billItem.quantity
+              billItem.quantity,
+              billItem.selectedModifiers // ⭐ FIX: Include modifiers in recalculation
             )
 
             // Check if cost changed (negative batches were created)

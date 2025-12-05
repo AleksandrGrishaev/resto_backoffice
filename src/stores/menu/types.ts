@@ -1,6 +1,7 @@
 // src/stores/menu/types.ts
 import type { BaseEntity } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
+import type { PortionType } from '@/stores/recipes/types'
 
 // =============================================
 // Основные типы меню
@@ -65,11 +66,14 @@ export interface MenuItemVariant {
 export interface MenuComposition {
   type: 'product' | 'recipe' | 'preparation' // что добавляем
   id: string // ID компонента
-  quantity: number // количество в конкретных единицах (не порциях!)
-  unit: MeasurementUnit // 'gram', 'ml', 'piece' - конкретные единицы
+  quantity: number // количество в конкретных единицах (порции для portion-type)
+  unit: MeasurementUnit // 'gram', 'ml', 'piece', 'portion' - конкретные единицы
   role?: ComponentRole // роль в блюде (для UI группировки)
   useYieldPercentage?: boolean // ✅ NEW: apply yield adjustment for products (Sprint 6)
   notes?: string
+  // ⭐ PHASE 2: Portion type support (for portion-type preparations)
+  portionType?: PortionType // 'weight' | 'portion' - cached from preparation
+  portionSize?: number // grams per portion - cached from preparation
 }
 
 export type ComponentRole = 'main' | 'garnish' | 'sauce' | 'addon'
@@ -429,6 +433,10 @@ export interface DishOption {
   type: 'recipe' | 'preparation'
   unit: MeasurementUnit
   outputQuantity: number
+  category?: string
+  // ⭐ PHASE 2: Portion type support
+  portionType?: PortionType // 'weight' | 'portion'
+  portionSize?: number // grams per portion (only for portionType='portion')
 }
 
 export interface ProductOption {

@@ -1,5 +1,5 @@
 import type { DecomposedItem } from '../../types'
-import type { MenuComposition } from '@/stores/menu/types'
+import type { MenuComposition, SelectedModifier } from '@/stores/menu/types'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import { useProductsStore } from '@/stores/productsStore'
@@ -65,11 +65,13 @@ export function useDecomposition() {
   /**
    * Main decomposition method
    * Разворачивает позицию меню до конечных продуктов
+   * ⭐ PHASE 2: Now supports selectedModifiers for write-off
    */
   async function decomposeMenuItem(
     menuItemId: string,
     variantId: string,
-    soldQuantity: number
+    soldQuantity: number,
+    selectedModifiers?: SelectedModifier[] // ⭐ NEW: Selected modifiers to include
   ): Promise<DecomposedItem[]> {
     // 🆕 Проверка инициализации stores перед декомпозицией (с lazy initialization)
     await checkStoresInitialized()
@@ -77,7 +79,8 @@ export function useDecomposition() {
     console.log(`🔍 [${MODULE_NAME}] Decomposing menu item:`, {
       menuItemId,
       variantId,
-      soldQuantity
+      soldQuantity,
+      modifiersCount: selectedModifiers?.length || 0
     })
 
     try {
@@ -97,15 +100,38 @@ export function useDecomposition() {
 
       console.log(`📋 [${MODULE_NAME}] Found variant:`, {
         name: `${menuItem.name} - ${variant.name}`,
-        compositionCount: variant.composition.length
+        compositionCount: variant.composition.length,
+        modifiersCount: selectedModifiers?.length || 0
       })
 
-      // 3. Process composition
+      // 3. Process base composition
       const results: DecomposedItem[] = []
 
       for (const comp of variant.composition) {
         const items = await decomposeComposition(comp, soldQuantity, [menuItem.name, variant.name])
         results.push(...items)
+      }
+
+      // ⭐ PHASE 2: Process selected modifiers composition
+      if (selectedModifiers && selectedModifiers.length > 0) {
+        console.log(`🔧 [${MODULE_NAME}] Processing ${selectedModifiers.length} selected modifiers`)
+
+        for (const modifier of selectedModifiers) {
+          if (modifier.composition && modifier.composition.length > 0) {
+            console.log(`  📦 [${MODULE_NAME}] Modifier "${modifier.optionName}":`, {
+              compositionCount: modifier.composition.length
+            })
+
+            for (const comp of modifier.composition) {
+              const items = await decomposeComposition(comp, soldQuantity, [
+                menuItem.name,
+                variant.name,
+                `Modifier: ${modifier.optionName}`
+              ])
+              results.push(...items)
+            }
+          }
+        }
       }
 
       // 4. Merge duplicates
@@ -256,6 +282,7 @@ export function useDecomposition() {
    * Decompose Preparation
    * ✅ SPRINT 1: STOP! Don't decompose to products - return preparation as final element
    * This prevents double write-off (products already written off during preparation production)
+   * ⭐ PHASE 2: Handle portion-type preparations - convert portions to grams
    */
   async function decomposePreparation(
     comp: MenuComposition,
@@ -268,13 +295,34 @@ export function useDecomposition() {
       return []
     }
 
-    const totalQuantity = comp.quantity * quantity
+    // ⭐ PHASE 2: Handle portion-type preparations
+    // If unit is 'portion', convert to grams using portionSize
+    let totalQuantity = comp.quantity * quantity
+    let outputUnit = preparation.outputUnit
+
+    if (
+      comp.unit === 'portion' &&
+      preparation.portionType === 'portion' &&
+      preparation.portionSize
+    ) {
+      // Convert portions to grams: 1 portion × 30g/portion = 30g
+      const portionsCount = totalQuantity
+      totalQuantity = portionsCount * preparation.portionSize
+      outputUnit = 'gram' // Always output in grams for storage write-off
+
+      console.log(`  🔄 [${MODULE_NAME}] Converted portions to grams:`, {
+        name: preparation.name,
+        portionsOrdered: portionsCount,
+        portionSize: preparation.portionSize,
+        totalGrams: totalQuantity
+      })
+    }
 
     console.log(`  ✅ [${MODULE_NAME}] Preparation as final element (no decomposition):`, {
       name: preparation.name,
       quantity: totalQuantity,
-      unit: preparation.outputUnit,
-      note: 'Cost will be calculated from FIFO batches in Sprint 2'
+      unit: outputUnit,
+      note: 'Cost will be calculated from FIFO batches'
     })
 
     // ✅ Return preparation as final element (NOT decomposed to products!)
@@ -284,7 +332,7 @@ export function useDecomposition() {
         preparationId: comp.id,
         preparationName: preparation.name,
         quantity: totalQuantity,
-        unit: preparation.outputUnit,
+        unit: outputUnit,
         costPerUnit: null, // ✅ null until Sprint 2 (FIFO calculation)
         totalCost: 0, // ✅ Will be calculated from FIFO batches in Sprint 2
         path: [...path, preparation.name]

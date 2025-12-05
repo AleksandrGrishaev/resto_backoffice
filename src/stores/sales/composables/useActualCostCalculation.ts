@@ -4,7 +4,7 @@ import type {
   ProductCostItem,
   BatchAllocation
 } from '../types'
-import type { MenuComposition } from '@/stores/menu/types'
+import type { MenuComposition, SelectedModifier } from '@/stores/menu/types'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import { useProductsStore } from '@/stores/productsStore'
@@ -29,16 +29,19 @@ export function useActualCostCalculation() {
   /**
    * Calculate actual cost from FIFO batches
    * Main entry point for cost calculation
+   * ⭐ PHASE 2: Now supports selectedModifiers
    */
   async function calculateActualCost(
     menuItemId: string,
     variantId: string,
-    quantity: number
+    quantity: number,
+    selectedModifiers?: SelectedModifier[] // ⭐ NEW: Include modifier compositions
   ): Promise<ActualCostBreakdown> {
     DebugUtils.info(MODULE_NAME, 'Calculating actual cost', {
       menuItemId,
       variantId,
-      quantity
+      quantity,
+      modifiersCount: selectedModifiers?.length || 0
     })
 
     try {
@@ -75,10 +78,27 @@ export function useActualCostCalculation() {
       // 2. For each component in composition
       for (const comp of composition) {
         if (comp.type === 'preparation') {
+          // ⭐ PHASE 2: Handle portion-type preparations
+          let requiredQuantity = comp.quantity * quantity
+
+          // Convert portions to grams if needed
+          if (comp.unit === 'portion') {
+            const preparation = recipesStore.preparations.find(p => p.id === comp.id)
+            if (preparation?.portionType === 'portion' && preparation?.portionSize) {
+              requiredQuantity = requiredQuantity * preparation.portionSize
+              DebugUtils.info(MODULE_NAME, 'Converted portions to grams for cost calculation', {
+                preparationName: preparation.name,
+                portionsOrdered: comp.quantity * quantity,
+                portionSize: preparation.portionSize,
+                totalGrams: requiredQuantity
+              })
+            }
+          }
+
           // FIFO allocation from PreparationBatch
           const prepCost = await allocateFromPreparationBatches(
             comp.id,
-            comp.quantity * quantity,
+            requiredQuantity,
             'kitchen' // TODO: Get from menuItem.department or recipe
           )
           preparationCosts.push(prepCost)
@@ -96,6 +116,53 @@ export function useActualCostCalculation() {
           const recipeCosts = await processRecipeComponents(comp, quantity)
           preparationCosts.push(...recipeCosts.preparationCosts)
           productCosts.push(...recipeCosts.productCosts)
+        }
+      }
+
+      // ⭐ PHASE 2: Process selected modifiers composition
+      if (selectedModifiers && selectedModifiers.length > 0) {
+        DebugUtils.info(MODULE_NAME, 'Processing modifier compositions for cost', {
+          modifiersCount: selectedModifiers.length
+        })
+
+        for (const modifier of selectedModifiers) {
+          if (modifier.composition && modifier.composition.length > 0) {
+            for (const comp of modifier.composition) {
+              if (comp.type === 'preparation') {
+                let requiredQuantity = comp.quantity * quantity
+
+                // Convert portions to grams if needed
+                if (comp.unit === 'portion') {
+                  const preparation = recipesStore.preparations.find(p => p.id === comp.id)
+                  if (preparation?.portionType === 'portion' && preparation?.portionSize) {
+                    requiredQuantity = requiredQuantity * preparation.portionSize
+                    DebugUtils.info(MODULE_NAME, 'Modifier: Converted portions to grams', {
+                      modifierName: modifier.optionName,
+                      preparationName: preparation.name,
+                      portionsOrdered: comp.quantity * quantity,
+                      portionSize: preparation.portionSize,
+                      totalGrams: requiredQuantity
+                    })
+                  }
+                }
+
+                const prepCost = await allocateFromPreparationBatches(
+                  comp.id,
+                  requiredQuantity,
+                  'kitchen'
+                )
+                preparationCosts.push(prepCost)
+              } else if (comp.type === 'product') {
+                const defaultWarehouse = storageStore.getDefaultWarehouse()
+                const prodCost = await allocateFromStorageBatches(
+                  comp.id,
+                  comp.quantity * quantity,
+                  defaultWarehouse.id
+                )
+                productCosts.push(prodCost)
+              }
+            }
+          }
         }
       }
 
