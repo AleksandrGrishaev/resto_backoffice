@@ -250,6 +250,7 @@
                                 hide-details
                                 style="width: 60px"
                               />
+                              <!-- ⭐ PHASE 2: Lock unit selector for portion-type preparations -->
                               <v-select
                                 v-model="comp.unit"
                                 :items="unitOptions"
@@ -257,6 +258,7 @@
                                 variant="outlined"
                                 hide-details
                                 style="width: 80px"
+                                :disabled="isCompositionPortionType(comp)"
                               />
                               <v-btn
                                 icon="mdi-delete"
@@ -443,12 +445,14 @@ const productSelectorDialog = ref<{
 })
 
 // Unit options for composition
+// ⭐ PHASE 2: Added 'portion' for portion-type preparations
 const unitOptions = [
   { title: 'Grams', value: 'gram' },
   { title: 'Milliliters', value: 'ml' },
   { title: 'Pieces', value: 'piece' },
   { title: 'Liters', value: 'liter' },
-  { title: 'Kilograms', value: 'kg' }
+  { title: 'Kilograms', value: 'kg' },
+  { title: 'Portions', value: 'portion' }
 ]
 
 // Constants
@@ -539,12 +543,18 @@ function addDishToComposition(dish: DishOption): void {
     option.composition = []
   }
 
+  // ⭐ PHASE 2: For portion-type preparations, auto-set unit to 'portion' and quantity to 1
+  const isPortionType = dish.portionType === 'portion' && dish.portionSize
+
   const newComp: MenuComposition = {
     type: dish.type,
     id: dish.id,
-    quantity: dish.outputQuantity,
-    unit: dish.unit,
-    role: 'addon'
+    quantity: isPortionType ? 1 : dish.outputQuantity,
+    unit: isPortionType ? 'portion' : dish.unit,
+    role: 'addon',
+    // ⭐ PHASE 2: Store portion info for UI
+    portionType: dish.portionType,
+    portionSize: dish.portionSize
   }
 
   option.composition.push(newComp)
@@ -620,6 +630,11 @@ function getCompositionName(comp: MenuComposition): string {
     const dish = props.dishOptions?.find(d => d.id === comp.id && d.type === comp.type)
     return dish?.name || 'Unknown dish'
   }
+}
+
+// ⭐ PHASE 2: Check if composition is portion-type (unit selector should be locked)
+function isCompositionPortionType(comp: MenuComposition): boolean {
+  return comp.portionType === 'portion' && !!comp.portionSize
 }
 </script>
 

@@ -60,8 +60,14 @@
               <v-list-item v-bind="props">
                 <template #subtitle>
                   <span class="text-caption">
-                    {{ item.raw.code }} • {{ item.raw.outputQuantity }}
-                    {{ item.raw.outputUnit }}
+                    {{ item.raw.code }} •
+                    <!-- ⭐ PHASE 2: Show portions or grams based on type -->
+                    <template v-if="item.raw.portionType === 'portion' && item.raw.portionSize">
+                      1 portion ({{ item.raw.portionSize }}{{ item.raw.outputUnit }})
+                    </template>
+                    <template v-else>
+                      {{ item.raw.outputQuantity }} {{ item.raw.outputUnit }}
+                    </template>
                   </span>
                 </template>
               </v-list-item>
@@ -144,7 +150,15 @@
                 <div class="text-right">
                   <div class="text-caption text-medium-emphasis">Cost per Unit</div>
                   <div class="text-subtitle-2">
-                    {{ formatCurrency(calculatedCostPerUnit) }}/{{ selectedPreparation.outputUnit }}
+                    <!-- ⭐ PHASE 2: calculatedCostPerUnit is already per portion for portion-type -->
+                    <template v-if="isPortionType">
+                      {{ formatCurrency(calculatedCostPerUnit) }}/portion
+                    </template>
+                    <template v-else>
+                      {{ formatCurrency(calculatedCostPerUnit) }}/{{
+                        selectedPreparation.outputUnit
+                      }}
+                    </template>
                   </div>
                 </div>
               </div>
@@ -468,6 +482,12 @@ const effectiveQuantity = computed(() => {
 
 const multiplier = computed(() => {
   if (!selectedPreparation.value || !effectiveQuantity.value) return 1
+  // ⭐ PHASE 2 FIX: For portion-type, use portion count for multiplier (not grams)
+  // outputQuantity = number of portions in recipe (typically 1)
+  // portionInput = number of portions to produce
+  if (isPortionType.value && portionInput.value) {
+    return portionInput.value / selectedPreparation.value.outputQuantity
+  }
   return effectiveQuantity.value / selectedPreparation.value.outputQuantity
 })
 
@@ -503,6 +523,11 @@ const calculatedCostPerUnit = computed(() => {
 })
 
 const calculatedCost = computed(() => {
+  // ⭐ PHASE 2 FIX: For portion-type, multiply by portion count (not grams)
+  // calculatedCostPerUnit is cost per output unit (per portion for portion-type)
+  if (isPortionType.value && portionInput.value) {
+    return calculatedCostPerUnit.value * portionInput.value
+  }
   return calculatedCostPerUnit.value * (effectiveQuantity.value || 0)
 })
 
@@ -722,10 +747,16 @@ async function handleSubmit() {
     expiryDate.setHours(20, 0, 0, 0)
 
     // Create receipt item - ⭐ Use effectiveQuantity (grams) for the actual batch
+    // ⭐ PHASE 2 FIX: For portion-type, convert cost per portion to cost per gram
+    // calculatedCostPerUnit is per portion for portion-type, but batch needs per gram
+    const costPerGram = isPortionType.value
+      ? calculatedCostPerUnit.value / portionSize.value
+      : calculatedCostPerUnit.value
+
     const receiptItem: PreparationReceiptItem = {
       preparationId: selectedPreparationId.value,
       quantity: effectiveQuantity.value, // ⭐ Always in grams
-      costPerUnit: calculatedCostPerUnit.value,
+      costPerUnit: costPerGram, // ⭐ Always per gram for batch storage
       expiryDate: expiryDate.toISOString().slice(0, 16),
       notes: ''
     }

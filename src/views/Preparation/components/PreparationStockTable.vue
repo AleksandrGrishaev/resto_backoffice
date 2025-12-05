@@ -244,7 +244,18 @@
         <template #[`item.cost`]="{ item }">
           <div>
             <div class="font-weight-medium" :class="getCostDisplayClass(item)">
-              <template v-if="item.totalQuantity <= 0">
+              <!-- ⭐ PHASE 2: Show cost per portion for portion-type -->
+              <template v-if="getPreparationPortionInfo(item.preparationId).isPortionType">
+                {{
+                  formatCurrency(
+                    item.averageCost * getPreparationPortionInfo(item.preparationId).portionSize
+                  )
+                }}/portion
+                <div v-if="item.totalQuantity <= 0" class="text-caption text-medium-emphasis">
+                  (last known)
+                </div>
+              </template>
+              <template v-else-if="item.totalQuantity <= 0">
                 {{ formatCurrency(item.averageCost) }}/{{ item.unit }}
                 <div class="text-caption text-medium-emphasis">(last known)</div>
               </template>
@@ -648,8 +659,8 @@ function formatQuantity(quantity: number, unit: string, preparationId?: string):
     const portionInfo = getPreparationPortionInfo(preparationId)
     if (portionInfo.isPortionType && portionInfo.portionSize) {
       const portions = Math.floor(quantity / portionInfo.portionSize)
-      // Show portions first, then weight in parentheses
-      return `${portions} portions (${quantity.toLocaleString()}${unit})`
+      // Show only portions count (no grams)
+      return `${portions} portions`
     }
   }
   return `${quantity.toLocaleString()} ${unit}`

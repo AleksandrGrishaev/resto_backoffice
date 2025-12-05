@@ -32,9 +32,6 @@
                   <template v-if="portionInfo.isPortionType">
                     <div class="text-h4 font-weight-bold">{{ totalPortions }}</div>
                     <div class="text-body-2">portions in stock</div>
-                    <div class="text-caption text-medium-emphasis">
-                      ({{ item.totalQuantity }}{{ item.unit }} total)
-                    </div>
                     <v-chip size="x-small" color="secondary" variant="tonal" class="mt-1">
                       {{ portionInfo.portionSize }}g per portion
                     </v-chip>
@@ -445,7 +442,8 @@ function formatBatchQuantity(current: number, initial: number, unit: string): st
   if (portionInfo.value.isPortionType && portionInfo.value.portionSize) {
     const currentPortions = Math.floor(current / portionInfo.value.portionSize)
     const initialPortions = Math.floor(initial / portionInfo.value.portionSize)
-    return `${currentPortions}/${initialPortions} portions (${current}/${initial}${unit})`
+    // Show only portions (no grams)
+    return `${currentPortions}/${initialPortions} portions`
   }
   return `${current}/${initial} ${unit}`
 }

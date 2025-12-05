@@ -81,7 +81,11 @@
                   <v-chip size="x-small" :color="dish.type === 'recipe' ? 'primary' : 'secondary'">
                     {{ dish.type === 'recipe' ? 'Recipe' : 'Semi-finished' }}
                   </v-chip>
-                  <span>{{ dish.outputQuantity }} {{ getUnitLabel(dish.unit) }}</span>
+                  <!-- ⭐ PHASE 2: Show portion info for portion-type -->
+                  <span v-if="dish.portionType === 'portion' && dish.portionSize">
+                    1 portion ({{ dish.portionSize }}{{ dish.unit }})
+                  </span>
+                  <span v-else>{{ dish.outputQuantity }} {{ getUnitLabel(dish.unit) }}</span>
                 </div>
               </div>
             </div>
@@ -129,6 +133,9 @@ interface DishOption {
   unit: string
   outputQuantity: number
   category?: string
+  // ⭐ PHASE 2: Portion type support
+  portionType?: 'weight' | 'portion'
+  portionSize?: number // grams per portion
 }
 
 interface Props {
@@ -223,7 +230,8 @@ function getUnitLabel(unit: string): string {
     ml: 'ml',
     piece: 'pc',
     liter: 'L',
-    kg: 'kg'
+    kg: 'kg',
+    portion: 'ptn'
   }
   return unitMap[unit] || unit
 }

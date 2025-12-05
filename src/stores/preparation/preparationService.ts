@@ -397,6 +397,24 @@ export class PreparationService {
     }
   }
 
+  /**
+   * ✅ FIX: Refresh batches cache from database
+   * Call this after operations that create new batches (like negative batches)
+   * to ensure cost calculations use fresh data
+   */
+  async refreshBatches(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Refreshing batches cache from database')
+      await this.loadBatchesFromSupabase()
+      DebugUtils.info(MODULE_NAME, 'Batches cache refreshed', {
+        count: this.batches.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to refresh batches cache', { error })
+      throw error
+    }
+  }
+
   async getPreparationBatches(
     preparationId: string,
     department: PreparationDepartment
@@ -790,6 +808,7 @@ export class PreparationService {
       let totalValue = 0
       const now = TimeUtils.getCurrentLocalISO()
       const storageWriteOffIds: string[] = [] // ✨ NEW: Track write-off operations
+      const actualCostsMap = new Map<string, number>() // ✅ FIX: Track actual FIFO costs per preparation
       const recipesStore = useRecipesStore()
       const productsStore = useProductsStore()
 
@@ -814,7 +833,17 @@ export class PreparationService {
           }
 
           // ⭐ PHASE 1: Calculate ingredient quantities needed (supports products AND preparations)
-          const multiplier = item.quantity / preparation.outputQuantity
+          // ⭐ PHASE 2 FIX: For portion-type, use portion count for multiplier (not grams)
+          let multiplier: number
+          if (preparation.portionType === 'portion' && preparation.portionSize) {
+            // For portion-type: item.quantity is in grams, convert to portions
+            const portionCount = Math.floor(item.quantity / preparation.portionSize)
+            multiplier = portionCount / preparation.outputQuantity
+          } else {
+            // For weight-type: use grams directly
+            multiplier = item.quantity / preparation.outputQuantity
+          }
+
           const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
             // ⭐ PHASE 1: Get ingredient info based on type
             let ingredientName: string
@@ -888,9 +917,16 @@ export class PreparationService {
           }
 
           storageWriteOffIds.push(writeOffResult.data.id)
+
+          // ✅ FIX: Store actual FIFO cost from write-off for batch creation
+          const actualWriteOffCost = writeOffResult.data.totalValue || 0
+          actualCostsMap.set(item.preparationId, actualWriteOffCost)
+
           DebugUtils.info(MODULE_NAME, 'Raw products written off successfully', {
             writeOffId: writeOffResult.data.id,
-            items: writeOffItems.length
+            items: writeOffItems.length,
+            actualFifoCost: actualWriteOffCost,
+            catalogCost: item.costPerUnit * item.quantity
           })
         }
       } else {
@@ -915,6 +951,24 @@ export class PreparationService {
           })
         }
 
+        // ✅ FIX: Use actual FIFO cost from write-off instead of catalog price
+        // Fallback to catalog cost only if write-off was skipped (inventory correction)
+        const catalogTotalCost = item.quantity * item.costPerUnit
+        const actualTotalCost = actualCostsMap.get(item.preparationId) ?? catalogTotalCost
+        const actualCostPerUnit =
+          item.quantity > 0 ? actualTotalCost / item.quantity : item.costPerUnit
+
+        if (actualCostsMap.has(item.preparationId)) {
+          DebugUtils.info(MODULE_NAME, '✅ Using actual FIFO cost for batch', {
+            preparationName: preparationInfo.name,
+            catalogCostPerUnit: item.costPerUnit,
+            actualCostPerUnit: actualCostPerUnit,
+            catalogTotalCost,
+            actualTotalCost,
+            savings: catalogTotalCost - actualTotalCost
+          })
+        }
+
         const batch: PreparationBatch = {
           id: crypto.randomUUID(),
           batchNumber: this.generateBatchNumber(preparationInfo.name, now),
@@ -923,8 +977,8 @@ export class PreparationService {
           initialQuantity: item.quantity,
           currentQuantity: item.quantity,
           unit: preparationInfo.unit,
-          costPerUnit: item.costPerUnit,
-          totalValue: Math.round(item.quantity * item.costPerUnit * 100) / 100,
+          costPerUnit: actualCostPerUnit, // ✅ FIX: Use actual FIFO cost
+          totalValue: Math.round(actualTotalCost * 100) / 100, // ✅ FIX: Use actual total
           productionDate: now,
           expiryDate: item.expiryDate,
           sourceType: data.sourceType,
@@ -949,10 +1003,10 @@ export class PreparationService {
           throw batchError
         }
 
-        // Update last_known_cost for preparation
+        // Update last_known_cost for preparation with actual FIFO cost
         const { error: updateError } = await supabase
           .from('preparations')
-          .update({ last_known_cost: item.costPerUnit })
+          .update({ last_known_cost: actualCostPerUnit }) // ✅ FIX: Use actual cost
           .eq('id', item.preparationId)
 
         if (updateError) {
@@ -964,7 +1018,7 @@ export class PreparationService {
           DebugUtils.info(MODULE_NAME, '✅ Updated preparation last_known_cost', {
             preparationId: item.preparationId,
             preparationName: preparationInfo.name,
-            costPerUnit: item.costPerUnit
+            costPerUnit: actualCostPerUnit // ✅ FIX: Log actual cost
           })
         }
 
@@ -978,7 +1032,7 @@ export class PreparationService {
           quantity: item.quantity,
           unit: batch.unit,
           totalCost: batch.totalValue,
-          averageCostPerUnit: item.costPerUnit,
+          averageCostPerUnit: actualCostPerUnit, // ✅ FIX: Use actual FIFO cost
           expiryDate: item.expiryDate,
           notes: item.notes
         })

@@ -117,6 +117,7 @@
                 />
 
                 <!-- Единицы -->
+                <!-- ⭐ PHASE 2: Lock unit selector for portion-type preparations -->
                 <v-select
                   v-model="component.unit"
                   :items="unitOptions"
@@ -124,6 +125,7 @@
                   hide-details="auto"
                   bg-color="background"
                   style="width: 100px"
+                  :disabled="isComponentPortionType(component)"
                   @update:model-value="emitUpdate"
                 />
 
@@ -224,6 +226,10 @@ interface Props {
     type: 'recipe' | 'preparation'
     unit: string
     outputQuantity: number
+    category?: string
+    // ⭐ PHASE 2: Portion type support
+    portionType?: 'weight' | 'portion'
+    portionSize?: number
   }>
   productOptions: Array<{
     id: string
@@ -296,17 +302,25 @@ function addDishComponent(dish: {
   type: 'recipe' | 'preparation'
   unit: string
   outputQuantity: number
+  portionType?: 'weight' | 'portion'
+  portionSize?: number
 }) {
   if (!localVariant.value.composition) {
     localVariant.value.composition = []
   }
 
+  // ⭐ PHASE 2: For portion-type preparations, auto-set unit to 'portion' and quantity to 1
+  const isPortionType = dish.portionType === 'portion' && dish.portionSize
+
   localVariant.value.composition.push({
     type: dish.type,
     id: dish.id,
-    quantity: dish.outputQuantity,
-    unit: dish.unit,
-    role: 'main'
+    quantity: isPortionType ? 1 : dish.outputQuantity,
+    unit: isPortionType ? 'portion' : dish.unit,
+    role: 'main',
+    // ⭐ PHASE 2: Store portion info for UI
+    portionType: dish.portionType,
+    portionSize: dish.portionSize
   })
 
   showDishSelector.value = false
@@ -411,9 +425,15 @@ function getUnitLabel(unit: string): string {
     ml: 'мл',
     piece: 'шт',
     liter: 'л',
-    kg: 'кг'
+    kg: 'кг',
+    portion: 'ptn'
   }
   return unitMap[unit] || unit
+}
+
+// ⭐ PHASE 2: Check if component is portion-type (unit selector should be locked)
+function isComponentPortionType(component: MenuComposition): boolean {
+  return component.portionType === 'portion' && !!component.portionSize
 }
 
 function getFullItemName(itemName: string, variantName: string): string {

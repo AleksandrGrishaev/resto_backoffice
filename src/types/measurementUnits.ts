@@ -17,9 +17,11 @@ export type MeasurementUnit =
   // Culinary measures
   | 'tsp' // teaspoon
   | 'tbsp' // tablespoon
+  // Portions (for preparation compositions)
+  | 'portion'
 
 // Unit types
-export type UnitType = 'weight' | 'volume' | 'piece' | 'culinary'
+export type UnitType = 'weight' | 'volume' | 'piece' | 'culinary' | 'portion'
 
 // Detailed unit information
 export interface UnitInfo {
@@ -111,6 +113,16 @@ export const MEASUREMENT_UNITS: Record<MeasurementUnit, UnitInfo> = {
     baseUnit: 'ml',
     conversionRate: 15,
     description: '1 tbsp ≈ 15 ml ≈ 10-15 g (depends on product)'
+  },
+
+  // Portions (for portion-type preparations)
+  portion: {
+    id: 'portion',
+    name: 'Portion',
+    shortName: 'ptn',
+    type: 'portion',
+    conversionRate: 1,
+    description: 'One portion of preparation (size defined by preparation)'
   }
 }
 
@@ -119,7 +131,8 @@ export const UNITS_BY_TYPE: Record<UnitType, MeasurementUnit[]> = {
   weight: ['gram', 'kg'],
   volume: ['ml', 'liter'],
   piece: ['piece', 'pack'],
-  culinary: ['tsp', 'tbsp']
+  culinary: ['tsp', 'tbsp'],
+  portion: ['portion']
 }
 
 // Units for different contexts
@@ -134,7 +147,7 @@ export const RECIPE_UNITS: MeasurementUnit[] = [
   'tbsp',
   'pack'
 ]
-export const MENU_COMPOSITION_UNITS: MeasurementUnit[] = ['gram', 'ml', 'piece'] // only precise units
+export const MENU_COMPOSITION_UNITS: MeasurementUnit[] = ['gram', 'ml', 'piece', 'portion'] // only precise units
 
 // =============================================
 // ✅ SAFE UTILITIES FOR WORKING WITH UNITS
