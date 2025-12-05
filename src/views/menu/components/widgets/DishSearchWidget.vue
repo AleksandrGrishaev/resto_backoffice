@@ -16,23 +16,12 @@
           class="flex-grow-1"
         />
 
-        <!-- Type Filter -->
-        <v-select
-          v-model="selectedType"
-          :items="typeOptions"
-          label="Type"
-          variant="outlined"
-          density="compact"
-          hide-details
-          clearable
-          prepend-inner-icon="mdi-filter-variant"
-          style="min-width: 180px"
-        />
-
         <!-- Category Filter -->
         <v-select
           v-model="selectedCategory"
           :items="categoryOptions"
+          item-title="label"
+          item-value="value"
           label="Category"
           variant="outlined"
           density="compact"
@@ -40,29 +29,26 @@
           clearable
           prepend-inner-icon="mdi-shape"
           style="min-width: 200px"
-        />
+        >
+          <template #item="{ props, item }">
+            <v-list-item v-bind="props">
+              <v-list-item-title>{{ item.raw.label }}</v-list-item-title>
+              <v-list-item-subtitle>{{ item.raw.count }} items</v-list-item-subtitle>
+            </v-list-item>
+          </template>
+        </v-select>
       </div>
 
       <!-- Results Summary -->
       <div class="d-flex align-center justify-space-between mb-3">
         <div class="text-body-2 text-medium-emphasis">
           <template v-if="filteredDishes.length === dishes.length">
-            Showing all {{ filteredDishes.length }} dishes
+            Showing all {{ filteredDishes.length }} preparations
           </template>
-          <template v-else>{{ filteredDishes.length }} of {{ dishes.length }} dishes</template>
+          <template v-else>
+            {{ filteredDishes.length }} of {{ dishes.length }} preparations
+          </template>
         </div>
-
-        <!-- Sort Options -->
-        <v-btn-toggle v-model="sortBy" size="small" variant="outlined" divided mandatory>
-          <v-btn value="name" size="small">
-            <v-icon size="18">mdi-sort-alphabetical-ascending</v-icon>
-            <span class="ml-1">Name</span>
-          </v-btn>
-          <v-btn value="type" size="small">
-            <v-icon size="18">mdi-shape</v-icon>
-            <span class="ml-1">Type</span>
-          </v-btn>
-        </v-btn-toggle>
       </div>
 
       <!-- Dish List -->
@@ -162,40 +148,26 @@ const emits = defineEmits<Emits>()
 
 // Local State
 const searchQuery = ref('')
-const selectedType = ref<'recipe' | 'preparation' | null>(null)
 const selectedCategory = ref<string | null>(null)
 const selectedDish = ref<DishOption | null>(null)
-const sortBy = ref<'name' | 'type'>('name')
 const displayCount = ref(props.itemsPerPage)
 
-// Type Options
-const typeOptions = [
-  { title: 'All Types', value: null },
-  { title: 'Recipes', value: 'recipe' },
-  { title: 'Semi-finished', value: 'preparation' }
-]
-
-// Category Options
+// Category Options - берем реальные типы полуфабрикатов
 const categoryOptions = computed(() => {
   const categories = new Map<string, number>()
 
   props.dishes.forEach(dish => {
-    if (dish.category) {
-      const count = categories.get(dish.category) || 0
-      categories.set(dish.category, count + 1)
-    }
+    // Используем category или type из dish
+    const cat = dish.category || 'Other'
+    const count = categories.get(cat) || 0
+    categories.set(cat, count + 1)
   })
 
-  const options = [{ title: 'All Categories', value: null }]
-
-  categories.forEach((count, category) => {
-    options.push({
-      title: `${category} (${count})`,
-      value: category
-    })
-  })
-
-  return options
+  return Array.from(categories.entries()).map(([category, count]) => ({
+    value: category,
+    label: category,
+    count
+  }))
 })
 
 // Filtered Dishes
@@ -208,27 +180,13 @@ const filteredDishes = computed(() => {
     result = result.filter(d => d.name.toLowerCase().includes(query))
   }
 
-  // Type filter
-  if (selectedType.value) {
-    result = result.filter(d => d.type === selectedType.value)
-  }
-
   // Category filter
   if (selectedCategory.value) {
-    result = result.filter(d => d.category === selectedCategory.value)
+    result = result.filter(d => (d.category || 'Other') === selectedCategory.value)
   }
 
-  // Sort
-  result.sort((a, b) => {
-    switch (sortBy.value) {
-      case 'name':
-        return a.name.localeCompare(b.name)
-      case 'type':
-        return a.type.localeCompare(b.type)
-      default:
-        return 0
-    }
-  })
+  // Sort by name only (default)
+  result.sort((a, b) => a.name.localeCompare(b.name))
 
   return result
 })
@@ -243,7 +201,7 @@ const hasMore = computed(() => {
 })
 
 // Reset display count when filters change
-watch([searchQuery, selectedType, selectedCategory], () => {
+watch([searchQuery, selectedCategory], () => {
   displayCount.value = props.itemsPerPage
 })
 

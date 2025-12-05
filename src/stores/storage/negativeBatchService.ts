@@ -105,58 +105,30 @@ class NegativeBatchService {
       return product.last_known_cost
     }
 
-    // Last resort: try to get ANY batch with cost (even old ones)
-    const { data: anyBatch, error: anyBatchError } = await supabase
-      .from('storage_batches')
-      .select('cost_per_unit, batch_number')
-      .eq('item_id', productId)
-      .eq('item_type', 'product')
-      .or('is_negative.eq.false,is_negative.is.null')
-      .not('cost_per_unit', 'is', null)
-      .gt('cost_per_unit', 0)
-      .order('receipt_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (!anyBatchError && anyBatch && anyBatch.cost_per_unit > 0) {
-      console.warn(
-        `⚠️  Using historical batch cost: ${anyBatch.cost_per_unit} (batch: ${anyBatch.batch_number}) - no recent cost data available`
-      )
-      return anyBatch.cost_per_unit
+    // FINAL FALLBACK: Return 0 with CRITICAL ERROR
+    // This makes the problem visible instead of masking it with arbitrary values
+    const errorContext = {
+      timestamp: new Date().toISOString(),
+      itemId: productId,
+      itemName: product?.name || 'Unknown',
+      itemType: 'product',
+      requestedQuantity: requestedQty,
+      unit: product?.unit || 'unknown',
+      failedFallbacks: ['last_active_batch', 'depleted_batches_avg', 'last_known_cost'],
+      suggestedAction: 'Create receipt operation or set base_cost_per_unit in products table'
     }
 
-    // If absolutely no cost data found anywhere, use estimated cost based on unit
-    const estimatedCost = this.getEstimatedCostByUnit(
-      product?.unit || 'gram',
-      product?.name || 'Unknown'
-    )
+    console.error('🚨 COST CALCULATION FAILED', errorContext)
     console.error(
-      `❌ NO COST DATA FOUND for product ${productId} (${product?.name || 'Unknown'}). Using estimated cost: ${estimatedCost} for ${requestedQty} ${product?.unit || 'units'}. THIS SHOULD BE FIXED!`
+      `❌ CRITICAL: NO COST DATA FOUND for product "${product?.name}" (${productId}). ` +
+        `Requested: ${requestedQty} ${product?.unit || 'units'}. ` +
+        `Returning 0 to make this problem visible. ` +
+        `SUGGESTED ACTION: Create a receipt operation for this product or set base_cost_per_unit.`
     )
-    return estimatedCost
-  }
 
-  /**
-   * Get estimated cost based on typical unit values
-   * This is a last resort fallback to avoid returning 0
-   * @private
-   */
-  private getEstimatedCostByUnit(unit: string, productName: string): number {
-    // Rough estimates based on typical product costs (IDR per unit)
-    // This is better than 0 but should trigger investigation
-    const estimates: Record<string, number> = {
-      gram: 20, // ~20 IDR per gram for typical products
-      kg: 20000, // ~20,000 IDR per kg
-      ml: 5, // ~5 IDR per ml for liquids
-      liter: 5000, // ~5,000 IDR per liter
-      piece: 1000, // ~1,000 IDR per piece
-      bottle: 15000 // ~15,000 IDR per bottle
-    }
-
-    // Use unit-based estimate or default
-    const estimatedCost = estimates[unit.toLowerCase()] || 100
-
-    return estimatedCost
+    // Return 0 instead of arbitrary estimated value
+    // This makes missing cost data very visible in reports
+    return 0
   }
 
   /**

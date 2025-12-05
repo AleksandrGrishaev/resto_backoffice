@@ -811,6 +811,25 @@ export class PreparationService {
           throw batchError
         }
 
+        // Update last_known_cost for preparation
+        const { error: updateError } = await supabase
+          .from('preparations')
+          .update({ last_known_cost: item.costPerUnit })
+          .eq('id', item.preparationId)
+
+        if (updateError) {
+          DebugUtils.warn(MODULE_NAME, '⚠️ Failed to update last_known_cost', {
+            preparationId: item.preparationId,
+            error: updateError
+          })
+        } else {
+          DebugUtils.info(MODULE_NAME, '✅ Updated preparation last_known_cost', {
+            preparationId: item.preparationId,
+            preparationName: preparationInfo.name,
+            costPerUnit: item.costPerUnit
+          })
+        }
+
         // Add to local array
         this.batches.push(batch)
 
@@ -1414,6 +1433,56 @@ export class PreparationService {
           }
 
           this.balances.push(balance)
+        }
+      }
+
+      // ✅ NEW: Add ALL active preparations from catalog (even without batches)
+      // This ensures new preparations are visible immediately after creation
+      DebugUtils.info(MODULE_NAME, `Adding all catalog preparations for ${department}`)
+
+      const recipesStore = useRecipesStore()
+      const allDepartmentPreparations = recipesStore.activePreparations.filter(
+        (p: any) => p.isActive && p.department === department
+      )
+
+      DebugUtils.info(
+        MODULE_NAME,
+        `Found ${allDepartmentPreparations.length} catalog preparations for ${department}`
+      )
+
+      // Add preparations that don't have batches yet
+      for (const prep of allDepartmentPreparations) {
+        const alreadyExists = this.balances.some(
+          b => b.preparationId === prep.id && b.department === department
+        )
+
+        if (!alreadyExists) {
+          const balance: PreparationBalance = {
+            preparationId: prep.id,
+            preparationName: prep.name,
+            department,
+            totalQuantity: 0,
+            unit: prep.outputUnit,
+            totalValue: 0,
+            averageCost: 0,
+            latestCost: 0,
+            costTrend: 'stable',
+            batches: [],
+            oldestBatchDate: '',
+            newestBatchDate: '',
+            hasExpired: false,
+            hasNearExpiry: false,
+            belowMinStock: true,
+            batchCount: 0,
+            lastCalculated: TimeUtils.getCurrentLocalISO()
+          }
+
+          this.balances.push(balance)
+
+          DebugUtils.info(
+            MODULE_NAME,
+            `Added catalog preparation without batches: ${prep.name} (${prep.code})`
+          )
         }
       }
 

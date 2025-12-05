@@ -8,6 +8,18 @@
 
       <v-divider />
 
+      <!-- Error Alert -->
+      <v-alert
+        v-if="errorMessage"
+        type="error"
+        variant="tonal"
+        closable
+        class="ma-4"
+        @click:close="errorMessage = ''"
+      >
+        {{ errorMessage }}
+      </v-alert>
+
       <v-card-text class="pa-4">
         <v-form ref="form" v-model="formValid" @submit.prevent="handleSubmit">
           <!-- ✅ Базовая информация -->
@@ -83,6 +95,7 @@ const recipesStore = useRecipesStore()
 const form = ref()
 const formValid = ref(false)
 const loading = ref(false)
+const errorMessage = ref('')
 
 // Dialog model
 const dialogModel = computed({
@@ -105,7 +118,7 @@ const formData = ref<any>({
   cookTime: undefined,
   difficulty: 'easy',
   tags: [],
-  instructions: '',
+  instructions: '', // Optional for preparations
   components: [],
   shelfLife: 2 // ✅ NEW: Default shelf life for preparations (days)
 })
@@ -176,8 +189,15 @@ function onComponentQuantityChange() {
 }
 
 async function handleSubmit() {
+  // Clear previous error
+  errorMessage.value = ''
+
+  // Validate form
   const isValid = await form.value?.validate()
-  if (!isValid?.valid) return
+  if (!isValid?.valid) {
+    errorMessage.value = 'Please fill in all required fields correctly'
+    return
+  }
 
   try {
     loading.value = true
@@ -198,7 +218,7 @@ async function handleSubmit() {
         outputQuantity: formData.value.outputQuantity,
         outputUnit: formData.value.outputUnit,
         preparationTime: formData.value.preparationTime,
-        instructions: formData.value.instructions,
+        instructions: formData.value.instructions || '', // ✅ Optional: send empty string if not provided
         shelfLife: formData.value.shelfLife, // ✅ NEW: Include shelf life
         recipe: validComponents.map((comp: any) => ({
           type: 'product' as const,
@@ -254,14 +274,18 @@ async function handleSubmit() {
     }
 
     dialogModel.value = false
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Failed to save ${props.type}:`, error)
+    // Show user-friendly error message
+    const errorMsg = error?.message || error?.toString() || 'Unknown error occurred'
+    errorMessage.value = `Failed to save ${props.type}: ${errorMsg}`
   } finally {
     loading.value = false
   }
 }
 
 function handleCancel() {
+  errorMessage.value = ''
   dialogModel.value = false
 }
 
@@ -286,7 +310,7 @@ function resetForm() {
     cookTime: undefined,
     difficulty: 'easy',
     tags: [],
-    instructions: '',
+    instructions: '', // Optional for preparations (nullable in DB)
     components: [],
     shelfLife: 2 // ✅ NEW: Default shelf life for preparations (days)
   }
@@ -296,6 +320,8 @@ function resetForm() {
 // Watch for dialog open/close
 watch(dialogModel, async newVal => {
   if (newVal) {
+    // Clear any previous errors
+    errorMessage.value = ''
     DebugUtils.info('UnifiedRecipeDialog', `Dialog opened for ${props.type}`)
 
     if (props.item) {
