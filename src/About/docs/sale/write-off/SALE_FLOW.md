@@ -603,209 +603,82 @@ allocatePreparationFIFO(preparationId, quantity, department) {
 
 ### 4.4. Расчет стоимости для Negative Batch
 
+**Функция:** `calculateNegativeBatchCost()`
+
 **Файлы:**
 
-- `src/stores/preparation/negativeBatchService.ts` (для preparations)
-- `src/stores/storage/negativeBatchService.ts` (для products)
+- `src/stores/preparation/negativeBatchService.ts:53-129` (preparations)
+- `src/stores/storage/negativeBatchService.ts:55-132` (products)
 
 **Улучшенный Fallback Chain (4 уровня):**
 
-```typescript
-async calculateNegativeBatchCost(preparationId, quantity) {
-  // 1. ✅ Last active batch cost (FIFO - самая точная)
-  const lastBatch = await getLastActiveBatch(preparationId)
-  if (lastBatch?.costPerUnit > 0) {
-    console.info(`✅ Using last active batch cost: ${lastBatch.costPerUnit}`)
-    return lastBatch.costPerUnit
-  }
-
-  // 2. ✅ Average from depleted batches (recent 5)
-  const depletedBatches = await getDepletedBatches(preparationId, limit: 5)
-  if (depletedBatches.length > 0) {
-    const avgCost = sum(depletedBatches.map(b => b.costPerUnit)) / count
-    console.info(`✅ Using average from ${count} depleted batches: ${avgCost}`)
-    return avgCost
-  }
-
-  // 3. ✅ Cached last_known_cost from DB (auto-updated!)
-  const preparation = await supabase
-    .from('preparations')
-    .select('last_known_cost, name')
-    .eq('id', preparationId)
-    .single()
-
-  if (preparation?.last_known_cost > 0) {
-    console.info(`✅ Using last_known_cost: ${preparation.last_known_cost}`)
-    return preparation.last_known_cost
-  }
-
-  // 4. ❌ CRITICAL ERROR: No cost data available
-  const errorContext = {
-    timestamp: new Date().toISOString(),
-    itemId: preparationId,
-    itemName: preparation?.name || 'Unknown',
-    itemType: 'preparation',
-    requestedQuantity: quantity,
-    failedFallbacks: ['last_active_batch', 'depleted_batches_avg', 'last_known_cost'],
-    suggestedAction: 'Create production receipt for this preparation'
-  }
-
-  console.error('🚨 COST CALCULATION FAILED', errorContext)
-  console.error(
-    `❌ CRITICAL: NO COST DATA FOUND for "${preparation?.name}" (${preparationId}). ` +
-    `Returning 0 to make this problem visible.`
-  )
-
-  // Return 0 instead of arbitrary value (100 IDR)
-  // This makes the problem visible in reports instead of masking it
-  return 0
-}
 ```
-
-**Пример расчета (Dragon test):**
-
-```typescript
-// Preparation: Dragon test
-// - Output: 1 gram
-// - Ingredients:
-//   - Dragon (product): 100 gram × 1000 IDR/gram = 100,000 IDR
-
-// Calculation:
-totalCost = 100 gram × 1000 IDR/gram = 100,000 IDR
-costPerOutputUnit = 100,000 IDR / 1 gram = 100,000 IDR/gram
-
-// Negative batch:
-quantity = -20 gram
-cost = 100,000 IDR/gram
-totalValue = -20 × 100,000 = -2,000,000 IDR
+1. Last active batch cost          ← getLastActiveBatch() → batch.costPerUnit
+   ↓ FAIL
+2. Depleted batches average (5шт)  ← SELECT FROM *_batches WHERE status='depleted' ORDER BY date DESC LIMIT 5
+   ↓ FAIL
+3. last_known_cost from DB         ← SELECT last_known_cost FROM products/preparations
+   ↓ FAIL
+4. 0 + CRITICAL ERROR               ← console.error() + errorContext { failedFallbacks, suggestedAction }
 ```
 
 #### 4.4.1. Автоматическое обновление `last_known_cost`
 
+**Trigger:** При создании batch в `createReceipt()`
+
 **Файлы:**
 
-- `src/stores/storage/storageService.ts:774-793` (для products)
-- `src/stores/preparation/preparationService.ts:814-831` (для preparations)
+- `src/stores/storage/storageService.ts:774-793` (products)
+- `src/stores/preparation/preparationService.ts:814-831` (preparations)
 
-**Что происходит:**
+**Flow:**
 
-При каждом создании batch (receipt operation) автоматически обновляется поле `last_known_cost`:
-
-```typescript
-// For Products (storageService.createReceipt)
-for (const item of data.items) {
-  // 1. Create batch
-  await supabase.from('storage_batches').insert(batch)
-
-  // 2. Update last_known_cost
-  await supabase
-    .from('products')
-    .update({ last_known_cost: item.costPerUnit })
-    .eq('id', item.itemId)
-
-  console.info('✅ Updated product last_known_cost', {
-    productId: item.itemId,
-    costPerUnit: item.costPerUnit
-  })
-}
-
-// For Preparations (preparationService.createReceipt)
-for (const item of data.items) {
-  // 1. Create batch
-  await supabase.from('preparation_batches').insert(batch)
-
-  // 2. Update last_known_cost
-  await supabase
-    .from('preparations')
-    .update({ last_known_cost: item.costPerUnit })
-    .eq('id', item.preparationId)
-
-  console.info('✅ Updated preparation last_known_cost', {
-    preparationId: item.preparationId,
-    costPerUnit: item.costPerUnit
-  })
-}
+```
+createReceipt()
+  → INSERT batch INTO *_batches (cost_per_unit = X)
+  → UPDATE products/preparations SET last_known_cost = X WHERE id = item_id
+  → log: "✅ Updated last_known_cost"
 ```
 
-**Результат:**
+**Результаты:**
 
-- ✅ `last_known_cost` всегда актуален (обновляется при каждом receipt)
-- ✅ Fallback уровень 3 работает надежно (есть недавняя цена)
-- ✅ Меньше случаев когда cost = 0
-- ✅ Более точные расчеты себестоимости
-
-**Важно:**
-
-- Поле `last_known_cost` **никогда не NULL** (default = 0)
-- При создании product: `last_known_cost = base_cost_per_unit || 0`
-- При создании preparation: `last_known_cost = 0` (обновится при первом batch)
-- Cost = 0 в negative batch → **CRITICAL ERROR** (видимая проблема, не скрытая произвольным значением)
+- ✅ `last_known_cost` обновляется при каждом receipt
+- ✅ Fallback level 3 всегда актуален
+- ❌ Cost = 0 → CRITICAL ERROR (не маскируется произвольным значением)
 
 ### 4.5. Создание записей в БД
 
-```typescript
-// 1. Create write_off_operations record
-const writeOffOperation = {
-  id: generateId(),
-  document_number: `WO-${timestamp}`,
-  department: 'kitchen',
-  reason: 'sale',
-  total_value: totalCost,
-  affects_kpi: true, // ← sale affects KPI!
-  created_at: now
-}
+**Таблицы:**
 
-await supabase.from('write_off_operations').insert(writeOffOperation)
-
-// 2. Create batch_operations records (для каждой allocation)
-for (const allocation of allocations) {
-  const batchOperation = {
-    batch_id: allocation.batchId,
-    operation_id: writeOffOperation.id,
-    operation_type: 'write_off',
-    quantity: -allocation.quantity, // Negative!
-    department: 'kitchen'
-  }
-
-  await supabase.from('batch_operations').insert(batchOperation)
-}
-
-// 3. Update batches
-for (const batch of updatedBatches) {
-  await supabase
-    .from('preparation_batches') // or product_batches
-    .update({
-      current_quantity: batch.currentQuantity,
-      status: batch.status,
-      updated_at: now
-    })
-    .eq('id', batch.id)
-}
 ```
+1. write_off_operations  ← operation metadata (document_number, reason, affects_kpi)
+2. batch_operations      ← links batches to operation (batch_id, operation_id, quantity)
+3. *_batches             ← update current_quantity, status
+```
+
+**Файл:** `src/stores/storage/storageService.ts:844-1170`
 
 ### 4.6. Запись расхода в Account Store
 
-**Если `reason` affects KPI:**
+**Условие:** `reason` affects KPI (sale, damage, spoilage)
 
-```typescript
-// Write-Off создает expense transaction в Account Store
-accountStore.createTransaction({
-  accountId: 'acc_1', // Main Cash Register
-  type: 'expense',
-  amount: -totalCost, // Negative!
-  category: 'inventory_adjustment',
-  description: `Write-off: ${documentNumber}`,
-  relatedEntityType: 'write_off',
-  relatedEntityId: writeOffOperation.id
-})
+**Flow:**
+
+```
+IF affects_kpi:
+  accountStore.createTransaction({
+    type: 'expense',
+    amount: -totalCost,
+    category: 'inventory_adjustment'
+  })
 ```
 
 **Результат Этапа 4:**
 
 - ✅ Write-off operation создана
 - ✅ Batches обновлены (FIFO)
-- ✅ Negative batches созданы/обновлены
-- ✅ Expense записан в Account Store
+- ✅ Negative batches созданы/обновлены при shortage
+- ✅ Expense записан в Account Store (если affects_kpi)
 - ✅ Inventory актуализирован
 
 ---

@@ -172,14 +172,29 @@ export function useDecomposition() {
       return []
     }
 
-    const totalQuantity = comp.quantity * quantity
+    // ✅ FIX: Apply yield adjustment if enabled
+    let totalQuantity = comp.quantity * quantity
+
+    if (comp.useYieldPercentage && product.yieldPercentage && product.yieldPercentage < 100) {
+      const originalQuantity = totalQuantity
+      totalQuantity = totalQuantity / (product.yieldPercentage / 100)
+
+      console.log(`  🔄 [${MODULE_NAME}] Applied yield adjustment for ${product.name}`, {
+        baseQuantity: originalQuantity,
+        yieldPercentage: product.yieldPercentage,
+        adjustedQuantity: totalQuantity
+      })
+    }
+
     const totalCost = totalQuantity * product.baseCostPerUnit
 
     console.log(`  ✅ [${MODULE_NAME}] Product decomposed:`, {
       name: product.name,
       quantity: totalQuantity,
       unit: comp.unit,
-      cost: totalCost
+      cost: totalCost,
+      yieldAdjusted:
+        comp.useYieldPercentage && product.yieldPercentage && product.yieldPercentage < 100
     })
 
     return [
@@ -224,7 +239,8 @@ export function useDecomposition() {
         type: recipeComp.componentType,
         id: recipeComp.componentId,
         quantity: recipeComp.quantity,
-        unit: recipeComp.unit
+        unit: recipeComp.unit,
+        useYieldPercentage: recipeComp.useYieldPercentage // ✅ FIX: Pass yield flag
       }
 
       // FIX: Don't multiply by comp.quantity here - it's already in menuComp.quantity

@@ -93,8 +93,8 @@ interface Props {
 const props = defineProps<Props>()
 
 // ✅ ИСПРАВЛЕНО: Избегаем циклических импортов - ленивая загрузка stores
-let productsStore: any = null
-let recipesStore: any = null
+const productsStore = ref<any>(null)
+const recipesStore = ref<any>(null)
 
 const { convertUnits, areUnitsCompatible } = useMeasurementUnits()
 const { calculateRecipeCost, calculatePreparationCost } = useCostCalculation() // ✅ SPRINT 4
@@ -107,15 +107,15 @@ const actualCost = ref({
 })
 
 async function getStores() {
-  if (!productsStore) {
+  if (!productsStore.value) {
     const { useProductsStore } = await import('@/stores/productsStore')
-    productsStore = useProductsStore()
+    productsStore.value = useProductsStore()
   }
-  if (!recipesStore) {
+  if (!recipesStore.value) {
     const { useRecipesStore } = await import('@/stores/recipes')
-    recipesStore = useRecipesStore()
+    recipesStore.value = useRecipesStore()
   }
-  return { productsStore, recipesStore }
+  return { productsStore: productsStore.value, recipesStore: recipesStore.value }
 }
 
 // ✅ ИСПРАВЛЕНО: Правильный расчет стоимости с базовыми единицами
@@ -123,20 +123,31 @@ const estimatedCost = computed(() => {
   let totalCost = 0
   let costPerUnit = 0
 
+  // ✅ FIX: Ensure stores are loaded
+  if (!productsStore.value || !recipesStore.value) {
+    DebugUtils.warn('RecipeCostPreviewWidget', 'Stores not loaded yet')
+    return { totalCost: 0, costPerUnit: 0 }
+  }
+
   try {
     for (const component of props.formData.components || []) {
       if (!component.componentId || !component.quantity || component.quantity <= 0) continue
 
       if (component.componentType === 'product') {
         // ✅ ИСПРАВЛЕНО: Используем правильный метод для получения продукта
-        const product = productsStore?.getProductForRecipe?.(component.componentId)
+        const product = productsStore.value?.getProductForRecipe?.(component.componentId)
         if (product && product.isActive) {
           // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем базовые единицы для точного расчета
           const componentCost = calculateProductCost(component, product)
           totalCost += componentCost
+        } else {
+          DebugUtils.debug('RecipeCostPreviewWidget', 'Product not found or inactive', {
+            componentId: component.componentId,
+            product
+          })
         }
       } else if (component.componentType === 'preparation') {
-        const prepCost = recipesStore?.getPreparationCostCalculation?.(component.componentId)
+        const prepCost = recipesStore.value?.getPreparationCostCalculation?.(component.componentId)
         if (prepCost) {
           const componentCost = prepCost.costPerOutputUnit * component.quantity
           totalCost += componentCost
@@ -187,14 +198,25 @@ function calculateProductCost(component: any, product: any): number {
     return 0
   }
 
+  // ✅ NEW: Apply yield percentage adjustment if enabled
+  let adjustedQuantity = baseQuantity
+  let yieldPercentage = 100
+  if (component.useYieldPercentage && product.yieldPercentage) {
+    yieldPercentage = product.yieldPercentage
+    adjustedQuantity = baseQuantity / (yieldPercentage / 100)
+  }
+
   // ✅ ПРАВИЛЬНЫЙ РАСЧЕТ: Умножаем на цену за базовую единицу
-  const componentCost = baseQuantity * product.baseCostPerUnit
+  const componentCost = adjustedQuantity * product.baseCostPerUnit
 
   DebugUtils.debug('RecipeCostPreviewWidget', 'Product cost calculation', {
     productName: product.name,
     componentQuantity: component.quantity,
     componentUnit: component.unit,
     baseQuantity,
+    yieldPercentage,
+    useYield: component.useYieldPercentage,
+    adjustedQuantity,
     baseUnit: product.baseUnit,
     baseCostPerUnit: product.baseCostPerUnit,
     totalCost: componentCost
@@ -221,7 +243,9 @@ async function loadActualCost() {
     let result: any = null
 
     if (props.type === 'preparation') {
-      const preparation = recipesStore?.preparations?.find((p: any) => p.id === props.formData.id)
+      const preparation = recipesStore.value?.preparations?.find(
+        (p: any) => p.id === props.formData.id
+      )
       if (!preparation) {
         actualCost.value.loaded = false
         return
@@ -229,7 +253,7 @@ async function loadActualCost() {
 
       result = await calculatePreparationCost(preparation, 'actual')
     } else if (props.type === 'recipe') {
-      const recipe = recipesStore?.recipes?.find((r: any) => r.id === props.formData.id)
+      const recipe = recipesStore.value?.recipes?.find((r: any) => r.id === props.formData.id)
       if (!recipe) {
         actualCost.value.loaded = false
         return

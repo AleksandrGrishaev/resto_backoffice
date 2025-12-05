@@ -77,9 +77,24 @@ export function useCostCalculation() {
 
   /**
    * ✅ ПРЯМОЙ РАСЧЕТ: Все данные уже в базовых единицах после приемки
+   * @param quantity - Количество в базовых единицах (net quantity)
+   * @param product - Продукт для расчета
+   * @param useYield - Учитывать yield percentage (опционально)
+   * @returns Стоимость с учетом yield adjustment если enabled
    */
-  function calculateDirectCost(quantity: number, product: ProductForRecipe): number {
-    return quantity * product.baseCostPerUnit
+  function calculateDirectCost(
+    quantity: number,
+    product: ProductForRecipe,
+    useYield: boolean = false
+  ): number {
+    let adjustedQuantity = quantity
+
+    // ✅ NEW: Apply yield percentage adjustment if enabled
+    if (useYield && product.yieldPercentage && product.yieldPercentage < 100) {
+      adjustedQuantity = quantity / (product.yieldPercentage / 100)
+    }
+
+    return adjustedQuantity * product.baseCostPerUnit
   }
 
   /**
@@ -192,7 +207,12 @@ export function useCostCalculation() {
         }
 
         // ✅ ПРЯМОЙ РАСЧЕТ: количество уже в базовых единицах
-        const ingredientTotalCost = calculateDirectCost(ingredient.quantity, product)
+        // ✅ FIX: Pass useYieldPercentage to calculateDirectCost
+        const ingredientTotalCost = calculateDirectCost(
+          ingredient.quantity,
+          product,
+          ingredient.useYieldPercentage || false
+        )
         totalCost += ingredientTotalCost
 
         componentCosts.push({
@@ -399,7 +419,12 @@ export function useCostCalculation() {
           }
 
           // ✅ ПРЯМОЙ РАСЧЕТ: количество уже в базовых единицах
-          componentCost = calculateDirectCost(component.quantity, product)
+          // ✅ NEW: Pass useYieldPercentage flag to enable yield adjustment
+          componentCost = calculateDirectCost(
+            component.quantity,
+            product,
+            component.useYieldPercentage || false
+          )
           unitCost = product.baseCostPerUnit
         } else if (component.componentType === 'preparation') {
           const preparationCost = await getPreparationCostCallback(component.componentId)

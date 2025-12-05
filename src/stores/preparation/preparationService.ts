@@ -733,11 +733,31 @@ export class PreparationService {
           const multiplier = item.quantity / preparation.outputQuantity
           const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
             const product = productsStore.getProductById(ingredient.id)
+
+            // ✅ FIX: Apply yield adjustment if enabled
+            let adjustedQuantity = ingredient.quantity * multiplier
+
+            if (
+              ingredient.useYieldPercentage &&
+              product?.yieldPercentage &&
+              product.yieldPercentage < 100
+            ) {
+              const originalQuantity = adjustedQuantity
+              adjustedQuantity = adjustedQuantity / (product.yieldPercentage / 100)
+
+              DebugUtils.info(MODULE_NAME, `Applied yield adjustment for ${product.name}`, {
+                baseQuantity: originalQuantity,
+                yieldPercentage: product.yieldPercentage,
+                adjustedQuantity,
+                ingredient: ingredient.id
+              })
+            }
+
             return {
               itemId: ingredient.id,
               itemName: product?.name || `Product ${ingredient.id}`,
               itemType: 'product' as const,
-              quantity: ingredient.quantity * multiplier,
+              quantity: adjustedQuantity,
               unit: ingredient.unit,
               notes: `Production: ${preparation.name} (${item.quantity}${preparation.outputUnit})`
             }

@@ -340,6 +340,7 @@ import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
 import { useAuthStore } from '@/stores/auth'
 import { negativeBatchService } from '@/stores/preparation/negativeBatchService'
+import { useCostCalculation } from '@/stores/recipes/composables/useCostCalculation' // ✅ NEW: For yield adjustment
 import type {
   PreparationDepartment,
   CreatePreparationReceiptData,
@@ -369,6 +370,7 @@ const preparationStore = usePreparationStore()
 const recipesStore = useRecipesStore()
 const productsStore = useProductsStore()
 const authStore = useAuthStore()
+const { calculateDirectCost } = useCostCalculation() // ✅ NEW: For yield adjustment in cost calculation
 
 // State
 const form = ref()
@@ -415,7 +417,12 @@ const calculatedCostPerUnit = computed(() => {
     const product = productsStore.getProductById(ingredient.id)
     if (!product || !product.isActive) continue
 
-    const ingredientCost = ingredient.quantity * product.baseCostPerUnit
+    // ✅ FIX: Use calculateDirectCost to account for yield adjustment
+    const ingredientCost = calculateDirectCost(
+      ingredient.quantity,
+      product,
+      ingredient.useYieldPercentage || false
+    )
     totalCost += ingredientCost
   }
 
@@ -430,11 +437,21 @@ const rawProductsPreview = computed(() => {
   if (!selectedPreparation.value?.recipe || !quantity.value) return []
 
   return selectedPreparation.value.recipe
-    .map(ingredient => {
+    .map((ingredient: any) => {
       const product = productsStore.getProductById(ingredient.id)
       if (!product) return null
 
-      const scaledQuantity = ingredient.quantity * multiplier.value
+      // ✅ FIX: Apply yield adjustment to quantity preview
+      let scaledQuantity = ingredient.quantity * multiplier.value
+
+      if (
+        ingredient.useYieldPercentage &&
+        product.yieldPercentage &&
+        product.yieldPercentage < 100
+      ) {
+        scaledQuantity = scaledQuantity / (product.yieldPercentage / 100)
+      }
+
       const costPerUnit = product.baseCostPerUnit
       const totalCost = scaledQuantity * costPerUnit
 
@@ -444,10 +461,12 @@ const rawProductsPreview = computed(() => {
         quantity: scaledQuantity.toFixed(2),
         unit: product.baseUnit,
         costPerUnit,
-        totalCost
+        totalCost,
+        yieldAdjusted:
+          ingredient.useYieldPercentage && product.yieldPercentage && product.yieldPercentage < 100
       }
     })
-    .filter(item => item !== null)
+    .filter((item: any) => item !== null)
 })
 
 const quantityHint = computed(() => {

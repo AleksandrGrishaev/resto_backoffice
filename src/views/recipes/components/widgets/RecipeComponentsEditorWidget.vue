@@ -159,6 +159,14 @@
                 variant="outlined"
                 density="comfortable"
                 :rules="[validateRequired, validatePositiveNumber]"
+                :hint="getQuantityHint(component)"
+                :persistent-hint="
+                  !!(
+                    component.useYieldPercentage &&
+                    component.componentType === 'product' &&
+                    component.componentId
+                  )
+                "
                 required
                 @update:model-value="handleQuantityChange(index, $event)"
               />
@@ -193,6 +201,35 @@
                   <v-icon>mdi-note-text</v-icon>
                 </template>
               </v-text-field>
+            </v-col>
+          </v-row>
+
+          <!-- ✅ COMPACT: Yield Toggle (Products only) - inline switch -->
+          <v-row
+            v-if="
+              component.componentType === 'product' &&
+              component.componentId &&
+              shouldShowYieldToggle(component)
+            "
+            class="mb-2"
+          >
+            <v-col cols="12">
+              <div class="d-flex align-center">
+                <v-switch
+                  :model-value="component.useYieldPercentage"
+                  color="warning"
+                  density="compact"
+                  hide-details
+                  @update:model-value="handleYieldToggle(index, $event)"
+                >
+                  <template #label>
+                    <span class="text-caption">
+                      <v-icon size="16" class="mr-1">mdi-percent</v-icon>
+                      Account for Yield ({{ getProductYield(component) }}%)
+                    </span>
+                  </template>
+                </v-switch>
+              </div>
             </v-col>
           </v-row>
 
@@ -274,6 +311,7 @@ interface Component {
   componentType: string
   quantity: number
   unit: string
+  useYieldPercentage?: boolean
   notes: string
 }
 
@@ -287,6 +325,7 @@ interface ProductItem {
   costPerUnit: number
   baseUnit?: string
   baseCostPerUnit?: number
+  yieldPercentage?: number
 }
 
 interface PreparationItem {
@@ -557,6 +596,16 @@ function handleComponentIdChange(index: number, componentId: string) {
   const fixedUnit = getFixedUnitForComponent(componentId, props.components[index].componentType)
   emit('update-component', index, 'unit', fixedUnit)
 
+  // ✅ NEW: Auto-enable yield percentage if product has yield < 100%
+  if (props.components[index].componentType === 'product') {
+    const product = products.value.find(p => p.id === componentId)
+    if (product && product.yieldPercentage && product.yieldPercentage < 100) {
+      emit('update-component', index, 'useYieldPercentage', true)
+    } else {
+      emit('update-component', index, 'useYieldPercentage', false)
+    }
+  }
+
   emit('component-quantity-changed')
 }
 
@@ -582,6 +631,62 @@ function handleNotesChange(index: number, notes: string) {
   emit('update-component', index, 'notes', notes)
 }
 
+/**
+ * ✅ NEW: Handle yield percentage toggle
+ */
+function handleYieldToggle(index: number, enabled: boolean) {
+  emit('update-component', index, 'useYieldPercentage', enabled)
+  emit('component-quantity-changed') // Recalculate costs
+}
+
+/**
+ * ✅ NEW: Get quantity hint (shows gross quantity when yield enabled)
+ */
+function getQuantityHint(component: Component): string {
+  if (
+    component.componentType !== 'product' ||
+    !component.componentId ||
+    !component.useYieldPercentage
+  ) {
+    return ''
+  }
+
+  const product = products.value.find(p => p.id === component.componentId)
+  if (!product) return ''
+
+  const yield_pct = product.yieldPercentage || 100
+  if (yield_pct >= 100) return ''
+
+  const netQuantity = component.quantity || 0
+  const grossQuantity = netQuantity / (yield_pct / 100)
+  const unit = getFixedUnit(component)
+
+  return `Purchase: ${grossQuantity.toFixed(1)}${unit} (${yield_pct}% yield)`
+}
+
+/**
+ * ✅ NEW: Should show yield toggle (only if product has yield < 100%)
+ */
+function shouldShowYieldToggle(component: Component): boolean {
+  if (component.componentType !== 'product') return false
+
+  const product = products.value.find(p => p.id === component.componentId)
+  if (!product) return false
+
+  const yield_pct = product.yieldPercentage || 100
+  return yield_pct < 100
+}
+
+/**
+ * ✅ NEW: Get product yield percentage
+ */
+function getProductYield(component: Component): number {
+  if (component.componentType !== 'product') return 100
+
+  const product = products.value.find(p => p.id === component.componentId)
+  return product?.yieldPercentage || 100
+}
+
 // ===== LIFECYCLE =====
 async function loadStores() {
   try {
@@ -598,7 +703,8 @@ async function loadStores() {
         isActive: p.isActive,
         costPerUnit: p.costPerUnit || 0,
         baseUnit: (p as any).baseUnit,
-        baseCostPerUnit: (p as any).baseCostPerUnit
+        baseCostPerUnit: (p as any).baseCostPerUnit,
+        yieldPercentage: (p as any).yieldPercentage || 100 // ✅ NEW: Load yield percentage
       }))
     }
 

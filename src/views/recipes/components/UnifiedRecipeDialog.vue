@@ -225,6 +225,7 @@ async function handleSubmit() {
           id: comp.componentId,
           quantity: comp.quantity,
           unit: comp.unit,
+          useYieldPercentage: comp.useYieldPercentage, // ✅ FIX: Include yield percentage toggle
           notes: comp.notes
         }))
       }
@@ -256,6 +257,7 @@ async function handleSubmit() {
           componentType: comp.componentType,
           quantity: comp.quantity,
           unit: comp.unit,
+          useYieldPercentage: comp.useYieldPercentage, // ✅ FIX: Include yield percentage toggle
           notes: comp.notes
         }))
       }
@@ -339,12 +341,13 @@ watch(dialogModel, async newVal => {
           preparationTime: prep.preparationTime,
           instructions: prep.instructions,
           shelfLife: prep.shelfLife || 2, // ✅ NEW: Include shelf life with default
-          components: (prep.recipe || []).map(ingredient => ({
+          components: (prep.recipe || []).map((ingredient: any) => ({
             id: generateId(),
             componentId: ingredient.id,
             componentType: 'product',
             quantity: ingredient.quantity,
             unit: ingredient.unit,
+            useYieldPercentage: ingredient.useYieldPercentage, // ✅ FIX: Include yield percentage toggle
             notes: ingredient.notes || ''
           }))
         }
