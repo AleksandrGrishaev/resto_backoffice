@@ -22,6 +22,57 @@ Enable preparations to use other preparations as ingredients (nested preparation
 - ✅ Cycle detection (prevent A→B→A)
 - ✅ Simple cost calculation via lastKnownCost
 - ✅ Production with FIFO write-off
+- ✅ **All quantities in WEIGHT (grams)** - no portions yet!
+
+---
+
+## 🔒 Safety Guarantees
+
+### Decomposition Will NOT Break
+
+**Verified in code analysis:**
+
+1. **Current behavior (products only)**:
+
+   - Sale → Preparation → STOP (don't decompose to products)
+   - Write-off preparation batch via FIFO ✅
+
+2. **New behavior (nested preparations)**:
+
+   - Sale → Nested Prep → STOP (same as before!)
+   - Write-off nested prep batch via FIFO ✅
+
+3. **No changes needed in**:
+   - `useDecomposition.ts` - already stops at preparation level ✅
+   - `useKitchenDecomposition.ts` - works as-is ✅
+   - POS/Sales write-off logic - works as-is ✅
+
+### No Double Write-Off
+
+**Product write-off timeline:**
+
+```
+Production Level 1: Fresh Fish → Marinated Fish
+  ↓ Fresh Fish written off from storage (ONCE)
+
+Production Level 2: Marinated Fish → Fish Portion
+  ↓ Marinated Fish written off from prep batch (ONCE)
+
+Sale: Dish with Fish Portion
+  ↓ Fish Portion written off from prep batch (ONCE)
+```
+
+**Result**: Each ingredient written off exactly ONCE ✅
+
+### Existing Code Already Supports This!
+
+**File: `preparationService.ts:createReceipt()` lines 732-764**
+
+The production service already has flexible structure:
+
+- `ingredient.type` can be 'product' or 'preparation'
+- Write-off logic just needs to check type and call appropriate allocator
+- ~5 lines of code change needed!
 
 ---
 
@@ -35,10 +86,10 @@ Step 1: Produce "Marinated Fish" (1000g)
 
   Creates batch_1:
   - preparationId: "marinated_fish"
-  - quantity: 1000g
+  - quantity: 1000g ← WEIGHT ONLY (no portions)
   - costPerUnit: (500 + 20) / 1000 = 0.52 rub/g
 
-Step 2: Produce "Fish Portion" (300g → 10 portions of 30g)
+Step 2: Produce "Fish Portion" (300g)
   Recipe:
   - Marinated Fish: 300g ← uses batch_1 via FIFO
 
@@ -47,8 +98,10 @@ Step 2: Produce "Fish Portion" (300g → 10 portions of 30g)
 
   Creates batch_2:
   - preparationId: "fish_portion"
-  - quantity: 300g (NO portion type yet!)
+  - quantity: 300g ← WEIGHT ONLY (Phase 1)
   - costPerUnit: 156 / 300 = 0.52 rub/g
+
+  Note: In Phase 2, we'll add "10 portions × 30g" display
 
 Step 3: Sell dish (uses 60g from portions)
   Write-off via FIFO:
@@ -72,6 +125,12 @@ if (ingredient.type === 'preparation') {
 // (deferred to Phase 4)
 ```
 
+**Why this works:**
+
+- `lastKnownCost` already includes all nested costs from production
+- No need to recalculate - just use the value!
+- Simpler, faster, fewer bugs
+
 ### 2. Decomposition - NO CHANGES!
 
 ```typescript
@@ -85,6 +144,21 @@ if (ingredient.type === 'preparation') {
 // - useActualCostCalculation.ts (minimal changes)
 ```
 
+**Proof from code** (`useDecomposition.ts:256-293`):
+
+```typescript
+if (comp.type === 'preparation') {
+  // STOP! Don't decompose to products
+  return [
+    {
+      type: 'preparation',
+      preparationId: comp.id,
+      quantity: totalQuantity
+    }
+  ]
+}
+```
+
 ### 3. Cycle Detection - Mandatory
 
 ```typescript
@@ -92,6 +166,13 @@ if (ingredient.type === 'preparation') {
 // A → B → C → OK
 // A → B → A → ERROR!
 ```
+
+**Why mandatory:**
+
+- Prevents infinite loops
+- Prevents system hangs
+- Clear error messages
+- Validates at save time (not runtime)
 
 ---
 
@@ -192,15 +273,24 @@ pnpm build
 
 **File**: `src/stores/recipes/composables/usePreparationGraph.ts` ⭐ NEW
 
-(See full implementation in detailed plan - includes DFS algorithm for cycle detection)
+**Implementation**: DFS (Depth-First Search) algorithm for cycle detection
+
+**Key functions**:
+
+- `detectCycle(preparationId, newRecipe)` - Check if adding recipe creates cycle
+- `buildGraph()` - Build adjacency list from all preparations
+- `hasCycleDFS(node, visited, recursionStack)` - DFS traversal with recursion stack
 
 **Test Cases**:
 
-1. Simple cycle: A → B → A
-2. Complex cycle: A → B → C → A
-3. Valid chain: A → B → C → D
-4. Valid branching: A → B, A → C
-5. Self-reference: A → A
+1. Simple cycle: A → B → A ❌
+2. Complex cycle: A → B → C → A ❌
+3. Deep cycle: A → B → C → D → A ❌
+4. Self-reference: A → A ❌
+5. Valid chain: A → B → C → D ✅
+6. Valid branching: A → (B, C) ✅
+
+**Complexity**: O(V + E) where V = preparations, E = ingredient relationships
 
 ---
 
@@ -231,9 +321,31 @@ pnpm build
 
 Add handling for `ingredient.type === 'preparation'`:
 
-- Use `prep.lastKnownCost` (NO recursion!)
+```typescript
+if (ingredient.type === 'preparation') {
+  const prep = recipesStore.getPreparationById(ingredient.id)
+
+  if (!prep) {
+    console.warn(`Preparation ${ingredient.id} not found`)
+    return 0
+  }
+
+  if (!prep.lastKnownCost || prep.lastKnownCost === 0) {
+    console.warn(`Preparation "${prep.name}" not yet produced (lastKnownCost = 0)`)
+    // Fallback to costPerPortion if available
+    return prep.costPerPortion ? prep.costPerPortion * ingredient.quantity : 0
+  }
+
+  return prep.lastKnownCost * ingredient.quantity
+}
+```
+
+**Key points**:
+
+- Use `lastKnownCost` (NO recursion!)
 - Show warning if not yet produced
 - Fallback to `costPerPortion` if available
+- Return 0 if no cost data available
 
 ---
 
@@ -243,11 +355,45 @@ Add handling for `ingredient.type === 'preparation'`:
 
 **File**: `src/stores/preparation/preparationService.ts` ✏️ MODIFY
 
-- Handle preparation ingredients in production
-- FIFO write-off from preparation batches
-- Calculate actual cost
-- Create new batch
-- Update `lastKnownCost`
+**Changes needed** (~5 lines):
+
+```typescript
+// Current (line 732-764):
+const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
+  return {
+    itemId: ingredient.id,
+    itemType: 'product' as const, // ← Change this!
+    quantity: adjustedQuantity,
+    unit: ingredient.unit
+  }
+})
+
+// New (Phase 1):
+const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
+  return {
+    itemId: ingredient.id,
+    itemType: ingredient.type, // ⭐ Use actual type!
+    quantity: adjustedQuantity,
+    unit: ingredient.unit
+  }
+})
+
+// Then handle both types:
+if (ingredient.type === 'product') {
+  // Existing logic: allocate from storage batches
+  await storageService.allocateBatches(...)
+} else if (ingredient.type === 'preparation') {
+  // NEW logic: allocate from preparation batches
+  await preparationService.allocateBatches(...)
+}
+```
+
+**FIFO allocation for preparations**:
+
+- Same logic as products
+- Use `preparation_batches` table
+- Allocate oldest batches first
+- Update batch quantities
 
 ---
 
@@ -257,13 +403,57 @@ Add handling for `ingredient.type === 'preparation'`:
 
 **File**: `src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue` ✏️ MODIFY
 
-Main changes:
+**Main changes:**
 
-1. Add "Preparation" to component type selector
-2. Add preparation selector (autocomplete)
-3. Real-time cycle validation
-4. Show cycle warning alert
-5. Display type badges (product/preparation)
+1. **Add "Preparation" to component type selector**:
+
+```vue
+<v-select
+  v-model="component.componentType"
+  :items="['product', 'preparation']" <!-- Add 'preparation' -->
+  label="Component Type"
+/>
+```
+
+2. **Add preparation selector (autocomplete)**:
+
+```vue
+<v-autocomplete
+  v-if="component.componentType === 'preparation'"
+  v-model="component.componentId"
+  :items="preparationsList"
+  item-title="name"
+  item-value="id"
+  label="Select Preparation"
+/>
+```
+
+3. **Real-time cycle validation**:
+
+```typescript
+const checkCycle = computed(() => {
+  if (component.componentType !== 'preparation') return null
+  return detectCycle(currentPreparationId, [component])
+})
+```
+
+4. **Show cycle warning alert**:
+
+```vue
+<v-alert
+  v-if="checkCycle?.hasCycle"
+  type="error"
+  text="Circular dependency detected! Cannot use this preparation."
+/>
+```
+
+5. **Display type badges**:
+
+```vue
+<v-chip :color="component.componentType === 'product' ? 'primary' : 'secondary'" size="small">
+  {{ component.componentType }}
+</v-chip>
+```
 
 ### 7.2. Unified Recipe Dialog
 
@@ -271,7 +461,19 @@ Main changes:
 
 - Remove hardcoded `componentType: 'product'`
 - Use actual type from editor
-- Add cycle validation before save
+- Add cycle validation before save:
+
+```typescript
+const validateBeforeSave = () => {
+  const cycleCheck = detectCycle(preparation.id, preparation.recipe)
+  if (cycleCheck.hasCycle) {
+    showError('Cannot save: circular dependency detected')
+    return false
+  }
+  return true
+}
+```
+
 - Show error dialog if cycle detected
 
 ---
@@ -319,6 +521,7 @@ Main changes:
 - [ ] Full flow: create → produce → sell
 - [ ] Multi-level nesting works (A → B → C)
 - [ ] Mixed ingredients work
+- [ ] **ALL QUANTITIES IN WEIGHT (grams)** - verified!
 
 ---
 
@@ -344,8 +547,8 @@ Main changes:
 
 ### NOT MODIFIED (important!)
 
-- ❌ `useDecomposition.ts` - works as-is
-- ❌ `useKitchenDecomposition.ts` - works as-is
+- ❌ `useDecomposition.ts` - works as-is ✅
+- ❌ `useKitchenDecomposition.ts` - works as-is ✅
 - ❌ All UI display components - deferred to Phase 3
 
 ---
@@ -364,7 +567,7 @@ Main changes:
 | 8         | Testing                 | 8      | ⏳ Not Started     |
 | **Total** | **Phase 1 (MVP)**       | **50** | **⏳ Not Started** |
 
-**Note**: Increased from 30 to 50 SP after detailed analysis
+**Note**: Increased from 30 to 50 SP after detailed analysis (cycle detection more complex than initially estimated)
 
 ---
 
@@ -378,6 +581,7 @@ Main changes:
 - [ ] Production writes off preparation ingredients via FIFO
 - [ ] All existing functionality works (no breaking changes)
 - [ ] Database migration applied successfully on DEV
+- [ ] **All quantities displayed in WEIGHT (grams)** - no portions yet
 
 ### Should Have ✅
 
@@ -409,7 +613,8 @@ Main changes:
 1. **lastKnownCost is critical** - without it, can't calculate nested prep cost
 2. **Cycle detection mandatory** - otherwise system may hang
 3. **DON'T touch decomposition** - already works correctly for FIFO!
-4. **Portions deferred** - doing in Phase 2, everything weight-based for now
+4. **Portions deferred to Phase 2** - everything weight-based for now
+5. **Existing code already 90% ready** - just need to extend type handling
 
 ### Potential Issues:
 
@@ -461,3 +666,4 @@ Main changes:
 
 **Last Updated**: 2025-12-05
 **Next Review**: After Phase 1 completion (~2 weeks)
+**Status**: Ready to start Stage 1 (Database Migration)
