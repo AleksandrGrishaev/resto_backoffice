@@ -94,9 +94,50 @@
 
               <!-- Правильный расчет с новым форматированием -->
               <div class="component-cost-details">
+                <!-- ✅ NEW: Show yield percentage info if applicable -->
+                <div
+                  v-if="getYieldInfo(componentCost.componentId, componentCost.componentType)"
+                  class="yield-info-box mb-2"
+                >
+                  <v-icon icon="mdi-information" size="14" class="mr-1" color="warning" />
+                  <span class="text-caption">
+                    <strong>Yield Adjustment:</strong>
+                    {{
+                      getYieldInfo(componentCost.componentId, componentCost.componentType)!
+                        .yieldPercentage
+                    }}% yield →
+                    <strong>
+                      {{
+                        getYieldInfo(
+                          componentCost.componentId,
+                          componentCost.componentType
+                        )!.adjustedQuantity.toFixed(1)
+                      }}
+                      {{ componentCost.unit }}
+                    </strong>
+                    gross needed (from
+                    {{
+                      getYieldInfo(componentCost.componentId, componentCost.componentType)!
+                        .originalQuantity
+                    }}
+                    {{ componentCost.unit }} net)
+                  </span>
+                </div>
+
                 <div class="cost-calculation-line">
                   <span class="text-caption">
-                    <strong>{{ componentCost.quantity }} {{ componentCost.unit }}</strong>
+                    <!-- ✅ FIX: Show adjusted quantity in formula if yield is applied -->
+                    <strong>
+                      {{
+                        getYieldInfo(componentCost.componentId, componentCost.componentType)
+                          ? getYieldInfo(
+                              componentCost.componentId,
+                              componentCost.componentType
+                            )!.adjustedQuantity.toFixed(1)
+                          : componentCost.quantity
+                      }}
+                      {{ componentCost.unit }}
+                    </strong>
                     ×
                     <strong>
                       {{
@@ -145,6 +186,7 @@ import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 interface Props {
   costCalculation: PreparationPlanCost | RecipePlanCost
   type: 'recipe' | 'preparation'
+  item?: any // ✅ NEW: Item (preparation or recipe) to get yield info
 }
 
 const props = defineProps<Props>()
@@ -212,6 +254,52 @@ function getComponentName(componentId: string, componentType: string): string {
 
 function getComponentColor(componentType: string): string {
   return componentType === 'product' ? '#2196F3' : '#4CAF50'
+}
+
+/**
+ * ✅ NEW: Get yield percentage info for a component
+ */
+function getYieldInfo(
+  componentId: string,
+  componentType: string
+): {
+  useYield: boolean
+  yieldPercentage: number
+  adjustedQuantity: number
+  originalQuantity: number
+} | null {
+  if (componentType !== 'product' || !props.item) {
+    return null
+  }
+
+  // Find component in recipe/preparation
+  let component: any = null
+  if (props.type === 'preparation' && props.item.recipe) {
+    component = props.item.recipe.find((c: any) => c.id === componentId)
+  } else if (props.type === 'recipe' && props.item.components) {
+    component = props.item.components.find((c: any) => c.componentId === componentId)
+  }
+
+  if (!component || !component.useYieldPercentage) {
+    return null
+  }
+
+  // Get product to find yield percentage
+  const product = productsStore.getProductForRecipe(componentId)
+  if (!product || !product.yieldPercentage || product.yieldPercentage >= 100) {
+    return null
+  }
+
+  // Calculate adjusted quantity
+  const originalQuantity = component.quantity
+  const adjustedQuantity = originalQuantity / (product.yieldPercentage / 100)
+
+  return {
+    useYield: true,
+    yieldPercentage: product.yieldPercentage,
+    adjustedQuantity,
+    originalQuantity
+  }
 }
 </script>
 
@@ -296,6 +384,15 @@ function getComponentColor(componentType: string): string {
     background: rgba(76, 175, 80, 0.1);
     border-radius: 4px;
     border-left: 2px solid #4caf50;
+  }
+
+  .yield-info-box {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    background: rgba(255, 152, 0, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid #ff9800;
   }
 }
 

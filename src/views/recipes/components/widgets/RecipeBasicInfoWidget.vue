@@ -6,7 +6,7 @@
       <v-col cols="12" md="8">
         <v-text-field
           :model-value="formData.name"
-          label="Name"
+          label="Name (Required)"
           :rules="[rules.required]"
           required
           variant="outlined"
@@ -49,7 +49,7 @@
           :items="categoryItems"
           item-title="text"
           item-value="value"
-          :label="type === 'preparation' ? 'Type' : 'Category'"
+          :label="type === 'preparation' ? 'Type (Required)' : 'Category (Required)'"
           :rules="[rules.required]"
           required
           variant="outlined"
@@ -65,7 +65,7 @@
           :items="departmentItems"
           item-title="label"
           item-value="value"
-          label="Department"
+          label="Department (Required)"
           :rules="[rules.required]"
           required
           variant="outlined"
@@ -84,7 +84,7 @@
         <v-col cols="12" md="4">
           <v-text-field
             :model-value="formData.outputQuantity"
-            label="Output Quantity"
+            label="Output Quantity (Required)"
             type="number"
             step="0.1"
             :rules="[rules.required, rules.positiveNumber]"
@@ -100,7 +100,7 @@
             :items="unitItems"
             item-title="label"
             item-value="value"
-            label="Output Unit"
+            label="Output Unit (Required)"
             :rules="[rules.required]"
             required
             variant="outlined"
@@ -114,7 +114,7 @@
         <v-col cols="12" md="4">
           <v-text-field
             :model-value="formData.portionSize"
-            label="Portion Size"
+            label="Portion Size (Required)"
             type="number"
             :rules="[rules.required, rules.positiveNumber]"
             required
@@ -126,7 +126,7 @@
         <v-col cols="12" md="4">
           <v-text-field
             :model-value="formData.portionUnit"
-            label="Portion Unit"
+            label="Portion Unit (Required)"
             placeholder="portions, servings"
             :rules="[rules.required]"
             required
@@ -183,7 +183,7 @@
             :items="difficultyLevels"
             item-title="text"
             item-value="value"
-            label="Difficulty"
+            label="Difficulty (Required)"
             :rules="[rules.required]"
             required
             variant="outlined"
@@ -217,8 +217,8 @@
           density="comfortable"
           :hint="
             type === 'preparation'
-              ? 'Step-by-step preparation instructions'
-              : 'Cooking instructions'
+              ? 'Step-by-step preparation instructions (Optional)'
+              : 'Cooking instructions (Optional)'
           "
           @update:model-value="updateField('instructions', $event)"
         />

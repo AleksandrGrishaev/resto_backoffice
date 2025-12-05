@@ -281,7 +281,17 @@ export const useRecipesStore = defineStore('recipes', () => {
 
       // Пересчитываем стоимость если изменился рецепт
       if (data.recipe || data.outputQuantity !== undefined) {
-        await costCalculationComposable.calculatePreparationCost(preparation)
+        const costResult = await costCalculationComposable.calculatePreparationCost(preparation)
+
+        // ✅ FIX: Update last_known_cost in database
+        if (costResult.success && costResult.cost) {
+          const preparationCost = costResult.cost as PreparationPlanCost
+          await preparationsComposable.updatePreparation(id, {
+            lastKnownCost: preparationCost.costPerOutputUnit
+          })
+          // Update local state
+          preparation.lastKnownCost = preparationCost.costPerOutputUnit
+        }
 
         // Пересчитываем рецепты, использующие этот полуфабрикат
         await recalculateRecipesUsingPreparation(id)
@@ -333,6 +343,42 @@ export const useRecipesStore = defineStore('recipes', () => {
       return preparation
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to toggle preparation status'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function duplicatePreparation(
+    preparationId: string,
+    newName: string,
+    newCode?: string
+  ): Promise<Preparation> {
+    try {
+      loading.value = true
+      const preparation = await preparationsComposable.duplicatePreparation(
+        preparationId,
+        newName,
+        newCode
+      )
+
+      // Рассчитываем стоимость нового полуфабриката
+      await costCalculationComposable.calculatePreparationCost(preparation)
+
+      // Обновляем usage в Product Store
+      await integrationComposable.updateUsageForAllProducts()
+
+      DebugUtils.info(MODULE_NAME, 'Preparation duplicated with cost calculation', {
+        original: preparationId,
+        new: preparation.id,
+        name: preparation.name
+      })
+
+      return preparation
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to duplicate preparation'
       error.value = message
       DebugUtils.error(MODULE_NAME, message, { err })
       throw err
@@ -708,6 +754,7 @@ export const useRecipesStore = defineStore('recipes', () => {
     updatePreparation,
     deletePreparation,
     togglePreparationStatus,
+    duplicatePreparation,
 
     // Recipe actions
     fetchRecipes,

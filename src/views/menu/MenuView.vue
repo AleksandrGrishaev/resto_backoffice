@@ -137,7 +137,7 @@
               No dishes
             </div>
             <div v-for="item in getCategoryItems(category.id)" :key="item.id">
-              <menu-item-component :item="item" @edit="editItem" />
+              <menu-item-component :item="item" @edit="editItem" @duplicate="duplicateItem" />
             </div>
           </v-expansion-panel-text>
         </v-expansion-panel>
@@ -169,6 +169,29 @@
       :dish-type="selectedDishType"
       @saved="handleItemSaved"
     />
+
+    <!-- Duplicate dialog -->
+    <v-dialog v-model="dialogs.duplicate" max-width="400px">
+      <v-card>
+        <v-card-title class="text-h6">Duplicate Dish</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="duplicateName"
+            label="New Dish Name"
+            variant="outlined"
+            autofocus
+            @keyup.enter="confirmDuplicate"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="dialogs.duplicate = false">Cancel</v-btn>
+          <v-btn color="primary" :disabled="!duplicateName.trim()" @click="confirmDuplicate">
+            Duplicate
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Confirm Dialog -->
     <v-dialog v-model="confirmDialog.show" max-width="400">
@@ -211,11 +234,14 @@ const filterTypes = ref<Array<'food' | 'beverage' | 'archive'>>(['food'])
 const dialogs = ref({
   dishTypeSelection: false, // ✨ NEW: Диалог выбора типа блюда
   category: false,
-  item: false
+  item: false,
+  duplicate: false // ✨ NEW: Диалог дублирования
 })
 const editingCategory = ref<Category | null>(null)
 const editingItem = ref<MenuItem | null>(null)
 const selectedDishType = ref<DishType | null>(null) // ✨ NEW: Выбранный тип блюда
+const duplicatingItem = ref<MenuItem | null>(null) // ✨ NEW: Дублируемое блюдо
+const duplicateName = ref('') // ✨ NEW: Новое имя для дубликата
 
 const confirmDialog = ref({
   show: false,
@@ -302,6 +328,28 @@ function editCategory(category: Category) {
 function editItem(item: MenuItem) {
   editingItem.value = item
   dialogs.value.item = true
+}
+
+function duplicateItem(item: MenuItem) {
+  duplicatingItem.value = item
+  duplicateName.value = `${item.name} (Copy)`
+  dialogs.value.duplicate = true
+}
+
+async function confirmDuplicate() {
+  if (!duplicatingItem.value || !duplicateName.value.trim()) return
+
+  try {
+    await menuStore.duplicateMenuItem(duplicatingItem.value.id, duplicateName.value.trim())
+    DebugUtils.info(MODULE_NAME, 'Menu item duplicated successfully')
+
+    // Закрываем диалог и сбрасываем состояние
+    dialogs.value.duplicate = false
+    duplicatingItem.value = null
+    duplicateName.value = ''
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to duplicate menu item', error)
+  }
 }
 
 function confirmDeleteCategory(category: Category) {

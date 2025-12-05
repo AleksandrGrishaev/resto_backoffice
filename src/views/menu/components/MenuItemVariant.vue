@@ -169,84 +169,38 @@
     </div>
 
     <!-- Диалог выбора блюда -->
-    <v-dialog v-model="showDishSelector" max-width="600">
+    <v-dialog v-model="showDishSelector" max-width="800">
       <v-card>
-        <v-card-title>Add Dish</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="dishSearch"
-            label="Search Dish"
-            prepend-inner-icon="mdi-magnify"
-            hide-details="auto"
-            class="mb-3"
-          />
-
-          <div class="dish-list" style="max-height: 400px; overflow-y: auto">
-            <v-list>
-              <v-list-item
-                v-for="dish in filteredDishes"
-                :key="dish.id"
-                @click="addDishComponent(dish)"
-              >
-                <template #prepend>
-                  <v-icon
-                    :icon="dish.type === 'recipe' ? 'mdi-chef-hat' : 'mdi-food-variant'"
-                    :color="dish.type === 'recipe' ? 'primary' : 'secondary'"
-                  />
-                </template>
-                <v-list-item-title>{{ dish.name }}</v-list-item-title>
-                <v-list-item-subtitle>
-                  {{ dish.type === 'recipe' ? 'Recipe' : 'Semi-finished' }} •
-                  {{ dish.outputQuantity }} {{ getUnitLabel(dish.unit) }}
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
-          </div>
+        <v-card-title class="d-flex align-center justify-space-between">
+          <span>Add Dish</span>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="showDishSelector = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <dish-search-widget :dishes="dishOptions" @dish-selected="addDishComponent" />
         </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="showDishSelector = false">Cancel</v-btn>
-        </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- Диалог выбора продукта -->
-    <v-dialog v-model="showProductSelector" max-width="600">
+    <v-dialog v-model="showProductSelector" max-width="800">
       <v-card>
-        <v-card-title>Add Product</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="productSearch"
-            label="Search Product"
-            prepend-inner-icon="mdi-magnify"
-            hide-details="auto"
-            class="mb-3"
+        <v-card-title class="d-flex align-center justify-space-between">
+          <span>Add Product</span>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            @click="showProductSelector = false"
           />
-
-          <div class="product-list" style="max-height: 400px; overflow-y: auto">
-            <v-list>
-              <v-list-item
-                v-for="product in filteredProducts"
-                :key="product.id"
-                @click="addProductComponent(product)"
-              >
-                <template #prepend>
-                  <v-icon icon="mdi-package-variant" color="info" />
-                </template>
-                <v-list-item-title>{{ product.name }}</v-list-item-title>
-                <v-list-item-subtitle>
-                  {{ product.category }} • {{ formatPrice(product.costPerUnit) }}/{{
-                    getUnitLabel(product.unit)
-                  }}
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
-          </div>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <product-search-widget
+            :products="productOptions"
+            @product-selected="addProductComponent"
+          />
         </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="showProductSelector = false">Cancel</v-btn>
-        </v-card-actions>
       </v-card>
     </v-dialog>
   </div>
@@ -255,6 +209,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { MenuItemVariant, MenuComposition, DishType } from '@/stores/menu'
+import DishSearchWidget from './widgets/DishSearchWidget.vue'
+import ProductSearchWidget from './widgets/ProductSearchWidget.vue'
 
 interface Props {
   variant: MenuItemVariant
@@ -293,8 +249,6 @@ const localVariant = ref<MenuItemVariant>({ ...props.variant })
 // Dialog states
 const showDishSelector = ref(false)
 const showProductSelector = ref(false)
-const dishSearch = ref('')
-const productSearch = ref('')
 
 // Computed
 const groupedComposition = computed(() => {
@@ -320,19 +274,6 @@ const groupedComposition = computed(() => {
   })
 
   return groups
-})
-
-const filteredDishes = computed(() => {
-  const search = dishSearch.value.toLowerCase()
-  return props.dishOptions.filter(dish => dish.name.toLowerCase().includes(search))
-})
-
-const filteredProducts = computed(() => {
-  const search = productSearch.value.toLowerCase()
-  return props.productOptions.filter(
-    product =>
-      product.name.toLowerCase().includes(search) || product.category.toLowerCase().includes(search)
-  )
 })
 
 // Methods
@@ -369,7 +310,6 @@ function addDishComponent(dish: {
   })
 
   showDishSelector.value = false
-  dishSearch.value = ''
   emitUpdate()
 }
 
@@ -387,7 +327,6 @@ function addProductComponent(product: { id: string; name: string; unit: string }
   })
 
   showProductSelector.value = false
-  productSearch.value = ''
   emitUpdate()
 }
 

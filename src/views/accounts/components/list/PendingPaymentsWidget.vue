@@ -30,7 +30,7 @@
     <v-card-title class="d-flex align-center justify-space-between">
       <div class="d-flex align-items-center">
         <v-icon icon="mdi-clock-alert" color="warning" class="mr-2" />
-        <span>Ожидающие платежи</span>
+        <span>Pending Payments</span>
         <v-chip v-if="paymentStatistics.totalPending > 0" color="primary" size="small" class="ml-2">
           {{ paymentStatistics.totalPending }}
         </v-chip>
@@ -51,14 +51,14 @@
     <v-card-text class="py-2">
       <div class="d-flex align-center gap-6">
         <div class="stat-item">
-          <span class="stat-label">Общая сумма:</span>
+          <span class="stat-label">Total Amount:</span>
           <span class="stat-value text-h6 font-weight-bold">
             {{ formatIDR(paymentStatistics.totalAmount) }}
           </span>
         </div>
 
         <div class="stat-item">
-          <span class="stat-label">Всего платежей:</span>
+          <span class="stat-label">Total Payments:</span>
           <span class="stat-value font-weight-bold">
             {{ paymentStatistics.totalPending }}
           </span>
@@ -73,10 +73,10 @@
       <v-table>
         <thead>
           <tr>
-            <th class="text-left" style="width: 300px">Поставщик</th>
-            <th class="text-left" style="width: 350px">Описание</th>
-            <th class="text-right" style="width: 150px">Сумма</th>
-            <th class="text-center" style="width: 100px">Статус</th>
+            <th class="text-left" style="width: 300px">Supplier</th>
+            <th class="text-left" style="width: 350px">Description</th>
+            <th class="text-right" style="width: 150px">Amount</th>
+            <th class="text-center" style="width: 100px">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -115,7 +115,7 @@
                 variant="tonal"
               >
                 <v-icon start size="small">mdi-close-circle</v-icon>
-                Отклонен
+                Rejected
               </v-chip>
               <v-chip
                 v-else-if="payment.status === 'processing'"
@@ -123,7 +123,7 @@
                 size="small"
                 variant="tonal"
               >
-                В обработке
+                Processing
               </v-chip>
               <v-icon v-else icon="mdi-chevron-right" size="small" class="text-medium-emphasis" />
             </td>
@@ -135,14 +135,14 @@
     <!-- Empty state -->
     <v-card-text v-else-if="!loading" class="text-center py-6">
       <v-icon icon="mdi-check-circle" size="48" color="success" class="mb-2" />
-      <div class="text-h6 text-medium-emphasis">Нет ожидающих платежей</div>
-      <div class="text-caption text-medium-emphasis">Все платежи обработаны</div>
+      <div class="text-h6 text-medium-emphasis">No Pending Payments</div>
+      <div class="text-caption text-medium-emphasis">All payments processed</div>
     </v-card-text>
 
     <!-- Loading state -->
     <v-card-text v-else class="text-center py-6">
       <v-progress-circular indeterminate color="primary" />
-      <div class="mt-2 text-medium-emphasis">Загрузка платежей...</div>
+      <div class="mt-2 text-medium-emphasis">Loading payments...</div>
     </v-card-text>
   </v-card>
 </template>

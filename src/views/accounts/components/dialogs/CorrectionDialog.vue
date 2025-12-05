@@ -1,11 +1,11 @@
 <template>
   <base-dialog
     v-model="dialogModel"
-    title="Корректировка баланса"
+    title="Balance Correction"
     :loading="loading"
     :disabled="!isFormValid"
-    cancel-text="Отмена"
-    confirm-text="Применить"
+    cancel-text="Cancel"
+    confirm-text="Apply"
     @cancel="handleCancel"
     @confirm="handleSubmit"
   >
@@ -17,7 +17,7 @@
             <div class="account-info">
               <h4>{{ account.name }}</h4>
               <div class="current-balance">
-                Текущий баланс:
+                Current balance:
                 <strong>{{ formatIDR(currentBalance) }}</strong>
               </div>
             </div>
@@ -27,9 +27,9 @@
         <!-- New balance input -->
         <v-text-field
           v-model.number="formData.newBalance"
-          label="Новый баланс"
+          label="New Balance"
           type="number"
-          :rules="[v => (v !== null && v !== undefined && !isNaN(v)) || 'Обязательное поле']"
+          :rules="[v => (v !== null && v !== undefined && !isNaN(v)) || 'Required field']"
           required
           class="mb-4"
           hide-details="auto"
@@ -39,7 +39,7 @@
         <v-card variant="outlined" class="correction-amount mb-4">
           <v-card-text>
             <div class="correction-info">
-              <span>Сумма корректировки:</span>
+              <span>Correction Amount:</span>
               <span :class="correctionAmountClass">
                 {{ formatIDR(correctionAmount) }}
               </span>
@@ -50,8 +50,8 @@
         <!-- Description -->
         <v-textarea
           v-model="formData.description"
-          label="Причина корректировки"
-          :rules="[v => !!v || 'Обязательное поле']"
+          label="Correction Reason"
+          :rules="[v => !!v || 'Required field']"
           required
           rows="3"
           class="mb-4"

@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { categoryService, menuItemService } from './menuService'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, generateId } from '@/utils'
 import type {
   Category,
   MenuItem,
@@ -327,6 +327,73 @@ export const useMenuStore = defineStore('menu', () => {
     }
   }
 
+  async function duplicateMenuItem(id: string, newName: string) {
+    try {
+      state.value.loading = true
+      state.value.error = null
+
+      const original = state.value.menuItems.find(item => item.id === id)
+      if (!original) {
+        throw new Error('Menu item not found')
+      }
+
+      // Создаем данные для нового блюда
+      const duplicateData: CreateMenuItemDto = {
+        categoryId: original.categoryId,
+        name: newName,
+        description: original.description,
+        type: original.type,
+        department: original.department,
+        dishType: original.dishType,
+        variants: original.variants.map(variant => ({
+          name: variant.name,
+          price: variant.price,
+          composition: variant.composition.map(comp => ({ ...comp })), // deep copy
+          portionMultiplier: variant.portionMultiplier,
+          isActive: variant.isActive,
+          sortOrder: variant.sortOrder,
+          notes: variant.notes
+        })),
+        sortOrder: original.sortOrder,
+        preparationTime: original.preparationTime,
+        allergens: original.allergens ? [...original.allergens] : undefined,
+        tags: original.tags ? [...original.tags] : undefined,
+        modifierGroups: original.modifierGroups
+          ? original.modifierGroups.map(group => ({
+              ...group,
+              id: generateId(), // новый ID для группы
+              options: group.options.map(option => ({
+                ...option,
+                id: generateId() // новый ID для опции
+              }))
+            }))
+          : undefined,
+        templates: original.templates
+          ? original.templates.map(template => ({
+              ...template,
+              id: generateId() // новый ID для template
+            }))
+          : undefined
+      }
+
+      const newMenuItem = await addMenuItem(duplicateData)
+
+      DebugUtils.info(MODULE_NAME, 'Menu item duplicated', {
+        original: id,
+        new: newMenuItem.id
+      })
+
+      return newMenuItem
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to duplicate menu item'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, error)
+      throw error
+    } finally {
+      state.value.loading = false
+    }
+  }
+
   async function toggleMenuItemActive(id: string, isActive: boolean) {
     try {
       await menuItemService.toggleActive(id, isActive)
@@ -432,6 +499,7 @@ export const useMenuStore = defineStore('menu', () => {
     addMenuItem,
     updateMenuItem,
     deleteMenuItem,
+    duplicateMenuItem,
     toggleMenuItemActive,
     moveMenuItem,
 

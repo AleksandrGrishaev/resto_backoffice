@@ -19,6 +19,7 @@ export interface ProductForRecipe {
   // ✅ НОВЫЕ ПОЛЯ: Базовые единицы для правильного расчета
   baseUnit: 'gram' | 'ml' | 'piece' // Единица для расчета себестоимости
   baseCostPerUnit: number // Цена за грамм/мл/штуку в IDR
+  yieldPercentage?: number // ✅ NEW: Процент выхода после обработки (очистка, разделка и т.д.)
 
   // Дополнительная информация
   category: string
@@ -84,7 +85,9 @@ export interface PreparationIngredient {
   id: string // ID продукта
   quantity: number
   unit: MeasurementUnit // Единица в рецепте (будет конвертирована в базовую)
+  useYieldPercentage?: boolean // ✅ NEW: Учитывать yield percentage при расчете стоимости
   notes?: string
+  sortOrder?: number // ✅ NEW: Порядок сортировки
 }
 
 // Updated to match database keys
@@ -131,6 +134,7 @@ export interface RecipeComponent {
   componentType: 'product' | 'preparation'
   quantity: number
   unit: MeasurementUnit // Единица в рецепте (будет конвертирована)
+  useYieldPercentage?: boolean // ✅ NEW: Учитывать yield percentage при расчете стоимости (только для products)
   preparation?: string
   isOptional?: boolean
   notes?: string
@@ -363,9 +367,9 @@ export interface RecipeCategory {
 // ❌ RECIPE_CATEGORIES removed - now loaded from database via recipe_categories table
 
 export const DIFFICULTY_LEVELS = [
-  { value: 'easy', text: 'Легко', color: 'success' },
-  { value: 'medium', text: 'Средне', color: 'warning' },
-  { value: 'hard', text: 'Сложно', color: 'error' }
+  { value: 'easy', text: 'Easy', color: 'success' },
+  { value: 'medium', text: 'Medium', color: 'warning' },
+  { value: 'hard', text: 'Hard', color: 'error' }
 ] as const
 
 // =============================================
@@ -440,6 +444,7 @@ export function createProductForRecipe(product: {
   nameEn?: string
   baseUnit: 'gram' | 'ml' | 'piece'
   baseCostPerUnit: number
+  yieldPercentage?: number
   category: string
   isActive: boolean
 }): ProductForRecipe {
@@ -449,6 +454,7 @@ export function createProductForRecipe(product: {
     nameEn: product.nameEn,
     baseUnit: product.baseUnit,
     baseCostPerUnit: product.baseCostPerUnit,
+    yieldPercentage: product.yieldPercentage,
     category: product.category,
     isActive: product.isActive
   }

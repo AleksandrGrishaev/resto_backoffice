@@ -276,6 +276,7 @@ export const useProductsStore = defineStore('products', {
         nameEn: product.nameEn || product.name,
         baseUnit: product.baseUnit, // Always base unit
         baseCostPerUnit: product.baseCostPerUnit, // Price per base unit
+        yieldPercentage: product.yieldPercentage, // ✅ NEW: Yield percentage for waste calculation
         category: product.category,
         isActive: product.isActive,
         // Deprecated fields for compatibility (if needed)

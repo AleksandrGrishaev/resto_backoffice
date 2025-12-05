@@ -13,21 +13,21 @@
       <v-select
         v-if="!account"
         v-model="formData.accountId"
-        label="Счет"
+        label="Account"
         :items="accountItems"
         item-title="name"
         item-value="id"
-        :rules="[v => !!v || 'Обязательное поле']"
+        :rules="[v => !!v || 'Required field']"
         required
       />
 
       <v-text-field
         v-model.number="formData.amount"
-        label="Сумма"
+        label="Amount"
         type="number"
         :rules="[
-          v => !!v || 'Обязательное поле',
-          v => v > 0 || 'Сумма должна быть больше 0',
+          v => !!v || 'Required field',
+          v => v > 0 || 'Amount must be greater than 0',
           validateAmount
         ]"
         required
@@ -37,27 +37,27 @@
       <template v-if="type === 'expense'">
         <v-select
           v-model="formData.expenseCategory.type"
-          label="Тип расхода"
+          label="Expense Type"
           :items="expenseTypes"
-          :rules="[v => !!v || 'Обязательное поле']"
+          :rules="[v => !!v || 'Required field']"
           required
           @update:model-value="handleExpenseTypeChange"
         />
 
         <v-select
           v-model="formData.expenseCategory.category"
-          label="Категория"
+          label="Category"
           :items="categoryItems"
-          :rules="[v => !!v || 'Обязательное поле']"
+          :rules="[v => !!v || 'Required field']"
           required
         />
       </template>
 
       <v-textarea
         v-model="formData.description"
-        label="Описание"
+        label="Description"
         rows="3"
-        :rules="[v => !!v || 'Обязательное поле']"
+        :rules="[v => !!v || 'Required field']"
         required
       />
     </v-form>
@@ -92,10 +92,10 @@ const authStore = useAuthStore()
 // Computed
 const title = computed(() => {
   const titles = {
-    income: 'Новый приход',
-    expense: 'Новый расход',
-    transfer: 'Новый перевод',
-    correction: 'Корректировка баланса'
+    income: 'New Income',
+    expense: 'New Expense',
+    transfer: 'New Transfer',
+    correction: 'Balance Correction'
   }
   return titles[props.type]
 })
@@ -113,8 +113,8 @@ const accountItems = computed(() =>
 )
 
 const expenseTypes = [
-  { title: 'Ежедневные расходы', value: 'daily' },
-  { title: 'Инвестиции', value: 'investment' }
+  { title: 'Daily Expenses', value: 'daily' },
+  { title: 'Investments', value: 'investment' }
 ]
 
 const categoryItems = computed(() => {
@@ -161,11 +161,11 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
       if (error instanceof Error) {
         if (error.message === 'Insufficient funds') {
           form.value?.setErrors({
-            amount: `Недостаточно средств. Доступно: ${formatIDR(props.account?.balance || 0)}`
+            amount: `Insufficient funds. Available: ${formatIDR(props.account?.balance || 0)}`
           })
         } else {
           form.value?.setErrors({
-            amount: 'Произошла ошибка при создании операции'
+            amount: 'An error occurred while creating the operation'
           })
         }
       }
@@ -183,7 +183,7 @@ function validateAmount(value: number) {
   if (props.type === 'expense' && props.account) {
     const maxAmount = props.account.balance
     if (value > maxAmount) {
-      return `Недостаточно средств. Доступно: ${formatIDR(maxAmount)}`
+      return `Insufficient funds. Available: ${formatIDR(maxAmount)}`
     }
   }
   return true

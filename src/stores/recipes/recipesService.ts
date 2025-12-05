@@ -331,14 +331,24 @@ export class RecipesService {
 
       const now = TimeUtils.getCurrentLocalISO()
 
+      // Set last_known_cost to 0 (will be updated on first batch creation)
+      const lastKnownCost = 0
+
       // Create preparation data without ID - database will generate UUID
       const preparationInsert = preparationToSupabaseInsert({
         ...data,
         code,
         recipe: data.recipe || [],
         isActive: data.isActive ?? true,
+        lastKnownCost: lastKnownCost,
         createdAt: now,
         updatedAt: now
+      })
+
+      // Log info that cost will be updated automatically
+      DebugUtils.info(MODULE_NAME, 'ℹ️ Preparation created with last_known_cost = 0', {
+        preparationName: data.name,
+        message: 'Cost will be automatically updated when first production batch is created'
       })
 
       // Insert preparation to Supabase and return the result

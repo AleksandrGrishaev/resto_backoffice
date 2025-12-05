@@ -295,7 +295,7 @@ export function usePreparations() {
   async function duplicatePreparation(
     preparationId: string,
     newName: string,
-    newCode: string
+    newCode?: string
   ): Promise<Preparation> {
     const original = getPreparationById(preparationId)
     if (!original) {
@@ -304,14 +304,16 @@ export function usePreparations() {
 
     const duplicateData: CreatePreparationData = {
       name: newName,
-      code: newCode,
+      code: newCode, // Will be auto-generated if not provided
       type: original.type,
       description: original.description,
       outputQuantity: original.outputQuantity,
       outputUnit: original.outputUnit,
       preparationTime: original.preparationTime,
       instructions: original.instructions,
-      recipe: [...original.recipe] // deep copy
+      recipe: [...original.recipe], // deep copy
+      department: original.department, // ✅ ADDED: Copy department from original
+      shelfLife: original.shelfLife // ✅ ADDED: Copy shelf life from original
     }
 
     return createPreparation(duplicateData)

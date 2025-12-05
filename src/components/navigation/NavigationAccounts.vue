@@ -1,7 +1,7 @@
 <template>
   <v-list-group value="accounts">
     <template #activator="{ props }">
-      <v-list-item v-bind="props" prepend-icon="mdi-wallet" title="Счета" color="primary" />
+      <v-list-item v-bind="props" prepend-icon="mdi-wallet" title="Accounts" color="primary" />
     </template>
     <v-list-item
       to="/accounts"
@@ -10,7 +10,7 @@
       class="mb-2"
     >
       <template #title>
-        <span>Список счетов</span>
+        <span>All Accounts</span>
       </template>
     </v-list-item>
     <!-- Активные счета -->
@@ -20,7 +20,7 @@
         <template #prepend>
           <v-progress-circular indeterminate size="20" />
         </template>
-        <v-list-item-title>Загрузка счетов...</v-list-item-title>
+        <v-list-item-title>Loading accounts...</v-list-item-title>
       </v-list-item>
     </template>
     <template v-else>

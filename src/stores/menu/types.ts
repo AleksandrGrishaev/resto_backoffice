@@ -68,6 +68,7 @@ export interface MenuComposition {
   quantity: number // количество в конкретных единицах (не порциях!)
   unit: MeasurementUnit // 'gram', 'ml', 'piece' - конкретные единицы
   role?: ComponentRole // роль в блюде (для UI группировки)
+  useYieldPercentage?: boolean // ✅ NEW: apply yield adjustment for products (Sprint 6)
   notes?: string
 }
 
