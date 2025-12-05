@@ -37,6 +37,10 @@ export function batchToSupabase(batch: PreparationBatch): Record<string, any> {
     source_operation_type: batch.sourceOperationType || null,
     affected_recipe_ids: batch.affectedRecipeIds || null,
     reconciled_at: batch.reconciledAt || null,
+    // ⭐ PHASE 2: Portion type fields
+    portion_type: batch.portionType || 'weight',
+    portion_size: batch.portionSize || null,
+    portion_quantity: batch.portionQuantity || null,
     created_at: batch.createdAt,
     updated_at: batch.updatedAt
   }
@@ -69,6 +73,10 @@ export function batchToSupabaseUpdate(batch: PreparationBatch): Record<string, a
     source_operation_type: batch.sourceOperationType || null,
     affected_recipe_ids: batch.affectedRecipeIds || null,
     reconciled_at: batch.reconciledAt || null,
+    // ⭐ PHASE 2: Portion type fields
+    portion_type: batch.portionType || 'weight',
+    portion_size: batch.portionSize || null,
+    portion_quantity: batch.portionQuantity || null,
     updated_at: batch.updatedAt
   }
 }
@@ -101,6 +109,10 @@ export function batchFromSupabase(row: any): PreparationBatch {
     sourceOperationType: row.source_operation_type,
     affectedRecipeIds: row.affected_recipe_ids,
     reconciledAt: row.reconciled_at,
+    // ⭐ PHASE 2: Portion type fields
+    portionType: row.portion_type || 'weight',
+    portionSize: row.portion_size ? Number(row.portion_size) : undefined,
+    portionQuantity: row.portion_quantity ? Number(row.portion_quantity) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

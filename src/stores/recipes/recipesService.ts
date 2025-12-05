@@ -38,6 +38,8 @@ import {
   recipeComponentsFromSupabase,
   recipeStepsFromSupabase
 } from './supabaseMappers'
+// ⭐ PHASE 1: Cycle detection for nested preparations
+import { detectCycle, formatCyclePath } from './composables/usePreparationGraph'
 
 const MODULE_NAME = 'RecipesService'
 
@@ -329,6 +331,37 @@ export class RecipesService {
       // Generate code if not provided
       const code = data.code || (await getNextPreparationCode())
 
+      // ⭐ PHASE 1: Cycle detection for nested preparations
+      if (data.recipe && data.recipe.length > 0) {
+        // Load all existing preparations for cycle detection
+        const allPreparations = await this.getAllPreparations()
+
+        // Generate temporary ID for cycle detection (will be replaced by database UUID)
+        const tempId = generateId()
+
+        // Check for cycles
+        const cycleCheck = detectCycle(tempId, data.recipe, allPreparations)
+
+        if (cycleCheck.hasCycle) {
+          const formattedPath = cycleCheck.cyclePath
+            ? formatCyclePath(cycleCheck.cyclePath, allPreparations)
+            : 'Unknown'
+
+          DebugUtils.error(MODULE_NAME, '❌ Circular dependency detected', {
+            preparationName: data.name,
+            cyclePath: formattedPath
+          })
+
+          throw new Error(
+            `Cannot create preparation "${data.name}": Circular dependency detected!\n` +
+              `Cycle: ${formattedPath}\n\n` +
+              `A preparation cannot use itself as an ingredient, directly or indirectly.`
+          )
+        }
+
+        DebugUtils.info(MODULE_NAME, '✅ No cycles detected', { preparationName: data.name })
+      }
+
       const now = TimeUtils.getCurrentLocalISO()
 
       // Set last_known_cost to 0 (will be updated on first batch creation)
@@ -437,6 +470,38 @@ export class RecipesService {
         ...updateData,
         recipe: recipe || existingPreparation.recipe,
         updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // ⭐ PHASE 1: Cycle detection for nested preparations
+      if (recipe && recipe.length > 0) {
+        // Load all existing preparations for cycle detection
+        const allPreparations = await this.getAllPreparations()
+
+        // Check for cycles with the updated recipe
+        const cycleCheck = detectCycle(id, recipe, allPreparations)
+
+        if (cycleCheck.hasCycle) {
+          const formattedPath = cycleCheck.cyclePath
+            ? formatCyclePath(cycleCheck.cyclePath, allPreparations)
+            : 'Unknown'
+
+          DebugUtils.error(MODULE_NAME, '❌ Circular dependency detected', {
+            preparationId: id,
+            preparationName: updatedPreparation.name,
+            cyclePath: formattedPath
+          })
+
+          throw new Error(
+            `Cannot update preparation "${updatedPreparation.name}": Circular dependency detected!\n` +
+              `Cycle: ${formattedPath}\n\n` +
+              `A preparation cannot use itself as an ingredient, directly or indirectly.`
+          )
+        }
+
+        DebugUtils.info(MODULE_NAME, '✅ No cycles detected', {
+          preparationId: id,
+          preparationName: updatedPreparation.name
+        })
       }
 
       // Update preparation in Supabase

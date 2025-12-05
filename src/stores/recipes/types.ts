@@ -49,6 +49,17 @@ export interface PreparationForRecipe {
 }
 
 // =============================================
+// PORTION TYPE (Phase 2)
+// =============================================
+
+/**
+ * How preparation quantities are measured:
+ * - weight: Quantities in grams/ml (default)
+ * - portion: Quantities in fixed-size portions (e.g., "10 portions × 30g")
+ */
+export type PortionType = 'weight' | 'portion'
+
+// =============================================
 // PREPARATION (полуфабрикаты)
 // =============================================
 
@@ -75,17 +86,22 @@ export interface Preparation extends BaseEntity {
   // ✨ NEW: Negative inventory config (Sprint 1)
   allowNegativeInventory?: boolean
   lastKnownCost?: number
+
+  // ⭐ PHASE 2: Portion type support
+  portionType: PortionType // 'weight' (default) or 'portion'
+  portionSize?: number // Size of one portion in grams (only for portionType='portion')
 }
 
 /**
  * ✅ ОБНОВЛЕНО: Ингредиент полуфабриката
+ * ⭐ PHASE 1: Поддержка вложенных полуфабрикатов (nested preparations)
  */
 export interface PreparationIngredient {
-  type: 'product'
-  id: string // ID продукта
+  type: 'product' | 'preparation' // ⭐ CHANGED: теперь может быть product или preparation
+  id: string // ID продукта (type=product) или ID полуфабриката (type=preparation)
   quantity: number
   unit: MeasurementUnit // Единица в рецепте (будет конвертирована в базовую)
-  useYieldPercentage?: boolean // ✅ NEW: Учитывать yield percentage при расчете стоимости
+  useYieldPercentage?: boolean // ✅ NEW: Учитывать yield percentage при расчете стоимости (только для products)
   notes?: string
   sortOrder?: number // ✅ NEW: Порядок сортировки
 }
@@ -275,6 +291,10 @@ export interface CreatePreparationData {
   instructions: string
   shelfLife?: number // ✅ NEW: Shelf life in days
   recipe?: PreparationIngredient[]
+
+  // ⭐ PHASE 2: Portion type support
+  portionType?: PortionType // Default: 'weight'
+  portionSize?: number // Required if portionType='portion'
 }
 
 // =============================================

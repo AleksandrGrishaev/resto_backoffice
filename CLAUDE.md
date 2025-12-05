@@ -286,6 +286,8 @@ The project uses a structured approach to documentation and task management:
    - Update `todo.md` with next phase
    - Clean up `NextTodo.md` for next sprint
 
+**IMPORTANT: All project files MUST use UTF-8 encoding.**
+
 ## Project Overview
 
 Kitchen App - **единое приложение** с множественными интерфейсами и режимами работы для управления рестораном.

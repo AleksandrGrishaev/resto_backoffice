@@ -186,51 +186,145 @@ export function useCostCalculation() {
       const missingProducts: string[] = []
       const inactiveProducts: string[] = []
       const zeroCostProducts: string[] = []
+      const missingPreparations: string[] = [] // ⭐ PHASE 1: Track missing preparations
+      const unproducedPreparations: string[] = [] // ⭐ PHASE 1: Track unproduced preparations
 
       // ✅ ПРОСТОЙ РАСЧЕТ: Все уже в базовых единицах
+      // ⭐ PHASE 1: Now supports both products and preparations
       for (const ingredient of preparation.recipe) {
-        const product = await getProductCallback(ingredient.id)
+        // ⭐ PHASE 1: Handle different ingredient types
+        if (ingredient.type === 'product') {
+          // === EXISTING LOGIC: Product ingredients ===
+          const product = await getProductCallback(ingredient.id)
 
-        if (!product) {
-          missingProducts.push(ingredient.id)
-          continue
+          if (!product) {
+            missingProducts.push(ingredient.id)
+            continue
+          }
+
+          if (!product.isActive) {
+            inactiveProducts.push(product.name)
+            continue
+          }
+
+          if (product.baseCostPerUnit === 0) {
+            zeroCostProducts.push(product.name)
+            continue
+          }
+
+          // ✅ ПРЯМОЙ РАСЧЕТ: количество уже в базовых единицах
+          // ✅ FIX: Pass useYieldPercentage to calculateDirectCost
+          const ingredientTotalCost = calculateDirectCost(
+            ingredient.quantity,
+            product,
+            ingredient.useYieldPercentage || false
+          )
+          totalCost += ingredientTotalCost
+
+          componentCosts.push({
+            componentId: ingredient.id,
+            componentType: 'product',
+            componentName: product.name,
+            quantity: ingredient.quantity,
+            unit: product.baseUnit, // ✅ Всегда базовая единица
+            planUnitCost: product.baseCostPerUnit,
+            totalPlanCost: ingredientTotalCost,
+            percentage: 0
+          })
+        } else if (ingredient.type === 'preparation') {
+          // ⭐ PHASE 1: NEW LOGIC - Preparation ingredients
+          // Get preparation by ID
+          const prep = (await getProductCallback(ingredient.id)) as any // Reuse callback, will be typed later
+
+          if (!prep) {
+            missingPreparations.push(ingredient.id)
+            continue
+          }
+
+          // Check if preparation has been produced (lastKnownCost exists)
+          if (!prep.lastKnownCost || prep.lastKnownCost === 0) {
+            unproducedPreparations.push(prep.name || ingredient.id)
+
+            // Fallback to costPerPortion if available
+            if (prep.costPerPortion && prep.costPerPortion > 0) {
+              const ingredientTotalCost = prep.costPerPortion * ingredient.quantity
+              totalCost += ingredientTotalCost
+
+              componentCosts.push({
+                componentId: ingredient.id,
+                componentType: 'preparation',
+                componentName: prep.name,
+                quantity: ingredient.quantity,
+                unit: prep.outputUnit || 'gram',
+                planUnitCost: prep.costPerPortion,
+                totalPlanCost: ingredientTotalCost,
+                percentage: 0
+              })
+
+              DebugUtils.warn(
+                MODULE_NAME,
+                `Using costPerPortion fallback for "${prep.name}" (not yet produced)`,
+                { costPerPortion: prep.costPerPortion }
+              )
+            } else {
+              DebugUtils.warn(
+                MODULE_NAME,
+                `Preparation "${prep.name}" not yet produced and no costPerPortion available`,
+                { preparationId: ingredient.id }
+              )
+            }
+            continue
+          }
+
+          // ✅ Use lastKnownCost from previous production
+          const ingredientTotalCost = prep.lastKnownCost * ingredient.quantity
+          totalCost += ingredientTotalCost
+
+          componentCosts.push({
+            componentId: ingredient.id,
+            componentType: 'preparation',
+            componentName: prep.name,
+            quantity: ingredient.quantity,
+            unit: prep.outputUnit || 'gram',
+            planUnitCost: prep.lastKnownCost,
+            totalPlanCost: ingredientTotalCost,
+            percentage: 0
+          })
+
+          DebugUtils.info(MODULE_NAME, `Using lastKnownCost for preparation "${prep.name}"`, {
+            lastKnownCost: prep.lastKnownCost,
+            quantity: ingredient.quantity,
+            totalCost: ingredientTotalCost
+          })
         }
-
-        if (!product.isActive) {
-          inactiveProducts.push(product.name)
-          continue
-        }
-
-        if (product.baseCostPerUnit === 0) {
-          zeroCostProducts.push(product.name)
-          continue
-        }
-
-        // ✅ ПРЯМОЙ РАСЧЕТ: количество уже в базовых единицах
-        // ✅ FIX: Pass useYieldPercentage to calculateDirectCost
-        const ingredientTotalCost = calculateDirectCost(
-          ingredient.quantity,
-          product,
-          ingredient.useYieldPercentage || false
-        )
-        totalCost += ingredientTotalCost
-
-        componentCosts.push({
-          componentId: ingredient.id,
-          componentType: 'product',
-          componentName: product.name,
-          quantity: ingredient.quantity,
-          unit: product.baseUnit, // ✅ Всегда базовая единица
-          planUnitCost: product.baseCostPerUnit,
-          totalPlanCost: ingredientTotalCost,
-          percentage: 0
-        })
       }
 
       // ✅ ТОЛЬКО КРИТИЧНЫЕ ПРЕДУПРЕЖДЕНИЯ
       if (missingProducts.length > 0) {
         DebugUtils.warn(MODULE_NAME, `Missing products in ${preparation.name}:`, missingProducts)
         return { success: false, error: `Missing products: ${missingProducts.join(', ')}` }
+      }
+
+      // ⭐ PHASE 1: Check for missing preparations
+      if (missingPreparations.length > 0) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          `Missing preparations in ${preparation.name}:`,
+          missingPreparations
+        )
+        return {
+          success: false,
+          error: `Missing preparations: ${missingPreparations.join(', ')}`
+        }
+      }
+
+      // ⭐ PHASE 1: Warn about unproduced preparations (non-critical)
+      if (unproducedPreparations.length > 0) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          `Unproduced preparations in ${preparation.name} (using fallback costs):`,
+          unproducedPreparations
+        )
       }
 
       if (totalCost === 0) {

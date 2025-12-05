@@ -60,8 +60,14 @@
               <v-list-item v-bind="props">
                 <template #subtitle>
                   <span class="text-caption">
-                    {{ item.raw.code }} • {{ item.raw.outputQuantity }}
-                    {{ item.raw.outputUnit }}
+                    {{ item.raw.code }} •
+                    <!-- ⭐ PHASE 2: Show portions or grams based on type -->
+                    <template v-if="item.raw.portionType === 'portion' && item.raw.portionSize">
+                      1 portion ({{ item.raw.portionSize }}{{ item.raw.outputUnit }})
+                    </template>
+                    <template v-else>
+                      {{ item.raw.outputQuantity }} {{ item.raw.outputUnit }}
+                    </template>
                   </span>
                 </template>
               </v-list-item>
@@ -75,8 +81,14 @@
                 <div>
                   <div class="text-caption text-medium-emphasis">Recipe Output</div>
                   <div class="text-h6 font-weight-medium">
-                    {{ selectedPreparation.outputQuantity }}
-                    {{ selectedPreparation.outputUnit }}
+                    <template v-if="isPortionType">
+                      1 portion ({{ selectedPreparation.portionSize
+                      }}{{ selectedPreparation.outputUnit }})
+                    </template>
+                    <template v-else>
+                      {{ selectedPreparation.outputQuantity }}
+                      {{ selectedPreparation.outputUnit }}
+                    </template>
                   </div>
                 </div>
                 <div v-if="hasRecipe" class="text-right">
@@ -89,8 +101,24 @@
             </v-card-text>
           </v-card>
 
-          <!-- Quantity -->
+          <!-- Quantity Input: Portions or Weight -->
           <v-text-field
+            v-if="isPortionType"
+            v-model.number="portionInput"
+            label="Number of Portions"
+            type="number"
+            min="1"
+            step="1"
+            :rules="[v => (!!v && v > 0) || 'Quantity must be greater than 0']"
+            variant="outlined"
+            class="mb-4"
+            suffix="portions"
+            prepend-inner-icon="mdi-food-variant"
+            :hint="`${portionInput || 0} portions × ${portionSize}g = ${effectiveQuantity}g total`"
+            persistent-hint
+          />
+          <v-text-field
+            v-else
             v-model.number="quantity"
             label="Production Quantity"
             type="number"
@@ -122,7 +150,15 @@
                 <div class="text-right">
                   <div class="text-caption text-medium-emphasis">Cost per Unit</div>
                   <div class="text-subtitle-2">
-                    {{ formatCurrency(calculatedCostPerUnit) }}/{{ selectedPreparation.outputUnit }}
+                    <!-- ⭐ PHASE 2: calculatedCostPerUnit is already per portion for portion-type -->
+                    <template v-if="isPortionType">
+                      {{ formatCurrency(calculatedCostPerUnit) }}/portion
+                    </template>
+                    <template v-else>
+                      {{ formatCurrency(calculatedCostPerUnit) }}/{{
+                        selectedPreparation.outputUnit
+                      }}
+                    </template>
                   </div>
                 </div>
               </div>
@@ -134,27 +170,37 @@
             </v-card-text>
           </v-card>
 
-          <!-- Raw Products Preview -->
-          <v-expansion-panels v-if="hasRecipe && rawProductsPreview.length > 0" class="mb-4">
+          <!-- Ingredients Preview (Products + Preparations) -->
+          <v-expansion-panels v-if="hasRecipe && ingredientsPreview.length > 0" class="mb-4">
             <v-expansion-panel>
               <v-expansion-panel-title>
                 <div class="d-flex align-center">
                   <v-icon icon="mdi-package-variant" class="mr-2" />
-                  <span>Raw Products to Write Off ({{ rawProductsPreview.length }} items)</span>
+                  <span>Ingredients to Write Off ({{ ingredientsPreview.length }} items)</span>
                 </div>
               </v-expansion-panel-title>
               <v-expansion-panel-text>
                 <v-list density="compact" class="pa-0">
-                  <v-list-item
-                    v-for="item in rawProductsPreview"
-                    :key="item.productId"
-                    class="px-2"
-                  >
+                  <v-list-item v-for="item in ingredientsPreview" :key="item.id" class="px-2">
                     <template #prepend>
-                      <v-icon icon="mdi-food" size="small" color="primary" class="mr-2" />
+                      <!-- Different icons for products vs preparations -->
+                      <v-icon
+                        :icon="item.type === 'preparation' ? 'mdi-chef-hat' : 'mdi-food'"
+                        size="small"
+                        :color="item.type === 'preparation' ? 'warning' : 'primary'"
+                        class="mr-2"
+                      />
                     </template>
                     <v-list-item-title class="text-body-2">
-                      {{ item.productName }}
+                      {{ item.name }}
+                      <v-chip
+                        v-if="item.type === 'preparation'"
+                        size="x-small"
+                        color="warning"
+                        class="ml-1"
+                      >
+                        prep
+                      </v-chip>
                     </v-list-item-title>
                     <v-list-item-subtitle class="text-caption">
                       {{ item.quantity }} {{ item.unit }} × {{ formatCurrency(item.costPerUnit) }} =
@@ -404,69 +450,146 @@ const hasRecipe = computed(() => {
   return selectedPreparation.value?.recipe && selectedPreparation.value.recipe.length > 0
 })
 
-const multiplier = computed(() => {
-  if (!selectedPreparation.value || !quantity.value) return 1
-  return quantity.value / selectedPreparation.value.outputQuantity
+// ⭐ PHASE 2: Portion type helpers
+const isPortionType = computed(() => {
+  return (
+    selectedPreparation.value?.portionType === 'portion' && selectedPreparation.value?.portionSize
+  )
 })
 
+const portionSize = computed(() => {
+  return selectedPreparation.value?.portionSize || 1
+})
+
+// Display unit for UI (portions or base unit)
+const displayUnit = computed(() => {
+  if (isPortionType.value) {
+    return 'portions'
+  }
+  return selectedPreparation.value?.outputUnit || 'g'
+})
+
+// For portion-type: input is in portions, quantity is in grams
+const portionInput = ref(0)
+
+// Convert portions to grams or use direct grams
+const effectiveQuantity = computed(() => {
+  if (isPortionType.value) {
+    return portionInput.value * portionSize.value
+  }
+  return quantity.value
+})
+
+const multiplier = computed(() => {
+  if (!selectedPreparation.value || !effectiveQuantity.value) return 1
+  // ⭐ PHASE 2 FIX: For portion-type, use portion count for multiplier (not grams)
+  // outputQuantity = number of portions in recipe (typically 1)
+  // portionInput = number of portions to produce
+  if (isPortionType.value && portionInput.value) {
+    return portionInput.value / selectedPreparation.value.outputQuantity
+  }
+  return effectiveQuantity.value / selectedPreparation.value.outputQuantity
+})
+
+// ⭐ PHASE 1: Support both products AND preparations in cost calculation
 const calculatedCostPerUnit = computed(() => {
   if (!selectedPreparation.value || !hasRecipe.value) return 0
 
   let totalCost = 0
   for (const ingredient of selectedPreparation.value.recipe) {
-    const product = productsStore.getProductById(ingredient.id)
-    if (!product || !product.isActive) continue
+    if (ingredient.type === 'preparation') {
+      // ⭐ NESTED PREPARATION: Use lastKnownCost or costPerPortion
+      const prep = recipesStore.preparations.find(p => p.id === ingredient.id)
+      if (!prep) continue
 
-    // ✅ FIX: Use calculateDirectCost to account for yield adjustment
-    const ingredientCost = calculateDirectCost(
-      ingredient.quantity,
-      product,
-      ingredient.useYieldPercentage || false
-    )
-    totalCost += ingredientCost
+      const costPerUnit = prep.lastKnownCost || prep.costPerPortion || 0
+      totalCost += ingredient.quantity * costPerUnit
+    } else {
+      // PRODUCT ingredient (default)
+      const product = productsStore.getProductById(ingredient.id)
+      if (!product || !product.isActive) continue
+
+      // Use calculateDirectCost to account for yield adjustment
+      const ingredientCost = calculateDirectCost(
+        ingredient.quantity,
+        product,
+        ingredient.useYieldPercentage || false
+      )
+      totalCost += ingredientCost
+    }
   }
 
   return totalCost / selectedPreparation.value.outputQuantity
 })
 
 const calculatedCost = computed(() => {
-  return calculatedCostPerUnit.value * (quantity.value || 0)
+  // ⭐ PHASE 2 FIX: For portion-type, multiply by portion count (not grams)
+  // calculatedCostPerUnit is cost per output unit (per portion for portion-type)
+  if (isPortionType.value && portionInput.value) {
+    return calculatedCostPerUnit.value * portionInput.value
+  }
+  return calculatedCostPerUnit.value * (effectiveQuantity.value || 0)
 })
 
-const rawProductsPreview = computed(() => {
-  if (!selectedPreparation.value?.recipe || !quantity.value) return []
+// ⭐ PHASE 1: Support both products AND preparations in preview
+const ingredientsPreview = computed(() => {
+  if (!selectedPreparation.value?.recipe || !effectiveQuantity.value) return []
 
   return selectedPreparation.value.recipe
     .map((ingredient: any) => {
-      const product = productsStore.getProductById(ingredient.id)
-      if (!product) return null
+      const scaledQuantity = ingredient.quantity * multiplier.value
 
-      // ✅ FIX: Apply yield adjustment to quantity preview
-      let scaledQuantity = ingredient.quantity * multiplier.value
+      // Check ingredient type (default to 'product' for backwards compatibility)
+      if (ingredient.type === 'preparation') {
+        // ⭐ NESTED PREPARATION: Get from recipesStore
+        const prep = recipesStore.preparations.find(p => p.id === ingredient.id)
+        if (!prep) return null
 
-      if (
-        ingredient.useYieldPercentage &&
-        product.yieldPercentage &&
-        product.yieldPercentage < 100
-      ) {
-        scaledQuantity = scaledQuantity / (product.yieldPercentage / 100)
-      }
+        const costPerUnit = prep.lastKnownCost || prep.costPerPortion || 0
 
-      const costPerUnit = product.baseCostPerUnit
-      const totalCost = scaledQuantity * costPerUnit
+        return {
+          type: 'preparation' as const,
+          id: ingredient.id,
+          name: prep.name,
+          quantity: scaledQuantity.toFixed(2),
+          unit: prep.outputUnit || 'g',
+          costPerUnit,
+          totalCost: scaledQuantity * costPerUnit
+        }
+      } else {
+        // PRODUCT ingredient (default)
+        const product = productsStore.getProductById(ingredient.id)
+        if (!product) return null
 
-      return {
-        productId: ingredient.id,
-        productName: product.name,
-        quantity: scaledQuantity.toFixed(2),
-        unit: product.baseUnit,
-        costPerUnit,
-        totalCost,
-        yieldAdjusted:
-          ingredient.useYieldPercentage && product.yieldPercentage && product.yieldPercentage < 100
+        // Apply yield adjustment to quantity preview
+        let adjustedQuantity = scaledQuantity
+        if (
+          ingredient.useYieldPercentage &&
+          product.yieldPercentage &&
+          product.yieldPercentage < 100
+        ) {
+          adjustedQuantity = scaledQuantity / (product.yieldPercentage / 100)
+        }
+
+        const costPerUnit = product.baseCostPerUnit
+        const totalCost = adjustedQuantity * costPerUnit
+
+        return {
+          type: 'product' as const,
+          id: ingredient.id,
+          name: product.name,
+          quantity: adjustedQuantity.toFixed(2),
+          unit: product.baseUnit,
+          costPerUnit,
+          totalCost,
+          yieldAdjusted:
+            ingredient.useYieldPercentage &&
+            product.yieldPercentage &&
+            product.yieldPercentage < 100
+        }
       }
     })
-    .filter((item: any) => item !== null)
+    .filter((item): item is NonNullable<typeof item> => item !== null)
 })
 
 const quantityHint = computed(() => {
@@ -517,7 +640,7 @@ const canSubmit = computed(() => {
   return (
     isFormValid.value &&
     selectedPreparationId.value &&
-    quantity.value > 0 &&
+    effectiveQuantity.value > 0 && // ⭐ Use effectiveQuantity (handles both portion and weight)
     calculatedCostPerUnit.value >= 0 &&
     !loading.value
   )
@@ -527,10 +650,11 @@ const canSubmit = computed(() => {
 watch(selectedPreparationId, async newId => {
   if (!newId) {
     quantity.value = 0
+    portionInput.value = 0
     return
   }
 
-  const prep = recipesStore.preparations.find(p => p.id === newId)
+  const prep = recipesStore.preparations.find((p: any) => p.id === newId)
   if (prep) {
     // Check for negative batches
     try {
@@ -554,12 +678,23 @@ watch(selectedPreparationId, async newId => {
         showDeficitDialog.value = true
       } else {
         // No deficit, set standard quantity
-        quantity.value = prep.outputQuantity
+        // ⭐ PHASE 2: Handle portion-type preparations
+        if (prep.portionType === 'portion' && prep.portionSize) {
+          portionInput.value = 1 // Default to 1 portion
+          quantity.value = prep.portionSize
+        } else {
+          quantity.value = prep.outputQuantity
+        }
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to check negative batches', { error })
       // Fallback to standard quantity
-      quantity.value = prep.outputQuantity
+      if (prep.portionType === 'portion' && prep.portionSize) {
+        portionInput.value = 1
+        quantity.value = prep.portionSize
+      } else {
+        quantity.value = prep.outputQuantity
+      }
     }
 
     DebugUtils.info(MODULE_NAME, `Selected preparation: ${prep.name}`, {
@@ -611,11 +746,17 @@ async function handleSubmit() {
     const expiryDate = calculatedExpiryDate.value
     expiryDate.setHours(20, 0, 0, 0)
 
-    // Create receipt item
+    // Create receipt item - ⭐ Use effectiveQuantity (grams) for the actual batch
+    // ⭐ PHASE 2 FIX: For portion-type, convert cost per portion to cost per gram
+    // calculatedCostPerUnit is per portion for portion-type, but batch needs per gram
+    const costPerGram = isPortionType.value
+      ? calculatedCostPerUnit.value / portionSize.value
+      : calculatedCostPerUnit.value
+
     const receiptItem: PreparationReceiptItem = {
       preparationId: selectedPreparationId.value,
-      quantity: quantity.value,
-      costPerUnit: calculatedCostPerUnit.value,
+      quantity: effectiveQuantity.value, // ⭐ Always in grams
+      costPerUnit: costPerGram, // ⭐ Always per gram for batch storage
       expiryDate: expiryDate.toISOString().slice(0, 16),
       notes: ''
     }
@@ -636,8 +777,14 @@ async function handleSubmit() {
 
     DebugUtils.info(MODULE_NAME, 'Preparation production created successfully')
 
+    // ⭐ PHASE 2: Show appropriate message for portion-type
     const prepName = selectedPreparation.value?.name || 'preparation'
-    const message = `Produced ${quantity.value}${selectedPreparation.value?.outputUnit} of ${prepName} successfully`
+    let message: string
+    if (isPortionType.value) {
+      message = `Produced ${portionInput.value} portions (${effectiveQuantity.value}${selectedPreparation.value?.outputUnit}) of ${prepName} successfully`
+    } else {
+      message = `Produced ${effectiveQuantity.value}${selectedPreparation.value?.outputUnit} of ${prepName} successfully`
+    }
     emit('success', message)
     handleClose()
   } catch (error) {
@@ -656,6 +803,7 @@ function handleClose() {
 function resetForm() {
   selectedPreparationId.value = ''
   quantity.value = 0
+  portionInput.value = 0 // ⭐ PHASE 2: Reset portion input
   formData.value = {
     department: props.department,
     responsiblePerson: authStore.userName,

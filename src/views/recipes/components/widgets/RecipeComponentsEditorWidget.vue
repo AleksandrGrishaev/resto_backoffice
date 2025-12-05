@@ -3,7 +3,7 @@
   <div class="components-section">
     <div class="d-flex justify-space-between align-center mb-4">
       <h3 class="text-h6">
-        {{ type === 'preparation' ? 'Recipe (Products only)' : 'Components' }}
+        {{ type === 'preparation' ? 'Recipe (Products & Preparations)' : 'Components' }}
       </h3>
       <v-btn
         color="primary"
@@ -12,9 +12,35 @@
         prepend-icon="mdi-plus"
         @click="handleAddComponent"
       >
-        Add {{ type === 'preparation' ? 'Product' : 'Component' }}
+        Add {{ type === 'preparation' ? 'Ingredient' : 'Component' }}
       </v-btn>
     </div>
+
+    <!-- ⭐ PHASE 1: Cycle Detection Warning -->
+    <v-alert
+      v-if="cycleDetectionResult?.hasCycle"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      prominent
+      border="start"
+    >
+      <template #title>
+        <div class="d-flex align-center">
+          <v-icon icon="mdi-alert-circle" class="mr-2" />
+          Circular Dependency Detected!
+        </div>
+      </template>
+      <div class="text-body-2 mt-2">
+        A preparation cannot use itself as an ingredient, directly or indirectly.
+      </div>
+      <div class="text-body-2 mt-2 font-weight-bold">
+        Cycle path: {{ cycleDetectionResult.formattedPath }}
+      </div>
+      <div class="text-caption mt-2 text-medium-emphasis">
+        Please remove the preparation ingredient that creates the cycle to save changes.
+      </div>
+    </v-alert>
 
     <div v-if="components.length === 0" class="empty-state">
       <v-icon icon="mdi-package-variant-closed" size="48" class="text-medium-emphasis mb-2" />
@@ -34,8 +60,8 @@
         class="component-card mb-3"
       >
         <v-card-text class="pa-4">
-          <!-- Header: Type Selection (только для рецептов) -->
-          <v-row v-if="type === 'recipe'" class="mb-3">
+          <!-- ⭐ PHASE 1: Header - Type Selection (для рецептов И полуфабрикатов) -->
+          <v-row class="mb-3">
             <v-col cols="10">
               <v-chip-group
                 :model-value="component.componentType"
@@ -232,17 +258,6 @@
               </div>
             </v-col>
           </v-row>
-
-          <!-- Delete button for preparations -->
-          <div v-if="type === 'preparation'" class="delete-button-container">
-            <v-btn
-              icon="mdi-delete"
-              color="error"
-              variant="text"
-              size="small"
-              @click="handleRemoveComponent(index)"
-            />
-          </div>
         </v-card-text>
       </v-card>
     </div>
@@ -303,6 +318,9 @@ import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 // ✅ NEW: Import search widgets
 import ProductSearchWidget from '@/views/menu/components/widgets/ProductSearchWidget.vue'
 import DishSearchWidget from '@/views/menu/components/widgets/DishSearchWidget.vue'
+// ⭐ PHASE 1: Cycle detection for nested preparations
+import { detectCycle, formatCyclePath } from '@/stores/recipes/composables/usePreparationGraph'
+import type { PreparationIngredient, Preparation } from '@/stores/recipes/types'
 
 // ===== TYPES =====
 interface Component {
@@ -339,6 +357,7 @@ interface PreparationItem {
 interface Props {
   components: Component[]
   type: 'recipe' | 'preparation'
+  preparationId?: string // ⭐ PHASE 1: Required for cycle detection
 }
 
 interface Emits {
@@ -436,6 +455,57 @@ const dishOptions = computed(() => {
     outputQuantity: 1,
     category: (prep as any).type || 'Other' // Use preparation type as category
   }))
+})
+
+// ⭐ PHASE 1: Cycle Detection for Nested Preparations
+const cycleDetectionResult = computed(() => {
+  // Only check for preparations (nested preparations feature)
+  if (props.type !== 'preparation' || !props.preparationId) {
+    return null
+  }
+
+  // Convert components to PreparationIngredient format
+  const recipe: PreparationIngredient[] = props.components
+    .filter(c => c.componentId) // Only check components with selected items
+    .map(c => ({
+      type: c.componentType === 'preparation' ? 'preparation' : 'product',
+      id: c.componentId,
+      quantity: c.quantity,
+      unit: c.unit as MeasurementUnit,
+      useYieldPercentage: c.useYieldPercentage,
+      notes: c.notes,
+      sortOrder: 0
+    }))
+
+  // Get all preparations for cycle detection
+  const allPreparations: Preparation[] = preparations.value.map(p => ({
+    id: p.id,
+    name: p.name,
+    code: p.code,
+    outputUnit: p.outputUnit as any,
+    outputQuantity: 1,
+    preparationTime: 0,
+    instructions: '',
+    isActive: true,
+    type: p.type || '',
+    department: 'kitchen',
+    recipe: [], // We don't need full recipes for cycle detection
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }))
+
+  // Detect cycles
+  const result = detectCycle(props.preparationId, recipe, allPreparations)
+
+  if (result.hasCycle && result.cyclePath) {
+    return {
+      hasCycle: true,
+      cyclePath: result.cyclePath,
+      formattedPath: formatCyclePath(result.cyclePath, allPreparations)
+    }
+  }
+
+  return null
 })
 
 // ===== VALIDATION =====

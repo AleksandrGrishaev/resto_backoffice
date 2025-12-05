@@ -37,6 +37,7 @@
           <recipe-components-editor-widget
             :components="formData.components"
             :type="type"
+            :preparation-id="type === 'preparation' ? formData.id : undefined"
             @component-quantity-changed="onComponentQuantityChange"
             @add-component="addComponent"
             @remove-component="removeComponent"
@@ -120,7 +121,9 @@ const formData = ref<any>({
   tags: [],
   instructions: '', // Optional for preparations
   components: [],
-  shelfLife: 2 // ✅ NEW: Default shelf life for preparations (days)
+  shelfLife: 2, // ✅ NEW: Default shelf life for preparations (days)
+  // ⭐ PHASE 2: Portion type support
+  portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
 })
 
 // Computed
@@ -220,8 +223,12 @@ async function handleSubmit() {
         preparationTime: formData.value.preparationTime,
         instructions: formData.value.instructions || '', // ✅ Optional: send empty string if not provided
         shelfLife: formData.value.shelfLife, // ✅ NEW: Include shelf life
+        // ⭐ PHASE 2: Portion type support
+        portionType: formData.value.portionType || 'weight',
+        portionSize:
+          formData.value.portionType === 'portion' ? formData.value.portionSize : undefined,
         recipe: validComponents.map((comp: any) => ({
-          type: 'product' as const,
+          type: comp.componentType || 'product', // ⭐ PHASE 1: Support nested preparations
           id: comp.componentId,
           quantity: comp.quantity,
           unit: comp.unit,
@@ -314,7 +321,9 @@ function resetForm() {
     tags: [],
     instructions: '', // Optional for preparations (nullable in DB)
     components: [],
-    shelfLife: 2 // ✅ NEW: Default shelf life for preparations (days)
+    shelfLife: 2, // ✅ NEW: Default shelf life for preparations (days)
+    // ⭐ PHASE 2: Portion type support
+    portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
   }
   form.value?.resetValidation()
 }
@@ -341,10 +350,13 @@ watch(dialogModel, async newVal => {
           preparationTime: prep.preparationTime,
           instructions: prep.instructions,
           shelfLife: prep.shelfLife || 2, // ✅ NEW: Include shelf life with default
+          // ⭐ PHASE 2: Portion type support
+          portionType: prep.portionType || 'weight',
+          portionSize: prep.portionSize || 1,
           components: (prep.recipe || []).map((ingredient: any) => ({
             id: generateId(),
             componentId: ingredient.id,
-            componentType: 'product',
+            componentType: ingredient.type || 'product', // ⭐ PHASE 1: Support nested preparations
             quantity: ingredient.quantity,
             unit: ingredient.unit,
             useYieldPercentage: ingredient.useYieldPercentage, // ✅ FIX: Include yield percentage toggle

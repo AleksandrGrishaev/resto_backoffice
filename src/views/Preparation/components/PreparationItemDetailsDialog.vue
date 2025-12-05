@@ -28,8 +28,18 @@
             <v-col cols="12" md="4">
               <v-card variant="tonal" color="primary">
                 <v-card-text class="text-center">
-                  <div class="text-h4 font-weight-bold">{{ item.totalQuantity }}</div>
-                  <div class="text-body-2">{{ item.unit }} in stock</div>
+                  <!-- ⭐ PHASE 2: Show portions for portion-type preparations -->
+                  <template v-if="portionInfo.isPortionType">
+                    <div class="text-h4 font-weight-bold">{{ totalPortions }}</div>
+                    <div class="text-body-2">portions in stock</div>
+                    <v-chip size="x-small" color="secondary" variant="tonal" class="mt-1">
+                      {{ portionInfo.portionSize }}g per portion
+                    </v-chip>
+                  </template>
+                  <template v-else>
+                    <div class="text-h4 font-weight-bold">{{ item.totalQuantity }}</div>
+                    <div class="text-body-2">{{ item.unit }} in stock</div>
+                  </template>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -117,10 +127,22 @@
 
                     <div class="text-right">
                       <div class="font-weight-medium">
-                        {{ batch.currentQuantity }}/{{ batch.initialQuantity }} {{ batch.unit }}
+                        <!-- ⭐ PHASE 2: Show portions for portion-type preparations -->
+                        {{
+                          formatBatchQuantity(
+                            batch.currentQuantity,
+                            batch.initialQuantity,
+                            batch.unit
+                          )
+                        }}
                       </div>
                       <div class="text-caption text-medium-emphasis">
                         {{ formatCurrency(batch.costPerUnit) }}/{{ batch.unit }}
+                        <template v-if="portionInfo.isPortionType && portionInfo.portionSize">
+                          ({{
+                            formatCurrency(batch.costPerUnit * portionInfo.portionSize)
+                          }}/portion)
+                        </template>
                       </div>
                     </div>
                   </div>
@@ -323,6 +345,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { PreparationBalance, PreparationDepartment } from '@/stores/preparation'
+import { useRecipesStore } from '@/stores/recipes'
 
 // Props
 interface Props {
@@ -332,6 +355,9 @@ interface Props {
 
 const props = defineProps<Props>()
 
+// Store
+const recipesStore = useRecipesStore()
+
 // Emits
 defineEmits<{
   'update:modelValue': [value: boolean]
@@ -339,6 +365,23 @@ defineEmits<{
 
 // State
 const selectedTab = ref('batches')
+
+// ⭐ PHASE 2: Portion type info
+const portionInfo = computed(() => {
+  if (!props.item?.preparationId) return { isPortionType: false, portionSize: null }
+  const preparation = recipesStore.preparations.find(p => p.id === props.item!.preparationId)
+  if (!preparation) return { isPortionType: false, portionSize: null }
+
+  return {
+    isPortionType: preparation.portionType === 'portion' && !!preparation.portionSize,
+    portionSize: preparation.portionSize || null
+  }
+})
+
+const totalPortions = computed(() => {
+  if (!portionInfo.value.isPortionType || !portionInfo.value.portionSize || !props.item) return 0
+  return Math.floor(props.item.totalQuantity / portionInfo.value.portionSize)
+})
 
 // Computed
 const freshBatchesCount = computed(() => {
@@ -392,6 +435,17 @@ function formatSource(sourceType: string): string {
     inventory_adjustment: 'Inventory Adjustment'
   }
   return sources[sourceType] || sourceType
+}
+
+// ⭐ PHASE 2: Format batch quantity with portions
+function formatBatchQuantity(current: number, initial: number, unit: string): string {
+  if (portionInfo.value.isPortionType && portionInfo.value.portionSize) {
+    const currentPortions = Math.floor(current / portionInfo.value.portionSize)
+    const initialPortions = Math.floor(initial / portionInfo.value.portionSize)
+    // Show only portions (no grams)
+    return `${currentPortions}/${initialPortions} portions`
+  }
+  return `${current}/${initial} ${unit}`
 }
 
 function getUsageColor(ratio: number): string {
