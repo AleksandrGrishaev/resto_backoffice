@@ -1,5 +1,6 @@
-// src/stores/preparation/types.ts - UPDATED: Added Write-off Support
+// src/stores/preparation/types.ts - UPDATED: Added Write-off Support + Portion Type
 import { BaseEntity } from '@/types/common'
+import type { PortionType } from '@/stores/recipes/types'
 
 export type PreparationDepartment = 'kitchen' | 'bar' | 'all'
 // ✅ SIMPLIFIED: Only production, inventory, and write_off operations
@@ -49,6 +50,11 @@ export interface PreparationBatch extends BaseEntity {
   sourceOperationType?: 'pos_order' | 'preparation_production' | 'manual_writeoff'
   affectedRecipeIds?: string[]
   reconciledAt?: string
+
+  // ⭐ PHASE 2: Portion type support
+  portionType?: PortionType // 'weight' (default) or 'portion'
+  portionSize?: number // Size of one portion in grams (only for portionType='portion')
+  portionQuantity?: number // Number of portions (when portionType='portion')
 }
 
 export interface BatchAllocation {

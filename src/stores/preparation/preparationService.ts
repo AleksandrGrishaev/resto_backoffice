@@ -108,7 +108,10 @@ export class PreparationService {
           outputQuantity: 1000,
           outputUnit: 'gram',
           costPerPortion: 0,
-          shelfLife: 2
+          shelfLife: 2,
+          // ⭐ PHASE 2: Portion type defaults
+          portionType: 'weight' as const,
+          portionSize: undefined as number | undefined
         }
       }
 
@@ -134,7 +137,10 @@ export class PreparationService {
           outputQuantity: 1000,
           outputUnit: 'gram',
           costPerPortion: 0,
-          shelfLife: 2 // days
+          shelfLife: 2, // days
+          // ⭐ PHASE 2: Portion type defaults
+          portionType: 'weight' as const,
+          portionSize: undefined as number | undefined
         }
       }
 
@@ -144,7 +150,10 @@ export class PreparationService {
         outputQuantity: preparation.outputQuantity,
         outputUnit: preparation.outputUnit,
         costPerPortion: preparation.costPerPortion || 0,
-        shelfLife: preparation.shelfLife || 2 // preparations expire faster
+        shelfLife: preparation.shelfLife || 2, // preparations expire faster
+        // ⭐ PHASE 2: Portion type support
+        portionType: preparation.portionType || 'weight',
+        portionSize: preparation.portionSize
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting preparation info', { error, preparationId })
@@ -154,7 +163,10 @@ export class PreparationService {
         outputQuantity: 1000,
         outputUnit: 'gram',
         costPerPortion: 0,
-        shelfLife: 2
+        shelfLife: 2,
+        // ⭐ PHASE 2: Portion type defaults
+        portionType: 'weight' as const,
+        portionSize: undefined as number | undefined
       }
     }
   }
@@ -416,6 +428,72 @@ export class PreparationService {
   }
 
   // ===========================
+  // ⭐ PHASE 2: PORTION CONVERSION HELPERS
+  // ===========================
+
+  /**
+   * Convert portions to weight (grams) for a preparation
+   * @param preparationId - The preparation ID
+   * @param portions - Number of portions
+   * @returns Weight in grams, or null if not a portion-type preparation
+   */
+  convertPortionsToWeight(preparationId: string, portions: number): number | null {
+    const prepInfo = this.getPreparationInfo(preparationId)
+    if (prepInfo.portionType === 'portion' && prepInfo.portionSize) {
+      return portions * prepInfo.portionSize
+    }
+    return null // Not a portion-type preparation
+  }
+
+  /**
+   * Convert weight (grams) to portions for a preparation
+   * @param preparationId - The preparation ID
+   * @param weight - Weight in grams
+   * @returns Number of portions (floored), or null if not a portion-type preparation
+   */
+  convertWeightToPortions(preparationId: string, weight: number): number | null {
+    const prepInfo = this.getPreparationInfo(preparationId)
+    if (prepInfo.portionType === 'portion' && prepInfo.portionSize) {
+      return Math.floor(weight / prepInfo.portionSize)
+    }
+    return null // Not a portion-type preparation
+  }
+
+  /**
+   * Calculate FIFO allocation in portions (converts to weight internally)
+   * @param preparationId - The preparation ID
+   * @param department - The department
+   * @param portions - Number of portions to allocate
+   * @returns Allocation result with weight-based quantities
+   */
+  calculateFifoAllocationByPortions(
+    preparationId: string,
+    department: PreparationDepartment,
+    portions: number
+  ): { allocations: BatchAllocation[]; remainingQuantity: number; remainingPortions: number } {
+    const prepInfo = this.getPreparationInfo(preparationId)
+
+    if (prepInfo.portionType !== 'portion' || !prepInfo.portionSize) {
+      throw new Error(`Preparation ${preparationId} is not a portion-type preparation`)
+    }
+
+    // Convert portions to weight
+    const weightNeeded = portions * prepInfo.portionSize
+
+    // Use standard FIFO allocation (works with weight)
+    const { allocations, remainingQuantity } = this.calculateFifoAllocation(
+      preparationId,
+      department,
+      weightNeeded
+    )
+
+    // Convert remaining quantity back to portions
+    const remainingPortions = Math.ceil(remainingQuantity / prepInfo.portionSize)
+
+    return { allocations, remainingQuantity, remainingPortions }
+  }
+
+  // ===========================
   // FIFO CALCULATIONS
   // ===========================
 
@@ -514,9 +592,15 @@ export class PreparationService {
             batch.totalValue = Math.round(batch.currentQuantity * batch.costPerUnit * 100) / 100
             batch.updatedAt = TimeUtils.getCurrentLocalISO()
 
+            // ⭐ PHASE 2: Update portion quantity if portion-type batch
+            if (batch.portionType === 'portion' && batch.portionSize) {
+              batch.portionQuantity = Math.floor(batch.currentQuantity / batch.portionSize)
+            }
+
             if (batch.currentQuantity <= 0.0001) {
               batch.currentQuantity = 0
               batch.totalValue = 0
+              batch.portionQuantity = 0 // ⭐ PHASE 2: Reset portion quantity
               batch.status = 'depleted'
               batch.isActive = false
 
@@ -729,25 +813,43 @@ export class PreparationService {
             continue // Skip write-off if no recipe (optional)
           }
 
-          // Calculate raw product quantities needed
+          // ⭐ PHASE 1: Calculate ingredient quantities needed (supports products AND preparations)
           const multiplier = item.quantity / preparation.outputQuantity
           const writeOffItems: WriteOffItem[] = preparation.recipe.map(ingredient => {
-            const product = productsStore.getProductById(ingredient.id)
+            // ⭐ PHASE 1: Get ingredient info based on type
+            let ingredientName: string
+            let yieldPercentage: number | undefined
 
-            // ✅ FIX: Apply yield adjustment if enabled
+            if (ingredient.type === 'product') {
+              // === EXISTING LOGIC: Product ingredients ===
+              const product = productsStore.getProductById(ingredient.id)
+              ingredientName = product?.name || `Product ${ingredient.id}`
+              yieldPercentage = product?.yieldPercentage
+            } else if (ingredient.type === 'preparation') {
+              // ⭐ PHASE 1: NEW LOGIC - Preparation ingredients
+              const prep = recipesStore.getPreparationById(ingredient.id)
+              ingredientName = prep?.name || `Preparation ${ingredient.id}`
+              yieldPercentage = undefined // Preparations don't have yield percentage
+            } else {
+              ingredientName = `Unknown ${ingredient.id}`
+              yieldPercentage = undefined
+            }
+
+            // ✅ FIX: Apply yield adjustment if enabled (only for products)
             let adjustedQuantity = ingredient.quantity * multiplier
 
             if (
+              ingredient.type === 'product' &&
               ingredient.useYieldPercentage &&
-              product?.yieldPercentage &&
-              product.yieldPercentage < 100
+              yieldPercentage &&
+              yieldPercentage < 100
             ) {
               const originalQuantity = adjustedQuantity
-              adjustedQuantity = adjustedQuantity / (product.yieldPercentage / 100)
+              adjustedQuantity = adjustedQuantity / (yieldPercentage / 100)
 
-              DebugUtils.info(MODULE_NAME, `Applied yield adjustment for ${product.name}`, {
+              DebugUtils.info(MODULE_NAME, `Applied yield adjustment for ${ingredientName}`, {
                 baseQuantity: originalQuantity,
-                yieldPercentage: product.yieldPercentage,
+                yieldPercentage,
                 adjustedQuantity,
                 ingredient: ingredient.id
               })
@@ -755,8 +857,8 @@ export class PreparationService {
 
             return {
               itemId: ingredient.id,
-              itemName: product?.name || `Product ${ingredient.id}`,
-              itemType: 'product' as const,
+              itemName: ingredientName,
+              itemType: ingredient.type, // ⭐ CHANGED: Use actual type ('product' | 'preparation')
               quantity: adjustedQuantity,
               unit: ingredient.unit,
               notes: `Production: ${preparation.name} (${item.quantity}${preparation.outputUnit})`
@@ -801,6 +903,18 @@ export class PreparationService {
       for (const item of data.items) {
         const preparationInfo = this.getPreparationInfo(item.preparationId)
 
+        // ⭐ PHASE 2: Calculate portion quantity if portionType='portion'
+        let portionQuantity: number | undefined
+        if (preparationInfo.portionType === 'portion' && preparationInfo.portionSize) {
+          portionQuantity = Math.floor(item.quantity / preparationInfo.portionSize)
+          DebugUtils.info(MODULE_NAME, '⭐ Calculated portion quantity', {
+            preparationName: preparationInfo.name,
+            totalWeight: item.quantity,
+            portionSize: preparationInfo.portionSize,
+            portionQuantity
+          })
+        }
+
         const batch: PreparationBatch = {
           id: crypto.randomUUID(),
           batchNumber: this.generateBatchNumber(preparationInfo.name, now),
@@ -817,6 +931,10 @@ export class PreparationService {
           notes: item.notes,
           status: 'active',
           isActive: true,
+          // ⭐ PHASE 2: Portion type support
+          portionType: preparationInfo.portionType,
+          portionSize: preparationInfo.portionSize,
+          portionQuantity,
           createdAt: now,
           updatedAt: now
         }

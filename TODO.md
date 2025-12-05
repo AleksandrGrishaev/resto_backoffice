@@ -20,9 +20,9 @@
 
 ## Phase-Based Strategy (4 Phases)
 
-### PHASE 1: MVP - Nested Preparations Only ⏳ CURRENT
+### PHASE 1: MVP - Nested Preparations Only ✅ COMPLETE
 
-**Duration**: 2 weeks | **Estimate**: 50 Story Points
+**Duration**: 2 weeks | **Estimate**: 50 Story Points | **Completed**: 2025-12-05
 
 **Goal**: Allow preparations to use other preparations as ingredients
 
@@ -56,7 +56,7 @@
 
 ---
 
-### PHASE 2: Portion Type Support 🔜
+### PHASE 2: Portion Type Support ⏳ CURRENT
 
 **Duration**: 1 week | **Estimate**: 15 Story Points
 
@@ -241,15 +241,14 @@ cost = recursivelyCalculateCost(prep.recipe)
 
 ### Completed Phases
 
-- None yet
+- ✅ **Phase 1 (MVP)** - Completed 2025-12-05 (see PHASE1_NESTED_PREPARATIONS_SUMMARY.md)
 
 ### Current Phase
 
-- **Phase 1 (MVP)** - Not Started (see NextTodo.md for detailed plan)
+- ⏳ **Phase 2 (Portion Types)** - In Progress (see NextTodo.md for detailed plan)
 
 ### Pending Phases
 
-- Phase 2 - Deferred (portion types)
 - Phase 3 - Deferred (UI polish)
 - Phase 4 - Deferred (advanced features)
 
@@ -309,5 +308,5 @@ After each phase:
 ---
 
 **Last Updated**: 2025-12-05
-**Status**: Phase 1 ready to start
-**Next Action**: Begin Stage 1 (Database Migration)
+**Status**: Phase 1 COMPLETE, Phase 2 in progress
+**Next Action**: Implement portion type support (Phase 2)

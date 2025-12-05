@@ -81,33 +81,99 @@
 
       <!-- Output/Portion Info -->
       <template v-if="type === 'preparation'">
+        <!-- ⭐ PHASE 2: Portion Type Selection FIRST -->
         <v-col cols="12" md="4">
-          <v-text-field
-            :model-value="formData.outputQuantity"
-            label="Output Quantity (Required)"
-            type="number"
-            step="0.1"
-            :rules="[rules.required, rules.positiveNumber]"
-            required
-            variant="outlined"
+          <v-radio-group
+            :model-value="formData.portionType || 'weight'"
+            inline
             density="comfortable"
-            @update:model-value="updateField('outputQuantity', Number($event))"
-          />
+            hide-details
+            class="mt-0"
+            @update:model-value="handlePortionTypeChange($event)"
+          >
+            <template #label>
+              <span class="text-body-2 text-medium-emphasis">Quantity Type</span>
+            </template>
+            <v-radio label="Weight" value="weight" />
+            <v-radio label="Portions" value="portion" />
+          </v-radio-group>
         </v-col>
-        <v-col cols="12" md="4">
-          <v-select
-            :model-value="formData.outputUnit"
-            :items="unitItems"
-            item-title="label"
-            item-value="value"
-            label="Output Unit (Required)"
-            :rules="[rules.required]"
-            required
-            variant="outlined"
-            density="comfortable"
-            @update:model-value="updateField('outputUnit', $event)"
-          />
-        </v-col>
+
+        <!-- Weight mode: Output Quantity + Output Unit -->
+        <template v-if="formData.portionType !== 'portion'">
+          <v-col cols="12" md="4">
+            <v-text-field
+              :model-value="formData.outputQuantity"
+              label="Output Quantity (Required)"
+              type="number"
+              step="0.1"
+              :rules="[rules.required, rules.positiveNumber]"
+              required
+              variant="outlined"
+              density="comfortable"
+              @update:model-value="updateField('outputQuantity', Number($event))"
+            />
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-select
+              :model-value="formData.outputUnit"
+              :items="unitItems"
+              item-title="label"
+              item-value="value"
+              label="Output Unit (Required)"
+              :rules="[rules.required]"
+              required
+              variant="outlined"
+              density="comfortable"
+              @update:model-value="updateField('outputUnit', $event)"
+            />
+          </v-col>
+        </template>
+
+        <!-- Portion mode: Number of Portions + Portion Size -->
+        <template v-else>
+          <v-col cols="12" md="4">
+            <v-text-field
+              :model-value="formData.outputQuantity"
+              label="Number of Portions (Required)"
+              type="number"
+              step="1"
+              min="1"
+              :rules="[rules.required, rules.positiveNumber]"
+              required
+              variant="outlined"
+              density="comfortable"
+              hint="How many portions this recipe makes"
+              persistent-hint
+              @update:model-value="updateField('outputQuantity', Number($event))"
+            />
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-text-field
+              :model-value="formData.portionSize"
+              label="Portion Size (grams)"
+              type="number"
+              step="1"
+              min="1"
+              :rules="[rules.required, rules.positiveNumber]"
+              required
+              variant="outlined"
+              density="comfortable"
+              hint="Weight of one portion"
+              persistent-hint
+              @update:model-value="updateField('portionSize', Number($event))"
+            />
+          </v-col>
+
+          <!-- Total Weight Preview -->
+          <v-col v-if="formData.outputQuantity > 0 && formData.portionSize > 0" cols="12">
+            <v-alert type="info" variant="tonal" density="compact" class="text-body-2">
+              <strong>{{ formData.outputQuantity }} portions</strong>
+              × {{ formData.portionSize }}g =
+              <strong>{{ calculatedTotalWeight }}g total</strong>
+            </v-alert>
+          </v-col>
+        </template>
       </template>
 
       <template v-else>
@@ -228,7 +294,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { DIFFICULTY_LEVELS } from '@/stores/recipes/types'
 import { useRecipesStore } from '@/stores/recipes'
 
@@ -248,6 +314,8 @@ interface FormData {
   tags: string[]
   instructions: string
   shelfLife?: number // ✅ NEW: Shelf life in days for preparations
+  // ⭐ PHASE 2: Portion type support
+  portionType?: 'weight' | 'portion'
 }
 
 interface Props {
@@ -266,15 +334,13 @@ const emit = defineEmits<Emits>()
 // ✅ Initialize recipes store
 const recipesStore = useRecipesStore()
 
-// ✅ ИСПРАВЛЕНО: Избегаем циклических импортов - ленивая загрузка
-let unitOptions: { value: Array<{ value: string; title: string }> } | null = null
+// ✅ FIXED: Make unitOptions reactive so computed updates when loaded
+const unitOptionsLoaded = ref<Array<{ value: string; title: string }>>([])
 
-async function getUnitOptions() {
-  if (!unitOptions) {
-    const { useRecipeUnits } = await import('@/composables/useMeasurementUnits')
-    unitOptions = useRecipeUnits()
-  }
-  return unitOptions
+async function loadUnitOptions() {
+  const { useRecipeUnits } = await import('@/composables/useMeasurementUnits')
+  const units = useRecipeUnits()
+  unitOptionsLoaded.value = units.value
 }
 
 // Computed
@@ -302,14 +368,22 @@ const departmentItems = computed(() => {
 })
 
 const unitItems = computed(() => {
-  if (!unitOptions?.value) return []
-  return unitOptions.value.map(option => ({
+  return unitOptionsLoaded.value.map(option => ({
     value: option.value,
     label: option.title
   }))
 })
 
 const difficultyLevels = DIFFICULTY_LEVELS
+
+// ⭐ PHASE 2: Calculated total weight for portion-type preparations
+const calculatedTotalWeight = computed(() => {
+  if (!props.formData.portionSize || props.formData.portionSize <= 0) return 0
+  if (!props.formData.outputQuantity || props.formData.outputQuantity <= 0) return 0
+  // When portionType = 'portion', outputQuantity IS the number of portions
+  // Total weight = portions × portionSize
+  return props.formData.outputQuantity * props.formData.portionSize
+})
 
 // Validation rules
 const rules = {
@@ -339,9 +413,31 @@ function handleCategoryChange(category: string) {
   emit('category-changed', category)
 }
 
-// ✅ ИСПРАВЛЕНО: Инициализация при монтировании
+// ⭐ PHASE 2: Handle portion type change with sensible defaults
+function handlePortionTypeChange(portionType: 'weight' | 'portion') {
+  updateField('portionType', portionType)
+
+  if (portionType === 'portion') {
+    // Switching to portion mode: set defaults
+    if (!props.formData.portionSize || props.formData.portionSize <= 0) {
+      updateField('portionSize', 30) // Default 30g per portion
+    }
+    if (!props.formData.outputQuantity || props.formData.outputQuantity <= 0) {
+      updateField('outputQuantity', 10) // Default 10 portions
+    }
+    // Set output unit to gram (fixed for portion mode)
+    updateField('outputUnit', 'gram')
+  } else {
+    // Switching to weight mode: set defaults
+    if (!props.formData.outputQuantity || props.formData.outputQuantity <= 0) {
+      updateField('outputQuantity', 100) // Default 100g
+    }
+  }
+}
+
+// ✅ FIXED: Load units on mount
 onMounted(async () => {
-  await getUnitOptions()
+  await loadUnitOptions()
 })
 </script>
 

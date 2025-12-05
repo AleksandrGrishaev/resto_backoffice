@@ -6,7 +6,8 @@ import type {
   Recipe,
   RecipeStep,
   RecipeComponent,
-  PreparationIngredient
+  PreparationIngredient,
+  PortionType
 } from './types'
 import type { Tables, TablesInsert, TablesUpdate } from '@/supabase/types'
 import type { Department } from '@/stores/menu/types'
@@ -58,6 +59,11 @@ export function preparationToSupabaseInsert(preparation: Preparation): SupabaseP
     shelf_life: preparation.shelfLife || null, // ✅ NEW: Shelf life in days
     is_active: preparation.isActive,
     cost_per_portion: preparation.costPerPortion || null,
+    // ⭐ FIX: Include lastKnownCost
+    last_known_cost: preparation.lastKnownCost || null,
+    // ⭐ PHASE 2: Portion type support
+    portion_type: preparation.portionType || 'weight',
+    portion_size: preparation.portionSize || null,
     updated_at: preparation.updatedAt
   }
 }
@@ -94,6 +100,11 @@ export function preparationFromSupabase(
     shelfLife: row.shelf_life || undefined, // ✅ NEW: Shelf life in days
     isActive: row.is_active ?? true,
     costPerPortion: row.cost_per_portion ? Number(row.cost_per_portion) : undefined,
+    // ⭐ FIX: Load lastKnownCost from database
+    lastKnownCost: row.last_known_cost ? Number(row.last_known_cost) : undefined,
+    // ⭐ PHASE 2: Portion type support
+    portionType: (row.portion_type as 'weight' | 'portion') || 'weight',
+    portionSize: row.portion_size ? Number(row.portion_size) : undefined,
     recipe: ingredients, // Ingredients from separate query
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
@@ -106,6 +117,7 @@ export function preparationFromSupabase(
 
 /**
  * Convert PreparationIngredient to Supabase INSERT format
+ * ⭐ PHASE 1: Supports nested preparations via ingredient_id
  */
 export function preparationIngredientToSupabaseInsert(
   ingredient: PreparationIngredient,
@@ -115,8 +127,8 @@ export function preparationIngredientToSupabaseInsert(
   return {
     // id is omitted - database will auto-generate UUID
     preparation_id: preparationId,
-    type: ingredient.type,
-    product_id: ingredient.id, // ingredient.id maps to product_id
+    type: ingredient.type, // ⭐ 'product' | 'preparation'
+    ingredient_id: ingredient.id, // ⭐ CHANGED: product_id → ingredient_id (references products or preparations)
     quantity: ingredient.quantity,
     unit: ingredient.unit,
     notes: ingredient.notes || null,
@@ -127,13 +139,14 @@ export function preparationIngredientToSupabaseInsert(
 
 /**
  * Convert Supabase row to PreparationIngredient
+ * ⭐ PHASE 1: Supports nested preparations via ingredient_id
  */
 export function preparationIngredientFromSupabase(
   row: SupabasePreparationIngredient
 ): PreparationIngredient {
   return {
-    id: row.product_id, // product_id maps to ingredient.id
-    type: row.type as any, // 'product' | 'preparation'
+    id: row.ingredient_id, // ⭐ CHANGED: product_id → ingredient_id (can be product or preparation)
+    type: row.type as any, // ⭐ 'product' | 'preparation'
     quantity: Number(row.quantity),
     unit: row.unit as any, // MeasurementUnit
     useYieldPercentage: row.use_yield_percentage || false, // ✅ NEW: Yield percentage toggle
