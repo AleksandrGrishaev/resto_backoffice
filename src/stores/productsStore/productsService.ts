@@ -253,14 +253,34 @@ export class ProductsService {
       }
 
       const now = TimeUtils.getCurrentLocalISO()
+
+      // Set last_known_cost from base_cost_per_unit or default to 0
+      const lastKnownCost = data.baseCostPerUnit || 0
+
       const newProduct: Product = {
         ...data,
         id: generateId(),
         packageOptions: [],
         isActive: data.isActive ?? true,
         canBeSold: data.canBeSold ?? false,
+        lastKnownCost: lastKnownCost,
         createdAt: now,
         updatedAt: now
+      }
+
+      // Log warning if cost is 0
+      if (lastKnownCost === 0) {
+        DebugUtils.warn(MODULE_NAME, '⚠️ Product created with 0 cost', {
+          productId: newProduct.id,
+          productName: newProduct.name,
+          suggestion: 'Set base_cost_per_unit or create receipt operation to update last_known_cost'
+        })
+      } else {
+        DebugUtils.info(MODULE_NAME, '✅ Product created with last_known_cost', {
+          productId: newProduct.id,
+          productName: newProduct.name,
+          lastKnownCost: lastKnownCost
+        })
       }
 
       // Insert to Supabase

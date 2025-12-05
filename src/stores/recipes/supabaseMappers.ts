@@ -120,7 +120,8 @@ export function preparationIngredientToSupabaseInsert(
     quantity: ingredient.quantity,
     unit: ingredient.unit,
     notes: ingredient.notes || null,
-    sort_order: ingredient.sortOrder || 0
+    sort_order: ingredient.sortOrder || 0,
+    use_yield_percentage: ingredient.useYieldPercentage || false // ✅ NEW: Yield percentage toggle
   }
 }
 
@@ -135,6 +136,7 @@ export function preparationIngredientFromSupabase(
     type: row.type as any, // 'product' | 'preparation'
     quantity: Number(row.quantity),
     unit: row.unit as any, // MeasurementUnit
+    useYieldPercentage: row.use_yield_percentage || false, // ✅ NEW: Yield percentage toggle
     notes: row.notes || undefined,
     sortOrder: row.sort_order || 0
   }
@@ -237,7 +239,8 @@ export function recipeComponentToSupabaseInsert(
     preparation: component.preparation || null,
     is_optional: component.isOptional || false,
     notes: component.notes || null,
-    sort_order: component.sortOrder || 0
+    sort_order: component.sortOrder || 0,
+    use_yield_percentage: component.useYieldPercentage || false // ✅ NEW: Yield percentage toggle
   }
 }
 
@@ -251,6 +254,7 @@ export function recipeComponentFromSupabase(row: SupabaseRecipeComponent): Recip
     componentType: row.component_type as any, // 'product' | 'preparation'
     quantity: Number(row.quantity),
     unit: row.unit as any, // MeasurementUnit
+    useYieldPercentage: row.use_yield_percentage || false, // ✅ NEW: Yield percentage toggle
     preparation: row.preparation || undefined,
     isOptional: row.is_optional || false,
     notes: row.notes || undefined,

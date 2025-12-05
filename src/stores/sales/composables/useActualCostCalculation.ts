@@ -163,7 +163,8 @@ export function useActualCostCalculation() {
         type: recipeComp.componentType,
         id: recipeComp.componentId,
         quantity: recipeComp.quantity,
-        unit: recipeComp.unit
+        unit: recipeComp.unit,
+        useYieldPercentage: recipeComp.useYieldPercentage // ✅ FIX: Pass yield flag
       }
 
       if (menuComp.type === 'preparation') {
@@ -174,10 +175,28 @@ export function useActualCostCalculation() {
         )
         preparationCosts.push(prepCost)
       } else if (menuComp.type === 'product') {
+        // ✅ FIX: Apply yield adjustment BEFORE FIFO allocation
+        let allocateQuantity = menuComp.quantity * quantity
+
+        if (menuComp.useYieldPercentage) {
+          const product = productsStore.getProductForRecipe(menuComp.id)
+          if (product && product.yieldPercentage && product.yieldPercentage < 100) {
+            const originalQuantity = allocateQuantity
+            allocateQuantity = allocateQuantity / (product.yieldPercentage / 100)
+
+            DebugUtils.info(MODULE_NAME, 'Applied yield adjustment before FIFO allocation', {
+              productName: product.name,
+              baseQuantity: originalQuantity,
+              yieldPercentage: product.yieldPercentage,
+              adjustedQuantity: allocateQuantity
+            })
+          }
+        }
+
         const defaultWarehouse = storageStore.getDefaultWarehouse()
         const prodCost = await allocateFromStorageBatches(
           menuComp.id,
-          menuComp.quantity * quantity,
+          allocateQuantity, // ✅ FIX: Use yield-adjusted quantity
           defaultWarehouse.id
         )
         productCosts.push(prodCost)

@@ -7,6 +7,7 @@ import { useProfitCalculation } from './composables/useProfitCalculation'
 import { useDecomposition } from './recipeWriteOff/composables/useDecomposition'
 import { useActualCostCalculation } from './composables/useActualCostCalculation' // ✅ SPRINT 2
 import { useMenuStore } from '@/stores/menu/menuStore'
+import { usePreparationStore } from '@/stores/preparation' // ✅ For reloading batches after write-off
 import type { PosPayment, PosBillItem } from '@/stores/pos/types'
 
 const MODULE_NAME = 'SalesStore'
@@ -371,6 +372,12 @@ export const useSalesStore = defineStore('sales', () => {
 
             // ✅ FIX: Recalculate actual cost AFTER write-off (negative batches now exist)
             // This ensures we capture cost from negative batches created during write-off
+
+            // ⚡ IMPORTANT: Reload batches from DB to get updated costs
+            // (negative batch cost may have been updated during write-off)
+            const preparationStore = usePreparationStore()
+            await preparationStore.fetchBalances('kitchen')
+
             const actualCostAfterWriteOff = await calculateActualCost(
               billItem.menuItemId,
               billItem.variantId || variant.id,

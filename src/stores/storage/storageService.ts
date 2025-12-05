@@ -771,6 +771,27 @@ export class StorageService {
           if (batchError) throw batchError
         }, `${MODULE_NAME}.createReceipt.insertBatch`)
 
+        // Update last_known_cost for product
+        await executeSupabaseMutation(async () => {
+          const { error: updateError } = await supabase
+            .from('products')
+            .update({ last_known_cost: item.costPerUnit })
+            .eq('id', item.itemId)
+
+          if (updateError) {
+            DebugUtils.warn(MODULE_NAME, '⚠️ Failed to update last_known_cost', {
+              productId: item.itemId,
+              error: updateError
+            })
+          } else {
+            DebugUtils.info(MODULE_NAME, '✅ Updated product last_known_cost', {
+              productId: item.itemId,
+              productName: item.itemName,
+              costPerUnit: item.costPerUnit
+            })
+          }
+        }, `${MODULE_NAME}.createReceipt.updateLastKnownCost`)
+
         // Prepare operation item
         operationItems.push({
           id: generateId(),

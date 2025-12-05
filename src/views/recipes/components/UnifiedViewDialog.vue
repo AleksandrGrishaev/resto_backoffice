@@ -63,6 +63,7 @@
             "
             :cost-calculation="costCalculation"
             :type="itemType"
+            :item="item"
           />
 
           <!-- ✅ УЛУЧШЕНО: Debug информация в dev режиме -->

@@ -281,7 +281,17 @@ export const useRecipesStore = defineStore('recipes', () => {
 
       // Пересчитываем стоимость если изменился рецепт
       if (data.recipe || data.outputQuantity !== undefined) {
-        await costCalculationComposable.calculatePreparationCost(preparation)
+        const costResult = await costCalculationComposable.calculatePreparationCost(preparation)
+
+        // ✅ FIX: Update last_known_cost in database
+        if (costResult.success && costResult.cost) {
+          const preparationCost = costResult.cost as PreparationPlanCost
+          await preparationsComposable.updatePreparation(id, {
+            lastKnownCost: preparationCost.costPerOutputUnit
+          })
+          // Update local state
+          preparation.lastKnownCost = preparationCost.costPerOutputUnit
+        }
 
         // Пересчитываем рецепты, использующие этот полуфабрикат
         await recalculateRecipesUsingPreparation(id)
