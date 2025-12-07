@@ -339,19 +339,16 @@ const filteredInventories = computed(() => {
 })
 
 const displayProductBalances = computed(() => {
+  // ✅ FIXED: Always show ALL products from catalog
+  // Zero stock products will show "0" in Stock column
+  // User can use "Out of Stock" filter to show ONLY zero-stock products
   if (showZeroStock.value) {
-    return filteredBalances.value
+    // Filter to show only zero/negative stock products
+    return filteredBalances.value.filter(b => b.totalQuantity <= 0)
   }
 
-  // ✅ FIXED: Always show products with transit batches, even if zero active stock
-  return filteredBalances.value.filter(b => {
-    // Show if has active stock
-    if (b.totalQuantity > 0) return true
-
-    // Also show if has transit batches (incoming inventory)
-    const hasTransit = storageStore.transitBatches?.some((batch: any) => batch.itemId === b.itemId)
-    return hasTransit
-  })
+  // Show all products by default
+  return filteredBalances.value
 })
 
 // ===========================

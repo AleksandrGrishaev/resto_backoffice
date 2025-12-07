@@ -12,6 +12,7 @@ import type {
   CostCalculationResult,
   ProductForRecipe,
   GetProductCallback,
+  GetPreparationCallback,
   GetPreparationCostCallback
 } from '../types'
 
@@ -30,6 +31,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 let getProductCallback: GetProductCallback | null = null
+let getPreparationCallback: GetPreparationCallback | null = null
 let getPreparationCostCallback: GetPreparationCostCallback | null = null
 
 // =============================================
@@ -42,9 +44,11 @@ export function useCostCalculation() {
    */
   function setIntegrationCallbacks(
     getProduct: GetProductCallback,
+    getPreparation: GetPreparationCallback,
     getPreparationCost: GetPreparationCostCallback
   ): void {
     getProductCallback = getProduct
+    getPreparationCallback = getPreparation
     getPreparationCostCallback = getPreparationCost
     DebugUtils.debug(MODULE_NAME, 'Integration callbacks configured')
   }
@@ -233,51 +237,53 @@ export function useCostCalculation() {
           })
         } else if (ingredient.type === 'preparation') {
           // ⭐ PHASE 1: NEW LOGIC - Preparation ingredients
-          // Get preparation by ID
-          const prep = (await getProductCallback(ingredient.id)) as any // Reuse callback, will be typed later
+          if (!getPreparationCallback) {
+            DebugUtils.warn(MODULE_NAME, 'Preparation callback not set')
+            missingPreparations.push(ingredient.id)
+            continue
+          }
+
+          // Get preparation by ID using the correct callback
+          const prep = await getPreparationCallback(ingredient.id)
 
           if (!prep) {
             missingPreparations.push(ingredient.id)
             continue
           }
 
-          // Check if preparation has been produced (lastKnownCost exists)
-          if (!prep.lastKnownCost || prep.lastKnownCost === 0) {
+          // ✅ FIX: First try to get cached cost calculation (consistent with edit dialog)
+          let unitCost = 0
+          let costSource = ''
+
+          // 1. Try cached cost calculation (matches edit dialog behavior)
+          const cachedCost = getPreparationCostCallback
+            ? await getPreparationCostCallback(ingredient.id)
+            : null
+          if (cachedCost && cachedCost.costPerOutputUnit > 0) {
+            unitCost = cachedCost.costPerOutputUnit
+            costSource = 'cached calculation'
+          }
+          // 2. Fallback to lastKnownCost
+          else if (prep.lastKnownCost && prep.lastKnownCost > 0) {
+            unitCost = prep.lastKnownCost
+            costSource = 'lastKnownCost'
+          }
+          // 3. Fallback to costPerPortion
+          else if (prep.costPerPortion && prep.costPerPortion > 0) {
+            unitCost = prep.costPerPortion
+            costSource = 'costPerPortion (fallback)'
             unproducedPreparations.push(prep.name || ingredient.id)
+          }
 
-            // Fallback to costPerPortion if available
-            if (prep.costPerPortion && prep.costPerPortion > 0) {
-              const ingredientTotalCost = prep.costPerPortion * ingredient.quantity
-              totalCost += ingredientTotalCost
-
-              componentCosts.push({
-                componentId: ingredient.id,
-                componentType: 'preparation',
-                componentName: prep.name,
-                quantity: ingredient.quantity,
-                unit: prep.outputUnit || 'gram',
-                planUnitCost: prep.costPerPortion,
-                totalPlanCost: ingredientTotalCost,
-                percentage: 0
-              })
-
-              DebugUtils.warn(
-                MODULE_NAME,
-                `Using costPerPortion fallback for "${prep.name}" (not yet produced)`,
-                { costPerPortion: prep.costPerPortion }
-              )
-            } else {
-              DebugUtils.warn(
-                MODULE_NAME,
-                `Preparation "${prep.name}" not yet produced and no costPerPortion available`,
-                { preparationId: ingredient.id }
-              )
-            }
+          if (unitCost === 0) {
+            DebugUtils.warn(MODULE_NAME, `Preparation "${prep.name}" has no cost data available`, {
+              preparationId: ingredient.id
+            })
+            unproducedPreparations.push(prep.name || ingredient.id)
             continue
           }
 
-          // ✅ Use lastKnownCost from previous production
-          const ingredientTotalCost = prep.lastKnownCost * ingredient.quantity
+          const ingredientTotalCost = unitCost * ingredient.quantity
           totalCost += ingredientTotalCost
 
           componentCosts.push({
@@ -286,15 +292,16 @@ export function useCostCalculation() {
             componentName: prep.name,
             quantity: ingredient.quantity,
             unit: prep.outputUnit || 'gram',
-            planUnitCost: prep.lastKnownCost,
+            planUnitCost: unitCost,
             totalPlanCost: ingredientTotalCost,
             percentage: 0
           })
 
-          DebugUtils.info(MODULE_NAME, `Using lastKnownCost for preparation "${prep.name}"`, {
-            lastKnownCost: prep.lastKnownCost,
+          DebugUtils.info(MODULE_NAME, `Using ${costSource} for preparation "${prep.name}"`, {
+            unitCost,
             quantity: ingredient.quantity,
-            totalCost: ingredientTotalCost
+            totalCost: ingredientTotalCost,
+            costSource
           })
         }
       }

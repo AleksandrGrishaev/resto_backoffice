@@ -196,9 +196,14 @@ export const useRecipesStore = defineStore('recipes', () => {
       const callbacks = setupIntegrationCallbacks()
       costCalculationComposable.setIntegrationCallbacks(
         callbacks.getProduct,
+        callbacks.getPreparation,
         callbacks.getPreparationCost
       )
-      recipesComposable.setIntegrationCallbacks(callbacks.getProduct, callbacks.getPreparationCost)
+      recipesComposable.setIntegrationCallbacks(
+        callbacks.getProduct,
+        callbacks.getPreparation,
+        callbacks.getPreparationCost
+      )
 
       // 5. Пересчитываем стоимости
       await recalculateAllCosts()
@@ -231,11 +236,16 @@ export const useRecipesStore = defineStore('recipes', () => {
       return integrationComposable.getProductForRecipe(productId)
     }
 
+    // ⭐ NEW: Callback for getting preparation by ID (for nested preparations)
+    const getPreparation = async (preparationId: string) => {
+      return preparationsComposable.getPreparationById(preparationId)
+    }
+
     const getPreparationCost = async (preparationId: string) => {
       return costCalculationComposable.getPreparationCost(preparationId)
     }
 
-    return { getProduct, getPreparationCost }
+    return { getProduct, getPreparation, getPreparationCost }
   }
 
   // =============================================

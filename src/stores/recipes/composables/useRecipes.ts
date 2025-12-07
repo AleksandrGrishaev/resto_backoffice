@@ -11,6 +11,7 @@ import type {
   ProductUsageInRecipe,
   PreparationUsageInRecipe,
   GetProductCallback,
+  GetPreparationCallback,
   GetPreparationCostCallback
 } from '../types'
 
@@ -121,6 +122,7 @@ export function useRecipes() {
    */
   function setIntegrationCallbacks(
     getProduct: GetProductCallback,
+    _getPreparation: GetPreparationCallback, // Not used in recipes, but needed for consistency
     getPreparationCost: GetPreparationCostCallback
   ): void {
     getProductCallback = getProduct
