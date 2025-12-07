@@ -2,27 +2,280 @@
 
 import { ref, computed } from 'vue'
 import type { ProductUsage } from '../types'
+import type {
+  ProductUsageInPreparation,
+  ProductUsageInRecipe,
+  Preparation,
+  Recipe
+} from '@/stores/recipes/types'
+import type { MenuItem } from '@/stores/menu/types'
+import { useRecipesStore } from '@/stores/recipes'
+import { useMenuStore } from '@/stores/menu'
 import { DebugUtils, TimeUtils } from '@/utils'
 
 const MODULE_NAME = 'ProductUsage'
+
+/**
+ * UsageLocation for archive check
+ */
+export interface UsageLocation {
+  type: 'preparation' | 'recipe' | 'menu'
+  id: string
+  name: string
+  code?: string
+  details?: string
+  quantity?: number
+  unit?: string
+  isActive: boolean
+}
+
+export interface UsageCheckResult {
+  canArchive: boolean
+  usageLocations: UsageLocation[]
+}
 
 export function useProductUsage() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // 🆕 MAIN FUNCTION: Get complete usage info for product
+  /**
+   * Get product usage in preparations
+   * Iterates all preparations and finds where product is used as ingredient
+   */
+  function getProductUsageInPreparations(productId: string): ProductUsageInPreparation[] {
+    const recipesStore = useRecipesStore()
+    const preparations = recipesStore.preparations as Preparation[]
+    const usageList: ProductUsageInPreparation[] = []
+
+    for (const prep of preparations) {
+      if (!prep.recipe) continue
+
+      for (const ingredient of prep.recipe) {
+        if (ingredient.type === 'product' && ingredient.id === productId) {
+          usageList.push({
+            preparationId: prep.id,
+            preparationName: prep.name,
+            preparationCode: prep.code,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            notes: ingredient.notes,
+            isActive: prep.isActive
+          })
+          break // Found in this preparation, move to next
+        }
+      }
+    }
+
+    DebugUtils.info(MODULE_NAME, '🔍 Product usage in preparations', {
+      productId,
+      count: usageList.length
+    })
+
+    return usageList
+  }
+
+  /**
+   * Get product usage in recipes
+   * Iterates all recipes and finds where product is used as component
+   */
+  function getProductUsageInRecipes(productId: string): ProductUsageInRecipe[] {
+    const recipesStore = useRecipesStore()
+    const recipes = recipesStore.recipes as Recipe[]
+    const usageList: ProductUsageInRecipe[] = []
+
+    for (const recipe of recipes) {
+      if (!recipe.components) continue
+
+      for (const component of recipe.components) {
+        if (component.componentType === 'product' && component.componentId === productId) {
+          usageList.push({
+            recipeId: recipe.id,
+            recipeName: recipe.name,
+            recipeCode: recipe.code,
+            quantity: component.quantity,
+            unit: component.unit,
+            notes: component.notes,
+            isActive: recipe.isActive
+          })
+          break // Found in this recipe, move to next
+        }
+      }
+    }
+
+    DebugUtils.info(MODULE_NAME, '🔍 Product usage in recipes', {
+      productId,
+      count: usageList.length
+    })
+
+    return usageList
+  }
+
+  /**
+   * Get product usage in menu items (direct composition)
+   * Iterates all menu items and finds where product is used directly in composition
+   */
+  function getProductUsageInMenu(productId: string): ProductUsage['directMenuItems'] {
+    const menuStore = useMenuStore()
+    const menuItems = menuStore.menuItems as MenuItem[]
+    const usageList: ProductUsage['directMenuItems'] = []
+
+    for (const menuItem of menuItems) {
+      // Check variants
+      for (const variant of menuItem.variants) {
+        if (!variant.composition) continue
+
+        const usedInVariant = variant.composition.some(
+          comp => comp.type === 'product' && comp.id === productId
+        )
+
+        if (usedInVariant) {
+          const comp = variant.composition.find(c => c.type === 'product' && c.id === productId)
+          usageList.push({
+            menuItemId: menuItem.id,
+            menuItemName: menuItem.name,
+            variantId: variant.id,
+            variantName: variant.name,
+            quantityPerItem: comp?.quantity || 1,
+            isActive: menuItem.isActive && variant.isActive
+          })
+        }
+      }
+
+      // Check modifiers
+      if (menuItem.modifierGroups) {
+        for (const group of menuItem.modifierGroups) {
+          for (const option of group.options) {
+            if (!option.composition) continue
+
+            const usedInModifier = option.composition.some(
+              comp => comp.type === 'product' && comp.id === productId
+            )
+
+            if (usedInModifier) {
+              const comp = option.composition.find(c => c.type === 'product' && c.id === productId)
+              usageList.push({
+                menuItemId: menuItem.id,
+                menuItemName: menuItem.name,
+                variantId: option.id,
+                variantName: `Modifier: ${group.name} - ${option.name}`,
+                quantityPerItem: comp?.quantity || 1,
+                isActive: menuItem.isActive && option.isActive !== false
+              })
+            }
+          }
+        }
+      }
+    }
+
+    DebugUtils.info(MODULE_NAME, '🔍 Product usage in menu', {
+      productId,
+      count: usageList.length
+    })
+
+    return usageList
+  }
+
+  /**
+   * Check if product can be archived
+   * Returns canArchive=true only if product is NOT used in any ACTIVE preparations/recipes/menu
+   */
+  function checkProductCanArchive(productId: string): UsageCheckResult {
+    const usageLocations: UsageLocation[] = []
+
+    // Check preparations (only active)
+    const prepUsage = getProductUsageInPreparations(productId)
+    for (const prep of prepUsage) {
+      if (prep.isActive) {
+        usageLocations.push({
+          type: 'preparation',
+          id: prep.preparationId,
+          name: prep.preparationName,
+          code: prep.preparationCode,
+          quantity: prep.quantity,
+          unit: prep.unit,
+          isActive: true
+        })
+      }
+    }
+
+    // Check recipes (only active)
+    const recipeUsage = getProductUsageInRecipes(productId)
+    for (const recipe of recipeUsage) {
+      if (recipe.isActive) {
+        usageLocations.push({
+          type: 'recipe',
+          id: recipe.recipeId,
+          name: recipe.recipeName,
+          code: recipe.recipeCode,
+          quantity: recipe.quantity,
+          unit: recipe.unit,
+          isActive: true
+        })
+      }
+    }
+
+    // Check menu items (only active)
+    const menuUsage = getProductUsageInMenu(productId)
+    for (const item of menuUsage) {
+      if (item.isActive) {
+        usageLocations.push({
+          type: 'menu',
+          id: item.menuItemId,
+          name: item.menuItemName,
+          details: `Variant: ${item.variantName}`,
+          quantity: item.quantityPerItem,
+          isActive: true
+        })
+      }
+    }
+
+    const result: UsageCheckResult = {
+      canArchive: usageLocations.length === 0,
+      usageLocations
+    }
+
+    DebugUtils.info(MODULE_NAME, '🔒 Product archive check', {
+      productId,
+      canArchive: result.canArchive,
+      activeUsageCount: usageLocations.length
+    })
+
+    return result
+  }
+
+  /**
+   * Get complete usage info for product (for UsageTrackingWidget)
+   */
   const getProductUsage = async (productId: string): Promise<ProductUsage> => {
     loading.value = true
     try {
       DebugUtils.info(MODULE_NAME, '🔍 Getting product usage', { productId })
 
-      // 🔧 FUTURE: Query real stores
-      // const recipes = await recipesStore.getRecipesUsingProduct(productId)
-      // const preparations = await preparationsStore.getPreparationsUsingProduct(productId)
-      // const menuItems = await menuStore.getMenuItemsUsingProduct(productId)
+      // Get real usage from stores
+      const prepUsage = getProductUsageInPreparations(productId)
+      const recipeUsage = getProductUsageInRecipes(productId)
+      const menuUsage = getProductUsageInMenu(productId)
 
-      // 🆕 FOR NOW: Generate realistic usage data
-      const usage = await generateRealisticUsage(productId)
+      const usage: ProductUsage = {
+        id: `usage-${productId}`,
+        productId,
+        usedInRecipes: recipeUsage.map(r => ({
+          recipeId: r.recipeId,
+          recipeName: r.recipeName,
+          quantityPerPortion: r.quantity,
+          isActive: r.isActive
+        })),
+        usedInPreparations: prepUsage.map(p => ({
+          preparationId: p.preparationId,
+          preparationName: p.preparationName,
+          quantityPerOutput: p.quantity,
+          isActive: p.isActive
+        })),
+        directMenuItems: menuUsage,
+        lastUpdated: TimeUtils.getCurrentLocalISO(),
+        createdAt: TimeUtils.getCurrentLocalISO(),
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
 
       DebugUtils.info(MODULE_NAME, '✅ Product usage retrieved', {
         productId,
@@ -32,156 +285,18 @@ export function useProductUsage() {
       })
 
       return usage
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Error getting product usage', { error, productId })
-      throw error
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, '❌ Error getting product usage', { error: err, productId })
+      throw err
     } finally {
       loading.value = false
     }
   }
 
-  // 🆕 Generate realistic usage data with fallback logic
-  const generateRealisticUsage = async (productId: string): Promise<ProductUsage> => {
-    try {
-      // 🔧 FUTURE: Get real usage data from Recipes, Preparations, and Menu stores
-      // For now, return empty usage structure
-      const usage: ProductUsage = {
-        id: `usage-${productId}`,
-        productId,
-        usedInRecipes: [],
-        usedInPreparations: [],
-        directMenuItems: [],
-        lastUpdated: TimeUtils.getCurrentLocalISO(),
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-
-      // In the future, this will query real stores:
-      // - recipesStore.getRecipesUsingProduct(productId)
-      // - preparationsStore.getPreparationsUsingProduct(productId)
-      // - menuStore.getMenuItemsUsingProduct(productId)
-
-      return usage
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Error generating usage data', { error, productId })
-
-      // Return empty usage structure
-      return {
-        id: `usage-${productId}-empty`,
-        productId,
-        usedInRecipes: [],
-        usedInPreparations: [],
-        directMenuItems: [],
-        lastUpdated: TimeUtils.getCurrentLocalISO(),
-        createdAt: TimeUtils.getCurrentLocalISO(),
-        updatedAt: TimeUtils.getCurrentLocalISO()
-      }
-    }
-  }
-
-  // 🆕 Generate recipe usage for raw materials
-  const generateRecipeUsage = (productDef: any): ProductUsage['usedInRecipes'] => {
-    const recipesByCategory = {
-      meat: [
-        { name: 'Beef Steak Medium', quantity: 0.25 },
-        { name: 'Beef Burger Patty', quantity: 0.15 },
-        { name: 'Beef Stir Fry', quantity: 0.2 }
-      ],
-      vegetables: [
-        { name: 'French Fries', quantity: 0.3 },
-        { name: 'Mashed Potatoes', quantity: 0.25 },
-        { name: 'Vegetable Salad', quantity: 0.1 },
-        { name: 'Grilled Vegetables', quantity: 0.15 }
-      ],
-      dairy: [
-        { name: 'Creamy Pasta Sauce', quantity: 0.05 },
-        { name: 'Butter Garlic Bread', quantity: 0.02 },
-        { name: 'Mashed Potatoes', quantity: 0.03 }
-      ],
-      spices: [
-        { name: 'Seasoned Fries', quantity: 0.005 },
-        { name: 'Grilled Meat', quantity: 0.003 },
-        { name: 'Pasta Sauce', quantity: 0.002 }
-      ],
-      other: [
-        { name: 'Salad Dressing', quantity: 0.01 },
-        { name: 'Cooking Base', quantity: 0.02 }
-      ]
-    }
-
-    const recipes = recipesByCategory[productDef.category] || recipesByCategory.other
-    const selectedRecipes = recipes.slice(
-      0,
-      Math.min(recipes.length, Math.floor(Math.random() * 3) + 1)
-    )
-
-    return selectedRecipes.map((recipe, index) => ({
-      recipeId: `recipe-${productDef.id}-${index}`,
-      recipeName: recipe.name,
-      quantityPerPortion: recipe.quantity,
-      isActive: Math.random() > 0.1 // 90% active
-    }))
-  }
-
-  // 🆕 Generate preparation usage for raw materials
-  const generatePreparationUsage = (productDef: any): ProductUsage['usedInPreparations'] => {
-    // Only some raw materials are used in preparations
-    if (Math.random() > 0.4) return [] // 40% chance of being used in preparations
-
-    const prepsByCategory = {
-      meat: [{ name: 'Ground Meat Mix', quantity: 0.5 }],
-      vegetables: [
-        { name: 'Chopped Vegetables', quantity: 0.8 },
-        { name: 'Vegetable Stock', quantity: 0.3 }
-      ],
-      dairy: [{ name: 'Cream Sauce Base', quantity: 0.2 }],
-      spices: [{ name: 'Spice Blend', quantity: 0.1 }],
-      other: [{ name: 'Base Preparation', quantity: 0.3 }]
-    }
-
-    const preps = prepsByCategory[productDef.category] || []
-    if (preps.length === 0) return []
-
-    const selectedPrep = preps[Math.floor(Math.random() * preps.length)]
-
-    return [
-      {
-        preparationId: `prep-${productDef.id}`,
-        preparationName: selectedPrep.name,
-        quantityPerOutput: selectedPrep.quantity,
-        isActive: Math.random() > 0.2 // 80% active
-      }
-    ]
-  }
-
-  // 🆕 Generate menu item usage for direct sale products
-  const generateMenuItemUsage = (productDef: any): ProductUsage['directMenuItems'] => {
-    const menuByCategory = {
-      beverages: [
-        { name: 'Cold Beer', variant: 'Small', quantity: 1 },
-        { name: 'Cold Beer', variant: 'Large', quantity: 1 },
-        { name: 'Happy Hour Special', variant: 'Standard', quantity: 1 }
-      ],
-      other: [
-        { name: 'Ready Made Item', variant: 'Standard', quantity: 1 },
-        { name: 'Special Offer', variant: 'Premium', quantity: 1 }
-      ]
-    }
-
-    const items = menuByCategory[productDef.category] || menuByCategory.other
-    const selectedItems = items.slice(0, Math.min(items.length, Math.floor(Math.random() * 2) + 1))
-
-    return selectedItems.map((item, index) => ({
-      menuItemId: `menu-${productDef.id}-${index}`,
-      menuItemName: item.name,
-      variantId: `variant-${index}`,
-      variantName: item.variant,
-      quantityPerItem: item.quantity,
-      isActive: Math.random() > 0.05 // 95% active for menu items
-    }))
-  }
-
-  // 🆕 Check if product can be safely deactivated
+  /**
+   * Check if product can be safely deactivated
+   * @deprecated Use checkProductCanArchive instead
+   */
   const checkCanDeactivate = async (
     productId: string
   ): Promise<{
@@ -198,54 +313,17 @@ export function useProductUsage() {
     try {
       DebugUtils.info(MODULE_NAME, '🔒 Checking deactivation safety', { productId })
 
-      const usage = await getProductUsage(productId)
-      const blockers: Array<{
-        type: 'recipe' | 'preparation' | 'menu_item'
-        id: string
-        name: string
-        isActive: boolean
-      }> = []
+      const result = checkProductCanArchive(productId)
 
-      // Check active recipes
-      usage.usedInRecipes.forEach(recipe => {
-        if (recipe.isActive) {
-          blockers.push({
-            type: 'recipe',
-            id: recipe.recipeId,
-            name: recipe.recipeName,
-            isActive: true
-          })
-        }
-      })
+      const blockers = result.usageLocations.map(loc => ({
+        type: loc.type === 'menu' ? ('menu_item' as const) : loc.type,
+        id: loc.id,
+        name: loc.details ? `${loc.name} - ${loc.details}` : loc.name,
+        isActive: loc.isActive
+      }))
 
-      // Check active preparations
-      usage.usedInPreparations.forEach(prep => {
-        if (prep.isActive) {
-          blockers.push({
-            type: 'preparation',
-            id: prep.preparationId,
-            name: prep.preparationName,
-            isActive: true
-          })
-        }
-      })
-
-      // Check active menu items
-      usage.directMenuItems?.forEach(item => {
-        if (item.isActive) {
-          blockers.push({
-            type: 'menu_item',
-            id: item.menuItemId,
-            name: `${item.menuItemName} - ${item.variantName}`,
-            isActive: true
-          })
-        }
-      })
-
-      const canDeactivate = blockers.length === 0
       const warnings: string[] = []
-
-      if (!canDeactivate) {
+      if (!result.canArchive) {
         warnings.push(`Product is used in ${blockers.length} active items`)
 
         const recipeCount = blockers.filter(b => b.type === 'recipe').length
@@ -259,17 +337,20 @@ export function useProductUsage() {
 
       DebugUtils.info(MODULE_NAME, '✅ Deactivation check completed', {
         productId,
-        canDeactivate,
+        canDeactivate: result.canArchive,
         blockersCount: blockers.length
       })
 
       return {
-        canDeactivate,
+        canDeactivate: result.canArchive,
         blockers,
         warnings
       }
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Error checking deactivation safety', { error, productId })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, '❌ Error checking deactivation safety', {
+        error: err,
+        productId
+      })
       return {
         canDeactivate: false,
         blockers: [],
@@ -280,7 +361,9 @@ export function useProductUsage() {
     }
   }
 
-  // 🆕 Get usage summary for multiple products
+  /**
+   * Get usage summary for multiple products
+   */
   const getBulkUsageSummary = async (
     productIds: string[]
   ): Promise<
@@ -303,46 +386,27 @@ export function useProductUsage() {
 
       const results: Record<string, any> = {}
 
-      // Process in batches
-      const batchSize = 5
-      for (let i = 0; i < productIds.length; i += batchSize) {
-        const batch = productIds.slice(i, i + batchSize)
+      for (const productId of productIds) {
+        const prepUsage = getProductUsageInPreparations(productId)
+        const recipeUsage = getProductUsageInRecipes(productId)
+        const menuUsage = getProductUsageInMenu(productId)
 
-        const batchPromises = batch.map(async productId => {
-          const usage = await generateRealisticUsage(productId)
+        const recipeCount = recipeUsage.length
+        const preparationCount = prepUsage.length
+        const menuItemCount = menuUsage.length
+        const totalUsage = recipeCount + preparationCount + menuItemCount
 
-          const recipeCount = usage.usedInRecipes.length
-          const preparationCount = usage.usedInPreparations.length
-          const menuItemCount = usage.directMenuItems?.length || 0
-          const totalUsage = recipeCount + preparationCount + menuItemCount
+        const hasActiveDependencies =
+          recipeUsage.some(r => r.isActive) ||
+          prepUsage.some(p => p.isActive) ||
+          menuUsage.some(m => m.isActive)
 
-          const hasActiveDependencies =
-            usage.usedInRecipes.some(r => r.isActive) ||
-            usage.usedInPreparations.some(p => p.isActive) ||
-            usage.directMenuItems?.some(m => m.isActive) ||
-            false
-
-          return {
-            productId,
-            summary: {
-              totalUsage,
-              recipeCount,
-              preparationCount,
-              menuItemCount,
-              hasActiveDependencies
-            }
-          }
-        })
-
-        const batchResults = await Promise.all(batchPromises)
-
-        batchResults.forEach(({ productId, summary }) => {
-          results[productId] = summary
-        })
-
-        // Small delay between batches
-        if (i + batchSize < productIds.length) {
-          await new Promise(resolve => setTimeout(resolve, 100))
+        results[productId] = {
+          totalUsage,
+          recipeCount,
+          preparationCount,
+          menuItemCount,
+          hasActiveDependencies
         }
       }
 
@@ -352,9 +416,9 @@ export function useProductUsage() {
       })
 
       return results
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, '❌ Error getting bulk usage summary', { error })
-      throw error
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, '❌ Error getting bulk usage summary', { error: err })
+      throw err
     } finally {
       loading.value = false
     }
@@ -464,16 +528,19 @@ export function useProductUsage() {
     loading: isLoading,
     error: computed(() => error.value),
 
-    // Core functions
+    // Core functions (real store queries)
+    getProductUsageInPreparations,
+    getProductUsageInRecipes,
+    getProductUsageInMenu,
+    checkProductCanArchive,
+
+    // Legacy API (for backwards compatibility)
     getProductUsage,
     checkCanDeactivate,
     getBulkUsageSummary,
 
     // Analysis functions
     getUsageStatistics,
-    findSimilarUsagePatterns,
-
-    // Utilities
-    generateRealisticUsage
+    findSimilarUsagePatterns
   }
 }
