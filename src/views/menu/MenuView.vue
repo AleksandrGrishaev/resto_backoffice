@@ -54,6 +54,15 @@
       </div>
 
       <div class="menu-toolbar__right">
+        <v-btn
+          variant="outlined"
+          class="mr-2"
+          prepend-icon="mdi-file-pdf-box"
+          :loading="isExporting"
+          @click="handleExportPdf"
+        >
+          Export PDF
+        </v-btn>
         <v-btn color="primary" class="mr-2" prepend-icon="mdi-plus" @click="showCategoryDialog">
           Category
         </v-btn>
@@ -215,8 +224,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu'
-import type { Category, MenuItem, DishType } from '@/stores/menu'
+import { useProductsStore } from '@/stores/productsStore'
+import { useRecipesStore } from '@/stores/recipes'
+import type { Category, MenuItem, DishType, MenuItemVariant, MenuComposition } from '@/stores/menu'
 import { DebugUtils } from '@/utils'
+import { useExport } from '@/core/export'
+import type {
+  MenuExportData,
+  MenuCategoryExport,
+  MenuItemExport,
+  MenuVariantExport
+} from '@/core/export'
 import MenuCategoryDialog from './components/MenuCategoryDialog.vue'
 import MenuItemDialog from './components/MenuItemDialog.vue'
 import MenuItemComponent from './components/MenuItem.vue'
@@ -224,6 +242,9 @@ import DishTypeSelectionDialog from './components/DishTypeSelectionDialog.vue'
 
 const MODULE_NAME = 'MenuView'
 const menuStore = useMenuStore()
+const productsStore = useProductsStore()
+const recipesStore = useRecipesStore()
+const { isExporting, exportMenu } = useExport()
 
 // State
 const expandedPanels = ref<string[]>([])
@@ -383,6 +404,112 @@ async function handleItemSaved() {
   // Данные уже обновлены в store благодаря реактивности
   dialogs.value.item = false
   editingItem.value = null
+}
+
+// PDF Export - Calculate cost from composition
+function calculateCompositionCost(composition: MenuComposition[]): number {
+  let totalCost = 0
+
+  for (const comp of composition) {
+    if (comp.type === 'product') {
+      const product = productsStore.products.find(p => p.id === comp.id)
+      if (product) {
+        totalCost += (product.baseCostPerUnit || 0) * comp.quantity
+      }
+    } else if (comp.type === 'recipe') {
+      const costCalc = recipesStore.getRecipeCostCalculation(comp.id)
+      if (costCalc) {
+        totalCost += (costCalc.costPerPortion || 0) * comp.quantity
+      }
+    } else if (comp.type === 'preparation') {
+      const costCalc = recipesStore.getPreparationCostCalculation(comp.id)
+      if (costCalc) {
+        totalCost += (costCalc.costPerOutputUnit || 0) * comp.quantity
+      }
+    }
+  }
+
+  return totalCost
+}
+
+function exportVariant(variant: MenuItemVariant): MenuVariantExport {
+  const cost = calculateCompositionCost(variant.composition || [])
+  const price = variant.price || 0
+  const margin = price - cost
+  const marginPercent = price > 0 ? (margin / price) * 100 : 0
+
+  return {
+    name: variant.name,
+    price,
+    cost,
+    margin,
+    marginPercent
+  }
+}
+
+async function handleExportPdf() {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Starting export', {
+      filteredCategoriesCount: filteredCategories.value.length,
+      filterTypes: filterTypes.value
+    })
+
+    const categories: MenuCategoryExport[] = filteredCategories.value
+      .filter(cat => cat.isActive)
+      .map(category => {
+        const items = getCategoryItems(category.id)
+        return {
+          name: category.name,
+          items: items.map(
+            (item): MenuItemExport => ({
+              name: item.name,
+              dishType: item.dishType,
+              variants: (item.variants || []).filter(v => v.isActive).map(exportVariant)
+            })
+          )
+        }
+      })
+      .filter(cat => cat.items.length > 0)
+
+    // Count total variants
+    const totalVariants = categories.reduce(
+      (sum, cat) => sum + cat.items.reduce((s, item) => s + item.variants.length, 0),
+      0
+    )
+    const totalCost = categories.reduce(
+      (sum, cat) =>
+        sum +
+        cat.items.reduce(
+          (s, item) => s + item.variants.reduce((v, variant) => v + variant.cost, 0),
+          0
+        ),
+      0
+    )
+
+    const data: MenuExportData = {
+      title: 'Menu Cost Report',
+      date: new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+      categories,
+      totals: {
+        itemCount: totalVariants,
+        totalCost
+      }
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Export data prepared', {
+      categoriesCount: categories.length,
+      totalVariants
+    })
+
+    await exportMenu(data, { orientation: 'landscape' })
+    DebugUtils.info(MODULE_NAME, 'Menu exported successfully')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to export menu', error)
+  }
 }
 
 // Initial load

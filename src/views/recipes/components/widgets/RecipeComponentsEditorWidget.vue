@@ -2,18 +2,40 @@
 <template>
   <div class="components-section">
     <div class="d-flex justify-space-between align-center mb-4">
-      <h3 class="text-h6">
-        {{ type === 'preparation' ? 'Recipe (Products & Preparations)' : 'Components' }}
-      </h3>
-      <v-btn
-        color="primary"
-        variant="outlined"
-        size="small"
-        prepend-icon="mdi-plus"
-        @click="handleAddComponent"
-      >
-        Add {{ type === 'preparation' ? 'Ingredient' : 'Component' }}
-      </v-btn>
+      <div class="d-flex align-center">
+        <h3 class="text-h6">
+          {{ type === 'preparation' ? 'Recipe (Products & Preparations)' : 'Components' }}
+        </h3>
+        <v-chip
+          v-if="components.length > 0"
+          size="small"
+          class="ml-2"
+          color="primary"
+          variant="tonal"
+        >
+          {{ components.length }}
+        </v-chip>
+      </div>
+      <div class="d-flex align-center gap-2">
+        <!-- ✅ NEW: Expand/Collapse All buttons -->
+        <v-btn-group v-if="components.length > 1" variant="text" density="compact">
+          <v-btn size="small" title="Expand all" @click="expandAllComponents">
+            <v-icon size="18">mdi-unfold-more-horizontal</v-icon>
+          </v-btn>
+          <v-btn size="small" title="Collapse all" @click="collapseAllComponents">
+            <v-icon size="18">mdi-unfold-less-horizontal</v-icon>
+          </v-btn>
+        </v-btn-group>
+        <v-btn
+          color="primary"
+          variant="outlined"
+          size="small"
+          prepend-icon="mdi-plus"
+          @click="handleAddComponent"
+        >
+          Add {{ type === 'preparation' ? 'Ingredient' : 'Component' }}
+        </v-btn>
+      </div>
     </div>
 
     <!-- ⭐ PHASE 1: Cycle Detection Warning -->
@@ -53,213 +75,258 @@
     </div>
 
     <template v-else>
+      <!-- ✅ NEW: Accordion-style collapsible components -->
       <div class="components-list">
         <v-card
           v-for="(component, index) in components"
           :key="component.id"
           variant="outlined"
-          class="component-card mb-3"
+          class="component-card mb-2"
         >
-          <v-card-text class="pa-4">
-            <!-- ⭐ PHASE 1: Header - Type Selection (для рецептов И полуфабрикатов) -->
-            <v-row class="mb-3">
-              <v-col cols="10">
-                <v-chip-group
-                  :model-value="component.componentType"
-                  mandatory
-                  @update:model-value="handleComponentTypeChange(index, $event)"
-                >
-                  <v-chip value="product" variant="outlined">
-                    <v-icon start size="14">mdi-food-apple</v-icon>
-                    Product
-                  </v-chip>
-                  <v-chip value="preparation" variant="outlined">
-                    <v-icon start size="14">mdi-chef-hat</v-icon>
-                    Preparation
-                  </v-chip>
-                </v-chip-group>
-              </v-col>
-              <v-col cols="2" class="d-flex justify-end align-center">
-                <v-btn
-                  icon="mdi-delete"
-                  color="error"
-                  variant="text"
-                  size="small"
-                  @click="handleRemoveComponent(index)"
+          <!-- ✅ Clickable Header - Always Visible -->
+          <div
+            class="component-header pa-3 d-flex align-center justify-space-between"
+            :class="{ 'component-header--expanded': expandedComponents.has(index) }"
+            @click="toggleComponentExpanded(index)"
+          >
+            <div class="d-flex align-center flex-grow-1">
+              <v-avatar
+                :color="component.componentType === 'product' ? 'primary' : 'secondary'"
+                variant="tonal"
+                size="32"
+                class="mr-3"
+              >
+                <v-icon
+                  :icon="component.componentType === 'product' ? 'mdi-food-apple' : 'mdi-chef-hat'"
+                  size="16"
                 />
-              </v-col>
-            </v-row>
+              </v-avatar>
+              <div class="flex-grow-1">
+                <div class="font-weight-medium text-body-2">
+                  {{ component.componentId ? getSelectedItemName(component) : 'Not selected' }}
+                </div>
+                <div v-if="component.componentId" class="text-caption text-medium-emphasis">
+                  {{ component.quantity }} {{ getFixedUnit(component) }}
+                </div>
+              </div>
+            </div>
+            <div class="d-flex align-center">
+              <v-btn
+                icon="mdi-delete"
+                color="error"
+                variant="text"
+                size="x-small"
+                @click.stop="handleRemoveComponent(index)"
+              />
+              <v-icon
+                :icon="expandedComponents.has(index) ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                size="20"
+                class="ml-1"
+              />
+            </div>
+          </div>
 
-            <!-- Product/Preparation Selection -->
-            <v-row class="mb-3">
-              <v-col cols="12">
-                <!-- Selected Item Display -->
-                <v-card
-                  v-if="component.componentId"
-                  variant="outlined"
-                  class="selected-item-card mb-2"
-                >
-                  <v-card-text class="pa-3">
-                    <div class="d-flex align-center justify-space-between">
-                      <div class="d-flex align-center flex-grow-1">
-                        <v-avatar
-                          :color="component.componentType === 'product' ? 'primary' : 'secondary'"
-                          variant="tonal"
-                          size="40"
-                          class="mr-3"
-                        >
-                          <v-icon
-                            :icon="
-                              component.componentType === 'product'
-                                ? 'mdi-food-apple'
-                                : 'mdi-chef-hat'
-                            "
-                            size="20"
-                          />
-                        </v-avatar>
-                        <div class="flex-grow-1">
-                          <div class="font-weight-bold text-body-1">
-                            {{ getSelectedItemName(component) }}
+          <!-- ✅ Expandable Content -->
+          <v-expand-transition>
+            <div v-show="expandedComponents.has(index)">
+              <v-divider />
+              <v-card-text class="pa-4">
+                <!-- Type Selection -->
+                <v-row class="mb-3">
+                  <v-col cols="12">
+                    <v-chip-group
+                      :model-value="component.componentType"
+                      mandatory
+                      @update:model-value="handleComponentTypeChange(index, $event)"
+                    >
+                      <v-chip value="product" variant="outlined" size="small">
+                        <v-icon start size="14">mdi-food-apple</v-icon>
+                        Product
+                      </v-chip>
+                      <v-chip value="preparation" variant="outlined" size="small">
+                        <v-icon start size="14">mdi-chef-hat</v-icon>
+                        Preparation
+                      </v-chip>
+                    </v-chip-group>
+                  </v-col>
+                </v-row>
+
+                <!-- Product/Preparation Selection -->
+                <v-row class="mb-3">
+                  <v-col cols="12">
+                    <!-- Selected Item Display -->
+                    <v-card
+                      v-if="component.componentId"
+                      variant="outlined"
+                      class="selected-item-card mb-2"
+                    >
+                      <v-card-text class="pa-3">
+                        <div class="d-flex align-center justify-space-between">
+                          <div class="d-flex align-center flex-grow-1">
+                            <v-avatar
+                              :color="
+                                component.componentType === 'product' ? 'primary' : 'secondary'
+                              "
+                              variant="tonal"
+                              size="40"
+                              class="mr-3"
+                            >
+                              <v-icon
+                                :icon="
+                                  component.componentType === 'product'
+                                    ? 'mdi-food-apple'
+                                    : 'mdi-chef-hat'
+                                "
+                                size="20"
+                              />
+                            </v-avatar>
+                            <div class="flex-grow-1">
+                              <div class="font-weight-bold text-body-1">
+                                {{ getSelectedItemName(component) }}
+                              </div>
+                              <div class="text-caption text-medium-emphasis">
+                                {{ getSelectedItemSubtitle(component) }}
+                              </div>
+                            </div>
                           </div>
-                          <div class="text-caption text-medium-emphasis">
-                            {{ getSelectedItemSubtitle(component) }}
+                          <v-btn
+                            icon="mdi-pencil"
+                            variant="text"
+                            size="small"
+                            @click="
+                              openSelectionDialog(index, component.componentType || 'product')
+                            "
+                          />
+                        </div>
+                      </v-card-text>
+                    </v-card>
+
+                    <!-- Add Button (when no item selected) -->
+                    <v-btn
+                      v-else
+                      block
+                      variant="outlined"
+                      color="primary"
+                      size="large"
+                      :prepend-icon="
+                        component.componentType === 'product' ? 'mdi-food-apple' : 'mdi-chef-hat'
+                      "
+                      @click="openSelectionDialog(index, component.componentType || 'product')"
+                    >
+                      {{ getItemLabel(component.componentType || 'product') }}
+                    </v-btn>
+                  </v-col>
+                </v-row>
+
+                <!-- Price Display -->
+                <v-row v-if="component.componentId" class="mb-3">
+                  <v-col cols="12">
+                    <v-card variant="tonal" color="success" class="price-info-card">
+                      <v-card-text class="pa-3">
+                        <div class="d-flex justify-space-between align-center">
+                          <div class="price-display">
+                            <v-icon icon="mdi-currency-try" size="16" class="mr-2" />
+                            {{ getEnhancedPriceDisplay(component) }}
+                          </div>
+                          <div class="base-unit-info">
+                            <v-chip size="small" color="info" variant="tonal">
+                              Base: {{ getBaseUnitInfo(component) }}
+                            </v-chip>
                           </div>
                         </div>
-                      </div>
-                      <v-btn
-                        icon="mdi-pencil"
-                        variant="text"
-                        size="small"
-                        @click="openSelectionDialog(index, component.componentType || 'product')"
-                      />
-                    </div>
-                  </v-card-text>
-                </v-card>
+                      </v-card-text>
+                    </v-card>
+                  </v-col>
+                </v-row>
 
-                <!-- Add Button (when no item selected) -->
-                <v-btn
-                  v-else
-                  block
-                  variant="outlined"
-                  color="primary"
-                  size="large"
-                  :prepend-icon="
-                    component.componentType === 'product' ? 'mdi-food-apple' : 'mdi-chef-hat'
+                <!-- Quantity and Notes -->
+                <v-row class="mb-2">
+                  <v-col cols="4">
+                    <v-text-field
+                      :model-value="component.quantity"
+                      label="Quantity"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      variant="outlined"
+                      density="comfortable"
+                      :rules="[validateRequired, validatePositiveNumber]"
+                      :hint="getQuantityHint(component)"
+                      :persistent-hint="
+                        !!(
+                          component.useYieldPercentage &&
+                          component.componentType === 'product' &&
+                          component.componentId
+                        )
+                      "
+                      required
+                      @update:model-value="handleQuantityChange(index, $event)"
+                    />
+                  </v-col>
+
+                  <!-- Показываем только базовую единицу, без выбора -->
+                  <v-col cols="3">
+                    <v-text-field
+                      :model-value="getFixedUnit(component)"
+                      label="Unit"
+                      variant="outlined"
+                      density="comfortable"
+                      readonly
+                      disabled
+                    >
+                      <template #prepend-inner>
+                        <v-icon>mdi-scale</v-icon>
+                      </template>
+                    </v-text-field>
+                  </v-col>
+
+                  <v-col cols="5">
+                    <v-text-field
+                      :model-value="component.notes"
+                      label="Notes"
+                      placeholder="diced, fresh, etc."
+                      variant="outlined"
+                      density="comfortable"
+                      @update:model-value="handleNotesChange(index, $event)"
+                    >
+                      <template #prepend-inner>
+                        <v-icon>mdi-note-text</v-icon>
+                      </template>
+                    </v-text-field>
+                  </v-col>
+                </v-row>
+
+                <!-- ✅ COMPACT: Yield Toggle (Products only) - inline switch -->
+                <v-row
+                  v-if="
+                    component.componentType === 'product' &&
+                    component.componentId &&
+                    shouldShowYieldToggle(component)
                   "
-                  @click="openSelectionDialog(index, component.componentType || 'product')"
+                  class="mb-2"
                 >
-                  {{ getItemLabel(component.componentType || 'product') }}
-                </v-btn>
-              </v-col>
-            </v-row>
-
-            <!-- Price Display -->
-            <v-row v-if="component.componentId" class="mb-3">
-              <v-col cols="12">
-                <v-card variant="tonal" color="success" class="price-info-card">
-                  <v-card-text class="pa-3">
-                    <div class="d-flex justify-space-between align-center">
-                      <div class="price-display">
-                        <v-icon icon="mdi-currency-try" size="16" class="mr-2" />
-                        {{ getEnhancedPriceDisplay(component) }}
-                      </div>
-                      <div class="base-unit-info">
-                        <v-chip size="small" color="info" variant="tonal">
-                          Base: {{ getBaseUnitInfo(component) }}
-                        </v-chip>
-                      </div>
+                  <v-col cols="12">
+                    <div class="d-flex align-center">
+                      <v-switch
+                        :model-value="component.useYieldPercentage"
+                        color="warning"
+                        density="compact"
+                        hide-details
+                        @update:model-value="handleYieldToggle(index, $event)"
+                      >
+                        <template #label>
+                          <span class="text-caption">
+                            <v-icon size="16" class="mr-1">mdi-percent</v-icon>
+                            Account for Yield ({{ getProductYield(component) }}%)
+                          </span>
+                        </template>
+                      </v-switch>
                     </div>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
-
-            <!-- Quantity and Notes -->
-            <v-row class="mb-2">
-              <v-col cols="4">
-                <v-text-field
-                  :model-value="component.quantity"
-                  label="Quantity"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  variant="outlined"
-                  density="comfortable"
-                  :rules="[validateRequired, validatePositiveNumber]"
-                  :hint="getQuantityHint(component)"
-                  :persistent-hint="
-                    !!(
-                      component.useYieldPercentage &&
-                      component.componentType === 'product' &&
-                      component.componentId
-                    )
-                  "
-                  required
-                  @update:model-value="handleQuantityChange(index, $event)"
-                />
-              </v-col>
-
-              <!-- Показываем только базовую единицу, без выбора -->
-              <v-col cols="3">
-                <v-text-field
-                  :model-value="getFixedUnit(component)"
-                  label="Unit"
-                  variant="outlined"
-                  density="comfortable"
-                  readonly
-                  disabled
-                >
-                  <template #prepend-inner>
-                    <v-icon>mdi-scale</v-icon>
-                  </template>
-                </v-text-field>
-              </v-col>
-
-              <v-col cols="5">
-                <v-text-field
-                  :model-value="component.notes"
-                  label="Notes"
-                  placeholder="diced, fresh, etc."
-                  variant="outlined"
-                  density="comfortable"
-                  @update:model-value="handleNotesChange(index, $event)"
-                >
-                  <template #prepend-inner>
-                    <v-icon>mdi-note-text</v-icon>
-                  </template>
-                </v-text-field>
-              </v-col>
-            </v-row>
-
-            <!-- ✅ COMPACT: Yield Toggle (Products only) - inline switch -->
-            <v-row
-              v-if="
-                component.componentType === 'product' &&
-                component.componentId &&
-                shouldShowYieldToggle(component)
-              "
-              class="mb-2"
-            >
-              <v-col cols="12">
-                <div class="d-flex align-center">
-                  <v-switch
-                    :model-value="component.useYieldPercentage"
-                    color="warning"
-                    density="compact"
-                    hide-details
-                    @update:model-value="handleYieldToggle(index, $event)"
-                  >
-                    <template #label>
-                      <span class="text-caption">
-                        <v-icon size="16" class="mr-1">mdi-percent</v-icon>
-                        Account for Yield ({{ getProductYield(component) }}%)
-                      </span>
-                    </template>
-                  </v-switch>
-                </div>
-              </v-col>
-            </v-row>
-          </v-card-text>
+                  </v-col>
+                </v-row>
+              </v-card-text>
+            </div>
+          </v-expand-transition>
         </v-card>
       </div>
 
@@ -319,7 +386,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import type { MeasurementUnit } from '@/stores/recipes/types'
 import { formatIDR } from '@/utils/currency'
 // ✅ ИСПРАВЛЕНО: Используем правильный импорт для единиц измерения
@@ -361,6 +428,7 @@ interface PreparationItem {
   name: string
   outputUnit: string
   type?: string // Category/type of preparation
+  portionType?: 'weight' | 'portion' // ✅ NEW: How quantities are measured
 }
 
 interface Props {
@@ -387,6 +455,9 @@ const { getUnitShortName } = useMeasurementUnits()
 const products = ref<ProductItem[]>([])
 const preparations = ref<PreparationItem[]>([])
 const storesLoaded = ref(false)
+
+// ✅ NEW: Accordion state - track which components are expanded (Set of indices)
+const expandedComponents = ref<Set<number>>(new Set())
 
 // ✅ NEW: Dialog states
 const productSearchDialog = ref(false)
@@ -547,8 +618,15 @@ function getFixedUnit(component: Component): string {
     return getUnitShortName((product.unit || 'gram') as MeasurementUnit)
   }
 
+  // ✅ FIX: For preparations, check portionType
   const prep = preparations.value.find(p => p.id === component.componentId)
-  return prep?.outputUnit || 'g'
+  if (!prep) return 'g'
+
+  // Check if preparation is portion-based
+  if ((prep as any).portionType === 'portion') {
+    return 'portion'
+  }
+  return prep.outputUnit || 'g'
 }
 
 /**
@@ -582,8 +660,15 @@ function getBaseUnitInfo(component: Component): string {
     return getBaseUnitDisplayForProduct(product)
   }
 
+  // ✅ FIX: For preparations, check portionType
   const prep = preparations.value.find(p => p.id === component.componentId)
-  return prep?.outputUnit || 'g'
+  if (!prep) return 'g'
+
+  // Check if preparation is portion-based
+  if ((prep as any).portionType === 'portion') {
+    return 'portion'
+  }
+  return prep.outputUnit || 'g'
 }
 
 // ===== DIALOG METHODS =====
@@ -650,13 +735,60 @@ function getSelectedItemSubtitle(component: Component): string {
     return `${getCategoryName(product.category)} • ${formatIDR(product.baseCostPerUnit || product.costPerUnit)}/${getBaseUnitDisplayForProduct(product)}`
   } else {
     const prep = preparations.value.find(p => p.id === component.componentId)
-    return prep ? `Semi-finished • Output: ${prep.outputUnit}` : ''
+    if (!prep) return ''
+    // ✅ FIX: Show correct output unit based on portionType
+    const outputDisplay = getPreparationOutputDisplay(prep as any)
+    return `Semi-finished • Output: ${outputDisplay}`
   }
+}
+
+/**
+ * ✅ NEW: Get preparation output display based on portionType
+ */
+function getPreparationOutputDisplay(prep: { portionType?: string; outputUnit?: string }): string {
+  if (prep.portionType === 'portion') {
+    return 'portions'
+  }
+  return prep.outputUnit || 'g'
+}
+
+// ===== ACCORDION METHODS =====
+
+/**
+ * Toggle component expanded/collapsed state
+ */
+function toggleComponentExpanded(index: number) {
+  const newSet = new Set(expandedComponents.value)
+  if (newSet.has(index)) {
+    newSet.delete(index)
+  } else {
+    newSet.add(index)
+  }
+  expandedComponents.value = newSet
+}
+
+/**
+ * Expand all components
+ */
+function expandAllComponents() {
+  const newSet = new Set<number>()
+  for (let i = 0; i < props.components.length; i++) {
+    newSet.add(i)
+  }
+  expandedComponents.value = newSet
+}
+
+/**
+ * Collapse all components
+ */
+function collapseAllComponents() {
+  expandedComponents.value = new Set()
 }
 
 // ===== EVENT HANDLERS =====
 function handleAddComponent() {
   emit('add-component')
+  // Note: Auto-expand is handled by watcher below
 }
 
 function handleRemoveComponent(index: number) {
@@ -697,7 +829,13 @@ function getFixedUnitForComponent(componentId: string, componentType: string): s
     return product?.baseUnit || product?.unit || 'gram'
   } else {
     const prep = preparations.value.find(p => p.id === componentId)
-    return prep?.outputUnit || 'gram'
+    if (!prep) return 'gram'
+
+    // ✅ FIX: For portion-based preparations, return 'portion'
+    if ((prep as any).portionType === 'portion') {
+      return 'portion'
+    }
+    return prep.outputUnit || 'gram'
   }
 }
 
@@ -796,7 +934,8 @@ async function loadStores() {
         code: p.code,
         name: p.name,
         outputUnit: p.outputUnit,
-        type: p.type // Include preparation type/category
+        type: p.type, // Include preparation type/category
+        portionType: p.portionType // ✅ NEW: Include portion type for correct unit display
       }))
     }
 
@@ -806,6 +945,22 @@ async function loadStores() {
     storesLoaded.value = true
   }
 }
+
+// ===== WATCHERS =====
+
+// Auto-expand newly added components
+watch(
+  () => props.components.length,
+  (newLength, oldLength) => {
+    if (newLength > oldLength) {
+      // New component was added - expand it
+      const newIndex = newLength - 1
+      const newSet = new Set(expandedComponents.value)
+      newSet.add(newIndex)
+      expandedComponents.value = newSet
+    }
+  }
+)
 
 onMounted(() => {
   loadStores()
@@ -841,11 +996,20 @@ onMounted(() => {
 .component-card {
   transition: all 0.2s ease;
   position: relative;
+  overflow: hidden;
+}
+
+.component-header {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
 
   &:hover {
-    border-color: var(--v-theme-primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-1px);
+    background-color: rgba(var(--v-theme-primary), 0.05);
+  }
+
+  &--expanded {
+    background-color: rgba(var(--v-theme-primary), 0.08);
   }
 }
 

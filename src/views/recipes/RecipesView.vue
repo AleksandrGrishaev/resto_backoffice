@@ -16,6 +16,16 @@
           </div>
         </v-col>
         <v-col cols="auto">
+          <v-btn
+            variant="outlined"
+            class="mr-2"
+            prepend-icon="mdi-file-pdf-box"
+            size="large"
+            :loading="isExporting"
+            @click="handleExportPdf"
+          >
+            Export PDF
+          </v-btn>
           <v-btn color="primary" prepend-icon="mdi-plus" size="large" @click="showCreateDialog">
             New {{ activeTab === 'recipes' ? 'Recipe' : 'Preparation' }}
           </v-btn>
@@ -315,7 +325,20 @@ import { ref, computed, onMounted } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
 import { useUsageCheck } from '@/stores/recipes/composables/useUsageCheck'
-import type { Recipe, Preparation, PreparationType } from '@/stores/recipes/types'
+import { useExport } from '@/core/export'
+import type {
+  RecipeExportData,
+  PreparationExportData,
+  RecipeCategoryExport,
+  PreparationCategoryExport
+} from '@/core/export'
+import type {
+  Recipe,
+  Preparation,
+  PreparationType,
+  RecipeComponent,
+  PreparationIngredient
+} from '@/stores/recipes/types'
 import type { UsageLocation } from '@/stores/recipes/composables/useUsageCheck'
 import { DebugUtils } from '@/utils'
 import UnifiedRecipeItem from './components/UnifiedRecipeItem.vue'
@@ -328,6 +351,7 @@ const MODULE_NAME = 'RecipesView'
 const store = useRecipesStore()
 const productsStore = useProductsStore()
 const { checkRecipeUsage, checkPreparationUsage } = useUsageCheck()
+const { isExporting, exportRecipes, exportPreparations } = useExport()
 
 // =============================================
 // STATE
@@ -730,6 +754,172 @@ async function handleItemSaved(item: Recipe | Preparation) {
 
 function showSnackbar(message: string, color: 'success' | 'error' | 'info' = 'success') {
   snackbar.value = { show: true, message, color }
+}
+
+// =============================================
+// PDF EXPORT
+// =============================================
+
+async function handleExportPdf() {
+  try {
+    // Helper to find component name and cost
+    const getComponentInfo = (
+      componentId: string,
+      componentType: 'product' | 'preparation',
+      quantity: number
+    ): { name: string; cost: number } => {
+      if (componentType === 'product') {
+        const product = productsStore.products.find(p => p.id === componentId)
+        return {
+          name: product?.name || 'Unknown Product',
+          cost: (product?.baseCostPerUnit || 0) * quantity
+        }
+      } else {
+        // It's a preparation (nested)
+        const prep = store.preparations.find(p => p.id === componentId)
+        const prepCost = store.getPreparationCostCalculation(componentId)
+        return {
+          name: prep?.name || 'Unknown Preparation',
+          cost: (prepCost?.costPerOutputUnit || 0) * quantity
+        }
+      }
+    }
+
+    if (activeTab.value === 'recipes') {
+      // Group recipes by category
+      const recipesByCategory = new Map<string, Recipe[]>()
+
+      for (const recipe of store.activeRecipes) {
+        const categoryKey = recipe.category || 'uncategorized'
+        if (!recipesByCategory.has(categoryKey)) {
+          recipesByCategory.set(categoryKey, [])
+        }
+        recipesByCategory.get(categoryKey)!.push(recipe)
+      }
+
+      // Build category names from store
+      const categoryNames: Record<string, string> = {
+        uncategorized: 'Uncategorized'
+      }
+      for (const cat of store.activeRecipeCategories) {
+        categoryNames[cat.id] = cat.name
+      }
+
+      const categories: RecipeCategoryExport[] = Array.from(recipesByCategory.entries()).map(
+        ([categoryKey, recipes]) => ({
+          name: categoryNames[categoryKey] || 'Unknown Category',
+          recipes: recipes.map((recipe: Recipe) => {
+            const costCalc = store.getRecipeCostCalculation(recipe.id)
+            return {
+              id: recipe.id,
+              name: recipe.name,
+              category: recipe.category,
+              outputQuantity: recipe.portionSize || 1,
+              outputUnit: recipe.portionUnit || 'portion',
+              costPerUnit: costCalc?.costPerPortion || 0,
+              totalCost: costCalc?.totalCost || 0,
+              components: (recipe.components || []).map((comp: RecipeComponent) => {
+                const info = getComponentInfo(comp.componentId, comp.componentType, comp.quantity)
+                return {
+                  name: info.name,
+                  type: comp.componentType,
+                  quantity: comp.quantity,
+                  unit: comp.unit,
+                  cost: info.cost
+                }
+              }),
+              instructions: recipe.instructions
+            }
+          })
+        })
+      )
+
+      const data: RecipeExportData = {
+        title: 'Recipes Cost Report',
+        date: new Date().toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        categories
+      }
+
+      await exportRecipes(data, { includeInstructions: true })
+    } else {
+      // Group preparations by type
+      const prepsByType = new Map<string, Preparation[]>()
+
+      for (const prep of store.activePreparations) {
+        const typeKey = prep.type || 'other'
+        if (!prepsByType.has(typeKey)) {
+          prepsByType.set(typeKey, [])
+        }
+        prepsByType.get(typeKey)!.push(prep)
+      }
+
+      // Format type names
+      const typeNames: Record<string, string> = {
+        sauce: 'Sauces',
+        base: 'Bases',
+        garnish: 'Garnishes',
+        marinade: 'Marinades',
+        dough: 'Doughs',
+        filling: 'Fillings',
+        other: 'Other'
+      }
+
+      const categories: PreparationCategoryExport[] = Array.from(prepsByType.entries()).map(
+        ([typeKey, preps]) => ({
+          name: typeNames[typeKey] || typeKey,
+          preparations: preps.map((prep: Preparation) => {
+            const costCalc = store.getPreparationCostCalculation(prep.id)
+            return {
+              id: prep.id,
+              name: prep.name,
+              category: prep.type,
+              portionType: (prep.portionType || 'weight') as 'weight' | 'portion',
+              outputQuantity: prep.outputQuantity || 1,
+              outputUnit: prep.outputUnit || 'unit',
+              costPerUnit: costCalc?.costPerOutputUnit || 0,
+              totalCost: costCalc?.totalCost || 0,
+              components: (prep.recipe || []).map((comp: PreparationIngredient) => {
+                const info = getComponentInfo(comp.id, comp.type, comp.quantity)
+                return {
+                  name: info.name,
+                  type: comp.type,
+                  quantity: comp.quantity,
+                  unit: comp.unit,
+                  cost: info.cost
+                }
+              }),
+              instructions: prep.instructions
+            }
+          })
+        })
+      )
+
+      const data: PreparationExportData = {
+        title: 'Preparations Cost Report',
+        date: new Date().toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        categories
+      }
+
+      await exportPreparations(data, { includeInstructions: true })
+    }
+
+    showSnackbar(
+      `${activeTab.value === 'recipes' ? 'Recipes' : 'Preparations'} exported successfully`,
+      'success'
+    )
+    DebugUtils.info(MODULE_NAME, 'Export completed', { type: activeTab.value })
+  } catch (error) {
+    showSnackbar('Failed to export PDF', 'error')
+    DebugUtils.error(MODULE_NAME, 'Failed to export', error)
+  }
 }
 
 // =============================================
