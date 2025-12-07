@@ -50,9 +50,9 @@ Run all commands quickly, only report errors:
 
 6. **Update dev (if not already on dev):**
    ```bash
-   git checkout dev && git merge HEAD@{1} --ff-only && git push origin dev && git checkout -
+   CURRENT=$(git branch --show-current) && git checkout dev && git merge $CURRENT && git push origin dev && git checkout $CURRENT
    ```
-   Use `--ff-only` for speed. If fails, skip dev update silently.
+   If merge fails, resolve or skip. Always return to original branch.
 
 ## Output Format
 
