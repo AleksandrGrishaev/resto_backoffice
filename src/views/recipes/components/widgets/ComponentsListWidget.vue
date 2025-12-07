@@ -1,73 +1,86 @@
-<!-- src/views/recipes/components/widgets/ComponentsListWidget.vue - ИСПРАВЛЕНО -->
+<!-- src/views/recipes/components/widgets/ComponentsListWidget.vue - С COLLAPSE КНОПКОЙ -->
 <template>
   <div class="components-section pa-4">
-    <h3 class="text-h6 mb-3 d-flex align-center">
-      <v-icon icon="mdi-food-apple" class="mr-2" />
-      {{ getComponentsTitle() }} ({{ getComponentsCount() }})
-    </h3>
+    <div class="d-flex justify-space-between align-center mb-3">
+      <h3 class="text-h6 d-flex align-center">
+        <v-icon icon="mdi-food-apple" class="mr-2" />
+        {{ getComponentsTitle() }} ({{ getComponentsCount() }})
+      </h3>
+      <v-btn
+        v-if="getComponentsCount() > 0"
+        variant="text"
+        size="small"
+        :prepend-icon="isExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+        @click="isExpanded = !isExpanded"
+      >
+        {{ isExpanded ? 'Collapse' : 'Expand' }}
+      </v-btn>
+    </div>
 
     <div v-if="getComponentsCount() === 0" class="text-center text-medium-emphasis py-4">
       No {{ type === 'preparation' ? 'products' : 'components' }} specified
     </div>
 
-    <div v-else class="components-list">
-      <v-card
-        v-for="component in getComponents()"
-        :key="component.id"
-        variant="outlined"
-        class="component-card mb-2"
-      >
-        <v-card-text class="pa-3">
-          <div class="d-flex justify-space-between align-center">
-            <div class="component-info">
-              <div class="component-name">
-                <span v-if="component.code" class="component-code">
-                  {{ component.code }}
-                </span>
-                <span class="component-title">
-                  {{ component.name }}
-                </span>
-                <v-chip
-                  v-if="component.type"
-                  size="x-small"
-                  :color="component.type === 'product' ? 'blue' : 'green'"
-                  variant="tonal"
-                  class="ml-2"
-                >
-                  {{ component.type }}
-                </v-chip>
-              </div>
+    <v-expand-transition>
+      <div v-show="isExpanded" class="components-list">
+        <v-card
+          v-for="component in getComponents()"
+          :key="component.id"
+          variant="outlined"
+          class="component-card mb-2"
+        >
+          <v-card-text class="pa-3">
+            <div class="d-flex justify-space-between align-center">
+              <div class="component-info">
+                <div class="component-name">
+                  <span v-if="component.code" class="component-code">
+                    {{ component.code }}
+                  </span>
+                  <span class="component-title">
+                    {{ component.name }}
+                  </span>
+                  <v-chip
+                    v-if="component.type"
+                    size="x-small"
+                    :color="component.type === 'product' ? 'blue' : 'green'"
+                    variant="tonal"
+                    class="ml-2"
+                  >
+                    {{ component.type }}
+                  </v-chip>
+                </div>
 
-              <!-- ✅ НОВОЕ: Показываем цену за базовую единицу -->
-              <div v-if="component.baseCost" class="component-price">
-                <v-icon icon="mdi-currency-try" size="12" class="mr-1" />
-                <span class="price-text">
-                  {{ formatCurrency(component.baseCost) }}/{{ component.baseUnit }}
-                </span>
-              </div>
+                <!-- ✅ НОВОЕ: Показываем цену за базовую единицу -->
+                <div v-if="component.baseCost" class="component-price">
+                  <v-icon icon="mdi-currency-try" size="12" class="mr-1" />
+                  <span class="price-text">
+                    {{ formatCurrency(component.baseCost) }}/{{ component.baseUnit }}
+                  </span>
+                </div>
 
-              <div v-if="component.notes" class="component-notes">
-                <v-icon icon="mdi-note-text" size="14" class="mr-1" />
-                {{ component.notes }}
+                <div v-if="component.notes" class="component-notes">
+                  <v-icon icon="mdi-note-text" size="14" class="mr-1" />
+                  {{ component.notes }}
+                </div>
+              </div>
+              <div class="component-quantity">
+                <span class="quantity-value">{{ component.quantity }}</span>
+                <span class="quantity-unit">{{ component.unit }}</span>
+                <!-- ✅ НОВОЕ: Показываем конвертацию если нужно -->
+                <div v-if="component.convertedQuantity" class="converted-quantity">
+                  ≈ {{ component.convertedQuantity }} {{ component.baseUnit }}
+                </div>
               </div>
             </div>
-            <div class="component-quantity">
-              <span class="quantity-value">{{ component.quantity }}</span>
-              <span class="quantity-unit">{{ component.unit }}</span>
-              <!-- ✅ НОВОЕ: Показываем конвертацию если нужно -->
-              <div v-if="component.convertedQuantity" class="converted-quantity">
-                ≈ {{ component.convertedQuantity }} {{ component.baseUnit }}
-              </div>
-            </div>
-          </div>
-        </v-card-text>
-      </v-card>
-    </div>
+          </v-card-text>
+        </v-card>
+      </div>
+    </v-expand-transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import type { Recipe, Preparation } from '@/stores/recipes/types'
@@ -81,6 +94,9 @@ const props = defineProps<Props>()
 
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
+
+// ✅ Collapse state - expanded by default
+const isExpanded = ref(true)
 
 // ✅ НОВАЯ ФУНКЦИЯ: Форматирование валюты в IDR
 function formatCurrency(amount: number): string {
@@ -141,11 +157,25 @@ function getComponents() {
         if (nestedPrep) {
           name = nestedPrep.name
           code = nestedPrep.code
-          baseUnit = nestedPrep.outputUnit
+          // ✅ FIX: Check portionType to determine correct unit
+          if (nestedPrep.portionType === 'portion') {
+            baseUnit = 'portion'
+          } else {
+            baseUnit = nestedPrep.outputUnit
+          }
           // Cost per unit from preparation's calculated cost
           baseCost = nestedPrep.costPerPortion || null
         } else {
           name = 'Unknown preparation'
+        }
+      }
+
+      // ✅ FIX: Determine display unit based on component's actual unit or preparation's portionType
+      let displayUnit = ingredient.unit
+      if (ingredientType === 'preparation') {
+        const nestedPrep = recipesStore.preparations.find(p => p.id === ingredient.id)
+        if (nestedPrep?.portionType === 'portion') {
+          displayUnit = ingredient.quantity === 1 ? 'portion' : 'portions'
         }
       }
 
@@ -155,7 +185,7 @@ function getComponents() {
         code,
         type: ingredientType,
         quantity: ingredient.quantity,
-        unit: ingredient.unit,
+        unit: displayUnit,
         notes: ingredient.notes,
         baseCost,
         baseUnit,
@@ -190,7 +220,21 @@ function getComponents() {
         if (preparation) {
           name = preparation.name
           code = preparation.code
-          baseUnit = preparation.outputUnit
+          // ✅ FIX: Check portionType to determine correct unit
+          if (preparation.portionType === 'portion') {
+            baseUnit = 'portion'
+          } else {
+            baseUnit = preparation.outputUnit
+          }
+        }
+      }
+
+      // ✅ FIX: Determine display unit based on component's actual unit or preparation's portionType
+      let displayUnit = component.unit
+      if (component.componentType === 'preparation') {
+        const preparation = recipesStore.preparations.find(p => p.id === component.componentId)
+        if (preparation?.portionType === 'portion') {
+          displayUnit = component.quantity === 1 ? 'portion' : 'portions'
         }
       }
 
@@ -200,7 +244,7 @@ function getComponents() {
         code,
         type: component.componentType,
         quantity: component.quantity,
-        unit: component.unit,
+        unit: displayUnit,
         notes: component.notes,
         baseCost,
         baseUnit,
