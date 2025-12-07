@@ -28,7 +28,7 @@
                   {{ component.name }}
                 </span>
                 <v-chip
-                  v-if="type === 'recipe' && component.type"
+                  v-if="component.type"
                   size="x-small"
                   :color="component.type === 'product' ? 'blue' : 'green'"
                   variant="tonal"
@@ -94,7 +94,7 @@ function formatCurrency(amount: number): string {
 }
 
 function getComponentsTitle(): string {
-  return props.type === 'preparation' ? 'Recipe (Products)' : 'Components'
+  return props.type === 'preparation' ? 'Recipe (Products & Preparations)' : 'Components'
 }
 
 function getComponentsCount(): number {
@@ -109,30 +109,51 @@ function getComponents() {
   if (props.type === 'preparation') {
     const prep = props.item as Preparation
     return (prep.recipe || []).map(ingredient => {
-      const product = productsStore.getProductForRecipe(ingredient.id)
+      // ⭐ PHASE 1: Support nested preparations - check ingredient type
+      const ingredientType = ingredient.type || 'product' // Default to product for backwards compatibility
 
-      // ✅ ИСПРАВЛЕНО: Получаем информацию о базовых единицах
+      let name = 'Unknown'
+      let code = ''
       let baseCost = null
       let baseUnit = null
       let convertedQuantity = null
 
-      if (product) {
-        baseCost = product.baseCostPerUnit
-        baseUnit = product.baseUnit
+      if (ingredientType === 'product') {
+        // Look up product
+        const product = productsStore.getProductForRecipe(ingredient.id)
+        if (product) {
+          name = product.name
+          baseCost = product.baseCostPerUnit
+          baseUnit = product.baseUnit
 
-        // Конвертируем количество если нужно
-        if (ingredient.unit.toLowerCase() === 'kg' && baseUnit === 'gram') {
-          convertedQuantity = (ingredient.quantity * 1000).toFixed(0)
-        } else if (ingredient.unit.toLowerCase() === 'liter' && baseUnit === 'ml') {
-          convertedQuantity = (ingredient.quantity * 1000).toFixed(0)
+          // Конвертируем количество если нужно
+          if (ingredient.unit.toLowerCase() === 'kg' && baseUnit === 'gram') {
+            convertedQuantity = (ingredient.quantity * 1000).toFixed(0)
+          } else if (ingredient.unit.toLowerCase() === 'liter' && baseUnit === 'ml') {
+            convertedQuantity = (ingredient.quantity * 1000).toFixed(0)
+          }
+        } else {
+          name = 'Unknown product'
+        }
+      } else if (ingredientType === 'preparation') {
+        // Look up nested preparation
+        const nestedPrep = recipesStore.preparations.find(p => p.id === ingredient.id)
+        if (nestedPrep) {
+          name = nestedPrep.name
+          code = nestedPrep.code
+          baseUnit = nestedPrep.outputUnit
+          // Cost per unit from preparation's calculated cost
+          baseCost = nestedPrep.costPerPortion || null
+        } else {
+          name = 'Unknown preparation'
         }
       }
 
       return {
         id: ingredient.id,
-        name: product?.name || 'Unknown product',
-        code: '',
-        type: 'product',
+        name,
+        code,
+        type: ingredientType,
         quantity: ingredient.quantity,
         unit: ingredient.unit,
         notes: ingredient.notes,
