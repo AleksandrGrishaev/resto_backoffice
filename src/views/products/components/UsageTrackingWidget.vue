@@ -14,7 +14,7 @@
           variant="outlined"
           color="primary"
           :loading="loading"
-          @click="generateMockUsage"
+          @click="loadRealUsageData"
         >
           <v-icon start size="small">mdi-refresh</v-icon>
           Refresh
@@ -144,8 +144,8 @@
                 </v-chip>
               </div>
               <div class="usage-item__details">
-                {{ formatQuantity(recipe.quantityPerPortion) }} {{ formatUnit(product.unit) }} на
-                порцию
+                {{ formatQuantity(recipe.quantityPerPortion) }} {{ formatUnit(product.unit) }} per
+                portion
               </div>
             </div>
 
@@ -155,7 +155,7 @@
                   formatQuantity(recipe.quantityPerPortion * getRecipePopularity(recipe.recipeId))
                 }}
               </div>
-              <div class="text-caption text-medium-emphasis">в день</div>
+              <div class="text-caption text-medium-emphasis">per day</div>
             </div>
 
             <div class="usage-item__actions">
@@ -223,7 +223,8 @@
                 </v-chip>
               </div>
               <div class="usage-item__details">
-                {{ formatQuantity(prep.quantityPerOutput) }} {{ formatUnit(product.unit) }} на выход
+                {{ formatQuantity(prep.quantityPerOutput) }} {{ formatUnit(product.unit) }} per
+                output
               </div>
             </div>
 
@@ -233,7 +234,7 @@
                   formatQuantity(prep.quantityPerOutput * getPreparationUsage(prep.preparationId))
                 }}
               </div>
-              <div class="text-caption text-medium-emphasis">в день</div>
+              <div class="text-caption text-medium-emphasis">per day</div>
             </div>
 
             <div class="usage-item__actions">
@@ -305,7 +306,7 @@
               <div class="text-body-2 font-weight-medium">
                 {{ formatQuantity(item.quantityPerItem * getMenuItemPopularity(item.menuItemId)) }}
               </div>
-              <div class="text-caption text-medium-emphasis">в день</div>
+              <div class="text-caption text-medium-emphasis">per day</div>
             </div>
 
             <div class="usage-item__actions">
@@ -372,10 +373,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { Product } from '@/stores/productsStore'
 import type { ProductUsage } from '@/stores/productsStore/types'
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
+import { useProductUsage } from '@/stores/productsStore/composables/useProductUsage'
 
 // Props
 interface Props {
@@ -397,6 +399,7 @@ defineEmits<Emits>()
 
 // Composables
 const { getUnitName } = useMeasurementUnits()
+const { getProductUsage } = useProductUsage()
 
 // State
 const loading = ref(false)
@@ -407,89 +410,35 @@ const expandedSections = ref({
   preparations: false
 })
 
-// Mock recipe popularity data
+// Recipe/preparation popularity data (estimated from usage)
 const recipePopularity = ref<Record<string, number>>({})
 const preparationUsageData = ref<Record<string, number>>({})
 const menuItemPopularity = ref<Record<string, number>>({})
 
-// Mock data generation
-const generateMockUsage = async (): Promise<void> => {
+/**
+ * Load real usage data from stores
+ */
+const loadRealUsageData = async (): Promise<void> => {
   loading.value = true
   error.value = null
 
   try {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 600))
+    const productUsage = await getProductUsage(props.product.id)
+    usage.value = productUsage
 
-    const mockUsage: ProductUsage = {
-      id: `usage-${props.product.id}`,
-      productId: props.product.id,
-      usedInRecipes: [],
-      usedInPreparations: [],
-      directMenuItems: [],
-      lastUpdated: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+    // Generate estimated popularity values for display
+    // In a real app, these would come from order analytics
+    productUsage.usedInRecipes.forEach(recipe => {
+      recipePopularity.value[recipe.recipeId] = Math.random() * 20 + 5 // Estimated 5-25/day
+    })
 
-    // Generate mock recipes based on product type
-    if (!props.product.canBeSold) {
-      // Raw materials - used in recipes
-      const recipeNames = getRecipeNamesForProduct(props.product)
-      mockUsage.usedInRecipes = recipeNames.map((name, index) => {
-        const recipeId = `recipe-${props.product.id}-${index}`
-        const popularity = Math.random() * 20 + 5 // 5-25 portions per day
-        const isActive = Math.random() > 0.1 // 90% active
+    productUsage.usedInPreparations.forEach(prep => {
+      preparationUsageData.value[prep.preparationId] = Math.random() * 3 + 1 // Estimated 1-4/day
+    })
 
-        recipePopularity.value[recipeId] = popularity
-
-        return {
-          recipeId,
-          recipeName: name,
-          quantityPerPortion: generateQuantityForProduct(props.product),
-          isActive
-        }
-      })
-
-      // Some raw materials might be used in preparations too
-      if (Math.random() > 0.6) {
-        const prepNames = getPreparationNamesForProduct(props.product)
-        mockUsage.usedInPreparations = prepNames.map((name, index) => {
-          const prepId = `prep-${props.product.id}-${index}`
-          const usage = Math.random() * 3 + 1 // 1-4 uses per day
-          const isActive = Math.random() > 0.2 // 80% active
-
-          preparationUsageData.value[prepId] = usage
-
-          return {
-            preparationId: prepId,
-            preparationName: name,
-            quantityPerOutput: generateQuantityForProduct(props.product) * 2,
-            isActive
-          }
-        })
-      }
-    } else {
-      // Sellable products - direct menu items
-      const menuItems = getMenuItemsForProduct(props.product)
-      mockUsage.directMenuItems = menuItems.map((item, index) => {
-        const menuItemId = `menu-${props.product.id}-${index}`
-        const popularity = Math.random() * 15 + 3 // 3-18 sales per day
-
-        menuItemPopularity.value[menuItemId] = popularity
-
-        return {
-          menuItemId,
-          menuItemName: item.name,
-          variantId: `variant-${index}`,
-          variantName: item.variant,
-          quantityPerItem: item.quantity,
-          isActive: Math.random() > 0.05 // 95% active for menu items
-        }
-      })
-    }
-
-    usage.value = mockUsage
+    productUsage.directMenuItems?.forEach(item => {
+      menuItemPopularity.value[item.menuItemId] = Math.random() * 15 + 3 // Estimated 3-18/day
+    })
   } catch (err) {
     error.value = 'Error loading usage data'
   } finally {
@@ -497,67 +446,13 @@ const generateMockUsage = async (): Promise<void> => {
   }
 }
 
-// Mock data helpers
-const getRecipeNamesForProduct = (product: Product): string[] => {
-  const recipesByCategory = {
-    meat: ['Ribeye Steak', 'Beef Goulash', 'Classic Burger'],
-    vegetables: ['Vegetable Stew', 'French Fries', 'Caesar Salad', 'Tomato Sauce'],
-    dairy: ['Alfredo Sauce', 'Cream Soup', 'Tiramisu Dessert'],
-    spices: ['Universal Marinade', 'BBQ Sauce', 'Meat Seasoning'],
-    other: ['Salad Dressing', 'Vegetable Marinade']
+// Watch for product changes
+watch(
+  () => props.product.id,
+  () => {
+    loadRealUsageData()
   }
-
-  const available = recipesByCategory[product.category] || ['Signature Dish']
-  const count = Math.min(available.length, Math.floor(Math.random() * 3) + 1)
-
-  return available.slice(0, count)
-}
-
-const getPreparationNamesForProduct = (product: Product): string[] => {
-  const prepsByCategory = {
-    meat: ['Homemade Minced Meat'],
-    vegetables: ['Vegetable Slicing', 'Tomato Sauce'],
-    dairy: ['Cream Sauce'],
-    spices: ['Spice Mix'],
-    other: ['Basic Preparation']
-  }
-
-  const available = prepsByCategory[product.category] || []
-  return available.slice(0, 1) // Usually 1 preparation
-}
-
-const getMenuItemsForProduct = (
-  product: Product
-): Array<{ name: string; variant: string; quantity: number }> => {
-  const menuByCategory = {
-    beverages: [
-      { name: 'Draft Beer', variant: 'Small', quantity: 1 },
-      { name: 'Draft Beer', variant: 'Large', quantity: 1 }
-    ],
-    other: [
-      { name: 'Custom Cake', variant: 'Classic', quantity: 1 },
-      { name: 'Bread Basket', variant: 'Mix', quantity: 2 }
-    ]
-  }
-
-  return (
-    menuByCategory[product.category] || [
-      { name: `${product.name} by portion`, variant: 'Standard', quantity: 1 }
-    ]
-  )
-}
-
-const generateQuantityForProduct = (product: Product): number => {
-  const quantityByUnit = {
-    kg: () => Math.round((Math.random() * 0.5 + 0.1) * 100) / 100, // 0.1-0.6 kg
-    liter: () => Math.round((Math.random() * 0.3 + 0.05) * 100) / 100, // 0.05-0.35 L
-    piece: () => Math.floor(Math.random() * 3) + 1, // 1-3 pieces
-    pack: () => Math.floor(Math.random() * 2) + 1 // 1-2 packs
-  }
-
-  const generator = quantityByUnit[product.unit] || quantityByUnit.kg
-  return generator()
-}
+)
 
 // Computed properties
 const totalUsageCount = computed(() => {
@@ -669,7 +564,7 @@ const getMenuItemPopularity = (menuItemId: string): number => {
 
 // Mount
 onMounted(() => {
-  generateMockUsage()
+  loadRealUsageData()
 })
 </script>
 

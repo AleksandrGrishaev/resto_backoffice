@@ -116,6 +116,13 @@
 
     <product-details-dialog v-model="dialogs.details" :product="selectedProduct" />
 
+    <!-- Usage warning dialog (shown when trying to archive a product in use) -->
+    <product-usage-warning-dialog
+      v-model="dialogs.usageWarning"
+      :product-name="usageWarning.productName"
+      :usage-locations="usageWarning.usageLocations"
+    />
+
     <!-- Original notifications -->
     <v-snackbar
       v-model="notification.show"
@@ -148,18 +155,36 @@ import ProductsFilters from './components/ProductsFilters.vue'
 import ProductsList from './components/ProductsList.vue'
 import ProductDialog from './components/ProductDialog.vue'
 import ProductDetailsDialog from './components/ProductDetailsDialog.vue'
+import ProductUsageWarningDialog from './components/ProductUsageWarningDialog.vue'
+
+// Composables
+import { useProductUsage } from '@/stores/productsStore/composables/useProductUsage'
+import type { UsageLocation } from '@/stores/productsStore/composables/useProductUsage'
 
 const MODULE_NAME = 'ProductsView'
 
 // Store
 const store = useProductsStore()
 
+// Composables
+const { checkProductCanArchive } = useProductUsage()
+
 // Original state
 const operationLoading = ref(false)
 
 const dialogs = ref({
   product: false,
-  details: false
+  details: false,
+  usageWarning: false
+})
+
+// Usage warning state
+const usageWarning = ref<{
+  productName: string
+  usageLocations: UsageLocation[]
+}>({
+  productName: '',
+  usageLocations: []
 })
 
 const selectedProduct = ref<Product | null>(null)
@@ -208,6 +233,29 @@ const toggleProductActive = async (product: Product): Promise<void> => {
   try {
     operationLoading.value = true
 
+    // If archiving (isActive=true -> false), check for usage first
+    if (product.isActive) {
+      const usageResult = checkProductCanArchive(product.id)
+
+      if (!usageResult.canArchive) {
+        // Show warning dialog instead of archiving
+        usageWarning.value = {
+          productName: product.name,
+          usageLocations: usageResult.usageLocations
+        }
+        dialogs.value.usageWarning = true
+
+        DebugUtils.warn(MODULE_NAME, 'Cannot archive product - in use', {
+          id: product.id,
+          usageCount: usageResult.usageLocations.length
+        })
+
+        operationLoading.value = false
+        return // Stop here, don't archive
+      }
+    }
+
+    // Proceed with toggle
     const updateData: UpdateProductData = {
       id: product.id,
       isActive: !product.isActive
@@ -216,7 +264,7 @@ const toggleProductActive = async (product: Product): Promise<void> => {
     await store.updateProduct(updateData)
 
     showNotification(
-      `Product "${product.name}" ${!product.isActive ? 'activated' : 'deactivated'}`,
+      `Product "${product.name}" ${!product.isActive ? 'activated' : 'archived'}`,
       'success'
     )
 
