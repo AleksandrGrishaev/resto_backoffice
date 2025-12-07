@@ -224,6 +224,7 @@ export interface CostCalculationResult {
 // =============================================
 
 export type GetProductCallback = (id: string) => Promise<ProductForRecipe | null>
+export type GetPreparationCallback = (id: string) => Promise<Preparation | null> // ⭐ NEW: For nested preparations
 export type GetPreparationCostCallback = (id: string) => Promise<PreparationPlanCost | null>
 export type NotifyUsageChangeCallback = (itemId: string, usageData: any) => Promise<void>
 

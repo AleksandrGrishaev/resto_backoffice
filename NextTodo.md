@@ -1,339 +1,174 @@
-# NextTodo - PHASE 2: Portion Type Support
+# NextTodo - Fix Nested Preparations Cost Calculation
 
-**Start Date**: 2025-12-05
-**Duration**: 1 week
-**Estimate**: 15 Story Points
+## Problem
 
----
+Cost calculation fails with error: `Missing items: Preparation: UUID`
 
-## Phase 2 Goal
+**Root cause:** When a preparation uses another preparation as ingredient (`type: 'preparation'`), the code calls `getProductCallback` which only searches in `productsStore`. Since preparations are NOT products, it returns `null` and the calculation fails.
 
-Add "portion" as an alternative to weight-based quantities for preparations.
-
-**Business Need**:
-
-- Kitchen staff thinks in portions, not grams
-- "10 fish portions" is clearer than "300g of fish preparation"
-- Cost calculation stays accurate via weight conversion
-
-**Example**:
-
-```
-Before (Phase 1): "Fish Portion: 300g"
-After (Phase 2):  "Fish Portion: 10 portions × 30g = 300g"
-```
-
----
-
-## What We're Adding
-
-1. **Database**: `portion_type` field ('weight' | 'portion'), `portion_size` field
-2. **Types**: Update `Preparation` interface
-3. **UI**: Radio buttons for type selection + portion size input
-4. **Display**: Show "10 portions (30g each)" format
-5. **Production**: Create batches with portion quantities
-6. **FIFO**: Convert portions ↔ weight for allocation
-
-**NOT Adding** (deferred to Phase 3):
-
-- Tree view for nested ingredients
-- Visual badges and icons
-- Cost breakdown drill-down
-
----
-
-## Stage 1: Database Schema (3 SP)
-
-### 1.1. Database Migration
-
-**File**: `src/supabase/migrations/041_add_portion_type.sql` ⭐ NEW
-
-```sql
--- Migration: 041_add_portion_type
--- Description: Add portion type support to preparations
--- Date: 2025-12-05
-
--- Add portion_type column to preparations table
-ALTER TABLE preparations
-ADD COLUMN IF NOT EXISTS portion_type TEXT DEFAULT 'weight'
-CHECK (portion_type IN ('weight', 'portion'));
-
--- Add portion_size column (grams per portion, only used when portion_type = 'portion')
-ALTER TABLE preparations
-ADD COLUMN IF NOT EXISTS portion_size NUMERIC DEFAULT NULL;
-
--- Add portion_type to preparation_batches for tracking
-ALTER TABLE preparation_batches
-ADD COLUMN IF NOT EXISTS portion_type TEXT DEFAULT 'weight'
-CHECK (portion_type IN ('weight', 'portion'));
-
-ALTER TABLE preparation_batches
-ADD COLUMN IF NOT EXISTS portion_size NUMERIC DEFAULT NULL;
-
--- Add portion_quantity to batches (number of portions, when applicable)
-ALTER TABLE preparation_batches
-ADD COLUMN IF NOT EXISTS portion_quantity NUMERIC DEFAULT NULL;
-
--- Comments for documentation
-COMMENT ON COLUMN preparations.portion_type IS
-'How quantities are measured: weight (grams) or portion (fixed-size pieces)';
-
-COMMENT ON COLUMN preparations.portion_size IS
-'Size of one portion in grams. Only used when portion_type = portion';
-
-COMMENT ON COLUMN preparation_batches.portion_quantity IS
-'Number of portions in this batch. Only used when portion_type = portion';
-
--- Validation
-DO $$
-BEGIN
-  RAISE NOTICE 'Migration 041: Portion type support added';
-END $$;
-```
-
-**Apply on DEV**:
+**Affected code:** `src/stores/recipes/composables/useCostCalculation.ts`
 
 ```typescript
-mcp__supabase__apply_migration({
-  name: '041_add_portion_type',
-  query: '...' // SQL above
-})
+// Line 237 - BUG: Uses getProductCallback for preparations!
+} else if (ingredient.type === 'preparation') {
+  const prep = (await getProductCallback(ingredient.id)) as any // <-- WRONG! Should search in preparations
 ```
+
+## Solution
+
+Add a new callback `getPreparationCallback` that searches in preparations store, and use it when `ingredient.type === 'preparation'`.
 
 ---
 
-## Stage 2: Type Definitions (2 SP)
+## Implementation Steps
 
-### 2.1. Update Types
+### Step 1: Add GetPreparationCallback type
 
-**File**: `src/stores/recipes/types.ts` ✏️ MODIFY
+**File:** `src/stores/recipes/types.ts`
 
 ```typescript
-// ⭐ NEW: Portion type enum
-export type PortionType = 'weight' | 'portion'
+// Add after GetProductCallback (line 226)
+export type GetPreparationCallback = (id: string) => Promise<Preparation | null>
+```
 
-// Update Preparation interface
-export interface Preparation extends BaseEntity {
-  // ... existing fields ...
+### Step 2: Update useCostCalculation.ts
 
-  // ⭐ PHASE 2: Portion type support
-  portionType: PortionType // 'weight' (default) or 'portion'
-  portionSize?: number // Size of one portion in grams (only for portionType='portion')
-}
+**File:** `src/stores/recipes/composables/useCostCalculation.ts`
 
-// Update CreatePreparationData
-export interface CreatePreparationData {
-  // ... existing fields ...
+#### 2.1 Add import
 
-  // ⭐ PHASE 2: Portion type support
-  portionType?: PortionType // Default: 'weight'
-  portionSize?: number // Required if portionType='portion'
+```typescript
+import type {
+  // ... existing imports
+  GetPreparationCallback // <-- ADD
+  // ...
+} from '../types'
+```
+
+#### 2.2 Add callback variable (after line 33)
+
+```typescript
+let getProductCallback: GetProductCallback | null = null
+let getPreparationCallback: GetPreparationCallback | null = null // <-- ADD
+let getPreparationCostCallback: GetPreparationCostCallback | null = null
+```
+
+#### 2.3 Update setIntegrationCallbacks function
+
+```typescript
+function setIntegrationCallbacks(
+  getProduct: GetProductCallback,
+  getPreparation: GetPreparationCallback, // <-- ADD
+  getPreparationCost: GetPreparationCostCallback
+): void {
+  getProductCallback = getProduct
+  getPreparationCallback = getPreparation // <-- ADD
+  getPreparationCostCallback = getPreparationCost
+  DebugUtils.debug(MODULE_NAME, 'Integration callbacks configured')
 }
 ```
 
-### 2.2. Add Batch Type Updates
+#### 2.4 Fix calculatePreparationCost for nested preparations (around line 234-299)
 
-**File**: `src/stores/preparation/types.ts` ✏️ MODIFY (if exists) or update in relevant file
-
-```typescript
-// Update PreparationBatch interface
-export interface PreparationBatch {
-  // ... existing fields ...
-
-  // ⭐ PHASE 2: Portion type support
-  portionType: PortionType
-  portionSize?: number
-  portionQuantity?: number // Number of portions (when portionType='portion')
-}
-```
-
----
-
-## Stage 3: Mappers & Service (3 SP)
-
-### 3.1. Update Supabase Mappers
-
-**File**: `src/stores/recipes/supabaseMappers.ts` ✏️ MODIFY
-
-Add `portion_type` and `portion_size` to:
-
-- `preparationToSupabase()` - when saving
-- `preparationFromSupabase()` - when loading
-
-### 3.2. Update Recipes Service
-
-**File**: `src/stores/recipes/recipesService.ts` ✏️ MODIFY
-
-- Validate `portionSize` is provided when `portionType='portion'`
-- Default `portionType` to 'weight' when not specified
-
----
-
-## Stage 4: Production Logic (3 SP)
-
-### 4.1. Update Preparation Service
-
-**File**: `src/stores/preparation/preparationService.ts` ✏️ MODIFY
-
-When creating production receipt:
+Replace:
 
 ```typescript
-// Calculate portion quantity from total weight
-if (preparation.portionType === 'portion' && preparation.portionSize) {
-  const portionQuantity = Math.floor(totalWeight / preparation.portionSize)
-
-  batch.portionType = 'portion'
-  batch.portionSize = preparation.portionSize
-  batch.portionQuantity = portionQuantity
-  batch.quantity = totalWeight // Still track weight for FIFO
-}
+} else if (ingredient.type === 'preparation') {
+  // P PHASE 1: NEW LOGIC - Preparation ingredients
+  // Get preparation by ID
+  const prep = (await getProductCallback(ingredient.id)) as any // Reuse callback, will be typed later
 ```
 
-### 4.2. Update FIFO Allocation
-
-When allocating from batches:
-
-- Always work in weight internally
-- Convert portions to weight: `portions × portionSize = weight`
-- Display in portions when `portionType='portion'`
-
----
-
-## Stage 5: UI Components (4 SP)
-
-### 5.1. Update Unified Recipe Dialog
-
-**File**: `src/views/recipes/components/UnifiedRecipeDialog.vue` ✏️ MODIFY
-
-Add portion type selection:
-
-```vue
-<!-- Portion Type Selection (only for preparations) -->
-<v-radio-group
-  v-if="type === 'preparation'"
-  v-model="formData.portionType"
-  inline
-  label="Quantity Type"
->
-  <v-radio label="Weight (grams)" value="weight" />
-  <v-radio label="Portions" value="portion" />
-</v-radio-group>
-
-<!-- Portion Size Input (only when portionType='portion') -->
-<v-text-field
-  v-if="formData.portionType === 'portion'"
-  v-model.number="formData.portionSize"
-  type="number"
-  label="Portion Size (grams)"
-  hint="Weight of one portion in grams"
-  :rules="[v => v > 0 || 'Must be greater than 0']"
-/>
-```
-
-### 5.2. Update Display Components
-
-Show quantities appropriately:
+With:
 
 ```typescript
-// Helper function
-function formatQuantity(batch: PreparationBatch): string {
-  if (batch.portionType === 'portion' && batch.portionQuantity) {
-    return `${batch.portionQuantity} portions (${batch.quantity}g total)`
+} else if (ingredient.type === 'preparation') {
+  // P PHASE 1: NEW LOGIC - Preparation ingredients
+  if (!getPreparationCallback) {
+    DebugUtils.warn(MODULE_NAME, 'Preparation callback not set')
+    missingPreparations.push(ingredient.id)
+    continue
   }
-  return `${batch.quantity}g`
+
+  // Get preparation by ID using the correct callback
+  const prep = await getPreparationCallback(ingredient.id)
+```
+
+### Step 3: Update recipesStore.ts
+
+**File:** `src/stores/recipes/recipesStore.ts`
+
+#### 3.1 Update setupIntegrationCallbacks function
+
+```typescript
+function setupIntegrationCallbacks() {
+  const getProduct = async (productId: string) => {
+    return integrationComposable.getProductForRecipe(productId)
+  }
+
+  // ADD: New callback for getting preparations
+  const getPreparation = async (preparationId: string) => {
+    return preparationsComposable.getPreparationById(preparationId)
+  }
+
+  const getPreparationCost = async (preparationId: string) => {
+    return costCalculationComposable.getPreparationCost(preparationId)
+  }
+
+  return { getProduct, getPreparation, getPreparationCost }
 }
 ```
 
----
+#### 3.2 Update callback setup calls
 
-## Testing (Phase 1 + Phase 2)
+```typescript
+// Around line 197
+const callbacks = setupIntegrationCallbacks()
+costCalculationComposable.setIntegrationCallbacks(
+  callbacks.getProduct,
+  callbacks.getPreparation, // <-- ADD
+  callbacks.getPreparationCost
+)
+recipesComposable.setIntegrationCallbacks(
+  callbacks.getProduct,
+  callbacks.getPreparation, // <-- ADD (if needed)
+  callbacks.getPreparationCost
+)
+```
 
-### Test Cases - Phase 1 (Nested Preparations)
+### Step 4: Update useRecipes.ts (if needed)
 
-- [ ] Can create preparation using another preparation as ingredient
-- [ ] Circular dependency detection prevents A→B→A
-- [ ] Cost calculation includes nested prep costs via `lastKnownCost`
-- [ ] Production writes off preparation ingredients via FIFO
-- [ ] UI shows type badges (product/preparation)
+**File:** `src/stores/recipes/composables/useRecipes.ts`
 
-### Test Cases - Phase 2 (Portion Types)
-
-- [ ] Can create preparation with `portionType='weight'` (default)
-- [ ] Can create preparation with `portionType='portion'`
-- [ ] `portionSize` is required when `portionType='portion'`
-- [ ] Production creates batches with correct portion quantities
-- [ ] Display shows "X portions (Yg each)" format
-- [ ] FIFO allocation works correctly with portions
-
-### Integration Tests
-
-- [ ] Nested preparation + portion type works together
-- [ ] Multi-level nesting with mixed portion types
-- [ ] Cost calculation correct for portion-based preparations
+Update `setIntegrationCallbacks` to accept the new parameter if recipes also need to resolve preparations.
 
 ---
 
-## Affected Files Summary
+## Testing
 
-**Total: 5 files** (1 new, 4 modified)
-
-### NEW Files (1)
-
-1. `src/supabase/migrations/041_add_portion_type.sql` ✅ CREATED & APPLIED
-
-### MODIFIED Files (4)
-
-2. `src/stores/recipes/types.ts` ✅ UPDATED (added PortionType, updated Preparation interface)
-3. `src/stores/recipes/supabaseMappers.ts` ✅ UPDATED (added portion_type/portion_size handling)
-4. `src/views/recipes/components/UnifiedRecipeDialog.vue` ✅ UPDATED (portionType in form data)
-5. `src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue` ✅ UPDATED (portion type UI)
-
-### PENDING Files (Stage 4: Production Logic)
-
-6. `src/stores/preparation/preparationService.ts` - Batch creation with portion quantities
+1. Open a preparation that uses another preparation as ingredient (e.g., "Banana frozen 150g")
+2. Click "Calculate Cost" or "Recalculate"
+3. Should successfully calculate cost without "Missing items" error
+4. Verify the cost breakdown shows the nested preparation with correct name and cost
 
 ---
 
-## Story Points Breakdown
+## Related Files
 
-| Stage     | Task               | SP     | Status                          |
-| --------- | ------------------ | ------ | ------------------------------- |
-| 1         | Database Migration | 3      | ✅ COMPLETE                     |
-| 2         | Type Definitions   | 2      | ✅ COMPLETE                     |
-| 3         | Mappers & Service  | 3      | ✅ COMPLETE                     |
-| 4         | Production Logic   | 3      | ⏳ Pending (for batch creation) |
-| 5         | UI Components      | 4      | ✅ COMPLETE                     |
-| **Total** | **Phase 2**        | **15** | **🔄 IN PROGRESS**              |
+- `src/stores/recipes/types.ts` - Callback types
+- `src/stores/recipes/composables/useCostCalculation.ts` - Main cost calculation logic
+- `src/stores/recipes/recipesStore.ts` - Store initialization and callbacks setup
+- `src/stores/recipes/composables/useRecipes.ts` - Recipe operations
+- `src/stores/recipes/composables/usePreparations.ts` - Preparation operations
 
 ---
 
-## Success Criteria
+## Database Check (Verified)
 
-### Must Have
+Preparations exist in production database:
 
-- [x] Can create preparation with portion type (weight or portion)
-- [x] Portion size configurable for portion-type preparations
-- [ ] Production creates batches with correct quantities (Stage 4 pending)
-- [x] Display shows user-friendly format ("10 portions (30g each)")
-- [ ] FIFO works correctly (converts to weight internally) (Stage 4 pending)
-- [x] Database migration applied successfully
+- `51069fe7-1c6d-4bbc-b8e0-59d9e1f52352` = "Avocado half cleaned"
+- `99451585-c9b3-4726-bc0d-5bfd5b9672fe` = "Humus red"
+- "Banana frozen 150g" (P-39) has ingredient "Banana" (`f751ce54-...`)
 
-### Should Have
-
-- [x] Clear validation messages
-- [x] Default to 'weight' for backward compatibility
-- [x] Existing preparations still work (no breaking changes)
-
----
-
-## Next Steps After Phase 2
-
-1. **Test Phase 1 + Phase 2 together** - full integration testing
-2. **Apply migrations to PROD** - both 012 and 041
-3. **Demo to stakeholders** - show complete nested + portion functionality
-4. **Plan Phase 3** - UI polish (tree view, badges)
-
----
-
-**Last Updated**: 2025-12-05
-**Status**: Stages 1-3, 5 COMPLETE. Stage 4 (Production Logic) pending.
+**The issue is NOT in the database - it's in the frontend callback resolution.**
