@@ -343,7 +343,19 @@
 
         <!-- Actions -->
         <template #[`item.actions`]="{ item }">
-          <div class="d-flex justify-center">
+          <div class="d-flex justify-center gap-1">
+            <!-- Quick Add Production Button -->
+            <v-btn
+              size="small"
+              variant="text"
+              color="success"
+              icon="mdi-plus"
+              @click.stop="emit('quick-add-production', item.preparationId)"
+            >
+              <v-icon />
+              <v-tooltip activator="parent" location="top">Add Production</v-tooltip>
+            </v-btn>
+            <!-- Info Button -->
             <v-btn
               size="small"
               variant="text"
@@ -432,6 +444,7 @@ const emit = defineEmits<{
   'toggle-zero-stock': []
   'refresh-needed': []
   'add-production': []
+  'quick-add-production': [preparationId: string]
 }>()
 
 // Store
@@ -467,7 +480,7 @@ const headers = computed(() => [
   { title: 'Cost', key: 'cost', sortable: false, width: '150px' },
   { title: 'Total Value', key: 'totalValue', sortable: false, width: '120px' },
   { title: 'Status', key: 'status', sortable: false, width: '120px' },
-  { title: 'Actions', key: 'actions', sortable: false, width: '60px' }
+  { title: 'Actions', key: 'actions', sortable: false, width: '100px' }
 ])
 
 const filteredBalances = computed(() => {

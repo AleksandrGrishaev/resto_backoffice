@@ -29,8 +29,7 @@
           <div class="recipe-item__output">
             <v-icon icon="mdi-package-variant" size="14" class="mr-1" />
             <span v-if="type === 'preparation'">
-              Output: {{ (item as Preparation).outputQuantity }}
-              {{ (item as Preparation).outputUnit }}
+              Output: {{ getOutputDisplay(item as Preparation) }}
             </span>
             <span v-else>
               Portions: {{ (item as Recipe).portionSize }} {{ (item as Recipe).portionUnit }}
@@ -228,6 +227,14 @@ defineEmits<Emits>()
 
 // ✅ Initialize recipes store
 const recipesStore = useRecipesStore()
+
+// Format output display based on portionType
+function getOutputDisplay(prep: Preparation): string {
+  if (prep.portionType === 'portion') {
+    return prep.outputQuantity === 1 ? '1 portion' : `${prep.outputQuantity} portions`
+  }
+  return `${prep.outputQuantity} ${prep.outputUnit}`
+}
 
 const hasCostData = computed(() => {
   return !!props.costCalculation && props.costCalculation.totalCost > 0

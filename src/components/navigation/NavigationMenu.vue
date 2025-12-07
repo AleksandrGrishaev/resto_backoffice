@@ -5,11 +5,25 @@
     <v-toolbar flat density="compact" class="navigation-header px-4">
       <v-toolbar-title :class="{ 'text-center': rail }">
         {{ rail ? 'BO' : 'BackOffice' }}
-        <!-- ✅ НОВЫЙ: Dev indicator -->
+        <!-- Dev indicator -->
         <v-chip v-if="isDev && !rail" size="x-small" color="warning" variant="tonal" class="ms-2">
           DEV
         </v-chip>
       </v-toolbar-title>
+
+      <v-spacer />
+
+      <!-- Refresh Button -->
+      <v-btn
+        v-if="!rail && canRefresh"
+        icon="mdi-refresh"
+        variant="text"
+        size="small"
+        :loading="refreshLoading"
+        :disabled="refreshLoading"
+        title="Refresh current view data"
+        @click="handleRefresh"
+      />
     </v-toolbar>
 
     <!-- Navigation -->
@@ -343,9 +357,9 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
+import { useViewRefresh } from '@/composables/useViewRefresh'
 import NavigationAccounts from './NavigationAccounts.vue'
 import AlertsBadge from './AlertsBadge.vue'
-// ✅ НОВЫЙ: Импорт Debug Stores Badge
 import DebugStoresBadge from './DebugStoresBadge.vue'
 
 const MODULE_NAME = 'NavigationMenu'
@@ -361,7 +375,10 @@ defineEmits<{
 const router = useRouter()
 const authStore = useAuthStore()
 
-// ✅ НОВЫЙ: Dev mode detection
+// View refresh
+const { refresh, loading: refreshLoading, canRefresh } = useViewRefresh()
+
+// Dev mode detection
 const isDev = computed(() => import.meta.env.DEV)
 
 const getUserRole = computed(() => {
@@ -375,6 +392,13 @@ async function handleLogout() {
     router.push({ name: 'login' })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Logout error', { error })
+  }
+}
+
+async function handleRefresh() {
+  const success = await refresh()
+  if (success) {
+    DebugUtils.info(MODULE_NAME, 'View data refreshed')
   }
 }
 </script>
