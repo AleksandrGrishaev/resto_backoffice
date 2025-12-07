@@ -137,6 +137,7 @@
           @toggle-zero-stock="toggleZeroStockFilter"
           @refresh-needed="refreshCurrentData"
           @add-production="showProductionDialog = true"
+          @quick-add-production="handleQuickAddProduction"
         />
       </v-tabs-window-item>
 
@@ -190,6 +191,7 @@
     <direct-preparation-production-dialog
       v-model="showProductionDialog"
       :department="selectedDepartment"
+      :preselected-preparation-id="preselectedPreparationId"
       @success="handleOperationSuccess"
       @error="handleOperationError"
     />
@@ -254,6 +256,9 @@ const editingInventory = ref<PreparationInventoryDocument | null>(null)
 
 // ✅ NEW: Zero stock filter state
 const showZeroStock = ref(false)
+
+// NEW: Preselected preparation for quick add from table
+const preselectedPreparationId = ref<string | null>(null)
 
 // Computed
 const preparationBalances = computed(() => {
@@ -418,6 +423,13 @@ async function refreshCurrentData() {
   }
 }
 
+// NEW: Handle quick add production from table
+function handleQuickAddProduction(preparationId: string) {
+  DebugUtils.info(MODULE_NAME, 'Quick add production', { preparationId })
+  preselectedPreparationId.value = preparationId
+  showProductionDialog.value = true
+}
+
 async function handleOperationSuccess(message: string = 'Operation completed successfully') {
   try {
     DebugUtils.info(MODULE_NAME, 'Operation completed, refreshing data')
@@ -427,8 +439,9 @@ async function handleOperationSuccess(message: string = 'Operation completed suc
 
     await refreshCurrentData()
 
-    // Close dialogs
+    // Close dialogs and reset preselected
     showProductionDialog.value = false
+    preselectedPreparationId.value = null
 
     DebugUtils.info(MODULE_NAME, 'Data refreshed successfully')
   } catch (error) {

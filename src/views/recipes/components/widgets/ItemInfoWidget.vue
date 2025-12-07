@@ -135,6 +135,10 @@ function getOutputLabel(): string {
 function getOutputValue(): string {
   if (props.type === 'preparation') {
     const prep = props.item as Preparation
+    // Use portionType to determine display unit
+    if (prep.portionType === 'portion') {
+      return prep.outputQuantity === 1 ? '1 portion' : `${prep.outputQuantity} portions`
+    }
     return `${prep.outputQuantity} ${prep.outputUnit}`
   } else {
     const recipe = props.item as Recipe

@@ -2,16 +2,19 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="700px"
+    :max-width="isMiniMode ? '450px' : '700px'"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
         <div>
-          <h3>Add Preparation to Production</h3>
-          <div class="text-caption text-medium-emphasis">
+          <h3>{{ isMiniMode ? 'Quick Add Production' : 'Add Preparation to Production' }}</h3>
+          <div v-if="!isMiniMode" class="text-caption text-medium-emphasis">
             Record new preparation production with automatic raw product write-off
+          </div>
+          <div v-else class="text-caption text-medium-emphasis">
+            {{ selectedPreparation?.name }}
           </div>
         </div>
         <v-btn icon="mdi-close" variant="text" @click="handleClose" />
@@ -19,233 +22,351 @@
 
       <v-divider />
 
-      <v-card-text class="pa-6">
+      <v-card-text :class="isMiniMode ? 'pa-4' : 'pa-6'">
         <v-form ref="form" v-model="isFormValid">
-          <!-- Responsible Person -->
-          <v-text-field
-            v-model="formData.responsiblePerson"
-            label="Responsible Person"
-            :rules="[v => !!v || 'Required field']"
-            prepend-inner-icon="mdi-account"
-            variant="outlined"
-            class="mb-4"
-            readonly
-          >
-            <template #append-inner>
-              <v-tooltip location="top">
-                <template #activator="{ props }">
-                  <v-icon v-bind="props" icon="mdi-lock" size="small" color="success" />
-                </template>
-                <span>Auto-filled from current user</span>
-              </v-tooltip>
-            </template>
-          </v-text-field>
-
           <!-- Source Type - Hidden, always 'production' -->
           <input v-model="formData.sourceType" type="hidden" value="production" />
 
-          <!-- Preparation Selection -->
-          <v-select
-            v-model="selectedPreparationId"
-            :items="availablePreparations"
-            item-title="name"
-            item-value="id"
-            label="Select Preparation"
-            :rules="[v => !!v || 'Please select a preparation']"
-            variant="outlined"
-            class="mb-4"
-            prepend-inner-icon="mdi-chef-hat"
-          >
-            <template #item="{ props, item }">
-              <v-list-item v-bind="props">
-                <template #subtitle>
-                  <span class="text-caption">
-                    {{ item.raw.code }} •
-                    <!-- ⭐ PHASE 2: Show portions or grams based on type -->
-                    <template v-if="item.raw.portionType === 'portion' && item.raw.portionSize">
-                      1 portion ({{ item.raw.portionSize }}{{ item.raw.outputUnit }})
-                    </template>
-                    <template v-else>
-                      {{ item.raw.outputQuantity }} {{ item.raw.outputUnit }}
-                    </template>
-                  </span>
-                </template>
-              </v-list-item>
-            </template>
-          </v-select>
-
-          <!-- Recipe Output Info -->
-          <v-card v-if="selectedPreparation" variant="tonal" color="primary" class="mb-4">
-            <v-card-text class="py-3">
-              <div class="d-flex justify-space-between align-center">
-                <div>
-                  <div class="text-caption text-medium-emphasis">Recipe Output</div>
-                  <div class="text-h6 font-weight-medium">
-                    <template v-if="isPortionType">
-                      1 portion ({{ selectedPreparation.portionSize
-                      }}{{ selectedPreparation.outputUnit }})
-                    </template>
-                    <template v-else>
-                      {{ selectedPreparation.outputQuantity }}
-                      {{ selectedPreparation.outputUnit }}
-                    </template>
+          <!-- ============================================ -->
+          <!-- MINI MODE: Simple quantity input -->
+          <!-- ============================================ -->
+          <template v-if="isMiniMode && selectedPreparation">
+            <!-- Recipe Output Info -->
+            <v-card variant="tonal" color="primary" class="mb-4">
+              <v-card-text class="py-3">
+                <div class="d-flex justify-space-between align-center">
+                  <div>
+                    <div class="text-caption text-medium-emphasis">Recipe Output</div>
+                    <div class="text-h6 font-weight-medium">
+                      <template v-if="isPortionType">
+                        1 portion ({{ selectedPreparation.portionSize
+                        }}{{ selectedPreparation.outputUnit }})
+                      </template>
+                      <template v-else>
+                        {{ selectedPreparation.outputQuantity }}
+                        {{ selectedPreparation.outputUnit }}
+                      </template>
+                    </div>
+                  </div>
+                  <div v-if="hasRecipe" class="text-right">
+                    <div class="text-caption text-medium-emphasis">Ingredients</div>
+                    <div class="text-subtitle-1 font-weight-medium">
+                      {{ selectedPreparation.recipe.length }} items
+                    </div>
                   </div>
                 </div>
-                <div v-if="hasRecipe" class="text-right">
-                  <div class="text-caption text-medium-emphasis">Recipe Ingredients</div>
-                  <div class="text-subtitle-1 font-weight-medium">
-                    {{ selectedPreparation.recipe.length }} items
-                  </div>
-                </div>
-              </div>
-            </v-card-text>
-          </v-card>
+              </v-card-text>
+            </v-card>
 
-          <!-- Quantity Input: Portions or Weight -->
-          <v-text-field
-            v-if="isPortionType"
-            v-model.number="portionInput"
-            label="Number of Portions"
-            type="number"
-            min="1"
-            step="1"
-            :rules="[v => (!!v && v > 0) || 'Quantity must be greater than 0']"
-            variant="outlined"
-            class="mb-4"
-            suffix="portions"
-            prepend-inner-icon="mdi-food-variant"
-            :hint="`${portionInput || 0} portions × ${portionSize}g = ${effectiveQuantity}g total`"
-            persistent-hint
-          />
-          <v-text-field
-            v-else
-            v-model.number="quantity"
-            label="Production Quantity"
-            type="number"
-            min="50"
-            step="50"
-            :rules="[v => (!!v && v > 0) || 'Quantity must be greater than 0']"
-            variant="outlined"
-            class="mb-4"
-            :suffix="selectedPreparation?.outputUnit || 'g'"
-            prepend-inner-icon="mdi-scale"
-            :hint="quantityHint"
-            persistent-hint
-          />
+            <!-- Quantity Input -->
+            <v-text-field
+              v-if="isPortionType"
+              v-model.number="portionInput"
+              label="Number of Portions"
+              type="number"
+              min="1"
+              step="1"
+              variant="outlined"
+              class="mb-4"
+              suffix="portions"
+              prepend-inner-icon="mdi-food-variant"
+              :hint="`${portionInput || 0} × ${portionSize}g = ${effectiveQuantity}g`"
+              persistent-hint
+              autofocus
+            />
+            <v-text-field
+              v-else
+              v-model.number="quantity"
+              label="Production Quantity"
+              type="number"
+              min="50"
+              step="50"
+              variant="outlined"
+              class="mb-4"
+              :suffix="selectedPreparation?.outputUnit || 'g'"
+              prepend-inner-icon="mdi-scale"
+              :hint="quantityHint"
+              persistent-hint
+              autofocus
+            />
 
-          <!-- Total Cost Display -->
-          <v-card
-            v-if="selectedPreparation && hasRecipe && calculatedCost > 0"
-            variant="outlined"
-            class="mb-4"
-          >
-            <v-card-text class="py-3">
-              <div class="d-flex justify-space-between align-center mb-2">
-                <div>
-                  <div class="text-caption text-medium-emphasis">Estimated Cost</div>
-                  <div class="text-h6 font-weight-bold text-success">
-                    {{ formatCurrency(calculatedCost) }}
-                  </div>
-                </div>
-                <div class="text-right">
-                  <div class="text-caption text-medium-emphasis">Cost per Unit</div>
-                  <div class="text-subtitle-2">
-                    <!-- ⭐ PHASE 2: calculatedCostPerUnit is already per portion for portion-type -->
-                    <template v-if="isPortionType">
-                      {{ formatCurrency(calculatedCostPerUnit) }}/portion
-                    </template>
-                    <template v-else>
-                      {{ formatCurrency(calculatedCostPerUnit) }}/{{
-                        selectedPreparation.outputUnit
-                      }}
-                    </template>
-                  </div>
-                </div>
-              </div>
-              <v-divider class="my-2" />
-              <div class="text-caption text-medium-emphasis">
-                <v-icon icon="mdi-information-outline" size="small" class="mr-1" />
-                Calculated from current product prices
-              </div>
-            </v-card-text>
-          </v-card>
-
-          <!-- Ingredients Preview (Products + Preparations) -->
-          <v-expansion-panels v-if="hasRecipe && ingredientsPreview.length > 0" class="mb-4">
-            <v-expansion-panel>
-              <v-expansion-panel-title>
-                <div class="d-flex align-center">
-                  <v-icon icon="mdi-package-variant" class="mr-2" />
-                  <span>Ingredients to Write Off ({{ ingredientsPreview.length }} items)</span>
-                </div>
-              </v-expansion-panel-title>
-              <v-expansion-panel-text>
-                <v-list density="compact" class="pa-0">
-                  <v-list-item v-for="item in ingredientsPreview" :key="item.id" class="px-2">
-                    <template #prepend>
-                      <!-- Different icons for products vs preparations -->
-                      <v-icon
-                        :icon="item.type === 'preparation' ? 'mdi-chef-hat' : 'mdi-food'"
-                        size="small"
-                        :color="item.type === 'preparation' ? 'warning' : 'primary'"
-                        class="mr-2"
-                      />
-                    </template>
-                    <v-list-item-title class="text-body-2">
-                      {{ item.name }}
-                      <v-chip
-                        v-if="item.type === 'preparation'"
-                        size="x-small"
-                        color="warning"
-                        class="ml-1"
-                      >
-                        prep
-                      </v-chip>
-                    </v-list-item-title>
-                    <v-list-item-subtitle class="text-caption">
-                      {{ item.quantity }} {{ item.unit }} × {{ formatCurrency(item.costPerUnit) }} =
-                      {{ formatCurrency(item.totalCost) }}
-                    </v-list-item-subtitle>
-                  </v-list-item>
-                </v-list>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
-
-          <!-- Shelf Life Display -->
-          <v-alert
-            v-if="selectedPreparation"
-            type="info"
-            variant="tonal"
-            density="compact"
-            class="mb-4"
-          >
-            <div class="d-flex align-center">
-              <v-icon icon="mdi-clock-outline" class="mr-2" />
-              <div>
-                <strong>Shelf Life:</strong>
-                {{ shelfLifeText }}
-                <br />
-                <small>Expiry: {{ calculatedExpiryDate.toLocaleDateString() }}</small>
-              </div>
+            <!-- Cost Display -->
+            <div
+              v-if="hasRecipe && calculatedCost > 0"
+              class="d-flex justify-space-between align-center mb-4 text-body-1"
+            >
+              <span class="text-medium-emphasis">Estimated Cost:</span>
+              <span class="font-weight-bold text-success text-h6">
+                {{ formatCurrency(calculatedCost) }}
+              </span>
             </div>
-          </v-alert>
 
-          <!-- WARNING: No Recipe -->
-          <v-alert
-            v-if="selectedPreparation && !hasRecipe"
-            type="warning"
-            variant="tonal"
-            density="compact"
-            class="mb-4"
-          >
-            <v-icon icon="mdi-alert" class="mr-1" />
-            This preparation has no recipe defined. Raw products will NOT be written off
-            automatically.
-          </v-alert>
+            <!-- Warning: No Recipe -->
+            <v-alert
+              v-if="!hasRecipe"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              class="mb-4"
+            >
+              <v-icon icon="mdi-alert" size="small" class="mr-1" />
+              No recipe - raw products won't be written off
+            </v-alert>
+          </template>
 
-          <!-- Production Notes -->
+          <!-- ============================================ -->
+          <!-- FULL MODE: Search + List + Queue -->
+          <!-- ============================================ -->
+          <template v-else>
+            <!-- Responsible Person (Full mode only) -->
+            <v-text-field
+              v-model="formData.responsiblePerson"
+              label="Responsible Person"
+              :rules="[v => !!v || 'Required field']"
+              prepend-inner-icon="mdi-account"
+              variant="outlined"
+              density="compact"
+              class="mb-4"
+              readonly
+            >
+              <template #append-inner>
+                <v-tooltip location="top">
+                  <template #activator="{ props: tooltipProps }">
+                    <v-icon v-bind="tooltipProps" icon="mdi-lock" size="small" color="success" />
+                  </template>
+                  <span>Auto-filled from current user</span>
+                </v-tooltip>
+              </template>
+            </v-text-field>
+
+            <!-- Search + Category Filter -->
+            <v-row class="mb-2">
+              <v-col cols="8">
+                <v-text-field
+                  v-model="searchQuery"
+                  prepend-inner-icon="mdi-magnify"
+                  placeholder="Search preparation..."
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+              <v-col cols="4">
+                <v-select
+                  v-model="selectedCategory"
+                  :items="categoryOptions"
+                  item-title="title"
+                  item-value="value"
+                  label="Category"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+            </v-row>
+
+            <!-- NEW: Scrollable Preparation List -->
+            <v-card variant="outlined" class="mb-4 preparation-list-card">
+              <v-list density="compact" class="pa-0">
+                <template v-if="filteredPreparations.length > 0">
+                  <template v-for="prep in filteredPreparations" :key="prep.id">
+                    <!-- Preparation Item -->
+                    <v-list-item
+                      :class="{
+                        'bg-primary-lighten-5': expandedPreparationId === prep.id,
+                        'bg-success-lighten-5': isInQueue(prep.id)
+                      }"
+                      @click="togglePreparation(prep.id)"
+                    >
+                      <template #prepend>
+                        <v-icon
+                          :icon="isInQueue(prep.id) ? 'mdi-check-circle' : 'mdi-chef-hat'"
+                          :color="isInQueue(prep.id) ? 'success' : 'primary'"
+                          size="small"
+                        />
+                      </template>
+                      <v-list-item-title>{{ prep.name }}</v-list-item-title>
+                      <v-list-item-subtitle class="text-caption">
+                        {{ prep.code }} •
+                        <template v-if="prep.portionType === 'portion' && prep.portionSize">
+                          1 portion ({{ prep.portionSize }}{{ prep.outputUnit }})
+                        </template>
+                        <template v-else>{{ prep.outputQuantity }} {{ prep.outputUnit }}</template>
+                      </v-list-item-subtitle>
+                      <template #append>
+                        <v-icon
+                          :icon="
+                            expandedPreparationId === prep.id
+                              ? 'mdi-chevron-up'
+                              : 'mdi-chevron-down'
+                          "
+                          size="small"
+                        />
+                      </template>
+                    </v-list-item>
+
+                    <!-- Inline Expansion: Quantity + Cost + Add Button -->
+                    <v-expand-transition>
+                      <div v-if="expandedPreparationId === prep.id" class="pa-4 expansion-content">
+                        <!-- Recipe Output Info -->
+                        <v-card
+                          v-if="selectedPreparation"
+                          variant="tonal"
+                          color="primary"
+                          class="mb-3"
+                        >
+                          <v-card-text class="py-2">
+                            <div class="d-flex justify-space-between align-center">
+                              <div>
+                                <div class="text-caption text-medium-emphasis">Recipe Output</div>
+                                <div class="text-subtitle-1 font-weight-medium">
+                                  <template v-if="isPortionType">
+                                    1 portion ({{ selectedPreparation.portionSize
+                                    }}{{ selectedPreparation.outputUnit }})
+                                  </template>
+                                  <template v-else>
+                                    {{ selectedPreparation.outputQuantity }}
+                                    {{ selectedPreparation.outputUnit }}
+                                  </template>
+                                </div>
+                              </div>
+                              <div v-if="hasRecipe" class="text-right">
+                                <div class="text-caption text-medium-emphasis">Ingredients</div>
+                                <div class="text-subtitle-2">
+                                  {{ selectedPreparation.recipe.length }} items
+                                </div>
+                              </div>
+                            </div>
+                          </v-card-text>
+                        </v-card>
+
+                        <!-- Quantity Input -->
+                        <v-text-field
+                          v-if="isPortionType"
+                          v-model.number="portionInput"
+                          label="Number of Portions"
+                          type="number"
+                          min="1"
+                          step="1"
+                          variant="outlined"
+                          density="compact"
+                          class="mb-2"
+                          suffix="portions"
+                          :hint="`${portionInput || 0} × ${portionSize}g = ${effectiveQuantity}g`"
+                          persistent-hint
+                        />
+                        <v-text-field
+                          v-else
+                          v-model.number="quantity"
+                          label="Production Quantity"
+                          type="number"
+                          min="50"
+                          step="50"
+                          variant="outlined"
+                          density="compact"
+                          class="mb-2"
+                          :suffix="selectedPreparation?.outputUnit || 'g'"
+                          :hint="quantityHint"
+                          persistent-hint
+                        />
+
+                        <!-- Cost Display -->
+                        <div
+                          v-if="hasRecipe && calculatedCost > 0"
+                          class="d-flex justify-space-between align-center mb-2 text-body-2"
+                        >
+                          <span class="text-medium-emphasis">Estimated Cost:</span>
+                          <span class="font-weight-bold text-success">
+                            {{ formatCurrency(calculatedCost) }}
+                          </span>
+                        </div>
+
+                        <!-- Warning: No Recipe -->
+                        <v-alert
+                          v-if="!hasRecipe"
+                          type="warning"
+                          variant="tonal"
+                          density="compact"
+                          class="mb-2"
+                        >
+                          <v-icon icon="mdi-alert" size="small" class="mr-1" />
+                          No recipe - raw products won't be written off
+                        </v-alert>
+
+                        <!-- Add to Queue Button -->
+                        <v-btn
+                          color="success"
+                          variant="flat"
+                          block
+                          :disabled="!canAddToQueue"
+                          prepend-icon="mdi-plus"
+                          @click.stop="addToQueue"
+                        >
+                          Add to Queue
+                        </v-btn>
+                      </div>
+                    </v-expand-transition>
+
+                    <v-divider v-if="expandedPreparationId !== prep.id" />
+                  </template>
+                </template>
+
+                <!-- No Results -->
+                <v-list-item v-else>
+                  <div class="text-center py-4 text-medium-emphasis">
+                    <v-icon icon="mdi-magnify" size="32" class="mb-2" />
+                    <div>No preparations found</div>
+                  </div>
+                </v-list-item>
+              </v-list>
+            </v-card>
+
+            <!-- NEW: Production Queue Summary -->
+            <v-card v-if="productionQueue.length > 0" variant="tonal" color="success" class="mb-4">
+              <v-card-text class="py-3">
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <div class="text-subtitle-2 font-weight-medium">
+                    <v-icon icon="mdi-playlist-check" class="mr-1" />
+                    Production Queue ({{ productionQueue.length }} items)
+                  </div>
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    color="error"
+                    icon="mdi-delete-sweep"
+                    @click="clearQueue"
+                  >
+                    <v-icon />
+                    <v-tooltip activator="parent" location="top">Clear Queue</v-tooltip>
+                  </v-btn>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                  <v-chip
+                    v-for="item in productionQueue"
+                    :key="item.id"
+                    size="small"
+                    closable
+                    color="success"
+                    variant="flat"
+                    @click:close="removeFromQueue(item.id)"
+                  >
+                    {{ item.name }}: {{ item.displayQuantity }}
+                  </v-chip>
+                </div>
+                <div class="d-flex justify-space-between align-center text-body-2">
+                  <span class="text-medium-emphasis">Total Estimated Cost:</span>
+                  <span class="font-weight-bold">{{ formatCurrency(totalQueueCost) }}</span>
+                </div>
+              </v-card-text>
+            </v-card>
+          </template>
+          <!-- END FULL MODE -->
+
+          <!-- Production Notes (full mode only) -->
           <v-textarea
+            v-if="!isMiniMode"
             v-model="formData.notes"
             label="Production Notes (optional)"
             variant="outlined"
@@ -269,7 +390,13 @@
           prepend-icon="mdi-chef-hat"
           @click="handleSubmit"
         >
-          Confirm Production
+          {{
+            isMiniMode
+              ? 'Produce'
+              : productionQueue.length > 0
+                ? `Confirm (${productionQueue.length})`
+                : 'Confirm Production'
+          }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -392,17 +519,36 @@ import type {
   CreatePreparationReceiptData,
   PreparationReceiptItem
 } from '@/stores/preparation'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, generateId } from '@/utils'
 
 const MODULE_NAME = 'DirectPreparationProductionDialog'
+
+// Production queue item interface
+interface ProductionQueueItem {
+  id: string
+  preparationId: string
+  name: string
+  code: string
+  quantity: number // effectiveQuantity in grams
+  displayQuantity: string // e.g. "3 portions" or "150g"
+  unit: string
+  costPerUnit: number
+  totalCost: number
+  expiryDate: string
+  isPortionType: boolean
+  portionCount?: number
+}
 
 // Props
 interface Props {
   modelValue: boolean
   department: PreparationDepartment
+  preselectedPreparationId?: string | null
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  preselectedPreparationId: null
+})
 
 // Emits
 const emit = defineEmits<{
@@ -439,7 +585,18 @@ const deficitQuantity = ref(0)
 const suggestedQuantity = ref(0)
 const productionChoice = ref<'cover_deficit' | 'standard' | 'custom'>('cover_deficit')
 
+// NEW: Search and filter state
+const searchQuery = ref('')
+const selectedCategory = ref<string | null>(null)
+const expandedPreparationId = ref<string | null>(null)
+
+// NEW: Production queue for multi-select
+const productionQueue = ref<ProductionQueueItem[]>([])
+
 // Computed - sourceType is always 'production'
+
+// NEW: Mini mode when preselected preparation is provided
+const isMiniMode = computed(() => !!props.preselectedPreparationId)
 
 const selectedPreparation = computed(() => {
   if (!selectedPreparationId.value) return null
@@ -627,7 +784,8 @@ const availablePreparations = computed(() => {
         ...p,
         code: prep?.code || '',
         outputQuantity: prep?.outputQuantity || 0,
-        outputUnit: prep?.outputUnit || 'g'
+        outputUnit: prep?.outputUnit || 'g',
+        category: prep?.type || '' // category is stored in 'type' field
       }
     })
   } catch (error) {
@@ -636,14 +794,70 @@ const availablePreparations = computed(() => {
   }
 })
 
-const canSubmit = computed(() => {
+// NEW: Category options for filter dropdown
+const categoryOptions = computed(() => {
+  return recipesStore.preparationCategories.map(cat => ({
+    title: cat.name,
+    value: cat.id
+  }))
+})
+
+// NEW: Filtered preparations based on search and category
+const filteredPreparations = computed(() => {
+  let preps = availablePreparations.value
+
+  // Filter by search query (name or code)
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    preps = preps.filter(p => p.name.toLowerCase().includes(q) || p.code?.toLowerCase().includes(q))
+  }
+
+  // Filter by category
+  if (selectedCategory.value) {
+    preps = preps.filter(p => p.category === selectedCategory.value)
+  }
+
+  return preps
+})
+
+// NEW: Check if preparation is already in queue
+const isInQueue = (prepId: string) => {
+  return productionQueue.value.some(item => item.preparationId === prepId)
+}
+
+// NEW: Total queue cost
+const totalQueueCost = computed(() =>
+  productionQueue.value.reduce((sum, item) => sum + item.totalCost, 0)
+)
+
+// NEW: Can add current selection to queue
+const canAddToQueue = computed(() => {
   return (
-    isFormValid.value &&
     selectedPreparationId.value &&
-    effectiveQuantity.value > 0 && // ⭐ Use effectiveQuantity (handles both portion and weight)
+    effectiveQuantity.value > 0 &&
     calculatedCostPerUnit.value >= 0 &&
-    !loading.value
+    !isInQueue(selectedPreparationId.value)
   )
+})
+
+// Updated: Can submit if queue has items OR current selection is valid
+const canSubmit = computed(() => {
+  // Mini mode: just check current selection
+  if (isMiniMode.value) {
+    return (
+      selectedPreparationId.value &&
+      effectiveQuantity.value > 0 &&
+      calculatedCostPerUnit.value >= 0 &&
+      !loading.value
+    )
+  }
+
+  // Full mode: check queue OR current selection
+  const hasQueueItems = productionQueue.value.length > 0
+  const hasCurrentSelection =
+    selectedPreparationId.value && effectiveQuantity.value > 0 && calculatedCostPerUnit.value >= 0
+
+  return isFormValid.value && (hasQueueItems || hasCurrentSelection) && !loading.value
 })
 
 // Watchers
@@ -736,55 +950,155 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+// NEW: Toggle preparation expansion for inline editing
+function togglePreparation(prepId: string) {
+  if (expandedPreparationId.value === prepId) {
+    // Collapse - clear selection
+    expandedPreparationId.value = null
+    selectedPreparationId.value = ''
+    quantity.value = 0
+    portionInput.value = 0
+  } else {
+    // Expand - select this preparation
+    expandedPreparationId.value = prepId
+    selectedPreparationId.value = prepId
+    // Quantity will be set by the watcher on selectedPreparationId
+  }
+}
+
+// NEW: Add current selection to production queue
+function addToQueue() {
+  if (!canAddToQueue.value || !selectedPreparation.value) return
+
+  const prep = selectedPreparation.value
+  const expiryDate = calculatedExpiryDate.value
+  expiryDate.setHours(20, 0, 0, 0)
+
+  // Build display quantity string
+  let displayQty: string
+  if (isPortionType.value) {
+    displayQty = `${portionInput.value} portion${portionInput.value > 1 ? 's' : ''} (${effectiveQuantity.value}${prep.outputUnit})`
+  } else {
+    displayQty = `${effectiveQuantity.value}${prep.outputUnit}`
+  }
+
+  // Calculate cost per gram for storage
+  const costPerGram = isPortionType.value
+    ? calculatedCostPerUnit.value / portionSize.value
+    : calculatedCostPerUnit.value
+
+  const queueItem: ProductionQueueItem = {
+    id: generateId(),
+    preparationId: prep.id,
+    name: prep.name,
+    code: prep.code || '',
+    quantity: effectiveQuantity.value,
+    displayQuantity: displayQty,
+    unit: prep.outputUnit,
+    costPerUnit: costPerGram,
+    totalCost: calculatedCost.value,
+    expiryDate: expiryDate.toISOString().slice(0, 16),
+    isPortionType: isPortionType.value,
+    portionCount: isPortionType.value ? portionInput.value : undefined
+  }
+
+  productionQueue.value.push(queueItem)
+
+  // Clear current selection for next item
+  expandedPreparationId.value = null
+  selectedPreparationId.value = ''
+  quantity.value = 0
+  portionInput.value = 0
+
+  DebugUtils.info(MODULE_NAME, `Added to queue: ${prep.name}`, { queueItem })
+}
+
+// NEW: Remove item from queue
+function removeFromQueue(itemId: string) {
+  productionQueue.value = productionQueue.value.filter(item => item.id !== itemId)
+}
+
+// NEW: Clear all queue items
+function clearQueue() {
+  productionQueue.value = []
+}
+
 async function handleSubmit() {
   if (!canSubmit.value) return
 
   try {
     loading.value = true
 
-    // Calculate expiry date
-    const expiryDate = calculatedExpiryDate.value
-    expiryDate.setHours(20, 0, 0, 0)
+    // Build list of items to process: queue items + current selection (if valid)
+    const itemsToProcess: PreparationReceiptItem[] = []
 
-    // Create receipt item - ⭐ Use effectiveQuantity (grams) for the actual batch
-    // ⭐ PHASE 2 FIX: For portion-type, convert cost per portion to cost per gram
-    // calculatedCostPerUnit is per portion for portion-type, but batch needs per gram
-    const costPerGram = isPortionType.value
-      ? calculatedCostPerUnit.value / portionSize.value
-      : calculatedCostPerUnit.value
-
-    const receiptItem: PreparationReceiptItem = {
-      preparationId: selectedPreparationId.value,
-      quantity: effectiveQuantity.value, // ⭐ Always in grams
-      costPerUnit: costPerGram, // ⭐ Always per gram for batch storage
-      expiryDate: expiryDate.toISOString().slice(0, 16),
-      notes: ''
+    // Add queue items
+    for (const queueItem of productionQueue.value) {
+      itemsToProcess.push({
+        preparationId: queueItem.preparationId,
+        quantity: queueItem.quantity,
+        costPerUnit: queueItem.costPerUnit,
+        expiryDate: queueItem.expiryDate,
+        notes: ''
+      })
     }
 
-    // Build receipt data
+    // Add current selection if valid and not in queue
+    if (
+      selectedPreparationId.value &&
+      effectiveQuantity.value > 0 &&
+      !isInQueue(selectedPreparationId.value)
+    ) {
+      const expiryDate = calculatedExpiryDate.value
+      expiryDate.setHours(20, 0, 0, 0)
+
+      const costPerGram = isPortionType.value
+        ? calculatedCostPerUnit.value / portionSize.value
+        : calculatedCostPerUnit.value
+
+      itemsToProcess.push({
+        preparationId: selectedPreparationId.value,
+        quantity: effectiveQuantity.value,
+        costPerUnit: costPerGram,
+        expiryDate: expiryDate.toISOString().slice(0, 16),
+        notes: ''
+      })
+    }
+
+    if (itemsToProcess.length === 0) {
+      emit('error', 'No items to produce')
+      return
+    }
+
+    // Build receipt data with all items
     const receiptData: CreatePreparationReceiptData = {
       department: props.department,
       responsiblePerson: formData.value.responsiblePerson,
       sourceType: formData.value.sourceType,
-      items: [receiptItem],
+      items: itemsToProcess,
       notes: formData.value.notes
     }
 
-    DebugUtils.info(MODULE_NAME, 'Submitting preparation production', { receiptData })
+    DebugUtils.info(MODULE_NAME, 'Submitting preparation production', {
+      receiptData,
+      itemCount: itemsToProcess.length
+    })
 
     // Create receipt through store
     await preparationStore.createReceipt(receiptData)
 
     DebugUtils.info(MODULE_NAME, 'Preparation production created successfully')
 
-    // ⭐ PHASE 2: Show appropriate message for portion-type
-    const prepName = selectedPreparation.value?.name || 'preparation'
+    // Build success message
     let message: string
-    if (isPortionType.value) {
-      message = `Produced ${portionInput.value} portions (${effectiveQuantity.value}${selectedPreparation.value?.outputUnit}) of ${prepName} successfully`
+    if (itemsToProcess.length === 1) {
+      const item = itemsToProcess[0]
+      const prep = recipesStore.preparations.find(p => p.id === item.preparationId)
+      message = `Produced ${item.quantity}${prep?.outputUnit || 'g'} of ${prep?.name || 'preparation'} successfully`
     } else {
-      message = `Produced ${effectiveQuantity.value}${selectedPreparation.value?.outputUnit} of ${prepName} successfully`
+      message = `Produced ${itemsToProcess.length} preparations successfully`
     }
+
     emit('success', message)
     handleClose()
   } catch (error) {
@@ -803,7 +1117,14 @@ function handleClose() {
 function resetForm() {
   selectedPreparationId.value = ''
   quantity.value = 0
-  portionInput.value = 0 // ⭐ PHASE 2: Reset portion input
+  portionInput.value = 0
+
+  // NEW: Reset search, filter, and queue state
+  searchQuery.value = ''
+  selectedCategory.value = null
+  expandedPreparationId.value = null
+  productionQueue.value = []
+
   formData.value = {
     department: props.department,
     responsiblePerson: authStore.userName,
@@ -829,6 +1150,12 @@ watch(
       // Auto-fill user when dialog opens
       formData.value.responsiblePerson = authStore.userName
       formData.value.department = props.department
+
+      // NEW: Handle preselected preparation (from quick add)
+      if (props.preselectedPreparationId) {
+        expandedPreparationId.value = props.preselectedPreparationId
+        selectedPreparationId.value = props.preselectedPreparationId
+      }
     }
   }
 )
@@ -847,5 +1174,34 @@ watch(
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   }
+}
+
+// NEW: Preparation list card styling
+.preparation-list-card {
+  max-height: 280px;
+  overflow-y: auto;
+
+  .v-list-item {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background-color: rgba(var(--v-theme-primary), 0.05);
+    }
+  }
+}
+
+.bg-primary-lighten-5 {
+  background-color: rgba(var(--v-theme-primary), 0.08) !important;
+}
+
+.bg-success-lighten-5 {
+  background-color: rgba(var(--v-theme-success), 0.08) !important;
+}
+
+// Expansion content styling - subtle background
+.expansion-content {
+  background-color: rgba(var(--v-theme-surface-variant), 0.3);
+  border-left: 3px solid rgb(var(--v-theme-primary));
 }
 </style>
