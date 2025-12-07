@@ -1,0 +1,151 @@
+/**
+ * Export PDF Styles
+ * Common styles for PDF export templates
+ */
+
+// Base print styles
+@media print {
+  .export-layout {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 10mm;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  .page-break {
+    page-break-after: always;
+  }
+
+  .no-break {
+    page-break-inside: avoid;
+  }
+}
+
+// Export container
+.export-container {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #000;
+  background: #fff;
+}
+
+// Tables
+.export-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+
+  th,
+  td {
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+  }
+
+  th {
+    background-color: #f5f5f5;
+    font-weight: bold;
+  }
+
+  tbody tr:nth-child(even) {
+    background-color: #fafafa;
+  }
+
+  tfoot {
+    font-weight: bold;
+
+    td {
+      background-color: #f0f0f0;
+    }
+  }
+}
+
+// Text alignment utilities
+.text-left {
+  text-align: left;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+// Number formatting
+.number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.currency {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.percent {
+  text-align: right;
+
+  &.low {
+    color: #c00;
+    font-weight: bold;
+  }
+
+  &.high {
+    color: #080;
+  }
+}
+
+// Section headers
+.section-header {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 16px 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #ccc;
+}
+
+// Cards/Blocks
+.export-card {
+  border: 1px solid #ddd;
+  padding: 12px;
+  margin-bottom: 16px;
+  page-break-inside: avoid;
+
+  .card-header {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 8px;
+  }
+}
+
+// Summary/Totals
+.export-summary {
+  margin-top: 20px;
+  padding: 12px;
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+
+    &.total {
+      font-weight: bold;
+      font-size: 14px;
+      border-top: 1px solid #ccc;
+      margin-top: 8px;
+      padding-top: 8px;
+    }
+  }
+}
