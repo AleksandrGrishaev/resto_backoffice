@@ -528,16 +528,44 @@ export function useCostCalculation() {
           )
           unitCost = product.baseCostPerUnit
         } else if (component.componentType === 'preparation') {
-          const preparationCost = await getPreparationCostCallback(component.componentId)
+          // ✅ FIX: Try multiple sources for preparation cost (same as nested preparations)
+          let prepUnitCost = 0
 
-          if (!preparationCost) {
-            missingItems.push(`Preparation: ${component.componentId}`)
-            continue
+          // 1. Try cached cost calculation first
+          const preparationCost = await getPreparationCostCallback(component.componentId)
+          if (preparationCost && preparationCost.costPerOutputUnit > 0) {
+            prepUnitCost = preparationCost.costPerOutputUnit
+            componentName = `Preparation (${component.componentId})`
+          } else {
+            // 2. Fallback: try to get preparation object directly
+            const prep = getPreparationCallback
+              ? await getPreparationCallback(component.componentId)
+              : null
+
+            if (!prep) {
+              missingItems.push(`Preparation: ${component.componentId}`)
+              continue
+            }
+
+            componentName = prep.name || `Preparation (${component.componentId})`
+
+            // Try lastKnownCost or costPerPortion
+            if (prep.lastKnownCost && prep.lastKnownCost > 0) {
+              prepUnitCost = prep.lastKnownCost
+            } else if (prep.costPerPortion && prep.costPerPortion > 0) {
+              prepUnitCost = prep.costPerPortion
+            } else {
+              // Preparation has no cost data - warn but continue with 0 cost
+              DebugUtils.warn(
+                MODULE_NAME,
+                `Preparation "${prep.name}" (${prep.code}) has no cost data - using 0`,
+                { preparationId: component.componentId }
+              )
+            }
           }
 
-          componentName = `Preparation (${component.componentId})`
-          componentCost = preparationCost.costPerOutputUnit * component.quantity
-          unitCost = preparationCost.costPerOutputUnit
+          componentCost = prepUnitCost * component.quantity
+          unitCost = prepUnitCost
         }
 
         totalCost += componentCost
