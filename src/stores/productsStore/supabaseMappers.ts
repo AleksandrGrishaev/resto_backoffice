@@ -132,13 +132,23 @@ export function packageOptionToSupabaseInsert(
 
 /**
  * Convert PackageOption to Supabase UPDATE format
+ * Note: id and product_id are immutable and should not be updated
  */
 export function packageOptionToSupabaseUpdate(
   packageOption: PackageOption
 ): SupabasePackageOptionUpdate {
-  const insert = packageOptionToSupabaseInsert(packageOption)
-  // created_at is immutable, already omitted by type
-  return insert
+  // Only include mutable fields - exclude id and product_id
+  return {
+    package_name: packageOption.packageName,
+    package_size: packageOption.packageSize,
+    package_unit: packageOption.packageUnit,
+    brand_name: packageOption.brandName || null,
+    package_price: packageOption.packagePrice || null,
+    base_cost_per_unit: packageOption.baseCostPerUnit,
+    is_active: packageOption.isActive,
+    notes: packageOption.notes || null,
+    updated_at: packageOption.updatedAt
+  }
 }
 
 /**
