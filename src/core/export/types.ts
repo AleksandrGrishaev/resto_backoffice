@@ -4,6 +4,8 @@
 
 export type ExportType = 'menu' | 'recipe' | 'preparation'
 
+export type DepartmentFilter = 'kitchen' | 'bar' | 'all'
+
 export interface ExportOptions {
   filename?: string
   includeQuantities?: boolean
@@ -11,6 +13,7 @@ export interface ExportOptions {
   includeCosts?: boolean
   pageSize?: 'a4' | 'letter'
   orientation?: 'portrait' | 'landscape'
+  department?: DepartmentFilter // filter by department
 }
 
 export interface ExportItem {
@@ -46,13 +49,19 @@ export interface MenuVariantExport {
   name: string
   price: number
   cost: number
-  margin: number
-  marginPercent: number
+  foodCostPercent: number
 }
 
 export interface RecipeExportData {
   title: string
   date: string
+  departments?: RecipeDepartmentExport[] // When exporting 'all' - grouped by department
+  categories: RecipeCategoryExport[] // Direct categories (single department or backward compat)
+}
+
+export interface RecipeDepartmentExport {
+  name: string // 'Kitchen' | 'Bar'
+  department: 'kitchen' | 'bar'
   categories: RecipeCategoryExport[]
 }
 
@@ -84,6 +93,13 @@ export interface RecipeComponentExport {
 export interface PreparationExportData {
   title: string
   date: string
+  departments?: PreparationDepartmentExport[] // When exporting 'all' - grouped by department
+  categories: PreparationCategoryExport[] // Direct categories (single department or backward compat)
+}
+
+export interface PreparationDepartmentExport {
+  name: string // 'Kitchen' | 'Bar'
+  department: 'kitchen' | 'bar'
   categories: PreparationCategoryExport[]
 }
 
