@@ -51,20 +51,31 @@ function isSupabaseAvailable(): boolean {
 // Helper: Generate next preparation code (P-001, P-002, etc.)
 async function getNextPreparationCode(): Promise<string> {
   try {
+    // Get ALL codes to find the actual maximum number
     const data = await executeSupabaseQuery(
-      supabase
-        .from('preparations')
-        .select('code')
-        .not('code', 'is', null)
-        .order('code', { ascending: false })
-        .limit(1),
+      supabase.from('preparations').select('code').not('code', 'is', null),
       'getNextPreparationCode'
     )
 
-    const lastCode = data?.[0]?.code || 'P-000'
-    const lastNumber = parseInt(lastCode.split('-')[1]) || 0
+    if (!data || data.length === 0) {
+      return 'P-001'
+    }
 
-    return `P-${(lastNumber + 1).toString().padStart(3, '0')}`
+    // Extract numeric parts and find the maximum
+    // Handle both P-1, P-10, P-010 formats
+    let maxNumber = 0
+    for (const row of data) {
+      const code = row.code as string
+      const match = code.match(/^P-(\d+)$/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (num > maxNumber) {
+          maxNumber = num
+        }
+      }
+    }
+
+    return `P-${(maxNumber + 1).toString().padStart(3, '0')}`
   } catch (error) {
     console.error('Error generating preparation code:', extractErrorDetails(error))
     return 'P-001' // Fallback
@@ -74,20 +85,31 @@ async function getNextPreparationCode(): Promise<string> {
 // Helper: Generate next recipe code (R-001, R-002, etc.)
 async function getNextRecipeCode(): Promise<string> {
   try {
+    // Get ALL codes to find the actual maximum number
     const data = await executeSupabaseQuery(
-      supabase
-        .from('recipes')
-        .select('code')
-        .not('code', 'is', null)
-        .order('code', { ascending: false })
-        .limit(1),
+      supabase.from('recipes').select('code').not('code', 'is', null),
       'getNextRecipeCode'
     )
 
-    const lastCode = data?.[0]?.code || 'R-000'
-    const lastNumber = parseInt(lastCode.split('-')[1]) || 0
+    if (!data || data.length === 0) {
+      return 'R-001'
+    }
 
-    return `R-${(lastNumber + 1).toString().padStart(3, '0')}`
+    // Extract numeric parts and find the maximum
+    // Handle both R-1, R-10, R-010, R-039 formats
+    let maxNumber = 0
+    for (const row of data) {
+      const code = row.code as string
+      const match = code.match(/^R-(\d+)$/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (num > maxNumber) {
+          maxNumber = num
+        }
+      }
+    }
+
+    return `R-${(maxNumber + 1).toString().padStart(3, '0')}`
   } catch (error) {
     console.error('Error generating recipe code:', extractErrorDetails(error))
     return 'R-001' // Fallback

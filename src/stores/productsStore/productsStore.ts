@@ -147,37 +147,36 @@ export const useProductsStore = defineStore('products', {
         this.loading = true
         this.error = null
 
-        const now = new Date().toISOString()
-
-        // ✅ First create base package
-        const basePackage: PackageOption = {
-          id: `pkg-base-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          productId: '', // Will be set after product creation
-          packageName: this.getDefaultPackageName(data.baseUnit),
-          packageSize: this.getDefaultPackageSize(data.baseUnit),
-          packageUnit: this.getDefaultPackageUnit(data.baseUnit),
-          packagePrice: data.baseCostPerUnit * this.getDefaultPackageSize(data.baseUnit),
-          baseCostPerUnit: data.baseCostPerUnit,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now
-        }
-
         // Always use productsService (Supabase-only)
         const { productsService } = await import('./productsService')
         const newProduct = await productsService.createProduct(data)
 
-        // Create base package for the new product
-        basePackage.productId = newProduct.id
-        newProduct.packageOptions = [basePackage]
-        newProduct.recommendedPackageId = basePackage.id
+        // Create base package for the new product and save to database
+        const basePackageData = {
+          productId: newProduct.id,
+          packageName: this.getDefaultPackageName(data.baseUnit),
+          packageSize: this.getDefaultPackageSize(data.baseUnit),
+          packageUnit: this.getDefaultPackageUnit(data.baseUnit),
+          packagePrice: data.baseCostPerUnit * this.getDefaultPackageSize(data.baseUnit),
+          baseCostPerUnit: data.baseCostPerUnit
+        }
+
+        const savedPackage = await productsService.addPackageOption(basePackageData)
+        newProduct.packageOptions = [savedPackage]
+        newProduct.recommendedPackageId = savedPackage.id
+
+        // Update product's recommendedPackageId in database
+        await productsService.updateProduct({
+          id: newProduct.id,
+          recommendedPackageId: savedPackage.id
+        })
 
         this.products.push(newProduct)
 
         DebugUtils.info(MODULE_NAME, 'Product created with base package', {
           id: newProduct.id,
-          basePackageId: basePackage.id,
-          packageName: basePackage.packageName
+          basePackageId: savedPackage.id,
+          packageName: savedPackage.packageName
         })
 
         return newProduct
