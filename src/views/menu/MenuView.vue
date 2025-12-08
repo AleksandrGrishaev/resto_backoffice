@@ -59,7 +59,7 @@
           class="mr-2"
           prepend-icon="mdi-file-pdf-box"
           :loading="isExporting"
-          @click="handleExportPdf"
+          @click="dialogs.export = true"
         >
           Export PDF
         </v-btn>
@@ -218,6 +218,9 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Export Options Dialog -->
+    <ExportOptionsDialog v-model="dialogs.export" export-type="menu" @export="handleExportPdf" />
   </div>
 </template>
 
@@ -228,12 +231,13 @@ import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import type { Category, MenuItem, DishType, MenuItemVariant, MenuComposition } from '@/stores/menu'
 import { DebugUtils } from '@/utils'
-import { useExport } from '@/core/export'
+import { useExport, ExportOptionsDialog } from '@/core/export'
 import type {
   MenuExportData,
   MenuCategoryExport,
   MenuItemExport,
-  MenuVariantExport
+  MenuVariantExport,
+  DepartmentFilter
 } from '@/core/export'
 import MenuCategoryDialog from './components/MenuCategoryDialog.vue'
 import MenuItemDialog from './components/MenuItemDialog.vue'
@@ -256,7 +260,8 @@ const dialogs = ref({
   dishTypeSelection: false, // ✨ NEW: Диалог выбора типа блюда
   category: false,
   item: false,
-  duplicate: false // ✨ NEW: Диалог дублирования
+  duplicate: false, // ✨ NEW: Диалог дублирования
+  export: false // Export options dialog
 })
 const editingCategory = ref<Category | null>(null)
 const editingItem = ref<MenuItem | null>(null)
@@ -435,29 +440,35 @@ function calculateCompositionCost(composition: MenuComposition[]): number {
 function exportVariant(variant: MenuItemVariant): MenuVariantExport {
   const cost = calculateCompositionCost(variant.composition || [])
   const price = variant.price || 0
-  const margin = price - cost
-  const marginPercent = price > 0 ? (margin / price) * 100 : 0
+  const foodCostPercent = price > 0 ? (cost / price) * 100 : 0
 
   return {
     name: variant.name,
     price,
     cost,
-    margin,
-    marginPercent
+    foodCostPercent
   }
 }
 
-async function handleExportPdf() {
+async function handleExportPdf(options: { department: DepartmentFilter }) {
   try {
+    const departmentFilter = options.department
     DebugUtils.info(MODULE_NAME, 'Starting export', {
       filteredCategoriesCount: filteredCategories.value.length,
-      filterTypes: filterTypes.value
+      filterTypes: filterTypes.value,
+      departmentFilter
     })
 
     const categories: MenuCategoryExport[] = filteredCategories.value
       .filter(cat => cat.isActive)
       .map(category => {
-        const items = getCategoryItems(category.id)
+        let items = getCategoryItems(category.id)
+
+        // Filter by department if not 'all'
+        if (departmentFilter !== 'all') {
+          items = items.filter(item => item.department === departmentFilter)
+        }
+
         return {
           name: category.name,
           items: items.map(
@@ -486,8 +497,12 @@ async function handleExportPdf() {
       0
     )
 
+    // Build title based on department filter
+    const departmentLabel =
+      departmentFilter === 'all' ? '' : departmentFilter === 'kitchen' ? ' (Kitchen)' : ' (Bar)'
+
     const data: MenuExportData = {
-      title: 'Menu Cost Report',
+      title: `Menu Cost Report${departmentLabel}`,
       date: new Date().toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
@@ -502,10 +517,11 @@ async function handleExportPdf() {
 
     DebugUtils.info(MODULE_NAME, 'Export data prepared', {
       categoriesCount: categories.length,
-      totalVariants
+      totalVariants,
+      departmentFilter
     })
 
-    await exportMenu(data, { orientation: 'landscape' })
+    await exportMenu(data, { orientation: 'landscape', department: departmentFilter })
     DebugUtils.info(MODULE_NAME, 'Menu exported successfully')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to export menu', error)

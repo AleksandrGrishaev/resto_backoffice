@@ -8,15 +8,18 @@ export type {
   ExportType,
   ExportOptions,
   ExportItem,
+  DepartmentFilter,
   MenuExportData,
   MenuCategoryExport,
   MenuItemExport,
   MenuVariantExport,
   RecipeExportData,
+  RecipeDepartmentExport,
   RecipeCategoryExport,
   RecipeExport,
   RecipeComponentExport,
   PreparationExportData,
+  PreparationDepartmentExport,
   PreparationCategoryExport,
   PreparationExport,
   PreparationComponentExport,
@@ -28,6 +31,9 @@ export { ExportService, exportService } from './ExportService'
 
 // Composable
 export { useExport } from './composables/useExport'
+
+// Components
+export { default as ExportOptionsDialog } from './components/ExportOptionsDialog.vue'
 
 // Templates (for direct use if needed)
 export { default as ExportLayout } from './templates/ExportLayout.vue'

@@ -40,25 +40,31 @@ export class ExportService {
   async generatePdf(element: HTMLElement, options: ExportOptions = {}): Promise<void> {
     const html2pdf = await getHtml2Pdf()
 
-    // Smaller margins for landscape to fit more content
+    // Margins: [top, left, bottom, right]
     const isLandscape = options.orientation === 'landscape'
-    const defaultMargin = isLandscape ? 5 : 10
+    const top = isLandscape ? 10 : 15
+    const bottom = isLandscape ? 15 : 20 // More bottom margin to prevent overlap
+    const leftRight = isLandscape ? 8 : 12
 
     const pdfOptions: Html2PdfOptions = {
-      margin: defaultMargin,
+      margin: [top, leftRight, bottom, leftRight],
       filename: options.filename || 'export.pdf',
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
         scale: 2,
         useCORS: true,
-        logging: false,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
+        logging: false
       },
       jsPDF: {
         unit: 'mm',
         format: options.pageSize || 'a4',
         orientation: options.orientation || 'portrait'
+      },
+      pagebreak: {
+        mode: ['css', 'legacy'],
+        before: '.page-break-before',
+        after: '.page-break-after',
+        avoid: '.avoid-break'
       }
     }
 

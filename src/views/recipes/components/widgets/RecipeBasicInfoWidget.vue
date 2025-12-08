@@ -339,8 +339,8 @@ const unitOptionsLoaded = ref<Array<{ value: string; title: string }>>([])
 
 async function loadUnitOptions() {
   const { useRecipeUnits } = await import('@/composables/useMeasurementUnits')
-  const units = useRecipeUnits()
-  unitOptionsLoaded.value = units.value
+  const { unitOptions } = useRecipeUnits()
+  unitOptionsLoaded.value = unitOptions.value || []
 }
 
 // Computed
@@ -368,7 +368,7 @@ const departmentItems = computed(() => {
 })
 
 const unitItems = computed(() => {
-  return unitOptionsLoaded.value.map(option => ({
+  return (unitOptionsLoaded.value || []).map(option => ({
     value: option.value,
     label: option.title
   }))
