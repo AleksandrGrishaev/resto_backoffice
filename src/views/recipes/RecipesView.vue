@@ -22,7 +22,7 @@
             prepend-icon="mdi-file-pdf-box"
             size="large"
             :loading="isExporting"
-            @click="handleExportPdf"
+            @click="dialogs.export = true"
           >
             Export PDF
           </v-btn>
@@ -317,6 +317,13 @@
       :item-type="usageWarning.itemType"
       :usage-locations="usageWarning.usageLocations"
     />
+
+    <!-- Export Options Dialog -->
+    <ExportOptionsDialog
+      v-model="dialogs.export"
+      :export-type="activeTab === 'recipes' ? 'recipes' : 'preparations'"
+      @export="handleExportPdf"
+    />
   </div>
 </template>
 
@@ -325,12 +332,15 @@ import { ref, computed, onMounted } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
 import { useUsageCheck } from '@/stores/recipes/composables/useUsageCheck'
-import { useExport } from '@/core/export'
+import { useExport, ExportOptionsDialog } from '@/core/export'
 import type {
   RecipeExportData,
   PreparationExportData,
   RecipeCategoryExport,
-  PreparationCategoryExport
+  PreparationCategoryExport,
+  RecipeDepartmentExport,
+  PreparationDepartmentExport,
+  DepartmentFilter
 } from '@/core/export'
 import type {
   Recipe,
@@ -372,7 +382,8 @@ const dialogs = ref({
   create: false,
   view: false,
   duplicate: false,
-  usageWarning: false
+  usageWarning: false,
+  export: false
 })
 
 // Usage warning state
@@ -760,8 +771,10 @@ function showSnackbar(message: string, color: 'success' | 'error' | 'info' = 'su
 // PDF EXPORT
 // =============================================
 
-async function handleExportPdf() {
+async function handleExportPdf(options: { department: DepartmentFilter }) {
   try {
+    const departmentFilter = options.department
+
     // Helper to find component name and cost
     const getComponentInfo = (
       componentId: string,
@@ -785,11 +798,23 @@ async function handleExportPdf() {
       }
     }
 
-    if (activeTab.value === 'recipes') {
-      // Group recipes by category
+    // Build category names from store
+    const categoryNames: Record<string, string> = {
+      uncategorized: 'Uncategorized',
+      other: 'Other'
+    }
+    for (const cat of store.activeRecipeCategories) {
+      categoryNames[cat.id] = cat.name
+    }
+    for (const cat of store.activePreparationCategories) {
+      categoryNames[cat.id] = cat.name
+    }
+
+    // Helper to build recipe categories for a specific department
+    const buildRecipeCategories = (recipes: Recipe[]): RecipeCategoryExport[] => {
       const recipesByCategory = new Map<string, Recipe[]>()
 
-      for (const recipe of store.activeRecipes) {
+      for (const recipe of recipes) {
         const categoryKey = recipe.category || 'uncategorized'
         if (!recipesByCategory.has(categoryKey)) {
           recipesByCategory.set(categoryKey, [])
@@ -797,18 +822,10 @@ async function handleExportPdf() {
         recipesByCategory.get(categoryKey)!.push(recipe)
       }
 
-      // Build category names from store
-      const categoryNames: Record<string, string> = {
-        uncategorized: 'Uncategorized'
-      }
-      for (const cat of store.activeRecipeCategories) {
-        categoryNames[cat.id] = cat.name
-      }
-
-      const categories: RecipeCategoryExport[] = Array.from(recipesByCategory.entries()).map(
-        ([categoryKey, recipes]) => ({
+      return Array.from(recipesByCategory.entries())
+        .map(([categoryKey, catRecipes]) => ({
           name: categoryNames[categoryKey] || 'Unknown Category',
-          recipes: recipes.map((recipe: Recipe) => {
+          recipes: catRecipes.map((recipe: Recipe) => {
             const costCalc = store.getRecipeCostCalculation(recipe.id)
             return {
               id: recipe.id,
@@ -831,25 +848,15 @@ async function handleExportPdf() {
               instructions: recipe.instructions
             }
           })
-        })
-      )
+        }))
+        .filter(cat => cat.recipes.length > 0)
+    }
 
-      const data: RecipeExportData = {
-        title: 'Recipes Cost Report',
-        date: new Date().toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }),
-        categories
-      }
-
-      await exportRecipes(data, { includeInstructions: true })
-    } else {
-      // Group preparations by type
+    // Helper to build preparation categories for a specific department
+    const buildPreparationCategories = (preps: Preparation[]): PreparationCategoryExport[] => {
       const prepsByType = new Map<string, Preparation[]>()
 
-      for (const prep of store.activePreparations) {
+      for (const prep of preps) {
         const typeKey = prep.type || 'other'
         if (!prepsByType.has(typeKey)) {
           prepsByType.set(typeKey, [])
@@ -857,21 +864,10 @@ async function handleExportPdf() {
         prepsByType.get(typeKey)!.push(prep)
       }
 
-      // Format type names
-      const typeNames: Record<string, string> = {
-        sauce: 'Sauces',
-        base: 'Bases',
-        garnish: 'Garnishes',
-        marinade: 'Marinades',
-        dough: 'Doughs',
-        filling: 'Fillings',
-        other: 'Other'
-      }
-
-      const categories: PreparationCategoryExport[] = Array.from(prepsByType.entries()).map(
-        ([typeKey, preps]) => ({
-          name: typeNames[typeKey] || typeKey,
-          preparations: preps.map((prep: Preparation) => {
+      return Array.from(prepsByType.entries())
+        .map(([typeKey, catPreps]) => ({
+          name: categoryNames[typeKey] || 'Unknown Category',
+          preparations: catPreps.map((prep: Preparation) => {
             const costCalc = store.getPreparationCostCalculation(prep.id)
             return {
               id: prep.id,
@@ -895,27 +891,126 @@ async function handleExportPdf() {
               instructions: prep.instructions
             }
           })
-        })
-      )
+        }))
+        .filter(cat => cat.preparations.length > 0)
+    }
 
-      const data: PreparationExportData = {
-        title: 'Preparations Cost Report',
-        date: new Date().toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }),
-        categories
+    if (activeTab.value === 'recipes') {
+      let data: RecipeExportData
+
+      if (departmentFilter === 'all') {
+        // Group by departments: Kitchen first, then Bar
+        const kitchenRecipes = store.activeRecipes.filter(r => r.department === 'kitchen')
+        const barRecipes = store.activeRecipes.filter(r => r.department === 'bar')
+
+        const departments: RecipeDepartmentExport[] = []
+
+        if (kitchenRecipes.length > 0) {
+          departments.push({
+            name: 'Kitchen',
+            department: 'kitchen',
+            categories: buildRecipeCategories(kitchenRecipes)
+          })
+        }
+
+        if (barRecipes.length > 0) {
+          departments.push({
+            name: 'Bar',
+            department: 'bar',
+            categories: buildRecipeCategories(barRecipes)
+          })
+        }
+
+        data = {
+          title: 'Recipes Cost Report',
+          date: new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          departments,
+          categories: [] // Empty, using departments instead
+        }
+      } else {
+        // Single department - use flat categories
+        const recipesToExport = store.activeRecipes.filter(r => r.department === departmentFilter)
+        const departmentLabel = departmentFilter === 'kitchen' ? ' (Kitchen)' : ' (Bar)'
+
+        data = {
+          title: `Recipes Cost Report${departmentLabel}`,
+          date: new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          categories: buildRecipeCategories(recipesToExport)
+        }
       }
 
-      await exportPreparations(data, { includeInstructions: true })
+      await exportRecipes(data, { includeInstructions: true, department: departmentFilter })
+    } else {
+      // Preparations
+      let data: PreparationExportData
+
+      if (departmentFilter === 'all') {
+        // Group by departments: Kitchen first, then Bar
+        const kitchenPreps = store.activePreparations.filter(p => p.department === 'kitchen')
+        const barPreps = store.activePreparations.filter(p => p.department === 'bar')
+
+        const departments: PreparationDepartmentExport[] = []
+
+        if (kitchenPreps.length > 0) {
+          departments.push({
+            name: 'Kitchen',
+            department: 'kitchen',
+            categories: buildPreparationCategories(kitchenPreps)
+          })
+        }
+
+        if (barPreps.length > 0) {
+          departments.push({
+            name: 'Bar',
+            department: 'bar',
+            categories: buildPreparationCategories(barPreps)
+          })
+        }
+
+        data = {
+          title: 'Preparations Cost Report',
+          date: new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          departments,
+          categories: [] // Empty, using departments instead
+        }
+      } else {
+        // Single department - use flat categories
+        const prepsToExport = store.activePreparations.filter(
+          p => p.department === departmentFilter
+        )
+        const departmentLabel = departmentFilter === 'kitchen' ? ' (Kitchen)' : ' (Bar)'
+
+        data = {
+          title: `Preparations Cost Report${departmentLabel}`,
+          date: new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          categories: buildPreparationCategories(prepsToExport)
+        }
+      }
+
+      await exportPreparations(data, { includeInstructions: true, department: departmentFilter })
     }
 
     showSnackbar(
       `${activeTab.value === 'recipes' ? 'Recipes' : 'Preparations'} exported successfully`,
       'success'
     )
-    DebugUtils.info(MODULE_NAME, 'Export completed', { type: activeTab.value })
+    DebugUtils.info(MODULE_NAME, 'Export completed', { type: activeTab.value, departmentFilter })
   } catch (error) {
     showSnackbar('Failed to export PDF', 'error')
     DebugUtils.error(MODULE_NAME, 'Failed to export', error)

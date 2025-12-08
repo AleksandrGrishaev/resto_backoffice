@@ -71,15 +71,14 @@ function formatPercent(value: number): string {
               <th class="col-name">Item / Variant</th>
               <th class="col-number">Cost</th>
               <th class="col-number">Price</th>
-              <th class="col-number">Margin</th>
-              <th class="col-number">%</th>
+              <th class="col-number">FC%</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="item in category.items" :key="item.name">
               <!-- Item header row -->
               <tr class="item-row">
-                <td class="col-name item-name" :colspan="item.variants.length === 1 ? 1 : 5">
+                <td class="col-name item-name" :colspan="item.variants.length === 1 ? 1 : 4">
                   {{ item.name }}
                   <span class="dish-type" :class="item.dishType">
                     {{ formatDishType(item.dishType) }}
@@ -89,12 +88,11 @@ function formatPercent(value: number): string {
                 <template v-if="item.variants.length === 1">
                   <td class="col-number">{{ formatCurrency(item.variants[0].cost) }}</td>
                   <td class="col-number">{{ formatCurrency(item.variants[0].price) }}</td>
-                  <td class="col-number">{{ formatCurrency(item.variants[0].margin) }}</td>
                   <td
                     class="col-number"
-                    :class="{ 'low-margin': item.variants[0].marginPercent < 30 }"
+                    :class="{ 'high-fc': item.variants[0].foodCostPercent > 35 }"
                   >
-                    {{ formatPercent(item.variants[0].marginPercent) }}
+                    {{ formatPercent(item.variants[0].foodCostPercent) }}
                   </td>
                 </template>
               </tr>
@@ -107,9 +105,8 @@ function formatPercent(value: number): string {
                 <td class="col-name variant-name">↳ {{ variant.name }}</td>
                 <td class="col-number">{{ formatCurrency(variant.cost) }}</td>
                 <td class="col-number">{{ formatCurrency(variant.price) }}</td>
-                <td class="col-number">{{ formatCurrency(variant.margin) }}</td>
-                <td class="col-number" :class="{ 'low-margin': variant.marginPercent < 30 }">
-                  {{ formatPercent(variant.marginPercent) }}
+                <td class="col-number" :class="{ 'high-fc': variant.foodCostPercent > 35 }">
+                  {{ formatPercent(variant.foodCostPercent) }}
                 </td>
               </tr>
             </template>
@@ -233,7 +230,7 @@ function formatPercent(value: number): string {
   color: #e65100;
 }
 
-.low-margin {
+.high-fc {
   color: #c00;
   font-weight: bold;
 }
