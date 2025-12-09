@@ -19,6 +19,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           name: string
+          parent_id: string | null
           sort_order: number | null
           updated_at: string | null
         }
@@ -28,6 +29,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name: string
+          parent_id?: string | null
           sort_order?: number | null
           updated_at?: string | null
         }
@@ -37,10 +39,19 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
+          parent_id?: string | null
           sort_order?: number | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'menu_categories_parent_id_fkey'
+            columns: ['parent_id']
+            isOneToOne: false
+            referencedRelation: 'menu_categories'
+            referencedColumns: ['id']
+          }
+        ]
       }
       menu_items: {
         Row: {

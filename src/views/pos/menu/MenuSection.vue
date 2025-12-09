@@ -57,12 +57,12 @@
         <v-btn color="primary" @click="refreshMenu">Try Again</v-btn>
       </div>
 
-      <!-- Categories View -->
+      <!-- Categories View (Root categories only) -->
       <div v-else-if="currentView === 'categories'" class="categories-grid">
         <v-container fluid>
           <v-row>
             <v-col
-              v-for="category in activeCategories"
+              v-for="category in activeRootCategories"
               :key="category.id"
               cols="12"
               sm="6"
@@ -71,11 +71,65 @@
             >
               <CategoryCard
                 :category="category"
-                :items-count="getCategoryItemsCount(category.id)"
-                @select="selectCategory"
+                :items-count="getTotalItemsCount(category.id)"
+                :has-subcategories="hasSubcategories(category.id)"
+                @select="selectRootCategory"
               />
             </v-col>
           </v-row>
+        </v-container>
+      </div>
+
+      <!-- Subcategories View (Mixed: direct items + subcategories) -->
+      <div v-else-if="currentView === 'subcategories'" class="mixed-grid">
+        <v-container fluid>
+          <!-- Direct items in parent category first -->
+          <div v-if="directParentItems.length > 0" class="mb-6">
+            <div class="text-subtitle-2 text-medium-emphasis mb-3 px-3">
+              Items in {{ selectedRootCategory?.name }}
+            </div>
+            <v-row>
+              <v-col v-for="item in directParentItems" :key="item.id" cols="12" sm="6" md="4">
+                <MenuItemCard
+                  :item="item"
+                  @add-item="handleAddAndReturn"
+                  @select-item="selectItem"
+                />
+              </v-col>
+            </v-row>
+          </div>
+
+          <!-- Subcategories -->
+          <div v-if="activeSubcategories.length > 0">
+            <div class="text-subtitle-2 text-medium-emphasis mb-3 px-3">Subcategories</div>
+            <v-row>
+              <v-col
+                v-for="subcategory in activeSubcategories"
+                :key="subcategory.id"
+                cols="12"
+                sm="6"
+                md="4"
+                lg="3"
+              >
+                <CategoryCard
+                  :category="subcategory"
+                  :items-count="getCategoryItemsCount(subcategory.id)"
+                  is-subcategory
+                  @select="selectSubcategory"
+                />
+              </v-col>
+            </v-row>
+          </div>
+
+          <!-- Empty state if no items and no subcategories -->
+          <div
+            v-if="directParentItems.length === 0 && activeSubcategories.length === 0"
+            class="d-flex flex-column justify-center align-center"
+            style="height: 200px"
+          >
+            <v-icon icon="mdi-food-off" size="48" color="grey" class="mb-4" />
+            <div class="text-h6 text-medium-emphasis">No items in this category</div>
+          </div>
         </v-container>
       </div>
 
@@ -156,9 +210,11 @@ const ordersStore = usePosOrdersStore()
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-type ViewMode = 'categories' | 'items' | 'variants'
+// Navigation: categories → subcategories (mixed view) → items → variants
+type ViewMode = 'categories' | 'subcategories' | 'items' | 'variants'
 const currentView = ref<ViewMode>('categories')
-const selectedCategoryId = ref<string | null>(null)
+const selectedRootCategoryId = ref<string | null>(null) // Selected parent category
+const selectedSubcategoryId = ref<string | null>(null) // Selected subcategory
 const selectedItem = ref<MenuItem | null>(null)
 
 // Customization Dialog State
@@ -169,20 +225,52 @@ const customizingVariant = ref<MenuItemVariant | null>(null)
 // ===== COMPUTED =====
 
 /**
- * Активные категории
+ * Active root categories (no parent)
  */
-const activeCategories = computed(() => {
-  return menuStore.categories.filter(category => category.isActive)
+const activeRootCategories = computed(() => {
+  return menuStore.activeRootCategories
 })
 
 /**
- * Товары текущей категории
+ * Selected root category object
+ */
+const selectedRootCategory = computed(() => {
+  if (!selectedRootCategoryId.value) return null
+  return menuStore.categories.find(c => c.id === selectedRootCategoryId.value)
+})
+
+/**
+ * Check if category has subcategories
+ */
+const hasSubcategories = (categoryId: string): boolean => {
+  return menuStore.hasSubcategories(categoryId)
+}
+
+/**
+ * Active subcategories of selected root (respecting parent active status)
+ */
+const activeSubcategories = computed(() => {
+  if (!selectedRootCategoryId.value) return []
+  return menuStore.getActiveSubcategories(selectedRootCategoryId.value)
+})
+
+/**
+ * Direct items in parent category (not in subcategories)
+ */
+const directParentItems = computed(() => {
+  if (!selectedRootCategoryId.value) return []
+  return menuStore.menuItems.filter(
+    item => item.categoryId === selectedRootCategoryId.value && item.isActive
+  )
+})
+
+/**
+ * Items of selected subcategory
  */
 const categoryItems = computed(() => {
-  if (!selectedCategoryId.value) return []
-
+  if (!selectedSubcategoryId.value) return []
   return menuStore.menuItems.filter(
-    item => item.categoryId === selectedCategoryId.value && item.isActive
+    item => item.categoryId === selectedSubcategoryId.value && item.isActive
   )
 })
 
@@ -199,9 +287,11 @@ const itemVariants = computed(() => {
  */
 const currentTitle = computed(() => {
   switch (currentView.value) {
+    case 'subcategories':
+      return selectedRootCategory.value?.name || 'Category'
     case 'items':
-      const category = activeCategories.value.find(c => c.id === selectedCategoryId.value)
-      return category?.name || 'Items'
+      const subcategory = menuStore.categories.find(c => c.id === selectedSubcategoryId.value)
+      return subcategory?.name || 'Items'
     case 'variants':
       return selectedItem.value?.name || 'Variants'
     default:
@@ -210,10 +300,22 @@ const currentTitle = computed(() => {
 })
 
 /**
- * Счетчик товаров в категории
+ * Count items directly in a category
  */
 const getCategoryItemsCount = (categoryId: string): number => {
   return menuStore.menuItems.filter(item => item.categoryId === categoryId && item.isActive).length
+}
+
+/**
+ * Total items count for root category (direct items + items in subcategories)
+ */
+const getTotalItemsCount = (categoryId: string): number => {
+  let count = getCategoryItemsCount(categoryId)
+  const subcategories = menuStore.getSubcategories(categoryId)
+  for (const sub of subcategories) {
+    count += getCategoryItemsCount(sub.id)
+  }
+  return count
 }
 
 // ===== METHODS =====
@@ -230,12 +332,22 @@ const formatPrice = (price: number): string => {
 }
 
 /**
- * Выбор категории
+ * Select root category - goes to subcategories/items mixed view
  */
-const selectCategory = (categoryId: string): void => {
-  selectedCategoryId.value = categoryId
-  currentView.value = 'items'
+const selectRootCategory = (categoryId: string): void => {
+  selectedRootCategoryId.value = categoryId
+  selectedSubcategoryId.value = null
   selectedItem.value = null
+  currentView.value = 'subcategories'
+}
+
+/**
+ * Select subcategory - goes to items view
+ */
+const selectSubcategory = (categoryId: string): void => {
+  selectedSubcategoryId.value = categoryId
+  selectedItem.value = null
+  currentView.value = 'items'
 }
 
 /**
@@ -255,7 +367,8 @@ const handleAddAndReturn = (item: MenuItem, variant: MenuItemVariant): void => {
 
   // Возвращаемся в главное меню
   currentView.value = 'categories'
-  selectedCategoryId.value = null
+  selectedRootCategoryId.value = null
+  selectedSubcategoryId.value = null
   selectedItem.value = null
 }
 
@@ -288,7 +401,8 @@ const handleAddItem = (item: MenuItem, variant: MenuItemVariant): void => {
     // Возвращаемся в главное меню после добавления из variants view
     if (currentView.value === 'variants') {
       currentView.value = 'categories'
-      selectedCategoryId.value = null
+      selectedRootCategoryId.value = null
+      selectedSubcategoryId.value = null
       selectedItem.value = null
     }
   } catch (error) {
@@ -314,7 +428,8 @@ const handleAddWithModifiers = (selectedModifiers: SelectedModifier[]): void => 
 
     // Return to main menu
     currentView.value = 'categories'
-    selectedCategoryId.value = null
+    selectedRootCategoryId.value = null
+    selectedSubcategoryId.value = null
     selectedItem.value = null
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to add item with modifiers'
@@ -332,16 +447,27 @@ const handleCancelCustomization = (): void => {
 }
 
 /**
- * Возврат к предыдущему виду
+ * Возврат к предыдущему виду (4-level navigation)
  */
 const goBack = (): void => {
   switch (currentView.value) {
-    case 'items':
+    case 'subcategories':
+      // Back to categories
       currentView.value = 'categories'
-      selectedCategoryId.value = null
+      selectedRootCategoryId.value = null
+      break
+    case 'items':
+      // Back to subcategories view
+      currentView.value = 'subcategories'
+      selectedSubcategoryId.value = null
       break
     case 'variants':
-      currentView.value = 'items'
+      // Back to items if from subcategory, otherwise to subcategories
+      if (selectedSubcategoryId.value) {
+        currentView.value = 'items'
+      } else {
+        currentView.value = 'subcategories'
+      }
       selectedItem.value = null
       break
   }
@@ -396,7 +522,8 @@ onMounted(async () => {
 
 .categories-grid,
 .items-grid,
-.variants-grid {
+.variants-grid,
+.mixed-grid {
   padding: 16px 0;
 }
 

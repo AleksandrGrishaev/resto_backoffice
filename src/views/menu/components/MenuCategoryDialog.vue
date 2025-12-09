@@ -28,6 +28,29 @@
           class="mb-4"
         />
 
+        <!-- Parent Category Selector -->
+        <v-select
+          v-model="formData.parentId"
+          :items="availableParentCategories"
+          item-title="name"
+          item-value="id"
+          label="Parent Category (optional)"
+          clearable
+          hide-details="auto"
+          class="mb-4"
+          :disabled="categoryHasSubcategories"
+          :hint="
+            categoryHasSubcategories
+              ? 'Categories with subcategories cannot become subcategories'
+              : 'Leave empty for root category'
+          "
+          persistent-hint
+        >
+          <template #prepend-inner>
+            <v-icon size="18" color="grey">mdi-folder-outline</v-icon>
+          </template>
+        </v-select>
+
         <div v-if="isEdit" class="mb-4">
           <v-btn-toggle
             v-model="formData.isActive"
@@ -79,7 +102,8 @@ const formData = ref({
   name: '',
   description: '',
   isActive: true,
-  sortOrder: 0
+  sortOrder: 0,
+  parentId: null as string | null
 })
 
 // Computed
@@ -92,6 +116,21 @@ const dialogModel = computed({
 
 const isFormValid = computed(() => {
   return isValid.value && formData.value.name.trim().length > 0
+})
+
+// Available parent categories (only root categories, excluding self)
+const availableParentCategories = computed(() => {
+  return menuStore.rootCategories.filter(c => {
+    // Cannot be its own parent
+    if (props.category && c.id === props.category.id) return false
+    return true
+  })
+})
+
+// Check if current category has subcategories (can't become subcategory itself)
+const categoryHasSubcategories = computed(() => {
+  if (!props.category) return false
+  return menuStore.hasSubcategories(props.category.id)
 })
 
 // Methods
@@ -109,7 +148,8 @@ function resetForm() {
     name: '',
     description: '',
     isActive: true,
-    sortOrder: getNextSortOrder()
+    sortOrder: getNextSortOrder(),
+    parentId: null
   }
 }
 
@@ -128,7 +168,8 @@ async function handleSubmit() {
       name: formData.value.name.trim(),
       description: formData.value.description?.trim(),
       isActive: formData.value.isActive,
-      sortOrder: formData.value.sortOrder
+      sortOrder: formData.value.sortOrder,
+      parentId: formData.value.parentId
     }
 
     if (isEdit.value && props.category) {
@@ -158,7 +199,8 @@ watch(
         name: newCategory.name,
         description: newCategory.description || '',
         isActive: newCategory.isActive,
-        sortOrder: newCategory.sortOrder
+        sortOrder: newCategory.sortOrder,
+        parentId: newCategory.parentId || null
       }
     } else {
       resetForm()
