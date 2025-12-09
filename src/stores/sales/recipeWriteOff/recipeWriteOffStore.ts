@@ -2,7 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { RecipeWriteOff, RecipeWriteOffItem } from './types'
 import { RecipeWriteOffService } from './services'
-import { useDecomposition } from './composables/useDecomposition'
+// ✅ PHASE 3: Use unified DecompositionEngine + WriteOffAdapter
+import {
+  createDecompositionEngine,
+  createWriteOffAdapter,
+  type WriteOffResult
+} from '@/core/decomposition'
 import { useStorageStore } from '@/stores/storage/storageStore'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import type { PosBillItem } from '@/stores/pos/types'
@@ -14,7 +19,6 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
   // Dependencies
   const storageStore = useStorageStore()
   const menuStore = useMenuStore()
-  const { decomposeMenuItem, calculateTotalCost } = useDecomposition()
 
   // State
   const state = ref({
@@ -85,24 +89,37 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
         return null
       }
 
-      // 2. Decompose menu item to final products (⭐ PHASE 2: include selectedModifiers)
-      const decomposedItems = await decomposeMenuItem(
-        billItem.menuItemId,
-        billItem.variantId || variant.id,
-        billItem.quantity,
-        billItem.selectedModifiers // ⭐ NEW: Pass selected modifiers for write-off
+      // 2. ✅ PHASE 3: Use unified DecompositionEngine + WriteOffAdapter
+      const engine = await createDecompositionEngine()
+      const adapter = createWriteOffAdapter()
+
+      const traversalResult = await engine.traverse(
+        {
+          menuItemId: billItem.menuItemId,
+          variantId: billItem.variantId || variant.id,
+          quantity: billItem.quantity,
+          selectedModifiers: billItem.selectedModifiers
+        },
+        adapter.getTraversalOptions()
       )
 
-      if (decomposedItems.length === 0) {
+      const writeOffResult: WriteOffResult = await adapter.transform(traversalResult, {
+        menuItemId: billItem.menuItemId,
+        variantId: billItem.variantId || variant.id,
+        quantity: billItem.quantity,
+        selectedModifiers: billItem.selectedModifiers
+      })
+
+      if (writeOffResult.items.length === 0) {
         console.warn(`⚠️ [${MODULE_NAME}] No ingredients to write off`)
         return null
       }
 
-      console.log(`📋 [${MODULE_NAME}] Decomposed to ${decomposedItems.length} items`)
+      console.log(`📋 [${MODULE_NAME}] Decomposed to ${writeOffResult.items.length} items`)
 
-      // 3. Prepare write-off items (✅ FIXED: Support both product and preparation)
-      const writeOffItems: RecipeWriteOffItem[] = decomposedItems.map(item => ({
-        type: item.type, // ✅ Use actual type from decomposition
+      // 3. ✅ PHASE 3: Prepare write-off items from WriteOffResult
+      const writeOffItems: RecipeWriteOffItem[] = writeOffResult.items.map(item => ({
+        type: item.type,
         itemId: item.type === 'product' ? item.productId! : item.preparationId!,
         itemName: item.type === 'product' ? item.productName! : item.preparationName!,
         quantityPerPortion: item.quantity / billItem.quantity,
@@ -172,6 +189,20 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
       })
 
       // 6. Create recipe write-off record
+      // ✅ PHASE 3: Convert WriteOffItems to DecomposedItem format for backward compatibility
+      const decomposedItemsForRecord = writeOffResult.items.map(item => ({
+        type: item.type,
+        productId: item.productId,
+        productName: item.productName,
+        preparationId: item.preparationId,
+        preparationName: item.preparationName,
+        quantity: item.quantity,
+        unit: item.unit,
+        costPerUnit: item.costPerUnit,
+        totalCost: item.totalCost,
+        path: item.path
+      }))
+
       const recipeWriteOff: RecipeWriteOff = {
         id: `rwo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         salesTransactionId,
@@ -181,7 +212,7 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
         portionSize: 1, // Default portion size
         soldQuantity: billItem.quantity,
         writeOffItems,
-        decomposedItems,
+        decomposedItems: decomposedItemsForRecord,
         originalComposition: variant.composition,
         department: menuItem.department,
         operationType: 'auto_sales_writeoff',

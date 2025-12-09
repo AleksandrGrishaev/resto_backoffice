@@ -4,8 +4,14 @@ import type { SalesTransaction, SalesFilters, DecompositionSummary } from './typ
 import { SalesService } from './services'
 import { useRecipeWriteOffStore } from './recipeWriteOff'
 import { useProfitCalculation } from './composables/useProfitCalculation'
-import { useDecomposition } from './recipeWriteOff/composables/useDecomposition'
-import { useActualCostCalculation } from './composables/useActualCostCalculation' // ✅ SPRINT 2
+// ✅ PHASE 3: Use unified DecompositionEngine + adapters
+import {
+  createDecompositionEngine,
+  createWriteOffAdapter,
+  createCostAdapter,
+  type WriteOffResult,
+  type ActualCostBreakdown
+} from '@/core/decomposition'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { usePreparationStore, preparationService } from '@/stores/preparation' // ✅ For reloading batches after write-off
 import type { PosPayment, PosBillItem } from '@/stores/pos/types'
@@ -17,8 +23,8 @@ export const useSalesStore = defineStore('sales', () => {
   const recipeWriteOffStore = useRecipeWriteOffStore()
   const menuStore = useMenuStore()
   const { calculateItemProfit, allocateBillDiscount } = useProfitCalculation()
-  const { decomposeMenuItem, calculateTotalCost } = useDecomposition()
-  const { calculateActualCost } = useActualCostCalculation() // ✅ SPRINT 2: FIFO cost calculation
+  // ✅ PHASE 3: Removed useDecomposition and useActualCostCalculation
+  // Now using DecompositionEngine + WriteOffAdapter + CostAdapter
 
   // State
   const state = ref({
@@ -273,24 +279,38 @@ export const useSalesStore = defineStore('sales', () => {
           continue
         }
 
-        // 2. Decompose menu item (initializes stores if needed) - ⭐ PHASE 2: include modifiers
-        const decomposedItems = await decomposeMenuItem(
-          billItem.menuItemId,
-          billItem.variantId || variant.id,
-          billItem.quantity,
-          billItem.selectedModifiers // ⭐ NEW: Pass selected modifiers for write-off
+        // 2. ✅ PHASE 3: Use unified DecompositionEngine + adapters
+        const engine = await createDecompositionEngine()
+        const writeOffAdapter = createWriteOffAdapter()
+        const costAdapter = createCostAdapter()
+        await costAdapter.initialize()
+
+        const menuInput = {
+          menuItemId: billItem.menuItemId,
+          variantId: billItem.variantId || variant.id,
+          quantity: billItem.quantity,
+          selectedModifiers: billItem.selectedModifiers
+        }
+
+        // 2a. Get write-off decomposition (for backward compatibility)
+        const traversalResultForWriteOff = await engine.traverse(
+          menuInput,
+          writeOffAdapter.getTraversalOptions()
         )
+        const writeOffResult: WriteOffResult = await writeOffAdapter.transform(
+          traversalResultForWriteOff,
+          menuInput
+        )
+        const totalCost = writeOffResult.totalBaseCost
 
-        const totalCost = calculateTotalCost(decomposedItems)
-
-        // 2b. Calculate actual cost from FIFO batches (✅ SPRINT 2: NEW LOGIC)
-        // Must be called AFTER decomposeMenuItem to ensure stores are initialized
-        // ⭐ PHASE 2: Include modifiers in cost calculation
-        const actualCost = await calculateActualCost(
-          billItem.menuItemId,
-          billItem.variantId || variant.id,
-          billItem.quantity,
-          billItem.selectedModifiers // ⭐ NEW: Pass selected modifiers for cost
+        // 2b. Calculate actual cost from FIFO batches
+        const traversalResultForCost = await engine.traverse(
+          menuInput,
+          costAdapter.getTraversalOptions()
+        )
+        const actualCost: ActualCostBreakdown = await costAdapter.transform(
+          traversalResultForCost,
+          menuInput
         )
 
         // 3. Get allocated bill discount for THIS specific item
@@ -304,13 +324,26 @@ export const useSalesStore = defineStore('sales', () => {
           allocatedDiscount
         )
 
-        // 5. Create decomposition summary (DEPRECATED: kept for backward compatibility)
-        // ✅ SPRINT 1: Count products and preparations separately
+        // 5. ✅ PHASE 3: Create decomposition summary from WriteOffResult
+        // Convert WriteOffItems to DecomposedItem format for backward compatibility
+        const decomposedItemsForSummary = writeOffResult.items.map(item => ({
+          type: item.type,
+          productId: item.productId,
+          productName: item.productName,
+          preparationId: item.preparationId,
+          preparationName: item.preparationName,
+          quantity: item.quantity,
+          unit: item.unit,
+          costPerUnit: item.costPerUnit,
+          totalCost: item.totalCost,
+          path: item.path
+        }))
+
         const decompositionSummary: DecompositionSummary = {
-          totalProducts: decomposedItems.filter(item => item.type === 'product').length,
-          totalPreparations: decomposedItems.filter(item => item.type === 'preparation').length,
+          totalProducts: writeOffResult.totalProducts,
+          totalPreparations: writeOffResult.totalPreparations,
           totalCost,
-          decomposedItems
+          decomposedItems: decomposedItemsForSummary
         }
 
         // 6. Calculate taxes (✅ SPRINT 8: Tax storage)
@@ -383,12 +416,15 @@ export const useSalesStore = defineStore('sales', () => {
             const preparationStore = usePreparationStore()
             await preparationStore.fetchBalances('kitchen')
 
-            const actualCostAfterWriteOff = await calculateActualCost(
-              billItem.menuItemId,
-              billItem.variantId || variant.id,
-              billItem.quantity,
-              billItem.selectedModifiers // ⭐ FIX: Include modifiers in recalculation
+            // ✅ PHASE 3: Use CostAdapter for recalculation
+            const costAdapterAfterWriteOff = createCostAdapter()
+            await costAdapterAfterWriteOff.initialize()
+            const traversalResultAfterWriteOff = await engine.traverse(
+              menuInput,
+              costAdapterAfterWriteOff.getTraversalOptions()
             )
+            const actualCostAfterWriteOff: ActualCostBreakdown =
+              await costAdapterAfterWriteOff.transform(traversalResultAfterWriteOff, menuInput)
 
             // Check if cost changed (negative batches were created)
             if (actualCostAfterWriteOff.totalCost !== actualCost.totalCost) {

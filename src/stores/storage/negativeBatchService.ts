@@ -425,8 +425,12 @@ class NegativeBatchService {
 
     // 2. Calculate new quantities
     const previousQty = batch.current_quantity // e.g., -100 (use snake_case from DB)
+    const previousCost = batch.cost_per_unit || 0
     const newQty = previousQty - additionalShortage // e.g., -100 - 100 = -200 (more negative)
-    const newTotalValue = newQty * batch.cost_per_unit // use snake_case from DB
+
+    // ✅ FIX: If batch cost is 0, use new cost from parameter (fallback)
+    const effectiveCost = previousCost === 0 ? costPerUnit : previousCost
+    const newTotalValue = newQty * effectiveCost
 
     const now = new Date().toISOString()
 
@@ -435,6 +439,7 @@ class NegativeBatchService {
       .from('storage_batches')
       .update({
         current_quantity: newQty,
+        cost_per_unit: effectiveCost, // ✅ Update cost if it was 0
         total_value: newTotalValue,
         updated_at: now
       })
@@ -447,7 +452,8 @@ class NegativeBatchService {
     }
 
     console.info(
-      `✅ Updated existing negative batch: ${batch.batch_number} (${previousQty} → ${newQty}, +${additionalShortage} shortage)`
+      `✅ Updated negative batch: ${batch.batch_number} (${previousQty} → ${newQty}, +${additionalShortage} shortage)` +
+        (previousCost === 0 && costPerUnit > 0 ? ` | Cost fixed: 0 → ${costPerUnit}` : '')
     )
 
     // ✅ FIX: Use mapper function for snake_case to camelCase conversion
