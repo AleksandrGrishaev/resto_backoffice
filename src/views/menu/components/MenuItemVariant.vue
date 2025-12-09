@@ -39,6 +39,27 @@
           bg-color="surface"
           @update:model-value="emitUpdate"
         />
+        <v-text-field
+          v-model.number="localVariant.portionMultiplier"
+          type="number"
+          label="Modifier Multiplier"
+          hide-details="auto"
+          placeholder="1.0"
+          :rules="[v => !v || v > 0 || 'Must be positive']"
+          style="width: 140px"
+          bg-color="surface"
+          step="0.1"
+          @update:model-value="emitUpdate"
+        >
+          <template #append-inner>
+            <v-tooltip location="top">
+              <template #activator="{ props: tooltipProps }">
+                <v-icon v-bind="tooltipProps" icon="mdi-help-circle-outline" size="18" />
+              </template>
+              <span>Scales modifier quantities (e.g., 1.3 = 30% more)</span>
+            </v-tooltip>
+          </template>
+        </v-text-field>
       </div>
 
       <!-- Композиция -->
