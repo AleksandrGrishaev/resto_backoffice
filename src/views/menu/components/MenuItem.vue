@@ -31,6 +31,18 @@
       </div>
 
       <div class="menu-item__actions">
+        <!-- View button -->
+        <v-btn
+          size="small"
+          variant="text"
+          color="default"
+          class="view-button"
+          @click="$emit('view', item)"
+        >
+          <v-icon icon="mdi-eye" size="20" />
+        </v-btn>
+
+        <!-- Edit button -->
         <v-btn
           size="small"
           variant="text"
@@ -41,17 +53,23 @@
           <v-icon icon="mdi-pencil" size="20" />
         </v-btn>
 
-        <!-- Menu actions (только для composition блюд) -->
-        <v-menu v-if="hasComposition">
+        <!-- Menu actions -->
+        <v-menu>
           <template #activator="{ props: menuProps }">
             <v-btn size="small" variant="text" icon="mdi-dots-vertical" v-bind="menuProps" />
           </template>
           <v-list>
-            <v-list-item @click="$emit('duplicate', item)">
+            <v-list-item v-if="hasComposition" @click="$emit('duplicate', item)">
               <template #prepend>
                 <v-icon icon="mdi-content-copy" />
               </template>
               <v-list-item-title>Duplicate</v-list-item-title>
+            </v-list-item>
+            <v-list-item @click="$emit('view', item)">
+              <template #prepend>
+                <v-icon icon="mdi-file-pdf-box" />
+              </template>
+              <v-list-item-title>View & Export PDF</v-list-item-title>
             </v-list-item>
           </v-list>
         </v-menu>
@@ -108,6 +126,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { MenuItem, MenuComposition } from '@/types/menu'
+import { DISH_TYPES, DISH_TYPE_ICONS } from '@/stores/menu/types'
 
 interface Props {
   item: MenuItem
@@ -118,6 +137,7 @@ const props = defineProps<Props>()
 defineEmits<{
   (e: 'edit', item: MenuItem): void
   (e: 'duplicate', item: MenuItem): void
+  (e: 'view', item: MenuItem): void
 }>()
 
 const sortedVariants = computed(() => {
@@ -129,33 +149,22 @@ const hasComposition = computed(() => {
   return props.item.variants.some(v => v.composition && v.composition.length > 0)
 })
 
-// Определяем тип блюда для индикатора
+// Определяем тип блюда для индикатора (используем dishType из БД)
 const itemTypeIndicator = computed(() => {
-  const variants = props.item.variants
+  const dishType = props.item.dishType
 
-  // Проверяем есть ли композитные варианты
-  const hasComposition = variants.some(v => v.composition && v.composition.length > 0)
+  if (!dishType) return null
 
-  if (hasComposition) {
-    // Проверяем сложность композиции
-    const maxComponents = Math.max(...variants.map(v => v.composition?.length || 0))
-
-    if (maxComponents > 1) {
-      return {
-        icon: 'mdi-layers-plus',
-        label: 'Composition',
-        color: 'orange'
-      }
-    } else {
-      return {
-        icon: 'mdi-chef-hat',
-        label: 'Simple',
-        color: 'primary'
-      }
-    }
+  const colors: Record<string, string> = {
+    simple: 'primary',
+    modifiable: 'orange'
   }
 
-  return null
+  return {
+    icon: DISH_TYPE_ICONS[dishType] || 'mdi-food',
+    label: DISH_TYPES[dishType] || dishType,
+    color: colors[dishType] || 'primary'
+  }
 })
 
 // Форматирование цены

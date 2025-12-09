@@ -362,16 +362,29 @@ export const useMenuStore = defineStore('menu', () => {
           ? original.modifierGroups.map(group => ({
               ...group,
               id: generateId(), // новый ID для группы
+              // Deep copy targetComponent для replacement модификаторов
+              targetComponent: group.targetComponent ? { ...group.targetComponent } : undefined,
               options: group.options.map(option => ({
                 ...option,
-                id: generateId() // новый ID для опции
+                id: generateId(), // новый ID для опции
+                // Deep copy composition для каждой опции
+                composition: option.composition
+                  ? option.composition.map(comp => ({ ...comp }))
+                  : undefined
               }))
             }))
           : undefined,
         templates: original.templates
           ? original.templates.map(template => ({
               ...template,
-              id: generateId() // новый ID для template
+              id: generateId(), // новый ID для template
+              // Deep copy selectedModifiers
+              selectedModifiers: template.selectedModifiers
+                ? template.selectedModifiers.map(sel => ({
+                    ...sel,
+                    optionIds: [...sel.optionIds]
+                  }))
+                : []
             }))
           : undefined
       }

@@ -176,9 +176,9 @@
                   <v-list-item
                     v-for="(option, optionIndex) in group.options"
                     :key="option.id"
-                    class="px-0 mb-2 border rounded"
+                    class="px-0 mb-2 border rounded option-item"
                   >
-                    <v-row dense>
+                    <v-row dense class="pa-3">
                       <v-col cols="12" md="4">
                         <v-text-field
                           v-model="option.name"
@@ -240,7 +240,7 @@
                       </v-col>
                       <!-- ✅ Composition Editor -->
                       <v-col cols="12">
-                        <div class="composition-editor pa-3 bg-grey-lighten-5 rounded">
+                        <div class="composition-editor pa-3 rounded">
                           <div class="d-flex align-center justify-space-between mb-2">
                             <span class="text-caption font-weight-bold">Composition</span>
                             <div class="d-flex ga-1">
@@ -279,7 +279,7 @@
                             <div
                               v-for="(comp, compIndex) in option.composition"
                               :key="compIndex"
-                              class="composition-item d-flex align-center ga-2 pa-2 mb-1 bg-white rounded"
+                              class="composition-item d-flex align-center ga-2 pa-2 mb-1 rounded"
                             >
                               <v-icon
                                 :icon="getCompositionIcon(comp.type)"
@@ -793,8 +793,24 @@ function isCompositionPortionType(comp: MenuComposition): boolean {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .modifiers-editor-widget {
   border: 2px solid rgba(var(--v-theme-primary), 0.2);
+}
+
+.option-item {
+  :deep(.v-list-item__content) {
+    overflow: visible;
+  }
+}
+
+.composition-editor {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border: 1px solid rgba(var(--v-border-color), 0.2);
+}
+
+.composition-item {
+  background: rgba(var(--v-theme-surface), 0.8);
+  border: 1px solid rgba(var(--v-border-color), 0.1);
 }
 </style>

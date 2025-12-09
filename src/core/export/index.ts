@@ -1,6 +1,6 @@
 /**
  * PDF Export Module
- * Exports Menu, Recipes, and Preparations to PDF
+ * Exports Menu, Recipes, Preparations, and Single Menu Items to PDF
  */
 
 // Types
@@ -23,6 +23,14 @@ export type {
   PreparationCategoryExport,
   PreparationExport,
   PreparationComponentExport,
+  // Single Menu Item Export Types
+  MenuItemExportData,
+  MenuItemDetailExport,
+  MenuItemVariantDetailExport,
+  MenuItemCompositionExport,
+  NestedComponentExport,
+  ModifierGroupExport,
+  ModifierOptionExport,
   Html2PdfOptions
 } from './types'
 
@@ -40,3 +48,4 @@ export { default as ExportLayout } from './templates/ExportLayout.vue'
 export { default as MenuExportTemplate } from './templates/MenuExportTemplate.vue'
 export { default as RecipeExportTemplate } from './templates/RecipeExportTemplate.vue'
 export { default as PreparationExportTemplate } from './templates/PreparationExportTemplate.vue'
+export { default as MenuItemExportTemplate } from './templates/MenuItemExportTemplate.vue'
