@@ -1,3 +1,4 @@
 // src/stores/pos/orders/composables/index.ts
-export { useKitchenDecomposition } from './useKitchenDecomposition'
-export type { KitchenDecomposedItem } from './useKitchenDecomposition'
+// Composables for POS orders module
+// Note: useKitchenDecomposition was removed in Phase 4 refactoring
+// Kitchen Display uses dish names + modifiers, not ingredient decomposition

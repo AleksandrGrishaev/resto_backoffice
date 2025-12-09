@@ -1,6 +1,6 @@
 # Sale Flow Documentation - Полный процесс продажи и списания
 
-## 📋 Оглавление
+## Оглавление
 
 1. [Обзор процесса](#обзор-процесса)
 2. [Этап 1: Оформление заказа (POS)](#этап-1-оформление-заказа-pos)
@@ -29,8 +29,8 @@
 
 - **POS Order**: Мгновенно (создание заказа)
 - **Payment**: 1-2 сек (обработка платежа)
-- **Sales Recording**: 2-3 сек (расчет COGS + запись в БД)
-- **Write-Off**: 3-5 сек (декомпозиция + FIFO allocation + negative batches)
+- **Sales Recording**: 2-3 сек (DecompositionEngine + CostAdapter)
+- **Write-Off**: 3-5 сек (DecompositionEngine + WriteOffAdapter + FIFO allocation)
 
 **Общее время:** ~6-11 секунд
 
@@ -61,7 +61,7 @@
      variantName: 'Dragon',
      quantity: 1,
      price: 100000,
-     discounts: []
+     selectedModifiers: [] // Replacement modifiers
    })
    ```
 
@@ -136,8 +136,9 @@
 ### Файлы:
 
 - `src/stores/sales/salesStore.ts`
-- `src/stores/sales/composables/useActualCostCalculation.ts`
-- `src/stores/sales/composables/useProfitCalculation.ts`
+- `src/core/decomposition/DecompositionEngine.ts`
+- `src/core/decomposition/adapters/CostAdapter.ts`
+- `src/core/decomposition/utils/batchAllocationUtils.ts`
 
 ### Что происходит:
 
@@ -153,83 +154,90 @@ salesStore.recordSalesTransaction({
 })
 ```
 
-### 3.2. Расчет ФАКТИЧЕСКОЙ себестоимости (FIFO)
+### 3.2. Расчет ФАКТИЧЕСКОЙ себестоимости (DecompositionEngine + CostAdapter)
 
-**Файл:** `src/stores/sales/composables/useActualCostCalculation.ts`
+**Файлы:**
+
+- `src/core/decomposition/DecompositionEngine.ts`
+- `src/core/decomposition/adapters/CostAdapter.ts`
 
 ```typescript
-const { calculateActualCost } = useActualCostCalculation()
+import { createDecompositionEngine, createCostAdapter } from '@/core/decomposition'
+
+// Create engine and adapter
+const engine = await createDecompositionEngine()
+const costAdapter = createCostAdapter({ department: 'kitchen' })
 
 for (const item of orderItems) {
-  // Get menu item variant
-  const variant = menuStore.getVariant(item.menuItemId, item.variantId)
+  // 1. Traverse menu item to get decomposed nodes
+  const traversalResult = await engine.traverse(
+    {
+      menuItemId: item.menuItemId,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      selectedModifiers: item.selectedModifiers
+    },
+    costAdapter.getTraversalOptions()
+  )
 
-  // variant.composition = [
-  //   { type: 'preparation', id: 'ba109...', quantity: 20, unit: 'gram' },
-  //   { type: 'product', id: '5212...', quantity: 5, unit: 'piece' }
+  // traversalResult.nodes = [
+  //   { type: 'preparation', preparationId: 'ba109...', quantity: 20, unit: 'gram' },
+  //   { type: 'product', productId: '5212...', quantity: 5, unit: 'piece' }
   // ]
 
-  let itemCost = 0
+  // 2. Transform to cost breakdown using FIFO
+  const costBreakdown = await costAdapter.transform(traversalResult, input)
 
-  for (const component of variant.composition) {
-    if (component.type === 'product') {
-      // Allocate from product batches (FIFO)
-      const result = allocateFromProductBatches(component.id, component.quantity, department)
-      itemCost += result.totalCost
-    }
+  // costBreakdown = {
+  //   totalCost: 2000,
+  //   preparationCosts: [...],
+  //   productCosts: [...],
+  //   method: 'FIFO'
+  // }
 
-    if (component.type === 'preparation') {
-      // Allocate from preparation batches (FIFO)
-      const result = allocateFromPreparationBatches(component.id, component.quantity, department)
-      itemCost += result.totalCost
-    }
-  }
-
-  totalCost += itemCost
+  totalCost += costBreakdown.totalCost
 }
 ```
 
-**Особенности FIFO allocation:**
+**FIFO Allocation (via batchAllocationUtils):**
 
 ```typescript
-// preparationStore.allocateBatches()
-function allocateFromPreparationBatches(preparationId, quantity, department) {
-  // 1. Get active batches (INCLUDING negative batches!)
-  const batches = preparationStore.batches
-    .filter(
-      b =>
-        b.preparationId === preparationId &&
-        b.department === department &&
-        b.isActive &&
-        b.currentQuantity !== 0 // ← Включая отрицательные!
-    )
-    .sort((a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime())
+// src/core/decomposition/utils/batchAllocationUtils.ts
 
-  // 2. Allocate FIFO
-  let remaining = quantity
-  let totalCost = 0
-  const allocations = []
+export async function allocateFromPreparationBatches(
+  preparationId: string,
+  requiredQuantity: number,
+  department: 'kitchen' | 'bar'
+): Promise<PreparationCostItem> {
+  // 1. Get batches from preparationStore
+  const batches = preparationStore.getPreparationBatches(preparationId, department)
 
-  for (const batch of batches) {
-    if (remaining <= 0) break
+  // 2. Allocate FIFO (positive batches first, then negative)
+  const allocations = allocateFromBatches(batches, requiredQuantity, b => b.productionDate)
 
-    const allocated = Math.min(remaining, batch.currentQuantity)
-    totalCost += allocated * batch.costPerUnit
-
+  // 3. Handle deficit with lastKnownCost fallback
+  if (deficit > 0) {
+    const fallbackCost = preparation.lastKnownCost || 0
     allocations.push({
-      batchId: batch.id,
-      quantity: allocated,
-      cost: batch.costPerUnit
+      batchId: 'fallback-prep-cost',
+      batchNumber: 'LAST_KNOWN',
+      allocatedQuantity: deficit,
+      costPerUnit: fallbackCost
     })
-
-    remaining -= allocated
   }
 
-  return { totalCost, allocations, deficit: remaining }
+  return {
+    preparationId,
+    preparationName,
+    quantity: requiredQuantity,
+    batchAllocations: allocations,
+    averageCostPerUnit: avgCost,
+    totalCost
+  }
 }
 ```
 
-**⚠️ ВАЖНО:** На этом этапе **НЕ происходит write-off**!
+**ВАЖНО:** На этом этапе **НЕ происходит write-off**!
 
 - Это только **расчет стоимости** для profit calculation
 - Batches **читаются**, но **не изменяются**
@@ -237,12 +245,10 @@ function allocateFromPreparationBatches(preparationId, quantity, department) {
 
 ### 3.3. Расчет прибыли
 
-**Файл:** `src/stores/sales/composables/useProfitCalculation.ts`
-
 ```typescript
 const profit = {
   revenue: item.finalPrice, // 100,000 IDR
-  cost: actualCost.totalCost, // 2,000 IDR (from FIFO)
+  cost: costBreakdown.totalCost, // 2,000 IDR (from FIFO)
   profit: revenue - cost, // 98,000 IDR
   profitMargin: ((revenue - cost) / revenue) * 100 // 98%
 }
@@ -275,10 +281,10 @@ await supabase.from('sales_transactions').insert(transaction)
 
 **Результат Этапа 3:**
 
-- ✅ Transaction создана в `sales_transactions` table
-- ✅ COGS рассчитана из FIFO batches
-- ✅ Profit calculated
-- ⏭️ Переход к Этапу 4 (Write-Off)
+- Transaction создана в `sales_transactions` table
+- COGS рассчитана через DecompositionEngine + CostAdapter
+- Profit calculated
+- Переход к Этапу 4 (Write-Off)
 
 ---
 
@@ -287,7 +293,8 @@ await supabase.from('sales_transactions').insert(transaction)
 ### Файлы:
 
 - `src/stores/sales/recipeWriteOff/recipeWriteOffStore.ts`
-- `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts`
+- `src/core/decomposition/DecompositionEngine.ts`
+- `src/core/decomposition/adapters/WriteOffAdapter.ts`
 - `src/stores/storage/storageService.ts`
 - `src/stores/preparation/negativeBatchService.ts`
 
@@ -301,155 +308,130 @@ recipeWriteOffStore.processItemWriteOff({
   menuItemId: item.menuItemId,
   variantId: item.variantId,
   quantity: item.quantity,
+  selectedModifiers: item.selectedModifiers,
   salesTransactionId: transaction.id
 })
 ```
 
-### 4.2. ДЕКОМПОЗИЦИЯ меню → ингредиенты
+### 4.2. ДЕКОМПОЗИЦИЯ через DecompositionEngine + WriteOffAdapter
 
-**Файл:** `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts`
+**Файлы:**
+
+- `src/core/decomposition/DecompositionEngine.ts`
+- `src/core/decomposition/adapters/WriteOffAdapter.ts`
 
 **Цель:** Раскрыть menu item до финальных ингредиентов (products/preparations)
 
 ```typescript
-const { decomposeMenuItem } = useDecomposition()
+import { createDecompositionEngine, createWriteOffAdapter } from '@/core/decomposition'
 
-const result = decomposeMenuItem(
-  menuItemId: '1880d1c2-...',
-  variantId: 'f2c05dbe-...',
-  soldQuantity: 1
+const engine = await createDecompositionEngine()
+const writeOffAdapter = createWriteOffAdapter({ department: 'kitchen' })
+
+// 1. Traverse menu item
+const traversalResult = await engine.traverse(
+  {
+    menuItemId: '1880d1c2-...',
+    variantId: 'f2c05dbe-...',
+    quantity: 1,
+    selectedModifiers: [] // Replacement modifiers
+  },
+  writeOffAdapter.getTraversalOptions()
 )
 
-// Пример варианта:
-// variant.composition = [
-//   { type: 'preparation', id: 'ba109...', quantity: 20, unit: 'gram' }
+// traversalResult.nodes = DecomposedNode[]
+// Each node has: type, quantity, unit, productId/preparationId, etc.
+
+// 2. Transform to WriteOffResult
+const writeOffResult = await writeOffAdapter.transform(traversalResult, input)
+
+// writeOffResult.items = WriteOffItem[]
+// [
+//   { type: 'preparation', id: 'ba109...', quantity: 20, unit: 'gram', name: 'Dragon test' }
 // ]
 ```
 
-**Алгоритм декомпозиции:**
+**Алгоритм декомпозиции (DecompositionEngine):**
 
 ```typescript
-function decomposeComponent(component, multiplier) {
-  if (component.type === 'product') {
-    // ✅ Product - конечный элемент, не раскрываем
-    return [
-      {
-        type: 'product',
-        id: component.id,
-        quantity: component.quantity * multiplier,
-        unit: component.unit
-      }
-    ]
-  }
+// DecompositionEngine.traverse()
+async traverse(input: MenuItemInput, options: TraversalOptions) {
+  // 1. Get menu item and variant
+  const menuItem = menuStore.getMenuItem(input.menuItemId)
+  const variant = menuItem.variants.find(v => v.id === input.variantId)
 
-  if (component.type === 'preparation') {
-    // Получаем preparation из recipesStore
-    const preparation = recipesStore.activePreparations.find(p => p.id === component.id)
+  // 2. Build replacement map from modifiers
+  const replacements = buildReplacementMap(input.selectedModifiers)
 
-    if (!preparation) {
-      console.error('Preparation not found:', component.id)
-      return []
-    }
+  // 3. Process variant composition
+  const nodes: DecomposedNode[] = []
 
-    // Проверяем: есть ли у preparation sub-components?
-    if (preparation.composition && preparation.composition.length > 0) {
-      // ✅ Preparation с sub-components - РАСКРЫВАЕМ рекурсивно
-      const subItems = []
-      for (const subComponent of preparation.composition) {
-        const decomposed = decomposeComponent(
-          subComponent,
-          multiplier * (component.quantity / preparation.outputQuantity)
-        )
-        subItems.push(...decomposed)
-      }
-      return subItems
+  for (const component of variant.composition) {
+    // Check for replacement modifier
+    const replacement = getReplacementForVariantComponent(
+      variant.id,
+      component.id,
+      replacements
+    )
+
+    if (replacement) {
+      // Use replacement composition instead
+      await this.processComposition(replacement.composition, nodes, options)
     } else {
-      // ✅ Preparation БЕЗ sub-components - НЕ раскрываем!
-      // Списываем как preparation batch целиком
-      return [
-        {
-          type: 'preparation',
-          id: component.id,
-          quantity: component.quantity * multiplier,
-          unit: component.unit,
-          note: 'Cost will be calculated from FIFO batches'
-        }
-      ]
+      // Process original component
+      await this.processComponent(component, nodes, options)
     }
   }
-}
-```
 
-**Пример декомпозиции:**
-
-**Случай 1: Preparation БЕЗ sub-components (Dragon test)**
-
-```typescript
-// Input:
-variant.composition = [{ type: 'preparation', id: 'ba109...', quantity: 20, unit: 'gram' }]
-
-// Output:
-decomposedItems = [{ type: 'preparation', id: 'ba109...', quantity: 20, unit: 'gram' }]
-// ← Не раскрывается! Списывается как preparation batch
-```
-
-**Случай 2: Preparation С sub-components (например "Соус")**
-
-```typescript
-// Input:
-variant.composition = [{ type: 'preparation', id: 'sauce-123', quantity: 50, unit: 'ml' }]
-
-// Sauce preparation:
-sauce.composition = [
-  { type: 'product', id: 'tomato', quantity: 30, unit: 'gram' },
-  { type: 'product', id: 'sugar', quantity: 5, unit: 'gram' }
-]
-
-// Output (после рекурсивной декомпозиции):
-decomposedItems = [
-  { type: 'product', id: 'tomato', quantity: 30, unit: 'gram' },
-  { type: 'product', id: 'sugar', quantity: 5, unit: 'gram' }
-]
-// ← Раскрыто до products!
-```
-
-**Merge duplicates:**
-
-```typescript
-// Если одинаковый product/preparation встречается несколько раз:
-mergeDuplicateItems(decomposedItems)[
-  // До merge:
-  ({ type: 'product', id: 'tomato', quantity: 30 }, { type: 'product', id: 'tomato', quantity: 10 })
-][
-  // После merge:
-  { type: 'product', id: 'tomato', quantity: 40 }
-]
-```
-
-**Результат декомпозиции:**
-
-```typescript
-{
-  success: true,
-  data: {
-    items: [
-      { type: 'preparation', id: 'ba109...', quantity: 20, unit: 'gram' }
-    ],
-    totalItems: 1,
-    totalCost: 0  // ← Будет рассчитана при write-off
+  // 4. Merge duplicates if needed
+  if (options.mergeDuplicates) {
+    mergeNodes(nodes)
   }
+
+  return { nodes, metadata }
 }
 ```
 
-### 4.3. Создание Write-Off операции
+**WriteOffAdapter transforms nodes:**
+
+```typescript
+// WriteOffAdapter.transform()
+async transform(result: TraversalResult, input: MenuItemInput): Promise<WriteOffResult> {
+  const items: WriteOffItem[] = []
+
+  for (const node of result.nodes) {
+    if (node.type === 'preparation') {
+      items.push({
+        type: 'preparation',
+        preparationId: node.preparationId,
+        preparationName: node.preparationName,
+        quantity: node.quantity,
+        unit: node.unit
+      })
+    } else if (node.type === 'product') {
+      items.push({
+        type: 'product',
+        productId: node.productId,
+        productName: node.productName,
+        quantity: node.quantity,
+        unit: node.unit
+      })
+    }
+  }
+
+  return { items, totalItems: items.length }
+}
+```
+
+### 4.3. FIFO Allocation и создание Write-Off
 
 **Файл:** `src/stores/storage/storageService.ts`
 
 ```typescript
 storageService.createWriteOff({
   department: 'kitchen',
-  reason: 'sale', // Affects KPI!
-  items: decomposedItems,
+  reason: 'sale',
+  items: writeOffResult.items,
   notes: `Sale transaction: ${salesTransactionId}`,
   userId: currentUser.id,
   shiftId: currentShift.id
@@ -470,7 +452,7 @@ allocateProductFIFO(productId, quantity, department) {
       b.status === 'active' &&
       b.currentQuantity > 0
     )
-    .sort(by productionDate)  // FIFO
+    .sort(by receiptDate)  // FIFO
 
   // 2. Allocate
   const allocations = []
@@ -495,7 +477,7 @@ allocateProductFIFO(productId, quantity, department) {
     const negativeBatch = await negativeBatchService.createNegativeBatch({
       productId,
       department,
-      quantity: -remaining,  // Negative!
+      quantity: -remaining,
       cost
     })
 
@@ -520,79 +502,36 @@ allocatePreparationFIFO(preparationId, quantity, department) {
       b.preparationId === preparationId &&
       b.department === department &&
       b.isActive &&
-      b.currentQuantity !== 0  // ← Including negative!
+      b.currentQuantity !== 0
     )
     .sort(by productionDate)  // FIFO
 
-  // 2. Allocate
-  const allocations = []
+  // 2. Allocate from positive batches first
   let remaining = quantity
 
-  for (const batch of batches) {
-    const allocated = Math.min(remaining, Math.abs(batch.currentQuantity))
-
-    // Update batch
-    if (batch.currentQuantity > 0) {
-      // Positive batch
-      batch.currentQuantity -= allocated
-      if (batch.currentQuantity === 0) {
-        batch.status = 'depleted'
-      }
-    } else {
-      // Negative batch - становится еще более отрицательным
-      batch.currentQuantity -= allocated
-    }
-
-    allocations.push({ batchId: batch.id, quantity: allocated })
+  for (const batch of positiveBatches) {
+    const allocated = Math.min(remaining, batch.currentQuantity)
+    batch.currentQuantity -= allocated
     remaining -= allocated
   }
 
   // 3. IF shortage → create/update negative batch
   if (remaining > 0) {
-    // Check: есть ли уже negative batch?
     const existingNegative = await negativeBatchService.getActiveNegativeBatch(
       preparationId,
       department
     )
 
     if (existingNegative) {
-      // ✅ UPDATE existing negative batch
-      const cost = existingNegative.costPerUnit
-
-      await negativeBatchService.updateNegativeBatch(
-        existingNegative.id,
-        remaining,  // Additional shortage
-        cost
-      )
-
-      allocations.push({
-        batchId: existingNegative.id,
-        quantity: remaining,
-        isNegative: true
-      })
+      // UPDATE existing
+      await negativeBatchService.updateNegativeBatch(existingNegative.id, remaining, cost)
     } else {
-      // ✅ CREATE new negative batch
-
-      // Calculate cost using fallback chain
-      const cost = await negativeBatchService.calculateNegativeBatchCost(
-        preparationId,
-        remaining
-      )
-
-      const negativeBatch = await negativeBatchService.createNegativeBatch({
+      // CREATE new
+      await negativeBatchService.createNegativeBatch({
         preparationId,
         department,
-        quantity: -remaining,  // Negative!
-        unit: preparation.outputUnit,
-        cost,
-        reason: 'sale',
-        sourceOperationType: 'pos_order'
-      })
-
-      allocations.push({
-        batchId: negativeBatch.id,
-        quantity: remaining,
-        isNegative: true
+        quantity: -remaining,
+        cost
       })
     }
   }
@@ -603,102 +542,74 @@ allocatePreparationFIFO(preparationId, quantity, department) {
 
 ### 4.4. Расчет стоимости для Negative Batch
 
-**Функция:** `calculateNegativeBatchCost()`
-
-**Файлы:**
-
-- `src/stores/preparation/negativeBatchService.ts:53-129` (preparations)
-- `src/stores/storage/negativeBatchService.ts:55-132` (products)
-
-**Улучшенный Fallback Chain (5 уровней для products, 4 для preparations):**
+**Fallback Chain (5 уровней для products, 4 для preparations):**
 
 ```
 1. Last active batch cost          ← getLastActiveBatch() → batch.costPerUnit
    ↓ FAIL
-2. Depleted batches average (5шт)  ← SELECT FROM *_batches WHERE status='depleted' ORDER BY date DESC LIMIT 5
+2. Depleted batches average (5шт)  ← SELECT FROM *_batches WHERE status='depleted' LIMIT 5
    ↓ FAIL
 3. last_known_cost from DB         ← SELECT last_known_cost FROM products/preparations
    ↓ FAIL
-4. base_cost_per_unit (products)   ← SELECT base_cost_per_unit FROM products (ручная стоимость из карточки товара)
+4. base_cost_per_unit (products)   ← SELECT base_cost_per_unit FROM products
    ↓ FAIL (или N/A для preparations)
-5. 0 + CRITICAL ERROR              ← console.error() + errorContext { failedFallbacks, suggestedAction }
-```
-
-> **Note:** `base_cost_per_unit` доступен только для products. Для preparations этот уровень пропускается.
-
-#### 4.4.1. Автоматическое обновление `last_known_cost`
-
-**Trigger:** При создании batch в `createReceipt()`
-
-**Файлы:**
-
-- `src/stores/storage/storageService.ts:774-793` (products)
-- `src/stores/preparation/preparationService.ts:814-831` (preparations)
-
-**Flow:**
-
-```
-createReceipt()
-  → INSERT batch INTO *_batches (cost_per_unit = X)
-  → UPDATE products/preparations SET last_known_cost = X WHERE id = item_id
-  → log: "✅ Updated last_known_cost"
-```
-
-**Результаты:**
-
-- ✅ `last_known_cost` обновляется при каждом receipt
-- ✅ Fallback level 3 всегда актуален
-- ❌ Cost = 0 → CRITICAL ERROR (не маскируется произвольным значением)
-
-### 4.5. Создание записей в БД
-
-**Таблицы:**
-
-```
-1. write_off_operations  ← operation metadata (document_number, reason, affects_kpi)
-2. batch_operations      ← links batches to operation (batch_id, operation_id, quantity)
-3. *_batches             ← update current_quantity, status
-```
-
-**Файл:** `src/stores/storage/storageService.ts:844-1170`
-
-### 4.6. Запись расхода в Account Store
-
-**Условие:** `reason` affects KPI (sale, damage, spoilage)
-
-**Flow:**
-
-```
-IF affects_kpi:
-  accountStore.createTransaction({
-    type: 'expense',
-    amount: -totalCost,
-    category: 'inventory_adjustment'
-  })
+5. 0 + CRITICAL ERROR              ← console.error() with context
 ```
 
 **Результат Этапа 4:**
 
-- ✅ Write-off operation создана
-- ✅ Batches обновлены (FIFO)
-- ✅ Negative batches созданы/обновлены при shortage
-- ✅ Expense записан в Account Store (если affects_kpi)
-- ✅ Inventory актуализирован
+- Write-off operation создана
+- Batches обновлены (FIFO)
+- Negative batches созданы/обновлены при shortage
+- Expense записан в Account Store (если affects_kpi)
+- Inventory актуализирован
 
 ---
 
 ## Технические детали
 
-### Разница между Step 3.2 и Step 4.2
+### Unified Decomposition Architecture
 
-| Аспект                          | Step 3.2 (Sales COGS)              | Step 4.2 (Write-Off)            |
-| ------------------------------- | ---------------------------------- | ------------------------------- |
-| **Цель**                        | Посчитать себестоимость для profit | Списать фактические ингредиенты |
-| **Файл**                        | `useActualCostCalculation.ts`      | `useDecomposition.ts`           |
-| **Действие**                    | Читает batches (read-only)         | Изменяет batches (write)        |
-| **Использует negative batches** | ✅ Да (для расчета стоимости)      | ✅ Да (создает при shortage)    |
-| **Декомпозиция**                | Нет (берет variant.composition)    | ✅ Да (рекурсивная)             |
-| **Обновляет БД**                | ❌ Нет                             | ✅ Да                           |
+С Phase 4 рефакторинга (декабрь 2025) используется **единый DecompositionEngine**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DecompositionEngine                          │
+│  - traverse(input, options)                                     │
+│  - Builds replacement map from modifiers                        │
+│  - Iterates composition                                         │
+│  - Applies yield adjustment (optional)                          │
+│  - Converts portions to grams (optional)                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+           ┌──────────────────┴──────────────────┐
+           │                                     │
+           ▼                                     ▼
+    WriteOffAdapter                        CostAdapter
+    (recipeWriteOffStore)                  (salesStore)
+           │                                     │
+           ▼                                     ▼
+    WriteOffResult                      ActualCostBreakdown
+```
+
+**Ключевые файлы:**
+
+| File                                                   | Purpose                   |
+| ------------------------------------------------------ | ------------------------- |
+| `src/core/decomposition/DecompositionEngine.ts`        | Unified traversal         |
+| `src/core/decomposition/adapters/WriteOffAdapter.ts`   | For inventory write-off   |
+| `src/core/decomposition/adapters/CostAdapter.ts`       | For FIFO cost calculation |
+| `src/core/decomposition/utils/batchAllocationUtils.ts` | Shared FIFO allocation    |
+
+### Разница между Step 3 и Step 4
+
+| Аспект               | Step 3 (Sales COGS)                | Step 4 (Write-Off)              |
+| -------------------- | ---------------------------------- | ------------------------------- |
+| **Цель**             | Посчитать себестоимость для profit | Списать фактические ингредиенты |
+| **Adapter**          | CostAdapter                        | WriteOffAdapter                 |
+| **Действие**         | Читает batches (read-only)         | Изменяет batches (write)        |
+| **Negative batches** | Использует для расчета             | Создает при shortage            |
+| **Обновляет БД**     | Нет                                | Да                              |
 
 ### Negative Batches
 
@@ -708,60 +619,34 @@ IF affects_kpi:
 - Представляет "долг" перед складом
 - Создается когда списываем больше чем есть
 
-**Когда создается:**
-
-- При write-off с shortage
-- При продаже без stock
-
 **Reconciliation:**
 
 - Когда создается новый receipt → negative batch reconciled
 - Status: `active` → `depleted`
 - `reconciled_at` заполняется
 
-**Пример:**
+### Replacement Modifiers
+
+Поддерживаются **Replacement Modifiers** - возможность заменить компонент рецепта:
+
+```
+Recipe: Cappuccino
+├── Espresso: 30ml
+└── Regular Milk: 150ml  ← заменяемый компонент
+
+При заказе с Oat Milk:
+├── Espresso: 30ml
+└── Oat Milk: 150ml  ← замена из modifier composition
+```
+
+**Обрабатывается в DecompositionEngine:**
 
 ```typescript
-// До продажи:
-batches = [] // Нет batches для Dragon test
-
-// После 1-й продажи (20 gram):
-batches = [
-  {
-    batchNumber: 'NEG-PREP-1764858333956',
-    currentQuantity: -20,
-    costPerUnit: 100000,
-    totalValue: -2000000,
-    isNegative: true
-  }
-]
-
-// После 2-й продажи (20 gram):
-batches = [
-  {
-    batchNumber: 'NEG-PREP-1764858333956',
-    currentQuantity: -40, // ← Обновился!
-    costPerUnit: 100000,
-    totalValue: -4000000,
-    isNegative: true
-  }
-]
-
-// После receipt (производство 100 gram):
-batches = [
-  {
-    batchNumber: 'NEG-PREP-1764858333956',
-    currentQuantity: -40,
-    status: 'depleted',
-    reconciledAt: '2024-12-04T15:30:00Z' // ← Reconciled!
-  },
-  {
-    batchNumber: 'PREP-1764858500000',
-    currentQuantity: 60, // ← Остаток после reconciliation (100 - 40)
-    costPerUnit: 95000, // ← Новая стоимость из receipt
-    isNegative: false
-  }
-]
+const replacements = buildReplacementMap(selectedModifiers)
+const replacement = getReplacementForComponent(recipeId, componentId, replacements)
+if (replacement) {
+  // Use replacement.composition instead of original
+}
 ```
 
 ---
@@ -775,7 +660,6 @@ try {
   await paymentsStore.processSimplePayment(...)
 } catch (error) {
   // Rollback: order status → 'pending'
-  // Show error to user
   // Payment НЕ создан
   // Sales transaction НЕ создана
   // Write-off НЕ выполнен
@@ -789,12 +673,8 @@ try {
   await salesStore.recordSalesTransaction(...)
 } catch (error) {
   // Payment УЖЕ создан!
-  // Order status = 'paid'
   // Но sales transaction НЕ создана
-
-  // ⚠️ КРИТИЧНО: Manual reconciliation required!
-  // Лог ошибки → errors.md
-  // Admin должен вручную создать sales transaction
+  // КРИТИЧНО: Manual reconciliation required!
 }
 ```
 
@@ -804,37 +684,14 @@ try {
 try {
   await recipeWriteOffStore.processItemWriteOff(...)
 } catch (error) {
-  // Payment создан ✅
-  // Sales transaction создана ✅
-  // Но write-off НЕ выполнен ❌
-
-  // Последствия:
-  // - Inventory НЕ обновлен
-  // - Batches НЕ списаны
-  // - Account expense НЕ записан
+  // Payment создан
+  // Sales transaction создана
+  // Но write-off НЕ выполнен
 
   // Решение:
   // 1. Retry автоматически (3 попытки)
-  // 2. Если fail → queue for manual write-off
-  // 3. Admin видит pending write-offs в UI
-}
-```
-
-### Ошибка в Negative Batch Cost Calculation (Step 4.4)
-
-```typescript
-try {
-  const cost = await calculateNegativeBatchCost(preparationId, quantity)
-} catch (error) {
-  // Все fallback шаги провалились
-  // Используем estimated cost: 100 IDR
-
-  console.error(`❌ CRITICAL: NO COST DATA FOUND`)
-
-  // ⚠️ WARNING: Inaccurate COGS!
-  // Admin должен:
-  // 1. Создать receipt operation для preparation
-  // 2. Обновить negative batch cost вручную
+  // 2. Queue for manual write-off
+  // 3. Admin видит pending write-offs
 }
 ```
 
@@ -845,24 +702,19 @@ try {
 ### Ключевые логи:
 
 ```typescript
-// Step 1: Order creation
-console.log('[OrdersStore] Order created:', orderId)
-
-// Step 2: Payment
-console.log('[PaymentsStore] Payment processed:', paymentId)
-
-// Step 3: Sales Recording
-console.log('[SalesStore] Transaction saved:', transactionId)
-console.log('[ActualCostCalculation] Actual cost calculated:', { totalCost })
+// Step 3: Sales Recording with DecompositionEngine
+[SalesStore] Recording sale transaction
+[DecompositionEngine] Traversing menu item: Cappuccino
+[DecompositionEngine] Replacement registered: { key, targetName, replacement }
+[CostAdapter] Calculating actual cost from FIFO batches
+[BatchAllocationUtils] Preparation stock allocated: { required, allocated, batchesUsed }
 
 // Step 4: Write-Off
-console.log('[RecipeWriteOffStore] Processing write-off for item:', item)
-console.log('[DecompositionEngine] Decomposition complete:', { totalProducts })
-console.log('[StorageService] Creating write-off operation:', { documentNumber })
-console.log('[StorageService] ⚠️ Shortage detected - checking for negative batch')
-console.log('[NegativeBatchService] 🔄 Attempting dynamic cost calculation')
-console.log('[NegativeBatchService] ✅ Calculated theoretical cost:', cost)
-console.log('[NegativeBatchService] ✅ Created negative batch:', batchNumber)
+[RecipeWriteOffStore] Processing write-off for item
+[DecompositionEngine] Traversing menu item
+[WriteOffAdapter] Transforming to write-off items: { totalItems }
+[StorageService] Creating write-off operation
+[NegativeBatchService] Created negative batch: { batchNumber, quantity, cost }
 ```
 
 ### Debugging checklist:
@@ -870,121 +722,45 @@ console.log('[NegativeBatchService] ✅ Created negative batch:', batchNumber)
 1. **Проверить decomposition:**
 
    ```typescript
-   const result = await decomposeMenuItem(menuItemId, variantId, 1)
-   console.log('Decomposed items:', result.items)
+   const engine = await createDecompositionEngine()
+   const result = await engine.traverse(input, options)
+   console.log('Decomposed nodes:', result.nodes)
    ```
 
 2. **Проверить batches:**
 
    ```typescript
-   const batches = preparationStore.batches.filter(
-     b => b.preparationId === preparationId && b.department === 'kitchen'
-   )
+   const batches = preparationStore.getPreparationBatches(preparationId, 'kitchen')
    console.log('Available batches:', batches)
    ```
 
-3. **Проверить ingredients:**
-
+3. **Проверить cost allocation:**
    ```typescript
-   const ingredients = await supabase
-     .from('preparation_ingredients')
-     .select('*')
-     .eq('preparation_id', preparationId)
-   console.log('Ingredients:', ingredients)
+   const costItem = await allocateFromPreparationBatches(preparationId, quantity, 'kitchen')
+   console.log('Cost breakdown:', costItem)
    ```
-
-4. **Проверить negative batches:**
-   ```typescript
-   const negativeBatches = await negativeBatchService.getNegativeBatches(preparationId)
-   console.log('Negative batches:', negativeBatches)
-   ```
-
----
-
-## Архитектура Decomposition Services
-
-### Текущее состояние (Technical Debt)
-
-В системе существует **3 отдельных сервиса** для декомпозиции:
-
-| Сервис                     | Файл                                           | Назначение            |
-| -------------------------- | ---------------------------------------------- | --------------------- |
-| `useKitchenDecomposition`  | `src/stores/pos/orders/composables/`           | Kitchen Display       |
-| `useDecomposition`         | `src/stores/sales/recipeWriteOff/composables/` | Write-off inventory   |
-| `useActualCostCalculation` | `src/stores/sales/composables/`                | FIFO cost calculation |
-
-**Проблема:** Дублирование логики. При добавлении новой функциональности (например, Replacement Modifiers) приходится менять 3 места.
-
-### Идеальная архитектура
-
-```
-                    ┌─────────────────────────────┐
-                    │   useBaseDecomposition      │
-                    │   (единая логика разбора)   │
-                    │   - recipes traversal       │
-                    │   - replacements            │
-                    │   - preparations            │
-                    └─────────────┬───────────────┘
-                                  │
-         ┌────────────────────────┼────────────────────────┐
-         │                        │                        │
-         ▼                        ▼                        ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ KitchenAdapter  │    │ WriteOffAdapter │    │  CostAdapter    │
-│ (source, role)  │    │ (stops at prep) │    │ (FIFO batches)  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-**Детальная документация:** [DECOMPOSITION_ARCHITECTURE.md](./DECOMPOSITION_ARCHITECTURE.md)
-
-### Replacement Modifiers
-
-С декабря 2025 поддерживаются **Replacement Modifiers** - возможность заменить компонент рецепта на альтернативу:
-
-```
-Recipe: Cappuccino
-├── Espresso: 30ml
-└── Regular Milk: 150ml  ← заменяемый компонент
-
-При заказе с Oat Milk:
-├── Espresso: 30ml
-└── Oat Milk: 150ml  ← замена из modifier composition
-```
-
-**Ключевые типы:**
-
-- `TargetComponent` - указывает какой компонент рецепта заменяется
-- `ModifierGroup.targetComponent` - для type='replacement'
-- `SelectedModifier.groupType`, `targetComponent`, `isDefault`
 
 ---
 
 ## Заключение
 
-**Полный цикл продажи - это сложный процесс из 4 этапов:**
+**Полный цикл продажи - это 4 этапа:**
 
-1. ✅ **POS Order** - создание заказа
-2. ✅ **Payment** - обработка платежа
-3. ✅ **Sales Recording** - учет продаж + COGS calculation
-4. ✅ **Write-Off** - списание ингредиентов со склада
+1. **POS Order** - создание заказа
+2. **Payment** - обработка платежа
+3. **Sales Recording** - DecompositionEngine + CostAdapter → COGS
+4. **Write-Off** - DecompositionEngine + WriteOffAdapter → inventory
 
-**Ключевые особенности:**
+**Ключевые особенности (Phase 4):**
 
-- **Декомпозиция** происходит в Step 4 (не в Step 3)
-- **COGS** считается из FIFO batches (включая negative)
-- **Negative batches** создаются автоматически при shortage
-- **Fallback chain** для стоимости (5 уровней для products, 4 для preparations)
-- **Reconciliation** negative batches при receipt
+- **Unified DecompositionEngine** - единая логика декомпозиции
+- **Adapters pattern** - CostAdapter и WriteOffAdapter
+- **Shared FIFO allocation** - batchAllocationUtils
+- **Negative batches** при shortage
+- **Replacement modifiers** support
+- **~1,728 lines removed** - удален дублирующийся код
 
-**Производительность:**
+**Документация:**
 
-- Общее время: ~6-11 секунд
-- Критично: Payment должен быть быстрым (<2 сек)
-- Write-Off можно делать асинхронно (в фоне)
-
-**Надежность:**
-
-- Rollback для Payment errors
-- Retry mechanism для Write-Off errors
-- Manual reconciliation для critical failures
-- Подробное логирование на каждом этапе
+- [DECOMPOSITION_ARCHITECTURE.md](./DECOMPOSITION_ARCHITECTURE.md) - архитектура
+- [REFACTORING_PLAN.md](./REFACTORING_PLAN.md) - план рефакторинга
