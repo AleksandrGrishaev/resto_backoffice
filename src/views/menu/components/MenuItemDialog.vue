@@ -195,7 +195,8 @@
               :templates="formData.templates"
               :dish-type="formData.dishType"
               :dish-options="dishOptions"
-              :product-options="productOptions"
+              :product-options="allProductOptions"
+              :variant-composition="currentVariantComposition"
               @update:modifier-groups="formData.modifierGroups = $event"
               @update:templates="formData.templates = $event"
             />
@@ -421,6 +422,53 @@ const productOptions = computed(() => {
   }
 
   return options.sort((a, b) => a.name.localeCompare(b.name))
+})
+
+// Опции для всех продуктов (БЕЗ фильтра canBeSold - для модификаторов)
+// Используется в ModifiersEditorWidget для replacement модификаторов
+const allProductOptions = computed(() => {
+  const options: Array<{
+    id: string
+    name: string
+    category: string
+    unit: string
+    costPerUnit: number
+  }> = []
+
+  try {
+    const menuDepartment = currentMenuItemDepartment.value
+
+    // Все активные продукты (не только sellable)
+    const allProducts = productsStore.products.filter(p => p.isActive) || []
+
+    // Фильтруем только по департаменту
+    const filteredProducts = allProducts.filter(
+      product => product.usedInDepartments && product.usedInDepartments.includes(menuDepartment)
+    )
+
+    filteredProducts.forEach(product => {
+      options.push({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        unit: product.baseUnit,
+        costPerUnit: product.baseCostPerUnit
+      })
+    })
+  } catch (error) {
+    console.warn('Error building all product options:', error)
+  }
+
+  return options.sort((a, b) => a.name.localeCompare(b.name))
+})
+
+// Composition текущего варианта (для target component selection в модификаторах)
+const currentVariantComposition = computed(() => {
+  // Берём composition первого варианта (обычно основной)
+  if (formData.value.variants.length > 0) {
+    return formData.value.variants[0].composition || []
+  }
+  return []
 })
 
 // Опции для единиц измерения

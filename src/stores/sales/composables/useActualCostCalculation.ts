@@ -4,7 +4,7 @@ import type {
   ProductCostItem,
   BatchAllocation
 } from '../types'
-import type { MenuComposition, SelectedModifier } from '@/stores/menu/types'
+import type { MenuComposition, SelectedModifier, TargetComponent } from '@/stores/menu/types'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import { useProductsStore } from '@/stores/productsStore'
@@ -13,6 +13,16 @@ import { useStorageStore } from '@/stores/storage/storageStore'
 import { TimeUtils, DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'ActualCostCalculation'
+
+/**
+ * Key for replacement map: recipeId_componentId
+ */
+function getReplacementKey(target: TargetComponent): string {
+  if (target.sourceType === 'recipe' && target.recipeId) {
+    return `${target.recipeId}_${target.componentId}`
+  }
+  return `variant_${target.componentId}`
+}
 
 /**
  * useActualCostCalculation
@@ -75,6 +85,26 @@ export function useActualCostCalculation() {
       const preparationCosts: PreparationCostItem[] = []
       const productCosts: ProductCostItem[] = []
 
+      // ✨ NEW: Build replacement map from selectedModifiers
+      const replacements = new Map<string, SelectedModifier>()
+      if (selectedModifiers) {
+        for (const modifier of selectedModifiers) {
+          if (
+            modifier.groupType === 'replacement' &&
+            modifier.targetComponent &&
+            !modifier.isDefault
+          ) {
+            const key = getReplacementKey(modifier.targetComponent)
+            replacements.set(key, modifier)
+            DebugUtils.info(MODULE_NAME, 'Replacement registered for cost calculation', {
+              key,
+              targetName: modifier.targetComponent.componentName,
+              replacementOption: modifier.optionName
+            })
+          }
+        }
+      }
+
       // 2. For each component in composition
       for (const comp of composition) {
         if (comp.type === 'preparation') {
@@ -112,20 +142,25 @@ export function useActualCostCalculation() {
           )
           productCosts.push(prodCost)
         } else if (comp.type === 'recipe') {
-          // Recursively process recipe components
-          const recipeCosts = await processRecipeComponents(comp, quantity)
+          // ✨ UPDATED: Recursively process recipe components with replacement support
+          const recipeCosts = await processRecipeComponents(comp, quantity, replacements)
           preparationCosts.push(...recipeCosts.preparationCosts)
           productCosts.push(...recipeCosts.productCosts)
         }
       }
 
-      // ⭐ PHASE 2: Process selected modifiers composition
+      // ⭐ PHASE 2: Process addon modifiers composition (NOT replacements - handled above)
       if (selectedModifiers && selectedModifiers.length > 0) {
-        DebugUtils.info(MODULE_NAME, 'Processing modifier compositions for cost', {
+        DebugUtils.info(MODULE_NAME, 'Processing addon modifier compositions for cost', {
           modifiersCount: selectedModifiers.length
         })
 
         for (const modifier of selectedModifiers) {
+          // ✨ Skip replacement modifiers - already handled via replacements map
+          if (modifier.groupType === 'replacement' && modifier.targetComponent) {
+            continue
+          }
+
           if (modifier.composition && modifier.composition.length > 0) {
             for (const comp of modifier.composition) {
               if (comp.type === 'preparation') {
@@ -210,11 +245,12 @@ export function useActualCostCalculation() {
   }
 
   /**
-   * Process recipe components recursively
+   * Process recipe components recursively with replacement support
    */
   async function processRecipeComponents(
     comp: MenuComposition,
-    quantity: number
+    quantity: number,
+    replacements?: Map<string, SelectedModifier>
   ): Promise<{ preparationCosts: PreparationCostItem[]; productCosts: ProductCostItem[] }> {
     const recipe = recipesStore.recipes.find(r => r.id === comp.id)
     if (!recipe) {
@@ -226,47 +262,80 @@ export function useActualCostCalculation() {
     const productCosts: ProductCostItem[] = []
 
     for (const recipeComp of recipe.components) {
-      const menuComp: MenuComposition = {
-        type: recipeComp.componentType,
-        id: recipeComp.componentId,
-        quantity: recipeComp.quantity,
-        unit: recipeComp.unit,
-        useYieldPercentage: recipeComp.useYieldPercentage // ✅ FIX: Pass yield flag
-      }
+      // ✨ Check if this component should be replaced
+      const replacementKey = `${recipe.id}_${recipeComp.id}`
+      const replacement = replacements?.get(replacementKey)
 
-      if (menuComp.type === 'preparation') {
-        const prepCost = await allocateFromPreparationBatches(
-          menuComp.id,
-          menuComp.quantity * quantity,
-          'kitchen'
-        )
-        preparationCosts.push(prepCost)
-      } else if (menuComp.type === 'product') {
-        // ✅ FIX: Apply yield adjustment BEFORE FIFO allocation
-        let allocateQuantity = menuComp.quantity * quantity
+      if (replacement && replacement.composition && replacement.composition.length > 0) {
+        // ✨ REPLACEMENT: Use replacement composition instead of original component
+        DebugUtils.info(MODULE_NAME, 'Replacing component for cost calculation', {
+          original: recipeComp.name || recipeComp.componentId,
+          replacement: replacement.optionName,
+          compositionCount: replacement.composition.length
+        })
 
-        if (menuComp.useYieldPercentage) {
-          const product = productsStore.getProductForRecipe(menuComp.id)
-          if (product && product.yieldPercentage && product.yieldPercentage < 100) {
-            const originalQuantity = allocateQuantity
-            allocateQuantity = allocateQuantity / (product.yieldPercentage / 100)
-
-            DebugUtils.info(MODULE_NAME, 'Applied yield adjustment before FIFO allocation', {
-              productName: product.name,
-              baseQuantity: originalQuantity,
-              yieldPercentage: product.yieldPercentage,
-              adjustedQuantity: allocateQuantity
-            })
+        for (const replComp of replacement.composition) {
+          if (replComp.type === 'preparation') {
+            const prepCost = await allocateFromPreparationBatches(
+              replComp.id,
+              replComp.quantity * quantity,
+              'kitchen'
+            )
+            preparationCosts.push(prepCost)
+          } else if (replComp.type === 'product') {
+            const defaultWarehouse = storageStore.getDefaultWarehouse()
+            const prodCost = await allocateFromStorageBatches(
+              replComp.id,
+              replComp.quantity * quantity,
+              defaultWarehouse.id
+            )
+            productCosts.push(prodCost)
           }
         }
+      } else {
+        // No replacement - use original component
+        const menuComp: MenuComposition = {
+          type: recipeComp.componentType,
+          id: recipeComp.componentId,
+          quantity: recipeComp.quantity,
+          unit: recipeComp.unit,
+          useYieldPercentage: recipeComp.useYieldPercentage
+        }
 
-        const defaultWarehouse = storageStore.getDefaultWarehouse()
-        const prodCost = await allocateFromStorageBatches(
-          menuComp.id,
-          allocateQuantity, // ✅ FIX: Use yield-adjusted quantity
-          defaultWarehouse.id
-        )
-        productCosts.push(prodCost)
+        if (menuComp.type === 'preparation') {
+          const prepCost = await allocateFromPreparationBatches(
+            menuComp.id,
+            menuComp.quantity * quantity,
+            'kitchen'
+          )
+          preparationCosts.push(prepCost)
+        } else if (menuComp.type === 'product') {
+          // ✅ FIX: Apply yield adjustment BEFORE FIFO allocation
+          let allocateQuantity = menuComp.quantity * quantity
+
+          if (menuComp.useYieldPercentage) {
+            const product = productsStore.getProductForRecipe(menuComp.id)
+            if (product && product.yieldPercentage && product.yieldPercentage < 100) {
+              const originalQuantity = allocateQuantity
+              allocateQuantity = allocateQuantity / (product.yieldPercentage / 100)
+
+              DebugUtils.info(MODULE_NAME, 'Applied yield adjustment before FIFO allocation', {
+                productName: product.name,
+                baseQuantity: originalQuantity,
+                yieldPercentage: product.yieldPercentage,
+                adjustedQuantity: allocateQuantity
+              })
+            }
+          }
+
+          const defaultWarehouse = storageStore.getDefaultWarehouse()
+          const prodCost = await allocateFromStorageBatches(
+            menuComp.id,
+            allocateQuantity,
+            defaultWarehouse.id
+          )
+          productCosts.push(prodCost)
+        }
       }
     }
 

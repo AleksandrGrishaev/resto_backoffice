@@ -44,13 +44,23 @@
 
       <!-- Results Summary -->
       <div class="d-flex align-center justify-space-between mb-3">
-        <div class="text-body-2 text-medium-emphasis">
-          <template v-if="filteredProducts.length === products.length">
-            Showing all {{ filteredProducts.length }} products
-          </template>
-          <template v-else>
-            {{ filteredProducts.length }} of {{ products.length }} products
-          </template>
+        <div class="d-flex align-center gap-2">
+          <div class="text-body-2 text-medium-emphasis">
+            <template v-if="filteredProducts.length === products.length">
+              Showing all {{ filteredProducts.length }} products
+            </template>
+            <template v-else>
+              {{ filteredProducts.length }} of {{ products.length }} products
+            </template>
+          </div>
+          <v-chip
+            size="x-small"
+            color="info"
+            variant="tonal"
+            prepend-icon="mdi-information-outline"
+          >
+            Only sellable products
+          </v-chip>
         </div>
 
         <!-- Sort Options -->

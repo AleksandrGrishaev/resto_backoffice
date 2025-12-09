@@ -1,10 +1,20 @@
 import type { DecomposedItem } from '../../types'
-import type { MenuComposition, SelectedModifier } from '@/stores/menu/types'
+import type { MenuComposition, SelectedModifier, TargetComponent } from '@/stores/menu/types'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import { useProductsStore } from '@/stores/productsStore'
 
 const MODULE_NAME = 'DecompositionEngine'
+
+/**
+ * Key for replacement map: recipeId_componentId or variant_componentId
+ */
+function getReplacementKey(target: TargetComponent): string {
+  if (target.sourceType === 'recipe' && target.recipeId) {
+    return `${target.recipeId}_${target.componentId}`
+  }
+  return `variant_${target.componentId}`
+}
 
 /**
  * useDecomposition
@@ -104,19 +114,50 @@ export function useDecomposition() {
         modifiersCount: selectedModifiers?.length || 0
       })
 
-      // 3. Process base composition
+      // ✨ NEW: Build replacement map from selectedModifiers
+      const replacements = new Map<string, SelectedModifier>()
+      if (selectedModifiers) {
+        for (const modifier of selectedModifiers) {
+          // Only process replacement modifiers with targetComponent and NOT default option
+          if (
+            modifier.groupType === 'replacement' &&
+            modifier.targetComponent &&
+            !modifier.isDefault
+          ) {
+            const key = getReplacementKey(modifier.targetComponent)
+            replacements.set(key, modifier)
+            console.log(`  🔄 [${MODULE_NAME}] Replacement registered:`, {
+              key,
+              targetName: modifier.targetComponent.componentName,
+              replacementOption: modifier.optionName
+            })
+          }
+        }
+      }
+
+      // 3. Process base composition with replacement support
       const results: DecomposedItem[] = []
 
       for (const comp of variant.composition) {
-        const items = await decomposeComposition(comp, soldQuantity, [menuItem.name, variant.name])
+        const items = await decomposeCompositionWithReplacements(
+          comp,
+          soldQuantity,
+          [menuItem.name, variant.name],
+          replacements
+        )
         results.push(...items)
       }
 
-      // ⭐ PHASE 2: Process selected modifiers composition
+      // ⭐ PHASE 2: Process addon modifiers (NOT replacements - those are handled above)
       if (selectedModifiers && selectedModifiers.length > 0) {
         console.log(`🔧 [${MODULE_NAME}] Processing ${selectedModifiers.length} selected modifiers`)
 
         for (const modifier of selectedModifiers) {
+          // Skip replacement modifiers (already handled via replacements map)
+          if (modifier.groupType === 'replacement' && modifier.targetComponent) {
+            continue
+          }
+
           if (modifier.composition && modifier.composition.length > 0) {
             console.log(`  📦 [${MODULE_NAME}] Modifier "${modifier.optionName}":`, {
               compositionCount: modifier.composition.length
@@ -147,6 +188,88 @@ export function useDecomposition() {
       console.error(`❌ [${MODULE_NAME}] Decomposition failed:`, error)
       return []
     }
+  }
+
+  /**
+   * Decompose composition with replacement support
+   * Проверяет replacements map и заменяет target components
+   */
+  async function decomposeCompositionWithReplacements(
+    comp: MenuComposition,
+    quantity: number,
+    path: string[],
+    replacements?: Map<string, SelectedModifier>
+  ): Promise<DecomposedItem[]> {
+    // For recipes - check if any component should be replaced
+    if (comp.type === 'recipe' && replacements && replacements.size > 0) {
+      return await decomposeRecipeWithReplacements(comp, quantity, path, replacements)
+    }
+
+    // For other types - use standard decomposition
+    return await decomposeComposition(comp, quantity, path)
+  }
+
+  /**
+   * Decompose Recipe with replacement support
+   * Проверяет replacements map для каждого компонента рецепта
+   */
+  async function decomposeRecipeWithReplacements(
+    comp: MenuComposition,
+    quantity: number,
+    path: string[],
+    replacements: Map<string, SelectedModifier>
+  ): Promise<DecomposedItem[]> {
+    const recipe = recipesStore.recipes.find(r => r.id === comp.id)
+    if (!recipe) {
+      console.error(`❌ [${MODULE_NAME}] Recipe not found:`, comp.id)
+      return []
+    }
+
+    console.log(`  📖 [${MODULE_NAME}] Decomposing recipe with replacements:`, {
+      name: recipe.name,
+      components: recipe.components.length,
+      replacementsCount: replacements.size
+    })
+
+    const results: DecomposedItem[] = []
+
+    // Iterate through recipe components and check for replacements
+    for (const recipeComp of recipe.components) {
+      const replacementKey = `${recipe.id}_${recipeComp.id}`
+      const replacement = replacements.get(replacementKey)
+
+      if (replacement && replacement.composition && replacement.composition.length > 0) {
+        // ✨ REPLACEMENT: Use replacement composition instead of original component
+        console.log(`    🔄 [${MODULE_NAME}] Replacing component:`, {
+          original: recipeComp.name || recipeComp.componentId,
+          replacement: replacement.optionName,
+          compositionCount: replacement.composition.length
+        })
+
+        for (const replComp of replacement.composition) {
+          const items = await decomposeComposition(replComp, quantity, [
+            ...path,
+            recipe.name,
+            `→${replacement.optionName}`
+          ])
+          results.push(...items)
+        }
+      } else {
+        // No replacement - use original component
+        const menuComp: MenuComposition = {
+          type: recipeComp.componentType,
+          id: recipeComp.componentId,
+          quantity: recipeComp.quantity,
+          unit: recipeComp.unit,
+          useYieldPercentage: recipeComp.useYieldPercentage
+        }
+
+        const items = await decomposeComposition(menuComp, quantity, [...path, recipe.name])
+        results.push(...items)
+      }
+    }
+
+    return results
   }
 
   /**

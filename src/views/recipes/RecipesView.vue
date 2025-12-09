@@ -131,7 +131,10 @@
             >
               <v-expansion-panel-title>
                 <div class="category-header">
-                  <span class="category-header__name">{{ category.text }}</span>
+                  <span class="category-header__name">
+                    <v-icon :icon="category.icon" size="20" class="mr-2" />
+                    {{ category.text }}
+                  </span>
                   <v-chip
                     size="small"
                     variant="tonal"
@@ -193,9 +196,7 @@
               <v-expansion-panel-title>
                 <div class="category-header">
                   <span class="category-header__name">
-                    <v-chip size="small" variant="tonal" color="primary" class="mr-2">
-                      {{ type.prefix }}
-                    </v-chip>
+                    <v-icon :icon="type.icon" size="20" class="mr-2" />
                     {{ type.text }}
                   </span>
                   <v-chip
@@ -416,17 +417,19 @@ const rules = {
 const recipeCategories = computed(() =>
   store.activeRecipeCategories.map(cat => ({
     value: cat.id,
-    text: cat.name
+    text: cat.name,
+    icon: cat.icon || 'mdi-chef-hat'
   }))
 )
 
-const preparationTypes = computed(() => [
-  { value: 'all', text: 'All Types' },
-  ...store.activePreparationCategories.map(cat => ({
+const preparationTypes = computed(() =>
+  store.activePreparationCategories.map(cat => ({
     value: cat.id,
-    text: cat.name
+    text: cat.name,
+    icon: cat.icon || 'mdi-food-variant',
+    emoji: cat.emoji
   }))
-])
+)
 
 // ✅ Helper functions for preparation categories
 const getPreparationCategoryName = (categoryId: string) =>
