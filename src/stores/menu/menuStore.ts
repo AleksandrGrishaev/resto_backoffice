@@ -52,6 +52,58 @@ export const useMenuStore = defineStore('menu', () => {
   )
   const inactiveCategories = computed(() => state.value.categories.filter(c => !c.isActive))
 
+  // Getters - Category Hierarchy (Nested Categories)
+  const rootCategories = computed(() =>
+    state.value.categories
+      .filter(c => !c.parentId)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+  )
+
+  const activeRootCategories = computed(() => rootCategories.value.filter(c => c.isActive))
+
+  const getSubcategories = computed(() => {
+    return (parentId: string) => {
+      return state.value.categories
+        .filter(c => c.parentId === parentId)
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    }
+  })
+
+  const getActiveSubcategories = computed(() => {
+    return (parentId: string) => {
+      const parent = state.value.categories.find(c => c.id === parentId)
+      // If parent is inactive, return empty array (inheritance)
+      if (parent && !parent.isActive) return []
+
+      return state.value.categories
+        .filter(c => c.parentId === parentId && c.isActive)
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    }
+  })
+
+  const hasSubcategories = computed(() => {
+    return (categoryId: string) => {
+      return state.value.categories.some(c => c.parentId === categoryId)
+    }
+  })
+
+  // Check if category is effectively active (self + parent must be active)
+  const isEffectivelyActive = computed(() => {
+    return (category: Category) => {
+      if (!category.isActive) return false
+      if (category.parentId) {
+        const parent = state.value.categories.find(c => c.id === category.parentId)
+        return parent?.isActive ?? false
+      }
+      return true
+    }
+  })
+
+  // Get all effectively active categories (for POS)
+  const effectivelyActiveCategories = computed(() =>
+    state.value.categories.filter(c => isEffectivelyActive.value(c))
+  )
+
   // Getters - Menu Items
   const menuItems = computed(() => state.value.menuItems)
   const activeMenuItems = computed(() => state.value.menuItems.filter(i => i.isActive))
@@ -140,6 +192,22 @@ export const useMenuStore = defineStore('menu', () => {
       state.value.loading = true
       state.value.error = null
 
+      // Validation: Category with subcategories cannot become a subcategory
+      if (data.parentId !== undefined && data.parentId !== null) {
+        const categoryHasChildren = hasSubcategories.value(id)
+        if (categoryHasChildren) {
+          throw new Error('Category with subcategories cannot become a subcategory itself.')
+        }
+
+        // Validation: Parent must be a root category (no grandchildren allowed)
+        const parent = state.value.categories.find(c => c.id === data.parentId)
+        if (parent?.parentId) {
+          throw new Error(
+            'Cannot create subcategory of a subcategory. Max nesting depth is 1 level.'
+          )
+        }
+      }
+
       await categoryService.update(id, data)
 
       // Обновляем локальное состояние
@@ -168,10 +236,16 @@ export const useMenuStore = defineStore('menu', () => {
       state.value.loading = true
       state.value.error = null
 
+      // Check for subcategories first
+      const categoryHasChildren = hasSubcategories.value(id)
+      if (categoryHasChildren) {
+        throw new Error('Cannot delete category with subcategories. Delete subcategories first.')
+      }
+
       // Проверяем, есть ли позиции в этой категории
       const categoryItems = getItemsByCategory.value(id)
       if (categoryItems.length > 0) {
-        throw new Error('Нельзя удалить категорию с позициями. Сначала удалите все позиции.')
+        throw new Error('Cannot delete category with items. Delete items first.')
       }
 
       await categoryService.delete(id)
@@ -482,6 +556,15 @@ export const useMenuStore = defineStore('menu', () => {
     inactiveCategories,
     categoriesCount,
     activeCategoriesCount,
+
+    // Getters - Category Hierarchy (Nested Categories)
+    rootCategories,
+    activeRootCategories,
+    getSubcategories,
+    getActiveSubcategories,
+    hasSubcategories,
+    isEffectivelyActive,
+    effectivelyActiveCategories,
 
     // Getters - Menu Items
     menuItems,

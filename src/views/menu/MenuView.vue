@@ -86,7 +86,7 @@
       <!-- Loading state -->
       <v-progress-linear v-if="menuStore.isLoading" indeterminate color="primary" />
 
-      <!-- Menu panels -->
+      <!-- Menu panels - Root categories with nested subcategories -->
       <v-expansion-panels v-model="expandedPanels" multiple>
         <v-expansion-panel
           v-for="category in filteredCategories"
@@ -94,7 +94,7 @@
           :value="category.id"
           :class="{
             'category--inactive': !category.isActive,
-            'category--empty': getCategoryItems(category.id).length === 0
+            'category--empty': getTotalItemsCount(category.id) === 0
           }"
         >
           <v-expansion-panel-title class="text-h6">
@@ -110,6 +110,14 @@
                 >
                   Archive
                 </v-chip>
+                <v-chip
+                  v-if="hasSubcategories(category.id)"
+                  size="x-small"
+                  variant="outlined"
+                  class="ml-2"
+                >
+                  {{ getFilteredSubcategories(category.id).length }} subcategories
+                </v-chip>
               </div>
               <div class="category-actions">
                 <v-btn
@@ -124,7 +132,7 @@
                 </v-btn>
 
                 <v-btn
-                  v-if="getCategoryItems(category.id).length === 0"
+                  v-if="getTotalItemsCount(category.id) === 0 && !hasSubcategories(category.id)"
                   icon
                   size="small"
                   variant="text"
@@ -139,19 +147,109 @@
           </v-expansion-panel-title>
 
           <v-expansion-panel-text>
+            <!-- Direct items in parent category -->
+            <div v-if="getDirectItemsCount(category.id) > 0" class="mb-4">
+              <div class="text-subtitle-2 text-medium-emphasis mb-2">
+                Items in {{ category.name }}
+              </div>
+              <div class="menu-items-grid">
+                <menu-item-component
+                  v-for="item in getCategoryItems(category.id)"
+                  :key="item.id"
+                  :item="item"
+                  @edit="editItem"
+                  @duplicate="duplicateItem"
+                  @view="viewItem"
+                  @toggle-status="toggleItemStatus"
+                />
+              </div>
+            </div>
+
+            <!-- Subcategories with their items -->
+            <v-expansion-panels
+              v-if="hasSubcategories(category.id)"
+              multiple
+              class="subcategory-panels"
+            >
+              <v-expansion-panel
+                v-for="subcategory in getFilteredSubcategories(category.id)"
+                :key="subcategory.id"
+                :value="subcategory.id"
+                :class="{
+                  'category--inactive': !subcategory.isActive,
+                  'category--empty': getCategoryItems(subcategory.id).length === 0
+                }"
+              >
+                <v-expansion-panel-title class="text-subtitle-1">
+                  <div class="d-flex align-center justify-space-between w-100">
+                    <div class="d-flex align-center">
+                      <v-icon icon="mdi-subdirectory-arrow-right" size="18" class="mr-2" />
+                      <span>{{ subcategory.name }}</span>
+                      <v-chip
+                        v-if="!subcategory.isActive"
+                        size="x-small"
+                        color="warning"
+                        variant="flat"
+                        class="ml-2"
+                      >
+                        Archive
+                      </v-chip>
+                    </div>
+                    <div class="category-actions">
+                      <v-btn
+                        icon
+                        size="small"
+                        variant="text"
+                        color="primary"
+                        class="category-btn"
+                        @click.stop="editCategory(subcategory)"
+                      >
+                        <v-icon icon="mdi-pencil" size="18" />
+                      </v-btn>
+
+                      <v-btn
+                        v-if="getCategoryItems(subcategory.id).length === 0"
+                        icon
+                        size="small"
+                        variant="text"
+                        color="error"
+                        class="category-btn"
+                        @click.stop="confirmDeleteCategory(subcategory)"
+                      >
+                        <v-icon icon="mdi-delete" size="18" />
+                      </v-btn>
+                    </div>
+                  </div>
+                </v-expansion-panel-title>
+
+                <v-expansion-panel-text>
+                  <div
+                    v-if="getCategoryItems(subcategory.id).length === 0"
+                    class="text-center py-4 text-medium-emphasis"
+                  >
+                    No dishes
+                  </div>
+                  <div v-else class="menu-items-grid">
+                    <menu-item-component
+                      v-for="item in getCategoryItems(subcategory.id)"
+                      :key="item.id"
+                      :item="item"
+                      @edit="editItem"
+                      @duplicate="duplicateItem"
+                      @view="viewItem"
+                      @toggle-status="toggleItemStatus"
+                    />
+                  </div>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+
+            <!-- Empty state if no items and no subcategories -->
             <div
-              v-if="getCategoryItems(category.id).length === 0"
+              v-if="getDirectItemsCount(category.id) === 0 && !hasSubcategories(category.id)"
               class="text-center py-4 text-medium-emphasis"
             >
               No dishes
-            </div>
-            <div v-for="item in getCategoryItems(category.id)" :key="item.id">
-              <menu-item-component
-                :item="item"
-                @edit="editItem"
-                @duplicate="duplicateItem"
-                @view="viewItem"
-              />
             </div>
           </v-expansion-panel-text>
         </v-expansion-panel>
@@ -285,29 +383,39 @@ const confirmDialog = ref({
   category: null as Category | null
 })
 
-// Computed
+// Computed - Only root categories (no parent)
 const filteredCategories = computed(() => {
-  const categories = menuStore.categories.filter(category => {
-    // Фильтр по поиску
-    if (search.value && !category.name.toLowerCase().includes(search.value.toLowerCase())) {
-      return false
-    }
-
+  // Get only root categories (parentId is null/undefined)
+  const rootCategories = menuStore.rootCategories.filter(category => {
     // Фильтр по активным категориям если не выбран архив
     if (!filterTypes.value.includes('archive') && !category.isActive) {
       return false
     }
-
     return true
   })
 
   // Сортировка категорий по sortOrder
-  return categories.sort((a, b) => {
+  return rootCategories.sort((a, b) => {
     const orderDiff = (a.sortOrder || 0) - (b.sortOrder || 0)
     if (orderDiff !== 0) return orderDiff
     return a.name.localeCompare(b.name)
   })
 })
+
+// Get subcategories of a parent (filtered)
+function getFilteredSubcategories(parentId: string) {
+  return menuStore.getSubcategories(parentId).filter(category => {
+    if (!filterTypes.value.includes('archive') && !category.isActive) {
+      return false
+    }
+    return true
+  })
+}
+
+// Check if category has subcategories
+function hasSubcategories(categoryId: string) {
+  return menuStore.hasSubcategories(categoryId)
+}
 
 // Methods
 function isFilterActive(value: string) {
@@ -322,8 +430,10 @@ function toggleAllPanels() {
   }
 }
 
+// Get items for a category (SEARCH ONLY BY DISH NAME, not category name)
 function getCategoryItems(categoryId: string) {
   return menuStore.getItemsByCategory(categoryId).filter(item => {
+    // Search only by dish name (NOT category name)
     if (search.value && !item.name.toLowerCase().includes(search.value.toLowerCase())) {
       return false
     }
@@ -334,6 +444,21 @@ function getCategoryItems(categoryId: string) {
 
     return filterTypes.value.includes(item.type) && item.isActive
   })
+}
+
+// Get direct items count (items directly in category, not in subcategories)
+function getDirectItemsCount(categoryId: string) {
+  return getCategoryItems(categoryId).length
+}
+
+// Get total items count (direct items + items in all subcategories)
+function getTotalItemsCount(categoryId: string) {
+  let count = getDirectItemsCount(categoryId)
+  const subcategories = menuStore.getSubcategories(categoryId)
+  for (const sub of subcategories) {
+    count += getCategoryItems(sub.id).length
+  }
+  return count
 }
 
 function showCategoryDialog() {
@@ -376,6 +501,16 @@ function duplicateItem(item: MenuItem) {
 function viewItem(item: MenuItem) {
   viewingItem.value = item
   dialogs.value.view = true
+}
+
+async function toggleItemStatus(item: MenuItem) {
+  try {
+    await menuStore.toggleMenuItemActive(item.id, !item.isActive)
+    const action = item.isActive ? 'archived' : 'restored'
+    DebugUtils.info(MODULE_NAME, `Menu item ${action}`, { id: item.id, name: item.name })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to toggle menu item status', error)
+  }
 }
 
 async function confirmDuplicate() {
@@ -628,6 +763,67 @@ onMounted(async () => {
     :deep(.v-expansion-panel-title) {
       color: var(--text-secondary);
     }
+  }
+}
+
+.menu-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 16px;
+  padding: 8px 0;
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .menu-items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+
+    &__left {
+      flex-direction: column;
+
+      .search-field {
+        width: 100%;
+      }
+    }
+
+    &__right {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+  }
+}
+
+:deep(.v-expansion-panel-text__wrapper) {
+  padding: 8px 16px 16px;
+}
+
+// Nested subcategory panels styling
+.subcategory-panels {
+  margin-top: 8px;
+
+  :deep(.v-expansion-panel) {
+    background: rgba(var(--v-theme-surface-variant), 0.3);
+    margin-bottom: 4px;
+
+    &::before {
+      display: none;
+    }
+  }
+
+  :deep(.v-expansion-panel-title) {
+    min-height: 48px;
+    font-size: 0.95rem;
+    padding: 12px 16px;
+  }
+
+  :deep(.v-expansion-panel-text__wrapper) {
+    padding: 8px 12px 12px;
   }
 }
 </style>

@@ -59,14 +59,22 @@
             <!-- Категория -->
             <v-select
               v-model="formData.categoryId"
-              :items="categories"
-              item-title="name"
+              :items="hierarchicalCategories"
+              item-title="displayName"
               item-value="id"
               label="Category"
               :rules="[v => !!v || 'Required field']"
               hide-details="auto"
               class="mb-4"
-            />
+            >
+              <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps" :class="{ 'pl-8': item.raw.isSubcategory }">
+                  <template v-if="item.raw.isSubcategory" #prepend>
+                    <v-icon size="16" class="mr-1">mdi-subdirectory-arrow-right</v-icon>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
 
             <!-- Зона приготовления -->
             <div class="mb-4">
@@ -294,6 +302,43 @@ const formData = ref({
 // Computed
 const isEdit = computed(() => !!props.item)
 const categories = computed(() => menuStore.activeCategories)
+
+// Hierarchical categories for dropdown with visual indentation
+const hierarchicalCategories = computed(() => {
+  const result: Array<{
+    id: string
+    name: string
+    displayName: string
+    isSubcategory: boolean
+    parentName?: string
+  }> = []
+
+  // First, add root categories
+  const rootCategories = menuStore.activeRootCategories
+
+  for (const rootCat of rootCategories) {
+    result.push({
+      id: rootCat.id,
+      name: rootCat.name,
+      displayName: rootCat.name,
+      isSubcategory: false
+    })
+
+    // Then add its subcategories right after
+    const subcategories = menuStore.getActiveSubcategories(rootCat.id)
+    for (const subCat of subcategories) {
+      result.push({
+        id: subCat.id,
+        name: subCat.name,
+        displayName: subCat.name,
+        isSubcategory: true,
+        parentName: rootCat.name
+      })
+    }
+  }
+
+  return result
+})
 
 const dialogModel = computed({
   get: () => props.modelValue,

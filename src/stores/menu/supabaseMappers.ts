@@ -25,6 +25,7 @@ export function categoryToSupabaseInsert(category: Category): SupabaseMenuCatego
     description: category.description || null,
     sort_order: category.sortOrder || 0,
     is_active: category.isActive,
+    parent_id: category.parentId || null,
     created_at: category.createdAt,
     updated_at: category.updatedAt
   }
@@ -50,6 +51,7 @@ export function categoryFromSupabase(row: SupabaseMenuCategory): Category {
     description: row.description || undefined,
     sortOrder: row.sort_order || 0,
     isActive: row.is_active ?? true,
+    parentId: row.parent_id || null,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
   }
