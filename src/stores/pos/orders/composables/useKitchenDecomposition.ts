@@ -1,9 +1,19 @@
 // src/stores/pos/orders/composables/useKitchenDecomposition.ts
 import type { PosBillItem } from '../../types'
-import type { MenuComposition } from '@/stores/menu/types'
+import type { MenuComposition, SelectedModifier, TargetComponent } from '@/stores/menu/types'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import { useProductsStore } from '@/stores/productsStore'
+
+/**
+ * Key for replacement map: recipeId_componentId or variant_componentId
+ */
+function getReplacementKey(target: TargetComponent): string {
+  if (target.sourceType === 'recipe' && target.recipeId) {
+    return `${target.recipeId}_${target.componentId}`
+  }
+  return `variant_${target.componentId}`
+}
 
 const MODULE_NAME = 'KitchenDecomposition'
 
@@ -95,35 +105,62 @@ export function useKitchenDecomposition() {
         portionMultiplier
       })
 
-      let baseResults: KitchenDecomposedItem[] = []
+      // ✨ NEW: Build replacement map from selectedModifiers
+      const replacements = new Map<string, SelectedModifier>()
+      if (billItem.selectedModifiers) {
+        for (const modifier of billItem.selectedModifiers) {
+          // Only process replacement modifiers with targetComponent and NOT default option
+          if (
+            modifier.groupType === 'replacement' &&
+            modifier.targetComponent &&
+            !modifier.isDefault
+          ) {
+            const key = getReplacementKey(modifier.targetComponent)
+            replacements.set(key, modifier)
+            console.log(`  🔄 [${MODULE_NAME}] Replacement registered:`, {
+              key,
+              targetName: modifier.targetComponent.componentName,
+              replacementOption: modifier.optionName
+            })
+          }
+        }
+      }
+
+      const baseResults: KitchenDecomposedItem[] = []
       const modifierResults: KitchenDecomposedItem[] = []
 
       // 2. Process base composition with portionMultiplier
       console.log(`  🍽️ [${MODULE_NAME}] Processing base composition (×${portionMultiplier})...`)
       for (const comp of variant.composition) {
-        const items = await decomposeComposition(
+        const items = await decomposeCompositionWithReplacements(
           comp,
-          billItem.quantity * portionMultiplier, // ✨ NEW: Apply portionMultiplier
+          billItem.quantity * portionMultiplier,
           [menuItem.name, variant.name],
-          'base'
+          'base',
+          undefined,
+          replacements
         )
         baseResults.push(...items)
       }
 
-      // 3. Process modifiers
+      // 3. Process addon modifiers (NOT replacements - those are handled above)
       if (billItem.selectedModifiers && billItem.selectedModifiers.length > 0) {
         console.log(
           `  ➕ [${MODULE_NAME}] Processing ${billItem.selectedModifiers.length} modifiers...`
         )
 
-        // ✅ Architecture v2: All modifiers are additive (no replacement logic)
         for (const modifier of billItem.selectedModifiers) {
+          // Skip replacement modifiers (already handled via replacements map)
+          if (modifier.groupType === 'replacement' && modifier.targetComponent) {
+            continue
+          }
+
           if (!modifier.composition || modifier.composition.length === 0) {
             console.log(`  ⚠️ [${MODULE_NAME}] Modifier has no composition:`, modifier.optionName)
             continue
           }
 
-          console.log(`    ➕ [${MODULE_NAME}] Processing modifier: ${modifier.optionName}`)
+          console.log(`    ➕ [${MODULE_NAME}] Processing addon modifier: ${modifier.optionName}`)
 
           for (const comp of modifier.composition) {
             const items = await decomposeComposition(
@@ -136,32 +173,20 @@ export function useKitchenDecomposition() {
             modifierResults.push(...items)
           }
         }
-
-        // ✨ NEW: Filter out base items that are replaced by component modifiers
-        if (replacedRoles.size > 0) {
-          const originalBaseCount = baseResults.length
-          baseResults = baseResults.filter(item => !item.role || !replacedRoles.has(item.role))
-          const removedCount = originalBaseCount - baseResults.length
-
-          if (removedCount > 0) {
-            console.log(
-              `  ✂️ [${MODULE_NAME}] Removed ${removedCount} base items replaced by components`
-            )
-          }
-        }
       }
 
       // 4. Combine base and modifier results
       const results = [...baseResults, ...modifierResults]
 
-      // 4. Merge duplicates
+      // 5. Merge duplicates
       const merged = mergeDecomposedItems(results)
 
       console.log(`✅ [${MODULE_NAME}] Kitchen decomposition complete:`, {
         totalProducts: merged.length,
         totalCost: merged.reduce((sum, item) => sum + item.totalCost, 0),
         baseProducts: merged.filter(i => i.source === 'base').length,
-        modifierProducts: merged.filter(i => i.source === 'modifier').length
+        modifierProducts: merged.filter(i => i.source === 'modifier').length,
+        replacementsApplied: replacements.size
       })
 
       return merged
@@ -169,6 +194,106 @@ export function useKitchenDecomposition() {
       console.error(`❌ [${MODULE_NAME}] Kitchen decomposition failed:`, error)
       return []
     }
+  }
+
+  /**
+   * Decompose composition with replacement support
+   * Проверяет replacements map и заменяет target components
+   */
+  async function decomposeCompositionWithReplacements(
+    comp: MenuComposition,
+    quantity: number,
+    path: string[],
+    source: 'base' | 'modifier',
+    modifierName?: string,
+    replacements?: Map<string, SelectedModifier>
+  ): Promise<KitchenDecomposedItem[]> {
+    // For recipes - check if any component should be replaced
+    if (comp.type === 'recipe' && replacements && replacements.size > 0) {
+      return await decomposeRecipeWithReplacements(
+        comp,
+        quantity,
+        path,
+        source,
+        modifierName,
+        replacements
+      )
+    }
+
+    // For other types - use standard decomposition
+    return await decomposeComposition(comp, quantity, path, source, modifierName)
+  }
+
+  /**
+   * Decompose Recipe with replacement support
+   * Проверяет replacements map для каждого компонента рецепта
+   */
+  async function decomposeRecipeWithReplacements(
+    comp: MenuComposition,
+    quantity: number,
+    path: string[],
+    source: 'base' | 'modifier',
+    modifierName: string | undefined,
+    replacements: Map<string, SelectedModifier>
+  ): Promise<KitchenDecomposedItem[]> {
+    const recipe = recipesStore.recipes.find(r => r.id === comp.id)
+    if (!recipe) {
+      console.error(`❌ [${MODULE_NAME}] Recipe not found:`, comp.id)
+      return []
+    }
+
+    console.log(`  📖 [${MODULE_NAME}] Decomposing recipe with replacements:`, {
+      name: recipe.name,
+      components: recipe.components.length,
+      replacementsCount: replacements.size
+    })
+
+    const results: KitchenDecomposedItem[] = []
+
+    // Iterate through recipe components and check for replacements
+    for (const recipeComp of recipe.components) {
+      const replacementKey = `${recipe.id}_${recipeComp.id}`
+      const replacement = replacements.get(replacementKey)
+
+      if (replacement && replacement.composition && replacement.composition.length > 0) {
+        // ✨ REPLACEMENT: Use replacement composition instead of original component
+        console.log(`    🔄 [${MODULE_NAME}] Replacing component:`, {
+          original: recipeComp.name || recipeComp.componentId,
+          replacement: replacement.optionName,
+          compositionCount: replacement.composition.length
+        })
+
+        for (const replComp of replacement.composition) {
+          const items = await decomposeComposition(
+            replComp,
+            comp.quantity * quantity,
+            [...path, recipe.name, `→${replacement.optionName}`],
+            source,
+            modifierName
+          )
+          results.push(...items)
+        }
+      } else {
+        // No replacement - use original component
+        const menuComp: MenuComposition = {
+          type: recipeComp.componentType,
+          id: recipeComp.componentId,
+          quantity: recipeComp.quantity,
+          unit: recipeComp.unit
+        }
+
+        const items = await decomposeComposition(
+          menuComp,
+          comp.quantity * quantity,
+          [...path, recipe.name],
+          source,
+          modifierName
+        )
+        results.push(...items)
+      }
+    }
+
+    return results
   }
 
   /**

@@ -84,6 +84,27 @@ export type ComponentRole = 'main' | 'garnish' | 'sauce' | 'addon'
 
 export type ModifierType = 'replacement' | 'addon' | 'removal'
 
+// =============================================
+// Target Component (для replacement модификаторов)
+// =============================================
+
+/**
+ * Указывает какой компонент рецепта/варианта заменяется модификатором.
+ * Используется только для ModifierGroup с type='replacement'.
+ */
+export interface TargetComponent {
+  /** Откуда берётся компонент: из composition варианта или из рецепта */
+  sourceType: 'variant' | 'recipe'
+  /** ID рецепта (если sourceType === 'recipe') */
+  recipeId?: string
+  /** ID компонента в рецепте (RecipeComponent.id) или index в variant composition */
+  componentId: string
+  /** Тип компонента для валидации */
+  componentType: 'product' | 'recipe' | 'preparation'
+  /** Название компонента для отображения в UI */
+  componentName: string
+}
+
 export interface ModifierGroup {
   id: string
   name: string // "Choose your bread", "Extra proteins", "Sauces"
@@ -97,6 +118,13 @@ export interface ModifierGroup {
   maxSelection?: number // максимум выбрать (0 = без ограничений)
   options: ModifierOption[]
   sortOrder?: number
+
+  /**
+   * Какой компонент рецепта/варианта заменяется (только для type='replacement').
+   * Если указан - при decomposition исключаем target и добавляем выбранную альтернативу.
+   * Если не указан - работает как addon (обратная совместимость).
+   */
+  targetComponent?: TargetComponent
 }
 
 export interface ModifierOption {
@@ -141,11 +169,17 @@ export interface TemplateModifierSelection {
 export interface SelectedModifier {
   groupId: string
   groupName: string
-  // ✅ groupStyle удалено - не нужен для расчета композиции
   optionId: string
   optionName: string
   priceAdjustment: number
   composition?: MenuComposition[] // что добавилось к базовой композиции
+
+  /** Тип модификатора для логики decomposition */
+  groupType?: ModifierType
+  /** Какой компонент заменяется (копия из ModifierGroup для decomposition) */
+  targetComponent?: TargetComponent
+  /** Если true - использовать оригинальный компонент из рецепта (не заменять) */
+  isDefault?: boolean
 }
 
 // =============================================
