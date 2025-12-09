@@ -206,6 +206,8 @@ export interface MenuVariantForDecomposition {
   id: string
   name: string
   composition: MenuComposition[]
+  /** Multiplier for scaling modifier quantities (e.g., 1.3 for no-ice juice) */
+  portionMultiplier?: number
 }
 
 // =============================================

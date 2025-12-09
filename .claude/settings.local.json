@@ -52,7 +52,8 @@
       "Bash(grep:*)",
       "Bash(mcp__supabase__list_tables)",
       "Bash(find:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git pull:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

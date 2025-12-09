@@ -15,7 +15,7 @@ import type {
 } from './types'
 import { DecompositionError } from './types'
 import { buildReplacementMap, getReplacementForComponent } from './utils/replacementUtils'
-import { convertPortionToGrams } from './utils/portionUtils'
+import { convertPortionToGrams, getPortionMultiplier } from './utils/portionUtils'
 import { applyYieldAdjustment } from './utils/yieldUtils'
 
 const MODULE_NAME = 'DecompositionEngine'
@@ -73,11 +73,15 @@ export class DecompositionEngine {
     // 3. Build replacement map from modifiers
     const replacements = buildReplacementMap(input.selectedModifiers)
 
+    // Get portion multiplier from variant (used for scaling modifier quantities)
+    const portionMultiplier = getPortionMultiplier(variant.portionMultiplier)
+
     DebugUtils.debug(MODULE_NAME, 'Processing variant composition', {
       menuItem: menuItem.name,
       variant: variant.name,
       compositionCount: variant.composition.length,
-      replacementsCount: replacements.size
+      replacementsCount: replacements.size,
+      portionMultiplier
     })
 
     // 4. Process base composition
@@ -95,10 +99,12 @@ export class DecompositionEngine {
     }
 
     // 5. Process addon modifiers (non-replacement modifiers with composition)
+    // Apply portionMultiplier to scale modifier quantities based on variant
     if (input.selectedModifiers) {
       const addonNodes = await this.processAddonModifiers(
         input.selectedModifiers,
         input.quantity,
+        portionMultiplier,
         options,
         options.includePath ? [menuItem.name, variant.name] : []
       )
@@ -353,10 +359,16 @@ export class DecompositionEngine {
 
   /**
    * Process addon modifiers (non-replacement modifiers that add extra components)
+   * @param selectedModifiers - Selected modifiers from order
+   * @param quantity - Base quantity (number of items sold)
+   * @param portionMultiplier - Multiplier from variant (e.g., 1.3 for no-ice juice)
+   * @param options - Traversal options
+   * @param basePath - Path for debugging
    */
   private async processAddonModifiers(
     selectedModifiers: SelectedModifier[],
     quantity: number,
+    portionMultiplier: number,
     options: TraversalOptions,
     basePath: string[]
   ): Promise<DecomposedNode[]> {
@@ -372,12 +384,19 @@ export class DecompositionEngine {
       if (modifier.composition && modifier.composition.length > 0) {
         DebugUtils.debug(MODULE_NAME, 'Processing addon modifier', {
           name: modifier.optionName,
-          compositionCount: modifier.composition.length
+          compositionCount: modifier.composition.length,
+          portionMultiplier
         })
 
         for (const comp of modifier.composition) {
+          // Apply portionMultiplier to modifier composition quantity
+          const scaledComp: MenuComposition = {
+            ...comp,
+            quantity: comp.quantity * portionMultiplier
+          }
+
           const items = await this.traverseComposition(
-            comp,
+            scaledComp,
             quantity,
             options,
             new Map(), // No nested replacements for modifiers
@@ -515,7 +534,8 @@ export async function createDecompositionEngine(
         variants: item.variants.map((v: any) => ({
           id: v.id,
           name: v.name,
-          composition: v.composition || []
+          composition: v.composition || [],
+          portionMultiplier: v.portionMultiplier
         }))
       }
     },
