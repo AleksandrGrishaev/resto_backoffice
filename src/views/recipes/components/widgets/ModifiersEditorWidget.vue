@@ -106,6 +106,53 @@
                     min="0"
                   />
                 </v-col>
+
+                <!-- Target Component Selector (only for replacement type) -->
+                <v-col v-if="group.type === 'replacement'" cols="12">
+                  <v-alert
+                    v-if="availableTargetComponents.length === 0"
+                    type="warning"
+                    density="compact"
+                    variant="tonal"
+                    class="mb-2"
+                  >
+                    <div class="text-caption">
+                      No recipe components available. Add a recipe to the variant composition first.
+                    </div>
+                  </v-alert>
+                  <v-select
+                    v-else
+                    :model-value="getSelectedTargetValue(group)"
+                    :items="availableTargetComponents"
+                    item-title="label"
+                    item-value="value"
+                    label="Target Component to Replace"
+                    density="compact"
+                    variant="outlined"
+                    clearable
+                    prepend-inner-icon="mdi-target"
+                    hint="Select which ingredient from the recipe will be replaced"
+                    persistent-hint
+                    :return-object="true"
+                    @update:model-value="val => updateTargetComponent(groupIndex, val)"
+                  >
+                    <template #prepend-inner>
+                      <v-icon icon="mdi-swap-horizontal" color="warning" />
+                    </template>
+                  </v-select>
+                  <v-chip
+                    v-if="group.targetComponent"
+                    size="small"
+                    color="warning"
+                    variant="tonal"
+                    class="mt-2"
+                    closable
+                    @click:close="updateTargetComponent(groupIndex, null)"
+                  >
+                    <v-icon icon="mdi-target" size="14" class="mr-1" />
+                    Replaces: {{ group.targetComponent.componentName }}
+                  </v-chip>
+                </v-col>
               </v-row>
 
               <v-divider class="my-4" />
@@ -394,8 +441,11 @@ import type {
   DishType,
   MenuComposition,
   DishOption,
-  ProductOption
+  ProductOption,
+  TargetComponent
 } from '@/stores/menu/types'
+import type { Recipe, RecipeComponent } from '@/stores/recipes/types'
+import { useRecipesStore } from '@/stores/recipes'
 import DishSearchWidget from '@/views/menu/components/widgets/DishSearchWidget.vue'
 import ProductSearchWidget from '@/views/menu/components/widgets/ProductSearchWidget.vue'
 
@@ -405,6 +455,7 @@ interface Props {
   dishType: DishType // ✨ NEW: тип блюда
   dishOptions?: DishOption[] // ✅ NEW: Опции для блюд (рецепты + полуфабрикаты)
   productOptions?: ProductOption[] // ✅ NEW: Опции для продуктов
+  variantComposition?: MenuComposition[] // ✅ NEW: Composition варианта для target component selection
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -412,8 +463,12 @@ const props = withDefaults(defineProps<Props>(), {
   templates: () => [],
   dishType: 'simple',
   dishOptions: () => [],
-  productOptions: () => []
+  productOptions: () => [],
+  variantComposition: () => []
 })
+
+// Store access for recipe components
+const recipesStore = useRecipesStore()
 
 const emit = defineEmits<{
   'update:modifierGroups': [groups: ModifierGroup[]]
@@ -466,6 +521,106 @@ const modifierTypes = [
 
 // Computed
 const hasModifiers = computed(() => props.modifierGroups.length > 0)
+
+/**
+ * Построение списка доступных target компонентов для replacement модификаторов.
+ * Включает компоненты из рецептов в composition варианта.
+ */
+interface TargetComponentOption {
+  label: string
+  value: TargetComponent
+}
+
+const availableTargetComponents = computed((): TargetComponentOption[] => {
+  const options: TargetComponentOption[] = []
+
+  if (!props.variantComposition || props.variantComposition.length === 0) {
+    return options
+  }
+
+  // Iterate through variant composition
+  for (const comp of props.variantComposition) {
+    if (comp.type === 'recipe') {
+      // Get recipe and its components
+      const recipe = recipesStore.recipes.find((r: Recipe) => r.id === comp.id)
+      if (recipe && recipe.components) {
+        for (const recipeComp of recipe.components) {
+          const componentName = getRecipeComponentName(recipeComp)
+          options.push({
+            label: `${recipe.name} → ${componentName}`,
+            value: {
+              sourceType: 'recipe',
+              recipeId: recipe.id,
+              componentId: recipeComp.id,
+              componentType: recipeComp.componentType,
+              componentName: componentName
+            }
+          })
+        }
+      }
+    } else if (comp.type === 'product') {
+      // Direct product in variant composition
+      const product = props.productOptions?.find(p => p.id === comp.id)
+      options.push({
+        label: `Variant → ${product?.name || 'Unknown product'}`,
+        value: {
+          sourceType: 'variant',
+          componentId: comp.id,
+          componentType: 'product',
+          componentName: product?.name || 'Unknown'
+        }
+      })
+    } else if (comp.type === 'preparation') {
+      // Direct preparation in variant composition
+      const dish = props.dishOptions?.find(d => d.id === comp.id && d.type === 'preparation')
+      options.push({
+        label: `Variant → ${dish?.name || 'Unknown preparation'}`,
+        value: {
+          sourceType: 'variant',
+          componentId: comp.id,
+          componentType: 'preparation',
+          componentName: dish?.name || 'Unknown'
+        }
+      })
+    }
+  }
+
+  return options
+})
+
+function getRecipeComponentName(comp: RecipeComponent): string {
+  if (comp.componentType === 'product') {
+    const product = props.productOptions?.find(p => p.id === comp.componentId)
+    return product?.name || 'Unknown product'
+  } else {
+    const dish = props.dishOptions?.find(d => d.id === comp.componentId)
+    return dish?.name || 'Unknown'
+  }
+}
+
+function updateTargetComponent(groupIndex: number, selected: TargetComponentOption | null): void {
+  const updated = [...props.modifierGroups]
+  // ✅ FIX: Extract .value from the select option object
+  updated[groupIndex].targetComponent = selected?.value || undefined
+  emit('update:modifierGroups', updated)
+}
+
+function getSelectedTargetValue(group: ModifierGroup): TargetComponentOption | null {
+  if (!group.targetComponent) return null
+  // ✅ FIX: Find matching option for v-select with return-object="true"
+  return (
+    availableTargetComponents.value.find(opt =>
+      targetComponentsEqual(opt.value, group.targetComponent!)
+    ) || null
+  )
+}
+
+function targetComponentsEqual(a: TargetComponent | null, b: TargetComponent | null): boolean {
+  if (!a || !b) return a === b
+  return (
+    a.sourceType === b.sourceType && a.recipeId === b.recipeId && a.componentId === b.componentId
+  )
+}
 
 // Methods
 function addModifierGroup(): void {

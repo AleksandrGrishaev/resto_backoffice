@@ -495,7 +495,11 @@ function handleAddToBill(): void {
             optionId: option.id,
             optionName: option.name,
             priceAdjustment: option.priceAdjustment,
-            composition: option.composition
+            composition: option.composition,
+            // NEW: Additional fields for replacement logic in decomposition
+            groupType: group.type,
+            targetComponent: group.targetComponent,
+            isDefault: option.isDefault
           })
         }
       })

@@ -24,7 +24,8 @@
     "seed:products:prod": "npx tsx --env-file=.env.seed.production src/scripts/seed/products.ts",
     "seed:warehouse:prod": "npx tsx --env-file=.env.seed.production src/scripts/seed/warehouse.ts",
     "seed:menu:prod": "npx tsx --env-file=.env.seed.production src/scripts/seed/menu.ts",
-    "migrate:users": "bash scripts/apply-migration.sh"
+    "migrate:users": "bash scripts/apply-migration.sh",
+    "backup:prod": "node scripts/backup-database.mjs"
   },
   "lint-staged": {
     "*.{vue,js,ts,cjs,mjs}": [

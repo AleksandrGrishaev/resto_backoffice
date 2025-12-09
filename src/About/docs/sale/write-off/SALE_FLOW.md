@@ -897,6 +897,64 @@ console.log('[NegativeBatchService] ✅ Created negative batch:', batchNumber)
 
 ---
 
+## Архитектура Decomposition Services
+
+### Текущее состояние (Technical Debt)
+
+В системе существует **3 отдельных сервиса** для декомпозиции:
+
+| Сервис                     | Файл                                           | Назначение            |
+| -------------------------- | ---------------------------------------------- | --------------------- |
+| `useKitchenDecomposition`  | `src/stores/pos/orders/composables/`           | Kitchen Display       |
+| `useDecomposition`         | `src/stores/sales/recipeWriteOff/composables/` | Write-off inventory   |
+| `useActualCostCalculation` | `src/stores/sales/composables/`                | FIFO cost calculation |
+
+**Проблема:** Дублирование логики. При добавлении новой функциональности (например, Replacement Modifiers) приходится менять 3 места.
+
+### Идеальная архитектура
+
+```
+                    ┌─────────────────────────────┐
+                    │   useBaseDecomposition      │
+                    │   (единая логика разбора)   │
+                    │   - recipes traversal       │
+                    │   - replacements            │
+                    │   - preparations            │
+                    └─────────────┬───────────────┘
+                                  │
+         ┌────────────────────────┼────────────────────────┐
+         │                        │                        │
+         ▼                        ▼                        ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ KitchenAdapter  │    │ WriteOffAdapter │    │  CostAdapter    │
+│ (source, role)  │    │ (stops at prep) │    │ (FIFO batches)  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+**Детальная документация:** [DECOMPOSITION_ARCHITECTURE.md](./DECOMPOSITION_ARCHITECTURE.md)
+
+### Replacement Modifiers
+
+С декабря 2025 поддерживаются **Replacement Modifiers** - возможность заменить компонент рецепта на альтернативу:
+
+```
+Recipe: Cappuccino
+├── Espresso: 30ml
+└── Regular Milk: 150ml  ← заменяемый компонент
+
+При заказе с Oat Milk:
+├── Espresso: 30ml
+└── Oat Milk: 150ml  ← замена из modifier composition
+```
+
+**Ключевые типы:**
+
+- `TargetComponent` - указывает какой компонент рецепта заменяется
+- `ModifierGroup.targetComponent` - для type='replacement'
+- `SelectedModifier.groupType`, `targetComponent`, `isDefault`
+
+---
+
 ## Заключение
 
 **Полный цикл продажи - это сложный процесс из 4 этапов:**
