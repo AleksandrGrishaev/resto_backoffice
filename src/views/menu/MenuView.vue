@@ -146,7 +146,12 @@
               No dishes
             </div>
             <div v-for="item in getCategoryItems(category.id)" :key="item.id">
-              <menu-item-component :item="item" @edit="editItem" @duplicate="duplicateItem" />
+              <menu-item-component
+                :item="item"
+                @edit="editItem"
+                @duplicate="duplicateItem"
+                @view="viewItem"
+              />
             </div>
           </v-expansion-panel-text>
         </v-expansion-panel>
@@ -221,6 +226,9 @@
 
     <!-- Export Options Dialog -->
     <ExportOptionsDialog v-model="dialogs.export" export-type="menu" @export="handleExportPdf" />
+
+    <!-- View Item Dialog -->
+    <MenuItemViewDialog v-model="dialogs.view" :item="viewingItem" />
   </div>
 </template>
 
@@ -243,6 +251,7 @@ import MenuCategoryDialog from './components/MenuCategoryDialog.vue'
 import MenuItemDialog from './components/MenuItemDialog.vue'
 import MenuItemComponent from './components/MenuItem.vue'
 import DishTypeSelectionDialog from './components/DishTypeSelectionDialog.vue'
+import MenuItemViewDialog from './components/dialogs/MenuItemViewDialog.vue'
 
 const MODULE_NAME = 'MenuView'
 const menuStore = useMenuStore()
@@ -261,10 +270,12 @@ const dialogs = ref({
   category: false,
   item: false,
   duplicate: false, // ✨ NEW: Диалог дублирования
-  export: false // Export options dialog
+  export: false, // Export options dialog
+  view: false // View item dialog with export
 })
 const editingCategory = ref<Category | null>(null)
 const editingItem = ref<MenuItem | null>(null)
+const viewingItem = ref<MenuItem | null>(null) // Item being viewed
 const selectedDishType = ref<DishType | null>(null) // ✨ NEW: Выбранный тип блюда
 const duplicatingItem = ref<MenuItem | null>(null) // ✨ NEW: Дублируемое блюдо
 const duplicateName = ref('') // ✨ NEW: Новое имя для дубликата
@@ -360,6 +371,11 @@ function duplicateItem(item: MenuItem) {
   duplicatingItem.value = item
   duplicateName.value = `${item.name} (Copy)`
   dialogs.value.duplicate = true
+}
+
+function viewItem(item: MenuItem) {
+  viewingItem.value = item
+  dialogs.value.view = true
 }
 
 async function confirmDuplicate() {

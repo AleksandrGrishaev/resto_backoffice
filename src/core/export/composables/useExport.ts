@@ -1,6 +1,6 @@
 /**
  * Export Composable
- * Provides PDF export functionality for Menu, Recipes, and Preparations
+ * Provides PDF export functionality for Menu, Recipes, Preparations, and Single Menu Items
  */
 
 import { ref, nextTick, createApp, h } from 'vue'
@@ -9,11 +9,13 @@ import type {
   ExportOptions,
   MenuExportData,
   RecipeExportData,
-  PreparationExportData
+  PreparationExportData,
+  MenuItemExportData
 } from '../types'
 import MenuExportTemplate from '../templates/MenuExportTemplate.vue'
 import RecipeExportTemplate from '../templates/RecipeExportTemplate.vue'
 import PreparationExportTemplate from '../templates/PreparationExportTemplate.vue'
+import MenuItemExportTemplate from '../templates/MenuItemExportTemplate.vue'
 
 export function useExport() {
   const isExporting = ref(false)
@@ -137,11 +139,39 @@ export function useExport() {
     }
   }
 
+  /**
+   * Export single menu item to PDF
+   */
+  async function exportMenuItem(
+    data: MenuItemExportData,
+    options: ExportOptions = {}
+  ): Promise<void> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      // Generate filename from item name (sanitized)
+      const sanitizedName = data.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+      const filename =
+        options.filename || exportService.generateFilename(`menu_item_${sanitizedName}`)
+      await renderAndExport(MenuItemExportTemplate, data, {
+        ...options,
+        filename
+      })
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
   return {
     isExporting,
     exportError,
     exportMenu,
     exportRecipes,
-    exportPreparations
+    exportPreparations,
+    exportMenuItem
   }
 }
