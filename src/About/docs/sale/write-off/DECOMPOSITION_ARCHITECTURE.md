@@ -232,6 +232,59 @@ function calculateActualCost(
 
 ---
 
+## Negative Batch Cost Fallback Chain
+
+При создании negative batch (когда нет stock) система использует fallback chain для определения стоимости:
+
+### For Products (5 levels)
+
+```
+1. Last active batch cost          ← Текущий активный batch с quantity > 0
+   ↓ FAIL
+2. Depleted batches average        ← Среднее из последних 5 использованных batches
+   ↓ FAIL
+3. last_known_cost                 ← Кэшированная стоимость из последнего receipt
+   ↓ FAIL
+4. base_cost_per_unit              ← Ручная стоимость из карточки товара (NEW!)
+   ↓ FAIL
+5. 0 + CRITICAL ERROR              ← console.error() с контекстом ошибки
+```
+
+### For Preparations (4 levels)
+
+```
+1. Last active batch cost          ← Текущий активный batch с quantity > 0
+   ↓ FAIL
+2. Depleted batches average        ← Среднее из последних 5 использованных batches
+   ↓ FAIL
+3. last_known_cost                 ← Кэшированная стоимость из последнего production
+   ↓ FAIL
+4. 0 + CRITICAL ERROR              ← console.error() с контекстом ошибки
+```
+
+### Key Files
+
+| File                                             | Entity       |
+| ------------------------------------------------ | ------------ |
+| `src/stores/storage/negativeBatchService.ts`     | Products     |
+| `src/stores/preparation/negativeBatchService.ts` | Preparations |
+
+### Logs
+
+```typescript
+// Success cases:
+✅ Using last active batch cost: 275 (batch: BATCH-123)
+✅ Using average cost from 5 depleted batches: 280.50
+✅ Using cached last_known_cost: 275 for Coffee bean (kopi)
+✅ Using base_cost_per_unit: 275 for Coffee bean (kopi)  // NEW!
+
+// Failure (should not happen if base_cost_per_unit is set):
+🚨 COST CALCULATION FAILED { itemName: '...', failedFallbacks: [...] }
+❌ CRITICAL: NO COST DATA FOUND for product "..." - cost = 0
+```
+
+---
+
 ## Debugging
 
 ### Key Logs
@@ -278,7 +331,8 @@ function calculateActualCost(
 
 ## Version History
 
-| Date       | Change                                                              |
-| ---------- | ------------------------------------------------------------------- |
-| 2025-12-09 | Added Replacement Modifiers support to all 3 decomposition services |
-| 2025-12-04 | Initial documentation                                               |
+| Date       | Change                                                                 |
+| ---------- | ---------------------------------------------------------------------- |
+| 2025-12-09 | Added base_cost_per_unit fallback for products in negativeBatchService |
+| 2025-12-09 | Added Replacement Modifiers support to all 3 decomposition services    |
+| 2025-12-04 | Initial documentation                                                  |

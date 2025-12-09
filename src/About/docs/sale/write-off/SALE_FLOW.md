@@ -610,7 +610,7 @@ allocatePreparationFIFO(preparationId, quantity, department) {
 - `src/stores/preparation/negativeBatchService.ts:53-129` (preparations)
 - `src/stores/storage/negativeBatchService.ts:55-132` (products)
 
-**Улучшенный Fallback Chain (4 уровня):**
+**Улучшенный Fallback Chain (5 уровней для products, 4 для preparations):**
 
 ```
 1. Last active batch cost          ← getLastActiveBatch() → batch.costPerUnit
@@ -619,8 +619,12 @@ allocatePreparationFIFO(preparationId, quantity, department) {
    ↓ FAIL
 3. last_known_cost from DB         ← SELECT last_known_cost FROM products/preparations
    ↓ FAIL
-4. 0 + CRITICAL ERROR               ← console.error() + errorContext { failedFallbacks, suggestedAction }
+4. base_cost_per_unit (products)   ← SELECT base_cost_per_unit FROM products (ручная стоимость из карточки товара)
+   ↓ FAIL (или N/A для preparations)
+5. 0 + CRITICAL ERROR              ← console.error() + errorContext { failedFallbacks, suggestedAction }
 ```
+
+> **Note:** `base_cost_per_unit` доступен только для products. Для preparations этот уровень пропускается.
 
 #### 4.4.1. Автоматическое обновление `last_known_cost`
 
@@ -969,7 +973,7 @@ Recipe: Cappuccino
 - **Декомпозиция** происходит в Step 4 (не в Step 3)
 - **COGS** считается из FIFO batches (включая negative)
 - **Negative batches** создаются автоматически при shortage
-- **Fallback chain** для стоимости (6 уровней)
+- **Fallback chain** для стоимости (5 уровней для products, 4 для preparations)
 - **Reconciliation** negative batches при receipt
 
 **Производительность:**

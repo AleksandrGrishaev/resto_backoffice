@@ -570,15 +570,44 @@ export function useActualCostCalculation() {
 
     // Check if we have enough stock
     const allocatedQuantity = allocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
+    const product = productsStore.products.find(p => p.id === productId)
+
+    // ✅ FALLBACK: If no batches or deficit, use base_cost_per_unit
     if (remainingQuantity > 0) {
-      DebugUtils.warn(MODULE_NAME, 'Insufficient product stock', {
-        productId,
-        required: requiredQuantity,
-        allocated: allocatedQuantity,
-        deficit: remainingQuantity,
-        availableBatches: batches.length,
-        totalAvailableStock: batches.reduce((sum, b) => sum + b.currentQuantity, 0)
-      })
+      const fallbackCost = product?.baseCostPerUnit || 0
+
+      if (fallbackCost > 0) {
+        // Create virtual allocation from base_cost_per_unit
+        const deficitCost = remainingQuantity * fallbackCost
+        allocations.push({
+          batchId: 'fallback-base-cost',
+          batchNumber: 'BASE_COST',
+          allocatedQuantity: remainingQuantity,
+          costPerUnit: fallbackCost,
+          totalCost: deficitCost,
+          batchCreatedAt: new Date().toISOString()
+        })
+
+        DebugUtils.info(MODULE_NAME, 'Using base_cost_per_unit fallback for cost calculation', {
+          productId,
+          productName: product?.name,
+          deficitQuantity: remainingQuantity,
+          baseCostPerUnit: fallbackCost,
+          deficitCost
+        })
+
+        remainingQuantity = 0
+      } else {
+        DebugUtils.warn(MODULE_NAME, 'Insufficient product stock and no base_cost_per_unit', {
+          productId,
+          productName: product?.name,
+          required: requiredQuantity,
+          allocated: allocatedQuantity,
+          deficit: remainingQuantity,
+          availableBatches: batches.length,
+          totalAvailableStock: batches.reduce((sum, b) => sum + b.currentQuantity, 0)
+        })
+      }
     } else {
       DebugUtils.info(MODULE_NAME, 'Product stock allocated successfully', {
         productId,
@@ -592,8 +621,6 @@ export function useActualCostCalculation() {
     const totalCost = allocations.reduce((sum, a) => sum + a.totalCost, 0)
     const totalQty = allocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
     const avgCost = totalQty > 0 ? totalCost / totalQty : 0
-
-    const product = productsStore.products.find(p => p.id === productId)
 
     DebugUtils.info(MODULE_NAME, 'Product cost breakdown', {
       productId,
@@ -612,7 +639,7 @@ export function useActualCostCalculation() {
       productId,
       productName: product?.name || 'Unknown Product',
       quantity: requiredQuantity,
-      unit: product?.unit || 'gram',
+      unit: product?.baseUnit || 'gram',
       batchAllocations: allocations,
       averageCostPerUnit: avgCost,
       totalCost
