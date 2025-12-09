@@ -31,7 +31,11 @@ dist-ssr
 .env.development
 .env.production
 .env.staging
-.env.seed.production  # ⚠️ CRITICAL: Contains SERVICE KEY for seeding
+.env.seed.production  # CRITICAL: Contains SERVICE KEY for seeding
+.env.backup           # Database password for backups
+
+# Backups (contain sensitive data!)
+backups/
 
 # Production credentials (NEVER commit!)
 PRODUCTION_CREDENTIALS.md

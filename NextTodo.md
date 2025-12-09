@@ -1,90 +1,76 @@
-# Current Sprint: PDF Export System - COMPLETED
+# Sprint: Replacement Modifiers A Target Component
 
-## Goal
+## 040G0
 
-Implement PDF export for menu, recipes, and preparations with internal costs.
+0AH8@8BL A8AB5<C <>48D8:0B>@>2 4;O ?>445@6:8 70<5=K 8=3@5485=B>2 2 @5F5?B5.
 
-## Decisions
+**59A:** Cappuccino A 2K1>@>< <>;>:0 - @5F5?B ?>;=K9 A <>;>:><, ?@8 70:075 <>6=> 70<5=8BL =0 0;LB5@=0B82C A 4>?;0B>9.
 
-- Format: A4 Portrait
-- Content: Costs only (internal reports)
-- Branding: None (plain text)
-- Recipe detail: Configurable
-- Component breakdown: One level only
-- POS receipts: Future sprint
+## 1@0B=0O A>2<5AB8<>ABL
 
-## Tasks
+- **addon** - 4>102;O5B composition (157 87<5=5=89)
+- **removal** - C40;O5B (157 87<5=5=89)
+- **replacement** - @0AH8@O5BAO:
+  - A;8 `targetComponent` C:070= � 70<5=O5B :><?>=5=B @5F5?B0
+  - A;8 =5 C:070= � @01>B05B :0: addon (>1@0B=0O A>2<5AB8<>ABL)
 
-### Step 1: Setup
+---
 
-- [x] Install html2pdf.js: `pnpm add html2pdf.js`
-- [x] Create folder: `src/core/export/`
+## 50;870F8O
 
-### Step 2: Core Types & Service
+### Phase 1: Types (`src/stores/menu/types.ts`)
 
-- [x] Create `src/core/export/types.ts`
-- [x] Create `src/core/export/ExportService.ts`
-- [x] Create `src/core/export/composables/useExport.ts`
-
-### Step 3: Templates
-
-- [x] Create `src/core/export/templates/ExportLayout.vue`
-- [x] Create `src/core/export/templates/MenuExportTemplate.vue`
-- [x] Create `src/core/export/templates/RecipeExportTemplate.vue`
-- [x] Create `src/core/export/templates/PreparationExportTemplate.vue`
-
-### Step 4: Styles
-
-- [x] Create `src/core/export/styles/export.scss`
-- [x] Create `src/core/export/index.ts`
-- [x] Create `src/core/export/html2pdf.d.ts` (TypeScript types)
-
-### Step 5: Integration
-
-- [x] Add "Export PDF" button to MenuView
-- [x] Add "Export PDF" button to RecipesView (exports both recipes and preparations)
-- [x] Test PDF output - Build successful
-
-## Implementation Summary
-
-### Files Created
-
-```
-src/core/export/
-├── index.ts                    # Module exports
-├── types.ts                    # Export types and interfaces
-├── ExportService.ts            # PDF generation service
-├── html2pdf.d.ts               # TypeScript declarations
-├── composables/
-│   └── useExport.ts            # Vue composable for exports
-├── templates/
-│   ├── ExportLayout.vue        # Base layout component
-│   ├── MenuExportTemplate.vue  # Menu export template
-│   ├── RecipeExportTemplate.vue # Recipe export template
-│   └── PreparationExportTemplate.vue # Preparation export template
-└── styles/
-    └── export.scss             # Print/export styles
-```
-
-### Usage
+- [ ] >1028BL `TargetComponent` interface
+- [ ] 0AH8@8BL `ModifierGroup` ?>;5< `targetComponent`
+- [ ] 0AH8@8BL `SelectedModifier` ?>;O<8 `groupType`, `targetComponent`, `isDefault`
 
 ```typescript
-import { useExport } from '@/core/export'
-
-const { isExporting, exportMenu, exportRecipes, exportPreparations } = useExport()
-
-// Export menu with costs
-await exportMenu(menuData)
-
-// Export recipes with instructions
-await exportRecipes(recipeData, { includeInstructions: true })
-
-// Export preparations
-await exportPreparations(prepData)
+export interface TargetComponent {
+  sourceType: 'variant' | 'recipe'
+  recipeId?: string
+  componentId: string
+  componentType: 'product' | 'recipe' | 'preparation'
+  componentName: string
+}
 ```
 
-### Notes
+### Phase 2: UI - Modifier Editor
 
-- pnpm upgraded from 7.14.0 to 9.15.9 (lockfile v9 compatibility)
-- html2pdf.js bundle: ~725KB (includes html2canvas + jsPDF)
-- Export buttons added to MenuView and RecipesView toolbars
+- [ ] `ModifiersEditorWidget.vue` - UI 4;O 2K1>@0 target component
+- [ ] `MenuItemDialog.vue` - C1@0BL canBeSold D8;LB@ 4;O modifier composition
+- [ ] 5@54020BL variant composition 2 ModifiersEditorWidget
+
+### Phase 3: UI - POS Customization
+
+- [ ] `CustomizationDialog.vue` - ?5@54020BL `groupType`, `targetComponent`, `isDefault` 2 SelectedModifier
+
+### Phase 4: Decomposition
+
+- [ ] `useKitchenDecomposition.ts` - ;>38:0 70<5=K :><?>=5=B>2
+- [ ] `useDecomposition.ts` - ;>38:0 70<5=K 4;O A?8A0=8O
+
+### Phase 5: "5AB8@>20=85
+
+- [ ] !>740BL B5AB>2K9 @5F5?B Cappuccino A <>;>:><
+- [ ] 0AB@>8BL replacement modifier A target component
+- [ ] @>25@8BL decomposition A 70<5=>9
+
+---
+
+## @8B8G5A:85 D09;K
+
+| $09;                                                              | 7<5=5=8O                                |
+| ----------------------------------------------------------------- | --------------------------------------- |
+| `src/stores/menu/types.ts`                                        | TargetComponent, @0AH8@5=85 8=B5@D59A>2 |
+| `src/views/menu/components/widgets/ModifiersEditorWidget.vue`     | UI 2K1>@0 target                        |
+| `src/views/menu/components/MenuItemDialog.vue`                    | #1@0BL canBeSold D8;LB@                 |
+| `src/views/pos/menu/dialogs/CustomizationDialog.vue`              | 5@54020BL =>2K5 ?>;O                    |
+| `src/stores/pos/orders/composables/useKitchenDecomposition.ts`    | >38:0 70<5=K                            |
+| `src/stores/sales/recipeWriteOff/composables/useDecomposition.ts` | >38:0 70<5=K                            |
+
+---
+
+## 0;840F8O
+
+- @8 A>E@0=5=88 menu item: ?@>25@OBL GB> 4;O replacement 3@C?? C:070= targetComponent
+- @8 decomposition: 5A;8 target =5 =0945= � fallback :0: addon
