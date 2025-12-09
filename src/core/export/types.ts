@@ -129,11 +129,74 @@ export interface PreparationComponentExport {
   cost: number
 }
 
+// =============================================
+// Single Menu Item Export Types
+// =============================================
+
+export interface MenuItemExportData {
+  title: string // Item name
+  date: string
+  item: MenuItemDetailExport
+  includeRecipes?: boolean
+}
+
+export interface MenuItemDetailExport {
+  name: string
+  category: string
+  department: 'kitchen' | 'bar'
+  dishType: 'simple' | 'modifiable'
+  description?: string
+  variants: MenuItemVariantDetailExport[]
+  modifierGroups?: ModifierGroupExport[]
+}
+
+export interface MenuItemVariantDetailExport {
+  name: string
+  price: number
+  cost: number
+  foodCostPercent: number
+  margin: number
+  composition: MenuItemCompositionExport[]
+}
+
+export interface MenuItemCompositionExport {
+  name: string
+  type: 'product' | 'recipe' | 'preparation'
+  quantity: number
+  unit: string
+  cost: number
+  role?: string
+  // For recipes/preparations - show their components
+  nestedComponents?: NestedComponentExport[]
+}
+
+export interface NestedComponentExport {
+  name: string
+  type: 'product' | 'preparation'
+  quantity: number
+  unit: string
+  cost: number
+}
+
+export interface ModifierGroupExport {
+  name: string
+  type: 'replacement' | 'addon' | 'removal'
+  isRequired: boolean
+  options: ModifierOptionExport[]
+}
+
+export interface ModifierOptionExport {
+  name: string
+  priceAdjustment: number
+  isDefault?: boolean
+}
+
 // html2pdf.js options
 export interface Html2PdfOptions {
   margin?: number | [number, number, number, number]
   filename?: string
   image?: { type: string; quality: number }
-  html2canvas?: { scale: number; useCORS: boolean }
+  html2canvas?: { scale: number; useCORS: boolean; logging?: boolean }
   jsPDF?: { unit: string; format: string; orientation: string }
+  pagebreak?: { mode: string[]; before?: string; after?: string; avoid?: string }
 }
