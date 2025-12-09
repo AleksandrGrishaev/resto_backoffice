@@ -80,11 +80,32 @@
         </v-container>
       </div>
 
-      <!-- Subcategories View (Mixed: direct items + subcategories) -->
+      <!-- Subcategories View (Mixed: subcategories on top + direct items below) -->
       <div v-else-if="currentView === 'subcategories'" class="mixed-grid">
         <v-container fluid>
-          <!-- Direct items in parent category first -->
-          <div v-if="directParentItems.length > 0" class="mb-6">
+          <!-- Subcategories - horizontal scroll at top -->
+          <div v-if="activeSubcategories.length > 0" class="subcategories-scroll-section mb-4">
+            <div class="subcategories-scroll">
+              <v-chip
+                v-for="subcategory in activeSubcategories"
+                :key="subcategory.id"
+                class="subcategory-chip"
+                size="large"
+                variant="outlined"
+                color="primary"
+                @click="selectSubcategory(subcategory.id)"
+              >
+                {{ subcategory.name }}
+                <span class="ml-2 text-medium-emphasis">
+                  ({{ getCategoryItemsCount(subcategory.id) }})
+                </span>
+                <v-icon end size="16">mdi-chevron-right</v-icon>
+              </v-chip>
+            </div>
+          </div>
+
+          <!-- Direct items in parent category -->
+          <div v-if="directParentItems.length > 0">
             <div class="text-subtitle-2 text-medium-emphasis mb-3 px-3">
               Items in {{ selectedRootCategory?.name }}
             </div>
@@ -92,30 +113,9 @@
               <v-col v-for="item in directParentItems" :key="item.id" cols="12" sm="6" md="4">
                 <MenuItemCard
                   :item="item"
+                  :show-variant-chips="false"
                   @add-item="handleAddAndReturn"
                   @select-item="selectItem"
-                />
-              </v-col>
-            </v-row>
-          </div>
-
-          <!-- Subcategories -->
-          <div v-if="activeSubcategories.length > 0">
-            <div class="text-subtitle-2 text-medium-emphasis mb-3 px-3">Subcategories</div>
-            <v-row>
-              <v-col
-                v-for="subcategory in activeSubcategories"
-                :key="subcategory.id"
-                cols="12"
-                sm="6"
-                md="4"
-                lg="3"
-              >
-                <CategoryCard
-                  :category="subcategory"
-                  :items-count="getCategoryItemsCount(subcategory.id)"
-                  is-subcategory
-                  @select="selectSubcategory"
                 />
               </v-col>
             </v-row>
@@ -138,7 +138,12 @@
         <v-container fluid>
           <v-row>
             <v-col v-for="item in categoryItems" :key="item.id" cols="12" sm="6" md="4">
-              <MenuItemCard :item="item" @add-item="handleAddAndReturn" @select-item="selectItem" />
+              <MenuItemCard
+                :item="item"
+                :show-variant-chips="false"
+                @add-item="handleAddAndReturn"
+                @select-item="selectItem"
+              />
             </v-col>
           </v-row>
         </v-container>
@@ -568,5 +573,43 @@ onMounted(async () => {
 .menu-content::-webkit-scrollbar-thumb {
   background: rgba(var(--v-theme-on-surface), 0.2);
   border-radius: 3px;
+}
+
+/* Subcategories horizontal scroll */
+.subcategories-scroll-section {
+  padding: 0 12px;
+}
+
+.subcategories-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.subcategories-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.subcategories-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subcategories-scroll::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 2px;
+}
+
+.subcategory-chip {
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.subcategory-chip:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 </style>
