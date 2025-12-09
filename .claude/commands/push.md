@@ -1,12 +1,12 @@
 ---
-description: Push current branch and update dev branch
+description: Push current branch and update dev branch (optionally main)
 ---
 
 You are a git push and branch update helper for the Kitchen App.
 
 ## Your Task
 
-Push the current feature branch and automatically merge it into dev:
+Push the current feature branch, merge into dev, and optionally update main:
 
 1. **Get current branch:**
 
@@ -25,20 +25,25 @@ Push the current feature branch and automatically merge it into dev:
    - Run `git merge <current-branch> --no-ff` to merge feature branch
    - Run `git push origin dev` to push updated dev
 
-4. **Return to feature branch:**
+4. **Ask about main branch:**
+
+   - Use AskUserQuestion tool to ask: "Also update main branch?"
+   - Options: "Yes" (merge dev into main) or "No" (skip main)
+
+5. **If user chose Yes - Update main:**
+
+   - Run `git checkout main` to switch to main branch
+   - Run `git pull origin main` to ensure main is up to date
+   - Run `git merge dev --no-ff` to merge dev into main
+   - Run `git push origin main` to push updated main
+
+6. **Return to feature branch:**
 
    - Run `git checkout <current-branch>` to return to original branch
 
-5. **Verify:**
-   - Show final status of both branches
-   - Confirm dev is updated
-
-## Important Notes
-
-- **Main branch is NEVER auto-updated** (manual only)
-- This command only updates `dev` branch
-- If merge conflicts occur, stop and report to user
-- Always verify remote exists before pushing
+7. **Verify:**
+   - Show final status of all updated branches
+   - Confirm which branches were updated
 
 ## Error Handling
 
@@ -56,7 +61,8 @@ Provide:
 1. Current branch name
 2. Push confirmation for feature branch
 3. Dev branch merge status
-4. Final verification
-5. Brief summary: "Feature branch `<name>` pushed and merged into dev"
+4. Main branch status (if updated)
+5. Final verification table
+6. Brief summary
 
 Be concise - this is meant for quick deployment iterations.
