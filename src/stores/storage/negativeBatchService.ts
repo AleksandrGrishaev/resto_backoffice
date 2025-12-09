@@ -86,10 +86,10 @@ class NegativeBatchService {
       return avgCost
     }
 
-    // Fallback to cached last_known_cost from product
+    // Fallback to cached last_known_cost or base_cost_per_unit from product
     const { data: product, error } = await supabase
       .from('products')
-      .select('last_known_cost, name, unit')
+      .select('last_known_cost, base_cost_per_unit, name, base_unit')
       .eq('id', productId)
       .single()
 
@@ -105,6 +105,12 @@ class NegativeBatchService {
       return product.last_known_cost
     }
 
+    // Fallback to base_cost_per_unit (manual cost from product card)
+    if (product?.base_cost_per_unit && product.base_cost_per_unit > 0) {
+      console.info(`✅ Using base_cost_per_unit: ${product.base_cost_per_unit} for ${product.name}`)
+      return product.base_cost_per_unit
+    }
+
     // FINAL FALLBACK: Return 0 with CRITICAL ERROR
     // This makes the problem visible instead of masking it with arbitrary values
     const errorContext = {
@@ -113,15 +119,20 @@ class NegativeBatchService {
       itemName: product?.name || 'Unknown',
       itemType: 'product',
       requestedQuantity: requestedQty,
-      unit: product?.unit || 'unknown',
-      failedFallbacks: ['last_active_batch', 'depleted_batches_avg', 'last_known_cost'],
+      unit: product?.base_unit || 'unknown',
+      failedFallbacks: [
+        'last_active_batch',
+        'depleted_batches_avg',
+        'last_known_cost',
+        'base_cost_per_unit'
+      ],
       suggestedAction: 'Create receipt operation or set base_cost_per_unit in products table'
     }
 
     console.error('🚨 COST CALCULATION FAILED', errorContext)
     console.error(
       `❌ CRITICAL: NO COST DATA FOUND for product "${product?.name}" (${productId}). ` +
-        `Requested: ${requestedQty} ${product?.unit || 'units'}. ` +
+        `Requested: ${requestedQty} ${product?.base_unit || 'units'}. ` +
         `Returning 0 to make this problem visible. ` +
         `SUGGESTED ACTION: Create a receipt operation for this product or set base_cost_per_unit.`
     )
@@ -414,8 +425,12 @@ class NegativeBatchService {
 
     // 2. Calculate new quantities
     const previousQty = batch.current_quantity // e.g., -100 (use snake_case from DB)
+    const previousCost = batch.cost_per_unit || 0
     const newQty = previousQty - additionalShortage // e.g., -100 - 100 = -200 (more negative)
-    const newTotalValue = newQty * batch.cost_per_unit // use snake_case from DB
+
+    // ✅ FIX: If batch cost is 0, use new cost from parameter (fallback)
+    const effectiveCost = previousCost === 0 ? costPerUnit : previousCost
+    const newTotalValue = newQty * effectiveCost
 
     const now = new Date().toISOString()
 
@@ -424,6 +439,7 @@ class NegativeBatchService {
       .from('storage_batches')
       .update({
         current_quantity: newQty,
+        cost_per_unit: effectiveCost, // ✅ Update cost if it was 0
         total_value: newTotalValue,
         updated_at: now
       })
@@ -436,7 +452,8 @@ class NegativeBatchService {
     }
 
     console.info(
-      `✅ Updated existing negative batch: ${batch.batch_number} (${previousQty} → ${newQty}, +${additionalShortage} shortage)`
+      `✅ Updated negative batch: ${batch.batch_number} (${previousQty} → ${newQty}, +${additionalShortage} shortage)` +
+        (previousCost === 0 && costPerUnit > 0 ? ` | Cost fixed: 0 → ${costPerUnit}` : '')
     )
 
     // ✅ FIX: Use mapper function for snake_case to camelCase conversion

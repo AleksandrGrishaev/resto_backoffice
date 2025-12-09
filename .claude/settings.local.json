@@ -49,7 +49,10 @@
       "mcp__supabase__get_project_url",
       "Bash(python3:*)",
       "Bash(git push:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(mcp__supabase__list_tables)",
+      "Bash(find:*)",
+      "Bash(git restore:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

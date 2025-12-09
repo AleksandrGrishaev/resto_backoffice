@@ -2,7 +2,8 @@
 
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
-import { useActualCostCalculation } from '@/stores/sales/composables/useActualCostCalculation' // ✅ SPRINT 4
+// ✅ SPRINT 4: Use shared batch allocation utilities from decomposition module
+import { allocateFromPreparationBatches, allocateFromStorageBatches } from '@/core/decomposition'
 import type {
   Preparation,
   Recipe,
@@ -131,8 +132,6 @@ export function useCostCalculation() {
     // ✅ SPRINT 4: For actual cost, use FIFO allocation
     if (mode === 'actual') {
       try {
-        const { allocateFromPreparationBatches } = useActualCostCalculation()
-
         // Calculate actual cost from FIFO batches (for preparation output quantity)
         const actualCost = await allocateFromPreparationBatches(
           preparation.id,
@@ -387,9 +386,6 @@ export function useCostCalculation() {
     // ✅ SPRINT 4: For actual cost, use FIFO allocation
     if (mode === 'actual') {
       try {
-        const { allocateFromPreparationBatches, allocateFromStorageBatches } =
-          useActualCostCalculation()
-
         if (!recipe.components || recipe.components.length === 0) {
           return { success: false, error: 'Recipe has no components' }
         }
