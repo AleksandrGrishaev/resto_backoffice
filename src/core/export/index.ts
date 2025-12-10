@@ -46,8 +46,17 @@ export type {
   UniqueRecipeIngredientExport,
   Html2PdfOptions,
   // Detailed Menu Export
-  MenuDetailedExportData
+  MenuDetailedExportData,
+  // Print Documents Types
+  PrintDocumentCategory,
+  PrintDocumentConfig,
+  InventorySheetOptions,
+  InventorySheetItem,
+  InventorySheetData
 } from './types'
+
+// Print Documents Registry
+export { PRINT_DOCUMENTS } from './types'
 
 // Service
 export { ExportService, exportService } from './ExportService'
@@ -68,6 +77,7 @@ export { default as RecipeExportTemplate } from './templates/RecipeExportTemplat
 export { default as PreparationExportTemplate } from './templates/PreparationExportTemplate.vue'
 export { default as MenuItemExportTemplate } from './templates/MenuItemExportTemplate.vue'
 export { default as CombinationsExportTemplate } from './templates/CombinationsExportTemplate.vue'
+export { default as InventorySheetTemplate } from './templates/InventorySheetTemplate.vue'
 
 // Utils
 export {

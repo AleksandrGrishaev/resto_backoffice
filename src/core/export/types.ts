@@ -350,3 +350,74 @@ export interface Html2PdfOptions {
   jsPDF?: { unit: string; format: string; orientation: string }
   pagebreak?: { mode: string[]; before?: string; after?: string; avoid?: string }
 }
+
+// =============================================
+// Print Documents Types (Inventory Sheets, etc.)
+// =============================================
+
+export type PrintDocumentCategory = 'inventory' | 'operations' | 'reports'
+
+export interface PrintDocumentConfig {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: PrintDocumentCategory
+}
+
+// Inventory Sheet Options (for both Products and Preparations)
+export interface InventorySheetOptions extends ExportOptions {
+  documentType: 'products' | 'preparations'
+  department: DepartmentFilter
+  includeZeroStock: boolean
+  sortBy: 'name' | 'code' | 'category'
+  categoryFilter?: string[] // Filter by specific categories (optional)
+  showSignatureLine: boolean
+  countDate: string // Date of inventory count
+}
+
+// Individual item in inventory sheet
+export interface InventorySheetItem {
+  index: number
+  name: string
+  code: string // Product code (P-001) or Preparation code (PR-042)
+  category?: string
+  unit: string
+  currentStock: number
+  // These are null - will be filled manually on printed sheet
+  actualCount: null
+  difference: null
+}
+
+// Complete inventory sheet data for PDF generation
+export interface InventorySheetData {
+  title: string // "Inventory Count Sheet - Products" or "...Preparations"
+  subtitle?: string // Department name
+  date: string // Count date
+  generatedAt: string // When PDF was generated
+  department: DepartmentFilter
+  items: InventorySheetItem[]
+  summary: {
+    totalItems: number
+    totalCategories: number
+  }
+  showSignatureLine: boolean
+}
+
+// Available print documents registry
+export const PRINT_DOCUMENTS: PrintDocumentConfig[] = [
+  {
+    id: 'inventory-products',
+    name: 'Inventory Sheet (Products)',
+    description: 'Count sheet for raw products and ingredients',
+    icon: 'mdi-package-variant',
+    category: 'inventory'
+  },
+  {
+    id: 'inventory-preparations',
+    name: 'Inventory Sheet (Preparations)',
+    description: 'Count sheet for semi-finished products',
+    icon: 'mdi-bowl-mix',
+    category: 'inventory'
+  }
+]
