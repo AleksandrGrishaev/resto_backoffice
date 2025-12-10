@@ -368,24 +368,59 @@
       <div>
         <div class="d-flex align-center justify-space-between mb-3">
           <div class="text-subtitle-1 font-weight-bold">Quick Select Templates</div>
-          <v-chip size="small">{{ templates.length }} templates</v-chip>
+          <div class="d-flex align-center ga-2">
+            <v-chip size="small">{{ templates.length }} templates</v-chip>
+            <v-btn
+              v-if="templates.length > 0"
+              size="small"
+              variant="text"
+              color="primary"
+              prepend-icon="mdi-plus"
+              @click="openAddTemplateDialog"
+            >
+              Add
+            </v-btn>
+          </div>
         </div>
 
         <div v-if="templates.length === 0" class="text-center py-4 bg-grey-lighten-5 rounded">
           <div class="text-body-2 text-grey mb-2">No templates configured</div>
-          <v-btn size="small" variant="text" color="primary" prepend-icon="mdi-plus">
+          <v-btn
+            size="small"
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-plus"
+            @click="openAddTemplateDialog"
+          >
             Add Template
           </v-btn>
         </div>
 
         <v-list v-else class="pa-0">
-          <v-list-item v-for="template in templates" :key="template.id" class="border rounded mb-2">
+          <v-list-item
+            v-for="(template, index) in templates"
+            :key="template.id"
+            class="border rounded mb-2"
+          >
             <v-list-item-title>{{ template.name }}</v-list-item-title>
-            <v-list-item-subtitle v-if="template.description">
-              {{ template.description }}
+            <v-list-item-subtitle class="text-caption">
+              {{ getTemplateModifiersPreview(template) }}
             </v-list-item-subtitle>
             <template #append>
-              <v-btn icon="mdi-delete" variant="text" size="small" color="error" />
+              <v-btn
+                icon="mdi-pencil"
+                variant="text"
+                size="small"
+                color="primary"
+                @click="openEditTemplateDialog(index)"
+              />
+              <v-btn
+                icon="mdi-delete"
+                variant="text"
+                size="small"
+                color="error"
+                @click="deleteTemplate(index)"
+              />
             </template>
           </v-list-item>
         </v-list>
@@ -438,6 +473,124 @@
             @product-selected="addProductToComposition"
           />
         </v-card-text>
+      </v-card>
+    </v-dialog>
+
+    <!-- Template Editor Dialog -->
+    <v-dialog v-model="templateDialog.show" max-width="600" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center justify-space-between bg-grey-lighten-4">
+          <span>{{ templateDialog.editIndex !== null ? 'Edit Template' : 'Add Template' }}</span>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            @click="templateDialog.show = false"
+          />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <!-- Template Name -->
+          <v-text-field
+            v-model="templateDialog.name"
+            label="Template Name *"
+            placeholder="e.g., Simple Breakfast, Premium Breakfast"
+            density="compact"
+            variant="outlined"
+            class="mb-3"
+            :rules="[v => !!v?.trim() || 'Name is required']"
+          />
+
+          <!-- Template Description -->
+          <v-textarea
+            v-model="templateDialog.description"
+            label="Description (optional)"
+            placeholder="Brief description shown to customers"
+            density="compact"
+            variant="outlined"
+            rows="2"
+            class="mb-4"
+          />
+
+          <!-- Modifier Groups Selection -->
+          <div
+            v-if="modifierGroups.length === 0"
+            class="text-center py-4 bg-grey-lighten-5 rounded"
+          >
+            <v-icon icon="mdi-alert-circle-outline" color="warning" class="mb-2" />
+            <div class="text-body-2 text-grey">
+              Add modifier groups first before creating templates
+            </div>
+          </div>
+
+          <div v-else>
+            <div class="text-subtitle-2 mb-2">Select modifiers for this template:</div>
+            <v-expansion-panels variant="accordion">
+              <v-expansion-panel v-for="group in modifierGroups" :key="group.id">
+                <v-expansion-panel-title>
+                  <div class="d-flex align-center">
+                    <v-chip
+                      :color="group.isRequired ? 'error' : 'default'"
+                      size="x-small"
+                      class="mr-2"
+                    >
+                      {{ group.isRequired ? 'Required' : 'Optional' }}
+                    </v-chip>
+                    <span>{{ group.name }}</span>
+                    <v-chip
+                      v-if="templateDialog.selectedModifiers.get(group.id)?.size"
+                      size="x-small"
+                      color="primary"
+                      class="ml-2"
+                    >
+                      {{ templateDialog.selectedModifiers.get(group.id)?.size }} selected
+                    </v-chip>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <div class="options-grid">
+                    <v-chip
+                      v-for="option in group.options.filter(o => o.isActive)"
+                      :key="option.id"
+                      :color="isTemplateOptionSelected(group.id, option.id) ? 'primary' : 'default'"
+                      :variant="isTemplateOptionSelected(group.id, option.id) ? 'flat' : 'outlined'"
+                      class="ma-1"
+                      @click="toggleTemplateOption(group.id, option.id)"
+                    >
+                      <v-icon
+                        v-if="isTemplateOptionSelected(group.id, option.id)"
+                        icon="mdi-check"
+                        size="14"
+                        class="mr-1"
+                      />
+                      {{ option.name }}
+                      <span v-if="option.priceAdjustment" class="ml-1 text-caption">
+                        (+{{ option.priceAdjustment.toLocaleString() }})
+                      </span>
+                    </v-chip>
+                  </div>
+                  <div v-if="group.maxSelection === 1" class="text-caption text-grey mt-2">
+                    <v-icon icon="mdi-information-outline" size="12" class="mr-1" />
+                    Single selection only
+                  </div>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="templateDialog.show = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :disabled="!templateDialog.name.trim() || modifierGroups.length === 0"
+            @click="saveTemplate"
+          >
+            {{ templateDialog.editIndex !== null ? 'Save Changes' : 'Add Template' }}
+          </v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
   </v-card>
@@ -816,6 +969,161 @@ function getCompositionName(comp: MenuComposition): string {
 function isCompositionPortionType(comp: MenuComposition): boolean {
   return comp.portionType === 'portion' && !!comp.portionSize
 }
+
+// =============================================
+// TEMPLATES FUNCTIONALITY
+// =============================================
+
+interface TemplateDialogState {
+  show: boolean
+  editIndex: number | null // null = add new, number = edit existing
+  name: string
+  description: string
+  selectedModifiers: Map<string, Set<string>> // groupId -> Set of optionIds
+}
+
+const templateDialog = ref<TemplateDialogState>({
+  show: false,
+  editIndex: null,
+  name: '',
+  description: '',
+  selectedModifiers: new Map()
+})
+
+function openAddTemplateDialog(): void {
+  // Initialize with default options selected
+  const defaultSelection = new Map<string, Set<string>>()
+  for (const group of props.modifierGroups) {
+    const defaultOptions = group.options.filter(opt => opt.isDefault).map(opt => opt.id)
+    if (defaultOptions.length > 0) {
+      defaultSelection.set(group.id, new Set(defaultOptions))
+    } else {
+      defaultSelection.set(group.id, new Set())
+    }
+  }
+
+  templateDialog.value = {
+    show: true,
+    editIndex: null,
+    name: '',
+    description: '',
+    selectedModifiers: defaultSelection
+  }
+}
+
+function openEditTemplateDialog(index: number): void {
+  const template = props.templates[index]
+  if (!template) return
+
+  // Convert template.selectedModifiers array to Map<string, Set<string>>
+  const selection = new Map<string, Set<string>>()
+  // Initialize all groups with empty sets
+  for (const group of props.modifierGroups) {
+    selection.set(group.id, new Set())
+  }
+  // Fill in selected options from template
+  for (const sel of template.selectedModifiers) {
+    selection.set(sel.groupId, new Set(sel.optionIds))
+  }
+
+  templateDialog.value = {
+    show: true,
+    editIndex: index,
+    name: template.name,
+    description: template.description || '',
+    selectedModifiers: selection
+  }
+}
+
+function toggleTemplateOption(groupId: string, optionId: string): void {
+  const group = props.modifierGroups.find(g => g.id === groupId)
+  if (!group) return
+
+  const currentSelection = templateDialog.value.selectedModifiers.get(groupId) || new Set()
+
+  if (currentSelection.has(optionId)) {
+    // Deselect
+    currentSelection.delete(optionId)
+  } else {
+    // Check if this is a single-select group (maxSelection === 1 or isRequired with single option needed)
+    const isSingleSelect = group.maxSelection === 1
+    if (isSingleSelect) {
+      // Clear previous selection and set new one
+      currentSelection.clear()
+    }
+    currentSelection.add(optionId)
+  }
+
+  templateDialog.value.selectedModifiers.set(groupId, currentSelection)
+}
+
+function isTemplateOptionSelected(groupId: string, optionId: string): boolean {
+  return templateDialog.value.selectedModifiers.get(groupId)?.has(optionId) || false
+}
+
+function saveTemplate(): void {
+  if (!templateDialog.value.name.trim()) {
+    return // Name is required
+  }
+
+  // Convert Map<string, Set<string>> to TemplateModifierSelection[]
+  const selectedModifiers: { groupId: string; optionIds: string[] }[] = []
+  templateDialog.value.selectedModifiers.forEach((optionIds, groupId) => {
+    if (optionIds.size > 0) {
+      selectedModifiers.push({
+        groupId,
+        optionIds: Array.from(optionIds)
+      })
+    }
+  })
+
+  const updatedTemplates = [...props.templates]
+
+  if (templateDialog.value.editIndex !== null) {
+    // Edit existing
+    updatedTemplates[templateDialog.value.editIndex] = {
+      ...updatedTemplates[templateDialog.value.editIndex],
+      name: templateDialog.value.name.trim(),
+      description: templateDialog.value.description.trim() || undefined,
+      selectedModifiers
+    }
+  } else {
+    // Add new
+    const newTemplate: VariantTemplate = {
+      id: `tpl-${Date.now()}`,
+      name: templateDialog.value.name.trim(),
+      description: templateDialog.value.description.trim() || undefined,
+      selectedModifiers,
+      sortOrder: updatedTemplates.length
+    }
+    updatedTemplates.push(newTemplate)
+  }
+
+  emit('update:templates', updatedTemplates)
+  templateDialog.value.show = false
+}
+
+function deleteTemplate(index: number): void {
+  const updatedTemplates = [...props.templates]
+  updatedTemplates.splice(index, 1)
+  emit('update:templates', updatedTemplates)
+}
+
+function getTemplateModifiersPreview(template: VariantTemplate): string {
+  const parts: string[] = []
+  for (const sel of template.selectedModifiers) {
+    const group = props.modifierGroups.find(g => g.id === sel.groupId)
+    if (group) {
+      const optionNames = sel.optionIds
+        .map(oid => group.options.find(o => o.id === oid)?.name)
+        .filter(Boolean)
+      if (optionNames.length > 0) {
+        parts.push(optionNames.join(', '))
+      }
+    }
+  }
+  return parts.length > 0 ? parts.join(' | ') : 'No modifiers selected'
+}
 </script>
 
 <style scoped lang="scss">
@@ -837,5 +1145,11 @@ function isCompositionPortionType(comp: MenuComposition): boolean {
 .composition-item {
   background: rgba(var(--v-theme-surface), 0.8);
   border: 1px solid rgba(var(--v-border-color), 0.1);
+}
+
+.options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

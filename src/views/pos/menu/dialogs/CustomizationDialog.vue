@@ -188,40 +188,80 @@
                 </div>
               </div>
 
-              <!-- Options (Checkbox for addon groups) -->
+              <!-- Options (with +/- controls for addon groups) -->
               <v-list class="pa-0">
                 <v-list-item
                   v-for="option in group.options"
                   :key="option.id"
-                  :disabled="!option.isActive || isOptionDisabled(group, option)"
+                  :disabled="!option.isActive"
                   class="px-0"
-                  @click="
-                    !option.isActive || isOptionDisabled(group, option)
-                      ? null
-                      : toggleOption(group, option)
-                  "
                 >
                   <template #prepend>
+                    <!-- Show checkbox when count=0, show +/- controls when count>0 -->
                     <v-checkbox
-                      :model-value="isOptionSelected(group.id, option.id)"
-                      :disabled="isOptionDisabled(group, option)"
+                      v-if="getOptionCount(group.id, option.id) === 0"
+                      :model-value="false"
+                      :disabled="!option.isActive || !canIncrement(group, option)"
                       color="primary"
                       hide-details
+                      @click.stop="incrementOption(group, option)"
                     />
+                    <div v-else class="d-flex align-center ga-1" style="min-width: 90px">
+                      <v-btn
+                        icon="mdi-minus"
+                        size="x-small"
+                        variant="outlined"
+                        density="compact"
+                        @click.stop="decrementOption(group, option)"
+                      />
+                      <span
+                        class="text-body-1 font-weight-bold mx-1"
+                        style="min-width: 20px; text-align: center"
+                      >
+                        {{ getOptionCount(group.id, option.id) }}
+                      </span>
+                      <v-btn
+                        icon="mdi-plus"
+                        size="x-small"
+                        variant="outlined"
+                        density="compact"
+                        color="primary"
+                        :disabled="!canIncrement(group, option)"
+                        @click.stop="incrementOption(group, option)"
+                      />
+                    </div>
                   </template>
 
                   <v-list-item-title>
                     <div class="d-flex align-center justify-space-between">
-                      <div>
+                      <div class="d-flex align-center">
                         <span>{{ option.name }}</span>
+                        <v-chip
+                          v-if="getOptionCount(group.id, option.id) > 1"
+                          size="x-small"
+                          color="primary"
+                          class="ml-2"
+                        >
+                          x{{ getOptionCount(group.id, option.id) }}
+                        </v-chip>
                       </div>
                       <div class="text-body-2">
                         <span v-if="option.priceAdjustment === 0" class="text-success">Free</span>
                         <span v-else-if="option.priceAdjustment > 0" class="text-primary">
-                          +{{ formatPrice(option.priceAdjustment) }}
+                          +{{
+                            formatPrice(
+                              option.priceAdjustment * getOptionCount(group.id, option.id) ||
+                                option.priceAdjustment
+                            )
+                          }}
                         </span>
                         <span v-else class="text-error">
-                          {{ formatPrice(option.priceAdjustment) }}
+                          {{
+                            formatPrice(
+                              option.priceAdjustment * getOptionCount(group.id, option.id) ||
+                                option.priceAdjustment
+                            )
+                          }}
                         </span>
                       </div>
                     </div>
@@ -309,7 +349,8 @@ const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
 
 // State
-const selectedModifiers = ref<Map<string, Set<string>>>(new Map())
+// Map<groupId, Map<optionId, count>> - allows selecting same option multiple times
+const selectedModifiers = ref<Map<string, Map<string, number>>>(new Map())
 const selectedTemplateId = ref<string | null>(null)
 
 // ✨ UPDATED: Read modifierGroups from menuItem (not variant)
@@ -332,10 +373,11 @@ const modifiersTotalPrice = computed(() => {
   props.menuItem.modifierGroups.forEach(group => {
     const selectedOptions = selectedModifiers.value.get(group.id)
     if (selectedOptions) {
-      selectedOptions.forEach(optionId => {
+      selectedOptions.forEach((count, optionId) => {
         const option = group.options.find(o => o.id === optionId)
         if (option) {
-          total += option.priceAdjustment
+          // Multiply priceAdjustment by count for multiple same options
+          total += option.priceAdjustment * count
         }
       })
     }
@@ -394,19 +436,32 @@ function getCompositionItemName(comp: MenuComposition): string {
 
 function isOptionSelected(groupId: string, optionId: string): boolean {
   const selectedOptions = selectedModifiers.value.get(groupId)
-  return selectedOptions ? selectedOptions.has(optionId) : false
+  return selectedOptions ? (selectedOptions.get(optionId) || 0) > 0 : false
 }
 
 function getSelectedOptionId(groupId: string): string | null {
   const selectedOptions = selectedModifiers.value.get(groupId)
   if (!selectedOptions || selectedOptions.size === 0) return null
-  // Return the first (and should be only) selected option for radio groups
-  return Array.from(selectedOptions)[0]
+  // Return first option with count > 0
+  for (const [optionId, count] of selectedOptions) {
+    if (count > 0) return optionId
+  }
+  return null
 }
 
 function getSelectedCount(group: ModifierGroup): number {
   const selectedOptions = selectedModifiers.value.get(group.id)
-  return selectedOptions ? selectedOptions.size : 0
+  if (!selectedOptions) return 0
+  let total = 0
+  for (const count of selectedOptions.values()) {
+    total += count
+  }
+  return total
+}
+
+function getOptionCount(groupId: string, optionId: string): number {
+  const selectedOptions = selectedModifiers.value.get(groupId)
+  return selectedOptions?.get(optionId) || 0
 }
 
 function isOptionDisabled(group: ModifierGroup, option: ModifierOption): boolean {
@@ -418,19 +473,26 @@ function isOptionDisabled(group: ModifierGroup, option: ModifierOption): boolean
   }
 
   // For multiple selection, check if max is reached
+  // But allow incrementing existing selections
   if (group.maxSelection && group.maxSelection > 1) {
-    const selectedCount = getSelectedCount(group)
-    const isSelected = isOptionSelected(group.id, option.id)
-
-    // If not selected and limit reached, disable
-    return !isSelected && selectedCount >= group.maxSelection
+    const totalSelected = getSelectedCount(group)
+    // Disable only if max reached (but still allow decrementing)
+    return totalSelected >= group.maxSelection
   }
 
   return false
 }
 
+// Check if can increment (for +/- UI)
+function canIncrement(group: ModifierGroup, option: ModifierOption): boolean {
+  if (!option.isActive) return false
+  if (!group.maxSelection || group.maxSelection === 0) return true // No limit
+  const totalSelected = getSelectedCount(group)
+  return totalSelected < group.maxSelection
+}
+
 function selectRadioOption(group: ModifierGroup, optionId: string): void {
-  const groupSelections = new Set<string>([optionId])
+  const groupSelections = new Map<string, number>([[optionId, 1]])
   selectedModifiers.value.set(group.id, groupSelections)
   selectedTemplateId.value = null
 
@@ -439,7 +501,7 @@ function selectRadioOption(group: ModifierGroup, optionId: string): void {
     optionId,
     selectedModifiers: Array.from(selectedModifiers.value.entries()).map(([gId, opts]) => ({
       groupId: gId,
-      options: Array.from(opts)
+      options: Array.from(opts.entries())
     }))
   })
 }
@@ -452,30 +514,25 @@ function handleRadioChange(group: ModifierGroup, optionId: string | null): void 
 function toggleOption(group: ModifierGroup, option: ModifierOption): void {
   if (!option.isActive) return
 
-  const groupSelections = selectedModifiers.value.get(group.id) || new Set<string>()
-  const isCurrentlySelected = groupSelections.has(option.id)
+  const groupSelections = selectedModifiers.value.get(group.id) || new Map<string, number>()
+  const currentCount = groupSelections.get(option.id) || 0
 
   if (group.maxSelection === 1) {
     // Single selection (radio-style) - toggle or switch
-    if (isCurrentlySelected) {
-      // Allow deselecting only for optional groups
-      if (!group.isRequired) {
-        groupSelections.clear()
-      }
-      // For required groups, keep the selection (can't deselect)
-    } else {
-      // Switch to new option
+    if (currentCount > 0 && !group.isRequired) {
       groupSelections.clear()
-      groupSelections.add(option.id)
+    } else {
+      groupSelections.clear()
+      groupSelections.set(option.id, 1)
     }
   } else {
-    // Multiple selection - toggle with max limit check
-    if (isCurrentlySelected) {
+    // Multiple selection - toggle (add/remove single count)
+    if (currentCount > 0) {
       groupSelections.delete(option.id)
     } else {
-      // Only add if under the limit
-      if (!group.maxSelection || groupSelections.size < group.maxSelection) {
-        groupSelections.add(option.id)
+      const totalSelected = getSelectedCount(group)
+      if (!group.maxSelection || totalSelected < group.maxSelection) {
+        groupSelections.set(option.id, 1)
       }
     }
   }
@@ -484,11 +541,50 @@ function toggleOption(group: ModifierGroup, option: ModifierOption): void {
   selectedTemplateId.value = null // Clear template when manually changing
 }
 
+// Increment option count (for +/- buttons)
+function incrementOption(group: ModifierGroup, option: ModifierOption): void {
+  if (!option.isActive) return
+  if (!canIncrement(group, option)) return
+
+  const groupSelections = selectedModifiers.value.get(group.id) || new Map<string, number>()
+  const currentCount = groupSelections.get(option.id) || 0
+
+  groupSelections.set(option.id, currentCount + 1)
+  selectedModifiers.value.set(group.id, groupSelections)
+  selectedTemplateId.value = null
+}
+
+// Decrement option count (for +/- buttons)
+function decrementOption(group: ModifierGroup, option: ModifierOption): void {
+  const groupSelections = selectedModifiers.value.get(group.id)
+  if (!groupSelections) return
+
+  const currentCount = groupSelections.get(option.id) || 0
+  if (currentCount <= 0) return
+
+  // For required groups with single selection, don't allow going to 0
+  if (group.isRequired && group.maxSelection === 1 && currentCount === 1) return
+
+  if (currentCount === 1) {
+    groupSelections.delete(option.id)
+  } else {
+    groupSelections.set(option.id, currentCount - 1)
+  }
+
+  selectedModifiers.value.set(group.id, groupSelections)
+  selectedTemplateId.value = null
+}
+
 function applyTemplate(template: VariantTemplate): void {
   selectedModifiers.value.clear()
 
   template.selectedModifiers.forEach(selection => {
-    const groupSelections = new Set<string>(selection.optionIds)
+    const groupSelections = new Map<string, number>()
+    // Count occurrences of each optionId (supports multiple same options in template)
+    selection.optionIds.forEach(optionId => {
+      const current = groupSelections.get(optionId) || 0
+      groupSelections.set(optionId, current + 1)
+    })
     selectedModifiers.value.set(selection.groupId, groupSelections)
   })
 
@@ -499,26 +595,30 @@ function handleAddToBill(): void {
   if (!isValid.value || !props.variant) return
 
   // Convert selectedModifiers Map to SelectedModifier[]
+  // Generate `count` number of SelectedModifier objects for each option
   const modifiers: SelectedModifier[] = []
 
   props.menuItem?.modifierGroups?.forEach(group => {
     const selectedOptions = selectedModifiers.value.get(group.id)
     if (selectedOptions) {
-      selectedOptions.forEach(optionId => {
+      selectedOptions.forEach((count, optionId) => {
         const option = group.options.find(o => o.id === optionId)
         if (option) {
-          modifiers.push({
-            groupId: group.id,
-            groupName: group.name,
-            optionId: option.id,
-            optionName: option.name,
-            priceAdjustment: option.priceAdjustment,
-            composition: option.composition,
-            // NEW: Additional fields for replacement logic in decomposition
-            groupType: group.type,
-            targetComponents: group.targetComponents,
-            isDefault: option.isDefault
-          })
+          // Generate `count` number of modifier objects (for decomposition)
+          for (let i = 0; i < count; i++) {
+            modifiers.push({
+              groupId: group.id,
+              groupName: group.name,
+              optionId: option.id,
+              optionName: option.name,
+              priceAdjustment: option.priceAdjustment,
+              composition: option.composition,
+              // Additional fields for replacement logic in decomposition
+              groupType: group.type,
+              targetComponents: group.targetComponents,
+              isDefault: option.isDefault
+            })
+          }
         }
       })
     }
@@ -532,6 +632,7 @@ function handleAddToBill(): void {
       name: m.optionName,
       priceAdjustment: m.priceAdjustment
     })),
+    modifiersCount: modifiers.length,
     modifiersTotal: modifiersTotalPrice.value,
     totalPrice: totalPrice.value
   })
@@ -550,20 +651,19 @@ function initializeDefaults(): void {
   selectedModifiers.value.clear()
   selectedTemplateId.value = null
 
-  // ✨ NEW: Apply defaults for required groups (they always need a selection)
-  // ✅ Architecture v2: Use isRequired instead of groupStyle
+  // Apply defaults for required groups (they always need a selection)
   props.menuItem.modifierGroups.forEach(group => {
     if (group.isRequired) {
       // For required groups, always select default or first active
       const defaultOption = group.options.find((o: ModifierOption) => o.isDefault && o.isActive)
       if (defaultOption) {
-        const groupSelections = new Set<string>([defaultOption.id])
+        const groupSelections = new Map<string, number>([[defaultOption.id, 1]])
         selectedModifiers.value.set(group.id, groupSelections)
       } else {
         // If no default, select first active option
         const firstActive = group.options.find((o: ModifierOption) => o.isActive)
         if (firstActive) {
-          const groupSelections = new Set<string>([firstActive.id])
+          const groupSelections = new Map<string, number>([[firstActive.id, 1]])
           selectedModifiers.value.set(group.id, groupSelections)
         }
       }

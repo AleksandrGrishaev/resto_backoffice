@@ -95,6 +95,9 @@ export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert
     // variants: Store exact TypeScript structure (includes composition, modifiers, etc.)
     variants: (item.variants || []) as any,
 
+    // templates: Quick select templates for POS
+    templates: (item.templates || []) as any,
+
     // Status and ordering
     is_active: item.isActive,
     sort_order: item.sortOrder || 0,
@@ -150,7 +153,7 @@ export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
     preparationTime: undefined, // Not stored in Supabase yet
     allergens: undefined,
     tags: undefined,
-    templates: undefined,
+    templates: (row.templates as any) || [],
     imageUrl: row.image_url || undefined,
 
     // Timestamps
