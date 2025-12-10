@@ -498,7 +498,7 @@ function handleAddToBill(): void {
             composition: option.composition,
             // NEW: Additional fields for replacement logic in decomposition
             groupType: group.type,
-            targetComponent: group.targetComponent,
+            targetComponents: group.targetComponents,
             isDefault: option.isDefault
           })
         }

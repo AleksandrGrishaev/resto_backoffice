@@ -14,7 +14,11 @@ import type {
   SelectedModifier
 } from './types'
 import { DecompositionError } from './types'
-import { buildReplacementMap, getReplacementForComponent } from './utils/replacementUtils'
+import {
+  buildReplacementMap,
+  getReplacementForComponent,
+  type ReplacementEntry
+} from './utils/replacementUtils'
 import { convertPortionToGrams, getPortionMultiplier } from './utils/portionUtils'
 import { applyYieldAdjustment } from './utils/yieldUtils'
 
@@ -142,7 +146,7 @@ export class DecompositionEngine {
     comp: MenuComposition,
     quantity: number,
     options: TraversalOptions,
-    replacements: Map<string, SelectedModifier>,
+    replacements: Map<string, ReplacementEntry>,
     path: string[]
   ): Promise<DecomposedNode[]> {
     switch (comp.type) {
@@ -216,7 +220,7 @@ export class DecompositionEngine {
     comp: MenuComposition,
     quantity: number,
     options: TraversalOptions,
-    replacements: Map<string, SelectedModifier>,
+    replacements: Map<string, ReplacementEntry>,
     path: string[]
   ): Promise<DecomposedNode[]> {
     const recipe = this.storeProvider.getRecipe(comp.id)
@@ -234,24 +238,34 @@ export class DecompositionEngine {
 
     for (const recipeComp of recipe.components) {
       // Check if this component should be replaced
-      const replacement = getReplacementForComponent(recipe.id, recipeComp.id, replacements)
+      const replacementEntry = getReplacementForComponent(recipe.id, recipeComp.id, replacements)
 
-      if (replacement && replacement.composition && replacement.composition.length > 0) {
-        // Use replacement composition
-        DebugUtils.debug(MODULE_NAME, 'Applying replacement', {
-          original: recipeComp.name || recipeComp.componentId,
-          replacement: replacement.optionName
-        })
+      if (replacementEntry) {
+        const { modifier, isCompositionTarget } = replacementEntry
 
-        for (const replComp of replacement.composition) {
-          const items = await this.traverseComposition(
-            replComp,
-            quantity,
-            options,
-            replacements,
-            options.includePath ? [...path, recipe.name, `→${replacement.optionName}`] : []
-          )
-          results.push(...items)
+        if (isCompositionTarget && modifier.composition?.length) {
+          // First target: add replacement composition
+          DebugUtils.debug(MODULE_NAME, 'Applying replacement composition', {
+            original: recipeComp.name || recipeComp.componentId,
+            replacement: modifier.optionName
+          })
+
+          for (const replComp of modifier.composition) {
+            const items = await this.traverseComposition(
+              replComp,
+              quantity,
+              options,
+              replacements,
+              options.includePath ? [...path, recipe.name, `→${modifier.optionName}`] : []
+            )
+            results.push(...items)
+          }
+        } else {
+          // Not composition target: just skip (exclude) this component
+          DebugUtils.debug(MODULE_NAME, 'Excluding component (multi-target)', {
+            excluded: recipeComp.name || recipeComp.componentId,
+            replacedBy: modifier.optionName
+          })
         }
       } else {
         // Use original component
@@ -376,7 +390,7 @@ export class DecompositionEngine {
 
     for (const modifier of selectedModifiers) {
       // Skip replacement modifiers (handled in traverseRecipe)
-      if (modifier.groupType === 'replacement' && modifier.targetComponent) {
+      if (modifier.groupType === 'replacement' && modifier.targetComponents?.length) {
         continue
       }
 

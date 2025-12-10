@@ -4,6 +4,16 @@
 import type { SelectedModifier, TargetComponent } from '../types'
 
 /**
+ * Entry in the replacement map.
+ * - isCompositionTarget: true → add replacement composition
+ * - isCompositionTarget: false → just exclude (skip) the component
+ */
+export interface ReplacementEntry {
+  modifier: SelectedModifier
+  isCompositionTarget: boolean
+}
+
+/**
  * Generate a unique key for replacement map
  * Format: "{recipeId}_{componentId}" or "variant_{componentId}"
  *
@@ -21,23 +31,37 @@ export function getReplacementKey(target: TargetComponent): string {
  * Build a map of replacement modifiers from selected modifiers
  * Only includes replacement-type modifiers that are not default options
  *
+ * For multi-target replacements:
+ * - First target gets isCompositionTarget: true (add composition)
+ * - Other targets get isCompositionTarget: false (just exclude)
+ *
  * @param selectedModifiers - Array of selected modifiers
- * @returns Map of replacement key to modifier
+ * @returns Map of replacement key to ReplacementEntry
  */
 export function buildReplacementMap(
   selectedModifiers?: SelectedModifier[]
-): Map<string, SelectedModifier> {
-  const replacements = new Map<string, SelectedModifier>()
+): Map<string, ReplacementEntry> {
+  const replacements = new Map<string, ReplacementEntry>()
 
   if (!selectedModifiers) {
     return replacements
   }
 
   for (const modifier of selectedModifiers) {
-    // Only process replacement modifiers with targetComponent and NOT default option
-    if (modifier.groupType === 'replacement' && modifier.targetComponent && !modifier.isDefault) {
-      const key = getReplacementKey(modifier.targetComponent)
-      replacements.set(key, modifier)
+    // Only process replacement modifiers with targetComponents and NOT default option
+    if (
+      modifier.groupType === 'replacement' &&
+      modifier.targetComponents?.length &&
+      !modifier.isDefault
+    ) {
+      // First target gets composition, rest just exclude
+      modifier.targetComponents.forEach((target, index) => {
+        const key = getReplacementKey(target)
+        replacements.set(key, {
+          modifier,
+          isCompositionTarget: index === 0
+        })
+      })
     }
   }
 
@@ -50,13 +74,13 @@ export function buildReplacementMap(
  * @param recipeId - ID of the recipe
  * @param componentId - ID of the component within the recipe
  * @param replacements - Replacement map
- * @returns The replacement modifier if found, undefined otherwise
+ * @returns ReplacementEntry if found, undefined otherwise
  */
 export function getReplacementForComponent(
   recipeId: string,
   componentId: string,
-  replacements: Map<string, SelectedModifier>
-): SelectedModifier | undefined {
+  replacements: Map<string, ReplacementEntry>
+): ReplacementEntry | undefined {
   const key = `${recipeId}_${componentId}`
   return replacements.get(key)
 }
@@ -66,12 +90,12 @@ export function getReplacementForComponent(
  *
  * @param componentId - ID of the component within the variant
  * @param replacements - Replacement map
- * @returns The replacement modifier if found, undefined otherwise
+ * @returns ReplacementEntry if found, undefined otherwise
  */
 export function getReplacementForVariantComponent(
   componentId: string,
-  replacements: Map<string, SelectedModifier>
-): SelectedModifier | undefined {
+  replacements: Map<string, ReplacementEntry>
+): ReplacementEntry | undefined {
   const key = `variant_${componentId}`
   return replacements.get(key)
 }
@@ -89,7 +113,7 @@ export function getAddonModifiers(selectedModifiers?: SelectedModifier[]): Selec
   }
 
   return selectedModifiers.filter(modifier => {
-    // Include if NOT a replacement modifier with targetComponent
-    return !(modifier.groupType === 'replacement' && modifier.targetComponent)
+    // Include if NOT a replacement modifier with targetComponents
+    return !(modifier.groupType === 'replacement' && modifier.targetComponents?.length)
   })
 }

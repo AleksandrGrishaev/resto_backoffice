@@ -121,11 +121,12 @@ export interface ModifierGroup {
   sortOrder?: number
 
   /**
-   * Какой компонент рецепта/варианта заменяется (только для type='replacement').
-   * Если указан - при decomposition исключаем target и добавляем выбранную альтернативу.
+   * Какие компоненты рецепта/варианта заменяются (только для type='replacement').
+   * Если указан - при decomposition исключаем все targets и добавляем выбранную альтернативу.
+   * Первый target получает composition замены, остальные просто исключаются.
    * Если не указан - работает как addon (обратная совместимость).
    */
-  targetComponent?: TargetComponent
+  targetComponents?: TargetComponent[]
 }
 
 export interface ModifierOption {
@@ -177,8 +178,8 @@ export interface SelectedModifier {
 
   /** Тип модификатора для логики decomposition */
   groupType?: ModifierType
-  /** Какой компонент заменяется (копия из ModifierGroup для decomposition) */
-  targetComponent?: TargetComponent
+  /** Какие компоненты заменяются (копия из ModifierGroup для decomposition) */
+  targetComponents?: TargetComponent[]
   /** Если true - использовать оригинальный компонент из рецепта (не заменять) */
   isDefault?: boolean
 }
