@@ -79,6 +79,20 @@ export function calculateFoodCostRange(
   const baseCost = calculateVariantBaseCost(variant, context)
   const basePrice = variant.price
 
+  // Debug log
+  console.log(`[ModifierCostCalc] ${item.name} - ${variant.name || 'Standard'}:`, {
+    baseCost,
+    basePrice,
+    modifierGroupsCount: modifierGroups.length,
+    groups: modifierGroups.map(g => ({
+      name: g.name,
+      type: g.type,
+      isRequired: g.isRequired,
+      optionsCount: g.options?.length,
+      hasTargetComponents: !!g.targetComponents?.length
+    }))
+  })
+
   // If no modifiers, return base values
   if (modifierGroups.length === 0) {
     const baseFoodCostPercent = basePrice > 0 ? (baseCost / basePrice) * 100 : 0
@@ -123,6 +137,20 @@ export function calculateFoodCostRange(
     portionMultiplier,
     context
   )
+
+  // Debug log result
+  console.log(`[ModifierCostCalc] ${item.name} RESULT:`, {
+    minFC: minCombination.foodCostPercent.toFixed(1) + '%',
+    minCombo: minCombination.name,
+    minCost: minCombination.cost,
+    minPrice: minCombination.price,
+    maxFC: maxCombination.foodCostPercent.toFixed(1) + '%',
+    maxCombo: maxCombination.name,
+    maxCost: maxCombination.cost,
+    maxPrice: maxCombination.price,
+    defaultFC: defaultCombination.foodCostPercent.toFixed(1) + '%',
+    defaultCombo: defaultCombination.name
+  })
 
   return {
     baseCost,
@@ -196,7 +224,14 @@ function findMinFoodCostCombination(
     })
   }
 
-  return buildCombinationResult(selectedOptions, baseCost, basePrice, portionMultiplier, context)
+  return buildCombinationResult(
+    selectedOptions,
+    groups,
+    baseCost,
+    basePrice,
+    portionMultiplier,
+    context
+  )
 }
 
 /**
@@ -250,7 +285,14 @@ function findMaxFoodCostCombination(
     })
   }
 
-  return buildCombinationResult(selectedOptions, baseCost, basePrice, portionMultiplier, context)
+  return buildCombinationResult(
+    selectedOptions,
+    groups,
+    baseCost,
+    basePrice,
+    portionMultiplier,
+    context
+  )
 }
 
 /**
@@ -286,7 +328,14 @@ function findDefaultCombination(
     })
   }
 
-  return buildCombinationResult(selectedOptions, baseCost, basePrice, portionMultiplier, context)
+  return buildCombinationResult(
+    selectedOptions,
+    groups,
+    baseCost,
+    basePrice,
+    portionMultiplier,
+    context
+  )
 }
 
 // =============================================
@@ -308,6 +357,11 @@ function calculateOptionFoodCostImpact(
 ): { costDelta: number; priceDelta: number; foodCostPercent: number } {
   let costDelta = 0
   const priceDelta = option.priceAdjustment || 0
+
+  // Debug: log price adjustment if present
+  if (priceDelta !== 0) {
+    console.log(`[ModifierCostCalc] Option "${option.name}" has priceAdjustment: ${priceDelta}`)
+  }
 
   // Calculate option composition cost
   const optionCost = calculateOptionCompositionCost(option, portionMultiplier, context)
@@ -451,9 +505,11 @@ function calculateVariantBaseCost(
 
 /**
  * Build final combination result with all costs calculated
+ * Now properly handles replacement modifiers by subtracting replaced costs
  */
 function buildCombinationResult(
   selectedOptions: SelectedOptionForCost[],
+  groups: ModifierGroup[],
   baseCost: number,
   basePrice: number,
   portionMultiplier: number,
@@ -469,18 +525,36 @@ function buildCombinationResult(
     const option = selection.option
     names.push(option.name)
 
-    // Get the group to check for replacement logic
-    // (We need to look this up - a bit inefficient but okay for heuristic)
+    // Find the corresponding group for this selection
+    const group = groups.find(g => g.id === selection.groupId)
+    if (!group) {
+      // Fallback: just add option cost
+      const optionCost = calculateOptionCompositionCost(option, portionMultiplier, context)
+      totalCostDelta += optionCost
+      totalPriceDelta += option.priceAdjustment || 0
+      continue
+    }
+
+    // Calculate option composition cost
     const optionCost = calculateOptionCompositionCost(option, portionMultiplier, context)
 
-    // For simplicity in result builder, just add option costs
-    // (The actual replacement logic was already factored into the selection)
-    totalCostDelta += optionCost
+    // Handle based on group type
+    if (group.type === 'replacement' && group.targetComponents?.length) {
+      // For replacement: subtract ALL target component costs, add option cost
+      const replacedCost = calculateReplacedComponentsCost(group.targetComponents, context)
+      totalCostDelta += optionCost - replacedCost
+    } else if (group.type === 'removal') {
+      // For removal: subtract option cost (what's being removed)
+      totalCostDelta -= optionCost
+    } else {
+      // Addon or default: just add option cost
+      totalCostDelta += optionCost
+    }
+
+    // Always add price adjustment
     totalPriceDelta += option.priceAdjustment || 0
   }
 
-  // Recalculate properly considering replacement groups
-  // This is a simplified version - for accurate result, we need group info
   const totalCost = baseCost + totalCostDelta
   const totalPrice = basePrice + totalPriceDelta
   const foodCostPercent = totalPrice > 0 ? (totalCost / totalPrice) * 100 : 0
