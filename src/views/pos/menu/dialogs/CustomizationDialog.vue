@@ -6,7 +6,9 @@
       <v-card-title class="d-flex align-center justify-space-between bg-primary">
         <div>
           <div class="text-h6">{{ menuItem.name }}</div>
-          <div class="text-body-2 text-grey-lighten-2">{{ variant.name }}</div>
+          <div v-if="!isVariantless" class="text-body-2 text-grey-lighten-2">
+            {{ variant.name }}
+          </div>
         </div>
         <v-btn icon="mdi-close" variant="text" size="small" @click="handleCancel" />
       </v-card-title>
@@ -27,10 +29,10 @@
         </div>
       </v-card-text>
 
-      <v-divider />
+      <v-divider v-if="!isVariantless" />
 
-      <!-- Variant Info & Base Composition -->
-      <v-card-text class="py-3 px-4 bg-grey-darken-4">
+      <!-- Variant Info & Base Composition - hidden in variantless mode -->
+      <v-card-text v-if="!isVariantless" class="py-3 px-4 bg-grey-darken-4">
         <div class="text-overline text-grey-lighten-1 mb-1">Base Composition</div>
         <div class="text-subtitle-2 mb-2">
           {{ variant.name }} - {{ formatPrice(variant.price) }}
@@ -70,7 +72,7 @@
         <div v-else class="text-body-2 text-grey-lighten-1">No base composition defined</div>
       </v-card-text>
 
-      <v-divider />
+      <v-divider v-if="!isVariantless" />
 
       <!-- Modifier Groups -->
       <v-card-text class="pa-0" style="max-height: 60vh">
@@ -206,25 +208,20 @@
                       hide-details
                       @click.stop="incrementOption(group, option)"
                     />
-                    <div v-else class="d-flex align-center ga-1" style="min-width: 90px">
+                    <div v-else class="d-flex align-center ga-2 quantity-controls">
                       <v-btn
                         icon="mdi-minus"
-                        size="x-small"
+                        size="small"
                         variant="outlined"
-                        density="compact"
                         @click.stop="decrementOption(group, option)"
                       />
-                      <span
-                        class="text-body-1 font-weight-bold mx-1"
-                        style="min-width: 20px; text-align: center"
-                      >
+                      <span class="text-body-1 font-weight-bold quantity-value">
                         {{ getOptionCount(group.id, option.id) }}
                       </span>
                       <v-btn
                         icon="mdi-plus"
-                        size="x-small"
+                        size="small"
                         variant="outlined"
-                        density="compact"
                         color="primary"
                         :disabled="!canIncrement(group, option)"
                         @click.stop="incrementOption(group, option)"
@@ -363,6 +360,11 @@ const componentGroups = computed(() => {
 const addonGroups = computed(() => {
   if (!props.menuItem?.modifierGroups) return []
   return props.menuItem.modifierGroups.filter(group => !group.isRequired)
+})
+
+// Variantless mode: when variant has no name and price=0, hide base composition
+const isVariantless = computed(() => {
+  return props.variant?.name === '' && props.variant?.price === 0
 })
 
 // Computed
@@ -700,5 +702,21 @@ watch(
 
 .v-list-item:not(.v-list-item--disabled):hover {
   background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+/* Quantity controls for +/- buttons */
+.quantity-controls {
+  min-width: 100px;
+}
+
+.quantity-controls .v-btn {
+  min-width: 32px !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.quantity-value {
+  min-width: 24px;
+  text-align: center;
 }
 </style>

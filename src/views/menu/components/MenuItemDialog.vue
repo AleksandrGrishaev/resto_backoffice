@@ -17,7 +17,7 @@
           <v-icon icon="mdi-information-outline" size="20" class="mr-2" />
           Basic
         </v-tab>
-        <v-tab value="variants">
+        <v-tab v-if="!isVariantlessMode" value="variants">
           <v-icon icon="mdi-format-list-bulleted" size="20" class="mr-2" />
           Variants
           <v-badge
@@ -111,6 +111,17 @@
                 </template>
               </div>
             </v-alert>
+
+            <!-- Variantless mode checkbox (only for modifiable dishes) -->
+            <v-checkbox
+              v-if="formData.dishType === 'modifiable'"
+              v-model="isVariantlessMode"
+              label="Build from modifiers only (no base price)"
+              hint="Price will come entirely from selected modifiers. Use for dishes like Custom Breakfast."
+              persistent-hint
+              color="primary"
+              class="mb-4"
+            />
 
             <!-- Название -->
             <v-text-field
@@ -302,6 +313,35 @@ const formData = ref({
 // Computed
 const isEdit = computed(() => !!props.item)
 const categories = computed(() => menuStore.activeCategories)
+
+// Variantless mode: price comes entirely from modifiers
+const isVariantlessMode = computed({
+  get: () => {
+    const v = formData.value.variants[0]
+    return v?.name === '' && v?.price === 0
+  },
+  set: (val: boolean) => {
+    if (val) {
+      // Set variantless mode - empty name, price 0
+      formData.value.variants = [
+        {
+          id: formData.value.variants[0]?.id || crypto.randomUUID(),
+          name: '',
+          price: 0,
+          isActive: true,
+          sortOrder: 0,
+          composition: [],
+          modifierMultiplier: 1
+        }
+      ]
+    } else {
+      // Reset to normal variant
+      if (formData.value.variants[0]) {
+        formData.value.variants[0].name = 'Standard'
+      }
+    }
+  }
+})
 
 // Hierarchical categories for dropdown with visual indentation
 const hierarchicalCategories = computed(() => {
