@@ -107,7 +107,7 @@
                   />
                 </v-col>
 
-                <!-- Target Component Selector (only for replacement type) -->
+                <!-- Target Components Selector (only for replacement type) - Multi-select -->
                 <v-col v-if="group.type === 'replacement'" cols="12">
                   <v-alert
                     v-if="availableTargetComponents.length === 0"
@@ -122,36 +122,47 @@
                   </v-alert>
                   <v-select
                     v-else
-                    :model-value="getSelectedTargetValue(group)"
+                    :model-value="getSelectedTargetValues(group)"
                     :items="availableTargetComponents"
                     item-title="label"
                     item-value="value"
-                    label="Target Component to Replace"
+                    label="Target Components to Replace"
                     density="compact"
                     variant="outlined"
-                    clearable
+                    multiple
+                    chips
+                    closable-chips
                     prepend-inner-icon="mdi-target"
-                    hint="Select which ingredient from the recipe will be replaced"
+                    hint="Select which ingredients will be replaced. First selected gets composition, others are excluded."
                     persistent-hint
                     :return-object="true"
-                    @update:model-value="val => updateTargetComponent(groupIndex, val)"
+                    @update:model-value="vals => updateTargetComponents(groupIndex, vals)"
                   >
                     <template #prepend-inner>
                       <v-icon icon="mdi-swap-horizontal" color="warning" />
                     </template>
+                    <template #chip="{ item, index }">
+                      <v-chip
+                        size="small"
+                        :color="index === 0 ? 'success' : 'warning'"
+                        variant="tonal"
+                        closable
+                        @click:close="removeTargetComponent(groupIndex, index)"
+                      >
+                        <v-icon
+                          :icon="index === 0 ? 'mdi-plus-circle' : 'mdi-minus-circle'"
+                          size="14"
+                          class="mr-1"
+                        />
+                        {{ item.title }}
+                      </v-chip>
+                    </template>
                   </v-select>
-                  <v-chip
-                    v-if="group.targetComponent"
-                    size="small"
-                    color="warning"
-                    variant="tonal"
-                    class="mt-2"
-                    closable
-                    @click:close="updateTargetComponent(groupIndex, null)"
-                  >
-                    <v-icon icon="mdi-target" size="14" class="mr-1" />
-                    Replaces: {{ group.targetComponent.componentName }}
-                  </v-chip>
+                  <div v-if="group.targetComponents?.length" class="mt-2 text-caption text-grey">
+                    <v-icon icon="mdi-information-outline" size="14" class="mr-1" />
+                    First target (green) receives replacement composition. Others (orange) are
+                    excluded only.
+                  </div>
                 </v-col>
               </v-row>
 
@@ -598,21 +609,35 @@ function getRecipeComponentName(comp: RecipeComponent): string {
   }
 }
 
-function updateTargetComponent(groupIndex: number, selected: TargetComponentOption | null): void {
+function updateTargetComponents(groupIndex: number, selected: TargetComponentOption[]): void {
   const updated = [...props.modifierGroups]
-  // ✅ FIX: Extract .value from the select option object
-  updated[groupIndex].targetComponent = selected?.value || undefined
+  // Extract .value from each select option object
+  updated[groupIndex].targetComponents = selected.map(opt => opt.value)
   emit('update:modifierGroups', updated)
 }
 
-function getSelectedTargetValue(group: ModifierGroup): TargetComponentOption | null {
-  if (!group.targetComponent) return null
-  // ✅ FIX: Find matching option for v-select with return-object="true"
-  return (
-    availableTargetComponents.value.find(opt =>
-      targetComponentsEqual(opt.value, group.targetComponent!)
-    ) || null
-  )
+function removeTargetComponent(groupIndex: number, targetIndex: number): void {
+  const updated = [...props.modifierGroups]
+  if (updated[groupIndex].targetComponents) {
+    updated[groupIndex].targetComponents = updated[groupIndex].targetComponents!.filter(
+      (_: TargetComponent, i: number) => i !== targetIndex
+    )
+    emit('update:modifierGroups', updated)
+  }
+}
+
+function getSelectedTargetValues(group: ModifierGroup): TargetComponentOption[] {
+  if (!group.targetComponents?.length) return []
+  // Find matching options for v-select with return-object="true"
+  return group.targetComponents
+    .map((target: TargetComponent) =>
+      availableTargetComponents.value.find((opt: TargetComponentOption) =>
+        targetComponentsEqual(opt.value, target)
+      )
+    )
+    .filter(
+      (opt: TargetComponentOption | undefined): opt is TargetComponentOption => opt !== undefined
+    )
 }
 
 function targetComponentsEqual(a: TargetComponent | null, b: TargetComponent | null): boolean {
