@@ -576,12 +576,17 @@ const roleOptions = computed(() => [
 ])
 
 const isFormValid = computed(() => {
+  // In variantless mode, price=0 is allowed
+  const priceValid = isVariantlessMode.value
+    ? true
+    : formData.value.variants.every(v => v.price > 0)
+
   return (
     isValid.value &&
     formData.value.name.trim().length > 0 &&
     formData.value.categoryId &&
     formData.value.variants.length > 0 &&
-    formData.value.variants.every(v => v.price > 0)
+    priceValid
   )
 })
 
