@@ -5,19 +5,30 @@ import { useStorageStore } from '@/stores/storage'
 import { usePreparationStore } from '@/stores/preparation'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
+import { useMenuStore } from '@/stores/menu'
 import { useExport } from '@/core/export'
 import type {
   InventorySheetOptions,
   InventorySheetData,
   InventorySheetItem,
-  DepartmentFilter
+  DepartmentFilter,
+  ProductYieldReportOptions,
+  ProductYieldReportData,
+  ProductYieldItem,
+  MenuCostReportOptions,
+  MenuCostReportData,
+  MenuCostCategoryGroup,
+  MenuCostItemData,
+  MenuCostVariantData
 } from '@/core/export'
 import type { StorageBalance } from '@/stores/storage/types'
 import type { PreparationBalance } from '@/stores/preparation/types'
+import type { MenuItem, MenuItemVariant, ModifierOption, Category } from '@/stores/menu/types'
 
 export function useInventorySheet() {
   const storageStore = useStorageStore()
   const preparationStore = usePreparationStore()
+  const menuStore = useMenuStore()
   const productsStore = useProductsStore()
   const recipesStore = useRecipesStore()
   const { generatePDF } = useExport()
@@ -230,10 +241,427 @@ export function useInventorySheet() {
     })
   }
 
+  /**
+   * Build product yield report data
+   */
+  function buildProductYieldData(options: ProductYieldReportOptions): ProductYieldReportData {
+    let products = [...productsStore.products]
+
+    // Filter by department
+    if (options.department !== 'all') {
+      products = products.filter(p =>
+        p.usedInDepartments?.includes(options.department as 'kitchen' | 'bar')
+      )
+    }
+
+    // Sort products
+    products.sort((a, b) => {
+      switch (options.sortBy) {
+        case 'code':
+          return a.id.localeCompare(b.id)
+        case 'yield':
+          return (b.yieldPercentage || 100) - (a.yieldPercentage || 100)
+        case 'category': {
+          const catA = productsStore.categories.find(c => c.id === a.category)?.name || ''
+          const catB = productsStore.categories.find(c => c.id === b.category)?.name || ''
+          return catA.localeCompare(catB) || a.name.localeCompare(b.name)
+        }
+        case 'name':
+        default:
+          return a.name.localeCompare(b.name)
+      }
+    })
+
+    // Build items
+    const items: ProductYieldItem[] = products.map((product, index) => {
+      const category = productsStore.categories.find(c => c.id === product.category)
+
+      // Determine department display
+      let deptDisplay = 'Both'
+      if (product.usedInDepartments?.length === 1) {
+        deptDisplay = product.usedInDepartments[0] === 'kitchen' ? 'Kitchen' : 'Bar'
+      }
+
+      return {
+        index: index + 1,
+        name: product.name,
+        code: product.id.substring(0, 8).toUpperCase(),
+        category: category?.name,
+        department: deptDisplay,
+        yieldPercentage: product.yieldPercentage || 100,
+        unit: product.baseUnit
+      }
+    })
+
+    // Calculate average yield
+    const totalYield = items.reduce((sum, item) => sum + item.yieldPercentage, 0)
+    const averageYield = items.length > 0 ? totalYield / items.length : 100
+
+    return {
+      title: 'Product Yield List',
+      date: new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+      generatedAt: new Date().toISOString(),
+      department: options.department,
+      items,
+      summary: {
+        totalProducts: items.length,
+        averageYield
+      }
+    }
+  }
+
+  /**
+   * Generate and download product yield report PDF
+   */
+  async function generateProductYieldReport(options: ProductYieldReportOptions): Promise<void> {
+    const data = buildProductYieldData(options)
+
+    // Dynamic import of template
+    const { default: ProductYieldTemplate } = await import(
+      '@/core/export/templates/ProductYieldTemplate.vue'
+    )
+
+    const departmentSuffix = options.department === 'all' ? '' : `-${options.department}`
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '')
+
+    await generatePDF(ProductYieldTemplate, data, {
+      filename: `product-yield${departmentSuffix}-${dateStr}.pdf`,
+      pageSize: 'a4',
+      orientation: 'portrait',
+      showPageNumbers: true
+    })
+  }
+
+  // =============================================
+  // Menu Cost Report Functions
+  // =============================================
+
+  /**
+   * Calculate variant base cost from composition
+   */
+  function calculateVariantBaseCost(variant: MenuItemVariant): number {
+    let totalCost = 0
+
+    for (const comp of variant.composition || []) {
+      const quantity = comp.quantity || 0
+      let unitCost = 0
+
+      if (comp.type === 'product') {
+        const product = productsStore.getProductById(comp.id)
+        unitCost = product?.baseCostPerUnit || 0
+      } else if (comp.type === 'recipe') {
+        const recipeCost = recipesStore.getRecipeCostCalculation(comp.id)
+        if (recipeCost && recipeCost.costPerPortion > 0) {
+          unitCost = recipeCost.costPerPortion
+        } else {
+          const recipe = recipesStore.getRecipeById(comp.id)
+          unitCost = recipe?.costPerPortion || 0
+        }
+      } else if (comp.type === 'preparation') {
+        const prep = recipesStore.getPreparationById(comp.id)
+        const prepCost = recipesStore.getPreparationCostCalculation(comp.id)
+        unitCost = prepCost?.costPerOutputUnit || prep?.lastKnownCost || prep?.costPerPortion || 0
+      }
+
+      totalCost += quantity * unitCost
+    }
+
+    return totalCost
+  }
+
+  /**
+   * Calculate modifier option cost
+   */
+  function calculateModifierCost(option: ModifierOption, portionMultiplier: number): number {
+    let cost = 0
+
+    if (option.composition && option.composition.length > 0) {
+      for (const comp of option.composition) {
+        const quantity = comp.quantity || 1
+        let unitCost = 0
+
+        if (comp.type === 'product') {
+          const product = productsStore.getProductById(comp.id)
+          unitCost = product?.baseCostPerUnit || 0
+        } else if (comp.type === 'recipe') {
+          const recipeCost = recipesStore.getRecipeCostCalculation(comp.id)
+          if (recipeCost && recipeCost.costPerPortion > 0) {
+            unitCost = recipeCost.costPerPortion
+          } else {
+            const recipe = recipesStore.getRecipeById(comp.id)
+            unitCost = recipe?.costPerPortion || 0
+          }
+        } else if (comp.type === 'preparation') {
+          const prep = recipesStore.getPreparationById(comp.id)
+          const prepCost = recipesStore.getPreparationCostCalculation(comp.id)
+          unitCost = prepCost?.costPerOutputUnit || prep?.lastKnownCost || prep?.costPerPortion || 0
+        }
+
+        cost += quantity * unitCost * portionMultiplier
+      }
+    }
+    return cost
+  }
+
+  /**
+   * Calculate min/max food cost for a variant considering modifiers
+   */
+  function calculateVariantCostRange(
+    variant: MenuItemVariant,
+    baseCost: number,
+    item: MenuItem
+  ): { minCost: number; maxCost: number } {
+    const modifierGroups = item.modifierGroups || []
+    const portionMultiplier = variant.portionMultiplier || 1
+
+    let minModifierCost = 0
+    let maxModifierCost = 0
+
+    for (const group of modifierGroups) {
+      // Only consider required modifier groups for min/max calculation
+      if (!group.isRequired) continue
+
+      const activeOptions = group.options.filter(opt => opt.isActive !== false)
+      if (activeOptions.length === 0) continue
+
+      const optionCosts = activeOptions.map(opt => calculateModifierCost(opt, portionMultiplier))
+
+      minModifierCost += Math.min(...optionCosts)
+      maxModifierCost += Math.max(...optionCosts)
+    }
+
+    return {
+      minCost: baseCost + minModifierCost,
+      maxCost: baseCost + maxModifierCost
+    }
+  }
+
+  /**
+   * Build variant cost data
+   */
+  function buildVariantCostData(variant: MenuItemVariant, item: MenuItem): MenuCostVariantData {
+    const baseCost = calculateVariantBaseCost(variant)
+    const price = variant.price
+
+    // For simple dishes, min = max = base cost
+    // For modifiable dishes, calculate range from modifiers
+    let minCost = baseCost
+    let maxCost = baseCost
+
+    if (item.dishType === 'modifiable' && item.modifierGroups?.length) {
+      const range = calculateVariantCostRange(variant, baseCost, item)
+      minCost = range.minCost
+      maxCost = range.maxCost
+    }
+
+    const minFoodCostPercent = price > 0 ? (minCost / price) * 100 : 0
+    const maxFoodCostPercent = price > 0 ? (maxCost / price) * 100 : 0
+    const margin = price - minCost
+
+    return {
+      name: variant.name || 'Standard',
+      price,
+      baseCost,
+      minCost,
+      maxCost,
+      minFoodCostPercent,
+      maxFoodCostPercent,
+      margin
+    }
+  }
+
+  /**
+   * Build menu item cost data
+   */
+  function buildMenuItemCostData(item: MenuItem): MenuCostItemData {
+    const activeVariants = (item.variants || []).filter(v => v.isActive)
+
+    return {
+      id: item.id,
+      name: item.name,
+      department: item.department,
+      dishType: item.dishType,
+      variants: activeVariants.map(v => buildVariantCostData(v, item))
+    }
+  }
+
+  /**
+   * Get category hierarchy path (for subcategories)
+   */
+  function getCategoryPath(category: Category): { name: string; parentName?: string } {
+    if (category.parentId) {
+      const parent = menuStore.categories.find(c => c.id === category.parentId)
+      return {
+        name: category.name,
+        parentName: parent?.name
+      }
+    }
+    return { name: category.name }
+  }
+
+  /**
+   * Build menu cost report data
+   */
+  function buildMenuCostData(options: MenuCostReportOptions): MenuCostReportData {
+    let items = [...menuStore.menuItems]
+
+    // Filter by department
+    if (options.department !== 'all') {
+      items = items.filter(item => item.department === options.department)
+    }
+
+    // Filter inactive if needed
+    if (!options.includeInactive) {
+      items = items.filter(item => item.isActive)
+    }
+
+    // Build category groups
+    const categoryGroups: MenuCostCategoryGroup[] = []
+
+    if (options.groupByCategory !== false) {
+      // Group by category/subcategory
+      const categoryMap = new Map<string, MenuCostItemData[]>()
+
+      for (const item of items) {
+        const categoryId = item.categoryId || 'uncategorized'
+        if (!categoryMap.has(categoryId)) {
+          categoryMap.set(categoryId, [])
+        }
+        categoryMap.get(categoryId)!.push(buildMenuItemCostData(item))
+      }
+
+      // Build category groups with proper hierarchy
+      for (const [categoryId, categoryItems] of categoryMap) {
+        const category = menuStore.categories.find(c => c.id === categoryId)
+
+        if (category) {
+          const path = getCategoryPath(category)
+          categoryGroups.push({
+            id: categoryId,
+            name: path.parentName ? `${path.parentName} → ${path.name}` : path.name,
+            isSubcategory: !!category.parentId,
+            parentName: path.parentName,
+            items: categoryItems
+          })
+        } else {
+          categoryGroups.push({
+            id: categoryId,
+            name: 'Uncategorized',
+            isSubcategory: false,
+            items: categoryItems
+          })
+        }
+      }
+
+      // Sort category groups
+      categoryGroups.sort((a, b) => a.name.localeCompare(b.name))
+    } else {
+      // Single group with all items
+      categoryGroups.push({
+        id: 'all',
+        name: 'All Items',
+        isSubcategory: false,
+        items: items.map(buildMenuItemCostData)
+      })
+    }
+
+    // Sort items within categories based on sortBy option
+    for (const group of categoryGroups) {
+      group.items.sort((a, b) => {
+        switch (options.sortBy) {
+          case 'foodCost': {
+            const aFC = a.variants[0]?.minFoodCostPercent || 0
+            const bFC = b.variants[0]?.minFoodCostPercent || 0
+            return bFC - aFC // High to low
+          }
+          case 'price': {
+            const aPrice = a.variants[0]?.price || 0
+            const bPrice = b.variants[0]?.price || 0
+            return bPrice - aPrice // High to low
+          }
+          case 'name':
+          default:
+            return a.name.localeCompare(b.name)
+        }
+      })
+    }
+
+    // Calculate summary stats
+    let totalItems = 0
+    let totalVariants = 0
+    const allFoodCosts: number[] = []
+
+    for (const group of categoryGroups) {
+      totalItems += group.items.length
+      for (const item of group.items) {
+        totalVariants += item.variants.length
+        for (const variant of item.variants) {
+          if (variant.minFoodCostPercent > 0) {
+            allFoodCosts.push(variant.minFoodCostPercent)
+          }
+          if (variant.maxFoodCostPercent > variant.minFoodCostPercent) {
+            allFoodCosts.push(variant.maxFoodCostPercent)
+          }
+        }
+      }
+    }
+
+    const averageFoodCost =
+      allFoodCosts.length > 0 ? allFoodCosts.reduce((a, b) => a + b, 0) / allFoodCosts.length : 0
+    const minFoodCost = allFoodCosts.length > 0 ? Math.min(...allFoodCosts) : 0
+    const maxFoodCost = allFoodCosts.length > 0 ? Math.max(...allFoodCosts) : 0
+
+    return {
+      title: 'Menu Cost Summary',
+      date: formatDate(new Date().toISOString().split('T')[0]),
+      generatedAt: new Date().toISOString(),
+      department: options.department,
+      categories: categoryGroups,
+      summary: {
+        totalItems,
+        totalVariants,
+        averageFoodCost,
+        minFoodCost,
+        maxFoodCost,
+        totalCategories: categoryGroups.length
+      }
+    }
+  }
+
+  /**
+   * Generate and download menu cost report PDF
+   */
+  async function generateMenuCostReport(options: MenuCostReportOptions): Promise<void> {
+    const data = buildMenuCostData(options)
+
+    // Dynamic import of template
+    const { default: MenuCostTemplate } = await import(
+      '@/core/export/templates/MenuCostTemplate.vue'
+    )
+
+    const departmentSuffix = options.department === 'all' ? '' : `-${options.department}`
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '')
+
+    await generatePDF(MenuCostTemplate, data, {
+      filename: `menu-cost${departmentSuffix}-${dateStr}.pdf`,
+      pageSize: 'a4',
+      orientation: 'portrait',
+      showPageNumbers: true
+    })
+  }
+
   return {
     buildProductsSheetData,
     buildPreparationsSheetData,
     generateProductsSheet,
-    generatePreparationsSheet
+    generatePreparationsSheet,
+    buildProductYieldData,
+    generateProductYieldReport,
+    buildMenuCostData,
+    generateMenuCostReport
   }
 }

@@ -52,7 +52,17 @@ export type {
   PrintDocumentConfig,
   InventorySheetOptions,
   InventorySheetItem,
-  InventorySheetData
+  InventorySheetData,
+  // Product Yield Report Types
+  ProductYieldReportOptions,
+  ProductYieldItem,
+  ProductYieldReportData,
+  // Menu Cost Report Types
+  MenuCostReportOptions,
+  MenuCostCategoryGroup,
+  MenuCostItemData,
+  MenuCostVariantData,
+  MenuCostReportData
 } from './types'
 
 // Print Documents Registry

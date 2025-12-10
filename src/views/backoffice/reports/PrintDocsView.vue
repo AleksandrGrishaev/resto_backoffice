@@ -11,9 +11,8 @@
         </v-col>
       </v-row>
 
-      <!-- Document Categories -->
+      <!-- Inventory Documents -->
       <v-row>
-        <!-- Inventory Documents -->
         <v-col cols="12">
           <h2 class="text-h6 mb-3">
             <v-icon start>mdi-clipboard-check-outline</v-icon>
@@ -43,25 +42,58 @@
         </v-col>
       </v-row>
 
-      <!-- Future: Operations Documents -->
-      <!--
-      <v-row class="mt-6">
+      <!-- Reports Documents -->
+      <v-row class="mt-4">
         <v-col cols="12">
           <h2 class="text-h6 mb-3">
-            <v-icon start>mdi-clipboard-list</v-icon>
-            Operations
+            <v-icon start>mdi-file-chart</v-icon>
+            Reports
           </h2>
         </v-col>
+
+        <v-col v-for="doc in reportsDocuments" :key="doc.id" cols="12" sm="6" md="4">
+          <v-card variant="outlined" class="document-card">
+            <v-card-item>
+              <template #prepend>
+                <v-avatar color="secondary" variant="tonal" size="48">
+                  <v-icon>{{ doc.icon }}</v-icon>
+                </v-avatar>
+              </template>
+              <v-card-title>{{ doc.name }}</v-card-title>
+              <v-card-subtitle>{{ doc.description }}</v-card-subtitle>
+            </v-card-item>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn color="secondary" variant="tonal" @click="openDocumentDialog(doc)">
+                <v-icon start>mdi-file-document-plus</v-icon>
+                Generate
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-col>
       </v-row>
-      -->
     </v-container>
 
     <!-- Inventory Sheet Options Dialog -->
     <InventorySheetOptionsDialog
-      v-model="showOptionsDialog"
+      v-model="showInventoryDialog"
       :document-type="selectedDocumentType"
       :loading="generating"
-      @generate="handleGenerate"
+      @generate="handleInventoryGenerate"
+    />
+
+    <!-- Product Yield Options Dialog -->
+    <ProductYieldOptionsDialog
+      v-model="showYieldDialog"
+      :loading="generating"
+      @generate="handleYieldGenerate"
+    />
+
+    <!-- Menu Cost Options Dialog -->
+    <MenuCostOptionsDialog
+      v-model="showMenuCostDialog"
+      :loading="generating"
+      @generate="handleMenuCostGenerate"
     />
   </div>
 </template>
@@ -70,6 +102,8 @@
 import { ref, computed } from 'vue'
 import { PRINT_DOCUMENTS, type PrintDocumentConfig } from '@/core/export'
 import InventorySheetOptionsDialog from './dialogs/InventorySheetOptionsDialog.vue'
+import ProductYieldOptionsDialog from './dialogs/ProductYieldOptionsDialog.vue'
+import MenuCostOptionsDialog from './dialogs/MenuCostOptionsDialog.vue'
 import { useInventorySheet } from './composables/useInventorySheet'
 
 // Filter documents by category
@@ -77,25 +111,38 @@ const inventoryDocuments = computed(() =>
   PRINT_DOCUMENTS.filter(doc => doc.category === 'inventory')
 )
 
+const reportsDocuments = computed(() => PRINT_DOCUMENTS.filter(doc => doc.category === 'reports'))
+
 // Dialog state
-const showOptionsDialog = ref(false)
+const showInventoryDialog = ref(false)
+const showYieldDialog = ref(false)
+const showMenuCostDialog = ref(false)
 const selectedDocumentType = ref<'products' | 'preparations'>('products')
 const generating = ref(false)
 
 // Composable for generating sheets
-const { generateProductsSheet, generatePreparationsSheet } = useInventorySheet()
+const {
+  generateProductsSheet,
+  generatePreparationsSheet,
+  generateProductYieldReport,
+  generateMenuCostReport
+} = useInventorySheet()
 
 function openDocumentDialog(doc: PrintDocumentConfig) {
-  // Determine document type from id
   if (doc.id === 'inventory-products') {
     selectedDocumentType.value = 'products'
+    showInventoryDialog.value = true
   } else if (doc.id === 'inventory-preparations') {
     selectedDocumentType.value = 'preparations'
+    showInventoryDialog.value = true
+  } else if (doc.id === 'product-yield-list') {
+    showYieldDialog.value = true
+  } else if (doc.id === 'menu-cost-summary') {
+    showMenuCostDialog.value = true
   }
-  showOptionsDialog.value = true
 }
 
-async function handleGenerate(options: {
+async function handleInventoryGenerate(options: {
   department: 'kitchen' | 'bar' | 'all'
   includeZeroStock: boolean
   sortBy: 'name' | 'code' | 'category'
@@ -123,7 +170,45 @@ async function handleGenerate(options: {
         countDate: new Date().toISOString().split('T')[0]
       })
     }
-    showOptionsDialog.value = false
+    showInventoryDialog.value = false
+  } finally {
+    generating.value = false
+  }
+}
+
+async function handleYieldGenerate(options: {
+  department: 'kitchen' | 'bar' | 'all'
+  sortBy: 'name' | 'code' | 'yield' | 'category'
+}) {
+  generating.value = true
+
+  try {
+    await generateProductYieldReport({
+      department: options.department,
+      sortBy: options.sortBy
+    })
+    showYieldDialog.value = false
+  } finally {
+    generating.value = false
+  }
+}
+
+async function handleMenuCostGenerate(options: {
+  department: 'kitchen' | 'bar' | 'all'
+  sortBy: 'name' | 'category' | 'foodCost' | 'price'
+  groupByCategory: boolean
+  includeInactive: boolean
+}) {
+  generating.value = true
+
+  try {
+    await generateMenuCostReport({
+      department: options.department,
+      sortBy: options.sortBy,
+      groupByCategory: options.groupByCategory,
+      includeInactive: options.includeInactive
+    })
+    showMenuCostDialog.value = false
   } finally {
     generating.value = false
   }

@@ -247,6 +247,29 @@ export function useExport() {
     }
   }
 
+  /**
+   * Generic PDF export for any template
+   * Use this for custom templates like inventory sheets
+   */
+  async function generatePDF<T>(
+    template: object,
+    data: T,
+    options: ExportOptions = {}
+  ): Promise<void> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      const filename = options.filename || exportService.generateFilename('document')
+      await renderAndExport(template, data, { ...options, filename })
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
   return {
     isExporting,
     exportError,
@@ -255,6 +278,7 @@ export function useExport() {
     exportPreparations,
     exportMenuItem,
     exportMenuItemCombinations,
-    exportMenuDetailed
+    exportMenuDetailed,
+    generatePDF
   }
 }

@@ -404,6 +404,88 @@ export interface InventorySheetData {
   showSignatureLine: boolean
 }
 
+// Product Yield Report Types
+export interface ProductYieldReportOptions extends ExportOptions {
+  department: DepartmentFilter
+  sortBy: 'name' | 'code' | 'yield' | 'category'
+}
+
+export interface ProductYieldItem {
+  index: number
+  name: string
+  code: string
+  department: string // 'Kitchen', 'Bar', 'Both'
+  category?: string
+  yieldPercentage: number
+  unit: string
+}
+
+export interface ProductYieldReportData {
+  title: string
+  date: string
+  generatedAt: string
+  department: DepartmentFilter
+  items: ProductYieldItem[]
+  summary: {
+    totalProducts: number
+    averageYield: number
+  }
+}
+
+// =============================================
+// Menu Cost Summary Report Types
+// =============================================
+
+export interface MenuCostReportOptions extends ExportOptions {
+  department: DepartmentFilter
+  sortBy: 'name' | 'category' | 'foodCost' | 'price'
+  includeInactive?: boolean
+  groupByCategory?: boolean // Group items by category/subcategory (default: true)
+}
+
+export interface MenuCostCategoryGroup {
+  id: string
+  name: string
+  isSubcategory: boolean
+  parentName?: string // For subcategories, the parent category name
+  items: MenuCostItemData[]
+}
+
+export interface MenuCostItemData {
+  id: string
+  name: string
+  department: 'kitchen' | 'bar'
+  dishType: 'simple' | 'modifiable'
+  variants: MenuCostVariantData[]
+}
+
+export interface MenuCostVariantData {
+  name: string
+  price: number
+  baseCost: number // Cost from composition only
+  minCost: number // Min total cost (base + min modifiers)
+  maxCost: number // Max total cost (base + max modifiers)
+  minFoodCostPercent: number
+  maxFoodCostPercent: number
+  margin: number // price - baseCost (for simple) or price - minCost (for modifiable)
+}
+
+export interface MenuCostReportData {
+  title: string
+  date: string
+  generatedAt: string
+  department: DepartmentFilter
+  categories: MenuCostCategoryGroup[]
+  summary: {
+    totalItems: number
+    totalVariants: number
+    averageFoodCost: number
+    minFoodCost: number
+    maxFoodCost: number
+    totalCategories: number
+  }
+}
+
 // Available print documents registry
 export const PRINT_DOCUMENTS: PrintDocumentConfig[] = [
   {
@@ -419,5 +501,19 @@ export const PRINT_DOCUMENTS: PrintDocumentConfig[] = [
     description: 'Count sheet for semi-finished products',
     icon: 'mdi-bowl-mix',
     category: 'inventory'
+  },
+  {
+    id: 'product-yield-list',
+    name: 'Product Yield List',
+    description: 'List of all products with yield percentages',
+    icon: 'mdi-percent',
+    category: 'reports'
+  },
+  {
+    id: 'menu-cost-summary',
+    name: 'Menu Cost Summary',
+    description: 'All menu items with food cost analysis',
+    icon: 'mdi-food-variant',
+    category: 'reports'
   }
 ]
