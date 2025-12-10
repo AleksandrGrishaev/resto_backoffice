@@ -11,6 +11,7 @@ import { useCostCalculation } from './composables/useCostCalculation'
 import { useRecipeIntegration } from './composables/useRecipeIntegration'
 import { useMenuRecipeLinks } from './composables/useMenuRecipeLinks'
 import { useUnits } from './composables/useUnits'
+import { useAutoCostRecalculation } from './composables/useAutoCostRecalculation'
 
 // Note: Mock imports removed - recipes now use Supabase via composables
 // Legacy services kept for backward compatibility if needed
@@ -52,6 +53,7 @@ export const useRecipesStore = defineStore('recipes', () => {
   const integrationComposable = useRecipeIntegration()
   const menuLinksComposable = useMenuRecipeLinks()
   const unitsComposable = useUnits()
+  const autoCostRecalculation = useAutoCostRecalculation()
 
   // =============================================
   // LEGACY SERVICES (for backward compatibility)
@@ -205,8 +207,24 @@ export const useRecipesStore = defineStore('recipes', () => {
         callbacks.getPreparationCost
       )
 
-      // 5. Пересчитываем стоимости
-      await recalculateAllCosts()
+      // 5. Check if automatic cost recalculation is needed (daily)
+      const needsRecalculation = autoCostRecalculation.isRecalculationNeeded()
+
+      if (needsRecalculation) {
+        DebugUtils.info(MODULE_NAME, '🔄 Daily cost recalculation needed...')
+        await recalculateAllCosts()
+        // Update database with new costs
+        await updateDatabaseCosts()
+        // Save recalculation date
+        autoCostRecalculation.saveLastRecalculationDate(new Date())
+      } else {
+        DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (already done today)')
+        // Still recalculate in memory for fresh data, but don't update DB
+        await recalculateAllCosts()
+      }
+
+      // Schedule periodic recalculation for long-running sessions
+      autoCostRecalculation.schedulePeriodicRecalculation(recalculateAllCosts, updateDatabaseCosts)
 
       // 🆕 Устанавливаем флаг инициализации
       initialized.value = true
@@ -216,7 +234,8 @@ export const useRecipesStore = defineStore('recipes', () => {
         recipes: activeRecipes.value.length,
         units: unitsComposable.units.value.length,
         preparationCategories: preparationCategories.value.length,
-        recipeCategories: recipeCategories.value.length
+        recipeCategories: recipeCategories.value.length,
+        costRecalculationNeeded: needsRecalculation
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize Recipe Store'
@@ -617,6 +636,60 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
+  /**
+   * Update last_known_cost in database for all preparations and recipes
+   * Called after daily cost recalculation
+   */
+  async function updateDatabaseCosts(): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, '💾 Updating database with new costs...')
+
+      // Get all calculated costs
+      const preparationCosts = costCalculationComposable.getAllPreparationCosts()
+      const recipeCosts = costCalculationComposable.getAllRecipeCosts()
+
+      let preparationsUpdated = 0
+      let recipesUpdated = 0
+      const errors: string[] = []
+
+      // Update preparations
+      for (const [preparationId, cost] of preparationCosts) {
+        try {
+          await recipesService.updatePreparationCost(preparationId, cost.costPerOutputUnit)
+          preparationsUpdated++
+        } catch (err) {
+          errors.push(
+            `Preparation ${preparationId}: ${err instanceof Error ? err.message : 'Unknown error'}`
+          )
+        }
+      }
+
+      // Update recipes
+      for (const [recipeId, cost] of recipeCosts) {
+        try {
+          await recipesService.updateRecipeCost(recipeId, cost.costPerPortion)
+          recipesUpdated++
+        } catch (err) {
+          errors.push(`Recipe ${recipeId}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Database costs updated', {
+        preparationsUpdated,
+        recipesUpdated,
+        errors: errors.length > 0 ? errors.slice(0, 3) : undefined
+      })
+
+      if (errors.length > 0) {
+        DebugUtils.warn(MODULE_NAME, `${errors.length} cost updates failed`)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update database costs'
+      DebugUtils.error(MODULE_NAME, message, { err })
+      // Don't throw - this is a non-critical operation
+    }
+  }
+
   // =============================================
   // CATEGORY ACTIONS
   // =============================================
@@ -778,8 +851,14 @@ export const useRecipesStore = defineStore('recipes', () => {
     calculatePreparationCost,
     calculateRecipeCost,
     recalculateAllCosts,
+    updateDatabaseCosts,
     getPreparationCostCalculation,
     getRecipeCostCalculation,
+
+    // Auto cost recalculation
+    autoCostRecalculationStatus: autoCostRecalculation.recalculationStatus,
+    forceRecalculateCosts: () =>
+      autoCostRecalculation.forceRecalculationNow(recalculateAllCosts, updateDatabaseCosts),
 
     // Integration methods
     handleProductPriceChange,

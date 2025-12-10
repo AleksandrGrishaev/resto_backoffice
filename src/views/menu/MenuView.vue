@@ -343,8 +343,12 @@ import type {
   MenuCategoryExport,
   MenuItemExport,
   MenuVariantExport,
-  DepartmentFilter
+  DepartmentFilter,
+  MenuDetailedExportData,
+  CombinationsExportData,
+  ExportDialogOptions
 } from '@/core/export'
+import { buildMenuItemExportData, type CostCalculationContext } from '@/core/export'
 import MenuCategoryDialog from './components/MenuCategoryDialog.vue'
 import MenuItemDialog from './components/MenuItemDialog.vue'
 import MenuItemComponent from './components/MenuItem.vue'
@@ -355,12 +359,12 @@ const MODULE_NAME = 'MenuView'
 const menuStore = useMenuStore()
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
-const { isExporting, exportMenu } = useExport()
+const { isExporting, exportMenu, exportMenuDetailed } = useExport()
 
 // State
 const expandedPanels = ref<string[]>([])
 const search = ref('')
-const filterTypes = ref<Array<'food' | 'beverage' | 'archive'>>(['food'])
+const filterTypes = ref<Array<'food' | 'beverage' | 'archive'>>(['food', 'beverage'])
 
 // Dialogs state
 const dialogs = ref({
@@ -601,15 +605,27 @@ function exportVariant(variant: MenuItemVariant): MenuVariantExport {
   }
 }
 
-async function handleExportPdf(options: { department: DepartmentFilter }) {
+async function handleExportPdf(options: ExportDialogOptions) {
   try {
     const departmentFilter = options.department
+    const includeRecipeDetails = options.includeRecipeDetails || false
+    const avoidPageBreaks = options.avoidPageBreaks !== false // Default to true
+
     DebugUtils.info(MODULE_NAME, 'Starting export', {
       filteredCategoriesCount: filteredCategories.value.length,
       filterTypes: filterTypes.value,
-      departmentFilter
+      departmentFilter,
+      includeRecipeDetails,
+      avoidPageBreaks
     })
 
+    // If includeRecipeDetails, build detailed export with all recipes
+    if (includeRecipeDetails) {
+      await handleDetailedExport(departmentFilter, avoidPageBreaks)
+      return
+    }
+
+    // Standard export (without recipe details)
     const categories: MenuCategoryExport[] = filteredCategories.value
       .filter(cat => cat.isActive)
       .map(category => {
@@ -677,6 +693,102 @@ async function handleExportPdf(options: { department: DepartmentFilter }) {
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to export menu', error)
   }
+}
+
+/**
+ * Handle detailed export with recipe information
+ * Uses all active menu items (not filtered by page view)
+ */
+async function handleDetailedExport(departmentFilter: DepartmentFilter, avoidPageBreaks: boolean) {
+  const costContext: CostCalculationContext = {
+    productsStore,
+    recipesStore
+  }
+
+  // Get all active items (not filtered by page view filters)
+  const allItems: { item: MenuItem; categoryName: string }[] = []
+
+  // Use all active root categories (not page-filtered)
+  const allRootCategories = menuStore.rootCategories.filter(cat => cat.isActive)
+
+  for (const category of allRootCategories) {
+    // Get all active items directly in this category
+    let items = menuStore.getItemsByCategory(category.id).filter(item => item.isActive)
+
+    // Filter by department if not 'all'
+    if (departmentFilter !== 'all') {
+      items = items.filter(item => item.department === departmentFilter)
+    }
+
+    for (const item of items) {
+      allItems.push({ item, categoryName: category.name })
+    }
+
+    // Also get items from subcategories
+    const subcategories = menuStore.getSubcategories(category.id).filter(sub => sub.isActive)
+    for (const subcategory of subcategories) {
+      let subItems = menuStore.getItemsByCategory(subcategory.id).filter(item => item.isActive)
+
+      // Filter by department if not 'all'
+      if (departmentFilter !== 'all') {
+        subItems = subItems.filter(item => item.department === departmentFilter)
+      }
+
+      for (const item of subItems) {
+        // Use format "Parent > Subcategory" for category name
+        allItems.push({ item, categoryName: `${category.name} > ${subcategory.name}` })
+      }
+    }
+  }
+
+  if (allItems.length === 0) {
+    DebugUtils.info(MODULE_NAME, 'No items to export')
+    return
+  }
+
+  // Build detailed export data for each item
+  const detailedItems: CombinationsExportData[] = allItems.map(({ item, categoryName }) =>
+    buildMenuItemExportData(item, categoryName, costContext, {
+      includeAllCombinations: false, // Summary mode
+      includeRecipes: true // Include recipe details
+    })
+  )
+
+  // Count total variants
+  const totalVariants = detailedItems.reduce((sum, item) => sum + item.variantGroups.length, 0)
+
+  // Build title based on department filter
+  const departmentLabel =
+    departmentFilter === 'all' ? '' : departmentFilter === 'kitchen' ? ' (Kitchen)' : ' (Bar)'
+
+  const data: MenuDetailedExportData = {
+    title: `Menu Detailed Report${departmentLabel}`,
+    date: new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }),
+    department: departmentFilter,
+    items: detailedItems,
+    summary: {
+      totalItems: allItems.length,
+      totalVariants
+    }
+  }
+
+  DebugUtils.info(MODULE_NAME, 'Detailed export data prepared', {
+    totalItems: allItems.length,
+    totalVariants,
+    departmentFilter
+  })
+
+  // Use portrait orientation for detailed reports
+  await exportMenuDetailed(data, {
+    orientation: 'portrait',
+    department: departmentFilter,
+    avoidPageBreaks
+  })
+  DebugUtils.info(MODULE_NAME, 'Menu detailed exported successfully')
 }
 
 // Initial load

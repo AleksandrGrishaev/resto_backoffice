@@ -31,7 +31,22 @@ export type {
   NestedComponentExport,
   ModifierGroupExport,
   ModifierOptionExport,
-  Html2PdfOptions
+  // Combinations Export Types
+  CombinationsExportOptions,
+  CombinationsExportData,
+  VariantCombinationGroup,
+  VariantDefaultModifier,
+  CombinationExport,
+  ModifierRecipeGroupExport,
+  ModifierIngredientExport,
+  NestedIngredientExport,
+  // Unique Recipe Export Types (portion columns)
+  UniqueModifierRecipeExport,
+  ModifierPortionUsage,
+  UniqueRecipeIngredientExport,
+  Html2PdfOptions,
+  // Detailed Menu Export
+  MenuDetailedExportData
 } from './types'
 
 // Service
@@ -42,6 +57,9 @@ export { useExport } from './composables/useExport'
 
 // Components
 export { default as ExportOptionsDialog } from './components/ExportOptionsDialog.vue'
+export type { ExportDialogOptions } from './components/ExportOptionsDialog.vue'
+export { default as MenuItemExportOptionsDialog } from './components/MenuItemExportOptionsDialog.vue'
+export type { MenuItemExportOptions } from './components/MenuItemExportOptionsDialog.vue'
 
 // Templates (for direct use if needed)
 export { default as ExportLayout } from './templates/ExportLayout.vue'
@@ -49,3 +67,28 @@ export { default as MenuExportTemplate } from './templates/MenuExportTemplate.vu
 export { default as RecipeExportTemplate } from './templates/RecipeExportTemplate.vue'
 export { default as PreparationExportTemplate } from './templates/PreparationExportTemplate.vue'
 export { default as MenuItemExportTemplate } from './templates/MenuItemExportTemplate.vue'
+export { default as CombinationsExportTemplate } from './templates/CombinationsExportTemplate.vue'
+
+// Utils
+export {
+  generateCombinations,
+  calculateTotalCombinations,
+  buildCombinationDisplayName,
+  getUniqueModifierOptions,
+  generateCombinationsGroupedByVariant,
+  getDefaultModifiersForVariant,
+  buildModifiersDisplayName,
+  calculateCombinationExport,
+  calculateCombinationCost,
+  buildModifierRecipeExport,
+  buildAllModifierRecipes,
+  buildUniqueRecipesWithPortions,
+  buildVariantCompositionRecipes,
+  buildMenuItemExportData,
+  type GeneratedCombination,
+  type SelectedOptionInfo,
+  type CombinationGeneratorOptions,
+  type DefaultModifierInfo,
+  type CostCalculationContext,
+  type MenuItemExportBuilderOptions
+} from './utils'

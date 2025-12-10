@@ -14,6 +14,8 @@ export interface ExportOptions {
   pageSize?: 'a4' | 'letter'
   orientation?: 'portrait' | 'landscape'
   department?: DepartmentFilter // filter by department
+  avoidPageBreaks?: boolean // avoid breaking modules across pages
+  showPageNumbers?: boolean // show page numbers in footer
 }
 
 export interface ExportItem {
@@ -191,12 +193,160 @@ export interface ModifierOptionExport {
   isDefault?: boolean
 }
 
+// =============================================
+// Combinations Export Types
+// =============================================
+
+export interface CombinationsExportOptions extends ExportOptions {
+  includeAllCombinations?: boolean
+  maxCombinations?: number // default: 10
+}
+
+// Multi-item detailed export (for bulk menu export with recipe details)
+export interface MenuDetailedExportData {
+  title: string
+  date: string
+  department: 'all' | 'kitchen' | 'bar'
+  items: CombinationsExportData[]
+  summary: {
+    totalItems: number
+    totalVariants: number
+  }
+}
+
+export interface CombinationsExportData {
+  title: string
+  date: string
+  item: MenuItemDetailExport
+  // Grouped by variant (new structure)
+  variantGroups: VariantCombinationGroup[]
+  // Flat list for backward compatibility
+  combinations: CombinationExport[]
+  modifierRecipes: ModifierRecipeGroupExport[] // Legacy format (grouped by modifier)
+  uniqueRecipes?: UniqueModifierRecipeExport[] // New format (unique recipes with portion columns)
+  totalCombinationsCount: number
+  isLimited: boolean
+  isSummaryMode: boolean // true = only default modifiers, false = all combinations
+}
+
+// Combinations grouped by variant
+export interface VariantCombinationGroup {
+  variantName: string
+  variantPrice: number
+  variantBaseCost: number
+  // Theoretical min/max food cost (calculated from ALL possible modifier combinations)
+  // This ensures accurate range even when combinations are limited for export
+  minFoodCostPercent: number
+  maxFoodCostPercent: number
+  minCost: number
+  maxCost: number
+  // For summary mode: single combination with default modifiers
+  defaultCombination?: CombinationExport
+  defaultModifiers?: VariantDefaultModifier[]
+  // For full mode: all combinations for this variant
+  combinations: CombinationExport[]
+}
+
+export interface VariantDefaultModifier {
+  groupName: string
+  modifierName: string
+  portionSize: number
+  cost: number
+}
+
+export interface CombinationExport {
+  variantName: string
+  displayName: string // "No Ice + Banana (0.33) + Dragon (0.33)"
+  price: number
+  cost: number
+  foodCostPercent: number
+  margin: number
+}
+
+export interface ModifierRecipeGroupExport {
+  modifierName: string // "Banana Portion"
+  groupName: string // "Fruit 1"
+  recipeId?: string // ID of the recipe/preparation
+  ingredients: ModifierIngredientExport[]
+  totalCost: number
+  quantity?: number // Quantity used in modifier (e.g., 0.33)
+  unit?: string
+}
+
+// Unique recipe with multiple portion sizes (for column display)
+export interface UniqueModifierRecipeExport {
+  recipeName: string // "Banana Portion" (from composition name)
+  recipeId: string
+  recipeCode?: string // "R-074" for recipes, "P-42" for preparations, product code for products
+  recipeType: 'product' | 'recipe' | 'preparation'
+  // Source: where this recipe is used
+  source?: 'variant' | 'modifier' // 'variant' = from variant composition, 'modifier' = from modifier options
+  // Recipe yield info
+  yield: {
+    quantity: number
+    unit: string
+  }
+  // All portion sizes used (for column headers)
+  portions: ModifierPortionUsage[]
+  // Ingredients with costs per portion
+  ingredients: UniqueRecipeIngredientExport[]
+  // Total cost for 1 full portion (yield)
+  totalCostPerYield: number
+}
+
+export interface ModifierPortionUsage {
+  portionSize: number // 0.33, 0.50, 1.0
+  modifierGroups: string[] // ["Fruit 1", "Fruit 2"] - where this portion is used
+}
+
+export interface UniqueRecipeIngredientExport {
+  name: string
+  type: 'product' | 'preparation' | 'recipe'
+  // Quantity per yield (full recipe) - NET quantity (cleaned/processed)
+  quantityPerYield: number
+  // Raw quantity before yield adjustment (gross) - shows how much raw product needed
+  rawQuantityPerYield?: number
+  unit: string
+  costPerYield: number
+  // Quantities for each portion size (calculated from quantityPerYield * portionSize)
+  quantitiesByPortion: Map<number, number> // portionSize -> quantity
+  costsByPortion: Map<number, number> // portionSize -> cost
+  // Nested components for full expansion (preparations/recipes inside)
+  nestedComponents?: NestedIngredientExport[]
+}
+
+export interface ModifierIngredientExport {
+  name: string
+  type: 'product' | 'recipe' | 'preparation'
+  quantity: number
+  unit: string
+  cost: number
+  nestedIngredients?: NestedIngredientExport[]
+}
+
+export interface NestedIngredientExport {
+  name: string
+  type: 'product' | 'preparation' | 'recipe'
+  quantity: number
+  unit: string
+  cost: number
+  // Deep nested components (for recursive expansion)
+  nestedComponents?: NestedIngredientExport[]
+}
+
 // html2pdf.js options
 export interface Html2PdfOptions {
   margin?: number | [number, number, number, number]
   filename?: string
   image?: { type: string; quality: number }
-  html2canvas?: { scale: number; useCORS: boolean; logging?: boolean }
+  html2canvas?: {
+    scale: number
+    useCORS: boolean
+    logging?: boolean
+    allowTaint?: boolean
+    scrollX?: number
+    scrollY?: number
+  }
   jsPDF?: { unit: string; format: string; orientation: string }
   pagebreak?: { mode: string[]; before?: string; after?: string; avoid?: string }
 }

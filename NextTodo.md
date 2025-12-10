@@ -1,37 +1,55 @@
-# Current Sprint: Nested Menu Categories
+# Next Sprint - Fix Export Cost Calculation
 
-## Task: Nested categories (max 1 level)
+## Priority Task: Use Pre-calculated Values in Export
 
-### Requirements
+**Problem**: Export 4C1;8@C5B @0AG5B AB>8<>AB8 2<5AB> 8A?>;L7>20=8O 7=0G5=89 87 .
 
-- Max 1 level nesting (category -> subcategory)
-- Items can be in both parent categories and subcategories
-- If parent category is inactive -> subcategories are hidden
-- Search only by dish names (not categories)
-- POS: Categories -> (Subcategories + Items) -> Items -> Variants
+**Plan file**: `.claude/plans/fix-export-cost-calculation.md`
 
-### Implementation Phases
+### Quick Summary
 
-- [x] **Phase 1**: Database Migration (add parent_id)
-- [x] **Phase 2**: TypeScript Types (Category, DTOs, defaults)
-- [x] **Phase 3**: Mappers (supabaseMappers.ts)
-- [x] **Phase 4**: Store Layer (menuStore.ts - getters, validation)
-- [x] **Phase 5**: MenuCategoryDialog.vue (parent selector)
-- [x] **Phase 6**: MenuView.vue (nested panels, search only dishes)
-- [x] **Phase 7**: POS CategoryCard.vue (subcategory indicator)
-- [x] **Phase 8**: POS MenuSection.vue (4-level navigation)
-- [ ] **Phase 9**: Testing all flows
-- [ ] **Phase 10**: Production migration file
+"5:CI89 :>4 ?5@5AG8BK205B AB>8<>ABL 87 8=3@5485=B>2:
 
-### Files Modified
+```
+qty * product.baseCostPerUnit (loop all ingredients)
+```
 
-| File                                                    | Status |
-| ------------------------------------------------------- | ------ |
-| `src/supabase/migrations/042_add_nested_categories.sql` | Done   |
-| `src/stores/menu/types.ts`                              | Done   |
-| `src/stores/menu/supabaseMappers.ts`                    | Done   |
-| `src/stores/menu/menuStore.ts`                          | Done   |
-| `src/views/menu/components/MenuCategoryDialog.vue`      | Done   |
-| `src/views/menu/MenuView.vue`                           | Done   |
-| `src/views/pos/menu/components/CategoryCard.vue`        | Done   |
-| `src/views/pos/menu/MenuSection.vue`                    | Done   |
+C6=> 8A?>;L7>20BL C65 @0AAG8B0==K5 7=0G5=8O:
+
+```
+preparation.last_known_cost * qty
+recipe.cost * qty
+```
+
+### Database Fields to Use
+
+| Entity         | Field                | Description                               |
+| -------------- | -------------------- | ----------------------------------------- |
+| `products`     | `base_cost_per_unit` | !B>8<>ABL 70 107>2CN 548=8FC              |
+| `preparations` | `last_known_cost`    | !B>8<>ABL 70 548=8FC 2KE>40 (output_unit) |
+| `recipes`      | `cost`               | !B>8<>ABL 70 ?>@F8N                       |
+
+### Files to Fix
+
+1. `src/core/export/utils/combinationCostCalculator.ts`
+
+   - `calculateComponentCost()` - 4>;65= 1@0BL 87 
+   - `calculateModifierOptionCost()` - 4>;65= 1@0BL 87 
+   - `buildUniqueRecipeExport()` - 4>;65= 1@0BL 87 
+
+2. `src/views/menu/components/dialogs/MenuItemViewDialog.vue`
+   - `buildCombinationsExportData()` - C?@>AB8BL, 8A?>;L7>20BL store getters
+
+### Store Methods (C65 5ABL, =04> 8A?>;L7>20BL)
+
+```typescript
+recipesStore.getPreparationCostCalculation(id) // -> costPerOutputUnit
+recipesStore.getRecipeCostCalculation(id) // -> costPerPortion
+```
+
+### Test
+
+>A;5 8A?@02;5=8O:
+
+- Export "Fresh Juice Mix 3"
+- @>25@8BL GB> Cost 2 M:A?>@B5 = `last_known_cost` \* quantity

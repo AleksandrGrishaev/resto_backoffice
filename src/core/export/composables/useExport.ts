@@ -10,12 +10,17 @@ import type {
   MenuExportData,
   RecipeExportData,
   PreparationExportData,
-  MenuItemExportData
+  MenuItemExportData,
+  CombinationsExportData,
+  CombinationsExportOptions,
+  MenuDetailedExportData
 } from '../types'
 import MenuExportTemplate from '../templates/MenuExportTemplate.vue'
 import RecipeExportTemplate from '../templates/RecipeExportTemplate.vue'
 import PreparationExportTemplate from '../templates/PreparationExportTemplate.vue'
 import MenuItemExportTemplate from '../templates/MenuItemExportTemplate.vue'
+import CombinationsExportTemplate from '../templates/CombinationsExportTemplate.vue'
+import MenuDetailedExportTemplate from '../templates/MenuDetailedExportTemplate.vue'
 
 export function useExport() {
   const isExporting = ref(false)
@@ -36,16 +41,19 @@ export function useExport() {
     const containerWidth = isLandscape ? '1085px' : '720px'
 
     // Create wrapper that will be temporarily visible
+    // Using absolute positioning instead of fixed to avoid html2canvas issues
     const wrapper = document.createElement('div')
-    wrapper.style.position = 'fixed'
+    wrapper.style.position = 'absolute'
     wrapper.style.left = '0'
     wrapper.style.top = '0'
-    wrapper.style.width = '100vw'
-    wrapper.style.height = '100vh'
-    wrapper.style.overflow = 'auto'
+    wrapper.style.width = '100%'
+    wrapper.style.minHeight = '100vh'
+    wrapper.style.overflow = 'visible'
     wrapper.style.background = 'white'
     wrapper.style.zIndex = '99999'
     document.body.appendChild(wrapper)
+    // Scroll to top to ensure content is visible
+    window.scrollTo(0, 0)
 
     // Create actual content container
     const container = document.createElement('div')
@@ -64,9 +72,25 @@ export function useExport() {
       })
       app.mount(container)
 
-      // Wait for render - need more time for complex components
+      // Wait for render - need more time for complex components with nested data
+      // Multiple nextTick calls to ensure full component tree is rendered
       await nextTick()
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await nextTick()
+      await nextTick()
+      // Additional timeout for complex nested components
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Force a reflow to ensure all content is rendered
+      void container.offsetHeight
+
+      // Debug: Check if content has actual dimensions
+      const contentHeight = container.scrollHeight
+      const contentWidth = container.scrollWidth
+      console.log(`[Export] Container dimensions: ${contentWidth}x${contentHeight}`)
+
+      if (contentHeight === 0 || contentWidth === 0) {
+        console.error('[Export] Container has zero dimensions - content may not have rendered')
+      }
 
       // Generate PDF from the container
       await exportService.generatePdf(container, options)
@@ -166,12 +190,71 @@ export function useExport() {
     }
   }
 
+  /**
+   * Export menu item combinations to PDF
+   * Shows all modifier combinations with costs and recipes
+   */
+  async function exportMenuItemCombinations(
+    data: CombinationsExportData,
+    options: CombinationsExportOptions = {}
+  ): Promise<void> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      // Generate filename from item name (sanitized)
+      const sanitizedName = data.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+      const filename =
+        options.filename || exportService.generateFilename(`combinations_${sanitizedName}`)
+
+      // Use landscape orientation for better table display
+      await renderAndExport(CombinationsExportTemplate, data, {
+        ...options,
+        filename,
+        orientation: options.orientation || 'landscape'
+      })
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
+  /**
+   * Export multiple menu items with detailed recipe information
+   * Used for bulk menu export with "Include recipe details" option
+   */
+  async function exportMenuDetailed(
+    data: MenuDetailedExportData,
+    options: ExportOptions = {}
+  ): Promise<void> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      const filename = options.filename || exportService.generateFilename('menu_detailed')
+      await renderAndExport(MenuDetailedExportTemplate, data, {
+        ...options,
+        filename,
+        orientation: options.orientation || 'portrait'
+      })
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
   return {
     isExporting,
     exportError,
     exportMenu,
     exportRecipes,
     exportPreparations,
-    exportMenuItem
+    exportMenuItem,
+    exportMenuItemCombinations,
+    exportMenuDetailed
   }
 }
