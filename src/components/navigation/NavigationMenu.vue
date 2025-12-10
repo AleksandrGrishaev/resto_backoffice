@@ -208,6 +208,18 @@
             <span>Discount Analytics</span>
           </template>
         </v-list-item>
+
+        <!-- Print Documents (Inventory Sheets) -->
+        <v-list-item
+          to="/reports/print-docs"
+          prepend-icon="mdi-printer"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Print Documents</span>
+          </template>
+        </v-list-item>
       </v-list-group>
 
       <!-- Catalogs Section -->

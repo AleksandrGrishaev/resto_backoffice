@@ -314,6 +314,23 @@ const routes: RouteRecordRaw[] = [
           }
         ]
       },
+      // === Reports - Print Documents ===
+      {
+        path: 'reports',
+        meta: {
+          allowedRoles: ['admin', 'manager']
+        },
+        children: [
+          {
+            path: 'print-docs',
+            name: 'print-docs',
+            component: () => import('@/views/backoffice/reports/PrintDocsView.vue'),
+            meta: {
+              title: 'Print Documents'
+            }
+          }
+        ]
+      },
       // === Debug маршруты (только для разработки) ===
       ...(import.meta.env.DEV
         ? [

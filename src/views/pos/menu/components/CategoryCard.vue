@@ -26,14 +26,8 @@
         </div>
 
         <!-- Status indicators -->
-        <div class="d-flex flex-column align-end gap-1">
-          <v-chip v-if="!category.isActive" size="x-small" color="error" variant="flat">
-            Unavailable
-          </v-chip>
-          <v-chip v-if="hasSubcategories" size="x-small" color="primary" variant="outlined">
-            <v-icon start size="12">mdi-folder-multiple</v-icon>
-            Subcategories
-          </v-chip>
+        <div v-if="!category.isActive" class="d-flex flex-column align-end gap-1">
+          <v-chip size="x-small" color="error" variant="flat">Unavailable</v-chip>
         </div>
       </div>
 

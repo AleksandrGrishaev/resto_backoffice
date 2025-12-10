@@ -21,6 +21,14 @@ Core system architecture, internal mechanisms, and foundational patterns.
   - Common patterns and debugging
   - Real-world example: discount events RLS fix
 
+### Database Operations
+
+- **[Database Backup & Restore](./database-backup-restore.md)** - Backup and restore procedures
+  - Backup production database (`pnpm backup:prod`)
+  - Restore to development (`pnpm restore:dev`)
+  - Configuration and troubleshooting
+  - Security considerations
+
 ## Coming Soon
 
 ### Architecture

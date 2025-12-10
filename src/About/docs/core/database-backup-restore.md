@@ -1,0 +1,281 @@
+# Database Backup & Restore
+
+## Overview
+
+This document describes the backup and restore process for Supabase databases. The project has two separate databases (DEV and PROD), and these scripts allow you to:
+
+- Create full backups of production database
+- Restore backups to development database for testing
+
+## Database Configuration
+
+| Database | Project Ref            | Pooler Host                                |
+| -------- | ---------------------- | ------------------------------------------ |
+| DEV      | `fjkfckjpnbcyuknsnchy` | `aws-1-ap-southeast-1.pooler.supabase.com` |
+| PROD     | `bkntdcvzatawencxghob` | `aws-1-ap-southeast-2.pooler.supabase.com` |
+
+## Commands
+
+```bash
+# Backup production database
+pnpm backup:prod
+
+# Restore latest backup to dev database
+pnpm restore:dev
+
+# Restore specific backup to dev
+pnpm restore:dev prod_2025-12-09T15-53-46
+```
+
+## Backup Process
+
+### Script Location
+
+`scripts/backup-database.mjs`
+
+### What It Does
+
+1. Connects to PROD database via session pooler
+2. Creates full backup with `pg_dump` (schema + data)
+3. Creates schema-only backup
+4. Saves metadata (timestamp, source, etc.)
+
+### Output Structure
+
+```
+backups/
+└── prod_YYYY-MM-DDTHH-MM-SS/
+    ├── backup.sql      # Full backup (schema + data)
+    ├── schema.sql      # Schema only
+    └── metadata.json   # Backup metadata
+```
+
+### What's Included
+
+| Component    | Included |
+| ------------ | -------- |
+| Tables       | Yes      |
+| Data (COPY)  | Yes      |
+| Functions    | Yes      |
+| RLS Policies | Yes      |
+| Triggers     | Yes      |
+| Indexes      | Yes      |
+
+### What's NOT Included
+
+- Supabase system schemas (`auth`, `storage`, `realtime`)
+- Extensions (`pgcrypto`, `uuid-ossp`) - must be enabled separately
+- Supabase Auth users (`auth.users`)
+- **GRANT permissions for Supabase roles** (`anon`, `authenticated`, `service_role`)
+
+### Configuration
+
+Create `.env.backup` file:
+
+```bash
+DB_PASSWORD=your_prod_database_password
+```
+
+Get password from: https://supabase.com/dashboard/project/bkntdcvzatawencxghob/settings/database
+
+## Restore Process
+
+### Script Location
+
+`scripts/restore-database.mjs`
+
+### What It Does
+
+1. Reads backup from `backups/` folder
+2. Cleans backup file (removes problematic directives)
+3. **DROPS entire public schema** in DEV database
+4. Recreates public schema with proper grants
+5. Restores backup data
+6. Reloads PostgREST schema cache
+7. Verifies restore (table/function count)
+
+### Configuration
+
+Create `.env.restore.dev` file:
+
+```bash
+# DEV Database credentials for restore
+DB_PASSWORD=your_dev_database_password
+DB_HOST=aws-1-ap-southeast-1.pooler.supabase.com
+DB_PROJECT_REF=fjkfckjpnbcyuknsnchy
+```
+
+Get password from: https://supabase.com/dashboard/project/fjkfckjpnbcyuknsnchy/settings/database
+
+### Important Notes
+
+1. **Restore is DESTRUCTIVE** - it completely replaces DEV database
+2. **Password must not contain special characters** (like `*`, `@`, etc.) - regenerate if needed
+3. **Extensions must be pre-enabled** in DEV database (`pgcrypto`, `uuid-ossp`)
+
+## Requirements
+
+- PostgreSQL client tools (`pg_dump`, `psql`)
+- macOS: `brew install libpq`
+- Ubuntu: `sudo apt install postgresql-client`
+
+## Typical Workflow
+
+### Sync DEV with PROD data
+
+```bash
+# 1. Create fresh backup of prod
+pnpm backup:prod
+
+# 2. Restore to dev
+pnpm restore:dev
+
+# 3. IMPORTANT: Restore GRANT permissions (see Troubleshooting section)
+# Run the SQL from "permission denied for table X" section
+
+# 4. Verify in app or via MCP
+mcp__supabase__list_tables({ schemas: ['public'] })
+```
+
+### Before major changes
+
+```bash
+# 1. Backup current prod state
+pnpm backup:prod
+
+# 2. Test changes on dev
+# ... make changes ...
+
+# 3. If something breaks, restore dev from backup
+pnpm restore:dev prod_2025-12-09T15-53-46
+```
+
+## Troubleshooting
+
+### "password authentication failed"
+
+- Check password in `.env.backup` or `.env.restore.dev`
+- Ensure password has no special characters
+- Reset password in Supabase Dashboard if needed
+
+### "duplicate SASL authentication request"
+
+- Password contains special characters that break URL parsing
+- Reset database password without special characters
+
+### "pg_dump/psql not found"
+
+```bash
+# macOS
+brew install libpq
+echo 'export PATH="/opt/homebrew/opt/libpq/bin:$PATH"' >> ~/.zshrc
+
+# Ubuntu
+sudo apt install postgresql-client
+```
+
+### Restore shows errors but completes
+
+Some warnings are normal:
+
+- "already exists" - duplicate objects (usually OK)
+- "NOTICE:" messages - informational only
+
+Check final stats - if tables/functions count matches, restore succeeded.
+
+### "permission denied for table X" after restore
+
+This is the most common issue! `pg_dump` doesn't export GRANT permissions for Supabase-specific roles (`anon`, `authenticated`, `service_role`).
+
+**Symptoms:**
+
+- HTTP 401/403 errors when accessing tables
+- Error code `42501` in PostgreSQL
+- "permission denied for table users" in console
+
+**Fix - Run this SQL via MCP or Supabase SQL Editor:**
+
+```sql
+-- 1. Grant permissions on all tables
+DO $$
+DECLARE
+  tbl RECORD;
+BEGIN
+  FOR tbl IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('GRANT SELECT ON public.%I TO anon', tbl.tablename);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', tbl.tablename);
+    EXECUTE format('GRANT ALL ON public.%I TO service_role', tbl.tablename);
+  END LOOP;
+END;
+$$;
+
+-- 2. Grant permissions on all sequences
+DO $$
+DECLARE
+  seq RECORD;
+BEGIN
+  FOR seq IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO anon', seq.sequencename);
+    EXECUTE format('GRANT USAGE, SELECT, UPDATE ON SEQUENCE public.%I TO authenticated', seq.sequencename);
+    EXECUTE format('GRANT ALL ON SEQUENCE public.%I TO service_role', seq.sequencename);
+  END LOOP;
+END;
+$$;
+
+-- 3. Grant permissions on all functions
+DO $$
+DECLARE
+  func RECORD;
+BEGIN
+  FOR func IN
+    SELECT p.proname, pg_get_function_identity_arguments(p.oid) as args
+    FROM pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+    WHERE n.nspname = 'public'
+  LOOP
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%I(%s) TO anon', func.proname, func.args);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%I(%s) TO authenticated', func.proname, func.args);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION public.%I(%s) TO service_role', func.proname, func.args);
+  END LOOP;
+END;
+$$;
+
+-- 4. Set default privileges for future objects
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
+
+-- 5. Reload PostgREST cache
+NOTIFY pgrst, 'reload schema';
+```
+
+**Verify fix:**
+
+```sql
+SELECT grantee, string_agg(privilege_type, ', ') as privileges
+FROM information_schema.table_privileges
+WHERE table_name = 'users' AND table_schema = 'public'
+GROUP BY grantee;
+```
+
+Should show:
+
+- `anon`: SELECT
+- `authenticated`: DELETE, INSERT, SELECT, UPDATE
+- `service_role`: all privileges
+
+## Security
+
+**NEVER commit these files to git:**
+
+- `.env.backup` - PROD database password
+- `.env.restore.dev` - DEV database password
+- `backups/` folder - contains sensitive data
+
+All are already in `.gitignore`.
