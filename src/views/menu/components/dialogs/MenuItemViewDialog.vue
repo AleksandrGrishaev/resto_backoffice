@@ -209,36 +209,51 @@
 
       <!-- Actions -->
       <v-card-actions class="dialog-actions">
-        <v-checkbox
-          v-model="includeRecipes"
-          label="Include recipe details"
-          density="compact"
-          hide-details
-          class="include-recipes-checkbox"
-        />
         <v-spacer />
         <v-btn variant="text" @click="close">Close</v-btn>
         <v-btn
           color="primary"
           variant="flat"
-          :loading="isExporting"
+          :loading="isExportingPdf || isExporting"
           prepend-icon="mdi-file-pdf-box"
-          @click="handleExport"
+          @click="openExportDialog"
         >
           Export PDF
         </v-btn>
       </v-card-actions>
     </v-card>
+
+    <!-- Export Options Dialog -->
+    <MenuItemExportOptionsDialog
+      v-model="showExportOptionsDialog"
+      :item-name="item?.name || ''"
+      :is-modifiable="isModifiable"
+      :total-combinations="totalCombinationsCount"
+      @export="handleExportWithOptions"
+    />
   </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { MenuItem, MenuItemVariant, MenuComposition } from '@/stores/menu/types'
 import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
-import { useExport } from '@/core/export'
+import {
+  useExport,
+  generateCombinations,
+  calculateTotalCombinations,
+  calculateCombinationExport,
+  getUniqueModifierOptions,
+  buildAllModifierRecipes,
+  buildUniqueRecipesWithPortions,
+  buildVariantCompositionRecipes,
+  getDefaultModifiersForVariant,
+  buildModifiersDisplayName,
+  MenuItemExportOptionsDialog
+} from '@/core/export'
+import type { MenuItemExportOptions } from '@/core/export'
 import { exportService } from '@/core/export/ExportService'
 import type {
   MenuItemExportData,
@@ -246,7 +261,11 @@ import type {
   MenuItemVariantDetailExport,
   MenuItemCompositionExport,
   NestedComponentExport,
-  ModifierGroupExport
+  ModifierGroupExport,
+  CombinationsExportData,
+  VariantCombinationGroup,
+  VariantDefaultModifier,
+  CombinationExport
 } from '@/core/export/types'
 
 interface VariantCost {
@@ -276,12 +295,16 @@ const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
 
 // Export composable
-const { exportMenuItem, isExporting } = useExport()
+const { exportMenuItem, exportMenuItemCombinations, isExporting } = useExport()
 
 // State
 const expandedVariant = ref<number | null>(0)
 const variantCosts = ref<VariantCost[]>([])
-const includeRecipes = ref(false)
+
+// Export state
+const showExportOptionsDialog = ref(false)
+const isExportingPdf = ref(false)
+const totalCombinationsCount = ref(0)
 
 // Computed
 const dialogModel = computed({
@@ -497,7 +520,7 @@ async function calculateVariantCosts() {
 }
 
 // Build export data
-function buildExportData(): MenuItemExportData {
+function buildExportData(includeRecipeDetails: boolean = false): MenuItemExportData {
   const item = props.item!
 
   // Build variants with costs
@@ -513,8 +536,8 @@ function buildExportData(): MenuItemExportData {
 
         let nestedComponents: NestedComponentExport[] | undefined
 
-        // If includeRecipes, get nested components for recipes/preparations
-        if (includeRecipes.value && (comp.type === 'recipe' || comp.type === 'preparation')) {
+        // If includeRecipeDetails, get nested components for recipes/preparations
+        if (includeRecipeDetails && (comp.type === 'recipe' || comp.type === 'preparation')) {
           nestedComponents = []
 
           if (comp.type === 'recipe') {
@@ -632,18 +655,343 @@ function buildExportData(): MenuItemExportData {
     title: item.name,
     date: exportService.formatDate(),
     item: itemDetail,
-    includeRecipes: includeRecipes.value
+    includeRecipes: includeRecipeDetails
   }
 }
 
-async function handleExport() {
+// =============================================
+// Export
+// =============================================
+
+/**
+ * Check if item is modifiable (has modifier groups)
+ */
+const isModifiable = computed(() => {
+  return (
+    props.item?.dishType === 'modifiable' &&
+    props.item?.modifierGroups &&
+    props.item.modifierGroups.length > 0
+  )
+})
+
+/**
+ * Calculate total number of possible combinations
+ */
+function updateTotalCombinations() {
+  if (!props.item || !isModifiable.value) {
+    totalCombinationsCount.value = 0
+    return
+  }
+
+  totalCombinationsCount.value = calculateTotalCombinations(
+    props.item.variants,
+    props.item.modifierGroups || []
+  )
+}
+
+/**
+ * Open export options dialog
+ */
+function openExportDialog() {
+  updateTotalCombinations()
+  showExportOptionsDialog.value = true
+}
+
+/**
+ * Handle export with selected options
+ */
+async function handleExportWithOptions(options: MenuItemExportOptions) {
   if (!props.item) return
 
+  isExportingPdf.value = true
   try {
-    const data = buildExportData()
-    await exportMenuItem(data)
+    if (isModifiable.value) {
+      // Export with combinations for modifiable items
+      const data = buildCombinationsExportData(
+        options.includeAllCombinations,
+        options.includeRecipes
+      )
+      await exportMenuItemCombinations(data, {
+        includeAllCombinations: options.includeAllCombinations,
+        maxCombinations: options.includeAllCombinations ? undefined : 10
+      })
+    } else {
+      // Export simple item
+      const data = buildExportData(options.includeRecipes)
+      await exportMenuItem(data)
+    }
   } catch (error) {
     console.error('Export failed:', error)
+  } finally {
+    isExportingPdf.value = false
+  }
+}
+
+/**
+ * Build export data for combinations
+ */
+function buildCombinationsExportData(
+  includeAllCombinations: boolean = false,
+  includeRecipes: boolean = false
+): CombinationsExportData {
+  const item = props.item!
+  const maxCombinations = includeAllCombinations ? undefined : 10
+
+  // Determine if this is summary mode (default modifiers only) or full mode
+  const isSummaryMode = !includeAllCombinations
+
+  // Generate combinations
+  const combinations = generateCombinations(item.variants, item.modifierGroups || [], {
+    maxCombinations,
+    includeAll: includeAllCombinations
+  })
+
+  // Create cost calculation context
+  const costContext = {
+    productsStore,
+    recipesStore
+  }
+
+  // Calculate costs for each combination
+  const combinationExports = combinations.map(combo =>
+    calculateCombinationExport(combo, costContext)
+  )
+
+  // Get unique modifier options
+  const uniqueOptions = getUniqueModifierOptions(combinations)
+
+  // Build modifier recipes (legacy format)
+  const modifierRecipes = buildAllModifierRecipes(uniqueOptions, costContext)
+
+  // Build unique recipes with portion columns (new format)
+  // Include both variant composition recipes AND modifier recipes
+  let uniqueRecipes = undefined
+  if (includeRecipes) {
+    // Build modifier recipes
+    const modifierUniqueRecipes = buildUniqueRecipesWithPortions(uniqueOptions, costContext)
+    // Mark them as from modifiers
+    modifierUniqueRecipes.forEach(r => (r.source = 'modifier'))
+
+    // Build variant composition recipes (main dish ingredients)
+    const variantRecipes = buildVariantCompositionRecipes(item.variants, costContext)
+
+    // Combine and deduplicate (prefer variant recipes if same recipeId)
+    const recipeMap = new Map<string, (typeof modifierUniqueRecipes)[0]>()
+    for (const recipe of variantRecipes) {
+      recipeMap.set(recipe.recipeId, recipe)
+    }
+    for (const recipe of modifierUniqueRecipes) {
+      if (!recipeMap.has(recipe.recipeId)) {
+        recipeMap.set(recipe.recipeId, recipe)
+      }
+    }
+
+    uniqueRecipes = Array.from(recipeMap.values()).sort((a, b) => {
+      // Sort: variant recipes first, then by name
+      if (a.source !== b.source) {
+        return a.source === 'variant' ? -1 : 1
+      }
+      return a.recipeName.localeCompare(b.recipeName)
+    })
+  }
+
+  // Helper: calculate modifier option cost
+  function calculateModifierOptionCost(option: ModifierOption, portionMultiplier: number): number {
+    let cost = 0
+    if (option.composition && option.composition.length > 0) {
+      for (const comp of option.composition) {
+        const quantity = comp.quantity || 1
+        let unitCost = 0
+
+        if (comp.type === 'product') {
+          const product = productsStore.getProductById(comp.id)
+          unitCost = product?.baseCostPerUnit || 0
+        } else if (comp.type === 'recipe') {
+          const recipeCost = recipesStore.getRecipeCostCalculation(comp.id)
+          if (recipeCost && recipeCost.costPerPortion > 0) {
+            unitCost = recipeCost.costPerPortion
+          } else {
+            const recipe = recipesStore.getRecipeById(comp.id)
+            unitCost = recipe?.costPerPortion || 0
+          }
+        } else if (comp.type === 'preparation') {
+          const prep = recipesStore.getPreparationById(comp.id)
+          const prepCost = recipesStore.getPreparationCostCalculation(comp.id)
+          unitCost = prepCost?.costPerOutputUnit || prep?.lastKnownCost || prep?.costPerPortion || 0
+        }
+
+        cost += quantity * unitCost * portionMultiplier
+      }
+    }
+    return cost
+  }
+
+  // Helper: calculate min/max food cost for a variant based on all modifier options
+  function calculateVariantFoodCostRange(variant: MenuItemVariant, baseCost: number) {
+    const modifierGroups = item.modifierGroups || []
+    const portionMultiplier = variant.portionMultiplier || 1
+
+    let minModifierCost = 0
+    let maxModifierCost = 0
+
+    for (const group of modifierGroups) {
+      if (!group.isRequired) continue
+
+      const activeOptions = group.options.filter(opt => opt.isActive !== false)
+      if (activeOptions.length === 0) continue
+
+      // Calculate costs for all options in this group
+      const optionCosts = activeOptions.map(opt =>
+        calculateModifierOptionCost(opt, portionMultiplier)
+      )
+
+      minModifierCost += Math.min(...optionCosts)
+      maxModifierCost += Math.max(...optionCosts)
+    }
+
+    const minTotalCost = baseCost + minModifierCost
+    const maxTotalCost = baseCost + maxModifierCost
+    const price = variant.price
+
+    return {
+      minCost: minTotalCost,
+      maxCost: maxTotalCost,
+      minFoodCostPercent: price > 0 ? (minTotalCost / price) * 100 : 0,
+      maxFoodCostPercent: price > 0 ? (maxTotalCost / price) * 100 : 0
+    }
+  }
+
+  // Build variant groups for new structured view
+  const variantGroups: VariantCombinationGroup[] = sortedVariants.value.map((variant, vIdx) => {
+    const variantBaseCost = variantCosts.value[vIdx]?.totalCost || 0
+
+    // Calculate min/max food cost range for this variant (from ALL possible modifier combinations)
+    const foodCostRange = calculateVariantFoodCostRange(variant, variantBaseCost)
+
+    // Get combinations for this variant
+    const variantCombos = combinationExports.filter(
+      c => c.variantName === (variant.name || 'Standard')
+    )
+
+    // For summary mode: build default modifiers list
+    let defaultModifiers: VariantDefaultModifier[] | undefined
+    let defaultCombination: CombinationExport | undefined
+
+    if (isSummaryMode) {
+      // Get default modifiers from required groups
+      const defaultModifierInfos = getDefaultModifiersForVariant(item.modifierGroups || [])
+
+      defaultModifiers = defaultModifierInfos.map(dm => {
+        // Calculate cost for this modifier option
+        let modifierCost = 0
+        const portionMultiplier = variant.portionMultiplier || 1
+
+        if (dm.option.composition && dm.option.composition.length > 0) {
+          for (const comp of dm.option.composition) {
+            const quantity = comp.quantity || 1
+            let unitCost = 0
+
+            if (comp.type === 'product') {
+              const product = productsStore.getProductById(comp.id)
+              unitCost = product?.baseCostPerUnit || 0
+            } else if (comp.type === 'recipe') {
+              // Use pre-calculated recipe cost
+              const recipeCost = recipesStore.getRecipeCostCalculation(comp.id)
+              if (recipeCost && recipeCost.costPerPortion > 0) {
+                unitCost = recipeCost.costPerPortion
+              } else {
+                // Fallback to stored field
+                const recipe = recipesStore.getRecipeById(comp.id)
+                unitCost = recipe?.costPerPortion || 0
+              }
+            } else if (comp.type === 'preparation') {
+              const prep = recipesStore.getPreparationById(comp.id)
+              const prepCost = recipesStore.getPreparationCostCalculation(comp.id)
+              unitCost =
+                prepCost?.costPerOutputUnit || prep?.lastKnownCost || prep?.costPerPortion || 0
+            }
+
+            modifierCost += quantity * unitCost * portionMultiplier
+          }
+        }
+
+        // Get portion size from first composition item
+        const portionSize = dm.option.composition?.[0]?.quantity || 1
+
+        return {
+          groupName: dm.groupName,
+          modifierName: dm.modifierName,
+          portionSize: portionSize * portionMultiplier,
+          cost: modifierCost
+        }
+      })
+
+      // Build default combination for this variant
+      const totalModifierCost = defaultModifiers.reduce((sum, dm) => sum + dm.cost, 0)
+      const totalCost = variantBaseCost + totalModifierCost
+      const totalPrice = variant.price // Default modifiers have 0 price adjustment
+
+      defaultCombination = {
+        variantName: variant.name || 'Standard',
+        displayName: buildModifiersDisplayName(
+          defaultModifierInfos.map(dm => ({
+            group: item.modifierGroups!.find(g => g.id === dm.groupId)!,
+            option: dm.option
+          }))
+        ),
+        price: totalPrice,
+        cost: totalCost,
+        foodCostPercent: totalPrice > 0 ? (totalCost / totalPrice) * 100 : 0,
+        margin: totalPrice - totalCost
+      }
+    }
+
+    return {
+      variantName: variant.name || 'Standard',
+      variantPrice: variant.price,
+      variantBaseCost,
+      // Theoretical min/max from ALL modifier options (not just exported combinations)
+      minFoodCostPercent: foodCostRange.minFoodCostPercent,
+      maxFoodCostPercent: foodCostRange.maxFoodCostPercent,
+      minCost: foodCostRange.minCost,
+      maxCost: foodCostRange.maxCost,
+      defaultCombination,
+      defaultModifiers,
+      combinations: variantCombos
+    }
+  })
+
+  // Build item detail for export
+  const itemDetail: MenuItemDetailExport = {
+    name: item.name,
+    category: categoryName.value,
+    department: item.department,
+    dishType: item.dishType,
+    description: item.description,
+    variants: sortedVariants.value.map((variant, vIdx) => ({
+      name: variant.name || 'Standard',
+      price: variant.price,
+      cost: variantCosts.value[vIdx]?.totalCost || 0,
+      foodCostPercent: variantCosts.value[vIdx]?.foodCostPercent || 0,
+      margin: variant.price - (variantCosts.value[vIdx]?.totalCost || 0),
+      composition: []
+    }))
+  }
+
+  // Calculate total combinations count
+  const totalCount = calculateTotalCombinations(item.variants, item.modifierGroups || [])
+
+  return {
+    title: item.name,
+    date: exportService.formatDate(),
+    item: itemDetail,
+    variantGroups,
+    combinations: combinationExports,
+    modifierRecipes,
+    uniqueRecipes,
+    totalCombinationsCount: totalCount,
+    isLimited: !includeAllCombinations && combinationExports.length < totalCount,
+    isSummaryMode
   }
 }
 
@@ -944,9 +1292,6 @@ watch(
 
 .dialog-actions {
   padding: 12px 20px;
-}
-
-.include-recipes-checkbox {
-  flex: 0 0 auto;
+  gap: 8px;
 }
 </style>

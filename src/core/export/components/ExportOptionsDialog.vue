@@ -12,8 +12,10 @@ interface Props {
   exportType: 'menu' | 'recipes' | 'preparations'
 }
 
-interface ExportDialogOptions {
+export interface ExportDialogOptions {
   department: DepartmentFilter
+  includeRecipeDetails?: boolean // For menu export - include detailed recipe breakdown
+  avoidPageBreaks?: boolean // Avoid cutting modules across pages
 }
 
 const props = defineProps<Props>()
@@ -24,6 +26,8 @@ const emit = defineEmits<{
 }>()
 
 const selectedDepartment = ref<DepartmentFilter>('all')
+const includeRecipeDetails = ref(true) // Default to true
+const avoidPageBreaks = ref(true) // Default to true - avoid cutting modules
 
 const isOpen = computed({
   get: () => props.modelValue,
@@ -47,7 +51,9 @@ const exportTypeLabel = computed(() => {
 
 function handleExport() {
   emit('export', {
-    department: selectedDepartment.value
+    department: selectedDepartment.value,
+    includeRecipeDetails: props.exportType === 'menu' ? includeRecipeDetails.value : undefined,
+    avoidPageBreaks: avoidPageBreaks.value
   })
   isOpen.value = false
 }
@@ -59,6 +65,8 @@ function handleCancel() {
 // Reset selection when dialog opens
 function handleAfterEnter() {
   selectedDepartment.value = 'all'
+  includeRecipeDetails.value = true
+  avoidPageBreaks.value = true
 }
 </script>
 
@@ -91,6 +99,32 @@ function handleAfterEnter() {
             </template>
           </v-radio>
         </v-radio-group>
+
+        <!-- Recipe details option (only for menu export) -->
+        <div v-if="exportType === 'menu'" class="mt-4">
+          <v-checkbox
+            v-model="includeRecipeDetails"
+            label="Include recipe details"
+            hint="Show ingredients and costs breakdown for each dish"
+            persistent-hint
+            hide-details="auto"
+            density="compact"
+            color="primary"
+          />
+        </div>
+
+        <!-- Page break option -->
+        <div class="mt-4">
+          <v-checkbox
+            v-model="avoidPageBreaks"
+            label="Keep items together"
+            hint="Avoid cutting menu items across page boundaries"
+            persistent-hint
+            hide-details="auto"
+            density="compact"
+            color="primary"
+          />
+        </div>
       </v-card-text>
 
       <v-card-actions class="pa-4 pt-0">

@@ -12,6 +12,7 @@ export interface Category extends BaseEntity {
   description?: string
   isActive: boolean
   sortOrder: number
+  parentId?: string | null // Reference to parent category (null = root category)
 }
 
 export type Department = 'kitchen' | 'bar'
@@ -191,6 +192,7 @@ export interface CreateCategoryDto {
   description?: string
   isActive?: boolean
   sortOrder?: number
+  parentId?: string | null // Reference to parent category (null = root category)
 }
 
 export interface UpdateCategoryDto extends Partial<CreateCategoryDto> {}
@@ -249,7 +251,8 @@ export const DEFAULT_CATEGORY: Omit<Category, 'id' | 'createdAt' | 'updatedAt'> 
   name: '',
   description: '',
   sortOrder: 0,
-  isActive: true
+  isActive: true,
+  parentId: null
 }
 
 export const DEFAULT_MENU_ITEM: Omit<MenuItem, 'id' | 'createdAt' | 'updatedAt'> = {

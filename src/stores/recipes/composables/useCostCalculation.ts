@@ -453,7 +453,25 @@ export function useCostCalculation() {
           component.percentage = (component.totalPlanCost / totalCost) * 100
         })
 
-        const costPerPortion = totalCost / recipe.portionSize
+        // Calculate cost per portion based on portionUnit semantics
+        const weightVolumeUnits = [
+          'gram',
+          'g',
+          'kilogram',
+          'kg',
+          'milliliter',
+          'ml',
+          'liter',
+          'l',
+          'ounce',
+          'oz',
+          'pound',
+          'lb'
+        ]
+        const isWeightOrVolumeUnit = weightVolumeUnits.includes(
+          (recipe.portionUnit || '').toLowerCase()
+        )
+        const costPerPortion = isWeightOrVolumeUnit ? totalCost : totalCost / recipe.portionSize
 
         const result: RecipePlanCost = {
           recipeId: recipe.id,
@@ -496,6 +514,7 @@ export function useCostCalculation() {
         let componentCost = 0
         let componentName = ''
         let unitCost = 0
+        let prepUnit: string | undefined // For preparations, store their output unit
 
         if (component.componentType === 'product') {
           const product = await getProductCallback(component.componentId)
@@ -524,40 +543,39 @@ export function useCostCalculation() {
           )
           unitCost = product.baseCostPerUnit
         } else if (component.componentType === 'preparation') {
-          // ✅ FIX: Try multiple sources for preparation cost (same as nested preparations)
+          // ✅ FIX: Always get preparation object for name and unit
+          const prep = getPreparationCallback
+            ? await getPreparationCallback(component.componentId)
+            : null
+
+          if (!prep) {
+            missingItems.push(`Preparation: ${component.componentId}`)
+            continue
+          }
+
+          componentName = prep.name || `Preparation (${component.componentId})`
+          prepUnit = prep.outputUnit || prep.output?.unit // Store preparation's output unit
+
+          // ✅ FIX: Try multiple sources for preparation cost
           let prepUnitCost = 0
 
           // 1. Try cached cost calculation first
           const preparationCost = await getPreparationCostCallback(component.componentId)
           if (preparationCost && preparationCost.costPerOutputUnit > 0) {
             prepUnitCost = preparationCost.costPerOutputUnit
-            componentName = `Preparation (${component.componentId})`
+          } else if (prep.lastKnownCost && prep.lastKnownCost > 0) {
+            // 2. Fallback: try lastKnownCost
+            prepUnitCost = prep.lastKnownCost
+          } else if (prep.costPerPortion && prep.costPerPortion > 0) {
+            // 3. Fallback: try costPerPortion
+            prepUnitCost = prep.costPerPortion
           } else {
-            // 2. Fallback: try to get preparation object directly
-            const prep = getPreparationCallback
-              ? await getPreparationCallback(component.componentId)
-              : null
-
-            if (!prep) {
-              missingItems.push(`Preparation: ${component.componentId}`)
-              continue
-            }
-
-            componentName = prep.name || `Preparation (${component.componentId})`
-
-            // Try lastKnownCost or costPerPortion
-            if (prep.lastKnownCost && prep.lastKnownCost > 0) {
-              prepUnitCost = prep.lastKnownCost
-            } else if (prep.costPerPortion && prep.costPerPortion > 0) {
-              prepUnitCost = prep.costPerPortion
-            } else {
-              // Preparation has no cost data - warn but continue with 0 cost
-              DebugUtils.warn(
-                MODULE_NAME,
-                `Preparation "${prep.name}" (${prep.code}) has no cost data - using 0`,
-                { preparationId: component.componentId }
-              )
-            }
+            // Preparation has no cost data - warn but continue with 0 cost
+            DebugUtils.warn(
+              MODULE_NAME,
+              `Preparation "${prep.name}" (${prep.code}) has no cost data - using 0`,
+              { preparationId: component.componentId }
+            )
           }
 
           componentCost = prepUnitCost * component.quantity
@@ -566,12 +584,15 @@ export function useCostCalculation() {
 
         totalCost += componentCost
 
+        // ✅ FIX: Use preparation's output unit for preparations, component unit for products
+        const displayUnit = prepUnit || component.unit
+
         componentCosts.push({
           componentId: component.componentId,
           componentType: component.componentType,
           componentName,
           quantity: component.quantity,
-          unit: component.unit, // ✅ Уже базовая единица
+          unit: displayUnit,
           planUnitCost: unitCost,
           totalPlanCost: componentCost,
           percentage: 0
@@ -596,7 +617,30 @@ export function useCostCalculation() {
         component.percentage = (component.totalPlanCost / totalCost) * 100
       })
 
-      const costPerPortion = totalCost / recipe.portionSize
+      // Calculate cost per portion based on portionUnit semantics:
+      // - Weight/volume units (gram, ml, etc.): portionSize is the weight of ONE portion, so costPerPortion = totalCost
+      // - Count units (portion, piece, etc.): portionSize is the NUMBER of portions, so costPerPortion = totalCost / portionSize
+      const weightVolumeUnits = [
+        'gram',
+        'g',
+        'kilogram',
+        'kg',
+        'milliliter',
+        'ml',
+        'liter',
+        'l',
+        'ounce',
+        'oz',
+        'pound',
+        'lb'
+      ]
+      const isWeightOrVolumeUnit = weightVolumeUnits.includes(
+        (recipe.portionUnit || '').toLowerCase()
+      )
+
+      const costPerPortion = isWeightOrVolumeUnit
+        ? totalCost // Recipe yields 1 portion of X grams/ml, total cost IS the portion cost
+        : totalCost / recipe.portionSize // Recipe yields N portions, divide to get cost per portion
 
       const result: RecipePlanCost = {
         recipeId: recipe.id,

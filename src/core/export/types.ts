@@ -14,6 +14,8 @@ export interface ExportOptions {
   pageSize?: 'a4' | 'letter'
   orientation?: 'portrait' | 'landscape'
   department?: DepartmentFilter // filter by department
+  avoidPageBreaks?: boolean // avoid breaking modules across pages
+  showPageNumbers?: boolean // show page numbers in footer
 }
 
 export interface ExportItem {
@@ -191,12 +193,327 @@ export interface ModifierOptionExport {
   isDefault?: boolean
 }
 
+// =============================================
+// Combinations Export Types
+// =============================================
+
+export interface CombinationsExportOptions extends ExportOptions {
+  includeAllCombinations?: boolean
+  maxCombinations?: number // default: 10
+}
+
+// Multi-item detailed export (for bulk menu export with recipe details)
+export interface MenuDetailedExportData {
+  title: string
+  date: string
+  department: 'all' | 'kitchen' | 'bar'
+  items: CombinationsExportData[]
+  summary: {
+    totalItems: number
+    totalVariants: number
+  }
+}
+
+export interface CombinationsExportData {
+  title: string
+  date: string
+  item: MenuItemDetailExport
+  // Grouped by variant (new structure)
+  variantGroups: VariantCombinationGroup[]
+  // Flat list for backward compatibility
+  combinations: CombinationExport[]
+  modifierRecipes: ModifierRecipeGroupExport[] // Legacy format (grouped by modifier)
+  uniqueRecipes?: UniqueModifierRecipeExport[] // New format (unique recipes with portion columns)
+  totalCombinationsCount: number
+  isLimited: boolean
+  isSummaryMode: boolean // true = only default modifiers, false = all combinations
+}
+
+// Combinations grouped by variant
+export interface VariantCombinationGroup {
+  variantName: string
+  variantPrice: number
+  variantBaseCost: number
+  // Theoretical min/max food cost (calculated from ALL possible modifier combinations)
+  // This ensures accurate range even when combinations are limited for export
+  minFoodCostPercent: number
+  maxFoodCostPercent: number
+  minCost: number
+  maxCost: number
+  // For summary mode: single combination with default modifiers
+  defaultCombination?: CombinationExport
+  defaultModifiers?: VariantDefaultModifier[]
+  // For full mode: all combinations for this variant
+  combinations: CombinationExport[]
+}
+
+export interface VariantDefaultModifier {
+  groupName: string
+  modifierName: string
+  portionSize: number
+  cost: number
+}
+
+export interface CombinationExport {
+  variantName: string
+  displayName: string // "No Ice + Banana (0.33) + Dragon (0.33)"
+  price: number
+  cost: number
+  foodCostPercent: number
+  margin: number
+}
+
+export interface ModifierRecipeGroupExport {
+  modifierName: string // "Banana Portion"
+  groupName: string // "Fruit 1"
+  recipeId?: string // ID of the recipe/preparation
+  ingredients: ModifierIngredientExport[]
+  totalCost: number
+  quantity?: number // Quantity used in modifier (e.g., 0.33)
+  unit?: string
+}
+
+// Unique recipe with multiple portion sizes (for column display)
+export interface UniqueModifierRecipeExport {
+  recipeName: string // "Banana Portion" (from composition name)
+  recipeId: string
+  recipeCode?: string // "R-074" for recipes, "P-42" for preparations, product code for products
+  recipeType: 'product' | 'recipe' | 'preparation'
+  // Source: where this recipe is used
+  source?: 'variant' | 'modifier' // 'variant' = from variant composition, 'modifier' = from modifier options
+  // Recipe yield info
+  yield: {
+    quantity: number
+    unit: string
+  }
+  // All portion sizes used (for column headers)
+  portions: ModifierPortionUsage[]
+  // Ingredients with costs per portion
+  ingredients: UniqueRecipeIngredientExport[]
+  // Total cost for 1 full portion (yield)
+  totalCostPerYield: number
+}
+
+export interface ModifierPortionUsage {
+  portionSize: number // 0.33, 0.50, 1.0
+  modifierGroups: string[] // ["Fruit 1", "Fruit 2"] - where this portion is used
+}
+
+export interface UniqueRecipeIngredientExport {
+  name: string
+  type: 'product' | 'preparation' | 'recipe'
+  // Quantity per yield (full recipe) - NET quantity (cleaned/processed)
+  quantityPerYield: number
+  // Raw quantity before yield adjustment (gross) - shows how much raw product needed
+  rawQuantityPerYield?: number
+  unit: string
+  costPerYield: number
+  // Quantities for each portion size (calculated from quantityPerYield * portionSize)
+  quantitiesByPortion: Map<number, number> // portionSize -> quantity
+  costsByPortion: Map<number, number> // portionSize -> cost
+  // Nested components for full expansion (preparations/recipes inside)
+  nestedComponents?: NestedIngredientExport[]
+}
+
+export interface ModifierIngredientExport {
+  name: string
+  type: 'product' | 'recipe' | 'preparation'
+  quantity: number
+  unit: string
+  cost: number
+  nestedIngredients?: NestedIngredientExport[]
+}
+
+export interface NestedIngredientExport {
+  name: string
+  type: 'product' | 'preparation' | 'recipe'
+  quantity: number
+  unit: string
+  cost: number
+  // Deep nested components (for recursive expansion)
+  nestedComponents?: NestedIngredientExport[]
+}
+
 // html2pdf.js options
 export interface Html2PdfOptions {
   margin?: number | [number, number, number, number]
   filename?: string
   image?: { type: string; quality: number }
-  html2canvas?: { scale: number; useCORS: boolean; logging?: boolean }
+  html2canvas?: {
+    scale: number
+    useCORS: boolean
+    logging?: boolean
+    allowTaint?: boolean
+    scrollX?: number
+    scrollY?: number
+  }
   jsPDF?: { unit: string; format: string; orientation: string }
   pagebreak?: { mode: string[]; before?: string; after?: string; avoid?: string }
 }
+
+// =============================================
+// Print Documents Types (Inventory Sheets, etc.)
+// =============================================
+
+export type PrintDocumentCategory = 'inventory' | 'operations' | 'reports'
+
+export interface PrintDocumentConfig {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: PrintDocumentCategory
+}
+
+// Inventory Sheet Options (for both Products and Preparations)
+export interface InventorySheetOptions extends ExportOptions {
+  documentType: 'products' | 'preparations'
+  department: DepartmentFilter
+  includeZeroStock: boolean
+  sortBy: 'name' | 'code' | 'category'
+  categoryFilter?: string[] // Filter by specific categories (optional)
+  showSignatureLine: boolean
+  countDate: string // Date of inventory count
+}
+
+// Individual item in inventory sheet
+export interface InventorySheetItem {
+  index: number
+  name: string
+  code: string // Product code (P-001) or Preparation code (PR-042)
+  category?: string
+  unit: string
+  currentStock: number
+  // These are null - will be filled manually on printed sheet
+  actualCount: null
+  difference: null
+}
+
+// Complete inventory sheet data for PDF generation
+export interface InventorySheetData {
+  title: string // "Inventory Count Sheet - Products" or "...Preparations"
+  subtitle?: string // Department name
+  date: string // Count date
+  generatedAt: string // When PDF was generated
+  department: DepartmentFilter
+  items: InventorySheetItem[]
+  summary: {
+    totalItems: number
+    totalCategories: number
+  }
+  showSignatureLine: boolean
+}
+
+// Product Yield Report Types
+export interface ProductYieldReportOptions extends ExportOptions {
+  department: DepartmentFilter
+  sortBy: 'name' | 'code' | 'yield' | 'category'
+}
+
+export interface ProductYieldItem {
+  index: number
+  name: string
+  code: string
+  department: string // 'Kitchen', 'Bar', 'Both'
+  category?: string
+  yieldPercentage: number
+  unit: string
+}
+
+export interface ProductYieldReportData {
+  title: string
+  date: string
+  generatedAt: string
+  department: DepartmentFilter
+  items: ProductYieldItem[]
+  summary: {
+    totalProducts: number
+    averageYield: number
+  }
+}
+
+// =============================================
+// Menu Cost Summary Report Types
+// =============================================
+
+export interface MenuCostReportOptions extends ExportOptions {
+  department: DepartmentFilter
+  sortBy: 'name' | 'category' | 'foodCost' | 'price'
+  includeInactive?: boolean
+  groupByCategory?: boolean // Group items by category/subcategory (default: true)
+}
+
+export interface MenuCostCategoryGroup {
+  id: string
+  name: string
+  isSubcategory: boolean
+  parentName?: string // For subcategories, the parent category name
+  items: MenuCostItemData[]
+}
+
+export interface MenuCostItemData {
+  id: string
+  name: string
+  department: 'kitchen' | 'bar'
+  dishType: 'simple' | 'modifiable'
+  variants: MenuCostVariantData[]
+}
+
+export interface MenuCostVariantData {
+  name: string
+  price: number
+  baseCost: number // Cost from composition only
+  minCost: number // Min total cost (base + min modifiers)
+  maxCost: number // Max total cost (base + max modifiers)
+  minFoodCostPercent: number
+  maxFoodCostPercent: number
+  margin: number // price - baseCost (for simple) or price - minCost (for modifiable)
+}
+
+export interface MenuCostReportData {
+  title: string
+  date: string
+  generatedAt: string
+  department: DepartmentFilter
+  categories: MenuCostCategoryGroup[]
+  summary: {
+    totalItems: number
+    totalVariants: number
+    averageFoodCost: number
+    minFoodCost: number
+    maxFoodCost: number
+    totalCategories: number
+  }
+}
+
+// Available print documents registry
+export const PRINT_DOCUMENTS: PrintDocumentConfig[] = [
+  {
+    id: 'inventory-products',
+    name: 'Inventory Sheet (Products)',
+    description: 'Count sheet for raw products and ingredients',
+    icon: 'mdi-package-variant',
+    category: 'inventory'
+  },
+  {
+    id: 'inventory-preparations',
+    name: 'Inventory Sheet (Preparations)',
+    description: 'Count sheet for semi-finished products',
+    icon: 'mdi-bowl-mix',
+    category: 'inventory'
+  },
+  {
+    id: 'product-yield-list',
+    name: 'Product Yield List',
+    description: 'List of all products with yield percentages',
+    icon: 'mdi-percent',
+    category: 'reports'
+  },
+  {
+    id: 'menu-cost-summary',
+    name: 'Menu Cost Summary',
+    description: 'All menu items with food cost analysis',
+    icon: 'mdi-food-variant',
+    category: 'reports'
+  }
+]

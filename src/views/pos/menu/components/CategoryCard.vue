@@ -3,7 +3,8 @@
   <v-card
     class="category-card pos-card"
     :class="{
-      'category-disabled': !category.isActive
+      'category-disabled': !category.isActive,
+      'category-subcategory': isSubcategory
     }"
     elevation="2"
     @click="handleClick"
@@ -24,10 +25,10 @@
           </v-card-subtitle>
         </div>
 
-        <!-- Status indicator -->
-        <v-chip v-if="!category.isActive" size="x-small" color="error" variant="flat" class="ml-2">
-          Unavailable
-        </v-chip>
+        <!-- Status indicators -->
+        <div v-if="!category.isActive" class="d-flex flex-column align-end gap-1">
+          <v-chip size="x-small" color="error" variant="flat">Unavailable</v-chip>
+        </div>
       </div>
 
       <!-- Footer with item count -->
@@ -52,10 +53,14 @@ import type { Category } from '@/stores/menu/types'
 interface Props {
   category: Category
   itemsCount?: number
+  hasSubcategories?: boolean // NEW: Indicates category has subcategories
+  isSubcategory?: boolean // NEW: Visual indicator for subcategory styling
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  itemsCount: 0
+  itemsCount: 0,
+  hasSubcategories: false,
+  isSubcategory: false
 })
 
 // Emits
@@ -208,5 +213,17 @@ const handleClick = (): void => {
 
 .category-card.loading .card-content {
   opacity: 0.7;
+}
+
+/* =============================================
+   SUBCATEGORY STYLING
+   ============================================= */
+
+.category-card.category-subcategory {
+  border-left: 4px solid rgb(var(--v-theme-primary));
+}
+
+.category-card.category-subcategory .category-title {
+  font-size: 1rem;
 }
 </style>

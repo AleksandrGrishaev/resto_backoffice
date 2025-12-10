@@ -86,7 +86,7 @@
       <!-- Loading state -->
       <v-progress-linear v-if="menuStore.isLoading" indeterminate color="primary" />
 
-      <!-- Menu panels -->
+      <!-- Menu panels - Root categories with nested subcategories -->
       <v-expansion-panels v-model="expandedPanels" multiple>
         <v-expansion-panel
           v-for="category in filteredCategories"
@@ -94,7 +94,7 @@
           :value="category.id"
           :class="{
             'category--inactive': !category.isActive,
-            'category--empty': getCategoryItems(category.id).length === 0
+            'category--empty': getTotalItemsCount(category.id) === 0
           }"
         >
           <v-expansion-panel-title class="text-h6">
@@ -110,6 +110,14 @@
                 >
                   Archive
                 </v-chip>
+                <v-chip
+                  v-if="hasSubcategories(category.id)"
+                  size="x-small"
+                  variant="outlined"
+                  class="ml-2"
+                >
+                  {{ getFilteredSubcategories(category.id).length }} subcategories
+                </v-chip>
               </div>
               <div class="category-actions">
                 <v-btn
@@ -124,7 +132,7 @@
                 </v-btn>
 
                 <v-btn
-                  v-if="getCategoryItems(category.id).length === 0"
+                  v-if="getTotalItemsCount(category.id) === 0 && !hasSubcategories(category.id)"
                   icon
                   size="small"
                   variant="text"
@@ -139,19 +147,109 @@
           </v-expansion-panel-title>
 
           <v-expansion-panel-text>
+            <!-- Direct items in parent category -->
+            <div v-if="getDirectItemsCount(category.id) > 0" class="mb-4">
+              <div class="text-subtitle-2 text-medium-emphasis mb-2">
+                Items in {{ category.name }}
+              </div>
+              <div class="menu-items-grid">
+                <menu-item-component
+                  v-for="item in getCategoryItems(category.id)"
+                  :key="item.id"
+                  :item="item"
+                  @edit="editItem"
+                  @duplicate="duplicateItem"
+                  @view="viewItem"
+                  @toggle-status="toggleItemStatus"
+                />
+              </div>
+            </div>
+
+            <!-- Subcategories with their items -->
+            <v-expansion-panels
+              v-if="hasSubcategories(category.id)"
+              multiple
+              class="subcategory-panels"
+            >
+              <v-expansion-panel
+                v-for="subcategory in getFilteredSubcategories(category.id)"
+                :key="subcategory.id"
+                :value="subcategory.id"
+                :class="{
+                  'category--inactive': !subcategory.isActive,
+                  'category--empty': getCategoryItems(subcategory.id).length === 0
+                }"
+              >
+                <v-expansion-panel-title class="text-subtitle-1">
+                  <div class="d-flex align-center justify-space-between w-100">
+                    <div class="d-flex align-center">
+                      <v-icon icon="mdi-subdirectory-arrow-right" size="18" class="mr-2" />
+                      <span>{{ subcategory.name }}</span>
+                      <v-chip
+                        v-if="!subcategory.isActive"
+                        size="x-small"
+                        color="warning"
+                        variant="flat"
+                        class="ml-2"
+                      >
+                        Archive
+                      </v-chip>
+                    </div>
+                    <div class="category-actions">
+                      <v-btn
+                        icon
+                        size="small"
+                        variant="text"
+                        color="primary"
+                        class="category-btn"
+                        @click.stop="editCategory(subcategory)"
+                      >
+                        <v-icon icon="mdi-pencil" size="18" />
+                      </v-btn>
+
+                      <v-btn
+                        v-if="getCategoryItems(subcategory.id).length === 0"
+                        icon
+                        size="small"
+                        variant="text"
+                        color="error"
+                        class="category-btn"
+                        @click.stop="confirmDeleteCategory(subcategory)"
+                      >
+                        <v-icon icon="mdi-delete" size="18" />
+                      </v-btn>
+                    </div>
+                  </div>
+                </v-expansion-panel-title>
+
+                <v-expansion-panel-text>
+                  <div
+                    v-if="getCategoryItems(subcategory.id).length === 0"
+                    class="text-center py-4 text-medium-emphasis"
+                  >
+                    No dishes
+                  </div>
+                  <div v-else class="menu-items-grid">
+                    <menu-item-component
+                      v-for="item in getCategoryItems(subcategory.id)"
+                      :key="item.id"
+                      :item="item"
+                      @edit="editItem"
+                      @duplicate="duplicateItem"
+                      @view="viewItem"
+                      @toggle-status="toggleItemStatus"
+                    />
+                  </div>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+
+            <!-- Empty state if no items and no subcategories -->
             <div
-              v-if="getCategoryItems(category.id).length === 0"
+              v-if="getDirectItemsCount(category.id) === 0 && !hasSubcategories(category.id)"
               class="text-center py-4 text-medium-emphasis"
             >
               No dishes
-            </div>
-            <div v-for="item in getCategoryItems(category.id)" :key="item.id">
-              <menu-item-component
-                :item="item"
-                @edit="editItem"
-                @duplicate="duplicateItem"
-                @view="viewItem"
-              />
             </div>
           </v-expansion-panel-text>
         </v-expansion-panel>
@@ -245,8 +343,12 @@ import type {
   MenuCategoryExport,
   MenuItemExport,
   MenuVariantExport,
-  DepartmentFilter
+  DepartmentFilter,
+  MenuDetailedExportData,
+  CombinationsExportData,
+  ExportDialogOptions
 } from '@/core/export'
+import { buildMenuItemExportData, type CostCalculationContext } from '@/core/export'
 import MenuCategoryDialog from './components/MenuCategoryDialog.vue'
 import MenuItemDialog from './components/MenuItemDialog.vue'
 import MenuItemComponent from './components/MenuItem.vue'
@@ -257,12 +359,12 @@ const MODULE_NAME = 'MenuView'
 const menuStore = useMenuStore()
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
-const { isExporting, exportMenu } = useExport()
+const { isExporting, exportMenu, exportMenuDetailed } = useExport()
 
 // State
 const expandedPanels = ref<string[]>([])
 const search = ref('')
-const filterTypes = ref<Array<'food' | 'beverage' | 'archive'>>(['food'])
+const filterTypes = ref<Array<'food' | 'beverage' | 'archive'>>(['food', 'beverage'])
 
 // Dialogs state
 const dialogs = ref({
@@ -285,29 +387,39 @@ const confirmDialog = ref({
   category: null as Category | null
 })
 
-// Computed
+// Computed - Only root categories (no parent)
 const filteredCategories = computed(() => {
-  const categories = menuStore.categories.filter(category => {
-    // Фильтр по поиску
-    if (search.value && !category.name.toLowerCase().includes(search.value.toLowerCase())) {
-      return false
-    }
-
+  // Get only root categories (parentId is null/undefined)
+  const rootCategories = menuStore.rootCategories.filter(category => {
     // Фильтр по активным категориям если не выбран архив
     if (!filterTypes.value.includes('archive') && !category.isActive) {
       return false
     }
-
     return true
   })
 
   // Сортировка категорий по sortOrder
-  return categories.sort((a, b) => {
+  return rootCategories.sort((a, b) => {
     const orderDiff = (a.sortOrder || 0) - (b.sortOrder || 0)
     if (orderDiff !== 0) return orderDiff
     return a.name.localeCompare(b.name)
   })
 })
+
+// Get subcategories of a parent (filtered)
+function getFilteredSubcategories(parentId: string) {
+  return menuStore.getSubcategories(parentId).filter(category => {
+    if (!filterTypes.value.includes('archive') && !category.isActive) {
+      return false
+    }
+    return true
+  })
+}
+
+// Check if category has subcategories
+function hasSubcategories(categoryId: string) {
+  return menuStore.hasSubcategories(categoryId)
+}
 
 // Methods
 function isFilterActive(value: string) {
@@ -322,8 +434,10 @@ function toggleAllPanels() {
   }
 }
 
+// Get items for a category (SEARCH ONLY BY DISH NAME, not category name)
 function getCategoryItems(categoryId: string) {
   return menuStore.getItemsByCategory(categoryId).filter(item => {
+    // Search only by dish name (NOT category name)
     if (search.value && !item.name.toLowerCase().includes(search.value.toLowerCase())) {
       return false
     }
@@ -334,6 +448,21 @@ function getCategoryItems(categoryId: string) {
 
     return filterTypes.value.includes(item.type) && item.isActive
   })
+}
+
+// Get direct items count (items directly in category, not in subcategories)
+function getDirectItemsCount(categoryId: string) {
+  return getCategoryItems(categoryId).length
+}
+
+// Get total items count (direct items + items in all subcategories)
+function getTotalItemsCount(categoryId: string) {
+  let count = getDirectItemsCount(categoryId)
+  const subcategories = menuStore.getSubcategories(categoryId)
+  for (const sub of subcategories) {
+    count += getCategoryItems(sub.id).length
+  }
+  return count
 }
 
 function showCategoryDialog() {
@@ -376,6 +505,16 @@ function duplicateItem(item: MenuItem) {
 function viewItem(item: MenuItem) {
   viewingItem.value = item
   dialogs.value.view = true
+}
+
+async function toggleItemStatus(item: MenuItem) {
+  try {
+    await menuStore.toggleMenuItemActive(item.id, !item.isActive)
+    const action = item.isActive ? 'archived' : 'restored'
+    DebugUtils.info(MODULE_NAME, `Menu item ${action}`, { id: item.id, name: item.name })
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to toggle menu item status', error)
+  }
 }
 
 async function confirmDuplicate() {
@@ -466,15 +605,27 @@ function exportVariant(variant: MenuItemVariant): MenuVariantExport {
   }
 }
 
-async function handleExportPdf(options: { department: DepartmentFilter }) {
+async function handleExportPdf(options: ExportDialogOptions) {
   try {
     const departmentFilter = options.department
+    const includeRecipeDetails = options.includeRecipeDetails || false
+    const avoidPageBreaks = options.avoidPageBreaks !== false // Default to true
+
     DebugUtils.info(MODULE_NAME, 'Starting export', {
       filteredCategoriesCount: filteredCategories.value.length,
       filterTypes: filterTypes.value,
-      departmentFilter
+      departmentFilter,
+      includeRecipeDetails,
+      avoidPageBreaks
     })
 
+    // If includeRecipeDetails, build detailed export with all recipes
+    if (includeRecipeDetails) {
+      await handleDetailedExport(departmentFilter, avoidPageBreaks)
+      return
+    }
+
+    // Standard export (without recipe details)
     const categories: MenuCategoryExport[] = filteredCategories.value
       .filter(cat => cat.isActive)
       .map(category => {
@@ -542,6 +693,102 @@ async function handleExportPdf(options: { department: DepartmentFilter }) {
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to export menu', error)
   }
+}
+
+/**
+ * Handle detailed export with recipe information
+ * Uses all active menu items (not filtered by page view)
+ */
+async function handleDetailedExport(departmentFilter: DepartmentFilter, avoidPageBreaks: boolean) {
+  const costContext: CostCalculationContext = {
+    productsStore,
+    recipesStore
+  }
+
+  // Get all active items (not filtered by page view filters)
+  const allItems: { item: MenuItem; categoryName: string }[] = []
+
+  // Use all active root categories (not page-filtered)
+  const allRootCategories = menuStore.rootCategories.filter(cat => cat.isActive)
+
+  for (const category of allRootCategories) {
+    // Get all active items directly in this category
+    let items = menuStore.getItemsByCategory(category.id).filter(item => item.isActive)
+
+    // Filter by department if not 'all'
+    if (departmentFilter !== 'all') {
+      items = items.filter(item => item.department === departmentFilter)
+    }
+
+    for (const item of items) {
+      allItems.push({ item, categoryName: category.name })
+    }
+
+    // Also get items from subcategories
+    const subcategories = menuStore.getSubcategories(category.id).filter(sub => sub.isActive)
+    for (const subcategory of subcategories) {
+      let subItems = menuStore.getItemsByCategory(subcategory.id).filter(item => item.isActive)
+
+      // Filter by department if not 'all'
+      if (departmentFilter !== 'all') {
+        subItems = subItems.filter(item => item.department === departmentFilter)
+      }
+
+      for (const item of subItems) {
+        // Use format "Parent > Subcategory" for category name
+        allItems.push({ item, categoryName: `${category.name} > ${subcategory.name}` })
+      }
+    }
+  }
+
+  if (allItems.length === 0) {
+    DebugUtils.info(MODULE_NAME, 'No items to export')
+    return
+  }
+
+  // Build detailed export data for each item
+  const detailedItems: CombinationsExportData[] = allItems.map(({ item, categoryName }) =>
+    buildMenuItemExportData(item, categoryName, costContext, {
+      includeAllCombinations: false, // Summary mode
+      includeRecipes: true // Include recipe details
+    })
+  )
+
+  // Count total variants
+  const totalVariants = detailedItems.reduce((sum, item) => sum + item.variantGroups.length, 0)
+
+  // Build title based on department filter
+  const departmentLabel =
+    departmentFilter === 'all' ? '' : departmentFilter === 'kitchen' ? ' (Kitchen)' : ' (Bar)'
+
+  const data: MenuDetailedExportData = {
+    title: `Menu Detailed Report${departmentLabel}`,
+    date: new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }),
+    department: departmentFilter,
+    items: detailedItems,
+    summary: {
+      totalItems: allItems.length,
+      totalVariants
+    }
+  }
+
+  DebugUtils.info(MODULE_NAME, 'Detailed export data prepared', {
+    totalItems: allItems.length,
+    totalVariants,
+    departmentFilter
+  })
+
+  // Use portrait orientation for detailed reports
+  await exportMenuDetailed(data, {
+    orientation: 'portrait',
+    department: departmentFilter,
+    avoidPageBreaks
+  })
+  DebugUtils.info(MODULE_NAME, 'Menu detailed exported successfully')
 }
 
 // Initial load
@@ -628,6 +875,67 @@ onMounted(async () => {
     :deep(.v-expansion-panel-title) {
       color: var(--text-secondary);
     }
+  }
+}
+
+.menu-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 16px;
+  padding: 8px 0;
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .menu-items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+
+    &__left {
+      flex-direction: column;
+
+      .search-field {
+        width: 100%;
+      }
+    }
+
+    &__right {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+  }
+}
+
+:deep(.v-expansion-panel-text__wrapper) {
+  padding: 8px 16px 16px;
+}
+
+// Nested subcategory panels styling
+.subcategory-panels {
+  margin-top: 8px;
+
+  :deep(.v-expansion-panel) {
+    background: rgba(var(--v-theme-surface-variant), 0.3);
+    margin-bottom: 4px;
+
+    &::before {
+      display: none;
+    }
+  }
+
+  :deep(.v-expansion-panel-title) {
+    min-height: 48px;
+    font-size: 0.95rem;
+    padding: 12px 16px;
+  }
+
+  :deep(.v-expansion-panel-text__wrapper) {
+    padding: 8px 12px 12px;
   }
 }
 </style>

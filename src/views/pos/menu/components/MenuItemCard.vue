@@ -136,7 +136,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showVariantChips: true
+  showVariantChips: false
 })
 
 // Emits
