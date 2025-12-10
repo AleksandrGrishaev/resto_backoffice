@@ -207,6 +207,102 @@ function hasRawQuantity(recipe: UniqueModifierRecipeExport): boolean {
       </table>
     </div>
 
+    <!-- Top Modifier Combinations (Min FC%, Max FC%, Default) -->
+    <div
+      v-if="isSummaryMode && variantGroups.some(g => g.minCombination || g.maxCombination)"
+      class="top-combinations-section"
+    >
+      <h2 class="combinations-title">Modifier Combinations Analysis</h2>
+      <table class="top-combinations-table">
+        <thead>
+          <tr>
+            <th class="col-type">Scenario</th>
+            <th class="col-combo-name">Modifiers</th>
+            <th class="col-combo-price">Price</th>
+            <th class="col-combo-cost">Cost</th>
+            <th class="col-combo-fc">FC%</th>
+            <th class="col-combo-margin">Margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="(variantGroup, vIdx) in variantGroups" :key="vIdx">
+            <!-- Variant Name Header (if multiple variants) -->
+            <tr v-if="variantGroups.length > 1" class="variant-header-row">
+              <td colspan="6" class="variant-header-cell">{{ variantGroup.variantName }}</td>
+            </tr>
+            <!-- Min FC% Combination -->
+            <tr v-if="variantGroup.minCombination" class="combo-row min-row">
+              <td class="col-type">
+                <span class="combo-badge min-badge">Min FC%</span>
+              </td>
+              <td class="col-combo-name">
+                {{ variantGroup.minCombination.displayName || 'Default' }}
+              </td>
+              <td class="col-combo-price">
+                {{ formatCurrency(variantGroup.minCombination.price) }}
+              </td>
+              <td class="col-combo-cost">{{ formatCurrency(variantGroup.minCombination.cost) }}</td>
+              <td
+                class="col-combo-fc"
+                :class="{ 'high-cost': variantGroup.minCombination.foodCostPercent > 35 }"
+              >
+                {{ formatPercent(variantGroup.minCombination.foodCostPercent) }}
+              </td>
+              <td class="col-combo-margin margin-positive">
+                {{ formatCurrency(variantGroup.minCombination.margin) }}
+              </td>
+            </tr>
+            <!-- Max FC% Combination -->
+            <tr v-if="variantGroup.maxCombination" class="combo-row max-row">
+              <td class="col-type">
+                <span class="combo-badge max-badge">Max FC%</span>
+              </td>
+              <td class="col-combo-name">
+                {{ variantGroup.maxCombination.displayName || 'Default' }}
+              </td>
+              <td class="col-combo-price">
+                {{ formatCurrency(variantGroup.maxCombination.price) }}
+              </td>
+              <td class="col-combo-cost">{{ formatCurrency(variantGroup.maxCombination.cost) }}</td>
+              <td
+                class="col-combo-fc"
+                :class="{ 'high-cost': variantGroup.maxCombination.foodCostPercent > 35 }"
+              >
+                {{ formatPercent(variantGroup.maxCombination.foodCostPercent) }}
+              </td>
+              <td class="col-combo-margin margin-positive">
+                {{ formatCurrency(variantGroup.maxCombination.margin) }}
+              </td>
+            </tr>
+            <!-- Default Combination -->
+            <tr v-if="variantGroup.defaultCombination" class="combo-row default-row">
+              <td class="col-type">
+                <span class="combo-badge default-badge">Default</span>
+              </td>
+              <td class="col-combo-name">
+                {{ variantGroup.defaultCombination.displayName || 'Default' }}
+              </td>
+              <td class="col-combo-price">
+                {{ formatCurrency(variantGroup.defaultCombination.price) }}
+              </td>
+              <td class="col-combo-cost">
+                {{ formatCurrency(variantGroup.defaultCombination.cost) }}
+              </td>
+              <td
+                class="col-combo-fc"
+                :class="{ 'high-cost': variantGroup.defaultCombination.foodCostPercent > 35 }"
+              >
+                {{ formatPercent(variantGroup.defaultCombination.foodCostPercent) }}
+              </td>
+              <td class="col-combo-margin margin-positive">
+                {{ formatCurrency(variantGroup.defaultCombination.margin) }}
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
     <!-- Warning if combinations are limited -->
     <div v-if="data.isLimited && !isSummaryMode" class="combinations-warning">
       <span class="warning-icon">&#9888;</span>
@@ -1220,5 +1316,125 @@ function hasRawQuantity(recipe: UniqueModifierRecipeExport): boolean {
 
 .variant-group-section .combinations-table {
   border-radius: 0 0 4px 4px;
+}
+
+/* Top Combinations Analysis Section */
+.top-combinations-section {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 6px;
+}
+
+.combinations-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin: 0 0 10px 0;
+  color: #f57c00;
+}
+
+.top-combinations-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.top-combinations-table th,
+.top-combinations-table td {
+  padding: 6px 10px;
+  border: 1px solid #ffe082;
+}
+
+.top-combinations-table th {
+  background: #ffecb3;
+  font-weight: bold;
+  text-align: left;
+}
+
+.top-combinations-table .col-type {
+  width: 12%;
+  text-align: center;
+}
+
+.top-combinations-table .col-combo-name {
+  width: 38%;
+}
+
+.top-combinations-table .col-combo-price,
+.top-combinations-table .col-combo-cost,
+.top-combinations-table .col-combo-margin {
+  width: 12%;
+  text-align: right;
+}
+
+.top-combinations-table .col-combo-fc {
+  width: 10%;
+  text-align: center;
+  font-weight: bold;
+}
+
+.variant-header-row {
+  background: #f5f5f5;
+}
+
+.variant-header-cell {
+  font-weight: bold;
+  font-size: 12px;
+  color: #333;
+  padding: 8px 10px !important;
+}
+
+.combo-row {
+  background: white;
+}
+
+.combo-row.min-row {
+  background: #e8f5e9;
+}
+
+.combo-row.max-row {
+  background: #ffebee;
+}
+
+.combo-row.default-row {
+  background: #e3f2fd;
+}
+
+.combo-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.combo-badge.min-badge {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.combo-badge.max-badge {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.combo-badge.default-badge {
+  background: #bbdefb;
+  color: #1565c0;
+}
+
+.margin-positive {
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+/* Raw quantity column for yield adjustments */
+.ingredients-table-vertical .col-raw {
+  width: 15%;
+  text-align: right;
+  color: #666;
+  font-style: italic;
 }
 </style>

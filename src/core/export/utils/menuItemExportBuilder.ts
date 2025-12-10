@@ -29,6 +29,10 @@ import {
   buildVariantCompositionRecipes,
   type CostCalculationContext
 } from './combinationCostCalculator'
+import {
+  calculateFoodCostRange,
+  type CostCalculationContext as ModifierCostContext
+} from '@/core/cost/modifierCostCalculator'
 
 export interface MenuItemExportBuilderOptions {
   includeAllCombinations?: boolean
@@ -115,44 +119,24 @@ function calculateModifierOptionCost(
 }
 
 /**
- * Calculate min/max food cost range for a variant
+ * Calculate min/max food cost range for a variant using the new heuristic algorithm
+ * This properly handles:
+ * - Optional modifiers (not just required)
+ * - Replacement modifiers (subtract replaced cost, add replacement)
+ * - Price adjustments affecting FC% denominator
  */
-function calculateVariantFoodCostRange(
+function calculateVariantFoodCostRangeNew(
   variant: MenuItemVariant,
-  baseCost: number,
   item: MenuItem,
   context: CostCalculationContext
-): { minCost: number; maxCost: number; minFoodCostPercent: number; maxFoodCostPercent: number } {
-  const modifierGroups = item.modifierGroups || []
-  const portionMultiplier = variant.portionMultiplier || 1
-
-  let minModifierCost = 0
-  let maxModifierCost = 0
-
-  for (const group of modifierGroups) {
-    if (!group.isRequired) continue
-
-    const activeOptions = group.options.filter(opt => opt.isActive !== false)
-    if (activeOptions.length === 0) continue
-
-    const optionCosts = activeOptions.map(opt =>
-      calculateModifierOptionCost(opt, portionMultiplier, context)
-    )
-
-    minModifierCost += Math.min(...optionCosts)
-    maxModifierCost += Math.max(...optionCosts)
+) {
+  // Convert context to the format expected by modifierCostCalculator
+  const modifierContext: ModifierCostContext = {
+    productsStore: context.productsStore,
+    recipesStore: context.recipesStore
   }
 
-  const minTotalCost = baseCost + minModifierCost
-  const maxTotalCost = baseCost + maxModifierCost
-  const price = variant.price
-
-  return {
-    minCost: minTotalCost,
-    maxCost: maxTotalCost,
-    minFoodCostPercent: price > 0 ? (minTotalCost / price) * 100 : 0,
-    maxFoodCostPercent: price > 0 ? (maxTotalCost / price) * 100 : 0
-  }
+  return calculateFoodCostRange(variant, item, modifierContext)
 }
 
 /**
@@ -225,13 +209,16 @@ export function buildMenuItemExportData(
   // Build variant groups
   const variantGroups: VariantCombinationGroup[] = sortedVariants.map((variant, vIdx) => {
     const variantBaseCost = variantCosts[vIdx]?.totalCost || 0
-    const foodCostRange = calculateVariantFoodCostRange(variant, variantBaseCost, item, context)
+    // Use the new heuristic algorithm for min/max food cost calculation
+    const foodCostRange = calculateVariantFoodCostRangeNew(variant, item, context)
     const variantCombos = combinationExports.filter(
       c => c.variantName === (variant.name || 'Standard')
     )
 
     let defaultModifiers: VariantDefaultModifier[] | undefined
     let defaultCombination: CombinationExport | undefined
+    let minCombination: CombinationExport | undefined
+    let maxCombination: CombinationExport | undefined
 
     if (isSummaryMode) {
       const defaultModifierInfos = getDefaultModifiersForVariant(item.modifierGroups || [])
@@ -249,22 +236,59 @@ export function buildMenuItemExportData(
         }
       })
 
-      const totalModifierCost = defaultModifiers.reduce((sum, dm) => sum + dm.cost, 0)
-      const totalCost = variantBaseCost + totalModifierCost
-      const totalPrice = variant.price
+      // Build min combination from heuristic result
+      if (foodCostRange.minCombination) {
+        minCombination = {
+          variantName: variant.name || 'Standard',
+          displayName: foodCostRange.minCombination.name || 'Min FC%',
+          price: foodCostRange.minCombination.price,
+          cost: foodCostRange.minCombination.cost,
+          foodCostPercent: foodCostRange.minCombination.foodCostPercent,
+          margin: foodCostRange.minCombination.margin
+        }
+      }
 
-      defaultCombination = {
-        variantName: variant.name || 'Standard',
-        displayName: buildModifiersDisplayName(
-          defaultModifierInfos.map(dm => ({
-            group: item.modifierGroups!.find(g => g.id === dm.groupId)!,
-            option: dm.option
-          }))
-        ),
-        price: totalPrice,
-        cost: totalCost,
-        foodCostPercent: totalPrice > 0 ? (totalCost / totalPrice) * 100 : 0,
-        margin: totalPrice - totalCost
+      // Build max combination from heuristic result
+      if (foodCostRange.maxCombination) {
+        maxCombination = {
+          variantName: variant.name || 'Standard',
+          displayName: foodCostRange.maxCombination.name || 'Max FC%',
+          price: foodCostRange.maxCombination.price,
+          cost: foodCostRange.maxCombination.cost,
+          foodCostPercent: foodCostRange.maxCombination.foodCostPercent,
+          margin: foodCostRange.maxCombination.margin
+        }
+      }
+
+      // Build default combination from heuristic result (more accurate than legacy calculation)
+      if (foodCostRange.defaultCombination) {
+        defaultCombination = {
+          variantName: variant.name || 'Standard',
+          displayName: foodCostRange.defaultCombination.name || 'Default',
+          price: foodCostRange.defaultCombination.price,
+          cost: foodCostRange.defaultCombination.cost,
+          foodCostPercent: foodCostRange.defaultCombination.foodCostPercent,
+          margin: foodCostRange.defaultCombination.margin
+        }
+      } else {
+        // Fallback to legacy calculation if no modifiers
+        const totalModifierCost = defaultModifiers.reduce((sum, dm) => sum + dm.cost, 0)
+        const totalCost = variantBaseCost + totalModifierCost
+        const totalPrice = variant.price
+
+        defaultCombination = {
+          variantName: variant.name || 'Standard',
+          displayName: buildModifiersDisplayName(
+            defaultModifierInfos.map(dm => ({
+              group: item.modifierGroups!.find(g => g.id === dm.groupId)!,
+              option: dm.option
+            }))
+          ),
+          price: totalPrice,
+          cost: totalCost,
+          foodCostPercent: totalPrice > 0 ? (totalCost / totalPrice) * 100 : 0,
+          margin: totalPrice - totalCost
+        }
       }
     }
 
@@ -276,6 +300,10 @@ export function buildMenuItemExportData(
       maxFoodCostPercent: foodCostRange.maxFoodCostPercent,
       minCost: foodCostRange.minCost,
       maxCost: foodCostRange.maxCost,
+      minPrice: foodCostRange.minPrice,
+      maxPrice: foodCostRange.maxPrice,
+      minCombination,
+      maxCombination,
       defaultCombination,
       defaultModifiers,
       combinations: variantCombos

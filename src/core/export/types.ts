@@ -240,7 +240,12 @@ export interface VariantCombinationGroup {
   maxFoodCostPercent: number
   minCost: number
   maxCost: number
-  // For summary mode: single combination with default modifiers
+  // Min price and max price (including price adjustments from modifiers)
+  minPrice: number
+  maxPrice: number
+  // For summary mode: specific combinations for min/max/default
+  minCombination?: CombinationExport // Combination with minimum food cost %
+  maxCombination?: CombinationExport // Combination with maximum food cost %
   defaultCombination?: CombinationExport
   defaultModifiers?: VariantDefaultModifier[]
   // For full mode: all combinations for this variant

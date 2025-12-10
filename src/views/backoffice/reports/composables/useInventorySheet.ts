@@ -24,6 +24,7 @@ import type {
 import type { StorageBalance } from '@/stores/storage/types'
 import type { PreparationBalance } from '@/stores/preparation/types'
 import type { MenuItem, MenuItemVariant, ModifierOption, Category } from '@/stores/menu/types'
+import { calculateFoodCostRange } from '@/core/cost/modifierCostCalculator'
 
 export function useInventorySheet() {
   const storageStore = useStorageStore()
@@ -409,34 +410,28 @@ export function useInventorySheet() {
 
   /**
    * Calculate min/max food cost for a variant considering modifiers
+   * Uses the new heuristic algorithm that properly handles:
+   * - Optional modifiers (not just required)
+   * - Replacement modifiers (subtract replaced cost, add replacement)
+   * - Price adjustments affecting FC% denominator
    */
   function calculateVariantCostRange(
     variant: MenuItemVariant,
-    baseCost: number,
+    _baseCost: number, // Not used anymore, calculated internally
     item: MenuItem
-  ): { minCost: number; maxCost: number } {
-    const modifierGroups = item.modifierGroups || []
-    const portionMultiplier = variant.portionMultiplier || 1
-
-    let minModifierCost = 0
-    let maxModifierCost = 0
-
-    for (const group of modifierGroups) {
-      // Only consider required modifier groups for min/max calculation
-      if (!group.isRequired) continue
-
-      const activeOptions = group.options.filter(opt => opt.isActive !== false)
-      if (activeOptions.length === 0) continue
-
-      const optionCosts = activeOptions.map(opt => calculateModifierCost(opt, portionMultiplier))
-
-      minModifierCost += Math.min(...optionCosts)
-      maxModifierCost += Math.max(...optionCosts)
+  ): { minCost: number; maxCost: number; minPrice: number; maxPrice: number } {
+    const context = {
+      productsStore,
+      recipesStore
     }
 
+    const result = calculateFoodCostRange(variant, item, context)
+
     return {
-      minCost: baseCost + minModifierCost,
-      maxCost: baseCost + maxModifierCost
+      minCost: result.minCost,
+      maxCost: result.maxCost,
+      minPrice: result.minPrice,
+      maxPrice: result.maxPrice
     }
   }
 
@@ -451,15 +446,20 @@ export function useInventorySheet() {
     // For modifiable dishes, calculate range from modifiers
     let minCost = baseCost
     let maxCost = baseCost
+    let minPrice = price
+    let maxPrice = price
 
     if (item.dishType === 'modifiable' && item.modifierGroups?.length) {
       const range = calculateVariantCostRange(variant, baseCost, item)
       minCost = range.minCost
       maxCost = range.maxCost
+      minPrice = range.minPrice
+      maxPrice = range.maxPrice
     }
 
-    const minFoodCostPercent = price > 0 ? (minCost / price) * 100 : 0
-    const maxFoodCostPercent = price > 0 ? (maxCost / price) * 100 : 0
+    // Calculate FC% considering price adjustments from modifiers
+    const minFoodCostPercent = maxPrice > 0 ? (minCost / maxPrice) * 100 : 0
+    const maxFoodCostPercent = minPrice > 0 ? (maxCost / minPrice) * 100 : 0
     const margin = price - minCost
 
     return {

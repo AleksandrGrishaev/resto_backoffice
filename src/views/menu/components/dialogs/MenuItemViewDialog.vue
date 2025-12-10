@@ -67,8 +67,19 @@
                     <span v-if="variantCosts[vIdx]" class="cost-info">
                       Cost: {{ formatCurrency(variantCosts[vIdx].totalCost) }}
                     </span>
+                    <!-- Show range for modifiable items, single value for simple items -->
                     <span
-                      v-if="variantCosts[vIdx]"
+                      v-if="
+                        variantCosts[vIdx] && variantCosts[vIdx].minFoodCostPercent !== undefined
+                      "
+                      class="food-cost"
+                      :class="{ high: variantCosts[vIdx].maxFoodCostPercent > 35 }"
+                    >
+                      FC: {{ variantCosts[vIdx].minFoodCostPercent.toFixed(1) }}% -
+                      {{ variantCosts[vIdx].maxFoodCostPercent.toFixed(1) }}%
+                    </span>
+                    <span
+                      v-else-if="variantCosts[vIdx]"
                       class="food-cost"
                       :class="{ high: variantCosts[vIdx].foodCostPercent > 35 }"
                     >
@@ -100,7 +111,18 @@
                     </div>
                     <div class="cost-item">
                       <span class="cost-label">Food Cost:</span>
+                      <!-- Show range for modifiable items -->
                       <span
+                        v-if="variantCosts[vIdx].minFoodCostPercent !== undefined"
+                        class="cost-value"
+                        :class="{ high: variantCosts[vIdx].maxFoodCostPercent > 35 }"
+                      >
+                        {{ variantCosts[vIdx].minFoodCostPercent.toFixed(1) }}% -
+                        {{ variantCosts[vIdx].maxFoodCostPercent.toFixed(1) }}%
+                      </span>
+                      <!-- Show single value for simple items -->
+                      <span
+                        v-else
                         class="cost-value"
                         :class="{ high: variantCosts[vIdx].foodCostPercent > 35 }"
                       >
@@ -236,7 +258,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { MenuItem, MenuItemVariant, MenuComposition } from '@/stores/menu/types'
+import type {
+  MenuItem,
+  MenuItemVariant,
+  MenuComposition,
+  ModifierOption
+} from '@/stores/menu/types'
+import { calculateFoodCostRange, type FoodCostRange } from '@/core/cost/modifierCostCalculator'
 import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
@@ -272,6 +300,11 @@ interface VariantCost {
   totalCost: number
   foodCostPercent: number
   componentCosts: Map<number, number>
+  // For modifiable items - food cost range
+  minFoodCostPercent?: number
+  maxFoodCostPercent?: number
+  minCost?: number
+  maxCost?: number
 }
 
 // Props & Emits
@@ -509,10 +542,32 @@ async function calculateVariantCosts() {
 
     const foodCostPercent = variant.price > 0 ? (totalCost / variant.price) * 100 : 0
 
+    // For modifiable items, calculate min/max FC% range
+    let minFoodCostPercent: number | undefined
+    let maxFoodCostPercent: number | undefined
+    let minCost: number | undefined
+    let maxCost: number | undefined
+
+    if (props.item?.dishType === 'modifiable' && props.item?.modifierGroups?.length) {
+      const context = {
+        productsStore,
+        recipesStore
+      }
+      const foodCostRange = calculateFoodCostRange(variant, props.item, context)
+      minFoodCostPercent = foodCostRange.minFoodCostPercent
+      maxFoodCostPercent = foodCostRange.maxFoodCostPercent
+      minCost = foodCostRange.minCost
+      maxCost = foodCostRange.maxCost
+    }
+
     costs.push({
       totalCost,
       foodCostPercent,
-      componentCosts
+      componentCosts,
+      minFoodCostPercent,
+      maxFoodCostPercent,
+      minCost,
+      maxCost
     })
   }
 

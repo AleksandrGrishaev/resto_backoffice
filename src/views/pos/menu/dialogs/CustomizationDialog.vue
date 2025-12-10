@@ -412,8 +412,13 @@ function getSelectedCount(group: ModifierGroup): number {
 function isOptionDisabled(group: ModifierGroup, option: ModifierOption): boolean {
   if (!option.isActive) return true
 
-  // Check if max selection is reached
-  if (group.maxSelection && group.maxSelection > 0) {
+  // For single selection (radio-style), never disable - allow switching
+  if (group.maxSelection === 1) {
+    return false
+  }
+
+  // For multiple selection, check if max is reached
+  if (group.maxSelection && group.maxSelection > 1) {
     const selectedCount = getSelectedCount(group)
     const isSelected = isOptionSelected(group.id, option.id)
 
@@ -445,20 +450,33 @@ function handleRadioChange(group: ModifierGroup, optionId: string | null): void 
 }
 
 function toggleOption(group: ModifierGroup, option: ModifierOption): void {
-  if (!option.isActive || isOptionDisabled(group, option)) return
+  if (!option.isActive) return
 
   const groupSelections = selectedModifiers.value.get(group.id) || new Set<string>()
+  const isCurrentlySelected = groupSelections.has(option.id)
 
   if (group.maxSelection === 1) {
-    // Single selection - replace
-    groupSelections.clear()
-    groupSelections.add(option.id)
+    // Single selection (radio-style) - toggle or switch
+    if (isCurrentlySelected) {
+      // Allow deselecting only for optional groups
+      if (!group.isRequired) {
+        groupSelections.clear()
+      }
+      // For required groups, keep the selection (can't deselect)
+    } else {
+      // Switch to new option
+      groupSelections.clear()
+      groupSelections.add(option.id)
+    }
   } else {
-    // Multiple selection - toggle
-    if (groupSelections.has(option.id)) {
+    // Multiple selection - toggle with max limit check
+    if (isCurrentlySelected) {
       groupSelections.delete(option.id)
     } else {
-      groupSelections.add(option.id)
+      // Only add if under the limit
+      if (!group.maxSelection || groupSelections.size < group.maxSelection) {
+        groupSelections.add(option.id)
+      }
     }
   }
 
