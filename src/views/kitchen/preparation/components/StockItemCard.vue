@@ -20,11 +20,11 @@
         <div class="stock-name">{{ balance.preparationName }}</div>
 
         <div class="stock-details">
-          <!-- Quantity -->
+          <!-- Quantity (with portion type support) -->
           <div class="detail-item">
             <v-icon size="14" class="mr-1">mdi-package-variant</v-icon>
             <span class="detail-value" :class="{ 'text-error': isOutOfStock }">
-              {{ formatQuantity(balance.totalQuantity, balance.unit) }}
+              {{ formatDisplayQuantity() }}
             </span>
           </div>
 
@@ -36,10 +36,10 @@
             </span>
           </div>
 
-          <!-- Cost -->
+          <!-- Cost (per unit: gram for weight type, portion for portion type) -->
           <div class="detail-item">
             <v-icon size="14" class="mr-1">mdi-currency-usd</v-icon>
-            <span>{{ formatCost(balance.averageCost) }}/{{ balance.unit }}</span>
+            <span>{{ formatCostDisplay() }}</span>
           </div>
 
           <!-- Days Remaining -->
@@ -153,6 +153,56 @@ function handleWriteOff(): void {
   if (!isOutOfStock.value) {
     emit('write-off', props.balance.preparationId)
   }
+}
+
+/**
+ * ⭐ PHASE 2: Format quantity display based on portion type
+ * - weight type: shows grams/kg (e.g., "290 gram", "1.5 kg")
+ * - portion type: shows portions with total weight (e.g., "10 portions (300g)")
+ */
+function formatDisplayQuantity(): string {
+  const value = props.balance.totalQuantity
+
+  if (value === 0) return 'OUT OF STOCK'
+
+  // For portion-type preparations, show portions
+  if (
+    props.balance.portionType === 'portion' &&
+    props.balance.portionSize &&
+    props.balance.portionSize > 0
+  ) {
+    const portions = Math.floor(value / props.balance.portionSize)
+    const weightDisplay = value >= 1000 ? `${(value / 1000).toFixed(1)}kg` : `${Math.round(value)}g`
+    return `${portions} pcs (${weightDisplay})`
+  }
+
+  // For weight-type preparations, show grams/kg
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)} kg`
+  }
+  return `${Math.round(value)} ${props.balance.unit}`
+}
+
+/**
+ * ⭐ PHASE 2: Format cost display based on portion type
+ * - weight type: shows cost per gram (e.g., "Rp 50/gram")
+ * - portion type: shows cost per portion (e.g., "Rp 1,500/pcs")
+ */
+function formatCostDisplay(): string {
+  const cost = props.balance.averageCost
+
+  if (
+    props.balance.portionType === 'portion' &&
+    props.balance.portionSize &&
+    props.balance.portionSize > 0
+  ) {
+    // Cost per portion = cost per gram * portion size
+    const costPerPortion = cost * props.balance.portionSize
+    return `${formatCost(costPerPortion)}/pcs`
+  }
+
+  // Default: cost per gram
+  return `${formatCost(cost)}/${props.balance.unit}`
 }
 
 function formatQuantity(value: number, unit: string): string {

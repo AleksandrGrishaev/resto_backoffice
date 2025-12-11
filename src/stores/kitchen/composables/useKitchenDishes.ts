@@ -1,6 +1,7 @@
 // src/stores/kitchen/composables/useKitchenDishes.ts
 import { computed, type Ref } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { useAuthStore } from '@/stores/auth'
 import type {
   PosOrder,
@@ -9,6 +10,7 @@ import type {
   ServiceResponse,
   Department
 } from '@/stores/pos/types'
+import type { SelectedModifier } from '@/stores/menu/types'
 
 /**
  * Kitchen Dish (expanded from bill item)
@@ -21,10 +23,15 @@ export interface KitchenDish {
 
   // Dish info
   name: string
+  variantName?: string // Variant name (e.g., "with fries", "330ml")
   quantity: 1 // Всегда 1, так как каждое блюдо - отдельная карточка
   status: 'waiting' | 'cooking' | 'ready'
   kitchenNotes?: string
   department?: Department // Which department should prepare this item (kitchen or bar)
+
+  // Modifiers for kitchen display
+  selectedModifiers?: SelectedModifier[]
+  hasModifiers: boolean // Quick flag for UI
 
   // Order context
   orderId: string
@@ -50,7 +57,13 @@ export interface KitchenDish {
  */
 export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'bar' | undefined>) {
   const posOrdersStore = usePosOrdersStore()
+  const tablesStore = usePosTablesStore()
   const authStore = useAuthStore()
+
+  // Ensure tables store is initialized for table lookup
+  if (!tablesStore.initialized) {
+    tablesStore.initialize()
+  }
 
   /**
    * Разбить bill item на отдельные блюда
@@ -59,12 +72,16 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
   function expandBillItemToDishes(item: PosBillItem, order: PosOrder, bill: any): KitchenDish[] {
     const dishes: KitchenDish[] = []
 
-    // Извлекаем номер стола из tableId
+    // Получаем номер стола через lookup по UUID
     let tableNumber: string | undefined
     if (order.type === 'dine_in' && order.tableId) {
-      const match = order.tableId.match(/table_(\d+)/)
-      tableNumber = match ? match[1] : order.tableId
+      // Lookup table by UUID to get table number
+      const table = tablesStore.getTableById(order.tableId)
+      tableNumber = table?.number || order.tableId
     }
+
+    // Check if dish has modifiers
+    const hasModifiers = (item.selectedModifiers?.length || 0) > 0
 
     // Создаем отдельную карточку для каждого экземпляра блюда
     for (let i = 0; i < item.quantity; i++) {
@@ -72,10 +89,13 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
         id: `${item.id}_${i}`, // Уникальный ID для каждого экземпляра
         itemId: item.id,
         name: item.menuItemName,
+        variantName: item.variantName,
         quantity: 1, // Всегда 1
         status: item.status as 'waiting' | 'cooking' | 'ready',
         kitchenNotes: item.kitchenNotes,
         department: item.department || 'kitchen', // Default to kitchen if not specified
+        selectedModifiers: item.selectedModifiers,
+        hasModifiers,
         orderId: order.id,
         orderNumber: order.orderNumber,
         orderType: order.type,

@@ -18,11 +18,11 @@
       <div class="task-details">
         <span class="detail-item">
           <v-icon size="14" class="mr-1">mdi-target</v-icon>
-          Need: {{ formatQuantity(task.targetQuantity, task.targetUnit) }}
+          Need: {{ formatDisplayQuantity(task.targetQuantity) }}
         </span>
         <span v-if="task.currentStockAtGeneration !== undefined" class="detail-item">
           <v-icon size="14" class="mr-1">mdi-package-variant</v-icon>
-          Stock: {{ formatQuantity(task.currentStockAtGeneration, task.targetUnit) }}
+          Stock: {{ formatDisplayQuantity(task.currentStockAtGeneration) }}
         </span>
       </div>
 
@@ -32,7 +32,7 @@
         Completed {{ formatTime(task.completedAt) }}
         <span v-if="task.completedByName">by {{ task.completedByName }}</span>
         <span v-if="task.completedQuantity">
-          ({{ formatQuantity(task.completedQuantity, task.targetUnit) }})
+          ({{ formatDisplayQuantity(task.completedQuantity) }})
         </span>
       </div>
     </div>
@@ -118,6 +118,32 @@ function handleComplete(): void {
 
 function handleStart(): void {
   emit('start', props.task)
+}
+
+/**
+ * ⭐ PHASE 2: Format quantity display based on portion type
+ * - weight type: shows grams/kg (e.g., "250g", "1.5kg")
+ * - portion type: shows portions with total weight (e.g., "10 pcs (300g)")
+ */
+function formatDisplayQuantity(value: number): string {
+  if (value <= 0) return '0'
+
+  // For portion-type preparations, show portions
+  if (
+    props.task.portionType === 'portion' &&
+    props.task.portionSize &&
+    props.task.portionSize > 0
+  ) {
+    const portions = Math.ceil(value / props.task.portionSize)
+    const weightDisplay = value >= 1000 ? `${(value / 1000).toFixed(1)}kg` : `${Math.round(value)}g`
+    return `${portions} pcs (${weightDisplay})`
+  }
+
+  // For weight-type preparations, show grams/kg
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}kg`
+  }
+  return `${Math.round(value)}${props.task.targetUnit}`
 }
 
 function formatQuantity(value: number, unit: string): string {

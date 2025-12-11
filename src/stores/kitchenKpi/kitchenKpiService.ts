@@ -3,6 +3,7 @@
 
 import { supabase } from '@/supabase/client'
 import { DebugUtils, TimeUtils } from '@/utils'
+import { useRecipesStore } from '@/stores/recipes'
 import type {
   KitchenKpiEntry,
   ProductionScheduleItem,
@@ -76,6 +77,30 @@ function scheduleFromSupabase(row: ProductionScheduleRow): ProductionScheduleIte
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+/**
+ * ⭐ PHASE 2: Enrich schedule items with portion type info from recipes store
+ */
+function enrichScheduleItemsWithPortionType(
+  items: ProductionScheduleItem[]
+): ProductionScheduleItem[] {
+  const recipesStore = useRecipesStore()
+  if (!recipesStore.initialized) {
+    return items // Can't enrich if store not loaded
+  }
+
+  return items.map(item => {
+    const preparation = recipesStore.preparations?.find(p => p.id === item.preparationId)
+    if (preparation) {
+      return {
+        ...item,
+        portionType: preparation.portionType || 'weight',
+        portionSize: preparation.portionSize
+      }
+    }
+    return item
+  })
 }
 
 function scheduleToSupabase(item: CreateScheduleItemData): Partial<ProductionScheduleRow> {
@@ -323,13 +348,16 @@ class KitchenKpiService {
 
       const items = (data || []).map(row => scheduleFromSupabase(row as ProductionScheduleRow))
 
+      // ⭐ PHASE 2: Enrich with portion type info
+      const enrichedItems = enrichScheduleItemsWithPortionType(items)
+
       DebugUtils.info(MODULE_NAME, 'Schedule fetched', {
-        count: items.length,
-        pending: items.filter(i => i.status === 'pending').length,
-        completed: items.filter(i => i.status === 'completed').length
+        count: enrichedItems.length,
+        pending: enrichedItems.filter(i => i.status === 'pending').length,
+        completed: enrichedItems.filter(i => i.status === 'completed').length
       })
 
-      return items
+      return enrichedItems
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to fetch schedule', { error })
       throw error
@@ -351,7 +379,10 @@ class KitchenKpiService {
 
       if (error) throw error
 
-      return (data || []).map((row: ProductionScheduleRow) => scheduleFromSupabase(row))
+      const items = (data || []).map((row: ProductionScheduleRow) => scheduleFromSupabase(row))
+
+      // ⭐ PHASE 2: Enrich with portion type info
+      return enrichScheduleItemsWithPortionType(items)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to fetch schedule via RPC', { error })
       throw error

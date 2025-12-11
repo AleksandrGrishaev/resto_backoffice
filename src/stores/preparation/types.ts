@@ -128,6 +128,11 @@ export interface PreparationBalance {
   averageDailyUsage?: number
   daysOfStockRemaining?: number
   lastCalculated: string
+
+  // ⭐ PHASE 2: Portion type support for UI display
+  portionType?: PortionType // 'weight' (default) or 'portion'
+  portionSize?: number // Size of one portion in grams (only for portionType='portion')
+  portionQuantity?: number // Calculated: totalQuantity / portionSize (for portion type)
 }
 
 export interface PreparationInventoryDocument extends BaseEntity {
@@ -398,6 +403,10 @@ export interface ProductionScheduleItem {
   currentStockAtGeneration?: number
   recommendationReason?: string
   status: ProductionScheduleStatus
+
+  // ⭐ PHASE 2: Portion type support for UI display
+  portionType?: PortionType // 'weight' (default) or 'portion'
+  portionSize?: number // Size of one portion in grams (only for portionType='portion')
 
   // Completion details
   completedAt?: string

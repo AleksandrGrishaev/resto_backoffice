@@ -127,6 +127,9 @@ export interface ModifierGroup {
    * Если не указан - работает как addon (обратная совместимость).
    */
   targetComponents?: TargetComponent[]
+
+  /** Краткое имя для отображения на кухне (например: "Хлеб: Тосты → Багет") */
+  kitchenDisplayName?: string
 }
 
 export interface ModifierOption {
@@ -182,6 +185,8 @@ export interface SelectedModifier {
   targetComponents?: TargetComponent[]
   /** Если true - использовать оригинальный компонент из рецепта (не заменять) */
   isDefault?: boolean
+  /** Краткое имя для отображения на кухне (копия из ModifierGroup) */
+  kitchenDisplayName?: string
 }
 
 // =============================================

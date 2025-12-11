@@ -618,7 +618,9 @@ function handleAddToBill(): void {
               // Additional fields for replacement logic in decomposition
               groupType: group.type,
               targetComponents: group.targetComponents,
-              isDefault: option.isDefault
+              isDefault: option.isDefault,
+              // Kitchen display name for concise display on kitchen screen
+              kitchenDisplayName: group.kitchenDisplayName
             })
           }
         }

@@ -12,7 +12,7 @@
         <div class="task-details d-flex flex-wrap gap-3">
           <span class="detail-item">
             <v-icon size="14" class="mr-1">mdi-scale</v-icon>
-            {{ formatQuantity(task.completedQuantity || task.targetQuantity, task.targetUnit) }}
+            {{ formatDisplayQuantity(task.completedQuantity || task.targetQuantity) }}
           </span>
           <span v-if="task.completedAt" class="detail-item">
             <v-icon size="14" class="mr-1">mdi-clock-outline</v-icon>
@@ -74,6 +74,32 @@ const slotColor = computed(() => {
 // =============================================
 // METHODS
 // =============================================
+
+/**
+ * ⭐ PHASE 2: Format quantity display based on portion type
+ * - weight type: shows grams/kg (e.g., "250g", "1.5kg")
+ * - portion type: shows portions with total weight (e.g., "10 pcs (300g)")
+ */
+function formatDisplayQuantity(value: number): string {
+  if (value <= 0) return '0'
+
+  // For portion-type preparations, show portions
+  if (
+    props.task.portionType === 'portion' &&
+    props.task.portionSize &&
+    props.task.portionSize > 0
+  ) {
+    const portions = Math.ceil(value / props.task.portionSize)
+    const weightDisplay = value >= 1000 ? `${(value / 1000).toFixed(1)}kg` : `${Math.round(value)}g`
+    return `${portions} pcs (${weightDisplay})`
+  }
+
+  // For weight-type preparations, show grams/kg
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}kg`
+  }
+  return `${Math.round(value)}${props.task.targetUnit}`
+}
 
 function formatQuantity(value: number, unit: string): string {
   if (value >= 1000) {

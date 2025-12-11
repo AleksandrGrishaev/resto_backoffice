@@ -280,32 +280,7 @@ if (accountId === getPOSCashAccountId()) {
 
 ## 📦 Real-World Examples
 
-### Example 1: Write-Off Expense Service
-
-```typescript
-// src/stores/storage/writeOffExpenseService.ts
-import { useAccountStore, getPOSCashAccountId } from '@/stores/account'
-
-async function recordManualAdjustment(params) {
-  const accountStore = useAccountStore()
-
-  // Get POS cash account ID dynamically
-  const accountId = getPOSCashAccountId()
-  const account = accountStore.accounts.find(a => a.id === accountId)
-
-  if (!account) {
-    throw new Error(`POS cash account (${accountId}) not found`)
-  }
-
-  await accountStore.createOperation({
-    accountId: account.id,
-    type: 'expense'
-    // ...
-  })
-}
-```
-
-### Example 2: Shift Sync Adapter
+### Example 1: Shift Sync Adapter
 
 ```typescript
 // src/core/sync/adapters/ShiftSyncAdapter.ts

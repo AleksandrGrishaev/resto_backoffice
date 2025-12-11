@@ -1551,6 +1551,12 @@ export class PreparationService {
           return diffDays <= 1 && diffDays > 0 // 1 day for preparations
         })
 
+        // ⭐ PHASE 2: Calculate portion quantity if portionType='portion'
+        const portionQuantity =
+          preparationInfo.portionType === 'portion' && preparationInfo.portionSize
+            ? Math.floor(totalQuantity / preparationInfo.portionSize)
+            : undefined
+
         const balance: PreparationBalance = {
           preparationId,
           preparationName: preparationInfo.name,
@@ -1567,7 +1573,11 @@ export class PreparationService {
           hasExpired,
           hasNearExpiry,
           belowMinStock,
-          lastCalculated: TimeUtils.getCurrentLocalISO()
+          lastCalculated: TimeUtils.getCurrentLocalISO(),
+          // ⭐ PHASE 2: Portion type support for UI display
+          portionType: preparationInfo.portionType,
+          portionSize: preparationInfo.portionSize,
+          portionQuantity
         }
 
         this.balances.push(balance)
@@ -1601,6 +1611,12 @@ export class PreparationService {
               (a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime()
             )
 
+          // ⭐ PHASE 2: Calculate portion quantity if portionType='portion'
+          const portionQuantity =
+            preparationInfo.portionType === 'portion' && preparationInfo.portionSize
+              ? Math.floor(actualBalance / preparationInfo.portionSize)
+              : undefined
+
           const balance: PreparationBalance = {
             preparationId,
             preparationName: preparationInfo.name,
@@ -1621,7 +1637,11 @@ export class PreparationService {
             hasExpired: false,
             hasNearExpiry: false,
             belowMinStock: true,
-            lastCalculated: TimeUtils.getCurrentLocalISO()
+            lastCalculated: TimeUtils.getCurrentLocalISO(),
+            // ⭐ PHASE 2: Portion type support for UI display
+            portionType: preparationInfo.portionType,
+            portionSize: preparationInfo.portionSize,
+            portionQuantity
           }
 
           this.balances.push(balance)
@@ -1665,8 +1685,11 @@ export class PreparationService {
             hasExpired: false,
             hasNearExpiry: false,
             belowMinStock: true,
-            batchCount: 0,
-            lastCalculated: TimeUtils.getCurrentLocalISO()
+            lastCalculated: TimeUtils.getCurrentLocalISO(),
+            // ⭐ PHASE 2: Portion type support for UI display
+            portionType: prep.portionType || 'weight',
+            portionSize: prep.portionSize,
+            portionQuantity: 0 // No stock = 0 portions
           }
 
           this.balances.push(balance)

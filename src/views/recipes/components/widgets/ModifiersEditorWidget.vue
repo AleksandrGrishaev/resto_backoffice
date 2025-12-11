@@ -77,6 +77,17 @@
                     placeholder="Optional description for customers"
                   />
                 </v-col>
+                <v-col cols="12">
+                  <v-text-field
+                    v-model="group.kitchenDisplayName"
+                    label="Kitchen Display Name"
+                    density="compact"
+                    variant="outlined"
+                    placeholder="e.g., Bread: Toast → Baguette"
+                    hint="Short name for kitchen screen (optional)"
+                    persistent-hint
+                  />
+                </v-col>
                 <v-col cols="12" md="4">
                   <v-switch
                     v-model="group.isRequired"

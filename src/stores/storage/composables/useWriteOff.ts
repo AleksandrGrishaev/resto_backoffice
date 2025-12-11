@@ -185,6 +185,10 @@ export function useWriteOff() {
         )
       }
 
+      // Get item info for the write-off
+      const itemName = storageStore.getItemName(itemId)
+      const unit = storageStore.getItemUnit(itemId)
+
       const writeOffData: CreateWriteOffData = {
         department,
         responsiblePerson,
@@ -192,8 +196,10 @@ export function useWriteOff() {
         items: [
           {
             itemId,
+            itemName,
             itemType: 'product',
             quantity,
+            unit,
             notes
           }
         ],
@@ -253,8 +259,10 @@ export function useWriteOff() {
         reason,
         items: items.map(item => ({
           itemId: item.itemId,
+          itemName: item.itemName,
           itemType: 'product',
           quantity: item.writeOffQuantity,
+          unit: item.unit,
           notes: item.notes
         })),
         notes
@@ -313,8 +321,10 @@ export function useWriteOff() {
         reason: 'expired',
         items: expiredBalances.map(balance => ({
           itemId: balance.itemId,
+          itemName: balance.itemName,
           itemType: 'product' as const,
           quantity: balance.totalQuantity,
+          unit: balance.unit,
           notes: `Auto write-off: expired on ${balance.batches.find(b => b.expiryDate)?.expiryDate || 'unknown date'}`
         })),
         notes: notes || 'Automatic write-off of expired products'

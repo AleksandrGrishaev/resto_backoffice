@@ -91,7 +91,7 @@
                 <template #item="{ props: itemProps, item }">
                   <v-list-item v-bind="itemProps">
                     <v-list-item-subtitle>
-                      {{ item.raw.code }} &bull; {{ item.raw.baseUnit }}
+                      Stock: {{ item.raw.currentQuantity }} {{ item.raw.unit }}
                     </v-list-item-subtitle>
                   </v-list-item>
                 </template>
@@ -105,7 +105,7 @@
                       {{ pendingProduct.name }}
                     </div>
                     <div class="text-caption text-medium-emphasis">
-                      {{ pendingProduct.baseUnit }}
+                      Stock: {{ pendingProduct.currentQuantity }} {{ pendingProduct.unit }}
                     </div>
                   </v-col>
                   <v-col cols="4">
@@ -117,7 +117,7 @@
                       step="0.1"
                       variant="outlined"
                       density="compact"
-                      :suffix="pendingProduct.baseUnit"
+                      :suffix="pendingProduct.unit"
                       hide-details
                     />
                   </v-col>
@@ -230,7 +230,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useWriteOff, useStorageStore } from '@/stores/storage'
-import { useProductsStore } from '@/stores/productsStore'
 import { useAuthStore } from '@/stores/auth'
 import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { formatIDR } from '@/utils/currency'
@@ -265,7 +264,6 @@ const emit = defineEmits<{
 // Stores & Composables
 const writeOff = useWriteOff()
 const storageStore = useStorageStore()
-const productsStore = useProductsStore()
 const authStore = useAuthStore()
 const kpiStore = useKitchenKpiStore()
 
@@ -301,17 +299,15 @@ const selectedReasonInfo = computed(() => {
   return writeOff.getReasonInfo(formData.value.reason)
 })
 
-// Available products - filtered by department, NO STOCK INFO shown
+// Available products - from storage balances with stock info
 const availableProducts = computed(() => {
-  return productsStore.products
-    .filter(p => p.isActive && (p.department === userDepartment.value || p.department === 'all'))
-    .map(p => ({
-      id: p.id,
-      name: p.name,
-      code: p.code,
-      baseUnit: p.baseUnit,
-      baseCostPerUnit: p.baseCostPerUnit
-    }))
+  // Use writeOff.availableProducts which filters by department and has stock > 0
+  return writeOff.availableProducts.value.map(item => ({
+    id: item.itemId,
+    name: item.itemName,
+    currentQuantity: item.currentQuantity,
+    unit: item.unit
+  }))
 })
 
 const totalCost = computed(() => {
@@ -376,20 +372,22 @@ function removeProductRow(index: number) {
 }
 
 function getProductName(productId: string): string {
-  const product = productsStore.getProductById(productId)
-  return product?.name || 'Unknown'
+  return storageStore.getItemName(productId)
 }
 
 function getProductUnit(productId: string): string {
-  const product = productsStore.getProductById(productId)
-  return product?.baseUnit || 'unit'
+  return storageStore.getItemUnit(productId)
+}
+
+function getProductStock(productId: string): number {
+  const balance = storageStore.state.balances.find(b => b.itemId === productId)
+  return balance?.totalQuantity || 0
 }
 
 function calculateItemCost(item: { itemId: string; quantity: number }): number {
   if (!item.itemId || !item.quantity) return 0
-  const product = productsStore.getProductById(item.itemId)
-  if (!product) return 0
-  return product.baseCostPerUnit * item.quantity
+  // Use writeOff.calculateWriteOffCost for FIFO-based cost calculation
+  return writeOff.calculateWriteOffCost(item.itemId, item.quantity, userDepartment.value)
 }
 
 async function handleSubmit() {
@@ -411,7 +409,7 @@ async function handleSubmit() {
       formData.value.items.map(item => ({
         itemId: item.itemId,
         itemName: getProductName(item.itemId),
-        currentQuantity: 0, // Kitchen doesn't see stock, set to 0
+        currentQuantity: getProductStock(item.itemId),
         unit: getProductUnit(item.itemId),
         writeOffQuantity: item.quantity,
         reason: formData.value.reason,
