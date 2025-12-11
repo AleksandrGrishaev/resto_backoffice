@@ -172,10 +172,16 @@ If `estimatedPrice` is provided and > 0, it will be preserved through the entire
 
 ### Updating Product Price After Receipt
 
-This happens automatically in `storageIntegration.updateSingleProductPrice()` when:
+This happens automatically when receipt is completed:
 
-- Receipt is completed
-- `actualPrice` differs from `orderedPrice`
+1. `useReceipts.completeReceipt()` calls `updateProductPrices()`
+2. For each item with `actualPrice > 0`:
+   - Updates `products.last_known_cost`
+   - Updates `products.base_cost_per_unit` (if different)
+   - Updates `package_options.base_cost_per_unit`
+   - Updates `package_options.package_price`
+
+**Important:** `actualPrice` is stored as price per BASE UNIT (e.g., IDR/gram), not per package.
 
 No manual action needed.
 
@@ -219,19 +225,21 @@ CREATE TABLE package_options (
 
 ```
 lastKnownCost = undefined
-baseCostPerUnit = 30000 (set during product creation)
+baseCostPerUnit = 30 IDR/gram (set during product creation)
 
-→ System uses baseCostPerUnit (30000) for all calculations
+→ System uses baseCostPerUnit (30 IDR/gram) for all calculations
+→ After first receipt, lastKnownCost and baseCostPerUnit will be updated
 ```
 
 ### Scenario 2: Product with Receipt History
 
 ```
-lastKnownCost = 25000 (from last receipt)
-baseCostPerUnit = 30000 (original price)
+After receipt completion:
+lastKnownCost = 25 IDR/gram (from last receipt)
+baseCostPerUnit = 25 IDR/gram (auto-updated to match)
 
-→ System uses lastKnownCost (25000) for requests/orders
-→ baseCostPerUnit is only used as fallback
+→ All prices stay in sync after each receipt
+→ System uses lastKnownCost for requests/orders
 ```
 
 ### Scenario 3: User Enters Custom Price
@@ -249,15 +257,17 @@ User creates request with estimatedPrice = 20000
 ### Scenario 4: Receipt with Different Price
 
 ```
-Order created with pricePerUnit = 25000
-Receipt completed with actualPrice = 27000 per package
-Package size = 1kg (1000g)
+Order created with pricePerUnit = 25 IDR/gram
+Receipt completed with actualPrice = 27 IDR/gram
+Package: 1kg (1000g)
 
-→ Calculated: 27000 / 1000 = 27 IDR/gram
+→ actualPrice is already per base unit (no conversion)
 → Updates:
   - products.last_known_cost = 27
+  - products.base_cost_per_unit = 27 (was 25, now updated)
   - package_options.base_cost_per_unit = 27
-→ Next request will show 27 IDR/gram
+  - package_options.package_price = 27000 (27 × 1000)
+→ Next request will show 27 IDR/gram (27,000 IDR/kg)
 ```
 
 ---
@@ -266,10 +276,11 @@ Package size = 1kg (1000g)
 
 ### Price Not Updating After Receipt
 
-1. Check if `actualPrice` was provided in receipt
-2. Check if `actualPrice !== orderedPrice`
-3. Check browser console for errors from `storageIntegration`
+1. Check if `actualPrice > 0` in receipt item
+2. Check browser console for log: `Product price updated from receipt`
+3. Check for errors from `SupplierStorageIntegration`
 4. Verify package exists: `productsStore.getPackageById(packageId)`
+5. Ensure `useReceipts.completeReceipt()` is being called (not direct status update)
 
 ### User Price Being Overwritten
 
@@ -289,5 +300,6 @@ Package size = 1kg (1000g)
 
 | Version | Date         | Changes                                                           |
 | ------- | ------------ | ----------------------------------------------------------------- |
+| 1.2     | Dec 11, 2025 | Updated scenarios and troubleshooting with accurate info          |
 | 1.1     | Dec 11, 2025 | Added auto-update for baseCostPerUnit and packagePrice on receipt |
 | 1.0     | Dec 11, 2025 | Initial documentation after pricing flow refactor                 |
