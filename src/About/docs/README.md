@@ -29,6 +29,12 @@ API documentation:
 - Database schema
 - RPC functions
 
+### Supplier (`src/About/docs/supplier/`)
+
+Supplier and procurement documentation:
+
+- **[Pricing System](./supplier/pricing-system.md)** - Product pricing architecture, price fields, update flows
+
 ### Features (coming soon)
 
 Feature documentation:

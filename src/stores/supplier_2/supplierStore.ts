@@ -1029,26 +1029,34 @@ export const useSupplierStore = defineStore('supplier', () => {
     const startTime = Date.now()
 
     try {
-      const itemIds = data.items.map(item => item.itemId)
-      const latestPrices = await supplierService.getLatestPrices(itemIds)
+      // ✅ REFACTORED: Use product.lastKnownCost directly instead of Storage query
+      // Priority: user-entered price > lastKnownCost > baseCostPerUnit
 
       let pricesUpdated = 0
       const enhancedItems = data.items.map(item => {
-        const latestPrice = latestPrices[item.itemId]
-
         // ✅ Если пользователь ввёл цену (estimatedPrice > 0), НЕ перезаписываем
         if (item.estimatedPrice && item.estimatedPrice > 0) {
           // Пользователь явно указал цену - сохраняем её
           return item
         }
 
+        // Получаем цену из product.lastKnownCost или baseCostPerUnit
+        const product = productsStore.products.find(p => p.id === item.itemId)
+        if (!product) {
+          return item
+        }
+
+        // Priority: lastKnownCost > baseCostPerUnit
+        const latestPrice = product.lastKnownCost ?? product.baseCostPerUnit
+
         // Только для items без цены - используем latestPrice
         if (latestPrice && latestPrice > 0) {
           pricesUpdated++
+          const priceSource = product.lastKnownCost ? 'lastKnownCost' : 'baseCostPerUnit'
           return {
             ...item,
             estimatedPrice: latestPrice,
-            notes: `${item.notes || ''} [Price from storage: ${latestPrice}]`.trim()
+            notes: `${item.notes || ''} [Price from ${priceSource}: ${latestPrice}]`.trim()
           }
         }
         return item

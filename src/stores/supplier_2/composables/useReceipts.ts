@@ -309,6 +309,15 @@ export function useReceipts() {
       // ✅ ШАГ 5: ОБНОВЛЯЕМ ЗАКАЗ
       await updateOrderAfterReceiptCompletion(completedReceipt, order, receipt.receivedBy)
 
+      // ✅ ШАГ 6: ОБНОВЛЯЕМ ЦЕНЫ ПРОДУКТОВ
+      try {
+        await updateProductPrices(completedReceipt)
+        console.log(`Receipts: Product prices updated for receipt ${receipt.receiptNumber}`)
+      } catch (priceError) {
+        console.warn('Receipts: Failed to update product prices:', priceError)
+        // Don't fail the receipt completion if price update fails
+      }
+
       console.log(`Receipts: Receipt ${receipt.receiptNumber} completed successfully`)
       return completedReceipt
     } catch (error) {

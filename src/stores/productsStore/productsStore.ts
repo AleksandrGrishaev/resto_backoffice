@@ -344,13 +344,20 @@ export const useProductsStore = defineStore('products', {
           throw new Error('Product not found')
         }
 
-        // Update product's base cost
+        // ✅ Update in database via productsService
+        const { productsService } = await import('./productsService')
+        await productsService.updateProduct({
+          id: productId,
+          baseCostPerUnit: newBaseCost
+        })
+
+        // Update in-memory state
         const productIndex = this.products.findIndex(p => p.id === productId)
         if (productIndex !== -1) {
           this.products[productIndex].baseCostPerUnit = newBaseCost
           this.products[productIndex].updatedAt = new Date().toISOString()
 
-          // Обновляем стоимость в рекомендуемой упаковке
+          // Update cost in recommended package (in-memory and database)
           if (product.recommendedPackageId) {
             const packageIndex = this.products[productIndex].packageOptions.findIndex(
               pkg => pkg.id === product.recommendedPackageId
@@ -359,11 +366,20 @@ export const useProductsStore = defineStore('products', {
               this.products[productIndex].packageOptions[packageIndex].baseCostPerUnit = newBaseCost
               this.products[productIndex].packageOptions[packageIndex].updatedAt =
                 new Date().toISOString()
+
+              // ✅ Also update package in database
+              await productsService.updatePackageOption({
+                id: product.recommendedPackageId,
+                baseCostPerUnit: newBaseCost
+              })
             }
           }
         }
 
-        DebugUtils.info(MODULE_NAME, 'Product cost updated', { productId, newBaseCost })
+        DebugUtils.info(MODULE_NAME, 'Product cost updated (with DB persistence)', {
+          productId,
+          newBaseCost
+        })
       } catch (error) {
         DebugUtils.error(MODULE_NAME, 'Error updating product cost', { error })
         throw error

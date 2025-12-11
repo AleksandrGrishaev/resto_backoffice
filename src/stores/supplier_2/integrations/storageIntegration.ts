@@ -439,7 +439,9 @@ export class SupplierStorageIntegration {
       const productsStore = await this.getProductsStore()
 
       for (const item of receipt.items) {
-        if (item.actualPrice && item.actualPrice !== item.orderedPrice) {
+        // ✅ ALWAYS update prices on receipt completion (not just when different)
+        // This ensures lastKnownCost and package prices stay in sync with actual receipts
+        if (item.actualPrice && item.actualPrice > 0) {
           try {
             await this.updateSingleProductPrice(item, productsStore)
           } catch (error) {
@@ -538,12 +540,93 @@ export class SupplierStorageIntegration {
     if (!item.actualPrice) return
 
     try {
-      await productsStore.updateProductCost(item.itemId, item.actualPrice)
-      DebugUtils.debug(MODULE_NAME, 'Product price updated', {
+      const { supabase } = await import('@/supabase')
+
+      // ✅ FIXED: actualPrice is already per base unit (stored as pricePerUnit in receipt)
+      // No need to divide by packageSize
+      const pricePerUnit = item.actualPrice
+
+      // Get current product to check if baseCostPerUnit needs updating
+      const product = productsStore.getProductById(item.itemId)
+      const shouldUpdateBaseCost = product && product.baseCostPerUnit !== pricePerUnit
+
+      // ✅ Update product.lastKnownCost (and baseCostPerUnit if different) in database
+      const productUpdateData: { last_known_cost: number; base_cost_per_unit?: number } = {
+        last_known_cost: pricePerUnit
+      }
+      if (shouldUpdateBaseCost) {
+        productUpdateData.base_cost_per_unit = pricePerUnit
+      }
+
+      const { error: productError } = await supabase
+        .from('products')
+        .update(productUpdateData)
+        .eq('id', item.itemId)
+
+      if (productError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update product prices', {
+          itemId: item.itemId,
+          error: productError
+        })
+      }
+
+      // Get package to calculate package_price
+      const pkg = productsStore.getPackageById(item.packageId)
+      const packagePrice = pkg ? pricePerUnit * pkg.packageSize : null
+
+      // ✅ Update package_options (base_cost_per_unit AND package_price) in database
+      const updateData: { base_cost_per_unit: number; package_price?: number } = {
+        base_cost_per_unit: pricePerUnit
+      }
+      if (packagePrice !== null) {
+        updateData.package_price = packagePrice
+      }
+
+      const { error: packageError } = await supabase
+        .from('package_options')
+        .update(updateData)
+        .eq('id', item.packageId)
+
+      if (packageError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update package prices', {
+          packageId: item.packageId,
+          error: packageError
+        })
+      }
+
+      // ✅ Update in-memory state
+      const productIndex = productsStore.products.findIndex(
+        (p: { id: string }) => p.id === item.itemId
+      )
+      if (productIndex !== -1) {
+        productsStore.products[productIndex].lastKnownCost = pricePerUnit
+        // Also update baseCostPerUnit if it was updated in DB
+        if (shouldUpdateBaseCost) {
+          productsStore.products[productIndex].baseCostPerUnit = pricePerUnit
+        }
+
+        // Update package in memory
+        const pkgIndex = productsStore.products[productIndex].packageOptions.findIndex(
+          (p: { id: string }) => p.id === item.packageId
+        )
+        if (pkgIndex !== -1) {
+          productsStore.products[productIndex].packageOptions[pkgIndex].baseCostPerUnit =
+            pricePerUnit
+          if (packagePrice !== null) {
+            productsStore.products[productIndex].packageOptions[pkgIndex].packagePrice =
+              packagePrice
+          }
+        }
+      }
+
+      DebugUtils.debug(MODULE_NAME, 'Product price updated from receipt', {
         itemId: item.itemId,
         itemName: item.itemName,
-        oldPrice: item.orderedPrice,
-        newPrice: item.actualPrice
+        packageId: item.packageId,
+        pricePerUnit,
+        packagePrice,
+        baseCostUpdated: shouldUpdateBaseCost,
+        orderedPrice: item.orderedPrice
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update product cost', {

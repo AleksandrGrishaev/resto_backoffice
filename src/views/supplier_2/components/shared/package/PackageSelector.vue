@@ -232,10 +232,7 @@
                   variant="text"
                   color="primary"
                   class="reset-btn"
-                  @click="
-                    overrideQuantity = null
-                    emitPackageSelected(internalSelectedPackageId!)
-                  "
+                  @click="resetToSuggested"
                 />
               </template>
               <span>Reset to suggested: {{ suggestedQuantity }} pkg</span>
@@ -452,6 +449,13 @@ function handleQuantityChange(newQuantity: number) {
   overrideQuantity.value = newQuantity
 
   // Re-emit with new quantity
+  if (internalSelectedPackageId.value) {
+    emitPackageSelected(internalSelectedPackageId.value)
+  }
+}
+
+function resetToSuggested() {
+  overrideQuantity.value = null
   if (internalSelectedPackageId.value) {
     emitPackageSelected(internalSelectedPackageId.value)
   }

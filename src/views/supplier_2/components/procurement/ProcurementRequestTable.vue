@@ -434,6 +434,9 @@ function calculateEstimatedTotal(request: ProcurementRequest): number {
     const product = productsStore.products.find(p => p.id === item.itemId)
     if (!product) return sum
 
+    // ✅ FIXED: Use item.estimatedPrice first, then fallback
+    const pricePerUnit = item.estimatedPrice || product.lastKnownCost || product.baseCostPerUnit
+
     // Конвертируем в базовые единицы
     let baseQuantity = item.requestedQuantity
 
@@ -446,7 +449,7 @@ function calculateEstimatedTotal(request: ProcurementRequest): number {
       }
     }
 
-    return sum + baseQuantity * product.baseCostPerUnit
+    return sum + baseQuantity * pricePerUnit
   }, 0)
 }
 

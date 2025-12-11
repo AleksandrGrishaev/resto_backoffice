@@ -426,53 +426,8 @@ class SupplierService {
     // ✅ ПОЛУЧАЕМ ДОСТУП К STORES
     const productsStore = useProductsStore()
 
-    // Get latest prices from storage if available
-    const itemIds = data.items.map(item => item.itemId)
-    const latestPrices: Record<string, number> = {}
-
-    try {
-      const storageStore = useStorageStore()
-      if (storageStore && storageStore.getBalance) {
-        for (const itemId of itemIds) {
-          try {
-            // ✅ ИСПРАВЛЕНИЕ: пробуем получить баланс из обоих департаментов
-            let latestCost: number | null = null
-
-            // Пробуем кухню
-            try {
-              const kitchenBalance = storageStore.getBalance(itemId, 'kitchen')
-              if (kitchenBalance && kitchenBalance.latestCost > 0) {
-                latestCost = kitchenBalance.latestCost
-              }
-            } catch {
-              // Ignore kitchen errors
-            }
-
-            // Если не нашли на кухне, пробуем бар
-            if (!latestCost) {
-              try {
-                const barBalance = storageStore.getBalance(itemId, 'bar')
-                if (barBalance && barBalance.latestCost > 0) {
-                  latestCost = barBalance.latestCost
-                }
-              } catch {
-                // Ignore bar errors
-              }
-            }
-
-            if (latestCost) {
-              latestPrices[itemId] = latestCost
-            }
-          } catch (error) {
-            // Ignore individual item errors
-          }
-        }
-      }
-    } catch (error) {
-      DebugUtils.warn(MODULE_NAME, 'Could not access storage store, using provided prices', {
-        error
-      })
-    }
+    // ✅ REFACTORED: Use prices from request/basket (item.pricePerUnit) instead of Storage query
+    // Price priority: item.pricePerUnit (from basket) > product.lastKnownCost > product.baseCostPerUnit
 
     // ✅ СОЗДАЕМ ITEMS С ПОЛЯМИ УПАКОВОК
     const orderItems: OrderItem[] = []
@@ -498,8 +453,24 @@ class SupplierService {
       const packageQuantity = isUnitDivisible(product.baseUnit)
         ? Math.round(rawPackageQuantity * 100) / 100 // Round to 2 decimal places
         : Math.ceil(rawPackageQuantity) // Round up for indivisible units
-      const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
-      const pricePerUnit = latestPrices[item.itemId] || pkg.baseCostPerUnit
+
+      // ✅ REFACTORED: Price priority from basket > product.lastKnownCost > baseCostPerUnit
+      const pricePerUnit = item.pricePerUnit ?? product.lastKnownCost ?? pkg.baseCostPerUnit
+      const hasUserPrice = item.pricePerUnit != null && item.pricePerUnit > 0
+
+      // ✅ FIXED: Calculate package price from pricePerUnit when user/request price exists
+      // Priority: item.packagePrice > calculated from pricePerUnit > pkg.packagePrice > fallback
+      let packagePrice: number
+      if (item.packagePrice != null && item.packagePrice > 0) {
+        // Explicit package price from basket
+        packagePrice = item.packagePrice
+      } else if (hasUserPrice || product.lastKnownCost != null) {
+        // Calculate from determined pricePerUnit (user price or lastKnownCost)
+        packagePrice = pricePerUnit * pkg.packageSize
+      } else {
+        // Fallback to package's stored price
+        packagePrice = pkg.packagePrice ?? pkg.baseCostPerUnit * pkg.packageSize
+      }
       const totalPrice = packageQuantity * packagePrice
 
       orderItems.push({
@@ -507,7 +478,7 @@ class SupplierService {
         itemId: item.itemId,
         itemName: product.name,
 
-        department: item.department, // ✅ СОХРАНИТЬ DEPARTMENT
+        department: (item as { department?: string }).department, // Optional department
 
         // Количества
         orderedQuantity: item.quantity, // В базовых единицах
@@ -519,14 +490,14 @@ class SupplierService {
         packageQuantity,
         packageUnit: pkg.packageUnit,
 
-        // ✅ ЦЕНЫ
+        // ✅ ЦЕНЫ (now using basket price or product.lastKnownCost)
         pricePerUnit,
         packagePrice,
         totalPrice,
 
         // Метаданные
-        isEstimatedPrice: !latestPrices[item.itemId],
-        lastPriceDate: latestPrices[item.itemId] ? new Date().toISOString() : undefined,
+        isEstimatedPrice: !hasUserPrice && product.lastKnownCost == null,
+        lastPriceDate: hasUserPrice || product.lastKnownCost ? new Date().toISOString() : undefined,
         status: 'ordered'
       })
     }
@@ -644,7 +615,6 @@ class SupplierService {
         itemCount: newOrder.items.length,
         totalAmount: newOrder.totalAmount,
         totalPackages: orderItems.reduce((sum, item) => sum + item.packageQuantity, 0),
-        usedLatestPrices: Object.keys(latestPrices).length > 0,
         requestIds: data.requestIds
       })
 
