@@ -27,7 +27,7 @@ export function useProductionSchedule() {
   } = storeToRefs(store)
 
   // Local state
-  const selectedDate = ref(TimeUtils.getCurrentLocalISO().split('T')[0])
+  const selectedDate = ref(TimeUtils.getCurrentLocalDate())
   const selectedTask = ref<ProductionScheduleItem | null>(null)
 
   // ===============================================
@@ -56,7 +56,7 @@ export function useProductionSchedule() {
    * Check if selected date is today
    */
   const isToday = computed(() => {
-    const today = TimeUtils.getCurrentLocalISO().split('T')[0]
+    const today = TimeUtils.getCurrentLocalDate()
     return selectedDate.value === today
   })
 
@@ -158,7 +158,7 @@ export function useProductionSchedule() {
    * Go to today's schedule
    */
   async function goToToday(): Promise<void> {
-    const today = TimeUtils.getCurrentLocalISO().split('T')[0]
+    const today = TimeUtils.getCurrentLocalDate()
     await setDate(today)
   }
 

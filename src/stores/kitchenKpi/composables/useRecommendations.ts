@@ -111,7 +111,7 @@ export function useRecommendations() {
     department: 'kitchen' | 'bar',
     scheduleDate?: string
   ): Promise<void> {
-    const date = scheduleDate || TimeUtils.getCurrentLocalISO().split('T')[0]
+    const date = scheduleDate || TimeUtils.getCurrentLocalDate()
 
     try {
       loading.value = true
@@ -158,7 +158,7 @@ export function useRecommendations() {
     department: 'kitchen' | 'bar',
     scheduleDate?: string
   ): Promise<void> {
-    const date = scheduleDate || TimeUtils.getCurrentLocalISO().split('T')[0]
+    const date = scheduleDate || TimeUtils.getCurrentLocalDate()
 
     try {
       loading.value = true

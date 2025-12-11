@@ -67,7 +67,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     department: 'all',
     slot: 'all',
     status: 'all',
-    date: TimeUtils.getCurrentLocalISO().split('T')[0]
+    date: TimeUtils.getCurrentLocalDate() // Use local timezone (Asia/Jakarta)
   })
 
   // Store status
@@ -311,7 +311,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
 
   async function loadCurrentUserKpi(staffId: string, department: 'kitchen' | 'bar'): Promise<void> {
     try {
-      const today = TimeUtils.getCurrentLocalISO().split('T')[0]
+      const today = TimeUtils.getCurrentLocalDate()
       currentUserKpi.value = await kitchenKpiService.getKpiEntry(staffId, today, department)
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to load current user KPI', { err })

@@ -2,7 +2,9 @@
 import { format, parseISO, formatISO } from 'date-fns'
 import { utcToZonedTime } from 'date-fns-tz'
 
-const TIMEZONE = 'Asia/Jakarta' // Вместо 'Asia/Denpasar'
+// Bali timezone: WITA (Central Indonesian Time) = UTC+8
+// IANA identifier: Asia/Makassar (covers Bali, Sulawesi, etc.)
+const TIMEZONE = 'Asia/Makassar'
 const DATE_FORMAT = 'yyyy-MM-dd HH:mm:ss'
 
 export class TimeUtils {
@@ -12,6 +14,16 @@ export class TimeUtils {
 
   static getCurrentLocalISO(): string {
     return new Date().toISOString()
+  }
+
+  /**
+   * Get current date in local timezone (Asia/Jakarta)
+   * Returns format: YYYY-MM-DD
+   */
+  static getCurrentLocalDate(): string {
+    const now = new Date()
+    const zonedDate = utcToZonedTime(now, TIMEZONE)
+    return format(zonedDate, 'yyyy-MM-dd')
   }
 
   static formatDateToDisplay(date: string | Date, formatStr: string = DATE_FORMAT): string {

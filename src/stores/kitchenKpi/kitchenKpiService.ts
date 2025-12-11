@@ -238,7 +238,7 @@ class KitchenKpiService {
     department: 'kitchen' | 'bar',
     detail: ProductionKpiDetail
   ): Promise<string> {
-    const today = TimeUtils.getCurrentLocalISO().split('T')[0]
+    const today = TimeUtils.getCurrentLocalDate()
 
     return this.recordKpiEntry({
       staffId,
@@ -258,7 +258,7 @@ class KitchenKpiService {
     department: 'kitchen' | 'bar',
     detail: WriteoffKpiDetail
   ): Promise<string> {
-    const today = TimeUtils.getCurrentLocalISO().split('T')[0]
+    const today = TimeUtils.getCurrentLocalDate()
 
     return this.recordKpiEntry({
       staffId,
@@ -278,7 +278,7 @@ class KitchenKpiService {
     department: 'kitchen' | 'bar',
     detail: ScheduleCompletionKpiDetail
   ): Promise<string> {
-    const today = TimeUtils.getCurrentLocalISO().split('T')[0]
+    const today = TimeUtils.getCurrentLocalDate()
 
     return this.recordKpiEntry({
       staffId,
@@ -296,7 +296,7 @@ class KitchenKpiService {
    */
   async getSchedule(filters: ScheduleFilters = {}): Promise<ProductionScheduleItem[]> {
     try {
-      const date = filters.date || TimeUtils.getCurrentLocalISO().split('T')[0]
+      const date = filters.date || TimeUtils.getCurrentLocalDate()
 
       DebugUtils.info(MODULE_NAME, 'Fetching production schedule', { date, filters })
 
