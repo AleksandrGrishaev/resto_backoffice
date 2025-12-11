@@ -337,6 +337,10 @@ export interface UpdateOrderData {
 export interface UpdateReceiptData {
   status?: Receipt['status']
   notes?: string
+  items?: ReceiptItem[]
+  receivedBy?: string
+  deliveryDate?: string
+  hasDiscrepancies?: boolean
 }
 
 // =============================================

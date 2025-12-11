@@ -434,22 +434,24 @@ const discrepancyCount = computed(() => {
 })
 
 /**
- * Original Total = ordered quantity × ordered price
+ * Original Total = ordered quantity × ordered base cost
+ * ✅ FIXED: Use BaseCost (per unit), not Price (per package)
  * Shows what was originally ordered (for reference)
  */
 const originalTotal = computed(() => {
   return props.items.reduce((sum, item) => {
-    return sum + item.orderedQuantity * item.orderedPrice
+    return sum + item.orderedQuantity * (item.orderedBaseCost || 0)
   }, 0)
 })
 
 /**
- * Expected Total = received quantity × ordered price
+ * Expected Total = received quantity × ordered base cost
+ * ✅ FIXED: Use BaseCost (per unit), not Price (per package)
  * What we WOULD pay for received goods without price adjustments
  */
 const expectedTotal = computed(() => {
   return props.items.reduce((sum, item) => {
-    return sum + item.receivedQuantity * item.orderedPrice
+    return sum + item.receivedQuantity * (item.orderedBaseCost || 0)
   }, 0)
 })
 
@@ -546,15 +548,19 @@ function getActualPackagePrice(item: ReceiptItem): number {
 }
 
 function getActualPricePerUnit(item: ReceiptItem): number {
-  if (item.actualPrice !== undefined) {
-    return item.actualPrice
+  // ✅ FIXED: Use actualBaseCost which is already per unit
+  if (item.actualBaseCost !== undefined && item.actualBaseCost > 0) {
+    return item.actualBaseCost
   }
 
   // Calculate from package price
   const packagePrice = getActualPackagePrice(item)
   const packageSize = getPackageSize(item)
 
-  if (!packageSize) return item.orderedPrice
+  if (!packageSize) {
+    // Fallback to orderedBaseCost (per unit), not orderedPrice (per package)
+    return item.orderedBaseCost || 0
+  }
 
   return packagePrice / packageSize
 }
@@ -634,14 +640,16 @@ function validateAndUpdateLineTotal(item: ReceiptItem) {
     // Store the actual line total
     actualLineTotals.value.set(item.id, parsed)
 
-    // Recalculate price per unit from the new line total
-    const newPricePerUnit = parsed / item.receivedQuantity
-    item.actualPrice = newPricePerUnit
+    // ✅ КРИТИЧНО: Рассчитываем цену за базовую единицу (для расчётов)
+    // newBaseCost = lineTotal / receivedQuantity (в базовых единицах)
+    const newBaseCost = parsed / item.receivedQuantity
+    item.actualBaseCost = newBaseCost
 
     // Also update package price if we have package info
     const packageSize = getPackageSize(item)
     if (packageSize > 0) {
-      item.actualPackagePrice = newPricePerUnit * packageSize
+      item.actualPackagePrice = newBaseCost * packageSize
+      item.actualPrice = newBaseCost * packageSize // actualPrice = price per package
       // Update the formatted package price too
       formattedPrices.value.set(item.id, formatPriceForInput(item.actualPackagePrice))
     }
@@ -651,7 +659,7 @@ function validateAndUpdateLineTotal(item: ReceiptItem) {
       newLineTotal: parsed,
       expectedLineTotal: calculateExpectedLineTotal(item),
       difference: parsed - calculateExpectedLineTotal(item),
-      newPricePerUnit,
+      newBaseCost,
       newPackagePrice: item.actualPackagePrice
     })
 
@@ -669,11 +677,12 @@ function validateAndUpdateLineTotal(item: ReceiptItem) {
 
 /**
  * Calculate the expected line total based on ordered prices
+ * ✅ FIXED: Use BaseCost (per unit), not Price (per package)
  * (what the system would calculate without adjustments)
  */
 function calculateExpectedLineTotal(item: ReceiptItem): number {
-  // Use ordered price × received quantity
-  return item.receivedQuantity * item.orderedPrice
+  // Use ordered base cost × received quantity (in base units)
+  return item.receivedQuantity * (item.orderedBaseCost || 0)
 }
 
 /**
@@ -715,6 +724,22 @@ function updateReceivedPackages(item: ReceiptItem, value: string | number) {
   item.receivedPackageQuantity = newPackageQty
   item.receivedQuantity = newPackageQty * packageSize
 
+  // ✅ КРИТИЧНО: Пересчитываем Line Total при изменении количества
+  // Если установлена цена (actualPackagePrice), пересчитываем total = qty × price
+  const actualPkgPrice = item.actualPackagePrice || getOrderedPackagePrice(item)
+  if (actualPkgPrice > 0) {
+    const newLineTotal = newPackageQty * actualPkgPrice
+    actualLineTotals.value.set(item.id, newLineTotal)
+    formattedLineTotals.value.set(item.id, formatPriceForInput(newLineTotal))
+
+    DebugUtils.info(MODULE_NAME, 'Line total recalculated on qty change', {
+      itemName: item.itemName,
+      receivedPackages: newPackageQty,
+      packagePrice: actualPkgPrice,
+      newLineTotal
+    })
+  }
+
   DebugUtils.info(MODULE_NAME, 'Received packages updated', {
     itemName: item.itemName,
     receivedPackages: newPackageQty,
@@ -731,9 +756,26 @@ function updateActualPackagePrice(item: ReceiptItem, value: string | number) {
   const packageSize = getPackageSize(item)
   if (!packageSize) return
 
-  // Update item
+  // Update item prices
   item.actualPackagePrice = newPrice
-  item.actualPrice = newPrice / packageSize
+  item.actualPrice = newPrice // actualPrice = price per package
+  item.actualBaseCost = newPrice / packageSize // ✅ КРИТИЧНО: baseCost = цена за единицу
+
+  // ✅ КРИТИЧНО: Пересчитываем Line Total при изменении цены
+  // Line Total = qty × price
+  const pkgQty = getReceivedPackageQuantity(item)
+  if (pkgQty > 0) {
+    const newLineTotal = pkgQty * newPrice
+    actualLineTotals.value.set(item.id, newLineTotal)
+    formattedLineTotals.value.set(item.id, formatPriceForInput(newLineTotal))
+
+    DebugUtils.info(MODULE_NAME, 'Line total recalculated on price change', {
+      itemName: item.itemName,
+      packagePrice: newPrice,
+      receivedPackages: pkgQty,
+      newLineTotal
+    })
+  }
 
   DebugUtils.info(MODULE_NAME, 'Actual package price updated', {
     itemName: item.itemName,
@@ -783,9 +825,11 @@ function handlePackageChange(data: {
   item.receivedQuantity = data.resultingBaseQuantity
 
   // Update prices
+  // ✅ FIXED: actualPrice = price per PACKAGE, actualBaseCost = price per UNIT
   const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
   item.actualPackagePrice = packagePrice
-  item.actualPrice = pkg.baseCostPerUnit
+  item.actualPrice = packagePrice // price per package, not per unit
+  item.actualBaseCost = pkg.baseCostPerUnit // price per unit
 
   DebugUtils.info(MODULE_NAME, 'Package changed', {
     itemName: item.itemName,
@@ -819,10 +863,12 @@ function hasQuantityDiscrepancy(item: ReceiptItem): boolean {
 }
 
 function hasPriceDiscrepancy(item: ReceiptItem): boolean {
-  if (!item.actualPrice && !item.actualPackagePrice) return false
+  if (!item.actualBaseCost && !item.actualPackagePrice) return false
 
-  const actualPrice = getActualPricePerUnit(item)
-  const diff = Math.abs(actualPrice - item.orderedPrice)
+  // ✅ FIXED: Compare BaseCost values (per unit), not Price (per package)
+  const actualBaseCost = item.actualBaseCost || getActualPricePerUnit(item)
+  const orderedBaseCost = item.orderedBaseCost || 0
+  const diff = Math.abs(actualBaseCost - orderedBaseCost)
   return diff > 0.01
 }
 
@@ -842,9 +888,13 @@ function getQuantityDifference(item: ReceiptItem): string {
 }
 
 function getPriceChangePercent(item: ReceiptItem): string {
-  const actualPrice = getActualPricePerUnit(item)
-  const diff = actualPrice - item.orderedPrice
-  const percent = (diff / item.orderedPrice) * 100
+  // ✅ FIXED: Compare BaseCost values (per unit), not Price (per package)
+  const actualBaseCost = item.actualBaseCost || getActualPricePerUnit(item)
+  const orderedBaseCost = item.orderedBaseCost || 0
+  if (!orderedBaseCost) return '0%'
+
+  const diff = actualBaseCost - orderedBaseCost
+  const percent = (diff / orderedBaseCost) * 100
   const sign = percent >= 0 ? '+' : ''
   return `${sign}${percent.toFixed(1)}%`
 }
@@ -868,7 +918,8 @@ function getItemStatusText(item: ReceiptItem): string {
 // =============================================
 
 function calculateOrderedLineTotal(item: ReceiptItem): number {
-  return item.orderedQuantity * item.orderedPrice
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  return item.orderedQuantity * (item.orderedBaseCost || 0)
 }
 
 function calculateActualLineTotal(item: ReceiptItem): number {

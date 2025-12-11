@@ -306,16 +306,17 @@ const calculatedActualTotal = computed(() => {
 })
 
 /**
- * Expected total = receivedQuantity × orderedPrice for each item
- * This is what we WOULD pay without any price adjustments (market rounding)
+ * Expected total = receivedQuantity × orderedBaseCost for each item
+ * ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+ * receivedQuantity is in base units (grams), so must multiply by cost per gram
  */
 const expectedTotal = computed(() => {
   if (!receiptForm.value.items || !Array.isArray(receiptForm.value.items)) {
     return 0
   }
   return receiptForm.value.items.reduce((total, item) => {
-    // Expected = received quantity × ordered price (no adjustments)
-    return total + item.receivedQuantity * item.orderedPrice
+    // Expected = received quantity (grams) × ordered cost per gram
+    return total + item.receivedQuantity * (item.orderedBaseCost || 0)
   }, 0)
 })
 
@@ -547,10 +548,26 @@ async function confirmComplete() {
       }
     })
 
-    const completedReceipt = await completeReceiptAction(
-      currentReceipt.value.id,
-      receiptForm.value.notes
-    )
+    // ✅ КРИТИЧНО: Сохраняем items В БАЗУ перед завершением приемки
+    // Иначе completeReceipt возьмёт старые данные из store
+    DebugUtils.info(MODULE_NAME, 'Saving receipt items before completion', {
+      receiptId: currentReceipt.value.id,
+      itemsCount: currentReceipt.value.items.length,
+      items: currentReceipt.value.items.map(i => ({
+        itemName: i.itemName,
+        actualPrice: i.actualPrice,
+        receivedQuantity: i.receivedQuantity
+      }))
+    })
+
+    await updateReceipt(currentReceipt.value.id, {
+      items: currentReceipt.value.items,
+      receivedBy: receiptForm.value.receivedBy,
+      deliveryDate: receiptForm.value.deliveryDate,
+      notes: receiptForm.value.notes
+    })
+
+    const completedReceipt = await completeReceiptAction(currentReceipt.value.id)
 
     DebugUtils.info(MODULE_NAME, 'Receipt completed successfully', {
       receiptId: completedReceipt.id,
@@ -618,8 +635,10 @@ function closeDialog() {
 // =============================================
 
 function calculateLineTotal(item: ReceiptFormItem): number {
-  const price = item.actualPrice || item.orderedPrice
-  return item.receivedQuantity * price
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  // receivedQuantity is in base units (grams), so multiply by cost per gram
+  const baseCost = item.actualBaseCost || item.orderedBaseCost || 0
+  return item.receivedQuantity * baseCost
 }
 
 function hasItemDiscrepancy(item: ReceiptFormItem): boolean {

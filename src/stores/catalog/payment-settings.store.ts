@@ -29,7 +29,28 @@ export const usePaymentSettingsStore = defineStore('paymentSettings', {
 
     getPaymentMethodById: state => (id: string) =>
       state.paymentMethods.find(method => method.id === id),
-    getTaxById: state => (id: string) => state.taxes.find(tax => tax.id === id)
+    getTaxById: state => (id: string) => state.taxes.find(tax => tax.id === id),
+
+    /**
+     * Get the main POS cash register payment method
+     * Returns the PaymentMethod with isPosСashRegister = true
+     */
+    posCashRegisterMethod: state =>
+      state.paymentMethods.find(method => method.isPosСashRegister === true),
+
+    /**
+     * Get the account ID of the main POS cash register
+     * This is used throughout the app to identify the cash account for:
+     * - Shift management (cash balance)
+     * - Supplier payment confirmations
+     * - Cash operations
+     *
+     * Returns null if no POS cash register is configured
+     */
+    posCashAccountId(): string | null {
+      const method = this.posCashRegisterMethod
+      return method?.accountId || null
+    }
   },
 
   actions: {

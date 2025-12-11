@@ -344,6 +344,83 @@ export class PaymentService {
   }
 
   /**
+   * Update payment used amount
+   * Called when payments are linked/unlinked to orders
+   */
+  async updatePaymentUsedAmount(paymentId: string, usedAmount: number): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating payment used amount', { paymentId, usedAmount })
+
+      if (shouldUseSupabase()) {
+        await accountSupabaseService.updatePaymentUsedAmount(paymentId, usedAmount)
+        DebugUtils.info(MODULE_NAME, 'Payment used amount updated successfully')
+      } else {
+        throw new Error('Supabase not available - cannot update payment used amount')
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment used amount:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update payment amount (with history tracking)
+   */
+  async updatePaymentAmount(data: UpdatePaymentAmountDto): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating payment amount', data)
+
+      if (shouldUseSupabase()) {
+        await accountSupabaseService.updatePaymentAmount(data)
+        DebugUtils.info(MODULE_NAME, 'Payment amount updated successfully')
+      } else {
+        throw new Error('Supabase not available - cannot update payment amount')
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment amount:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update payment priority
+   */
+  async updatePaymentPriority(paymentId: string, priority: string): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating payment priority', { paymentId, priority })
+
+      if (shouldUseSupabase()) {
+        await accountSupabaseService.updatePaymentPriority(paymentId, priority)
+        DebugUtils.info(MODULE_NAME, 'Payment priority updated successfully')
+      } else {
+        throw new Error('Supabase not available - cannot update payment priority')
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update payment priority:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Cancel payment
+   */
+  async cancelPayment(paymentId: string): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Cancelling payment', { paymentId })
+
+      if (shouldUseSupabase()) {
+        await accountSupabaseService.cancelPayment(paymentId)
+        DebugUtils.info(MODULE_NAME, 'Payment cancelled successfully')
+      } else {
+        throw new Error('Supabase not available - cannot cancel payment')
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to cancel payment:', error)
+      throw error
+    }
+  }
+
+  /**
    * ✅ Sprint 8: Process payment and return transaction ID
    * ⚠️ FIX: Preserve all payment data in transaction (amount, counteragent, category, etc.)
    */

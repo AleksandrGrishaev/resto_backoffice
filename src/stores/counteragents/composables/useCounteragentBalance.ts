@@ -1,28 +1,95 @@
 // src/stores/counteragents/composables/useCounteragentBalance.ts
 
 /**
- * Простой composable для работы с балансами контрагентов
- * Без переусложнения - только то, что нужно для ТЗ
+ * Composable для работы с балансами контрагентов
+ * Баланс = Оплачено - Получено (на основе completed receipts)
  */
+
+export interface BalanceBreakdown {
+  totalReceived: number // Стоимость полученных товаров (completed receipts)
+  totalPaid: number // Сумма оплат за эти товары
+  balance: number // totalPaid - totalReceived (положительный = переплата, отрицательный = долг)
+  ordersWithReceipts: number // Количество заказов с completed receipts
+}
+
 export function useCounteragentBalance() {
   /**
-   * Рассчитать баланс контрагента из платежей
+   * Получить детальную разбивку баланса контрагента
+   * Основано на ПОЛУЧЕННЫХ товарах (completed receipts), а не на pending платежах
    */
-  const calculateBalance = async (counteragentId: string): Promise<number> => {
+  const getBalanceBreakdown = async (counteragentId: string): Promise<BalanceBreakdown> => {
     try {
+      const { useSupplierStore } = await import('@/stores/supplier_2')
       const { useAccountStore } = await import('@/stores/account')
+
+      const supplierStore = useSupplierStore()
       const accountStore = useAccountStore()
 
-      const payments = accountStore.state.pendingPayments.filter(
-        payment => payment.counteragentId === counteragentId && payment.status === 'completed'
-      )
+      // 1. Получить заказы для этого контрагента с completed receipts
+      const ordersWithReceipts = supplierStore.state.orders.filter(order => {
+        if (order.supplierId !== counteragentId) return false
+        if (order.status !== 'delivered') return false
 
-      // Доступный баланс = сумма всех availableAmount (переплат)
-      return payments.reduce((sum, payment) => sum + (payment.availableAmount || 0), 0)
+        // Должен быть completed receipt
+        const hasCompletedReceipt = supplierStore.state.receipts.some(
+          r => r.purchaseOrderId === order.id && r.status === 'completed'
+        )
+        return hasCompletedReceipt
+      })
+
+      // 2. Рассчитать общую стоимость полученных товаров
+      const totalReceived = ordersWithReceipts.reduce((sum, order) => {
+        // Используем actualDeliveredAmount если есть (после приёмки с расхождениями)
+        return sum + (order.actualDeliveredAmount || order.totalAmount)
+      }, 0)
+
+      // 3. Рассчитать сумму оплат за эти заказы
+      let totalPaid = 0
+      for (const order of ordersWithReceipts) {
+        // Найти completed платежи, привязанные к этому заказу
+        const payments = accountStore.state.pendingPayments.filter(
+          p =>
+            p.status === 'completed' &&
+            p.linkedOrders?.some(l => l.orderId === order.id && l.isActive)
+        )
+
+        for (const payment of payments) {
+          const link = payment.linkedOrders?.find(l => l.orderId === order.id && l.isActive)
+          if (link) {
+            totalPaid += link.linkedAmount
+          }
+        }
+      }
+
+      // 4. Баланс = Оплачено - Получено
+      // Положительный = переплата (кредит)
+      // Отрицательный = недоплата (долг)
+      return {
+        totalReceived,
+        totalPaid,
+        balance: totalPaid - totalReceived,
+        ordersWithReceipts: ordersWithReceipts.length
+      }
     } catch (error) {
-      console.error('Failed to calculate balance:', error)
-      return 0
+      console.error('Failed to get balance breakdown:', error)
+      return {
+        totalReceived: 0,
+        totalPaid: 0,
+        balance: 0,
+        ordersWithReceipts: 0
+      }
     }
+  }
+
+  /**
+   * Рассчитать баланс контрагента
+   * Balance = Total Paid - Total Received (from completed receipts)
+   * Positive = credit (overpaid)
+   * Negative = debt (underpaid for received goods)
+   */
+  const calculateBalance = async (counteragentId: string): Promise<number> => {
+    const breakdown = await getBalanceBreakdown(counteragentId)
+    return breakdown.balance
   }
 
   /**
@@ -110,6 +177,7 @@ export function useCounteragentBalance() {
   return {
     // Расчеты
     calculateBalance,
+    getBalanceBreakdown,
     updateCounteragentBalance,
     syncAllSupplierBalances,
 

@@ -385,15 +385,15 @@ function formatFinancialImpact(receipt: Receipt): string {
     return '±0'
   }
 
-  // Simple calculation - in real app would use more complex logic
+  // ✅ КРИТИЧНО: Используем BaseCost (цена за единицу), не Price (за упаковку)
   const originalTotal = receipt.items.reduce(
-    (sum, item) => sum + (item.orderedQuantity || 0) * (item.orderedPrice || 0),
+    (sum, item) => sum + (item.orderedQuantity || 0) * (item.orderedBaseCost || 0),
     0
   )
 
   const actualTotal = receipt.items.reduce(
     (sum, item) =>
-      sum + (item.receivedQuantity || 0) * (item.actualPrice || item.orderedPrice || 0),
+      sum + (item.receivedQuantity || 0) * (item.actualBaseCost || item.orderedBaseCost || 0),
     0
   )
 
@@ -409,14 +409,15 @@ function getFinancialImpactClass(receipt: Receipt): string {
     return 'text-success'
   }
 
+  // ✅ КРИТИЧНО: Используем BaseCost (цена за единицу), не Price (за упаковку)
   const originalTotal = receipt.items.reduce(
-    (sum, item) => sum + (item.orderedQuantity || 0) * (item.orderedPrice || 0),
+    (sum, item) => sum + (item.orderedQuantity || 0) * (item.orderedBaseCost || 0),
     0
   )
 
   const actualTotal = receipt.items.reduce(
     (sum, item) =>
-      sum + (item.receivedQuantity || 0) * (item.actualPrice || item.orderedPrice || 0),
+      sum + (item.receivedQuantity || 0) * (item.actualBaseCost || item.orderedBaseCost || 0),
     0
   )
 

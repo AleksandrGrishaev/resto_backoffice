@@ -288,7 +288,6 @@ import CorrectionDialog from './components/dialogs/CorrectionDialog.vue'
 import TransactionDetailDialog from './components/dialogs/TransactionDetailDialog.vue'
 import PendingPaymentsSection from './components/detail/PendingPaymentsSection.vue'
 import { useAccountStore } from '@/stores/account'
-import { POS_CASH_ACCOUNT_ID } from '@/stores/account/types'
 
 const route = useRoute()
 const router = useRouter()

@@ -338,7 +338,7 @@ import { useRouter } from 'vue-router'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useAccountStore } from '@/stores/account'
-import { POS_CASH_ACCOUNT_ID } from '@/stores/account/types'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type { PosShift, PosPayment } from '@/stores/pos/types'
 import type { PendingPayment } from '@/stores/account/types'
 import StartShiftDialog from './dialogs/StartShiftDialog.vue'
@@ -370,6 +370,7 @@ const router = useRouter()
 const shiftsStore = useShiftsStore()
 const paymentsStore = usePosPaymentsStore()
 const accountStore = useAccountStore()
+const paymentSettingsStore = usePaymentSettingsStore()
 
 // State
 const search = ref('')
@@ -466,9 +467,16 @@ const expectedCash = computed(() => {
 // Sprint 3: Check if balance is negative
 const hasNegativeBalance = computed(() => expectedCash.value < 0)
 
-// Sprint 3: Get POS cash account (by ID from types.ts)
+// Sprint 3 FIX: Get POS cash account from PaymentMethod settings
+// Uses isPosСashRegister flag from payment_methods table - works with any UUID
 const cashAccount = computed(() => {
-  return accountStore.accounts.find(acc => acc.id === POS_CASH_ACCOUNT_ID)
+  // Primary: Use PaymentMethod with isPosСashRegister = true
+  const posCashAccountId = paymentSettingsStore.posCashAccountId
+  if (posCashAccountId) {
+    return accountStore.accounts.find(acc => acc.id === posCashAccountId)
+  }
+  // Fallback: Find account by type 'cash' (if PaymentMethod not configured)
+  return accountStore.accounts.find(acc => acc.type === 'cash')
 })
 
 // Sprint 3: Pending payments requiring confirmation
@@ -671,6 +679,13 @@ onMounted(async () => {
     console.log('📦 [ShiftManagementView] Initializing paymentsStore...')
     await paymentsStore.initialize()
     console.log('✅ [ShiftManagementView] PaymentsStore initialized')
+  }
+
+  // ✅ Initialize payment settings to get POS cash account ID
+  if (paymentSettingsStore.paymentMethods.length === 0) {
+    console.log('📦 [ShiftManagementView] Initializing paymentSettingsStore...')
+    await paymentSettingsStore.initialize()
+    console.log('✅ [ShiftManagementView] PaymentSettingsStore initialized')
   }
 
   // ✅ Sprint 8: Load pending payments ALWAYS (even without active shift)

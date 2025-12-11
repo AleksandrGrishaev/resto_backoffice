@@ -713,6 +713,179 @@ export class AccountSupabaseService {
   }
 
   /**
+   * Update payment used amount
+   * Called when payments are linked/unlinked to orders
+   */
+  async updatePaymentUsedAmount(paymentId: string, usedAmount: number): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      const { error } = await withTimeout(
+        supabase
+          .from('pending_payments')
+          .update({
+            used_amount: usedAmount,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', paymentId)
+      )
+
+      if (error) {
+        DebugUtils.error(
+          MODULE_NAME,
+          'Failed to update payment used amount',
+          extractErrorDetails(error)
+        )
+        throw error
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Payment used amount updated in Supabase', {
+        paymentId,
+        usedAmount
+      })
+    } catch (error) {
+      DebugUtils.error(
+        MODULE_NAME,
+        'Error updating payment used amount',
+        extractErrorDetails(error)
+      )
+      throw error
+    }
+  }
+
+  /**
+   * Update payment amount (with history tracking)
+   */
+  async updatePaymentAmount(data: UpdatePaymentAmountDto): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      // First get current payment to build history
+      const { data: currentPayment, error: fetchError } = await withTimeout(
+        supabase.from('pending_payments').select('*').eq('id', data.paymentId).single()
+      )
+
+      if (fetchError) {
+        throw fetchError
+      }
+
+      const payment = currentPayment ? pendingPaymentFromSupabase(currentPayment) : null
+      if (!payment) {
+        throw new Error('Payment not found')
+      }
+
+      // Build amount history entry
+      const historyEntry = {
+        previousAmount: payment.amount,
+        newAmount: data.newAmount,
+        changedAt: new Date().toISOString(),
+        reason: data.reason || 'manual_update'
+      }
+
+      const amountHistory = [...(payment.amountHistory || []), historyEntry]
+
+      const { error } = await withTimeout(
+        supabase
+          .from('pending_payments')
+          .update({
+            amount: data.newAmount,
+            amount_history: amountHistory,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', data.paymentId)
+      )
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update payment amount', extractErrorDetails(error))
+        throw error
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Payment amount updated in Supabase', {
+        paymentId: data.paymentId,
+        oldAmount: payment.amount,
+        newAmount: data.newAmount,
+        reason: data.reason
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error updating payment amount', extractErrorDetails(error))
+      throw error
+    }
+  }
+
+  /**
+   * Update payment priority
+   */
+  async updatePaymentPriority(paymentId: string, priority: string): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      const { error } = await withTimeout(
+        supabase
+          .from('pending_payments')
+          .update({
+            priority,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', paymentId)
+      )
+
+      if (error) {
+        DebugUtils.error(
+          MODULE_NAME,
+          'Failed to update payment priority',
+          extractErrorDetails(error)
+        )
+        throw error
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Payment priority updated in Supabase', {
+        paymentId,
+        priority
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error updating payment priority', extractErrorDetails(error))
+      throw error
+    }
+  }
+
+  /**
+   * Cancel payment
+   */
+  async cancelPayment(paymentId: string): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      const { error } = await withTimeout(
+        supabase
+          .from('pending_payments')
+          .update({
+            status: 'cancelled',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', paymentId)
+      )
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to cancel payment', extractErrorDetails(error))
+        throw error
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Payment cancelled in Supabase', { paymentId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error cancelling payment', extractErrorDetails(error))
+      throw error
+    }
+  }
+
+  /**
    * Get payment statistics
    */
   async getPaymentStatistics(): Promise<PaymentStatistics> {

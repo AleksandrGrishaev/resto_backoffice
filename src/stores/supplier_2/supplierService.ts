@@ -803,10 +803,13 @@ class SupplierService {
         packageUnit: orderItem.packageUnit,
 
         // Pricing
-        orderedPrice: orderItem.pricePerUnit,
-        actualPrice: item.actualPrice || orderItem.pricePerUnit,
+        // ✅ FIXED: orderedPrice/actualPrice = per PACKAGE, orderedBaseCost/actualBaseCost = per UNIT
+        orderedPrice: orderItem.packagePrice,
+        actualPrice: item.actualPackagePrice || orderItem.packagePrice,
         orderedBaseCost: orderItem.pricePerUnit,
-        actualBaseCost: item.actualPrice || orderItem.pricePerUnit,
+        actualBaseCost: item.actualPackagePrice
+          ? item.actualPackagePrice / (orderItem.orderedQuantity / orderItem.packageQuantity)
+          : orderItem.pricePerUnit,
 
         notes: item.notes
       }
@@ -918,9 +921,13 @@ class SupplierService {
           orderItem.status = 'received'
 
           // Update price if changed
-          if (receiptItem.actualPrice && receiptItem.actualPrice !== receiptItem.orderedPrice) {
-            orderItem.pricePerUnit = receiptItem.actualPrice
-            orderItem.totalPrice = receiptItem.receivedQuantity * receiptItem.actualPrice
+          // ✅ КРИТИЧНО: Используем actualBaseCost (цена за единицу), не actualPrice (за упаковку)
+          if (
+            receiptItem.actualBaseCost &&
+            receiptItem.actualBaseCost !== receiptItem.orderedBaseCost
+          ) {
+            orderItem.pricePerUnit = receiptItem.actualBaseCost
+            orderItem.totalPrice = receiptItem.receivedQuantity * receiptItem.actualBaseCost
             orderItem.isEstimatedPrice = false
           }
         }

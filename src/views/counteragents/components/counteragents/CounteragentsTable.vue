@@ -38,20 +38,20 @@
           </v-chip>
         </template>
 
-        <!-- ✅ НОВАЯ КОЛОНКА: Balance -->
+        <!-- ✅ Balance Column (receipt-based calculation) -->
         <template #[`item.currentBalance`]="{ item }">
           <div class="balance-cell">
             <!-- Показываем баланс только для поставщиков -->
             <div v-if="item.type === 'supplier'" class="balance-content">
               <v-chip
-                v-if="hasBalance(item)"
-                :color="getBalanceColor(item.currentBalance || 0)"
-                :prepend-icon="getBalanceIcon(item.currentBalance || 0)"
+                v-if="hasReceiptBalance(item)"
+                :color="getBalanceColor(getReceiptBalance(item.id))"
+                :prepend-icon="getBalanceIcon(getReceiptBalance(item.id))"
                 size="small"
                 variant="flat"
                 class="balance-chip"
               >
-                {{ formatBalance(item.currentBalance || 0) }}
+                {{ formatBalance(getReceiptBalance(item.id)) }}
               </v-chip>
               <span v-else class="text-medium-emphasis">—</span>
             </div>
@@ -184,11 +184,45 @@ defineEmits<{
 }>()
 
 const store = useCounteragentsStore()
-const { getBalanceColor, getBalanceIcon, formatBalance } = useCounteragentBalance()
+const { getBalanceBreakdown, getBalanceColor, getBalanceIcon, formatBalance } =
+  useCounteragentBalance()
 
 // Local state
 const selected = ref<string[]>([])
 const viewMode = ref<'table' | 'grid'>('table')
+
+// Balance map for receipt-based calculation
+const balanceMap = ref<Map<string, number>>(new Map())
+
+// Load balances for all suppliers
+const loadBalances = async () => {
+  const suppliers = store.counteragents.filter(c => c.type === 'supplier')
+  for (const supplier of suppliers) {
+    const breakdown = await getBalanceBreakdown(supplier.id)
+    balanceMap.value.set(supplier.id, breakdown.balance)
+  }
+}
+
+// Get receipt-based balance for a counteragent
+const getReceiptBalance = (counteragentId: string): number => {
+  return balanceMap.value.get(counteragentId) ?? 0
+}
+
+// Has receipt-based balance
+const hasReceiptBalance = (counteragent: Counteragent): boolean => {
+  if (counteragent.type !== 'supplier') return false
+  const balance = balanceMap.value.get(counteragent.id)
+  return balance !== undefined && balance !== 0
+}
+
+// Load balances on mount and when counteragents change
+watch(
+  () => store.counteragents,
+  () => {
+    loadBalances()
+  },
+  { immediate: true }
+)
 
 // Table headers
 const headers = [
@@ -294,9 +328,6 @@ const getPaymentLabel = (terms: string): string => {
   return getPaymentTermsLabel(terms as any)
 }
 
-const hasBalance = (counteragent: Counteragent): boolean => {
-  return (counteragent.currentBalance || 0) !== 0
-}
 // Watch store selection
 watch(
   () => store.selectedIds,

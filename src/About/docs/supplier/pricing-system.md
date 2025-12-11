@@ -69,11 +69,11 @@ This document describes how product prices work in the Kitchen App, including pr
 When a receipt is completed with actual prices:
 
 ```
-Receipt completed with actualPrice (already per base unit)
+Receipt completed with actualBaseCost (price per base unit)
          ↓
 storageIntegration.updateSingleProductPrice()
          ↓
-pricePerUnit = actualPrice (no conversion needed)
+pricePerUnit = item.actualBaseCost (per unit, e.g., per gram)
          ↓
 ┌───────────────────────────────────────────────────┐
 │ 1. UPDATE products                                │
@@ -89,6 +89,9 @@ pricePerUnit = actualPrice (no conversion needed)
          ↓
 Update in-memory state
 ```
+
+**Note:** `actualBaseCost` is the key field - it contains price per base unit (gram/ml/piece).
+`actualPrice` contains price per package and should NOT be used for calculations.
 
 **What gets updated:**
 
@@ -175,13 +178,18 @@ If `estimatedPrice` is provided and > 0, it will be preserved through the entire
 This happens automatically when receipt is completed:
 
 1. `useReceipts.completeReceipt()` calls `updateProductPrices()`
-2. For each item with `actualPrice > 0`:
+2. For each item with `actualBaseCost > 0`:
    - Updates `products.last_known_cost`
    - Updates `products.base_cost_per_unit` (if different)
    - Updates `package_options.base_cost_per_unit`
    - Updates `package_options.package_price`
 
-**Important:** `actualPrice` is stored as price per BASE UNIT (e.g., IDR/gram), not per package.
+**Important:** Price field semantics in ReceiptItem:
+
+- `actualPrice` / `orderedPrice` = price per PACKAGE (e.g., Rp 35,000/kg)
+- `actualBaseCost` / `orderedBaseCost` = price per BASE UNIT (e.g., Rp 35/gram)
+
+All financial calculations (totals, impacts, batch costs) must use `BaseCost` fields, not `Price` fields!
 
 No manual action needed.
 
@@ -276,11 +284,18 @@ Package: 1kg (1000g)
 
 ### Price Not Updating After Receipt
 
-1. Check if `actualPrice > 0` in receipt item
+1. Check if `actualBaseCost > 0` in receipt item (NOT actualPrice!)
 2. Check browser console for log: `Product price updated from receipt`
 3. Check for errors from `SupplierStorageIntegration`
 4. Verify package exists: `productsStore.getPackageById(packageId)`
 5. Ensure `useReceipts.completeReceipt()` is being called (not direct status update)
+
+### Batch Shows Wrong Quantity/Price After Receipt
+
+1. Verify `transitBatchService.convertToActive()` is receiving correct `receivedItems`
+2. Check that `receivedItems.actualPrice` contains `actualBaseCost` (per unit), not package price
+3. Look for logs: `Updating batch quantity` and `Updating batch price`
+4. Ensure receipts are reloaded before completion (`fetchReceipts()` called)
 
 ### User Price Being Overwritten
 
@@ -298,8 +313,9 @@ Package: 1kg (1000g)
 
 ## Version History
 
-| Version | Date         | Changes                                                           |
-| ------- | ------------ | ----------------------------------------------------------------- |
-| 1.2     | Dec 11, 2025 | Updated scenarios and troubleshooting with accurate info          |
-| 1.1     | Dec 11, 2025 | Added auto-update for baseCostPerUnit and packagePrice on receipt |
-| 1.0     | Dec 11, 2025 | Initial documentation after pricing flow refactor                 |
+| Version | Date         | Changes                                                                             |
+| ------- | ------------ | ----------------------------------------------------------------------------------- |
+| 1.3     | Dec 11, 2025 | Clarified Price vs BaseCost semantics. CRITICAL: Use BaseCost for all calculations! |
+| 1.2     | Dec 11, 2025 | Updated scenarios and troubleshooting with accurate info                            |
+| 1.1     | Dec 11, 2025 | Added auto-update for baseCostPerUnit and packagePrice on receipt                   |
+| 1.0     | Dec 11, 2025 | Initial documentation after pricing flow refactor                                   |

@@ -618,6 +618,22 @@ export const useAccountStore = defineStore('account', () => {
         paymentId: data.paymentId
       })
 
+      // ✅ FIX: Update usedAmount to match linkedOrders for completed payment
+      // This prevents completed payments from being counted as "free prepayment"
+      if (payment.linkedOrders && payment.linkedOrders.length > 0) {
+        const totalLinkedAmount = payment.linkedOrders
+          .filter(o => o.isActive)
+          .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+        if (totalLinkedAmount > 0) {
+          await paymentService.updatePaymentUsedAmount(data.paymentId, totalLinkedAmount)
+          DebugUtils.info(MODULE_NAME, 'Payment usedAmount set on completion', {
+            paymentId: data.paymentId,
+            usedAmount: totalLinkedAmount
+          })
+        }
+      }
+
       // Обновляем локальное состояние
       await Promise.all([
         fetchPayments(true),
@@ -668,9 +684,12 @@ export const useAccountStore = defineStore('account', () => {
         payment.assignedToAccount = accountId
         payment.updatedAt = new Date().toISOString()
 
-        // ✅ Sprint 3: Auto-set requiresCashierConfirmation for POS cash account
-        const { POS_CASH_ACCOUNT_ID } = await import('./types')
-        if (accountId === POS_CASH_ACCOUNT_ID) {
+        // ✅ Sprint 3 FIX: Check by account type instead of hardcoded ID
+        // Проверяем по типу счёта, а не по ID (более надёжно для разных окружений)
+        const targetAccount = state.value.accounts.find(a => a.id === accountId)
+        const isCashAccount = targetAccount?.type === 'cash'
+
+        if (isCashAccount) {
           payment.requiresCashierConfirmation = true
           payment.confirmationStatus = 'pending'
           // Сохранить обновленный платеж через метод update базового сервиса
@@ -678,10 +697,11 @@ export const useAccountStore = defineStore('account', () => {
             requiresCashierConfirmation: true,
             confirmationStatus: 'pending'
           })
-          DebugUtils.info(MODULE_NAME, 'Payment requires cashier confirmation (POS cash account)', {
+          DebugUtils.info(MODULE_NAME, 'Payment requires cashier confirmation (cash account)', {
             paymentId,
             accountId,
-            posCashAccountId: POS_CASH_ACCOUNT_ID
+            accountType: targetAccount?.type,
+            accountName: targetAccount?.name
           })
         }
       }

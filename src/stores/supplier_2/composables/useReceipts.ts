@@ -116,7 +116,7 @@ export function useReceipts() {
   async function fetchReceipts(): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Fetching receipts')
-      await supplierStore.fetchReceipts()
+      await supplierStore.getReceipts()
       DebugUtils.info(MODULE_NAME, `Fetched ${receipts.value.length} receipts`)
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error fetching receipts', { error })
@@ -219,10 +219,27 @@ export function useReceipts() {
     try {
       console.log(`Receipts: Completing receipt ${receiptId}`)
 
+      // ✅ FIXED: Reload receipts from DB to ensure we have fresh data
+      // This fixes stale data issue when updateReceipt was called right before
+      await supplierStore.getReceipts()
+
       const receipt = receipts.value.find(r => r.id === receiptId)
       if (!receipt) {
         throw new Error(`Receipt not found: ${receiptId}`)
       }
+
+      DebugUtils.info(MODULE_NAME, 'Receipt loaded with fresh data', {
+        receiptId,
+        itemsCount: receipt.items.length,
+        sampleItem: receipt.items[0]
+          ? {
+              itemName: receipt.items[0].itemName,
+              receivedQuantity: receipt.items[0].receivedQuantity,
+              actualBaseCost: receipt.items[0].actualBaseCost,
+              actualPrice: receipt.items[0].actualPrice
+            }
+          : null
+      })
 
       if (!canEditReceipt(receipt)) {
         throw new Error(`Receipt cannot be edited in current status: ${receipt.status}`)
@@ -239,12 +256,13 @@ export function useReceipts() {
         transitBatches: storageStore.state.transitBatches.length
       })
 
-      // ✅ ШАГ 1: УДАЛЯЕМ ТРАНЗИТНЫЕ BATCH-И (БЕЗ fetchBalances внутри!)
+      // ✅ ШАГ 1: КОНВЕРТИРУЕМ ТРАНЗИТНЫЕ BATCH-И В АКТИВНЫЕ
       try {
+        // ✅ КРИТИЧНО: Передаём actualBaseCost (цена за единицу) для costPerUnit в batch
         const receiptItems = receipt.items.map(item => ({
           itemId: item.itemId,
           receivedQuantity: item.receivedQuantity,
-          actualPrice: item.actualPrice
+          actualPrice: item.actualBaseCost // costPerUnit должен быть за единицу
         }))
 
         await storageStore.convertTransitBatchesToActive(receipt.purchaseOrderId, receiptItems)
@@ -344,11 +362,16 @@ export function useReceipts() {
       if (!orderItem) return
 
       const orderedTotal = orderItem.orderedQuantity * orderItem.pricePerUnit
-      const actualPrice = receiptItem.actualPrice || orderItem.pricePerUnit
-      const receivedTotal = receiptItem.receivedQuantity * actualPrice
+
+      // ✅ КРИТИЧНО: Используем actualBaseCost (цена за единицу), не actualPrice (цена за упаковку)
+      // actualPrice = цена за упаковку (например 35000 за 1kg)
+      // actualBaseCost = цена за базовую единицу (например 35 за gram)
+      // receivedQuantity в базовых единицах (grams), поэтому умножаем на baseCost
+      const actualBaseCost = receiptItem.actualBaseCost || orderItem.pricePerUnit
+      const receivedTotal = receiptItem.receivedQuantity * actualBaseCost
 
       const quantityDifference = receiptItem.receivedQuantity - orderItem.orderedQuantity
-      const priceDifference = actualPrice - orderItem.pricePerUnit
+      const priceDifference = actualBaseCost - orderItem.pricePerUnit
       const totalDifference = receivedTotal - orderedTotal
 
       newOrderAmount += receivedTotal
@@ -379,7 +402,7 @@ export function useReceipts() {
           },
           received: {
             quantity: receiptItem.receivedQuantity,
-            price: actualPrice,
+            price: actualBaseCost,
             total: receivedTotal
           },
           impact: {
@@ -628,8 +651,9 @@ export function useReceipts() {
       }
 
       // Check price discrepancies
-      const actualPrice = item.actualPrice || item.orderedPrice
-      const priceDiff = actualPrice - item.orderedPrice
+      // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+      const actualBaseCost = item.actualBaseCost || item.orderedBaseCost
+      const priceDiff = actualBaseCost - item.orderedBaseCost
       if (Math.abs(priceDiff) > 0.01) {
         // Price precision tolerance
         hasPriceDiscrepancies = true
@@ -664,7 +688,8 @@ export function useReceipts() {
       }
 
       // Price discrepancy
-      if (item.actualPrice && Math.abs(item.actualPrice - item.orderedPrice) > 0.01) {
+      // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+      if (item.actualBaseCost && Math.abs(item.actualBaseCost - item.orderedBaseCost) > 0.01) {
         return true
       }
 
@@ -686,8 +711,10 @@ export function useReceipts() {
     let actualTotal = 0
 
     for (const item of receipt.items) {
-      plannedTotal += item.orderedQuantity * item.orderedPrice
-      actualTotal += item.receivedQuantity * (item.actualPrice || item.orderedPrice)
+      // ✅ КРИТИЧНО: Используем BaseCost (цена за единицу), не Price (цена за упаковку)
+      // receivedQuantity/orderedQuantity в базовых единицах (grams)
+      plannedTotal += item.orderedQuantity * item.orderedBaseCost
+      actualTotal += item.receivedQuantity * (item.actualBaseCost || item.orderedBaseCost)
     }
 
     const difference = actualTotal - plannedTotal

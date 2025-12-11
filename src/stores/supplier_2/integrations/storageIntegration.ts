@@ -517,7 +517,9 @@ export class SupplierStorageIntegration {
       const orderItem = order.items.find(oi => oi.id === receiptItem.orderItemId)
       if (!orderItem) continue
 
-      const actualPrice = receiptItem.actualPrice || receiptItem.orderedPrice
+      // ✅ КРИТИЧНО: Используем BaseCost (цена за единицу), не Price (цена за упаковку)
+      // receivedQuantity в базовых единицах, costPerUnit должен быть за единицу
+      const actualBaseCost = receiptItem.actualBaseCost || receiptItem.orderedBaseCost
       const expiryDate = await this.calculateExpiryDate(receiptItem.itemId)
 
       storageItems.push({
@@ -526,8 +528,8 @@ export class SupplierStorageIntegration {
         itemType: 'product' as const,
         quantity: receiptItem.receivedQuantity,
         unit: receiptItem.unit,
-        costPerUnit: actualPrice,
-        totalCost: receiptItem.receivedQuantity * actualPrice,
+        costPerUnit: actualBaseCost,
+        totalCost: receiptItem.receivedQuantity * actualBaseCost,
         notes: this.buildItemNotes(receiptItem, orderItem),
         expiryDate
       })
@@ -537,14 +539,14 @@ export class SupplierStorageIntegration {
   }
 
   private async updateSingleProductPrice(item: ReceiptItem, productsStore: any): Promise<void> {
-    if (!item.actualPrice) return
+    // ✅ КРИТИЧНО: Используем actualBaseCost (цена за единицу)
+    // actualPrice = цена за упаковку, actualBaseCost = цена за базовую единицу
+    if (!item.actualBaseCost) return
 
     try {
       const { supabase } = await import('@/supabase')
 
-      // ✅ FIXED: actualPrice is already per base unit (stored as pricePerUnit in receipt)
-      // No need to divide by packageSize
-      const pricePerUnit = item.actualPrice
+      const pricePerUnit = item.actualBaseCost
 
       // Get current product to check if baseCostPerUnit needs updating
       const product = productsStore.getProductById(item.itemId)
@@ -686,11 +688,12 @@ export class SupplierStorageIntegration {
       notes.push(`Qty diff: ${sign}${qtyDiff.toFixed(3)}`)
     }
 
-    const actualPrice = receiptItem.actualPrice || receiptItem.orderedPrice
-    const priceDiff = actualPrice - receiptItem.orderedPrice
+    // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+    const actualBaseCost = receiptItem.actualBaseCost || receiptItem.orderedBaseCost
+    const priceDiff = actualBaseCost - receiptItem.orderedBaseCost
     if (Math.abs(priceDiff) > 0.01) {
       const sign = priceDiff > 0 ? '+' : ''
-      notes.push(`Price diff: ${sign}${priceDiff.toFixed(2)}`)
+      notes.push(`Price diff: ${sign}${priceDiff.toFixed(2)}/unit`)
     }
 
     return notes.length > 0 ? notes.join(' | ') : undefined

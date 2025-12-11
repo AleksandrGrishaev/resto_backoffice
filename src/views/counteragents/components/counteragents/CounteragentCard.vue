@@ -102,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Counteragent } from '@/stores/counteragents'
 import { useCounteragentBalance } from '@/stores/counteragents/composables/useCounteragentBalance'
 import CounteragentCardContent from './CounteragentCardContent.vue'
@@ -132,20 +132,33 @@ defineEmits<{
 const activeTab = ref('details')
 
 // Composables
-const { getBalanceColor, getBalanceText } = useCounteragentBalance()
+const { getBalanceBreakdown, getBalanceColor, getBalanceText } = useCounteragentBalance()
 
-// Computed
+// Receipt-based balance (correct calculation)
+const balanceData = ref({ balance: 0, totalReceived: 0, totalPaid: 0 })
+
+// Load balance when counteragent changes
+watch(
+  () => props.counteragent?.id,
+  async newId => {
+    if (newId) {
+      balanceData.value = await getBalanceBreakdown(newId)
+    }
+  },
+  { immediate: true }
+)
+
+// Computed - use receipt-based balance
 const hasBalance = computed(() => {
-  return (props.counteragent?.currentBalance || 0) !== 0
+  return balanceData.value.balance !== 0 || balanceData.value.totalReceived > 0
 })
 
 const balanceColor = computed(() => {
-  return getBalanceColor(props.counteragent?.currentBalance || 0)
+  return getBalanceColor(balanceData.value.balance)
 })
 
 const balanceText = computed(() => {
-  const balance = props.counteragent?.currentBalance || 0
-  return balance > 0 ? 'Credit' : 'Debt'
+  return getBalanceText(balanceData.value.balance)
 })
 </script>
 

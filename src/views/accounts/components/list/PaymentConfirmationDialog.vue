@@ -287,16 +287,16 @@ async function handleConfirm() {
   try {
     loading.value = true
 
+    // ✅ Sprint 3: Проверяем, требуется ли подтверждение кассира
+    // Используем тип счёта вместо сравнения ID (более надёжно)
+    const isCashAccount = selectedAccount.value?.type === 'cash'
+
     // ✅ Sprint 3: Сначала назначаем платеж на счет
-    // Это установит requiresCashierConfirmation=true для POS кассы
+    // Для счета типа 'cash' это установит requiresCashierConfirmation=true
     await accountStore.assignPaymentToAccount(props.payment.id, selectedAccountId.value)
 
-    // ✅ Sprint 3: Проверяем, требуется ли подтверждение кассира
-    const { POS_CASH_ACCOUNT_ID } = await import('@/stores/account/types')
-    const isPOSCashAccount = selectedAccountId.value === POS_CASH_ACCOUNT_ID
-
-    if (!isPOSCashAccount) {
-      // Для обычных счетов (не POS касса) - сразу обрабатываем платеж
+    if (!isCashAccount) {
+      // Для обычных счетов (не касса) - сразу обрабатываем платеж
       await accountStore.processPayment({
         paymentId: props.payment.id,
         accountId: selectedAccountId.value,
@@ -307,7 +307,7 @@ async function handleConfirm() {
         }
       })
     }
-    // Для POS кассы платеж уже назначен и ждет подтверждения кассира
+    // Для счета типа 'cash' платеж уже назначен и ждет подтверждения кассира
 
     emit('success')
     handleCancel()

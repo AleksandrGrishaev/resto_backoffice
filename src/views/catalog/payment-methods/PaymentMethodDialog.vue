@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useAccountStore } from '@/stores/account'
@@ -145,20 +145,21 @@ function getAccountColor(type: string): string {
   return colors[type] || 'grey'
 }
 
-const initialData = computed(() => ({
-  name: '',
-  type: 'cash' as PaymentType,
-  accountId: '',
-  requiresDetails: false,
-  isActive: true,
-  isPosСashRegister: false,
-  ...props.method
-}))
+function getDefaultData() {
+  return {
+    name: '',
+    type: 'cash' as PaymentType,
+    accountId: '',
+    requiresDetails: false,
+    isActive: true,
+    isPosСashRegister: false
+  }
+}
 
 const { form, loading, formState, formData, isFormValid, handleSubmit, handleCancel } =
   useDialogForm({
     moduleName: MODULE_NAME,
-    initialData: initialData.value,
+    initialData: getDefaultData(),
     onSubmit: async data => {
       try {
         const store = usePaymentSettingsStore()
@@ -174,4 +175,29 @@ const { form, loading, formState, formData, isFormValid, handleSubmit, handleCan
       }
     }
   })
+
+// Watch for dialog open with method data - populate form
+watch(
+  () => props.modelValue,
+  isOpen => {
+    if (isOpen) {
+      if (props.method) {
+        // Editing existing method - populate form with method data
+        formData.value = {
+          ...getDefaultData(),
+          name: props.method.name,
+          type: props.method.type,
+          accountId: props.method.accountId || '',
+          requiresDetails: props.method.requiresDetails,
+          isActive: props.method.isActive,
+          isPosСashRegister: props.method.isPosСashRegister
+        }
+      } else {
+        // Creating new - reset to defaults
+        formData.value = getDefaultData()
+      }
+    }
+  },
+  { immediate: true }
+)
 </script>

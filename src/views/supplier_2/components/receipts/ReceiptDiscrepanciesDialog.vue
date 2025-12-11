@@ -345,12 +345,14 @@ function getPriceImpactClass(item: ReceiptItem): string {
 }
 
 function getOriginalLineTotal(item: ReceiptItem): number {
-  return item.orderedQuantity * item.orderedPrice
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  return item.orderedQuantity * (item.orderedBaseCost || 0)
 }
 
 function getActualLineTotal(item: ReceiptItem): number {
-  const price = item.actualPrice || item.orderedPrice
-  return item.receivedQuantity * price
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  const baseCost = item.actualBaseCost || item.orderedBaseCost || 0
+  return item.receivedQuantity * baseCost
 }
 
 function formatLineTotalImpact(item: ReceiptItem): string {

@@ -305,13 +305,14 @@ const discrepantItemsCount = computed(() => {
 const totalFinancialImpact = computed(() => {
   if (!props.receipt) return 0
 
+  // ✅ КРИТИЧНО: Используем BaseCost (цена за единицу), не Price (за упаковку)
   const originalTotal = props.receipt.items.reduce(
-    (sum, item) => sum + item.orderedQuantity * item.orderedPrice,
+    (sum, item) => sum + item.orderedQuantity * item.orderedBaseCost,
     0
   )
 
   const actualTotal = props.receipt.items.reduce(
-    (sum, item) => sum + item.receivedQuantity * (item.actualPrice || item.orderedPrice),
+    (sum, item) => sum + item.receivedQuantity * (item.actualBaseCost || item.orderedBaseCost),
     0
   )
 
@@ -371,7 +372,10 @@ function hasQuantityDiscrepancy(item: ReceiptItem): boolean {
 }
 
 function hasPriceDiscrepancy(item: ReceiptItem): boolean {
-  return item.actualPrice !== undefined && Math.abs(item.actualPrice - item.orderedPrice) > 0.01
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  return (
+    item.actualBaseCost !== undefined && Math.abs(item.actualBaseCost - item.orderedBaseCost) > 0.01
+  )
 }
 
 function getQuantityDiscrepancyText(item: ReceiptItem): string {
@@ -387,18 +391,21 @@ function getQuantityDiscrepancyClass(item: ReceiptItem): string {
 }
 
 function getPriceDiscrepancyClass(item: ReceiptItem): string {
-  if (!item.actualPrice) return 'text-success'
-  const diff = item.actualPrice - item.orderedPrice
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  if (!item.actualBaseCost) return 'text-success'
+  const diff = item.actualBaseCost - item.orderedBaseCost
   return diff > 0 ? 'text-error' : 'text-success'
 }
 
 function calculateLineTotal(item: ReceiptItem): number {
-  const price = item.actualPrice || item.orderedPrice
-  return item.receivedQuantity * price
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  const baseCost = item.actualBaseCost || item.orderedBaseCost
+  return item.receivedQuantity * baseCost
 }
 
 function formatLineTotalImpact(item: ReceiptItem): string {
-  const originalTotal = item.orderedQuantity * item.orderedPrice
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  const originalTotal = item.orderedQuantity * item.orderedBaseCost
   const actualTotal = calculateLineTotal(item)
   const diff = actualTotal - originalTotal
 
@@ -407,7 +414,8 @@ function formatLineTotalImpact(item: ReceiptItem): string {
 }
 
 function getLineTotalImpactClass(item: ReceiptItem): string {
-  const originalTotal = item.orderedQuantity * item.orderedPrice
+  // ✅ FIXED: Use BaseCost (per unit), not Price (per package)
+  const originalTotal = item.orderedQuantity * item.orderedBaseCost
   const actualTotal = calculateLineTotal(item)
   const diff = actualTotal - originalTotal
 

@@ -44,17 +44,17 @@
             <v-row dense>
               <v-col cols="4">
                 <div class="breakdown-item">
-                  <div class="breakdown-value text-error">
-                    {{ formatCurrency(totalDebt) }}
+                  <div class="breakdown-value text-warning">
+                    {{ formatCurrency(balanceBreakdownData.totalReceived) }}
                   </div>
-                  <div class="breakdown-label">Total Debt</div>
+                  <div class="breakdown-label">Total Received</div>
                 </div>
               </v-col>
 
               <v-col cols="4">
                 <div class="breakdown-item">
                   <div class="breakdown-value text-success">
-                    {{ formatCurrency(totalPaid) }}
+                    {{ formatCurrency(balanceBreakdownData.totalPaid) }}
                   </div>
                   <div class="breakdown-label">Total Paid</div>
                 </div>
@@ -62,10 +62,15 @@
 
               <v-col cols="4">
                 <div class="breakdown-item">
-                  <div class="breakdown-value text-info">
-                    {{ formatCurrency(availablePrepayment) }}
+                  <div
+                    class="breakdown-value"
+                    :class="balanceBreakdownData.balance >= 0 ? 'text-success' : 'text-error'"
+                  >
+                    {{ formatCurrency(Math.abs(balanceBreakdownData.balance)) }}
                   </div>
-                  <div class="breakdown-label">Available</div>
+                  <div class="breakdown-label">
+                    {{ balanceBreakdownData.balance >= 0 ? 'Credit' : 'Outstanding' }}
+                  </div>
                 </div>
               </v-col>
             </v-row>
@@ -212,6 +217,10 @@ import type { Counteragent, BalanceHistoryEntry } from '@/stores/counteragents'
 import type { PendingPayment } from '@/stores/account/types'
 import { balanceCorrectionService } from '@/stores/counteragents/services/balanceCorrectionService'
 import { REASON_DESCRIPTIONS } from '@/stores/counteragents/types'
+import {
+  useCounteragentBalance,
+  type BalanceBreakdown
+} from '@/stores/counteragents/composables/useCounteragentBalance'
 import DateRangePicker from '@/components/molecules/DateRangePicker.vue'
 import BalanceCorrectionDialog from '../dialogs/BalanceCorrectionDialog.vue'
 
@@ -220,6 +229,11 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+// =============================================
+// COMPOSABLES
+// =============================================
+const { getBalanceBreakdown } = useCounteragentBalance()
 
 // =============================================
 // STATE
@@ -235,6 +249,14 @@ const dateRange = ref<{ dateFrom: string | null; dateTo: string | null }>({
 })
 
 const showBalanceCorrectionDialog = ref(false)
+
+// Balance breakdown from receipts (correct calculation)
+const balanceBreakdownData = ref<BalanceBreakdown>({
+  totalReceived: 0,
+  totalPaid: 0,
+  balance: 0,
+  ordersWithReceipts: 0
+})
 
 // =============================================
 // COMPUTED - Объединенные операции
@@ -306,15 +328,16 @@ const showAdditionalInfo = (operation: CombinedOperation): boolean => {
   return !operation.isBalanceCorrection && operation.status === 'completed'
 }
 
-const currentBalance = computed(() => props.counteragent.currentBalance || 0)
+// Use receipt-based balance calculation
+const currentBalance = computed(() => balanceBreakdownData.value.balance)
 
 const formattedBalance = computed(() => {
   return formatCurrency(Math.abs(currentBalance.value))
 })
 
 const balanceColor = computed(() => {
-  if (currentBalance.value > 0) return 'success' // предоплата
-  if (currentBalance.value < 0) return 'error' // долг
+  if (currentBalance.value > 0) return 'success' // переплата (credit)
+  if (currentBalance.value < 0) return 'error' // долг за полученные товары
   return 'default' // ноль
 })
 
@@ -325,9 +348,9 @@ const balanceIcon = computed(() => {
 })
 
 const balanceExplanation = computed(() => {
-  if (currentBalance.value > 0) return 'Prepayment available for new orders'
-  if (currentBalance.value < 0) return 'Outstanding debt - payment required'
-  return 'Balanced - no debt or prepayment'
+  if (currentBalance.value > 0) return 'Credit available (prepayment exceeds debt)'
+  if (currentBalance.value < 0) return 'Outstanding debt for received goods'
+  return 'Balanced - all received goods paid'
 })
 
 // Тип для объединенной операции
@@ -480,6 +503,9 @@ const loadOperations = async () => {
 
     // Загружаем историю баланса напрямую из counteragent
     balanceHistory.value = props.counteragent.balanceHistory || []
+
+    // Загружаем правильный расчёт баланса (на основе receipts)
+    balanceBreakdownData.value = await getBalanceBreakdown(props.counteragent.id)
   } catch (error) {
     console.error('Failed to load operations:', error)
   } finally {

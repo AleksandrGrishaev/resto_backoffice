@@ -172,6 +172,7 @@ export class TransitBatchService {
 
   /**
    * Convert transit batches to active on receipt
+   * ✅ FIXED: Now properly uses receivedItems to update quantity and price
    */
   async convertToActive(
     orderId: string,
@@ -180,30 +181,102 @@ export class TransitBatchService {
     try {
       DebugUtils.info(MODULE_NAME, 'Converting transit batches to active', {
         orderId,
-        itemsCount: receivedItems.length
+        itemsCount: receivedItems.length,
+        receivedItems: receivedItems.map(i => ({
+          itemId: i.itemId,
+          qty: i.receivedQuantity,
+          price: i.actualPrice
+        }))
       })
 
-      // Update batches in database
-      const { data, error } = await supabase
-        .from('storage_batches')
-        .update({
+      // 1. Get all transit batches for this order
+      const transitBatches = await this.findByOrder(orderId)
+
+      if (transitBatches.length === 0) {
+        DebugUtils.warn(MODULE_NAME, 'No transit batches found for order', { orderId })
+        return []
+      }
+
+      const activeBatches: StorageBatch[] = []
+
+      // 2. For each batch, find the corresponding receivedItem and update
+      for (const batch of transitBatches) {
+        const receivedItem = receivedItems.find(r => r.itemId === batch.itemId)
+
+        // Prepare update data
+        const updateData: Record<string, unknown> = {
           status: 'active',
           is_active: true,
           actual_delivery_date: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        })
-        .eq('purchase_order_id', orderId)
-        .eq('status', 'in_transit')
-        .select()
+        }
 
-      if (error) throw error
+        if (receivedItem) {
+          // ✅ Update quantity if different
+          if (receivedItem.receivedQuantity !== batch.currentQuantity) {
+            DebugUtils.debug(MODULE_NAME, 'Updating batch quantity', {
+              batchId: batch.id,
+              itemId: batch.itemId,
+              planned: batch.currentQuantity,
+              received: receivedItem.receivedQuantity
+            })
+            updateData.current_quantity = receivedItem.receivedQuantity
+            updateData.initial_quantity = receivedItem.receivedQuantity
+          }
 
-      const activeBatches = (data || []).map(mapBatchFromDB)
+          // ✅ Update price if provided (actualPrice = cost per unit / BaseCost)
+          if (receivedItem.actualPrice && receivedItem.actualPrice > 0) {
+            DebugUtils.debug(MODULE_NAME, 'Updating batch price', {
+              batchId: batch.id,
+              itemId: batch.itemId,
+              estimated: batch.costPerUnit,
+              actual: receivedItem.actualPrice
+            })
+            updateData.cost_per_unit = receivedItem.actualPrice
+          }
+
+          // Recalculate total value
+          const finalQty = (updateData.current_quantity as number) || batch.currentQuantity
+          const finalPrice = (updateData.cost_per_unit as number) || batch.costPerUnit
+          updateData.total_value = finalQty * finalPrice
+
+          DebugUtils.debug(MODULE_NAME, 'Batch update calculated', {
+            batchId: batch.id,
+            finalQty,
+            finalPrice,
+            totalValue: updateData.total_value
+          })
+        }
+
+        // 3. Update batch in database
+        const { data, error } = await supabase
+          .from('storage_batches')
+          .update(updateData)
+          .eq('id', batch.id)
+          .select()
+          .single()
+
+        if (error) {
+          DebugUtils.error(MODULE_NAME, 'Failed to update batch', {
+            batchId: batch.id,
+            error
+          })
+          throw error
+        }
+
+        activeBatches.push(mapBatchFromDB(data))
+      }
 
       DebugUtils.info(MODULE_NAME, 'Batches converted successfully', {
         orderId,
         convertedCount: activeBatches.length,
-        activeBatchIds: activeBatches.map(b => b.id)
+        activeBatches: activeBatches.map(b => ({
+          id: b.id,
+          itemId: b.itemId,
+          qty: b.currentQuantity,
+          costPerUnit: b.costPerUnit,
+          totalValue: b.totalValue
+        }))
       })
 
       return activeBatches
