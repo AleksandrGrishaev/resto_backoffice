@@ -67,6 +67,7 @@ backups/
 - Extensions (`pgcrypto`, `uuid-ossp`) - must be enabled separately
 - Supabase Auth users (`auth.users`)
 - **GRANT permissions for Supabase roles** (`anon`, `authenticated`, `service_role`)
+- **Real-time publication table memberships** (`supabase_realtime` publication)
 
 ### Configuration
 
@@ -133,7 +134,10 @@ pnpm restore:dev
 # 3. IMPORTANT: Restore GRANT permissions (see Troubleshooting section)
 # Run the SQL from "permission denied for table X" section
 
-# 4. Verify in app or via MCP
+# 4. IMPORTANT: Restore real-time publication (see Troubleshooting section)
+# Run: ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+
+# 5. Verify in app or via MCP
 mcp__supabase__list_tables({ schemas: ['public'] })
 ```
 
@@ -182,6 +186,42 @@ Some warnings are normal:
 - "NOTICE:" messages - informational only
 
 Check final stats - if tables/functions count matches, restore succeeded.
+
+### Real-time subscriptions not working after restore
+
+After restoring from backup, Supabase real-time stops working because the `supabase_realtime` publication loses its table subscriptions.
+
+**Symptoms:**
+
+- Kitchen/POS views don't update in real-time
+- Console shows `[KitchenRealtime]: 📡 Kitchen Realtime connected` (SUBSCRIBED) but no update events
+- Changes only appear after page refresh
+
+**Diagnosis:**
+
+```sql
+SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
+-- If empty (tablename: null), real-time is broken
+```
+
+**Fix - Add tables to publication:**
+
+```sql
+-- Add orders table (required for Kitchen/POS real-time sync)
+ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+
+-- Verify
+SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
+-- Should show: orders
+```
+
+**Why this happens:**
+
+- `pg_dump` doesn't export publication table memberships
+- The `supabase_realtime` publication exists but has no tables after restore
+- Supabase real-time subscription shows "SUBSCRIBED" but receives no events
+
+---
 
 ### "permission denied for table X" after restore
 
