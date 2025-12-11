@@ -26,6 +26,8 @@ export type StoreName =
   | 'writeOff'
   | 'pos'
   | 'kitchen'
+  | 'kitchenKpi'
+  | 'discounts'
   | 'debug'
 
 /**

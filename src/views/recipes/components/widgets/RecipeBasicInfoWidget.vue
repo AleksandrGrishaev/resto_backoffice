@@ -241,6 +241,67 @@
         />
       </v-col>
 
+      <!-- 🆕 Kitchen Preparation: Storage & Production Settings -->
+      <template v-if="type === 'preparation'">
+        <!-- Storage Location -->
+        <v-col cols="12" md="6">
+          <v-select
+            :model-value="formData.storageLocation || 'fridge'"
+            :items="storageLocationItems"
+            item-title="label"
+            item-value="value"
+            label="Storage Location"
+            variant="outlined"
+            density="comfortable"
+            hint="Where this preparation is stored"
+            @update:model-value="updateField('storageLocation', $event)"
+          />
+        </v-col>
+
+        <!-- Production Slot -->
+        <v-col cols="12" md="6">
+          <v-select
+            :model-value="formData.productionSlot || 'any'"
+            :items="productionSlotItems"
+            item-title="label"
+            item-value="value"
+            label="Production Time"
+            variant="outlined"
+            density="comfortable"
+            hint="Preferred production time slot"
+            @update:model-value="updateField('productionSlot', $event)"
+          />
+        </v-col>
+
+        <!-- Min Stock Threshold -->
+        <v-col cols="12" md="6">
+          <v-text-field
+            :model-value="formData.minStockThreshold || 0"
+            label="Min Stock Threshold"
+            type="number"
+            min="0"
+            variant="outlined"
+            density="comfortable"
+            :hint="`Alert when stock falls below this (${formData.outputUnit || 'units'})`"
+            @update:model-value="updateField('minStockThreshold', Number($event))"
+          />
+        </v-col>
+
+        <!-- Daily Target Quantity -->
+        <v-col cols="12" md="6">
+          <v-text-field
+            :model-value="formData.dailyTargetQuantity || 0"
+            label="Daily Target Quantity"
+            type="number"
+            min="0"
+            variant="outlined"
+            density="comfortable"
+            :hint="`Target daily production (${formData.outputUnit || 'units'})`"
+            @update:model-value="updateField('dailyTargetQuantity', Number($event))"
+          />
+        </v-col>
+      </template>
+
       <!-- Recipe-specific fields -->
       <template v-if="type === 'recipe'">
         <v-col cols="12" md="6">
@@ -316,6 +377,11 @@ interface FormData {
   shelfLife?: number // ✅ NEW: Shelf life in days for preparations
   // ⭐ PHASE 2: Portion type support
   portionType?: 'weight' | 'portion'
+  // 🆕 Kitchen Preparation: Storage & Production Settings
+  storageLocation?: 'shelf' | 'fridge' | 'freezer'
+  productionSlot?: 'morning' | 'afternoon' | 'evening' | 'any'
+  minStockThreshold?: number
+  dailyTargetQuantity?: number
 }
 
 interface Props {
@@ -364,6 +430,25 @@ const departmentItems = computed(() => {
   return [
     { label: 'Kitchen', value: 'kitchen' },
     { label: 'Bar', value: 'bar' }
+  ]
+})
+
+// 🆕 Kitchen Preparation: Storage location options
+const storageLocationItems = computed(() => {
+  return [
+    { label: 'Fridge', value: 'fridge' },
+    { label: 'Shelf', value: 'shelf' },
+    { label: 'Freezer', value: 'freezer' }
+  ]
+})
+
+// 🆕 Kitchen Preparation: Production slot options
+const productionSlotItems = computed(() => {
+  return [
+    { label: 'Any time', value: 'any' },
+    { label: 'Morning (6:00-12:00)', value: 'morning' },
+    { label: 'Afternoon (12:00-18:00)', value: 'afternoon' },
+    { label: 'Evening (18:00-22:00)', value: 'evening' }
   ]
 })
 

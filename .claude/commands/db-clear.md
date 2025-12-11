@@ -1,5 +1,5 @@
 ---
-description: Clean temporary data from database (orders, payments, batches, reset tables)
+description: Erase temporary data from database (orders, payments, batches, reset tables)
 tags: [database, cleanup, testing]
 ---
 

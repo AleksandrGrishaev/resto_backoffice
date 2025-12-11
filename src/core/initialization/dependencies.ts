@@ -64,13 +64,6 @@ export const CRITICAL_STORES = {
   all: ['products', 'recipes', 'menu', 'storage'] as StoreName[],
 
   /**
-   * Минимальный набор для Kitchen monitor
-   * Kitchen читает orders из Supabase и показывает dish names из menu
-   * НЕ нуждается в products/recipes/storage
-   */
-  kitchen: ['menu'] as StoreName[],
-
-  /**
    * Дополнительные stores для POS пользователей (cashier, waiter)
    *
    * Почему критичны:
@@ -90,7 +83,19 @@ export const CRITICAL_STORES = {
    * - preparations: управление полуфабрикатами
    * - accounts: финансовый учет
    */
-  backoffice: ['counteragents', 'suppliers', 'storage', 'preparations', 'accounts'] as StoreName[]
+  backoffice: ['counteragents', 'suppliers', 'storage', 'preparations', 'accounts'] as StoreName[],
+
+  /**
+   * 🆕 Kitchen Preparation: Stores needed for kitchen/bar roles
+   * Kitchen Preparation feature requires preparations store for:
+   * - Viewing stock balances
+   * - Creating production batches
+   * - Write-off operations
+   *
+   * NOTE: kitchen/bar roles now load ALL critical stores (products, recipes, menu, storage)
+   * plus preparations via role-based loading
+   */
+  kitchenPreparation: ['preparations'] as StoreName[]
 }
 
 /**

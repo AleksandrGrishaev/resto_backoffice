@@ -23,9 +23,11 @@ import { useRecipesStore } from '@/stores/recipes'
 import { useAccountStore } from '@/stores/account'
 import { useMenuStore } from '@/stores/menu'
 import { useStorageStore } from '@/stores/storage'
+import { usePreparationStore } from '@/stores/preparation'
 import { useSalesStore, useRecipeWriteOffStore } from '@/stores/sales'
 import { usePosStore } from '@/stores/pos'
 import { useKitchenStore } from '@/stores/kitchen'
+import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 
 const MODULE_NAME = 'ProductionInitStrategy'
 
@@ -65,37 +67,13 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
    *
    * В PRODUCTION режиме: загружаем для всех ролей, т.к. нужны для базовых операций
    * (decomposition при продажах требует recipes даже для кассиров)
-   * ОПТИМИЗАЦИЯ: Для Kitchen monitor (роль 'kitchen') грузим только menu
+   * Kitchen Preparation feature requires full critical stores for kitchen/bar roles
    */
   async initializeCriticalStores(userRoles?: UserRole[]): Promise<StoreInitResult[]> {
     const results: StoreInitResult[] = []
 
     try {
-      // 🆕 ОПТИМИЗАЦИЯ: Kitchen monitor нуждается только в menu
-      const isKitchenMonitorOnly =
-        userRoles?.length === 1 && (userRoles[0] === 'kitchen' || userRoles[0] === 'bar')
-
-      if (isKitchenMonitorOnly) {
-        DebugUtils.info(
-          MODULE_NAME,
-          '📦 [PROD] Kitchen monitor - loading minimal stores (menu only)',
-          {
-            role: userRoles[0]
-          }
-        )
-
-        // Kitchen нуждается только в menu для отображения dish names
-        results.push(await this.loadMenuFromAPI())
-
-        DebugUtils.info(MODULE_NAME, '✅ [PROD] Kitchen critical stores initialized', {
-          count: results.length,
-          stores: ['menu']
-        })
-
-        return results
-      }
-
-      // Стандартная загрузка для всех остальных ролей
+      // Стандартная загрузка для всех ролей (включая kitchen/bar для Kitchen Preparation)
       DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...')
 
       // TODO: В production можно грузить параллельно через API
@@ -145,6 +123,12 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
       // Kitchen stores (depends on POS)
       if (shouldLoadKitchenStores(userRoles)) {
         results.push(await this.loadKitchenFromAPI())
+        // 🆕 Kitchen Preparation: Load preparations and KPI stores for kitchen/bar roles
+        if (!shouldLoadBackofficeStores(userRoles)) {
+          // Only load preparations here if NOT loading backoffice stores (to avoid duplication)
+          results.push(await this.loadPreparationsFromAPI())
+        }
+        results.push(await this.loadKitchenKpiFromAPI())
       }
 
       if (shouldLoadBackofficeStores(userRoles)) {
@@ -502,6 +486,77 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'kitchen',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  /**
+   * TODO: Загрузить preparations через API
+   * 🆕 Kitchen Preparation: Required for kitchen/bar roles
+   */
+  private async loadPreparationsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = usePreparationStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading preparations from API...')
+
+      // TODO: Заменить на API вызов
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'preparations',
+        success: true,
+        count: store.state?.balances?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load preparations'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'preparations',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  /**
+   * 🆕 Kitchen KPI: Load KPI store for kitchen/bar roles
+   */
+  private async loadKitchenKpiFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useKitchenKpiStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading Kitchen KPI from API...')
+
+      const result = await store.initialize()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Kitchen KPI initialization failed')
+      }
+
+      return {
+        name: 'kitchenKpi',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load Kitchen KPI'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'kitchenKpi',
         success: false,
         error: message,
         duration: Date.now() - start

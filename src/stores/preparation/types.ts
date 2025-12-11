@@ -1,8 +1,15 @@
-// src/stores/preparation/types.ts - UPDATED: Added Write-off Support + Portion Type
+// src/stores/preparation/types.ts - UPDATED: Added Write-off Support + Portion Type + Kitchen Preparation
 import { BaseEntity } from '@/types/common'
 import type { PortionType } from '@/stores/recipes/types'
 
 export type PreparationDepartment = 'kitchen' | 'bar' | 'all'
+
+// 🆕 Kitchen Preparation: Storage and Production Types
+export type StorageLocation = 'shelf' | 'fridge' | 'freezer'
+export type ProductionSlot = 'morning' | 'afternoon' | 'evening' | 'any'
+export type ProductionScheduleSlot = 'urgent' | 'morning' | 'afternoon' | 'evening'
+export type ProductionScheduleStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+export type SyncStatus = 'pending' | 'synced' | 'failed'
 // ✅ SIMPLIFIED: Only production, inventory, and write_off operations
 export type PreparationOperationType = 'receipt' | 'inventory' | 'write_off'
 // ✅ SIMPLIFIED: Only production and inventory_adjustment sources
@@ -359,4 +366,179 @@ export function getPreparationWriteOffReasonInfo(reason: PreparationWriteOffReas
       color: 'default'
     }
   )
+}
+
+// ===============================================
+// 🆕 Kitchen Preparation Types (Sprint 1)
+// ===============================================
+
+/**
+ * Extended preparation info with Kitchen Preparation fields
+ */
+export interface PreparationScheduleFields {
+  storageLocation?: StorageLocation
+  productionSlot?: ProductionSlot
+  minStockThreshold?: number
+  dailyTargetQuantity?: number
+}
+
+/**
+ * Production Schedule Item - TODO-style task for kitchen/bar staff
+ */
+export interface ProductionScheduleItem {
+  id: string
+  preparationId: string
+  preparationName: string
+  department: 'kitchen' | 'bar'
+  scheduleDate: string // ISO date
+  productionSlot: ProductionScheduleSlot
+  priority: number
+  targetQuantity: number
+  targetUnit: string
+  currentStockAtGeneration?: number
+  recommendationReason?: string
+  status: ProductionScheduleStatus
+
+  // Completion details
+  completedAt?: string
+  completedBy?: string
+  completedByName?: string
+  completedQuantity?: number
+  preparationBatchId?: string
+
+  // Sync status for offline support
+  syncStatus: SyncStatus
+  syncedAt?: string
+  syncError?: string
+
+  // Timestamps
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Production Recommendation - AI/Rule-based schedule suggestion
+ */
+export interface ProductionRecommendation {
+  id: string
+  preparationId: string
+  preparationName: string
+  currentStock: number
+  avgDailyConsumption: number
+  daysUntilStockout: number
+  recommendedQuantity: number
+  urgency: ProductionScheduleSlot
+  reason: string
+  storageLocation: StorageLocation
+  expiryDate?: string
+  portionType?: PortionType
+  portionSize?: number
+
+  // Completion tracking (when converted to schedule item)
+  isCompleted: boolean
+  completionDetails?: {
+    completedAt: string
+    completedBy: string
+    completedQuantity: number
+    batchId: string
+  }
+}
+
+/**
+ * Kitchen/Bar KPI Entry - Daily performance metrics for a staff member
+ */
+export interface KitchenKpiEntry {
+  id: string
+  staffId: string
+  staffName: string
+  department: 'kitchen' | 'bar'
+  periodDate: string // ISO date
+
+  // Production metrics
+  productionsCompleted: number
+  productionQuantityTotal: number
+  productionValueTotal: number
+
+  // Write-off metrics (KPI-affecting)
+  writeoffsKpiAffecting: number
+  writeoffValueKpiAffecting: number
+
+  // Write-off metrics (non-KPI)
+  writeoffsNonKpi: number
+  writeoffValueNonKpi: number
+
+  // Schedule completion metrics
+  onTimeCompletions: number
+  lateCompletions: number
+
+  // Detailed breakdowns
+  productionDetails: ProductionKpiDetail[]
+  writeoffDetails: WriteoffKpiDetail[]
+
+  // Timestamps
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Production detail for KPI tracking
+ */
+export interface ProductionKpiDetail {
+  batchId: string
+  preparationName: string
+  quantity: number
+  value: number
+  timestamp: string
+  scheduleTaskId?: string
+}
+
+/**
+ * Write-off detail for KPI tracking
+ */
+export interface WriteoffKpiDetail {
+  operationId: string
+  type: 'preparation' | 'product'
+  reason: PreparationWriteOffReason | string
+  quantity: number
+  value: number
+  timestamp: string
+  affectsKpi: boolean
+}
+
+/**
+ * Storage location options for UI
+ */
+export const STORAGE_LOCATION_OPTIONS = [
+  { value: 'fridge' as StorageLocation, label: 'Fridge', icon: 'mdi-fridge' },
+  { value: 'shelf' as StorageLocation, label: 'Shelf', icon: 'mdi-archive' },
+  { value: 'freezer' as StorageLocation, label: 'Freezer', icon: 'mdi-snowflake' }
+] as const
+
+/**
+ * Production slot options for UI
+ */
+export const PRODUCTION_SLOT_OPTIONS = [
+  { value: 'any' as ProductionSlot, label: 'Any time', timeRange: null },
+  { value: 'morning' as ProductionSlot, label: 'Morning', timeRange: '6:00-12:00' },
+  { value: 'afternoon' as ProductionSlot, label: 'Afternoon', timeRange: '12:00-18:00' },
+  { value: 'evening' as ProductionSlot, label: 'Evening', timeRange: '18:00-22:00' }
+] as const
+
+/**
+ * Get production slot display info
+ */
+export function getProductionSlotInfo(slot: ProductionSlot | ProductionScheduleSlot) {
+  if (slot === 'urgent') {
+    return { label: 'Urgent', timeRange: 'ASAP', color: 'error' }
+  }
+  const option = PRODUCTION_SLOT_OPTIONS.find(o => o.value === slot)
+  return option || { label: slot, timeRange: null, color: 'default' }
+}
+
+/**
+ * Get storage location display info
+ */
+export function getStorageLocationInfo(location: StorageLocation) {
+  const option = STORAGE_LOCATION_OPTIONS.find(o => o.value === location)
+  return option || { value: location, label: location, icon: 'mdi-help' }
 }

@@ -7,7 +7,19 @@
 
 // ===== ENTITY & OPERATION TYPES =====
 
-export type SyncEntityType = 'shift' | 'transaction' | 'discount' | 'customer' | 'product' | 'order'
+export type SyncEntityType =
+  | 'shift'
+  | 'transaction'
+  | 'discount'
+  | 'customer'
+  | 'product'
+  | 'order'
+  // Kitchen Preparation types (Sprint 2)
+  | 'preparation_batch'
+  | 'preparation_writeoff'
+  | 'product_writeoff'
+  | 'schedule_completion'
+  | 'kpi_entry'
 
 export type SyncOperation = 'create' | 'update' | 'delete'
 
