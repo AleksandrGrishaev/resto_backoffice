@@ -2,64 +2,96 @@
 <template>
   <div class="storage-stock-table">
     <!-- Filters and Search -->
-    <div class="d-flex align-center justify-space-between mb-4">
-      <div class="d-flex align-center gap-2">
-        <v-select
-          v-model="selectedCategory"
-          :items="categoryOptions"
-          label="Filter by category"
-          variant="outlined"
-          density="compact"
-          hide-details
-          style="width: 300px"
-          clearable
-        />
+    <div class="d-flex align-center gap-2 flex-wrap mb-4">
+      <!-- Search Input -->
+      <v-text-field
+        v-model="searchQuery"
+        prepend-inner-icon="mdi-magnify"
+        label="Search by name"
+        variant="outlined"
+        density="compact"
+        hide-details
+        clearable
+        style="min-width: 200px; max-width: 250px"
+      />
 
-        <v-btn
-          color="warning"
-          variant="outlined"
-          size="small"
-          :class="{ 'bg-warning': filters.showNearExpiry }"
-          @click="toggleNearExpiryFilter"
-        >
-          <v-icon icon="mdi-clock-alert-outline" class="mr-1" />
-          Expiring ({{ expiringCount }})
-        </v-btn>
+      <!-- Category Dropdown -->
+      <v-select
+        v-model="selectedCategory"
+        :items="categoryOptions"
+        label="Filter by category"
+        variant="outlined"
+        density="compact"
+        hide-details
+        style="min-width: 180px; max-width: 220px"
+        clearable
+      />
 
-        <v-btn
-          color="info"
-          variant="outlined"
-          size="small"
-          :class="{ 'bg-info': filters.showLowStock }"
-          @click="toggleLowStockFilter"
-        >
-          <v-icon icon="mdi-package-variant" class="mr-1" />
-          Low Stock ({{ lowStockCount }})
-        </v-btn>
+      <!-- Compact Filter Buttons (icons only with tooltips) -->
+      <v-btn
+        color="warning"
+        variant="outlined"
+        size="small"
+        :class="{ 'bg-warning': filters.showNearExpiry }"
+        min-width="50"
+        @click="toggleNearExpiryFilter"
+      >
+        <v-icon icon="mdi-clock-alert-outline" size="18" />
+        <span class="ml-1">{{ expiringCount }}</span>
+        <v-tooltip activator="parent" location="bottom">Expiring Soon</v-tooltip>
+      </v-btn>
 
-        <v-btn
-          color="error"
-          variant="outlined"
-          size="small"
-          :class="{ 'bg-error': filters.showExpired }"
-          @click="toggleExpiredFilter"
-        >
-          <v-icon icon="mdi-alert-circle" class="mr-1" />
-          Expired ({{ expiredCount }})
-        </v-btn>
+      <v-btn
+        color="info"
+        variant="outlined"
+        size="small"
+        :class="{ 'bg-info': filters.showLowStock }"
+        min-width="50"
+        @click="toggleLowStockFilter"
+      >
+        <v-icon icon="mdi-package-variant" size="18" />
+        <span class="ml-1">{{ lowStockCount }}</span>
+        <v-tooltip activator="parent" location="bottom">Low Stock</v-tooltip>
+      </v-btn>
 
-        <!-- ✅ FIXED: Out of Stock Filter Button (includes negative stock) -->
-        <v-btn
-          color="grey"
-          variant="outlined"
-          size="small"
-          :class="{ 'bg-grey': showZeroStock }"
-          @click="$emit('toggle-zero-stock')"
-        >
-          <v-icon icon="mdi-package-variant-closed" class="mr-1" />
-          Out of Stock ({{ outOfStockCount }})
-        </v-btn>
-      </div>
+      <v-btn
+        color="error"
+        variant="outlined"
+        size="small"
+        :class="{ 'bg-error': filters.showExpired }"
+        min-width="50"
+        @click="toggleExpiredFilter"
+      >
+        <v-icon icon="mdi-alert-circle" size="18" />
+        <span class="ml-1">{{ expiredCount }}</span>
+        <v-tooltip activator="parent" location="bottom">Expired</v-tooltip>
+      </v-btn>
+
+      <v-btn
+        color="grey"
+        variant="outlined"
+        size="small"
+        :class="{ 'bg-grey': showZeroStock }"
+        min-width="50"
+        @click="$emit('toggle-zero-stock')"
+      >
+        <v-icon icon="mdi-package-variant-closed" size="18" />
+        <span class="ml-1">{{ outOfStockCount }}</span>
+        <v-tooltip activator="parent" location="bottom">Out of Stock</v-tooltip>
+      </v-btn>
+
+      <v-btn
+        color="deep-orange"
+        variant="outlined"
+        size="small"
+        :class="{ 'bg-deep-orange': filters.showNegativeStock }"
+        min-width="50"
+        @click="toggleNegativeStockFilter"
+      >
+        <v-icon icon="mdi-alert-octagon" size="18" />
+        <span class="ml-1">{{ negativeStockCount }}</span>
+        <v-tooltip activator="parent" location="bottom">Negative Stock</v-tooltip>
+      </v-btn>
     </div>
 
     <!-- Active Filters Display -->
@@ -115,6 +147,16 @@
           @click:close="$emit('toggle-zero-stock')"
         >
           Out of Stock
+        </v-chip>
+
+        <v-chip
+          v-if="filters.showNegativeStock"
+          size="small"
+          closable
+          color="deep-orange"
+          @click:close="toggleNegativeStockFilter"
+        >
+          Negative Stock
         </v-chip>
 
         <v-btn size="small" variant="text" @click="clearAllFilters">Clear All</v-btn>
@@ -453,7 +495,8 @@ const selectedItem = ref<StorageBalance | null>(null)
 const filters = ref({
   showExpired: false,
   showNearExpiry: false,
-  showLowStock: false
+  showLowStock: false,
+  showNegativeStock: false
 })
 
 // Computed
@@ -506,14 +549,25 @@ const customSort = (items: StorageBalance[], sortBy: any[]) => {
 const filteredBalances = computed(() => {
   let items = [...props.balances]
 
-  // Apply category filter first
+  // Apply search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    items = items.filter(item => item.itemName.toLowerCase().includes(query))
+  }
+
+  // Apply category filter
   if (selectedCategory.value) {
     items = items.filter(item => getProductCategory(item.itemId) === selectedCategory.value)
   }
 
-  // ✅ FIXED: Apply out of stock filter (includes negative stock)
+  // Apply out of stock filter (includes negative stock)
   if (props.showZeroStock) {
     items = items.filter(item => item.totalQuantity <= 0)
+  }
+
+  // Apply negative stock filter (only negative, not zero)
+  if (filters.value.showNegativeStock) {
+    items = items.filter(item => item.totalQuantity < 0)
   }
 
   // Apply other status filters
@@ -535,8 +589,10 @@ const hasActiveFilters = computed(
     filters.value.showExpired ||
     filters.value.showNearExpiry ||
     filters.value.showLowStock ||
+    filters.value.showNegativeStock ||
     selectedCategory.value !== null ||
-    props.showZeroStock
+    props.showZeroStock ||
+    searchQuery.value !== ''
 )
 
 const expiringCount = computed(() => props.balances.filter(b => b.hasNearExpiry).length)
@@ -892,11 +948,16 @@ function toggleLowStockFilter() {
   filters.value.showLowStock = !filters.value.showLowStock
 }
 
+function toggleNegativeStockFilter() {
+  filters.value.showNegativeStock = !filters.value.showNegativeStock
+}
+
 function clearAllFilters() {
   filters.value = {
     showExpired: false,
     showNearExpiry: false,
-    showLowStock: false
+    showLowStock: false,
+    showNegativeStock: false
   }
   searchQuery.value = ''
   selectedCategory.value = null
@@ -934,6 +995,12 @@ function clearAllFilters() {
   .bg-grey {
     background-color: rgb(var(--v-theme-surface-variant)) !important;
     color: rgb(var(--v-theme-on-surface-variant)) !important;
+  }
+
+  // Negative stock filter styling
+  .bg-deep-orange {
+    background-color: #ff5722 !important;
+    color: white !important;
   }
 }
 
