@@ -451,6 +451,49 @@ class KitchenKpiService {
   }
 
   /**
+   * Auto-fulfill schedule task (system action, no user ID)
+   * Uses direct SQL update since RPC requires UUID for completed_by
+   */
+  async completeTaskAutoFulfill(data: {
+    taskId: string
+    completedByName: string
+    completedQuantity: number
+  }): Promise<ProductionScheduleItem> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Auto-fulfilling schedule task', {
+        taskId: data.taskId,
+        quantity: data.completedQuantity
+      })
+
+      const { data: result, error } = await supabase
+        .from('production_schedule')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          completed_by: null,
+          completed_by_name: data.completedByName,
+          completed_quantity: data.completedQuantity,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', data.taskId)
+        .in('status', ['pending', 'in_progress'])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      const item = scheduleFromSupabase(result as ProductionScheduleRow)
+
+      DebugUtils.info(MODULE_NAME, 'Task auto-fulfilled', { id: item.id, status: item.status })
+
+      return item
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to auto-fulfill task', { error })
+      throw error
+    }
+  }
+
+  /**
    * Update schedule item status
    */
   async updateScheduleStatus(

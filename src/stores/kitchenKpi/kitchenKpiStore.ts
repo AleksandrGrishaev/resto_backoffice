@@ -6,6 +6,7 @@ import { ref, computed } from 'vue'
 import { DebugUtils, TimeUtils } from '@/utils'
 import { kitchenKpiService } from './kitchenKpiService'
 import { generateRecommendations as generateRecs } from './services/recommendationsService'
+import { kitchenOfflineCache } from './offlineCache'
 import { useSyncService } from '@/core/sync/SyncService'
 import { PreparationBatchSyncAdapter } from '@/core/sync/adapters/PreparationBatchSyncAdapter'
 import { PreparationWriteOffSyncAdapter } from '@/core/sync/adapters/PreparationWriteOffSyncAdapter'
@@ -185,7 +186,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     return items
   })
 
-  // Group schedule items by slot
+  // Group schedule items by slot (excluding completed - they go to History tab)
   const scheduleBySlot = computed(() => {
     const grouped: Record<string, ProductionScheduleItem[]> = {
       urgent: [],
@@ -194,7 +195,12 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
       evening: []
     }
 
-    for (const item of filteredScheduleItems.value) {
+    // Only include pending and in_progress tasks
+    const pendingItems = filteredScheduleItems.value.filter(
+      item => item.status === 'pending' || item.status === 'in_progress'
+    )
+
+    for (const item of pendingItems) {
       const slot = item.productionSlot
       if (grouped[slot]) {
         grouped[slot].push(item)
@@ -259,12 +265,45 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
 
       const appliedFilters = filters || kpiFilters.value
 
-      kpiEntries.value = await kitchenKpiService.getKpiEntries(appliedFilters)
+      // Check if online
+      if (navigator.onLine) {
+        kpiEntries.value = await kitchenKpiService.getKpiEntries(appliedFilters)
 
-      DebugUtils.info(MODULE_NAME, 'KPI entries loaded', { count: kpiEntries.value.length })
+        // Cache for offline use
+        kitchenOfflineCache.cacheKpiEntries(
+          kpiEntries.value,
+          appliedFilters.department as 'kitchen' | 'bar' | undefined
+        )
+
+        DebugUtils.info(MODULE_NAME, 'KPI entries loaded from server', {
+          count: kpiEntries.value.length
+        })
+      } else {
+        // Offline - try to load from cache
+        const cached = kitchenOfflineCache.getCachedKpiEntries()
+        if (cached) {
+          kpiEntries.value = cached.data
+          DebugUtils.info(MODULE_NAME, 'KPI entries loaded from cache', {
+            count: kpiEntries.value.length,
+            isStale: cached.isStale
+          })
+        } else {
+          kpiEntries.value = []
+          DebugUtils.warn(MODULE_NAME, 'No cached KPI entries available')
+        }
+      }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load KPI entries'
-      throw err
+      // On error, try to load from cache
+      const cached = kitchenOfflineCache.getCachedKpiEntries()
+      if (cached) {
+        kpiEntries.value = cached.data
+        DebugUtils.info(MODULE_NAME, 'KPI entries loaded from cache after error', {
+          count: kpiEntries.value.length
+        })
+      } else {
+        error.value = err instanceof Error ? err.message : 'Failed to load KPI entries'
+        throw err
+      }
     } finally {
       loading.value.kpi = false
     }
@@ -355,15 +394,49 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
 
       const appliedFilters = filters || scheduleFilters.value
 
-      scheduleItems.value = await kitchenKpiService.getSchedule(appliedFilters)
+      // Check if online
+      if (navigator.onLine) {
+        scheduleItems.value = await kitchenKpiService.getSchedule(appliedFilters)
 
-      DebugUtils.info(MODULE_NAME, 'Schedule loaded', {
-        count: scheduleItems.value.length,
-        date: appliedFilters.date
-      })
+        // Cache for offline use
+        kitchenOfflineCache.cacheSchedule(
+          scheduleItems.value,
+          appliedFilters.department as 'kitchen' | 'bar' | undefined
+        )
+
+        // Record successful sync
+        kitchenOfflineCache.recordLastSync()
+
+        DebugUtils.info(MODULE_NAME, 'Schedule loaded from server', {
+          count: scheduleItems.value.length,
+          date: appliedFilters.date
+        })
+      } else {
+        // Offline - try to load from cache
+        const cached = kitchenOfflineCache.getCachedSchedule()
+        if (cached) {
+          scheduleItems.value = cached.data
+          DebugUtils.info(MODULE_NAME, 'Schedule loaded from cache', {
+            count: scheduleItems.value.length,
+            isStale: cached.isStale
+          })
+        } else {
+          scheduleItems.value = []
+          DebugUtils.warn(MODULE_NAME, 'No cached schedule available')
+        }
+      }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to load schedule'
-      throw err
+      // On error, try to load from cache
+      const cached = kitchenOfflineCache.getCachedSchedule()
+      if (cached) {
+        scheduleItems.value = cached.data
+        DebugUtils.info(MODULE_NAME, 'Schedule loaded from cache after error', {
+          count: scheduleItems.value.length
+        })
+      } else {
+        error.value = err instanceof Error ? err.message : 'Failed to load schedule'
+        throw err
+      }
     } finally {
       loading.value.schedule = false
     }
@@ -457,6 +530,112 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     }
   }
 
+  /**
+   * Auto-fulfill tasks that have sufficient stock
+   * Checks pending tasks against current stock levels and marks them as completed
+   */
+  async function autoFulfillTasks(department: 'kitchen' | 'bar'): Promise<number> {
+    try {
+      const preparationStore = usePreparationStore()
+
+      // Get pending tasks only
+      const pendingTasks = scheduleItems.value.filter(
+        item => item.status === 'pending' || item.status === 'in_progress'
+      )
+
+      if (pendingTasks.length === 0) {
+        DebugUtils.debug(MODULE_NAME, 'No pending tasks to check for auto-fulfillment')
+        return 0
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Checking tasks for auto-fulfillment...', {
+        pendingCount: pendingTasks.length,
+        department
+      })
+
+      let fulfilledCount = 0
+
+      for (const task of pendingTasks) {
+        // Get current stock for this preparation
+        const balance = preparationStore.getBalance(task.preparationId, department)
+        const currentStock = balance?.totalQuantity || 0
+
+        // Check if current stock meets or exceeds target
+        if (currentStock >= task.targetQuantity) {
+          try {
+            // Mark as completed with auto-fulfill note
+            // Use null for completedBy since it's a system action (RPC expects UUID)
+            const completed = await kitchenKpiService.completeTaskAutoFulfill({
+              taskId: task.id,
+              completedByName: 'Auto-fulfilled',
+              completedQuantity: task.targetQuantity
+            })
+
+            // Update local state
+            const index = scheduleItems.value.findIndex(i => i.id === task.id)
+            if (index !== -1) {
+              scheduleItems.value[index] = completed
+            }
+
+            fulfilledCount++
+
+            DebugUtils.info(MODULE_NAME, 'Task auto-fulfilled', {
+              taskId: task.id,
+              preparationName: task.preparationName,
+              currentStock,
+              targetQuantity: task.targetQuantity
+            })
+          } catch (err) {
+            DebugUtils.error(MODULE_NAME, 'Failed to auto-fulfill task', {
+              taskId: task.id,
+              error: err
+            })
+          }
+        }
+      }
+
+      if (fulfilledCount > 0) {
+        DebugUtils.info(MODULE_NAME, 'Auto-fulfillment complete', {
+          fulfilled: fulfilledCount,
+          remaining: pendingTasks.length - fulfilledCount
+        })
+      }
+
+      return fulfilledCount
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to run auto-fulfillment', { err })
+      return 0
+    }
+  }
+
+  /**
+   * Refresh schedule and run auto-fulfillment check
+   */
+  async function refreshScheduleWithAutoFulfill(
+    department: 'kitchen' | 'bar'
+  ): Promise<{ refreshed: boolean; fulfilled: number }> {
+    try {
+      loading.value.schedule = true
+
+      // Reload schedule from server
+      await loadSchedule({ department })
+
+      // Ensure balances are fresh
+      const preparationStore = usePreparationStore()
+      await preparationStore.fetchBalances(department)
+
+      // Run auto-fulfillment
+      const fulfilledCount = await autoFulfillTasks(department)
+
+      return { refreshed: true, fulfilled: fulfilledCount }
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to refresh schedule with auto-fulfill', { err })
+      return { refreshed: false, fulfilled: 0 }
+    } finally {
+      loading.value.schedule = false
+    }
+  }
+
   // ===============================================
   // Actions - Recommendations
   // ===============================================
@@ -487,6 +666,9 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
 
       recommendations.value = generateRecs(department, balances, preparations)
 
+      // Cache recommendations
+      kitchenOfflineCache.cacheRecommendations(recommendations.value, department)
+
       DebugUtils.info(MODULE_NAME, 'Recommendations generated', {
         count: recommendations.value.length,
         urgent: recommendations.value.filter(r => r.urgency === 'urgent').length,
@@ -495,10 +677,20 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
         evening: recommendations.value.filter(r => r.urgency === 'evening').length
       })
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to generate recommendations'
-      error.value = errorMessage
-      DebugUtils.error(MODULE_NAME, 'Failed to generate recommendations', { error: errorMessage })
-      throw err
+      // Try to load cached recommendations on error
+      const cached = kitchenOfflineCache.getCachedRecommendations()
+      if (cached) {
+        recommendations.value = cached.data
+        DebugUtils.info(MODULE_NAME, 'Recommendations loaded from cache after error', {
+          count: recommendations.value.length
+        })
+      } else {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to generate recommendations'
+        error.value = errorMessage
+        DebugUtils.error(MODULE_NAME, 'Failed to generate recommendations', { error: errorMessage })
+        throw err
+      }
     } finally {
       loading.value.recommendations = false
     }
@@ -586,6 +778,8 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     completeTask,
     updateTaskStatus,
     deleteScheduleItem,
+    autoFulfillTasks,
+    refreshScheduleWithAutoFulfill,
 
     // Actions - Recommendations
     loadRecommendations,

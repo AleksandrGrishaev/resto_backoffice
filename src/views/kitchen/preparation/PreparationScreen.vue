@@ -6,14 +6,21 @@
     <div class="preparation-header">
       <div class="header-title">
         <h1 class="text-h5 font-weight-bold">Preparation Management</h1>
-        <v-chip v-if="!isOnline" color="warning" size="small" variant="flat" class="ml-2">
-          <v-icon start size="small">mdi-cloud-off-outline</v-icon>
-          Offline
-        </v-chip>
+        <SyncStatusIndicator class="ml-2" />
       </div>
 
       <!-- Action Buttons -->
       <div class="header-actions">
+        <v-btn
+          variant="outlined"
+          class="action-btn"
+          :loading="isRefreshing"
+          @click="handleRefreshSchedule"
+        >
+          <v-icon start>mdi-refresh</v-icon>
+          Refresh
+        </v-btn>
+
         <v-btn
           variant="outlined"
           class="action-btn"
@@ -65,6 +72,17 @@
           class="ml-2"
         />
       </v-tab>
+      <v-tab value="history">
+        <v-icon start>mdi-history</v-icon>
+        History
+        <v-badge
+          v-if="completedTasksCount > 0"
+          :content="completedTasksCount"
+          color="success"
+          inline
+          class="ml-2"
+        />
+      </v-tab>
     </v-tabs>
 
     <!-- Tab Content -->
@@ -111,6 +129,11 @@
             @produce="openProductionDialogForPrep"
             @write-off="openPrepWriteOffDialogForPrep"
           />
+        </v-window-item>
+
+        <!-- History Tab -->
+        <v-window-item value="history">
+          <HistoryTab :completed-tasks="completedTasks" :loading="kpiStore.loading.schedule" />
         </v-window-item>
       </v-window>
     </div>
@@ -165,8 +188,11 @@ import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
 import { useRecommendations } from '@/stores/kitchenKpi/composables/useRecommendations'
+import { useSyncStatus } from '@/stores/kitchenKpi/composables/useSyncStatus'
 import ProductionScheduleTab from './components/ProductionScheduleTab.vue'
 import StockListTab from './components/StockListTab.vue'
+import HistoryTab from './components/HistoryTab.vue'
+import SyncStatusIndicator from './components/SyncStatusIndicator.vue'
 import {
   SimpleProductionDialog,
   PrepWriteOffDialog,
@@ -210,13 +236,19 @@ const {
 } = useRecommendations()
 
 // =============================================
+// SYNC STATUS (Sprint 7)
+// =============================================
+
+const { isOnline, hasPendingSync, triggerSync } = useSyncStatus()
+
+// =============================================
 // STATE
 // =============================================
 
-const activeTab = ref<'schedule' | 'stock'>('schedule')
+const activeTab = ref<'schedule' | 'stock' | 'history'>('schedule')
 const isLoading = ref(false)
+const isRefreshing = ref(false)
 const error = ref<string | null>(null)
-const isOnline = ref(navigator.onLine)
 
 // Dialog state
 const showProductionDialog = ref(false)
@@ -259,6 +291,21 @@ const scheduleBySlot = computed(() => kpiStore.scheduleBySlot)
 const pendingTasksCount = computed(() => {
   const summary = kpiStore.scheduleSummary
   return summary?.pendingTasks || 0
+})
+
+/**
+ * Completed tasks count for badge
+ */
+const completedTasksCount = computed(() => {
+  const summary = kpiStore.scheduleSummary
+  return summary?.completedTasks || 0
+})
+
+/**
+ * Completed tasks for history tab
+ */
+const completedTasks = computed(() => {
+  return kpiStore.scheduleItems.filter(item => item.status === 'completed')
 })
 
 /**
@@ -307,12 +354,42 @@ async function loadData(): Promise<void> {
       scheduleItems: kpiStore.scheduleItems.length,
       balances: filteredBalances.value.length
     })
+
+    // Auto-fulfill tasks that have sufficient stock
+    const fulfilledCount = await kpiStore.autoFulfillTasks(userDepartment.value)
+    if (fulfilledCount > 0) {
+      showSnackbar(`${fulfilledCount} task(s) auto-fulfilled based on stock`, 'success')
+    }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Failed to load data'
     error.value = errorMessage
     DebugUtils.error(MODULE_NAME, 'Failed to load data', { error: errorMessage })
   } finally {
     isLoading.value = false
+  }
+}
+
+/**
+ * Refresh schedule and check for auto-fulfillment
+ */
+async function handleRefreshSchedule(): Promise<void> {
+  try {
+    isRefreshing.value = true
+
+    DebugUtils.info(MODULE_NAME, 'Refreshing schedule with auto-fulfillment check...')
+
+    const result = await kpiStore.refreshScheduleWithAutoFulfill(userDepartment.value)
+
+    if (result.fulfilled > 0) {
+      showSnackbar(`Refreshed! ${result.fulfilled} task(s) auto-fulfilled`, 'success')
+    } else {
+      showSnackbar('Schedule refreshed', 'info')
+    }
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to refresh schedule', { error: err })
+    showSnackbar('Failed to refresh schedule', 'error')
+  } finally {
+    isRefreshing.value = false
   }
 }
 
@@ -520,13 +597,19 @@ function showSnackbar(message: string, color: 'success' | 'error' | 'info' | 'wa
 }
 
 /**
- * Handle online/offline status
+ * Handle online/offline status with auto-sync
  */
-function handleOnlineStatus(): void {
-  isOnline.value = navigator.onLine
-  if (isOnline.value) {
-    DebugUtils.info(MODULE_NAME, 'Back online, refreshing data...')
-    loadData()
+async function handleOnlineStatus(): Promise<void> {
+  if (navigator.onLine) {
+    DebugUtils.info(MODULE_NAME, 'Back online, syncing and refreshing data...')
+
+    // Trigger sync if there are pending items
+    if (hasPendingSync.value) {
+      await triggerSync()
+    }
+
+    // Refresh data from server
+    await loadData()
   }
 }
 
