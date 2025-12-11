@@ -62,7 +62,11 @@ export type {
   MenuCostCategoryGroup,
   MenuCostItemData,
   MenuCostVariantData,
-  MenuCostReportData
+  MenuCostReportData,
+  // Purchase Order Export Types
+  PurchaseOrderExportOptions,
+  PurchaseOrderExportData,
+  PurchaseOrderItemExport
 } from './types'
 
 // Print Documents Registry
@@ -88,6 +92,7 @@ export { default as PreparationExportTemplate } from './templates/PreparationExp
 export { default as MenuItemExportTemplate } from './templates/MenuItemExportTemplate.vue'
 export { default as CombinationsExportTemplate } from './templates/CombinationsExportTemplate.vue'
 export { default as InventorySheetTemplate } from './templates/InventorySheetTemplate.vue'
+export { default as PurchaseOrderTemplate } from './templates/PurchaseOrderTemplate.vue'
 
 // Utils
 export {

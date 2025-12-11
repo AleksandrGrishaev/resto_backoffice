@@ -29,14 +29,14 @@ export class AutomatedPayments {
         return
       }
 
-      // Создаем задолженность
+      // Create debt/bill for order
       const debtAmount = order.actualDeliveredAmount || order.totalAmount
 
       await accountStore.createPayment({
         counteragentId: order.supplierId,
         counteragentName: order.supplierName,
         amount: debtAmount,
-        description: `Задолженность по заказу ${order.orderNumber}`,
+        description: `Payment for order ${order.orderNumber}`,
         category: 'supplier',
         invoiceNumber: `DEBT-${order.orderNumber}`,
         priority: 'medium',

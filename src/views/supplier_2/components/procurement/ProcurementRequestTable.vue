@@ -183,13 +183,6 @@
 
             <v-list density="compact" min-width="160">
               <v-list-item
-                v-if="canDeleteRequest(item)"
-                prepend-icon="mdi-delete"
-                title="Delete"
-                @click="deleteRequest(item)"
-              />
-
-              <v-list-item
                 v-if="item.status === 'submitted'"
                 prepend-icon="mdi-cancel"
                 title="Cancel"
@@ -200,6 +193,14 @@
                 prepend-icon="mdi-content-copy"
                 title="Duplicate"
                 @click="duplicateRequest(item)"
+              />
+
+              <v-list-item
+                v-if="canDeleteRequest(item)"
+                prepend-icon="mdi-delete"
+                title="Delete"
+                base-color="warning"
+                @click="deleteRequest(item)"
               />
             </v-list>
           </v-menu>
@@ -389,7 +390,8 @@ function canEditRequest(request: ProcurementRequest): boolean {
 }
 
 function canDeleteRequest(request: ProcurementRequest): boolean {
-  return request.status === 'draft'
+  // ✅ Allow deletion for draft and submitted (if no orders)
+  return ['draft', 'submitted'].includes(request.status)
 }
 
 // =============================================

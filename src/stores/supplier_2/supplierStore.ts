@@ -649,6 +649,13 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
+  /**
+   * ✅ Check if request can be deleted
+   */
+  async function canDeleteRequest(id: string): Promise<{ canDelete: boolean; reason?: string }> {
+    return await supplierService.canDeleteRequest(id)
+  }
+
   async function getRequests(filters?: {
     status?: RequestStatus[]
     department?: Department
@@ -1028,13 +1035,20 @@ export const useSupplierStore = defineStore('supplier', () => {
       let pricesUpdated = 0
       const enhancedItems = data.items.map(item => {
         const latestPrice = latestPrices[item.itemId]
-        if (latestPrice && Math.abs(latestPrice - item.estimatedPrice) > 0.01) {
+
+        // ✅ Если пользователь ввёл цену (estimatedPrice > 0), НЕ перезаписываем
+        if (item.estimatedPrice && item.estimatedPrice > 0) {
+          // Пользователь явно указал цену - сохраняем её
+          return item
+        }
+
+        // Только для items без цены - используем latestPrice
+        if (latestPrice && latestPrice > 0) {
           pricesUpdated++
           return {
             ...item,
             estimatedPrice: latestPrice,
-            notes:
-              `${item.notes || ''} [Price updated: ${item.estimatedPrice} → ${latestPrice}]`.trim()
+            notes: `${item.notes || ''} [Price from storage: ${latestPrice}]`.trim()
           }
         }
         return item
@@ -1569,6 +1583,7 @@ export const useSupplierStore = defineStore('supplier', () => {
     createRequest,
     updateRequest,
     deleteRequest,
+    canDeleteRequest,
     getOrders,
     createOrder,
     updateOrder,

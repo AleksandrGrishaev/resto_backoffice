@@ -314,3 +314,20 @@ export function isUnitValidForContext(
   }
   return getUnitsForContext(context).includes(unit as MeasurementUnit)
 }
+
+/**
+ * Check if unit is divisible (can have fractional quantities)
+ * - Weight (gram, kg) and Volume (ml, liter) are divisible
+ * - Pieces (piece, pack, portion) are NOT divisible
+ *
+ * Use case: When ordering packages, divisible units allow fractional package quantities
+ * (e.g., 1.5 kg of potatoes), while indivisible units must be rounded up
+ * (e.g., can't order 1.5 bottles of milk)
+ */
+export function isUnitDivisible(unit: MeasurementUnit | string | undefined | null): boolean {
+  const info = getUnitInfo(unit)
+  if (!info) return false
+
+  // Weight and volume are divisible
+  return info.type === 'weight' || info.type === 'volume'
+}

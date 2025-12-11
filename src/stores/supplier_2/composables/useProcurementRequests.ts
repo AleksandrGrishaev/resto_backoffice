@@ -384,10 +384,12 @@ export function useProcurementRequests() {
   }
 
   /**
-   * Check if request can be deleted
+   * Check if request can be deleted (basic status check)
+   * For full validation (including orders check), use store.canDeleteRequest()
    */
   function canDeleteRequest(request: ProcurementRequest): boolean {
-    return request.status === 'draft'
+    // ✅ Allow deletion for draft and submitted (if no orders)
+    return ['draft', 'submitted'].includes(request.status)
   }
 
   /**

@@ -274,6 +274,7 @@ export interface UnassignedItem {
     quantity: number // в базовых единицах
     packageId?: string
     packageQuantity?: number
+    estimatedPrice?: number // Цена из request (за базовую единицу)
   }>
 }
 

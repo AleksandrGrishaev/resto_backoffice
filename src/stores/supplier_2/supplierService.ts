@@ -6,6 +6,7 @@ import { useSupplierStorageIntegration } from './integrations/storageIntegration
 import { useCounteragentsStore } from '@/stores/counteragents'
 import { supabase } from '@/supabase/client'
 import { generateId } from '@/utils/id'
+import { isUnitDivisible } from '@/types/measurementUnits'
 import {
   mapRequestFromDB,
   mapRequestToDB,
@@ -293,9 +294,58 @@ class SupplierService {
     }
   }
 
+  /**
+   * ✅ Check if request can be deleted
+   * Returns { canDelete: boolean, reason?: string }
+   */
+  async canDeleteRequest(id: string): Promise<{ canDelete: boolean; reason?: string }> {
+    try {
+      // 1. Get request to check status
+      const request = await this.getRequestById(id)
+      if (!request) {
+        return { canDelete: false, reason: 'Request not found' }
+      }
+
+      // 2. Check status - only draft and submitted can be deleted
+      const allowedStatuses = ['draft', 'submitted']
+      if (!allowedStatuses.includes(request.status)) {
+        return {
+          canDelete: false,
+          reason: `Cannot delete request with status "${request.status}". Only draft and submitted requests can be deleted.`
+        }
+      }
+
+      // 3. Check if any orders reference this request
+      const orders = await this.getOrders()
+      const ordersWithThisRequest = orders.filter(order => order.requestIds.includes(id))
+
+      if (ordersWithThisRequest.length > 0) {
+        const orderNumbers = ordersWithThisRequest.map(o => o.orderNumber).join(', ')
+        return {
+          canDelete: false,
+          reason: `Cannot delete request. It is referenced by order(s): ${orderNumbers}`
+        }
+      }
+
+      return { canDelete: true }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error checking if request can be deleted', {
+        id,
+        ...extractErrorDetails(error)
+      })
+      return { canDelete: false, reason: 'Error checking delete eligibility' }
+    }
+  }
+
   async deleteRequest(id: string): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Deleting request from Supabase', { id })
+
+      // ✅ Validate before deleting
+      const { canDelete, reason } = await this.canDeleteRequest(id)
+      if (!canDelete) {
+        throw new Error(reason || 'Cannot delete this request')
+      }
 
       // Delete request (CASCADE will auto-delete items)
       await executeSupabaseMutation(async () => {
@@ -442,7 +492,12 @@ class SupplierService {
       }
 
       // Рассчитываем упаковки
-      const packageQuantity = Math.ceil(item.quantity / pkg.packageSize)
+      // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
+      // Для неделимых (piece, pack, portion) - округляем вверх
+      const rawPackageQuantity = item.quantity / pkg.packageSize
+      const packageQuantity = isUnitDivisible(product.baseUnit)
+        ? Math.round(rawPackageQuantity * 100) / 100 // Round to 2 decimal places
+        : Math.ceil(rawPackageQuantity) // Round up for indivisible units
       const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
       const pricePerUnit = latestPrices[item.itemId] || pkg.baseCostPerUnit
       const totalPrice = packageQuantity * packagePrice
@@ -1374,15 +1429,34 @@ class SupplierService {
           if (remainingQuantity > 0) {
             const existingItem = unassignedItems.find(ui => ui.itemId === item.itemId)
 
+            // ✅ Используем цену из request если есть, иначе из продукта
+            const itemPrice = item.estimatedPrice ?? product.baseCostPerUnit
+            console.log(
+              `  Price for ${item.itemName}: request=${item.estimatedPrice}, product=${product.baseCostPerUnit}, using=${itemPrice}`
+            )
+
             if (existingItem) {
-              existingItem.totalQuantity += remainingQuantity
+              // ✅ Weighted average: (oldQty * oldPrice + newQty * newPrice) / totalQty
+              const oldTotal = existingItem.totalQuantity * existingItem.estimatedBaseCost
+              const newTotal = remainingQuantity * itemPrice
+              const newTotalQuantity = existingItem.totalQuantity + remainingQuantity
+              const weightedAvg = (oldTotal + newTotal) / newTotalQuantity
+
+              console.log(
+                `  Weighted average: (${existingItem.totalQuantity}×${existingItem.estimatedBaseCost} + ${remainingQuantity}×${itemPrice}) / ${newTotalQuantity} = ${weightedAvg}`
+              )
+
+              existingItem.estimatedBaseCost = weightedAvg
+              existingItem.totalQuantity = newTotalQuantity
+
               existingItem.sources.push({
                 requestId: request.id,
                 requestNumber: request.requestNumber,
                 department: request.department,
                 quantity: remainingQuantity,
                 packageId: item.packageId,
-                packageQuantity: item.packageQuantity
+                packageQuantity: item.packageQuantity,
+                estimatedPrice: itemPrice // ✅ Сохраняем цену источника
               })
             } else {
               unassignedItems.push({
@@ -1391,9 +1465,9 @@ class SupplierService {
                 category: product.category, // ✅ Из продукта
                 totalQuantity: remainingQuantity,
 
-                // ✅ КРИТИЧНО: Заполняем из продукта
+                // ✅ Используем цену из request если есть
                 unit: product.baseUnit,
-                estimatedBaseCost: product.baseCostPerUnit,
+                estimatedBaseCost: itemPrice,
 
                 // Рекомендованная упаковка из request
                 recommendedPackageId: item.packageId,
@@ -1406,7 +1480,8 @@ class SupplierService {
                     department: request.department,
                     quantity: remainingQuantity,
                     packageId: item.packageId,
-                    packageQuantity: item.packageQuantity
+                    packageQuantity: item.packageQuantity,
+                    estimatedPrice: itemPrice // ✅ Сохраняем цену источника
                   }
                 ]
               })

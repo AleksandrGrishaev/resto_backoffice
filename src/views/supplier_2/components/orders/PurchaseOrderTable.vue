@@ -228,7 +228,12 @@
                 @click="duplicateOrder(item)"
               />
 
-              <v-list-item prepend-icon="mdi-download" title="Export" @click="exportOrder(item)" />
+              <v-list-item
+                prepend-icon="mdi-printer"
+                title="Print PDF"
+                :disabled="isPrinting"
+                @click="handlePrintOrder(item)"
+              />
 
               <v-divider v-if="canDeleteOrder(item)" />
 
@@ -267,14 +272,24 @@
       @send-order="sendOrder"
       @start-receipt="startReceipt"
     />
+
+    <!-- Print Options Dialog -->
+    <PrintOrderOptionsDialog
+      v-model="showPrintOptionsDialog"
+      :order="printingOrder"
+      :loading="isPrinting"
+      @print="handlePrintWithOptions"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
+import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurchaseOrderExport'
 import type { PurchaseOrder, BillStatus } from '@/stores/supplier_2/types'
 import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
+import PrintOrderOptionsDialog from './PrintOrderOptionsDialog.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -319,12 +334,16 @@ const {
   getOrderPaymentDetails
 } = usePurchaseOrders()
 
+const { isPrinting, printOrder } = usePurchaseOrderExport()
+
 // =============================================
 // LOCAL STATE (упрощенный - убраны orderBills)
 // =============================================
 const showDetailsDialog = ref(false)
 const selectedOrder = ref<PurchaseOrder | null>(null)
 const searchQuery = ref('')
+const showPrintOptionsDialog = ref(false)
+const printingOrder = ref<PurchaseOrder | null>(null)
 
 // =============================================
 // TABLE CONFIGURATION
@@ -463,8 +482,20 @@ function duplicateOrder(order: PurchaseOrder) {
   console.log('Duplicate order:', order.id)
 }
 
-function exportOrder(order: PurchaseOrder) {
-  console.log('Export order:', order.id)
+function handlePrintOrder(order: PurchaseOrder) {
+  printingOrder.value = order
+  showPrintOptionsDialog.value = true
+}
+
+async function handlePrintWithOptions(options: { includePrices: boolean }) {
+  if (!printingOrder.value) return
+  showPrintOptionsDialog.value = false
+  await printOrder(printingOrder.value, {
+    companyName: 'Kitchen Restaurant',
+    companyAddress: 'Bali, Indonesia',
+    includePrices: options.includePrices
+  })
+  printingOrder.value = null
 }
 
 function deleteOrder(order: PurchaseOrder) {

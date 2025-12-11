@@ -305,9 +305,27 @@ const calculatedActualTotal = computed(() => {
   }, 0)
 })
 
+/**
+ * Expected total = receivedQuantity × orderedPrice for each item
+ * This is what we WOULD pay without any price adjustments (market rounding)
+ */
+const expectedTotal = computed(() => {
+  if (!receiptForm.value.items || !Array.isArray(receiptForm.value.items)) {
+    return 0
+  }
+  return receiptForm.value.items.reduce((total, item) => {
+    // Expected = received quantity × ordered price (no adjustments)
+    return total + item.receivedQuantity * item.orderedPrice
+  }, 0)
+})
+
+/**
+ * Financial impact = difference between actual paid and expected
+ * Positive = we paid MORE than expected (bad)
+ * Negative = we paid LESS than expected (market rounding in our favor)
+ */
 const financialImpact = computed(() => {
-  const originalTotal = props.order?.totalAmount || 0
-  return calculatedActualTotal.value - originalTotal
+  return calculatedActualTotal.value - expectedTotal.value
 })
 
 const hasDiscrepancies = computed(() => {

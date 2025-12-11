@@ -337,19 +337,8 @@ watch(
 <style lang="scss" scoped>
 .payment-info {
   .v-card {
-    background-color: rgb(var(--v-theme-surface-variant));
-  }
-}
-
-.account-selection {
-  .v-select {
-    margin-bottom: 0;
-  }
-}
-
-.payment-info {
-  .v-card {
-    background-color: rgb(var(--v-theme-surface-variant));
+    background-color: transparent;
+    border-color: rgba(var(--v-theme-primary), 0.3);
   }
 }
 

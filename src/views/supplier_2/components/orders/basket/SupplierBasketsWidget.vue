@@ -64,6 +64,7 @@
                 :product-id="item.itemId"
                 :required-base-quantity="item.totalQuantity"
                 :selected-package-id="item.packageId"
+                :override-base-cost="item.estimatedBaseCost"
                 mode="required"
                 layout="horizontal"
                 @package-selected="handlePackageSelected(basket.supplierId, item.itemId, $event)"
@@ -105,6 +106,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
+import { isUnitDivisible } from '@/types/measurementUnits'
 import type { SupplierBasket, UnassignedItem } from '@/stores/supplier_2/types'
 import PackageSelector from '../../shared/package/PackageSelector.vue'
 
@@ -142,7 +144,13 @@ function initializeItemPackage(supplierId: string, item: UnassignedItem) {
   const pkg = productsStore.getPackageById(item.packageId)
   if (!pkg) return
 
-  const packageQuantity = Math.ceil(item.totalQuantity / pkg.packageSize)
+  // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
+  // Для неделимых (piece, pack) - округляем вверх
+  const rawQty = item.totalQuantity / pkg.packageSize
+  const packageQuantity = isUnitDivisible(item.unit)
+    ? Math.round(rawQty * 100) / 100
+    : Math.ceil(rawQty)
+
   const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
   const totalCost = packagePrice * packageQuantity
 

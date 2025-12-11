@@ -41,15 +41,26 @@
               </v-btn>
 
               <v-btn
+                variant="tonal"
+                color="primary"
+                size="small"
+                prepend-icon="mdi-content-save-outline"
+                :disabled="completedBaskets === 0 || isLoading"
+                :loading="isLoading && !isSending"
+                @click="saveAllDrafts"
+              >
+                Save Drafts ({{ completedBaskets }})
+              </v-btn>
+              <v-btn
                 color="success"
                 variant="flat"
                 size="small"
-                prepend-icon="mdi-cart-plus"
+                prepend-icon="mdi-send"
                 :disabled="completedBaskets === 0 || isLoading"
-                :loading="isLoading"
-                @click="createAllOrders"
+                :loading="isSending"
+                @click="sendAllOrders"
               >
-                Create All Orders ({{ completedBaskets }})
+                Send to Supplier ({{ completedBaskets }})
               </v-btn>
             </div>
           </div>
@@ -129,12 +140,24 @@
         <v-btn variant="outlined" :disabled="isLoading" @click="closeDialog">Cancel</v-btn>
         <v-spacer />
         <v-btn
-          color="success"
+          variant="tonal"
+          color="primary"
+          prepend-icon="mdi-content-save-outline"
           :disabled="completedBaskets === 0 || isLoading"
-          :loading="isLoading"
-          @click="createAllOrders"
+          :loading="isLoading && !isSending"
+          @click="saveAllDrafts"
         >
-          Create All Orders ({{ completedBaskets }})
+          Save Drafts
+        </v-btn>
+        <v-btn
+          color="success"
+          prepend-icon="mdi-send"
+          class="ml-2"
+          :disabled="completedBaskets === 0 || isLoading"
+          :loading="isSending"
+          @click="sendAllOrders"
+        >
+          Send to Supplier
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -178,6 +201,7 @@ import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOr
 import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
 import { useCounteragentsStore } from '@/stores/counteragents'
 import { useProductsStore } from '@/stores/productsStore'
+import { isUnitDivisible } from '@/types/measurementUnits'
 import type { SupplierBasket } from '@/stores/supplier_2/types'
 import UnassignedItemsWidget from './basket/UnassignedItemsWidget.vue'
 import SupplierBasketsWidget from './basket/SupplierBasketsWidget.vue'
@@ -207,7 +231,7 @@ const emits = defineEmits<Emits>()
 // =============================================
 
 const { selectedRequestIds, formatCurrency } = useProcurementRequests()
-const { createOrderFromBasket: createOrderFromBasketAction } = usePurchaseOrders()
+const { createOrderFromBasket: createOrderFromBasketAction, sendOrder } = usePurchaseOrders()
 const supplierStore = useSupplierStore()
 const counteragentsStore = useCounteragentsStore()
 const productsStore = useProductsStore()
@@ -222,6 +246,7 @@ const isOpen = computed({
 })
 
 const isLoading = ref(false)
+const isSending = ref(false)
 const showRequestDetails = ref(false)
 const showNewSupplierDialog = ref(false)
 
@@ -399,7 +424,13 @@ function handleAssignToSupplier(supplierId: string, supplierName: string, itemId
         if (pkg) {
           item.packageId = item.recommendedPackageId
           item.packageName = item.recommendedPackageName
-          item.packageQuantity = Math.ceil(item.totalQuantity / pkg.packageSize)
+
+          // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
+          // Для неделимых (piece, pack) - округляем вверх
+          const rawQty = item.totalQuantity / pkg.packageSize
+          item.packageQuantity = isUnitDivisible(item.unit)
+            ? Math.round(rawQty * 100) / 100
+            : Math.ceil(rawQty)
 
           const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
           item.estimatedPackagePrice = packagePrice
@@ -417,7 +448,10 @@ function handleAssignToSupplier(supplierId: string, supplierName: string, itemId
       if (item.packageId && !item.packageQuantity) {
         const pkg = productsStore.getPackageById(item.packageId)
         if (pkg) {
-          item.packageQuantity = Math.ceil(item.totalQuantity / pkg.packageSize)
+          const rawQty = item.totalQuantity / pkg.packageSize
+          item.packageQuantity = isUnitDivisible(item.unit)
+            ? Math.round(rawQty * 100) / 100
+            : Math.ceil(rawQty)
           const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
           item.estimatedPackagePrice = packagePrice
         }
@@ -476,15 +510,19 @@ function handlePackageSelected(
     item.packageName = pkg.packageName
     item.packageQuantity = data.packageQuantity
 
-    // ✅ Используем totalCost из события или рассчитываем
-    item.estimatedPackagePrice = data.totalCost / data.packageQuantity
+    // ✅ ИСПРАВЛЕНО: Используем item.estimatedBaseCost из request, не из продукта
+    // estimatedBaseCost - это цена за базовую единицу из request (user-entered или weighted average)
+    const totalCostFromRequest = item.estimatedBaseCost * data.resultingBaseQuantity
+    item.estimatedPackagePrice = totalCostFromRequest / data.packageQuantity
 
     console.log('Package selected:', {
       item: item.itemName,
       package: pkg.packageName,
       quantity: data.packageQuantity,
+      estimatedBaseCost: item.estimatedBaseCost,
+      resultingBaseQuantity: data.resultingBaseQuantity,
       pricePerPackage: item.estimatedPackagePrice,
-      total: data.totalCost
+      total: totalCostFromRequest
     })
   }
 
@@ -546,14 +584,15 @@ function updateBasketTotals() {
           `  ✅ ${item.itemName}: ${item.packageQuantity} × ${item.estimatedPackagePrice} = ${itemCost}`
         )
       }
-      // Если есть packageId но нет цены - пробуем получить из store
+      // Если есть packageId но нет цены - рассчитываем из estimatedBaseCost
       else if (item.packageId && item.packageQuantity) {
         const pkg = productsStore.getPackageById(item.packageId)
         if (pkg) {
-          const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
+          // ✅ ИСПРАВЛЕНО: Используем item.estimatedBaseCost из request, не из продукта
+          const packagePrice = (item.estimatedBaseCost || 0) * pkg.packageSize
           itemCost = packagePrice * item.packageQuantity
           console.log(
-            `  📦 ${item.itemName}: ${item.packageQuantity} × ${packagePrice} = ${itemCost} (from store)`
+            `  📦 ${item.itemName}: ${item.packageQuantity} × ${packagePrice} = ${itemCost} (from request price)`
           )
         } else {
           itemCost = (item.estimatedBaseCost || 0) * item.totalQuantity
@@ -597,7 +636,7 @@ async function createOrderFromBasket(basket: SupplierBasket) {
   }
 }
 
-async function createAllOrders() {
+async function saveAllDrafts() {
   const readyBaskets = supplierBaskets.value.filter(basket => basket.items.length > 0)
 
   if (readyBaskets.length === 0) {
@@ -607,7 +646,7 @@ async function createAllOrders() {
 
   try {
     isLoading.value = true
-    const createdOrderIds = []
+    const createdOrderIds: string[] = []
 
     for (const basket of readyBaskets) {
       const order = await createOrderFromBasketAction(basket)
@@ -615,10 +654,10 @@ async function createAllOrders() {
     }
 
     const unassignedCount = unassignedBasket.value?.items.length || 0
-    let message = `${createdOrderIds.length} orders created successfully`
+    let message = `${createdOrderIds.length} draft orders saved successfully`
 
     if (unassignedCount > 0) {
-      message += `. ${unassignedCount} items remain unassigned - you can assign them later or create additional orders.`
+      message += `. ${unassignedCount} items remain unassigned.`
     }
 
     emits('success', message)
@@ -630,10 +669,55 @@ async function createAllOrders() {
       emits('order-created', createdOrderIds)
     }
   } catch (error: any) {
-    console.error('Error creating all orders:', error)
-    emits('error', 'Failed to create orders')
+    console.error('Error saving draft orders:', error)
+    emits('error', 'Failed to save draft orders')
   } finally {
     isLoading.value = false
+  }
+}
+
+async function sendAllOrders() {
+  const readyBaskets = supplierBaskets.value.filter(basket => basket.items.length > 0)
+
+  if (readyBaskets.length === 0) {
+    emits('error', 'No baskets ready for order creation')
+    return
+  }
+
+  try {
+    isLoading.value = true
+    isSending.value = true
+    const createdOrderIds: string[] = []
+
+    for (const basket of readyBaskets) {
+      // Create order first
+      const order = await createOrderFromBasketAction(basket)
+      // Then send it to supplier
+      await sendOrder(order.id)
+      createdOrderIds.push(order.id)
+    }
+
+    const unassignedCount = unassignedBasket.value?.items.length || 0
+    let message = `${createdOrderIds.length} orders sent to suppliers`
+
+    if (unassignedCount > 0) {
+      message += `. ${unassignedCount} items remain unassigned.`
+    }
+
+    emits('success', message)
+
+    if (unassignedCount === 0) {
+      emits('orders-completed')
+      emits('order-created', createdOrderIds)
+    } else {
+      emits('order-created', createdOrderIds)
+    }
+  } catch (error: any) {
+    console.error('Error sending orders:', error)
+    emits('error', 'Failed to send orders to suppliers')
+  } finally {
+    isLoading.value = false
+    isSending.value = false
   }
 }
 

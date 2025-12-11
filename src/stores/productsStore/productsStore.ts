@@ -17,7 +17,7 @@ import type {
 } from './types'
 import { DebugUtils } from '@/utils'
 import type { ProductForRecipe } from '@/stores/recipes/types'
-import type { MeasurementUnit } from '@/types/measurementUnits'
+import { isUnitDivisible, type MeasurementUnit } from '@/types/measurementUnits'
 
 const MODULE_NAME = 'ProductsStore'
 
@@ -828,7 +828,13 @@ export const useProductsStore = defineStore('products', {
       }
 
       const exactPackages = baseQuantity / packageOption.packageSize
-      const suggestedPackages = Math.ceil(exactPackages)
+
+      // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
+      // Для неделимых (piece, pack) - округляем вверх
+      const suggestedPackages = isUnitDivisible(product.baseUnit)
+        ? Math.round(exactPackages * 100) / 100 // Round to 2 decimal places for divisible units
+        : Math.ceil(exactPackages) // Round up for indivisible units
+
       const actualBaseQuantity = suggestedPackages * packageOption.packageSize
       const difference = actualBaseQuantity - baseQuantity
 

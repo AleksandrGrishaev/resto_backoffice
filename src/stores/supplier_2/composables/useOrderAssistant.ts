@@ -80,7 +80,17 @@ export function useOrderAssistant() {
       throw new Error(`Product not found: ${itemId}`)
     }
 
-    // Только приоритет 1: baseCostPerUnit (новая структура)
+    // ✅ Приоритет 1: lastKnownCost (актуальная цена из последней операции)
+    if (product.lastKnownCost && product.lastKnownCost > 0) {
+      DebugUtils.debug(MODULE_NAME, `Using lastKnownCost for ${itemId}`, {
+        productName: product.name,
+        price: product.lastKnownCost,
+        baseUnit: product.baseUnit
+      })
+      return product.lastKnownCost
+    }
+
+    // ✅ Приоритет 2: baseCostPerUnit (fallback на базовую цену)
     if (product.baseCostPerUnit && product.baseCostPerUnit > 0) {
       DebugUtils.debug(MODULE_NAME, `Using baseCostPerUnit for ${itemId}`, {
         productName: product.name,
@@ -90,19 +100,18 @@ export function useOrderAssistant() {
       return product.baseCostPerUnit
     }
 
-    // Если нет baseCostPerUnit - это ошибка в данных
-    DebugUtils.error(MODULE_NAME, `No baseCostPerUnit found for product ${itemId}`, {
+    // Если нет цен - это ошибка в данных
+    DebugUtils.error(MODULE_NAME, `No price found for product ${itemId}`, {
       product: {
         id: product.id,
         name: product.name,
+        lastKnownCost: product.lastKnownCost,
         baseCostPerUnit: product.baseCostPerUnit,
-        baseUnit: product.baseUnit,
-        hasBaseCostPerUnit: product.baseCostPerUnit !== undefined,
-        baseCostValue: product.baseCostPerUnit
+        baseUnit: product.baseUnit
       }
     })
 
-    throw new Error(`No baseCostPerUnit for product: ${product.name} (${itemId})`)
+    throw new Error(`No price for product: ${product.name} (${itemId})`)
   }
 
   /**
@@ -211,7 +220,8 @@ export function useOrderAssistant() {
       } else {
         // Создаем новый товар с упрощенной логикой цен
         const baseUnit = getProductBaseUnit(suggestion.itemId)
-        const estimatedPrice = getProductPrice(suggestion.itemId)
+        // Use user-entered price from suggestion if provided, otherwise get from product
+        const estimatedPrice = suggestion.estimatedPrice ?? getProductPrice(suggestion.itemId)
 
         const newItem: RequestItem = {
           id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -250,6 +260,7 @@ export function useOrderAssistant() {
       priority?: Priority
       notes?: string
       department?: Department
+      autoSubmit?: boolean // If true, automatically submit after creation
     }
   ): Promise<string> {
     try {
@@ -268,7 +279,8 @@ export function useOrderAssistant() {
           category: item.category,
           requestedQuantity: item.requestedQuantity,
           unit: item.unit,
-          estimatedPrice: getProductPrice(item.itemId), // Убрали Math.max(..., 1000)
+          // ✅ Приоритет: user-entered → lastKnownCost → baseCostPerUnit
+          estimatedPrice: item.estimatedPrice ?? getProductPrice(item.itemId),
           priority: item.priority,
           notes: item.notes
         })),
@@ -283,6 +295,22 @@ export function useOrderAssistant() {
       }
 
       const newRequest = await supplierStore.createRequest(createData)
+
+      // Auto-submit if requested
+      if (options?.autoSubmit) {
+        try {
+          await supplierStore.updateRequest(newRequest.id, { status: 'submitted' })
+          DebugUtils.info(MODULE_NAME, 'Request auto-submitted', {
+            requestId: newRequest.id,
+            requestNumber: newRequest.requestNumber
+          })
+        } catch (submitError) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to auto-submit request', {
+            submitError,
+            requestId: newRequest.id
+          })
+        }
+      }
 
       // Очищаем выбранные товары
       clearSelectedItems()
@@ -641,7 +669,8 @@ export function useOrderAssistant() {
     itemName: string,
     quantity: number,
     unit: string,
-    notes?: string
+    notes?: string,
+    estimatedPrice?: number // User-entered price (per base unit)
   ): void {
     // Создаем объект suggestion для совместимости
     const mockSuggestion: OrderSuggestion = {
@@ -650,7 +679,8 @@ export function useOrderAssistant() {
       suggestedQuantity: quantity,
       urgency: 'medium',
       reason: 'manual_add',
-      estimatedPrice: getProductPrice(itemId),
+      // Use user-entered price if provided, otherwise get from product
+      estimatedPrice: estimatedPrice ?? getProductPrice(itemId),
       currentStock: 0,
       minStock: 0
     }

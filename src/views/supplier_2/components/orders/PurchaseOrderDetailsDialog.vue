@@ -99,6 +99,17 @@
 
       <!-- Dialog Actions -->
       <v-card-actions class="pa-4 border-t">
+        <!-- Print Button -->
+        <v-btn
+          variant="tonal"
+          color="primary"
+          prepend-icon="mdi-printer"
+          :loading="isPrinting"
+          @click="handlePrintOrder"
+        >
+          Print PDF
+        </v-btn>
+
         <v-spacer />
 
         <v-btn
@@ -240,6 +251,14 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Print Options Dialog -->
+    <PrintOrderOptionsDialog
+      v-model="showPrintOptionsDialog"
+      :order="order"
+      :loading="isPrinting"
+      @print="handlePrintWithOptions"
+    />
   </v-dialog>
 </template>
 
@@ -247,11 +266,13 @@
 import { ref, computed, watch } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
+import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurchaseOrderExport'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
 import OrderItemsWidget from './order/OrderItemsWidget.vue'
 import OrderReceiptWidget from './order/OrderReceiptWidget.vue'
 import AttachBillDialog from './order/AttachBillDialog.vue'
 import PurchaseOrderPayment from './order/PurchaseOrderPayment.vue'
+import PrintOrderOptionsDialog from './PrintOrderOptionsDialog.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -286,6 +307,11 @@ const {
   actions,
   getPaymentStatusColor
 } = useOrderPayments()
+
+const { isPrinting, printOrder } = usePurchaseOrderExport()
+
+// Print options dialog
+const showPrintOptionsDialog = ref(false)
 
 // =============================================
 // LOCAL STATE
@@ -391,6 +417,20 @@ async function handleCancelBill(billId: string) {
 function sendOrder(order: PurchaseOrder) {
   emits('send-order', order)
   isOpen.value = false
+}
+
+function handlePrintOrder() {
+  showPrintOptionsDialog.value = true
+}
+
+async function handlePrintWithOptions(options: { includePrices: boolean }) {
+  if (!props.order) return
+  showPrintOptionsDialog.value = false
+  await printOrder(props.order, {
+    companyName: 'Kitchen Restaurant',
+    companyAddress: 'Bali, Indonesia',
+    includePrices: options.includePrices
+  })
 }
 
 function startReceipt(order: PurchaseOrder) {

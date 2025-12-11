@@ -13,7 +13,9 @@ import type {
   MenuItemExportData,
   CombinationsExportData,
   CombinationsExportOptions,
-  MenuDetailedExportData
+  MenuDetailedExportData,
+  PurchaseOrderExportData,
+  PurchaseOrderExportOptions
 } from '../types'
 import MenuExportTemplate from '../templates/MenuExportTemplate.vue'
 import RecipeExportTemplate from '../templates/RecipeExportTemplate.vue'
@@ -21,6 +23,7 @@ import PreparationExportTemplate from '../templates/PreparationExportTemplate.vu
 import MenuItemExportTemplate from '../templates/MenuItemExportTemplate.vue'
 import CombinationsExportTemplate from '../templates/CombinationsExportTemplate.vue'
 import MenuDetailedExportTemplate from '../templates/MenuDetailedExportTemplate.vue'
+import PurchaseOrderTemplate from '../templates/PurchaseOrderTemplate.vue'
 
 export function useExport() {
   const isExporting = ref(false)
@@ -270,6 +273,34 @@ export function useExport() {
     }
   }
 
+  /**
+   * Export purchase order to PDF
+   * Professional document format for sending to suppliers
+   */
+  async function exportPurchaseOrder(
+    data: PurchaseOrderExportData,
+    options: PurchaseOrderExportOptions = {}
+  ): Promise<void> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      // Generate filename from order number (sanitized)
+      const sanitizedNumber = data.orderNumber.replace(/[^a-zA-Z0-9-]/g, '_')
+      const filename = options.filename || exportService.generateFilename(`PO_${sanitizedNumber}`)
+      await renderAndExport(PurchaseOrderTemplate, data, {
+        ...options,
+        filename,
+        orientation: options.orientation || 'portrait'
+      })
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
   return {
     isExporting,
     exportError,
@@ -279,6 +310,7 @@ export function useExport() {
     exportMenuItem,
     exportMenuItemCombinations,
     exportMenuDetailed,
+    exportPurchaseOrder,
     generatePDF
   }
 }

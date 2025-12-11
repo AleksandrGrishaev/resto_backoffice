@@ -70,26 +70,26 @@ export const OPERATION_TYPES: Record<OperationType, string> = {
 // ============ PAYMENT PRIORITIES ============
 
 /**
- * Payment priority labels for display (Russian)
+ * Payment priority labels for display
  */
 export const PAYMENT_PRIORITIES: Record<PaymentPriority, string> = {
-  low: 'Низкий',
-  medium: 'Средний',
-  high: 'Высокий',
-  urgent: 'Срочный'
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent'
 } as const
 
 // ============ PAYMENT STATUSES ============
 
 /**
- * Payment status labels for display (Russian)
+ * Payment status labels for display
  */
 export const PAYMENT_STATUSES: Record<PaymentStatus, string> = {
-  pending: 'Ожидает оплаты',
-  processing: 'В обработке',
-  completed: 'Оплачен',
-  failed: 'Ошибка',
-  cancelled: 'Отменен'
+  pending: 'Pending',
+  processing: 'Processing',
+  completed: 'Paid',
+  failed: 'Failed',
+  cancelled: 'Cancelled'
 } as const
 
 // ============ PAYMENT CATEGORIES ============

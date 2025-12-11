@@ -273,6 +273,12 @@ function formatCurrency(amount: number): string {
 }
 
 function getItemCost(item: RequestItem): number {
+  // Use user-entered estimatedPrice if available (per base unit)
+  if (item.estimatedPrice && item.estimatedPrice > 0) {
+    return item.estimatedPrice * item.requestedQuantity
+  }
+
+  // Fallback to product base cost
   const product = productsStore.getProductById(item.itemId)
   if (!product) return 0
   return product.baseCostPerUnit * item.requestedQuantity

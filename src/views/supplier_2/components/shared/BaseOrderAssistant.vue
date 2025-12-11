@@ -153,12 +153,24 @@
         <v-btn variant="outlined" @click="closeDialog">Cancel</v-btn>
         <v-spacer />
         <v-btn
+          variant="tonal"
+          color="primary"
+          :disabled="!canCreateRequest"
+          :loading="isCreating && !isSubmitting"
+          prepend-icon="mdi-content-save-outline"
+          @click="saveDraft"
+        >
+          Save Draft
+        </v-btn>
+        <v-btn
           color="success"
           :disabled="!canCreateRequest"
-          :loading="isCreating"
-          @click="createRequest"
+          :loading="isSubmitting"
+          prepend-icon="mdi-send"
+          class="ml-2"
+          @click="sendRequest"
         >
-          Create Request
+          Send Request
         </v-btn>
       </v-card-actions>
 
@@ -223,6 +235,7 @@ const isOpen = computed({
 
 const activeTab = ref('suggestions')
 const isCreating = ref(false)
+const isSubmitting = ref(false)
 const requestedBy = ref('Chef Maria')
 const priority = ref<'normal' | 'urgent'>('normal')
 const selectedDepartmentIndex = ref<Department>('kitchen')
@@ -336,15 +349,18 @@ function handleAddManualItem(item: {
   packageId?: string
   packageName?: string
   packageQuantity?: number
+  pricePerUnit?: number // User-entered price per base unit
+  totalCost?: number
   notes?: string
 }): void {
-  // Add item using order assistant
+  // Add item using order assistant with user-entered price
   orderAssistant.addManualItem(
     item.itemId,
     item.itemName,
     item.requestedQuantity,
     item.unit,
-    item.notes
+    item.notes,
+    item.pricePerUnit // Pass user-entered price
   )
 
   // Update package info if provided
@@ -395,20 +411,42 @@ function handleError(message: string): void {
   emits('error', message)
 }
 
-async function createRequest(): Promise<void> {
+async function saveDraft(): Promise<void> {
   try {
     isCreating.value = true
 
     const requestId = await orderAssistant.createRequest(requestedBy.value, {
       priority: priority.value,
-      department: selectedDepartmentIndex.value
+      department: selectedDepartmentIndex.value,
+      autoSubmit: false
     })
 
-    emits('success', `Request ${requestId} created successfully`)
+    emits('success', `Draft ${requestId} saved successfully`)
     closeDialog()
   } catch (error) {
-    emits('error', 'Failed to create request')
+    emits('error', 'Failed to save draft')
   } finally {
+    isCreating.value = false
+  }
+}
+
+async function sendRequest(): Promise<void> {
+  try {
+    isSubmitting.value = true
+    isCreating.value = true
+
+    const requestId = await orderAssistant.createRequest(requestedBy.value, {
+      priority: priority.value,
+      department: selectedDepartmentIndex.value,
+      autoSubmit: true
+    })
+
+    emits('success', `Request ${requestId} sent successfully`)
+    closeDialog()
+  } catch (error) {
+    emits('error', 'Failed to send request')
+  } finally {
+    isSubmitting.value = false
     isCreating.value = false
   }
 }

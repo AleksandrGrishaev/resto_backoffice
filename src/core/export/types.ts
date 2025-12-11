@@ -491,6 +491,61 @@ export interface MenuCostReportData {
   }
 }
 
+// =============================================
+// Purchase Order Export Types
+// =============================================
+
+export interface PurchaseOrderExportOptions extends ExportOptions {
+  includeNotes?: boolean
+  showPackageDetails?: boolean
+  companyName?: string
+  companyAddress?: string
+  companyPhone?: string
+}
+
+export interface PurchaseOrderExportData {
+  title: string // "Purchase Order"
+  orderNumber: string
+  date: string // Order date
+  generatedAt: string
+  supplier: {
+    name: string
+    id: string
+    address?: string
+    phone?: string
+    email?: string
+  }
+  company?: {
+    name: string
+    address?: string
+    phone?: string
+  }
+  expectedDeliveryDate?: string
+  items: PurchaseOrderItemExport[]
+  totals: {
+    subtotal: number
+    itemCount: number
+    packageCount: number
+  }
+  notes?: string
+  status: string
+  includePrices?: boolean // If false, prices are hidden in the PDF
+}
+
+export interface PurchaseOrderItemExport {
+  index: number
+  itemName: string
+  itemCode?: string
+  packageName: string
+  packageQuantity: number
+  packageUnit: string
+  baseQuantity: number // Total base units
+  baseUnit: string
+  pricePerPackage: number
+  totalPrice: number
+  notes?: string
+}
+
 // Available print documents registry
 export const PRINT_DOCUMENTS: PrintDocumentConfig[] = [
   {

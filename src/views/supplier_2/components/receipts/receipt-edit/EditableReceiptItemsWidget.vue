@@ -167,21 +167,50 @@
         </div>
       </template>
 
-      <!-- Line Total -->
+      <!-- Line Total - EDITABLE for market rounding adjustments -->
       <template #[`item.lineTotal`]="{ item }">
         <div class="text-right">
-          <div class="text-body-1 font-weight-bold" :class="getLineTotalClass(item)">
-            {{ formatCurrency(calculateActualLineTotal(item)) }}
-          </div>
+          <!-- Editable mode -->
+          <template v-if="!isCompleted">
+            <v-text-field
+              :model-value="getFormattedLineTotal(item)"
+              type="text"
+              variant="outlined"
+              density="compact"
+              hide-details
+              style="width: 140px"
+              prefix="Rp"
+              :placeholder="formatPriceForInput(calculateExpectedLineTotal(item))"
+              :class="{ 'line-total-adjusted': hasLineTotalAdjustment(item) }"
+              @update:model-value="updateFormattedLineTotal(item, $event)"
+              @blur="validateAndUpdateLineTotal(item)"
+            />
+            <!-- Show expected vs actual -->
+            <div class="text-caption text-medium-emphasis mt-1">
+              Expected: {{ formatCurrency(calculateExpectedLineTotal(item)) }}
+            </div>
+            <div
+              v-if="hasLineTotalAdjustment(item)"
+              class="text-caption mt-1"
+              :class="getLineDifferenceClass(item)"
+            >
+              {{ formatLineTotalAdjustment(item) }}
+            </div>
+          </template>
 
-          <!-- Show difference from ordered -->
-          <div
-            v-if="hasLineDiscrepancy(item)"
-            class="text-caption mt-1"
-            :class="getLineDifferenceClass(item)"
-          >
-            {{ formatLineDifference(item) }}
-          </div>
+          <!-- Read-only mode -->
+          <template v-else>
+            <div class="text-body-1 font-weight-bold" :class="getLineTotalClass(item)">
+              {{ formatCurrency(calculateActualLineTotal(item)) }}
+            </div>
+            <div
+              v-if="hasLineDiscrepancy(item)"
+              class="text-caption mt-1"
+              :class="getLineDifferenceClass(item)"
+            >
+              {{ formatLineDifference(item) }}
+            </div>
+          </template>
         </div>
       </template>
 
@@ -216,8 +245,11 @@
       </div>
 
       <div class="text-right">
-        <div class="text-caption text-medium-emphasis mb-1">Original Total:</div>
-        <div class="text-body-1">{{ formatCurrency(originalTotal) }}</div>
+        <div class="text-caption text-medium-emphasis mb-1">Expected Total:</div>
+        <div class="text-body-1">{{ formatCurrency(expectedTotal) }}</div>
+        <div v-if="originalTotal !== expectedTotal" class="text-caption text-medium-emphasis">
+          (Ordered: {{ formatCurrency(originalTotal) }})
+        </div>
       </div>
 
       <div class="text-right">
@@ -228,7 +260,7 @@
       </div>
 
       <div v-if="hasFinancialImpact" class="text-right">
-        <div class="text-caption text-medium-emphasis mb-1">Financial Impact:</div>
+        <div class="text-caption text-medium-emphasis mb-1">Adjustment:</div>
         <div
           class="text-h6 font-weight-bold"
           :class="financialImpact >= 0 ? 'text-error' : 'text-success'"
@@ -271,6 +303,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
+import { isUnitDivisible } from '@/types/measurementUnits'
 import { DebugUtils } from '@/utils'
 import { formatIDR, parseIDR } from '@/utils/currency'
 import type { ReceiptItem } from '@/stores/supplier_2/types'
@@ -314,6 +347,12 @@ const selectedItemIndex = ref(-1)
 
 // Formatted price inputs (for display in text fields with Rp prefix)
 const formattedPrices = ref<Map<string, string>>(new Map())
+
+// Formatted line totals (for manual adjustment of market rounding)
+const formattedLineTotals = ref<Map<string, string>>(new Map())
+
+// Actual line totals (when user manually adjusts the line total)
+const actualLineTotals = ref<Map<string, number>>(new Map())
 
 // =============================================
 // TABLE CONFIGURATION
@@ -394,24 +433,46 @@ const discrepancyCount = computed(() => {
   return props.items.filter(item => hasAnyDiscrepancy(item)).length
 })
 
+/**
+ * Original Total = ordered quantity × ordered price
+ * Shows what was originally ordered (for reference)
+ */
 const originalTotal = computed(() => {
   return props.items.reduce((sum, item) => {
     return sum + item.orderedQuantity * item.orderedPrice
   }, 0)
 })
 
+/**
+ * Expected Total = received quantity × ordered price
+ * What we WOULD pay for received goods without price adjustments
+ */
+const expectedTotal = computed(() => {
+  return props.items.reduce((sum, item) => {
+    return sum + item.receivedQuantity * item.orderedPrice
+  }, 0)
+})
+
+/**
+ * Actual Total = sum of actual line totals (with price adjustments)
+ */
 const actualTotal = computed(() => {
   return props.items.reduce((sum, item) => {
     return sum + calculateActualLineTotal(item)
   }, 0)
 })
 
+/**
+ * Financial Impact = actual - expected
+ * Positive = paid MORE (bad), Negative = paid LESS (market rounding in our favor)
+ */
 const financialImpact = computed(() => {
-  return actualTotal.value - originalTotal.value
+  return actualTotal.value - expectedTotal.value
 })
 
 const hasFinancialImpact = computed(() => {
-  return Math.abs(financialImpact.value) > 1000
+  // Show adjustment even for small amounts (market rounding)
+  return Math.abs(financialImpact.value) > 100
 })
 
 // =============================================
@@ -445,7 +506,10 @@ function getPackageQuantity(item: ReceiptItem): number {
   const packageSize = getPackageSize(item)
   if (!packageSize) return 0
 
-  return Math.ceil(item.orderedQuantity / packageSize)
+  // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
+  // Для неделимых (piece, pack) - округляем вверх
+  const rawQty = item.orderedQuantity / packageSize
+  return isUnitDivisible(item.unit) ? Math.round(rawQty * 100) / 100 : Math.ceil(rawQty)
 }
 
 function getReceivedPackageQuantity(item: ReceiptItem): number {
@@ -453,7 +517,11 @@ function getReceivedPackageQuantity(item: ReceiptItem): number {
     // Calculate from received quantity
     const packageSize = getPackageSize(item)
     if (!packageSize) return 0
-    return Math.ceil(item.receivedQuantity / packageSize)
+
+    // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
+    // Для неделимых (piece, pack) - округляем вверх
+    const rawQty = item.receivedQuantity / packageSize
+    return isUnitDivisible(item.unit) ? Math.round(rawQty * 100) / 100 : Math.ceil(rawQty)
   }
 
   return item.receivedPackageQuantity
@@ -526,6 +594,110 @@ function validateAndUpdatePrice(item: ReceiptItem) {
 
 function formatCurrency(amount: number): string {
   return formatIDR(amount)
+}
+
+// =============================================
+// LINE TOTAL EDITING METHODS (for market rounding)
+// =============================================
+
+/**
+ * Get the formatted line total for display in the input field
+ */
+function getFormattedLineTotal(item: ReceiptItem): string {
+  const key = item.id
+  if (formattedLineTotals.value.has(key)) {
+    return formattedLineTotals.value.get(key)!
+  }
+  // If we have a stored actual line total, use that
+  if (actualLineTotals.value.has(key)) {
+    return formatPriceForInput(actualLineTotals.value.get(key)!)
+  }
+  // Otherwise calculate from current prices
+  return formatPriceForInput(calculateActualLineTotal(item))
+}
+
+/**
+ * Update the formatted line total as user types
+ */
+function updateFormattedLineTotal(item: ReceiptItem, value: string) {
+  formattedLineTotals.value.set(item.id, value)
+}
+
+/**
+ * Validate and update line total, recalculating the price per unit
+ */
+function validateAndUpdateLineTotal(item: ReceiptItem) {
+  const formattedValue = formattedLineTotals.value.get(item.id) || ''
+  const parsed = parseIDR(`Rp ${formattedValue}`)
+
+  if (parsed > 0 && item.receivedQuantity > 0) {
+    // Store the actual line total
+    actualLineTotals.value.set(item.id, parsed)
+
+    // Recalculate price per unit from the new line total
+    const newPricePerUnit = parsed / item.receivedQuantity
+    item.actualPrice = newPricePerUnit
+
+    // Also update package price if we have package info
+    const packageSize = getPackageSize(item)
+    if (packageSize > 0) {
+      item.actualPackagePrice = newPricePerUnit * packageSize
+      // Update the formatted package price too
+      formattedPrices.value.set(item.id, formatPriceForInput(item.actualPackagePrice))
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Line total adjusted (market rounding)', {
+      itemName: item.itemName,
+      newLineTotal: parsed,
+      expectedLineTotal: calculateExpectedLineTotal(item),
+      difference: parsed - calculateExpectedLineTotal(item),
+      newPricePerUnit,
+      newPackagePrice: item.actualPackagePrice
+    })
+
+    emitItemChange(item)
+  }
+
+  // Update formatted value to reflect the stored total
+  const storedTotal = actualLineTotals.value.get(item.id)
+  if (storedTotal) {
+    formattedLineTotals.value.set(item.id, formatPriceForInput(storedTotal))
+  } else {
+    formattedLineTotals.value.set(item.id, formatPriceForInput(calculateActualLineTotal(item)))
+  }
+}
+
+/**
+ * Calculate the expected line total based on ordered prices
+ * (what the system would calculate without adjustments)
+ */
+function calculateExpectedLineTotal(item: ReceiptItem): number {
+  // Use ordered price × received quantity
+  return item.receivedQuantity * item.orderedPrice
+}
+
+/**
+ * Check if the line total has been manually adjusted
+ */
+function hasLineTotalAdjustment(item: ReceiptItem): boolean {
+  const storedTotal = actualLineTotals.value.get(item.id)
+  if (!storedTotal) return false
+
+  const expectedTotal = calculateExpectedLineTotal(item)
+  return Math.abs(storedTotal - expectedTotal) > 100 // More than Rp 100 difference
+}
+
+/**
+ * Format the line total adjustment (difference from expected)
+ */
+function formatLineTotalAdjustment(item: ReceiptItem): string {
+  const storedTotal = actualLineTotals.value.get(item.id)
+  if (!storedTotal) return ''
+
+  const expectedTotal = calculateExpectedLineTotal(item)
+  const diff = storedTotal - expectedTotal
+  const sign = diff >= 0 ? '+' : ''
+  return `${sign}${formatCurrency(diff)}`
 }
 
 // =============================================
@@ -700,6 +872,12 @@ function calculateOrderedLineTotal(item: ReceiptItem): number {
 }
 
 function calculateActualLineTotal(item: ReceiptItem): number {
+  // If we have a manually set line total (market rounding), use that
+  const storedTotal = actualLineTotals.value.get(item.id)
+  if (storedTotal !== undefined) {
+    return storedTotal
+  }
+  // Otherwise calculate from price
   const price = getActualPricePerUnit(item)
   return item.receivedQuantity * price
 }
@@ -775,6 +953,14 @@ function formatFinancialImpact(): string {
   .price-discrepancy {
     :deep(.v-field) {
       border-left: 3px solid rgb(var(--v-theme-error));
+    }
+  }
+
+  /* Line total adjusted (market rounding) */
+  .line-total-adjusted {
+    :deep(.v-field) {
+      border-left: 3px solid rgb(var(--v-theme-info));
+      background-color: rgba(var(--v-theme-info), 0.05);
     }
   }
 }

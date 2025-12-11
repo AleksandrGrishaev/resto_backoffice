@@ -46,7 +46,7 @@
         <!-- ✅ ПОКАЗЫВАЕМ BREAKDOWN ДЛЯ PENDING ПЛАТЕЖЕЙ -->
         <div
           v-if="mode === 'pending-payment' && orderBreakdown"
-          class="mt-3 pa-3 bg-blue-lighten-5 rounded"
+          class="mt-3 pa-3 rounded payment-breakdown"
         >
           <div class="text-caption text-medium-emphasis mb-1">Payment Breakdown:</div>
           <div class="d-flex justify-space-between mb-1">
@@ -191,23 +191,18 @@ function viewOrderDetails(orderId: string) {
 
 <style lang="scss" scoped>
 .supplier-payment-context {
-  border: 1px solid rgb(var(--v-theme-outline));
+  border: 1px solid rgba(var(--v-theme-primary), 0.3);
   border-radius: 12px;
   overflow: hidden;
-  background-color: rgb(var(--v-theme-surface));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background-color: transparent;
 }
 
 .payment-context {
-  background: linear-gradient(
-    135deg,
-    rgb(var(--v-theme-primary-lighten-5)) 0%,
-    rgb(var(--v-theme-surface)) 100%
-  );
+  background-color: rgba(var(--v-theme-primary), 0.05);
 }
 
 .border-t {
-  border-top: 1px solid rgb(var(--v-theme-outline-variant));
+  border-top: 1px solid rgba(var(--v-theme-outline), 0.3);
 }
 
 .orders-summary {
@@ -226,12 +221,13 @@ function viewOrderDetails(orderId: string) {
   }
 }
 
-.bg-blue-lighten-5 {
-  background-color: rgb(var(--v-theme-blue-lighten-5));
+.payment-breakdown {
+  background-color: rgba(var(--v-theme-info), 0.1);
+  border: 1px solid rgba(var(--v-theme-info), 0.2);
 }
 
 .bg-warning-lighten-4 {
-  background-color: rgba(var(--v-theme-warning), 0.2);
+  background-color: rgba(var(--v-theme-warning), 0.1);
 }
 
 .text-primary {

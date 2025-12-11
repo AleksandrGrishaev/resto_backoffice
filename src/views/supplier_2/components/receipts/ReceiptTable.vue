@@ -168,7 +168,7 @@
             <span>View Details</span>
           </v-tooltip>
 
-          <!-- Edit -->
+          <!-- Edit (for draft receipts - leads to dialog where user can complete) -->
           <v-tooltip v-if="item.status === 'draft'" location="top">
             <template #activator="{ props: tooltipProps }">
               <v-btn
@@ -182,24 +182,7 @@
                 <v-icon>mdi-pencil</v-icon>
               </v-btn>
             </template>
-            <span>Edit Receipt</span>
-          </v-tooltip>
-
-          <!-- Complete -->
-          <v-tooltip v-if="item.status === 'draft'" location="top">
-            <template #activator="{ props: tooltipProps }">
-              <v-btn
-                v-bind="tooltipProps"
-                icon
-                variant="text"
-                size="small"
-                color="success"
-                @click="$emit('complete-receipt', item)"
-              >
-                <v-icon>mdi-check-circle</v-icon>
-              </v-btn>
-            </template>
-            <span>Complete Receipt</span>
+            <span>Edit & Complete Receipt</span>
           </v-tooltip>
 
           <!-- View Storage -->
@@ -255,7 +238,6 @@ interface Props {
 interface Emits {
   (e: 'view-details', receipt: Receipt): void
   (e: 'edit-receipt', receipt: Receipt): void
-  (e: 'complete-receipt', receipt: Receipt): void
   (e: 'view-storage', operationId: string): void
 }
 

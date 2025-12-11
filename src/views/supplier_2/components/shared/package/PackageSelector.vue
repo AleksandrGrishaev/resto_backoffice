@@ -207,17 +207,47 @@
       </v-select>
 
       <!-- Selected package info -->
-      <div v-if="selectedPackage" class="d-flex align-center gap-4">
-        <div class="text-center">
-          <div class="text-caption text-medium-emphasis">Quantity</div>
-          <div class="text-body-1 font-weight-bold">{{ calculatedQuantity }} pkg</div>
+      <div v-if="selectedPackage" class="package-info-block">
+        <div class="info-item quantity-edit">
+          <div class="info-label">Quantity</div>
+          <div class="quantity-input-wrapper">
+            <v-text-field
+              :model-value="calculatedQuantity"
+              type="number"
+              density="compact"
+              variant="outlined"
+              hide-details
+              suffix="pkg"
+              class="quantity-input"
+              :step="0.1"
+              min="0.1"
+              @update:model-value="handleQuantityChange(Number($event))"
+            />
+            <v-tooltip v-if="overrideQuantity !== null" location="top">
+              <template #activator="{ props: tooltipProps }">
+                <v-btn
+                  v-bind="tooltipProps"
+                  icon="mdi-refresh"
+                  size="x-small"
+                  variant="text"
+                  color="primary"
+                  class="reset-btn"
+                  @click="
+                    overrideQuantity = null
+                    emitPackageSelected(internalSelectedPackageId!)
+                  "
+                />
+              </template>
+              <span>Reset to suggested: {{ suggestedQuantity }} pkg</span>
+            </v-tooltip>
+          </div>
         </div>
 
-        <div class="text-center">
-          <div class="text-caption text-medium-emphasis">Total</div>
-          <div class="text-body-1 font-weight-bold text-success">
-            {{ formatCurrency(totalCost) }}
-          </div>
+        <v-divider vertical class="mx-3" />
+
+        <div class="info-item">
+          <div class="info-label">Total</div>
+          <div class="info-value text-success">{{ formatCurrency(totalCost) }}</div>
         </div>
 
         <v-chip
@@ -225,6 +255,7 @@
           color="info"
           size="small"
           variant="tonal"
+          class="ml-3"
         >
           Recommended
         </v-chip>
@@ -232,7 +263,9 @@
         <!-- Warning if no price -->
         <v-tooltip v-if="!selectedPackage.packagePrice" location="top">
           <template #activator="{ props: tooltipProps }">
-            <v-icon v-bind="tooltipProps" color="warning" size="20">mdi-alert-circle</v-icon>
+            <v-icon v-bind="tooltipProps" color="warning" size="20" class="ml-2">
+              mdi-alert-circle
+            </v-icon>
           </template>
           <span>Price calculated from base cost</span>
         </v-tooltip>
@@ -245,6 +278,7 @@
         color="primary"
         icon="mdi-plus"
         size="small"
+        class="ml-3"
         @click="showAddPackageDialog = true"
       >
         <v-icon>mdi-plus</v-icon>
@@ -297,6 +331,7 @@ interface Props {
   mode: 'optional' | 'required' | 'change'
   layout?: 'vertical' | 'horizontal'
   allowAddPackage?: boolean
+  overrideBaseCost?: number // Override base cost per unit (from request)
 }
 
 interface Emits {
@@ -333,6 +368,7 @@ const productsStore = useProductsStore()
 const loading = ref(false)
 const error = ref<string | null>(null)
 const internalSelectedPackageId = ref<string | undefined>(props.selectedPackageId)
+const overrideQuantity = ref<number | null>(null) // Manual quantity override
 const showAddPackageDialog = ref(false)
 const packageDialogLoading = ref(false)
 const productForDialog = computed(() => {
@@ -367,10 +403,17 @@ const selectedPackage = computed(() => {
   return availablePackages.value.find(p => p.id === internalSelectedPackageId.value) || null
 })
 
-const calculatedQuantity = computed(() => {
+// Suggested quantity from calculation (can be overridden)
+const suggestedQuantity = computed(() => {
   if (!selectedPackage.value) return 0
   const calc = getPackageCalculation(selectedPackage.value)
   return calc.suggestedPackages
+})
+
+// Actual quantity (override or suggested)
+const calculatedQuantity = computed(() => {
+  if (overrideQuantity.value !== null) return overrideQuantity.value
+  return suggestedQuantity.value
 })
 
 const totalCost = computed(() => {
@@ -384,37 +427,51 @@ const totalCost = computed(() => {
 // =============================================
 
 function getPackagePrice(pkg: PackageOption): number {
+  // ✅ Приоритет 1: overrideBaseCost из request (user-entered price)
+  if (props.overrideBaseCost && props.overrideBaseCost > 0) {
+    return props.overrideBaseCost * pkg.packageSize
+  }
+  // Приоритет 2: packagePrice (если есть фиксированная цена)
   if (pkg.packagePrice && pkg.packagePrice > 0) {
     return pkg.packagePrice
   }
+  // Fallback: baseCostPerUnit из продукта
   return pkg.baseCostPerUnit * pkg.packageSize
 }
 
 function selectPackage(packageId: string) {
   internalSelectedPackageId.value = packageId
+  overrideQuantity.value = null // Reset override when changing package
   emits('update:selectedPackageId', packageId)
   emitPackageSelected(packageId)
 }
 
+function handleQuantityChange(newQuantity: number) {
+  if (newQuantity <= 0) return
+
+  overrideQuantity.value = newQuantity
+
+  // Re-emit with new quantity
+  if (internalSelectedPackageId.value) {
+    emitPackageSelected(internalSelectedPackageId.value)
+  }
+}
+
 function emitPackageSelected(packageId: string) {
   try {
-    const calculation = productsStore.calculatePackageQuantity(
-      props.productId,
-      props.requiredBaseQuantity,
-      packageId
-    )
-
     const pkg = availablePackages.value.find(p => p.id === packageId)
     if (!pkg) return
 
+    // Use override quantity if set, otherwise use suggested
+    const quantity = overrideQuantity.value ?? suggestedQuantity.value
     const packagePrice = getPackagePrice(pkg)
-    const totalCost = packagePrice * calculation.suggestedPackages
+    const resultingBaseQuantity = quantity * pkg.packageSize
 
     emits('package-selected', {
       packageId: packageId,
-      packageQuantity: calculation.suggestedPackages,
-      resultingBaseQuantity: calculation.actualBaseQuantity,
-      totalCost
+      packageQuantity: quantity,
+      resultingBaseQuantity: resultingBaseQuantity,
+      totalCost: packagePrice * quantity
     })
   } catch (err) {
     console.error('Failed to calculate package quantity:', err)
@@ -575,6 +632,71 @@ onMounted(() => {
 
   &:has(select:focus) {
     border-color: rgb(var(--v-theme-primary));
+  }
+
+  .package-info-block {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: rgba(var(--v-theme-surface-variant), 0.3);
+    border-radius: 8px;
+    margin-left: 16px;
+  }
+
+  .info-item {
+    text-align: center;
+    min-width: 80px;
+  }
+
+  .info-label {
+    font-size: 11px;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
+  .info-value {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .quantity-edit {
+    min-width: 120px;
+  }
+
+  .quantity-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .quantity-input {
+    max-width: 100px;
+
+    :deep(.v-field__input) {
+      font-weight: 600;
+      font-size: 14px;
+      padding: 4px 8px;
+      min-height: 32px;
+    }
+
+    :deep(.v-field__outline) {
+      --v-field-border-opacity: 0.3;
+    }
+
+    :deep(.v-text-field__suffix) {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+  }
+
+  .reset-btn {
+    opacity: 0.7;
+    &:hover {
+      opacity: 1;
+    }
   }
 }
 

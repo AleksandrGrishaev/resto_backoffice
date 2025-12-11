@@ -116,7 +116,6 @@
             :loading="supplierStore.state.loading?.requests || false"
             @view-details="handleViewReceiptDetails"
             @edit-receipt="handleEditReceipt"
-            @complete-receipt="handleCompleteReceipt"
             @view-storage="handleViewStorage"
           />
 
@@ -242,6 +241,41 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Delete Confirmation Dialog -->
+    <v-dialog v-model="showDeleteConfirmDialog" max-width="450px" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center bg-warning">
+          <v-icon icon="mdi-alert" class="mr-2" />
+          Delete Request
+        </v-card-title>
+
+        <v-card-text class="pa-6">
+          <p class="text-body-1 mb-4">
+            Are you sure you want to delete request
+            <strong>{{ requestToDelete?.requestNumber }}</strong>
+            ?
+          </p>
+          <v-alert type="warning" variant="tonal" density="compact">
+            This action cannot be undone.
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" :disabled="isDeleting" @click="cancelDeleteRequest">Cancel</v-btn>
+          <v-btn
+            color="warning"
+            variant="flat"
+            :loading="isDeleting"
+            prepend-icon="mdi-delete"
+            @click="confirmDeleteRequest"
+          >
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -306,6 +340,11 @@ const selectedRequestIds = ref<string[]>([])
 const selectedOrder = ref<PurchaseOrder | null>(null)
 const selectedReceipt = ref<Receipt | null>(null)
 const selectedRequestForEdit = ref<ProcurementRequest | null>(null)
+
+// Delete confirmation dialog
+const showDeleteConfirmDialog = ref(false)
+const requestToDelete = ref<ProcurementRequest | null>(null)
+const isDeleting = ref(false)
 
 // Подсветка заказа при переходе
 const highlightedOrderId = ref<string | null>(null)
@@ -484,17 +523,47 @@ async function handleSubmitRequest(request: ProcurementRequest) {
   }
 }
 
-function handleDeleteRequest(request: ProcurementRequest) {
+async function handleDeleteRequest(request: ProcurementRequest) {
   console.log(`${MODULE_NAME}: Delete request`, request.id)
 
-  // Проверяем можно ли удалить
+  // 1. Проверяем статус (быстрая проверка)
   if (!canDeleteRequest(request)) {
     handleError(`Cannot delete request with status: ${request.status}`)
     return
   }
 
-  // TODO: Показать подтверждение и удалить через composable
-  showSuccess(`Delete request ${request.requestNumber} - TODO: Implement with confirmation`)
+  // 2. Полная проверка через store (включая проверку заказов)
+  const { canDelete, reason } = await supplierStore.canDeleteRequest(request.id)
+  if (!canDelete) {
+    handleError(reason || 'Cannot delete this request')
+    return
+  }
+
+  // 3. Показываем диалог подтверждения
+  requestToDelete.value = request
+  showDeleteConfirmDialog.value = true
+}
+
+async function confirmDeleteRequest() {
+  if (!requestToDelete.value) return
+
+  isDeleting.value = true
+  try {
+    await supplierStore.deleteRequest(requestToDelete.value.id)
+    showSuccess(`Request ${requestToDelete.value.requestNumber} deleted successfully`)
+    showDeleteConfirmDialog.value = false
+    requestToDelete.value = null
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to delete request`, error)
+    handleError(`Failed to delete request: ${error}`)
+  } finally {
+    isDeleting.value = false
+  }
+}
+
+function cancelDeleteRequest() {
+  showDeleteConfirmDialog.value = false
+  requestToDelete.value = null
 }
 
 function handleCreateOrderFromRequest(request: ProcurementRequest) {

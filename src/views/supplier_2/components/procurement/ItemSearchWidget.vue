@@ -161,13 +161,19 @@
               </div>
             </div>
 
-            <!-- Selection Indicator -->
-            <v-icon
-              v-if="selectedProduct?.id === product.id"
-              icon="mdi-check-circle"
-              color="primary"
+            <!-- Add Button -->
+            <v-btn
+              v-if="!isProductAlreadyAdded(product.id)"
+              color="success"
+              variant="tonal"
+              size="small"
               class="ml-3"
-            />
+              prepend-icon="mdi-plus"
+              @click.stop="selectProduct(product)"
+            >
+              Add
+            </v-btn>
+            <v-icon v-else icon="mdi-check-circle" color="success" class="ml-3" />
           </div>
         </div>
 
