@@ -161,6 +161,7 @@ class OrderAlertService {
 
   /**
    * Trigger alert (notification + sound)
+   * Sound is played FIRST and independently of notification permission
    */
   private async triggerAlert(event: OrderAlertEvent): Promise<void> {
     // Build notification message
@@ -169,18 +170,26 @@ class OrderAlertService {
 
     DebugUtils.info(MODULE_NAME, 'Triggering alert', { event, title, body })
 
-    // Show notification
+    // ALWAYS try to play sound first if enabled (independent of notification)
+    if (this.config.soundEnabled) {
+      await this.notifications.playSound()
+    }
+
+    // Show notification if enabled (with silent: true since sound already played)
     if (this.config.notificationEnabled) {
       await this.notifications.notify({
         title,
         body,
         tag: `order-${event.orderId}`,
         vibrate: this.config.vibrationEnabled ? this.config.vibrationPattern : undefined,
-        data: event
+        data: event,
+        silent: true // Sound already played above
       })
-    } else if (this.config.soundEnabled) {
-      // If notifications disabled but sound enabled, just play sound
-      await this.notifications.playSound()
+    }
+
+    // Vibrate if enabled and notifications were not shown (vibrate is in notify)
+    if (this.config.vibrationEnabled && !this.config.notificationEnabled) {
+      this.notifications.vibrate(this.config.vibrationPattern || [200, 100, 200, 100, 200])
     }
   }
 

@@ -30,7 +30,7 @@ import StatusChip from '@/components/atoms/indicators/StatusChip.vue'
 import { useKitchenStore } from '@/stores/kitchen'
 import { useAuthStore } from '@/stores/auth'
 import { useKitchenOrders } from '@/stores/kitchen/composables'
-import { useOrderAlertService } from '@/core/pwa'
+import { useNotifications } from '@/core/pwa'
 
 const MODULE_NAME = 'KitchenNavigationMenu'
 
@@ -51,7 +51,7 @@ const router = useRouter()
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
 const { ordersStats } = useKitchenOrders()
-const orderAlerts = useOrderAlertService()
+const notifications = useNotifications()
 
 // =============================================
 // STATE
@@ -157,10 +157,17 @@ const handleAction = async (actionId: string) => {
 
 const handleActivateSound = async () => {
   try {
-    // Play test sound to unlock browser autoplay
-    await orderAlerts.testAlert()
-    soundActivated.value = true
-    DebugUtils.info(MODULE_NAME, 'Sound activated - browser autoplay unlocked')
+    // Unlock audio for browser autoplay policy
+    const unlocked = await notifications.unlockAudio()
+
+    if (unlocked) {
+      // Play test sound to confirm it works
+      await notifications.playSound()
+      soundActivated.value = true
+      DebugUtils.info(MODULE_NAME, 'Sound activated - browser autoplay unlocked')
+    } else {
+      DebugUtils.warn(MODULE_NAME, 'Failed to unlock audio')
+    }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to activate sound', error)
   }

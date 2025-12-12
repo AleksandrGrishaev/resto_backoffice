@@ -36,8 +36,12 @@ export function useNotifications() {
     vibrationEnabled: true
   })
 
+  // Audio unlock state (for browser autoplay policy)
+  const audioUnlocked = ref(false)
+
   // Audio element for notification sound
   let audioElement: HTMLAudioElement | null = null
+  let audioContext: AudioContext | null = null
   let soundUrl = DEFAULT_SOUND_URL
   let soundVolume = 0.7
 
@@ -73,6 +77,67 @@ export function useNotifications() {
       return permission === 'granted'
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to request notification permission', { error: err })
+      return false
+    }
+  }
+
+  /**
+   * Unlock audio for browser autoplay policy
+   * MUST be called from user interaction (click, touch)
+   * This creates an AudioContext and plays a silent buffer to unlock audio playback
+   */
+  const unlockAudio = async (): Promise<boolean> => {
+    if (audioUnlocked.value) {
+      DebugUtils.debug(MODULE_NAME, 'Audio already unlocked')
+      return true
+    }
+
+    try {
+      // Create AudioContext on user interaction
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioContextClass) {
+        DebugUtils.warn(MODULE_NAME, 'AudioContext not supported')
+        return false
+      }
+
+      audioContext = new AudioContextClass()
+
+      // Resume context if suspended (required by some browsers)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume()
+      }
+
+      // Play silent buffer to unlock audio
+      const buffer = audioContext.createBuffer(1, 1, 22050)
+      const source = audioContext.createBufferSource()
+      source.buffer = buffer
+      source.connect(audioContext.destination)
+      source.start(0)
+
+      // Pre-load the notification sound
+      if (!audioElement) {
+        audioElement = new Audio(soundUrl)
+        audioElement.volume = soundVolume
+      }
+
+      // Load and prepare the audio element
+      audioElement.load()
+
+      // Try to play and immediately pause to unlock
+      try {
+        await audioElement.play()
+        audioElement.pause()
+        audioElement.currentTime = 0
+      } catch {
+        // Ignore play error during unlock - some browsers may still block
+        DebugUtils.debug(MODULE_NAME, 'Play during unlock blocked, continuing...')
+      }
+
+      audioUnlocked.value = true
+      DebugUtils.info(MODULE_NAME, 'Audio unlocked successfully')
+      return true
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to unlock audio', { error: err })
       return false
     }
   }
@@ -221,9 +286,11 @@ export function useNotifications() {
     state: readonly(state),
     isSupported,
     isGranted,
+    audioUnlocked: readonly(audioUnlocked),
 
     // Actions
     requestPermission,
+    unlockAudio,
     notify,
     playSound,
     vibrate,
