@@ -369,9 +369,6 @@ export function usePreparationWriteOff() {
           reasons: {
             expired: { count: 0, value: 0 },
             spoiled: { count: 0, value: 0 },
-            contaminated: { count: 0, value: 0 },
-            overproduced: { count: 0, value: 0 },
-            quality_control: { count: 0, value: 0 },
             other: { count: 0, value: 0 }
           }
         },

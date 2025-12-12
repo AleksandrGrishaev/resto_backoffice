@@ -126,9 +126,6 @@ const STORAGE_REASONS = [
 const PREPARATION_REASONS = [
   { value: 'expired', label: 'Expired', description: 'Preparations past shelf life' },
   { value: 'spoiled', label: 'Spoiled', description: 'Damaged preparations' },
-  { value: 'contaminated', label: 'Contaminated', description: 'Cross-contamination' },
-  { value: 'overproduced', label: 'Overproduced', description: 'Excess production not sold' },
-  { value: 'quality_control', label: 'Quality Control', description: 'Failed quality check' },
   { value: 'other', label: 'Other', description: 'Other reasons' },
   { value: 'education', label: 'Education', description: 'Staff training usage' },
   { value: 'test', label: 'Test', description: 'Recipe testing' }

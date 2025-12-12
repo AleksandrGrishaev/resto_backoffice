@@ -22,15 +22,7 @@ export type BatchStatus = 'active' | 'expired' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
 // ✅ NEW: Write-off Reason Types for Preparations
-export type PreparationWriteOffReason =
-  | 'expired'
-  | 'spoiled'
-  | 'contaminated'
-  | 'overproduced'
-  | 'quality_control'
-  | 'education'
-  | 'test'
-  | 'other'
+export type PreparationWriteOffReason = 'expired' | 'spoiled' | 'other' | 'education' | 'test'
 
 // Core preparation batch entity
 export interface PreparationBatch extends BaseEntity {
@@ -210,9 +202,6 @@ export interface PreparationWriteOffStatistics {
     reasons: {
       expired: { count: number; value: number }
       spoiled: { count: number; value: number }
-      contaminated: { count: number; value: number }
-      overproduced: { count: number; value: number }
-      quality_control: { count: number; value: number }
       other: { count: number; value: number }
     }
   }
@@ -278,14 +267,7 @@ export interface PreparationState {
 
 // ✅ NEW: Write-off Helper Functions and Constants
 export const PREPARATION_WRITE_OFF_CLASSIFICATION = {
-  KPI_AFFECTING: [
-    'expired',
-    'spoiled',
-    'contaminated',
-    'overproduced',
-    'quality_control',
-    'other'
-  ] as PreparationWriteOffReason[],
+  KPI_AFFECTING: ['expired', 'spoiled', 'other'] as PreparationWriteOffReason[],
   NON_KPI_AFFECTING: ['education', 'test'] as PreparationWriteOffReason[]
 } as const
 
@@ -306,27 +288,6 @@ export const PREPARATION_WRITE_OFF_REASON_OPTIONS = [
     description: 'Preparation is damaged or spoiled',
     affectsKPI: true,
     color: 'error'
-  },
-  {
-    value: 'contaminated' as PreparationWriteOffReason,
-    title: 'Contaminated',
-    description: 'Preparation is contaminated or unsafe',
-    affectsKPI: true,
-    color: 'error'
-  },
-  {
-    value: 'overproduced' as PreparationWriteOffReason,
-    title: 'Overproduced',
-    description: 'Excess production beyond demand',
-    affectsKPI: true,
-    color: 'warning'
-  },
-  {
-    value: 'quality_control' as PreparationWriteOffReason,
-    title: 'Quality Control',
-    description: 'Failed quality control standards',
-    affectsKPI: true,
-    color: 'warning'
   },
   {
     value: 'other' as PreparationWriteOffReason,

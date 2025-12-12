@@ -86,7 +86,7 @@ BEGIN
     v_spoilage_total + COALESCE(SUM(total_value), 0),
     v_spoilage_expired + COALESCE(SUM(CASE WHEN write_off_details->>'reason' = 'expired' THEN total_value ELSE 0 END), 0),
     v_spoilage_spoiled + COALESCE(SUM(CASE WHEN write_off_details->>'reason' = 'spoiled' THEN total_value ELSE 0 END), 0),
-    v_spoilage_other + COALESCE(SUM(CASE WHEN write_off_details->>'reason' IN ('other', 'contaminated', 'overproduced', 'quality_control') THEN total_value ELSE 0 END), 0)
+    v_spoilage_other + COALESCE(SUM(CASE WHEN write_off_details->>'reason' = 'other' THEN total_value ELSE 0 END), 0)
   INTO v_spoilage_total, v_spoilage_expired, v_spoilage_spoiled, v_spoilage_other
   FROM preparation_operations
   WHERE operation_type = 'write_off'
