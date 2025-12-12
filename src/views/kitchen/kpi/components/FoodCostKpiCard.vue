@@ -98,12 +98,15 @@
           <div class="metric-label">Total COGS</div>
         </div>
 
-        <!-- Variance -->
+        <!-- Loss Impact -->
         <div class="metric-item">
-          <div class="metric-value" :class="varianceClass">
-            {{ varianceDisplay }}
+          <div class="metric-value" :class="lossImpactClass">
+            {{ lossImpactDisplay }}
           </div>
-          <div class="metric-label">Variance from Target</div>
+          <div class="metric-value metric-sm" :class="lossImpactClass">
+            {{ formatCurrencyCompact(lossAmount) }}
+          </div>
+          <div class="metric-label">Loss Impact</div>
         </div>
       </div>
     </v-card-text>
@@ -115,7 +118,11 @@ import { computed } from 'vue'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
 import type { FoodCostKpiMetrics } from '@/stores/kitchenKpi/types'
-import { FOOD_COST_TARGETS, VARIANCE_THRESHOLD } from '@/stores/kitchenKpi/types'
+import {
+  FOOD_COST_TARGETS,
+  VARIANCE_THRESHOLD,
+  LOSS_VARIANCE_THRESHOLD
+} from '@/stores/kitchenKpi/types'
 
 // =============================================
 // PROPS
@@ -184,15 +191,20 @@ const surplusPercent = computed(() => {
   return ((props.metrics.surplus / props.metrics.revenue) * 100).toFixed(1)
 })
 
-const variance = computed(() => {
+// Loss Impact = Spoilage + Shortage - Surplus (cost of losses)
+const lossAmount = computed(() => {
   if (!props.metrics) return 0
-  return props.metrics.totalCOGSPercent - targetPercent.value
+  return props.metrics.spoilage + props.metrics.shortage - props.metrics.surplus
 })
 
-const varianceDisplay = computed(() => {
-  const value = variance.value
-  if (value > 0) return `+${value.toFixed(1)}%`
-  return `${value.toFixed(1)}%`
+const lossImpactPercent = computed(() => {
+  if (!props.metrics || props.metrics.revenue === 0) return 0
+  return (lossAmount.value / props.metrics.revenue) * 100
+})
+
+const lossImpactDisplay = computed(() => {
+  const value = lossImpactPercent.value
+  return `+${value.toFixed(1)}%`
 })
 
 // CSS classes
@@ -204,9 +216,11 @@ const totalCogsClass = computed(() => {
   return 'text-error'
 })
 
-const varianceClass = computed(() => {
-  if (variance.value <= 0) return 'text-success'
-  if (variance.value <= VARIANCE_THRESHOLD.warning) return 'text-warning'
+const lossImpactClass = computed(() => {
+  const percent = lossImpactPercent.value
+  if (percent <= LOSS_VARIANCE_THRESHOLD.ok) return 'text-success'
+  if (percent <= LOSS_VARIANCE_THRESHOLD.warning) return 'text-warning'
+  if (percent <= LOSS_VARIANCE_THRESHOLD.high) return 'text-orange'
   return 'text-error'
 })
 
@@ -216,6 +230,11 @@ const varianceClass = computed(() => {
 
 const formatCurrency = (value: number): string => {
   return formatIDR(value, { compact: value > 1000000 })
+}
+
+// Compact format for Loss Impact (always compact for large values)
+const formatCurrencyCompact = (value: number): string => {
+  return formatIDR(value, { compact: value >= 1000000 })
 }
 </script>
 
@@ -286,6 +305,10 @@ const formatCurrency = (value: number): string => {
 
 .text-warning {
   color: rgb(var(--v-theme-warning));
+}
+
+.text-orange {
+  color: #ff9800;
 }
 
 .text-error {

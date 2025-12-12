@@ -328,7 +328,7 @@ export const FOOD_COST_TARGETS = {
 } as const
 
 /**
- * Variance threshold for color coding
+ * Variance threshold for color coding (legacy - variance from target)
  * - 0 to warning: OK (green)
  * - warning to error: Warning (yellow)
  * - above error: Error (red)
@@ -336,6 +336,20 @@ export const FOOD_COST_TARGETS = {
 export const VARIANCE_THRESHOLD = {
   warning: 5, // Show warning if over target by up to 5%
   error: 5 // Show error if over target by more than 5%
+} as const
+
+/**
+ * Loss Impact threshold for color coding
+ * Shows impact of losses (spoilage, shortage, surplus) as % of revenue
+ * - 0-10%: OK (green) - normal operational losses
+ * - 10-20%: Warning (yellow) - elevated losses
+ * - 20-30%: High (orange) - significant losses
+ * - 30%+: Critical (red) - requires immediate attention
+ */
+export const LOSS_VARIANCE_THRESHOLD = {
+  ok: 10, // 0-10%: OK (green)
+  warning: 20, // 10-20%: Warning (yellow)
+  high: 30 // 20-30%: High (orange), 30%+: Critical (red)
 } as const
 
 /**

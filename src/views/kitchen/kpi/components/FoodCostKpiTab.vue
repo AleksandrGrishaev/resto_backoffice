@@ -30,19 +30,19 @@
           </tr>
         </thead>
         <tbody>
-          <!-- Sales COGS -->
+          <!-- Theoretical COGS (recipe cost without losses) -->
           <tr>
             <td>
               <div class="d-flex align-center">
-                <v-icon size="18" class="mr-2" color="blue">mdi-cart</v-icon>
-                Sales COGS (FIFO)
+                <v-icon size="18" class="mr-2" color="blue">mdi-calculator</v-icon>
+                Theoretical COGS
               </div>
-              <div class="text-caption text-medium-emphasis">Cost of goods sold from sales</div>
+              <div class="text-caption text-medium-emphasis">Recipe cost (FIFO) without losses</div>
             </td>
             <td class="text-right mono">{{ formatCurrency(metrics.salesCOGS) }}</td>
             <td class="text-right mono">{{ salesCogsPercent }}%</td>
             <td class="text-center">
-              <v-icon size="18" color="success">mdi-check-circle</v-icon>
+              <v-icon size="18" color="info">mdi-information</v-icon>
             </td>
           </tr>
 
@@ -115,15 +115,15 @@
             </td>
           </tr>
 
-          <!-- Total COGS -->
+          <!-- Actual COGS (with losses) -->
           <tr class="total-row">
             <td>
               <div class="d-flex align-center font-weight-bold">
                 <v-icon size="18" class="mr-2" color="primary">mdi-sigma</v-icon>
-                Total COGS
+                Actual COGS
               </div>
               <div class="text-caption text-medium-emphasis">
-                = Sales COGS + Spoilage + Shortage - Surplus
+                = Theoretical + Spoilage + Shortage - Surplus
               </div>
             </td>
             <td class="text-right mono font-weight-bold">
@@ -152,20 +152,25 @@
             <td></td>
           </tr>
 
-          <!-- Variance -->
+          <!-- Loss Impact -->
           <tr class="variance-row">
             <td>
-              <div class="d-flex align-center" :class="varianceClass">
-                <v-icon size="18" class="mr-2">mdi-chart-line-variant</v-icon>
-                Variance
+              <div class="d-flex align-center" :class="lossImpactClass">
+                <v-icon size="18" class="mr-2">mdi-alert-decagram</v-icon>
+                Loss Impact
+              </div>
+              <div class="text-caption text-medium-emphasis">
+                Actual - Theoretical = cost of losses
               </div>
             </td>
-            <td class="text-right mono" :class="varianceClass">-</td>
-            <td class="text-right mono font-weight-bold" :class="varianceClass">
-              {{ varianceDisplay }}
+            <td class="text-right mono font-weight-bold" :class="lossImpactClass">
+              {{ formatCurrency(lossAmount) }}
+            </td>
+            <td class="text-right mono font-weight-bold" :class="lossImpactClass">
+              {{ lossImpactDisplay }}
             </td>
             <td class="text-center">
-              <v-icon size="18" :color="varianceIcon.color">{{ varianceIcon.icon }}</v-icon>
+              <v-icon size="18" :color="lossImpactIcon.color">{{ lossImpactIcon.icon }}</v-icon>
             </td>
           </tr>
         </tbody>
@@ -178,7 +183,11 @@
 import { computed } from 'vue'
 import { formatIDR } from '@/utils/currency'
 import type { FoodCostKpiMetrics } from '@/stores/kitchenKpi/types'
-import { FOOD_COST_TARGETS, VARIANCE_THRESHOLD } from '@/stores/kitchenKpi/types'
+import {
+  FOOD_COST_TARGETS,
+  VARIANCE_THRESHOLD,
+  LOSS_VARIANCE_THRESHOLD
+} from '@/stores/kitchenKpi/types'
 
 // =============================================
 // PROPS
@@ -225,15 +234,20 @@ const surplusPercent = computed(() => {
   return ((props.metrics.surplus / props.metrics.revenue) * 100).toFixed(1)
 })
 
-const variance = computed(() => {
+// Loss Impact = Spoilage + Shortage - Surplus (cost of losses)
+const lossAmount = computed(() => {
   if (!props.metrics) return 0
-  return props.metrics.totalCOGSPercent - targetPercent.value
+  return props.metrics.spoilage + props.metrics.shortage - props.metrics.surplus
 })
 
-const varianceDisplay = computed(() => {
-  const value = variance.value
-  if (value > 0) return `+${value.toFixed(1)}%`
-  return `${value.toFixed(1)}%`
+const lossImpactPercent = computed(() => {
+  if (!props.metrics || props.metrics.revenue === 0) return 0
+  return (lossAmount.value / props.metrics.revenue) * 100
+})
+
+const lossImpactDisplay = computed(() => {
+  const value = lossImpactPercent.value
+  return `+${value.toFixed(1)}%`
 })
 
 // CSS classes
@@ -253,21 +267,27 @@ const totalCogsColor = computed(() => {
   return 'error'
 })
 
-const varianceClass = computed(() => {
-  if (variance.value <= 0) return 'text-success'
-  if (variance.value <= VARIANCE_THRESHOLD.warning) return 'text-warning'
+const lossImpactClass = computed(() => {
+  const percent = lossImpactPercent.value
+  if (percent <= LOSS_VARIANCE_THRESHOLD.ok) return 'text-success'
+  if (percent <= LOSS_VARIANCE_THRESHOLD.warning) return 'text-warning'
+  if (percent <= LOSS_VARIANCE_THRESHOLD.high) return 'text-orange'
   return 'text-error'
 })
 
-// Variance icon info for template
-const varianceIcon = computed(() => {
-  if (variance.value <= 0) {
-    return { icon: 'mdi-thumb-up', color: 'success' }
+// Loss Impact icon info for template
+const lossImpactIcon = computed(() => {
+  const percent = lossImpactPercent.value
+  if (percent <= LOSS_VARIANCE_THRESHOLD.ok) {
+    return { icon: 'mdi-check-circle', color: 'success' }
   }
-  if (variance.value <= VARIANCE_THRESHOLD.warning) {
+  if (percent <= LOSS_VARIANCE_THRESHOLD.warning) {
     return { icon: 'mdi-alert', color: 'warning' }
   }
-  return { icon: 'mdi-thumb-down', color: 'error' }
+  if (percent <= LOSS_VARIANCE_THRESHOLD.high) {
+    return { icon: 'mdi-alert-circle', color: 'orange' }
+  }
+  return { icon: 'mdi-alert-octagon', color: 'error' }
 })
 
 // =============================================
@@ -345,6 +365,10 @@ const formatCurrency = (value: number): string => {
 
 .text-warning {
   color: rgb(var(--v-theme-warning));
+}
+
+.text-orange {
+  color: #ff9800;
 }
 
 .text-error {
