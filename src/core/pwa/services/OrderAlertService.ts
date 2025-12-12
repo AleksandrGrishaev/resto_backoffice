@@ -144,12 +144,23 @@ class OrderAlertService {
       return
     }
 
-    // Department filter: only alert if order has items for user's department
-    if (
-      this.config.userDepartment &&
-      !this.hasItemsForDepartment(order, this.config.userDepartment)
-    ) {
-      DebugUtils.debug(MODULE_NAME, 'Ignoring - no items for user department', {
+    // Department filter: only alert if order has WAITING items for user's department
+    const hasItems = this.hasItemsForDepartment(order, this.config.userDepartment)
+    const waitingItems = (order?.items || []).filter((i: any) => i.status === 'waiting')
+    DebugUtils.info(MODULE_NAME, '🔍 Department filter check', {
+      orderId: order?.id,
+      orderNumber: order?.order_number,
+      userDepartment: this.config.userDepartment,
+      hasWaitingItemsForDept: hasItems,
+      waitingItems: waitingItems.map((i: any) => ({
+        name: i.menuItemName,
+        dept: i.department || 'kitchen',
+        status: i.status
+      }))
+    })
+
+    if (this.config.userDepartment && !hasItems) {
+      DebugUtils.info(MODULE_NAME, '🚫 Ignoring - no items for user department', {
         orderId: order?.id,
         userDepartment: this.config.userDepartment
       })
@@ -265,13 +276,19 @@ class OrderAlertService {
   }
 
   /**
-   * Check if order has items for the specified department
-   * Used to filter alerts - only play sound for orders relevant to user's department
+   * Check if order has items with status 'waiting' for the specified department
+   * Used to filter alerts - only play sound if there are NEW items (waiting) for user's department
    */
-  private hasItemsForDepartment(order: any, department: 'kitchen' | 'bar'): boolean {
+  private hasItemsForDepartment(order: any, department: 'kitchen' | 'bar' | undefined): boolean {
+    if (!department) return true // No filter if department not specified
+
     const items = order?.items || []
-    // Each item has a department field, defaulting to 'kitchen' if not set
-    return items.some((item: any) => (item.department || 'kitchen') === department)
+    // Check for items that are:
+    // 1. In 'waiting' status (just sent to kitchen/bar)
+    // 2. Belong to the specified department
+    return items.some(
+      (item: any) => item.status === 'waiting' && (item.department || 'kitchen') === department
+    )
   }
 
   /**
