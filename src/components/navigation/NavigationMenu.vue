@@ -209,6 +209,18 @@
           </template>
         </v-list-item>
 
+        <!-- Cancelled Items Report -->
+        <v-list-item
+          to="/analytics/cancelled-items"
+          prepend-icon="mdi-cancel"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Cancelled Items</span>
+          </template>
+        </v-list-item>
+
         <!-- Print Documents (Inventory Sheets) -->
         <v-list-item
           to="/reports/print-docs"

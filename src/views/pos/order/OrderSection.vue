@@ -46,12 +46,25 @@
             @move-items="handleMoveItems"
             @checkout="handleCheckout"
           />
+
+          <!-- Order Totals (mobile - inline with scroll) -->
+          <OrderTotals
+            v-if="isSmallScreen"
+            :totals="orderTotals"
+            :has-selection="calculations.hasSelection.value"
+            :selected-items-count="calculations.selectedItemsCount.value"
+            :show-taxes="true"
+            :service-tax-rate="5"
+            :government-tax-rate="10"
+            class="mobile-totals"
+          />
         </div>
 
         <!-- Fixed Footer Section -->
         <div class="order-footer">
-          <!-- Order Totals -->
+          <!-- Order Totals (desktop only) -->
           <OrderTotals
+            v-if="!isSmallScreen"
             :totals="orderTotals"
             :has-selection="calculations.hasSelection.value"
             :selected-items-count="calculations.selectedItemsCount.value"
@@ -157,6 +170,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useVuetifyBreakpoints } from '@/composables/useVuetifyBreakpoints'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
@@ -177,6 +191,10 @@ import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
 import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
 
 const MODULE_NAME = 'OrderSection'
+
+// Viewport detection for responsive layout
+const breakpoints = useVuetifyBreakpoints()
+const isSmallScreen = computed(() => breakpoints.isSmallScreen.value)
 
 // Stores
 const ordersStore = usePosOrdersStore()
@@ -1240,12 +1258,27 @@ onMounted(() => {
 }
 
 /* =============================================
+   MOBILE TOTALS (inline with scroll)
+   ============================================= */
+
+.mobile-totals {
+  flex-shrink: 0;
+  background: rgb(var(--v-theme-surface));
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* =============================================
    RESPONSIVE DESIGN
    ============================================= */
 
-@media (max-width: 768px) {
+@media (max-width: 959px) {
   .order-section {
     padding: 0;
+  }
+
+  /* На мобильных .order-content становится скроллируемым */
+  .order-content {
+    overflow-y: auto;
   }
 
   .empty-state {

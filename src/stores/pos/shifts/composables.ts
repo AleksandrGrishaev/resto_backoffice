@@ -97,7 +97,7 @@ export function useShiftsComposables() {
     if (currentShift?.status === 'active') {
       return {
         canStart: false,
-        reason: 'Уже есть активная смена'
+        reason: 'Active shift already exists'
       }
     }
 
@@ -118,31 +118,31 @@ export function useShiftsComposables() {
     if (!shift) {
       return {
         canEnd: false,
-        reason: 'Нет активной смены'
+        reason: 'No active shift'
       }
     }
 
     if (shift.status !== 'active') {
       return {
         canEnd: false,
-        reason: 'Смена уже завершена'
+        reason: 'Shift is already closed'
       }
     }
 
     const warnings: string[] = []
 
-    // Проверка несинхронизированных транзакций
+    // Check for unsynced transactions
     const pendingCount = pendingTransactions.length
     if (pendingCount > 0) {
-      warnings.push(`${pendingCount} транзакций не синхронизированы`)
+      warnings.push(`${pendingCount} transaction${pendingCount === 1 ? '' : 's'} not synchronized`)
     }
 
-    // Проверка минимальной продолжительности смены (например, 30 минут)
+    // Check minimum shift duration (30 minutes)
     const duration = new Date().getTime() - new Date(shift.startTime).getTime()
-    const minDuration = 30 * 60 * 1000 // 30 минут в миллисекундах
+    const minDuration = 30 * 60 * 1000 // 30 minutes in milliseconds
 
     if (duration < minDuration) {
-      warnings.push('Смена слишком короткая (менее 30 минут)')
+      warnings.push('Shift is too short (less than 30 minutes)')
     }
 
     return {
@@ -231,12 +231,12 @@ export function useShiftsComposables() {
    */
   function getSyncStatusText(status: SyncStatus): string {
     const texts = {
-      synced: 'Синхронизировано',
-      pending: 'Ожидает синхронизации',
-      failed: 'Ошибка синхронизации',
-      offline: 'Offline режим'
+      synced: 'Synchronized',
+      pending: 'Pending synchronization',
+      failed: 'Synchronization failed',
+      offline: 'Offline mode'
     }
-    return texts[status] || 'Неизвестно'
+    return texts[status] || 'Unknown'
   }
 
   /**
@@ -358,29 +358,29 @@ export function useShiftsComposables() {
   function getShiftWarnings(shift: PosShift, transactions: ShiftTransaction[]): string[] {
     const warnings: string[] = []
 
-    // Проверка синхронизации
+    // Check synchronization
     if (needsSync(shift, transactions)) {
       const pendingCount = transactions.filter(
         t => t.syncStatus === 'pending' || t.syncStatus === 'failed'
       ).length
-      warnings.push(`${pendingCount} транзакций требуют синхронизации`)
-    }
-
-    // Проверка расхождений по кассе
-    if (shift.cashDiscrepancy && Math.abs(shift.cashDiscrepancy) > 0) {
-      const type = shift.cashDiscrepancy > 0 ? 'излишек' : 'недостача'
       warnings.push(
-        `Расхождение по кассе: ${type} ${formatCurrency(Math.abs(shift.cashDiscrepancy))}`
+        `${pendingCount} transaction${pendingCount === 1 ? '' : 's'} require synchronization`
       )
     }
 
-    // Проверка продолжительности для активной смены
+    // Check cash discrepancy
+    if (shift.cashDiscrepancy && Math.abs(shift.cashDiscrepancy) > 0) {
+      const type = shift.cashDiscrepancy > 0 ? 'overage' : 'shortage'
+      warnings.push(`Cash discrepancy: ${type} ${formatCurrency(Math.abs(shift.cashDiscrepancy))}`)
+    }
+
+    // Check duration for active shift
     if (shift.status === 'active') {
       const duration = new Date().getTime() - new Date(shift.startTime).getTime()
       const hours = duration / (1000 * 60 * 60)
 
       if (hours > 12) {
-        warnings.push('Смена длится более 12 часов')
+        warnings.push('Shift has been running for more than 12 hours')
       }
     }
 

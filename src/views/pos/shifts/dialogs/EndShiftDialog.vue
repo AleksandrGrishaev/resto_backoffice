@@ -34,6 +34,33 @@
           </v-alert>
         </div>
 
+        <!-- ✅ Refunded Orders Warning -->
+        <div v-if="hasRefundedOrders" class="mb-4">
+          <v-alert color="error" variant="tonal">
+            <div class="font-weight-bold mb-2">Cannot Close Shift: Refunded Items</div>
+            <div>
+              There {{ ordersWithRefundedItems.length === 1 ? 'is' : 'are' }}
+              <strong>{{ ordersWithRefundedItems.length }}</strong>
+              order{{ ordersWithRefundedItems.length === 1 ? '' : 's' }}
+              with refunded items. Please resolve these before closing the shift.
+            </div>
+            <div class="mt-2">
+              <div
+                v-for="{ order, refundedItems } in ordersWithRefundedItems"
+                :key="order.id"
+                class="text-caption"
+              >
+                • Order #{{ order.orderNumber }}:
+                <span v-for="(item, idx) in refundedItems" :key="item.id">
+                  {{ item.menuItemName }} ({{ formatCurrency(item.totalPrice) }}){{
+                    idx < refundedItems.length - 1 ? ', ' : ''
+                  }}
+                </span>
+              </div>
+            </div>
+          </v-alert>
+        </div>
+
         <!-- Validation Warnings -->
         <div v-if="validationWarnings.length > 0" class="mb-4">
           <v-alert color="warning" variant="tonal">
@@ -283,6 +310,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { useShiftsComposables } from '@/stores/pos/shifts/composables'
 import { useAccountStore } from '@/stores/account'
 import type {
@@ -312,6 +340,7 @@ const emit = defineEmits<{
 const shiftsStore = useShiftsStore()
 const paymentsStore = usePosPaymentsStore()
 const accountStore = useAccountStore()
+const ordersStore = usePosOrdersStore()
 const {
   formatShiftDuration,
   formatCurrency,
@@ -371,8 +400,39 @@ const isAccountStoreReady = computed(() => {
   return accountStore.accounts && accountStore.accounts.length > 0
 })
 
+// ✅ Check for orders with refunded items
+const ordersWithRefundedItems = computed(() => {
+  if (!currentShift.value) return []
+  const shiftStartTime = new Date(currentShift.value.startTime).getTime()
+
+  return ordersStore.orders
+    .filter(order => {
+      const orderTime = new Date(order.createdAt).getTime()
+      if (orderTime < shiftStartTime) return false
+
+      // Check if order has refunded status OR any items with refunded status
+      if (order.paymentStatus === 'refunded') return true
+
+      // Check items in all bills
+      return order.bills.some(bill => bill.items.some(item => item.paymentStatus === 'refunded'))
+    })
+    .map(order => {
+      // Get refunded items for display
+      const refundedItems = order.bills.flatMap(bill =>
+        bill.items.filter(item => item.paymentStatus === 'refunded')
+      )
+      return { order, refundedItems }
+    })
+})
+
+const hasRefundedOrders = computed(() => ordersWithRefundedItems.value.length > 0)
+
 const canEndShift = computed(
-  () => validationCheck.value.canEnd && form.value.endingCash > 0 && isAccountStoreReady.value
+  () =>
+    validationCheck.value.canEnd &&
+    form.value.endingCash > 0 &&
+    isAccountStoreReady.value &&
+    !hasRefundedOrders.value
 )
 
 // ✅ FIX: Get real payments for this shift

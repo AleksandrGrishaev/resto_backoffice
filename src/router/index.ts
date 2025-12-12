@@ -294,6 +294,14 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'Discount Analytics'
             }
+          },
+          {
+            path: 'cancelled-items',
+            name: 'cancelled-items-report',
+            component: () => import('@/views/backoffice/analytics/CancelledItemsReport.vue'),
+            meta: {
+              title: 'Cancelled Items Report'
+            }
           }
         ]
       },

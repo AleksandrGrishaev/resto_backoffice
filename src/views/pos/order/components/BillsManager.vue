@@ -255,19 +255,24 @@ const handleApplyDiscount = (itemId: string): void => {
    RESPONSIVE DESIGN
    ============================================= */
 
-@media (max-width: 768px) {
+@media (max-width: 959px) {
   .items-list {
     padding: var(--spacing-sm);
+    /* На мобильных убираем внутренний scroll - скроллится родитель .order-content */
+    overflow-y: visible;
+    max-height: none;
+    padding-bottom: var(--spacing-md);
   }
 
   /* Обеспечиваем правильную работу scroll на мобильных */
   .bills-manager {
-    height: 100%;
-    overflow: hidden;
+    height: auto; /* Не фиксированная высота */
+    overflow: visible;
   }
 
   .bill-content {
-    min-height: 0; /* Критично для мобильного flex */
+    min-height: 0;
+    overflow: visible;
   }
 }
 
