@@ -123,17 +123,22 @@ class OrderAlertService {
 
   /**
    * Handle new order event (order sent to kitchen)
-   * Only triggers when status CHANGES to 'waiting' (not on every update while waiting)
+   * Only triggers when status CHANGES TO 'waiting' from another status
+   * Ignores all updates while order is already in 'waiting' status
    */
   private handleNewOrder(payload: any): void {
     const order = payload.new
     const oldOrder = payload.old
 
-    // Only trigger if status actually CHANGED to 'waiting'
-    // Ignore updates while already in 'waiting' status
-    if (oldOrder?.status === 'waiting') {
-      DebugUtils.debug(MODULE_NAME, 'Ignoring update - order already was waiting', {
-        orderId: order.id
+    // STRICT CHECK: Only trigger when status CHANGED TO 'waiting'
+    // Must have: old status !== 'waiting' AND new status === 'waiting'
+    const statusChangedToWaiting = oldOrder?.status !== 'waiting' && order?.status === 'waiting'
+
+    if (!statusChangedToWaiting) {
+      DebugUtils.debug(MODULE_NAME, 'Ignoring - not a status change to waiting', {
+        orderId: order?.id,
+        oldStatus: oldOrder?.status,
+        newStatus: order?.status
       })
       return
     }
@@ -159,16 +164,20 @@ class OrderAlertService {
 
   /**
    * Handle order ready event
-   * Only triggers when status CHANGES to 'ready' (not on every update while ready)
+   * Only triggers when status CHANGES TO 'ready' from another status
    */
   private handleOrderReady(payload: any): void {
     const order = payload.new
     const oldOrder = payload.old
 
-    // Only trigger if status actually CHANGED to 'ready'
-    if (oldOrder?.status === 'ready') {
-      DebugUtils.debug(MODULE_NAME, 'Ignoring update - order already was ready', {
-        orderId: order.id
+    // STRICT CHECK: Only trigger when status CHANGED TO 'ready'
+    const statusChangedToReady = oldOrder?.status !== 'ready' && order?.status === 'ready'
+
+    if (!statusChangedToReady) {
+      DebugUtils.debug(MODULE_NAME, 'Ignoring - not a status change to ready', {
+        orderId: order?.id,
+        oldStatus: oldOrder?.status,
+        newStatus: order?.status
       })
       return
     }
