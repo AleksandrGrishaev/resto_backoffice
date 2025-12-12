@@ -1,4 +1,5 @@
 // src/core/pwa/services/OrderAlertService.ts
+// Updated for order_items table architecture (Migration 053-054)
 
 import { ref, readonly } from 'vue'
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -22,6 +23,11 @@ const DEFAULT_CONFIG: OrderAlertConfig = {
 /**
  * Service for handling order alerts via Supabase Realtime
  * Plays sounds and shows notifications when new orders arrive
+ *
+ * Architecture (Migration 053-054):
+ * - Subscribes to order_items table (not orders!)
+ * - Triggers alert when item.status changes to 'waiting'
+ * - Filters by user's department (kitchen vs bar)
  */
 class OrderAlertService {
   private channel: RealtimeChannel | null = null
@@ -62,7 +68,8 @@ class OrderAlertService {
   }
 
   /**
-   * Subscribe to order updates
+   * Subscribe to order_items updates (NEW: Migration 053-054)
+   * Sound plays when item status changes to 'waiting' (sent to kitchen/bar)
    */
   subscribe(): void {
     if (this.isSubscribed.value) {
@@ -75,36 +82,38 @@ class OrderAlertService {
       return
     }
 
-    // Subscribe to orders table changes
-    // Sound plays when order is SENT TO KITCHEN (status becomes 'waiting')
+    // Subscribe to order_items table changes (NOT orders!)
+    // This allows direct filtering by item status and department
     this.channel = supabase
-      .channel('order-alerts')
+      .channel('order-item-alerts')
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'orders',
+          table: 'order_items',
           filter: 'status=eq.waiting'
         },
-        payload => this.handleNewOrder(payload)
+        payload => this.handleItemSentToKitchen(payload)
       )
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'orders',
+          table: 'order_items',
           filter: 'status=eq.ready'
         },
-        payload => this.handleOrderReady(payload)
+        payload => this.handleItemReady(payload)
       )
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
           this.isSubscribed.value = true
-          DebugUtils.info(MODULE_NAME, 'Subscribed to order alerts')
+          DebugUtils.info(MODULE_NAME, 'Subscribed to order_items alerts', {
+            userDepartment: this.config.userDepartment
+          })
         } else if (status === 'CHANNEL_ERROR') {
-          DebugUtils.error(MODULE_NAME, 'Failed to subscribe to order alerts')
+          DebugUtils.error(MODULE_NAME, 'Failed to subscribe to order_items alerts')
         }
       })
   }
@@ -122,64 +131,54 @@ class OrderAlertService {
   }
 
   /**
-   * Handle new order event (order sent to kitchen)
-   * Only triggers when status CHANGES TO 'waiting' from another status
-   * Ignores all updates while order is already in 'waiting' status
+   * Handle item sent to kitchen (NEW: Migration 053-054)
+   * Triggers when item.status CHANGES TO 'waiting'
+   * Filters by user's department (kitchen vs bar)
    */
-  private handleNewOrder(payload: any): void {
-    const order = payload.new
-    const oldOrder = payload.old
+  private handleItemSentToKitchen(payload: any): void {
+    const item = payload.new
+    const oldItem = payload.old
 
     // STRICT CHECK: Only trigger when status CHANGED TO 'waiting'
-    // Must have: old status !== 'waiting' AND new status === 'waiting'
-    // NOTE: Requires REPLICA IDENTITY FULL on orders table for oldOrder to have status field
-    const statusChangedToWaiting = oldOrder?.status !== 'waiting' && order?.status === 'waiting'
+    // Requires REPLICA IDENTITY FULL on order_items table
+    const statusChangedToWaiting = oldItem?.status !== 'waiting' && item?.status === 'waiting'
 
     if (!statusChangedToWaiting) {
       DebugUtils.debug(MODULE_NAME, 'Ignoring - not a status change to waiting', {
-        orderId: order?.id,
-        oldStatus: oldOrder?.status,
-        newStatus: order?.status
+        itemId: item?.id,
+        oldStatus: oldItem?.status,
+        newStatus: item?.status
       })
       return
     }
 
-    // Department filter: only alert if order has WAITING items for user's department
-    const hasItems = this.hasItemsForDepartment(order, this.config.userDepartment)
-    const waitingItems = (order?.items || []).filter((i: any) => i.status === 'waiting')
-    DebugUtils.info(MODULE_NAME, '🔍 Department filter check', {
-      orderId: order?.id,
-      orderNumber: order?.order_number,
-      userDepartment: this.config.userDepartment,
-      hasWaitingItemsForDept: hasItems,
-      waitingItems: waitingItems.map((i: any) => ({
-        name: i.menuItemName,
-        dept: i.department || 'kitchen',
-        status: i.status
-      }))
-    })
-
-    if (this.config.userDepartment && !hasItems) {
-      DebugUtils.info(MODULE_NAME, '🚫 Ignoring - no items for user department', {
-        orderId: order?.id,
+    // Department filter: only alert if item belongs to user's department
+    const itemDepartment = item?.department || 'kitchen'
+    if (this.config.userDepartment && itemDepartment !== this.config.userDepartment) {
+      DebugUtils.debug(MODULE_NAME, '🚫 Ignoring - item not for user department', {
+        itemId: item?.id,
+        itemName: item?.menu_item_name,
+        itemDepartment,
         userDepartment: this.config.userDepartment
       })
       return
     }
 
-    DebugUtils.info(MODULE_NAME, '🔔 New order sent to kitchen!', {
-      orderId: order.id,
-      orderNumber: order.order_number,
-      previousStatus: oldOrder?.status,
-      itemCount: order.items?.length || 0,
+    DebugUtils.info(MODULE_NAME, '🔔 Item sent to kitchen/bar!', {
+      itemId: item.id,
+      itemName: item.menu_item_name,
+      orderId: item.order_id,
+      billNumber: item.bill_number,
+      department: itemDepartment,
+      previousStatus: oldItem?.status,
       userDepartment: this.config.userDepartment
     })
 
     const event: OrderAlertEvent = {
-      orderId: order.id,
-      orderNumber: order.order_number,
-      tableNumber: order.table_id,
-      itemCount: order.items?.length || 0,
+      orderId: item.order_id,
+      orderNumber: item.bill_number || 'N/A',
+      tableNumber: undefined, // Not available at item level
+      itemCount: 1,
       type: 'new_order',
       timestamp: new Date().toISOString()
     }
@@ -188,36 +187,39 @@ class OrderAlertService {
   }
 
   /**
-   * Handle order ready event
-   * Only triggers when status CHANGES TO 'ready' from another status
+   * Handle item ready (NEW: Migration 053-054)
+   * Triggers when item.status CHANGES TO 'ready'
    */
-  private handleOrderReady(payload: any): void {
-    const order = payload.new
-    const oldOrder = payload.old
+  private handleItemReady(payload: any): void {
+    const item = payload.new
+    const oldItem = payload.old
 
     // STRICT CHECK: Only trigger when status CHANGED TO 'ready'
-    const statusChangedToReady = oldOrder?.status !== 'ready' && order?.status === 'ready'
+    const statusChangedToReady = oldItem?.status !== 'ready' && item?.status === 'ready'
 
     if (!statusChangedToReady) {
       DebugUtils.debug(MODULE_NAME, 'Ignoring - not a status change to ready', {
-        orderId: order?.id,
-        oldStatus: oldOrder?.status,
-        newStatus: order?.status
+        itemId: item?.id,
+        oldStatus: oldItem?.status,
+        newStatus: item?.status
       })
       return
     }
 
-    DebugUtils.info(MODULE_NAME, '✅ Order ready!', {
-      orderId: order.id,
-      orderNumber: order.order_number,
-      previousStatus: oldOrder?.status
+    DebugUtils.info(MODULE_NAME, '✅ Item ready!', {
+      itemId: item.id,
+      itemName: item.menu_item_name,
+      orderId: item.order_id,
+      billNumber: item.bill_number,
+      department: item.department,
+      previousStatus: oldItem?.status
     })
 
     const event: OrderAlertEvent = {
-      orderId: order.id,
-      orderNumber: order.order_number,
-      tableNumber: order.table_id,
-      itemCount: order.items?.length || 0,
+      orderId: item.order_id,
+      orderNumber: item.bill_number || 'N/A',
+      tableNumber: undefined,
+      itemCount: 1,
       type: 'order_ready',
       timestamp: new Date().toISOString()
     }
@@ -273,22 +275,6 @@ class OrderAlertService {
       default:
         return 'Order Alert'
     }
-  }
-
-  /**
-   * Check if order has items with status 'waiting' for the specified department
-   * Used to filter alerts - only play sound if there are NEW items (waiting) for user's department
-   */
-  private hasItemsForDepartment(order: any, department: 'kitchen' | 'bar' | undefined): boolean {
-    if (!department) return true // No filter if department not specified
-
-    const items = order?.items || []
-    // Check for items that are:
-    // 1. In 'waiting' status (just sent to kitchen/bar)
-    // 2. Belong to the specified department
-    return items.some(
-      (item: any) => item.status === 'waiting' && (item.department || 'kitchen') === department
-    )
   }
 
   /**

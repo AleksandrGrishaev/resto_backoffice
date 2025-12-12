@@ -1,9 +1,14 @@
 // src/stores/kitchen/kitchenService.ts
 // Kitchen Service - Read-only operations + item status updates
+// Updated for order_items table architecture (Migration 053-054)
 
 import { supabase } from '@/supabase/client'
-import { fromSupabase as orderFromSupabase } from '@/stores/pos/orders/supabaseMappers'
-import type { PosOrder, OrderStatus, ItemStatus } from '@/stores/pos/types'
+import {
+  fromSupabase as orderFromSupabase,
+  fromOrderItemRow,
+  buildStatusUpdatePayload
+} from '@/stores/pos/orders/supabaseMappers'
+import type { PosOrder, ItemStatus, PosBillItem } from '@/stores/pos/types'
 import { DebugUtils, extractErrorDetails } from '@/utils'
 import { executeSupabaseMutation } from '@/utils/supabase'
 
@@ -12,33 +17,116 @@ const MODULE_NAME = 'KitchenService'
 /**
  * Get all active kitchen orders (waiting, cooking, ready)
  * Kitchen only sees orders that need preparation
+ *
+ * NEW (Migration 053-054): Loads from 2 tables - orders + order_items
  */
 export async function getActiveKitchenOrders(): Promise<PosOrder[]> {
   try {
-    const { data, error } = await supabase
+    // Step 1: Get orders with kitchen statuses
+    const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
       .select('*')
       .in('status', ['waiting', 'cooking', 'ready'])
       .order('created_at', { ascending: true })
 
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load kitchen orders', { error })
+    if (ordersError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load kitchen orders', { error: ordersError })
       return []
     }
 
-    const orders = data.map(orderFromSupabase)
+    if (!ordersData || ordersData.length === 0) {
+      DebugUtils.debug(MODULE_NAME, 'No active kitchen orders')
+      return []
+    }
+
+    // Step 2: Get items for these orders
+    const orderIds = ordersData.map(o => o.id)
+    const { data: itemsData, error: itemsError } = await supabase
+      .from('order_items')
+      .select('*')
+      .in('order_id', orderIds)
+      .in('status', ['waiting', 'cooking', 'ready']) // Only kitchen items
+
+    if (itemsError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load kitchen items', { error: itemsError })
+      return []
+    }
+
+    // Step 3: Convert to app format
+    const items = (itemsData || []).map(fromOrderItemRow)
+
+    // Step 4: Assemble orders with items
+    const orders = ordersData.map(order =>
+      orderFromSupabase(
+        order,
+        items.filter(i => {
+          // Find bill_id from item's billId
+          const orderBills = (order.bills as any[]) || []
+          return orderBills.some((b: any) => b.id === i.billId)
+        })
+      )
+    )
 
     DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded from Supabase', {
       count: orders.length,
       waiting: orders.filter(o => o.status === 'waiting').length,
       cooking: orders.filter(o => o.status === 'cooking').length,
-      ready: orders.filter(o => o.status === 'ready').length
+      ready: orders.filter(o => o.status === 'ready').length,
+      totalItems: items.length
     })
 
     return orders
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Exception loading kitchen orders', { error })
     return []
+  }
+}
+
+/**
+ * Get single order by ID with items
+ * Used when a new item arrives for an order not in local state
+ */
+export async function getOrderById(orderId: string): Promise<PosOrder | null> {
+  try {
+    // Get order
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .single()
+
+    if (orderError || !orderData) {
+      DebugUtils.error(MODULE_NAME, 'Order not found', { orderId, error: orderError })
+      return null
+    }
+
+    // Get items for this order (kitchen items only)
+    const { data: itemsData, error: itemsError } = await supabase
+      .from('order_items')
+      .select('*')
+      .eq('order_id', orderId)
+      .in('status', ['waiting', 'cooking', 'ready'])
+
+    if (itemsError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load items for order', {
+        orderId,
+        error: itemsError
+      })
+      return null
+    }
+
+    const items = (itemsData || []).map(fromOrderItemRow)
+    const order = orderFromSupabase(orderData, items)
+
+    DebugUtils.debug(MODULE_NAME, 'Order loaded by ID', {
+      orderNumber: order.orderNumber,
+      itemCount: items.length
+    })
+
+    return order
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Exception getting order by ID', { orderId, error })
+    return null
   }
 }
 
@@ -66,11 +154,11 @@ export function calculateOrderStatus(
 }
 
 /**
- * Update item status in order
- * Kitchen updates individual items (not full order)
+ * Update item status in order_items table (NEW: Migration 053-054)
+ * Kitchen updates individual items directly
  *
- * @param orderId - Order UUID
- * @param itemId - Item UUID (from flattened items array)
+ * @param orderId - Order UUID (for reference)
+ * @param itemId - Item UUID in order_items table
  * @param newStatus - New status (waiting, cooking, ready)
  */
 export async function updateItemStatus(
@@ -79,47 +167,14 @@ export async function updateItemStatus(
   newStatus: 'waiting' | 'cooking' | 'ready'
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // 1. Get order from Supabase
-    const { data: order, error: fetchError } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('id', orderId)
-      .single()
+    // Build update payload with appropriate timestamp
+    const payload = buildStatusUpdatePayload(newStatus)
 
-    if (fetchError || !order) {
-      DebugUtils.error(MODULE_NAME, 'Order not found', { orderId, error: fetchError })
-      return { success: false, error: 'Order not found' }
-    }
-
-    // 2. Update item status in JSONB array
-    const items = order.items || []
-    const itemIndex = items.findIndex((i: any) => i.id === itemId)
-
-    if (itemIndex === -1) {
-      DebugUtils.error(MODULE_NAME, 'Item not found in order', { orderId, itemId })
-      return { success: false, error: 'Item not found' }
-    }
-
-    // Update item status
-    items[itemIndex].status = newStatus
-    items[itemIndex].updatedAt = new Date().toISOString()
-
-    // Set timestamps
-    if (newStatus === 'cooking' && !items[itemIndex].sentToKitchenAt) {
-      items[itemIndex].sentToKitchenAt = new Date().toISOString()
-    }
-    if (newStatus === 'ready') {
-      items[itemIndex].preparedAt = new Date().toISOString()
-    }
-
-    // 3. Update order in Supabase
+    // Update item directly in order_items table
     const { error: updateError } = await supabase
-      .from('orders')
-      .update({
-        items,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', orderId)
+      .from('order_items')
+      .update(payload)
+      .eq('id', itemId)
 
     if (updateError) {
       DebugUtils.error(MODULE_NAME, 'Failed to update item status', {
@@ -132,10 +187,12 @@ export async function updateItemStatus(
     }
 
     DebugUtils.info(MODULE_NAME, 'Item status updated', {
-      orderId: order.order_number,
       itemId,
       newStatus
     })
+
+    // Auto-update order status based on all items
+    await checkAndUpdateOrderStatus(orderId)
 
     return { success: true }
   } catch (error) {
@@ -146,26 +203,44 @@ export async function updateItemStatus(
 }
 
 /**
- * Auto-update order status based on items
+ * Auto-update order status based on items (NEW: Migration 053-054)
  * Called after each item status change
  *
- * Calculates order status from items and updates if changed
+ * Calculates order status from order_items and updates if changed
  */
 export async function checkAndUpdateOrderStatus(orderId: string): Promise<void> {
   try {
-    const { data: order, error } = await supabase
+    // Get order
+    const { data: order, error: orderError } = await supabase
       .from('orders')
       .select('*')
       .eq('id', orderId)
       .single()
 
-    if (error || !order) {
-      DebugUtils.error(MODULE_NAME, 'Order not found for status update', { orderId, error })
+    if (orderError || !order) {
+      DebugUtils.error(MODULE_NAME, 'Order not found for status update', {
+        orderId,
+        error: orderError
+      })
       return
     }
 
-    const items = order.items || []
-    const calculatedStatus = calculateOrderStatus(items)
+    // Get all items for this order
+    const { data: items, error: itemsError } = await supabase
+      .from('order_items')
+      .select('status')
+      .eq('order_id', orderId)
+
+    if (itemsError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load items for status calculation', {
+        orderId,
+        error: itemsError
+      })
+      return
+    }
+
+    const itemStatuses = (items || []).map(i => ({ status: i.status as ItemStatus }))
+    const calculatedStatus = calculateOrderStatus(itemStatuses)
 
     // Update order status if changed
     if (calculatedStatus !== order.status) {
@@ -192,7 +267,7 @@ export async function checkAndUpdateOrderStatus(orderId: string): Promise<void> 
           orderNumber: order.order_number,
           oldStatus: order.status,
           newStatus: calculatedStatus,
-          itemsCount: items.length
+          itemsCount: items?.length || 0
         })
       } catch (updateError) {
         DebugUtils.error(MODULE_NAME, 'Failed to auto-update order status', {
@@ -210,6 +285,7 @@ export async function checkAndUpdateOrderStatus(orderId: string): Promise<void> 
 
 export const kitchenService = {
   getActiveKitchenOrders,
+  getOrderById,
   updateItemStatus,
   checkAndUpdateOrderStatus,
   calculateOrderStatus

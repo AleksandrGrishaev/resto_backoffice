@@ -115,9 +115,105 @@ export type Database = {
           }
         ]
       }
+      order_items: {
+        Row: {
+          id: string
+          order_id: string
+          bill_id: string
+          bill_number: string | null
+          menu_item_id: string
+          menu_item_name: string
+          variant_id: string | null
+          variant_name: string | null
+          quantity: number
+          unit_price: number
+          modifiers_total: number | null
+          total_price: number
+          selected_modifiers: Json | null
+          discounts: Json | null
+          status: string
+          department: string | null
+          payment_status: string | null
+          paid_by_payment_ids: string[] | null
+          kitchen_notes: string | null
+          draft_at: string | null
+          sent_to_kitchen_at: string | null
+          cooking_started_at: string | null
+          ready_at: string | null
+          served_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          bill_id: string
+          bill_number?: string | null
+          menu_item_id: string
+          menu_item_name: string
+          variant_id?: string | null
+          variant_name?: string | null
+          quantity?: number
+          unit_price: number
+          modifiers_total?: number | null
+          total_price: number
+          selected_modifiers?: Json | null
+          discounts?: Json | null
+          status?: string
+          department?: string | null
+          payment_status?: string | null
+          paid_by_payment_ids?: string[] | null
+          kitchen_notes?: string | null
+          draft_at?: string | null
+          sent_to_kitchen_at?: string | null
+          cooking_started_at?: string | null
+          ready_at?: string | null
+          served_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          bill_id?: string
+          bill_number?: string | null
+          menu_item_id?: string
+          menu_item_name?: string
+          variant_id?: string | null
+          variant_name?: string | null
+          quantity?: number
+          unit_price?: number
+          modifiers_total?: number | null
+          total_price?: number
+          selected_modifiers?: Json | null
+          discounts?: Json | null
+          status?: string
+          department?: string | null
+          payment_status?: string | null
+          paid_by_payment_ids?: string[] | null
+          kitchen_notes?: string | null
+          draft_at?: string | null
+          sent_to_kitchen_at?: string | null
+          cooking_started_at?: string | null
+          ready_at?: string | null
+          served_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'order_items_order_id_fkey'
+            columns: ['order_id']
+            isOneToOne: false
+            referencedRelation: 'orders'
+            referencedColumns: ['id']
+          }
+        ]
+      }
       orders: {
         Row: {
           actual_ready_time: string | null
+          bills: Json | null
           created_at: string
           created_by: string | null
           customer_name: string | null
@@ -126,7 +222,6 @@ export type Database = {
           estimated_ready_time: string | null
           final_amount: number | null
           id: string
-          items: Json
           notes: string | null
           order_number: string
           paid_amount: number | null
@@ -148,6 +243,7 @@ export type Database = {
         }
         Insert: {
           actual_ready_time?: string | null
+          bills?: Json | null
           created_at?: string
           created_by?: string | null
           customer_name?: string | null
@@ -156,7 +252,6 @@ export type Database = {
           estimated_ready_time?: string | null
           final_amount?: number | null
           id?: string
-          items?: Json
           notes?: string | null
           order_number: string
           paid_amount?: number | null
@@ -178,6 +273,7 @@ export type Database = {
         }
         Update: {
           actual_ready_time?: string | null
+          bills?: Json | null
           created_at?: string
           created_by?: string | null
           customer_name?: string | null
@@ -186,7 +282,6 @@ export type Database = {
           estimated_ready_time?: string | null
           final_amount?: number | null
           id?: string
-          items?: Json
           notes?: string | null
           order_number?: string
           paid_amount?: number | null
@@ -706,6 +801,11 @@ export type SupabaseMenuItemUpdate = TablesUpdate<'menu_items'>
 export type SupabaseOrder = Tables<'orders'>
 export type SupabaseOrderInsert = TablesInsert<'orders'>
 export type SupabaseOrderUpdate = TablesUpdate<'orders'>
+
+// Order Items types (Migration 053)
+export type SupabaseOrderItem = Tables<'order_items'>
+export type SupabaseOrderItemInsert = TablesInsert<'order_items'>
+export type SupabaseOrderItemUpdate = TablesUpdate<'order_items'>
 
 // Payments types
 export type SupabasePayment = Tables<'payments'>

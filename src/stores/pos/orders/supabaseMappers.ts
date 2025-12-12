@@ -1,249 +1,91 @@
 // src/stores/pos/orders/supabaseMappers.ts - Supabase data mappers for orders
+// Updated for order_items table architecture (Migration 053-054)
 
 import type { PosOrder, PosBill, PosBillItem } from '../types'
-import type { Database } from '@/supabase/types'
+import type {
+  SupabaseOrder,
+  SupabaseOrderInsert,
+  SupabaseOrderUpdate,
+  SupabaseOrderItem,
+  SupabaseOrderItemInsert,
+  SupabaseOrderItemUpdate
+} from '@/supabase/types'
 
-type SupabaseOrder = Database['public']['Tables']['orders']['Row']
-type SupabaseOrderInsert = Database['public']['Tables']['orders']['Insert']
-type SupabaseOrderUpdate = Database['public']['Tables']['orders']['Update']
+// =====================================================
+// BILL METADATA TYPE (stored in orders.bills JSONB)
+// =====================================================
 
 /**
- * Flattened item structure for Supabase JSONB storage
- * Includes both item data and bill metadata for reconstruction
+ * Bill metadata stored in orders.bills JSONB (without items)
+ * Items are stored in separate order_items table
  */
-interface FlattenedItem {
-  // Item data
+interface BillMetadata {
   id: string
-  billId: string
-  menuItemId: string
-  menuItemName: string
-  variantId?: string
-  variantName?: string
-  quantity: number
-  unitPrice: number
-  totalPrice: number
-
-  // Modifiers (both systems for backward compatibility)
-  modifications: Array<{
-    id: string
-    name: string
-    price: number
-  }>
-  selectedModifiers?: Array<{
-    id: string
-    name: string
-    price: number
-    type?: string
-  }>
-  modifiersTotal?: number
-
-  // Discounts
-  discounts: Array<{
-    id: string
-    type: 'percentage' | 'fixed'
-    value: number
-    reason: string
-    appliedBy: string
-    appliedAt: string
-  }>
-
-  // Status
-  status: string
-  paymentStatus: string
-
-  // Kitchen
-  kitchenNotes?: string
-  sentToKitchenAt?: string
-  preparedAt?: string
-  department?: 'kitchen' | 'bar' // Which department should prepare this
-
-  // Payment links
-  paidByPaymentIds?: string[]
-
-  // Bill metadata (CRITICAL for reconstruction!)
-  bill_id: string
-  bill_name: string
-  bill_number: string
-  bill_status: string
-  bill_notes?: string
-  bill_subtotal: number
-  bill_discountAmount: number
-  bill_discountReason?: string // ✅ FIX: Store discount reason
-  bill_taxAmount: number
-  bill_total: number
-  bill_paymentStatus: string
-  bill_paidAmount: number
-
-  // Timestamps
+  billNumber: string
+  orderId: string
+  name: string
+  status: 'draft' | 'active' | 'closed' | 'cancelled'
+  subtotal: number
+  discountAmount: number
+  discountReason?: string
+  discountType?: 'percentage' | 'fixed'
+  taxAmount: number
+  total: number
+  paymentStatus: 'unpaid' | 'partial' | 'paid'
+  paidAmount: number
+  notes?: string
   createdAt: string
   updatedAt: string
 }
 
-/**
- * Flatten bills hierarchy into a single array of items with bill metadata
- * Order → Bills[] → Items[] becomes Items[] with embedded bill data
- */
-export function flattenBillsToItems(order: PosOrder): FlattenedItem[] {
-  return order.bills.flatMap(bill =>
-    bill.items.map(
-      (item): FlattenedItem => ({
-        // Item data
-        id: item.id,
-        billId: item.billId,
-        menuItemId: item.menuItemId,
-        menuItemName: item.menuItemName,
-        variantId: item.variantId,
-        variantName: item.variantName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-
-        // Modifiers (handle both systems!)
-        modifications: item.modifications || [],
-        selectedModifiers: item.selectedModifiers || [],
-        modifiersTotal: item.modifiersTotal || 0,
-
-        // Discounts
-        discounts: item.discounts || [],
-
-        // Status
-        status: item.status,
-        paymentStatus: item.paymentStatus,
-
-        // Kitchen
-        kitchenNotes: item.kitchenNotes,
-        sentToKitchenAt: item.sentToKitchenAt,
-        preparedAt: item.preparedAt,
-        department: item.department || 'kitchen', // Default to kitchen
-
-        // Payment links
-        paidByPaymentIds: item.paidByPaymentIds || [],
-
-        // Bill metadata (CRITICAL for reconstruction!)
-        bill_id: bill.id,
-        bill_name: bill.name,
-        bill_number: bill.billNumber,
-        bill_status: bill.status,
-        bill_notes: bill.notes,
-        bill_subtotal: bill.subtotal,
-        bill_discountAmount: bill.discountAmount,
-        bill_discountReason: bill.discountReason, // ✅ FIX: Include discount reason
-        bill_taxAmount: bill.taxAmount,
-        bill_total: bill.total,
-        bill_paymentStatus: bill.paymentStatus,
-        bill_paidAmount: bill.paidAmount,
-
-        // Timestamps
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt
-      })
-    )
-  )
-}
-
-/**
- * Reconstruct bills hierarchy from flattened items array
- * Items[] with embedded bill data becomes Order → Bills[] → Items[]
- */
-export function reconstructBillsFromItems(items: FlattenedItem[]): PosBill[] {
-  const billsMap = new Map<string, PosBill>()
-
-  items.forEach(item => {
-    const billId = item.bill_id
-
-    // Create bill if not exists
-    if (!billsMap.has(billId)) {
-      billsMap.set(billId, {
-        id: billId,
-        billNumber: item.bill_number,
-        orderId: '', // Will be set by caller
-        name: item.bill_name,
-        status: item.bill_status as 'draft' | 'active' | 'closed' | 'cancelled',
-        items: [],
-
-        // Use bill metadata from flattened item
-        subtotal: item.bill_subtotal,
-        discountAmount: item.bill_discountAmount,
-        discountReason: item.bill_discountReason, // ✅ FIX: Restore discount reason
-        taxAmount: item.bill_taxAmount,
-        total: item.bill_total,
-        paymentStatus: item.bill_paymentStatus as 'unpaid' | 'partial' | 'paid',
-        paidAmount: item.bill_paidAmount,
-
-        notes: item.bill_notes,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt
-      })
-    }
-
-    // Add item to bill
-    const bill = billsMap.get(billId)!
-    const billItem: PosBillItem = {
-      id: item.id,
-      billId: item.billId,
-      menuItemId: item.menuItemId,
-      menuItemName: item.menuItemName,
-      variantId: item.variantId,
-      variantName: item.variantName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice,
-
-      // Modifiers
-      modifications: item.modifications || [],
-      selectedModifiers: item.selectedModifiers,
-      modifiersTotal: item.modifiersTotal,
-
-      // Discounts
-      discounts: item.discounts || [],
-
-      // Status
-      status: item.status as 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled',
-      paymentStatus: item.paymentStatus as 'unpaid' | 'paid' | 'refunded',
-
-      // Kitchen
-      kitchenNotes: item.kitchenNotes,
-      sentToKitchenAt: item.sentToKitchenAt,
-      preparedAt: item.preparedAt,
-      department: item.department,
-
-      // Payment links
-      paidByPaymentIds: item.paidByPaymentIds,
-
-      // Timestamps
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt
-    }
-
-    bill.items.push(billItem)
-  })
-
-  return Array.from(billsMap.values())
-}
+// =====================================================
+// ORDER MAPPERS
+// =====================================================
 
 /**
  * Convert PosOrder (app) to Supabase format for INSERT
+ * Note: items are NOT included - they go to order_items table separately
  */
 export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
+  // Convert bills to metadata (without items)
+  const billsMetadata: BillMetadata[] = order.bills.map(bill => ({
+    id: bill.id,
+    billNumber: bill.billNumber,
+    orderId: bill.orderId,
+    name: bill.name,
+    status: bill.status,
+    subtotal: bill.subtotal,
+    discountAmount: bill.discountAmount,
+    discountReason: bill.discountReason,
+    discountType: bill.discountType,
+    taxAmount: bill.taxAmount,
+    total: bill.total,
+    paymentStatus: bill.paymentStatus,
+    paidAmount: bill.paidAmount,
+    notes: bill.notes,
+    createdAt: bill.createdAt,
+    updatedAt: bill.updatedAt
+  }))
+
   return {
     // Identity
     id: order.id,
     order_number: order.orderNumber,
 
     // Type & Status
-    type: order.type, // 'dine_in' | 'takeaway' | 'delivery'
-    status: order.status, // 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | etc.
-    payment_status: order.paymentStatus, // 'unpaid' | 'partial' | 'paid' | 'refunded'
+    type: order.type,
+    status: order.status,
+    payment_status: order.paymentStatus,
 
     // Links
     table_id: order.tableId || null,
     shift_id: null, // TODO: Add shiftId to PosOrder type
     customer_name: order.customerName || null,
 
-    // Flattened bills/items → JSONB array
-    items: flattenBillsToItems(order) as any,
+    // Bills metadata (without items)
+    bills: billsMetadata as any,
 
-    // Financial data (from Migration 003)
+    // Financial data
     total_amount: order.totalAmount,
     discount_amount: order.discountAmount,
     tax_amount: order.taxAmount,
@@ -285,25 +127,52 @@ export function toSupabaseUpdate(order: PosOrder): SupabaseOrderUpdate {
   const insert = toSupabaseInsert(order)
   return {
     ...insert,
-    // Don't update created_at on updates
     created_at: undefined,
-    // Supabase has updated_at trigger, so we don't need to set it
     updated_at: order.updatedAt
   }
 }
 
 /**
  * Convert Supabase order to PosOrder (app)
+ * Note: items must be loaded separately from order_items table
+ *
+ * @param supabaseOrder - Order row from Supabase
+ * @param items - Items loaded from order_items table (optional, can be added later)
  */
-export function fromSupabase(supabaseOrder: SupabaseOrder): PosOrder {
-  // Reconstruct bills hierarchy from flattened items
-  const flattenedItems = supabaseOrder.items as any as FlattenedItem[]
-  const bills = reconstructBillsFromItems(flattenedItems || [])
+export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]): PosOrder {
+  // Parse bills metadata from JSONB
+  const billsMetadata = (supabaseOrder.bills as any as BillMetadata[]) || []
 
-  // Set orderId for each bill
-  bills.forEach(bill => {
-    bill.orderId = supabaseOrder.id
-  })
+  // Group items by bill_id if items provided
+  const itemsByBillId = new Map<string, PosBillItem[]>()
+  if (items) {
+    items.forEach(item => {
+      const existing = itemsByBillId.get(item.billId) || []
+      existing.push(item)
+      itemsByBillId.set(item.billId, existing)
+    })
+  }
+
+  // Reconstruct bills with items
+  const bills: PosBill[] = billsMetadata.map(meta => ({
+    id: meta.id,
+    billNumber: meta.billNumber,
+    orderId: supabaseOrder.id,
+    name: meta.name,
+    status: meta.status,
+    items: itemsByBillId.get(meta.id) || [],
+    subtotal: meta.subtotal,
+    discountAmount: meta.discountAmount,
+    discountReason: meta.discountReason,
+    discountType: meta.discountType,
+    taxAmount: meta.taxAmount,
+    total: meta.total,
+    paymentStatus: meta.paymentStatus,
+    paidAmount: meta.paidAmount,
+    notes: meta.notes,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt
+  }))
 
   return {
     // Identity
@@ -325,10 +194,10 @@ export function fromSupabase(supabaseOrder: SupabaseOrder): PosOrder {
 
     // Links
     tableId: supabaseOrder.table_id || undefined,
-    customerId: undefined, // Not in Supabase yet
+    customerId: undefined,
     customerName: supabaseOrder.customer_name || undefined,
 
-    // Reconstructed bills hierarchy
+    // Reconstructed bills with items
     bills,
 
     // Financial data
@@ -359,4 +228,205 @@ export function fromSupabase(supabaseOrder: SupabaseOrder): PosOrder {
     createdAt: supabaseOrder.created_at,
     updatedAt: supabaseOrder.updated_at
   }
+}
+
+// =====================================================
+// ORDER ITEM MAPPERS (for order_items table)
+// =====================================================
+
+/**
+ * Convert PosBillItem (app) to Supabase format for INSERT into order_items table
+ *
+ * @param item - Bill item from app
+ * @param orderId - Parent order ID
+ * @param billNumber - Bill number for kitchen display (denormalized)
+ */
+export function toOrderItemInsert(
+  item: PosBillItem,
+  orderId: string,
+  billNumber: string
+): SupabaseOrderItemInsert {
+  return {
+    id: item.id,
+    order_id: orderId,
+    bill_id: item.billId,
+    bill_number: billNumber,
+
+    // Menu item
+    menu_item_id: item.menuItemId,
+    menu_item_name: item.menuItemName,
+    variant_id: item.variantId || null,
+    variant_name: item.variantName || null,
+
+    // Pricing
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+    modifiers_total: item.modifiersTotal || 0,
+    total_price: item.totalPrice,
+
+    // Modifiers & discounts (JSONB)
+    selected_modifiers: (item.selectedModifiers || []) as any,
+    discounts: (item.discounts || []) as any,
+
+    // Status & department
+    status: item.status,
+    department: item.department || 'kitchen',
+
+    // Payment
+    payment_status: item.paymentStatus,
+    paid_by_payment_ids: item.paidByPaymentIds || [],
+
+    // Kitchen
+    kitchen_notes: item.kitchenNotes || null,
+
+    // KPI timestamps
+    draft_at: item.createdAt,
+    sent_to_kitchen_at: item.sentToKitchenAt || null,
+    cooking_started_at: null, // Set when status changes to 'cooking'
+    ready_at: item.preparedAt || null,
+    served_at: null, // Set when status changes to 'served'
+
+    // Audit
+    created_at: item.createdAt,
+    updated_at: item.updatedAt
+  }
+}
+
+/**
+ * Convert PosBillItem (app) to Supabase format for UPDATE
+ */
+export function toOrderItemUpdate(item: PosBillItem): SupabaseOrderItemUpdate {
+  return {
+    // Pricing (can change)
+    quantity: item.quantity,
+    modifiers_total: item.modifiersTotal || 0,
+    total_price: item.totalPrice,
+
+    // Modifiers & discounts (can change)
+    selected_modifiers: (item.selectedModifiers || []) as any,
+    discounts: (item.discounts || []) as any,
+
+    // Status & department
+    status: item.status,
+    department: item.department || 'kitchen',
+
+    // Payment
+    payment_status: item.paymentStatus,
+    paid_by_payment_ids: item.paidByPaymentIds || [],
+
+    // Kitchen
+    kitchen_notes: item.kitchenNotes || null,
+
+    // KPI timestamps (updated by status change)
+    sent_to_kitchen_at: item.sentToKitchenAt || null,
+    ready_at: item.preparedAt || null,
+
+    // Audit
+    updated_at: new Date().toISOString()
+  }
+}
+
+/**
+ * Convert Supabase order_items row to PosBillItem (app)
+ */
+export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
+  return {
+    id: row.id,
+    billId: row.bill_id,
+
+    // Menu item
+    menuItemId: row.menu_item_id,
+    menuItemName: row.menu_item_name,
+    variantId: row.variant_id || undefined,
+    variantName: row.variant_name || undefined,
+
+    // Pricing
+    quantity: row.quantity,
+    unitPrice: row.unit_price,
+    modifiersTotal: row.modifiers_total || 0,
+    totalPrice: row.total_price,
+
+    // Modifiers (new system)
+    selectedModifiers: (row.selected_modifiers as any) || [],
+    modifications: [], // Legacy, not used in new system
+
+    // Discounts
+    discounts: (row.discounts as any) || [],
+
+    // Status
+    status: row.status as 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled',
+    paymentStatus: (row.payment_status || 'unpaid') as 'unpaid' | 'paid' | 'refunded',
+
+    // Department
+    department: (row.department || 'kitchen') as 'kitchen' | 'bar',
+
+    // Kitchen
+    kitchenNotes: row.kitchen_notes || undefined,
+    sentToKitchenAt: row.sent_to_kitchen_at || undefined,
+    preparedAt: row.ready_at || undefined,
+
+    // Payment links
+    paidByPaymentIds: row.paid_by_payment_ids || [],
+
+    // Timestamps
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+// =====================================================
+// HELPER FUNCTIONS
+// =====================================================
+
+/**
+ * Extract all items from order bills for batch INSERT
+ */
+export function extractItemsForInsert(order: PosOrder): SupabaseOrderItemInsert[] {
+  const items: SupabaseOrderItemInsert[] = []
+
+  order.bills.forEach(bill => {
+    bill.items.forEach(item => {
+      items.push(toOrderItemInsert(item, order.id, bill.billNumber))
+    })
+  })
+
+  return items
+}
+
+/**
+ * Get timestamp field name for status change
+ * Used to update KPI timestamps when item status changes
+ */
+export function getTimestampFieldForStatus(
+  status: string
+): 'sent_to_kitchen_at' | 'cooking_started_at' | 'ready_at' | 'served_at' | null {
+  switch (status) {
+    case 'waiting':
+      return 'sent_to_kitchen_at'
+    case 'cooking':
+      return 'cooking_started_at'
+    case 'ready':
+      return 'ready_at'
+    case 'served':
+      return 'served_at'
+    default:
+      return null
+  }
+}
+
+/**
+ * Build status update payload with timestamp
+ */
+export function buildStatusUpdatePayload(newStatus: string): SupabaseOrderItemUpdate {
+  const timestampField = getTimestampFieldForStatus(newStatus)
+  const payload: SupabaseOrderItemUpdate = {
+    status: newStatus,
+    updated_at: new Date().toISOString()
+  }
+
+  if (timestampField) {
+    payload[timestampField] = new Date().toISOString()
+  }
+
+  return payload
 }
