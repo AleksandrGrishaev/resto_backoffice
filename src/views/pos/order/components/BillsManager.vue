@@ -223,6 +223,7 @@ const handleApplyDiscount = (itemId: string): void => {
 
 .items-list {
   padding: var(--spacing-md);
+  padding-bottom: 80px; /* Extra space for last item visibility when scrolling */
   flex: 1;
   overflow-y: auto;
   max-height: calc(100vh - 400px); /* Ограничиваем высоту для scroll */

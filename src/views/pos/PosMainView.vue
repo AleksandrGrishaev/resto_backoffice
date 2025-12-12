@@ -126,13 +126,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router' // ✅ ADDED for navigation
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosStore } from '@/stores/pos'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { useAuthStore } from '@/stores/auth' // 🆕 ДОБАВЛЕН
+import { useWakeLock } from '@/core/pwa'
 import { DebugUtils } from '@/utils'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 import type { PosOrder } from '@/stores/pos/types'
@@ -153,6 +154,9 @@ const ordersStore = usePosOrdersStore()
 const posStore = usePosStore()
 const shiftsStore = useShiftsStore()
 const authStore = useAuthStore() // 🆕 ДОБАВЛЕН
+
+// PWA: Wake Lock to keep screen on
+const wakeLock = useWakeLock()
 
 // =============================================
 // REFS
@@ -546,11 +550,24 @@ const handleAddItemToOrder = async (
 // LIFECYCLE
 // =============================================
 
-onMounted(() => {
+onMounted(async () => {
   DebugUtils.debug(MODULE_NAME, 'PosMainView mounted')
 
   // 🔄 ИЗМЕНЕНО: Вызываем новый метод инициализации
   initializePOS()
+
+  // PWA: Request wake lock to keep screen on during POS operations
+  const wakeLockAcquired = await wakeLock.request()
+  if (wakeLockAcquired) {
+    DebugUtils.info(MODULE_NAME, 'Screen will stay on during POS session')
+  }
+})
+
+onUnmounted(async () => {
+  DebugUtils.debug(MODULE_NAME, 'PosMainView unmounting')
+
+  // PWA: Release wake lock when leaving POS
+  await wakeLock.release()
 })
 
 // =============================================

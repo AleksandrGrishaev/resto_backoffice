@@ -91,6 +91,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useKitchenStore } from '@/stores/kitchen'
 import { useAuthStore } from '@/stores/auth'
+import { useWakeLock, useOrderAlertService } from '@/core/pwa'
 import { DebugUtils } from '@/utils'
 import KitchenLayout from '@/layouts/KitchenLayout.vue'
 import KitchenSidebar from './components/KitchenSidebar.vue'
@@ -105,6 +106,12 @@ const MODULE_NAME = 'KitchenMainView'
 
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
+
+// PWA: Wake Lock to keep screen on
+const wakeLock = useWakeLock()
+
+// PWA: Order alerts with sound
+const orderAlerts = useOrderAlertService()
 
 // =============================================
 // STATE
@@ -214,14 +221,38 @@ const handleDepartmentChange = (department: 'all' | 'kitchen' | 'bar'): void => 
 
 onMounted(async () => {
   await initializeKitchen()
+
+  // PWA: Request wake lock to keep screen on during kitchen operations
+  const wakeLockAcquired = await wakeLock.request()
+  if (wakeLockAcquired) {
+    DebugUtils.info(MODULE_NAME, 'Screen will stay on during kitchen session')
+  }
+
+  // PWA: Initialize order alerts with sound for new orders
+  await orderAlerts.initialize({
+    soundEnabled: true,
+    soundUrl: '/sounds/new-order.mp3',
+    soundVolume: 0.8,
+    notificationEnabled: true,
+    vibrationEnabled: true
+  })
+  orderAlerts.subscribe()
+  DebugUtils.info(MODULE_NAME, 'Order alerts initialized - will play sound on new orders')
 })
 
 /**
  * Cleanup on unmount
  * Unsubscribe from Realtime to prevent memory leaks
  */
-onUnmounted(() => {
+onUnmounted(async () => {
   DebugUtils.debug(MODULE_NAME, 'Component unmounting, cleaning up Kitchen store')
+
+  // PWA: Release wake lock
+  await wakeLock.release()
+
+  // PWA: Unsubscribe from order alerts
+  await orderAlerts.unsubscribe()
+
   kitchenStore.cleanup()
 })
 </script>
