@@ -112,12 +112,13 @@
               class="item-row"
               :class="{
                 selected: isItemSelected(item.id),
-                'item-paid': item.paymentStatus === 'paid'
+                'item-paid': item.paymentStatus === 'paid',
+                'item-cancelled': item.status === 'cancelled'
               }"
             >
               <v-checkbox
                 :model-value="isItemSelected(item.id)"
-                :disabled="item.paymentStatus === 'paid'"
+                :disabled="item.paymentStatus === 'paid' || item.status === 'cancelled'"
                 density="comfortable"
                 hide-details
                 @update:model-value="val => handleSelect(item.id, val)"
@@ -191,12 +192,30 @@
 
                   <v-divider />
 
-                  <v-list-item class="text-error" @click="handleCancel(item.id)">
-                    <template #prepend>
-                      <v-icon size="small" color="error">mdi-cancel</v-icon>
+                  <v-tooltip :disabled="canCancelItem(item)" location="left">
+                    <template #activator="{ props: tooltipProps }">
+                      <div v-bind="tooltipProps">
+                        <v-list-item
+                          :disabled="!canCancelItem(item)"
+                          :class="canCancelItem(item) ? 'text-error' : ''"
+                          @click="canCancelItem(item) ? handleCancel(item.id) : null"
+                        >
+                          <template #prepend>
+                            <v-icon size="small" :color="canCancelItem(item) ? 'error' : 'grey'">
+                              mdi-cancel
+                            </v-icon>
+                          </template>
+                          <v-list-item-title>
+                            Cancel Item
+                            <span v-if="!canCancelItem(item)" class="text-caption text-grey">
+                              ({{ getCancelBlockReason(item) }})
+                            </span>
+                          </v-list-item-title>
+                        </v-list-item>
+                      </div>
                     </template>
-                    <v-list-item-title>Cancel Item</v-list-item-title>
-                  </v-list-item>
+                    {{ getCancelBlockReason(item) }}
+                  </v-tooltip>
                 </v-list>
               </v-menu>
             </div>
@@ -210,12 +229,15 @@
         class="single-item"
         :class="{
           selected: isItemSelected(group.items[0].id),
-          'item-paid': group.items[0].paymentStatus === 'paid'
+          'item-paid': group.items[0].paymentStatus === 'paid',
+          'item-cancelled': group.items[0].status === 'cancelled'
         }"
       >
         <v-checkbox
           :model-value="isItemSelected(group.items[0].id)"
-          :disabled="group.items[0].paymentStatus === 'paid'"
+          :disabled="
+            group.items[0].paymentStatus === 'paid' || group.items[0].status === 'cancelled'
+          "
           density="comfortable"
           hide-details
           @update:model-value="val => handleSelect(group.items[0].id, val)"
@@ -338,12 +360,33 @@
 
             <v-divider />
 
-            <v-list-item class="text-error" @click="handleCancel(group.items[0].id)">
-              <template #prepend>
-                <v-icon size="small" color="error">mdi-cancel</v-icon>
+            <v-tooltip :disabled="canCancelItem(group.items[0])" location="left">
+              <template #activator="{ props: tooltipProps }">
+                <div v-bind="tooltipProps">
+                  <v-list-item
+                    :disabled="!canCancelItem(group.items[0])"
+                    :class="canCancelItem(group.items[0]) ? 'text-error' : ''"
+                    @click="canCancelItem(group.items[0]) ? handleCancel(group.items[0].id) : null"
+                  >
+                    <template #prepend>
+                      <v-icon
+                        size="small"
+                        :color="canCancelItem(group.items[0]) ? 'error' : 'grey'"
+                      >
+                        mdi-cancel
+                      </v-icon>
+                    </template>
+                    <v-list-item-title>
+                      Cancel Item
+                      <span v-if="!canCancelItem(group.items[0])" class="text-caption text-grey">
+                        ({{ getCancelBlockReason(group.items[0]) }})
+                      </span>
+                    </v-list-item-title>
+                  </v-list-item>
+                </div>
               </template>
-              <v-list-item-title>Cancel Item</v-list-item-title>
-            </v-list-item>
+              {{ getCancelBlockReason(group.items[0]) }}
+            </v-tooltip>
           </v-list>
         </v-menu>
       </div>
@@ -527,6 +570,21 @@ const handleSelectGroup = (group: GroupedBillItems, selected: boolean): void => 
 
 const handleCancel = (itemId: string): void => {
   emit('cancel', itemId)
+}
+
+// Cancellation validation helpers
+const canCancelItem = (item: PosBillItem): boolean => {
+  if (item.status === 'served') return false
+  if (item.status === 'cancelled') return false
+  if (item.paymentStatus === 'paid') return false
+  return true
+}
+
+const getCancelBlockReason = (item: PosBillItem): string => {
+  if (item.status === 'served') return 'Served'
+  if (item.status === 'cancelled') return 'Already cancelled'
+  if (item.paymentStatus === 'paid') return 'Paid'
+  return ''
 }
 
 const handleAddNote = (itemId: string): void => {
@@ -891,6 +949,33 @@ const calculateGroupOriginalPrice = (group: GroupedBillItems): number => {
 
 .item-paid :deep(.v-selection-control--disabled) {
   opacity: 0.4;
+}
+
+/* =============================================
+   CANCELLED ITEMS VISUAL INDICATOR
+   ============================================= */
+
+.item-cancelled {
+  opacity: 0.5;
+  background: rgba(var(--v-theme-error), 0.05) !important;
+  border-left: 3px solid rgba(var(--v-theme-error), 0.3);
+}
+
+.item-cancelled:hover {
+  background: rgba(var(--v-theme-error), 0.08) !important;
+}
+
+.item-cancelled .item-name-single,
+.item-cancelled .item-name-full {
+  text-decoration: line-through;
+  color: rgb(var(--v-theme-on-surface-variant));
+}
+
+.item-cancelled .item-price,
+.item-cancelled .item-price-inline,
+.item-cancelled .group-price-inline {
+  text-decoration: line-through;
+  color: rgb(var(--v-theme-on-surface-variant));
 }
 
 /* =============================================

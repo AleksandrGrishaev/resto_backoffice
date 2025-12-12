@@ -19,6 +19,13 @@ export {
   determineStatusByOrderType
 } from './composables/useOrderCalculations'
 
+export { useCancellation } from './composables/useCancellation'
+export type {
+  CancellationRequest,
+  CancellationResult,
+  WriteOffCallbacks
+} from './composables/useCancellation'
+
 export function useOrdersComposables() {
   /**
    * Проверить можно ли добавить товар в заказ

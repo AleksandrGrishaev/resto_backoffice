@@ -445,6 +445,129 @@ export class OrdersService {
   }
 
   /**
+   * Cancel item (mark as cancelled, don't delete)
+   * For items that have been sent to kitchen (waiting, cooking, ready)
+   */
+  async cancelItem(
+    itemId: string,
+    cancellationData: {
+      reason: string
+      notes?: string
+      cancelledBy: string
+      writeOffOperationId?: string
+    }
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const cancelledAt = TimeUtils.getCurrentLocalISO()
+
+      // Try Supabase first
+      if (this.isSupabaseAvailable()) {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase
+              .from('order_items')
+              .update({
+                status: 'cancelled',
+                cancelled_at: cancelledAt,
+                cancelled_by: cancellationData.cancelledBy,
+                cancellation_reason: cancellationData.reason,
+                cancellation_notes: cancellationData.notes || null,
+                write_off_operation_id: cancellationData.writeOffOperationId || null,
+                updated_at: cancelledAt
+              })
+              .eq('id', itemId)
+            if (error) throw error
+          }, 'OrdersService.cancelItem')
+
+          console.log('✅ Item cancelled in Supabase:', itemId)
+        } catch (error) {
+          console.error('❌ Supabase cancel failed:', extractErrorDetails(error))
+        }
+      }
+
+      // Always update localStorage
+      const allItems = this.getAllStoredItems()
+      const itemIndex = allItems.findIndex(item => item.id === itemId)
+
+      if (itemIndex === -1) {
+        throw new Error('Item not found')
+      }
+
+      allItems[itemIndex] = {
+        ...allItems[itemIndex],
+        status: 'cancelled',
+        cancelledAt,
+        cancelledBy: cancellationData.cancelledBy,
+        cancellationReason: cancellationData.reason,
+        cancellationNotes: cancellationData.notes,
+        writeOffOperationId: cancellationData.writeOffOperationId,
+        updatedAt: cancelledAt
+      }
+
+      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to cancel item'
+      }
+    }
+  }
+
+  /**
+   * Update write-off operation ID on a cancelled item (called after background write-off completes)
+   */
+  async updateItemWriteOffId(
+    itemId: string,
+    writeOffOperationId: string
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const updatedAt = TimeUtils.getCurrentLocalISO()
+
+      // Try Supabase first
+      if (this.isSupabaseAvailable()) {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase
+              .from('order_items')
+              .update({
+                write_off_operation_id: writeOffOperationId,
+                updated_at: updatedAt
+              })
+              .eq('id', itemId)
+            if (error) throw error
+          }, 'OrdersService.updateItemWriteOffId')
+
+          console.log('✅ Item write-off ID updated in Supabase:', itemId)
+        } catch (error) {
+          console.error('❌ Supabase update write-off ID failed:', extractErrorDetails(error))
+        }
+      }
+
+      // Always update localStorage
+      const allItems = this.getAllStoredItems()
+      const itemIndex = allItems.findIndex(item => item.id === itemId)
+
+      if (itemIndex !== -1) {
+        allItems[itemIndex] = {
+          ...allItems[itemIndex],
+          writeOffOperationId,
+          updatedAt
+        }
+        localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      }
+
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update write-off ID'
+      }
+    }
+  }
+
+  /**
    * Send order to kitchen
    * NEW: UPDATE order_items SET status='waiting' with KPI timestamp
    */

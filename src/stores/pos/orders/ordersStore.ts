@@ -504,6 +504,135 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Cancel item (mark as cancelled, keep in order for audit trail)
+   * For items that have been sent to kitchen (waiting, cooking, ready)
+   */
+  async function cancelItem(
+    orderId: string,
+    billId: string,
+    itemId: string,
+    cancellationData: {
+      reason: string
+      notes?: string
+      cancelledBy: string
+      writeOffOperationId?: string
+    }
+  ): Promise<ServiceResponse<void>> {
+    try {
+      // Check for active shift
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+
+      if (!shiftsStore.currentShift || shiftsStore.currentShift.status !== 'active') {
+        return {
+          success: false,
+          error: 'Cannot cancel items: No active shift. Please start a shift first.'
+        }
+      }
+
+      // Find the item to validate its status
+      const order = orders.value.find(o => o.id === orderId)
+      if (!order) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      const bill = order.bills.find(b => b.id === billId)
+      if (!bill) {
+        return { success: false, error: 'Bill not found' }
+      }
+
+      const item = bill.items.find(i => i.id === itemId)
+      if (!item) {
+        return { success: false, error: 'Item not found' }
+      }
+
+      // Validate item status - cannot cancel served or paid items
+      if (item.status === 'served') {
+        return { success: false, error: 'Cannot cancel served items' }
+      }
+
+      if (item.paymentStatus === 'paid') {
+        return { success: false, error: 'Cannot cancel paid items' }
+      }
+
+      // Call service to update in DB
+      const response = await ordersService.cancelItem(itemId, cancellationData)
+
+      if (response.success) {
+        // Update local state
+        const orderIndex = orders.value.findIndex(o => o.id === orderId)
+        if (orderIndex !== -1) {
+          const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
+          if (billIndex !== -1) {
+            const itemIndex = orders.value[orderIndex].bills[billIndex].items.findIndex(
+              i => i.id === itemId
+            )
+            if (itemIndex !== -1) {
+              const cancelledAt = new Date().toISOString()
+              orders.value[orderIndex].bills[billIndex].items[itemIndex] = {
+                ...orders.value[orderIndex].bills[billIndex].items[itemIndex],
+                status: 'cancelled',
+                cancelledAt,
+                cancelledBy: cancellationData.cancelledBy,
+                cancellationReason: cancellationData.reason as any,
+                cancellationNotes: cancellationData.notes,
+                writeOffOperationId: cancellationData.writeOffOperationId
+              }
+
+              // Recalculate order totals
+              await recalculateOrderTotals(orderId)
+            }
+          }
+        }
+      }
+
+      return response
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to cancel item'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * Update write-off operation ID on a cancelled item (called after background write-off completes)
+   */
+  async function updateItemWriteOffId(
+    orderId: string,
+    billId: string,
+    itemId: string,
+    writeOffOperationId: string
+  ): Promise<ServiceResponse<void>> {
+    try {
+      // Update in database
+      const response = await ordersService.updateItemWriteOffId(itemId, writeOffOperationId)
+
+      if (response.success) {
+        // Update local state
+        const orderIndex = orders.value.findIndex(o => o.id === orderId)
+        if (orderIndex !== -1) {
+          const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
+          if (billIndex !== -1) {
+            const itemIndex = orders.value[orderIndex].bills[billIndex].items.findIndex(
+              i => i.id === itemId
+            )
+            if (itemIndex !== -1) {
+              orders.value[orderIndex].bills[billIndex].items[itemIndex].writeOffOperationId =
+                writeOffOperationId
+            }
+          }
+        }
+      }
+
+      return response
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update write-off ID'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Отправить заказ на кухню - ОБНОВЛЕНО для поддержки конкретных элементов
    */
   async function sendOrderToKitchen(
@@ -1265,6 +1394,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     updateItemQuantity,
     updateItemNote,
     removeItemFromBill,
+    cancelItem,
+    updateItemWriteOffId,
     sendOrderToKitchen,
     closeOrder,
     releaseTable,

@@ -40,6 +40,23 @@ export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded'
 export type ItemStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
 export type ItemPaymentStatus = 'unpaid' | 'paid' | 'refunded'
 
+// Cancellation reasons for order items
+export type CancellationReason =
+  | 'kitchen_mistake'
+  | 'customer_refused'
+  | 'wrong_order'
+  | 'out_of_stock'
+  | 'other'
+
+// Cancellation reason options for UI
+export const CANCELLATION_REASON_OPTIONS = [
+  { value: 'kitchen_mistake' as CancellationReason, label: 'Kitchen Mistake', color: 'error' },
+  { value: 'customer_refused' as CancellationReason, label: 'Customer Refused', color: 'warning' },
+  { value: 'wrong_order' as CancellationReason, label: 'Wrong Order', color: 'info' },
+  { value: 'out_of_stock' as CancellationReason, label: 'Out of Stock', color: 'secondary' },
+  { value: 'other' as CancellationReason, label: 'Other', color: 'grey' }
+] as const
+
 // ДОБАВИТЬ: Типы статусов для разных типов заказов
 export type DineInStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
 export type TakeawayStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'collected' | 'cancelled'
@@ -188,6 +205,13 @@ export interface PosBillItem extends BaseEntity {
 
   // Payment link (Sprint 1: Payment Architecture)
   paidByPaymentIds?: string[] // Links to payments that paid this item
+
+  // Cancellation tracking (Sprint: Item Cancellation)
+  cancelledAt?: string // When item was cancelled
+  cancelledBy?: string // User who cancelled the item
+  cancellationReason?: CancellationReason // Reason for cancellation
+  cancellationNotes?: string // Additional notes
+  writeOffOperationId?: string // Link to write-off if ingredients were written off
 }
 
 export interface PosItemDiscount {

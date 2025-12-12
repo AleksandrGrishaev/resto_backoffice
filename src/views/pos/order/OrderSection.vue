@@ -144,6 +144,14 @@
       @success="handleDiscountSuccess"
       @cancel="handleDiscountCancel"
     />
+
+    <!-- Item Cancel Dialog -->
+    <BillItemCancelDialog
+      v-model="showCancelDialog"
+      :cancellation-item="cancellationItem"
+      @confirm="handleConfirmCancel"
+      @cancel="handleCancelDialogClose"
+    />
   </div>
 </template>
 
@@ -166,6 +174,7 @@ import OrderActions from './components/OrderActions.vue'
 import PaymentDialog from '../payment/PaymentDialog.vue'
 import AddNoteDialog from './dialogs/AddNoteDialog.vue'
 import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
+import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
 
 const MODULE_NAME = 'OrderSection'
 
@@ -241,6 +250,25 @@ const discountingItem = computed(() => {
       .flatMap(bill => bill.items)
       .find(i => i.id === discountingItemId.value) || null
   )
+})
+
+// Item Cancel Dialog State
+const showCancelDialog = ref(false)
+const cancellingItemId = ref<string | null>(null)
+const cancellationItem = computed(() => {
+  if (!cancellingItemId.value || !currentOrder.value || !activeBillId.value) return null
+
+  const item = currentOrder.value.bills
+    .flatMap(bill => bill.items)
+    .find(i => i.id === cancellingItemId.value)
+
+  if (!item) return null
+
+  return {
+    item,
+    orderId: currentOrder.value.id,
+    billId: activeBillId.value
+  }
 })
 
 // Computed - Main Data
@@ -489,22 +517,66 @@ const handleModifyItem = async (itemId: string): Promise<void> => {
   }
 }
 
-const handleCancelItem = async (itemId: string): Promise<void> => {
+const handleCancelItem = (itemId: string): void => {
   if (!currentOrder.value || !activeBillId.value) return
 
+  // Open cancel dialog
+  cancellingItemId.value = itemId
+  showCancelDialog.value = true
+}
+
+const handleConfirmCancel = async (data: {
+  itemId: string
+  reason?: string
+  notes?: string
+  shouldWriteOff: boolean
+}): Promise<void> => {
+  if (!currentOrder.value || !activeBillId.value || !cancellationItem.value) return
+
+  // Close dialog immediately for better UX
+  const orderId = currentOrder.value.id
+  const item = cancellationItem.value.item
+  const itemName = item.menuItemName
+  handleCancelDialogClose()
+
   try {
-    const result = await ordersStore.removeItemFromBill(
-      currentOrder.value.id,
-      activeBillId.value,
-      itemId
+    // Import and use the cancellation composable
+    const { useCancellation } = await import('@/stores/pos/orders/composables')
+    const { cancelItem } = useCancellation()
+
+    const result = await cancelItem(
+      orderId,
+      activeBillId.value!,
+      item,
+      item.status === 'draft'
+        ? undefined
+        : {
+            reason: data.reason as any,
+            notes: data.notes,
+            shouldWriteOff: data.shouldWriteOff
+          },
+      // Write-off callbacks (runs in background)
+      data.shouldWriteOff
+        ? {
+            onSuccess: (operationId: string) => {
+              showSuccess(`Write-off completed for ${itemName}`)
+              console.log('✅ Background write-off created:', operationId)
+            },
+            onError: (error: string) => {
+              showError(`Write-off failed: ${error}`)
+              console.error('❌ Background write-off failed:', error)
+            }
+          }
+        : undefined
     )
 
     if (result.success) {
-      showSuccess('Item cancelled successfully')
+      const message = item.status === 'draft' ? 'Item removed' : 'Item cancelled'
+      showSuccess(result.writeOffPending ? `${message} (write-off in progress...)` : message)
       hasUnsavedChanges.value = true
 
-      // Пересчитываем итоги заказа
-      await ordersStore.recalculateOrderTotals(currentOrder.value.id)
+      // Recalculate order totals
+      await ordersStore.recalculateOrderTotals(orderId)
     } else {
       throw new Error(result.error || 'Failed to cancel item')
     }
@@ -512,6 +584,11 @@ const handleCancelItem = async (itemId: string): Promise<void> => {
     const message = err instanceof Error ? err.message : 'Failed to cancel item'
     showError(message)
   }
+}
+
+const handleCancelDialogClose = (): void => {
+  showCancelDialog.value = false
+  cancellingItemId.value = null
 }
 
 const handleAddNote = async (itemId: string): Promise<void> => {
