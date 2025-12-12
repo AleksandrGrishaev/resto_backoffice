@@ -86,6 +86,11 @@ interface EnvironmentConfig {
     maxRetries: number // Max retry attempts on failure
     retryDelay: number // Base delay between retries (exponential backoff)
   }
+
+  // UI Scaling
+  ui: {
+    autoScale: boolean // Auto-scale UI on smaller screens
+  }
 }
 
 /**
@@ -174,6 +179,11 @@ function createEnvironmentConfig(): EnvironmentConfig {
       timeout: Number(import.meta.env.VITE_SUPABASE_TIMEOUT) || 15000, // 15 seconds default
       maxRetries: Number(import.meta.env.VITE_SUPABASE_MAX_RETRIES) || 3, // 3 retries default
       retryDelay: Number(import.meta.env.VITE_SUPABASE_RETRY_DELAY) || 1000 // 1 second default
+    },
+
+    // UI Scaling
+    ui: {
+      autoScale: import.meta.env.VITE_UI_AUTO_SCALE === 'true'
     }
   }
 }

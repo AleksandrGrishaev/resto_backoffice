@@ -102,6 +102,12 @@ $z-index: (
 // CSS ПЕРЕМЕННЫЕ (для использования в компонентах)
 // =============================================
 :root {
+  // =============================================
+  // UI SCALE FACTOR
+  // =============================================
+  // Default scale (1 = 100%), JS will override based on viewport
+  --ui-scale: 1;
+
   // Цвета
   @each $name, $value in $color {
     --color-#{$name}: #{$value};
@@ -110,20 +116,21 @@ $z-index: (
     --black-#{$name}: #{$value};
   }
 
-  // Отступы
+  // Отступы (scaled)
   @each $name, $value in $spacing {
-    --spacing-#{$name}: #{$value};
+    --spacing-#{$name}: calc(var(--ui-scale) * #{$value});
   }
 
-  // Размеры текста
+  // Размеры текста (scaled)
   @each $name, $value in $font-size {
-    --text-#{$name}: #{$value};
+    --text-#{$name}: calc(var(--ui-scale) * #{$value});
   }
 
-  // Touch размеры
-  @each $name, $value in $touch {
-    --touch-#{$name}: #{$value};
-  }
+  // Touch размеры (scaled with minimum for accessibility)
+  --touch-min: max(36px, calc(var(--ui-scale) * 44px));
+  --touch-button: max(40px, calc(var(--ui-scale) * 48px));
+  --touch-card: max(52px, calc(var(--ui-scale) * 64px));
+  --touch-input: max(44px, calc(var(--ui-scale) * 56px));
 
   // POS Layout
   @each $name, $value in $pos-layout {
@@ -143,6 +150,25 @@ $z-index: (
   // Брейкпоинты (для JavaScript)
   @each $name, $value in $breakpoints {
     --bp-#{$name}: #{$value};
+  }
+}
+
+// =============================================
+// CSS-ONLY FALLBACK FOR UI SCALING
+// =============================================
+// These media queries provide fallback scaling before JS loads
+// JS will override --ui-scale dynamically when enabled
+// data-scale-disabled attribute disables CSS scaling (set by JS when ENV.ui.autoScale=false)
+
+@media (max-width: #{map.get($breakpoints, 'tablet') - 1px}) {
+  :root:not([data-scale-disabled]) {
+    --ui-scale: 0.9; // 90% at tablet and below
+  }
+}
+
+@media (max-width: #{map.get($breakpoints, 'mobile') - 1px}) {
+  :root:not([data-scale-disabled]) {
+    --ui-scale: 0.85; // 85% at mobile
   }
 }
 

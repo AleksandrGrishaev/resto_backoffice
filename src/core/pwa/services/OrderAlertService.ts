@@ -75,7 +75,7 @@ class OrderAlertService {
       return
     }
 
-    // Subscribe to pos_orders table changes
+    // Subscribe to orders table changes
     this.channel = supabase
       .channel('order-alerts')
       .on(
@@ -83,7 +83,7 @@ class OrderAlertService {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'pos_orders'
+          table: 'orders'
         },
         payload => this.handleNewOrder(payload)
       )
@@ -92,7 +92,7 @@ class OrderAlertService {
         {
           event: 'UPDATE',
           schema: 'public',
-          table: 'pos_orders',
+          table: 'orders',
           filter: 'status=eq.ready'
         },
         payload => this.handleOrderReady(payload)

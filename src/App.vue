@@ -23,11 +23,20 @@ import { useRouter } from 'vue-router'
 import { usePosStore } from '@/stores/pos'
 import { useKitchenStore } from '@/stores/kitchen'
 import { getConnectionHealthMonitor } from '@/core/connection/ConnectionHealthMonitor'
+import { useUIScale } from '@/composables/useUIScale'
 
 const MODULE_NAME = 'App'
 const authStore = useAuthStore()
 const router = useRouter()
 const appInitializer = useAppInitializer()
+
+// Initialize UI scaling (responsive UI based on viewport)
+const { scale: uiScale, isEnabled: uiScaleEnabled, currentBreakpoint } = useUIScale()
+DebugUtils.info(MODULE_NAME, '📐 UI Scale initialized', {
+  scale: uiScale.value,
+  enabled: uiScaleEnabled.value,
+  breakpoint: currentBreakpoint.value
+})
 
 // ✅ FIX: Initialize connection health monitor
 console.log('🔍 [App.vue] Initializing connection health monitor...')

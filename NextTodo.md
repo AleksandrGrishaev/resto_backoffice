@@ -176,6 +176,55 @@
 
 ---
 
-**Last Updated**: 2025-12-11
-**Total Progress**: 7/7 sprints completed (100%)
-**Status**: FEATURE COMPLETE - Ready for production deployment
+---
+
+## Sprint 8: UI Auto-Scaling [COMPLETED]
+
+**Feature**: Adaptive UI Scaling Based on Viewport
+**Completed**: 2025-12-12
+**Plan**: `/Users/peaker/.claude/plans/peaceful-forging-naur.md`
+
+### Goal
+
+Make UI proportionally smaller on smaller screens (85-90% scaling), controlled by environment variable.
+
+### Scale Levels
+
+- Desktop (>1024px): 100%
+- Tablet (768-1024px): 90%
+- Mobile (<768px): 85%
+
+### Tasks
+
+- [x] Add `VITE_UI_AUTO_SCALE=true` to `.env.development` + `.env.production`
+- [x] Add `ui.autoScale` config to `src/config/environment.ts`
+- [x] Add `--ui-scale` CSS variable and media queries to `src/styles/variables.scss`
+- [x] Update CSS variable generation to use scale factor
+- [x] Create `src/composables/useUIScale.ts` composable
+- [x] Initialize `useUIScale()` in `src/App.vue`
+- [x] Build verification passed
+
+### Files Modified
+
+| File                            | Action                                              |
+| ------------------------------- | --------------------------------------------------- |
+| `.env.development`              | Added `VITE_UI_AUTO_SCALE=true`                     |
+| `.env.production`               | Added `VITE_UI_AUTO_SCALE=true`                     |
+| `src/config/environment.ts`     | Added `ui.autoScale` config                         |
+| `src/styles/variables.scss`     | Added `--ui-scale`, scaled spacing/typography/touch |
+| `src/composables/useUIScale.ts` | **Created** new composable                          |
+| `src/App.vue`                   | Initialized `useUIScale()`                          |
+
+### Key Implementation Details
+
+1. **CSS Variable `--ui-scale`**: Applied to all spacing, typography, and touch targets
+2. **Touch Target Minimums**: Preserved accessibility with `max(36px, calc(--ui-scale * 44px))`
+3. **CSS Fallback**: Media queries provide scaling before JS loads
+4. **JS Control**: `useUIScale()` composable for dynamic control
+5. **ENV Control**: `VITE_UI_AUTO_SCALE=false` disables scaling
+
+---
+
+**Last Updated**: 2025-12-12
+**Total Progress**: Kitchen Prep + UI Scaling complete
+**Status**: FEATURE COMPLETE

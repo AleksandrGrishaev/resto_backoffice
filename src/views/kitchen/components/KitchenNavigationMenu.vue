@@ -30,13 +30,15 @@ import StatusChip from '@/components/atoms/indicators/StatusChip.vue'
 import { useKitchenStore } from '@/stores/kitchen'
 import { useAuthStore } from '@/stores/auth'
 import { useKitchenOrders } from '@/stores/kitchen/composables'
+import { useOrderAlertService } from '@/core/pwa'
 
 const MODULE_NAME = 'KitchenNavigationMenu'
 
 // Kitchen action IDs
 const KITCHEN_ACTIONS = {
   LOGOUT: 'logout',
-  REFRESH: 'refresh'
+  REFRESH: 'refresh',
+  ACTIVATE_SOUND: 'activate_sound'
 } as const
 
 // =============================================
@@ -49,6 +51,7 @@ const router = useRouter()
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
 const { ordersStats } = useKitchenOrders()
+const orderAlerts = useOrderAlertService()
 
 // =============================================
 // STATE
@@ -56,6 +59,7 @@ const { ordersStats } = useKitchenOrders()
 
 const loading = ref(false)
 const refreshing = ref(false)
+const soundActivated = ref(false)
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -91,6 +95,13 @@ const menuSections = computed(() => [
     title: 'ACTIONS',
     actions: [
       {
+        id: KITCHEN_ACTIONS.ACTIVATE_SOUND,
+        icon: soundActivated.value ? 'mdi-volume-high' : 'mdi-volume-off',
+        label: soundActivated.value ? 'Sound Active' : 'Activate Sound',
+        disabled: loading.value,
+        color: soundActivated.value ? ('success' as const) : undefined
+      },
+      {
         id: KITCHEN_ACTIONS.REFRESH,
         icon: 'mdi-refresh',
         label: 'Refresh Orders',
@@ -124,6 +135,10 @@ const handleAction = async (actionId: string) => {
 
   try {
     switch (actionId) {
+      case KITCHEN_ACTIONS.ACTIVATE_SOUND:
+        await handleActivateSound()
+        break
+
       case KITCHEN_ACTIONS.REFRESH:
         await handleRefresh()
         break
@@ -137,6 +152,17 @@ const handleAction = async (actionId: string) => {
     }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Action failed', { actionId, error })
+  }
+}
+
+const handleActivateSound = async () => {
+  try {
+    // Play test sound to unlock browser autoplay
+    await orderAlerts.testAlert()
+    soundActivated.value = true
+    DebugUtils.info(MODULE_NAME, 'Sound activated - browser autoplay unlocked')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to activate sound', error)
   }
 }
 
