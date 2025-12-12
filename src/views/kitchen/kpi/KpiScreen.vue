@@ -1,22 +1,17 @@
 <!-- src/views/kitchen/kpi/KpiScreen.vue -->
 <template>
   <div class="kpi-screen">
-    <!-- Header -->
-    <div class="kpi-header">
-      <h1 class="kpi-title">Kitchen KPI</h1>
-      <div class="kpi-header-actions">
-        <v-btn-toggle v-model="activeTab" mandatory density="compact" color="primary">
-          <v-btn value="time" size="small">
-            <v-icon start size="18">mdi-clock-outline</v-icon>
-            Time
-          </v-btn>
-          <v-btn value="foodcost" size="small" disabled>
-            <v-icon start size="18">mdi-currency-usd</v-icon>
-            Food Cost
-          </v-btn>
-        </v-btn-toggle>
-      </div>
-    </div>
+    <!-- KPI Type Tabs -->
+    <v-tabs v-model="activeTab" color="primary" class="kpi-tabs">
+      <v-tab value="time">
+        <v-icon icon="mdi-clock-outline" class="mr-2" />
+        Time
+      </v-tab>
+      <v-tab value="foodcost">
+        <v-icon icon="mdi-currency-usd" class="mr-2" />
+        Food Cost
+      </v-tab>
+    </v-tabs>
 
     <!-- Dashboard Cards -->
     <div class="kpi-cards">
@@ -26,7 +21,13 @@
         :department="effectiveDepartment"
         :loading="loading.today"
       />
-      <FoodCostKpiCard v-else-if="activeTab === 'foodcost'" />
+      <FoodCostKpiCard
+        v-else-if="activeTab === 'foodcost'"
+        :metrics="foodCostKpi"
+        :department="effectiveDepartment"
+        :loading="foodCostLoading"
+        :error="foodCostError"
+      />
     </div>
 
     <!-- Detail Tabs -->
@@ -39,14 +40,19 @@
         :department="effectiveDepartment"
         @load-more="handleLoadMore"
       />
-      <FoodCostKpiTab v-else-if="activeTab === 'foodcost'" />
+      <FoodCostKpiTab
+        v-else-if="activeTab === 'foodcost'"
+        :metrics="foodCostKpi"
+        :department="effectiveDepartment"
+        :loading="foodCostLoading"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useTimeKpi } from '@/stores/kitchenKpi/composables'
+import { useTimeKpi, useFoodCostKpi } from '@/stores/kitchenKpi/composables'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
 import TimeKpiCard from './components/TimeKpiCard.vue'
@@ -130,20 +136,49 @@ const departmentRef = computed(() => effectiveDepartment.value)
 const { currentRealtimeKpi, historicalDetail, loading, loadHistoricalDetail, loadTodayKpi } =
   useTimeKpi(departmentRef)
 
+// Food Cost KPI composable
+const {
+  monthKpi: foodCostKpi,
+  loading: foodCostLoading,
+  error: foodCostError,
+  loadMonthKpi
+} = useFoodCostKpi(departmentRef)
+
 // =============================================
 // METHODS
 // =============================================
 
 /**
- * Load initial data
+ * Load Time KPI data
  */
-const loadData = async () => {
-  DebugUtils.debug(MODULE_NAME, 'Loading KPI data', { department: props.selectedDepartment })
+const loadTimeKpiData = async () => {
+  DebugUtils.debug(MODULE_NAME, 'Loading Time KPI data', { department: props.selectedDepartment })
   await Promise.all([
     loadTodayKpi(apiDepartment.value),
     loadHistoricalDetail(undefined, undefined, apiDepartment.value, DETAIL_LIMIT, 0)
   ])
   detailOffset.value = DETAIL_LIMIT
+}
+
+/**
+ * Load Food Cost KPI data
+ */
+const loadFoodCostData = async () => {
+  DebugUtils.debug(MODULE_NAME, 'Loading Food Cost KPI data', {
+    department: props.selectedDepartment
+  })
+  await loadMonthKpi()
+}
+
+/**
+ * Load data based on active tab
+ */
+const loadData = async () => {
+  if (activeTab.value === 'time') {
+    await loadTimeKpiData()
+  } else if (activeTab.value === 'foodcost') {
+    await loadFoodCostData()
+  }
 }
 
 /**
@@ -173,6 +208,11 @@ watch(
   }
 )
 
+// Load data when switching tabs
+watch(activeTab, () => {
+  loadData()
+})
+
 // =============================================
 // LIFECYCLE
 // =============================================
@@ -192,23 +232,8 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-.kpi-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-}
-
-.kpi-title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  margin: 0;
-}
-
-.kpi-header-actions {
-  display: flex;
-  gap: var(--spacing-sm);
+.kpi-tabs {
+  flex-shrink: 0;
 }
 
 .kpi-cards {
@@ -229,15 +254,6 @@ onMounted(() => {
   .kpi-screen {
     padding: var(--spacing-sm);
     gap: var(--spacing-sm);
-  }
-
-  .kpi-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .kpi-title {
-    font-size: var(--text-lg);
   }
 }
 </style>

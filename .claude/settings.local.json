@@ -54,7 +54,8 @@
       "Bash(find:*)",
       "Bash(git restore:*)",
       "Bash(git pull:*)",
-      "SlashCommand(/db-clear)"
+      "SlashCommand(/db-clear)",
+      "Bash(ls:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -204,6 +204,16 @@ const routes: RouteRecordRaw[] = [
           allowedRoles: ['admin']
         }
       },
+      // === KPI Settings ===
+      {
+        path: 'kpi-settings',
+        name: 'kpi-settings',
+        component: () => import('@/views/backoffice/settings/KpiSettingsView.vue'),
+        meta: {
+          title: 'KPI Settings',
+          allowedRoles: ['admin']
+        }
+      },
       // === Sales Analytics (Sprint 2) ===
       {
         path: 'sales',
@@ -345,11 +355,19 @@ const routes: RouteRecordRaw[] = [
             }
           },
           {
-            path: 'kitchen-time-kpi',
-            name: 'salary-kitchen-time-kpi',
+            path: 'time-kpi',
+            name: 'salary-time-kpi',
             component: () => import('@/views/backoffice/salary/kpi/KitchenTimeKpiView.vue'),
             meta: {
-              title: 'Kitchen Time KPI'
+              title: 'Time KPI'
+            }
+          },
+          {
+            path: 'food-cost-kpi',
+            name: 'salary-food-cost-kpi',
+            component: () => import('@/views/backoffice/salary/kpi/FoodCostKpiView.vue'),
+            meta: {
+              title: 'Food Cost KPI'
             }
           }
         ]

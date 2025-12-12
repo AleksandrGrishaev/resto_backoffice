@@ -314,3 +314,70 @@ export interface TimeKpiTodayRow {
   items_exceeded_plan: number
   exceeded_rate: number
 }
+
+// ===============================================
+// FOOD COST KPI Types
+// ===============================================
+
+/**
+ * Target COGS percentages by department
+ */
+export const FOOD_COST_TARGETS = {
+  kitchen: 30, // 30%
+  bar: 25 // 25%
+} as const
+
+/**
+ * Variance threshold for color coding
+ * - 0 to warning: OK (green)
+ * - warning to error: Warning (yellow)
+ * - above error: Error (red)
+ */
+export const VARIANCE_THRESHOLD = {
+  warning: 5, // Show warning if over target by up to 5%
+  error: 5 // Show error if over target by more than 5%
+} as const
+
+/**
+ * Food Cost KPI metrics for a month
+ */
+export interface FoodCostKpiMetrics {
+  period: {
+    startDate: string // ISO date
+    endDate: string // ISO date
+  }
+  revenue: number
+  revenueByDepartment: {
+    kitchen: number
+    bar: number
+  }
+  salesCOGS: number // Cost from sales transactions (FIFO)
+  spoilage: number // Write-offs (spoiled, damaged, expired)
+  shortage: number // Inventory shortage (actual < expected)
+  surplus: number // Inventory surplus (actual > expected)
+  totalCOGS: number // salesCOGS + spoilage + shortage - surplus
+  totalCOGSPercent: number // (totalCOGS / revenue) * 100
+  targetPercent: number // Target percentage for the department
+  variance: number // totalCOGSPercent - targetPercent
+}
+
+/**
+ * Database row type for Food Cost KPI (RPC result)
+ */
+export interface FoodCostKpiRow {
+  period: {
+    startDate: string
+    endDate: string
+  }
+  revenue: number
+  revenueByDepartment: {
+    kitchen: number
+    bar: number
+  }
+  salesCOGS: number
+  spoilage: number
+  shortage: number
+  surplus: number
+  totalCOGS: number
+  totalCOGSPercent: number
+}

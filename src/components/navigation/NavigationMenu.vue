@@ -232,15 +232,27 @@
           </v-list-item>
         </template>
 
-        <!-- Kitchen Time KPI -->
+        <!-- Time KPI -->
         <v-list-item
-          to="/salary/kitchen-time-kpi"
+          to="/salary/time-kpi"
           prepend-icon="mdi-clock-fast"
           color="primary"
           class="ps-8"
         >
           <template #title>
-            <span>Kitchen Time KPI</span>
+            <span>Time KPI</span>
+          </template>
+        </v-list-item>
+
+        <!-- Food Cost KPI -->
+        <v-list-item
+          to="/salary/food-cost-kpi"
+          prepend-icon="mdi-currency-usd"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Food Cost KPI</span>
           </template>
         </v-list-item>
       </v-list-group>
@@ -290,6 +302,13 @@
         >
           <template #title>
             <span>Payment</span>
+          </template>
+        </v-list-item>
+
+        <!-- KPI Settings -->
+        <v-list-item to="/kpi-settings" prepend-icon="mdi-target" color="primary" class="ps-8">
+          <template #title>
+            <span>KPI Settings</span>
           </template>
         </v-list-item>
       </v-list-group>
