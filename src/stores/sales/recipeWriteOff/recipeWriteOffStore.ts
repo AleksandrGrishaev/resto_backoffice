@@ -134,7 +134,7 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
       const writeOffData: CreateWriteOffData = {
         department: menuItem.department,
         responsiblePerson: 'system',
-        reason: 'other', // Используем 'other' для автоматических списаний
+        reason: 'sales_consumption', // FIFO списание при продаже - исключается из Spoilage в COGS
         items: writeOffItems.map(item => ({
           itemId: item.itemId,
           itemName: item.itemName, // ✅ Added

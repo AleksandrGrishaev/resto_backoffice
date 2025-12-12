@@ -36,7 +36,7 @@
                 :rules="[rules.required]"
               >
                 <template #item="{ props: itemProps, item }">
-                  <v-list-item v-bind="itemProps">
+                  <v-list-item v-bind="itemProps" :title="undefined" :subtitle="undefined">
                     <template #prepend>
                       <v-icon
                         :color="item.raw.color"

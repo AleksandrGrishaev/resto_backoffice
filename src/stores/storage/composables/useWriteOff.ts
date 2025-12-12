@@ -653,12 +653,18 @@ export function useWriteOff() {
 
   /**
    * Get write-off reason options for UI
+   * Filters out automatic system reasons (production_consumption, sales_consumption)
+   * which are only used by the system for automatic write-offs, not for manual user selection
    */
   const writeOffReasonOptions = computed(() => {
-    return WRITE_OFF_REASON_OPTIONS.map(option => ({
-      ...option,
-      subtitle: option.affectsKPI ? 'Affects KPI metrics' : 'Does not affect KPI'
-    }))
+    const AUTOMATIC_REASONS: WriteOffReason[] = ['production_consumption', 'sales_consumption']
+
+    return WRITE_OFF_REASON_OPTIONS.filter(option => !AUTOMATIC_REASONS.includes(option.value)).map(
+      option => ({
+        ...option,
+        subtitle: option.affectsKPI ? 'Affects KPI metrics' : 'Does not affect KPI'
+      })
+    )
   })
 
   /**

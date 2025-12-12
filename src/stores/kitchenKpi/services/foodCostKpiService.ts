@@ -76,8 +76,10 @@ export async function getFoodCostKpiMonth(
 
     const metrics: FoodCostKpiMetrics = {
       period: {
-        startDate: cogsData.period.startDate,
-        endDate: cogsData.period.endDate
+        // Use locally calculated ISO dates (with time) for proper timezone conversion
+        // SQL function returns only date part without time, causing timezone issues
+        startDate: startDateStr,
+        endDate: endDateStr
       },
       revenue: cogsData.revenue,
       revenueByDepartment: {

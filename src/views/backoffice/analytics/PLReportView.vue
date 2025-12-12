@@ -356,20 +356,7 @@
                       OPERATING EXPENSES (OPEX)
                     </td>
                   </tr>
-                  <tr>
-                    <td class="pl-8">Supplier Payments</td>
-                    <td class="text-right">
-                      {{ formatIDR(report.opex.byCategory.suppliersPayments) }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          report.opex.byCategory.suppliersPayments,
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
+                  <!-- suppliersPayments removed - they are part of COGS -->
                   <tr>
                     <td class="pl-8">Utilities</td>
                     <td class="text-right">{{ formatIDR(report.opex.byCategory.utilities) }}</td>

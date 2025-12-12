@@ -428,6 +428,77 @@ export class TimeUtils {
   }
 
   // =============================================
+  // MONTH UTILITIES (for KPI reports)
+  // =============================================
+
+  /**
+   * Get current year-month in local timezone (Asia/Makassar)
+   * Returns format: YYYY-MM
+   */
+  static getCurrentLocalYearMonth(): string {
+    const now = new Date()
+    const zonedDate = utcToZonedTime(now, TIMEZONE)
+    return format(zonedDate, 'yyyy-MM')
+  }
+
+  /**
+   * Get year-month from a date in local timezone
+   * @param date - Date object or ISO string
+   * Returns format: YYYY-MM
+   */
+  static getLocalYearMonth(date: Date | string): string {
+    const dateObj = typeof date === 'string' ? parseISO(date) : date
+    const zonedDate = utcToZonedTime(dateObj, TIMEZONE)
+    return format(zonedDate, 'yyyy-MM')
+  }
+
+  /**
+   * Format month name from date (respects local timezone)
+   * @param dateString - ISO date string (UTC)
+   * Returns: "December 2025"
+   */
+  static formatMonthName(dateString: string): string {
+    try {
+      const date = parseISO(dateString)
+      const zonedDate = utcToZonedTime(date, TIMEZONE)
+      return format(zonedDate, 'MMMM yyyy')
+    } catch (error) {
+      console.error('Error formatting month name:', error)
+      return 'Invalid date'
+    }
+  }
+
+  /**
+   * Generate last N months for selection dropdowns
+   * @param count - Number of months to generate (default 12)
+   * Returns array of { title: "December 2025", value: "2025-12" }
+   */
+  static getLastMonthsOptions(count: number = 12): Array<{ title: string; value: string }> {
+    const options: Array<{ title: string; value: string }> = []
+    const now = new Date()
+    const zonedNow = utcToZonedTime(now, TIMEZONE)
+
+    for (let i = 0; i < count; i++) {
+      const date = new Date(zonedNow.getFullYear(), zonedNow.getMonth() - i, 1)
+      const value = format(date, 'yyyy-MM')
+      const title = format(date, 'MMMM yyyy')
+      options.push({ title, value })
+    }
+
+    return options
+  }
+
+  /**
+   * Parse year-month string to Date (first day of month, midnight local time)
+   * @param yearMonth - "YYYY-MM" format
+   * Returns Date object for first day of month
+   */
+  static parseYearMonth(yearMonth: string): Date {
+    const [year, month] = yearMonth.split('-').map(Number)
+    return new Date(year, month - 1, 15) // Middle of month to avoid timezone edge cases
+  }
+
+  // =============================================
   // VALIDATION METHODS
   // =============================================
 

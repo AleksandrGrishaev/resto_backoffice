@@ -113,6 +113,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatIDR } from '@/utils/currency'
+import { TimeUtils } from '@/utils'
 import type { FoodCostKpiMetrics } from '@/stores/kitchenKpi/types'
 import { FOOD_COST_TARGETS, VARIANCE_THRESHOLD } from '@/stores/kitchenKpi/types'
 
@@ -148,8 +149,13 @@ const departmentLabel = computed(() => {
 
 const monthName = computed(() => {
   if (!props.metrics) return ''
-  const date = new Date(props.metrics.period.startDate)
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  // Use TimeUtils for timezone-aware month formatting (Asia/Makassar UTC+8)
+  const result = TimeUtils.formatMonthName(props.metrics.period.startDate)
+  console.log('[FoodCostKpiCard] monthName debug:', {
+    startDate: props.metrics.period.startDate,
+    result
+  })
+  return result
 })
 
 const targetPercent = computed(() => {

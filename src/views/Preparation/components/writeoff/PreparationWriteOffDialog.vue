@@ -58,8 +58,8 @@
                 :rules="[rules.required]"
                 @update:model-value="onReasonChange"
               >
-                <template #item="{ props, item }">
-                  <v-list-item v-bind="props">
+                <template #item="{ props: itemProps, item }">
+                  <v-list-item v-bind="itemProps" :title="undefined" :subtitle="undefined">
                     <template #prepend>
                       <v-icon
                         :color="item.raw.color"
@@ -501,9 +501,12 @@ async function handleSubmit() {
 }
 
 function handleCancel() {
+  // Get responsible person name before reset
+  const responsiblePerson = authStore.user?.displayName || authStore.user?.email || ''
+
   formData.value = {
     department: props.department,
-    responsiblePerson: '',
+    responsiblePerson,
     reason: 'other',
     items: [],
     notes: ''
@@ -517,12 +520,17 @@ function handleCancel() {
 watch(
   () => props.modelValue,
   isOpen => {
-    if (isOpen && !formData.value.responsiblePerson) {
+    if (isOpen) {
+      // Set department from props when dialog opens
+      formData.value.department = props.department
+
       // Auto-fill responsible person when dialog opens
-      if (authStore.user?.displayName) {
-        formData.value.responsiblePerson = authStore.user.displayName
-      } else if (authStore.user?.email) {
-        formData.value.responsiblePerson = authStore.user.email
+      if (!formData.value.responsiblePerson) {
+        if (authStore.user?.displayName) {
+          formData.value.responsiblePerson = authStore.user.displayName
+        } else if (authStore.user?.email) {
+          formData.value.responsiblePerson = authStore.user.email
+        }
       }
     }
   }

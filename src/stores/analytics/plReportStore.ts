@@ -194,13 +194,14 @@ export const usePLReportStore = defineStore('plReport', () => {
         count: allTransactions.length
       })
 
-      // Filter OPEX transactions (exclude inventory_adjustment - those are now in COGS)
+      // Filter OPEX transactions (exclude inventory_adjustment and product)
       const opexTransactions = allTransactions.filter(t => {
         if (!t.expenseCategory) return false
         const category = t.expenseCategory.category
-        // ✅ SPRINT 4: Exclude inventory_adjustment - it's now calculated from operations
-        // Only include real expenses (supplier payments, rent, salaries, etc.)
-        return category !== 'inventory_adjustment' && t.type === 'expense'
+        // Exclude:
+        // - inventory_adjustment: calculated from physical counts (in COGS)
+        // - product: supplier payments are part of COGS (Sales COGS in Accrual, Purchases in Cash)
+        return category !== 'inventory_adjustment' && category !== 'product' && t.type === 'expense'
       })
 
       DebugUtils.info(MODULE_NAME, 'OPEX transactions filtered', {
@@ -210,7 +211,7 @@ export const usePLReportStore = defineStore('plReport', () => {
 
       const opex = {
         byCategory: {
-          suppliersPayments: sumByExpenseCategory(opexTransactions, 'product'),
+          // suppliersPayments removed - they are part of COGS (Sales COGS or Purchases)
           utilities: sumByExpenseCategory(opexTransactions, 'utilities'),
           salary: sumByExpenseCategory(opexTransactions, 'salary'),
           rent: sumByExpenseCategory(opexTransactions, 'rent'),

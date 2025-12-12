@@ -89,7 +89,7 @@ export interface PLReport {
   opex: {
     total: number
     byCategory: {
-      suppliersPayments: number // Payments to suppliers (category: 'product')
+      // suppliersPayments removed - they are part of COGS (Sales COGS or Purchases)
       utilities: number
       salary: number
       rent: number

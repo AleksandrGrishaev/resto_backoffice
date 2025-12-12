@@ -24,6 +24,10 @@
           {{ productsNeedingAssignment }}
         </v-chip>
       </v-tab>
+      <v-tab value="writeoff">
+        <v-icon start>mdi-delete-variant</v-icon>
+        Write-off Reasons
+      </v-tab>
     </v-tabs>
 
     <!-- Targets Tab -->
@@ -78,13 +82,15 @@
 
       <v-row class="mt-4">
         <v-col cols="12">
-          <v-btn color="primary" :loading="savingTargets" @click="saveTargets">
+          <v-btn
+            color="primary"
+            :loading="savingTargets"
+            :disabled="loadingSettings"
+            @click="saveTargets"
+          >
             <v-icon start>mdi-content-save</v-icon>
             Save Targets
           </v-btn>
-          <v-chip class="ml-4" variant="tonal" color="info">
-            Currently using hardcoded values. Database storage coming soon.
-          </v-chip>
         </v-col>
       </v-row>
     </div>
@@ -191,6 +197,11 @@
       </v-card>
     </div>
 
+    <!-- Write-off Reasons Tab -->
+    <div v-if="activeTab === 'writeoff'">
+      <WriteOffReasonsSettings />
+    </div>
+
     <!-- Success Snackbar -->
     <v-snackbar v-model="showSuccess" color="success" timeout="3000" location="top">
       <v-icon start>mdi-check-circle</v-icon>
@@ -209,6 +220,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { FOOD_COST_TARGETS } from '@/stores/kitchenKpi/types'
+import { getKPISettings, updateKPISettings } from '@/stores/kitchenKpi/services/kpiSettingsService'
+import WriteOffReasonsSettings from './components/WriteOffReasonsSettings.vue'
 import { DebugUtils } from '@/utils'
 import type { Product } from '@/stores/productsStore/types'
 
@@ -224,7 +237,7 @@ const productsStore = useProductsStore()
 // STATE
 // =============================================
 
-const activeTab = ref<'targets' | 'products'>('targets')
+const activeTab = ref<'targets' | 'products' | 'writeoff'>('targets')
 
 // Targets
 const targets = ref({
@@ -232,6 +245,7 @@ const targets = ref({
   bar: FOOD_COST_TARGETS.bar
 })
 const savingTargets = ref(false)
+const loadingSettings = ref(false)
 
 // Products
 const productSearch = ref('')
@@ -322,13 +336,9 @@ const getKpiDepartment = (product: Product): 'kitchen' | 'bar' => {
 const saveTargets = async () => {
   savingTargets.value = true
   try {
-    // TODO: Save to database when settings table is implemented
-    DebugUtils.info(MODULE_NAME, 'Saving targets', targets.value)
-
-    // For now, just show success (values are hardcoded in types.ts)
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    successMessage.value = 'Targets saved (note: currently using hardcoded values)'
+    await updateKPISettings({ targets: targets.value })
+    DebugUtils.info(MODULE_NAME, 'Targets saved', targets.value)
+    successMessage.value = 'Targets saved successfully'
     showSuccess.value = true
   } catch (error) {
     errorMessage.value = 'Failed to save targets'
@@ -336,6 +346,20 @@ const saveTargets = async () => {
     DebugUtils.error(MODULE_NAME, 'Failed to save targets', { error })
   } finally {
     savingTargets.value = false
+  }
+}
+
+const loadKpiSettings = async () => {
+  loadingSettings.value = true
+  try {
+    const settings = await getKPISettings()
+    targets.value = settings.targets
+    DebugUtils.info(MODULE_NAME, 'Loaded KPI settings', settings)
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load KPI settings, using defaults', { error })
+    // Keep default values from FOOD_COST_TARGETS
+  } finally {
+    loadingSettings.value = false
   }
 }
 
@@ -390,6 +414,7 @@ const loadProducts = async () => {
 // =============================================
 
 onMounted(() => {
+  loadKpiSettings()
   loadProducts()
 })
 </script>

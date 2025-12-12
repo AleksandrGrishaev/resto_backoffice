@@ -85,6 +85,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFoodCostKpi } from '@/stores/kitchenKpi/composables'
+import { TimeUtils } from '@/utils'
 import FoodCostKpiCard from '@/views/kitchen/kpi/components/FoodCostKpiCard.vue'
 import FoodCostKpiTab from '@/views/kitchen/kpi/components/FoodCostKpiTab.vue'
 
@@ -94,21 +95,12 @@ const router = useRouter()
 // STATE
 // =============================================
 
-const selectedMonth = ref(new Date().toISOString().slice(0, 7)) // YYYY-MM format
+// Use TimeUtils for timezone-aware date handling (Asia/Makassar UTC+8)
+const selectedMonth = ref(TimeUtils.getCurrentLocalYearMonth())
 const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>('all')
 
-// Generate last 12 months for selection
-const monthOptions = computed(() => {
-  const options = []
-  const now = new Date()
-  for (let i = 0; i < 12; i++) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const value = date.toISOString().slice(0, 7)
-    const title = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    options.push({ title, value })
-  }
-  return options
-})
+// Generate last 12 months for selection (timezone-aware)
+const monthOptions = computed(() => TimeUtils.getLastMonthsOptions(12))
 
 const departmentOptions = [
   { title: 'All Departments', value: 'all' },
@@ -137,8 +129,7 @@ const { monthKpi, loading, error, loadMonthKpi } = useFoodCostKpi(departmentRef)
 // =============================================
 
 const loadData = async () => {
-  const [year, month] = selectedMonth.value.split('-').map(Number)
-  const date = new Date(year, month - 1, 15) // Middle of month
+  const date = TimeUtils.parseYearMonth(selectedMonth.value)
   await loadMonthKpi(date)
 }
 
