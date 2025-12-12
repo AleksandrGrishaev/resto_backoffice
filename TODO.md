@@ -1,212 +1,171 @@
-# Kitchen App - Todo
+# TODO: Food Cost KPI Implementation
 
-## Current Sprint: Kitchen Time KPI
+## Summary
 
-### Overview
+Implement Food Cost KPI for Kitchen Monitor with monthly COGS statistics:
 
-50;870F8O A8AB5<K >BA;56820=8O 2@5<5=8 ?@83>B>2;5=8O 8 KPI 4;O :CE=8/10@0.
-
-### User Decisions
-
-- **Timer Start**: @8 A>E@0=5=88 bill, :>340 AB0BCA <5=O5BAO =0 `waiting`
-- **Plan Values**: $8:A8@>20==K5 - Kitchen: 15 <8=, Bar: 5 <8=
-- **Storage**: "01;8F0 4;O 8AB>@88 + realtime 4;O A53>4=O
-- **Store**: 0AH8@8BL ACI5AB2CNI89 `kitchenKpi` store
+- Sales COGS (FIFO) - cost of goods sold from sales
+- Spoilage & Losses - write-offs
+- Shortage - inventory adjustment (-)
+- Surplus - inventory adjustment (+)
+- Total COGS = Sales COGS + Spoilage + Shortage - Surplus
 
 ---
 
-## Phase 1: Database & Data Layer
+## Phase 1: Kitchen Monitor Food Cost KPI
 
-### 1.1 Create Migration
+### 1.1 Create Types
 
-- [ ] `src/supabase/migrations/052_create_kitchen_time_kpi_table.sql`
+**File:** `src/stores/kitchenKpi/types.ts`
 
-```sql
-CREATE TABLE IF NOT EXISTS kitchen_time_kpi (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    period_date date NOT NULL,
-    department text NOT NULL DEFAULT 'kitchen',
-    avg_waiting_time_seconds numeric NOT NULL DEFAULT 0,
-    avg_cooking_time_seconds numeric NOT NULL DEFAULT 0,
-    avg_total_time_seconds numeric NOT NULL DEFAULT 0,
-    plan_total_time_seconds numeric NOT NULL DEFAULT 900,
-    items_completed integer NOT NULL DEFAULT 0,
-    items_exceeded_plan integer NOT NULL DEFAULT 0,
-    hourly_breakdown jsonb DEFAULT '[]'::jsonb,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now(),
-    UNIQUE (period_date, department),
-    CHECK (department IN ('kitchen', 'bar'))
-);
-```
+Add `FoodCostKpiMetrics` interface with:
 
-### 1.2 Add `cookingStartedAt` to Types
+- Period (start/end dates)
+- Revenue (total, by department)
+- COGS components (salesCOGS, spoilage, shortage, surplus, totalCOGS)
+- Percentages for each component
+- Target % and variance
 
-- [ ] `src/stores/pos/types.ts` - Add `cookingStartedAt?: string` to PosBillItem
+### 1.2 Create Service
 
-### 1.3 Update Supabase Mappers
+**File:** `src/stores/kitchenKpi/services/foodCostKpiService.ts`
 
-- [ ] `src/stores/pos/orders/supabaseMappers.ts`
-  - Add `cookingStartedAt` to FlattenedItem
-  - Add to `flattenBillsToItems()` and `reconstructBillsFromItems()`
+Function: `getFoodCostKpiMonth(month?: Date, department?: 'kitchen' | 'bar' | null)`
 
-### 1.4 Fix Kitchen Service Timestamps
+- Load sales_transactions for the period
+- Filter by department if specified
+- Calculate salesCOGS from actualCost
+- Load write-offs (spoilage, shortage)
+- Load corrections (surplus)
+- Return FoodCostKpiMetrics
 
-- [ ] `src/stores/kitchen/kitchenService.ts`
-  - Remove incorrect `sentToKitchenAt` setting (already set in POS)
-  - Add `cookingStartedAt` when status � 'cooking'
+### 1.3 Create Composable
 
----
+**File:** `src/stores/kitchenKpi/composables/useFoodCostKpi.ts`
 
-## Phase 2: Fix Timer Display
+Pattern like `useTimeKpi`:
 
-### 2.1 Update KitchenDish Interface
+- Accepts `selectedDepartment` as Ref
+- `loadMonthKpi(date?)` function
+- Returns metrics, loading, error states
 
-- [ ] `src/stores/kitchen/composables/useKitchenDishes.ts`
-  - Add `cookingStartedAt?: string`
+### 1.4 Implement FoodCostKpiCard
 
-### 2.2 Fix DishCard Timer
+**File:** `src/views/kitchen/kpi/components/FoodCostKpiCard.vue`
 
-- [ ] `src/views/kitchen/orders/components/DishCard.vue`
+Display:
 
-```typescript
-const updateTimer = () => {
-  const now = new Date()
-  if (props.dish.status === 'waiting') {
-    // Waiting time: since sent to kitchen
-    const start = props.dish.sentToKitchenAt
-      ? new Date(props.dish.sentToKitchenAt)
-      : new Date(props.dish.createdAt)
-    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
-  } else if (props.dish.status === 'cooking') {
-    // Cooking time: since cooking started
-    const start = props.dish.cookingStartedAt
-      ? new Date(props.dish.cookingStartedAt)
-      : new Date(props.dish.sentToKitchenAt || props.dish.createdAt)
-    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
-  } else if (props.dish.status === 'ready') {
-    // Total time (frozen)
-    const start = new Date(props.dish.sentToKitchenAt || props.dish.createdAt)
-    const end = new Date(props.dish.preparedAt || now)
-    elapsedSeconds.value = Math.floor((end.getTime() - start.getTime()) / 1000)
-  }
-}
-```
+- Month period
+- Revenue
+- COGS breakdown (Sales COGS, Spoilage, Shortage, Surplus)
+- Total COGS %
+- Target comparison with color coding
+
+### 1.5 Implement FoodCostKpiTab
+
+**File:** `src/views/kitchen/kpi/components/FoodCostKpiTab.vue`
+
+Detailed table with COGS components
+
+### 1.6 Integrate into KpiScreen
+
+**File:** `src/views/kitchen/kpi/KpiScreen.vue`
+
+- Enable Food Cost tab (remove disabled)
+- Add `useFoodCostKpi(departmentRef)`
+- Call `loadMonthKpi()` in loadData
+
+### 1.7 Export from Index
+
+**File:** `src/stores/kitchenKpi/composables/index.ts`
 
 ---
 
-## Phase 3: KPI Store Extension
+## Phase 2: Backoffice COGS Settings
 
-### 3.1 Add Time KPI Types
+### 2.1 Create Settings Store
 
-- [ ] `src/stores/kitchenKpi/types.ts`
-  - `KitchenTimeKpiEntry`
-  - `RealtimeTimeKpi`
+**File:** `src/stores/kitchenKpi/cogsSettingsStore.ts`
 
-### 3.2 Create Time KPI Service
+Settings:
 
-- [ ] `src/stores/kitchenKpi/services/timeKpiService.ts` (NEW)
-  - `getTimeKpiEntries(filters)` - Historical data
-  - `aggregateTimeKpi(date, department)` - RPC call
-  - `calculateRealtimeKpi(dishes, department)` - Realtime calculation
+- **Target % per department:**
+  - Kitchen: 30% (default)
+  - Bar: 25% (default)
+- **Product assignments for `kitchenAndBar` products:**
+  - Map<productId, 'kitchen' | 'bar'>
+  - Default: kitchen
 
-### 3.3 Create Time KPI Composable
+### 2.2 Create Settings View
 
-- [ ] `src/stores/kitchenKpi/composables/useTimeKpi.ts` (NEW)
-  - `kitchenRealtimeKpi` - computed
-  - `barRealtimeKpi` - computed
-  - `formatTime(seconds)` - helper
-  - `calculateDeviation(actual, plan)` - helper
+**File:** `src/views/backoffice/salary/CogsSettingsView.vue`
 
----
+UI sections:
 
-## Phase 4: Kitchen Monitor KPI Tab
+1. TARGET FOOD COST % - input fields for Kitchen and Bar targets
+2. PRODUCT DEPARTMENT ASSIGNMENT - table with kitchenAndBar products and dropdown to assign department
 
-### 4.1 Create TimeKpiWidget
+### 2.3 Add Route
 
-- [ ] `src/views/kitchen/orders/components/TimeKpiWidget.vue` (NEW)
-
-| Metric         | Real     | Plan      | Deviation |
-| -------------- | -------- | --------- | --------- |
-| Waiting Time   | X:XX     | -         | -         |
-| Cooking Time   | X:XX     | -         | -         |
-| **Total Time** | **X:XX** | **15:00** | **+10%**  |
-
-### 4.2 Create KpiScreen
-
-- [ ] `src/views/kitchen/kpi/KpiScreen.vue` (NEW)
-  - Two widgets: Kitchen + Bar side-by-side
-  - Auto-refresh indicator
-
-### 4.3 Update Navigation
-
-- [ ] `src/views/kitchen/components/KitchenSidebar.vue` - Add KPI menu item
-- [ ] `src/views/kitchen/KitchenMainView.vue` - Add KPI screen routing
-
----
-
-## Phase 5: Backoffice Report
-
-### 5.1 Create Report View
-
-- [ ] `src/views/backoffice/analytics/KitchenTimeKpiView.vue` (NEW)
-  - Date range filter
-  - Department filter
-  - Historical data table/chart
-  - Summary cards
-
-### 5.2 Add Route
-
-- [ ] `src/router/index.ts`
+**File:** `src/router/index.ts`
 
 ```typescript
 {
-  path: '/analytics/kitchen-time-kpi',
-  name: 'kitchen-time-kpi',
-  component: () => import('@/views/backoffice/analytics/KitchenTimeKpiView.vue'),
+  path: '/salary/kpi-cogs',
+  name: 'cogs-settings',
+  component: () => import('@/views/backoffice/salary/CogsSettingsView.vue'),
   meta: { allowedRoles: ['admin', 'manager'] }
 }
 ```
+
+### 2.4 Update Service to Use Settings
+
+**File:** `src/stores/kitchenKpi/services/foodCostKpiService.ts`
+
+For `kitchenAndBar` products:
+
+- Check `cogsSettingsStore.getAssignment(productId)`
+- Include in COGS only if matches current department filter
 
 ---
 
 ## Files Summary
 
-### Modify (7 files)
+### Phase 1 (Kitchen Monitor)
 
-| File                                                 | Changes                |
-| ---------------------------------------------------- | ---------------------- |
-| `src/stores/pos/types.ts`                            | Add `cookingStartedAt` |
-| `src/stores/pos/orders/supabaseMappers.ts`           | Add field to mappers   |
-| `src/stores/kitchen/kitchenService.ts`               | Fix timestamp logic    |
-| `src/stores/kitchen/composables/useKitchenDishes.ts` | Add field              |
-| `src/views/kitchen/orders/components/DishCard.vue`   | Fix timer              |
-| `src/views/kitchen/KitchenMainView.vue`              | Add KPI screen         |
-| `src/router/index.ts`                                | Add report route       |
+1. `src/stores/kitchenKpi/types.ts` - FoodCostKpi types
+2. `src/stores/kitchenKpi/services/foodCostKpiService.ts` - new service
+3. `src/stores/kitchenKpi/composables/useFoodCostKpi.ts` - new composable
+4. `src/stores/kitchenKpi/composables/index.ts` - export
+5. `src/views/kitchen/kpi/KpiScreen.vue` - integration
+6. `src/views/kitchen/kpi/components/FoodCostKpiCard.vue` - UI
+7. `src/views/kitchen/kpi/components/FoodCostKpiTab.vue` - detailed UI
 
-### Create (6 files)
+### Phase 2 (Backoffice)
 
-| File                                                            | Purpose          |
-| --------------------------------------------------------------- | ---------------- |
-| `src/supabase/migrations/052_create_kitchen_time_kpi_table.sql` | DB table         |
-| `src/stores/kitchenKpi/services/timeKpiService.ts`              | API/calculations |
-| `src/stores/kitchenKpi/composables/useTimeKpi.ts`               | Composable       |
-| `src/views/kitchen/orders/components/TimeKpiWidget.vue`         | Widget           |
-| `src/views/kitchen/kpi/KpiScreen.vue`                           | KPI screen       |
-| `src/views/backoffice/analytics/KitchenTimeKpiView.vue`         | Report           |
+8. `src/stores/kitchenKpi/cogsSettingsStore.ts` - settings store
+9. `src/views/backoffice/salary/CogsSettingsView.vue` - settings view
+10. `src/router/index.ts` - route `/salary/kpi-cogs`
 
 ---
 
-## Key Insight
+## Department Logic
 
-**`sentToKitchenAt` C65 ?@028;L=> CAB0=02;8205BAO 2 POS:**
+- Department is determined automatically by user role
+- No department switcher in Kitchen Monitor UI
+- Admin: can select department via KitchenSidebar tabs
+- Kitchen staff: always 'kitchen'
+- Bar staff: always 'bar'
 
-```typescript
-// src/stores/pos/orders/services.ts:152-157
-if (item.status === 'draft') {
-  item.status = 'waiting'
-  item.sentToKitchenAt = new Date().toISOString() // Correct!
-}
-```
+## kitchenAndBar Products
 
-**03 2 `kitchenService.ts`** - =5?@028;L=> CAB0=02;820; `sentToKitchenAt` ?@8 ?5@5E>45 2 `cooking`.
+- Products used in both departments need assignment
+- Default assignment: kitchen
+- Can be configured in Backoffice COGS Settings
+- Applies to write-offs and COGS calculations
+
+## Update Mode
+
+- Load on KPI screen open
+- Manual refresh button
+- No realtime subscription

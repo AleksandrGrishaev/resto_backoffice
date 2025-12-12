@@ -58,6 +58,23 @@
           <span class="screen-btn-label">Preparation</span>
         </div>
       </v-btn>
+
+      <div class="separator" />
+
+      <!-- KPI Screen Button -->
+      <v-btn
+        :class="['screen-btn', { active: currentScreen === 'kpi' }]"
+        :color="currentScreen === 'kpi' ? 'primary' : undefined"
+        :variant="currentScreen === 'kpi' ? 'flat' : 'text'"
+        block
+        height="56"
+        @click="handleScreenSelect('kpi')"
+      >
+        <div class="screen-btn-content">
+          <v-icon size="24">mdi-chart-timeline-variant</v-icon>
+          <span class="screen-btn-label">KPI</span>
+        </div>
+      </v-btn>
     </div>
 
     <div class="spacer" />
@@ -83,7 +100,7 @@ const MODULE_NAME = 'KitchenSidebar'
 // =============================================
 
 interface Props {
-  currentScreen?: 'orders' | 'preparation'
+  currentScreen?: 'orders' | 'preparation' | 'kpi'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -95,7 +112,7 @@ const props = withDefaults(defineProps<Props>(), {
 // =============================================
 
 const emit = defineEmits<{
-  'screen-select': [screen: 'orders' | 'preparation']
+  'screen-select': [screen: 'orders' | 'preparation' | 'kpi']
   'department-change': [department: 'all' | 'kitchen' | 'bar']
 }>()
 
@@ -139,7 +156,7 @@ watch(selectedDepartment, value => {
 // METHODS
 // =============================================
 
-const handleScreenSelect = (screen: 'orders' | 'preparation') => {
+const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi') => {
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
   emit('screen-select', screen)
 }

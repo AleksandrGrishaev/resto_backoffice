@@ -5,7 +5,6 @@ import type { RouteRecordRaw } from 'vue-router'
 // ===== LAYOUTS =====
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import MainLayout from '@/layouts/MainLayout.vue'
-import PosLayout from '@/layouts/PosLayout.vue'
 
 // ===== AUTH VIEWS =====
 import LoginView from '@/views/auth/LoginView.vue'
@@ -33,8 +32,7 @@ import HMRTestView from '@/views/debug/HMRTestView.vue'
 
 // ===== AUTH SYSTEM =====
 import { useAuthStore } from '@/stores/auth'
-import { useAuth, usePermissions } from '@/stores/auth/composables'
-import { CoreUserService } from '@/core/users'
+import { usePermissions } from '@/stores/auth/composables'
 import type { UserRole } from '@/stores/auth/types'
 
 // ===== ROUTES CONFIGURATION =====
@@ -327,6 +325,31 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/backoffice/reports/PrintDocsView.vue'),
             meta: {
               title: 'Print Documents'
+            }
+          }
+        ]
+      },
+      // === Salary Section (Kitchen Time KPI) ===
+      {
+        path: 'salary',
+        meta: {
+          allowedRoles: ['admin', 'manager']
+        },
+        children: [
+          {
+            path: '',
+            name: 'salary-index',
+            component: () => import('@/views/backoffice/salary/SalaryIndexView.vue'),
+            meta: {
+              title: 'Salary & KPI'
+            }
+          },
+          {
+            path: 'kitchen-time-kpi',
+            name: 'salary-kitchen-time-kpi',
+            component: () => import('@/views/backoffice/salary/kpi/KitchenTimeKpiView.vue'),
+            meta: {
+              title: 'Kitchen Time KPI'
             }
           }
         ]

@@ -52,27 +52,20 @@ export async function getActiveKitchenOrders(): Promise<PosOrder[]> {
       return []
     }
 
-    // Step 3: Convert to app format
-    const items = (itemsData || []).map(fromOrderItemRow)
-
-    // Step 4: Assemble orders with items
-    const orders = ordersData.map(order =>
-      orderFromSupabase(
-        order,
-        items.filter(i => {
-          // Find bill_id from item's billId
-          const orderBills = (order.bills as any[]) || []
-          return orderBills.some((b: any) => b.id === i.billId)
-        })
-      )
-    )
+    // Step 3: Assemble orders with items (filter by order_id directly)
+    const orders = ordersData.map(order => {
+      const orderItems = (itemsData || [])
+        .filter(row => row.order_id === order.id)
+        .map(fromOrderItemRow)
+      return orderFromSupabase(order, orderItems)
+    })
 
     DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded from Supabase', {
       count: orders.length,
       waiting: orders.filter(o => o.status === 'waiting').length,
       cooking: orders.filter(o => o.status === 'cooking').length,
       ready: orders.filter(o => o.status === 'ready').length,
-      totalItems: items.length
+      totalItems: (itemsData || []).length
     })
 
     return orders

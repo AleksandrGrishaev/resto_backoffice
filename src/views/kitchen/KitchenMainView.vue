@@ -69,6 +69,12 @@
             v-else-if="currentScreen === 'preparation'"
             @navigate-to-orders="handleScreenSelect('orders')"
           />
+
+          <!-- KPI Screen -->
+          <KpiScreen
+            v-else-if="currentScreen === 'kpi'"
+            :selected-department="selectedDepartment"
+          />
         </div>
       </template>
     </KitchenLayout>
@@ -98,6 +104,7 @@ import KitchenLayout from '@/layouts/KitchenLayout.vue'
 import KitchenSidebar from './components/KitchenSidebar.vue'
 import OrdersScreen from './orders/OrdersScreen.vue'
 import PreparationScreen from './preparation/PreparationScreen.vue'
+import KpiScreen from './kpi/KpiScreen.vue'
 
 const MODULE_NAME = 'KitchenMainView'
 
@@ -122,7 +129,7 @@ const orderAlerts = useOrderAlertService()
 const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
-const currentScreen = ref<'orders' | 'preparation'>('orders')
+const currentScreen = ref<'orders' | 'preparation' | 'kpi'>('orders')
 const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>('all')
 
 // =============================================
@@ -204,7 +211,7 @@ const retryInitialization = async (): Promise<void> => {
 /**
  * Handle screen selection from sidebar
  */
-const handleScreenSelect = (screen: 'orders' | 'preparation'): void => {
+const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi'): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
 }

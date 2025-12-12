@@ -208,3 +208,109 @@ export interface ProductionScheduleRow {
   created_at: string
   updated_at: string
 }
+
+// ===============================================
+// TIME KPI Types (Order Processing Time Tracking)
+// ===============================================
+
+/**
+ * Plan times for different departments (in seconds)
+ */
+export const TIME_KPI_PLAN = {
+  kitchen: 900, // 15 minutes
+  bar: 300 // 5 minutes
+} as const
+
+/**
+ * Realtime time KPI metrics (calculated from in-memory dishes)
+ */
+export interface TimeKpiMetrics {
+  avgWaitingSeconds: number
+  avgCookingSeconds: number
+  avgTotalSeconds: number
+  itemsCompleted: number
+  itemsExceededPlan: number
+  exceededRate: number // percentage (0-100)
+}
+
+/**
+ * Historical time KPI summary entry (from database aggregation)
+ */
+export interface TimeKpiSummaryEntry {
+  periodDate: string
+  department: string
+  avgWaitingSeconds: number
+  avgCookingSeconds: number
+  avgTotalSeconds: number
+  itemsCompleted: number
+  itemsExceededPlan: number
+}
+
+/**
+ * Time KPI detail entry (individual dish timing)
+ */
+export interface TimeKpiDetailEntry {
+  itemId: string
+  orderId: string
+  orderNumber: string
+  productName: string
+  department: string
+  draftSeconds: number // time from created to sent_to_kitchen
+  waitingSeconds: number
+  cookingSeconds: number
+  totalSeconds: number
+  exceededPlan: boolean
+  readyAt: string
+}
+
+/**
+ * Time KPI filters for queries
+ */
+export interface TimeKpiFilters {
+  dateFrom: string // ISO date
+  dateTo: string // ISO date
+  department?: 'kitchen' | 'bar' | null
+}
+
+/**
+ * Database row type for time KPI summary (RPC result)
+ */
+export interface TimeKpiSummaryRow {
+  period_date: string
+  department: string
+  avg_waiting_seconds: number
+  avg_cooking_seconds: number
+  avg_total_seconds: number
+  items_completed: number
+  items_exceeded_plan: number
+}
+
+/**
+ * Database row type for time KPI detail (RPC result)
+ */
+export interface TimeKpiDetailRow {
+  item_id: string
+  order_id: string
+  order_number: string
+  product_name: string
+  department: string
+  draft_seconds: number
+  waiting_seconds: number
+  cooking_seconds: number
+  total_seconds: number
+  exceeded_plan: boolean
+  ready_at: string
+}
+
+/**
+ * Database row type for today's KPI (RPC result)
+ */
+export interface TimeKpiTodayRow {
+  department: string
+  avg_waiting_seconds: number
+  avg_cooking_seconds: number
+  avg_total_seconds: number
+  items_completed: number
+  items_exceeded_plan: number
+  exceeded_rate: number
+}

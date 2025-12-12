@@ -3,13 +3,7 @@ import { computed, type Ref } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { useAuthStore } from '@/stores/auth'
-import type {
-  PosOrder,
-  PosBillItem,
-  OrderStatus,
-  ServiceResponse,
-  Department
-} from '@/stores/pos/types'
+import type { PosOrder, PosBillItem, ServiceResponse, Department } from '@/stores/pos/types'
 import type { SelectedModifier } from '@/stores/menu/types'
 
 /**
@@ -39,9 +33,11 @@ export interface KitchenDish {
   orderType: 'dine_in' | 'takeaway' | 'delivery'
   tableNumber?: string
 
-  // Timing
+  // Timing (KPI timestamps)
   createdAt: string
-  sentToKitchenAt?: string
+  sentToKitchenAt?: string // When item sent to kitchen
+  cookingStartedAt?: string // When cooking started
+  readyAt?: string // When item ready
 
   // Bill context (для группировки)
   billId: string
@@ -102,6 +98,8 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
         tableNumber,
         createdAt: order.createdAt,
         sentToKitchenAt: item.sentToKitchenAt,
+        cookingStartedAt: item.cookingStartedAt,
+        readyAt: item.readyAt,
         billId: bill.id,
         billNumber: bill.billNumber
       })
@@ -204,13 +202,48 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
   }))
 
   /**
+   * Draft dishes (items not yet sent to kitchen)
+   * Useful for KPI to see how many items are waiting to be sent
+   */
+  const draftDishes = computed((): KitchenDish[] => {
+    const dishes: KitchenDish[] = []
+    const allowed = allowedDepartments.value
+
+    // Проходим по всем заказам
+    for (const order of posOrdersStore.orders) {
+      // Проходим по всем bills в заказе
+      for (const bill of order.bills) {
+        // Проходим по всем items в bill
+        for (const item of bill.items) {
+          // Определяем department (default: 'kitchen' если не указан)
+          const itemDepartment = item.department || 'kitchen'
+
+          // Фильтруем только draft статус И разрешенные департаменты
+          if (item.status === 'draft' && allowed.includes(itemDepartment)) {
+            // Разворачиваем item в отдельные блюда
+            const expandedDishes = expandBillItemToDishes(item, order, bill)
+            // Override status to show as 'waiting' for display but mark differently
+            for (const dish of expandedDishes) {
+              ;(dish as any).isDraft = true // Mark as draft for UI differentiation
+            }
+            dishes.push(...expandedDishes)
+          }
+        }
+      }
+    }
+
+    return dishes
+  })
+
+  /**
    * Статистика блюд
    */
   const dishesStats = computed(() => ({
     total: kitchenDishes.value.length,
     waiting: dishesByStatus.value.waiting.length,
     cooking: dishesByStatus.value.cooking.length,
-    ready: dishesByStatus.value.ready.length
+    ready: dishesByStatus.value.ready.length,
+    draft: draftDishes.value.length
   }))
 
   /**
@@ -299,6 +332,7 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
   return {
     // Data
     kitchenDishes,
+    draftDishes,
     dishesByStatus,
     dishesStats,
     dishesByOrder,

@@ -73,19 +73,13 @@ export class OrdersService {
               .in('order_id', orderIds)
 
             if (!itemsError && itemsData) {
-              // Convert items to app format
-              const items = itemsData.map(fromOrderItemRow)
-
-              // Group items by order_id
+              // Group items by order_id in single pass (O(n) instead of O(n²))
               const itemsByOrderId = new Map<string, PosBillItem[]>()
-              items.forEach(item => {
-                // Find order_id from itemsData (we need it for grouping)
-                const row = itemsData.find(r => r.id === item.id)
-                if (row) {
-                  const existing = itemsByOrderId.get(row.order_id) || []
-                  existing.push(item)
-                  itemsByOrderId.set(row.order_id, existing)
-                }
+              itemsData.forEach(row => {
+                const item = fromOrderItemRow(row)
+                const existing = itemsByOrderId.get(row.order_id) || []
+                existing.push(item)
+                itemsByOrderId.set(row.order_id, existing)
               })
 
               // Assemble orders with items
@@ -96,7 +90,7 @@ export class OrdersService {
 
               console.log('✅ Loaded orders from Supabase:', {
                 ordersCount: orders.length,
-                itemsCount: items.length
+                itemsCount: itemsData.length
               })
               return { success: true, data: orders }
             }

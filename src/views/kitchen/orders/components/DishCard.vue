@@ -326,13 +326,36 @@ const handleStatusUpdate = () => {
 }
 
 /**
- * Обновить таймер
+ * Обновить таймер - uses correct timestamp per status
+ * - waiting: time since sent to kitchen
+ * - cooking: time since cooking started
+ * - ready: frozen total time from sent to kitchen until ready
  */
 const updateTimer = () => {
-  const createdAt = new Date(props.dish.createdAt)
   const now = new Date()
-  const diffMs = now.getTime() - createdAt.getTime()
-  elapsedSeconds.value = Math.floor(diffMs / 1000)
+
+  if (props.dish.status === 'waiting') {
+    // Waiting time: since sent to kitchen
+    const start = props.dish.sentToKitchenAt
+      ? new Date(props.dish.sentToKitchenAt)
+      : new Date(props.dish.createdAt)
+    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
+  } else if (props.dish.status === 'cooking') {
+    // Cooking time: since cooking started
+    const start = props.dish.cookingStartedAt
+      ? new Date(props.dish.cookingStartedAt)
+      : new Date(props.dish.sentToKitchenAt || props.dish.createdAt)
+    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
+  } else if (props.dish.status === 'ready') {
+    // Total time (frozen at completion): from sent to kitchen until ready
+    const start = new Date(props.dish.sentToKitchenAt || props.dish.createdAt)
+    const end = props.dish.readyAt ? new Date(props.dish.readyAt) : now
+    elapsedSeconds.value = Math.floor((end.getTime() - start.getTime()) / 1000)
+  } else {
+    // Fallback for any other status
+    const start = new Date(props.dish.createdAt)
+    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
+  }
 }
 
 // =============================================

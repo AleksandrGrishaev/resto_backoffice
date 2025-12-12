@@ -222,6 +222,29 @@
         </v-list-item>
       </v-list-group>
 
+      <!-- Salary & KPI Section -->
+      <v-list-group value="salary" class="mb-2">
+        <template #activator="{ props }">
+          <v-list-item v-bind="props" prepend-icon="mdi-account-cash" color="primary">
+            <template #title>
+              <span>Salary</span>
+            </template>
+          </v-list-item>
+        </template>
+
+        <!-- Kitchen Time KPI -->
+        <v-list-item
+          to="/salary/kitchen-time-kpi"
+          prepend-icon="mdi-clock-fast"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Kitchen Time KPI</span>
+          </template>
+        </v-list-item>
+      </v-list-group>
+
       <!-- Catalogs Section -->
       <v-list-group value="catalogs" class="mb-2">
         <template #activator="{ props }">

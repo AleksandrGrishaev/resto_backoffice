@@ -176,8 +176,12 @@ export interface PosBillItem extends BaseEntity {
   status: ItemStatus
   paymentStatus: ItemPaymentStatus
   kitchenNotes?: string
-  sentToKitchenAt?: string
-  preparedAt?: string
+
+  // KPI timestamps (for time tracking)
+  sentToKitchenAt?: string // When item sent to kitchen (status → waiting)
+  cookingStartedAt?: string // When cooking started (status → cooking)
+  readyAt?: string // When item ready (status → ready)
+  servedAt?: string // When item served (status → served)
 
   // Department routing (Kitchen vs Bar)
   department?: Department // Which department should prepare this item

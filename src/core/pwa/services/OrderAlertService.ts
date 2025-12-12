@@ -38,16 +38,25 @@ class OrderAlertService {
 
   /**
    * Initialize the service
+   * Can be called multiple times to update config (e.g., when switching departments)
    */
   async initialize(config?: Partial<OrderAlertConfig>): Promise<void> {
-    if (this.isInitialized.value) {
-      DebugUtils.debug(MODULE_NAME, 'Already initialized')
-      return
+    // Always merge config (allows updating userDepartment when switching views)
+    if (config) {
+      const oldDepartment = this.config.userDepartment
+      this.config = { ...this.config, ...config }
+
+      if (this.isInitialized.value && oldDepartment !== config.userDepartment) {
+        DebugUtils.info(MODULE_NAME, 'Department changed, updating config', {
+          oldDepartment,
+          newDepartment: config.userDepartment
+        })
+      }
     }
 
-    // Merge config
-    if (config) {
-      this.config = { ...this.config, ...config }
+    if (this.isInitialized.value) {
+      DebugUtils.debug(MODULE_NAME, 'Already initialized, config updated')
+      return
     }
 
     // Configure notifications
@@ -139,8 +148,21 @@ class OrderAlertService {
     const item = payload.new
     const oldItem = payload.old
 
+    // Validate payload.old exists (requires REPLICA IDENTITY FULL)
+    // If oldItem is null, this could be INSERT (legitimate) or UPDATE without REPLICA IDENTITY (problem)
+    if (!oldItem && item?.status === 'waiting') {
+      DebugUtils.warn(MODULE_NAME, 'payload.old is null - assuming new item INSERT', {
+        itemId: item?.id,
+        itemName: item?.menu_item_name,
+        status: item?.status,
+        hint: 'If this is UPDATE, check REPLICA IDENTITY FULL on order_items table'
+      })
+      // Continue processing - treat as new item entering kitchen
+    }
+
     // STRICT CHECK: Only trigger when status CHANGED TO 'waiting'
-    // Requires REPLICA IDENTITY FULL on order_items table
+    // For INSERT: oldItem is null, undefined !== 'waiting' = true (correct)
+    // For UPDATE: requires REPLICA IDENTITY FULL for proper change detection
     const statusChangedToWaiting = oldItem?.status !== 'waiting' && item?.status === 'waiting'
 
     if (!statusChangedToWaiting) {
@@ -164,7 +186,17 @@ class OrderAlertService {
       return
     }
 
-    DebugUtils.info(MODULE_NAME, '🔔 Item sent to kitchen/bar!', {
+    // TEMPORARY: Skip sound alerts for bar (bar staff take orders directly, they know about them)
+    // TODO: Remove this when bar needs sound alerts
+    if (this.config.userDepartment === 'bar') {
+      DebugUtils.debug(MODULE_NAME, '🔇 Bar alerts disabled (temporary)', {
+        itemId: item?.id,
+        itemName: item?.menu_item_name
+      })
+      return
+    }
+
+    DebugUtils.info(MODULE_NAME, '🔔 Item sent to kitchen!', {
       itemId: item.id,
       itemName: item.menu_item_name,
       orderId: item.order_id,
@@ -189,10 +221,18 @@ class OrderAlertService {
   /**
    * Handle item ready (NEW: Migration 053-054)
    * Triggers when item.status CHANGES TO 'ready'
+   * NOTE: This is for POS/waiters to know when to pick up dishes
    */
   private handleItemReady(payload: any): void {
     const item = payload.new
     const oldItem = payload.old
+
+    // Kitchen/Bar staff don't need "ready" alerts - they mark items ready themselves
+    // This alert is only for POS/waiters
+    if (this.config.userDepartment === 'kitchen' || this.config.userDepartment === 'bar') {
+      DebugUtils.debug(MODULE_NAME, '🔇 Ready alerts disabled for kitchen/bar staff')
+      return
+    }
 
     // STRICT CHECK: Only trigger when status CHANGED TO 'ready'
     const statusChangedToReady = oldItem?.status !== 'ready' && item?.status === 'ready'
@@ -206,7 +246,7 @@ class OrderAlertService {
       return
     }
 
-    DebugUtils.info(MODULE_NAME, '✅ Item ready!', {
+    DebugUtils.info(MODULE_NAME, '✅ Item ready (for POS/waiter)!', {
       itemId: item.id,
       itemName: item.menu_item_name,
       orderId: item.order_id,

@@ -254,7 +254,8 @@ export const useKitchenStore = defineStore('kitchen', () => {
       }
     }
 
-    if (order.status !== minStatus && minPriority < 4) {
+    // Update order status if changed (allow all statuses including served/cancelled)
+    if (order.status !== minStatus && minPriority !== Infinity) {
       order.status = minStatus
       DebugUtils.debug(MODULE_NAME, 'Order status recalculated', {
         orderNumber: order.orderNumber,

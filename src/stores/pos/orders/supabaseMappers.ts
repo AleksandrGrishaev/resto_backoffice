@@ -282,9 +282,9 @@ export function toOrderItemInsert(
     // KPI timestamps
     draft_at: item.createdAt,
     sent_to_kitchen_at: item.sentToKitchenAt || null,
-    cooking_started_at: null, // Set when status changes to 'cooking'
-    ready_at: item.preparedAt || null,
-    served_at: null, // Set when status changes to 'served'
+    cooking_started_at: item.cookingStartedAt || null,
+    ready_at: item.readyAt || null,
+    served_at: item.servedAt || null,
 
     // Audit
     created_at: item.createdAt,
@@ -319,7 +319,9 @@ export function toOrderItemUpdate(item: PosBillItem): SupabaseOrderItemUpdate {
 
     // KPI timestamps (updated by status change)
     sent_to_kitchen_at: item.sentToKitchenAt || null,
-    ready_at: item.preparedAt || null,
+    cooking_started_at: item.cookingStartedAt || null,
+    ready_at: item.readyAt || null,
+    served_at: item.servedAt || null,
 
     // Audit
     updated_at: new Date().toISOString()
@@ -362,8 +364,12 @@ export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
 
     // Kitchen
     kitchenNotes: row.kitchen_notes || undefined,
+
+    // KPI timestamps
     sentToKitchenAt: row.sent_to_kitchen_at || undefined,
-    preparedAt: row.ready_at || undefined,
+    cookingStartedAt: row.cooking_started_at || undefined,
+    readyAt: row.ready_at || undefined,
+    servedAt: row.served_at || undefined,
 
     // Payment links
     paidByPaymentIds: row.paid_by_payment_ids || [],
