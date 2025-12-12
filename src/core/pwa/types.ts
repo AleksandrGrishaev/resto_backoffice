@@ -58,6 +58,8 @@ export interface OrderAlertConfig {
   notificationEnabled: boolean
   vibrationEnabled: boolean
   vibrationPattern: number[]
+  /** Filter alerts by department - only play sound if order has items for this department */
+  userDepartment?: 'kitchen' | 'bar'
 }
 
 /**

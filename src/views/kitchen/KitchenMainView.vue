@@ -231,19 +231,20 @@ onMounted(async () => {
   }
 
   // PWA: Initialize order alerts with sound for new orders
-  // Sound is ONLY for kitchen staff, bar staff sees orders directly
-  const isKitchenDepartment = userDepartment.value === 'kitchen'
+  // Sound plays for all kitchen/bar staff, but filtered by department
+  // Each department only hears alerts for orders with items in their department
   await orderAlerts.initialize({
-    soundEnabled: isKitchenDepartment,
+    soundEnabled: true,
     soundUrl: '/sounds/new-order.mp3',
     soundVolume: 0.8,
-    notificationEnabled: isKitchenDepartment,
-    vibrationEnabled: isKitchenDepartment
+    notificationEnabled: true,
+    vibrationEnabled: true,
+    userDepartment: userDepartment.value // Filter alerts by user's department
   })
   orderAlerts.subscribe()
   DebugUtils.info(MODULE_NAME, 'Order alerts initialized', {
     department: userDepartment.value,
-    soundEnabled: isKitchenDepartment
+    soundEnabled: true
   })
 })
 

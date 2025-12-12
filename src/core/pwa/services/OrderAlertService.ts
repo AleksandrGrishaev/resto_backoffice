@@ -132,6 +132,7 @@ class OrderAlertService {
 
     // STRICT CHECK: Only trigger when status CHANGED TO 'waiting'
     // Must have: old status !== 'waiting' AND new status === 'waiting'
+    // NOTE: Requires REPLICA IDENTITY FULL on orders table for oldOrder to have status field
     const statusChangedToWaiting = oldOrder?.status !== 'waiting' && order?.status === 'waiting'
 
     if (!statusChangedToWaiting) {
@@ -143,11 +144,24 @@ class OrderAlertService {
       return
     }
 
+    // Department filter: only alert if order has items for user's department
+    if (
+      this.config.userDepartment &&
+      !this.hasItemsForDepartment(order, this.config.userDepartment)
+    ) {
+      DebugUtils.debug(MODULE_NAME, 'Ignoring - no items for user department', {
+        orderId: order?.id,
+        userDepartment: this.config.userDepartment
+      })
+      return
+    }
+
     DebugUtils.info(MODULE_NAME, '🔔 New order sent to kitchen!', {
       orderId: order.id,
       orderNumber: order.order_number,
       previousStatus: oldOrder?.status,
-      itemCount: order.items?.length || 0
+      itemCount: order.items?.length || 0,
+      userDepartment: this.config.userDepartment
     })
 
     const event: OrderAlertEvent = {
@@ -248,6 +262,16 @@ class OrderAlertService {
       default:
         return 'Order Alert'
     }
+  }
+
+  /**
+   * Check if order has items for the specified department
+   * Used to filter alerts - only play sound for orders relevant to user's department
+   */
+  private hasItemsForDepartment(order: any, department: 'kitchen' | 'bar'): boolean {
+    const items = order?.items || []
+    // Each item has a department field, defaulting to 'kitchen' if not set
+    return items.some((item: any) => (item.department || 'kitchen') === department)
   }
 
   /**
