@@ -6,21 +6,19 @@
         <v-card class="pa-6">
           <v-card-title class="text-center mb-4">
             <v-icon size="64" color="warning" class="mb-2">mdi-shield-alert</v-icon>
-            <div>Доступ запрещен</div>
+            <div>Access Denied</div>
           </v-card-title>
 
           <v-card-text class="text-center">
-            <p class="mb-4">У вас недостаточно прав для доступа к этой странице</p>
+            <p class="mb-4">You don't have permission to access this page</p>
 
-            <p class="text-caption mb-4">
-              Пользователь: {{ currentUserName }} ({{ userRoleText }})
-            </p>
+            <p class="text-caption mb-4">User: {{ currentUserName }} ({{ userRoleText }})</p>
           </v-card-text>
 
           <v-card-actions class="justify-center">
-            <v-btn color="primary" variant="outlined" @click="goBack">Назад</v-btn>
+            <v-btn color="primary" variant="outlined" @click="goBack">Back</v-btn>
 
-            <LogoutButton variant="text" text="Выйти" />
+            <LogoutButton variant="text" text="Log out" />
           </v-card-actions>
         </v-card>
       </v-col>
@@ -38,11 +36,11 @@ import LogoutButton from '@/components/atoms/buttons/LogoutButton.vue'
 const router = useRouter()
 const { currentUser } = useAuth()
 
-const currentUserName = computed(() => currentUser.value?.name || 'Неизвестный')
+const currentUserName = computed(() => currentUser.value?.name || 'Unknown')
 
 const userRoleText = computed(() => {
   const roles = currentUser.value?.roles || []
-  return roles.map(role => CoreUserService.getRoleDisplayName(role)).join(', ') || 'Нет ролей'
+  return roles.map(role => CoreUserService.getRoleDisplayName(role)).join(', ') || 'No roles'
 })
 
 const goBack = () => {

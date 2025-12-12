@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useKitchenStore } from '@/stores/kitchen'
+import { useKitchenDishes } from '@/stores/kitchen/composables'
 import { useAuthStore } from '@/stores/auth'
 import { useWakeLock, useOrderAlertService } from '@/core/pwa'
 import { DebugUtils } from '@/utils'
@@ -106,6 +107,7 @@ const MODULE_NAME = 'KitchenMainView'
 
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
+const { userDepartment } = useKitchenDishes()
 
 // PWA: Wake Lock to keep screen on
 const wakeLock = useWakeLock()
@@ -229,15 +231,20 @@ onMounted(async () => {
   }
 
   // PWA: Initialize order alerts with sound for new orders
+  // Sound is ONLY for kitchen staff, bar staff sees orders directly
+  const isKitchenDepartment = userDepartment.value === 'kitchen'
   await orderAlerts.initialize({
-    soundEnabled: true,
+    soundEnabled: isKitchenDepartment,
     soundUrl: '/sounds/new-order.mp3',
     soundVolume: 0.8,
-    notificationEnabled: true,
-    vibrationEnabled: true
+    notificationEnabled: isKitchenDepartment,
+    vibrationEnabled: isKitchenDepartment
   })
   orderAlerts.subscribe()
-  DebugUtils.info(MODULE_NAME, 'Order alerts initialized - will play sound on new orders')
+  DebugUtils.info(MODULE_NAME, 'Order alerts initialized', {
+    department: userDepartment.value,
+    soundEnabled: isKitchenDepartment
+  })
 })
 
 /**

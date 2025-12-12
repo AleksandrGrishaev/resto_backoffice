@@ -111,6 +111,20 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
   }
 
   /**
+   * User's department based on role (single value for sound alerts etc.)
+   * Bar staff = 'bar', Kitchen staff or Admin = 'kitchen'
+   */
+  const userDepartment = computed((): Department => {
+    const roles = authStore.userRoles
+    // If user has 'bar' role but NOT 'kitchen' role → bar department
+    if (roles.includes('bar') && !roles.includes('kitchen') && !roles.includes('admin')) {
+      return 'bar'
+    }
+    // Otherwise (kitchen, admin, or both) → kitchen department
+    return 'kitchen'
+  })
+
+  /**
    * Определить разрешенные департаменты на основе роли пользователя
    * Admin может переключаться между департаментами, остальные видят только свой
    */
@@ -288,6 +302,7 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
     dishesByStatus,
     dishesStats,
     dishesByOrder,
+    userDepartment,
 
     // Methods
     updateDishStatus,

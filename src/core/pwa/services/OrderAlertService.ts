@@ -76,14 +76,16 @@ class OrderAlertService {
     }
 
     // Subscribe to orders table changes
+    // Sound plays when order is SENT TO KITCHEN (status becomes 'waiting')
     this.channel = supabase
       .channel('order-alerts')
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: 'UPDATE',
           schema: 'public',
-          table: 'orders'
+          table: 'orders',
+          filter: 'status=eq.waiting'
         },
         payload => this.handleNewOrder(payload)
       )
@@ -120,18 +122,34 @@ class OrderAlertService {
   }
 
   /**
-   * Handle new order event
+   * Handle new order event (order sent to kitchen)
+   * Only triggers when status CHANGES to 'waiting' (not on every update while waiting)
    */
   private handleNewOrder(payload: any): void {
     const order = payload.new
+    const oldOrder = payload.old
 
-    DebugUtils.debug(MODULE_NAME, 'New order received', { orderId: order.id })
+    // Only trigger if status actually CHANGED to 'waiting'
+    // Ignore updates while already in 'waiting' status
+    if (oldOrder?.status === 'waiting') {
+      DebugUtils.debug(MODULE_NAME, 'Ignoring update - order already was waiting', {
+        orderId: order.id
+      })
+      return
+    }
+
+    DebugUtils.info(MODULE_NAME, '🔔 New order sent to kitchen!', {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      previousStatus: oldOrder?.status,
+      itemCount: order.items?.length || 0
+    })
 
     const event: OrderAlertEvent = {
       orderId: order.id,
       orderNumber: order.order_number,
-      tableNumber: order.table_id, // Will need to resolve table number
-      itemCount: 0, // Would need to fetch items count
+      tableNumber: order.table_id,
+      itemCount: order.items?.length || 0,
       type: 'new_order',
       timestamp: new Date().toISOString()
     }
@@ -141,17 +159,31 @@ class OrderAlertService {
 
   /**
    * Handle order ready event
+   * Only triggers when status CHANGES to 'ready' (not on every update while ready)
    */
   private handleOrderReady(payload: any): void {
     const order = payload.new
+    const oldOrder = payload.old
 
-    DebugUtils.debug(MODULE_NAME, 'Order ready', { orderId: order.id })
+    // Only trigger if status actually CHANGED to 'ready'
+    if (oldOrder?.status === 'ready') {
+      DebugUtils.debug(MODULE_NAME, 'Ignoring update - order already was ready', {
+        orderId: order.id
+      })
+      return
+    }
+
+    DebugUtils.info(MODULE_NAME, '✅ Order ready!', {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      previousStatus: oldOrder?.status
+    })
 
     const event: OrderAlertEvent = {
       orderId: order.id,
       orderNumber: order.order_number,
       tableNumber: order.table_id,
-      itemCount: 0,
+      itemCount: order.items?.length || 0,
       type: 'order_ready',
       timestamp: new Date().toISOString()
     }
