@@ -335,3 +335,47 @@ export interface AnalyticsState {
   loading: boolean
   error: string | null
 }
+
+/**
+ * ✅ COGS Unification: Spoilage breakdown by reason
+ */
+export interface SpoilageBreakdown {
+  total: number
+  expired: number
+  spoiled: number
+  other: number
+}
+
+/**
+ * ✅ COGS Unification: Complete COGS breakdown from unified SQL function
+ *
+ * Used by:
+ * - P&L Report (getCOGSForPL - no exclusions)
+ * - Food Cost Dashboard (getCOGSForPL - salesCOGS only)
+ * - Food Cost KPI (getCOGSForKPI - with exclusions)
+ */
+export interface COGSBreakdown {
+  period: {
+    startDate: string
+    endDate: string
+  }
+  revenue: number
+  salesCOGS: number
+  spoilage: SpoilageBreakdown
+  shortage: number
+  surplus: number
+  totalCOGS: number
+  totalCOGSPercent: number
+  metadata: {
+    generatedAt: string
+    excludedReasons: ExcludedReasons | null
+  }
+}
+
+/**
+ * ✅ COGS Unification: Excluded write-off reasons for KPI
+ */
+export interface ExcludedReasons {
+  storage?: string[]
+  preparation?: string[]
+}

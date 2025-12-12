@@ -8,8 +8,7 @@ import type { PLReport, COGSMethod, COGSCalculation } from './types'
 import { useSalesStore } from '@/stores/sales/salesStore'
 import { useAccountStore } from '@/stores/account'
 import type { DailyExpenseCategory } from '@/stores/account/types'
-import { useStorageStore } from '@/stores/storage'
-import { usePreparationStore } from '@/stores/preparation'
+import { getCOGSForPL } from './services/cogsService'
 
 const MODULE_NAME = 'PLReportStore'
 
@@ -95,99 +94,58 @@ export const usePLReportStore = defineStore('plReport', () => {
       })
 
       // ============================================
-      // ✅ SPRINT 4: INVENTORY ADJUSTMENTS FROM OPERATIONS
+      // ✅ COGS UNIFICATION: Use unified SQL function for COGS
       // ============================================
-      // 4. Calculate inventory adjustments from storage/preparation operations
-      // NOT from accountStore transactions (Sprint 4 fix)
-      DebugUtils.info(MODULE_NAME, 'Calculating inventory adjustments from operations')
+      // 4. Get COGS data from unified SQL function (includes storage + preparation write-offs)
+      DebugUtils.info(MODULE_NAME, 'Getting COGS data from unified SQL function')
 
-      const storageStore = useStorageStore()
-      const preparationStore = usePreparationStore()
+      const cogsData = await getCOGSForPL(dateFrom, dateTo, null)
 
-      const dateRange = { start: dateFrom, end: dateTo }
-
-      // 4a. Product spoilage (storage write-offs)
-      const productSpoilageOps = await storageStore.getOperationsByFilter({
-        type: 'write_off',
-        reasons: ['expired', 'spoiled', 'other'],
-        dateRange
+      DebugUtils.info(MODULE_NAME, 'COGS data received from SQL function', {
+        revenue: cogsData.revenue,
+        salesCOGS: cogsData.salesCOGS,
+        spoilageTotal: cogsData.spoilage.total,
+        spoilageExpired: cogsData.spoilage.expired,
+        spoilageSpoiled: cogsData.spoilage.spoiled,
+        spoilageOther: cogsData.spoilage.other,
+        shortage: cogsData.shortage,
+        surplus: cogsData.surplus,
+        totalCOGS: cogsData.totalCOGS
       })
-      const productSpoilage = productSpoilageOps.reduce((sum, op) => sum + (op.totalValue || 0), 0)
 
-      // 4b. Product shortage (inventory adjustment write-offs)
-      const productShortageOps = await storageStore.getOperationsByFilter({
-        type: 'write_off',
-        reasons: ['inventory_adjustment'],
-        dateRange
-      })
-      const productShortage = productShortageOps.reduce((sum, op) => sum + (op.totalValue || 0), 0)
-
-      // 4c. Product surplus (inventory adjustment corrections)
-      const productSurplusOps = await storageStore.getOperationsByFilter({
-        type: 'correction',
-        correctionReason: 'other', // inventory adjustments are stored as 'other' corrections
-        dateRange
-      })
-      const productSurplus = productSurplusOps.reduce((sum, op) => sum + (op.totalValue || 0), 0)
-
-      // 4d. Preparation spoilage (preparation write-offs)
-      const prepSpoilageOps = await preparationStore.getOperationsByFilter({
-        type: 'write_off',
-        reasons: ['expired', 'spoiled', 'contaminated', 'quality_control'],
-        dateRange
-      })
-      const prepSpoilage = prepSpoilageOps.reduce((sum, op) => sum + (op.totalValue || 0), 0)
-
-      // 4e. Preparation shortage (inventory adjustment write-offs)
-      // Note: Preparations don't have 'inventory_adjustment' reason yet, skip for now
-      const prepShortage = 0
-
-      // 4f. Preparation surplus (inventory adjustment corrections)
-      const prepSurplusOps = await preparationStore.getOperationsByFilter({
-        type: 'correction',
-        correctionReason: 'other', // inventory adjustments
-        dateRange
-      })
-      const prepSurplus = prepSurplusOps.reduce((sum, op) => sum + (op.totalValue || 0), 0)
-
-      // 4g. Calculate totals
-      const spoilage = productSpoilage + prepSpoilage
-      const shortage = productShortage + prepShortage
-      const surplus = productSurplus + prepSurplus
-
-      const inventoryLosses = spoilage + shortage
-      const inventoryGains = surplus
-      const totalAdjustments = inventoryLosses - inventoryGains // Losses are positive, gains reduce cost
+      // Map SQL function results to inventoryAdjustments structure
+      const inventoryLosses = cogsData.spoilage.total + cogsData.shortage
+      const inventoryGains = cogsData.surplus
+      const totalAdjustments = inventoryLosses - inventoryGains
 
       const inventoryAdjustments = {
         losses: inventoryLosses,
         gains: inventoryGains,
         total: totalAdjustments,
         byCategory: {
-          spoilage, // Spoilage from storage + preparation operations
-          shortage, // Shortage from inventory adjustments
-          surplus // Surplus from inventory adjustments
+          spoilage: cogsData.spoilage.total,
+          shortage: cogsData.shortage,
+          surplus: cogsData.surplus
         }
       }
 
-      DebugUtils.info(MODULE_NAME, 'Inventory adjustments calculated from operations', {
-        productSpoilage,
-        productShortage,
-        productSurplus,
-        prepSpoilage,
-        prepShortage,
-        prepSurplus,
+      DebugUtils.info(MODULE_NAME, 'Inventory adjustments mapped from SQL function', {
+        spoilageBreakdown: cogsData.spoilage,
+        shortage: cogsData.shortage,
+        surplus: cogsData.surplus,
         totalLosses: inventoryLosses,
         totalGains: inventoryGains,
         netAdjustment: totalAdjustments
       })
 
-      // 4h. Calculate Real Food Cost
-      const realFoodCost = cogs.total + totalAdjustments
+      // 4h. Calculate Real Food Cost (Sales COGS + Adjustments)
+      const realFoodCost = cogsData.totalCOGS
 
-      DebugUtils.info(MODULE_NAME, 'Real food cost calculated', {
-        salesCOGS: cogs.total,
-        adjustments: totalAdjustments,
+      DebugUtils.info(MODULE_NAME, 'Real food cost from SQL function', {
+        salesCOGS: cogsData.salesCOGS,
+        spoilage: cogsData.spoilage.total,
+        shortage: cogsData.shortage,
+        surplus: cogsData.surplus,
         realFoodCost
       })
 
@@ -196,13 +154,13 @@ export const usePLReportStore = defineStore('plReport', () => {
       // ============================================
       DebugUtils.info(MODULE_NAME, 'Calculating COGS using both Accrual and Cash Basis methods')
 
-      // Accrual method (current implementation)
+      // Accrual method - use unified SQL function data
       const accrualCOGS = {
-        salesCOGS: cogs.total,
-        spoilage: inventoryAdjustments.byCategory.spoilage,
-        shortage: inventoryAdjustments.byCategory.shortage,
-        surplus: inventoryAdjustments.byCategory.surplus,
-        total: realFoodCost
+        salesCOGS: cogsData.salesCOGS,
+        spoilage: cogsData.spoilage.total,
+        shortage: cogsData.shortage,
+        surplus: cogsData.surplus,
+        total: cogsData.totalCOGS
       }
 
       // Cash method (new)

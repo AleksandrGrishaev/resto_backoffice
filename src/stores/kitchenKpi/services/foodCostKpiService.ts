@@ -1,15 +1,19 @@
 // src/stores/kitchenKpi/services/foodCostKpiService.ts
 // Food Cost KPI Service - Database operations for food cost KPIs
+// ✅ COGS UNIFICATION: Uses unified get_cogs_by_date_range with KPI settings
 
-import { supabase } from '@/supabase/client'
 import { DebugUtils } from '@/utils'
-import type { FoodCostKpiMetrics, FoodCostKpiRow } from '../types'
+import type { FoodCostKpiMetrics } from '../types'
 import { FOOD_COST_TARGETS, VARIANCE_THRESHOLD } from '../types'
+import { getCOGSForKPI } from '@/stores/analytics/services/cogsService'
+import { getKPISettings, getDefaultExcludedReasons } from './kpiSettingsService'
 
 const MODULE_NAME = 'FoodCostKpiService'
 
 /**
  * Get Food Cost KPI metrics for a specific month
+ * ✅ COGS UNIFICATION: Uses unified SQL function with KPI settings
+ *
  * @param month - Date within the target month (defaults to current date)
  * @param department - Filter by department ('kitchen', 'bar', or null for all)
  */
@@ -19,53 +23,79 @@ export async function getFoodCostKpiMonth(
 ): Promise<{ success: boolean; data?: FoodCostKpiMetrics; error?: string }> {
   try {
     const targetDate = month || new Date()
-    const dateParam = targetDate.toISOString().split('T')[0] // YYYY-MM-DD
 
-    DebugUtils.info(MODULE_NAME, 'Getting Food Cost KPI', { month: dateParam, department })
+    // Calculate month boundaries
+    const year = targetDate.getFullYear()
+    const monthIndex = targetDate.getMonth()
+    const startDate = new Date(year, monthIndex, 1)
+    const endDate = new Date(year, monthIndex + 1, 1) // First day of next month
 
-    const { data, error } = await supabase.rpc('get_food_cost_kpi_month', {
-      p_month: dateParam,
-      p_department: department || null
+    const startDateStr = startDate.toISOString()
+    const endDateStr = endDate.toISOString()
+
+    DebugUtils.info(MODULE_NAME, 'Getting Food Cost KPI (unified COGS)', {
+      month: `${year}-${String(monthIndex + 1).padStart(2, '0')}`,
+      department,
+      startDate: startDateStr,
+      endDate: endDateStr
     })
 
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get Food Cost KPI', { error })
-      return { success: false, error: error.message }
+    // Get KPI settings (excluded reasons)
+    let excludedReasons
+    try {
+      const settings = await getKPISettings()
+      excludedReasons = settings.excludedReasons
+      DebugUtils.info(MODULE_NAME, 'Using KPI settings from database', { excludedReasons })
+    } catch {
+      // Fallback to defaults if settings unavailable
+      excludedReasons = getDefaultExcludedReasons()
+      DebugUtils.warn(MODULE_NAME, 'Using default excluded reasons', { excludedReasons })
     }
 
-    const row = data as FoodCostKpiRow
+    // Get COGS data using unified function with KPI exclusions
+    const cogsData = await getCOGSForKPI(
+      startDateStr,
+      endDateStr,
+      department || null,
+      excludedReasons
+    )
 
-    if (!row) {
-      DebugUtils.warn(MODULE_NAME, 'No data returned from RPC')
-      return { success: false, error: 'No data returned' }
-    }
+    DebugUtils.info(MODULE_NAME, 'COGS data received from unified function', {
+      revenue: cogsData.revenue,
+      salesCOGS: cogsData.salesCOGS,
+      spoilage: cogsData.spoilage.total,
+      shortage: cogsData.shortage,
+      surplus: cogsData.surplus,
+      totalCOGS: cogsData.totalCOGS,
+      totalCOGSPercent: cogsData.totalCOGSPercent
+    })
 
     // Calculate target based on department
     const targetPercent = getTargetPercent(department)
-    const variance = Number(row.totalCOGSPercent) - targetPercent
+    const variance = cogsData.totalCOGSPercent - targetPercent
 
     const metrics: FoodCostKpiMetrics = {
       period: {
-        startDate: row.period.startDate,
-        endDate: row.period.endDate
+        startDate: cogsData.period.startDate,
+        endDate: cogsData.period.endDate
       },
-      revenue: Number(row.revenue) || 0,
+      revenue: cogsData.revenue,
       revenueByDepartment: {
-        kitchen: Number(row.revenueByDepartment?.kitchen) || 0,
-        bar: Number(row.revenueByDepartment?.bar) || 0
+        kitchen: 0, // Not available from unified function - need separate query if needed
+        bar: 0
       },
-      salesCOGS: Number(row.salesCOGS) || 0,
-      spoilage: Number(row.spoilage) || 0,
-      shortage: Number(row.shortage) || 0,
-      surplus: Number(row.surplus) || 0,
-      totalCOGS: Number(row.totalCOGS) || 0,
-      totalCOGSPercent: Number(row.totalCOGSPercent) || 0,
+      salesCOGS: cogsData.salesCOGS,
+      spoilage: cogsData.spoilage.total,
+      shortage: cogsData.shortage,
+      surplus: cogsData.surplus,
+      totalCOGS: cogsData.totalCOGS,
+      totalCOGSPercent: cogsData.totalCOGSPercent,
       targetPercent,
       variance: Math.round(variance * 100) / 100
     }
 
-    DebugUtils.info(MODULE_NAME, 'Got Food Cost KPI', {
-      month: dateParam,
+    DebugUtils.info(MODULE_NAME, 'Got Food Cost KPI (unified)', {
+      month: `${year}-${String(monthIndex + 1).padStart(2, '0')}`,
       department,
       revenue: metrics.revenue,
       totalCOGS: metrics.totalCOGS,

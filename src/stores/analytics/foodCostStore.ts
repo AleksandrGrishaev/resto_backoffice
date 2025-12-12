@@ -6,6 +6,7 @@ import { ref } from 'vue'
 import { DebugUtils } from '@/utils'
 import type { FoodCostDashboard } from './types'
 import { useSalesStore } from '@/stores/sales/salesStore'
+import { getCOGSForPL } from './services/cogsService'
 
 const MODULE_NAME = 'FoodCostStore'
 
@@ -42,27 +43,39 @@ export const useFoodCostStore = defineStore('foodCost', () => {
 
       DebugUtils.info(MODULE_NAME, 'Transactions loaded', { count: transactions.length })
 
-      // 2. Calculate summary
+      // 2. Calculate summary using unified COGS service
+      // ✅ COGS UNIFICATION: Use SQL function for consistent data
+      const cogsData = await getCOGSForPL(dateFrom, dateTo, null)
+
+      DebugUtils.info(MODULE_NAME, 'COGS data from SQL function', {
+        revenue: cogsData.revenue,
+        salesCOGS: cogsData.salesCOGS
+      })
+
       /**
        * Revenue Calculation:
-       * - Default: Use actualRevenue (after discounts, before tax)
-       * - With taxes toggle: Use totalCollected (with taxes)
+       * - Default: Use SQL function revenue (actual revenue from sales_transactions)
+       * - With taxes toggle: Use transaction-level totalCollected (requires manual calculation)
        *
-       * This affects the food cost percentage denominator:
-       * - Food Cost % = Cost / Actual Revenue × 100 (default)
-       * - Food Cost % = Cost / Total Collected × 100 (with taxes)
+       * For taxes toggle, we still need to process transactions individually
        */
-      const revenue = transactions.reduce((sum, t) => {
-        // Use actualRevenue (after discounts, before tax) by default
-        // Or use totalCollected (with taxes) if toggle is enabled
-        const revenueAmount = includeTaxesInRevenue.value
-          ? t.order?.totalCollected || t.profitCalculation.finalRevenue
-          : t.order?.actualRevenue || t.profitCalculation.finalRevenue
+      let revenue: number
+      let foodCost: number
 
-        return sum + revenueAmount
-      }, 0)
+      if (includeTaxesInRevenue.value) {
+        // With taxes: calculate from transactions manually
+        revenue = transactions.reduce((sum, t) => {
+          const revenueAmount = t.order?.totalCollected || t.profitCalculation.finalRevenue
+          return sum + revenueAmount
+        }, 0)
+        // Use SQL function salesCOGS for consistency
+        foodCost = cogsData.salesCOGS
+      } else {
+        // Without taxes: use unified SQL function data
+        revenue = cogsData.revenue
+        foodCost = cogsData.salesCOGS
+      }
 
-      const foodCost = transactions.reduce((sum, t) => sum + (t.actualCost?.totalCost || 0), 0)
       const foodCostPercentage = revenue > 0 ? (foodCost / revenue) * 100 : 0
       const variance = foodCostPercentage - targetFoodCostPercentage
 
@@ -74,7 +87,7 @@ export const useFoodCostStore = defineStore('foodCost', () => {
         variance
       }
 
-      DebugUtils.info(MODULE_NAME, 'Summary calculated', summary)
+      DebugUtils.info(MODULE_NAME, 'Summary calculated (using unified COGS)', summary)
 
       // 3. Calculate daily breakdown
       const dailyMap = new Map<
