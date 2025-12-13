@@ -10,7 +10,15 @@
       <v-card-title class="text-h6">Move Items to Bill</v-card-title>
 
       <v-card-text>
-        <div v-if="selectedItems?.length">
+        <!-- No target bills available -->
+        <div v-if="!targetBills?.length" class="text-center py-4">
+          <v-icon size="48" color="grey" class="mb-2">mdi-alert-circle-outline</v-icon>
+          <p class="text-body-1 text-grey">No other bills available to move items to.</p>
+          <p class="text-body-2 text-grey">Create a new bill first.</p>
+        </div>
+
+        <!-- Normal flow with target bills -->
+        <div v-else-if="selectedItems?.length">
           <p class="mb-4">Moving {{ selectedItems.length }} item(s) to:</p>
 
           <v-radio-group v-model="selectedBillId">
@@ -42,6 +50,7 @@
         <v-spacer />
         <v-btn variant="text" @click="$emit('cancel')">Cancel</v-btn>
         <v-btn
+          v-if="targetBills?.length"
           color="primary"
           :disabled="!selectedBillId"
           @click="$emit('confirm', selectedBillId)"

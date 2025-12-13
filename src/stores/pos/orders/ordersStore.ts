@@ -301,6 +301,89 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Rename a bill
+   */
+  function renameBill(orderId: string, billId: string, newName: string): ServiceResponse<PosBill> {
+    try {
+      const orderIndex = orders.value.findIndex(o => o.id === orderId)
+      if (orderIndex === -1) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
+      if (billIndex === -1) {
+        return { success: false, error: 'Bill not found' }
+      }
+
+      orders.value[orderIndex].bills[billIndex].name = newName
+      return { success: true, data: orders.value[orderIndex].bills[billIndex] }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to rename bill'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * Remove a bill from order
+   */
+  function removeBill(orderId: string, billId: string): ServiceResponse<void> {
+    try {
+      const orderIndex = orders.value.findIndex(o => o.id === orderId)
+      if (orderIndex === -1) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      const order = orders.value[orderIndex]
+
+      // Cannot remove if only one bill left
+      if (order.bills.length <= 1) {
+        return { success: false, error: 'Cannot remove the last bill' }
+      }
+
+      const billIndex = order.bills.findIndex(b => b.id === billId)
+      if (billIndex === -1) {
+        return { success: false, error: 'Bill not found' }
+      }
+
+      const bill = order.bills[billIndex]
+
+      // Cannot remove bill with paid items
+      if (bill.paymentStatus === 'paid') {
+        return { success: false, error: 'Cannot remove a paid bill' }
+      }
+
+      // Cannot remove bill with items (must be empty)
+      if (bill.items.length > 0) {
+        return {
+          success: false,
+          error: 'Cannot remove bill with items. Move or remove items first.'
+        }
+      }
+
+      // Remove the bill
+      order.bills.splice(billIndex, 1)
+
+      // If active bill was removed, select another one
+      if (activeBillId.value === billId) {
+        activeBillId.value = order.bills[0]?.id || null
+      }
+
+      console.log('🗑️ [ordersStore] Bill removed:', {
+        orderId,
+        billId,
+        remainingBills: order.bills.length
+      })
+
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to remove bill'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Добавить товар в счет
    */
   async function addItemToBill(
@@ -1390,6 +1473,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     selectOrder,
     selectBill,
     addBillToOrder,
+    renameBill,
+    removeBill,
     addItemToBill,
     updateItemQuantity,
     updateItemNote,

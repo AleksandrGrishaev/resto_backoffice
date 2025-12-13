@@ -268,7 +268,7 @@ const getPaymentStatusIcon = (status: 'paid' | 'partial' | 'unpaid'): string => 
 // Rename methods
 const openRenameDialog = (bill: PosBill) => {
   billToRename.value = bill
-  newBillName.value = bill.name
+  newBillName.value = ''
   showRenameDialog.value = true
 }
 

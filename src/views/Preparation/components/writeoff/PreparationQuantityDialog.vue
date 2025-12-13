@@ -6,13 +6,15 @@
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <v-card>
-      <v-card-title class="d-flex align-center">
+    <v-card class="write-off-dialog-card">
+      <v-card-title class="d-flex align-center pa-4 pb-2">
         <v-icon icon="mdi-delete-sweep" class="mr-2" color="error" />
         Write Off: {{ preparation?.name }}
+        <v-spacer />
+        <v-btn icon="mdi-close" variant="text" size="small" @click="handleCancel" />
       </v-card-title>
 
-      <v-card-text class="pa-6">
+      <v-card-text class="pa-4 pt-0 dialog-content">
         <!-- Preparation Info -->
         <div class="mb-4">
           <div class="d-flex justify-space-between align-center mb-2">
@@ -185,7 +187,7 @@
         </v-alert>
       </v-card-text>
 
-      <v-card-actions class="pa-6 pt-0">
+      <v-card-actions class="pa-4 pt-2 dialog-actions">
         <v-spacer />
         <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
         <v-btn color="error" variant="flat" :disabled="!isQuantityValid" @click="handleConfirm">
@@ -492,6 +494,25 @@ watch(quantityToWriteOff, () => {
 </script>
 
 <style lang="scss" scoped>
+// Dialog card with fixed layout for always-visible buttons
+.write-off-dialog-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.dialog-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 60vh;
+}
+
+.dialog-actions {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
 .quick-buttons {
   .v-btn-group {
     .v-btn {
@@ -534,6 +555,10 @@ watch(quantityToWriteOff, () => {
 
 /* Responsive improvements */
 @media (max-width: 600px) {
+  .dialog-content {
+    max-height: 55vh;
+  }
+
   .quick-buttons {
     .v-btn-group {
       .v-btn {

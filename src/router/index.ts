@@ -35,9 +35,15 @@ import { useAuthStore } from '@/stores/auth'
 import { usePermissions } from '@/stores/auth/composables'
 import type { UserRole } from '@/stores/auth/types'
 
+// ===== HELP ROUTES =====
+import { helpRoutes } from '@/help/router'
+
 // ===== ROUTES CONFIGURATION =====
 
 const routes: RouteRecordRaw[] = [
+  // ===== HELP ROUTES (PUBLIC) =====
+  ...helpRoutes,
+
   // ===== AUTHENTICATION ROUTES =====
   {
     path: '/auth',
@@ -497,6 +503,12 @@ router.beforeEach(async (to, from, next) => {
       return
     }
 
+    // Если маршрут публичный (help pages)
+    if (to.meta.public) {
+      next()
+      return
+    }
+
     // Если маршрут не требует авторизации
     if (!to.meta.requiresAuth) {
       // Если пользователь авторизован и идет на login - переадресуем на главную
@@ -542,6 +554,8 @@ declare module 'vue-router' {
     allowedRoles?: UserRole[]
     title?: string
     requiresDev?: boolean
+    public?: boolean
+    section?: string
   }
 }
 

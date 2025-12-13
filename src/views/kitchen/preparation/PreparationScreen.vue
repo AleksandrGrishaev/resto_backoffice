@@ -174,6 +174,15 @@
       @cancelled="handleTaskCancelled"
     />
 
+    <!-- Single Item Write-off Dialog (from Stock List trash icon) -->
+    <PreparationQuantityDialog
+      v-model="showSingleWriteOffDialog"
+      :preparation="selectedPreparation"
+      :department="userDepartment"
+      @confirm="handleSingleWriteOffConfirm"
+      @cancel="handleSingleWriteOffCancel"
+    />
+
     <!-- Snackbar for notifications -->
     <v-snackbar
       v-model="snackbar.show"
@@ -207,6 +216,8 @@ import {
   ProductWriteOffDialog,
   ScheduleConfirmDialog
 } from './dialogs'
+import PreparationQuantityDialog from '@/views/Preparation/components/writeoff/PreparationQuantityDialog.vue'
+import { useBackgroundTasks } from '@/core/background'
 import type { PreparationBalance, ProductionRecommendation } from '@/stores/preparation/types'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
 import type { ComponentPublicInstance } from 'vue'
@@ -228,6 +239,7 @@ const emit = defineEmits<{
 const preparationStore = usePreparationStore()
 const kpiStore = useKitchenKpiStore()
 const authStore = useAuthStore()
+const { addPrepWriteOffTask } = useBackgroundTasks()
 
 // =============================================
 // RECOMMENDATIONS COMPOSABLE
@@ -264,7 +276,9 @@ const showProductionDialog = ref(false)
 const showPrepWriteOffDialog = ref(false)
 const showProductWriteOffDialog = ref(false)
 const showScheduleConfirmDialog = ref(false)
+const showSingleWriteOffDialog = ref(false)
 const selectedPreparationId = ref<string | null>(null)
+const selectedPreparation = ref<{ id: string; name: string; unit: string } | null>(null)
 const selectedTask = ref<ProductionScheduleItem | null>(null)
 
 // Template refs
@@ -423,12 +437,30 @@ function openPrepWriteOffDialog(): void {
 }
 
 /**
- * Open preparation write-off dialog for specific preparation
+ * Open single-item preparation write-off dialog for specific preparation (from Stock List trash icon)
  */
 function openPrepWriteOffDialogForPrep(preparationId: string): void {
-  selectedPreparationId.value = preparationId
-  showPrepWriteOffDialog.value = true
-  DebugUtils.debug(MODULE_NAME, 'Opening prep write-off dialog for prep', { preparationId })
+  // Get preparation details from balance
+  const balance = preparationStore.getBalance(preparationId, userDepartment.value)
+  if (balance) {
+    selectedPreparation.value = {
+      id: preparationId,
+      name: balance.preparationName,
+      unit: balance.unit
+    }
+    showSingleWriteOffDialog.value = true
+    DebugUtils.debug(MODULE_NAME, 'Opening single write-off dialog for prep', {
+      preparationId,
+      name: balance.preparationName
+    })
+  } else {
+    // Fallback to multi-select dialog if balance not found
+    selectedPreparationId.value = preparationId
+    showPrepWriteOffDialog.value = true
+    DebugUtils.debug(MODULE_NAME, 'Fallback to prep write-off dialog (balance not found)', {
+      preparationId
+    })
+  }
 }
 
 /**
@@ -602,6 +634,67 @@ function handleTaskConfirmed(data: { taskId: string; quantity: number; notes: st
  */
 function handleTaskCancelled(): void {
   selectedTask.value = null
+}
+
+/**
+ * Handle single preparation write-off confirmation (from Stock List trash icon)
+ */
+function handleSingleWriteOffConfirm(
+  preparation: { id: string; name: string; unit: string },
+  quantity: number,
+  notes: string
+): void {
+  DebugUtils.info(MODULE_NAME, 'Processing single preparation write-off', {
+    preparationId: preparation.id,
+    preparationName: preparation.name,
+    quantity,
+    notes
+  })
+
+  // Queue background task
+  addPrepWriteOffTask(
+    {
+      items: [
+        {
+          preparationId: preparation.id,
+          preparationName: preparation.name,
+          quantity,
+          unit: preparation.unit
+        }
+      ],
+      department: userDepartment.value,
+      responsiblePerson: authStore.userName,
+      reason: 'expiration', // Default reason for single item write-off
+      notes: notes || 'Write-off from Stock List',
+      kpiData: {
+        userId: authStore.userId || 'unknown',
+        userName: authStore.userName,
+        affectsKpi: true // Expiration affects KPI
+      }
+    },
+    {
+      onSuccess: (message: string) => {
+        showSnackbar(message, 'success')
+        handleBackgroundTaskCompleted()
+      },
+      onError: (message: string) => {
+        showSnackbar(message, 'error')
+      }
+    }
+  )
+
+  // Close dialog and show processing message
+  showSingleWriteOffDialog.value = false
+  selectedPreparation.value = null
+  showSnackbar(`Processing write-off of ${preparation.name}...`, 'info')
+}
+
+/**
+ * Handle single write-off dialog cancellation
+ */
+function handleSingleWriteOffCancel(): void {
+  showSingleWriteOffDialog.value = false
+  selectedPreparation.value = null
 }
 
 /**

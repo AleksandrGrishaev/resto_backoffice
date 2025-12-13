@@ -199,8 +199,8 @@ const statusBadgeColor = computed((): string => {
 const statusBadgeText = computed((): string => {
   if (isOrder.value && props.order) {
     const statusTexts = {
-      preparing: 'Готовится',
-      ready: 'Готов'
+      preparing: 'In Progress',
+      ready: 'Ready'
     }
     return statusTexts[props.order.status as keyof typeof statusTexts] || ''
   }

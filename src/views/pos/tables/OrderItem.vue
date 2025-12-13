@@ -132,30 +132,30 @@ const orderTypeText = computed(() => {
   return props.order.type === 'delivery' ? 'Доставка' : 'Самовывоз'
 })
 
-// Статус конфигурация
+// Status configuration
 const statusConfig = {
   new: {
-    text: 'Новый',
+    text: 'New',
     icon: 'mdi-clock-outline',
     class: 'status--new'
   },
   preparing: {
-    text: 'Готовится',
+    text: 'In Progress',
     icon: 'mdi-chef-hat',
     class: 'status--preparing'
   },
   ready: {
-    text: 'Готов',
+    text: 'Ready',
     icon: 'mdi-check-circle',
     class: 'status--ready'
   },
   delivered: {
-    text: 'Доставлен',
+    text: 'Delivered',
     icon: 'mdi-truck-check',
     class: 'status--delivered'
   },
   cancelled: {
-    text: 'Отменён',
+    text: 'Cancelled',
     icon: 'mdi-cancel',
     class: 'status--cancelled'
   }
@@ -195,7 +195,7 @@ const progressPercentage = computed(() => {
 
 const progressText = computed(() => {
   if (props.order.estimatedTime) {
-    return `Готов через ${props.order.estimatedTime}`
+    return `Ready in ${props.order.estimatedTime}`
   }
   return statusConfig[props.order.status]?.text || ''
 })

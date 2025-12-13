@@ -165,6 +165,16 @@
       @confirm="handleConfirmCancel"
       @cancel="handleCancelDialogClose"
     />
+
+    <!-- Move Items Dialog -->
+    <MoveItemsDialog
+      v-model="showMoveDialog"
+      :source-bill="moveDialogData.sourceBill"
+      :target-bills="moveDialogData.targetBills"
+      :selected-items="moveDialogData.selectedItems"
+      @confirm="handleMoveConfirm"
+      @cancel="handleMoveCancel"
+    />
   </div>
 </template>
 
@@ -189,6 +199,7 @@ import PaymentDialog from '../payment/PaymentDialog.vue'
 import AddNoteDialog from './dialogs/AddNoteDialog.vue'
 import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
 import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
+import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
 
 const MODULE_NAME = 'OrderSection'
 
@@ -287,6 +298,22 @@ const cancellationItem = computed(() => {
     orderId: currentOrder.value.id,
     billId: activeBillId.value
   }
+})
+
+// Move Items Dialog State
+const showMoveDialog = ref(false)
+const moveSourceBillId = ref<string | null>(null)
+const moveItemIds = ref<string[]>([])
+const moveDialogData = computed(() => {
+  if (!currentOrder.value || !moveSourceBillId.value) {
+    return { sourceBill: null, targetBills: [], selectedItems: [] }
+  }
+
+  const sourceBill = currentOrder.value.bills.find(b => b.id === moveSourceBillId.value)
+  const targetBills = currentOrder.value.bills.filter(b => b.id !== moveSourceBillId.value)
+  const selectedItems = sourceBill?.items.filter(i => moveItemIds.value.includes(i.id)) || []
+
+  return { sourceBill, targetBills, selectedItems }
 })
 
 // Computed - Main Data
@@ -475,10 +502,16 @@ const handleAddBill = async (): Promise<void> => {
 }
 
 const handleRenameBill = async (billId: string, newName: string): Promise<void> => {
+  if (!currentOrder.value) return
+
   try {
-    // TODO: Implement bill rename logic
-    showSuccess('Bill renamed successfully')
-    hasUnsavedChanges.value = true
+    const result = ordersStore.renameBill(currentOrder.value.id, billId, newName)
+    if (result.success) {
+      showSuccess('Bill renamed successfully')
+      hasUnsavedChanges.value = true
+    } else {
+      showError(result.error || 'Failed to rename bill')
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to rename bill'
     showError(message)
@@ -486,12 +519,16 @@ const handleRenameBill = async (billId: string, newName: string): Promise<void> 
 }
 
 const handleRemoveBill = async (billId: string): Promise<void> => {
-  if (!canRemoveBill.value) return
+  if (!currentOrder.value) return
 
   try {
-    // TODO: Implement bill removal logic
-    showSuccess('Bill removed successfully')
-    hasUnsavedChanges.value = true
+    const result = ordersStore.removeBill(currentOrder.value.id, billId)
+    if (result.success) {
+      showSuccess('Bill removed successfully')
+      hasUnsavedChanges.value = true
+    } else {
+      showError(result.error || 'Failed to remove bill')
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to remove bill'
     showError(message)
@@ -805,14 +842,14 @@ const handleSendToKitchenFromActions = async (): Promise<void> => {
 }
 
 const handleMoveItems = (itemIds: string[], sourceBillId: string): void => {
-  console.log('📦 Move items action:', {
-    itemIds,
-    sourceBillId,
-    count: itemIds.length
-  })
+  if (!currentOrder.value || bills.value.length < 2) {
+    showError('Need at least 2 bills to move items')
+    return
+  }
 
-  // TODO: Implement move dialog
-  showSuccess(`Moving ${itemIds.length} items`)
+  moveItemIds.value = itemIds
+  moveSourceBillId.value = sourceBillId
+  showMoveDialog.value = true
 }
 
 const handleMoveFromActions = (): void => {
@@ -823,9 +860,57 @@ const handleMoveFromActions = (): void => {
     return
   }
 
+  if (bills.value.length < 2) {
+    showError('Need at least 2 bills to move items')
+    return
+  }
+
   if (activeBillId.value) {
     handleMoveItems(ordersStore.selectedItemIds, activeBillId.value)
   }
+}
+
+const handleMoveConfirm = async (targetBillId: string): Promise<void> => {
+  if (!currentOrder.value || !moveSourceBillId.value) return
+
+  try {
+    // Move items from source bill to target bill
+    for (const itemId of moveItemIds.value) {
+      // Find item in source bill
+      const sourceBill = currentOrder.value.bills.find(b => b.id === moveSourceBillId.value)
+      const itemIndex = sourceBill?.items.findIndex(i => i.id === itemId) ?? -1
+
+      if (sourceBill && itemIndex !== -1) {
+        const [item] = sourceBill.items.splice(itemIndex, 1)
+        const targetBill = currentOrder.value.bills.find(b => b.id === targetBillId)
+        if (targetBill && item) {
+          targetBill.items.push(item)
+        }
+      }
+    }
+
+    // Recalculate totals
+    ordersStore.recalculateOrderTotals(currentOrder.value.id)
+
+    // Clear selection
+    ordersStore.clearSelection()
+
+    showSuccess(`Moved ${moveItemIds.value.length} item(s) successfully`)
+    hasUnsavedChanges.value = true
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to move items'
+    showError(message)
+  } finally {
+    showMoveDialog.value = false
+    moveItemIds.value = []
+    moveSourceBillId.value = null
+  }
+}
+
+const handleMoveCancel = (): void => {
+  showMoveDialog.value = false
+  moveItemIds.value = []
+  moveSourceBillId.value = null
 }
 
 const handlePrint = (): void => {

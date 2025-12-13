@@ -27,20 +27,34 @@
       </v-alert>
 
       <!-- Action Buttons Row -->
-      <div class="action-buttons d-flex gap-3">
+      <div class="action-buttons d-flex gap-2">
+        <!-- Move Items Button -->
+        <BaseButton
+          variant="outlined"
+          color="secondary"
+          size="large"
+          :disabled="!canMove"
+          icon="mdi-swap-horizontal"
+          class="flex-shrink-0"
+          @click="handleMove"
+        />
+
         <!-- Save Button -->
         <BaseButton
           :variant="hasUnsavedChanges ? 'flat' : 'outlined'"
           :color="hasUnsavedChanges ? 'primary' : undefined"
           size="large"
-          class="flex-grow-1"
+          class="flex-grow-1 flex-shrink-1 min-w-0"
           :disabled="!canSave"
           :loading="saving"
-          start-icon="mdi-content-save"
+          :icon="isCompact ? 'mdi-content-save' : undefined"
+          :start-icon="isCompact ? undefined : 'mdi-content-save'"
           @click="handleSave"
         >
-          Save Bill
-          <span v-if="hasUnsavedChanges" class="unsaved-indicator">*</span>
+          <template v-if="!isCompact">
+            Save
+            <span v-if="hasUnsavedChanges" class="unsaved-indicator">*</span>
+          </template>
         </BaseButton>
 
         <!-- Checkout / Release Table / Complete Order Button -->
@@ -49,15 +63,18 @@
           color="success"
           variant="flat"
           size="large"
-          class="flex-grow-1"
+          class="flex-grow-1 flex-shrink-1 min-w-0"
           :disabled="!canCheckout"
           :loading="processing"
-          start-icon="mdi-credit-card"
+          :icon="isCompact ? 'mdi-credit-card' : undefined"
+          :start-icon="isCompact ? undefined : 'mdi-credit-card'"
           @click="handleCheckout"
         >
-          Checkout
-          <template v-if="ordersStore.selectedItemsCount > 0">
-            ({{ ordersStore.selectedItemsCount }})
+          <template v-if="!isCompact">
+            Checkout
+            <template v-if="ordersStore.selectedItemsCount > 0">
+              ({{ ordersStore.selectedItemsCount }})
+            </template>
           </template>
         </BaseButton>
 
@@ -67,13 +84,14 @@
           color="primary"
           variant="flat"
           size="large"
-          class="flex-grow-1"
+          class="flex-grow-1 flex-shrink-1 min-w-0"
           :disabled="!canReleaseTable"
           :loading="processing"
-          start-icon="mdi-table-chair"
+          :icon="isCompact ? 'mdi-table-chair' : undefined"
+          :start-icon="isCompact ? undefined : 'mdi-table-chair'"
           @click="handleReleaseTable"
         >
-          Release Table
+          <template v-if="!isCompact">Release</template>
         </BaseButton>
 
         <!-- Complete Order Button (shown when delivery/takeaway order is fully paid) -->
@@ -82,23 +100,29 @@
           color="primary"
           variant="flat"
           size="large"
-          class="flex-grow-1"
+          class="flex-grow-1 flex-shrink-1 min-w-0"
           :disabled="!canCompleteOrder"
           :loading="processing"
-          :start-icon="order?.type === 'delivery' ? 'mdi-bike-fast' : 'mdi-package-variant'"
+          :icon="
+            isCompact
+              ? order?.type === 'delivery'
+                ? 'mdi-bike-fast'
+                : 'mdi-package-variant'
+              : undefined
+          "
+          :start-icon="
+            isCompact
+              ? undefined
+              : order?.type === 'delivery'
+                ? 'mdi-bike-fast'
+                : 'mdi-package-variant'
+          "
           @click="handleCompleteOrder"
         >
-          {{ order?.type === 'delivery' ? 'Mark Delivered' : 'Mark Collected' }}
+          <template v-if="!isCompact">
+            {{ order?.type === 'delivery' ? 'Delivered' : 'Collected' }}
+          </template>
         </BaseButton>
-
-        <!-- Move Items Button -->
-        <BaseButton
-          variant="outlined"
-          size="large"
-          :disabled="!canMove"
-          icon="mdi-arrow-right"
-          @click="handleMove"
-        />
       </div>
 
       <!-- Checkout Summary (only when items selected) -->
@@ -123,7 +147,12 @@
 import { ref, computed } from 'vue'
 import type { PosOrder, PosBill } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useVuetifyBreakpoints } from '@/composables/useVuetifyBreakpoints'
 import BaseButton from '@/components/atoms/buttons/BaseButton.vue'
+
+// Breakpoints
+const breakpoints = useVuetifyBreakpoints()
+const isCompact = computed(() => breakpoints.isSmallScreen.value)
 
 // Store
 const ordersStore = usePosOrdersStore()
@@ -161,7 +190,8 @@ const canSave = computed((): boolean => {
 })
 
 const canMove = computed((): boolean => {
-  return ordersStore.hasSelection
+  // Need selection AND at least 2 bills to move items between
+  return ordersStore.hasSelection && props.bills.length >= 2
 })
 
 const canCheckout = computed((): boolean => {
@@ -171,26 +201,31 @@ const canCheckout = computed((): boolean => {
   return hasItems && hasUnpaidBills
 })
 
-// Check if order is fully paid
+// Check if order is fully paid (all non-empty bills are paid)
 const isOrderFullyPaid = computed((): boolean => {
   if (!props.order) return false
-  return props.order.paymentStatus === 'paid'
+
+  // Get bills with items
+  const billsWithItems = props.bills.filter(bill => bill.items.length > 0)
+
+  // If no bills have items, not fully paid (nothing to pay)
+  if (billsWithItems.length === 0) return false
+
+  // All bills with items must be paid
+  return billsWithItems.every(bill => bill.paymentStatus === 'paid')
 })
 
-// Can release table (order is paid and it's a dine-in order with a table)
+// Can release table (order is fully paid and it's a dine-in order with a table)
 const canReleaseTable = computed((): boolean => {
   if (!props.order) return false
-  return (
-    props.order.paymentStatus === 'paid' && props.order.type === 'dine_in' && !!props.order.tableId
-  )
+  return isOrderFullyPaid.value && props.order.type === 'dine_in' && !!props.order.tableId
 })
 
-// Can complete order (order is paid and it's delivery/takeaway)
+// Can complete order (order is fully paid and it's delivery/takeaway)
 const canCompleteOrder = computed((): boolean => {
   if (!props.order) return false
   return (
-    props.order.paymentStatus === 'paid' &&
-    (props.order.type === 'delivery' || props.order.type === 'takeaway')
+    isOrderFullyPaid.value && (props.order.type === 'delivery' || props.order.type === 'takeaway')
   )
 })
 
@@ -401,6 +436,10 @@ const handleCompleteOrder = async (): Promise<void> => {
 
 .action-buttons {
   gap: var(--spacing-sm);
+}
+
+.min-w-0 {
+  min-width: 0;
 }
 
 .unsaved-indicator {
