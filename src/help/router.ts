@@ -13,6 +13,10 @@ const PosGuide = () => import('./pos/guides/PosGuide.vue')
 
 // Backoffice
 const BackofficeHelpView = () => import('./backoffice/BackofficeHelpView.vue')
+const SupplierGuide = () => import('./backoffice/guides/SupplierGuide.vue')
+const AccountsGuide = () => import('./backoffice/guides/AccountsGuide.vue')
+const RecipesGuide = () => import('./backoffice/guides/RecipesGuide.vue')
+const ProductsGuide = () => import('./backoffice/guides/ProductsGuide.vue')
 
 // Kitchen guides
 const PreparationGuide = () => import('./kitchen/guides/PreparationGuide.vue')
@@ -160,6 +164,42 @@ export const helpRoutes: RouteRecordRaw[] = [
         component: BackofficeHelpView,
         meta: {
           title: 'Backoffice Help',
+          section: 'backoffice'
+        }
+      },
+      {
+        path: 'backoffice/supplier',
+        name: 'help-backoffice-supplier',
+        component: SupplierGuide,
+        meta: {
+          title: 'Manajemen Pemasok',
+          section: 'backoffice'
+        }
+      },
+      {
+        path: 'backoffice/accounts',
+        name: 'help-backoffice-accounts',
+        component: AccountsGuide,
+        meta: {
+          title: 'Manajemen Akun',
+          section: 'backoffice'
+        }
+      },
+      {
+        path: 'backoffice/recipes',
+        name: 'help-backoffice-recipes',
+        component: RecipesGuide,
+        meta: {
+          title: 'Manajemen Resep',
+          section: 'backoffice'
+        }
+      },
+      {
+        path: 'backoffice/products',
+        name: 'help-backoffice-products',
+        component: ProductsGuide,
+        meta: {
+          title: 'Manajemen Produk',
           section: 'backoffice'
         }
       }

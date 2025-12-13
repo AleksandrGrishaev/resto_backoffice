@@ -380,7 +380,13 @@ const canEditOrder = computed((): boolean => {
 })
 
 const canAddBill = computed((): boolean => {
-  return !!currentOrder.value && currentOrder.value.status === 'draft'
+  if (!currentOrder.value) return false
+  // Can add bill while order is not closed/cancelled and not fully paid
+  const closedStatuses = ['served', 'collected', 'delivered', 'cancelled']
+  return (
+    !closedStatuses.includes(currentOrder.value.status) &&
+    currentOrder.value.paymentStatus !== 'paid'
+  )
 })
 
 const canRemoveBill = computed((): boolean => {
@@ -522,10 +528,10 @@ const handleRemoveBill = async (billId: string): Promise<void> => {
   if (!currentOrder.value) return
 
   try {
-    const result = ordersStore.removeBill(currentOrder.value.id, billId)
+    const result = await ordersStore.removeBill(currentOrder.value.id, billId)
     if (result.success) {
       showSuccess('Bill removed successfully')
-      hasUnsavedChanges.value = true
+      // No need to mark unsaved - already saved to DB
     } else {
       showError(result.error || 'Failed to remove bill')
     }

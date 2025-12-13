@@ -47,3 +47,6 @@ PRODUCTION_CREDENTIALS.md
 # Vercel
 .vercel
 *.vercel.json
+
+# Playwright MCP temporary files
+.playwright-mcp/

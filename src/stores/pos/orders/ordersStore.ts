@@ -327,7 +327,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   /**
    * Remove a bill from order
    */
-  function removeBill(orderId: string, billId: string): ServiceResponse<void> {
+  async function removeBill(orderId: string, billId: string): Promise<ServiceResponse<void>> {
     try {
       const orderIndex = orders.value.findIndex(o => o.id === orderId)
       if (orderIndex === -1) {
@@ -361,7 +361,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         }
       }
 
-      // Remove the bill
+      // Remove the bill locally
       order.bills.splice(billIndex, 1)
 
       // If active bill was removed, select another one
@@ -369,10 +369,24 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         activeBillId.value = order.bills[0]?.id || null
       }
 
+      // Recalculate order totals and status
+      recalculateOrderTotals(orderId)
+
+      // Save to database
+      const saveResponse = await ordersService.updateOrder(order)
+      if (!saveResponse.success) {
+        console.error(
+          '❌ [ordersStore] Failed to save order after bill removal:',
+          saveResponse.error
+        )
+        // Note: local state is already updated, but DB save failed
+      }
+
       console.log('🗑️ [ordersStore] Bill removed:', {
         orderId,
         billId,
-        remainingBills: order.bills.length
+        remainingBills: order.bills.length,
+        savedToDb: saveResponse.success
       })
 
       return { success: true }

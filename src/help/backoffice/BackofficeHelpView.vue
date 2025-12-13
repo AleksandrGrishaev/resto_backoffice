@@ -10,7 +10,35 @@ const guides: Array<{
   icon: string
   route: string
   tags: string[]
-}> = []
+}> = [
+  {
+    id: 'supplier',
+    title: 'Manajemen Pemasok',
+    description:
+      'Panduan lengkap untuk mengelola pembelian dari pemasok: request, order, invoice, dan penerimaan barang',
+    icon: 'mdi-truck-delivery',
+    route: 'help-backoffice-supplier',
+    tags: ['Pembelian', 'Invoice', 'Request', 'Order']
+  },
+  {
+    id: 'accounts',
+    title: 'Manajemen Akun',
+    description:
+      'Panduan untuk mengelola akun keuangan, pembayaran tagihan, income, expense, dan transfer',
+    icon: 'mdi-wallet',
+    route: 'help-backoffice-accounts',
+    tags: ['Keuangan', 'Pembayaran', 'Transfer', 'Kas']
+  },
+  {
+    id: 'recipes',
+    title: 'Manajemen Resep',
+    description:
+      'Panduan lengkap untuk mengelola resep, semi-finished products (polufabrikaty), dan kalkulasi biaya',
+    icon: 'mdi-book-open-page-variant',
+    route: 'help-backoffice-recipes',
+    tags: ['Resep', 'Polufabrikaty', 'Biaya', 'Margin']
+  }
+]
 
 const features = [
   {
@@ -145,9 +173,6 @@ function goToGuide(routeName: string) {
         <v-list density="compact">
           <v-list-item prepend-icon="mdi-food">
             <v-list-item-title>Produk & Kategori</v-list-item-title>
-          </v-list-item>
-          <v-list-item prepend-icon="mdi-receipt-text">
-            <v-list-item-title>Manajemen Resep</v-list-item-title>
           </v-list-item>
           <v-list-item prepend-icon="mdi-silverware-fork-knife">
             <v-list-item-title>Konfigurasi Menu</v-list-item-title>

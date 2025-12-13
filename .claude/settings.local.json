@@ -55,7 +55,11 @@
       "Bash(git restore:*)",
       "Bash(git pull:*)",
       "SlashCommand(/db-clear)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(pkill:*)",
+      "Bash(cp:*)",
+      "mcp__playwright__browser_run_code",
+      "mcp__playwright__browser_press_key"
     ]
   },
   "enableAllProjectMcpServers": true,

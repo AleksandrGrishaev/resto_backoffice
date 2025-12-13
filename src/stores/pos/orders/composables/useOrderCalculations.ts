@@ -493,14 +493,20 @@ export function recalculateOrderTotals(order: PosOrder): void {
 
   // Пересчитать payment status
   const calculateOrderPaymentStatus = (bills: PosBill[]): OrderPaymentStatus => {
-    const activeBills = bills.filter(bill => bill.status !== 'cancelled')
+    // Only consider active bills WITH items (empty bills don't affect payment status)
+    const activeBillsWithItems = bills.filter(
+      bill => bill.status !== 'cancelled' && bill.items.length > 0
+    )
 
-    if (activeBills.length === 0) return 'unpaid'
+    // If no bills have items, order is unpaid (nothing to pay)
+    if (activeBillsWithItems.length === 0) return 'unpaid'
 
-    const paidBills = activeBills.filter(bill => bill.paymentStatus === 'paid')
-    const partialBills = activeBills.filter(bill => bill.paymentStatus === 'partial')
+    const paidBills = activeBillsWithItems.filter(bill => bill.paymentStatus === 'paid')
+    const partialBills = activeBillsWithItems.filter(bill => bill.paymentStatus === 'partial')
 
-    if (paidBills.length === activeBills.length) return 'paid'
+    // All bills with items are paid
+    if (paidBills.length === activeBillsWithItems.length) return 'paid'
+    // Some bills are paid or partially paid
     if (paidBills.length > 0 || partialBills.length > 0) return 'partial'
 
     return 'unpaid'

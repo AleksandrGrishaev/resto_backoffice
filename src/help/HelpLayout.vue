@@ -67,7 +67,32 @@ const sections: Section[] = [
     icon: 'mdi-chart-box',
     route: 'help-backoffice',
     description: 'Management interface documentation',
-    guides: []
+    guides: [
+      {
+        id: 'supplier',
+        title: 'Manajemen Pemasok',
+        icon: 'mdi-truck-delivery',
+        route: 'help-backoffice-supplier'
+      },
+      {
+        id: 'accounts',
+        title: 'Manajemen Akun',
+        icon: 'mdi-wallet',
+        route: 'help-backoffice-accounts'
+      },
+      {
+        id: 'recipes',
+        title: 'Manajemen Resep',
+        icon: 'mdi-book-open-page-variant',
+        route: 'help-backoffice-recipes'
+      },
+      {
+        id: 'products',
+        title: 'Manajemen Produk',
+        icon: 'mdi-package-variant',
+        route: 'help-backoffice-products'
+      }
+    ]
   }
 ]
 
