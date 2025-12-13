@@ -462,7 +462,7 @@ class KitchenKpiService {
 
       const { data: result, error } = await supabase.rpc('complete_production_schedule_task', {
         p_task_id: data.taskId,
-        p_completed_by: data.completedBy,
+        p_completed_by: data.completedBy || null, // NULL if no user UUID
         p_completed_by_name: data.completedByName,
         p_completed_quantity: data.completedQuantity,
         p_batch_id: data.preparationBatchId || null

@@ -17,6 +17,7 @@ export type {
   ProductionTaskPayload,
   ProductWriteOffTaskPayload,
   PrepWriteOffTaskPayload,
+  ScheduleCompleteTaskPayload,
   ProductWriteOffItem,
   PrepWriteOffItem,
   TaskResult

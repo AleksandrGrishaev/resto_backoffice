@@ -1,117 +1,111 @@
 <!-- src/views/kitchen/preparation/dialogs/ProductWriteOffDialog.vue -->
-<!-- Kitchen Preparation - Product Write-Off Dialog (NO STOCK INFO) -->
+<!-- Kitchen Preparation - Product Write-Off Dialog (Horizontal Tablet Layout) -->
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="800"
+    max-width="900"
     persistent
-    scrollable
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <v-card>
-      <!-- Header -->
-      <v-card-title class="d-flex align-center justify-space-between">
-        <div>
-          <h3>Write Off Products</h3>
-          <div class="text-body-2 text-medium-emphasis">
-            {{ userDepartment === 'kitchen' ? 'Kitchen' : 'Bar' }} Department
+    <v-card class="dialog-card">
+      <!-- Compact Header with Reason Selector -->
+      <v-card-title class="dialog-header pa-3">
+        <div class="d-flex align-center justify-space-between w-100">
+          <div class="d-flex align-center gap-4 flex-grow-1">
+            <div>
+              <h3 class="text-h6">Write Off Products</h3>
+              <div class="text-caption text-medium-emphasis">
+                {{ userDepartment === 'kitchen' ? 'Kitchen' : 'Bar' }}
+              </div>
+            </div>
+            <!-- Reason Selector inline -->
+            <v-select
+              v-model="formData.reason"
+              :items="writeOffReasonOptions"
+              label="Reason"
+              variant="outlined"
+              density="compact"
+              class="reason-select"
+              hide-details
+              :rules="[rules.required]"
+            >
+              <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps" :title="undefined" :subtitle="undefined">
+                  <template #prepend>
+                    <v-icon
+                      :color="item.raw.color"
+                      :icon="item.raw.affectsKPI ? 'mdi-alert' : 'mdi-check-circle'"
+                      size="small"
+                    />
+                  </template>
+                  <v-list-item-title class="text-body-2">{{ item.raw.title }}</v-list-item-title>
+                </v-list-item>
+              </template>
+            </v-select>
+            <!-- KPI Warning inline -->
+            <v-chip
+              v-if="selectedReasonInfo?.affectsKPI"
+              color="warning"
+              size="small"
+              prepend-icon="mdi-alert"
+            >
+              Affects KPI
+            </v-chip>
           </div>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="handleCancel" />
         </div>
-        <v-btn icon="mdi-close" variant="text" @click="handleCancel" />
       </v-card-title>
       <v-divider />
 
-      <!-- Form -->
-      <v-card-text class="pa-6">
+      <!-- Main Content: Horizontal Layout -->
+      <v-card-text class="pa-3 dialog-content">
         <v-form ref="formRef" @submit.prevent="handleSubmit">
-          <!-- Write-off Reason -->
-          <v-select
-            v-model="formData.reason"
-            :items="writeOffReasonOptions"
-            label="Write-off Reason"
-            variant="outlined"
-            density="comfortable"
-            class="mb-4"
-            :rules="[rules.required]"
-          >
-            <template #item="{ props: itemProps, item }">
-              <v-list-item v-bind="itemProps" :title="undefined" :subtitle="undefined">
-                <template #prepend>
-                  <v-icon
-                    :color="item.raw.color"
-                    :icon="item.raw.affectsKPI ? 'mdi-alert' : 'mdi-check-circle'"
-                  />
-                </template>
-                <v-list-item-title>{{ item.raw.title }}</v-list-item-title>
-                <v-list-item-subtitle>{{ item.raw.description }}</v-list-item-subtitle>
-              </v-list-item>
-            </template>
-          </v-select>
+          <div class="d-flex gap-3 panels-container">
+            <!-- Left Panel: Product Search & Add -->
+            <v-card variant="outlined" class="flex-grow-1 panel-card">
+              <v-card-title class="pa-2 py-1">
+                <span class="text-body-1 font-weight-medium">Add Products</span>
+              </v-card-title>
+              <v-divider />
+              <v-card-text class="pa-2">
+                <!-- Product Search -->
+                <v-autocomplete
+                  v-model="selectedProduct"
+                  :items="availableProducts"
+                  item-title="name"
+                  item-value="id"
+                  placeholder="Search product..."
+                  variant="outlined"
+                  density="compact"
+                  prepend-inner-icon="mdi-magnify"
+                  clearable
+                  return-object
+                  hide-details
+                  :loading="loadingProducts"
+                  @update:model-value="handleProductSelected"
+                >
+                  <template #item="{ props: itemProps, item }">
+                    <v-list-item v-bind="itemProps">
+                      <v-list-item-subtitle class="text-caption">
+                        {{ item.raw.currentQuantity }} {{ item.raw.unit }}
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                  </template>
+                </v-autocomplete>
 
-          <!-- KPI Warning -->
-          <v-alert
-            v-if="selectedReasonInfo?.affectsKPI"
-            type="warning"
-            variant="tonal"
-            class="mb-4"
-          >
-            <template #prepend>
-              <v-icon icon="mdi-alert-triangle" />
-            </template>
-            <strong>Affects KPI:</strong>
-            This write-off will impact your performance metrics.
-          </v-alert>
-
-          <!-- Add Product Section -->
-          <v-card variant="outlined" class="mb-4">
-            <v-card-title class="pa-4 d-flex align-center justify-space-between">
-              <span>Add Products</span>
-              <v-chip size="small" color="primary" variant="tonal">
-                {{ formData.items.length }} selected
-              </v-chip>
-            </v-card-title>
-            <v-divider />
-            <v-card-text class="pa-4">
-              <!-- Product Search -->
-              <v-autocomplete
-                v-model="selectedProduct"
-                :items="availableProducts"
-                item-title="name"
-                item-value="id"
-                label="Search product..."
-                variant="outlined"
-                density="comfortable"
-                prepend-inner-icon="mdi-magnify"
-                clearable
-                return-object
-                class="mb-3"
-                :loading="loadingProducts"
-                @update:model-value="handleProductSelected"
-              >
-                <template #item="{ props: itemProps, item }">
-                  <v-list-item v-bind="itemProps">
-                    <v-list-item-subtitle>
-                      Stock: {{ item.raw.currentQuantity }} {{ item.raw.unit }}
-                    </v-list-item-subtitle>
-                  </v-list-item>
-                </template>
-              </v-autocomplete>
-
-              <!-- Quantity Input (appears after product selected) -->
-              <div v-if="pendingProduct" class="pending-product-input">
-                <v-row align="center">
-                  <v-col cols="5">
-                    <div class="text-subtitle-1 font-weight-medium">
-                      {{ pendingProduct.name }}
+                <!-- Quantity Input (appears after product selected) -->
+                <div v-if="pendingProduct" class="pending-product-input mt-2">
+                  <div class="d-flex align-center gap-2">
+                    <div class="flex-grow-1">
+                      <div class="text-body-2 font-weight-medium text-truncate">
+                        {{ pendingProduct.name }}
+                      </div>
+                      <div class="text-caption text-medium-emphasis">
+                        Stock: {{ pendingProduct.currentQuantity }} {{ pendingProduct.unit }}
+                      </div>
                     </div>
-                    <div class="text-caption text-medium-emphasis">
-                      Stock: {{ pendingProduct.currentQuantity }} {{ pendingProduct.unit }}
-                    </div>
-                  </v-col>
-                  <v-col cols="4">
                     <v-text-field
                       v-model.number="pendingQuantity"
-                      label="Quantity"
                       type="number"
                       min="0.01"
                       step="0.1"
@@ -119,9 +113,8 @@
                       density="compact"
                       :suffix="pendingProduct.unit"
                       hide-details
+                      class="quantity-input"
                     />
-                  </v-col>
-                  <v-col cols="3" class="text-right">
                     <v-btn
                       color="primary"
                       variant="flat"
@@ -131,96 +124,95 @@
                     >
                       Add
                     </v-btn>
-                  </v-col>
-                </v-row>
-              </div>
-            </v-card-text>
-          </v-card>
+                  </div>
+                </div>
+              </v-card-text>
+            </v-card>
 
-          <!-- Selected Products List -->
-          <v-card variant="outlined" class="mb-4">
-            <v-card-title class="pa-4">Selected Products</v-card-title>
-            <v-divider />
-            <v-card-text class="pa-0" style="max-height: 300px; overflow-y: auto">
-              <!-- Empty State -->
-              <div v-if="formData.items.length === 0" class="text-center py-8 text-medium-emphasis">
-                <v-icon icon="mdi-package-variant-closed" size="48" class="mb-2" />
-                <div>No products selected</div>
-                <div class="text-body-2">Search and add products above</div>
-              </div>
-
-              <!-- Products list -->
-              <v-list v-else class="pa-0" density="compact">
-                <v-list-item
-                  v-for="(item, index) in formData.items"
-                  :key="`item-${index}`"
-                  class="px-4"
+            <!-- Right Panel: Selected Products -->
+            <v-card variant="outlined" class="selected-panel panel-card">
+              <v-card-title class="d-flex align-center justify-space-between pa-2 py-1">
+                <span class="text-body-1 font-weight-medium">Selected</span>
+                <v-chip size="x-small" color="primary" variant="tonal">
+                  {{ formData.items.length }}
+                </v-chip>
+              </v-card-title>
+              <v-divider />
+              <v-card-text class="pa-2 panel-scroll">
+                <!-- Empty State -->
+                <div
+                  v-if="formData.items.length === 0"
+                  class="text-center py-4 text-medium-emphasis"
                 >
-                  <v-list-item-title class="font-weight-medium">
-                    {{ getProductName(item.itemId) }}
-                  </v-list-item-title>
-                  <v-list-item-subtitle>
-                    <span class="font-weight-bold">
-                      {{ item.quantity }} {{ getProductUnit(item.itemId) }}
-                    </span>
-                    <span class="text-medium-emphasis ml-2">
-                      Est. cost: {{ formatIDR(calculateItemCost(item)) }}
-                    </span>
-                  </v-list-item-subtitle>
+                  <v-icon icon="mdi-package-variant-closed" size="32" class="mb-1" />
+                  <div class="text-caption">No products selected</div>
+                </div>
 
-                  <template #append>
+                <!-- Products list -->
+                <div v-else class="selected-items-list">
+                  <div
+                    v-for="(item, index) in formData.items"
+                    :key="`item-${index}`"
+                    class="selected-item-row d-flex align-center justify-space-between py-1"
+                  >
+                    <div class="flex-grow-1">
+                      <div class="text-body-2 font-weight-medium text-truncate">
+                        {{ getProductName(item.itemId) }}
+                      </div>
+                      <div class="d-flex align-center gap-2 text-caption text-medium-emphasis">
+                        <span>{{ item.quantity }} {{ getProductUnit(item.itemId) }}</span>
+                        <span>{{ formatIDR(calculateItemCost(item)) }}</span>
+                      </div>
+                    </div>
                     <v-btn
-                      icon="mdi-delete"
+                      icon="mdi-close"
                       variant="text"
-                      size="small"
+                      size="x-small"
                       color="error"
                       @click="removeProductRow(index)"
                     />
-                  </template>
-                </v-list-item>
-              </v-list>
-            </v-card-text>
-          </v-card>
+                  </div>
+                </div>
+              </v-card-text>
 
-          <!-- Notes -->
-          <v-textarea
-            v-model="formData.notes"
-            label="General Notes (optional)"
-            variant="outlined"
-            density="comfortable"
-            rows="2"
-            placeholder="Additional information about this write-off..."
-          />
-
-          <!-- Total Cost Summary -->
-          <v-card v-if="formData.items.length > 0" variant="tonal" color="error" class="pa-4 mt-4">
-            <div class="d-flex align-center justify-space-between">
-              <div>
-                <div class="text-h6 font-weight-bold">Estimated Write-off Cost</div>
-                <div class="text-body-2 text-medium-emphasis">
-                  {{ formData.items.length }} product{{ formData.items.length !== 1 ? 's' : '' }}
+              <!-- Total Cost at bottom of selected panel -->
+              <v-divider v-if="formData.items.length > 0" />
+              <div v-if="formData.items.length > 0" class="pa-2 bg-error-lighten-5">
+                <div class="d-flex align-center justify-space-between">
+                  <span class="text-body-2 font-weight-medium">Total Cost</span>
+                  <span class="text-subtitle-1 font-weight-bold text-error">
+                    {{ formatIDR(totalCost) }}
+                  </span>
                 </div>
               </div>
-              <div class="text-h4 font-weight-bold">
-                {{ formatIDR(totalCost) }}
-              </div>
-            </div>
-          </v-card>
+            </v-card>
+          </div>
         </v-form>
       </v-card-text>
 
-      <!-- Actions -->
-      <v-card-actions class="pa-6 pt-0">
+      <!-- Compact Actions -->
+      <v-divider />
+      <v-card-actions class="pa-3 dialog-actions">
+        <v-text-field
+          v-model="formData.notes"
+          placeholder="Notes (optional)"
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="notes-input"
+          prepend-inner-icon="mdi-note-text"
+        />
         <v-spacer />
-        <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
+        <v-btn variant="text" size="small" @click="handleCancel">Cancel</v-btn>
         <v-btn
           color="error"
           variant="flat"
+          size="small"
           :loading="loading"
           :disabled="!isFormValid"
           @click="handleSubmit"
         >
-          Write Off Products
+          Write Off ({{ formData.items.length }})
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -468,10 +460,103 @@ watch(
 </script>
 
 <style scoped lang="scss">
+// Horizontal tablet-optimized layout
+.dialog-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.dialog-header {
+  flex-shrink: 0;
+}
+
+.dialog-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dialog-actions {
+  flex-shrink: 0;
+}
+
+.reason-select {
+  max-width: 200px;
+  min-width: 150px;
+}
+
+.notes-input {
+  max-width: 300px;
+}
+
+.quantity-input {
+  max-width: 120px;
+}
+
+.panels-container {
+  height: 100%;
+  min-height: 200px;
+}
+
+.panel-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 220px;
+}
+
+.selected-panel {
+  min-width: 280px;
+  max-width: 320px;
+}
+
 .pending-product-input {
   background-color: rgba(var(--v-theme-primary), 0.05);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 6px;
+  padding: 8px;
   border: 1px dashed rgba(var(--v-theme-primary), 0.3);
+}
+
+.selected-items-list {
+  .selected-item-row {
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin-bottom: 2px;
+
+    &:hover {
+      background-color: rgba(var(--v-theme-surface-variant), 0.1);
+    }
+
+    &:not(:last-child) {
+      border-bottom: 1px solid rgba(var(--v-theme-outline), 0.08);
+    }
+  }
+}
+
+.bg-error-lighten-5 {
+  background-color: rgba(var(--v-theme-error), 0.08);
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-3 {
+  gap: 12px;
+}
+
+.gap-4 {
+  gap: 16px;
+}
+
+.w-100 {
+  width: 100%;
 }
 </style>

@@ -1,164 +1,179 @@
 <!-- src/views/kitchen/preparation/dialogs/SimpleProductionDialog.vue -->
-<!-- Kitchen Preparation - Simple Production Dialog (Mini Mode Only) -->
+<!-- Kitchen Preparation - Simple Production Dialog (Horizontal Tablet Layout) -->
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="500px"
+    max-width="700px"
     persistent
+    content-class="dialog-top-aligned"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <div>
-          <h3>New Production</h3>
-          <div class="text-caption text-medium-emphasis">
-            {{ selectedPreparation ? selectedPreparation.name : 'Select preparation' }}
+    <v-card class="dialog-card">
+      <!-- Compact Header -->
+      <v-card-title class="dialog-header pa-3">
+        <div class="d-flex align-center justify-space-between w-100">
+          <div class="d-flex align-center gap-3">
+            <v-icon icon="mdi-chef-hat" color="success" />
+            <div>
+              <h3 class="text-h6">New Production</h3>
+              <div v-if="selectedPreparation" class="text-caption text-medium-emphasis">
+                {{ selectedPreparation.name }}
+              </div>
+            </div>
           </div>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="handleClose" />
         </div>
-        <v-btn icon="mdi-close" variant="text" @click="handleClose" />
       </v-card-title>
 
       <v-divider />
 
-      <v-card-text class="pa-4">
+      <v-card-text class="pa-3 dialog-content">
         <v-form ref="form" v-model="isFormValid">
-          <!-- Preparation Selector (if not preselected) -->
-          <v-autocomplete
-            v-if="!preselectedPreparationId"
-            v-model="selectedPreparationId"
-            :items="availablePreparations"
-            item-title="name"
-            item-value="id"
-            label="Select Preparation"
-            variant="outlined"
-            density="comfortable"
-            class="mb-4"
-            prepend-inner-icon="mdi-chef-hat"
-            :rules="[v => !!v || 'Please select a preparation']"
-            :loading="loadingPreparations"
-            clearable
-          >
-            <template #item="{ props, item }">
-              <v-list-item v-bind="props">
-                <template #subtitle>
-                  {{ item.raw.code }} &bull;
-                  <template v-if="item.raw.portionType === 'portion'">
-                    1 portion ({{ item.raw.portionSize }}{{ item.raw.outputUnit }})
-                  </template>
-                  <template v-else>
-                    {{ item.raw.outputQuantity }} {{ item.raw.outputUnit }}
-                  </template>
+          <!-- Horizontal layout: Left = Selector/Info, Right = Quantity/Cost -->
+          <div class="d-flex gap-3">
+            <!-- Left Column -->
+            <div class="left-column">
+              <!-- Preparation Selector (if not preselected) -->
+              <v-autocomplete
+                v-if="!preselectedPreparationId"
+                v-model="selectedPreparationId"
+                :items="availablePreparations"
+                item-title="name"
+                item-value="id"
+                placeholder="Select Preparation"
+                variant="outlined"
+                density="compact"
+                prepend-inner-icon="mdi-chef-hat"
+                :rules="[v => !!v || 'Required']"
+                :loading="loadingPreparations"
+                clearable
+                hide-details
+              >
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props">
+                    <template #subtitle>
+                      <span class="text-caption">
+                        {{ item.raw.code }} &bull;
+                        <template v-if="item.raw.portionType === 'portion'">
+                          {{ item.raw.portionSize }}{{ item.raw.outputUnit }}/portion
+                        </template>
+                        <template v-else>
+                          {{ item.raw.outputQuantity }} {{ item.raw.outputUnit }}
+                        </template>
+                      </span>
+                    </template>
+                  </v-list-item>
                 </template>
-              </v-list-item>
-            </template>
-          </v-autocomplete>
+              </v-autocomplete>
 
-          <!-- Recipe Output Info -->
-          <v-card v-if="selectedPreparation" variant="tonal" color="primary" class="mb-4">
-            <v-card-text class="py-3">
-              <div class="d-flex justify-space-between align-center">
-                <div>
-                  <div class="text-caption text-medium-emphasis">Recipe Output</div>
-                  <div class="text-h6 font-weight-medium">
-                    <template v-if="isPortionType">
-                      1 portion ({{ selectedPreparation.portionSize
-                      }}{{ selectedPreparation.outputUnit }})
-                    </template>
-                    <template v-else>
-                      {{ selectedPreparation.outputQuantity }}
-                      {{ selectedPreparation.outputUnit }}
-                    </template>
+              <!-- Recipe Output Info (compact) -->
+              <div v-if="selectedPreparation" class="recipe-info mt-2 pa-2">
+                <div class="d-flex justify-space-between align-center">
+                  <div>
+                    <div class="text-caption text-medium-emphasis">Recipe Output</div>
+                    <div class="text-body-1 font-weight-medium">
+                      <template v-if="isPortionType">
+                        1 portion ({{ selectedPreparation.portionSize
+                        }}{{ selectedPreparation.outputUnit }})
+                      </template>
+                      <template v-else>
+                        {{ selectedPreparation.outputQuantity }}
+                        {{ selectedPreparation.outputUnit }}
+                      </template>
+                    </div>
                   </div>
-                </div>
-                <div v-if="hasRecipe" class="text-right">
-                  <div class="text-caption text-medium-emphasis">Ingredients</div>
-                  <div class="text-subtitle-1 font-weight-medium">
-                    {{ selectedPreparation.recipe?.length || 0 }} items
+                  <div v-if="hasRecipe" class="text-right">
+                    <div class="text-caption text-medium-emphasis">Ingredients</div>
+                    <div class="text-body-2 font-weight-medium">
+                      {{ selectedPreparation.recipe?.length || 0 }} items
+                    </div>
                   </div>
                 </div>
               </div>
-            </v-card-text>
-          </v-card>
 
-          <!-- Quantity Input - Portion Type -->
-          <v-text-field
-            v-if="selectedPreparation && isPortionType"
-            v-model.number="portionInput"
-            label="Number of Portions"
-            type="number"
-            min="1"
-            step="1"
-            variant="outlined"
-            class="mb-4"
-            suffix="portions"
-            prepend-inner-icon="mdi-food-variant"
-            :hint="`${portionInput || 0} x ${portionSize}g = ${effectiveQuantity}g`"
-            persistent-hint
-            autofocus
-            :rules="[v => (v && v > 0) || 'Enter quantity']"
-          />
+              <!-- Warning: No Recipe (inline) -->
+              <v-chip
+                v-if="selectedPreparation && !hasRecipe"
+                color="warning"
+                size="small"
+                prepend-icon="mdi-alert"
+                class="mt-2"
+              >
+                No recipe
+              </v-chip>
+            </div>
 
-          <!-- Quantity Input - Weight Type -->
-          <v-text-field
-            v-else-if="selectedPreparation"
-            v-model.number="quantity"
-            label="Production Quantity"
-            type="number"
-            min="50"
-            step="50"
-            variant="outlined"
-            class="mb-4"
-            :suffix="selectedPreparation?.outputUnit || 'g'"
-            prepend-inner-icon="mdi-scale"
-            :hint="quantityHint"
-            persistent-hint
-            autofocus
-            :rules="[v => (v && v > 0) || 'Enter quantity']"
-          />
+            <!-- Right Column -->
+            <div v-if="selectedPreparation" class="right-column">
+              <!-- Quantity Input - Portion Type -->
+              <v-text-field
+                v-if="isPortionType"
+                v-model.number="portionInput"
+                label="Portions"
+                type="number"
+                min="1"
+                step="1"
+                variant="outlined"
+                density="compact"
+                suffix="pcs"
+                prepend-inner-icon="mdi-food-variant"
+                :hint="`= ${effectiveQuantity}${selectedPreparation.outputUnit}`"
+                persistent-hint
+                autofocus
+                :rules="[v => (v && v > 0) || 'Required']"
+              />
 
-          <!-- Cost Display -->
-          <div
-            v-if="hasRecipe && calculatedCost > 0"
-            class="d-flex justify-space-between align-center mb-4 text-body-1"
-          >
-            <span class="text-medium-emphasis">Estimated Cost:</span>
-            <span class="font-weight-bold text-success text-h6">
-              {{ formatCurrency(calculatedCost) }}
-            </span>
+              <!-- Quantity Input - Weight Type -->
+              <v-text-field
+                v-else
+                v-model.number="quantity"
+                label="Quantity"
+                type="number"
+                min="50"
+                step="50"
+                variant="outlined"
+                density="compact"
+                :suffix="selectedPreparation?.outputUnit || 'g'"
+                prepend-inner-icon="mdi-scale"
+                :hint="quantityHint"
+                persistent-hint
+                autofocus
+                :rules="[v => (v && v > 0) || 'Required']"
+              />
+
+              <!-- Cost Display (compact) -->
+              <div
+                v-if="hasRecipe && calculatedCost > 0"
+                class="d-flex justify-space-between align-center mt-2 cost-display pa-2"
+              >
+                <span class="text-body-2 text-medium-emphasis">Est. Cost:</span>
+                <span class="font-weight-bold text-success text-subtitle-1">
+                  {{ formatCurrency(calculatedCost) }}
+                </span>
+              </div>
+            </div>
           </div>
-
-          <!-- Warning: No Recipe -->
-          <v-alert
-            v-if="selectedPreparation && !hasRecipe"
-            type="warning"
-            variant="tonal"
-            density="compact"
-            class="mb-4"
-          >
-            <v-icon icon="mdi-alert" size="small" class="mr-1" />
-            No recipe - raw products won't be written off
-          </v-alert>
-
-          <!-- Production Notes -->
-          <v-textarea
-            v-model="notes"
-            label="Notes (optional)"
-            variant="outlined"
-            rows="2"
-            class="mb-2"
-            placeholder="e.g., Special batch, rush order..."
-          />
         </v-form>
       </v-card-text>
 
+      <!-- Compact Actions with inline notes -->
       <v-divider />
-
-      <v-card-actions class="pa-4">
+      <v-card-actions class="pa-3 dialog-actions">
+        <v-text-field
+          v-model="notes"
+          placeholder="Notes (optional)"
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="notes-input"
+          prepend-inner-icon="mdi-note-text"
+        />
         <v-spacer />
-        <v-btn variant="outlined" @click="handleClose">Cancel</v-btn>
+        <v-btn variant="text" size="small" @click="handleClose">Cancel</v-btn>
         <v-btn
           color="success"
           variant="flat"
+          size="small"
           :loading="loading"
           :disabled="!canSubmit"
           prepend-icon="mdi-chef-hat"
@@ -470,7 +485,68 @@ onMounted(() => {
 })
 </script>
 
+<!-- Global style for dialog positioning (not scoped) -->
+<style lang="scss">
+.dialog-top-aligned {
+  align-self: flex-start !important;
+  margin-top: 5vh !important;
+}
+</style>
+
 <style lang="scss" scoped>
+// Horizontal tablet-optimized layout
+.dialog-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.dialog-header {
+  flex-shrink: 0;
+}
+
+.dialog-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dialog-actions {
+  flex-shrink: 0;
+}
+
+.left-column {
+  flex: 1;
+  min-width: 280px;
+}
+
+.right-column {
+  min-width: 180px;
+  max-width: 220px;
+}
+
+.recipe-info {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+  border-radius: 6px;
+}
+
+.cost-display {
+  background-color: rgba(var(--v-theme-success), 0.08);
+  border-radius: 6px;
+}
+
+.notes-input {
+  max-width: 280px;
+}
+
+.gap-3 {
+  gap: 12px;
+}
+
+.w-100 {
+  width: 100%;
+}
+
 .cursor-pointer {
   cursor: pointer;
 }

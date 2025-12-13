@@ -31,7 +31,8 @@ import type {
   BackgroundTaskStatus,
   ProductionTaskPayload,
   ProductWriteOffTaskPayload,
-  PrepWriteOffTaskPayload
+  PrepWriteOffTaskPayload,
+  ScheduleCompleteTaskPayload
 } from './types'
 
 const MODULE_NAME = 'BackgroundTasks'
@@ -433,6 +434,126 @@ export function useBackgroundTasks() {
   }
 
   // ============================================================
+  // Schedule Complete Task
+  // ============================================================
+
+  async function addScheduleCompleteTask(
+    payload: ScheduleCompleteTaskPayload,
+    callbacks?: TaskCallbacks
+  ): Promise<string> {
+    const taskId = generateId()
+    const description = `Completing ${payload.preparationName} (${payload.completedQuantity}${payload.unit})`
+
+    const task: BackgroundTask<ScheduleCompleteTaskPayload> = {
+      id: taskId,
+      type: 'schedule_complete',
+      status: 'queued',
+      description,
+      department: payload.department,
+      createdBy: payload.responsiblePerson,
+      payload,
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+      maxAttempts: 3
+    }
+
+    tasks.value.push(task)
+    DebugUtils.info(MODULE_NAME, 'Schedule complete task queued', {
+      taskId,
+      scheduleTaskId: payload.taskId,
+      preparation: payload.preparationName
+    })
+
+    callbacks?.onQueued?.(`Completing: ${payload.preparationName}...`)
+
+    // Process immediately in background
+    processScheduleCompleteTask(task, callbacks)
+
+    return taskId
+  }
+
+  async function processScheduleCompleteTask(
+    task: BackgroundTask<ScheduleCompleteTaskPayload>,
+    callbacks?: TaskCallbacks
+  ): Promise<void> {
+    const preparationStore = usePreparationStore()
+    const kpiStore = useKitchenKpiStore()
+    const { payload } = task
+
+    updateTaskStatus(task.id, 'processing')
+    task.startedAt = new Date().toISOString()
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Processing schedule complete task', { taskId: task.id })
+
+      // Step 1: Create production receipt
+      const receipt = await preparationStore.createReceipt(payload.receiptData)
+
+      // Step 2: Mark schedule task as completed
+      await kpiStore.completeTask({
+        taskId: payload.taskId,
+        completedBy: payload.responsiblePersonId || undefined, // UUID for database, undefined if empty
+        completedByName: payload.responsiblePerson, // Display name
+        completedQuantity: payload.completedQuantity,
+        notes: payload.notes,
+        preparationBatchId: receipt?.id
+      })
+
+      // Step 3: Record KPI (non-critical)
+      if (payload.kpiData) {
+        try {
+          await kpiStore.recordScheduleCompletion(
+            payload.kpiData.userId,
+            payload.kpiData.userName,
+            payload.department,
+            {
+              scheduleItemId: payload.taskId,
+              preparationId: payload.preparationId,
+              preparationName: payload.preparationName,
+              targetQuantity: payload.targetQuantity,
+              actualQuantity: payload.completedQuantity,
+              productionSlot: payload.productionSlot,
+              isOnTime: payload.kpiData.isOnTime,
+              timestamp: new Date().toISOString()
+            }
+          )
+        } catch (kpiError) {
+          DebugUtils.warn(MODULE_NAME, 'Schedule KPI recording failed (non-critical)', { kpiError })
+        }
+      }
+
+      // Success
+      updateTaskStatus(task.id, 'completed')
+      task.completedAt = new Date().toISOString()
+
+      const successMessage = `${payload.preparationName} completed (${payload.completedQuantity}${payload.unit})`
+      DebugUtils.info(MODULE_NAME, 'Schedule complete task finished', { taskId: task.id })
+      callbacks?.onSuccess?.(successMessage)
+
+      setTimeout(() => removeTask(task.id), 5000)
+    } catch (error) {
+      task.attempts++
+      task.lastError = error instanceof Error ? error.message : 'Unknown error'
+
+      if (task.attempts < task.maxAttempts) {
+        const delay = Math.pow(2, task.attempts) * 1000
+        DebugUtils.warn(MODULE_NAME, 'Schedule complete task failed, retrying', {
+          taskId: task.id,
+          attempt: task.attempts
+        })
+        setTimeout(() => processScheduleCompleteTask(task, callbacks), delay)
+      } else {
+        updateTaskStatus(task.id, 'failed')
+        const errorMessage = `Schedule completion failed: ${task.lastError}`
+        DebugUtils.error(MODULE_NAME, 'Schedule complete task failed permanently', {
+          taskId: task.id
+        })
+        callbacks?.onError?.(errorMessage)
+      }
+    }
+  }
+
+  // ============================================================
   // Helper Functions
   // ============================================================
 
@@ -477,6 +598,7 @@ export function useBackgroundTasks() {
     addProductionTask,
     addProductWriteOffTask,
     addPrepWriteOffTask,
+    addScheduleCompleteTask,
 
     // Getters
     getTaskById,

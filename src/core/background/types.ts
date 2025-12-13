@@ -11,7 +11,11 @@ import type { CreatePreparationReceiptData } from '@/stores/preparation/preparat
 // Task Types
 // ============================================================
 
-export type BackgroundTaskType = 'production' | 'product_writeoff' | 'preparation_writeoff'
+export type BackgroundTaskType =
+  | 'production'
+  | 'product_writeoff'
+  | 'preparation_writeoff'
+  | 'schedule_complete'
 
 export type BackgroundTaskStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
@@ -124,6 +128,48 @@ export interface PrepWriteOffTaskPayload {
 }
 
 export type PrepWriteOffTask = BackgroundTask<PrepWriteOffTaskPayload>
+
+// ============================================================
+// Schedule Complete Task
+// ============================================================
+
+export interface ScheduleCompleteTaskPayload {
+  taskId: string
+  preparationId: string
+  preparationName: string
+  targetQuantity: number
+  completedQuantity: number
+  unit: string
+  productionSlot: string
+  department: 'kitchen' | 'bar'
+  responsiblePerson: string
+  responsiblePersonId: string // User UUID for database
+  notes?: string
+
+  // Receipt data for production
+  receiptData: {
+    department: 'kitchen' | 'bar'
+    responsiblePerson: string
+    sourceType: 'production'
+    items: Array<{
+      preparationId: string
+      quantity: number
+      costPerUnit: number
+      expiryDate: string
+      notes?: string
+    }>
+    notes?: string
+  }
+
+  // KPI data
+  kpiData?: {
+    userId: string
+    userName: string
+    isOnTime: boolean
+  }
+}
+
+export type ScheduleCompleteTask = BackgroundTask<ScheduleCompleteTaskPayload>
 
 // ============================================================
 // Task Result

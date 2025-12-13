@@ -1,144 +1,154 @@
 <!-- src/views/kitchen/preparation/dialogs/ScheduleConfirmDialog.vue -->
-<!-- Kitchen Preparation - Schedule Task Completion Confirmation Dialog -->
+<!-- Kitchen Preparation - Schedule Task Completion Dialog (Horizontal Tablet Layout) -->
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="450px"
+    max-width="650px"
     persistent
+    content-class="dialog-top-aligned"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <v-card v-if="task">
-      <v-card-title class="d-flex align-center justify-space-between bg-success">
-        <div class="d-flex align-center">
-          <v-icon icon="mdi-check-circle" class="mr-2" />
-          <span>Complete Task</span>
+    <v-card v-if="task" class="dialog-card">
+      <!-- Compact Header -->
+      <v-card-title class="dialog-header pa-3 bg-success">
+        <div class="d-flex align-center justify-space-between w-100">
+          <div class="d-flex align-center gap-2">
+            <v-icon icon="mdi-check-circle" />
+            <div>
+              <span class="text-h6">Complete Task</span>
+              <div class="text-caption opacity-80">{{ task.preparationName }}</div>
+            </div>
+          </div>
+          <div class="d-flex align-center gap-2">
+            <v-chip :color="slotColor" size="small" variant="flat">
+              {{ slotLabel }}
+            </v-chip>
+            <v-btn icon="mdi-close" variant="text" size="small" @click="handleCancel" />
+          </div>
         </div>
-        <v-btn icon="mdi-close" variant="text" color="white" @click="handleCancel" />
       </v-card-title>
 
       <v-divider />
 
-      <v-card-text class="pa-4">
-        <!-- Task Info -->
-        <v-card variant="tonal" color="primary" class="mb-4">
-          <v-card-text class="py-3">
-            <div class="text-h6 font-weight-bold mb-1">{{ task.preparationName }}</div>
-            <div class="d-flex align-center gap-4 text-body-2">
-              <span>
-                <v-icon size="small" class="mr-1">mdi-target</v-icon>
-                Target: {{ task.targetQuantity }} {{ task.targetUnit }}
-              </span>
-              <span v-if="currentStock !== null">
-                <v-icon size="small" class="mr-1">mdi-package-variant</v-icon>
-                Stock: {{ currentStock }} {{ task.targetUnit }}
-              </span>
-            </div>
-            <div v-if="task.productionSlot" class="text-caption text-medium-emphasis mt-1">
-              <v-chip :color="slotColor" size="x-small" variant="flat">
-                {{ slotLabel }}
+      <!-- Main Content: Horizontal Layout -->
+      <v-card-text class="pa-3 dialog-content">
+        <v-form ref="form" v-model="isFormValid">
+          <div class="d-flex gap-3">
+            <!-- Left Column: Task Info -->
+            <div class="info-column">
+              <div class="info-card pa-2 mb-2">
+                <div class="d-flex justify-space-between align-center">
+                  <div>
+                    <div class="text-caption text-medium-emphasis">Target</div>
+                    <div class="text-body-1 font-weight-bold">
+                      {{ task.targetQuantity }} {{ task.targetUnit }}
+                    </div>
+                  </div>
+                  <div v-if="currentStock !== null" class="text-right">
+                    <div class="text-caption text-medium-emphasis">Stock</div>
+                    <div class="text-body-1 font-weight-medium">
+                      {{ currentStock }} {{ task.targetUnit }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quantity comparison (inline chip) -->
+              <v-chip
+                v-if="quantityDifference !== 0"
+                :color="quantityDifference > 0 ? 'success' : 'warning'"
+                size="small"
+                :prepend-icon="quantityDifference > 0 ? 'mdi-plus' : 'mdi-minus'"
+              >
+                {{ Math.abs(quantityDifference) }} {{ task.targetUnit }}
+                {{ quantityDifference > 0 ? 'over' : 'under' }}
               </v-chip>
             </div>
-          </v-card-text>
-        </v-card>
 
-        <!-- Quantity Input -->
-        <v-form ref="form" v-model="isFormValid">
-          <v-text-field
-            v-if="isPortionType"
-            v-model.number="portionInput"
-            label="Actual Portions Produced"
-            type="number"
-            min="1"
-            step="1"
-            variant="outlined"
-            class="mb-4"
-            suffix="portions"
-            prepend-inner-icon="mdi-food-variant"
-            :hint="`${portionInput || 0} x ${portionSize}g = ${effectiveQuantity}g`"
-            persistent-hint
-            autofocus
-            :rules="[v => (v && v > 0) || 'Enter quantity']"
-          />
-          <v-text-field
-            v-else
-            v-model.number="quantity"
-            label="Actual Quantity Produced"
-            type="number"
-            min="1"
-            step="50"
-            variant="outlined"
-            class="mb-4"
-            :suffix="task.targetUnit"
-            prepend-inner-icon="mdi-scale"
-            autofocus
-            :rules="[v => (v && v > 0) || 'Enter quantity']"
-          />
+            <!-- Right Column: Quantity Input -->
+            <div class="input-column">
+              <v-text-field
+                v-if="isPortionType"
+                v-model.number="portionInput"
+                label="Portions"
+                type="number"
+                min="1"
+                step="1"
+                variant="outlined"
+                density="compact"
+                suffix="pcs"
+                prepend-inner-icon="mdi-food-variant"
+                :hint="`= ${effectiveQuantity}${task.targetUnit}`"
+                persistent-hint
+                autofocus
+                :rules="[v => (v && v > 0) || 'Required']"
+              />
+              <v-text-field
+                v-else
+                v-model.number="quantity"
+                label="Quantity"
+                type="number"
+                min="1"
+                step="50"
+                variant="outlined"
+                density="compact"
+                :suffix="task.targetUnit"
+                prepend-inner-icon="mdi-scale"
+                autofocus
+                :rules="[v => (v && v > 0) || 'Required']"
+              />
 
-          <!-- Quantity comparison -->
-          <v-alert
-            v-if="quantityDifference !== 0"
-            :type="quantityDifference > 0 ? 'success' : 'warning'"
-            variant="tonal"
-            density="compact"
-            class="mb-4"
-          >
-            <template v-if="quantityDifference > 0">
-              Producing {{ Math.abs(quantityDifference) }} {{ task.targetUnit }} MORE than target
-            </template>
-            <template v-else>
-              Producing {{ Math.abs(quantityDifference) }} {{ task.targetUnit }} LESS than target
-            </template>
-          </v-alert>
-
-          <!-- Cost Display -->
-          <div
-            v-if="estimatedCost > 0"
-            class="d-flex justify-space-between align-center mb-4 text-body-1"
-          >
-            <span class="text-medium-emphasis">Estimated Cost:</span>
-            <span class="font-weight-bold text-success text-h6">
-              {{ formatCurrency(estimatedCost) }}
-            </span>
+              <!-- Cost Display (compact) -->
+              <div
+                v-if="estimatedCost > 0"
+                class="d-flex justify-space-between align-center mt-2 cost-display pa-2"
+              >
+                <span class="text-body-2 text-medium-emphasis">Est. Cost:</span>
+                <span class="font-weight-bold text-success text-subtitle-1">
+                  {{ formatCurrency(estimatedCost) }}
+                </span>
+              </div>
+            </div>
           </div>
-
-          <!-- Notes -->
-          <v-textarea
-            v-model="notes"
-            label="Notes (optional)"
-            variant="outlined"
-            rows="2"
-            placeholder="Any notes about this production..."
-          />
         </v-form>
       </v-card-text>
 
+      <!-- Compact Actions with inline notes -->
       <v-divider />
-
-      <v-card-actions class="pa-4">
+      <v-card-actions class="pa-3 dialog-actions">
+        <v-text-field
+          v-model="notes"
+          placeholder="Notes (optional)"
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="notes-input"
+          prepend-inner-icon="mdi-note-text"
+        />
         <v-spacer />
-        <v-btn variant="outlined" @click="handleCancel">Cancel</v-btn>
+        <v-btn variant="text" size="small" @click="handleCancel">Cancel</v-btn>
         <v-btn
           color="success"
           variant="flat"
-          :loading="loading"
+          size="small"
           :disabled="!canSubmit"
           prepend-icon="mdi-check"
           @click="handleConfirm"
         >
-          Confirm Production
+          Complete
         </v-btn>
       </v-card-actions>
     </v-card>
 
     <!-- Empty state if no task -->
     <v-card v-else>
-      <v-card-text class="text-center py-8">
-        <v-icon size="48" color="grey" class="mb-4">mdi-clipboard-alert</v-icon>
-        <div class="text-body-1">No task selected</div>
+      <v-card-text class="text-center py-6">
+        <v-icon size="40" color="grey" class="mb-2">mdi-clipboard-alert</v-icon>
+        <div class="text-body-2">No task selected</div>
       </v-card-text>
-      <v-card-actions>
+      <v-card-actions class="pa-3">
         <v-spacer />
-        <v-btn @click="handleCancel">Close</v-btn>
+        <v-btn size="small" @click="handleCancel">Close</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -150,11 +160,10 @@ import { usePreparationStore } from '@/stores/preparation'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
 import { useAuthStore } from '@/stores/auth'
-import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { useCostCalculation } from '@/stores/recipes/composables/useCostCalculation'
-import type { CreatePreparationReceiptData } from '@/stores/preparation'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
-import { DebugUtils, TimeUtils, formatIDR } from '@/utils'
+import { DebugUtils, formatIDR } from '@/utils'
+import { useBackgroundTasks } from '@/core/background'
 
 const MODULE_NAME = 'ScheduleConfirmDialog'
 
@@ -173,18 +182,17 @@ const emit = defineEmits<{
   cancelled: []
 }>()
 
-// Stores
+// Stores & Composables
 const preparationStore = usePreparationStore()
 const recipesStore = useRecipesStore()
 const productsStore = useProductsStore()
 const authStore = useAuthStore()
-const kpiStore = useKitchenKpiStore()
 const { calculateDirectCost } = useCostCalculation()
+const { addScheduleCompleteTask } = useBackgroundTasks()
 
 // State
 const form = ref()
 const isFormValid = ref(false)
-const loading = ref(false)
 const quantity = ref(0)
 const portionInput = ref(0)
 const notes = ref('')
@@ -283,7 +291,7 @@ const estimatedCost = computed(() => {
 })
 
 const canSubmit = computed(() => {
-  return effectiveQuantity.value > 0 && !loading.value && props.task
+  return effectiveQuantity.value > 0 && props.task
 })
 
 // Watchers
@@ -323,89 +331,81 @@ function formatCurrency(amount: number): string {
   return formatIDR(amount)
 }
 
-async function handleConfirm() {
+function handleConfirm() {
   if (!canSubmit.value || !props.task || !preparation.value) return
 
-  try {
-    loading.value = true
+  const expiryDate = new Date()
+  expiryDate.setDate(expiryDate.getDate() + (preparation.value.shelfLife || 2))
+  expiryDate.setHours(20, 0, 0, 0)
 
-    const expiryDate = new Date()
-    expiryDate.setDate(expiryDate.getDate() + (preparation.value.shelfLife || 2))
-    expiryDate.setHours(20, 0, 0, 0)
+  const costPerGram = isPortionType.value
+    ? calculatedCostPerUnit.value / portionSize.value
+    : calculatedCostPerUnit.value
 
-    const costPerGram = isPortionType.value
-      ? calculatedCostPerUnit.value / portionSize.value
-      : calculatedCostPerUnit.value
+  const isOnTime = determineIfOnTime(props.task.productionSlot)
 
-    // Create production receipt
-    const receiptData: CreatePreparationReceiptData = {
+  DebugUtils.info(MODULE_NAME, 'Queueing schedule complete task (background)', {
+    taskId: props.task.id,
+    preparation: preparation.value.name,
+    quantity: effectiveQuantity.value
+  })
+
+  // Capture values before closing (props.task may become null)
+  const taskId = props.task.id
+  const qty = effectiveQuantity.value
+  const noteValue = notes.value
+
+  // Queue background task (non-blocking)
+  addScheduleCompleteTask(
+    {
+      taskId: taskId,
+      preparationId: props.task.preparationId,
+      preparationName: preparation.value.name,
+      targetQuantity: props.task.targetQuantity,
+      completedQuantity: qty,
+      unit: props.task.targetUnit,
+      productionSlot: props.task.productionSlot,
       department: userDepartment.value,
       responsiblePerson: authStore.userName,
-      sourceType: 'production',
-      items: [
-        {
-          preparationId: props.task.preparationId,
-          quantity: effectiveQuantity.value,
-          costPerUnit: costPerGram,
-          expiryDate: expiryDate.toISOString().slice(0, 16),
-          notes: notes.value
-        }
-      ],
-      notes: `Schedule task completion: ${notes.value || 'No notes'}`
+      responsiblePersonId: authStore.userId || '', // UUID for database (empty = null)
+      notes: noteValue,
+      receiptData: {
+        department: userDepartment.value,
+        responsiblePerson: authStore.userName,
+        sourceType: 'production',
+        items: [
+          {
+            preparationId: props.task.preparationId,
+            quantity: qty,
+            costPerUnit: costPerGram,
+            expiryDate: expiryDate.toISOString().slice(0, 16),
+            notes: noteValue
+          }
+        ],
+        notes: `Schedule task completion: ${noteValue || 'No notes'}`
+      },
+      kpiData: {
+        userId: authStore.userId || 'unknown',
+        userName: authStore.userName,
+        isOnTime
+      }
+    },
+    {
+      onError: error => {
+        DebugUtils.error(MODULE_NAME, 'Background task failed', { error })
+      }
     }
+  )
 
-    DebugUtils.info(MODULE_NAME, 'Creating production from schedule task', {
-      taskId: props.task.id,
-      preparation: preparation.value.name,
-      quantity: effectiveQuantity.value
-    })
+  // Emit confirmed BEFORE closing (with captured values)
+  emit('confirmed', {
+    taskId: taskId,
+    quantity: qty,
+    notes: noteValue
+  })
 
-    // Create receipt
-    const receipt = await preparationStore.createReceipt(receiptData)
-
-    // Mark task as completed in KPI store
-    await kpiStore.completeTask({
-      taskId: props.task.id,
-      completedBy: authStore.userName,
-      completedQuantity: effectiveQuantity.value,
-      notes: notes.value,
-      preparationBatchId: receipt?.id
-    })
-
-    // Record schedule completion in KPI
-    try {
-      const isOnTime = determineIfOnTime(props.task.productionSlot)
-      await kpiStore.recordScheduleCompletion(
-        authStore.userId || 'unknown',
-        authStore.userName,
-        userDepartment.value,
-        {
-          scheduleItemId: props.task.id,
-          preparationId: props.task.preparationId,
-          preparationName: preparation.value.name,
-          targetQuantity: props.task.targetQuantity,
-          actualQuantity: effectiveQuantity.value,
-          productionSlot: props.task.productionSlot,
-          isOnTime,
-          timestamp: TimeUtils.getCurrentLocalISO()
-        }
-      )
-    } catch (kpiError) {
-      DebugUtils.error(MODULE_NAME, 'Failed to record schedule completion KPI', { kpiError })
-    }
-
-    emit('confirmed', {
-      taskId: props.task.id,
-      quantity: effectiveQuantity.value,
-      notes: notes.value,
-      batchId: receipt?.id
-    })
-    emit('update:modelValue', false)
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to complete task', { error })
-  } finally {
-    loading.value = false
-  }
+  // Close dialog immediately (operations continue in background)
+  emit('update:modelValue', false)
 }
 
 function determineIfOnTime(slot: string): boolean {
@@ -432,8 +432,73 @@ function handleCancel() {
 }
 </script>
 
+<!-- Global style for dialog positioning (not scoped) -->
+<style lang="scss">
+.dialog-top-aligned {
+  align-self: flex-start !important;
+  margin-top: 5vh !important;
+}
+</style>
+
 <style lang="scss" scoped>
-.gap-4 {
-  gap: 16px;
+// Horizontal tablet-optimized layout
+.dialog-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.dialog-header {
+  flex-shrink: 0;
+}
+
+.dialog-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dialog-actions {
+  flex-shrink: 0;
+}
+
+.info-column {
+  flex: 1;
+  min-width: 200px;
+}
+
+.input-column {
+  min-width: 180px;
+  max-width: 220px;
+}
+
+.info-card {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+  border-radius: 6px;
+}
+
+.cost-display {
+  background-color: rgba(var(--v-theme-success), 0.08);
+  border-radius: 6px;
+}
+
+.notes-input {
+  max-width: 250px;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-3 {
+  gap: 12px;
+}
+
+.w-100 {
+  width: 100%;
+}
+
+.opacity-80 {
+  opacity: 0.8;
 }
 </style>

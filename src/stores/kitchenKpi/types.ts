@@ -128,7 +128,7 @@ export interface CreateScheduleItemData {
 export interface CompleteScheduleTaskData {
   taskId: string
   completedQuantity: number
-  completedBy: string
+  completedBy?: string // UUID, optional for system actions
   completedByName: string
   preparationBatchId?: string
   notes?: string
