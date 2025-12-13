@@ -211,6 +211,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:modelValue': [boolean]
   success: [message: string]
+  completed: [] // Emitted when background task completes successfully - triggers data reload
   error: [error: string]
 }>()
 
@@ -369,10 +370,11 @@ async function handleSubmit() {
       }
     },
     {
-      onSuccess: message => {
+      onSuccess: (message: string) => {
         emit('success', message)
+        emit('completed') // Trigger data reload in parent
       },
-      onError: message => {
+      onError: (message: string) => {
         emit('error', message)
       }
     }

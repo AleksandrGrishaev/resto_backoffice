@@ -179,6 +179,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   confirmed: [data: { taskId: string; quantity: number; notes: string; batchId?: string }]
+  completed: [] // Emitted when background task completes successfully - triggers data reload
   cancelled: []
 }>()
 
@@ -391,7 +392,11 @@ function handleConfirm() {
       }
     },
     {
-      onError: error => {
+      onSuccess: () => {
+        // Background task completed - trigger data reload in parent
+        emit('completed')
+      },
+      onError: (error: string) => {
         DebugUtils.error(MODULE_NAME, 'Background task failed', { error })
       }
     }

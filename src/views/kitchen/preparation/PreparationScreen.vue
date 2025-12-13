@@ -143,6 +143,7 @@
       v-model="showProductionDialog"
       :preselected-preparation-id="selectedPreparationId"
       @success="handleProductionSuccess"
+      @completed="handleBackgroundTaskCompleted"
       @error="handleError"
     />
 
@@ -150,12 +151,14 @@
       v-model="showPrepWriteOffDialog"
       :preselected-preparation-id="selectedPreparationId"
       @success="handleWriteOffSuccess"
+      @completed="handleBackgroundTaskCompleted"
       @error="handleError"
     />
 
     <ProductWriteOffDialog
       v-model="showProductWriteOffDialog"
       @success="handleProductWriteOffSuccess"
+      @completed="handleBackgroundTaskCompleted"
       @error="handleError"
     />
 
@@ -163,6 +166,7 @@
       v-model="showScheduleConfirmDialog"
       :task="selectedTask"
       @confirmed="handleTaskConfirmed"
+      @completed="handleBackgroundTaskCompleted"
       @cancelled="handleTaskCancelled"
     />
 
@@ -538,26 +542,34 @@ function handleDismissRecommendation(id: string): void {
 // =============================================
 
 /**
- * Handle successful production
+ * Handle successful production (dialog closed, task queued)
+ * Note: Don't reload data here - wait for @completed event when background task finishes
  */
 function handleProductionSuccess(message: string): void {
-  showSnackbar(message, 'success')
-  loadData() // Refresh data
+  showSnackbar(message, 'info')
 }
 
 /**
- * Handle successful preparation write-off
+ * Handle successful preparation write-off (dialog closed, task queued)
+ * Note: Don't reload data here - wait for @completed event when background task finishes
  */
 function handleWriteOffSuccess(message: string): void {
-  showSnackbar(message, 'success')
-  loadData()
+  showSnackbar(message, 'info')
 }
 
 /**
- * Handle successful product write-off
+ * Handle successful product write-off (dialog closed, task queued)
+ * Note: Don't reload data here - wait for @completed event when background task finishes
  */
 function handleProductWriteOffSuccess(message: string): void {
-  showSnackbar(message, 'success')
+  showSnackbar(message, 'info')
+}
+
+/**
+ * Handle background task completion - reload data to show updated history
+ */
+function handleBackgroundTaskCompleted(): void {
+  DebugUtils.info(MODULE_NAME, 'Background task completed, refreshing data...')
   loadData()
 }
 
@@ -569,13 +581,13 @@ function handleError(errorMessage: string): void {
 }
 
 /**
- * Handle task confirmation from schedule
+ * Handle task confirmation from schedule (dialog closed, task queued)
+ * Note: Don't reload data here - wait for @completed event when background task finishes
  */
 function handleTaskConfirmed(data: { taskId: string; quantity: number; notes: string }): void {
-  showSnackbar('Task completed successfully', 'success')
+  showSnackbar('Processing task completion...', 'info')
   selectedTask.value = null
-  loadData()
-  DebugUtils.info(MODULE_NAME, 'Task confirmed', data)
+  DebugUtils.info(MODULE_NAME, 'Task confirmed, waiting for background completion', data)
 }
 
 /**

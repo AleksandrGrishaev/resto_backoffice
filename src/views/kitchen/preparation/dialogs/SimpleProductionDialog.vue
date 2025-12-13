@@ -212,6 +212,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   success: [message: string]
+  completed: [] // Emitted when background task completes successfully - triggers data reload
   error: [message: string]
 }>()
 
@@ -448,10 +449,11 @@ async function handleSubmit() {
       onQueued: () => {
         // Dialog already closed, parent handles snackbar
       },
-      onSuccess: message => {
+      onSuccess: (message: string) => {
         emit('success', message)
+        emit('completed') // Trigger data reload in parent
       },
-      onError: message => {
+      onError: (message: string) => {
         emit('error', message)
       }
     }
