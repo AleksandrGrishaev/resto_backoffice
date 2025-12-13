@@ -1,5 +1,5 @@
 <!-- src/views/kitchen/preparation/components/HistoryTab.vue -->
-<!-- History Tab - Shows completed production tasks -->
+<!-- History Tab - Shows completed production tasks and write-offs for today -->
 <template>
   <div class="history-tab">
     <!-- Loading State -->
@@ -8,85 +8,206 @@
       <span class="ml-2">Loading history...</span>
     </div>
 
-    <!-- Empty State -->
-    <div v-else-if="completedTasks.length === 0" class="history-empty">
-      <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-history</v-icon>
-      <h3 class="text-h6 mb-2">No Completed Tasks</h3>
-      <p class="text-body-2 text-medium-emphasis">Completed production tasks will appear here.</p>
+    <!-- Error State -->
+    <div v-else-if="error" class="history-error">
+      <v-icon size="48" color="error" class="mb-3">mdi-alert-circle-outline</v-icon>
+      <p class="text-body-2 text-error mb-3">{{ error }}</p>
+      <v-btn variant="outlined" color="primary" size="small" @click="refreshHistory">
+        <v-icon start>mdi-refresh</v-icon>
+        Retry
+      </v-btn>
     </div>
 
-    <!-- History List -->
+    <!-- Empty State -->
+    <div v-else-if="filteredItems.length === 0" class="history-empty">
+      <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-history</v-icon>
+      <h3 class="text-h6 mb-2">No Operations Today</h3>
+      <p class="text-body-2 text-medium-emphasis">
+        {{ emptyStateMessage }}
+      </p>
+    </div>
+
+    <!-- History Content -->
     <div v-else class="history-content">
       <!-- Summary Card -->
-      <v-card variant="tonal" color="success" class="mb-4">
-        <v-card-text class="d-flex align-center justify-space-between py-3">
-          <div class="d-flex align-center">
-            <v-icon size="24" class="mr-3">mdi-check-circle</v-icon>
-            <div>
-              <div class="text-h6 font-weight-bold">{{ completedTasks.length }} Completed</div>
-              <div class="text-caption">Today's production</div>
+      <v-card variant="tonal" :color="summaryColor" class="mb-4">
+        <v-card-text class="py-3">
+          <!-- Summary Stats Row -->
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div class="d-flex align-center">
+              <v-icon size="24" class="mr-3">mdi-chart-timeline-variant</v-icon>
+              <div>
+                <div class="text-h6 font-weight-bold">{{ totalCount }} Operations</div>
+                <div class="text-caption">Today's activity</div>
+              </div>
             </div>
           </div>
-          <div class="text-right">
-            <div class="text-h6">{{ totalQuantityProduced }}</div>
-            <div class="text-caption">Total produced</div>
+
+          <!-- Stats Pills -->
+          <div class="d-flex flex-wrap gap-2">
+            <v-chip color="success" size="small" variant="flat">
+              <v-icon start size="14">mdi-check-circle</v-icon>
+              {{ productionCount }} Produced ({{ formattedTotalProduced }})
+            </v-chip>
+            <v-chip v-if="writeOffCount > 0" color="error" size="small" variant="flat">
+              <v-icon start size="14">mdi-delete-outline</v-icon>
+              {{ writeOffCount }} Written Off
+            </v-chip>
           </div>
         </v-card-text>
       </v-card>
 
-      <!-- Completed Tasks List -->
+      <!-- Filter Chips -->
+      <div class="filter-chips mb-4">
+        <v-chip-group v-model="selectedFilter" mandatory>
+          <v-chip
+            value="all"
+            :color="filter === 'all' ? 'primary' : undefined"
+            variant="outlined"
+            filter
+          >
+            All ({{ totalCount }})
+          </v-chip>
+          <v-chip
+            value="production"
+            :color="filter === 'production' ? 'success' : undefined"
+            variant="outlined"
+            filter
+          >
+            Productions ({{ productionCount }})
+          </v-chip>
+          <v-chip
+            value="writeoff"
+            :color="filter === 'writeoff' ? 'error' : undefined"
+            variant="outlined"
+            filter
+          >
+            Write-offs ({{ writeOffCount }})
+          </v-chip>
+        </v-chip-group>
+      </div>
+
+      <!-- History List -->
       <div class="history-list">
-        <HistoryTaskCard v-for="task in sortedTasks" :key="task.id" :task="task" />
+        <HistoryItemCard v-for="item in filteredItems" :key="item.id" :item="item" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import HistoryTaskCard from './HistoryTaskCard.vue'
-import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
+import { computed, onMounted, watch } from 'vue'
+import HistoryItemCard from './HistoryItemCard.vue'
+import { useHistoryTab } from '@/stores/kitchenKpi'
+import type { HistoryFilterType } from '@/stores/kitchenKpi'
 
 // =============================================
 // PROPS
 // =============================================
 
 interface Props {
-  completedTasks: ProductionScheduleItem[]
-  loading?: boolean
+  department?: 'kitchen' | 'bar' | 'all'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  department: 'all'
 })
+
+// =============================================
+// EMITS
+// =============================================
+
+const emit = defineEmits<{
+  (e: 'count-change', count: number): void
+}>()
+
+// =============================================
+// COMPOSABLE
+// =============================================
+
+const {
+  filteredItems,
+  loading,
+  error,
+  filter,
+  totalCount,
+  productionCount,
+  writeOffCount,
+  formattedTotalProduced,
+  loadHistory,
+  refreshHistory,
+  setFilter
+} = useHistoryTab(props.department)
 
 // =============================================
 // COMPUTED
 // =============================================
 
 /**
- * Tasks sorted by completion time (newest first)
+ * v-model for filter chip group
  */
-const sortedTasks = computed(() => {
-  return [...props.completedTasks].sort((a, b) => {
-    const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0
-    const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0
-    return dateB - dateA // Newest first
-  })
+const selectedFilter = computed({
+  get: () => filter.value,
+  set: (value: HistoryFilterType) => setFilter(value)
 })
 
 /**
- * Total quantity produced today
+ * Summary card color based on content
  */
-const totalQuantityProduced = computed(() => {
-  const total = props.completedTasks.reduce((sum, task) => {
-    return sum + (task.completedQuantity || task.targetQuantity || 0)
-  }, 0)
+const summaryColor = computed(() => {
+  if (writeOffCount.value > productionCount.value) return 'warning'
+  return 'success'
+})
 
-  if (total >= 1000) {
-    return `${(total / 1000).toFixed(1)}kg`
+/**
+ * Empty state message based on filter
+ */
+const emptyStateMessage = computed(() => {
+  if (filter.value === 'production') {
+    return 'No production tasks completed today.'
   }
-  return `${total}g`
+  if (filter.value === 'writeoff') {
+    return 'No write-offs recorded today.'
+  }
+  return 'Completed productions and write-offs will appear here.'
+})
+
+// =============================================
+// WATCHERS
+// =============================================
+
+// Emit count change when totalCount changes
+watch(
+  totalCount,
+  count => {
+    emit('count-change', count)
+  },
+  { immediate: true }
+)
+
+// Reload when department changes
+watch(
+  () => props.department,
+  () => {
+    loadHistory()
+  }
+)
+
+// =============================================
+// LIFECYCLE
+// =============================================
+
+onMounted(() => {
+  loadHistory()
+})
+
+// =============================================
+// EXPOSE
+// =============================================
+
+defineExpose({
+  refreshHistory,
+  totalCount
 })
 </script>
 
@@ -108,6 +229,17 @@ const totalQuantityProduced = computed(() => {
   color: var(--v-theme-on-surface);
 }
 
+.history-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  text-align: center;
+  padding: 24px;
+}
+
 .history-empty {
   display: flex;
   flex-direction: column;
@@ -124,9 +256,18 @@ const totalQuantityProduced = computed(() => {
   flex-direction: column;
 }
 
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
 .history-list {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.gap-2 {
   gap: 8px;
 }
 </style>

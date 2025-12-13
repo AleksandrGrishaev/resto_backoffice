@@ -32,7 +32,12 @@ export type {
   RecordKpiEntryData,
   ScheduleCompletionKpiDetail,
   KitchenKpiRow,
-  ProductionScheduleRow
+  ProductionScheduleRow,
+  // Unified History types
+  UnifiedHistoryItem,
+  HistorySummary,
+  HistoryOperationType,
+  HistoryFilterType
 } from './types'
 
 // Export helper functions
@@ -52,3 +57,4 @@ export { useKitchenKpiStore } from './kitchenKpiStore'
 // Export composables
 export { useKitchenKpi } from './composables/useKitchenKpi'
 export { useProductionSchedule } from './composables/useProductionSchedule'
+export { useHistoryTab } from './composables/useHistoryTab'

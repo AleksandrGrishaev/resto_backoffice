@@ -395,3 +395,59 @@ export interface FoodCostKpiRow {
   totalCOGS: number
   totalCOGSPercent: number
 }
+
+// ===============================================
+// UNIFIED HISTORY Types (History Tab Enhancement)
+// ===============================================
+
+/**
+ * Type of operation in unified history view
+ */
+export type HistoryOperationType = 'production' | 'preparation_writeoff' | 'product_writeoff'
+
+/**
+ * Filter options for unified history
+ */
+export type HistoryFilterType = 'all' | 'production' | 'writeoff'
+
+/**
+ * Unified history item for displaying all operations in History tab
+ */
+export interface UnifiedHistoryItem {
+  id: string
+  type: HistoryOperationType
+  timestamp: string // ISO datetime - for sorting
+  displayName: string // Name of item (preparation or product)
+  quantity: number
+  unit: string
+  totalValue?: number // Cost value (for write-offs)
+  responsiblePerson?: string
+  department: 'kitchen' | 'bar'
+
+  // Production-specific details
+  productionDetails?: {
+    productionSlot: import('@/stores/preparation/types').ProductionScheduleSlot
+    portionType?: string
+    portionSize?: number
+  }
+
+  // Write-off specific details
+  writeOffDetails?: {
+    operationId: string
+    reason: string // 'expired', 'spoiled', 'other', 'education', 'test'
+    affectsKPI: boolean
+    notes?: string
+    itemType: 'preparation' | 'product'
+  }
+}
+
+/**
+ * Summary statistics for history tab
+ */
+export interface HistorySummary {
+  totalProduced: number // Total quantity produced (grams)
+  totalWrittenOff: number // Total quantity written off (grams)
+  productionCount: number // Number of production items
+  writeOffCount: number // Number of write-off items
+  totalWriteOffValue: number // Total cost of write-offs (IDR)
+}

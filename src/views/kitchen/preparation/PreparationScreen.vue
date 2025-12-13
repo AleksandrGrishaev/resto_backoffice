@@ -76,8 +76,8 @@
         <v-icon start>mdi-history</v-icon>
         History
         <v-badge
-          v-if="completedTasksCount > 0"
-          :content="completedTasksCount"
+          v-if="historyCount > 0"
+          :content="historyCount"
           color="success"
           inline
           class="ml-2"
@@ -133,7 +133,11 @@
 
         <!-- History Tab -->
         <v-window-item value="history">
-          <HistoryTab :completed-tasks="completedTasks" :loading="kpiStore.loading.schedule" />
+          <HistoryTab
+            ref="historyTabRef"
+            :department="userDepartment"
+            @count-change="handleHistoryCountChange"
+          />
         </v-window-item>
       </v-window>
     </div>
@@ -205,6 +209,7 @@ import {
 } from './dialogs'
 import type { PreparationBalance, ProductionRecommendation } from '@/stores/preparation/types'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
+import type { ComponentPublicInstance } from 'vue'
 
 const MODULE_NAME = 'PreparationScreen'
 
@@ -262,6 +267,14 @@ const showScheduleConfirmDialog = ref(false)
 const selectedPreparationId = ref<string | null>(null)
 const selectedTask = ref<ProductionScheduleItem | null>(null)
 
+// Template refs
+const historyTabRef = ref<ComponentPublicInstance<{ refreshHistory: () => Promise<void> }> | null>(
+  null
+)
+
+// History count for badge (updated via @count-change event)
+const historyCount = ref(0)
+
 // Snackbar state
 const snackbar = ref({
   show: false,
@@ -295,21 +308,6 @@ const scheduleBySlot = computed(() => kpiStore.scheduleBySlot)
 const pendingTasksCount = computed(() => {
   const summary = kpiStore.scheduleSummary
   return summary?.pendingTasks || 0
-})
-
-/**
- * Completed tasks count for badge
- */
-const completedTasksCount = computed(() => {
-  const summary = kpiStore.scheduleSummary
-  return summary?.completedTasks || 0
-})
-
-/**
- * Completed tasks for history tab
- */
-const completedTasks = computed(() => {
-  return kpiStore.scheduleItems.filter(item => item.status === 'completed')
 })
 
 /**
@@ -571,6 +569,15 @@ function handleProductWriteOffSuccess(message: string): void {
 function handleBackgroundTaskCompleted(): void {
   DebugUtils.info(MODULE_NAME, 'Background task completed, refreshing data...')
   loadData()
+  // Also refresh history tab if it exists
+  historyTabRef.value?.refreshHistory?.()
+}
+
+/**
+ * Handle history count change from HistoryTab
+ */
+function handleHistoryCountChange(count: number): void {
+  historyCount.value = count
 }
 
 /**
