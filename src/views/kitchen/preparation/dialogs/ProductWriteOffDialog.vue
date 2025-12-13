@@ -231,7 +231,6 @@
 import { ref, computed, watch } from 'vue'
 import { useWriteOff, useStorageStore } from '@/stores/storage'
 import { useAuthStore } from '@/stores/auth'
-import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { formatIDR } from '@/utils/currency'
 import { DebugUtils, TimeUtils } from '@/utils'
 import type { WriteOffReason } from '@/stores/storage/types'
@@ -265,7 +264,10 @@ const emit = defineEmits<{
 const writeOff = useWriteOff()
 const storageStore = useStorageStore()
 const authStore = useAuthStore()
-const kpiStore = useKitchenKpiStore()
+
+// Background tasks (non-blocking processing)
+import { useBackgroundTasks } from '@/core/background'
+const { addProductWriteOffTask } = useBackgroundTasks()
 
 // Refs
 const formRef = ref()
@@ -395,67 +397,49 @@ async function handleSubmit() {
   const { valid } = await formRef.value.validate()
   if (!valid) return
 
-  try {
-    loading.value = true
+  DebugUtils.info(MODULE_NAME, 'Queueing product write-off task (background)', {
+    reason: formData.value.reason,
+    itemCount: formData.value.items.length,
+    totalCost: totalCost.value
+  })
 
-    DebugUtils.info(MODULE_NAME, 'Submitting product write-off', {
+  // Prepare data before closing dialog
+  const affectsKpi = selectedReasonInfo.value?.affectsKPI || false
+  const items = formData.value.items.map(item => ({
+    itemId: item.itemId,
+    itemName: getProductName(item.itemId),
+    quantity: item.quantity,
+    unit: getProductUnit(item.itemId)
+  }))
+
+  // Queue background task (non-blocking)
+  addProductWriteOffTask(
+    {
+      items,
+      department: userDepartment.value,
+      responsiblePerson: authStore.userName,
       reason: formData.value.reason,
-      itemCount: formData.value.items.length,
-      totalCost: totalCost.value
-    })
-
-    // Create write-off operation
-    const operation = await writeOff.writeOffMultipleProducts(
-      formData.value.items.map(item => ({
-        itemId: item.itemId,
-        itemName: getProductName(item.itemId),
-        currentQuantity: getProductStock(item.itemId),
-        unit: getProductUnit(item.itemId),
-        writeOffQuantity: item.quantity,
-        reason: formData.value.reason,
-        notes: item.notes
-      })),
-      userDepartment.value,
-      authStore.userName,
-      formData.value.reason,
-      formData.value.notes
-    )
-
-    // Record KPI for each item
-    const affectsKpi = selectedReasonInfo.value?.affectsKPI || false
-    for (const item of formData.value.items) {
-      try {
-        await kpiStore.recordWriteoff(
-          authStore.userId || 'unknown',
-          authStore.userName,
-          userDepartment.value,
-          {
-            itemId: item.itemId,
-            itemName: getProductName(item.itemId),
-            itemType: 'product',
-            quantity: item.quantity,
-            unit: getProductUnit(item.itemId),
-            value: calculateItemCost(item),
-            reason: formData.value.reason,
-            affectsKpi,
-            timestamp: TimeUtils.getCurrentLocalISO()
-          }
-        )
-      } catch (kpiError) {
-        DebugUtils.error(MODULE_NAME, 'Failed to record KPI', { kpiError })
+      notes: formData.value.notes,
+      kpiData: {
+        userId: authStore.userId || 'unknown',
+        userName: authStore.userName,
+        affectsKpi
+      }
+    },
+    {
+      onSuccess: message => {
+        emit('success', message)
+      },
+      onError: message => {
+        emit('error', message)
       }
     }
+  )
 
-    DebugUtils.info(MODULE_NAME, 'Write-off completed', { operationId: operation.id })
-
-    emit('success', `${formData.value.items.length} product(s) written off successfully`)
-    handleCancel()
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Write-off failed', { error })
-    emit('error', error instanceof Error ? error.message : 'Write-off failed')
-  } finally {
-    loading.value = false
-  }
+  // Close dialog immediately (operations continue in background)
+  const itemCount = formData.value.items.length
+  emit('success', `Processing write-off of ${itemCount} product(s)...`)
+  handleCancel()
 }
 
 function handleCancel() {

@@ -230,7 +230,6 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { usePreparationWriteOff, usePreparationStore } from '@/stores/preparation'
 import { useAuthStore } from '@/stores/auth'
-import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { formatIDR } from '@/utils/currency'
 import { DebugUtils, TimeUtils } from '@/utils'
 import PreparationSelectorWidget from '@/views/Preparation/components/writeoff/PreparationSelectorWidget.vue'
@@ -267,7 +266,10 @@ const emit = defineEmits<{
 const preparationWriteOff = usePreparationWriteOff()
 const preparationStore = usePreparationStore()
 const authStore = useAuthStore()
-const kpiStore = useKitchenKpiStore()
+
+// Background tasks (non-blocking processing)
+import { useBackgroundTasks } from '@/core/background'
+const { addPrepWriteOffTask } = useBackgroundTasks()
 
 // Refs
 const formRef = ref()
@@ -385,66 +387,49 @@ async function handleSubmit() {
   const { valid } = await formRef.value.validate()
   if (!valid) return
 
-  try {
-    loading.value = true
+  DebugUtils.info(MODULE_NAME, 'Queueing preparation write-off task (background)', {
+    reason: formData.value.reason,
+    itemCount: formData.value.items.length,
+    totalCost: totalCost.value
+  })
 
-    DebugUtils.info(MODULE_NAME, 'Submitting preparation write-off', {
+  // Prepare data before closing dialog
+  const affectsKpi = selectedReasonInfo.value?.affectsKPI || false
+  const items = formData.value.items.map(item => ({
+    preparationId: item.preparationId,
+    preparationName: getPreparationName(item.preparationId),
+    quantity: item.quantity,
+    unit: getPreparationUnit(item.preparationId)
+  }))
+
+  // Queue background task (non-blocking)
+  addPrepWriteOffTask(
+    {
+      items,
+      department: userDepartment.value,
+      responsiblePerson: authStore.userName,
       reason: formData.value.reason,
-      itemCount: formData.value.items.length,
-      totalCost: totalCost.value
-    })
-
-    const operation = await preparationWriteOff.writeOffMultiplePreparations(
-      formData.value.items.map(item => ({
-        preparationId: item.preparationId,
-        preparationName: getPreparationName(item.preparationId),
-        currentQuantity: getPreparationStock(item.preparationId),
-        unit: getPreparationUnit(item.preparationId),
-        writeOffQuantity: item.quantity,
-        reason: formData.value.reason,
-        notes: item.notes
-      })),
-      userDepartment.value,
-      authStore.userName,
-      formData.value.reason,
-      formData.value.notes
-    )
-
-    // Record KPI for each item
-    const affectsKpi = selectedReasonInfo.value?.affectsKPI || false
-    for (const item of formData.value.items) {
-      try {
-        await kpiStore.recordWriteoff(
-          authStore.userId || 'unknown',
-          authStore.userName,
-          userDepartment.value,
-          {
-            itemId: item.preparationId,
-            itemName: getPreparationName(item.preparationId),
-            itemType: 'preparation',
-            quantity: item.quantity,
-            unit: getPreparationUnit(item.preparationId),
-            value: calculateItemCost(item),
-            reason: formData.value.reason,
-            affectsKpi,
-            timestamp: TimeUtils.getCurrentLocalISO()
-          }
-        )
-      } catch (kpiError) {
-        DebugUtils.error(MODULE_NAME, 'Failed to record KPI', { kpiError })
+      notes: formData.value.notes,
+      kpiData: {
+        userId: authStore.userId || 'unknown',
+        userName: authStore.userName,
+        affectsKpi
+      }
+    },
+    {
+      onSuccess: message => {
+        emit('success', message)
+      },
+      onError: message => {
+        emit('error', message)
       }
     }
+  )
 
-    DebugUtils.info(MODULE_NAME, 'Write-off completed', { operationId: operation.id })
-
-    emit('success', `${formData.value.items.length} preparation(s) written off successfully`)
-    handleCancel()
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Write-off failed', { error })
-    emit('error', error instanceof Error ? error.message : 'Write-off failed')
-  } finally {
-    loading.value = false
-  }
+  // Close dialog immediately (operations continue in background)
+  const itemCount = formData.value.items.length
+  emit('success', `Processing write-off of ${itemCount} preparation(s)...`)
+  handleCancel()
 }
 
 function handleCancel() {

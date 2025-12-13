@@ -301,7 +301,6 @@ const formatCurrency = (value: number): string => {
 
 <style scoped lang="scss">
 .food-cost-kpi-tab {
-  flex: 1;
   display: flex;
   flex-direction: column;
   background-color: transparent;

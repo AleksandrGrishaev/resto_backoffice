@@ -177,7 +177,6 @@ import { usePreparationStore } from '@/stores/preparation'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
 import { useAuthStore } from '@/stores/auth'
-import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { useCostCalculation } from '@/stores/recipes/composables/useCostCalculation'
 import type { CreatePreparationReceiptData } from '@/stores/preparation'
 import { DebugUtils, TimeUtils, formatIDR } from '@/utils'
@@ -206,8 +205,11 @@ const preparationStore = usePreparationStore()
 const recipesStore = useRecipesStore()
 const productsStore = useProductsStore()
 const authStore = useAuthStore()
-const kpiStore = useKitchenKpiStore()
 const { calculateDirectCost } = useCostCalculation()
+
+// Background tasks (non-blocking processing)
+import { useBackgroundTasks } from '@/core/background'
+const { addProductionTask } = useBackgroundTasks()
 
 // State
 const form = ref()
@@ -374,70 +376,76 @@ function formatCurrency(amount: number): string {
 async function handleSubmit() {
   if (!canSubmit.value || !selectedPreparation.value) return
 
-  try {
-    loading.value = true
+  // Prepare data before closing dialog
+  const expiryDate = calculatedExpiryDate.value
+  expiryDate.setHours(20, 0, 0, 0)
 
-    const expiryDate = calculatedExpiryDate.value
-    expiryDate.setHours(20, 0, 0, 0)
+  const costPerGram = isPortionType.value
+    ? calculatedCostPerUnit.value / portionSize.value
+    : calculatedCostPerUnit.value
 
-    const costPerGram = isPortionType.value
-      ? calculatedCostPerUnit.value / portionSize.value
-      : calculatedCostPerUnit.value
-
-    const receiptData: CreatePreparationReceiptData = {
-      department: userDepartment.value,
-      responsiblePerson: authStore.userName,
-      sourceType: 'production',
-      items: [
-        {
-          preparationId: selectedPreparationId.value,
-          quantity: effectiveQuantity.value,
-          costPerUnit: costPerGram,
-          expiryDate: expiryDate.toISOString().slice(0, 16),
-          notes: notes.value
-        }
-      ],
-      notes: notes.value
-    }
-
-    DebugUtils.info(MODULE_NAME, 'Creating production', {
-      preparation: selectedPreparation.value.name,
-      quantity: effectiveQuantity.value,
-      cost: calculatedCost.value
-    })
-
-    // Create receipt through store (handles offline queueing)
-    await preparationStore.createReceipt(receiptData)
-
-    // Record KPI
-    try {
-      await kpiStore.recordProduction(
-        authStore.userId || 'unknown',
-        authStore.userName,
-        userDepartment.value,
-        {
-          preparationId: selectedPreparationId.value,
-          preparationName: selectedPreparation.value.name,
-          quantity: effectiveQuantity.value,
-          unit: selectedPreparation.value.outputUnit,
-          value: calculatedCost.value,
-          timestamp: TimeUtils.getCurrentLocalISO()
-        }
-      )
-    } catch (kpiError) {
-      DebugUtils.error(MODULE_NAME, 'Failed to record KPI', { kpiError })
-      // Don't fail the whole operation if KPI fails
-    }
-
-    const message = `Produced ${effectiveQuantity.value}${selectedPreparation.value.outputUnit} of ${selectedPreparation.value.name}`
-    emit('success', message)
-    handleClose()
-  } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to create production', { error })
-    emit('error', error instanceof Error ? error.message : 'Failed to record production')
-  } finally {
-    loading.value = false
+  const receiptData: CreatePreparationReceiptData = {
+    department: userDepartment.value,
+    responsiblePerson: authStore.userName,
+    sourceType: 'production',
+    items: [
+      {
+        preparationId: selectedPreparationId.value,
+        quantity: effectiveQuantity.value,
+        costPerUnit: costPerGram,
+        expiryDate: expiryDate.toISOString().slice(0, 16),
+        notes: notes.value
+      }
+    ],
+    notes: notes.value
   }
+
+  DebugUtils.info(MODULE_NAME, 'Queueing production task (background)', {
+    preparation: selectedPreparation.value.name,
+    quantity: effectiveQuantity.value,
+    cost: calculatedCost.value
+  })
+
+  // Queue background task (non-blocking)
+  const prepName = selectedPreparation.value.name
+  const prepId = selectedPreparationId.value
+  const qty = effectiveQuantity.value
+  const unit = selectedPreparation.value.outputUnit
+  const cost = calculatedCost.value
+
+  addProductionTask(
+    {
+      receiptData,
+      preparationName: prepName,
+      preparationId: prepId,
+      quantity: qty,
+      unit: unit,
+      estimatedCost: cost,
+      kpiData: {
+        userId: authStore.userId || 'unknown',
+        userName: authStore.userName,
+        department: userDepartment.value,
+        value: cost,
+        timestamp: TimeUtils.getCurrentLocalISO()
+      }
+    },
+    {
+      onQueued: () => {
+        // Dialog already closed, parent handles snackbar
+      },
+      onSuccess: message => {
+        emit('success', message)
+      },
+      onError: message => {
+        emit('error', message)
+      }
+    }
+  )
+
+  // Close dialog immediately (operations continue in background)
+  const message = `Processing: ${prepName}...`
+  emit('success', message)
+  handleClose()
 }
 
 function handleClose() {
