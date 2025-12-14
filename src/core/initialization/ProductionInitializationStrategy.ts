@@ -20,6 +20,7 @@ import { DebugUtils } from '@/utils'
 // Импорт stores (те же что в Dev, но будут использовать API вместо localStorage)
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
+import { useCounteragentsStore } from '@/stores/counteragents'
 import { useAccountStore } from '@/stores/account'
 import { useMenuStore } from '@/stores/menu'
 import { useStorageStore } from '@/stores/storage'
@@ -81,6 +82,7 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       // ВАЖНО: Критические stores нужны ВСЕМ для decomposition
       results.push(await this.loadProductsFromAPI())
+      results.push(await this.loadCounteragentsFromAPI())
       results.push(await this.loadRecipesFromAPI())
       results.push(await this.loadMenuFromAPI())
 
@@ -214,6 +216,41 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'products',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  /**
+   * TODO: Загрузить counteragents через API
+   */
+  private async loadCounteragentsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useCounteragentsStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading counteragents from API...')
+
+      // TODO: Заменить на API вызов
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'counteragents',
+        success: true,
+        count: store.counteragents.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load counteragents'
+      DebugUtils.error(MODULE_NAME, `❌ [PROD] ${message}`, { error })
+
+      return {
+        name: 'counteragents',
         success: false,
         error: message,
         duration: Date.now() - start

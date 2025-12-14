@@ -3,7 +3,7 @@
   <div class="menu-view">
     <!-- Toolbar -->
     <div class="menu-toolbar">
-      <div class="menu-toolbar__left">
+      <div class="menu-toolbar__top">
         <v-text-field
           v-model="search"
           placeholder="Search..."
@@ -14,60 +14,56 @@
           class="search-field"
         />
 
-        <v-chip-group v-model="filterTypes" multiple class="menu-toolbar__filters">
-          <template #default>
-            <v-chip
-              filter
-              value="food"
-              variant="flat"
-              :color="isFilterActive('food') ? 'primary' : undefined"
-            >
-              <template #default>
-                <v-icon start icon="mdi-silverware-fork-knife" size="16" />
-                Kitchen
-              </template>
-            </v-chip>
-            <v-chip
-              filter
-              value="beverage"
-              variant="flat"
-              :color="isFilterActive('beverage') ? 'primary' : undefined"
-            >
-              <template #default>
-                <v-icon start icon="mdi-coffee" size="16" />
-                Bar
-              </template>
-            </v-chip>
-            <v-chip
-              filter
-              value="archive"
-              variant="flat"
-              :color="isFilterActive('archive') ? 'primary' : undefined"
-            >
-              <template #default>
-                <v-icon start icon="mdi-archive" size="16" />
-                Archive
-              </template>
-            </v-chip>
-          </template>
-        </v-chip-group>
+        <div class="menu-toolbar__actions">
+          <v-btn
+            variant="outlined"
+            size="small"
+            icon="mdi-file-pdf-box"
+            :loading="isExporting"
+            title="Export PDF"
+            @click="dialogs.export = true"
+          />
+          <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="showCategoryDialog">
+            Category
+          </v-btn>
+          <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="showItemDialog">
+            DISH
+          </v-btn>
+        </div>
       </div>
 
-      <div class="menu-toolbar__right">
-        <v-btn
-          variant="outlined"
-          class="mr-2"
-          prepend-icon="mdi-file-pdf-box"
-          :loading="isExporting"
-          @click="dialogs.export = true"
+      <v-chip-group v-model="filterTypes" multiple class="menu-toolbar__filters">
+        <v-chip
+          filter
+          value="food"
+          variant="flat"
+          size="small"
+          :color="isFilterActive('food') ? 'primary' : undefined"
         >
-          Export PDF
-        </v-btn>
-        <v-btn color="primary" class="mr-2" prepend-icon="mdi-plus" @click="showCategoryDialog">
-          Category
-        </v-btn>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="showItemDialog">Dish</v-btn>
-      </div>
+          <v-icon start icon="mdi-silverware-fork-knife" size="14" />
+          Kitchen
+        </v-chip>
+        <v-chip
+          filter
+          value="beverage"
+          variant="flat"
+          size="small"
+          :color="isFilterActive('beverage') ? 'primary' : undefined"
+        >
+          <v-icon start icon="mdi-coffee" size="14" />
+          Bar
+        </v-chip>
+        <v-chip
+          filter
+          value="archive"
+          variant="flat"
+          size="small"
+          :color="isFilterActive('archive') ? 'primary' : undefined"
+        >
+          <v-icon start icon="mdi-archive" size="14" />
+          Archive
+        </v-chip>
+      </v-chip-group>
     </div>
 
     <!-- Content -->
@@ -809,21 +805,30 @@ onMounted(async () => {
 
 .menu-toolbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  gap: 12px;
   background: var(--color-surface);
-  padding: 16px;
+  padding: 12px 16px;
   border-radius: 8px;
 
-  &__left {
+  &__top {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
+    width: 100%;
 
     .search-field {
-      width: 300px;
+      flex: 1;
+      min-width: 150px;
+      max-width: 400px;
     }
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
   &__filters {
@@ -892,21 +897,19 @@ onMounted(async () => {
   }
 
   .menu-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-
-    &__left {
-      flex-direction: column;
+    &__top {
+      flex-wrap: wrap;
 
       .search-field {
-        width: 100%;
+        flex: 1 1 100%;
+        max-width: none;
+        order: 1;
       }
     }
 
-    &__right {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+    &__actions {
+      order: 2;
+      margin-left: auto;
     }
   }
 }
