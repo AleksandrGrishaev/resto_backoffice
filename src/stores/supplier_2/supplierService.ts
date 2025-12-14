@@ -450,9 +450,16 @@ class SupplierService {
       // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
       // Для неделимых (piece, pack, portion) - округляем вверх
       const rawPackageQuantity = item.quantity / pkg.packageSize
-      const packageQuantity = isUnitDivisible(product.baseUnit)
+      const isDivisible = isUnitDivisible(product.baseUnit)
+      const packageQuantity = isDivisible
         ? Math.round(rawPackageQuantity * 100) / 100 // Round to 2 decimal places
         : Math.ceil(rawPackageQuantity) // Round up for indivisible units
+
+      // ✅ FIX: For indivisible units, recalculate actual ordered quantity based on whole packages
+      // E.g., if requested 14 pieces but package has 83 pieces, we order 1 package = 83 pieces
+      const actualOrderedQuantity = isDivisible
+        ? item.quantity // For divisible units, keep original quantity
+        : packageQuantity * pkg.packageSize // For indivisible units, order full packages
 
       // ✅ REFACTORED: Price priority from basket > product.lastKnownCost > baseCostPerUnit
       const pricePerUnit = item.pricePerUnit ?? product.lastKnownCost ?? pkg.baseCostPerUnit
@@ -481,7 +488,7 @@ class SupplierService {
         department: (item as { department?: string }).department, // Optional department
 
         // Количества
-        orderedQuantity: item.quantity, // В базовых единицах
+        orderedQuantity: actualOrderedQuantity, // В базовых единицах (rounded up for piece-based)
         unit: product.baseUnit, // Базовая единица
 
         // ✅ ПОЛЯ УПАКОВКИ

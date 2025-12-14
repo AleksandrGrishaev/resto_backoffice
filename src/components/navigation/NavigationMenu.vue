@@ -391,31 +391,42 @@
       </v-list-group>
     </v-list>
 
-    <!-- User Info & Actions -->
-    <div class="navigation-footer pa-4">
-      <v-list density="compact" class="pa-0 mb-4">
-        <v-list-item
-          prepend-icon="mdi-account"
-          :title="authStore.state.currentUser?.name"
-          :subtitle="getUserRole"
-        />
-      </v-list>
+    <!-- User Info & Actions - Compact -->
+    <div class="navigation-footer pa-2">
+      <!-- User row with actions -->
+      <div class="d-flex align-center" :class="rail ? 'flex-column gap-2' : 'gap-2'">
+        <!-- User info -->
+        <div v-if="!rail" class="user-info flex-grow-1 text-truncate">
+          <div class="text-body-2 text-truncate">{{ authStore.state.currentUser?.name }}</div>
+          <div class="text-caption text-medium-emphasis text-truncate">{{ getUserRole }}</div>
+        </div>
+        <v-icon v-else size="small" color="grey">mdi-account</v-icon>
 
-      <div class="d-flex flex-column gap-2">
-        <v-btn block variant="text" prepend-icon="mdi-help-circle-outline" to="/help">
-          {{ rail ? '' : 'HELP' }}
-        </v-btn>
-        <v-btn block color="error" variant="text" prepend-icon="mdi-logout" @click="handleLogout">
-          {{ rail ? '' : 'LOGOUT' }}
-        </v-btn>
-        <v-btn
-          block
-          variant="text"
-          :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
-          @click="$emit('update:rail', !rail)"
-        >
-          {{ rail ? '' : 'COLLAPSE' }}
-        </v-btn>
+        <!-- Action buttons -->
+        <div class="d-flex" :class="rail ? 'flex-column' : ''">
+          <v-btn icon variant="text" size="small" to="/help" title="Help">
+            <v-icon size="small">mdi-help-circle-outline</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            variant="text"
+            size="small"
+            color="error"
+            title="Logout"
+            @click="handleLogout"
+          >
+            <v-icon size="small">mdi-logout</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            variant="text"
+            size="small"
+            :title="rail ? 'Expand' : 'Collapse'"
+            @click="$emit('update:rail', !rail)"
+          >
+            <v-icon size="small">{{ rail ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
+          </v-btn>
+        </div>
       </div>
     </div>
   </div>
@@ -479,6 +490,10 @@ async function handleRefresh() {
 
 .navigation-footer {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.user-info {
+  min-width: 0; // Enable text-truncate in flex
 }
 
 :deep(.v-list) {

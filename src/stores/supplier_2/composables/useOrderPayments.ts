@@ -185,19 +185,35 @@ export function useOrderPayments() {
       // Обеспечиваем свежие данные
       await accountStore.fetchPayments()
 
-      // ✅ НОВОЕ: Фильтруем платежи с доступной суммой
+      // ✅ ИСПРАВЛЕНО: Фильтруем платежи с доступной суммой
       const bills = accountStore.state.pendingPayments.filter(payment => {
         // Базовые условия
         if (payment.counteragentId !== supplierId) return false
-        if (!payment.linkedOrders) return false // Только связанные с заказами
 
-        const availableAmount = getAvailableAmount(payment)
-        if (availableAmount <= 0) return false // Нет доступной суммы
+        // ✅ ИСПРАВЛЕНО: Для completed платежей проверяем availableAmount даже без linkedOrders
+        // Это важно для случаев с кредиторкой после приёмки
+        if (payment.status === 'completed') {
+          // Completed платёж может иметь доступную сумму если:
+          // amount > usedAmount (кредиторка)
+          const availableAmount = getAvailableAmount(payment)
+          DebugUtils.debug(MODULE_NAME, 'Checking completed payment', {
+            paymentId: payment.id,
+            amount: payment.amount,
+            usedAmount: payment.usedAmount,
+            availableAmount
+          })
+          if (availableAmount <= 0) return false
+        } else {
+          // Для pending/processing - проверяем linkedOrders
+          if (!payment.linkedOrders) return false
+          const availableAmount = getAvailableAmount(payment)
+          if (availableAmount <= 0) return false
+        }
 
-        // ✅ НОВОЕ: Исключаем счета, уже привязанные к текущему заказу
+        // ✅ Исключаем счета, уже привязанные к текущему заказу
         const currentOrderId = paymentState.selectedOrder?.id
-        if (currentOrderId) {
-          const alreadyLinkedToCurrentOrder = payment.linkedOrders?.some(
+        if (currentOrderId && payment.linkedOrders) {
+          const alreadyLinkedToCurrentOrder = payment.linkedOrders.some(
             link => link.orderId === currentOrderId && link.isActive
           )
           if (alreadyLinkedToCurrentOrder) return false
@@ -773,23 +789,25 @@ export function useOrderPayments() {
   // Getters
 
   function getAvailableAmount(payment: PendingPayment): number {
-    if (!payment.linkedOrders) return 0 // Операционные платежи = 0
+    // ✅ ИСПРАВЛЕНО: Для completed платежей используем usedAmount как основной показатель
+    if (payment.status === 'completed') {
+      // Для оплаченных платежей: available = amount - usedAmount
+      // usedAmount показывает сколько реально использовано после приёмки
+      const usedAmount = payment.usedAmount || 0
+      const availableAmount = payment.amount - usedAmount
+      return Math.max(0, availableAmount)
+    }
+
+    // Для pending/processing платежей: проверяем linkedOrders
+    if (!payment.linkedOrders) return 0 // Операционные платежи без привязок = 0
 
     const linkedAmount = payment.linkedOrders
       .filter(o => o.isActive)
       .reduce((sum, o) => sum + o.linkedAmount, 0)
 
-    if (payment.status === 'completed') {
-      // ✅ Для completed платежей: защита от рассинхронизации
-      const usedAmount = Math.max(payment.usedAmount || 0, linkedAmount)
-      const availableAmount = payment.amount - usedAmount
-
-      return Math.max(0, availableAmount) // Не может быть отрицательным
-    } else {
-      // ✅ Для pending платежей: available = amount - linkedAmount
-      const availableAmount = payment.amount - linkedAmount
-      return Math.max(0, availableAmount)
-    }
+    // Для pending платежей: available = amount - linkedAmount
+    const availableAmount = payment.amount - linkedAmount
+    return Math.max(0, availableAmount)
   }
 
   // =============================================

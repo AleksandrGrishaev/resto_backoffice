@@ -1160,7 +1160,7 @@ export const useAccountStore = defineStore('account', () => {
         paymentId,
         accountId: payment.assignedToAccount!,
         actualAmount,
-        notes: `Подтверждено кассиром: ${performer.name}${shiftInfo}`,
+        notes: `Confirmed by cashier: ${performer.name}${shiftInfo}`,
         performedBy: performer
       }
 
