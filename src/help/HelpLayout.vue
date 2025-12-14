@@ -6,6 +6,32 @@ const route = useRoute()
 const router = useRouter()
 
 const currentSection = computed(() => route.meta.section as string | undefined)
+
+// Smart "Back to App" navigation based on current section
+const backToAppRoute = computed(() => {
+  switch (currentSection.value) {
+    case 'pos':
+      return '/pos'
+    case 'kitchen':
+      return '/kitchen'
+    case 'backoffice':
+    default:
+      return '/'
+  }
+})
+
+const backToAppLabel = computed(() => {
+  switch (currentSection.value) {
+    case 'pos':
+      return 'Back to POS'
+    case 'kitchen':
+      return 'Back to Kitchen'
+    case 'backoffice':
+      return 'Back to Backoffice'
+    default:
+      return 'Back to App'
+  }
+})
 const currentRouteName = computed(() => route.name as string)
 
 interface GuideItem {
@@ -128,8 +154,8 @@ function isActiveRoute(routeName: string): boolean {
       </v-app-bar-title>
 
       <template #append>
-        <v-btn variant="text" color="primary" prepend-icon="mdi-arrow-left" href="/">
-          Back to App
+        <v-btn variant="text" color="primary" prepend-icon="mdi-arrow-left" :to="backToAppRoute">
+          {{ backToAppLabel }}
         </v-btn>
       </template>
     </v-app-bar>

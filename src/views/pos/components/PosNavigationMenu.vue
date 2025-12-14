@@ -203,6 +203,12 @@ const menuSections = computed(() => [
     title: 'SYSTEM',
     actions: [
       {
+        id: 'help',
+        icon: 'mdi-help-circle-outline',
+        label: 'Help',
+        disabled: loading.value
+      },
+      {
         id: POS_ACTIONS.LOGOUT,
         icon: 'mdi-logout',
         label: 'Logout',
@@ -251,6 +257,10 @@ const handleAction = async (actionId: string) => {
 
       case POS_ACTIONS.LOGOUT:
         await handleLogout()
+        break
+
+      case 'help':
+        router.push('/help/pos')
         break
 
       default:

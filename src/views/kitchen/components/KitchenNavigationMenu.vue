@@ -116,6 +116,12 @@ const menuSections = computed(() => [
     title: 'SYSTEM',
     actions: [
       {
+        id: 'help',
+        icon: 'mdi-help-circle-outline',
+        label: 'Help',
+        disabled: loading.value
+      },
+      {
         id: KITCHEN_ACTIONS.LOGOUT,
         icon: 'mdi-logout',
         label: 'Logout',
@@ -145,6 +151,10 @@ const handleAction = async (actionId: string) => {
 
       case KITCHEN_ACTIONS.LOGOUT:
         await handleLogout()
+        break
+
+      case 'help':
+        router.push('/help/kitchen')
         break
 
       default:

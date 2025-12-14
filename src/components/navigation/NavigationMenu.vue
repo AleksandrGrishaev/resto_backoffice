@@ -402,6 +402,9 @@
       </v-list>
 
       <div class="d-flex flex-column gap-2">
+        <v-btn block variant="text" prepend-icon="mdi-help-circle-outline" to="/help">
+          {{ rail ? '' : 'HELP' }}
+        </v-btn>
         <v-btn block color="error" variant="text" prepend-icon="mdi-logout" @click="handleLogout">
           {{ rail ? '' : 'LOGOUT' }}
         </v-btn>
