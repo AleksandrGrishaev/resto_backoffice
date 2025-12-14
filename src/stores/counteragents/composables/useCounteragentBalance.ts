@@ -15,7 +15,13 @@ export interface BalanceBreakdown {
 export function useCounteragentBalance() {
   /**
    * Получить детальную разбивку баланса контрагента
-   * Основано на ПОЛУЧЕННЫХ товарах (completed receipts), а не на pending платежах
+   *
+   * Логика баланса:
+   * - totalReceived = стоимость ПОЛУЧЕННЫХ товаров (delivered orders with completed receipts)
+   * - totalPaid = ВСЕ completed платежи для этого контрагента (включая предоплаты)
+   * - balance = totalPaid - totalReceived
+   *   - Положительный = кредит (предоплата, оплатили больше чем получили)
+   *   - Отрицательный = долг (получили больше чем оплатили)
    */
   const getBalanceBreakdown = async (counteragentId: string): Promise<BalanceBreakdown> => {
     try {
@@ -25,7 +31,7 @@ export function useCounteragentBalance() {
       const supplierStore = useSupplierStore()
       const accountStore = useAccountStore()
 
-      // 1. Получить заказы для этого контрагента с completed receipts
+      // 1. Получить заказы для этого контрагента с completed receipts (ПОЛУЧЕННЫЕ товары)
       const ordersWithReceipts = supplierStore.state.orders.filter(order => {
         if (order.supplierId !== counteragentId) return false
         if (order.status !== 'delivered') return false
@@ -37,33 +43,25 @@ export function useCounteragentBalance() {
         return hasCompletedReceipt
       })
 
-      // 2. Рассчитать общую стоимость полученных товаров
+      // 2. Рассчитать общую стоимость ПОЛУЧЕННЫХ товаров
       const totalReceived = ordersWithReceipts.reduce((sum, order) => {
         // Используем actualDeliveredAmount если есть (после приёмки с расхождениями)
         return sum + (order.actualDeliveredAmount || order.totalAmount)
       }, 0)
 
-      // 3. Рассчитать сумму оплат за эти заказы
-      let totalPaid = 0
-      for (const order of ordersWithReceipts) {
-        // Найти completed платежи, привязанные к этому заказу
-        const payments = accountStore.state.pendingPayments.filter(
-          p =>
-            p.status === 'completed' &&
-            p.linkedOrders?.some(l => l.orderId === order.id && l.isActive)
-        )
+      // 3. Рассчитать ВСЕ completed платежи для этого контрагента
+      // (включая предоплаты за ещё не полученные заказы)
+      const allCompletedPayments = accountStore.state.pendingPayments.filter(
+        p => p.counteragentId === counteragentId && p.status === 'completed'
+      )
 
-        for (const payment of payments) {
-          const link = payment.linkedOrders?.find(l => l.orderId === order.id && l.isActive)
-          if (link) {
-            totalPaid += link.linkedAmount
-          }
-        }
-      }
+      const totalPaid = allCompletedPayments.reduce((sum, payment) => {
+        return sum + (payment.paidAmount || payment.amount)
+      }, 0)
 
       // 4. Баланс = Оплачено - Получено
-      // Положительный = переплата (кредит)
-      // Отрицательный = недоплата (долг)
+      // Положительный = кредит (предоплата за ещё не полученные товары)
+      // Отрицательный = долг (получили товары, но не оплатили)
       return {
         totalReceived,
         totalPaid,

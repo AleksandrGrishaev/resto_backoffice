@@ -258,6 +258,9 @@ const balanceBreakdownData = ref<BalanceBreakdown>({
   ordersWithReceipts: 0
 })
 
+// Order statuses for determining prepayment vs debt
+const orderStatuses = ref<Record<string, string>>({})
+
 // =============================================
 // COMPUTED - Объединенные операции
 // =============================================
@@ -379,10 +382,14 @@ const historyAsOperations = computed((): CombinedOperation[] => {
 // Объединяем операции и историю баланса
 const allOperations = computed((): CombinedOperation[] => {
   const combined: CombinedOperation[] = [
-    // Обычные операции
+    // Обычные операции - тип зависит от статуса платежа
+    // pending = ещё не оплачено (долг если товар получен)
+    // completed = оплачено (может быть предоплата если товар не получен)
     ...operations.value.map(op => ({
       ...op,
       isBalanceCorrection: false,
+      // pending payment = debt (показываем как долг - товар получен, не оплачен)
+      // completed payment = payment (оплачено)
       type: op.status === 'pending' ? 'debt' : 'payment'
     })),
     // История баланса как операции

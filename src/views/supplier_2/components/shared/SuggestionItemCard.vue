@@ -82,17 +82,18 @@
 
           <!-- Quantity Editor with Unit Toggle -->
           <div class="quantity-editor">
-            <!-- Unit Toggle -->
+            <!-- Unit Toggle - only show if conversion is available -->
             <v-btn-toggle
+              v-if="hasUnitConversion"
               v-model="currentDisplayUnit"
               size="x-small"
               density="compact"
               mandatory
               class="mb-2"
             >
-              <v-btn :value="baseUnit" size="x-small">{{ baseUnit }}</v-btn>
-              <v-btn v-if="purchaseUnit !== baseUnit" :value="purchaseUnit" size="x-small">
-                {{ purchaseUnit }}
+              <v-btn :value="baseUnit" size="x-small">{{ baseUnit.toUpperCase() }}</v-btn>
+              <v-btn :value="purchaseUnit" size="x-small">
+                {{ purchaseUnit.toUpperCase() }}
               </v-btn>
             </v-btn-toggle>
 
@@ -171,6 +172,11 @@ const baseUnit = computed(() => {
 const purchaseUnit = computed(() => {
   if (!product.value) return 'kg'
 
+  // For piece-based products, purchase unit is same as base unit
+  if (product.value.baseUnit === 'piece') {
+    return 'pcs'
+  }
+
   const purchaseUnits: Record<string, string> = {
     kg: 'kg',
     liter: 'L',
@@ -178,6 +184,16 @@ const purchaseUnit = computed(() => {
     pack: 'pack'
   }
   return purchaseUnits[product.value.purchaseUnit] || 'kg'
+})
+
+// Check if unit conversion is available (gram↔kg, ml↔L)
+const hasUnitConversion = computed(() => {
+  if (!product.value) return false
+  // Only gram↔kg and ml↔L conversions are supported
+  return (
+    (product.value.baseUnit === 'gram' && product.value.purchaseToBaseRatio) ||
+    (product.value.baseUnit === 'ml' && product.value.purchaseToBaseRatio)
+  )
 })
 
 const currentDisplayUnit = ref(baseUnit.value)
@@ -248,8 +264,8 @@ function getCurrentQuantityForDisplay(): number {
     return Math.round(props.selectedQuantity)
   }
 
-  // Convert to purchase units
-  if (currentDisplayUnit.value === purchaseUnit.value) {
+  // Convert to purchase units (only if ratio is available)
+  if (currentDisplayUnit.value === purchaseUnit.value && product.value.purchaseToBaseRatio) {
     return Math.round((props.selectedQuantity / product.value.purchaseToBaseRatio) * 10) / 10
   }
 
@@ -272,12 +288,19 @@ function getQuantityStep(): number {
 
 function updateQuantity(newValue: string | number): void {
   const quantity = typeof newValue === 'string' ? parseFloat(newValue) : newValue
-  if (quantity <= 0 || isNaN(quantity)) return
+  if (isNaN(quantity) || quantity < 0) return
+
+  // Allow 0 to clear quantity, but treat empty string as no change
+  if (newValue === '' || newValue === null || newValue === undefined) return
 
   let finalQuantity = quantity
 
-  // Convert to base units if needed
-  if (currentDisplayUnit.value === purchaseUnit.value && product.value) {
+  // Convert to base units if needed (only if ratio is available)
+  if (
+    currentDisplayUnit.value === purchaseUnit.value &&
+    product.value &&
+    product.value.purchaseToBaseRatio
+  ) {
     finalQuantity = Math.round(quantity * product.value.purchaseToBaseRatio)
   } else {
     finalQuantity = Math.round(quantity)

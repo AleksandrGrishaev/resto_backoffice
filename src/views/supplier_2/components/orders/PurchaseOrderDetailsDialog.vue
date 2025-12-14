@@ -142,6 +142,34 @@
         <v-card-title>Create New Bill</v-card-title>
 
         <v-card-text>
+          <!-- Payment Summary Info -->
+          <v-alert
+            v-if="paymentCalculations.totalBilled > 0"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mb-4"
+          >
+            <div class="d-flex justify-space-between align-center">
+              <div>
+                <div class="text-caption">Order Total</div>
+                <div class="font-weight-bold">{{ formatCurrency(order?.totalAmount || 0) }}</div>
+              </div>
+              <div class="text-center">
+                <div class="text-caption">Already Billed</div>
+                <div class="font-weight-bold text-warning">
+                  {{ formatCurrency(paymentCalculations.totalBilled) }}
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="text-caption">Remaining</div>
+                <div class="font-weight-bold text-success">
+                  {{ formatCurrency(remainingAmount) }}
+                </div>
+              </div>
+            </div>
+          </v-alert>
+
           <v-form v-model="createBillForm.valid">
             <v-text-field
               v-model.number="createBillForm.amount"
@@ -149,6 +177,10 @@
               type="number"
               prefix="Rp"
               :rules="createBillForm.amountRules"
+              :hint="
+                remainingAmount > 0 ? `Remaining unpaid: ${formatCurrency(remainingAmount)}` : ''
+              "
+              persistent-hint
               required
             />
 
@@ -158,6 +190,7 @@
               :items="priorityOptions"
               :rules="createBillForm.priorityRules"
               required
+              class="mt-2"
             />
 
             <v-textarea
@@ -356,13 +389,23 @@ const activeBills = computed(() =>
   selectedOrderBills.value.filter(bill => bill.status !== 'cancelled')
 )
 
+// Remaining amount to be billed
+const remainingAmount = computed(() => {
+  if (!props.order) return 0
+  const remaining = props.order.totalAmount - paymentCalculations.value.totalBilled
+  return Math.max(0, remaining)
+})
+
 // =============================================
 // METHODS
 // =============================================
 
 async function handleCreateBill() {
   if (!props.order) return
-  createBillForm.value.amount = props.order.totalAmount
+  // Use remaining amount if there are already bills, otherwise use full order amount
+  const suggestedAmount =
+    remainingAmount.value > 0 ? remainingAmount.value : props.order.totalAmount
+  createBillForm.value.amount = suggestedAmount
   createBillForm.value.description = `Payment for order ${props.order.orderNumber}`
   showCreateBillDialog.value = true
 }
