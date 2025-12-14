@@ -31,6 +31,17 @@ export function useCounteragentBalance() {
       const supplierStore = useSupplierStore()
       const accountStore = useAccountStore()
 
+      // Ensure data is loaded
+      if (accountStore.state.pendingPayments.length === 0) {
+        await accountStore.fetchPayments()
+      }
+      if (supplierStore.state.orders.length === 0) {
+        await supplierStore.loadOrders()
+      }
+      if (supplierStore.state.receipts.length === 0) {
+        await supplierStore.loadReceipts()
+      }
+
       // 1. Получить заказы для этого контрагента с completed receipts (ПОЛУЧЕННЫЕ товары)
       const ordersWithReceipts = supplierStore.state.orders.filter(order => {
         if (order.supplierId !== counteragentId) return false
