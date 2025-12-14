@@ -306,9 +306,9 @@ const calculatedActualTotal = computed(() => {
 })
 
 /**
- * Expected total = receivedQuantity × orderedBaseCost for each item
- * ✅ FIXED: Use BaseCost (per unit), not Price (per package)
- * receivedQuantity is in base units (grams), so must multiply by cost per gram
+ * Expected total = what we WOULD pay if prices didn't change
+ * = receivedQuantity × orderedBaseCost
+ * This shows the expected cost for RECEIVED quantities at ORDERED prices
  */
 const expectedTotal = computed(() => {
   if (!receiptForm.value.items || !Array.isArray(receiptForm.value.items)) {
@@ -321,12 +321,25 @@ const expectedTotal = computed(() => {
 })
 
 /**
- * Financial impact = difference between actual paid and expected
- * Positive = we paid MORE than expected (bad)
- * Negative = we paid LESS than expected (market rounding in our favor)
+ * Ordered total = what was originally ordered
+ * = orderedQuantity × orderedBaseCost
+ */
+const orderedTotal = computed(() => {
+  if (!receiptForm.value.items || !Array.isArray(receiptForm.value.items)) {
+    return 0
+  }
+  return receiptForm.value.items.reduce((total, item) => {
+    return total + item.orderedQuantity * (item.orderedBaseCost || 0)
+  }, 0)
+})
+
+/**
+ * Financial impact = difference between actual total and ordered total
+ * Positive = we pay MORE than originally ordered (quantity up or price up)
+ * Negative = we pay LESS than originally ordered (quantity down or price down)
  */
 const financialImpact = computed(() => {
-  return calculatedActualTotal.value - expectedTotal.value
+  return calculatedActualTotal.value - orderedTotal.value
 })
 
 const hasDiscrepancies = computed(() => {
@@ -553,10 +566,17 @@ async function confirmComplete() {
     DebugUtils.info(MODULE_NAME, 'Saving receipt items before completion', {
       receiptId: currentReceipt.value.id,
       itemsCount: currentReceipt.value.items.length,
+      orderedTotal: orderedTotal.value,
+      actualTotal: calculatedActualTotal.value,
+      financialImpact: financialImpact.value,
       items: currentReceipt.value.items.map(i => ({
         itemName: i.itemName,
+        orderedQuantity: i.orderedQuantity,
+        receivedQuantity: i.receivedQuantity,
+        orderedBaseCost: i.orderedBaseCost,
+        actualBaseCost: i.actualBaseCost,
         actualPrice: i.actualPrice,
-        receivedQuantity: i.receivedQuantity
+        receivedPackageQuantity: i.receivedPackageQuantity
       }))
     })
 

@@ -291,6 +291,8 @@ export interface UpdatePaymentAmountDto {
   reason: AmountChange['reason']
   notes?: string
   userId?: string
+  // ✅ Опционально: обновить linkedAmount для конкретного заказа
+  updateLinkedOrderId?: string
 }
 
 export interface CreateHistoricalTransactionDto extends CreateOperationDto {

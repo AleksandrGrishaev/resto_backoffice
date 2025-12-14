@@ -788,12 +788,24 @@ export class AccountSupabaseService {
 
       const amountHistory = [...(payment.amountHistory || []), historyEntry]
 
+      // ✅ Обновляем linkedAmount если указан orderId
+      let updatedLinkedOrders = payment.linkedOrders
+      if (data.updateLinkedOrderId && updatedLinkedOrders) {
+        updatedLinkedOrders = updatedLinkedOrders.map(link => {
+          if (link.orderId === data.updateLinkedOrderId && link.isActive) {
+            return { ...link, linkedAmount: data.newAmount }
+          }
+          return link
+        })
+      }
+
       const { error } = await withTimeout(
         supabase
           .from('pending_payments')
           .update({
             amount: data.newAmount,
             amount_history: amountHistory,
+            linked_orders: updatedLinkedOrders,
             updated_at: new Date().toISOString()
           })
           .eq('id', data.paymentId)

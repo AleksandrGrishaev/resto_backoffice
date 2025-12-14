@@ -605,29 +605,40 @@ export function useOrderPayments() {
         }))
       })
 
+      const actualDeliveredAmount = order.actualDeliveredAmount || order.totalAmount
+
+      // ✅ СЛУЧАЙ 1: Нет платежей - создаём новый pending payment на всю сумму
       if (orderPayments.length === 0) {
-        console.warn(`OrderPayments: No payments found for order ${order.orderNumber}`)
+        console.log(
+          `OrderPayments: No payments found, creating new pending payment for order ${order.orderNumber}`
+        )
+        await createPendingPaymentForOrder(order, actualDeliveredAmount)
         return
       }
 
-      // ✅ COMPLETED платежи - обновляем usedAmount
+      // ✅ СЛУЧАЙ 2: COMPLETED платежи - обновляем usedAmount
       const completedPayments = orderPayments.filter(p => p.status === 'completed')
       for (const payment of completedPayments) {
         await updatePaymentUsedAmount(payment, order)
       }
 
-      // ✅ НОВОЕ: PENDING платежи с автосинхронизацией - обновляем сумму
-      const pendingPayments = orderPayments.filter(
-        p => p.status === 'pending' && p.autoSyncEnabled && p.sourceOrderId === order.id // Только для исходного заказа
+      // ✅ СЛУЧАЙ 3: PENDING платежи с автосинхронизацией - обновляем сумму
+      const pendingAutoSyncPayments = orderPayments.filter(
+        p => p.status === 'pending' && p.autoSyncEnabled && p.sourceOrderId === order.id
       )
 
-      if (pendingPayments.length > 0) {
-        console.log(`OrderPayments: Auto-syncing ${pendingPayments.length} pending payments`)
+      if (pendingAutoSyncPayments.length > 0) {
+        console.log(
+          `OrderPayments: Auto-syncing ${pendingAutoSyncPayments.length} pending payments`
+        )
 
-        for (const payment of pendingPayments) {
+        for (const payment of pendingAutoSyncPayments) {
           await autoSyncPendingPaymentAmount(payment, order)
         }
       }
+
+      // ✅ СЛУЧАЙ 4: Проверяем есть ли недоплата и создаём pending payment на остаток
+      await createOveragePaymentIfNeeded(order, orderPayments, actualDeliveredAmount)
 
       console.log(`OrderPayments: Payment sync completed for order ${order.orderNumber}`)
     } catch (error) {
@@ -659,19 +670,14 @@ export function useOrderPayments() {
         difference: newAmount - oldAmount
       })
 
-      // Обновляем сумму платежа через accountStore
+      // Обновляем сумму платежа через accountStore (включая linkedAmount)
       await accountStore.updatePaymentAmount({
         paymentId: payment.id,
         newAmount,
         reason: 'receipt_discrepancy',
-        notes: `Auto-sync after receipt completion for order ${order.orderNumber}`
+        notes: `Auto-sync after receipt completion for order ${order.orderNumber}`,
+        updateLinkedOrderId: order.id // ✅ Обновить linkedAmount для этого заказа
       })
-
-      // Обновляем linkedAmount тоже
-      const orderLink = payment.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
-      if (orderLink) {
-        orderLink.linkedAmount = newAmount
-      }
     } catch (error) {
       console.error(`OrderPayments: Failed to auto-sync payment amount:`, error)
       throw error
@@ -713,7 +719,9 @@ export function useOrderPayments() {
 
       if (activeLinks.length === 1) {
         // Простой случай: один платеж - один заказ
-        newUsedAmount = actualDeliveredAmount
+        // ✅ FIX: usedAmount не может превышать сумму счёта (payment.amount)
+        // Если заказ стоит больше чем счёт - используем всю сумму счёта
+        newUsedAmount = Math.min(actualDeliveredAmount, payment.amount)
       } else {
         // Сложный случай: один платеж на несколько заказов
         // Обновляем пропорционально
@@ -721,7 +729,9 @@ export function useOrderPayments() {
           .filter(o => o.orderId !== order.id)
           .reduce((sum, o) => sum + o.linkedAmount, 0)
 
-        newUsedAmount = actualDeliveredAmount + otherLinkedAmount
+        // ✅ FIX: Ограничиваем суммой счёта
+        const thisOrderUsed = Math.min(actualDeliveredAmount, payment.amount - otherLinkedAmount)
+        newUsedAmount = Math.min(thisOrderUsed + otherLinkedAmount, payment.amount)
       }
 
       // ✅ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Обновляем через новый метод accountStore.updatePaymentUsedAmount
@@ -739,6 +749,113 @@ export function useOrderPayments() {
       throw error
     }
   }
+
+  /**
+   * ✅ НОВОЕ: Создаёт pending payment для заказа на указанную сумму
+   */
+  async function createPendingPaymentForOrder(
+    order: PurchaseOrder,
+    amount: number,
+    isOverage: boolean = false
+  ): Promise<void> {
+    try {
+      const { accountStore, authStore } = await getStores()
+      const { useSupplierStore } = await import('@/stores/supplier_2')
+      const supplierStore = useSupplierStore()
+
+      // Получаем имя поставщика
+      const supplier = supplierStore.state.suppliers.find(s => s.id === order.supplierId)
+      const counteragentName = supplier?.name || order.supplierName || 'Unknown Supplier'
+
+      const newPayment: CreatePaymentDto = {
+        counteragentId: order.supplierId,
+        counteragentName,
+        amount,
+        description: isOverage
+          ? `Payment for order ${order.orderNumber} (overage)`
+          : `Payment for order ${order.orderNumber}`,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // +7 дней
+        priority: 'medium',
+        category: 'supplier',
+        linkedOrders: [
+          {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            linkedAmount: amount,
+            linkedAt: new Date().toISOString(),
+            isActive: true
+          }
+        ],
+        sourceOrderId: order.id,
+        autoSyncEnabled: !isOverage, // Не синхронизировать overage автоматически
+        createdBy: {
+          id: authStore.currentUser?.id || 'system',
+          name: authStore.currentUser?.name || 'System',
+          type: 'user'
+        }
+      }
+
+      await accountStore.createPendingPayment(newPayment)
+
+      console.log(`OrderPayments: Created pending payment for order ${order.orderNumber}`, {
+        orderId: order.id,
+        amount,
+        isOverage
+      })
+    } catch (error) {
+      console.error(`OrderPayments: Failed to create pending payment:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * ✅ НОВОЕ: Создаёт pending payment на остаток если фактическая сумма > оплаченной
+   */
+  async function createOveragePaymentIfNeeded(
+    order: PurchaseOrder,
+    orderPayments: PendingPayment[],
+    actualDeliveredAmount: number
+  ): Promise<void> {
+    try {
+      // Считаем сколько уже оплачено/выставлено к оплате
+      const totalPaid = orderPayments
+        .filter(p => p.status === 'completed')
+        .reduce((sum, p) => sum + p.amount, 0)
+
+      const totalPending = orderPayments
+        .filter(p => p.status === 'pending')
+        .reduce((sum, p) => sum + p.amount, 0)
+
+      const totalCovered = totalPaid + totalPending
+
+      // Есть ли недопокрытая сумма?
+      const overage = actualDeliveredAmount - totalCovered
+
+      if (overage <= 0) {
+        console.log(`OrderPayments: No overage detected for order ${order.orderNumber}`, {
+          actualDeliveredAmount,
+          totalPaid,
+          totalPending,
+          totalCovered
+        })
+        return
+      }
+
+      console.log(`OrderPayments: Overage detected, creating pending payment`, {
+        orderId: order.id,
+        actualDeliveredAmount,
+        totalCovered,
+        overage
+      })
+
+      // Создаём pending payment на остаток (isOverage = true)
+      await createPendingPaymentForOrder(order, overage, true)
+    } catch (error) {
+      console.error(`OrderPayments: Failed to create overage payment:`, error)
+      throw error
+    }
+  }
+
   // =============================================
   // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
   // =============================================

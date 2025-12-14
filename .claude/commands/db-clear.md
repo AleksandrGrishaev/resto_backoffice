@@ -16,8 +16,11 @@ Clean all temporary test data from the database:
 9. **Delete auto-generated storage operations** (sales_consumption, production_consumption)
 10. **Delete auto-generated preparation operations** (linked to storage)
 11. **Delete kitchen/bar KPI records** (staff performance data)
-12. Reset all tables to 'available' status
-13. Clear table order references
+12. **Delete pending payments** (counteragent payment requests)
+13. **Delete supplier orders and receipts** (supplierstore_orders, supplierstore_receipts)
+14. **Reset counteragent balances** (current_balance, total_orders, total_order_value, balance_history)
+15. Reset all tables to 'available' status
+16. Clear table order references
 
 Execute the cleanup SQL and show summary of deleted records.
 
@@ -28,6 +31,7 @@ Execute the cleanup SQL and show summary of deleted records.
 - Users
 - Recipes
 - Suppliers
+- Counteragents themselves (only their balances are reset)
 - Manually created batches and operations
 - Other permanent data (storage receipts, manual write-offs, etc.)
 - Production schedule
@@ -53,7 +57,11 @@ SELECT
   (SELECT COUNT(*) FROM preparation_batches WHERE is_negative = true) as negative_prep_batches_before,
   (SELECT COUNT(*) FROM storage_operations WHERE write_off_details->>'reason' IN ('sales_consumption', 'production_consumption')) as auto_storage_ops_before,
   (SELECT COUNT(*) FROM preparation_operations WHERE write_off_details->>'reason' IN ('production_consumption', 'sales_consumption') OR consumption_details IS NOT NULL) as auto_prep_ops_before,
-  (SELECT COUNT(*) FROM kitchen_bar_kpi) as kitchen_bar_kpi_before;
+  (SELECT COUNT(*) FROM kitchen_bar_kpi) as kitchen_bar_kpi_before,
+  (SELECT COUNT(*) FROM pending_payments) as pending_payments_before,
+  (SELECT COUNT(*) FROM supplierstore_orders) as supplier_orders_before,
+  (SELECT COUNT(*) FROM supplierstore_receipts) as supplier_receipts_before,
+  (SELECT COUNT(*) FROM counteragents WHERE current_balance != 0 OR total_orders > 0) as counteragents_with_balance_before;
 
 -- Complete cleanup in correct order (respecting foreign key constraints)
 
@@ -117,6 +125,36 @@ WHERE operation_type IN ('production', 'write_off')
 -- Step 14: Delete kitchen/bar KPI records (staff performance tracking)
 DELETE FROM kitchen_bar_kpi;
 
+-- Step 15: Delete all pending payments (counteragent payment requests)
+DELETE FROM pending_payments;
+
+-- Step 16: Delete supplier receipt items (depends on receipts)
+DELETE FROM supplierstore_receipt_items;
+
+-- Step 17: Delete supplier receipts (depends on orders)
+DELETE FROM supplierstore_receipts;
+
+-- Step 18: Delete supplier order items (depends on orders)
+DELETE FROM supplierstore_order_items;
+
+-- Step 19: Delete supplier orders
+DELETE FROM supplierstore_orders;
+
+-- Step 20: Reset counteragent balances and order statistics
+UPDATE counteragents
+SET current_balance = 0,
+    total_orders = 0,
+    total_order_value = 0,
+    last_order_date = NULL,
+    balance_history = '[]'::jsonb,
+    last_balance_update = NOW(),
+    updated_at = NOW()
+WHERE current_balance != 0
+   OR total_orders > 0
+   OR total_order_value > 0
+   OR last_order_date IS NOT NULL
+   OR balance_history IS NOT NULL;
+
 -- Return comprehensive summary
 SELECT
   (SELECT COUNT(*) FROM order_items) as order_items_after,
@@ -133,7 +171,11 @@ SELECT
   (SELECT COUNT(*) FROM preparation_batches WHERE is_negative = true) as negative_prep_batches_remaining,
   (SELECT COUNT(*) FROM storage_operations WHERE write_off_details->>'reason' IN ('sales_consumption', 'production_consumption')) as auto_storage_ops_remaining,
   (SELECT COUNT(*) FROM preparation_operations WHERE consumption_details IS NOT NULL) as auto_prep_ops_remaining,
-  (SELECT COUNT(*) FROM kitchen_bar_kpi) as kitchen_bar_kpi_remaining;
+  (SELECT COUNT(*) FROM kitchen_bar_kpi) as kitchen_bar_kpi_remaining,
+  (SELECT COUNT(*) FROM pending_payments) as pending_payments_remaining,
+  (SELECT COUNT(*) FROM supplierstore_orders) as supplier_orders_remaining,
+  (SELECT COUNT(*) FROM supplierstore_receipts) as supplier_receipts_remaining,
+  (SELECT COUNT(*) FROM counteragents WHERE current_balance != 0 OR total_orders > 0) as counteragents_with_balance_remaining;
 ```
 
 ---
@@ -155,8 +197,13 @@ preparation_batches (negative) ← sales_transactions (FIFO allocation)
 storage_operations (sales_consumption, production_consumption) ← auto-generated
 preparation_operations (production) ← auto-generated
 
+supplierstore_receipt_items → supplierstore_receipts → supplierstore_orders
+supplierstore_order_items → supplierstore_orders
+
 kitchen_bar_kpi (independent, no FK dependencies)
 shifts (independent, no FK dependencies)
+pending_payments → counteragents (counteragent_id reference)
+counteragents (balance fields are reset, records preserved)
 ```
 
 **Note:**
@@ -169,6 +216,9 @@ shifts (independent, no FK dependencies)
 - Manual batches (receipts, manual write-offs, corrections) are NOT deleted
 - Manual storage operations (reason: other, expired, spoiled, etc.) are NOT deleted
 - Shifts can be deleted independently as they have no foreign key dependencies with other temporary data
+- `pending_payments` references `counteragents` but can be deleted independently
+- Supplier receipts depend on orders, receipt items depend on receipts
+- Counteragent records are preserved, only balance/order statistics are reset
 
 ---
 
@@ -196,11 +246,21 @@ shifts (independent, no FK dependencies)
 
 - Kitchen/Bar staff KPI records
 
+✅ **Counteragent Data:**
+
+- All pending payments (payment requests)
+- Supplier orders (supplierstore_orders)
+- Supplier receipts (supplierstore_receipts)
+- Supplier order items and receipt items
+- Counteragent balances reset to 0
+- Order statistics reset (total_orders, total_order_value, last_order_date)
+- Balance history cleared
+
 ❌ **Preserved Data:**
 
 - Menu items and recipes
 - Products and ingredients
-- Suppliers and counteragents
+- Suppliers and counteragents (records preserved, only balances reset)
 - Users and permissions
 - Manual inventory operations (receipts, corrections)
 - Manual write-offs (reason: other, expired, spoiled, etc.)

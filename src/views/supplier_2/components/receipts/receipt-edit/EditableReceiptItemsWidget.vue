@@ -185,17 +185,6 @@
               @update:model-value="updateFormattedLineTotal(item, $event)"
               @blur="validateAndUpdateLineTotal(item)"
             />
-            <!-- Show expected vs actual -->
-            <div class="text-caption text-medium-emphasis mt-1">
-              Expected: {{ formatCurrency(calculateExpectedLineTotal(item)) }}
-            </div>
-            <div
-              v-if="hasLineTotalAdjustment(item)"
-              class="text-caption mt-1"
-              :class="getLineDifferenceClass(item)"
-            >
-              {{ formatLineTotalAdjustment(item) }}
-            </div>
           </template>
 
           <!-- Read-only mode -->
@@ -245,11 +234,8 @@
       </div>
 
       <div class="text-right">
-        <div class="text-caption text-medium-emphasis mb-1">Expected Total:</div>
-        <div class="text-body-1">{{ formatCurrency(expectedTotal) }}</div>
-        <div v-if="originalTotal !== expectedTotal" class="text-caption text-medium-emphasis">
-          (Ordered: {{ formatCurrency(originalTotal) }})
-        </div>
+        <div class="text-caption text-medium-emphasis mb-1">Ordered Total:</div>
+        <div class="text-body-1">{{ formatCurrency(orderedTotal) }}</div>
       </div>
 
       <div class="text-right">
@@ -434,11 +420,10 @@ const discrepancyCount = computed(() => {
 })
 
 /**
- * Original Total = ordered quantity × ordered base cost
- * ✅ FIXED: Use BaseCost (per unit), not Price (per package)
- * Shows what was originally ordered (for reference)
+ * Ordered Total = ordered quantity × ordered base cost
+ * What was originally ordered (before any changes)
  */
-const originalTotal = computed(() => {
+const orderedTotal = computed(() => {
   return props.items.reduce((sum, item) => {
     return sum + item.orderedQuantity * (item.orderedBaseCost || 0)
   }, 0)
@@ -446,8 +431,8 @@ const originalTotal = computed(() => {
 
 /**
  * Expected Total = received quantity × ordered base cost
- * ✅ FIXED: Use BaseCost (per unit), not Price (per package)
- * What we WOULD pay for received goods without price adjustments
+ * What we WOULD pay for received goods at ORDERED prices (no price change)
+ * Shows the cost impact of quantity changes only
  */
 const expectedTotal = computed(() => {
   return props.items.reduce((sum, item) => {
@@ -465,11 +450,12 @@ const actualTotal = computed(() => {
 })
 
 /**
- * Financial Impact = actual - expected
- * Positive = paid MORE (bad), Negative = paid LESS (market rounding in our favor)
+ * Financial Impact = actual - ordered
+ * Positive = we pay MORE than originally ordered (quantity up or price up)
+ * Negative = we pay LESS than originally ordered (quantity down or price down)
  */
 const financialImpact = computed(() => {
-  return actualTotal.value - expectedTotal.value
+  return actualTotal.value - orderedTotal.value
 })
 
 const hasFinancialImpact = computed(() => {

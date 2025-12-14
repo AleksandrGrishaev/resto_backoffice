@@ -36,10 +36,10 @@ export function useCounteragentBalance() {
         await accountStore.fetchPayments()
       }
       if (supplierStore.state.orders.length === 0) {
-        await supplierStore.loadOrders()
+        await supplierStore.getOrders()
       }
       if (supplierStore.state.receipts.length === 0) {
-        await supplierStore.loadReceipts()
+        await supplierStore.getReceipts()
       }
 
       // 1. Получить заказы для этого контрагента с completed receipts (ПОЛУЧЕННЫЕ товары)
