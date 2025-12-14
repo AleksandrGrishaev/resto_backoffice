@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { accountService, transactionService, paymentService } from './service'
+import { categoryService } from './categoryService'
 import { DebugUtils, generateId } from '@/utils'
 import type {
   Account,
@@ -17,8 +18,12 @@ import type {
   AccountStoreState,
   UpdatePaymentAmountDto,
   AmountChange,
-  LinkPaymentToOrderDto
+  LinkPaymentToOrderDto,
+  TransactionCategory,
+  CreateCategoryDto,
+  UpdateCategoryDto
 } from './types'
+import { COGS_CATEGORY_LABELS } from './constants'
 
 const MODULE_NAME = 'AccountStore'
 
@@ -26,6 +31,7 @@ export const useAccountStore = defineStore('account', () => {
   // ============ STATE ============
   const state = ref<AccountStoreState>({
     accounts: [],
+    transactionCategories: [],
     accountTransactions: {},
     allTransactionsCache: undefined,
     cacheTimestamp: undefined,
@@ -52,6 +58,7 @@ export const useAccountStore = defineStore('account', () => {
     error: null,
     lastFetch: {
       accounts: null,
+      categories: null,
       transactions: {},
       payments: null
     }
@@ -107,10 +114,61 @@ export const useAccountStore = defineStore('account', () => {
 
     if (filters.dateTo && transaction.createdAt > filters.dateTo) return false
 
-    if (filters.category && transaction.expenseCategory?.type !== filters.category) return false
+    if (filters.category && transaction.expenseCategory?.category !== filters.category) return false
 
     return true
   }
+
+  // ============ CATEGORY GETTERS ============
+
+  /**
+   * All expense categories (for dropdowns)
+   * Excludes system categories (supplier, sales) - they are used automatically by the system
+   */
+  const expenseCategories = computed(() =>
+    state.value.transactionCategories
+      .filter(c => c.type === 'expense' && c.isActive && !c.isSystem)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  )
+
+  /**
+   * All income categories
+   * Excludes system categories (sales) - they are used automatically by the system
+   */
+  const incomeCategories = computed(() =>
+    state.value.transactionCategories
+      .filter(c => c.type === 'income' && c.isActive && !c.isSystem)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  )
+
+  /**
+   * OPEX categories (for P&L report)
+   */
+  const opexCategories = computed(() =>
+    state.value.transactionCategories
+      .filter(c => c.isOpex && c.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  )
+
+  /**
+   * Get category by code
+   * Returns category from DB or null if not found
+   * For COGS categories (product, food_cost, etc.) returns null - use COGS_CATEGORY_LABELS
+   */
+  const getCategoryByCode = computed(() => (code: string): TransactionCategory | null => {
+    return state.value.transactionCategories.find(c => c.code === code) || null
+  })
+
+  /**
+   * Get category label by code
+   * First checks DB categories, then COGS_CATEGORY_LABELS, then returns code as fallback
+   */
+  const getCategoryLabel = computed(() => (code: string): string => {
+    const category = state.value.transactionCategories.find(c => c.code === code)
+    if (category) return category.name
+    if (COGS_CATEGORY_LABELS[code]) return COGS_CATEGORY_LABELS[code]
+    return code
+  })
 
   // ============ NEW PAYMENT GETTERS ============
   const pendingPayments = computed(() =>
@@ -199,19 +257,88 @@ export const useAccountStore = defineStore('account', () => {
     try {
       DebugUtils.info(MODULE_NAME, 'Initializing account store')
 
-      // Загружаем аккаунты
-      await fetchAccounts()
+      // Загружаем аккаунты и категории параллельно
+      await Promise.all([fetchAccounts(), fetchCategories()])
 
       // Загружаем транзакции для активных аккаунтов
-      const activeAccounts = state.value.accounts.filter(acc => acc.isActive)
-      if (activeAccounts.length > 0) {
+      const activeAccs = state.value.accounts.filter(acc => acc.isActive)
+      if (activeAccs.length > 0) {
         await fetchAllAccountsTransactions()
       }
 
-      DebugUtils.info(MODULE_NAME, 'Account store initialized successfully')
+      DebugUtils.info(MODULE_NAME, 'Account store initialized successfully', {
+        accounts: state.value.accounts.length,
+        categories: state.value.transactionCategories.length
+      })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to initialize store', { error })
       setError(error)
+    }
+  }
+
+  // ============ CATEGORY ACTIONS ============
+
+  async function fetchCategories(force = false) {
+    const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+    if (
+      !force &&
+      state.value.lastFetch.categories &&
+      Date.now() - new Date(state.value.lastFetch.categories).getTime() < CACHE_DURATION
+    ) {
+      DebugUtils.info(MODULE_NAME, 'Using cached categories data')
+      return
+    }
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Fetching categories')
+      state.value.transactionCategories = await categoryService.getAll()
+      state.value.lastFetch.categories = new Date().toISOString()
+
+      DebugUtils.info(MODULE_NAME, 'Categories fetched successfully', {
+        count: state.value.transactionCategories.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch categories', { error })
+      throw error
+    }
+  }
+
+  async function createCategory(dto: CreateCategoryDto): Promise<TransactionCategory> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating category', { dto })
+      const category = await categoryService.create(dto)
+      state.value.transactionCategories.push(category)
+      return category
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create category', { error })
+      throw error
+    }
+  }
+
+  async function updateCategory(id: string, dto: UpdateCategoryDto): Promise<void> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Updating category', { id, dto })
+      await categoryService.update(id, dto)
+      await fetchCategories(true) // Refresh cache
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update category', { error })
+      throw error
+    }
+  }
+
+  async function deleteCategory(id: string): Promise<void> {
+    try {
+      const category = state.value.transactionCategories.find(c => c.id === id)
+      if (category?.isSystem) {
+        throw new Error('Cannot delete system category')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Deleting category', { id })
+      await categoryService.delete(id)
+      state.value.transactionCategories = state.value.transactionCategories.filter(c => c.id !== id)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete category', { error })
+      throw error
     }
   }
 
@@ -842,7 +969,13 @@ export const useAccountStore = defineStore('account', () => {
     try {
       DebugUtils.info(MODULE_NAME, 'Fetching all transactions by date range', { dateFrom, dateTo })
 
-      // Get all transactions from cache or fetch
+      // ✅ FIX: Refresh cache if empty to ensure we have latest data from DB
+      if (!state.value.allTransactionsCache || state.value.allTransactionsCache.length === 0) {
+        DebugUtils.info(MODULE_NAME, 'Cache empty, refreshing transactions from DB')
+        await refreshAllTransactions()
+      }
+
+      // Get all transactions from cache
       const allTransactions = getAllTransactions.value
 
       // Filter by date range only (include both income and expenses)
@@ -853,8 +986,9 @@ export const useAccountStore = defineStore('account', () => {
 
       DebugUtils.info(MODULE_NAME, 'Transactions filtered', {
         total: transactions.length,
-        expenseCount: transactions.filter(t => t.amount < 0).length,
-        incomeCount: transactions.filter(t => t.amount > 0).length
+        expenseCount: transactions.filter(t => t.type === 'expense').length,
+        incomeCount: transactions.filter(t => t.type === 'income').length,
+        categories: [...new Set(transactions.map(t => t.expenseCategory?.category).filter(Boolean))]
       })
 
       return transactions
@@ -1246,11 +1380,18 @@ export const useAccountStore = defineStore('account', () => {
 
     // Existing getters
     activeAccounts,
-
     totalBalance,
     isLoading,
 
-    // New payment getters
+    // Category getters
+    transactionCategories: computed(() => state.value.transactionCategories),
+    expenseCategories,
+    incomeCategories,
+    opexCategories,
+    getCategoryByCode,
+    getCategoryLabel,
+
+    // Payment getters
     pendingPayments,
     filteredPayments,
     urgentPayments,
@@ -1270,6 +1411,12 @@ export const useAccountStore = defineStore('account', () => {
     fetchAccounts,
     createAccount,
     updateAccount,
+
+    // Category actions
+    fetchCategories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
 
     // Transaction actions
     createOperation,

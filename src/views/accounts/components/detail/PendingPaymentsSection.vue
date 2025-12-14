@@ -96,7 +96,10 @@
 
 <script setup lang="ts">
 import type { PendingPayment } from '@/stores/account/types'
-import { PAYMENT_CATEGORIES, PAYMENT_PRIORITIES } from '@/stores/account/types'
+import { PAYMENT_PRIORITIES } from '@/stores/account/types'
+import { useAccountStore } from '@/stores/account'
+
+const accountStore = useAccountStore()
 
 interface Props {
   pendingPayments: PendingPayment[]
@@ -131,8 +134,8 @@ function formatIDR(amount: number): string {
 }
 
 // Получить цвет категории
-function getCategoryColor(category: PendingPayment['category']): string {
-  const colors: Record<PendingPayment['category'], string> = {
+function getCategoryColor(category: string): string {
+  const colors: Record<string, string> = {
     supplier: 'blue',
     service: 'purple',
     utilities: 'orange',
@@ -144,9 +147,9 @@ function getCategoryColor(category: PendingPayment['category']): string {
   return colors[category] || 'grey'
 }
 
-// Получить лейбл категории
-function getCategoryLabel(category: PendingPayment['category']): string {
-  return PAYMENT_CATEGORIES[category] || category
+// Получить лейбл категории (from DB via store)
+function getCategoryLabel(category: string): string {
+  return accountStore.getCategoryLabel(category)
 }
 
 // Получить цвет приоритета

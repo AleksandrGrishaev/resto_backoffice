@@ -13,16 +13,31 @@
       <div class="settings-toolbar__section">
         <v-btn color="primary" prepend-icon="mdi-plus" @click="showTaxDialog">Add Tax</v-btn>
       </div>
+
+      <!-- Categories Section -->
+      <div class="settings-toolbar__section">
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="showCategoryDialog">
+          Add Category
+        </v-btn>
+      </div>
     </div>
 
     <div class="settings-content">
       <v-row>
-        <v-col cols="12" md="6">
-          <payment-method-list :methods="store.paymentMethods" @edit="editPaymentMethod" />
+        <!-- Left column: Payment Methods + Taxes (stacked) -->
+        <v-col cols="12" md="4">
+          <div class="d-flex flex-column gap-4">
+            <payment-method-list :methods="store.paymentMethods" @edit="editPaymentMethod" />
+            <tax-list :taxes="store.taxes" @edit="editTax" />
+          </div>
         </v-col>
 
-        <v-col cols="12" md="6">
-          <tax-list :taxes="store.taxes" @edit="editTax" />
+        <!-- Right column: Categories (more space for 17 items) -->
+        <v-col cols="12" md="8">
+          <transaction-category-list
+            :categories="accountStore.transactionCategories"
+            @edit="editCategory"
+          />
         </v-col>
       </v-row>
     </div>
@@ -35,31 +50,44 @@
     />
 
     <tax-dialog v-model="dialogs.tax" :tax="editingTax" @saved="handleTaxSaved" />
+
+    <transaction-category-dialog
+      v-model="dialogs.category"
+      :category="editingCategory"
+      @saved="handleCategorySaved"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { useAccountStore } from '@/stores/account'
 import type { PaymentMethod } from '@/types/payment'
 import type { Tax } from '@/types/tax'
+import type { TransactionCategory } from '@/stores/account/types'
 import { DebugUtils } from '@/utils'
 import PaymentMethodList from '@/views/catalog/payment-methods/PaymentMethodList.vue'
 import TaxList from '@/components/payment-settings/TaxList.vue'
 import PaymentMethodDialog from '@/views/catalog/payment-methods/PaymentMethodDialog.vue'
 import TaxDialog from '@/components/payment-settings/TaxDialog.vue'
+import TransactionCategoryList from '@/views/catalog/categories/TransactionCategoryList.vue'
+import TransactionCategoryDialog from '@/views/catalog/categories/TransactionCategoryDialog.vue'
 
 const MODULE_NAME = 'PaymentSettingsView'
 const store = usePaymentSettingsStore()
+const accountStore = useAccountStore()
 
 // State
 const dialogs = ref({
   paymentMethod: false,
-  tax: false
+  tax: false,
+  category: false
 })
 
 const editingMethod = ref<PaymentMethod | null>(null)
 const editingTax = ref<Tax | null>(null)
+const editingCategory = ref<TransactionCategory | null>(null)
 
 // Methods
 function showPaymentMethodDialog() {
@@ -72,6 +100,11 @@ function showTaxDialog() {
   dialogs.value.tax = true
 }
 
+function showCategoryDialog() {
+  editingCategory.value = null
+  dialogs.value.category = true
+}
+
 function editPaymentMethod(method: PaymentMethod) {
   editingMethod.value = method
   dialogs.value.paymentMethod = true
@@ -82,6 +115,11 @@ function editTax(tax: Tax) {
   dialogs.value.tax = true
 }
 
+function editCategory(category: TransactionCategory) {
+  editingCategory.value = category
+  dialogs.value.category = true
+}
+
 function handlePaymentMethodSaved() {
   dialogs.value.paymentMethod = false
   editingMethod.value = null
@@ -90,6 +128,11 @@ function handlePaymentMethodSaved() {
 function handleTaxSaved() {
   dialogs.value.tax = false
   editingTax.value = null
+}
+
+function handleCategorySaved() {
+  dialogs.value.category = false
+  editingCategory.value = null
 }
 
 // Initial load

@@ -29,6 +29,8 @@ export {
   addTestData
 } from './service'
 
+export { categoryService } from './categoryService'
+
 // ============ STORE ============
 export { useAccountStore } from './store'
 
@@ -50,9 +52,12 @@ export type {
   ExpenseCategory,
   TransactionPerformer,
   TransferDetails,
-  DailyExpenseCategory,
-  InvestmentCategory,
-  // Новые типы для платежей
+  // Transaction categories
+  TransactionCategory,
+  CategoryType,
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  // Типы для платежей
   PendingPayment,
   PaymentStatus,
   PaymentPriority,

@@ -151,9 +151,8 @@ import { ref, computed, watch } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts'
 import { useCounteragentsStore } from '@/stores/counteragents'
 import { useAuthStore } from '@/stores/auth'
-import { EXPENSE_CATEGORIES } from '@/stores/account/types'
+import { useAccountStore } from '@/stores/account'
 import type { CreateDirectExpenseDto } from '@/stores/pos/shifts/types'
-import type { DailyExpenseCategory } from '@/stores/account/types'
 
 // Props & Emits
 const props = defineProps<{
@@ -171,6 +170,7 @@ const emit = defineEmits<{
 const shiftsStore = useShiftsStore()
 const counteragentsStore = useCounteragentsStore()
 const authStore = useAuthStore()
+const accountStore = useAccountStore()
 
 // Local state
 const dialog = computed({
@@ -184,7 +184,7 @@ const loading = ref(false)
 
 const form = ref({
   amount: 0,
-  category: '' as DailyExpenseCategory | '',
+  category: '',
   counteragentId: '',
   counteragentName: '',
   description: '',
@@ -192,12 +192,11 @@ const form = ref({
   notes: ''
 })
 
-// Expense categories for dropdown
+// Expense categories for dropdown (from DB via store)
 const expenseCategories = computed(() => {
-  const categories = EXPENSE_CATEGORIES.daily
-  return Object.entries(categories).map(([value, label]) => ({
-    value: value as DailyExpenseCategory,
-    label
+  return accountStore.expenseCategories.map(cat => ({
+    value: cat.code,
+    label: cat.name
   }))
 })
 
@@ -239,7 +238,7 @@ async function createExpense() {
       accountId: props.cashAccountId,
       amount: form.value.amount,
       description: form.value.description,
-      category: form.value.category as DailyExpenseCategory,
+      category: form.value.category,
       counteragentId: form.value.counteragentId || undefined,
       counteragentName: form.value.counteragentName || undefined,
       invoiceNumber: form.value.invoiceNumber || undefined,

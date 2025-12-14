@@ -26,31 +26,51 @@ export interface AccountWithOperations extends Account {
 
 export type OperationType = 'income' | 'expense' | 'transfer' | 'correction'
 
-export type DailyExpenseCategory =
-  | 'product'
-  | 'food_cost' // Negative batch write-offs (expense)
-  | 'inventory_variance' // Reconciliation corrections (income/expense)
-  | 'inventory_adjustment' // Monthly physical count, spoilage (income/expense)
-  | 'training_education' // Education write-offs (OPEX)
-  | 'recipe_development' // Recipe testing write-offs (OPEX)
-  | 'marketing' // Marketing expenses (OPEX)
-  | 'takeaway'
-  | 'ayu_cake'
-  | 'utilities'
-  | 'salary'
-  | 'renovation'
-  | 'transport'
-  | 'cleaning'
-  | 'security'
-  | 'village'
-  | 'rent'
-  | 'other'
+// ============ TRANSACTION CATEGORIES ============
 
-export type InvestmentCategory = 'shares' | 'other'
+export type CategoryType = 'expense' | 'income'
 
+/**
+ * TransactionCategory - unified category from database
+ * Loaded from transaction_categories table
+ */
+export interface TransactionCategory {
+  id: string
+  code: string
+  name: string
+  type: CategoryType
+  isOpex: boolean
+  isSystem: boolean
+  isActive: boolean
+  sortOrder: number
+  description?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateCategoryDto {
+  code: string
+  name: string
+  type: CategoryType
+  isOpex?: boolean
+  description?: string
+}
+
+export interface UpdateCategoryDto {
+  name?: string
+  isOpex?: boolean
+  isActive?: boolean
+  sortOrder?: number
+  description?: string
+}
+
+/**
+ * ExpenseCategory - stored in transaction.expense_category JSONB field
+ * References category code from transaction_categories table
+ */
 export interface ExpenseCategory {
-  type: 'daily' | 'investment'
-  category: DailyExpenseCategory | InvestmentCategory
+  type: 'expense' | 'income'
+  category: string // code from transaction_categories table or COGS constant
 }
 
 export interface TransactionPerformer {
@@ -120,7 +140,7 @@ export interface TransactionFilters {
   dateFrom?: string | null
   dateTo?: string | null
   type?: OperationType | null
-  category?: ExpenseCategory['type'] | null
+  category?: string | null // filter by category code
 }
 
 // ============ PAYMENT TYPES ============
@@ -136,7 +156,7 @@ export interface PendingPayment extends BaseEntity {
   dueDate?: string
   priority: PaymentPriority
   status: PaymentStatus
-  category: 'supplier' | 'service' | 'utilities' | 'salary' | 'other' | 'rent' | 'maintenance'
+  category: string // code from transaction_categories table
   invoiceNumber?: string
   notes?: string
   assignedToAccount?: string // ID счета для списания
@@ -183,7 +203,7 @@ export interface CreatePaymentDto {
   description: string
   dueDate?: string
   priority: PaymentPriority
-  category: PendingPayment['category']
+  category: string // code from transaction_categories table
   invoiceNumber?: string
   notes?: string
   createdBy: TransactionPerformer
@@ -228,11 +248,10 @@ export interface PaymentStatistics {
 // Re-export constants for backwards compatibility
 export {
   POS_CASH_ACCOUNT_ID,
-  EXPENSE_CATEGORIES,
+  COGS_CATEGORY_LABELS,
   OPERATION_TYPES,
   PAYMENT_PRIORITIES,
   PAYMENT_STATUSES,
-  PAYMENT_CATEGORIES,
   AMOUNT_CHANGE_REASONS
 } from './constants'
 
@@ -249,6 +268,7 @@ export interface LoadingState {
 
 export interface AccountStoreState {
   accounts: Account[]
+  transactionCategories: TransactionCategory[]
   accountTransactions: Record<string, Transaction[]>
   allTransactionsCache?: Transaction[]
   cacheTimestamp?: string
@@ -260,6 +280,7 @@ export interface AccountStoreState {
   error: Error | null
   lastFetch: {
     accounts: string | null
+    categories: string | null
     transactions: Record<string, string> // accountId -> timestamp
     payments: string | null
   }

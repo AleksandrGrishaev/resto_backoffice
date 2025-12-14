@@ -1,14 +1,7 @@
 // src/stores/account/constants.ts
 // Static constants for account store (categories, statuses, labels)
 
-import type {
-  DailyExpenseCategory,
-  InvestmentCategory,
-  OperationType,
-  PaymentPriority,
-  PaymentStatus,
-  AmountChangeReason
-} from './types'
+import type { OperationType, PaymentPriority, PaymentStatus, AmountChangeReason } from './types'
 
 // ============ DEPRECATED LEGACY CONSTANTS ============
 
@@ -20,40 +13,42 @@ import type {
  */
 export const POS_CASH_ACCOUNT_ID = 'acc_1'
 
-// ============ EXPENSE CATEGORIES ============
+// ============ COGS CATEGORIES (HARDCODED) ============
 
 /**
- * Expense category labels for display
+ * COGS (Cost of Goods Sold) category labels
+ * These categories are NOT stored in transaction_categories table
+ * They are used for P&L calculations and inventory write-offs
  */
-export const EXPENSE_CATEGORIES: Record<
-  'daily' | 'investment',
-  Record<DailyExpenseCategory | InvestmentCategory, string>
-> = {
-  daily: {
-    product: 'Products',
-    food_cost: 'Food Cost (Negative Batches)',
-    inventory_variance: 'Inventory Variance (Reconciliation)',
-    inventory_adjustment: 'Inventory Adjustment (Physical Count)',
-    training_education: 'Training & Education',
-    recipe_development: 'Recipe Development',
-    marketing: 'Marketing',
-    takeaway: 'Takeaway',
-    ayu_cake: 'Ayu cake',
-    utilities: 'Utilities',
-    salary: 'Salary',
-    renovation: 'Renovation',
-    transport: 'Products Transport',
-    cleaning: 'Cleaning',
-    security: 'Security',
-    village: 'Village',
-    rent: 'Rent',
-    other: 'Other'
-  },
-  investment: {
-    shares: 'Shares',
-    other: 'Other Investments'
-  }
+export const COGS_CATEGORY_LABELS: Record<string, string> = {
+  product: 'Products',
+  food_cost: 'Food Cost (Negative Batches)',
+  inventory_variance: 'Inventory Variance (Reconciliation)',
+  inventory_adjustment: 'Inventory Adjustment (Physical Count)',
+  training_education: 'Training & Education',
+  recipe_development: 'Recipe Development'
 } as const
+
+/**
+ * List of COGS category codes for type checking
+ */
+export const COGS_CATEGORY_CODES = [
+  'product',
+  'food_cost',
+  'inventory_variance',
+  'inventory_adjustment',
+  'training_education',
+  'recipe_development'
+] as const
+
+export type COGSCategoryCode = (typeof COGS_CATEGORY_CODES)[number]
+
+/**
+ * Check if a category code is a COGS category
+ */
+export function isCOGSCategory(code: string): code is COGSCategoryCode {
+  return COGS_CATEGORY_CODES.includes(code as COGSCategoryCode)
+}
 
 // ============ OPERATION TYPES ============
 
@@ -90,21 +85,6 @@ export const PAYMENT_STATUSES: Record<PaymentStatus, string> = {
   completed: 'Paid',
   failed: 'Failed',
   cancelled: 'Cancelled'
-} as const
-
-// ============ PAYMENT CATEGORIES ============
-
-/**
- * Payment category labels for display
- */
-export const PAYMENT_CATEGORIES = {
-  supplier: 'Supplier Payment',
-  service: 'Service Payment',
-  utilities: 'Utilities',
-  salary: 'Salary',
-  rent: 'Rent',
-  maintenance: 'Maintenance',
-  other: 'Other'
 } as const
 
 // ============ AMOUNT CHANGE REASONS ============

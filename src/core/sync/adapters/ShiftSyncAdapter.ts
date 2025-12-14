@@ -178,8 +178,8 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
           amount: expense.amount,
           description: `${shift.shiftNumber} - ${expense.description}`,
           expenseCategory: {
-            type: 'daily',
-            category: expense.category as any
+            type: 'expense',
+            category: expense.category
           },
           performedBy: expense.performedBy,
           counteragentId: expense.counteragentId,

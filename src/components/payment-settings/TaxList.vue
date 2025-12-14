@@ -1,7 +1,7 @@
 // src/components/payment-settings/TaxList.vue
 <template>
   <v-card class="tax-list">
-    <v-card-title class="text-h6 px-4 py-3">Налоги</v-card-title>
+    <v-card-title class="text-h6 px-4 py-3">Taxes</v-card-title>
 
     <v-list class="py-2">
       <v-list-item
@@ -23,7 +23,7 @@
         <template #append>
           <div class="d-flex align-center">
             <v-chip v-if="!tax.isActive" size="small" color="warning" variant="flat" class="mr-2">
-              Неактивен
+              Inactive
             </v-chip>
 
             <v-btn icon size="small" variant="text" color="primary" @click.stop="emit('edit', tax)">
@@ -34,7 +34,7 @@
       </v-list-item>
 
       <v-list-item v-if="taxes.length === 0">
-        <v-list-item-title class="text-center text-medium-emphasis">Нет налогов</v-list-item-title>
+        <v-list-item-title class="text-center text-medium-emphasis">No taxes</v-list-item-title>
       </v-list-item>
     </v-list>
   </v-card>

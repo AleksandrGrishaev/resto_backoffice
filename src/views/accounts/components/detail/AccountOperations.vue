@@ -89,7 +89,7 @@ import { formatIDR } from '@/utils/currency'
 // ✅ ИСПРАВЛЕНО: Добавлен импорт formatDateTime
 import { formatDateTime } from '@/utils/formatter'
 import type { Transaction, ExpenseCategory } from '@/stores/account'
-import { EXPENSE_CATEGORIES } from '@/stores/account'
+import { useAccountStore } from '@/stores/account'
 
 // Props
 interface Props {
@@ -108,6 +108,7 @@ const emit = defineEmits<{
 
 // Store
 const authStore = useAuthStore()
+const accountStore = useAccountStore()
 const canEdit = computed(() => authStore.isAdmin)
 
 // ✅ ИСПРАВЛЕНО: Добавлена функция форматирования даты транзакции
@@ -152,7 +153,7 @@ function getOperationTypeLabel(type: Transaction['type']): string {
 }
 
 function getExpenseCategoryLabel(category: ExpenseCategory): string {
-  return EXPENSE_CATEGORIES[category.type][category.category]
+  return accountStore.getCategoryLabel(category.category)
 }
 
 function getAmountClass(operation: Transaction) {

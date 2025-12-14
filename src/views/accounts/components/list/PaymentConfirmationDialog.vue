@@ -230,7 +230,7 @@ const paymentAsTransaction = computed((): Transaction | null => {
     amount: props.payment.amount,
     balanceAfter: 0, // Не важно для виджета
     description: props.payment.description,
-    expenseCategory: { type: 'daily', category: 'product' },
+    expenseCategory: { type: 'expense', category: 'supplier' },
     performedBy: props.payment.createdBy,
     status: 'completed',
 

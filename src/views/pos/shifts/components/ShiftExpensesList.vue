@@ -88,10 +88,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
+import { useAccountStore } from '@/stores/account'
 
 const props = defineProps<{
   expenses: ShiftExpenseOperation[]
 }>()
+
+const accountStore = useAccountStore()
 
 const totalExpenses = computed(() => {
   return props.expenses
@@ -131,13 +134,31 @@ function getExpenseIcon(expense: ShiftExpenseOperation): string {
   return icons[expense.type] || 'mdi-cash'
 }
 
-// ✅ Sprint 8: Category functions
+// ✅ Sprint 8: Category functions - now using dynamic categories from DB
 function getCategoryLabel(category?: string): string {
-  if (category === 'supplier') return 'Product'
-  return 'Other'
+  if (!category) return 'Other'
+
+  // Look up category name from transaction_categories table
+  const categoryObj = accountStore.getCategoryByCode(category)
+  if (categoryObj) return categoryObj.name
+
+  // Fallback: capitalize the code
+  return category.charAt(0).toUpperCase() + category.slice(1).replace(/_/g, ' ')
 }
 
 function getCategoryColor(category?: string): string {
+  if (!category) return 'grey'
+
+  // Look up category from DB to check type
+  const categoryObj = accountStore.getCategoryByCode(category)
+  if (categoryObj) {
+    // Income categories = green, OPEX = blue, non-OPEX expense = purple
+    if (categoryObj.type === 'income') return 'success'
+    if (categoryObj.isOpex) return 'blue'
+    return 'purple'
+  }
+
+  // Fallback
   return category === 'supplier' ? 'purple' : 'blue'
 }
 

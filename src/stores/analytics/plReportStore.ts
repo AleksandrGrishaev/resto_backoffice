@@ -7,7 +7,6 @@ import { DebugUtils, TimeUtils } from '@/utils'
 import type { PLReport, COGSMethod, COGSCalculation } from './types'
 import { useSalesStore } from '@/stores/sales/salesStore'
 import { useAccountStore } from '@/stores/account'
-import type { DailyExpenseCategory } from '@/stores/account/types'
 import { getCOGSForPL } from './services/cogsService'
 
 const MODULE_NAME = 'PLReportStore'
@@ -194,14 +193,17 @@ export const usePLReportStore = defineStore('plReport', () => {
         count: allTransactions.length
       })
 
-      // Filter OPEX transactions (exclude inventory_adjustment and product)
+      // ✅ FIX: Filter OPEX transactions using is_opex flag from transaction_categories
       const opexTransactions = allTransactions.filter(t => {
         if (!t.expenseCategory) return false
-        const category = t.expenseCategory.category
-        // Exclude:
-        // - inventory_adjustment: calculated from physical counts (in COGS)
-        // - product: supplier payments are part of COGS (Sales COGS in Accrual, Purchases in Cash)
-        return category !== 'inventory_adjustment' && category !== 'product' && t.type === 'expense'
+        if (t.type !== 'expense') return false
+
+        const categoryCode = t.expenseCategory.category
+        // Look up category in DB to check is_opex flag
+        const categoryObj = accountStore.getCategoryByCode(categoryCode)
+
+        // Only include if category exists and is_opex=true
+        return categoryObj?.isOpex === true
       })
 
       DebugUtils.info(MODULE_NAME, 'OPEX transactions filtered', {
@@ -209,24 +211,18 @@ export const usePLReportStore = defineStore('plReport', () => {
         totalExpenses: opexTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0)
       })
 
-      const opex = {
-        byCategory: {
-          // suppliersPayments removed - they are part of COGS (Sales COGS or Purchases)
-          utilities: sumByExpenseCategory(opexTransactions, 'utilities'),
-          salary: sumByExpenseCategory(opexTransactions, 'salary'),
-          rent: sumByExpenseCategory(opexTransactions, 'rent'),
-          transport: sumByExpenseCategory(opexTransactions, 'transport'),
-          cleaning: sumByExpenseCategory(opexTransactions, 'cleaning'),
-          security: sumByExpenseCategory(opexTransactions, 'security'),
-          renovation: sumByExpenseCategory(opexTransactions, 'renovation'),
-          trainingEducation: sumByExpenseCategory(opexTransactions, 'training_education'),
-          recipeDevelopment: sumByExpenseCategory(opexTransactions, 'recipe_development'),
-          marketing: sumByExpenseCategory(opexTransactions, 'marketing'),
-          other: sumByExpenseCategory(opexTransactions, 'other')
-        },
-        total: 0
+      // Dynamic OPEX aggregation - only categories with actual transactions
+      const opexByCategory: Record<string, number> = {}
+      for (const tx of opexTransactions) {
+        const code = tx.expenseCategory?.category
+        if (code) {
+          opexByCategory[code] = (opexByCategory[code] || 0) + Math.abs(tx.amount)
+        }
       }
-      opex.total = Object.values(opex.byCategory).reduce((sum, v) => sum + v, 0)
+      const opex = {
+        byCategory: opexByCategory,
+        total: Object.values(opexByCategory).reduce((sum, v) => sum + v, 0)
+      }
 
       DebugUtils.info(MODULE_NAME, 'OPEX calculated', {
         total: opex.total,
@@ -308,8 +304,9 @@ export const usePLReportStore = defineStore('plReport', () => {
 
   /**
    * Sum transactions by expense category
+   * @deprecated Use dynamic aggregation instead (see OPEX calculation above)
    */
-  function sumByExpenseCategory(transactions: any[], category: DailyExpenseCategory): number {
+  function sumByExpenseCategory(transactions: any[], category: string): number {
     return transactions
       .filter((t: any) => {
         // Handle both direct category and expenseCategory.category

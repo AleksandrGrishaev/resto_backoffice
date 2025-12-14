@@ -451,8 +451,8 @@ export class PaymentService {
       // ✅ FIX: Determine expense category from payment.category
       const expenseCategory =
         payment.category === 'supplier' || payment.category === 'product'
-          ? { type: 'daily' as const, category: 'product' as const }
-          : { type: 'daily' as const, category: 'other' as const }
+          ? { type: 'expense' as const, category: 'supplier' as const }
+          : { type: 'expense' as const, category: 'other' as const }
 
       // ✅ ENHANCEMENT: Build detailed description with order/payment info
       let enhancedDescription = data.notes || payment.description

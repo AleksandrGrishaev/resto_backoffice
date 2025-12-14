@@ -33,21 +33,14 @@
         required
       />
 
-      <!-- Поля для расходов -->
-      <template v-if="type === 'expense'">
-        <v-select
-          v-model="formData.expenseCategory.type"
-          label="Expense Type"
-          :items="expenseTypes"
-          :rules="[v => !!v || 'Required field']"
-          required
-          @update:model-value="handleExpenseTypeChange"
-        />
-
+      <!-- Category selector for expense and income -->
+      <template v-if="type === 'expense' || type === 'income'">
         <v-select
           v-model="formData.expenseCategory.category"
-          label="Category"
+          :label="type === 'expense' ? 'Expense Category' : 'Income Category'"
           :items="categoryItems"
+          item-title="name"
+          item-value="code"
           :rules="[v => !!v || 'Required field']"
           required
         />
@@ -70,7 +63,6 @@ import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth'
 import { useDialogForm } from '@/composables/useDialogForm'
-import { EXPENSE_CATEGORIES } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
 import type { Account, OperationType, ExpenseCategory } from '@/stores/account'
 
@@ -112,19 +104,12 @@ const accountItems = computed(() =>
   }))
 )
 
-const expenseTypes = [
-  { title: 'Daily Expenses', value: 'daily' },
-  { title: 'Investments', value: 'investment' }
-]
-
+// Use categories from store based on operation type
 const categoryItems = computed(() => {
-  const type = formData.value.expenseCategory?.type
-  if (!type) return []
-
-  return Object.entries(EXPENSE_CATEGORIES[type]).map(([value, title]) => ({
-    title,
-    value
-  }))
+  if (props.type === 'income') {
+    return accountStore.incomeCategories
+  }
+  return accountStore.expenseCategories
 })
 
 // Form
@@ -134,9 +119,9 @@ const initialData = computed(() => ({
   type: props.type,
   description: '',
   expenseCategory:
-    props.type === 'expense'
+    props.type === 'expense' || props.type === 'income'
       ? ({
-          type: 'daily',
+          type: props.type as 'expense' | 'income',
           category: ''
         } as ExpenseCategory)
       : undefined
@@ -175,10 +160,6 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
 })
 
 // Methods
-function handleExpenseTypeChange() {
-  formData.value.expenseCategory!.category = ''
-}
-
 function validateAmount(value: number) {
   if (props.type === 'expense' && props.account) {
     const maxAmount = props.account.balance

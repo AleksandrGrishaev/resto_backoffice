@@ -926,7 +926,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
           amount: totalDirectExpenses,
           description: `POS Shift ${shift.shiftNumber} - Direct Expenses`,
           expenseCategory: {
-            type: 'daily',
+            type: 'expense',
             category: 'other'
           },
           performedBy: {

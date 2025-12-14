@@ -350,107 +350,23 @@
 
                   <tr><td colspan="3" class="py-2"></td></tr>
 
-                  <!-- OPEX Section -->
+                  <!-- OPEX Section (Dynamic from transaction_categories) -->
                   <tr class="section-header">
                     <td colspan="3" class="font-weight-bold text-error">
                       OPERATING EXPENSES (OPEX)
                     </td>
                   </tr>
-                  <!-- suppliersPayments removed - they are part of COGS -->
-                  <tr>
-                    <td class="pl-8">Utilities</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.utilities) }}</td>
+                  <!-- Dynamic loop over OPEX categories -->
+                  <tr v-for="(amount, code) in report.opex.byCategory" :key="code">
+                    <td class="pl-8">{{ getCategoryName(code as string) }}</td>
+                    <td class="text-right">{{ formatIDR(amount) }}</td>
                     <td class="text-right">
-                      {{
-                        calculatePercentage(report.opex.byCategory.utilities, report.revenue.total)
-                      }}
+                      {{ calculatePercentage(amount, report.revenue.total) }}
                     </td>
                   </tr>
-                  <tr>
-                    <td class="pl-8">Salary</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.salary) }}</td>
-                    <td class="text-right">
-                      {{ calculatePercentage(report.opex.byCategory.salary, report.revenue.total) }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Rent</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.rent) }}</td>
-                    <td class="text-right">
-                      {{ calculatePercentage(report.opex.byCategory.rent, report.revenue.total) }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Transport</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.transport) }}</td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(report.opex.byCategory.transport, report.revenue.total)
-                      }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Cleaning</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.cleaning) }}</td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(report.opex.byCategory.cleaning, report.revenue.total)
-                      }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Security</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.security) }}</td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(report.opex.byCategory.security, report.revenue.total)
-                      }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Renovation</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.renovation) }}</td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(report.opex.byCategory.renovation, report.revenue.total)
-                      }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Other Goods Write-off</td>
-                    <td class="text-right">
-                      {{
-                        formatIDR(
-                          report.opex.byCategory.trainingEducation +
-                            report.opex.byCategory.recipeDevelopment
-                        )
-                      }}
-                    </td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(
-                          report.opex.byCategory.trainingEducation +
-                            report.opex.byCategory.recipeDevelopment,
-                          report.revenue.total
-                        )
-                      }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Marketing</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.marketing) }}</td>
-                    <td class="text-right">
-                      {{
-                        calculatePercentage(report.opex.byCategory.marketing, report.revenue.total)
-                      }}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="pl-8">Other</td>
-                    <td class="text-right">{{ formatIDR(report.opex.byCategory.other) }}</td>
-                    <td class="text-right">
-                      {{ calculatePercentage(report.opex.byCategory.other, report.revenue.total) }}
-                    </td>
+                  <!-- Empty state when no OPEX -->
+                  <tr v-if="Object.keys(report.opex.byCategory).length === 0">
+                    <td class="pl-8 text-medium-emphasis" colspan="3">No operating expenses</td>
                   </tr>
                   <tr class="font-weight-bold">
                     <td>Total OPEX</td>
@@ -501,6 +417,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePLReportStore } from '@/stores/analytics/plReportStore'
+import { useAccountStore, COGS_CATEGORY_LABELS } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
 import type { PLReport, COGSMethod } from '@/stores/analytics/types'
@@ -510,6 +427,7 @@ const router = useRouter()
 
 // Store
 const plReportStore = usePLReportStore()
+const accountStore = useAccountStore()
 
 // State
 const dateFrom = ref('')
@@ -578,6 +496,23 @@ function formatDate(dateString: string): string {
 
 function formatDateTime(dateString: string): string {
   return TimeUtils.formatDateTimeForDisplay(dateString)
+}
+
+/**
+ * Get category display name from accountStore or COGS labels
+ */
+function getCategoryName(code: string): string {
+  // Try to find in transaction categories (from DB)
+  const category = accountStore.getCategoryByCode(code)
+  if (category) return category.name
+
+  // Fallback to COGS labels (hardcoded for P&L calculations)
+  if (COGS_CATEGORY_LABELS[code]) {
+    return COGS_CATEGORY_LABELS[code]
+  }
+
+  // Last resort - capitalize the code
+  return code.charAt(0).toUpperCase() + code.slice(1).replace(/_/g, ' ')
 }
 
 // Computed

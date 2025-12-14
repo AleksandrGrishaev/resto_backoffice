@@ -275,7 +275,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAccountTransactions } from '@/stores/account/composables/useAccountTransactions'
 import type { Transaction, OperationType, ExpenseCategory } from '@/stores/account'
-import { EXPENSE_CATEGORIES } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
 import { formatDate } from '@/utils/formatter'
 
@@ -451,7 +450,7 @@ function formatTransactionDate(date: string | Date): string {
 
 function getCategoryLabel(expenseCategory: ExpenseCategory): string {
   if (!expenseCategory) return 'No category'
-  return EXPENSE_CATEGORIES[expenseCategory.type][expenseCategory.category]
+  return accountStore.getCategoryLabel(expenseCategory.category)
 }
 
 function getTransactionColor(type: OperationType): string {

@@ -1,8 +1,6 @@
 // src/stores/analytics/types.ts
 // ✅ SPRINT 5: Analytics types for P&L Report and Food Cost Dashboard
 
-import type { DailyExpenseCategory } from '@/stores/account/types'
-
 /**
  * ✅ SPRINT 4: COGS Calculation Methods
  */
@@ -85,23 +83,10 @@ export interface PLReport {
   // Real Food Cost (Sales COGS + Inventory Adjustments)
   realFoodCost: number
 
-  // Operating Expenses (OPEX)
+  // Operating Expenses (OPEX) - dynamic categories from database
   opex: {
     total: number
-    byCategory: {
-      // suppliersPayments removed - they are part of COGS (Sales COGS or Purchases)
-      utilities: number
-      salary: number
-      rent: number
-      transport: number
-      cleaning: number
-      security: number
-      renovation: number
-      trainingEducation: number // Education write-offs (category: 'training_education')
-      recipeDevelopment: number // Recipe testing write-offs (category: 'recipe_development')
-      marketing: number // Marketing expenses (category: 'marketing')
-      other: number
-    }
+    byCategory: Record<string, number> // Dynamic: only categories with transactions
   }
 
   // Net Profit
@@ -236,7 +221,7 @@ export interface ExpenseSummary {
   total: number
 
   byCategory: Record<
-    DailyExpenseCategory,
+    string,
     {
       amount: number
       percentage: number
@@ -248,7 +233,7 @@ export interface ExpenseSummary {
   topExpenses: Array<{
     transactionId: string
     date: string
-    category: DailyExpenseCategory
+    category: string
     amount: number
     description?: string
     counteragentName?: string

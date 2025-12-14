@@ -85,8 +85,10 @@
 <script setup lang="ts">
 import { formatIDR } from '@/utils/currency'
 import { formatDateTime } from '@/utils/formatter'
-import { EXPENSE_CATEGORIES } from '@/stores/account'
+import { useAccountStore, COGS_CATEGORY_LABELS } from '@/stores/account'
 import type { Transaction } from '@/stores/account'
+
+const accountStore = useAccountStore()
 
 interface Props {
   transaction: Transaction
@@ -143,7 +145,8 @@ function formatAmount(transaction: Transaction): string {
 
 function getCategoryLabel(expenseCategory: Transaction['expenseCategory']): string {
   if (!expenseCategory) return 'No category'
-  return EXPENSE_CATEGORIES[expenseCategory.type][expenseCategory.category]
+  // First check DB categories, then COGS labels, then fallback to code
+  return accountStore.getCategoryLabel(expenseCategory.category)
 }
 </script>
 
