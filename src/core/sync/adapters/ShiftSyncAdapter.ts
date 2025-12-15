@@ -14,6 +14,7 @@ import { supabase } from '@/supabase'
 import { getSupabaseErrorMessage } from '@/supabase/config'
 import { toSupabaseUpdate } from '@/stores/pos/shifts/supabaseMappers'
 import { ENV } from '@/config/environment'
+import { calculateTaxBreakdown, TAX_RATES } from '../helpers/taxCalculationHelper'
 
 export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
   entityType = 'shift' as const
@@ -123,23 +124,80 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
         if (netAmount <= 0) continue // Skip if no income after adjustments
 
-        // Create income transaction for this payment method
-        const incomeTransaction = await accountStore.createOperation({
+        // ===== SPRINT 9: TAX BREAKDOWN =====
+        // Split income into: revenue (sales) + service_tax + local_tax
+        const taxBreakdown = calculateTaxBreakdown(netAmount)
+
+        console.log(
+          `  📊 Tax breakdown for ${pmSummary.methodName}: revenue=${taxBreakdown.pureRevenue}, service_tax=${taxBreakdown.serviceTaxAmount}, local_tax=${taxBreakdown.localTaxAmount}`
+        )
+
+        // 1. Create REVENUE transaction (pure sales without taxes)
+        const revenueTransaction = await accountStore.createOperation({
           accountId: paymentMethod.accountId,
           type: 'income',
-          amount: netAmount,
-          description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Income`,
+          amount: taxBreakdown.pureRevenue,
+          description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Revenue`,
+          expenseCategory: {
+            type: 'income',
+            category: 'sales'
+          },
           performedBy: {
             type: 'user',
             id: shift.cashierId,
             name: shift.cashierName
           }
         })
-
-        transactionIds.push(incomeTransaction.id)
+        transactionIds.push(revenueTransaction.id)
         console.log(
-          `✅ Income transaction created for ${pmSummary.methodName}: ${incomeTransaction.id} (${netAmount} → ${paymentMethod.accountId})`
+          `✅ Revenue transaction created: ${revenueTransaction.id} (${taxBreakdown.pureRevenue} → sales)`
         )
+
+        // 2. Create SERVICE TAX transaction
+        if (taxBreakdown.serviceTaxAmount > 0) {
+          const serviceTaxTransaction = await accountStore.createOperation({
+            accountId: paymentMethod.accountId,
+            type: 'income',
+            amount: taxBreakdown.serviceTaxAmount,
+            description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Service Tax (${TAX_RATES.SERVICE_TAX}%)`,
+            expenseCategory: {
+              type: 'income',
+              category: 'service_tax'
+            },
+            performedBy: {
+              type: 'user',
+              id: shift.cashierId,
+              name: shift.cashierName
+            }
+          })
+          transactionIds.push(serviceTaxTransaction.id)
+          console.log(
+            `✅ Service tax transaction created: ${serviceTaxTransaction.id} (${taxBreakdown.serviceTaxAmount} → service_tax)`
+          )
+        }
+
+        // 3. Create LOCAL TAX transaction
+        if (taxBreakdown.localTaxAmount > 0) {
+          const localTaxTransaction = await accountStore.createOperation({
+            accountId: paymentMethod.accountId,
+            type: 'income',
+            amount: taxBreakdown.localTaxAmount,
+            description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Local Tax (${TAX_RATES.LOCAL_TAX}%)`,
+            expenseCategory: {
+              type: 'income',
+              category: 'local_tax'
+            },
+            performedBy: {
+              type: 'user',
+              id: shift.cashierId,
+              name: shift.cashierName
+            }
+          })
+          transactionIds.push(localTaxTransaction.id)
+          console.log(
+            `✅ Local tax transaction created: ${localTaxTransaction.id} (${taxBreakdown.localTaxAmount} → local_tax)`
+          )
+        }
       }
 
       // ===== SPRINT 8: CREATE INDIVIDUAL EXPENSE TRANSACTIONS =====

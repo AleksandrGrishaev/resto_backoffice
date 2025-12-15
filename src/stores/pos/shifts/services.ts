@@ -244,8 +244,10 @@ export class ShiftsService {
         updatedAt: endTime
       }))
 
-      // Calculate expected cash: Starting + Sales - Expenses
-      const cashSales = this.calculateCashSales(shift)
+      // ✅ FIX: Use paymentMethods from DTO (calculated from real payments in EndShiftDialog)
+      // The shift.paymentMethods may not be updated yet, so we need to use dto.paymentMethods
+      const paymentMethodsForCalc = dto.paymentMethods || shift.paymentMethods
+      const cashSales = this.calculateCashSalesFromMethods(paymentMethodsForCalc)
       const totalExpenses = this.calculateTotalExpenses(shift)
       const expectedCash = shift.startingCash + cashSales - totalExpenses
 
@@ -261,7 +263,9 @@ export class ShiftsService {
         cashDiscrepancyType: this.getCashDiscrepancyType(dto.endingCash - expectedCash),
         corrections: [...shift.corrections, ...newCorrections],
         notes: dto.notes || shift.notes,
-        updatedAt: endTime
+        updatedAt: endTime,
+        // Use payment methods from DTO if provided (calculated from real payments)
+        paymentMethods: dto.paymentMethods || shift.paymentMethods
       }
 
       // Try to update in Supabase first
@@ -492,11 +496,19 @@ export class ShiftsService {
   }
 
   /**
-   * Рассчитать продажи наличными
+   * Рассчитать продажи наличными из массива paymentMethods
+   * ✅ FIX: Accept paymentMethods array directly (can be from DTO or shift)
+   */
+  private calculateCashSalesFromMethods(paymentMethods: PaymentMethodSummary[]): number {
+    const cashMethod = paymentMethods.find(p => p.methodType === 'cash')
+    return cashMethod ? cashMethod.amount : 0
+  }
+
+  /**
+   * @deprecated Use calculateCashSalesFromMethods instead
    */
   private calculateCashSales(shift: PosShift): number {
-    const cashMethod = shift.paymentMethods.find(p => p.methodType === 'cash')
-    return cashMethod ? cashMethod.amount : 0
+    return this.calculateCashSalesFromMethods(shift.paymentMethods)
   }
 
   /**

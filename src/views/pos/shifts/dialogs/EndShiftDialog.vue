@@ -680,7 +680,9 @@ async function endShift() {
       actualAccountBalances: form.value.actualAccountBalances,
       corrections: form.value.corrections,
       notes: form.value.notes,
-      performedBy: performer
+      performedBy: performer,
+      // Pass calculated payment methods from real payments
+      paymentMethods: currentShift.value.paymentMethods
     }
 
     const result = await shiftsStore.endShift(dto)

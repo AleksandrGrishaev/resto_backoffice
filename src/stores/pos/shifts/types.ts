@@ -411,6 +411,8 @@ export interface EndShiftDto {
   corrections: Omit<ShiftCorrection, 'id' | 'shiftId' | 'createdAt' | 'updatedAt'>[]
   notes?: string
   performedBy: TransactionPerformer
+  // Payment methods summary (calculated from actual payments)
+  paymentMethods?: PaymentMethodSummary[]
 }
 
 export interface UpdateShiftDto {

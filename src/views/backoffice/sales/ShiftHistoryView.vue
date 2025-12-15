@@ -38,6 +38,13 @@
                 {{ item.endTime ? formatDateTime(item.endTime) : '—' }}
               </template>
 
+              <!-- Total Sales Column -->
+              <template #[`item.totalSales`]="{ item }">
+                <span class="font-weight-bold text-success">
+                  {{ formatCurrency(item.totalSales) }}
+                </span>
+              </template>
+
               <!-- Total Expected Column -->
               <template #[`item.totalExpected`]="{ item }">
                 <span class="font-weight-medium">{{ formatCurrency(item.totalExpected) }}</span>
@@ -48,11 +55,17 @@
                 <span class="font-weight-medium">{{ formatCurrency(item.totalActual) }}</span>
               </template>
 
-              <!-- Difference Column -->
-              <template #[`item.difference`]="{ item }">
-                <v-chip :color="getDifferenceColor(item.difference)" size="small">
-                  {{ formatCurrency(item.difference) }}
+              <!-- Discrepancy Column (Shortage/Overage) -->
+              <template #[`item.discrepancy`]="{ item }">
+                <v-chip
+                  v-if="item.discrepancy !== 0"
+                  :color="getDiscrepancyColor(item.discrepancyType)"
+                  size="small"
+                >
+                  {{ item.discrepancyType === 'overage' ? '+' : '-'
+                  }}{{ formatCurrency(Math.abs(item.discrepancy)) }}
                 </v-chip>
+                <v-chip v-else color="success" size="small">OK</v-chip>
               </template>
 
               <!-- Sync Status Column -->
@@ -147,9 +160,10 @@ const headers = [
   { title: 'Name', key: 'name', sortable: true },
   { title: 'Start Time', key: 'startTime', sortable: true },
   { title: 'End Time', key: 'endTime', sortable: true },
-  { title: 'Total Expected', key: 'totalExpected', align: 'end' as const, sortable: true },
-  { title: 'Total Actual', key: 'totalActual', align: 'end' as const, sortable: true },
-  { title: 'Difference', key: 'difference', align: 'end' as const, sortable: true },
+  { title: 'Total Sales', key: 'totalSales', align: 'end' as const, sortable: true },
+  { title: 'Expected Cash', key: 'totalExpected', align: 'end' as const, sortable: true },
+  { title: 'Actual Cash', key: 'totalActual', align: 'end' as const, sortable: true },
+  { title: 'Discrepancy', key: 'discrepancy', align: 'end' as const, sortable: true },
   { title: 'Sync', key: 'syncStatus', sortable: true },
   { title: '', key: 'actions', sortable: false, width: '100px' }
 ]
@@ -158,19 +172,31 @@ const headers = [
 const tableItems = computed(() => {
   return shiftsStore.shifts
     .filter(shift => shift.status === 'completed') // Only show completed shifts
-    .map(shift => ({
-      id: shift.id,
-      name: shift.shiftNumber,
-      cashier: shift.cashierName,
-      startTime: shift.startTime,
-      endTime: shift.endTime,
-      totalExpected: shift.expectedCash || 0,
-      totalActual: shift.endingCash || 0,
-      difference: (shift.endingCash || 0) - (shift.expectedCash || 0),
-      syncStatus: getSyncStatus(shift),
-      syncError: shift.syncError,
-      syncAttempts: shift.syncAttempts || 0
-    }))
+    .map(shift => {
+      // ✅ Fix: Calculate totalSales from paymentMethods (saved in shift record)
+      const totalSales =
+        shift.paymentMethods?.reduce((sum, pm) => sum + pm.amount, 0) || shift.totalSales || 0
+
+      // ✅ Use saved cash_discrepancy from shift (already calculated during close)
+      const discrepancy = shift.cashDiscrepancy || 0
+      const discrepancyType = shift.cashDiscrepancyType || 'none'
+
+      return {
+        id: shift.id,
+        name: shift.shiftNumber,
+        cashier: shift.cashierName,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        totalSales,
+        totalExpected: shift.expectedCash || 0,
+        totalActual: shift.endingCash || 0,
+        discrepancy,
+        discrepancyType,
+        syncStatus: getSyncStatus(shift),
+        syncError: shift.syncError,
+        syncAttempts: shift.syncAttempts || 0
+      }
+    })
     .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()) // Newest first
 })
 
@@ -228,10 +254,10 @@ function getSyncTooltip(item: {
   }
 }
 
-function getDifferenceColor(difference: number): string {
-  if (difference === 0) return 'success'
-  if (difference > 0) return 'info'
-  return 'error'
+function getDiscrepancyColor(discrepancyType: string): string {
+  if (discrepancyType === 'none') return 'success'
+  if (discrepancyType === 'overage') return 'info' // Overage (excess) - blue
+  return 'error' // Shortage - red
 }
 
 function formatCurrency(value: number): string {

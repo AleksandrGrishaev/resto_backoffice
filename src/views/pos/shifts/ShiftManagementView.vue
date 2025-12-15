@@ -415,6 +415,36 @@ const shiftStats = computed(() => {
     cashRefunded: 0
   }
 
+  // ✅ Fix: For historical shifts (read-only mode), use saved paymentMethods from shift
+  // This fixes the issue where payment methods showed 0 in backoffice shift history
+  if (props.readOnly && currentShift.value?.paymentMethods?.length) {
+    const shift = currentShift.value
+
+    for (const pm of shift.paymentMethods) {
+      stats.totalCount += pm.count
+      stats.totalAmount += pm.amount
+
+      if (pm.methodType === 'cash') {
+        stats.cash.count = pm.count
+        stats.cash.amount = pm.amount
+        stats.cashReceived = pm.amount // All cash is considered received for historical shifts
+      } else if (pm.methodType === 'card') {
+        stats.card.count = pm.count
+        stats.card.amount = pm.amount
+      } else if (pm.methodType === 'qr') {
+        stats.qr.count = pm.count
+        stats.qr.amount = pm.amount
+      }
+    }
+
+    // Calculate refunds from corrections
+    const refunds = shift.corrections?.filter(c => c.type === 'refund') || []
+    stats.cashRefunded = refunds.reduce((sum, c) => sum + c.amount, 0)
+
+    return stats
+  }
+
+  // For active shifts, calculate from payments store
   shiftPayments.value.forEach((p: PosPayment) => {
     // Include both completed payments and refunds
     if (p.status === 'completed' || p.status === 'refunded') {
