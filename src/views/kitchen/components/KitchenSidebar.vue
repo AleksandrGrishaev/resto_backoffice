@@ -75,6 +75,29 @@
           <span class="screen-btn-label">KPI</span>
         </div>
       </v-btn>
+
+      <div class="separator" />
+
+      <!-- Request Screen Button -->
+      <v-btn
+        :class="['screen-btn', { active: currentScreen === 'request' }]"
+        :color="currentScreen === 'request' ? 'primary' : undefined"
+        :variant="currentScreen === 'request' ? 'flat' : 'text'"
+        block
+        height="56"
+        @click="handleScreenSelect('request')"
+      >
+        <div class="screen-btn-content">
+          <v-icon size="24">mdi-cart-plus</v-icon>
+          <span class="screen-btn-label">Request</span>
+          <v-badge
+            v-if="props.pendingRequestCount > 0"
+            :content="props.pendingRequestCount"
+            color="warning"
+            inline
+          />
+        </div>
+      </v-btn>
     </div>
 
     <div class="spacer" />
@@ -100,11 +123,13 @@ const MODULE_NAME = 'KitchenSidebar'
 // =============================================
 
 interface Props {
-  currentScreen?: 'orders' | 'preparation' | 'kpi'
+  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'request'
+  pendingRequestCount?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  currentScreen: 'orders'
+  currentScreen: 'orders',
+  pendingRequestCount: 0
 })
 
 // =============================================
@@ -112,7 +137,7 @@ const props = withDefaults(defineProps<Props>(), {
 // =============================================
 
 const emit = defineEmits<{
-  'screen-select': [screen: 'orders' | 'preparation' | 'kpi']
+  'screen-select': [screen: 'orders' | 'preparation' | 'kpi' | 'request']
   'department-change': [department: 'all' | 'kitchen' | 'bar']
 }>()
 
@@ -156,7 +181,7 @@ watch(selectedDepartment, value => {
 // METHODS
 // =============================================
 
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi') => {
+const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'request') => {
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
   emit('screen-select', screen)
 }

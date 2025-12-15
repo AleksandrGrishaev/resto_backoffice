@@ -5,6 +5,7 @@
     </template>
     <v-list-item
       to="/accounts"
+      :exact="true"
       prepend-icon="mdi-format-list-bulleted"
       color="primary"
       class="mb-2"
@@ -13,6 +14,14 @@
         <span>All Accounts</span>
       </template>
     </v-list-item>
+
+    <!-- Payments Management -->
+    <v-list-item to="/accounts/payments" prepend-icon="mdi-cash-sync" color="primary" class="mb-2">
+      <template #title>
+        <span>Payments</span>
+      </template>
+    </v-list-item>
+
     <!-- Активные счета -->
     <v-divider class="my-2" />
     <template v-if="loading">

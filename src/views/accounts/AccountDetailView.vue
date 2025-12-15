@@ -50,13 +50,6 @@
             </v-btn>
           </div>
         </div>
-
-        <!-- Pending Payments Section (Sprint 3) -->
-        <PendingPaymentsSection
-          :pending-payments="pendingPaymentsForAccount"
-          @view-payment="viewPaymentDetails"
-          @refresh="refreshPendingPayments"
-        />
       </template>
 
       <!-- Filters -->
@@ -285,7 +278,6 @@ import OperationDialog from './components/dialogs/OperationDialog.vue'
 import TransferDialog from './components/dialogs/TransferDialog.vue'
 import CorrectionDialog from './components/dialogs/CorrectionDialog.vue'
 import TransactionDetailDialog from './components/dialogs/TransactionDetailDialog.vue'
-import PendingPaymentsSection from './components/detail/PendingPaymentsSection.vue'
 import { useAccountStore } from '@/stores/account'
 
 const route = useRoute()
@@ -369,16 +361,6 @@ const hasActiveFilters = computed(() => {
   return !!(f.dateFrom || f.dateTo || f.type || f.search || f.category)
 })
 
-// ✅ Sprint 3: Pending payments for this account (requiring cashier confirmation)
-const pendingPaymentsForAccount = computed(() => {
-  return accountStore.pendingPayments.filter(
-    p =>
-      p.assignedToAccount === accountId.value &&
-      p.requiresCashierConfirmation === true &&
-      p.confirmationStatus === 'pending'
-  )
-})
-
 // Methods
 function handleBack() {
   router.back()
@@ -406,13 +388,6 @@ function handleEditOperation(operation: Transaction) {
   dialogs.value.transactionDetail = true
 }
 
-// ✅ Sprint 3: View payment details (для pending payments)
-function viewPaymentDetails(payment: any) {
-  // TODO: Открыть диалог с деталями pending payment
-  console.log('View payment details:', payment)
-  // В будущем можно добавить PendingPaymentDetailsDialog
-}
-
 async function handleOperationSuccess() {
   dialogs.value.operation = false
   await refreshAfterTransaction()
@@ -426,16 +401,6 @@ async function handleTransferSuccess() {
 async function handleCorrectionSuccess() {
   dialogs.value.correction = false
   await refreshAfterTransaction()
-}
-
-// ✅ Sprint 8: Refresh pending payments manually
-async function refreshPendingPayments() {
-  try {
-    await accountStore.fetchPayments(true) // force refresh
-    console.log('✅ Pending payments refreshed')
-  } catch (error) {
-    console.error('❌ Failed to refresh pending payments:', error)
-  }
 }
 
 // Utility functions

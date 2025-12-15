@@ -1,15 +1,5 @@
 <template>
   <div class="account-list-container">
-    <!-- Виджет ожидающих платежей -->
-    <PendingPaymentsWidget @view-payment="handleViewPayment" />
-
-    <!-- Диалог подтверждения платежа -->
-    <PaymentConfirmationDialog
-      v-model="showPaymentDialog"
-      :payment="selectedPayment"
-      @success="handlePaymentSuccess"
-    />
-
     <!-- Основная таблица счетов -->
     <v-card>
       <v-card-title>
@@ -95,14 +85,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { useAccountStore } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
-import { formatDate } from '@/utils/formatter' // ✅ ДОБАВЛЕН импорт formatDate
-import type { Account, PendingPayment } from '@/stores/account'
-import PendingPaymentsWidget from './PendingPaymentsWidget.vue'
-import PaymentConfirmationDialog from './PaymentConfirmationDialog.vue'
+import { formatDate } from '@/utils/formatter'
+import type { Account } from '@/stores/account'
 
 const props = defineProps<{
   accounts: Account[]
@@ -116,24 +103,7 @@ const emit = defineEmits<{
 
 // Stores
 const authStore = useAuthStore()
-const accountStore = useAccountStore()
 const canEdit = computed(() => authStore.isAdmin)
-
-// State for payment dialog
-const showPaymentDialog = ref(false)
-const selectedPayment = ref<PendingPayment | null>(null)
-
-// Methods
-function handleViewPayment(payment: PendingPayment) {
-  selectedPayment.value = payment
-  showPaymentDialog.value = true
-}
-
-function handlePaymentSuccess() {
-  // Обновляем список платежей после успешной оплаты
-  accountStore.fetchPayments(true)
-  console.log('Payment processed successfully')
-}
 
 // Utility functions
 function getAccountTypeIcon(type: Account['type']): string {

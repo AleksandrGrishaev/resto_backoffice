@@ -50,6 +50,7 @@
       <template #sidebar>
         <KitchenSidebar
           :current-screen="currentScreen"
+          :pending-request-count="pendingRequestCount"
           @screen-select="handleScreenSelect"
           @department-change="handleDepartmentChange"
         />
@@ -74,6 +75,13 @@
           <KpiScreen
             v-else-if="currentScreen === 'kpi'"
             :selected-department="selectedDepartment"
+          />
+
+          <!-- Request Screen -->
+          <RequestScreen
+            v-else-if="currentScreen === 'request'"
+            :selected-department="selectedDepartment"
+            @back="handleScreenSelect('orders')"
           />
         </div>
       </template>
@@ -105,6 +113,8 @@ import KitchenSidebar from './components/KitchenSidebar.vue'
 import OrdersScreen from './orders/OrdersScreen.vue'
 import PreparationScreen from './preparation/PreparationScreen.vue'
 import KpiScreen from './kpi/KpiScreen.vue'
+import RequestScreen from './request/RequestScreen.vue'
+import { useKitchenRequest } from './request/composables/useKitchenRequest'
 
 const MODULE_NAME = 'KitchenMainView'
 
@@ -115,6 +125,10 @@ const MODULE_NAME = 'KitchenMainView'
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
 const { userDepartment } = useKitchenDishes()
+
+// Initialize kitchen request composable for pending count
+const selectedDepartmentRef = computed(() => selectedDepartment.value)
+const kitchenRequest = useKitchenRequest(selectedDepartmentRef)
 
 // PWA: Wake Lock to keep screen on
 const wakeLock = useWakeLock()
@@ -129,7 +143,7 @@ const orderAlerts = useOrderAlertService()
 const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
-const currentScreen = ref<'orders' | 'preparation' | 'kpi'>('orders')
+const currentScreen = ref<'orders' | 'preparation' | 'kpi' | 'request'>('orders')
 const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>('all')
 
 // =============================================
@@ -163,6 +177,13 @@ const showLoadingState = computed(() => {
  */
 const showMainInterface = computed(() => {
   return isInitialized.value && !showErrorState.value && !showLoadingState.value
+})
+
+/**
+ * Pending request count for sidebar badge
+ */
+const pendingRequestCount = computed(() => {
+  return kitchenRequest.pendingRequestCount.value
 })
 
 // =============================================
@@ -211,7 +232,7 @@ const retryInitialization = async (): Promise<void> => {
 /**
  * Handle screen selection from sidebar
  */
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi'): void => {
+const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'request'): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
 }

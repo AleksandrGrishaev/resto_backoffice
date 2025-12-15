@@ -4,7 +4,6 @@
 
 import { ref, onMounted, computed } from 'vue'
 import { useExpenseLinking } from '@/stores/pos/shifts/composables/useExpenseLinking'
-import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth'
 import PendingPaymentsList from './components/PendingPaymentsList.vue'
@@ -12,6 +11,7 @@ import UnlinkedExpensesList from './components/UnlinkedExpensesList.vue'
 import PaymentHistoryList from './components/PaymentHistoryList.vue'
 import LinkExpenseDialog from './dialogs/LinkExpenseDialog.vue'
 import UnlinkExpenseDialog from './dialogs/UnlinkExpenseDialog.vue'
+import ConfirmPaymentDialog from './dialogs/ConfirmPaymentDialog.vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import type { PendingPayment } from '@/stores/account/types'
 import type { InvoiceSuggestion } from '@/stores/pos/shifts/composables/useExpenseLinking'
@@ -20,7 +20,6 @@ import type { InvoiceSuggestion } from '@/stores/pos/shifts/composables/useExpen
 // STORES & COMPOSABLES
 // =============================================
 
-const shiftsStore = useShiftsStore()
 const accountStore = useAccountStore()
 const authStore = useAuthStore()
 const {
@@ -41,8 +40,10 @@ const {
 
 const activeTab = ref('unlinked')
 const selectedExpense = ref<ShiftExpenseOperation | null>(null)
+const selectedPayment = ref<PendingPayment | null>(null)
 const showLinkDialog = ref(false)
 const showUnlinkDialog = ref(false)
+const showConfirmPaymentDialog = ref(false)
 const invoiceSuggestions = ref<InvoiceSuggestion[]>([])
 
 // =============================================
@@ -75,9 +76,9 @@ const tabStats = computed(() => ({
 // =============================================
 
 onMounted(async () => {
-  // Load shifts data if needed
-  if (!shiftsStore.initialized) {
-    await shiftsStore.initialize()
+  // Load pending payments if needed
+  if (accountStore.pendingPayments.length === 0) {
+    await accountStore.fetchPayments()
   }
 })
 
@@ -147,18 +148,45 @@ function handleCancelUnlink() {
 // =============================================
 
 function handleConfirmPayment(payment: PendingPayment) {
-  // TODO: Implement payment confirmation
-  console.log('Confirm payment:', payment)
+  selectedPayment.value = payment
+  showConfirmPaymentDialog.value = true
+}
+
+async function handleConfirmPaymentSubmit(
+  payment: PendingPayment,
+  accountId: string,
+  actualAmount: number
+) {
+  try {
+    // Process payment using existing accountStore method
+    await accountStore.processPayment({
+      paymentId: payment.id,
+      accountId,
+      actualAmount,
+      performedBy: currentUser.value
+    })
+
+    showConfirmPaymentDialog.value = false
+    selectedPayment.value = null
+  } catch (err) {
+    console.error('Failed to confirm payment:', err)
+  }
+}
+
+function handleCancelConfirmPayment() {
+  showConfirmPaymentDialog.value = false
+  selectedPayment.value = null
 }
 
 function handleRejectPayment(payment: PendingPayment) {
-  // TODO: Implement payment rejection
+  // TODO: Implement payment rejection with reason dialog
   console.log('Reject payment:', payment)
 }
 
 function handleViewPayment(payment: PendingPayment) {
-  // TODO: Implement view payment details
-  console.log('View payment:', payment)
+  // Open confirm dialog in view mode (or navigate to details)
+  selectedPayment.value = payment
+  showConfirmPaymentDialog.value = true
 }
 
 // =============================================
@@ -281,6 +309,15 @@ function handleDismissError() {
       :loading="isLoading"
       @confirm="handleConfirmUnlink"
       @cancel="handleCancelUnlink"
+    />
+
+    <!-- Confirm Payment Dialog -->
+    <ConfirmPaymentDialog
+      v-model="showConfirmPaymentDialog"
+      :payment="selectedPayment"
+      :loading="isLoading"
+      @confirm="handleConfirmPaymentSubmit"
+      @cancel="handleCancelConfirmPayment"
     />
   </v-container>
 </template>

@@ -172,9 +172,6 @@ function getStatusColor(status: string): string {
                 <v-icon start>mdi-close</v-icon>
                 Reject
               </v-btn>
-              <v-btn icon variant="text" size="small" color="grey" @click="handleView(payment)">
-                <v-icon>mdi-eye</v-icon>
-              </v-btn>
             </div>
           </template>
         </v-list-item>

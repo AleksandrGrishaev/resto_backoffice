@@ -24,11 +24,38 @@
 
     <div class="settings-content">
       <v-row>
-        <!-- Left column: Payment Methods + Taxes (stacked) -->
+        <!-- Left column: Payment Methods + Taxes + Expense Settings (stacked) -->
         <v-col cols="12" md="4">
           <div class="d-flex flex-column gap-4">
             <payment-method-list :methods="store.paymentMethods" @edit="editPaymentMethod" />
             <tax-list :taxes="store.taxes" @edit="editTax" />
+
+            <!-- Expense Settings Card -->
+            <v-card>
+              <v-card-title class="text-subtitle-1">
+                <v-icon start size="small">mdi-cash-register</v-icon>
+                POS Expense Settings
+              </v-card-title>
+              <v-card-text>
+                <v-switch
+                  v-model="expenseSettings.allowCashierDirectExpense"
+                  color="primary"
+                  hide-details
+                  density="compact"
+                  :loading="savingExpenseSettings"
+                  @update:model-value="saveExpenseSettings"
+                >
+                  <template #label>
+                    <div>
+                      <div class="text-body-2">Allow POS Payments</div>
+                      <div class="text-caption text-medium-emphasis">
+                        Cashiers can make supplier payments from POS
+                      </div>
+                    </div>
+                  </template>
+                </v-switch>
+              </v-card-text>
+            </v-card>
           </div>
         </v-col>
 
@@ -60,9 +87,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useAccountStore } from '@/stores/account'
+import { supabase } from '@/supabase'
 import type { PaymentMethod } from '@/types/payment'
 import type { Tax } from '@/types/tax'
 import type { TransactionCategory } from '@/stores/account/types'
@@ -77,6 +105,61 @@ import TransactionCategoryDialog from '@/views/catalog/categories/TransactionCat
 const MODULE_NAME = 'PaymentSettingsView'
 const store = usePaymentSettingsStore()
 const accountStore = useAccountStore()
+
+// Expense Settings State
+interface ExpenseSettings {
+  defaultExpenseMode: string
+  allowCashierDirectExpense: boolean
+  autoSuggestThreshold: number
+}
+
+const expenseSettings = reactive<ExpenseSettings>({
+  defaultExpenseMode: 'backoffice_first',
+  allowCashierDirectExpense: true,
+  autoSuggestThreshold: 0.05
+})
+const savingExpenseSettings = ref(false)
+
+// Load expense settings from DB
+async function loadExpenseSettings() {
+  try {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'expense_settings')
+      .single()
+
+    if (error) throw error
+    if (data?.value) {
+      Object.assign(expenseSettings, data.value)
+    }
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load expense settings', { err })
+  }
+}
+
+// Save expense settings to DB
+async function saveExpenseSettings() {
+  savingExpenseSettings.value = true
+  try {
+    const { error } = await supabase.from('app_settings').upsert({
+      key: 'expense_settings',
+      value: {
+        defaultExpenseMode: expenseSettings.defaultExpenseMode,
+        allowCashierDirectExpense: expenseSettings.allowCashierDirectExpense,
+        autoSuggestThreshold: expenseSettings.autoSuggestThreshold
+      },
+      updated_at: new Date().toISOString()
+    })
+
+    if (error) throw error
+    DebugUtils.info(MODULE_NAME, 'Expense settings saved', { expenseSettings })
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to save expense settings', { err })
+  } finally {
+    savingExpenseSettings.value = false
+  }
+}
 
 // State
 const dialogs = ref({
@@ -139,7 +222,7 @@ function handleCategorySaved() {
 onMounted(async () => {
   try {
     DebugUtils.debug(MODULE_NAME, 'Component mounted')
-    await store.initialize()
+    await Promise.all([store.initialize(), loadExpenseSettings()])
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize', { error })
   }
