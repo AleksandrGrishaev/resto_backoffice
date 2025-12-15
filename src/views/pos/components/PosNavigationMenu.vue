@@ -189,6 +189,13 @@ const menuSections = computed(() => [
     title: 'ACTIONS',
     actions: [
       {
+        id: POS_ACTIONS.GOODS_RECEIPT,
+        icon: 'mdi-package-variant-closed-check',
+        label: 'Goods Receipt',
+        disabled: loading.value || !currentShift.value,
+        color: 'info' as const
+      },
+      {
         id: POS_ACTIONS.SYNC_DATA,
         icon: 'mdi-refresh',
         label: 'Sync Data',
@@ -255,6 +262,10 @@ const handleAction = async (actionId: string) => {
         await handleSyncData()
         break
 
+      case POS_ACTIONS.GOODS_RECEIPT:
+        handleGoodsReceipt()
+        break
+
       case POS_ACTIONS.LOGOUT:
         await handleLogout()
         break
@@ -284,6 +295,11 @@ const handleEndShift = () => {
 const handleViewShift = () => {
   DebugUtils.debug(MODULE_NAME, 'Navigating to shift management view')
   router.push('/pos/shift-management')
+}
+
+const handleGoodsReceipt = () => {
+  DebugUtils.debug(MODULE_NAME, 'Navigating to goods receipt view')
+  router.push('/pos/receipts')
 }
 
 const handleShiftStarted = (data: { shift: unknown; startTime: string }) => {

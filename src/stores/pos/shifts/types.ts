@@ -132,6 +132,15 @@ export type ExpenseOperationType =
   | 'direct_expense' // Прямой расход из кассы (создан кассиром)
   | 'supplier_payment' // Платеж поставщику (из backoffice, требует подтверждения)
   | 'incoming_transfer' // Входящий перевод на кассу (для отображения)
+  | 'unlinked_expense' // Расход без привязки к накладной (offline режим)
+
+/**
+ * Статус привязки расхода к накладной
+ */
+export type ExpenseLinkingStatus =
+  | 'unlinked' // Не привязан к накладной
+  | 'partially_linked' // Частично привязан (сумма меньше расхода)
+  | 'fully_linked' // Полностью привязан
 
 /**
  * Статус расходной операции
@@ -170,6 +179,13 @@ export interface ShiftExpenseOperation extends BaseEntity {
   relatedPaymentId?: string // ID PendingPayment из Account Store
   relatedTransactionId?: string // ID Transaction из Account Store
   relatedAccountId: string // Счет, с которого происходит расход
+
+  // ✅ Sprint 6: Expense Linking (привязка к накладным)
+  linkingStatus?: ExpenseLinkingStatus // Статус привязки к накладной
+  linkedOrderId?: string // ID supplierstore_orders (привязанная накладная)
+  linkedInvoiceId?: string // Альтернативный ID для invoice
+  linkedAmount?: number // Сумма, привязанная к накладной
+  unlinkedAmount?: number // Сумма, НЕ привязанная к накладной
 
   // Sync
   syncStatus: SyncStatus
@@ -210,6 +226,62 @@ export interface ConfirmSupplierPaymentDto {
 export interface RejectSupplierPaymentDto {
   shiftId: string
   paymentId: string
+  reason: string
+  performedBy: TransactionPerformer
+}
+
+// =============================================
+// SPRINT 6: EXPENSE LINKING DTOs
+// =============================================
+
+/**
+ * DTO для создания привязанного расхода (online, есть накладная)
+ */
+export interface CreateLinkedExpenseDto {
+  shiftId: string
+  accountId: string
+  amount: number
+  counteragentId: string
+  counteragentName: string
+  linkedOrderId: string // ID накладной supplierstore_orders
+  linkedInvoiceNumber?: string
+  notes?: string
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO для создания непривязанного расхода (offline режим)
+ */
+export interface CreateUnlinkedExpenseDto {
+  shiftId: string
+  accountId: string
+  amount: number
+  counteragentId?: string
+  counteragentName?: string
+  description?: string
+  notes?: string
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO для привязки расхода к накладной (backoffice)
+ */
+export interface LinkExpenseToInvoiceDto {
+  expenseId: string
+  shiftId: string
+  invoiceId: string // supplierstore_orders.id
+  invoiceNumber: string
+  linkAmount: number
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO для отвязки расхода от накладной (Manager/Admin only)
+ */
+export interface UnlinkExpenseFromInvoiceDto {
+  expenseId: string
+  shiftId: string
+  linkId: string // expense_invoice_links.id
   reason: string
   performedBy: TransactionPerformer
 }

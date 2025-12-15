@@ -18,7 +18,9 @@ import type {
   CreateDirectExpenseDto,
   ConfirmSupplierPaymentDto,
   RejectSupplierPaymentDto,
-  SyncQueueItem
+  SyncQueueItem,
+  CreateLinkedExpenseDto,
+  CreateUnlinkedExpenseDto
 } from './types'
 import { ShiftsService } from './services'
 import { useShiftsComposables } from './composables'
@@ -793,6 +795,184 @@ export const useShiftsStore = defineStore('posShifts', () => {
     }
   }
 
+  // ============ SPRINT 6: RECEIPT PAYMENT SCENARIOS ============
+
+  /**
+   * Check if there's a pending payment for a specific order
+   * Used to determine payment scenario at goods receipt
+   */
+  function hasPendingPaymentForOrder(orderId: string): boolean {
+    if (!currentShift.value) return false
+
+    // Check in pending payments list
+    const pendingPayments = accountStore.pendingPayments
+    return pendingPayments.some(p => p.relatedOrderId === orderId && p.status === 'pending')
+  }
+
+  /**
+   * Create linked expense (Scenario A2: Online, no pending payment)
+   * Creates expense with direct link to order/invoice
+   */
+  async function createLinkedExpense(
+    data: CreateLinkedExpenseDto
+  ): Promise<ServiceResponse<ShiftExpenseOperation>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.create = true
+      error.value = null
+
+      // Get POS cash register account
+      const posCashAccountId = await getPosCashRegisterAccountId()
+      if (!posCashAccountId) {
+        return { success: false, error: 'No POS cash register configured' }
+      }
+
+      // Use provided accountId or fallback to POS cash register
+      const accountId = data.accountId || posCashAccountId
+
+      // Create expense operation with linked order
+      const expenseOperation: ShiftExpenseOperation = {
+        id: `exp-linked-${Date.now()}`,
+        shiftId: data.shiftId,
+        type: 'supplier_payment',
+        amount: data.amount,
+        description: `Payment for order ${data.linkedInvoiceNumber || data.linkedOrderId}`,
+        category: 'supplier_payment',
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName,
+        invoiceNumber: data.linkedInvoiceNumber,
+        status: 'completed',
+        performedBy: data.performedBy,
+        relatedAccountId: accountId,
+        linkedOrderId: data.linkedOrderId,
+        linkingStatus: 'linked',
+        syncStatus: 'pending',
+        notes: data.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Add to shift
+      currentShift.value.expenseOperations.push(expenseOperation)
+
+      // Update account balance in shift
+      const accountBalance = currentShift.value.accountBalances.find(
+        ab => ab.accountId === accountId
+      )
+      if (accountBalance) {
+        accountBalance.totalExpense += data.amount
+        accountBalance.expenseOperations.push(expenseOperation)
+      }
+
+      // Save shift
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      console.log(
+        `✅ Linked expense created: ${expenseOperation.id} for order ${data.linkedOrderId}`
+      )
+      return { success: true, data: expenseOperation }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create linked expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.create = false
+    }
+  }
+
+  /**
+   * Create unlinked expense (Scenario B: Offline mode)
+   * Creates expense without order link - to be linked later in backoffice
+   */
+  async function createUnlinkedExpense(
+    data: CreateUnlinkedExpenseDto
+  ): Promise<ServiceResponse<ShiftExpenseOperation>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.create = true
+      error.value = null
+
+      // Get POS cash register account
+      const posCashAccountId = await getPosCashRegisterAccountId()
+      if (!posCashAccountId) {
+        return { success: false, error: 'No POS cash register configured' }
+      }
+
+      // Use provided accountId or fallback to POS cash register
+      const accountId = data.accountId || posCashAccountId
+
+      // Create unlinked expense operation
+      const expenseOperation: ShiftExpenseOperation = {
+        id: `exp-unlinked-${Date.now()}`,
+        shiftId: data.shiftId,
+        type: 'supplier_payment',
+        amount: data.amount,
+        description: data.description || `Supplier payment (to be linked)`,
+        category: 'supplier_payment',
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName,
+        status: 'completed',
+        performedBy: data.performedBy,
+        relatedAccountId: accountId,
+        linkingStatus: 'unlinked', // Key difference - needs to be linked later
+        syncStatus: 'pending',
+        notes: data.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Add to shift
+      currentShift.value.expenseOperations.push(expenseOperation)
+
+      // Update account balance in shift
+      const accountBalance = currentShift.value.accountBalances.find(
+        ab => ab.accountId === accountId
+      )
+      if (accountBalance) {
+        accountBalance.totalExpense += data.amount
+        accountBalance.expenseOperations.push(expenseOperation)
+      }
+
+      // Save shift
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      console.log(
+        `✅ Unlinked expense created: ${expenseOperation.id} (to be linked in backoffice)`
+      )
+      return { success: true, data: expenseOperation }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create unlinked expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.create = false
+    }
+  }
+
+  /**
+   * Get expenses by linking status
+   * Used for backoffice payments management view
+   */
+  function getExpensesByLinkingStatus(
+    status: 'linked' | 'unlinked' | 'partially_linked'
+  ): ShiftExpenseOperation[] {
+    const allExpenses: ShiftExpenseOperation[] = []
+
+    // Collect from all shifts
+    for (const shift of shifts.value) {
+      const filtered = shift.expenseOperations.filter(exp => exp.linkingStatus === status)
+      allExpenses.push(...filtered)
+    }
+
+    return allExpenses
+  }
+
   /**
    * Очистить ошибки
    */
@@ -1194,6 +1374,12 @@ export const useShiftsStore = defineStore('posShifts', () => {
     createDirectExpense,
     confirmExpense,
     rejectExpense,
+
+    // Sprint 6: Receipt Payment Scenarios
+    hasPendingPaymentForOrder,
+    createLinkedExpense,
+    createUnlinkedExpense,
+    getExpensesByLinkingStatus,
 
     // Sprint 7: Payment Methods Update
     updatePaymentMethods,

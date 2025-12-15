@@ -264,6 +264,10 @@ export type BalanceCorrectionReason =
   | 'system_migration'
   | 'reconciliation'
   | 'other'
+  // Sprint 6: POS Receipt expense linking
+  | 'expense_overpayment' // Переплата при привязке расхода к накладной
+  | 'expense_underpayment' // Недоплата при привязке расхода к накладной
+  | 'expense_link_reversal' // Отмена привязки расхода (возврат баланса)
 
 export const BALANCE_CORRECTION_REASONS = [
   { title: 'Historical Prepayment', value: 'historical_prepayment' as const },
@@ -272,7 +276,11 @@ export const BALANCE_CORRECTION_REASONS = [
   { title: 'Manual Adjustment', value: 'manual_adjustment' as const },
   { title: 'System Migration', value: 'system_migration' as const },
   { title: 'Reconciliation', value: 'reconciliation' as const },
-  { title: 'Other', value: 'other' as const }
+  { title: 'Other', value: 'other' as const },
+  // Sprint 6: POS Receipt expense linking
+  { title: 'Expense Overpayment', value: 'expense_overpayment' as const },
+  { title: 'Expense Underpayment', value: 'expense_underpayment' as const },
+  { title: 'Expense Link Reversal', value: 'expense_link_reversal' as const }
 ]
 
 export const REASON_DESCRIPTIONS: Record<BalanceCorrectionReason, string> = {
@@ -282,7 +290,11 @@ export const REASON_DESCRIPTIONS: Record<BalanceCorrectionReason, string> = {
   manual_adjustment: 'Manual Adjustment',
   system_migration: 'System Migration',
   reconciliation: 'Account Reconciliation',
-  other: 'Other Adjustment'
+  other: 'Other Adjustment',
+  // Sprint 6: POS Receipt expense linking
+  expense_overpayment: 'Expense Overpayment (paid more than invoice)',
+  expense_underpayment: 'Expense Underpayment (paid less than invoice)',
+  expense_link_reversal: 'Expense Link Reversal (unlink correction)'
 }
 
 // DTO для создания корректировки

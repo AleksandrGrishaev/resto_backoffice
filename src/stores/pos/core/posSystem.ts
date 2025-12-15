@@ -59,6 +59,7 @@ export const POS_ACTIONS = {
   VIEW_SHIFT: 'view_shift',
   NEW_ORDER: 'new_order',
   SYNC_DATA: 'sync_data',
+  GOODS_RECEIPT: 'goods_receipt', // Sprint 6: POS Receipt
   LOGOUT: 'logout'
 } as const
 

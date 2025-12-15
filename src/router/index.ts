@@ -82,6 +82,16 @@ const routes: RouteRecordRaw[] = [
       title: 'Shift Management'
     }
   },
+  {
+    path: '/pos/receipts',
+    name: 'pos-receipts',
+    component: () => import('@/views/pos/receipts/PosReceiptsView.vue'),
+    meta: {
+      requiresAuth: true,
+      allowedRoles: ['admin', 'cashier'],
+      title: 'Goods Receipt'
+    }
+  },
 
   // ===== KITCHEN ROUTES =====
   {
@@ -196,6 +206,16 @@ const routes: RouteRecordRaw[] = [
             component: AccountDetailView,
             meta: {
               title: 'Account Details'
+            }
+          },
+          // === Sprint 4: Payments Management ===
+          {
+            path: 'payments',
+            name: 'accounts-payments',
+            component: () => import('@/views/backoffice/accounts/payments/PaymentsView.vue'),
+            meta: {
+              title: 'Payments Management',
+              allowedRoles: ['admin', 'manager']
             }
           }
         ]

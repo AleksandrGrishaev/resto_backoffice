@@ -8,6 +8,10 @@ export { useShiftsStore } from './shiftsStore'
 export { ShiftsService } from './services'
 export { useShiftsComposables } from './composables'
 
+// Sprint 4: Expense Linking Composable
+export { useExpenseLinking } from './composables/useExpenseLinking'
+export type { InvoiceSuggestion, ExpenseLinkRecord } from './composables/useExpenseLinking'
+
 // Export all types
 export type * from './types'
 
