@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // src/views/pos/receipts/PosReceiptsView.vue
-// Sprint 6: POS Receipt Module - Main View (ONLINE ONLY)
+// Sprint 6: POS Receipt Module - Table-based Design
 
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { usePosReceipt } from '@/stores/pos/receipts'
-import PendingOrdersList from './components/PendingOrdersList.vue'
-import ReceiptForm from './components/ReceiptForm.vue'
-import ConfirmReceiptDialog from './dialogs/ConfirmReceiptDialog.vue'
+import { usePosReceipt, getPaymentStatusDisplay } from '@/stores/pos/receipts'
+import { formatIDR } from '@/utils'
+import ReceiptDialog from './dialogs/ReceiptDialog.vue'
+import type { PendingOrderForReceipt } from '@/stores/pos/receipts'
 
 const router = useRouter()
 
@@ -19,8 +19,6 @@ const {
   isLoading,
   isSubmitting,
   error,
-  hasSelectedOrder,
-  canComplete,
   loadOrders,
   selectOrder,
   clearSelection,
@@ -34,61 +32,88 @@ const {
 } = usePosReceipt()
 
 // =============================================
-// CONFIRMATION DIALOG STATE
+// LOCAL STATE
 // =============================================
 
-const showConfirmDialog = ref(false)
-const pendingPaymentAmount = ref(0)
-const isPaymentMode = ref(false)
+const showReceiptDialog = ref(false)
+const searchQuery = ref('')
+
+// =============================================
+// TABLE CONFIGURATION
+// =============================================
+
+const headers = [
+  { title: 'Order #', key: 'orderNumber', sortable: true, width: '140px' },
+  { title: 'Supplier', key: 'supplierName', sortable: true },
+  { title: 'Items', key: 'itemsCount', sortable: false, width: '80px', align: 'center' as const },
+  { title: 'Amount', key: 'totalAmount', sortable: true, width: '140px', align: 'end' as const },
+  { title: 'Payment', key: 'paymentStatus', sortable: false, width: '140px' },
+  { title: 'Date', key: 'createdAt', sortable: true, width: '120px' },
+  { title: '', key: 'actions', sortable: false, width: '100px', align: 'center' as const }
+]
+
+// =============================================
+// COMPUTED
+// =============================================
+
+const filteredOrders = computed(() => {
+  if (!searchQuery.value) return pendingOrders.value
+
+  const query = searchQuery.value.toLowerCase()
+  return pendingOrders.value.filter(
+    order =>
+      order.orderNumber.toLowerCase().includes(query) ||
+      order.supplierName.toLowerCase().includes(query)
+  )
+})
+
+const ordersWithPaymentInfo = computed(
+  () => pendingOrders.value.filter(o => o.hasPendingPayment).length
+)
+
+// =============================================
+// METHODS
+// =============================================
 
 // Load orders on mount
 onMounted(async () => {
   await loadOrders()
 })
 
-// Handle order selection
-async function handleSelectOrder(orderId: string) {
-  await selectOrder(orderId)
+// Handle order selection - open dialog
+async function handleSelectOrder(order: PendingOrderForReceipt) {
+  await selectOrder(order.id)
+  showReceiptDialog.value = true
 }
 
-// =============================================
-// RECEIPT COMPLETION FLOW
-// =============================================
-
-// Open confirmation dialog (without payment)
-function handleComplete() {
-  isPaymentMode.value = false
-  pendingPaymentAmount.value = 0
-  showConfirmDialog.value = true
+// Close dialog
+function handleCloseDialog() {
+  showReceiptDialog.value = false
+  clearSelection()
 }
 
-// Open confirmation dialog (with payment)
-function handleCompleteWithPayment(amount: number) {
-  isPaymentMode.value = true
-  pendingPaymentAmount.value = amount
-  showConfirmDialog.value = true
-}
-
-// Actually complete the receipt after confirmation
-async function handleConfirmComplete() {
-  if (isPaymentMode.value) {
-    const result = await completeReceiptWithPayment(pendingPaymentAmount.value)
-    if (result.success) {
-      showConfirmDialog.value = false
-      // TODO: Show success snackbar
-    }
-  } else {
-    const success = await completeReceipt()
-    if (success) {
-      showConfirmDialog.value = false
-      // TODO: Show success snackbar
-    }
+// Complete receipt from dialog
+async function handleCompleteReceipt() {
+  const success = await completeReceipt()
+  if (success) {
+    showReceiptDialog.value = false
   }
 }
 
-// Cancel confirmation
-function handleCancelConfirm() {
-  showConfirmDialog.value = false
+// Complete receipt with payment from dialog
+async function handleCompleteWithPayment(amount: number) {
+  const result = await completeReceiptWithPayment(amount)
+  if (result.success) {
+    showReceiptDialog.value = false
+  }
+}
+
+// Format date
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short'
+  })
 }
 
 // Go back to POS main view
@@ -132,81 +157,147 @@ function goBack() {
       {{ error }}
     </v-alert>
 
-    <!-- Main Content -->
-    <v-row>
-      <!-- Left Panel: Orders List -->
-      <v-col cols="12" md="4">
-        <v-card>
-          <v-card-title class="d-flex align-center">
-            <span>Pending Orders</span>
-            <v-spacer />
-            <v-btn
-              icon="mdi-refresh"
-              variant="text"
-              size="small"
-              :loading="isLoading"
-              :disabled="!isOnline"
-              @click="loadOrders"
-            />
-          </v-card-title>
+    <!-- Main Content Card -->
+    <v-card>
+      <!-- Card Header with Search -->
+      <v-card-title class="d-flex align-center pa-4">
+        <span>Pending Orders</span>
+        <v-chip class="ml-2" size="small" color="primary" variant="tonal">
+          {{ pendingOrders.length }}
+        </v-chip>
+        <v-chip
+          v-if="ordersWithPaymentInfo > 0"
+          class="ml-2"
+          size="small"
+          color="success"
+          variant="tonal"
+        >
+          {{ ordersWithPaymentInfo }} with payment
+        </v-chip>
 
-          <v-divider />
+        <v-spacer />
 
-          <PendingOrdersList
-            :orders="pendingOrders"
-            :selected-order-id="selectedOrder?.id"
-            :loading="isLoading"
+        <v-text-field
+          v-model="searchQuery"
+          placeholder="Search orders..."
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          style="max-width: 250px"
+          class="mr-2"
+        />
+
+        <v-btn
+          icon="mdi-refresh"
+          variant="text"
+          :loading="isLoading"
+          :disabled="!isOnline"
+          @click="loadOrders"
+        />
+      </v-card-title>
+
+      <v-divider />
+
+      <!-- Orders Table -->
+      <v-data-table
+        :headers="headers"
+        :items="filteredOrders"
+        :loading="isLoading"
+        density="comfortable"
+        :items-per-page="25"
+        :items-per-page-options="[10, 25, 50]"
+        hover
+        class="orders-table"
+        @click:row="
+          (_event: Event, { item }: { item: PendingOrderForReceipt }) => handleSelectOrder(item)
+        "
+      >
+        <!-- Order Number Column -->
+        <template #[`item.orderNumber`]="{ item }">
+          <div class="font-weight-medium">{{ item.orderNumber }}</div>
+        </template>
+
+        <!-- Supplier Column -->
+        <template #[`item.supplierName`]="{ item }">
+          <div>{{ item.supplierName }}</div>
+        </template>
+
+        <!-- Items Count Column -->
+        <template #[`item.itemsCount`]="{ item }">
+          <v-chip size="small" variant="outlined">{{ item.items.length }}</v-chip>
+        </template>
+
+        <!-- Amount Column -->
+        <template #[`item.totalAmount`]="{ item }">
+          <div class="font-weight-medium">{{ formatIDR(item.totalAmount) }}</div>
+          <v-chip v-if="item.isEstimatedTotal" size="x-small" color="warning" variant="flat">
+            Est.
+          </v-chip>
+        </template>
+
+        <!-- Payment Status Column -->
+        <template #[`item.paymentStatus`]="{ item }">
+          <v-chip :color="getPaymentStatusDisplay(item).color" size="small" variant="tonal">
+            <v-icon :icon="getPaymentStatusDisplay(item).icon" size="small" start />
+            {{ getPaymentStatusDisplay(item).shortLabel }}
+          </v-chip>
+        </template>
+
+        <!-- Date Column -->
+        <template #[`item.createdAt`]="{ item }">
+          <span class="text-body-2">{{ formatDate(item.createdAt) }}</span>
+        </template>
+
+        <!-- Actions Column -->
+        <template #[`item.actions`]="{ item }">
+          <v-btn
+            color="primary"
+            variant="tonal"
+            size="small"
             :disabled="!isOnline"
-            @select="handleSelectOrder"
-          />
-        </v-card>
-      </v-col>
+            @click.stop="handleSelectOrder(item)"
+          >
+            <v-icon start>mdi-package-down</v-icon>
+            Receive
+          </v-btn>
+        </template>
 
-      <!-- Right Panel: Receipt Form -->
-      <v-col cols="12" md="8">
-        <v-card v-if="hasSelectedOrder && formData">
-          <v-card-title class="d-flex align-center">
-            <span>Receipt: {{ formData.orderNumber }}</span>
-            <v-spacer />
-            <v-btn icon="mdi-close" variant="text" size="small" @click="clearSelection" />
-          </v-card-title>
+        <!-- Loading state -->
+        <template #loading>
+          <v-skeleton-loader type="table-row@5" />
+        </template>
 
-          <v-card-subtitle>Supplier: {{ formData.supplierName }}</v-card-subtitle>
+        <!-- No data state -->
+        <template #no-data>
+          <div class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1" class="mb-4">
+              mdi-package-variant-closed
+            </v-icon>
+            <h3 class="text-h6 text-grey mb-2">No pending orders</h3>
+            <p class="text-body-2 text-grey">
+              Orders with status "Sent" and payment terms "On Delivery" will appear here
+            </p>
+          </div>
+        </template>
+      </v-data-table>
+    </v-card>
 
-          <v-divider />
-
-          <ReceiptForm
-            :form-data="formData"
-            :submitting="isSubmitting"
-            :can-complete="canComplete"
-            @update:quantity="updateItemQuantity"
-            @update:package-quantity="updateItemPackageQuantity"
-            @update:price="updateItemPrice"
-            @update:package-price="updateItemPackagePrice"
-            @update:line-total="updateItemLineTotal"
-            @complete="handleComplete"
-            @complete-with-payment="handleCompleteWithPayment"
-          />
-        </v-card>
-
-        <!-- Empty State -->
-        <v-card v-else class="text-center pa-8">
-          <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-package-variant</v-icon>
-          <h3 class="text-h6 text-grey">Select an order to start receipt</h3>
-          <p class="text-body-2 text-grey mt-2">Choose a pending order from the list on the left</p>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Confirmation Dialog -->
-    <ConfirmReceiptDialog
-      v-model="showConfirmDialog"
+    <!-- Receipt Dialog -->
+    <ReceiptDialog
+      v-model="showReceiptDialog"
+      :order="selectedOrder"
       :form-data="formData"
       :submitting="isSubmitting"
-      :with-payment="isPaymentMode"
-      :payment-amount="pendingPaymentAmount"
-      @confirm="handleConfirmComplete"
-      @cancel="handleCancelConfirm"
+      @close="handleCloseDialog"
+      @update:quantity="updateItemQuantity"
+      @update:package-quantity="updateItemPackageQuantity"
+      @update:price="updateItemPrice"
+      @update:package-price="updateItemPackagePrice"
+      @update:line-total="updateItemLineTotal"
+      @complete="handleCompleteReceipt"
+      @complete-with-payment="handleCompleteWithPayment"
     />
   </v-container>
 </template>
@@ -215,5 +306,15 @@ function goBack() {
 .pos-receipts-view {
   min-height: 100vh;
   background: rgb(var(--v-theme-surface-variant));
+}
+
+.orders-table {
+  :deep(.v-data-table__tr) {
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(var(--v-theme-primary), 0.04) !important;
+    }
+  }
 }
 </style>

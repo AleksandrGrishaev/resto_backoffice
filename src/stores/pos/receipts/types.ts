@@ -2,6 +2,7 @@
 // Sprint 6: POS Receipt Module (ONLINE ONLY)
 
 import type { TransactionPerformer } from '@/types/common'
+import type { BillStatus } from '@/stores/supplier_2/types'
 
 // =============================================
 // PENDING ORDERS FOR RECEIPT
@@ -20,6 +21,14 @@ export interface PendingOrderForReceipt {
   isEstimatedTotal: boolean
   createdAt: string
   items: PendingOrderItem[]
+
+  // Payment info (populated from pendingPayments)
+  hasPendingPayment?: boolean
+  pendingPaymentId?: string
+  pendingPaymentAmount?: number
+
+  // Bill status (from order)
+  billStatus?: BillStatus
 }
 
 /**
@@ -159,4 +168,94 @@ export interface PosReceiptServiceResponse<T = void> {
   success: boolean
   data?: T
   error?: string
+}
+
+// =============================================
+// PAYMENT STATUS DISPLAY (Single Source of Truth)
+// =============================================
+
+/**
+ * Payment status display info for UI
+ */
+export interface PaymentStatusDisplay {
+  status: 'pending' | 'billed' | 'partially_paid' | 'fully_paid' | 'overdue' | 'no_payment'
+  label: string
+  shortLabel: string // For table view (compact)
+  color: string
+  icon: string
+  description: string
+}
+
+/**
+ * Get payment status display for an order
+ * SINGLE SOURCE OF TRUTH for all views (table, dialog, widget)
+ */
+export function getPaymentStatusDisplay(order: PendingOrderForReceipt): PaymentStatusDisplay {
+  // 1. Has actual pending payment ready to confirm
+  if (order.hasPendingPayment) {
+    return {
+      status: 'pending',
+      label: 'Pending Payment',
+      shortLabel: 'Pending',
+      color: 'orange',
+      icon: 'mdi-cash-clock',
+      description: 'A pending payment is ready to be confirmed upon receipt completion.'
+    }
+  }
+
+  // 2. Check billStatus for orders without pending payment
+  const billStatus = order.billStatus || 'not_billed'
+
+  switch (billStatus) {
+    case 'billed':
+      return {
+        status: 'billed',
+        label: 'Billed (Not Paid)',
+        shortLabel: 'Billed',
+        color: 'warning',
+        icon: 'mdi-receipt-text',
+        description: 'Invoice created but not yet paid. Payment will be required.'
+      }
+
+    case 'partially_paid':
+      return {
+        status: 'partially_paid',
+        label: 'Partially Paid',
+        shortLabel: 'Partial',
+        color: 'info',
+        icon: 'mdi-cash-multiple',
+        description: 'Some payments made. Remaining balance due upon receipt.'
+      }
+
+    case 'fully_paid':
+      return {
+        status: 'fully_paid',
+        label: 'Fully Paid',
+        shortLabel: 'Paid',
+        color: 'success',
+        icon: 'mdi-cash-check',
+        description: 'Order is fully paid. No additional payment needed.'
+      }
+
+    case 'overdue':
+      return {
+        status: 'overdue',
+        label: 'Overdue',
+        shortLabel: 'Overdue',
+        color: 'error',
+        icon: 'mdi-alert-circle',
+        description: 'Payment is overdue. Immediate payment required.'
+      }
+
+    case 'not_billed':
+    default:
+      return {
+        status: 'no_payment',
+        label: 'No Pre-payment',
+        shortLabel: 'No Payment',
+        color: 'grey',
+        icon: 'mdi-cash-remove',
+        description: 'No pending payment linked to this order. Payment can be added during receipt.'
+      }
+  }
 }

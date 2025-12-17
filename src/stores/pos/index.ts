@@ -188,8 +188,14 @@ export const usePosStore = defineStore('pos', () => {
       platform.debugLog('POS', '💰 Initializing Account Store...')
       const accountStore = useAccountStore()
       await accountStore.initializeStore()
+
+      // ✅ Sprint 6 FIX: Load pending payments for POS Receipt
+      // initializeStore() loads accounts/categories/transactions but NOT pendingPayments
+      platform.debugLog('POS', '💳 Loading pending payments...')
+      await accountStore.fetchPayments(true)
       platform.debugLog('POS', '✅ Account Store initialized', {
-        accountsCount: accountStore.accounts.length
+        accountsCount: accountStore.accounts.length,
+        pendingPaymentsCount: accountStore.pendingPayments.length
       })
 
       // ✅ Sprint 6: Initialize SyncService

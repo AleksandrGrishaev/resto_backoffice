@@ -20,11 +20,15 @@ import type {
   RejectSupplierPaymentDto,
   SyncQueueItem,
   CreateLinkedExpenseDto,
-  CreateUnlinkedExpenseDto
+  CreateUnlinkedExpenseDto,
+  CreateAccountPaymentExpenseDto
 } from './types'
 import { ShiftsService } from './services'
 import { useShiftsComposables } from './composables'
 import { useAccountStore } from '@/stores/account'
+import { DebugUtils } from '@/utils'
+
+const MODULE_NAME = 'ShiftsStore'
 
 // ✅ Sprint 5: Sync queue localStorage key
 const SYNC_QUEUE_KEY = 'pos_sync_queue'
@@ -802,11 +806,35 @@ export const useShiftsStore = defineStore('posShifts', () => {
    * Used to determine payment scenario at goods receipt
    */
   function hasPendingPaymentForOrder(orderId: string): boolean {
-    if (!currentShift.value) return false
+    if (!currentShift.value) {
+      DebugUtils.debug(MODULE_NAME, 'hasPendingPaymentForOrder: No active shift')
+      return false
+    }
 
     // Check in pending payments list
     const pendingPayments = accountStore.pendingPayments
-    return pendingPayments.some(p => p.relatedOrderId === orderId && p.status === 'pending')
+
+    DebugUtils.info(MODULE_NAME, 'Checking pending payments for order', {
+      orderId,
+      pendingPaymentsCount: pendingPayments.length,
+      pendingPaymentIds: pendingPayments.map(p => ({
+        id: p.id,
+        sourceOrderId: p.sourceOrderId,
+        status: p.status
+      }))
+    })
+
+    const found = pendingPayments.some(p => {
+      if (p.status !== 'pending') return false
+      // Check sourceOrderId (primary link)
+      if (p.sourceOrderId === orderId) return true
+      // Check linkedOrders array
+      if (p.linkedOrders?.some(lo => lo.orderId === orderId && lo.isActive)) return true
+      return false
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Pending payment check result', { orderId, found })
+    return found
   }
 
   /**
@@ -948,6 +976,77 @@ export const useShiftsStore = defineStore('posShifts', () => {
       return { success: true, data: expenseOperation }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to create unlinked expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.create = false
+    }
+  }
+
+  /**
+   * Create account payment expense (Scenario: Payment already processed via account store)
+   * Records payment in shift for reporting but does NOT create transaction on shift close
+   * Used when PO payment is processed directly via PaymentsView/Account Store
+   */
+  async function createAccountPaymentExpense(
+    data: CreateAccountPaymentExpenseDto
+  ): Promise<ServiceResponse<ShiftExpenseOperation>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.create = true
+      error.value = null
+
+      // Create account payment expense operation
+      // This type is NOT synced to account on shift close (already processed)
+      const expenseOperation: ShiftExpenseOperation = {
+        id: `exp-account-${Date.now()}`,
+        shiftId: data.shiftId,
+        type: 'account_payment', // Special type: already processed via account
+        amount: data.amount,
+        description: `Account payment for order ${data.linkedInvoiceNumber || data.linkedOrderId}`,
+        category: 'supplier_payment',
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName,
+        invoiceNumber: data.linkedInvoiceNumber,
+        status: 'completed',
+        performedBy: data.performedBy,
+        relatedAccountId: data.accountId,
+        relatedTransactionId: data.transactionId, // Already created transaction
+        relatedPaymentId: data.paymentId,
+        linkedOrderId: data.linkedOrderId,
+        linkingStatus: 'fully_linked',
+        syncStatus: 'synced', // Already synced via account store
+        lastSyncAt: new Date().toISOString(),
+        notes: data.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Add to shift
+      currentShift.value.expenseOperations.push(expenseOperation)
+
+      // Update account balance in shift (for display only)
+      const accountBalance = currentShift.value.accountBalances.find(
+        ab => ab.accountId === data.accountId
+      )
+      if (accountBalance) {
+        accountBalance.totalExpense += data.amount
+        accountBalance.expenseOperations.push(expenseOperation)
+      }
+
+      // Save shift
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      console.log(
+        `✅ Account payment expense recorded: ${expenseOperation.id} for order ${data.linkedOrderId} (already processed via account)`
+      )
+      return { success: true, data: expenseOperation }
+    } catch (err) {
+      const errorMsg =
+        err instanceof Error ? err.message : 'Failed to create account payment expense'
       error.value = errorMsg
       return { success: false, error: errorMsg }
     } finally {
@@ -1379,6 +1478,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
     hasPendingPaymentForOrder,
     createLinkedExpense,
     createUnlinkedExpense,
+    createAccountPaymentExpense,
     getExpensesByLinkingStatus,
 
     // Sprint 7: Payment Methods Update

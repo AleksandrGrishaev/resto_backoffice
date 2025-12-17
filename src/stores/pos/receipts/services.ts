@@ -3,6 +3,7 @@
 
 import { supabase } from '@/supabase'
 import type { PendingOrderForReceipt, PendingOrderItem, PosReceiptServiceResponse } from './types'
+import type { BillStatus } from '@/stores/supplier_2/types'
 
 const MODULE_NAME = 'PosReceiptService'
 
@@ -49,7 +50,8 @@ export async function loadPendingOrdersForReceipt(): Promise<
         total_amount,
         is_estimated_total,
         created_at,
-        status
+        status,
+        bill_status
       `
       )
       .eq('status', 'sent')
@@ -117,6 +119,7 @@ export async function loadPendingOrdersForReceipt(): Promise<
     }
 
     // Transform to PendingOrderForReceipt
+    // All orders with status='sent' are shown - bill_status only affects payment display
     const pendingOrders: PendingOrderForReceipt[] = orders.map(order => ({
       id: order.id,
       orderNumber: order.order_number,
@@ -125,7 +128,9 @@ export async function loadPendingOrdersForReceipt(): Promise<
       totalAmount: Number(order.total_amount),
       isEstimatedTotal: order.is_estimated_total,
       createdAt: order.created_at,
-      items: itemsByOrder.get(order.id) || []
+      items: itemsByOrder.get(order.id) || [],
+      // Bill status from database
+      billStatus: (order.bill_status as BillStatus) || 'not_billed'
     }))
 
     console.log(`[${MODULE_NAME}] Loaded ${pendingOrders.length} pending orders for receipt`)
@@ -162,7 +167,8 @@ export async function getOrderForReceipt(
         total_amount,
         is_estimated_total,
         created_at,
-        status
+        status,
+        bill_status
       `
       )
       .eq('id', orderId)
@@ -228,7 +234,9 @@ export async function getOrderForReceipt(
       totalAmount: Number(order.total_amount),
       isEstimatedTotal: order.is_estimated_total,
       createdAt: order.created_at,
-      items
+      items,
+      // Bill status from database
+      billStatus: (order.bill_status as BillStatus) || 'not_billed'
     }
 
     return { success: true, data: pendingOrder }

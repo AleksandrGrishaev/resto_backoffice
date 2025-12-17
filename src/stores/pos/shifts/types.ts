@@ -133,6 +133,7 @@ export type ExpenseOperationType =
   | 'supplier_payment' // Платеж поставщику (из backoffice, требует подтверждения)
   | 'incoming_transfer' // Входящий перевод на кассу (для отображения)
   | 'unlinked_expense' // Расход без привязки к накладной (offline режим)
+  | 'account_payment' // Платеж, уже проведенный через аккаунт (не списывается при закрытии)
 
 /**
  * Статус привязки расхода к накладной
@@ -283,6 +284,25 @@ export interface UnlinkExpenseFromInvoiceDto {
   shiftId: string
   linkId: string // expense_invoice_links.id
   reason: string
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO для записи платежа, уже проведенного через аккаунт
+ * Используется когда оплата PO прошла через PaymentsView напрямую в аккаунт
+ * Эта запись нужна для отображения в смене, но НЕ создает транзакцию при закрытии
+ */
+export interface CreateAccountPaymentExpenseDto {
+  shiftId: string
+  accountId: string
+  amount: number
+  counteragentId?: string
+  counteragentName?: string
+  linkedOrderId: string // ID supplierstore_orders
+  linkedInvoiceNumber?: string
+  transactionId: string // ID транзакции, уже созданной в аккаунте
+  paymentId?: string // ID PendingPayment
+  notes?: string
   performedBy: TransactionPerformer
 }
 

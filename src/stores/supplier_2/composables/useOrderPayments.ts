@@ -760,12 +760,20 @@ export function useOrderPayments() {
   ): Promise<void> {
     try {
       const { accountStore, authStore } = await getStores()
-      const { useSupplierStore } = await import('@/stores/supplier_2')
-      const supplierStore = useSupplierStore()
 
-      // Получаем имя поставщика
-      const supplier = supplierStore.state.suppliers.find(s => s.id === order.supplierId)
-      const counteragentName = supplier?.name || order.supplierName || 'Unknown Supplier'
+      // Получаем имя поставщика из counteragents store
+      let counteragentName = order.supplierName || 'Unknown Supplier'
+      try {
+        const { useCounteragentsStore } = await import('@/stores/counteragents')
+        const counteragentsStore = useCounteragentsStore()
+        const counteragent = counteragentsStore.counteragents?.find(c => c.id === order.supplierId)
+        if (counteragent?.name) {
+          counteragentName = counteragent.name
+        }
+      } catch {
+        // Fallback to order.supplierName if counteragents store not available
+        console.warn('OrderPayments: Could not load counteragents store, using order.supplierName')
+      }
 
       const newPayment: CreatePaymentDto = {
         counteragentId: order.supplierId,

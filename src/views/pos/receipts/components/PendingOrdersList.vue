@@ -89,15 +89,15 @@ function formatDate(dateStr: string): string {
             <div class="text-caption text-grey">
               {{ formatDate(order.createdAt) }}
             </div>
-            <v-chip
-              v-if="order.isEstimatedTotal"
-              size="x-small"
-              color="warning"
-              variant="flat"
-              class="mt-1"
-            >
-              Estimated
-            </v-chip>
+            <div class="d-flex gap-1 justify-end mt-1">
+              <v-chip v-if="order.hasPendingPayment" size="x-small" color="success" variant="tonal">
+                <v-icon start size="x-small">mdi-cash-clock</v-icon>
+                Payment Ready
+              </v-chip>
+              <v-chip v-if="order.isEstimatedTotal" size="x-small" color="warning" variant="flat">
+                Estimated
+              </v-chip>
+            </div>
           </div>
         </template>
       </v-list-item>

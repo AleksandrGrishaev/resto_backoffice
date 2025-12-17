@@ -126,15 +126,27 @@ export function useReceipts() {
 
   /**
    * Start receipt process for an order with validation
+   * Supports both: order from local store or direct DB fetch (for POS Receipt)
    */
   async function startReceipt(
     purchaseOrderId: string,
     createData: CreateReceiptData
   ): Promise<Receipt> {
     try {
-      const order = supplierStore.state.orders.find(o => o.id === purchaseOrderId)
+      // Try to find order in local store first
+      let order = supplierStore.state.orders.find(o => o.id === purchaseOrderId)
+
+      // If not found locally, fetch from DB (needed for POS Receipt flow)
       if (!order) {
-        throw new Error(`Order with id ${purchaseOrderId} not found`)
+        DebugUtils.info(MODULE_NAME, 'Order not in local store, fetching from DB', {
+          purchaseOrderId
+        })
+        await supplierStore.getOrders({ status: 'sent' })
+        order = supplierStore.state.orders.find(o => o.id === purchaseOrderId)
+      }
+
+      if (!order) {
+        throw new Error(`Order with id ${purchaseOrderId} not found in database`)
       }
 
       if (!canStartReceipt(order)) {
@@ -144,25 +156,34 @@ export function useReceipts() {
       DebugUtils.info(MODULE_NAME, 'Starting receipt for order', {
         orderId: purchaseOrderId,
         orderNumber: order.orderNumber,
-        itemsCount: order.items.length
+        itemsCount: order.items.length,
+        orderItemIds: order.items.map(i => i.id),
+        createDataItemIds: createData.items?.map(i => i.orderItemId) || []
       })
 
       // ✅ ИСПРАВЛЕНО: Создаем receipt с полными данными упаковок
+      // Use order items as base, matching with input data if available
       const enrichedCreateData: CreateReceiptData = {
         ...createData,
         items: order.items.map(orderItem => {
-          const inputItem = createData.items.find(i => i.orderItemId === orderItem.id)
+          const inputItem = createData.items?.find(i => i.orderItemId === orderItem.id)
+
+          DebugUtils.debug(MODULE_NAME, 'Mapping order item', {
+            orderItemId: orderItem.id,
+            inputItemFound: !!inputItem,
+            orderedQuantity: orderItem.orderedQuantity
+          })
 
           return {
             orderItemId: orderItem.id,
 
             // Количества из заказа по умолчанию
-            receivedQuantity: inputItem?.receivedQuantity || orderItem.orderedQuantity,
+            receivedQuantity: inputItem?.receivedQuantity ?? orderItem.orderedQuantity,
             receivedPackageQuantity:
-              inputItem?.receivedPackageQuantity || orderItem.packageQuantity,
+              inputItem?.receivedPackageQuantity ?? orderItem.packageQuantity,
 
             // ✅ НОВОЕ: Данные упаковки из заказа
-            packageId: inputItem?.packageId || orderItem.packageId,
+            packageId: inputItem?.packageId ?? orderItem.packageId,
 
             // Цены из заказа по умолчанию
             actualPackagePrice: inputItem?.actualPackagePrice, // undefined = использовать заказанную
@@ -538,7 +559,8 @@ export function useReceipts() {
         throw new Error('Cannot modify completed receipt')
       }
 
-      const item = receipt.items.find(i => i.orderItemId === itemId)
+      // Find by id OR orderItemId for flexibility
+      const item = receipt.items.find(i => i.id === itemId || i.orderItemId === itemId)
       if (!item) {
         throw new Error(`Item with id ${itemId} not found in receipt`)
       }

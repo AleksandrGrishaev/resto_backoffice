@@ -205,10 +205,17 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
       // Process each expense operation individually
       for (const expense of shift.expenseOperations) {
         // Only process completed direct expenses
+        // Skip account_payment - already processed via account store directly
         if (expense.status !== 'completed' || expense.type !== 'direct_expense') {
-          console.log(
-            `⏭️ Skipping expense ${expense.id}: status=${expense.status}, type=${expense.type}`
-          )
+          if (expense.type === 'account_payment') {
+            console.log(
+              `⏭️ Skipping account_payment ${expense.id}: already processed via account store`
+            )
+          } else {
+            console.log(
+              `⏭️ Skipping expense ${expense.id}: status=${expense.status}, type=${expense.type}`
+            )
+          }
           continue
         }
 
@@ -268,6 +275,26 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
         // Add their transaction IDs if they exist
         for (const payment of supplierPayments) {
+          if (payment.relatedTransactionId) {
+            transactionIds.push(payment.relatedTransactionId)
+          }
+        }
+      }
+
+      // Account payments - already processed via account store, just log for audit
+      const accountPayments = shift.expenseOperations.filter(
+        exp => exp.status === 'completed' && exp.type === 'account_payment'
+      )
+
+      if (accountPayments.length > 0) {
+        console.log(
+          `💳 Found ${accountPayments.length} account payments in shift (already synced via account store)`
+        )
+        const totalAccountPayments = accountPayments.reduce((sum, p) => sum + p.amount, 0)
+        console.log(`   Total account payments: ${totalAccountPayments}`)
+
+        // Add their transaction IDs if they exist
+        for (const payment of accountPayments) {
           if (payment.relatedTransactionId) {
             transactionIds.push(payment.relatedTransactionId)
           }

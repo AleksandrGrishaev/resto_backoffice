@@ -4,6 +4,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useShiftsStore } from '@/stores/pos/shifts'
+import { useAccountStore } from '@/stores/account'
+import { getPOSCashAccountId } from '@/stores/account/accountConfig'
 import {
   loadPendingOrdersForReceipt,
   getOrderForReceipt,
@@ -29,6 +31,7 @@ export function usePosReceipt() {
 
   const receiptsComposable = useReceipts()
   const shiftsStore = useShiftsStore()
+  const accountStore = useAccountStore()
 
   // =============================================
   // STATE
@@ -180,6 +183,7 @@ export function usePosReceipt() {
   /**
    * Load pending orders from API
    * REQUIRES ONLINE MODE
+   * Enriches orders with pending payment info
    */
   async function loadOrders(): Promise<void> {
     if (!isOnline.value) {
@@ -194,8 +198,12 @@ export function usePosReceipt() {
       const result = await loadPendingOrdersForReceipt()
 
       if (result.success && result.data) {
-        pendingOrders.value = result.data
-        DebugUtils.info(MODULE_NAME, `Loaded ${result.data.length} pending orders`)
+        // Enrich orders with pending payment info
+        const enrichedOrders = await enrichOrdersWithPaymentInfo(result.data)
+        pendingOrders.value = enrichedOrders
+        DebugUtils.info(MODULE_NAME, `Loaded ${enrichedOrders.length} pending orders`, {
+          withPendingPayments: enrichedOrders.filter(o => o.hasPendingPayment).length
+        })
       } else {
         error.value = result.error || 'Failed to load orders'
         DebugUtils.error(MODULE_NAME, 'Failed to load orders', { error: result.error })
@@ -205,6 +213,81 @@ export function usePosReceipt() {
       DebugUtils.error(MODULE_NAME, 'Error loading orders', { error: err })
     } finally {
       isLoading.value = false
+    }
+  }
+
+  /**
+   * Enrich orders with pending payment information
+   * Checks both linkedOrders AND sourceOrderId for payment linkage
+   * ВАЖНО: Показываем "Payment Ready" только для платежей со статусом 'pending'
+   */
+  async function enrichOrdersWithPaymentInfo(
+    orders: PendingOrderForReceipt[]
+  ): Promise<PendingOrderForReceipt[]> {
+    try {
+      // Force refresh pending payments to get current state
+      await accountStore.fetchPayments(true)
+
+      // Get ALL pending payments (status === 'pending')
+      const allPendingPayments = accountStore.pendingPayments
+
+      DebugUtils.info(MODULE_NAME, 'Enriching orders with payment info', {
+        ordersCount: orders.length,
+        pendingPaymentsCount: allPendingPayments.length,
+        pendingPaymentIds: allPendingPayments.map(p => ({
+          id: p.id,
+          status: p.status,
+          linkedOrders: p.linkedOrders?.length,
+          sourceOrderId: p.sourceOrderId
+        }))
+      })
+
+      return orders.map(order => {
+        // Check for payment linked via linkedOrders OR sourceOrderId
+        // КРИТИЧНО: Проверяем status === 'pending' явно, чтобы избежать показа
+        // "Payment Ready" для уже оплаченных или отменённых платежей
+        const payment = allPendingPayments.find(
+          p =>
+            p.status === 'pending' && // ЯВНАЯ ПРОВЕРКА статуса
+            // Check linkedOrders array with active status
+            (p.linkedOrders?.some(lo => lo.orderId === order.id && lo.isActive) ||
+              // Check sourceOrderId (direct link)
+              p.sourceOrderId === order.id)
+        )
+
+        if (payment) {
+          DebugUtils.info(MODULE_NAME, 'Found pending payment for order', {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            paymentId: payment.id,
+            paymentStatus: payment.status,
+            paymentAmount: payment.amount,
+            linkedOrders: payment.linkedOrders,
+            sourceOrderId: payment.sourceOrderId,
+            orderBillStatus: order.billStatus
+          })
+
+          return {
+            ...order,
+            hasPendingPayment: true,
+            pendingPaymentId: payment.id,
+            pendingPaymentAmount: payment.amount
+            // Сохраняем billStatus из заказа - он уже загружен из DB
+          }
+        }
+
+        // Нет pending payment - billStatus уже загружен из DB
+        DebugUtils.info(MODULE_NAME, 'No pending payment for order', {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          billStatus: order.billStatus
+        })
+
+        return order
+      })
+    } catch (err) {
+      DebugUtils.warn(MODULE_NAME, 'Failed to enrich orders with payment info', { error: err })
+      return orders
     }
   }
 
@@ -364,9 +447,21 @@ export function usePosReceipt() {
     error.value = null
 
     try {
+      // Build items data from form
+      const itemsData = formData.value.items.map(item => ({
+        orderItemId: item.orderItemId,
+        receivedQuantity: item.receivedQuantity,
+        receivedPackageQuantity: item.receivedPackageQuantity,
+        actualPackagePrice: item.actualPrice,
+        packageId: item.packageId,
+        notes: ''
+      }))
+
       // Start receipt via supplier_2
       await receiptsComposable.startReceipt(selectedOrder.value.id, {
-        receivedBy: options?.performedBy?.name || 'Cashier'
+        purchaseOrderId: selectedOrder.value.id,
+        receivedBy: options?.performedBy?.name || 'Cashier',
+        items: itemsData
       })
 
       // Update each item
@@ -407,6 +502,7 @@ export function usePosReceipt() {
   /**
    * Complete receipt with payment
    * Creates expense in shift after receipt completion
+   * После успешной оплаты обновляет billStatus заказа
    */
   async function completeReceiptWithPayment(
     paymentAmount: number,
@@ -422,6 +518,7 @@ export function usePosReceipt() {
     }
 
     const order = selectedOrder.value
+    const orderId = order.id
 
     // First complete the receipt
     const receiptSuccess = await completeReceipt(options)
@@ -435,7 +532,7 @@ export function usePosReceipt() {
     }
 
     // Determine payment scenario
-    const scenario = determinePaymentScenario(order.id)
+    const scenario = determinePaymentScenario(orderId)
 
     try {
       let result: PaymentScenarioResult
@@ -456,6 +553,24 @@ export function usePosReceipt() {
           // Scenario B: Create unlinked expense (offline fallback)
           result = await createUnlinkedExpenseForOrder(order, paymentAmount, options?.performedBy)
           break
+      }
+
+      // После успешной оплаты - обновляем billStatus заказа
+      if (result.success && isOnline.value) {
+        try {
+          const { usePurchaseOrders } = await import(
+            '@/stores/supplier_2/composables/usePurchaseOrders'
+          )
+          const purchaseOrdersComposable = usePurchaseOrders()
+          await purchaseOrdersComposable.updateOrderBillStatus(orderId)
+          DebugUtils.info(MODULE_NAME, 'Updated bill status after payment', { orderId })
+        } catch (err) {
+          // Не критичная ошибка - billStatus обновится при следующей загрузке
+          DebugUtils.warn(MODULE_NAME, 'Failed to update bill status (non-critical)', {
+            error: err,
+            orderId
+          })
+        }
       }
 
       return result
@@ -480,6 +595,13 @@ export function usePosReceipt() {
     // Check for existing pending payment
     const hasPendingPayment = shiftsStore.hasPendingPaymentForOrder?.(orderId) ?? false
 
+    DebugUtils.info(MODULE_NAME, 'Determining payment scenario', {
+      orderId,
+      hasPendingPayment,
+      isOnline: isOnline.value,
+      hasMethod: !!shiftsStore.hasPendingPaymentForOrder
+    })
+
     if (hasPendingPayment) {
       return 'confirm_pending'
     }
@@ -493,6 +615,8 @@ export function usePosReceipt() {
 
   /**
    * Scenario A1: Confirm existing pending payment
+   * Finds pending payment linked to order and processes it
+   * Also records payment in current shift as account_payment expense
    */
   async function confirmPendingPayment(
     order: PendingOrderForReceipt,
@@ -501,33 +625,103 @@ export function usePosReceipt() {
   ): Promise<PaymentScenarioResult> {
     DebugUtils.info(MODULE_NAME, 'Confirming pending payment', { orderId: order.id, amount })
 
-    // Get the pending payment and confirm it
-    const pendingPayments = shiftsStore.currentShift?.pendingPayments || []
-    // Find the payment for this order (would need account store integration)
-    // For now, we confirm via shiftsStore.confirmExpense
+    try {
+      // Find pending payment for this order
+      const payments = await accountStore.getPaymentsByOrder(order.id)
+      const pendingPayment = payments.find(p => p.status === 'pending')
 
-    // This scenario requires finding the pending payment ID
-    // For MVP, we'll treat it as creating a linked expense
-    const result = await shiftsStore.createLinkedExpense({
-      shiftId: shiftsStore.currentShift?.id || '',
-      accountId: '', // Will use default POS cash register
-      amount,
-      counteragentId: order.supplierId,
-      counteragentName: order.supplierName,
-      linkedOrderId: order.id,
-      linkedInvoiceNumber: order.orderNumber,
-      performedBy: performedBy
-        ? { type: 'user', id: performedBy.id, name: performedBy.name }
-        : { type: 'system', name: 'POS Receipt' }
-    })
+      if (!pendingPayment) {
+        DebugUtils.warn(MODULE_NAME, 'No pending payment found, falling back to create_linked', {
+          orderId: order.id
+        })
+        // Fallback to creating linked expense if no pending payment found
+        return createLinkedExpenseForOrder(order, amount, performedBy)
+      }
 
-    return {
-      scenario: 'confirm_pending',
-      amount,
-      linkedOrderId: order.id,
-      expenseId: result.data?.id,
-      success: result.success,
-      error: result.error
+      DebugUtils.info(MODULE_NAME, 'Found pending payment to confirm', {
+        paymentId: pendingPayment.id,
+        paymentAmount: pendingPayment.amount,
+        actualAmount: amount
+      })
+
+      const performer = performedBy
+        ? { type: 'user' as const, id: performedBy.id, name: performedBy.name }
+        : { type: 'api' as const, id: 'pos-receipt', name: 'POS Receipt' }
+
+      // Determine account ID with fallback to POS cash account
+      const accountId = pendingPayment.assignedToAccount || getPOSCashAccountId()
+
+      let transactionId: string
+
+      // Check if payment requires cashier confirmation
+      if (pendingPayment.requiresCashierConfirmation) {
+        // Use confirmPayment flow for cashier confirmation
+        const confirmPerformer = performedBy
+          ? { type: 'user' as const, id: performedBy.id, name: performedBy.name }
+          : { type: 'system' as const, id: 'pos-receipt', name: 'POS Receipt' }
+
+        transactionId = await accountStore.confirmPayment(
+          pendingPayment.id,
+          confirmPerformer,
+          amount
+        )
+      } else {
+        // Use processPayment for regular pending payments
+        transactionId = await accountStore.processPayment({
+          paymentId: pendingPayment.id,
+          accountId,
+          actualAmount: amount,
+          notes: `Receipt payment for ${order.orderNumber}`,
+          performedBy: performer
+        })
+      }
+
+      // Record payment in shift as account_payment expense
+      // This expense is for reporting only - won't create transaction on shift close
+      if (shiftsStore.currentShift) {
+        const expenseResult = await shiftsStore.createAccountPaymentExpense({
+          shiftId: shiftsStore.currentShift.id,
+          accountId,
+          amount,
+          counteragentId: order.supplierId,
+          counteragentName: order.supplierName,
+          linkedOrderId: order.id,
+          linkedInvoiceNumber: order.orderNumber,
+          transactionId,
+          paymentId: pendingPayment.id,
+          notes: `Payment via account for order ${order.orderNumber}`,
+          performedBy: performer
+        })
+
+        if (expenseResult.success) {
+          DebugUtils.info(MODULE_NAME, 'Account payment expense recorded in shift', {
+            expenseId: expenseResult.data?.id,
+            orderId: order.id
+          })
+        } else {
+          DebugUtils.warn(MODULE_NAME, 'Failed to record account payment in shift (non-critical)', {
+            error: expenseResult.error
+          })
+        }
+      }
+
+      return {
+        scenario: 'confirm_pending',
+        amount,
+        linkedOrderId: order.id,
+        pendingPaymentId: pendingPayment.id,
+        expenseId: transactionId,
+        success: true
+      }
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Error confirming pending payment', { error: err })
+      return {
+        scenario: 'confirm_pending',
+        amount,
+        linkedOrderId: order.id,
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to confirm pending payment'
+      }
     }
   }
 
@@ -566,6 +760,7 @@ export function usePosReceipt() {
 
   /**
    * Scenario B: Create unlinked expense (offline mode)
+   * При offline + есть pending payment - сначала отвязываем payment, затем создаём unlinked expense
    */
   async function createUnlinkedExpenseForOrder(
     order: PendingOrderForReceipt,
@@ -574,8 +769,29 @@ export function usePosReceipt() {
   ): Promise<PaymentScenarioResult> {
     DebugUtils.info(MODULE_NAME, 'Creating unlinked expense', {
       supplierId: order.supplierId,
-      amount
+      amount,
+      hasPendingPayment: order.hasPendingPayment,
+      pendingPaymentId: order.pendingPaymentId
     })
+
+    // Если есть pending payment - отвязываем его от заказа
+    // Это предотвращает дублирование: unlinked expense + pending payment
+    if (order.pendingPaymentId) {
+      try {
+        await accountStore.unlinkPaymentFromOrder(order.pendingPaymentId, order.id)
+        DebugUtils.info(MODULE_NAME, 'Unlinked pending payment before creating unlinked expense', {
+          paymentId: order.pendingPaymentId,
+          orderId: order.id
+        })
+      } catch (err) {
+        // Не блокируем создание expense если unlink не удался (offline)
+        DebugUtils.warn(MODULE_NAME, 'Failed to unlink pending payment (will retry on sync)', {
+          error: err,
+          paymentId: order.pendingPaymentId,
+          orderId: order.id
+        })
+      }
+    }
 
     const result = await shiftsStore.createUnlinkedExpense({
       shiftId: shiftsStore.currentShift?.id || '',

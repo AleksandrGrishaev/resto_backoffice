@@ -1154,9 +1154,13 @@ export const useAccountStore = defineStore('account', () => {
       // Обеспечиваем актуальные данные
       await fetchPayments()
 
-      const payments = state.value.pendingPayments.filter(payment =>
-        payment.linkedOrders?.some(o => o.orderId === orderId && o.isActive)
-      )
+      const payments = state.value.pendingPayments.filter(payment => {
+        // Check sourceOrderId (primary link)
+        if (payment.sourceOrderId === orderId) return true
+        // Check linkedOrders array
+        if (payment.linkedOrders?.some(o => o.orderId === orderId && o.isActive)) return true
+        return false
+      })
 
       DebugUtils.info(MODULE_NAME, 'Found payments for order', {
         orderId,
