@@ -134,21 +134,11 @@
       </v-btn>
       <v-spacer />
       <v-btn
-        variant="tonal"
-        color="primary"
-        :disabled="!canCreateRequest"
-        :loading="isCreating && !isSubmitting"
-        prepend-icon="mdi-content-save-outline"
-        @click="saveDraft"
-      >
-        Save Draft
-      </v-btn>
-      <v-btn
         color="success"
+        size="large"
         :disabled="!canCreateRequest"
         :loading="isSubmitting"
         prepend-icon="mdi-send"
-        class="ml-2"
         @click="sendRequest"
       >
         Send Request
@@ -202,7 +192,6 @@ const { productsStore } = kitchenRequest
 // =============================================
 
 const activeTab = ref('suggestions')
-const isCreating = ref(false)
 const isSubmitting = ref(false)
 const requestedByLocal = ref(props.requestedBy)
 const priority = ref<'normal' | 'urgent'>('normal')
@@ -259,7 +248,9 @@ const categorizedSuggestions = computed(() => {
 })
 
 const canCreateRequest = computed(() => {
-  return selectedItems.value.length > 0 && requestedByLocal.value.trim() !== '' && !isCreating.value
+  return (
+    selectedItems.value.length > 0 && requestedByLocal.value.trim() !== '' && !isSubmitting.value
+  )
 })
 
 // =============================================
@@ -376,29 +367,16 @@ function handleError(message: string): void {
   emits('error', message)
 }
 
-async function saveDraft(): Promise<void> {
-  try {
-    isCreating.value = true
-
-    const requestId = await kitchenRequest.createRequest(requestedByLocal.value, priority.value)
-
-    emits('success', `Draft ${requestId} saved successfully`)
-  } catch (error) {
-    emits('error', 'Failed to save draft')
-  } finally {
-    isCreating.value = false
-  }
-}
-
 async function sendRequest(): Promise<void> {
   try {
     isSubmitting.value = true
-    isCreating.value = true
 
+    // Kitchen Monitor always sends requests directly with 'submitted' status
     const requestId = await kitchenRequest.createRequest(
       requestedByLocal.value,
       priority.value,
-      `Request from Kitchen Monitor (${props.department})`
+      `Request from Kitchen Monitor (${props.department})`,
+      true // sendDirectly = true, creates with 'submitted' status
     )
 
     emits('success', `Request ${requestId} sent successfully`)
@@ -406,7 +384,6 @@ async function sendRequest(): Promise<void> {
     emits('error', 'Failed to send request')
   } finally {
     isSubmitting.value = false
-    isCreating.value = false
   }
 }
 

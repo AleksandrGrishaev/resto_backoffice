@@ -232,12 +232,15 @@ export function usePurchaseOrders() {
         }, 0)
 
       // ✅ НОВАЯ ЛОГИКА: Подсчет общей суммы выставленных счетов через linkedOrders
-      const totalBilled = bills.reduce((sum, bill) => {
-        const orderLink = bill.linkedOrders?.find(
-          link => link.orderId === order.id && link.isActive
-        )
-        return sum + (orderLink?.linkedAmount || 0)
-      }, 0)
+      // Исключаем cancelled платежи
+      const totalBilled = bills
+        .filter(bill => bill.status !== 'cancelled')
+        .reduce((sum, bill) => {
+          const orderLink = bill.linkedOrders?.find(
+            link => link.orderId === order.id && link.isActive
+          )
+          return sum + (orderLink?.linkedAmount || 0)
+        }, 0)
 
       // ✅ НОВАЯ ЛОГИКА: Проверка просроченных счетов
       const now = new Date()

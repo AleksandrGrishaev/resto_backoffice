@@ -98,7 +98,7 @@ const amountStatus = computed(() => {
         <div class="text-body-2 text-grey">
           {{ paymentStatus.description }}
         </div>
-        <div class="text-caption text-grey mt-2">
+        <div v-if="paymentStatus.status !== 'fully_paid'" class="text-caption text-grey mt-2">
           <v-icon size="x-small" class="mr-1">mdi-lightbulb-outline</v-icon>
           Click "Add Payment" to record payment during receipt.
         </div>

@@ -29,6 +29,9 @@ export interface PendingOrderForReceipt {
 
   // Bill status (from order)
   billStatus?: BillStatus
+
+  // Total paid amount (sum of completed payments' linkedAmount for this order)
+  paidAmount?: number
 }
 
 /**

@@ -168,6 +168,12 @@ export class SupplierStorageIntegration {
           reason
         })
 
+        // Get pricing information from product
+        const estimatedBaseCost = product.baseCostPerUnit || product.lastKnownCost || 0
+        const recommendedPackage = product.packageOptions?.find(
+          pkg => pkg.id === product.recommendedPackageId
+        )
+
         suggestions.push({
           itemId: balance.itemId,
           itemName: balance.itemName,
@@ -179,7 +185,15 @@ export class SupplierStorageIntegration {
           minStock,
           suggestedQuantity: Math.round(suggestedQuantity * 100) / 100, // Round to 2 decimals
           urgency,
-          reason
+          reason,
+          // ✅ Pricing and package information
+          estimatedBaseCost,
+          recommendedPackageId: recommendedPackage?.id,
+          recommendedPackageName: recommendedPackage?.packageName,
+          recommendedPackageQuantity: recommendedPackage
+            ? Math.ceil(suggestedQuantity / recommendedPackage.packageSize)
+            : undefined,
+          estimatedPackagePrice: recommendedPackage?.packagePrice
         })
       }
 

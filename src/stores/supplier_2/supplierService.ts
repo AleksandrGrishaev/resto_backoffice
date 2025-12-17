@@ -161,7 +161,7 @@ class SupplierService {
           ...item,
           id: generateId()
         })),
-        status: 'draft',
+        status: data.initialStatus || 'draft',
         priority: data.priority || 'normal',
         purchaseOrderIds: [],
         notes: data.notes,
@@ -444,6 +444,14 @@ class SupplierService {
       const product = productsStore.products.find(p => p.id === item.itemId)
       if (!product) {
         throw new Error(`Product ${item.itemId} not found`)
+      }
+
+      // ✅ VALIDATION: Check package size is valid (not zero or negative)
+      if (!pkg.packageSize || pkg.packageSize <= 0) {
+        throw new Error(
+          `Invalid package size for ${product.name}: package "${pkg.packageName}" has size ${pkg.packageSize}. ` +
+            `Package size must be greater than 0.`
+        )
       }
 
       // Рассчитываем упаковки

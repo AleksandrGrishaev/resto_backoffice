@@ -78,24 +78,18 @@
 
       <div class="separator" />
 
-      <!-- Request Screen Button -->
+      <!-- Requests Screen Button (combined Request + History) -->
       <v-btn
-        :class="['screen-btn', { active: currentScreen === 'request' }]"
-        :color="currentScreen === 'request' ? 'primary' : undefined"
-        :variant="currentScreen === 'request' ? 'flat' : 'text'"
+        :class="['screen-btn', { active: currentScreen === 'requests' }]"
+        :color="currentScreen === 'requests' ? 'primary' : undefined"
+        :variant="currentScreen === 'requests' ? 'flat' : 'text'"
         block
         height="56"
-        @click="handleScreenSelect('request')"
+        @click="handleScreenSelect('requests')"
       >
         <div class="screen-btn-content">
-          <v-icon size="24">mdi-cart-plus</v-icon>
-          <span class="screen-btn-label">Request</span>
-          <v-badge
-            v-if="props.pendingRequestCount > 0"
-            :content="props.pendingRequestCount"
-            color="warning"
-            inline
-          />
+          <v-icon size="24">mdi-cart-arrow-down</v-icon>
+          <span class="screen-btn-label">Requests</span>
         </div>
       </v-btn>
     </div>
@@ -123,13 +117,11 @@ const MODULE_NAME = 'KitchenSidebar'
 // =============================================
 
 interface Props {
-  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'request'
-  pendingRequestCount?: number
+  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'requests'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  currentScreen: 'orders',
-  pendingRequestCount: 0
+  currentScreen: 'orders'
 })
 
 // =============================================
@@ -137,7 +129,7 @@ const props = withDefaults(defineProps<Props>(), {
 // =============================================
 
 const emit = defineEmits<{
-  'screen-select': [screen: 'orders' | 'preparation' | 'kpi' | 'request']
+  'screen-select': [screen: 'orders' | 'preparation' | 'kpi' | 'requests']
   'department-change': [department: 'all' | 'kitchen' | 'bar']
 }>()
 
@@ -181,7 +173,7 @@ watch(selectedDepartment, value => {
 // METHODS
 // =============================================
 
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'request') => {
+const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'requests') => {
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
   emit('screen-select', screen)
 }

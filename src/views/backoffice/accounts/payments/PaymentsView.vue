@@ -178,9 +178,37 @@ function handleCancelConfirmPayment() {
   selectedPayment.value = null
 }
 
-function handleRejectPayment(payment: PendingPayment) {
-  // TODO: Implement payment rejection with reason dialog
-  console.log('Reject payment:', payment)
+async function handleRejectPayment(payment: PendingPayment) {
+  try {
+    // Cancel the pending payment
+    await accountStore.cancelPayment(payment.id)
+
+    // Force refresh the payment list (bypass cache)
+    await accountStore.fetchPayments(true)
+
+    // Update bill status for linked orders (if any)
+    if (payment.linkedOrders && payment.linkedOrders.length > 0) {
+      try {
+        const { usePurchaseOrders } = await import(
+          '@/stores/supplier_2/composables/usePurchaseOrders'
+        )
+        const { updateMultipleOrderBillStatuses } = usePurchaseOrders()
+
+        const orderIds = payment.linkedOrders
+          .filter(link => link.isActive)
+          .map(link => link.orderId)
+
+        if (orderIds.length > 0) {
+          await updateMultipleOrderBillStatuses(orderIds)
+        }
+      } catch (error) {
+        console.error('Failed to update order bill statuses:', error)
+        // Non-critical error, continue
+      }
+    }
+  } catch (err) {
+    console.error('Failed to cancel payment:', err)
+  }
 }
 
 function handleViewPayment(payment: PendingPayment) {
@@ -325,6 +353,6 @@ function handleDismissError() {
 <style scoped lang="scss">
 .payments-view {
   min-height: 100vh;
-  background: rgb(var(--v-theme-surface-variant));
+  // ✅ Changed to default black background (removed surface-variant)
 }
 </style>

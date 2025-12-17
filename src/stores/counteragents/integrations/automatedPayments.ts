@@ -18,14 +18,25 @@ export class AutomatedPayments {
       // Проверяем, что заказ доставлен
       if (order.status !== 'delivered') return
 
-      // Проверяем, есть ли уже счет
+      // Проверяем, есть ли уже счет или платёж
       const { useAccountStore } = await import('@/stores/account')
       const accountStore = useAccountStore()
 
-      await accountStore.fetchPayments()
+      // Wait a bit to allow confirmPendingPayment to complete first (race condition prevention)
+      // confirmPendingPayment runs after completeReceipt() which triggers this automation
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Force refresh to get latest data (avoid race condition with confirmPendingPayment)
+      await accountStore.fetchPayments(true)
       const existingBills = await accountStore.getPaymentsByOrder(order.id)
+
+      // Check for any existing payment (pending OR completed)
+      // This prevents creating duplicate when confirmPendingPayment already processed a payment
       if (existingBills.length > 0) {
-        console.log(`Bill already exists for order ${order.orderNumber}`)
+        console.log(`AutomatedPayments: Bill already exists for order ${order.orderNumber}`, {
+          count: existingBills.length,
+          statuses: existingBills.map(b => b.status)
+        })
         return
       }
 
@@ -192,6 +203,9 @@ export class AutomatedPayments {
       const order = supplierStore.state.orders.find(o => o.id === orderId)
       if (!order) return
 
+      // ✅ Используем actualDeliveredAmount если есть (после receipt), иначе totalAmount
+      const orderAmount = order.actualDeliveredAmount || order.totalAmount
+
       // Получаем все счета для заказа
       await accountStore.fetchPayments()
       const bills = await accountStore.getPaymentsByOrder(orderId)
@@ -206,22 +220,34 @@ export class AutomatedPayments {
         totalBilled += orderLink.linkedAmount
 
         if (bill.status === 'completed') {
-          totalPaid += orderLink.linkedAmount
+          // ✅ Используем paid_amount если есть (реальная сумма оплаты), иначе linkedAmount
+          totalPaid += bill.paidAmount || orderLink.linkedAmount
         }
       }
 
       // Определяем новый статус
+      // ✅ Сравниваем с orderAmount (actualDeliveredAmount), а не с totalBilled
       let newBillStatus: string
 
       if (totalBilled === 0) {
         newBillStatus = 'not_billed'
       } else if (totalPaid === 0) {
         newBillStatus = 'billed'
-      } else if (totalPaid >= totalBilled) {
+      } else if (totalPaid > orderAmount) {
+        newBillStatus = 'overpaid'
+      } else if (totalPaid >= orderAmount) {
         newBillStatus = 'fully_paid'
       } else {
         newBillStatus = 'partially_paid'
       }
+
+      console.log(`📝 Bill status calculation for ${order.orderNumber}:`, {
+        orderAmount,
+        totalBilled,
+        totalPaid,
+        currentStatus: order.billStatus,
+        newBillStatus
+      })
 
       // Обновляем заказ если статус изменился
       if (order.billStatus !== newBillStatus) {
@@ -230,7 +256,9 @@ export class AutomatedPayments {
           billStatusCalculatedAt: new Date().toISOString()
         })
 
-        console.log(`📝 Order ${order.orderNumber} bill status: ${newBillStatus}`)
+        console.log(
+          `📝 Order ${order.orderNumber} bill status updated: ${order.billStatus} → ${newBillStatus}`
+        )
       }
     } catch (error) {
       console.error('Failed to update order bill status:', error)

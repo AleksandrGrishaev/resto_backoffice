@@ -168,10 +168,13 @@ function getStatusColor(status: string): string {
                 <v-icon start>mdi-check</v-icon>
                 Confirm
               </v-btn>
-              <v-btn color="error" variant="tonal" size="small" @click="handleReject(payment)">
-                <v-icon start>mdi-close</v-icon>
-                Reject
-              </v-btn>
+              <v-btn
+                color="error"
+                variant="text"
+                icon="mdi-close"
+                size="small"
+                @click="handleReject(payment)"
+              />
             </div>
           </template>
         </v-list-item>

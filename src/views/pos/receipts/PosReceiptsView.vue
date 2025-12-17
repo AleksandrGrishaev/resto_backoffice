@@ -305,7 +305,7 @@ function goBack() {
 <style scoped lang="scss">
 .pos-receipts-view {
   min-height: 100vh;
-  background: rgb(var(--v-theme-surface-variant));
+  // ✅ Убран серый фон
 }
 
 .orders-table {

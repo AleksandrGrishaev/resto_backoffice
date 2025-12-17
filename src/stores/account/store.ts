@@ -734,6 +734,24 @@ export const useAccountStore = defineStore('account', () => {
 
       const transactionId = await paymentService.processPayment(data)
 
+      // ✅ FIX: If actualAmount differs from payment.amount, update payment amount
+      // This handles cases where payment was created with order amount but paid with different amount
+      if (data.actualAmount !== undefined && data.actualAmount !== payment.amount) {
+        DebugUtils.info(MODULE_NAME, 'Payment amount differs from actual payment, updating', {
+          paymentId: data.paymentId,
+          originalAmount: payment.amount,
+          actualAmount: data.actualAmount
+        })
+
+        await paymentService.updatePaymentAmount({
+          paymentId: data.paymentId,
+          newAmount: data.actualAmount,
+          reason: 'receipt_discrepancy', // Корректировка после приемки
+          userId: undefined,
+          notes: `Actual payment amount ${data.actualAmount} differs from bill amount ${payment.amount}`
+        })
+      }
+
       // ✅ FIX: Update payment status to 'completed' in service BEFORE fetching
       await paymentService.update(data.paymentId, {
         status: 'completed',
@@ -1049,6 +1067,17 @@ export const useAccountStore = defineStore('account', () => {
 
       payment.updatedAt = new Date().toISOString()
 
+      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем linkedOrders в базу данных
+      await paymentService.update(payment.id, {
+        linkedOrders: payment.linkedOrders,
+        updatedAt: payment.updatedAt
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment linkedOrders saved to database', {
+        paymentId: payment.id,
+        linkedOrdersCount: payment.linkedOrders.length
+      })
+
       // ✅ НОВОЕ: Обновляем usedAmount для completed платежей
       if (payment.status === 'completed') {
         // Вычисляем общую сумму всех активных привязок после добавления новой
@@ -1112,6 +1141,17 @@ export const useAccountStore = defineStore('account', () => {
       link.unlinkedAt = new Date().toISOString()
 
       payment.updatedAt = new Date().toISOString()
+
+      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем linkedOrders в базу данных
+      await paymentService.update(payment.id, {
+        linkedOrders: payment.linkedOrders,
+        updatedAt: payment.updatedAt
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Payment linkedOrders saved to database after unlink', {
+        paymentId: payment.id,
+        linkedOrdersCount: payment.linkedOrders.filter(o => o.isActive).length
+      })
 
       // ✅ НОВОЕ: Обновляем usedAmount для completed платежей после отвязки
       if (payment.status === 'completed') {
@@ -1183,6 +1223,36 @@ export const useAccountStore = defineStore('account', () => {
     } catch (error) {
       console.error('Failed to get payments by counteragent:', error)
       return []
+    }
+  }
+
+  /**
+   * Get total paid amount for an order
+   * Considers linkedAmount from completed payments only
+   * Used for calculating unpaid balance in receipts
+   */
+  async function getTotalPaidForOrder(orderId: string): Promise<number> {
+    try {
+      const payments = await getPaymentsByOrder(orderId)
+
+      const totalPaid = payments
+        .filter(p => p.status === 'completed')
+        .reduce((sum, p) => {
+          // Get linked amount for this specific order
+          const link = p.linkedOrders?.find(o => o.orderId === orderId && o.isActive)
+          return sum + (link?.linkedAmount || p.usedAmount || 0)
+        }, 0)
+
+      DebugUtils.info(MODULE_NAME, 'Calculated total paid for order', {
+        orderId,
+        totalPaid,
+        paymentsCount: payments.filter(p => p.status === 'completed').length
+      })
+
+      return totalPaid
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get total paid for order', { error })
+      return 0
     }
   }
 
@@ -1406,6 +1476,7 @@ export const useAccountStore = defineStore('account', () => {
     getAccountTransactions,
     getAllTransactions,
     getPaymentsByCounteragent,
+    getTotalPaidForOrder,
 
     // Helper methods
     clearError,

@@ -107,7 +107,10 @@ export function useOrderPayments() {
 
     const paidAmount = bills
       .filter(bill => bill.status === 'completed')
-      .reduce((sum, bill) => sum + bill.amount, 0)
+      .reduce((sum, bill) => {
+        const link = bill.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+        return sum + (link?.linkedAmount || bill.usedAmount || 0)
+      }, 0)
 
     const deliveredAmount = order.actualDeliveredAmount || 0
     const shortfallAmount = paidAmount - deliveredAmount
@@ -607,8 +610,19 @@ export function useOrderPayments() {
 
       const actualDeliveredAmount = order.actualDeliveredAmount || order.totalAmount
 
-      // ✅ СЛУЧАЙ 1: Нет платежей - создаём новый pending payment на всю сумму
+      // ✅ СЛУЧАЙ 1: Нет платежей
+      // НО: Если статус delivered - автоматизация (automatedPayments.ts) уже создаёт платёж
+      // Не создаём дубликат, пропускаем и ждём автоматизацию
       if (orderPayments.length === 0) {
+        if (order.status === 'delivered') {
+          console.log(
+            `OrderPayments: No payments found but status is delivered - skipping creation (automatedPayments will handle it)`,
+            { orderId: order.id, orderNumber: order.orderNumber }
+          )
+          // Автоматизация из supplierStore.updateOrder создаст платёж через AutomatedPayments.onOrderStatusChanged
+          return
+        }
+
         console.log(
           `OrderPayments: No payments found, creating new pending payment for order ${order.orderNumber}`
         )
@@ -803,7 +817,7 @@ export function useOrderPayments() {
         }
       }
 
-      await accountStore.createPendingPayment(newPayment)
+      await accountStore.createPayment(newPayment)
 
       console.log(`OrderPayments: Created pending payment for order ${order.orderNumber}`, {
         orderId: order.id,

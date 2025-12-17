@@ -243,7 +243,11 @@ export const useAuthStore = defineStore('auth', () => {
         userId: data.user.id
       })
 
-      // Profile will be loaded by onAuthStateChange callback
+      // ✅ FIX: Load profile immediately instead of waiting for onAuthStateChange
+      // This prevents race condition where router.push() happens before isAuthenticated = true
+      await loadUserProfile(data.user.id)
+      lastUserId = data.user.id
+
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed'
@@ -341,8 +345,11 @@ export const useAuthStore = defineStore('auth', () => {
       // Clear failed attempts on successful login
       localStorage.removeItem(attemptKey)
 
-      // Note: User data will be loaded via onAuthStateChange listener
-      // No need to manually set state here
+      // ✅ FIX: Load profile immediately instead of waiting for onAuthStateChange
+      // This prevents race condition where router.push() happens before isAuthenticated = true
+      await loadUserProfile(authData.user.id)
+      lastUserId = authData.user.id
+
       return true
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed'

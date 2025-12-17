@@ -688,6 +688,10 @@ export class AccountSupabaseService {
       if (updates.confirmedAt !== undefined) {
         supabaseUpdates.confirmed_at = updates.confirmedAt
       }
+      // ✅ FIX: Add linkedOrders field (critical for attach/detach bill operations)
+      if (updates.linkedOrders !== undefined) {
+        supabaseUpdates.linked_orders = updates.linkedOrders
+      }
 
       const { error } = await withTimeout(
         supabase.from('pending_payments').update(supabaseUpdates).eq('id', paymentId)

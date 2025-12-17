@@ -50,7 +50,6 @@
       <template #sidebar>
         <KitchenSidebar
           :current-screen="currentScreen"
-          :pending-request-count="pendingRequestCount"
           @screen-select="handleScreenSelect"
           @department-change="handleDepartmentChange"
         />
@@ -77,11 +76,10 @@
             :selected-department="selectedDepartment"
           />
 
-          <!-- Request Screen -->
-          <RequestScreen
-            v-else-if="currentScreen === 'request'"
+          <!-- Requests Screen (combines history + create) -->
+          <RequestsPage
+            v-else-if="currentScreen === 'requests'"
             :selected-department="selectedDepartment"
-            @back="handleScreenSelect('orders')"
           />
         </div>
       </template>
@@ -113,8 +111,7 @@ import KitchenSidebar from './components/KitchenSidebar.vue'
 import OrdersScreen from './orders/OrdersScreen.vue'
 import PreparationScreen from './preparation/PreparationScreen.vue'
 import KpiScreen from './kpi/KpiScreen.vue'
-import RequestScreen from './request/RequestScreen.vue'
-import { useKitchenRequest } from './request/composables/useKitchenRequest'
+import RequestsPage from './request/RequestsPage.vue'
 
 const MODULE_NAME = 'KitchenMainView'
 
@@ -125,10 +122,6 @@ const MODULE_NAME = 'KitchenMainView'
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
 const { userDepartment } = useKitchenDishes()
-
-// Initialize kitchen request composable for pending count
-const selectedDepartmentRef = computed(() => selectedDepartment.value)
-const kitchenRequest = useKitchenRequest(selectedDepartmentRef)
 
 // PWA: Wake Lock to keep screen on
 const wakeLock = useWakeLock()
@@ -143,8 +136,17 @@ const orderAlerts = useOrderAlertService()
 const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
-const currentScreen = ref<'orders' | 'preparation' | 'kpi' | 'request'>('orders')
-const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>('all')
+const currentScreen = ref<'orders' | 'preparation' | 'kpi' | 'requests'>('orders')
+
+// Initialize selectedDepartment based on user role
+const getInitialDepartment = (): 'all' | 'kitchen' | 'bar' => {
+  const roles = authStore.userRoles
+  if (roles.includes('admin')) return 'all' // Admin sees all departments
+  if (roles.includes('bar') && !roles.includes('kitchen')) return 'bar' // Bar-only user
+  return 'kitchen' // Kitchen user (default)
+}
+
+const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>(getInitialDepartment())
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -177,13 +179,6 @@ const showLoadingState = computed(() => {
  */
 const showMainInterface = computed(() => {
   return isInitialized.value && !showErrorState.value && !showLoadingState.value
-})
-
-/**
- * Pending request count for sidebar badge
- */
-const pendingRequestCount = computed(() => {
-  return kitchenRequest.pendingRequestCount.value
 })
 
 // =============================================
@@ -232,7 +227,7 @@ const retryInitialization = async (): Promise<void> => {
 /**
  * Handle screen selection from sidebar
  */
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'request'): void => {
+const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'requests'): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
 }

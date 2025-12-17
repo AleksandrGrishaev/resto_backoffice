@@ -69,6 +69,61 @@ const canComplete = computed(() => {
   return props.formData && props.formData.items.length > 0
 })
 
+// Check if order is fully paid
+const isFullyPaid = computed(() => {
+  return props.order?.billStatus === 'fully_paid'
+})
+
+// Calculate if additional payment is needed after receipt
+// This happens when actualTotal > already paid amount
+const needsAdditionalPayment = computed(() => {
+  if (!props.order || !props.formData) return false
+
+  // If not fully paid, payment may be needed
+  if (!isFullyPaid.value) return true
+
+  // If fully paid, check if actual total increased (discrepancy)
+  // actualTotal might be more than what was already paid
+  const actualTotal = props.formData.actualTotal
+  const originalTotal = props.order.totalAmount
+
+  // If actual is more than original, need additional payment for difference
+  return actualTotal > originalTotal
+})
+
+// Check if ADD PAYMENT button should be disabled
+const canAddPayment = computed(() => {
+  // Fully paid AND no additional payment needed → disable
+  if (isFullyPaid.value && !needsAdditionalPayment.value) return false
+
+  // Otherwise allow adding payment
+  return true
+})
+
+// Calculate unpaid amount based on billStatus
+const unpaidAmount = computed(() => {
+  if (!props.order || !props.formData) return 0
+
+  const actualTotal = props.formData.actualTotal
+  const billStatus = props.order.billStatus
+
+  // For fully paid orders with discrepancy, pay only the difference
+  if (billStatus === 'fully_paid') {
+    const originalTotal = props.order.totalAmount
+    const difference = actualTotal - originalTotal
+    return Math.max(0, difference) // Only positive differences
+  }
+
+  // For partially paid orders, pay the unpaid balance
+  if (billStatus === 'partially_paid') {
+    const paidAmount = props.order.paidAmount ?? 0
+    return Math.max(0, actualTotal - paidAmount)
+  }
+
+  // For not_billed/billed orders, pay the full actual total
+  return actualTotal
+})
+
 // =============================================
 // WATCH
 // =============================================
@@ -82,21 +137,43 @@ watch(
       // Auto-enable payment section for orders with pending payment
       showPayment.value = true
       // Use pending payment amount as default
-      paymentAmount.value = newOrder.pendingPaymentAmount ?? props.formData?.actualTotal ?? 0
+      paymentAmount.value = newOrder.pendingPaymentAmount ?? unpaidAmount.value
     } else {
       showPayment.value = false
-      paymentAmount.value = props.formData?.actualTotal ?? 0
+      paymentAmount.value = unpaidAmount.value
     }
   },
   { immediate: true }
 )
 
-// Update payment amount when actual total changes
+// Update payment amount when unpaid amount changes
 watch(
-  () => props.formData?.actualTotal,
-  newTotal => {
+  () => unpaidAmount.value,
+  newUnpaidAmount => {
     if (showPayment.value) {
-      paymentAmount.value = newTotal ?? 0
+      paymentAmount.value = newUnpaidAmount
+    }
+  }
+)
+
+// Auto-enable payment section when actualTotal increases and additional payment needed
+// This handles the case when receipt has discrepancy (actual > original)
+watch(
+  () => needsAdditionalPayment.value,
+  (needsPayment, wasNeedingPayment) => {
+    // If order was fully paid but now needs additional payment (due to receipt discrepancy)
+    if (needsPayment && !wasNeedingPayment && isFullyPaid.value) {
+      console.log('💰 Receipt discrepancy detected: order needs additional payment')
+      showPayment.value = true
+
+      // Use unpaidAmount for correct calculation
+      paymentAmount.value = unpaidAmount.value
+
+      console.log(`💰 Additional payment needed: ${paymentAmount.value}`, {
+        actualTotal: props.formData?.actualTotal,
+        originalTotal: props.order?.totalAmount,
+        unpaidAmount: unpaidAmount.value
+      })
     }
   }
 )
@@ -112,7 +189,7 @@ function handleClose() {
 function togglePayment() {
   showPayment.value = !showPayment.value
   if (showPayment.value) {
-    paymentAmount.value = props.formData?.actualTotal ?? 0
+    paymentAmount.value = unpaidAmount.value
   }
 }
 
@@ -157,7 +234,7 @@ function handleCompleteWithPayment() {
       </v-card-title>
 
       <!-- Order Info Row -->
-      <div class="pa-4 bg-grey-lighten-4 d-flex align-center">
+      <div class="pa-4 d-flex align-center">
         <div>
           <div class="text-subtitle-2 text-grey">Supplier</div>
           <div class="text-body-1 font-weight-medium">{{ order.supplierName }}</div>
@@ -178,7 +255,7 @@ function handleCompleteWithPayment() {
           <v-col cols="12" lg="8">
             <v-table density="compact">
               <thead>
-                <tr class="bg-grey-lighten-4">
+                <tr>
                   <th class="text-center" style="width: 40px"></th>
                   <th>Product</th>
                   <th style="width: 100px">Package</th>
@@ -228,7 +305,7 @@ function handleCompleteWithPayment() {
               </v-alert>
 
               <!-- Totals -->
-              <div class="totals-section pa-3 bg-grey-lighten-5 rounded mb-4">
+              <div class="totals-section pa-3 rounded mb-4">
                 <div class="d-flex justify-space-between mb-2">
                   <span class="text-body-2 text-grey">Expected Total:</span>
                   <span class="text-body-2">{{ formatIDR(formData.expectedTotal) }}</span>
@@ -253,10 +330,7 @@ function handleCompleteWithPayment() {
 
               <!-- Payment Input Section -->
               <v-expand-transition>
-                <div
-                  v-if="showPayment"
-                  class="payment-section pa-3 bg-success-lighten-5 rounded mb-4"
-                >
+                <div v-if="showPayment" class="payment-section pa-3 rounded mb-4">
                   <div class="d-flex align-center mb-2">
                     <v-icon start color="success" size="small">mdi-cash</v-icon>
                     <span class="text-subtitle-2">Payment Amount</span>
@@ -298,7 +372,7 @@ function handleCompleteWithPayment() {
 
       <!-- Actions -->
       <v-card-actions class="pa-4">
-        <v-btn variant="outlined" :disabled="submitting" @click="togglePayment">
+        <v-btn variant="outlined" :disabled="submitting || !canAddPayment" @click="togglePayment">
           <v-icon start>{{ showPayment ? 'mdi-cash-remove' : 'mdi-cash-plus' }}</v-icon>
           {{ showPayment ? 'Remove Payment' : 'Add Payment' }}
         </v-btn>
@@ -337,14 +411,12 @@ function handleCompleteWithPayment() {
 .receipt-dialog {
   .totals-section {
     border: 1px solid rgba(var(--v-border-color), 0.12);
+    background-color: rgba(var(--v-theme-surface), 0.4);
   }
 
   .payment-section {
-    border: 1px solid rgba(var(--v-theme-success), 0.2);
-  }
-
-  .bg-success-lighten-5 {
-    background-color: rgba(var(--v-theme-success), 0.05);
+    border: 1px solid rgba(var(--v-theme-success), 0.3);
+    background-color: rgba(var(--v-theme-success), 0.08);
   }
 
   .border-s {

@@ -186,17 +186,21 @@ export function useKitchenRequest(selectedDepartment?: Ref<'all' | 'kitchen' | '
   }
 
   // Create request using supplierStore
+  // For Kitchen Monitor, we send directly with 'submitted' status
   async function createRequest(
     requestedBy: string,
     priority: Priority,
-    notes?: string
+    notes?: string,
+    /** If true, creates request with 'submitted' status (for direct send from Kitchen Monitor) */
+    sendDirectly: boolean = false
   ): Promise<string> {
     state.isCreatingRequest = true
     try {
       DebugUtils.info(MODULE_NAME, 'Creating request', {
         department: effectiveDepartment.value,
         itemCount: state.selectedItems.length,
-        requestedBy
+        requestedBy,
+        sendDirectly
       })
 
       const createData: CreateRequestData = {
@@ -213,14 +217,16 @@ export function useKitchenRequest(selectedDepartment?: Ref<'all' | 'kitchen' | '
           notes: item.notes
         })),
         priority,
-        notes: notes || `Request from Kitchen Monitor (${effectiveDepartment.value})`
+        notes: notes || `Request from Kitchen Monitor (${effectiveDepartment.value})`,
+        initialStatus: sendDirectly ? 'submitted' : 'draft'
       }
 
       const newRequest = await supplierStore.createRequest(createData)
 
       DebugUtils.info(MODULE_NAME, 'Request created successfully', {
         requestId: newRequest.id,
-        requestNumber: newRequest.requestNumber
+        requestNumber: newRequest.requestNumber,
+        status: newRequest.status
       })
 
       clearSelectedItems()

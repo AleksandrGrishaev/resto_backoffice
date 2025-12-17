@@ -288,6 +288,8 @@ export interface CreateRequestData {
   items: Omit<RequestItem, 'id'>[]
   priority?: 'normal' | 'urgent'
   notes?: string
+  /** Initial status for the request. Defaults to 'draft'. Use 'submitted' for Kitchen Monitor direct send. */
+  initialStatus?: 'draft' | 'submitted'
 }
 
 export interface CreateOrderData {

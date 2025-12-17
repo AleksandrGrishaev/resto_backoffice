@@ -131,14 +131,25 @@ export function usePosReceipt() {
    * Uses baseCost (per unit) for calculations, not packagePrice
    */
   function recalculateItem(item: ReceiptFormItem): void {
-    // Get effective base cost (actual if set, otherwise ordered)
-    const effectiveBaseCost = item.actualBaseCost ?? item.orderedBaseCost
-
-    // Calculate actual total: receivedQuantity (base units) × baseCost
-    // Unless user has manually set actualLineTotal (for market rounding)
+    // Calculate actual total and recalculate price if lineTotal was manually set
     if (item.actualLineTotal !== undefined) {
+      // User manually set the line total (e.g., for market rounding)
       item.actualTotal = item.actualLineTotal
+
+      // Recalculate actualBaseCost from the manual line total
+      // This ensures the formula is correct: lineTotal = quantity × price
+      if (item.receivedQuantity > 0) {
+        item.actualBaseCost = item.actualLineTotal / item.receivedQuantity
+
+        // If item has package, also update actualPrice (price per package)
+        if (item.packageSize && item.receivedPackageQuantity && item.receivedPackageQuantity > 0) {
+          item.actualPrice = item.actualLineTotal / item.receivedPackageQuantity
+        }
+      }
     } else {
+      // No manual override - calculate from price
+      // Get effective base cost (actual if set, otherwise ordered)
+      const effectiveBaseCost = item.actualBaseCost ?? item.orderedBaseCost
       item.actualTotal = item.receivedQuantity * effectiveBaseCost
     }
 
@@ -242,49 +253,60 @@ export function usePosReceipt() {
         }))
       })
 
-      return orders.map(order => {
-        // Check for payment linked via linkedOrders OR sourceOrderId
-        // КРИТИЧНО: Проверяем status === 'pending' явно, чтобы избежать показа
-        // "Payment Ready" для уже оплаченных или отменённых платежей
-        const payment = allPendingPayments.find(
-          p =>
-            p.status === 'pending' && // ЯВНАЯ ПРОВЕРКА статуса
-            // Check linkedOrders array with active status
-            (p.linkedOrders?.some(lo => lo.orderId === order.id && lo.isActive) ||
-              // Check sourceOrderId (direct link)
-              p.sourceOrderId === order.id)
-        )
+      return Promise.all(
+        orders.map(async order => {
+          // Check for payment linked via linkedOrders OR sourceOrderId
+          // КРИТИЧНО: Проверяем status === 'pending' явно, чтобы избежать показа
+          // "Payment Ready" для уже оплаченных или отменённых платежей
+          const payment = allPendingPayments.find(
+            p =>
+              p.status === 'pending' && // ЯВНАЯ ПРОВЕРКА статуса
+              // Check linkedOrders array with active status
+              (p.linkedOrders?.some(lo => lo.orderId === order.id && lo.isActive) ||
+                // Check sourceOrderId (direct link)
+                p.sourceOrderId === order.id)
+          )
 
-        if (payment) {
-          DebugUtils.info(MODULE_NAME, 'Found pending payment for order', {
+          // Get total paid amount for this order
+          const paidAmount = await accountStore.getTotalPaidForOrder(order.id)
+
+          if (payment) {
+            DebugUtils.info(MODULE_NAME, 'Found pending payment for order', {
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              paymentId: payment.id,
+              paymentStatus: payment.status,
+              paymentAmount: payment.amount,
+              linkedOrders: payment.linkedOrders,
+              sourceOrderId: payment.sourceOrderId,
+              orderBillStatus: order.billStatus,
+              paidAmount
+            })
+
+            return {
+              ...order,
+              hasPendingPayment: true,
+              pendingPaymentId: payment.id,
+              pendingPaymentAmount: payment.amount,
+              paidAmount
+              // Сохраняем billStatus из заказа - он уже загружен из DB
+            }
+          }
+
+          // Нет pending payment - billStatus уже загружен из DB
+          DebugUtils.info(MODULE_NAME, 'No pending payment for order', {
             orderId: order.id,
             orderNumber: order.orderNumber,
-            paymentId: payment.id,
-            paymentStatus: payment.status,
-            paymentAmount: payment.amount,
-            linkedOrders: payment.linkedOrders,
-            sourceOrderId: payment.sourceOrderId,
-            orderBillStatus: order.billStatus
+            billStatus: order.billStatus,
+            paidAmount
           })
 
           return {
             ...order,
-            hasPendingPayment: true,
-            pendingPaymentId: payment.id,
-            pendingPaymentAmount: payment.amount
-            // Сохраняем billStatus из заказа - он уже загружен из DB
+            paidAmount
           }
-        }
-
-        // Нет pending payment - billStatus уже загружен из DB
-        DebugUtils.info(MODULE_NAME, 'No pending payment for order', {
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          billStatus: order.billStatus
         })
-
-        return order
-      })
+      )
     } catch (err) {
       DebugUtils.warn(MODULE_NAME, 'Failed to enrich orders with payment info', { error: err })
       return orders
