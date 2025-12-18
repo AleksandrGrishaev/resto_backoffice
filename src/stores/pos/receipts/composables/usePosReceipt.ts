@@ -5,6 +5,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useShiftsStore } from '@/stores/pos/shifts'
 import { useAccountStore } from '@/stores/account'
+import { useProductsStore } from '@/stores/productsStore'
 import { getPOSCashAccountId } from '@/stores/account/accountConfig'
 import {
   loadPendingOrdersForReceipt,
@@ -32,6 +33,7 @@ export function usePosReceipt() {
   const receiptsComposable = useReceipts()
   const shiftsStore = useShiftsStore()
   const accountStore = useAccountStore()
+  const productsStore = useProductsStore()
 
   // =============================================
   // STATE
@@ -440,6 +442,66 @@ export function usePosReceipt() {
    */
   function clearItemLineTotal(itemId: string): void {
     updateItemLineTotal(itemId, undefined)
+  }
+
+  /**
+   * Change item package (select different package type)
+   * Recalculates quantities and prices based on new package
+   */
+  function changeItemPackage(
+    itemId: string,
+    newPackageId: string,
+    newPackageQuantity: number
+  ): void {
+    if (!formData.value) return
+
+    const item = formData.value.items.find(i => i.orderItemId === itemId)
+    if (!item) return
+
+    // Get new package info from products store
+    const newPackage = productsStore.getPackageById(newPackageId)
+    if (!newPackage) {
+      DebugUtils.error(MODULE_NAME, 'Package not found', { packageId: newPackageId })
+      return
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Changing item package', {
+      itemId,
+      oldPackageId: item.packageId,
+      newPackageId,
+      newPackageQuantity,
+      newPackageName: newPackage.packageName
+    })
+
+    // Update package info
+    item.packageId = newPackageId
+    item.packageName = newPackage.packageName
+    item.packageUnit = newPackage.packageUnit
+    item.packageSize = newPackage.packageSize
+
+    // Update quantities
+    item.receivedPackageQuantity = newPackageQuantity
+    item.receivedQuantity = newPackageQuantity * newPackage.packageSize
+
+    // Update prices
+    const packagePrice =
+      newPackage.packagePrice || newPackage.baseCostPerUnit * newPackage.packageSize
+    item.actualPrice = packagePrice
+    item.actualBaseCost = newPackage.baseCostPerUnit
+
+    // Clear manual line total override (will recalculate from new package)
+    item.actualLineTotal = undefined
+
+    // Recalculate
+    recalculateItem(item)
+    recalculateFormTotals()
+
+    DebugUtils.info(MODULE_NAME, 'Package changed successfully', {
+      itemId,
+      newPackageName: newPackage.packageName,
+      receivedQuantity: item.receivedQuantity,
+      actualTotal: item.actualTotal
+    })
   }
 
   /**
@@ -893,6 +955,7 @@ export function usePosReceipt() {
     updateItemPackageQuantity,
     updateItemLineTotal,
     clearItemLineTotal,
+    changeItemPackage,
     setPaymentAmount,
     completeReceipt,
     completeReceiptWithPayment

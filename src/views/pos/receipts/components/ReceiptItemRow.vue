@@ -18,6 +18,7 @@ interface Emits {
   (e: 'update:price', itemId: string, price: number): void
   (e: 'update:packagePrice', itemId: string, packagePrice: number): void
   (e: 'update:lineTotal', itemId: string, lineTotal: number | undefined): void
+  (e: 'change-package', itemId: string): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -32,6 +33,10 @@ const emit = defineEmits<Emits>()
 
 const formattedPackagePrice = ref<string>('')
 const formattedLineTotal = ref<string>('')
+
+// Track if user is actively editing (focused on input)
+const isEditingPackagePrice = ref(false)
+const isEditingLineTotal = ref(false)
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -117,12 +122,33 @@ function handleQuantityChange(value: number | string) {
 // EVENT HANDLERS - PACKAGE PRICE
 // =============================================
 
+function handlePackagePriceFocus() {
+  isEditingPackagePrice.value = true
+  // Pre-fill with current value (without formatting)
+  const currentPrice = props.item.actualPrice ?? props.item.orderedPrice
+  if (currentPrice && currentPrice > 0) {
+    formattedPackagePrice.value = new Intl.NumberFormat('id-ID').format(currentPrice)
+  } else {
+    formattedPackagePrice.value = ''
+  }
+}
+
 function handlePackagePriceInput(value: string) {
   formattedPackagePrice.value = value
 }
 
 function handlePackagePriceBlur() {
-  const parsed = parseIDR(`Rp ${formattedPackagePrice.value}`)
+  isEditingPackagePrice.value = false
+  const trimmed = formattedPackagePrice.value.trim()
+
+  // If empty, reset to ordered price (clear manual override)
+  if (!trimmed || trimmed === '') {
+    emit('update:packagePrice', props.item.orderItemId, props.item.orderedPrice || 0)
+    formattedPackagePrice.value = ''
+    return
+  }
+
+  const parsed = parseIDR(`Rp ${trimmed}`)
   if (parsed > 0) {
     emit('update:packagePrice', props.item.orderItemId, parsed)
   }
@@ -134,16 +160,36 @@ function handlePackagePriceBlur() {
 // EVENT HANDLERS - LINE TOTAL (Market Rounding)
 // =============================================
 
+function handleLineTotalFocus() {
+  isEditingLineTotal.value = true
+  // Pre-fill with current value (without formatting)
+  if (props.item.actualTotal && props.item.actualTotal > 0) {
+    formattedLineTotal.value = new Intl.NumberFormat('id-ID').format(props.item.actualTotal)
+  } else {
+    formattedLineTotal.value = ''
+  }
+}
+
 function handleLineTotalInput(value: string) {
   formattedLineTotal.value = value
 }
 
 function handleLineTotalBlur() {
-  const parsed = parseIDR(`Rp ${formattedLineTotal.value}`)
+  isEditingLineTotal.value = false
+  const trimmed = formattedLineTotal.value.trim()
+
+  // If empty, clear manual override and return to calculated value
+  if (!trimmed || trimmed === '') {
+    emit('update:lineTotal', props.item.orderItemId, undefined)
+    formattedLineTotal.value = ''
+    return
+  }
+
+  const parsed = parseIDR(`Rp ${trimmed}`)
   if (parsed > 0) {
     emit('update:lineTotal', props.item.orderItemId, parsed)
   } else {
-    // Clear manual adjustment if invalid
+    // Clear manual adjustment if invalid/zero
     emit('update:lineTotal', props.item.orderItemId, undefined)
   }
   // Reset formatted value
@@ -165,13 +211,21 @@ function formatPriceForInput(price: number): string {
 
 // Get display value for package price input
 const displayPackagePrice = computed(() => {
-  if (formattedPackagePrice.value) return formattedPackagePrice.value
+  // If user is actively editing, show their input (including empty string)
+  if (isEditingPackagePrice.value) {
+    return formattedPackagePrice.value
+  }
+  // Otherwise show formatted current value
   return formatPriceForInput(effectivePackagePrice.value)
 })
 
 // Get display value for line total input
 const displayLineTotal = computed(() => {
-  if (formattedLineTotal.value) return formattedLineTotal.value
+  // If user is actively editing, show their input (including empty string)
+  if (isEditingLineTotal.value) {
+    return formattedLineTotal.value
+  }
+  // Otherwise show formatted current value
   return formatPriceForInput(props.item.actualTotal)
 })
 </script>
@@ -193,8 +247,16 @@ const displayLineTotal = computed(() => {
 
     <!-- Package Info (if applicable) -->
     <td v-if="hasPackage" class="package-col">
-      <v-chip color="primary" size="small" variant="tonal" class="mb-1">
+      <v-chip
+        color="primary"
+        size="small"
+        variant="tonal"
+        class="mb-1 cursor-pointer"
+        :disabled="disabled"
+        @click="!disabled && emit('change-package', item.orderItemId)"
+      >
         {{ item.packageName || 'Package' }}
+        <v-icon v-if="!disabled" end size="14">mdi-pencil</v-icon>
       </v-chip>
       <div class="text-caption text-medium-emphasis">
         {{ item.packageSize }} {{ item.unit }}/pkg
@@ -274,6 +336,7 @@ const displayLineTotal = computed(() => {
         :placeholder="formatPriceForInput(item.orderedPrice)"
         :class="{ 'price-changed': priceDiff }"
         class="price-input"
+        @focus="handlePackagePriceFocus"
         @update:model-value="handlePackagePriceInput"
         @blur="handlePackagePriceBlur"
       />
@@ -308,6 +371,7 @@ const displayLineTotal = computed(() => {
         :disabled="disabled"
         :class="{ 'line-total-adjusted': hasLineTotalAdjustment }"
         class="total-input"
+        @focus="handleLineTotalFocus"
         @update:model-value="handleLineTotalInput"
         @blur="handleLineTotalBlur"
       />
@@ -345,6 +409,15 @@ const displayLineTotal = computed(() => {
   td {
     padding: 12px 8px;
     vertical-align: top;
+  }
+}
+
+.cursor-pointer {
+  cursor: pointer;
+  transition: transform 0.2s;
+
+  &:hover {
+    transform: scale(1.02);
   }
 }
 

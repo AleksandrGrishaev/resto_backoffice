@@ -3,10 +3,15 @@
 // Sprint 6: POS Receipt Module - Receipt Dialog with Payment Info
 
 import { ref, computed, watch } from 'vue'
-import type { PendingOrderForReceipt, ReceiptFormData } from '@/stores/pos/receipts'
+import type {
+  PendingOrderForReceipt,
+  ReceiptFormData,
+  ReceiptFormItem
+} from '@/stores/pos/receipts'
 import { formatIDR } from '@/utils'
 import ReceiptItemRow from '../components/ReceiptItemRow.vue'
 import PaymentInfoWidget from '../components/PaymentInfoWidget.vue'
+import PackageChangeDialog from './PackageChangeDialog.vue'
 
 interface Props {
   modelValue: boolean
@@ -23,6 +28,7 @@ interface Emits {
   (e: 'update:price', itemId: string, price: number): void
   (e: 'update:packagePrice', itemId: string, packagePrice: number): void
   (e: 'update:lineTotal', itemId: string, lineTotal: number | undefined): void
+  (e: 'change-package', itemId: string, packageId: string, packageQuantity: number): void
   (e: 'complete'): void
   (e: 'complete-with-payment', amount: number): void
 }
@@ -39,6 +45,10 @@ const emit = defineEmits<Emits>()
 
 const showPayment = ref(false)
 const paymentAmount = ref(0)
+
+// Package change dialog state
+const showPackageChangeDialog = ref(false)
+const selectedItemForPackageChange = ref<ReceiptFormItem | null>(null)
 
 // =============================================
 // COMPUTED
@@ -213,6 +223,33 @@ function handleLineTotalUpdate(itemId: string, lineTotal: number | undefined) {
   emit('update:lineTotal', itemId, lineTotal)
 }
 
+function handleChangePackage(itemId: string) {
+  const item = props.formData?.items.find(i => i.orderItemId === itemId)
+  if (!item) return
+
+  selectedItemForPackageChange.value = item
+  showPackageChangeDialog.value = true
+}
+
+function handlePackageChanged(data: {
+  packageId: string
+  packageQuantity: number
+  resultingBaseQuantity: number
+  totalCost: number
+}) {
+  if (!selectedItemForPackageChange.value) return
+
+  emit(
+    'change-package',
+    selectedItemForPackageChange.value.orderItemId,
+    data.packageId,
+    data.packageQuantity
+  )
+
+  showPackageChangeDialog.value = false
+  selectedItemForPackageChange.value = null
+}
+
 function handleComplete() {
   emit('complete')
 }
@@ -275,6 +312,7 @@ function handleCompleteWithPayment() {
                   @update:price="handlePriceUpdate"
                   @update:package-price="handlePackagePriceUpdate"
                   @update:line-total="handleLineTotalUpdate"
+                  @change-package="handleChangePackage"
                 />
               </tbody>
             </v-table>
@@ -404,6 +442,17 @@ function handleCompleteWithPayment() {
         </v-btn>
       </v-card-actions>
     </v-card>
+
+    <!-- Package Change Dialog -->
+    <PackageChangeDialog
+      v-model="showPackageChangeDialog"
+      :product-id="selectedItemForPackageChange?.productId"
+      :product-name="selectedItemForPackageChange?.productName"
+      :current-package-id="selectedItemForPackageChange?.packageId"
+      :current-package-quantity="selectedItemForPackageChange?.receivedPackageQuantity"
+      :required-quantity="selectedItemForPackageChange?.receivedQuantity"
+      @package-changed="handlePackageChanged"
+    />
   </v-dialog>
 </template>
 

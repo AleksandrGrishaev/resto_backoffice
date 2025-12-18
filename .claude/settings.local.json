@@ -60,7 +60,8 @@
       "Bash(cp:*)",
       "mcp__playwright__browser_run_code",
       "mcp__playwright__browser_press_key",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(npx vue-tsc:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

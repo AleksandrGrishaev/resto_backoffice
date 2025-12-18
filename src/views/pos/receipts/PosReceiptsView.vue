@@ -27,6 +27,7 @@ const {
   updateItemPackagePrice,
   updateItemPackageQuantity,
   updateItemLineTotal,
+  changeItemPackage,
   completeReceipt,
   completeReceiptWithPayment
 } = usePosReceipt()
@@ -296,6 +297,7 @@ function goBack() {
       @update:price="updateItemPrice"
       @update:package-price="updateItemPackagePrice"
       @update:line-total="updateItemLineTotal"
+      @change-package="changeItemPackage"
       @complete="handleCompleteReceipt"
       @complete-with-payment="handleCompleteWithPayment"
     />
