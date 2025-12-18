@@ -66,8 +66,18 @@ const hasSufficientBalance = computed(() => {
   return selectedAccount.value.balance >= actualAmount.value
 })
 
+// Check if selected account is cash account (informational only)
+const needsCashierConfirmation = computed(() => {
+  // Show info message when selecting cash account
+  // This is informational - user CAN still confirm (creates pending payment)
+  return selectedAccount.value?.type === 'cash'
+})
+
 const canConfirm = computed(() => {
-  return selectedAccountId.value !== '' && actualAmount.value > 0
+  // Allow confirmation for ALL account types:
+  // - Cash accounts: creates pending payment (awaits cashier confirmation)
+  // - Other accounts: processes payment immediately
+  return selectedAccountId.value !== '' && actualAmount.value > 0 && hasSufficientBalance.value
 })
 
 // =============================================
@@ -149,6 +159,16 @@ function getAccountIcon(type: string): string {
             <div class="text-h6 font-weight-bold text-primary">
               {{ formatIDR(payment.amount) }}
             </div>
+          </div>
+        </v-alert>
+
+        <!-- Cashier Confirmation Info -->
+        <v-alert v-if="needsCashierConfirmation" type="info" variant="tonal" class="mb-4">
+          <v-icon start>mdi-information</v-icon>
+          <div class="text-subtitle-2 mb-1">Cashier Confirmation Required</div>
+          <div class="text-body-2">
+            This payment will be sent to the cashier for confirmation. The cashier will approve or
+            reject it through POS > Shift Management > Pending Payments.
           </div>
         </v-alert>
 

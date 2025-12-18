@@ -59,7 +59,8 @@
       "Bash(pkill:*)",
       "Bash(cp:*)",
       "mcp__playwright__browser_run_code",
-      "mcp__playwright__browser_press_key"
+      "mcp__playwright__browser_press_key",
+      "Bash(git log:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

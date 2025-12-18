@@ -38,7 +38,7 @@ const {
 // STATE
 // =============================================
 
-const activeTab = ref('unlinked')
+const activeTab = ref('pending')
 const selectedExpense = ref<ShiftExpenseOperation | null>(null)
 const selectedPayment = ref<PendingPayment | null>(null)
 const showLinkDialog = ref(false)
@@ -158,7 +158,24 @@ async function handleConfirmPaymentSubmit(
   actualAmount: number
 ) {
   try {
-    // Process payment using existing accountStore method
+    // ✅ Step 1: Check if target account is cash account
+    const targetAccount = accountStore.accounts.find(a => a.id === accountId)
+    const isCashAccount = targetAccount?.type === 'cash'
+
+    // ✅ Step 2: Always assign payment to account first
+    // This sets requiresCashierConfirmation=true for cash accounts
+    await accountStore.assignPaymentToAccount(payment.id, accountId)
+
+    // ✅ Step 3: For cash accounts, STOP here (payment awaits cashier confirmation)
+    if (isCashAccount) {
+      console.log('✅ Payment assigned to cash account, awaiting cashier confirmation')
+      showConfirmPaymentDialog.value = false
+      selectedPayment.value = null
+      // Payment is created with status='pending', cashier will process it from POS
+      return
+    }
+
+    // ✅ Step 4: For non-cash accounts (bank, card), process payment immediately
     await accountStore.processPayment({
       paymentId: payment.id,
       accountId,
@@ -168,8 +185,10 @@ async function handleConfirmPaymentSubmit(
 
     showConfirmPaymentDialog.value = false
     selectedPayment.value = null
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to confirm payment:', err)
+    // Error is already handled by accountStore (sets error state)
+    // Dialog will remain open, showing the error from accountStore
   }
 }
 

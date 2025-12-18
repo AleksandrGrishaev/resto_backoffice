@@ -82,6 +82,34 @@ function getStatusColor(status: string): string {
       return 'grey'
   }
 }
+
+function getConfirmationStatusColor(confirmationStatus?: string): string {
+  switch (confirmationStatus) {
+    case 'pending':
+      return 'info'
+    case 'confirmed':
+      return 'success'
+    case 'rejected':
+      return 'error'
+    default:
+      return 'grey'
+  }
+}
+
+function getConfirmationStatusText(payment: PendingPayment): string {
+  if (!payment.requiresCashierConfirmation) return ''
+
+  switch (payment.confirmationStatus) {
+    case 'pending':
+      return 'Awaiting Cashier'
+    case 'confirmed':
+      return 'Confirmed by Cashier'
+    case 'rejected':
+      return 'Rejected by Cashier'
+    default:
+      return 'Awaiting Cashier'
+  }
+}
 </script>
 
 <template>
@@ -143,6 +171,17 @@ function getStatusColor(status: string): string {
                 {{ payment.status || 'pending' }}
               </v-chip>
 
+              <!-- Cashier Confirmation Status -->
+              <v-chip
+                v-if="payment.requiresCashierConfirmation"
+                size="x-small"
+                :color="getConfirmationStatusColor(payment.confirmationStatus)"
+                variant="flat"
+              >
+                <v-icon start size="x-small">mdi-cash-register</v-icon>
+                {{ getConfirmationStatusText(payment) }}
+              </v-chip>
+
               <!-- Order Number if exists -->
               <v-chip v-if="payment.orderId" size="x-small" color="info" variant="outlined">
                 <v-icon start size="x-small">mdi-file-document</v-icon>
@@ -164,10 +203,34 @@ function getStatusColor(status: string): string {
 
           <template #append>
             <div class="d-flex gap-2">
-              <v-btn color="success" variant="flat" size="small" @click="handleConfirm(payment)">
+              <!-- Show Confirm button only if NOT awaiting cashier confirmation -->
+              <v-btn
+                v-if="
+                  !payment.requiresCashierConfirmation || payment.confirmationStatus === 'confirmed'
+                "
+                color="success"
+                variant="flat"
+                size="small"
+                @click="handleConfirm(payment)"
+              >
                 <v-icon start>mdi-check</v-icon>
                 Confirm
               </v-btn>
+
+              <!-- Show "View" button for payments awaiting cashier -->
+              <v-btn
+                v-else-if="
+                  payment.requiresCashierConfirmation && payment.confirmationStatus === 'pending'
+                "
+                color="info"
+                variant="outlined"
+                size="small"
+                @click="handleView(payment)"
+              >
+                <v-icon start>mdi-eye</v-icon>
+                View
+              </v-btn>
+
               <v-btn
                 color="error"
                 variant="text"

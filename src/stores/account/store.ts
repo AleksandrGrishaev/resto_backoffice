@@ -732,6 +732,23 @@ export const useAccountStore = defineStore('account', () => {
         throw new Error(`Payment not found: ${data.paymentId}`)
       }
 
+      // ✅ SECURITY: Check if payment requires cashier confirmation
+      // This prevents bypassing the cashier confirmation workflow from backoffice
+      // Check BOTH: 1) payment.requiresCashierConfirmation flag (from assignPaymentToAccount)
+      //             2) accountId type (from processPayment call - for direct payments)
+      const targetAccount = state.value.accounts.find(a => a.id === data.accountId)
+      const isCashAccount = targetAccount?.type === 'cash'
+      const needsCashierConfirmation =
+        payment.requiresCashierConfirmation === true ||
+        (isCashAccount && payment.confirmationStatus !== 'confirmed')
+
+      if (needsCashierConfirmation && payment.confirmationStatus !== 'confirmed') {
+        throw new Error(
+          'This payment requires cashier confirmation. ' +
+            'Please use confirmPayment() or have cashier confirm from POS Shift Management.'
+        )
+      }
+
       const transactionId = await paymentService.processPayment(data)
 
       // ✅ FIX: If actualAmount differs from payment.amount, update payment amount
