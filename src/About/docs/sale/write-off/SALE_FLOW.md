@@ -601,6 +601,171 @@ allocatePreparationFIFO(preparationId, quantity, department) {
 | `src/core/decomposition/adapters/CostAdapter.ts`       | For FIFO cost calculation |
 | `src/core/decomposition/utils/batchAllocationUtils.ts` | Shared FIFO allocation    |
 
+### Portion-Type Preparations Handling
+
+**CRITICAL:** All portion-type preparations (`portionType='portion'`) follow the principle **"Storage in Grams, Display in Portions"**.
+
+#### Storage Rules
+
+All batch data is stored in **base units (grams/ml)**:
+
+```typescript
+// Example: Bacon slices 30g preparation
+{
+  portionType: 'portion',
+  portionSize: 30,        // 1 portion = 30 grams
+  outputUnit: 'gram',     // Base unit
+  lastKnownCost: 115      // IDR per gram
+}
+
+// Production batch (stored in DB)
+{
+  unit: 'gram',           // Always base unit
+  initialQuantity: 120,   // 4 portions (120 / 30)
+  currentQuantity: 90,    // 3 portions (90 / 30)
+  costPerUnit: 115,       // IDR per gram
+  totalValue: 10350       // 90 × 115
+}
+```
+
+#### Decomposition Flow
+
+**Portion Conversion Utilities** (`src/core/decomposition/utils/portionUtils.ts`):
+
+- `convertPortionToGrams()` - Converts portions to base units (grams)
+- `getPortionMultiplier()` - Gets variant multiplier (e.g., "no ice" = 1.3x)
+- `isPortionUnit()` - Checks if unit is portion-based
+- `normalizeUnit()` - Normalizes unit strings (e.g., 'g' → 'gram')
+
+```
+Menu Item: "1 portion of Bacon"
+         ↓
+DecompositionEngine (portionUtils.convertPortionToGrams):
+  - Input: { quantity: 1, unit: 'portion' }, prep.portionSize: 30
+  - Convert: 1 × 30g = 30 grams
+  - Output: { quantity: 30, unit: 'gram', wasConverted: true }
+         ↓
+Step 3 (Sales COGS) - CostAdapter:
+  - Required: 30 grams
+  - FIFO Allocation: allocate from batches (stored in grams)
+  - Cost: 30g × 115 IDR/gram = 3,450 IDR
+  - NO CONVERSION NEEDED (already per-gram)
+         ↓
+Step 4 (Write-Off) - WriteOffAdapter:
+  - Required: 30 grams
+  - FIFO Allocation: deduct from batches (stored in grams)
+  - Update: currentQuantity -= 30
+  - NO CONVERSION NEEDED
+         ↓
+UI Display:
+  - Show: "1 portion (30g)"
+  - Cost: "Rp 115/gram (Rp 3,450/portion)"
+```
+
+#### Critical Rules
+
+1. **Storage Layer (Database):**
+
+   - ✅ Always store `quantity` in **grams** (base unit)
+   - ✅ Always store `cost_per_unit` in **IDR/gram** (per base unit)
+   - ✅ Use `unit='gram'` for all batches (production & negative)
+
+2. **Decomposition Layer:**
+
+   - ✅ Convert portions → grams **once** in DecompositionEngine (via portionUtils)
+   - ✅ Output quantity always in grams
+   - ✅ No `portionSize` in DecomposedPreparationNode (not needed)
+
+3. **Cost Calculation Layer:**
+
+   - ✅ All costs are per-gram (base unit)
+   - ✅ NO conversion in batchAllocationUtils
+   - ✅ NO conversion in CostAdapter
+   - ✅ Multiply: `quantity(grams) × cost(per-gram) = total`
+
+4. **UI Layer:**
+   - ✅ Convert grams → portions **for display only**
+   - ✅ Show both: "Rp 115/gram (Rp 3,450/portion)"
+   - ✅ Use `formatBatchQuantity()` to display portions
+
+#### Example: Sale Transaction with Portion-Type Preparation
+
+**Menu Item:** "Breakfast Plate" (contains 2 portions of Bacon slices 30g)
+
+```
+Step 1: POS Order
+  - User orders "Breakfast Plate"
+  - Order item: { menuItemId, variantId, quantity: 1 }
+
+Step 2: Payment
+  - Amount: Rp 50,000
+  - Status: paid
+
+Step 3: Sales Recording (CostAdapter)
+  - DecompositionEngine traverses menu item
+  - Finds component: { type: 'preparation', id: 'bacon', quantity: 2, unit: 'portion' }
+  - portionUtils converts: 2 portions × 30g = 60 grams
+  - Output node: { type: 'preparation', quantity: 60, unit: 'gram' }
+  - CostAdapter allocates:
+    * Batch PROD-001: 40g × 115 IDR/g = 4,600 IDR
+    * Batch PROD-002: 20g × 115 IDR/g = 2,300 IDR
+    * Total cost: 6,900 IDR (for 60g = 2 portions)
+  - Sales transaction created with actualCost: 6,900 IDR
+
+Step 4: Write-Off (WriteOffAdapter)
+  - Same decomposition: 60 grams of Bacon
+  - FIFO allocation deducts from batches:
+    * Batch PROD-001: currentQuantity 120 → 80 (40g used)
+    * Batch PROD-002: currentQuantity 50 → 30 (20g used)
+  - Write-off record: { itemId: 'bacon', quantity: 60, unit: 'gram' }
+
+UI Display (Write-Off History):
+  - Item: "Bacon slices 30g"
+  - Quantity: "2/4 portions" (60/120 grams)
+  - Cost: "Rp 6,900" (60g × 115 IDR/g)
+  - Unit cost: "Rp 115/gram (Rp 3,450/portion)"
+```
+
+#### Common Mistakes to Avoid
+
+❌ **WRONG: Storing quantity in portions**
+
+```typescript
+// BAD
+{
+  unit: 'portion',
+  currentQuantity: 3,    // WRONG!
+  costPerUnit: 3450      // per-portion - WRONG!
+}
+```
+
+✅ **CORRECT: Storing quantity in grams**
+
+```typescript
+// GOOD
+{
+  unit: 'gram',
+  currentQuantity: 90,   // 3 portions = 90 grams
+  costPerUnit: 115       // per-gram
+}
+```
+
+❌ **WRONG: Converting cost in allocation**
+
+```typescript
+// BAD - leads to 30x lower cost
+if (portionSize) {
+  cost = cost / portionSize // WRONG!
+}
+```
+
+✅ **CORRECT: Use cost as-is**
+
+```typescript
+// GOOD - cost is already per-gram
+totalCost = quantity * costPerUnit
+```
+
 ### Разница между Step 3 и Step 4
 
 | Аспект               | Step 3 (Sales COGS)                | Step 4 (Write-Off)              |
@@ -699,22 +864,197 @@ try {
 
 ## Логи и Debugging
 
-### Ключевые логи:
+### Complete Log Flow Example
+
+Below is a **real log sequence** from a successful sale with portion-type preparation (Bacon slices 30g):
+
+#### Step 3: Sales Recording (CostAdapter)
 
 ```typescript
-// Step 3: Sales Recording with DecompositionEngine
-[SalesStore] Recording sale transaction
-[DecompositionEngine] Traversing menu item: Cappuccino
-[DecompositionEngine] Replacement registered: { key, targetName, replacement }
-[CostAdapter] Calculating actual cost from FIFO batches
-[BatchAllocationUtils] Preparation stock allocated: { required, allocated, batchesUsed }
+// Engine initialization
+[INFO] [DecompositionEngine]: Starting decomposition {
+  menuItemId: 'ed14a91d-a30d-4840-8c26-6c4602a964a3',
+  variantId: '255acc73-739b-424e-adae-6b6a431d9570',
+  quantity: 1,
+  modifiersCount: 1
+}
 
-// Step 4: Write-Off
-[RecipeWriteOffStore] Processing write-off for item
-[DecompositionEngine] Traversing menu item
-[WriteOffAdapter] Transforming to write-off items: { totalItems }
-[StorageService] Creating write-off operation
-[NegativeBatchService] Created negative batch: { batchNumber, quantity, cost }
+// Processing preparation
+[DEBUG] [DecompositionEngine]: 📦 Processing preparation {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  preparationName: 'Bacon slices 30g',
+  compQuantity: 1,
+  multiplier: 1
+}
+
+// Portion conversion (KEY STEP!)
+[DEBUG] [DecompositionEngine]: Converted portions to grams {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  preparation: 'Bacon slices 30g',
+  originalQuantity: 1,
+  convertedQuantity: 30,  // 1 portion × 30g
+  portionSize: 30
+}
+
+// Creating node
+[DEBUG] [DecompositionEngine]: ✅ Creating preparation node {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  preparationName: 'Bacon slices 30g',
+  finalQuantity: 30,  // In grams!
+  unit: 'gram'
+}
+
+// Cost calculation
+[INFO] [CostAdapter]: Calculating actual cost from FIFO batches {
+  nodesCount: 3,
+  menuItem: 'Test recipe'
+}
+
+[DEBUG] [CostAdapter]: 🔵 Allocating preparation from batches {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  preparationName: 'Bacon slices 30g',
+  quantity: 30,  // Requesting 30 grams
+  unit: 'gram',
+  department: 'kitchen'
+}
+
+// FIFO allocation
+[INFO] [BatchAllocationUtils]: Allocating from preparation batches {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  requiredQuantity: 30,
+  department: 'kitchen'
+}
+
+[DEBUG] [BatchAllocationUtils]: Available preparation batches {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  batchCount: 1,
+  positiveBatches: 1,
+  negativeBatches: 0,
+  totalAvailable: 120  // 4 portions = 120 grams
+}
+
+[INFO] [BatchAllocationUtils]: Preparation stock allocated successfully {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  required: 30,
+  allocated: 30,
+  batchesUsed: 1
+}
+
+// Cost breakdown (NO CONVERSION HERE!)
+[INFO] [BatchAllocationUtils]: Preparation cost breakdown {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  preparationName: 'Bacon slices 30g',
+  totalCost: 3450,  // 30g × 115 IDR/g
+  avgCostPerUnit: 115,  // Already per-gram
+  allocations: [{
+    batchId: 'ad2375c4',
+    qty: 30,
+    cost: 115,
+    total: 3450
+  }]
+}
+
+[INFO] [CostAdapter]: Actual cost calculated {
+  totalCost: 13820.9,
+  preparationItems: 2,
+  productItems: 1
+}
+```
+
+#### Step 4: Write-Off (WriteOffAdapter)
+
+```typescript
+// Write-off starts
+[RecipeWriteOffStore] 🔄 Processing write-off for item: {
+  menuItemName: 'Test recipe',
+  quantity: 1,
+  salesTransactionId: 'st-1766128497893-qspegolx2'
+}
+
+// Same decomposition (reuses engine)
+[INFO] [DecompositionEngine]: Decomposition complete {
+  totalNodes: 3,
+  products: 1,
+  preparations: 2
+}
+
+[INFO] [WriteOffAdapter]: Transforming traversal result for write-off {
+  nodesCount: 3,
+  menuItem: 'Test recipe'
+}
+
+[INFO] [WriteOffAdapter]: Write-off transformation complete {
+  totalItems: 3,
+  products: 1,
+  preparations: 2,
+  totalBaseCost: 5840
+}
+
+// FIFO deduction
+[INFO] [StorageService]: Creating write-off operation {
+  documentNumber: 'WO-498301',
+  department: 'kitchen',
+  reason: 'sales_consumption',
+  itemsCount: 3
+}
+
+[INFO] [StorageService]: Preparation FIFO allocation complete {
+  preparationId: '701d0e2d-38fa-42bc-acdb-99889fc638a9',
+  department: 'kitchen',
+  needed: 30,  // 30 grams
+  batchesUsed: 1,
+  hasShortage: false
+}
+
+// Batch updated
+[INFO] [StorageService]: ✅ Write-off created successfully {
+  documentNumber: 'WO-498301',
+  reason: 'sales_consumption',
+  affectsKPI: false,
+  batchesUsed: 3,
+  totalValue: 13820.9
+}
+
+// Result: Batch currentQuantity: 120 → 90 (deducted 30 grams)
+```
+
+### Key Log Patterns to Watch
+
+**✅ GOOD - Portion Conversion:**
+
+```
+[DEBUG] Converted portions to grams {
+  originalQuantity: 1,
+  convertedQuantity: 30,
+  portionSize: 30
+}
+```
+
+**✅ GOOD - Cost Calculation (no conversion):**
+
+```
+[INFO] Preparation cost breakdown {
+  totalCost: 3450,     // 30g × 115 IDR/g
+  avgCostPerUnit: 115  // Already per-gram
+}
+```
+
+**❌ BAD - Would indicate bug:**
+
+```
+[ERROR] CostAdapter: Failed to allocate preparation {
+  error: 'portionSize is not defined'  // Bug! Should never happen
+}
+```
+
+**⚠️ WARNING - Fallback used:**
+
+```
+[INFO] Using lastKnownCost fallback for preparation {
+  preparationId: '...',
+  deficitQuantity: 30,
+  fallbackCost: 115  // No batches available
+}
 ```
 
 ### Debugging checklist:

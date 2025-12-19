@@ -94,15 +94,17 @@ export interface DecomposedProductNode extends DecomposedNodeBase {
 
 /**
  * Decomposed preparation node
+ *
+ * NOTE: All quantities are in base units (gram/ml).
+ * Portion conversion happens in DecompositionEngine.
+ * No cost conversion needed - all batch costs are per-gram.
  */
 export interface DecomposedPreparationNode extends DecomposedNodeBase {
   type: 'preparation'
   preparationId: string
   preparationName: string
-  /** Output unit from preparation definition */
+  /** Output unit from preparation definition (always gram/ml - base unit) */
   outputUnit: string
-  /** Portion size (if portionType='portion') - needed for cost conversion */
-  portionSize?: number
 }
 
 /**

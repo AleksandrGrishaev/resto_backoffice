@@ -104,16 +104,14 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
             preparationName: prepNode.preparationName,
             quantity: prepNode.quantity,
             unit: prepNode.unit,
-            portionSize: prepNode.portionSize,
             department: this.config.department || 'kitchen'
           })
 
-          // 🔧 FIX: Pass portionSize for cost conversion when quantity was converted to grams
+          // ✅ FIXED: No portionSize needed - all costs are per-gram (base unit)
           const prepCost = await allocatePreparation(
             prepNode.preparationId,
             prepNode.quantity,
-            this.config.department || 'kitchen',
-            prepNode.portionSize // If provided, will convert cost from per-portion to per-gram
+            this.config.department || 'kitchen'
           )
 
           // 🐛 DEBUG: Log after allocation

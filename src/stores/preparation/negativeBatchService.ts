@@ -48,7 +48,7 @@ class NegativeBatchService {
    *
    * @param preparationId - UUID of the preparation
    * @param requestedQty - Quantity needed (used for logging only)
-   * @returns Cost per unit for the negative batch (never returns 0)
+   * @returns Cost per unit for the negative batch (same format as production batches)
    */
   async calculateNegativeBatchCost(preparationId: string, requestedQty: number): Promise<number> {
     // Try to get cost from most recent active batch

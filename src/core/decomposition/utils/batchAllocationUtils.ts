@@ -182,23 +182,23 @@ function allocateFromBatches<
  * FIFO allocation from preparation batches
  * Allocates from oldest batches first
  *
+ * NOTE: All batch costs are stored per-gram (base unit).
+ * No conversion is needed - DecompositionEngine handles portion→gram conversion.
+ *
  * @param preparationId - ID of the preparation
- * @param requiredQuantity - Quantity required (may be in grams or portions)
+ * @param requiredQuantity - Quantity required in grams (base unit)
  * @param department - Department (kitchen or bar)
- * @param portionSize - If provided, converts cost from per-portion to per-gram
  * @returns PreparationCostItem with batch allocations and costs
  */
 export async function allocateFromPreparationBatches(
   preparationId: string,
   requiredQuantity: number,
-  department: 'kitchen' | 'bar',
-  portionSize?: number
+  department: 'kitchen' | 'bar'
 ): Promise<PreparationCostItem> {
   DebugUtils.info(MODULE_NAME, 'Allocating from preparation batches', {
     preparationId,
     requiredQuantity,
-    department,
-    portionSize
+    department
   })
 
   // Get stores
@@ -287,42 +287,10 @@ export async function allocateFromPreparationBatches(
     })
   }
 
-  // 🔧 FIX: If portionSize provided, cost needs conversion from per-portion to per-gram
-  let adjustedAllocations = allocations
-  let finalTotalCost = allocations.reduce((sum, a) => sum + a.totalCost, 0)
-
-  if (portionSize && portionSize > 0) {
-    // Batch costs are stored per-portion, but requiredQuantity is in grams
-    // We need to convert: costPerPortion → costPerGram
-    // Example: 3450 IDR/portion, portionSize=30g → 3450/30 = 115 IDR/gram
-
-    DebugUtils.debug(MODULE_NAME, '🔄 Converting cost from per-portion to per-gram', {
-      preparationId,
-      preparationName: preparation?.name,
-      portionSize,
-      originalTotalCost: finalTotalCost,
-      requiredQuantity
-    })
-
-    adjustedAllocations = allocations.map(alloc => ({
-      ...alloc,
-      costPerUnit: alloc.costPerUnit / portionSize, // Convert: IDR/portion → IDR/gram
-      totalCost: alloc.totalCost / portionSize // Adjust total cost
-    }))
-
-    finalTotalCost = adjustedAllocations.reduce((sum, a) => sum + a.totalCost, 0)
-
-    DebugUtils.info(MODULE_NAME, '✅ Cost converted to per-gram basis', {
-      preparationId,
-      originalCostPerPortion: allocations[0]?.costPerUnit || 0,
-      convertedCostPerGram: adjustedAllocations[0]?.costPerUnit || 0,
-      originalTotalCost: allocations.reduce((sum, a) => sum + a.totalCost, 0),
-      adjustedTotalCost: finalTotalCost
-    })
-  }
-
-  // Calculate weighted average cost (using adjusted allocations if converted)
-  const totalQty = adjustedAllocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
+  // ✅ FIXED: No conversion needed - all batch costs are stored per-gram
+  // Unit conversion happens ONLY in DecompositionEngine
+  const finalTotalCost = allocations.reduce((sum, a) => sum + a.totalCost, 0)
+  const totalQty = allocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
   const avgCost = totalQty > 0 ? finalTotalCost / totalQty : 0
 
   DebugUtils.info(MODULE_NAME, 'Preparation cost breakdown', {
@@ -330,8 +298,7 @@ export async function allocateFromPreparationBatches(
     preparationName: preparation?.name,
     totalCost: finalTotalCost,
     avgCostPerUnit: avgCost,
-    wasConverted: !!portionSize,
-    allocations: adjustedAllocations.map(a => ({
+    allocations: allocations.map(a => ({
       batchId: a.batchId.substring(0, 8),
       qty: a.allocatedQuantity,
       cost: a.costPerUnit,
@@ -343,8 +310,8 @@ export async function allocateFromPreparationBatches(
     preparationId,
     preparationName: preparation?.name || 'Unknown Preparation',
     quantity: requiredQuantity,
-    unit: portionSize ? 'gram' : preparation?.outputUnit || 'gram',
-    batchAllocations: adjustedAllocations,
+    unit: preparation?.outputUnit || 'gram', // Always base unit (gram/ml)
+    batchAllocations: allocations, // Fixed: use allocations, not adjustedAllocations
     averageCostPerUnit: avgCost,
     totalCost: finalTotalCost
   }

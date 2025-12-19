@@ -1003,11 +1003,13 @@ export class StorageService {
               })
             } else {
               // Create new negative batch
+              // ✅ FIXED: Always use base unit (gram/ml) - consistent with production batches
+              // All costs are per-gram, no conversion needed
               const negativeBatch = await negativeBatchService.createNegativeBatch({
                 preparationId: item.itemId,
                 department: data.department,
                 quantity: -shortage,
-                unit: item.unit || preparation.unit,
+                unit: item.unit || preparation.outputUnit,
                 cost: cost,
                 reason: item.notes || data.notes || 'Automatic negative batch creation',
                 sourceOperationType: 'manual_writeoff',

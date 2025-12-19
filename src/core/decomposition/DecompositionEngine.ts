@@ -358,9 +358,8 @@ export class DecompositionEngine {
         preparationName: preparation.name,
         quantity: totalQuantity,
         unit: outputUnit,
-        outputUnit: preparation.outputUnit,
-        // 🔧 FIX: Include portionSize for cost conversion
-        portionSize: preparation.portionType === 'portion' ? preparation.portionSize : undefined
+        outputUnit: preparation.outputUnit
+        // ✅ FIXED: No portionSize needed - all costs are per-gram (base unit)
       }
 
       if (options.includePath) {
