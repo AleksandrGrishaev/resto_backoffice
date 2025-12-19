@@ -123,7 +123,24 @@
       <div v-else class="recipes-content">
         <!-- Recipes Tab -->
         <div v-if="activeTab === 'recipes'" class="recipes-section">
-          <v-expansion-panels v-model="expandedPanels" multiple>
+          <!-- Flat list when searching -->
+          <div v-if="isSearchActive" class="items-grid">
+            <unified-recipe-item
+              v-for="recipe in filteredRecipes"
+              :key="recipe.id"
+              :item="recipe"
+              type="recipe"
+              :cost-calculation="getCostCalculation(recipe.id)"
+              @view="viewItem"
+              @edit="editItem"
+              @duplicate="duplicateItem"
+              @calculate-cost="calculateCost"
+              @toggle-status="toggleStatus"
+            />
+          </div>
+
+          <!-- Categorized view when not searching -->
+          <v-expansion-panels v-else v-model="expandedPanels" multiple>
             <v-expansion-panel
               v-for="category in recipeCategories"
               :key="category.value"
@@ -187,7 +204,24 @@
 
         <!-- Preparations Tab -->
         <div v-if="activeTab === 'preparations'" class="preparations-section">
-          <v-expansion-panels v-model="expandedPanels" multiple>
+          <!-- Flat list when searching -->
+          <div v-if="isSearchActive" class="items-grid">
+            <unified-recipe-item
+              v-for="preparation in filteredPreparations"
+              :key="preparation.id"
+              :item="preparation"
+              type="preparation"
+              :cost-calculation="getCostCalculation(preparation.id)"
+              @view="viewItem"
+              @edit="editItem"
+              @duplicate="duplicateItem"
+              @calculate-cost="calculateCost"
+              @toggle-status="toggleStatus"
+            />
+          </div>
+
+          <!-- Categorized view when not searching -->
+          <v-expansion-panels v-else v-model="expandedPanels" multiple>
             <v-expansion-panel
               v-for="type in preparationTypes"
               :key="type.value"
@@ -521,6 +555,11 @@ const hasActiveFilters = computed(() => {
     currentFilters.value.status !== 'active' ||
     currentFilters.value.department !== 'all'
   )
+})
+
+// ✅ НОВОЕ: Check if search is active (determines flat list vs categorized view)
+const isSearchActive = computed(() => {
+  return currentFilters.value.search.trim() !== ''
 })
 
 // =============================================
