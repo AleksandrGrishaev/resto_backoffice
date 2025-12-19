@@ -12,7 +12,9 @@ import type {
   PreparationUsageInRecipe,
   GetProductCallback,
   GetPreparationCallback,
-  GetPreparationCostCallback
+  GetPreparationCostCallback,
+  GetRecipeCallback, // ⭐ PHASE 1: Recipe Nesting
+  GetRecipeCostCallback // ⭐ PHASE 1: Recipe Nesting
 } from '../types'
 
 const MODULE_NAME = 'useRecipes'
@@ -123,7 +125,9 @@ export function useRecipes() {
   function setIntegrationCallbacks(
     getProduct: GetProductCallback,
     _getPreparation: GetPreparationCallback, // Not used in recipes, but needed for consistency
-    getPreparationCost: GetPreparationCostCallback
+    getPreparationCost: GetPreparationCostCallback,
+    _getRecipe?: GetRecipeCallback, // ⭐ PHASE 1: Not used here, but needed for consistency
+    _getRecipeCost?: GetRecipeCostCallback // ⭐ PHASE 1: Not used here, but needed for consistency
   ): void {
     getProductCallback = getProduct
     getPreparationCostCallback = getPreparationCost

@@ -190,16 +190,22 @@
           />
         </v-col>
         <v-col cols="12" md="4">
-          <v-text-field
+          <v-select
             :model-value="formData.portionUnit"
+            :items="portionUnits"
+            item-title="label"
+            item-value="value"
             label="Portion Unit (Required)"
-            placeholder="portions, servings"
             :rules="[rules.required]"
             required
             variant="outlined"
             density="comfortable"
             @update:model-value="updateField('portionUnit', $event)"
-          />
+          >
+            <template #prepend-inner>
+              <v-icon>mdi-scale</v-icon>
+            </template>
+          </v-select>
         </v-col>
       </template>
 
@@ -460,6 +466,15 @@ const unitItems = computed(() => {
 })
 
 const difficultyLevels = DIFFICULTY_LEVELS
+
+// ⭐ PHASE 1: Portion units for recipes
+const portionUnits = [
+  { label: 'Portion', value: 'portion' },
+  { label: 'Piece', value: 'piece' },
+  { label: 'Serving', value: 'serving' },
+  { label: 'Gram', value: 'gram' },
+  { label: 'Milliliter', value: 'ml' }
+]
 
 // ⭐ PHASE 2: Calculated total weight for portion-type preparations
 const calculatedTotalWeight = computed(() => {

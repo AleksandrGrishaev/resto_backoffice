@@ -1,4 +1,4 @@
-import type { BaseEntity } from '@/types/base'
+import type { BaseEntity } from '@/types/common'
 import type { DecomposedItem } from '../types'
 import type { MenuComposition } from '@/stores/menu/types'
 

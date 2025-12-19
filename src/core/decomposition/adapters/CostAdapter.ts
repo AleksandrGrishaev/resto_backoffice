@@ -97,11 +97,35 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
       try {
         if (node.type === 'preparation') {
           const prepNode = node as DecomposedPreparationNode
+
+          // 🐛 DEBUG: Log before allocation
+          DebugUtils.debug(MODULE_NAME, '🔵 Allocating preparation from batches', {
+            preparationId: prepNode.preparationId,
+            preparationName: prepNode.preparationName,
+            quantity: prepNode.quantity,
+            unit: prepNode.unit,
+            portionSize: prepNode.portionSize,
+            department: this.config.department || 'kitchen'
+          })
+
+          // 🔧 FIX: Pass portionSize for cost conversion when quantity was converted to grams
           const prepCost = await allocatePreparation(
             prepNode.preparationId,
             prepNode.quantity,
-            this.config.department || 'kitchen'
+            this.config.department || 'kitchen',
+            prepNode.portionSize // If provided, will convert cost from per-portion to per-gram
           )
+
+          // 🐛 DEBUG: Log after allocation
+          DebugUtils.debug(MODULE_NAME, '✅ Preparation cost allocated', {
+            preparationId: prepCost.preparationId,
+            preparationName: prepCost.preparationName,
+            requestedQuantity: prepNode.quantity,
+            allocatedQuantity: prepCost.quantity,
+            unit: prepCost.unit,
+            totalCost: prepCost.totalCost
+          })
+
           preparationCosts.push(prepCost)
         } else if (node.type === 'product') {
           const prodNode = node as DecomposedProductNode

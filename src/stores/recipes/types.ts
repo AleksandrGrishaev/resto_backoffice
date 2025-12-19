@@ -48,6 +48,24 @@ export interface PreparationForRecipe {
   isActive: boolean
 }
 
+/**
+ * ⭐ NEW: Рецепт для использования в других рецептах (Phase 1 - Recipe Nesting)
+ */
+export interface RecipeForRecipe {
+  id: string
+  name: string
+  code: string
+  category: string
+  department: Department
+
+  // Информация о порции для расчета стоимости
+  portionSize: number
+  portionUnit: string
+  cost?: number // Себестоимость порции в IDR
+
+  isActive: boolean
+}
+
 // =============================================
 // PORTION TYPE (Phase 2)
 // =============================================
@@ -143,11 +161,12 @@ export interface Recipe extends BaseEntity {
 
 /**
  * ✅ ОБНОВЛЕНО: Компонент рецепта с поддержкой базовых единиц
+ * ⭐ PHASE 1: Поддержка вложенных рецептов (nested recipes)
  */
 export interface RecipeComponent {
   id: string
-  componentId: string // ID продукта или полуфабриката
-  componentType: 'product' | 'preparation'
+  componentId: string // ID продукта, полуфабриката или рецепта
+  componentType: 'product' | 'preparation' | 'recipe' // ⭐ NEW: добавлен тип 'recipe'
   quantity: number
   unit: MeasurementUnit // Единица в рецепте (будет конвертирована)
   useYieldPercentage?: boolean // ✅ NEW: Учитывать yield percentage при расчете стоимости (только для products)
@@ -225,7 +244,9 @@ export interface CostCalculationResult {
 
 export type GetProductCallback = (id: string) => Promise<ProductForRecipe | null>
 export type GetPreparationCallback = (id: string) => Promise<Preparation | null> // ⭐ NEW: For nested preparations
+export type GetRecipeCallback = (id: string) => Promise<Recipe | null> // ⭐ NEW: For nested recipes (Phase 1)
 export type GetPreparationCostCallback = (id: string) => Promise<PreparationPlanCost | null>
+export type GetRecipeCostCallback = (id: string) => Promise<RecipePlanCost | null> // ⭐ NEW: For nested recipe costs (Phase 1)
 export type NotifyUsageChangeCallback = (itemId: string, usageData: any) => Promise<void>
 
 // =============================================

@@ -38,11 +38,15 @@
             :components="formData.components"
             :type="type"
             :preparation-id="type === 'preparation' ? formData.id : undefined"
+            :recipe-id="type === 'recipe' ? formData.id : undefined"
             @component-quantity-changed="onComponentQuantityChange"
             @add-component="addComponent"
             @remove-component="removeComponent"
             @update-component="updateComponent"
           />
+
+          <!-- ⭐ PHASE 1: Used In Widget (только для существующих items) -->
+          <used-in-widget v-if="isEditing && formData.id" :type="type" :item-id="formData.id" />
         </v-form>
       </v-card-text>
 
@@ -77,6 +81,7 @@ import type {
 import RecipeBasicInfoWidget from './widgets/RecipeBasicInfoWidget.vue'
 import RecipeCostPreviewWidget from './widgets/RecipeCostPreviewWidget.vue'
 import RecipeComponentsEditorWidget from './widgets/RecipeComponentsEditorWidget.vue'
+import UsedInWidget from './widgets/UsedInWidget.vue' // ⭐ PHASE 1: Recipe Nesting
 
 interface Props {
   modelValue: boolean

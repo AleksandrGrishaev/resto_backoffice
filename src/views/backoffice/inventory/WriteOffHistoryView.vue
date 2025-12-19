@@ -448,6 +448,17 @@ const displayItems = computed(() => {
   // Map preparation costs
   if (actualCost.preparationCosts) {
     for (const prep of actualCost.preparationCosts) {
+      // 🐛 DEBUG: Log preparation cost data
+      console.log('🔍 Preparation cost from actual_cost:', {
+        preparationId: prep.preparationId,
+        preparationName: prep.preparationName,
+        quantity: prep.quantity,
+        unit: prep.unit,
+        soldQuantity: selectedWriteOff.value?.soldQuantity,
+        calculated_quantityPerPortion: prep.quantity / (selectedWriteOff.value?.soldQuantity || 1),
+        calculated_totalQuantity: prep.quantity
+      })
+
       items.push({
         itemName: prep.preparationName,
         quantityPerPortion: prep.quantity / (selectedWriteOff.value?.soldQuantity || 1),

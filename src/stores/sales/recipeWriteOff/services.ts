@@ -349,12 +349,57 @@ export class RecipeWriteOffService {
 
       const writeOffs = result.data
 
+      // ✅ FIXED: Load actual costs from sales_transactions for accurate summary
+      const actualCostMap = new Map<string, number>()
+
+      // Get all sales transaction IDs
+      const transactionIds = writeOffs
+        .filter(w => w.salesTransactionId)
+        .map(w => w.salesTransactionId!)
+
+      if (transactionIds.length > 0) {
+        try {
+          const { data, error } = await supabase
+            .from('sales_transactions')
+            .select('id, actual_cost')
+            .in('id', transactionIds)
+
+          if (!error && data) {
+            // Build map: writeOffId -> actualTotalCost
+            for (const writeOff of writeOffs) {
+              if (!writeOff.salesTransactionId) continue
+
+              const transaction = data.find(t => t.id === writeOff.salesTransactionId)
+              if (transaction?.actual_cost?.totalCost) {
+                actualCostMap.set(writeOff.id, transaction.actual_cost.totalCost)
+              }
+            }
+
+            console.log(
+              `✅ [RecipeWriteOffService] Loaded actual costs for ${actualCostMap.size} write-offs in summary`
+            )
+          }
+        } catch (err) {
+          console.warn(
+            '⚠️ [RecipeWriteOffService] Failed to load actual costs for summary, using estimated costs:',
+            err
+          )
+        }
+      }
+
+      // Helper function to get cost (actual or estimated)
+      const getCost = (writeOff: RecipeWriteOff): number => {
+        // Use actual cost if available
+        if (actualCostMap.has(writeOff.id)) {
+          return actualCostMap.get(writeOff.id)!
+        }
+        // Fallback to estimated cost from writeOffItems
+        return writeOff.writeOffItems.reduce((s, i) => s + i.totalCost, 0)
+      }
+
       // Calculate totals
       const totalWriteOffs = writeOffs.length
-      const totalCost = writeOffs.reduce(
-        (sum, w) => sum + w.writeOffItems.reduce((s, i) => s + i.totalCost, 0),
-        0
-      )
+      const totalCost = writeOffs.reduce((sum, w) => sum + getCost(w), 0)
       const totalItems = writeOffs.reduce((sum, w) => sum + w.writeOffItems.length, 0)
 
       // By department
@@ -364,17 +409,11 @@ export class RecipeWriteOffService {
       const byDepartment = {
         kitchen: {
           count: kitchen.length,
-          cost: kitchen.reduce(
-            (sum, w) => sum + w.writeOffItems.reduce((s, i) => s + i.totalCost, 0),
-            0
-          )
+          cost: kitchen.reduce((sum, w) => sum + getCost(w), 0)
         },
         bar: {
           count: bar.length,
-          cost: bar.reduce(
-            (sum, w) => sum + w.writeOffItems.reduce((s, i) => s + i.totalCost, 0),
-            0
-          )
+          cost: bar.reduce((sum, w) => sum + getCost(w), 0)
         }
       }
 
@@ -388,10 +427,7 @@ export class RecipeWriteOffService {
         },
         auto_sales_writeoff: {
           count: autoSales.length,
-          cost: autoSales.reduce(
-            (sum, w) => sum + w.writeOffItems.reduce((s, i) => s + i.totalCost, 0),
-            0
-          )
+          cost: autoSales.reduce((sum, w) => sum + getCost(w), 0)
         }
       }
 

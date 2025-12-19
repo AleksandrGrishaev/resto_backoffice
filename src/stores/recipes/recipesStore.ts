@@ -199,12 +199,16 @@ export const useRecipesStore = defineStore('recipes', () => {
       costCalculationComposable.setIntegrationCallbacks(
         callbacks.getProduct,
         callbacks.getPreparation,
-        callbacks.getPreparationCost
+        callbacks.getPreparationCost,
+        callbacks.getRecipe, // ⭐ PHASE 1: Recipe Nesting
+        callbacks.getRecipeCost // ⭐ PHASE 1: Recipe Nesting
       )
       recipesComposable.setIntegrationCallbacks(
         callbacks.getProduct,
         callbacks.getPreparation,
-        callbacks.getPreparationCost
+        callbacks.getPreparationCost,
+        callbacks.getRecipe, // ⭐ PHASE 1: Recipe Nesting
+        callbacks.getRecipeCost // ⭐ PHASE 1: Recipe Nesting
       )
 
       // 5. Check if automatic cost recalculation is needed (daily)
@@ -264,7 +268,29 @@ export const useRecipesStore = defineStore('recipes', () => {
       return costCalculationComposable.getPreparationCost(preparationId)
     }
 
-    return { getProduct, getPreparation, getPreparationCost }
+    // ⭐ PHASE 1: Recipe Nesting - callbacks for nested recipes
+    const getRecipe = async (recipeId: string) => {
+      return recipesComposable.getRecipeById(recipeId)
+    }
+
+    const getRecipeCost = async (recipeId: string) => {
+      const recipe = await recipesComposable.getRecipeById(recipeId)
+      if (!recipe) return null
+
+      // Return cached cost if available
+      if (recipe.cost && recipe.cost > 0) {
+        return {
+          totalCost: recipe.cost,
+          costPerPortion: recipe.cost / (recipe.portionSize || 1)
+        }
+      }
+
+      // Calculate cost if not cached
+      const costResult = await costCalculationComposable.calculateRecipeCost(recipe, 'planned')
+      return costResult
+    }
+
+    return { getProduct, getPreparation, getPreparationCost, getRecipe, getRecipeCost }
   }
 
   // =============================================

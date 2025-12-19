@@ -312,6 +312,19 @@ export class DecompositionEngine {
     let totalQuantity = comp.quantity * quantity
     let outputUnit = preparation.outputUnit
 
+    // 🐛 DEBUG: Log input values before conversion
+    DebugUtils.debug(MODULE_NAME, '📦 Processing preparation', {
+      preparationId: comp.id,
+      preparationName: preparation.name,
+      compQuantity: comp.quantity,
+      multiplier: quantity,
+      totalBeforeConversion: totalQuantity,
+      compUnit: comp.unit,
+      prepOutputUnit: preparation.outputUnit,
+      prepPortionSize: preparation.portionSize,
+      prepPortionType: preparation.portionType
+    })
+
     if (options.convertPortions) {
       const conversionResult = convertPortionToGrams(comp, preparation, quantity)
       if (conversionResult.wasConverted) {
@@ -319,6 +332,7 @@ export class DecompositionEngine {
         outputUnit = conversionResult.unit
 
         DebugUtils.debug(MODULE_NAME, 'Converted portions to grams', {
+          preparationId: comp.id, // 🐛 Added ID for tracking
           preparation: preparation.name,
           originalQuantity: comp.quantity * quantity,
           convertedQuantity: totalQuantity,
@@ -329,13 +343,24 @@ export class DecompositionEngine {
 
     // Strategy: keep preparation as final element (for write-off from prep batches)
     if (options.preparationStrategy === 'keep') {
+      // 🐛 DEBUG: Log final node creation
+      DebugUtils.debug(MODULE_NAME, '✅ Creating preparation node', {
+        preparationId: comp.id,
+        preparationName: preparation.name,
+        finalQuantity: totalQuantity,
+        unit: outputUnit,
+        portionSize: preparation.portionSize
+      })
+
       const node: DecomposedPreparationNode = {
         type: 'preparation',
         preparationId: comp.id,
         preparationName: preparation.name,
         quantity: totalQuantity,
         unit: outputUnit,
-        outputUnit: preparation.outputUnit
+        outputUnit: preparation.outputUnit,
+        // 🔧 FIX: Include portionSize for cost conversion
+        portionSize: preparation.portionType === 'portion' ? preparation.portionSize : undefined
       }
 
       if (options.includePath) {

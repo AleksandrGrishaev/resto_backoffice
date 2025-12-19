@@ -101,6 +101,8 @@ export interface DecomposedPreparationNode extends DecomposedNodeBase {
   preparationName: string
   /** Output unit from preparation definition */
   outputUnit: string
+  /** Portion size (if portionType='portion') - needed for cost conversion */
+  portionSize?: number
 }
 
 /**
@@ -179,11 +181,12 @@ export interface RecipeForDecomposition {
 
 /**
  * Recipe component
+ * ⭐ PHASE 1: Added support for nested recipes (componentType: 'recipe')
  */
 export interface RecipeComponent {
   id: string
   componentId: string
-  componentType: 'product' | 'preparation'
+  componentType: 'product' | 'preparation' | 'recipe' // ⭐ NEW: Added 'recipe' type
   name?: string
   quantity: number
   unit: string

@@ -66,6 +66,13 @@
             :item="item"
           />
 
+          <v-divider />
+
+          <!-- ⭐ PHASE 1: Used In Widget - показываем где используется рецепт/полуфабрикат -->
+          <div class="pa-4">
+            <used-in-widget v-if="item.id" :type="type" :item-id="item.id" />
+          </div>
+
           <!-- ✅ УЛУЧШЕНО: Debug информация в dev режиме -->
           <div v-if="showDebugInfo" class="debug-info pa-4">
             <v-divider class="mb-4" />
@@ -146,6 +153,7 @@ import ItemInfoWidget from './widgets/ItemInfoWidget.vue'
 import ComponentsListWidget from './widgets/ComponentsListWidget.vue'
 import InstructionsWidget from './widgets/InstructionsWidget.vue'
 import CostBreakdownWidget from './widgets/CostBreakdownWidget.vue'
+import UsedInWidget from './widgets/UsedInWidget.vue' // ⭐ PHASE 1: Recipe Nesting
 
 interface Props {
   modelValue: boolean

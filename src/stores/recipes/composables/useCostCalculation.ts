@@ -14,7 +14,9 @@ import type {
   ProductForRecipe,
   GetProductCallback,
   GetPreparationCallback,
-  GetPreparationCostCallback
+  GetPreparationCostCallback,
+  GetRecipeCallback,
+  GetRecipeCostCallback
 } from '../types'
 
 const MODULE_NAME = 'useCostCalculation'
@@ -34,6 +36,8 @@ const error = ref<string | null>(null)
 let getProductCallback: GetProductCallback | null = null
 let getPreparationCallback: GetPreparationCallback | null = null
 let getPreparationCostCallback: GetPreparationCostCallback | null = null
+let getRecipeCallback: GetRecipeCallback | null = null // ⭐ PHASE 1: For nested recipes
+let getRecipeCostCallback: GetRecipeCostCallback | null = null // ⭐ PHASE 1: For nested recipe costs
 
 // =============================================
 // MAIN COMPOSABLE
@@ -42,16 +46,24 @@ let getPreparationCostCallback: GetPreparationCostCallback | null = null
 export function useCostCalculation() {
   /**
    * Устанавливает callbacks для интеграции
+   * ⭐ PHASE 1: Added getRecipe and getRecipeCost callbacks for nested recipes
    */
   function setIntegrationCallbacks(
     getProduct: GetProductCallback,
     getPreparation: GetPreparationCallback,
-    getPreparationCost: GetPreparationCostCallback
+    getPreparationCost: GetPreparationCostCallback,
+    getRecipe?: GetRecipeCallback, // ⭐ NEW: Optional for nested recipes
+    getRecipeCost?: GetRecipeCostCallback // ⭐ NEW: Optional for nested recipe costs
   ): void {
     getProductCallback = getProduct
     getPreparationCallback = getPreparation
     getPreparationCostCallback = getPreparationCost
-    DebugUtils.debug(MODULE_NAME, 'Integration callbacks configured')
+    getRecipeCallback = getRecipe || null // ⭐ PHASE 1
+    getRecipeCostCallback = getRecipeCost || null // ⭐ PHASE 1
+    DebugUtils.debug(MODULE_NAME, 'Integration callbacks configured', {
+      hasRecipeCallback: !!getRecipe,
+      hasRecipeCostCallback: !!getRecipeCost
+    })
   }
 
   /**
@@ -438,6 +450,46 @@ export function useCostCalculation() {
               totalPlanCost: prodCost.totalCost,
               percentage: 0
             })
+          } else if (component.componentType === 'recipe') {
+            // ⭐ PHASE 1: NEW LOGIC - Recipe components (nested recipes) in actual mode
+            // For actual cost, we need to recursively calculate the nested recipe's cost
+            // using the same actual mode
+            if (!getRecipeCallback) {
+              DebugUtils.warn(MODULE_NAME, 'Recipe callback not set for nested recipes')
+              continue
+            }
+
+            const nestedRecipe = await getRecipeCallback(component.componentId)
+            if (!nestedRecipe) {
+              DebugUtils.warn(MODULE_NAME, `Nested recipe not found: ${component.componentId}`)
+              continue
+            }
+
+            // Recursively calculate actual cost for nested recipe
+            const nestedCostResult = await calculateRecipeCost(nestedRecipe, 'actual')
+            if (!nestedCostResult.success || !nestedCostResult.cost) {
+              DebugUtils.warn(
+                MODULE_NAME,
+                `Failed to calculate actual cost for nested recipe: ${nestedRecipe.name}`
+              )
+              continue
+            }
+
+            const nestedCost = nestedCostResult.cost as RecipePlanCost
+            const recipeTotalCost = nestedCost.costPerPortion * component.quantity
+
+            totalCost += recipeTotalCost
+
+            componentCosts.push({
+              componentId: component.componentId,
+              componentType: 'recipe',
+              componentName: nestedRecipe.name,
+              quantity: component.quantity,
+              unit: 'portion' as any, // Nested recipes are measured in portions
+              planUnitCost: nestedCost.costPerPortion,
+              totalPlanCost: recipeTotalCost,
+              percentage: 0
+            })
           }
         }
 
@@ -580,6 +632,50 @@ export function useCostCalculation() {
 
           componentCost = prepUnitCost * component.quantity
           unitCost = prepUnitCost
+        } else if (component.componentType === 'recipe') {
+          // ⭐ PHASE 1: NEW LOGIC - Recipe components (nested recipes)
+          if (!getRecipeCallback) {
+            DebugUtils.warn(MODULE_NAME, 'Recipe callback not set for nested recipes')
+            missingItems.push(`Recipe (callback missing): ${component.componentId}`)
+            continue
+          }
+
+          // Get recipe by ID
+          const nestedRecipe = await getRecipeCallback(component.componentId)
+
+          if (!nestedRecipe) {
+            missingItems.push(`Recipe: ${component.componentId}`)
+            continue
+          }
+
+          componentName = nestedRecipe.name || `Recipe (${component.componentId})`
+
+          // ✅ FIX: Try multiple sources for recipe cost
+          let recipeUnitCost = 0
+
+          // 1. Try cached cost calculation first
+          const recipeCost = getRecipeCostCallback
+            ? await getRecipeCostCallback(component.componentId)
+            : null
+          if (recipeCost && recipeCost.costPerPortion > 0) {
+            recipeUnitCost = recipeCost.costPerPortion
+          } else if (nestedRecipe.cost && nestedRecipe.cost > 0) {
+            // 2. Fallback: try recipe.cost (stored cost)
+            recipeUnitCost = nestedRecipe.cost
+          } else {
+            // Recipe has no cost data - warn but continue with 0 cost
+            DebugUtils.warn(
+              MODULE_NAME,
+              `Nested recipe "${nestedRecipe.name}" (${nestedRecipe.code}) has no cost data - using 0`,
+              { recipeId: component.componentId }
+            )
+          }
+
+          componentCost = recipeUnitCost * component.quantity
+          unitCost = recipeUnitCost
+
+          // For nested recipes, quantity represents portions
+          prepUnit = 'portion' // Set display unit to 'portion' for recipes
         }
 
         totalCost += componentCost

@@ -183,19 +183,22 @@ function allocateFromBatches<
  * Allocates from oldest batches first
  *
  * @param preparationId - ID of the preparation
- * @param requiredQuantity - Quantity required in grams
+ * @param requiredQuantity - Quantity required (may be in grams or portions)
  * @param department - Department (kitchen or bar)
+ * @param portionSize - If provided, converts cost from per-portion to per-gram
  * @returns PreparationCostItem with batch allocations and costs
  */
 export async function allocateFromPreparationBatches(
   preparationId: string,
   requiredQuantity: number,
-  department: 'kitchen' | 'bar'
+  department: 'kitchen' | 'bar',
+  portionSize?: number
 ): Promise<PreparationCostItem> {
   DebugUtils.info(MODULE_NAME, 'Allocating from preparation batches', {
     preparationId,
     requiredQuantity,
-    department
+    department,
+    portionSize
   })
 
   // Get stores
@@ -284,17 +287,51 @@ export async function allocateFromPreparationBatches(
     })
   }
 
-  // Calculate weighted average cost
-  const totalCost = allocations.reduce((sum, a) => sum + a.totalCost, 0)
-  const totalQty = allocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
-  const avgCost = totalQty > 0 ? totalCost / totalQty : 0
+  // 🔧 FIX: If portionSize provided, cost needs conversion from per-portion to per-gram
+  let adjustedAllocations = allocations
+  let finalTotalCost = allocations.reduce((sum, a) => sum + a.totalCost, 0)
+
+  if (portionSize && portionSize > 0) {
+    // Batch costs are stored per-portion, but requiredQuantity is in grams
+    // We need to convert: costPerPortion → costPerGram
+    // Example: 3450 IDR/portion, portionSize=30g → 3450/30 = 115 IDR/gram
+
+    DebugUtils.debug(MODULE_NAME, '🔄 Converting cost from per-portion to per-gram', {
+      preparationId,
+      preparationName: preparation?.name,
+      portionSize,
+      originalTotalCost: finalTotalCost,
+      requiredQuantity
+    })
+
+    adjustedAllocations = allocations.map(alloc => ({
+      ...alloc,
+      costPerUnit: alloc.costPerUnit / portionSize, // Convert: IDR/portion → IDR/gram
+      totalCost: alloc.totalCost / portionSize // Adjust total cost
+    }))
+
+    finalTotalCost = adjustedAllocations.reduce((sum, a) => sum + a.totalCost, 0)
+
+    DebugUtils.info(MODULE_NAME, '✅ Cost converted to per-gram basis', {
+      preparationId,
+      originalCostPerPortion: allocations[0]?.costPerUnit || 0,
+      convertedCostPerGram: adjustedAllocations[0]?.costPerUnit || 0,
+      originalTotalCost: allocations.reduce((sum, a) => sum + a.totalCost, 0),
+      adjustedTotalCost: finalTotalCost
+    })
+  }
+
+  // Calculate weighted average cost (using adjusted allocations if converted)
+  const totalQty = adjustedAllocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
+  const avgCost = totalQty > 0 ? finalTotalCost / totalQty : 0
 
   DebugUtils.info(MODULE_NAME, 'Preparation cost breakdown', {
     preparationId,
     preparationName: preparation?.name,
-    totalCost,
+    totalCost: finalTotalCost,
     avgCostPerUnit: avgCost,
-    allocations: allocations.map(a => ({
+    wasConverted: !!portionSize,
+    allocations: adjustedAllocations.map(a => ({
       batchId: a.batchId.substring(0, 8),
       qty: a.allocatedQuantity,
       cost: a.costPerUnit,
@@ -306,10 +343,10 @@ export async function allocateFromPreparationBatches(
     preparationId,
     preparationName: preparation?.name || 'Unknown Preparation',
     quantity: requiredQuantity,
-    unit: preparation?.outputUnit || 'gram',
-    batchAllocations: allocations,
+    unit: portionSize ? 'gram' : preparation?.outputUnit || 'gram',
+    batchAllocations: adjustedAllocations,
     averageCostPerUnit: avgCost,
-    totalCost
+    totalCost: finalTotalCost
   }
 }
 

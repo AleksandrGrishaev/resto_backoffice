@@ -38,7 +38,7 @@
       </div>
     </div>
 
-    <!-- ⭐ PHASE 1: Cycle Detection Warning -->
+    <!-- ⭐ PHASE 1: Cycle Detection Warning (Preparations) -->
     <v-alert
       v-if="cycleDetectionResult?.hasCycle"
       type="error"
@@ -61,6 +61,40 @@
       </div>
       <div class="text-caption mt-2 text-medium-emphasis">
         Please remove the preparation ingredient that creates the cycle to save changes.
+      </div>
+    </v-alert>
+
+    <!-- ⭐ PHASE 1: Recipe Depth Warning (Recipes only) -->
+    <v-alert
+      v-if="type === 'recipe' && currentRecipeDepth >= 4"
+      :type="currentRecipeDepth >= MAX_RECIPE_DEPTH ? 'error' : 'warning'"
+      variant="tonal"
+      class="mb-4"
+      density="compact"
+      border="start"
+    >
+      <template #title>
+        <div class="d-flex align-center">
+          <v-icon icon="mdi-layers" class="mr-2" />
+          {{
+            currentRecipeDepth >= MAX_RECIPE_DEPTH
+              ? 'Maximum Nesting Depth Reached!'
+              : 'Approaching Maximum Depth'
+          }}
+        </div>
+      </template>
+      <div class="text-body-2 mt-2">
+        Current nesting depth:
+        <strong>{{ currentRecipeDepth }}/{{ MAX_RECIPE_DEPTH }}</strong>
+      </div>
+      <div
+        v-if="currentRecipeDepth >= MAX_RECIPE_DEPTH"
+        class="text-caption mt-2 text-medium-emphasis"
+      >
+        You cannot add more nested recipes to this recipe. Maximum depth limit reached.
+      </div>
+      <div v-else class="text-caption mt-2 text-medium-emphasis">
+        Be careful when adding more nested recipes. You're approaching the maximum allowed depth.
       </div>
     </v-alert>
 
@@ -91,15 +125,12 @@
           >
             <div class="d-flex align-center flex-grow-1">
               <v-avatar
-                :color="component.componentType === 'product' ? 'primary' : 'secondary'"
+                :color="getComponentTypeColor(component.componentType)"
                 variant="tonal"
                 size="32"
                 class="mr-3"
               >
-                <v-icon
-                  :icon="component.componentType === 'product' ? 'mdi-food-apple' : 'mdi-chef-hat'"
-                  size="16"
-                />
+                <v-icon :icon="getComponentTypeIcon(component.componentType)" size="16" />
               </v-avatar>
               <div class="flex-grow-1">
                 <div class="font-weight-medium text-body-2">
@@ -147,6 +178,16 @@
                         <v-icon start size="14">mdi-chef-hat</v-icon>
                         Preparation
                       </v-chip>
+                      <!-- ⭐ PHASE 1: Recipe Nesting - только для рецептов -->
+                      <v-chip
+                        v-if="type === 'recipe'"
+                        value="recipe"
+                        variant="outlined"
+                        size="small"
+                      >
+                        <v-icon start size="14">mdi-book-open-variant</v-icon>
+                        Recipe
+                      </v-chip>
                     </v-chip-group>
                   </v-col>
                 </v-row>
@@ -164,19 +205,13 @@
                         <div class="d-flex align-center justify-space-between">
                           <div class="d-flex align-center flex-grow-1">
                             <v-avatar
-                              :color="
-                                component.componentType === 'product' ? 'primary' : 'secondary'
-                              "
+                              :color="getComponentTypeColor(component.componentType)"
                               variant="tonal"
                               size="40"
                               class="mr-3"
                             >
                               <v-icon
-                                :icon="
-                                  component.componentType === 'product'
-                                    ? 'mdi-food-apple'
-                                    : 'mdi-chef-hat'
-                                "
+                                :icon="getComponentTypeIcon(component.componentType)"
                                 size="20"
                               />
                             </v-avatar>
@@ -189,14 +224,26 @@
                               </div>
                             </div>
                           </div>
-                          <v-btn
-                            icon="mdi-pencil"
-                            variant="text"
-                            size="small"
-                            @click="
-                              openSelectionDialog(index, component.componentType || 'product')
-                            "
-                          />
+                          <div class="d-flex align-center gap-1">
+                            <!-- ⭐ PHASE 1: View Details button (for recipes only) -->
+                            <v-btn
+                              v-if="component.componentType === 'recipe'"
+                              icon="mdi-open-in-new"
+                              variant="text"
+                              size="small"
+                              color="primary"
+                              title="View Recipe Details"
+                              @click="viewRecipeDetails(component.componentId)"
+                            />
+                            <v-btn
+                              icon="mdi-pencil"
+                              variant="text"
+                              size="small"
+                              @click="
+                                openSelectionDialog(index, component.componentType || 'product')
+                              "
+                            />
+                          </div>
                         </div>
                       </v-card-text>
                     </v-card>
@@ -208,9 +255,7 @@
                       variant="outlined"
                       color="primary"
                       size="large"
-                      :prepend-icon="
-                        component.componentType === 'product' ? 'mdi-food-apple' : 'mdi-chef-hat'
-                      "
+                      :prepend-icon="getComponentTypeIcon(component.componentType || 'product')"
                       @click="openSelectionDialog(index, component.componentType || 'product')"
                     >
                       {{ getItemLabel(component.componentType || 'product') }}
@@ -382,11 +427,39 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <!-- ⭐ PHASE 1: Recipe Search Dialog (for nested recipes) -->
+    <v-dialog v-model="recipeSearchDialog" max-width="800px" scrollable>
+      <v-card>
+        <v-card-title class="pa-4">
+          <div class="d-flex align-center justify-space-between">
+            <span class="text-h6">Select Recipe</span>
+            <v-btn
+              icon="mdi-close"
+              variant="text"
+              size="small"
+              @click="recipeSearchDialog = false"
+            />
+          </div>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <recipe-search-widget
+            v-if="recipeSearchDialog"
+            :current-recipe-id="recipeId"
+            :current-recipe-components="components"
+            @select="handleRecipeSelected"
+            @cancel="recipeSearchDialog = false"
+          />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import type { MeasurementUnit } from '@/stores/recipes/types'
 import { formatIDR } from '@/utils/currency'
 // ✅ ИСПРАВЛЕНО: Используем правильный импорт для единиц измерения
@@ -394,9 +467,12 @@ import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 // ✅ NEW: Import search widgets
 import ProductSearchWidget from '@/views/menu/components/widgets/ProductSearchWidget.vue'
 import DishSearchWidget from '@/views/menu/components/widgets/DishSearchWidget.vue'
+import RecipeSearchWidget from './RecipeSearchWidget.vue' // ⭐ PHASE 1: Recipe nesting
 // ⭐ PHASE 1: Cycle detection for nested preparations
 import { detectCycle, formatCyclePath } from '@/stores/recipes/composables/usePreparationGraph'
-import type { PreparationIngredient, Preparation } from '@/stores/recipes/types'
+// ⭐ PHASE 1: Recipe nesting - cycle detection and depth validation
+import { useRecipeGraph } from '@/stores/recipes/composables/useRecipeGraph'
+import type { PreparationIngredient, Preparation, Recipe } from '@/stores/recipes/types'
 
 // ===== TYPES =====
 interface Component {
@@ -434,7 +510,8 @@ interface PreparationItem {
 interface Props {
   components: Component[]
   type: 'recipe' | 'preparation'
-  preparationId?: string // ⭐ PHASE 1: Required for cycle detection
+  preparationId?: string // ⭐ PHASE 1: Required for cycle detection (preparations)
+  recipeId?: string // ⭐ PHASE 1: Required for cycle detection (recipes)
 }
 
 interface Emits {
@@ -442,18 +519,24 @@ interface Emits {
   (e: 'add-component'): void
   (e: 'remove-component', index: number): void
   (e: 'update-component', index: number, field: string, value: unknown): void
+  (e: 'view-recipe-details', recipeId: string): void // ⭐ PHASE 1: Navigate to nested recipe
 }
 
 // ===== SETUP =====
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+const router = useRouter()
 
 // ✅ ИСПРАВЛЕНО: Используем composable для единиц измерения
 const { getUnitShortName } = useMeasurementUnits()
 
+// ⭐ PHASE 1: Recipe nesting - depth validation
+const { getRecipeDepth, MAX_RECIPE_DEPTH } = useRecipeGraph()
+
 // ===== STATE =====
 const products = ref<ProductItem[]>([])
 const preparations = ref<PreparationItem[]>([])
+const recipes = ref<any[]>([]) // ⭐ PHASE 1: Recipe nesting
 const storesLoaded = ref(false)
 
 // ✅ NEW: Accordion state - track which components are expanded (Set of indices)
@@ -462,6 +545,7 @@ const expandedComponents = ref<Set<number>>(new Set())
 // ✅ NEW: Dialog states
 const productSearchDialog = ref(false)
 const dishSearchDialog = ref(false)
+const recipeSearchDialog = ref(false) // ⭐ PHASE 1: Recipe nesting
 const currentEditingIndex = ref<number>(-1)
 
 // Category icons mapping
@@ -537,6 +621,14 @@ const dishOptions = computed(() => {
   }))
 })
 
+// ⭐ PHASE 1: Recipe Depth Calculation (for recipes only)
+const currentRecipeDepth = computed(() => {
+  if (props.type !== 'recipe' || !props.recipeId) {
+    return 0
+  }
+  return getRecipeDepth(props.recipeId, recipes.value as Recipe[])
+})
+
 // ⭐ PHASE 1: Cycle Detection for Nested Preparations
 const cycleDetectionResult = computed(() => {
   // Only check for preparations (nested preparations feature)
@@ -598,8 +690,44 @@ function getCategoryIcon(category: string): string {
   return categoryIcons[category] || 'mdi-package-variant'
 }
 
+// ⭐ PHASE 1: Helper functions for component type icons and colors
+function getComponentTypeIcon(componentType: string): string {
+  switch (componentType) {
+    case 'product':
+      return 'mdi-food-apple'
+    case 'preparation':
+      return 'mdi-chef-hat'
+    case 'recipe':
+      return 'mdi-book-open-variant'
+    default:
+      return 'mdi-help-circle'
+  }
+}
+
+function getComponentTypeColor(componentType: string): string {
+  switch (componentType) {
+    case 'product':
+      return 'primary'
+    case 'preparation':
+      return 'secondary'
+    case 'recipe':
+      return 'success'
+    default:
+      return 'grey'
+  }
+}
+
 function getItemLabel(componentType: string): string {
-  return componentType === 'product' ? 'Select Product' : 'Select Preparation'
+  switch (componentType) {
+    case 'product':
+      return 'Select Product'
+    case 'preparation':
+      return 'Select Preparation'
+    case 'recipe':
+      return 'Select Recipe'
+    default:
+      return 'Select Item'
+  }
 }
 
 /**
@@ -618,15 +746,26 @@ function getFixedUnit(component: Component): string {
     return getUnitShortName((product.unit || 'gram') as MeasurementUnit)
   }
 
-  // ✅ FIX: For preparations, check portionType
-  const prep = preparations.value.find(p => p.id === component.componentId)
-  if (!prep) return 'g'
+  if (component.componentType === 'preparation') {
+    // ✅ FIX: For preparations, check portionType
+    const prep = preparations.value.find(p => p.id === component.componentId)
+    if (!prep) return 'g'
 
-  // Check if preparation is portion-based
-  if ((prep as any).portionType === 'portion') {
-    return 'portion'
+    // Check if preparation is portion-based
+    if ((prep as any).portionType === 'portion') {
+      return 'portion'
+    }
+    return prep.outputUnit || 'g'
   }
-  return prep.outputUnit || 'g'
+
+  if (component.componentType === 'recipe') {
+    // ⭐ PHASE 1: Recipe nesting - recipes are always measured in portions
+    const recipe = recipes.value.find(r => r.id === component.componentId)
+    if (!recipe) return 'portion'
+    return recipe.portionUnit || 'portion'
+  }
+
+  return 'g'
 }
 
 /**
@@ -683,6 +822,8 @@ function openSelectionDialog(index: number, componentType: string) {
     productSearchDialog.value = true
   } else if (componentType === 'preparation') {
     dishSearchDialog.value = true
+  } else if (componentType === 'recipe') {
+    recipeSearchDialog.value = true // ⭐ PHASE 1: Recipe nesting
   }
 }
 
@@ -709,6 +850,25 @@ function handleDishSelected(dish: any) {
 }
 
 /**
+ * ⭐ PHASE 1: Handle recipe selection from RecipeSearchWidget
+ */
+function handleRecipeSelected(recipe: any) {
+  if (currentEditingIndex.value >= 0) {
+    handleComponentIdChange(currentEditingIndex.value, recipe.id)
+    recipeSearchDialog.value = false
+    currentEditingIndex.value = -1
+  }
+}
+
+/**
+ * ⭐ PHASE 1: View nested recipe details (navigate to recipe page)
+ */
+function viewRecipeDetails(recipeId: string) {
+  // Navigate to recipes page with query parameter to open the recipe dialog
+  router.push({ name: 'recipes', query: { recipeId } })
+}
+
+/**
  * Get selected item name for display
  */
 function getSelectedItemName(component: Component): string {
@@ -717,10 +877,15 @@ function getSelectedItemName(component: Component): string {
   if (component.componentType === 'product') {
     const product = products.value.find(p => p.id === component.componentId)
     return product ? product.nameEn || product.name : 'Product not found'
-  } else {
+  } else if (component.componentType === 'preparation') {
     const prep = preparations.value.find(p => p.id === component.componentId)
     return prep ? `${prep.code} - ${prep.name}` : 'Preparation not found'
+  } else if (component.componentType === 'recipe') {
+    // ⭐ PHASE 1: Recipe nesting
+    const recipe = recipes.value.find(r => r.id === component.componentId)
+    return recipe ? `${recipe.code} - ${recipe.name}` : 'Recipe not found'
   }
+  return 'Unknown type'
 }
 
 /**
@@ -733,13 +898,20 @@ function getSelectedItemSubtitle(component: Component): string {
     const product = products.value.find(p => p.id === component.componentId)
     if (!product) return ''
     return `${getCategoryName(product.category)} • ${formatIDR(product.baseCostPerUnit || product.costPerUnit)}/${getBaseUnitDisplayForProduct(product)}`
-  } else {
+  } else if (component.componentType === 'preparation') {
     const prep = preparations.value.find(p => p.id === component.componentId)
     if (!prep) return ''
     // ✅ FIX: Show correct output unit based on portionType
     const outputDisplay = getPreparationOutputDisplay(prep as any)
     return `Semi-finished • Output: ${outputDisplay}`
+  } else if (component.componentType === 'recipe') {
+    // ⭐ PHASE 1: Recipe nesting - show portion info and cost
+    const recipe = recipes.value.find(r => r.id === component.componentId)
+    if (!recipe) return ''
+    const costDisplay = recipe.cost ? formatIDR(recipe.cost) : 'No cost'
+    return `Recipe • ${recipe.portionSize} ${recipe.portionUnit} • ${costDisplay}`
   }
+  return ''
 }
 
 /**
@@ -936,6 +1108,19 @@ async function loadStores() {
         outputUnit: p.outputUnit,
         type: p.type, // Include preparation type/category
         portionType: p.portionType // ✅ NEW: Include portion type for correct unit display
+      }))
+    }
+
+    // ⭐ PHASE 1: Load recipes for recipe nesting
+    if (recipesStore.activeRecipes) {
+      recipes.value = recipesStore.activeRecipes.map(r => ({
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        portionSize: r.portionSize,
+        portionUnit: r.portionUnit,
+        cost: r.cost,
+        components: r.components
       }))
     }
 
