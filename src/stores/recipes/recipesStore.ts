@@ -711,6 +711,16 @@ export const useRecipesStore = defineStore('recipes', () => {
         DebugUtils.warn(MODULE_NAME, `${errors.length} cost updates failed`)
         DebugUtils.debug(MODULE_NAME, 'First 10 errors:', errors.slice(0, 10))
       }
+
+      // ✅ NEW: Reload data from database to refresh cache
+      if (preparationsUpdated > 0 || recipesUpdated > 0) {
+        DebugUtils.info(MODULE_NAME, '🔄 Reloading data to refresh cache...')
+        await Promise.all([
+          preparationsComposable.loadPreparations(),
+          recipesComposable.loadRecipes()
+        ])
+        DebugUtils.info(MODULE_NAME, '✅ Cache refreshed from database')
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update database costs'
       DebugUtils.error(MODULE_NAME, message, { err })

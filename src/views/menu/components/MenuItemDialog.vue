@@ -17,7 +17,7 @@
           <v-icon icon="mdi-information-outline" size="20" class="mr-2" />
           Basic
         </v-tab>
-        <v-tab v-if="!isVariantlessMode" value="variants">
+        <v-tab value="variants">
           <v-icon icon="mdi-format-list-bulleted" size="20" class="mr-2" />
           Variants
           <v-badge
