@@ -703,11 +703,13 @@ export const useRecipesStore = defineStore('recipes', () => {
       DebugUtils.info(MODULE_NAME, '✅ Database costs updated', {
         preparationsUpdated,
         recipesUpdated,
-        errors: errors.length > 0 ? errors.slice(0, 3) : undefined
+        totalErrors: errors.length,
+        sampleErrors: errors.length > 0 ? errors.slice(0, 5) : undefined
       })
 
       if (errors.length > 0) {
         DebugUtils.warn(MODULE_NAME, `${errors.length} cost updates failed`)
+        DebugUtils.debug(MODULE_NAME, 'First 10 errors:', errors.slice(0, 10))
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update database costs'

@@ -955,6 +955,70 @@ export class RecipesService {
   }
 
   // =============================================
+  // COST UPDATE OPERATIONS
+  // =============================================
+
+  /**
+   * Update preparation cost in database (last_known_cost field)
+   * Used for automatic daily cost recalculation
+   */
+  async updatePreparationCost(preparationId: string, cost: number): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        DebugUtils.warn(MODULE_NAME, 'Supabase not available, skipping preparation cost update')
+        return
+      }
+
+      const { error } = await supabase
+        .from('preparations')
+        .update({
+          last_known_cost: cost,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', preparationId)
+
+      if (error) {
+        throw error
+      }
+
+      DebugUtils.debug(MODULE_NAME, 'Updated preparation cost', { preparationId, cost })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update preparation cost', { err, preparationId })
+      throw err
+    }
+  }
+
+  /**
+   * Update recipe cost in database (cost field)
+   * Used for automatic daily cost recalculation
+   */
+  async updateRecipeCost(recipeId: string, cost: number): Promise<void> {
+    try {
+      if (!isSupabaseAvailable()) {
+        DebugUtils.warn(MODULE_NAME, 'Supabase not available, skipping recipe cost update')
+        return
+      }
+
+      const { error } = await supabase
+        .from('recipes')
+        .update({
+          cost: cost,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', recipeId)
+
+      if (error) {
+        throw error
+      }
+
+      DebugUtils.debug(MODULE_NAME, 'Updated recipe cost', { recipeId, cost })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update recipe cost', { err, recipeId })
+      throw err
+    }
+  }
+
+  // =============================================
   // LEGACY RECIPE WRITE OPERATIONS (TODO: Remove when migration complete)
   // =============================================
   // Future implementation for recipe write operations

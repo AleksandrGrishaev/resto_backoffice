@@ -19,6 +19,16 @@
           <v-btn
             variant="outlined"
             class="mr-2"
+            prepend-icon="mdi-calculator-variant"
+            size="large"
+            :loading="isRecalculating"
+            @click="dialogs.recalculate = true"
+          >
+            Recalculate All Costs
+          </v-btn>
+          <v-btn
+            variant="outlined"
+            class="mr-2"
             prepend-icon="mdi-file-pdf-box"
             size="large"
             :loading="isExporting"
@@ -353,6 +363,44 @@
       :usage-locations="usageWarning.usageLocations"
     />
 
+    <!-- Recalculate All Costs Confirmation Dialog -->
+    <v-dialog v-model="dialogs.recalculate" max-width="600">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="warning">mdi-calculator-variant</v-icon>
+          Recalculate All Costs
+        </v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" class="mb-4">
+            <div class="text-subtitle-2 mb-2">This will recalculate costs for:</div>
+            <ul class="ml-4">
+              <li>{{ store.preparations.length }} preparations</li>
+              <li>{{ store.recipes.length }} recipes</li>
+            </ul>
+          </v-alert>
+          <p class="text-body-1">
+            This operation will recalculate all preparation and recipe costs based on current
+            product prices and component quantities, then save the updated costs to the database.
+          </p>
+          <p class="text-body-2 text-medium-emphasis mt-2">
+            This may take a few moments depending on the number of recipes and preparations.
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="dialogs.recalculate = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="isRecalculating"
+            @click="handleRecalculateCosts"
+          >
+            Recalculate Now
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Export Options Dialog -->
     <ExportOptionsDialog
       v-model="dialogs.export"
@@ -418,7 +466,8 @@ const dialogs = ref({
   view: false,
   duplicate: false,
   usageWarning: false,
-  export: false
+  export: false,
+  recalculate: false
 })
 
 // Usage warning state
@@ -441,6 +490,9 @@ const snackbar = ref({
   message: '',
   color: 'success' as 'success' | 'error' | 'info'
 })
+
+// Recalculation state
+const isRecalculating = ref(false)
 
 // Validation rules
 const rules = {
@@ -1056,6 +1108,38 @@ async function handleExportPdf(options: { department: DepartmentFilter }) {
   } catch (error) {
     showSnackbar('Failed to export PDF', 'error')
     DebugUtils.error(MODULE_NAME, 'Failed to export', error)
+  }
+}
+
+async function handleRecalculateCosts() {
+  try {
+    isRecalculating.value = true
+    DebugUtils.info(MODULE_NAME, '🔄 Starting cost recalculation...')
+
+    // Step 1: Recalculate all costs in memory
+    await store.recalculateAllCosts()
+
+    // Step 2: Save calculated costs to database
+    await store.updateDatabaseCosts()
+
+    // Close dialog
+    dialogs.value.recalculate = false
+
+    // Show success message
+    showSnackbar(
+      `✅ Successfully recalculated costs for ${store.preparations.length} preparations and ${store.recipes.length} recipes`,
+      'success'
+    )
+
+    DebugUtils.info(MODULE_NAME, '✅ Cost recalculation completed', {
+      preparations: store.preparations.length,
+      recipes: store.recipes.length
+    })
+  } catch (error) {
+    showSnackbar('❌ Failed to recalculate costs. Please try again.', 'error')
+    DebugUtils.error(MODULE_NAME, 'Failed to recalculate costs', error)
+  } finally {
+    isRecalculating.value = false
   }
 }
 
