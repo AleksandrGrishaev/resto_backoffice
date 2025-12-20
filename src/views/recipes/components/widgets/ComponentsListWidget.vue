@@ -215,7 +215,7 @@ function getComponents() {
             convertedQuantity = (component.quantity * 1000).toFixed(0)
           }
         }
-      } else {
+      } else if (component.componentType === 'preparation') {
         const preparation = recipesStore.preparations.find(p => p.id === component.componentId)
         if (preparation) {
           name = preparation.name
@@ -227,6 +227,13 @@ function getComponents() {
             baseUnit = preparation.outputUnit
           }
         }
+      } else if (component.componentType === 'recipe') {
+        const recipe = recipesStore.recipes.find(r => r.id === component.componentId)
+        if (recipe) {
+          name = recipe.name
+          code = recipe.code
+          baseUnit = 'portion'
+        }
       }
 
       // ✅ FIX: Determine display unit based on component's actual unit or preparation's portionType
@@ -236,6 +243,8 @@ function getComponents() {
         if (preparation?.portionType === 'portion') {
           displayUnit = component.quantity === 1 ? 'portion' : 'portions'
         }
+      } else if (component.componentType === 'recipe') {
+        displayUnit = component.quantity === 1 ? 'portion' : 'portions'
       }
 
       return {

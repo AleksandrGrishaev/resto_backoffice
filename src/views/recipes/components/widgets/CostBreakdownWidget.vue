@@ -59,6 +59,10 @@
               <div class="legend-color" style="background-color: var(--color-green)"></div>
               <span class="legend-text">Preparations</span>
             </div>
+            <div class="legend-item">
+              <div class="legend-color" style="background-color: var(--color-orange)"></div>
+              <span class="legend-text">Recipes</span>
+            </div>
           </div>
           <span class="text-caption text-medium-emphasis">
             Cost distribution by component (hover bars for details)
@@ -246,14 +250,21 @@ function getComponentName(componentId: string, componentType: string): string {
   if (componentType === 'product') {
     const product = productsStore.products.find(p => p.id === componentId)
     return product?.name || 'Unknown product'
-  } else {
+  } else if (componentType === 'preparation') {
     const preparation = recipesStore.preparations.find(p => p.id === componentId)
     return preparation?.name || 'Unknown preparation'
+  } else if (componentType === 'recipe') {
+    const recipe = recipesStore.recipes.find(r => r.id === componentId)
+    return recipe?.name || 'Unknown recipe'
   }
+  return 'Unknown component'
 }
 
 function getComponentColor(componentType: string): string {
-  return componentType === 'product' ? '#2196F3' : '#4CAF50'
+  if (componentType === 'product') return '#2196F3' // Blue
+  if (componentType === 'preparation') return '#4CAF50' // Green
+  if (componentType === 'recipe') return '#FF9800' // Orange
+  return '#9E9E9E' // Grey fallback
 }
 
 /**

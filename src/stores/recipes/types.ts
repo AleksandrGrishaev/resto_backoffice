@@ -219,7 +219,7 @@ export interface RecipePlanCost {
  */
 export interface ComponentPlanCost {
   componentId: string
-  componentType: 'product' | 'preparation'
+  componentType: 'product' | 'preparation' | 'recipe'
   componentName: string
   quantity: number // Количество в рецепте
   unit: MeasurementUnit // Единица в рецепте
