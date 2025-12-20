@@ -93,6 +93,7 @@
           @duplicate="duplicateItem"
           @view="viewItem"
           @toggle-status="toggleItemStatus"
+          @convert-dish-type="convertDishType"
         />
       </div>
 
@@ -171,6 +172,7 @@
                   @duplicate="duplicateItem"
                   @view="viewItem"
                   @toggle-status="toggleItemStatus"
+                  @convert-dish-type="convertDishType"
                 />
               </div>
             </div>
@@ -248,6 +250,7 @@
                       @duplicate="duplicateItem"
                       @view="viewItem"
                       @toggle-status="toggleItemStatus"
+                      @convert-dish-type="convertDishType"
                     />
                   </div>
                 </v-expansion-panel-text>
@@ -343,6 +346,13 @@
 
     <!-- View Item Dialog -->
     <MenuItemViewDialog v-model="dialogs.view" :item="viewingItem" />
+
+    <!-- Convert Dish Type Dialog -->
+    <ConvertDishTypeDialog
+      v-model="dialogs.convertDishType"
+      :item="convertingItem"
+      @confirm="confirmConvertDishType"
+    />
   </div>
 </template>
 
@@ -351,7 +361,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
-import type { Category, MenuItem, DishType, MenuItemVariant, MenuComposition } from '@/stores/menu'
+import type {
+  Category,
+  MenuItem,
+  DishType,
+  MenuItemVariant,
+  MenuComposition,
+  UpdateMenuItemDto
+} from '@/stores/menu'
 import { DebugUtils } from '@/utils'
 import { useExport, ExportOptionsDialog } from '@/core/export'
 import type {
@@ -370,6 +387,7 @@ import MenuItemDialog from './components/MenuItemDialog.vue'
 import MenuItemComponent from './components/MenuItem.vue'
 import DishTypeSelectionDialog from './components/DishTypeSelectionDialog.vue'
 import MenuItemViewDialog from './components/dialogs/MenuItemViewDialog.vue'
+import ConvertDishTypeDialog from './components/dialogs/ConvertDishTypeDialog.vue'
 
 const MODULE_NAME = 'MenuView'
 const menuStore = useMenuStore()
@@ -389,7 +407,8 @@ const dialogs = ref({
   item: false,
   duplicate: false, // ✨ NEW: Диалог дублирования
   export: false, // Export options dialog
-  view: false // View item dialog with export
+  view: false, // View item dialog with export
+  convertDishType: false // ✨ NEW: Диалог конвертации типа блюда
 })
 const editingCategory = ref<Category | null>(null)
 const editingItem = ref<MenuItem | null>(null)
@@ -397,6 +416,7 @@ const viewingItem = ref<MenuItem | null>(null) // Item being viewed
 const selectedDishType = ref<DishType | null>(null) // ✨ NEW: Выбранный тип блюда
 const duplicatingItem = ref<MenuItem | null>(null) // ✨ NEW: Дублируемое блюдо
 const duplicateName = ref('') // ✨ NEW: Новое имя для дубликата
+const convertingItem = ref<MenuItem | null>(null) // ✨ NEW: Блюдо для конвертации типа
 
 const confirmDialog = ref({
   show: false,
@@ -567,6 +587,66 @@ async function toggleItemStatus(item: MenuItem) {
     DebugUtils.info(MODULE_NAME, `Menu item ${action}`, { id: item.id, name: item.name })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to toggle menu item status', error)
+  }
+}
+
+// ✨ NEW: Convert dish type (simple <-> modifiable)
+function convertDishType(item: MenuItem) {
+  convertingItem.value = item
+  dialogs.value.convertDishType = true
+}
+
+async function confirmConvertDishType() {
+  if (!convertingItem.value) return
+
+  try {
+    const item = convertingItem.value
+    const newDishType: DishType = item.dishType === 'simple' ? 'modifiable' : 'simple'
+
+    DebugUtils.info(MODULE_NAME, `Converting dish type: ${item.dishType} -> ${newDishType}`, {
+      id: item.id,
+      name: item.name
+    })
+
+    // Prepare update data
+    const updateData: UpdateMenuItemDto = {
+      dishType: newDishType,
+      department: item.department
+    }
+
+    // If converting to simple, remove modifiers and templates
+    if (newDishType === 'simple') {
+      updateData.modifierGroups = []
+      updateData.templates = []
+      DebugUtils.info(MODULE_NAME, 'Removing modifiers and templates', {
+        modifierGroupsCount: item.modifierGroups?.length || 0,
+        templatesCount: item.templates?.length || 0
+      })
+    }
+
+    // If converting to modifiable, initialize empty arrays
+    if (newDishType === 'modifiable') {
+      updateData.modifierGroups = []
+      updateData.templates = []
+    }
+
+    // Variants remain unchanged
+    updateData.variants = item.variants
+
+    // Update in store
+    await menuStore.updateMenuItem(item.id, updateData)
+
+    DebugUtils.info(MODULE_NAME, 'Dish type converted successfully', {
+      id: item.id,
+      name: item.name,
+      newDishType
+    })
+
+    // Close dialog
+    dialogs.value.convertDishType = false
+    convertingItem.value = null
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to convert dish type', error)
   }
 }
 

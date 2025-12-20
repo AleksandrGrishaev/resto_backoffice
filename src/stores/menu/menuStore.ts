@@ -21,14 +21,8 @@ const MODULE_NAME = 'MenuStore'
 function validateMenuItem(data: CreateMenuItemDto | UpdateMenuItemDto): string[] {
   const errors: string[] = []
 
-  // Modifiable dishes must have at least one modifier group
-  if (data.dishType === 'modifiable') {
-    const modifierGroups = data.modifierGroups || []
-
-    if (modifierGroups.length === 0) {
-      errors.push('Modifiable dishes must have at least one modifier group')
-    }
-  }
+  // ✅ UPDATED: Modifiable dishes CAN have empty modifier groups (modifiers are added later)
+  // No validation needed for modifiable dishes - they can start empty
 
   return errors
 }

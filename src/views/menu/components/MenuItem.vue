@@ -51,6 +51,13 @@
               <v-list-item-title>Export PDF</v-list-item-title>
             </v-list-item>
             <v-divider />
+            <v-list-item @click="$emit('convert-dish-type', item)">
+              <template #prepend>
+                <v-icon :icon="conversionIcon" />
+              </template>
+              <v-list-item-title>{{ conversionLabel }}</v-list-item-title>
+            </v-list-item>
+            <v-divider />
             <v-list-item
               :class="{ 'text-error': item.isActive }"
               @click="$emit('toggle-status', item)"
@@ -153,6 +160,7 @@ defineEmits<{
   (e: 'duplicate', item: MenuItem): void
   (e: 'view', item: MenuItem): void
   (e: 'toggle-status', item: MenuItem): void
+  (e: 'convert-dish-type', item: MenuItem): void
 }>()
 
 const sortedVariants = computed(() => {
@@ -180,6 +188,15 @@ const itemTypeIndicator = computed(() => {
     label: DISH_TYPES[dishType] || dishType,
     color: colors[dishType] || 'primary'
   }
+})
+
+// Определяем текст и иконку для конвертации типа блюда
+const conversionLabel = computed(() => {
+  return props.item.dishType === 'simple' ? 'Convert to Modifiable' : 'Convert to Simple'
+})
+
+const conversionIcon = computed(() => {
+  return props.item.dishType === 'simple' ? 'mdi-swap-horizontal' : 'mdi-swap-horizontal'
 })
 
 // Форматирование цены
