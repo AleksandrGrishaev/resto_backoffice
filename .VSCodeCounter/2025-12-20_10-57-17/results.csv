@@ -1,0 +1,771 @@
+"filename", "language", "TypeScript", "Markdown", "XML", "Vue", "SCSS", "MS SQL", "Python", "JSON", "comment", "blank", "total"
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/Base/About.md", "Markdown", 0, 23, 0, 0, 0, 0, 0, 0, 0, 7, 30
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/Base/ArchitecturApp.md", "Markdown", 0, 384, 0, 0, 0, 0, 0, 0, 0, 102, 486
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/Base/MeasurementUnits.md", "Markdown", 0, 724, 0, 0, 0, 0, 0, 0, 0, 228, 952
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/Base/Style.md", "Markdown", 0, 96, 0, 0, 0, 0, 0, 0, 0, 31, 127
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/README.md", "Markdown", 0, 56, 0, 0, 0, 0, 0, 0, 0, 31, 87
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/README.md", "Markdown", 0, 42, 0, 0, 0, 0, 0, 0, 0, 18, 60
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/background-tasks.md", "Markdown", 0, 204, 0, 0, 0, 0, 0, 0, 0, 55, 259
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/database-backup-restore.md", "Markdown", 0, 230, 0, 0, 0, 0, 0, 0, 0, 92, 322
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/hmr-optimization.md", "Markdown", 0, 195, 0, 0, 0, 0, 0, 0, 0, 89, 284
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/supabase-auth.md", "Markdown", 0, 201, 0, 0, 0, 0, 0, 0, 0, 89, 290
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/help-system.md", "Markdown", 0, 293, 0, 0, 0, 0, 0, 0, 4, 80, 377
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/kpi/COGS_Department_Assignment.md", "Markdown", 0, 67, 0, 0, 0, 0, 0, 0, 0, 37, 104
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/recipe/architecture.md", "Markdown", 0, 877, 0, 0, 0, 0, 0, 0, 0, 281, 1158
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/sale/write-off/DECOMPOSITION_ARCHITECTURE.md", "Markdown", 0, 526, 0, 0, 0, 0, 0, 0, 0, 160, 686
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/sale/write-off/SALE_FLOW.md", "Markdown", 0, 875, 0, 0, 0, 0, 0, 0, 0, 232, 1107
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/supplier/pricing-system.md", "Markdown", 0, 233, 0, 0, 0, 0, 0, 0, 0, 89, 322
+"/Users/peaker/dev/kitchen-app/backoffice/src/About/docs/timezone.md", "Markdown", 0, 70, 0, 0, 0, 0, 0, 0, 0, 35, 105
+"/Users/peaker/dev/kitchen-app/backoffice/src/App.vue", "Vue", 0, 0, 0, 244, 0, 0, 0, 0, 2, 41, 287
+"/Users/peaker/dev/kitchen-app/backoffice/src/assets/vue.svg", "XML", 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/HMRTestComponent.vue", "Vue", 0, 0, 0, 25, 0, 0, 0, 0, 0, 6, 31
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/DatePicker.vue", "Vue", 0, 0, 0, 157, 0, 0, 0, 0, 1, 17, 175
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/ActionButton.vue", "Vue", 0, 0, 0, 58, 0, 0, 0, 0, 7, 9, 74
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/BaseButton.vue", "Vue", 0, 0, 0, 128, 0, 0, 0, 0, 45, 21, 194
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/LogoutButton.vue", "Vue", 0, 0, 0, 121, 0, 0, 0, 0, 3, 25, 149
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/MenuButton.vue", "Vue", 0, 0, 0, 41, 0, 0, 0, 0, 7, 7, 55
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/dropdowns/BaseDropdown.vue", "Vue", 0, 0, 0, 41, 0, 0, 0, 0, 7, 7, 55
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/feedback/AppNotification.vue", "Vue", 0, 0, 0, 200, 0, 0, 0, 0, 1, 42, 243
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/indicators/NotificationBadge.vue", "Vue", 0, 0, 0, 110, 0, 0, 0, 0, 7, 19, 136
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/indicators/StatusChip.vue", "Vue", 0, 0, 0, 82, 0, 0, 0, 0, 7, 20, 109
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/inputs/PinInput.vue", "Vue", 0, 0, 0, 197, 0, 0, 0, 0, 1, 46, 244
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/base/BaseDialog.vue", "Vue", 0, 0, 0, 124, 0, 0, 0, 0, 0, 14, 138
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/index.ts", "TypeScript", 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/molecules/DateRangePicker.vue", "Vue", 0, 0, 0, 284, 0, 0, 0, 0, 3, 29, 316
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/molecules/navigation/ActionMenu.vue", "Vue", 0, 0, 0, 134, 0, 0, 0, 0, 7, 24, 165
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/molecules/navigation/StatusBar.vue", "Vue", 0, 0, 0, 72, 0, 0, 0, 0, 10, 15, 97
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/AlertsBadge.vue", "Vue", 0, 0, 0, 132, 0, 0, 0, 0, 4, 22, 158
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/DebugStoresBadge.vue", "Vue", 0, 0, 0, 54, 0, 0, 0, 0, 1, 13, 68
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationAccounts.vue", "Vue", 0, 0, 0, 75, 0, 0, 0, 0, 2, 8, 85
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationMenu.vue", "Vue", 0, 0, 0, 424, 0, 0, 0, 0, 67, 60, 551
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/StorageAlertsBadge.vue", "Vue", 0, 0, 0, 46, 0, 0, 0, 0, 3, 9, 58
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/organisms/LazyList.vue", "Vue", 0, 0, 0, 247, 0, 0, 0, 0, 13, 41, 301
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/TaxDialog.vue", "Vue", 0, 0, 0, 84, 0, 0, 0, 0, 0, 8, 92
+"/Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/TaxList.vue", "Vue", 0, 0, 0, 59, 0, 0, 0, 0, 0, 12, 71
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/useBackgroundTasks.ts", "TypeScript", 114, 0, 0, 0, 0, 0, 0, 0, 31, 28, 173
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/useDialogForm.ts", "TypeScript", 59, 0, 0, 0, 0, 0, 0, 0, 6, 10, 75
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/useLazyLoading.ts", "TypeScript", 249, 0, 0, 0, 0, 0, 0, 0, 15, 50, 314
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/useMeasurementUnits.ts", "TypeScript", 214, 0, 0, 0, 0, 0, 0, 0, 82, 46, 342
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/usePersistence.ts", "TypeScript", 205, 0, 0, 0, 0, 0, 0, 0, 50, 45, 300
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/usePlatform.ts", "TypeScript", 106, 0, 0, 0, 0, 0, 0, 0, 42, 35, 183
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/useUIScale.ts", "TypeScript", 83, 0, 0, 0, 0, 0, 0, 0, 30, 20, 133
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/useViewRefresh.ts", "TypeScript", 138, 0, 0, 0, 0, 0, 0, 0, 35, 29, 202
+"/Users/peaker/dev/kitchen-app/backoffice/src/composables/useVuetifyBreakpoints.ts", "TypeScript", 31, 0, 0, 0, 0, 0, 0, 0, 6, 7, 44
+"/Users/peaker/dev/kitchen-app/backoffice/src/config/environment.ts", "TypeScript", 181, 0, 0, 0, 0, 0, 0, 0, 71, 44, 296
+"/Users/peaker/dev/kitchen-app/backoffice/src/config/users.ts", "TypeScript", 66, 0, 0, 0, 0, 0, 0, 0, 4, 8, 78
+"/Users/peaker/dev/kitchen-app/backoffice/src/config/validateEnv.ts", "TypeScript", 132, 0, 0, 0, 0, 0, 0, 0, 43, 26, 201
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/appInitializer.ts", "TypeScript", 272, 0, 0, 0, 0, 0, 0, 0, 52, 57, 381
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/appInitializerTests.ts", "TypeScript", 443, 0, 0, 0, 0, 0, 0, 0, 84, 93, 620
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/background/index.ts", "TypeScript", 14, 0, 0, 0, 0, 0, 0, 0, 8, 3, 25
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/background/types.ts", "TypeScript", 115, 0, 0, 0, 0, 0, 0, 0, 36, 32, 183
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/background/useBackgroundTasks.ts", "TypeScript", 457, 0, 0, 0, 0, 0, 0, 0, 72, 85, 614
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/connection/ConnectionHealthMonitor.ts", "TypeScript", 175, 0, 0, 0, 0, 0, 0, 0, 45, 40, 260
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/cost/modifierCostCalculator.ts", "TypeScript", 400, 0, 0, 0, 0, 0, 0, 0, 104, 73, 577
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/DecompositionEngine.ts", "TypeScript", 480, 0, 0, 0, 0, 0, 0, 0, 107, 87, 674
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/CostAdapter.ts", "TypeScript", 137, 0, 0, 0, 0, 0, 0, 0, 47, 26, 210
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/IDecompositionAdapter.ts", "TypeScript", 14, 0, 0, 0, 0, 0, 0, 0, 32, 6, 52
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/WriteOffAdapter.ts", "TypeScript", 151, 0, 0, 0, 0, 0, 0, 0, 53, 33, 237
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/index.ts", "TypeScript", 14, 0, 0, 0, 0, 0, 0, 0, 5, 4, 23
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/index.ts", "TypeScript", 70, 0, 0, 0, 0, 0, 0, 0, 21, 17, 108
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/types.ts", "TypeScript", 132, 0, 0, 0, 0, 0, 0, 0, 92, 32, 256
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/batchAllocationUtils.ts", "TypeScript", 331, 0, 0, 0, 0, 0, 0, 0, 71, 62, 464
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/portionUtils.ts", "TypeScript", 66, 0, 0, 0, 0, 0, 0, 0, 48, 12, 126
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/replacementUtils.ts", "TypeScript", 58, 0, 0, 0, 0, 0, 0, 0, 50, 12, 120
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/yieldUtils.ts", "TypeScript", 56, 0, 0, 0, 0, 0, 0, 0, 53, 12, 121
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/ExportService.ts", "TypeScript", 140, 0, 0, 0, 0, 0, 0, 0, 28, 23, 191
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/components/ExportOptionsDialog.vue", "Vue", 0, 0, 0, 119, 0, 0, 0, 0, 2, 19, 140
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/components/MenuItemExportOptionsDialog.vue", "Vue", 0, 0, 0, 139, 0, 0, 0, 0, 3, 24, 166
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/composables/useExport.ts", "TypeScript", 232, 0, 0, 0, 0, 0, 0, 0, 54, 31, 317
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/html2pdf.d.ts", "TypeScript", 22, 0, 0, 0, 0, 0, 0, 0, 3, 5, 30
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/index.ts", "TypeScript", 93, 0, 0, 0, 0, 0, 0, 0, 19, 8, 120
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/styles/export.scss", "SCSS", 0, 0, 0, 0, 114, 0, 0, 0, 12, 26, 152
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/CombinationsExportTemplate.vue", "Vue", 0, 0, 0, 1241, 0, 0, 0, 0, 24, 176, 1441
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/ExportLayout.vue", "Vue", 0, 0, 0, 61, 0, 0, 0, 0, 0, 11, 72
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/InventorySheetTemplate.vue", "Vue", 0, 0, 0, 260, 0, 0, 0, 0, 5, 40, 305
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuCostTemplate.vue", "Vue", 0, 0, 0, 388, 0, 0, 0, 0, 6, 56, 450
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuDetailedExportTemplate.vue", "Vue", 0, 0, 0, 126, 0, 0, 0, 0, 4, 25, 155
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuExportTemplate.vue", "Vue", 0, 0, 0, 215, 0, 0, 0, 0, 7, 33, 255
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuItemExportTemplate.vue", "Vue", 0, 0, 0, 471, 0, 0, 0, 0, 8, 74, 553
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/PreparationExportTemplate.vue", "Vue", 0, 0, 0, 375, 0, 0, 0, 0, 4, 47, 426
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/ProductYieldTemplate.vue", "Vue", 0, 0, 0, 219, 0, 0, 0, 0, 4, 35, 258
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/PurchaseOrderTemplate.vue", "Vue", 0, 0, 0, 441, 0, 0, 0, 0, 7, 71, 519
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/RecipeExportTemplate.vue", "Vue", 0, 0, 0, 324, 0, 0, 0, 0, 3, 42, 369
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/types.ts", "TypeScript", 473, 0, 0, 0, 0, 0, 0, 0, 46, 61, 580
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/combinationCostCalculator.ts", "TypeScript", 760, 0, 0, 0, 0, 0, 0, 0, 123, 119, 1002
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/combinationGenerator.ts", "TypeScript", 214, 0, 0, 0, 0, 0, 0, 0, 70, 60, 344
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/index.ts", "TypeScript", 27, 0, 0, 0, 0, 0, 0, 0, 4, 4, 35
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/menuItemExportBuilder.ts", "TypeScript", 266, 0, 0, 0, 0, 0, 0, 0, 40, 40, 346
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/hmrState.ts", "TypeScript", 87, 0, 0, 0, 0, 0, 0, 0, 35, 21, 143
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/DevInitializationStrategy.ts", "TypeScript", 487, 0, 0, 0, 0, 0, 0, 0, 49, 132, 668
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/ProductionInitializationStrategy.ts", "TypeScript", 413, 0, 0, 0, 0, 0, 0, 0, 111, 119, 643
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/dependencies.ts", "TypeScript", 101, 0, 0, 0, 0, 0, 0, 0, 98, 44, 243
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 7
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/types.ts", "TypeScript", 44, 0, 0, 0, 0, 0, 0, 0, 35, 11, 90
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/composables/useNotifications.ts", "TypeScript", 189, 0, 0, 0, 0, 0, 0, 0, 73, 45, 307
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/composables/usePwaInstall.ts", "TypeScript", 103, 0, 0, 0, 0, 0, 0, 0, 55, 37, 195
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/composables/useWakeLock.ts", "TypeScript", 87, 0, 0, 0, 0, 0, 0, 0, 38, 25, 150
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/index.ts", "TypeScript", 14, 0, 0, 0, 0, 0, 0, 0, 33, 5, 52
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/services/OrderAlertService.ts", "TypeScript", 280, 0, 0, 0, 0, 0, 0, 0, 81, 52, 413
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/types.ts", "TypeScript", 58, 0, 0, 0, 0, 0, 0, 0, 26, 10, 94
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/request/SupabaseRetryHandler.ts", "TypeScript", 80, 0, 0, 0, 0, 0, 0, 0, 38, 17, 135
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/storeResetService.ts", "TypeScript", 81, 0, 0, 0, 0, 0, 0, 0, 26, 11, 118
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/SyncService.ts", "TypeScript", 365, 0, 0, 0, 0, 0, 0, 0, 42, 82, 489
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/PreparationBatchSyncAdapter.ts", "TypeScript", 121, 0, 0, 0, 0, 0, 0, 0, 24, 26, 171
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/PreparationWriteOffSyncAdapter.ts", "TypeScript", 148, 0, 0, 0, 0, 0, 0, 0, 26, 31, 205
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/ProductWriteOffSyncAdapter.ts", "TypeScript", 152, 0, 0, 0, 0, 0, 0, 0, 34, 32, 218
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/ScheduleCompletionSyncAdapter.ts", "TypeScript", 144, 0, 0, 0, 0, 0, 0, 0, 30, 31, 205
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/ShiftSyncAdapter.ts", "TypeScript", 361, 0, 0, 0, 0, 0, 0, 0, 62, 74, 497
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/index.ts", "TypeScript", 9, 0, 0, 0, 0, 0, 0, 0, 4, 6, 19
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/helpers/taxCalculationHelper.ts", "TypeScript", 33, 0, 0, 0, 0, 0, 0, 0, 25, 8, 66
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/migrations/migrateLegacyShiftQueue.ts", "TypeScript", 61, 0, 0, 0, 0, 0, 0, 0, 18, 18, 97
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/storage/ApiSyncStorage.ts", "TypeScript", 89, 0, 0, 0, 0, 0, 0, 0, 8, 18, 115
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/storage/LocalStorageSyncStorage.ts", "TypeScript", 73, 0, 0, 0, 0, 0, 0, 0, 10, 14, 97
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/storage/index.ts", "TypeScript", 2, 0, 0, 0, 0, 0, 0, 0, 3, 2, 7
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/sync/types.ts", "TypeScript", 125, 0, 0, 0, 0, 0, 0, 0, 72, 41, 238
+"/Users/peaker/dev/kitchen-app/backoffice/src/core/users.ts", "TypeScript", 75, 0, 0, 0, 0, 0, 0, 0, 33, 15, 123
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/RECIPES.md", "Markdown", 0, 167, 0, 0, 0, 0, 0, 0, 0, 49, 216
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/add_codes_to_migration.py", "Python", 0, 0, 0, 0, 0, 0, 40, 0, 24, 14, 78
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/add_on_conflict.py", "Python", 0, 0, 0, 0, 0, 0, 25, 0, 12, 9, 46
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/add_on_conflict_ingredients.py", "Python", 0, 0, 0, 0, 0, 0, 19, 0, 10, 8, 37
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/fix_code_references.py", "Python", 0, 0, 0, 0, 0, 0, 94, 0, 21, 16, 131
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/categories.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 16, 0, 1, 17
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/preparation-categories.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 13, 0, 1, 14
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/preparation-rules.ts", "TypeScript", 49, 0, 0, 0, 0, 0, 0, 0, 16, 11, 76
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/product-rules.ts", "TypeScript", 132, 0, 0, 0, 0, 0, 0, 0, 26, 22, 180
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/product-to-prep-replacements.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 92, 0, 1, 93
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/recipe-categories.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 16, 0, 1, 17
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/recipe-rules.ts", "TypeScript", 89, 0, 0, 0, 0, 0, 0, 0, 41, 26, 156
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/suppliers.json", "JSON", 0, 0, 0, 0, 0, 0, 0, 28, 0, 1, 29
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/scripts/parsePreparations.ts", "TypeScript", 243, 0, 0, 0, 0, 0, 0, 0, 60, 64, 367
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/scripts/parseProducts.ts", "TypeScript", 230, 0, 0, 0, 0, 0, 0, 0, 56, 46, 332
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/scripts/parseRecipes.ts", "TypeScript", 303, 0, 0, 0, 0, 0, 0, 0, 49, 46, 398
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_preparations.sql", "MS SQL", 0, 0, 0, 0, 0, 459, 0, 0, 5, 10, 474
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_products.sql", "MS SQL", 0, 0, 0, 0, 0, 5179, 0, 0, 5, 6, 5190
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_recipes.sql", "MS SQL", 0, 0, 0, 0, 0, 3683, 0, 0, 401, 432, 4516
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_winter_menu_preparations.sql", "MS SQL", 0, 0, 0, 0, 0, 948, 0, 0, 79, 94, 1121
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/test_3_recipes_full_chain.sql", "MS SQL", 0, 0, 0, 0, 0, 331, 0, 0, 160, 121, 612
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/test_3_recipes_simple.sql", "MS SQL", 0, 0, 0, 0, 0, 88, 0, 0, 60, 49, 197
+"/Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/verify_recipe_components.sql", "MS SQL", 0, 0, 0, 0, 0, 159, 0, 0, 1, 1, 161
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/HelpHomeView.vue", "Vue", 0, 0, 0, 96, 0, 0, 0, 0, 3, 15, 114
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/HelpLayout.vue", "Vue", 0, 0, 0, 197, 0, 0, 0, 0, 8, 25, 230
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/BackofficeHelpView.vue", "Vue", 0, 0, 0, 185, 0, 0, 0, 0, 5, 19, 209
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/AccountsGuide.vue", "Vue", 0, 0, 0, 708, 0, 0, 0, 0, 19, 50, 777
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/ProductsGuide.vue", "Vue", 0, 0, 0, 541, 0, 0, 0, 0, 14, 33, 588
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/RecipesGuide.vue", "Vue", 0, 0, 0, 671, 0, 0, 0, 0, 16, 37, 724
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/SupplierGuide.vue", "Vue", 0, 0, 0, 1263, 0, 0, 0, 0, 30, 109, 1402
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/KitchenHelpView.vue", "Vue", 0, 0, 0, 167, 0, 0, 0, 0, 5, 18, 190
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/KpiGuide.vue", "Vue", 0, 0, 0, 468, 0, 0, 0, 0, 7, 38, 513
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/MonitorGuide.vue", "Vue", 0, 0, 0, 353, 0, 0, 0, 0, 7, 41, 401
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/OrdersGuide.vue", "Vue", 0, 0, 0, 397, 0, 0, 0, 0, 8, 33, 438
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/PreparationGuide.vue", "Vue", 0, 0, 0, 499, 0, 0, 0, 0, 9, 48, 556
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/PosHelpView.vue", "Vue", 0, 0, 0, 142, 0, 0, 0, 0, 5, 18, 165
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosCancelMoveGuide.vue", "Vue", 0, 0, 0, 161, 0, 0, 0, 0, 5, 18, 184
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosDiscountsGuide.vue", "Vue", 0, 0, 0, 239, 0, 0, 0, 0, 5, 20, 264
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosGuide.vue", "Vue", 0, 0, 0, 163, 0, 0, 0, 0, 4, 11, 178
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosOrdersGuide.vue", "Vue", 0, 0, 0, 224, 0, 0, 0, 0, 7, 23, 254
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosOverviewGuide.vue", "Vue", 0, 0, 0, 133, 0, 0, 0, 0, 3, 13, 149
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosPaymentGuide.vue", "Vue", 0, 0, 0, 167, 0, 0, 0, 0, 4, 11, 182
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosShiftGuide.vue", "Vue", 0, 0, 0, 333, 0, 0, 0, 0, 5, 30, 368
+"/Users/peaker/dev/kitchen-app/backoffice/src/help/router.ts", "TypeScript", 192, 0, 0, 0, 0, 0, 0, 0, 9, 8, 209
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/AuthLayout.vue", "Vue", 0, 0, 0, 23, 0, 0, 0, 0, 1, 4, 28
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/EmptyLayout.vue", "Vue", 0, 0, 0, 12, 0, 0, 0, 0, 1, 3, 16
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/KitchenLayout.vue", "Vue", 0, 0, 0, 91, 0, 0, 0, 0, 3, 16, 110
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/MainLayout.vue", "Vue", 0, 0, 0, 32, 0, 0, 0, 0, 1, 7, 40
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/PosLayout.vue", "Vue", 0, 0, 0, 107, 0, 0, 0, 0, 5, 18, 130
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/index.ts", "TypeScript", 9, 0, 0, 0, 0, 0, 0, 0, 4, 4, 17
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/posConstants.ts", "TypeScript", 80, 0, 0, 0, 0, 0, 0, 0, 4, 9, 93
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/posTypes.ts", "TypeScript", 57, 0, 0, 0, 0, 0, 0, 0, 1, 6, 64
+"/Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/usePosLayout.ts", "TypeScript", 84, 0, 0, 0, 0, 0, 0, 0, 17, 21, 122
+"/Users/peaker/dev/kitchen-app/backoffice/src/main.ts", "TypeScript", 48, 0, 0, 0, 0, 0, 0, 0, 14, 15, 77
+"/Users/peaker/dev/kitchen-app/backoffice/src/plugins/vuetify.ts", "TypeScript", 109, 0, 0, 0, 0, 0, 0, 0, 2, 3, 114
+"/Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/IRepository.ts", "TypeScript", 81, 0, 0, 0, 0, 0, 0, 0, 113, 42, 236
+"/Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/LocalStorageRepository.ts", "TypeScript", 272, 0, 0, 0, 0, 0, 0, 0, 19, 57, 348
+"/Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/ServiceResponse.ts", "TypeScript", 134, 0, 0, 0, 0, 0, 0, 0, 69, 32, 235
+"/Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/index.ts", "TypeScript", 90, 0, 0, 0, 0, 0, 0, 0, 25, 20, 135
+"/Users/peaker/dev/kitchen-app/backoffice/src/router/guards/auth.guard.ts", "TypeScript", 118, 0, 0, 0, 0, 0, 0, 0, 14, 12, 144
+"/Users/peaker/dev/kitchen-app/backoffice/src/router/index.ts", "TypeScript", 504, 0, 0, 0, 0, 0, 0, 0, 49, 30, 583
+"/Users/peaker/dev/kitchen-app/backoffice/src/router/types.ts", "TypeScript", 15, 0, 0, 0, 0, 0, 0, 0, 1, 4, 20
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/checkBothDatabases.ts", "TypeScript", 51, 0, 0, 0, 0, 0, 0, 0, 5, 14, 70
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/checkProductionDb.ts", "TypeScript", 35, 0, 0, 0, 0, 0, 0, 0, 4, 10, 49
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/checkProductionTables.ts", "TypeScript", 55, 0, 0, 0, 0, 0, 0, 0, 4, 13, 72
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/migrateMenuToSupabase.ts", "TypeScript", 89, 0, 0, 0, 0, 0, 0, 0, 17, 32, 138
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/addWarehouseRLS.sql", "MS SQL", 0, 0, 0, 0, 0, 18, 0, 0, 6, 5, 29
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/applyPinAuthFunctions.ts", "TypeScript", 72, 0, 0, 0, 0, 0, 0, 0, 13, 25, 110
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/createAuthUsersProduction.sql", "MS SQL", 0, 0, 0, 0, 0, 142, 0, 0, 11, 7, 160
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/createPinAuthFunctions.sql", "MS SQL", 0, 0, 0, 0, 0, 102, 0, 0, 15, 12, 129
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/seedUsersProduction.sql", "MS SQL", 0, 0, 0, 0, 0, 80, 0, 0, 5, 3, 88
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/seedWarehouseProduction.sql", "MS SQL", 0, 0, 0, 0, 0, 16, 0, 0, 4, 3, 23
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/syncUsersFromDev.sql", "MS SQL", 0, 0, 0, 0, 0, 106, 0, 0, 6, 4, 116
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/users.ts", "TypeScript", 171, 0, 0, 0, 0, 0, 0, 0, 27, 23, 221
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/seedProductionUsers.ts", "TypeScript", 146, 0, 0, 0, 0, 0, 0, 0, 8, 19, 173
+"/Users/peaker/dev/kitchen-app/backoffice/src/scripts/supabaseClient.ts", "TypeScript", 34, 0, 0, 0, 0, 0, 0, 0, 7, 10, 51
+"/Users/peaker/dev/kitchen-app/backoffice/src/services/session.service.ts", "TypeScript", 96, 0, 0, 0, 0, 0, 0, 0, 2, 21, 119
+"/Users/peaker/dev/kitchen-app/backoffice/src/services/tax.service.ts", "TypeScript", 46, 0, 0, 0, 0, 0, 0, 0, 5, 14, 65
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/README.md", "Markdown", 0, 254, 0, 0, 0, 0, 0, 0, 0, 89, 343
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/accountConfig.ts", "TypeScript", 126, 0, 0, 0, 0, 0, 0, 0, 91, 24, 241
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/accountSupabaseService.ts", "TypeScript", 708, 0, 0, 0, 0, 0, 0, 0, 103, 126, 937
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/categoryService.ts", "TypeScript", 202, 0, 0, 0, 0, 0, 0, 0, 50, 37, 289
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/composables/useAccountTransactions.ts", "TypeScript", 251, 0, 0, 0, 0, 0, 0, 0, 41, 63, 355
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/constants.ts", "TypeScript", 50, 0, 0, 0, 0, 0, 0, 0, 37, 17, 104
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/index.ts", "TypeScript", 50, 0, 0, 0, 0, 0, 0, 0, 14, 10, 74
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/service.ts", "TypeScript", 424, 0, 0, 0, 0, 0, 0, 0, 45, 75, 544
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/store.ts", "TypeScript", 1120, 0, 0, 0, 0, 0, 0, 0, 189, 242, 1551
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/supabaseMappers.ts", "TypeScript", 178, 0, 0, 0, 0, 0, 0, 0, 65, 25, 268
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/account/types.ts", "TypeScript", 266, 0, 0, 0, 0, 0, 0, 0, 32, 44, 342
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/foodCostStore.ts", "TypeScript", 206, 0, 0, 0, 0, 0, 0, 0, 38, 41, 285
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 2, 2, 8
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/inventoryValuationStore.ts", "TypeScript", 323, 0, 0, 0, 0, 0, 0, 0, 37, 48, 408
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/negativeInventoryReportStore.ts", "TypeScript", 250, 0, 0, 0, 0, 0, 0, 0, 33, 47, 330
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/plReportStore.ts", "TypeScript", 379, 0, 0, 0, 0, 0, 0, 0, 99, 82, 560
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/services/cogsService.ts", "TypeScript", 60, 0, 0, 0, 0, 0, 0, 0, 38, 10, 108
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/types.ts", "TypeScript", 247, 0, 0, 0, 0, 0, 0, 0, 75, 45, 367
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/authStore.ts", "TypeScript", 412, 0, 0, 0, 0, 0, 0, 0, 85, 93, 590
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/composables/index.ts", "TypeScript", 2, 0, 0, 0, 0, 0, 0, 0, 4, 2, 8
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/composables/useAuth.ts", "TypeScript", 59, 0, 0, 0, 0, 0, 0, 0, 21, 15, 95
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/composables/usePermissions.ts", "TypeScript", 39, 0, 0, 0, 0, 0, 0, 0, 19, 15, 73
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/index.ts", "TypeScript", 3, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/services/index.ts", "TypeScript", 0, 0, 0, 0, 0, 0, 0, 0, 7, 3, 10
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/services/session.service.ts", "TypeScript", 181, 0, 0, 0, 0, 0, 0, 0, 51, 38, 270
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/types.ts", "TypeScript", 211, 0, 0, 0, 0, 0, 0, 0, 48, 54, 313
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/catalog/payment-methods.service.ts", "TypeScript", 167, 0, 0, 0, 0, 0, 0, 0, 42, 33, 242
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/catalog/payment-settings.store.ts", "TypeScript", 153, 0, 0, 0, 0, 0, 0, 0, 17, 29, 199
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/composables/useCounteragentBalance.ts", "TypeScript", 122, 0, 0, 0, 0, 0, 0, 0, 52, 26, 200
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/counteragentsService.ts", "TypeScript", 466, 0, 0, 0, 0, 0, 0, 0, 49, 109, 624
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/counteragentsStore.ts", "TypeScript", 523, 0, 0, 0, 0, 0, 0, 0, 87, 127, 737
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/index.ts", "TypeScript", 157, 0, 0, 0, 0, 0, 0, 0, 19, 33, 209
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/integrations/automatedPayments.ts", "TypeScript", 251, 0, 0, 0, 0, 0, 0, 0, 50, 57, 358
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/services/balanceCorrectionService.ts", "TypeScript", 219, 0, 0, 0, 0, 0, 0, 0, 33, 40, 292
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/supabaseMappers.ts", "TypeScript", 100, 0, 0, 0, 0, 0, 0, 0, 11, 8, 119
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/types.ts", "TypeScript", 212, 0, 0, 0, 0, 0, 0, 0, 59, 47, 318
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useDebugFormatting.ts", "TypeScript", 282, 0, 0, 0, 0, 0, 0, 0, 75, 43, 400
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useDebugStores.ts", "TypeScript", 164, 0, 0, 0, 0, 0, 0, 0, 93, 42, 299
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/debugService.ts", "TypeScript", 1398, 0, 0, 0, 0, 0, 0, 0, 123, 203, 1724
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/debugStore.ts", "TypeScript", 358, 0, 0, 0, 0, 0, 0, 0, 88, 80, 526
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/index.ts", "TypeScript", 23, 0, 0, 0, 0, 0, 0, 0, 6, 6, 35
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/types.ts", "TypeScript", 233, 0, 0, 0, 0, 0, 0, 0, 38, 40, 311
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/composables/index.ts", "TypeScript", 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 3
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/composables/useDiscountAnalytics.ts", "TypeScript", 181, 0, 0, 0, 0, 0, 0, 0, 97, 37, 315
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/constants.ts", "TypeScript", 140, 0, 0, 0, 0, 0, 0, 0, 57, 10, 207
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/discountsStore.ts", "TypeScript", 242, 0, 0, 0, 0, 0, 0, 0, 70, 40, 352
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/index.ts", "TypeScript", 39, 0, 0, 0, 0, 0, 0, 0, 23, 8, 70
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/services/discountService.ts", "TypeScript", 319, 0, 0, 0, 0, 0, 0, 0, 159, 57, 535
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/services/index.ts", "TypeScript", 9, 0, 0, 0, 0, 0, 0, 0, 8, 3, 20
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/services/supabaseService.ts", "TypeScript", 338, 0, 0, 0, 0, 0, 0, 0, 118, 63, 519
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/types.ts", "TypeScript", 116, 0, 0, 0, 0, 0, 0, 0, 70, 32, 218
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 1, 1, 6
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/useKitchenDishes.ts", "TypeScript", 213, 0, 0, 0, 0, 0, 0, 0, 90, 44, 347
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/useKitchenOrders.ts", "TypeScript", 70, 0, 0, 0, 0, 0, 0, 0, 35, 14, 119
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/useKitchenStatus.ts", "TypeScript", 105, 0, 0, 0, 0, 0, 0, 0, 31, 10, 146
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/index.ts", "TypeScript", 214, 0, 0, 0, 0, 0, 0, 0, 43, 28, 285
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/kitchenService.ts", "TypeScript", 199, 0, 0, 0, 0, 0, 0, 0, 50, 37, 286
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/useKitchenRealtime.ts", "TypeScript", 161, 0, 0, 0, 0, 0, 0, 0, 46, 16, 223
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/index.ts", "TypeScript", 5, 0, 0, 0, 0, 0, 0, 0, 2, 2, 9
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useFoodCostKpi.ts", "TypeScript", 81, 0, 0, 0, 0, 0, 0, 0, 50, 25, 156
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useHistoryTab.ts", "TypeScript", 82, 0, 0, 0, 0, 0, 0, 0, 52, 27, 161
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useKitchenKpi.ts", "TypeScript", 164, 0, 0, 0, 0, 0, 0, 0, 76, 45, 285
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useProductionSchedule.ts", "TypeScript", 240, 0, 0, 0, 0, 0, 0, 0, 116, 58, 414
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useRecommendations.ts", "TypeScript", 142, 0, 0, 0, 0, 0, 0, 0, 54, 40, 236
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useSyncStatus.ts", "TypeScript", 174, 0, 0, 0, 0, 0, 0, 0, 67, 47, 288
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useTimeKpi.ts", "TypeScript", 196, 0, 0, 0, 0, 0, 0, 0, 77, 42, 315
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/index.ts", "TypeScript", 38, 0, 0, 0, 0, 0, 0, 0, 16, 7, 61
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/kitchenKpiService.ts", "TypeScript", 459, 0, 0, 0, 0, 0, 0, 0, 73, 99, 631
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/kitchenKpiStore.ts", "TypeScript", 567, 0, 0, 0, 0, 0, 0, 0, 97, 134, 798
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/offlineCache.ts", "TypeScript", 242, 0, 0, 0, 0, 0, 0, 0, 25, 58, 325
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/foodCostKpiService.ts", "TypeScript", 115, 0, 0, 0, 0, 0, 0, 0, 32, 19, 166
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/historyService.ts", "TypeScript", 264, 0, 0, 0, 0, 0, 0, 0, 31, 52, 347
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/kpiSettingsService.ts", "TypeScript", 65, 0, 0, 0, 0, 0, 0, 0, 20, 13, 98
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/recommendationsService.ts", "TypeScript", 339, 0, 0, 0, 0, 0, 0, 0, 81, 74, 494
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/timeKpiService.ts", "TypeScript", 200, 0, 0, 0, 0, 0, 0, 0, 30, 29, 259
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/types.ts", "TypeScript", 297, 0, 0, 0, 0, 0, 0, 0, 114, 43, 454
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/index.ts", "TypeScript", 54, 0, 0, 0, 0, 0, 0, 0, 9, 6, 69
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/menuService.ts", "TypeScript", 439, 0, 0, 0, 0, 0, 0, 0, 59, 75, 573
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/menuStore.ts", "TypeScript", 479, 0, 0, 0, 0, 0, 0, 0, 46, 83, 608
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/supabaseMappers.ts", "TypeScript", 103, 0, 0, 0, 0, 0, 0, 0, 78, 34, 215
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/types.ts", "TypeScript", 335, 0, 0, 0, 0, 0, 0, 0, 82, 76, 493
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/core/posSystem.ts", "TypeScript", 80, 0, 0, 0, 0, 0, 0, 0, 37, 21, 138
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/index.ts", "TypeScript", 326, 0, 0, 0, 0, 0, 0, 0, 71, 77, 474
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables.ts", "TypeScript", 275, 0, 0, 0, 0, 0, 0, 0, 94, 50, 419
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 4, 2, 10
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/useCancellation.ts", "TypeScript", 236, 0, 0, 0, 0, 0, 0, 0, 38, 40, 314
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/useOrderCalculations.ts", "TypeScript", 546, 0, 0, 0, 0, 0, 0, 0, 242, 120, 908
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/useOrders.ts", "TypeScript", 172, 0, 0, 0, 0, 0, 0, 0, 69, 39, 280
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/ordersStore.ts", "TypeScript", 1076, 0, 0, 0, 0, 0, 0, 0, 256, 208, 1540
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/services.ts", "TypeScript", 1040, 0, 0, 0, 0, 0, 0, 0, 127, 174, 1341
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/supabaseMappers.ts", "TypeScript", 267, 0, 0, 0, 0, 0, 0, 0, 105, 67, 439
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/useOrdersRealtime.ts", "TypeScript", 178, 0, 0, 0, 0, 0, 0, 0, 52, 32, 262
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/composables.ts", "TypeScript", 144, 0, 0, 0, 0, 0, 0, 0, 46, 22, 212
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/paymentsStore.ts", "TypeScript", 446, 0, 0, 0, 0, 0, 0, 0, 124, 106, 676
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/services.ts", "TypeScript", 258, 0, 0, 0, 0, 0, 0, 0, 58, 42, 358
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/supabaseMappers.ts", "TypeScript", 72, 0, 0, 0, 0, 0, 0, 0, 31, 23, 126
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/composables/usePosReceipt.ts", "TypeScript", 670, 0, 0, 0, 0, 0, 0, 0, 170, 124, 964
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/index.ts", "TypeScript", 8, 0, 0, 0, 0, 0, 0, 0, 5, 4, 17
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/services.ts", "TypeScript", 210, 0, 0, 0, 0, 0, 0, 0, 40, 30, 280
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/types.ts", "TypeScript", 162, 0, 0, 0, 0, 0, 0, 0, 68, 35, 265
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/service/DepartmentNotificationService.ts", "TypeScript", 264, 0, 0, 0, 0, 0, 0, 0, 62, 58, 384
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/service/supabaseMappers.ts", "TypeScript", 106, 0, 0, 0, 0, 0, 0, 0, 22, 16, 144
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/composables.ts", "TypeScript", 273, 0, 0, 0, 0, 0, 0, 0, 91, 58, 422
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/composables/useExpenseLinking.ts", "TypeScript", 264, 0, 0, 0, 0, 0, 0, 0, 44, 50, 358
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/index.ts", "TypeScript", 6, 0, 0, 0, 0, 0, 0, 0, 240, 19, 265
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/services.ts", "TypeScript", 514, 0, 0, 0, 0, 0, 0, 0, 136, 99, 749
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/shiftsStore.ts", "TypeScript", 1081, 0, 0, 0, 0, 0, 0, 0, 217, 204, 1502
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/supabaseMappers.ts", "TypeScript", 200, 0, 0, 0, 0, 0, 0, 0, 28, 26, 254
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/types.ts", "TypeScript", 324, 0, 0, 0, 0, 0, 0, 0, 170, 91, 585
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/composables/useTables.ts", "TypeScript", 95, 0, 0, 0, 0, 0, 0, 0, 56, 22, 173
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/services.ts", "TypeScript", 219, 0, 0, 0, 0, 0, 0, 0, 35, 37, 291
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/supabaseMappers.ts", "TypeScript", 47, 0, 0, 0, 0, 0, 0, 0, 18, 8, 73
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/tablesStore.ts", "TypeScript", 244, 0, 0, 0, 0, 0, 0, 0, 52, 51, 347
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/types.ts", "TypeScript", 47, 0, 0, 0, 0, 0, 0, 0, 5, 12, 64
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/types.ts", "TypeScript", 350, 0, 0, 0, 0, 0, 0, 0, 35, 55, 440
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/composables/usePreparationWriteOff.ts", "TypeScript", 380, 0, 0, 0, 0, 0, 0, 0, 82, 63, 525
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/index.ts", "TypeScript", 29, 0, 0, 0, 0, 0, 0, 0, 12, 6, 47
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/negativeBatchService.ts", "TypeScript", 258, 0, 0, 0, 0, 0, 0, 0, 106, 51, 415
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/preparationService.ts", "TypeScript", 1326, 0, 0, 0, 0, 0, 0, 0, 156, 246, 1728
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/preparationStore.ts", "TypeScript", 623, 0, 0, 0, 0, 0, 0, 0, 86, 126, 835
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/reconciliationService.ts", "TypeScript", 77, 0, 0, 0, 0, 0, 0, 0, 49, 17, 143
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/supabase/mappers.ts", "TypeScript", 187, 0, 0, 0, 0, 0, 0, 0, 48, 17, 252
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/types.ts", "TypeScript", 393, 0, 0, 0, 0, 0, 0, 0, 69, 53, 515
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 3, 3, 10
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductConsumption.ts", "TypeScript", 256, 0, 0, 0, 0, 0, 0, 0, 32, 53, 341
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductPriceHistory.ts", "TypeScript", 295, 0, 0, 0, 0, 0, 0, 0, 45, 59, 399
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductUsage.ts", "TypeScript", 429, 0, 0, 0, 0, 0, 0, 0, 45, 73, 547
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useStockRecommendations.ts", "TypeScript", 231, 0, 0, 0, 0, 0, 0, 0, 25, 45, 301
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/index.ts", "TypeScript", 11, 0, 0, 0, 0, 0, 0, 0, 6, 5, 22
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/productsService.ts", "TypeScript", 392, 0, 0, 0, 0, 0, 0, 0, 87, 82, 561
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/productsStore.ts", "TypeScript", 748, 0, 0, 0, 0, 0, 0, 0, 125, 155, 1028
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/supabaseMappers.ts", "TypeScript", 140, 0, 0, 0, 0, 0, 0, 0, 50, 20, 210
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/types.ts", "TypeScript", 299, 0, 0, 0, 0, 0, 0, 0, 36, 55, 390
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useAutoCostRecalculation.ts", "TypeScript", 142, 0, 0, 0, 0, 0, 0, 0, 42, 35, 219
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useCostCalculation.ts", "TypeScript", 906, 0, 0, 0, 0, 0, 0, 0, 140, 165, 1211
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useMenuRecipeLinks.ts", "TypeScript", 145, 0, 0, 0, 0, 0, 0, 0, 51, 37, 233
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/usePreparationGraph.ts", "TypeScript", 140, 0, 0, 0, 0, 0, 0, 0, 79, 40, 259
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/usePreparations.ts", "TypeScript", 373, 0, 0, 0, 0, 0, 0, 0, 115, 84, 572
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeGraph.ts", "TypeScript", 197, 0, 0, 0, 0, 0, 0, 0, 102, 50, 349
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeIntegration.ts", "TypeScript", 186, 0, 0, 0, 0, 0, 0, 0, 65, 55, 306
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeUsage.ts", "TypeScript", 200, 0, 0, 0, 0, 0, 0, 0, 66, 45, 311
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipes.ts", "TypeScript", 520, 0, 0, 0, 0, 0, 0, 0, 140, 114, 774
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useUnits.ts", "TypeScript", 83, 0, 0, 0, 0, 0, 0, 0, 53, 34, 170
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useUsageCheck.ts", "TypeScript", 147, 0, 0, 0, 0, 0, 0, 0, 26, 24, 197
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 2, 2, 8
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesService.ts", "TypeScript", 878, 0, 0, 0, 0, 0, 0, 0, 145, 173, 1196
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesStore.ts", "TypeScript", 638, 0, 0, 0, 0, 0, 0, 0, 128, 151, 917
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/supabaseMappers.ts", "TypeScript", 264, 0, 0, 0, 0, 0, 0, 0, 108, 37, 409
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/types.ts", "TypeScript", 369, 0, 0, 0, 0, 0, 0, 0, 122, 80, 571
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/composables/useProfitCalculation.ts", "TypeScript", 204, 0, 0, 0, 0, 0, 0, 0, 48, 34, 286
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/index.ts", "TypeScript", 14, 0, 0, 0, 0, 0, 0, 0, 5, 5, 24
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/index.ts", "TypeScript", 3, 0, 0, 0, 0, 0, 0, 0, 5, 4, 12
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/recipeWriteOffStore.ts", "TypeScript", 225, 0, 0, 0, 0, 0, 0, 0, 39, 36, 300
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/services.ts", "TypeScript", 429, 0, 0, 0, 0, 0, 0, 0, 47, 55, 531
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/supabase/mappers.ts", "TypeScript", 45, 0, 0, 0, 0, 0, 0, 0, 20, 14, 79
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/types.ts", "TypeScript", 62, 0, 0, 0, 0, 0, 0, 0, 28, 16, 106
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/salesStore.ts", "TypeScript", 407, 0, 0, 0, 0, 0, 0, 0, 77, 59, 543
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/services.ts", "TypeScript", 374, 0, 0, 0, 0, 0, 0, 0, 36, 44, 454
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/supabase/mappers.ts", "TypeScript", 75, 0, 0, 0, 0, 0, 0, 0, 30, 24, 129
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/types.ts", "TypeScript", 135, 0, 0, 0, 0, 0, 0, 0, 75, 36, 246
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/composables/useInventory.ts", "TypeScript", 163, 0, 0, 0, 0, 0, 0, 0, 63, 49, 275
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/composables/useWriteOff-copy.ts", "TypeScript", 479, 0, 0, 0, 0, 0, 0, 0, 100, 84, 663
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/composables/useWriteOff.ts", "TypeScript", 560, 0, 0, 0, 0, 0, 0, 0, 111, 99, 770
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/index.ts", "TypeScript", 36, 0, 0, 0, 0, 0, 0, 0, 6, 6, 48
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/negativeBatchService.ts", "TypeScript", 303, 0, 0, 0, 0, 0, 0, 0, 109, 53, 465
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/reconciliationService.ts", "TypeScript", 61, 0, 0, 0, 0, 0, 0, 0, 47, 15, 123
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageService.ts", "TypeScript", 1527, 0, 0, 0, 0, 0, 0, 0, 191, 280, 1998
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageStore.ts", "TypeScript", 743, 0, 0, 0, 0, 0, 0, 0, 139, 186, 1068
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/supabaseMappers.ts", "TypeScript", 156, 0, 0, 0, 0, 0, 0, 0, 23, 9, 188
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/transitBatchService.ts", "TypeScript", 366, 0, 0, 0, 0, 0, 0, 0, 103, 85, 554
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/types.ts", "TypeScript", 376, 0, 0, 0, 0, 0, 0, 0, 22, 41, 439
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/__tests__/supplierIntegration.test.ts", "TypeScript", 363, 0, 0, 0, 0, 0, 0, 0, 22, 55, 440
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useOrderAssistant.ts", "TypeScript", 533, 0, 0, 0, 0, 0, 0, 0, 144, 110, 787
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useOrderPayments.ts", "TypeScript", 677, 0, 0, 0, 0, 0, 0, 0, 150, 153, 980
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useProcurementRequests.ts", "TypeScript", 317, 0, 0, 0, 0, 0, 0, 0, 115, 65, 497
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/usePurchaseOrderExport.ts", "TypeScript", 120, 0, 0, 0, 0, 0, 0, 0, 30, 20, 170
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/usePurchaseOrders.ts", "TypeScript", 785, 0, 0, 0, 0, 0, 0, 0, 251, 178, 1214
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useReceipts.ts", "TypeScript", 754, 0, 0, 0, 0, 0, 0, 0, 185, 161, 1100
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/index.ts", "TypeScript", 133, 0, 0, 0, 0, 0, 0, 0, 51, 37, 221
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/accountIntegration.ts", "TypeScript", 357, 0, 0, 0, 0, 0, 0, 0, 40, 67, 464
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 7
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/plannedDeliveryIntegration-copy.ts", "TypeScript", 167, 0, 0, 0, 0, 0, 0, 0, 84, 44, 295
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/storageIntegration.ts", "TypeScript", 575, 0, 0, 0, 0, 0, 0, 0, 43, 120, 738
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supabaseMappers.ts", "TypeScript", 283, 0, 0, 0, 0, 0, 0, 0, 89, 74, 446
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supplierService.ts", "TypeScript", 1309, 0, 0, 0, 0, 0, 0, 0, 172, 265, 1746
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supplierStore.ts", "TypeScript", 1285, 0, 0, 0, 0, 0, 0, 0, 98, 259, 1642
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/types.ts", "TypeScript", 399, 0, 0, 0, 0, 0, 0, 0, 66, 89, 554
+"/Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/types/supplierIntegrationTypes.ts", "TypeScript", 163, 0, 0, 0, 0, 0, 0, 0, 82, 33, 278
+"/Users/peaker/dev/kitchen-app/backoffice/src/styles/main.scss", "SCSS", 0, 0, 0, 0, 387, 0, 0, 0, 56, 55, 498
+"/Users/peaker/dev/kitchen-app/backoffice/src/styles/variables.scss", "SCSS", 0, 0, 0, 0, 180, 0, 0, 0, 57, 37, 274
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/README.md", "Markdown", 0, 198, 0, 0, 0, 0, 0, 0, 0, 94, 292
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/client.ts", "TypeScript", 81, 0, 0, 0, 0, 0, 0, 0, 49, 20, 150
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/config.ts", "TypeScript", 44, 0, 0, 0, 0, 0, 0, 0, 22, 7, 73
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/index.ts", "TypeScript", 18, 0, 0, 0, 0, 0, 0, 0, 1, 2, 21
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/060_update_food_cost_kpi_inventory_dept.sql", "MS SQL", 0, 0, 0, 0, 0, 135, 0, 0, 34, 14, 183
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/061_add_item_cancellation_fields.sql", "MS SQL", 0, 0, 0, 0, 0, 14, 0, 0, 6, 4, 24
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/062_add_cogs_indexes.sql", "MS SQL", 0, 0, 0, 0, 0, 9, 0, 0, 10, 6, 25
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/063_create_cogs_date_range_function.sql", "MS SQL", 0, 0, 0, 0, 0, 128, 0, 0, 23, 12, 163
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/064_create_kpi_settings_table.sql", "MS SQL", 0, 0, 0, 0, 0, 34, 0, 0, 11, 9, 54
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/065_drop_old_kpi_function.sql", "MS SQL", 0, 0, 0, 0, 0, 1, 0, 0, 10, 4, 15
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/066_create_complete_production_schedule_task.sql", "MS SQL", 0, 0, 0, 0, 0, 35, 0, 0, 13, 7, 55
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/067_create_transaction_categories.sql", "MS SQL", 0, 0, 0, 0, 0, 36, 0, 0, 10, 5, 51
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/068_add_tax_income_categories.sql", "MS SQL", 0, 0, 0, 0, 0, 26, 0, 0, 15, 5, 46
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/069_expense_linking.sql", "MS SQL", 0, 0, 0, 0, 0, 136, 0, 0, 56, 28, 220
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/070_create_products_consumption_stats_function.sql", "MS SQL", 0, 0, 0, 0, 0, 74, 0, 0, 20, 12, 106
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/071_add_recipe_nesting_support.sql", "MS SQL", 0, 0, 0, 0, 0, 104, 0, 0, 78, 29, 211
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/PRODUCTION_kitchen_prep_sprint7.sql", "MS SQL", 0, 0, 0, 0, 0, 305, 0, 0, 40, 55, 400
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/README.md", "Markdown", 0, 111, 0, 0, 0, 0, 0, 0, 0, 35, 146
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/001_initial_schema.sql", "MS SQL", 0, 0, 0, 0, 0, 195, 0, 0, 67, 63, 325
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/002_add_missing_shift_fields.sql", "MS SQL", 0, 0, 0, 0, 0, 29, 0, 0, 7, 6, 42
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/003_update_orders_payments_schema.sql", "MS SQL", 0, 0, 0, 0, 0, 88, 0, 0, 32, 21, 141
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/004_create_menu_tables.sql", "MS SQL", 0, 0, 0, 0, 0, 52, 0, 0, 37, 27, 116
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/005_update_products_schema.sql", "MS SQL", 0, 0, 0, 0, 0, 74, 0, 0, 44, 34, 152
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/006_enable_rls_policies.sql", "MS SQL", 0, 0, 0, 0, 0, 334, 0, 0, 85, 62, 481
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/007_create_users_table.sql", "MS SQL", 0, 0, 0, 0, 0, 133, 0, 0, 82, 32, 247
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/008_create_product_categories.sql", "MS SQL", 0, 0, 0, 0, 0, 45, 0, 0, 10, 8, 63
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/009_migrate_preparations_type_to_uuid.sql", "MS SQL", 0, 0, 0, 0, 0, 58, 0, 0, 58, 22, 138
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/009_migrate_products_category.sql", "MS SQL", 0, 0, 0, 0, 0, 30, 0, 0, 14, 11, 55
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/010_cleanup_preparations_category_id.sql", "MS SQL", 0, 0, 0, 0, 0, 2, 0, 0, 28, 6, 36
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/011_create_recipe_categories.sql", "MS SQL", 0, 0, 0, 0, 0, 43, 0, 0, 10, 8, 61
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/011_make_recipe_preparation_codes_required.sql", "MS SQL", 0, 0, 0, 0, 0, 74, 0, 0, 33, 19, 126
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/012_fix_product_units.sql", "MS SQL", 0, 0, 0, 0, 0, 32, 0, 0, 10, 10, 52
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/012_migrate_recipes_category_to_uuid.sql", "MS SQL", 0, 0, 0, 0, 0, 28, 0, 0, 13, 11, 52
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/013_add_prep_categories_winter_menu.sql", "MS SQL", 0, 0, 0, 0, 0, 10, 0, 0, 11, 6, 27
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/013_fix_preparation_batches_department_consistency.sql", "MS SQL", 0, 0, 0, 0, 0, 53, 0, 0, 32, 16, 101
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/014_add_preparation_shelf_life.sql", "MS SQL", 0, 0, 0, 0, 0, 25, 0, 0, 80, 23, 128
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/014_dev_migrate_prep_ingredients_to_uuid.sql", "MS SQL", 0, 0, 0, 0, 0, 57, 0, 0, 32, 23, 112
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/014_fix_preparation_ingredients_id_type.sql", "MS SQL", 0, 0, 0, 0, 0, 14, 0, 0, 9, 8, 31
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/015_add_operation_links_for_auto_writeoff.sql", "MS SQL", 0, 0, 0, 0, 0, 42, 0, 0, 54, 22, 118
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/015_add_recipe_categories_winter_menu.sql", "MS SQL", 0, 0, 0, 0, 0, 18, 0, 0, 9, 7, 34
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/016_add_code_field_to_products.sql", "MS SQL", 0, 0, 0, 0, 0, 82, 0, 0, 64, 34, 180
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/016_add_code_fields_nullable.sql", "MS SQL", 0, 0, 0, 0, 0, 33, 0, 0, 39, 19, 91
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/016_fix_is_admin_infinite_loop.sql", "MS SQL", 0, 0, 0, 0, 0, 38, 0, 0, 19, 10, 67
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/017_create_sales_transactions.sql", "MS SQL", 0, 0, 0, 0, 0, 106, 0, 0, 107, 41, 254
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/018_add_actual_cost_to_sales_transactions.sql", "MS SQL", 0, 0, 0, 0, 0, 34, 0, 0, 18, 15, 67
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/019_create_payment_methods_table.sql", "MS SQL", 0, 0, 0, 0, 0, 79, 0, 0, 58, 33, 170
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/020_add_pos_cash_register_flag.sql", "MS SQL", 0, 0, 0, 0, 0, 25, 0, 0, 9, 7, 41
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/021_simplify_payment_type.sql", "MS SQL", 0, 0, 0, 0, 0, 7, 0, 0, 6, 4, 17
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/022_cleanup_empty_expense_account_ids.sql", "MS SQL", 0, 0, 0, 0, 0, 48, 0, 0, 13, 8, 69
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/023_negative_inventory_support.sql", "MS SQL", 0, 0, 0, 0, 0, 40, 0, 0, 18, 15, 73
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/024_backfill_last_known_costs.sql", "MS SQL", 0, 0, 0, 0, 0, 23, 0, 0, 21, 9, 53
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/025_negative_inventory_indexes.sql", "MS SQL", 0, 0, 0, 0, 0, 36, 0, 0, 33, 18, 87
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/026_fix_reconciled_negative_batches.sql", "MS SQL", 0, 0, 0, 0, 0, 53, 0, 0, 20, 11, 84
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/027_backfill_writeoff_expenses.sql", "MS SQL", 0, 0, 0, 0, 0, 130, 0, 0, 18, 13, 161
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/028_backfill_opex_writeoffs.sql", "MS SQL", 0, 0, 0, 0, 0, 159, 0, 0, 16, 11, 186
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/029_production_writeoff_expenses.sql", "MS SQL", 0, 0, 0, 0, 0, 282, 0, 0, 37, 31, 350
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/030_cleanup_unused_negative_batch_field.sql", "MS SQL", 0, 0, 0, 0, 0, 55, 0, 0, 18, 14, 87
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/031_migrate_supplier_ids_to_uuid.sql", "MS SQL", 0, 0, 0, 0, 0, 96, 0, 0, 59, 21, 176
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/032_simplify_menu_dish_types.sql", "MS SQL", 0, 0, 0, 0, 0, 67, 0, 0, 40, 17, 124
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/033_add_base_composition_to_modifiable_dishes.sql", "MS SQL", 0, 0, 0, 0, 0, 156, 0, 0, 39, 19, 214
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/034_create_discount_events_table.sql", "MS SQL", 0, 0, 0, 0, 0, 125, 0, 0, 66, 38, 229
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/035_add_revenue_breakdown_to_orders.sql", "MS SQL", 0, 0, 0, 0, 0, 66, 0, 0, 75, 27, 168
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/036_add_tax_storage_fields.sql", "MS SQL", 0, 0, 0, 0, 0, 32, 0, 0, 18, 13, 63
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/037_add_department_to_recipes.sql", "MS SQL", 0, 0, 0, 0, 0, 39, 0, 0, 19, 11, 69
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/038_make_instructions_optional.sql", "MS SQL", 0, 0, 0, 0, 0, 39, 0, 0, 17, 11, 67
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/039_add_use_yield_percentage.sql", "MS SQL", 0, 0, 0, 0, 0, 36, 0, 0, 33, 16, 85
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/040_add_nested_preparations.sql", "MS SQL", 0, 0, 0, 0, 0, 34, 0, 0, 17, 10, 61
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/041_add_portion_type.sql", "MS SQL", 0, 0, 0, 0, 0, 27, 0, 0, 20, 16, 63
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/042_add_nested_categories.sql", "MS SQL", 0, 0, 0, 0, 0, 52, 0, 0, 27, 17, 96
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/043_convert_target_component_to_array.sql", "MS SQL", 0, 0, 0, 0, 0, 16, 0, 0, 18, 5, 39
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/044_add_custom_breakfast_category.sql", "MS SQL", 0, 0, 0, 0, 0, 23, 0, 0, 5, 3, 31
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/045_add_templates_to_menu_items.sql", "MS SQL", 0, 0, 0, 0, 0, 13, 0, 0, 8, 5, 26
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/046_add_related_storage_operation_ids.sql", "MS SQL", 0, 0, 0, 0, 0, 4, 0, 0, 9, 3, 16
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/047_add_preparation_schedule_fields.sql", "MS SQL", 0, 0, 0, 0, 0, 53, 0, 0, 19, 15, 87
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/048_create_kitchen_kpi_table.sql", "MS SQL", 0, 0, 0, 0, 0, 142, 0, 0, 30, 29, 201
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/049_create_production_schedule_table.sql", "MS SQL", 0, 0, 0, 0, 0, 152, 0, 0, 29, 36, 217
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/050_add_batch_decrement_functions.sql", "MS SQL", 0, 0, 0, 0, 0, 45, 0, 0, 10, 9, 64
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/051_create_complete_schedule_task_rpc.sql", "MS SQL", 0, 0, 0, 0, 0, 35, 0, 0, 13, 8, 56
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/052_orders_replica_identity_full.sql", "MS SQL", 0, 0, 0, 0, 0, 1, 0, 0, 11, 3, 15
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/053_create_order_items_table.sql", "MS SQL", 0, 0, 0, 0, 0, 36, 0, 0, 37, 16, 89
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/054_update_orders_structure.sql", "MS SQL", 0, 0, 0, 0, 0, 2, 0, 0, 42, 5, 49
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/055_order_items_realtime_publication.sql", "MS SQL", 0, 0, 0, 0, 0, 32, 0, 0, 30, 9, 71
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/056_create_time_kpi_functions.sql", "MS SQL", 0, 0, 0, 0, 0, 121, 0, 0, 16, 5, 142
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/057_add_draft_seconds_to_kpi.sql", "MS SQL", 0, 0, 0, 0, 0, 49, 0, 0, 10, 4, 63
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/058_fix_bar_waiting_seconds.sql", "MS SQL", 0, 0, 0, 0, 0, 57, 0, 0, 18, 4, 79
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/059_create_food_cost_kpi_function.sql", "MS SQL", 0, 0, 0, 0, 0, 93, 0, 0, 19, 12, 124
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/098_make_discount_events_applied_by_nullable.sql", "MS SQL", 0, 0, 0, 0, 0, 4, 0, 0, 25, 7, 36
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/099_fix_discount_events_insert_policy.sql", "MS SQL", 0, 0, 0, 0, 0, 7, 0, 0, 30, 8, 45
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/100_fix_discount_events_policy_match_orders.sql", "MS SQL", 0, 0, 0, 0, 0, 6, 0, 0, 21, 8, 35
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/101_temp_disable_rls_discount_events.sql", "MS SQL", 0, 0, 0, 0, 0, 1, 0, 0, 17, 5, 23
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/102_enable_rls_with_uid_check.sql", "MS SQL", 0, 0, 0, 0, 0, 7, 0, 0, 21, 8, 36
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/README.md", "Markdown", 0, 66, 0, 0, 0, 0, 0, 0, 0, 34, 100
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/types.gen.ts", "TypeScript", 2708, 0, 0, 0, 0, 0, 0, 0, 2, 10, 2720
+"/Users/peaker/dev/kitchen-app/backoffice/src/supabase/types.ts", "TypeScript", 792, 0, 0, 0, 0, 0, 0, 0, 13, 19, 824
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/bill.ts", "TypeScript", 29, 0, 0, 0, 0, 0, 0, 0, 1, 4, 34
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/common.ts", "TypeScript", 8, 0, 0, 0, 0, 0, 0, 0, 1, 1, 10
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/customer.ts", "TypeScript", 7, 0, 0, 0, 0, 0, 0, 0, 1, 1, 9
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/index.ts", "TypeScript", 7, 0, 0, 0, 0, 0, 0, 0, 1, 1, 9
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/measurementUnits.ts", "TypeScript", 226, 0, 0, 0, 0, 0, 0, 0, 70, 38, 334
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/payment.ts", "TypeScript", 49, 0, 0, 0, 0, 0, 0, 0, 16, 7, 72
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/settings.ts", "TypeScript", 23, 0, 0, 0, 0, 0, 0, 0, 1, 3, 27
+"/Users/peaker/dev/kitchen-app/backoffice/src/types/tax.ts", "TypeScript", 6, 0, 0, 0, 0, 0, 0, 0, 1, 2, 9
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/currency.ts", "TypeScript", 180, 0, 0, 0, 0, 0, 0, 0, 125, 54, 359
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/debugger.ts", "TypeScript", 370, 0, 0, 0, 0, 0, 0, 0, 53, 77, 500
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/errors.ts", "TypeScript", 83, 0, 0, 0, 0, 0, 0, 0, 34, 17, 134
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/formatter.ts", "TypeScript", 96, 0, 0, 0, 0, 0, 0, 0, 40, 25, 161
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/id.ts", "TypeScript", 16, 0, 0, 0, 0, 0, 0, 0, 12, 4, 32
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/index.ts", "TypeScript", 7, 0, 0, 0, 0, 0, 0, 0, 1, 1, 9
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/quantityFormatter.ts", "TypeScript", 181, 0, 0, 0, 0, 0, 0, 0, 53, 43, 277
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/supabase.ts", "TypeScript", 46, 0, 0, 0, 0, 0, 0, 0, 56, 8, 110
+"/Users/peaker/dev/kitchen-app/backoffice/src/utils/time.ts", "TypeScript", 347, 0, 0, 0, 0, 0, 0, 0, 126, 60, 533
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/NotFoundView.vue", "Vue", 0, 0, 0, 120, 0, 0, 0, 0, 5, 19, 144
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/PreparationView.vue", "Vue", 0, 0, 0, 525, 0, 0, 0, 0, 16, 82, 623
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/DirectPreparationProductionDialog.vue", "Vue", 0, 0, 0, 1046, 0, 0, 0, 0, 27, 135, 1208
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/InventoryDetailsDialog.vue", "Vue", 0, 0, 0, 633, 0, 0, 0, 0, 18, 66, 717
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationAlerts.vue", "Vue", 0, 0, 0, 92, 0, 0, 0, 0, 2, 14, 108
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoriesTable.vue", "Vue", 0, 0, 0, 478, 0, 0, 0, 0, 19, 61, 558
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoryDialog.vue", "Vue", 0, 0, 0, 496, 0, 0, 0, 0, 9, 76, 581
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoryItemRow.vue", "Vue", 0, 0, 0, 325, 0, 0, 0, 0, 10, 42, 377
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationItemDetailsDialog.vue", "Vue", 0, 0, 0, 516, 0, 0, 0, 0, 11, 57, 584
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationOperationsTable.vue", "Vue", 0, 0, 0, 729, 0, 0, 0, 0, 29, 71, 829
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationStockTable.vue", "Vue", 0, 0, 0, 743, 0, 0, 0, 0, 27, 93, 863
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/index.ts", "TypeScript", 9, 0, 0, 0, 0, 0, 0, 0, 122, 17, 148
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationQuantityDialog.vue", "Vue", 0, 0, 0, 500, 0, 0, 0, 0, 8, 79, 587
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationSelectorWidget.vue", "Vue", 0, 0, 0, 324, 0, 0, 0, 0, 7, 55, 386
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationWriteOffDialog.vue", "Vue", 0, 0, 0, 541, 0, 0, 0, 0, 20, 69, 630
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationWriteOffWidget.vue", "Vue", 0, 0, 0, 81, 0, 0, 0, 0, 5, 16, 102
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/AccountDetailView.vue", "Vue", 0, 0, 0, 605, 0, 0, 0, 0, 16, 86, 707
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/AccountListView.vue", "Vue", 0, 0, 0, 143, 0, 0, 0, 0, 3, 24, 170
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/detail/AccountOperations.vue", "Vue", 0, 0, 0, 174, 0, 0, 0, 0, 0, 20, 194
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/detail/AccountOperationsFilter.vue", "Vue", 0, 0, 0, 121, 0, 0, 0, 0, 0, 21, 142
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/AccountDialog.vue", "Vue", 0, 0, 0, 173, 0, 0, 0, 0, 0, 19, 192
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/CorrectionDialog.vue", "Vue", 0, 0, 0, 153, 0, 0, 0, 0, 4, 20, 177
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/OperationDialog.vue", "Vue", 0, 0, 0, 164, 0, 0, 0, 0, 2, 16, 182
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/PaymentDialog.vue", "Vue", 0, 0, 0, 650, 0, 0, 0, 0, 20, 86, 756
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/TransactionDetailDialog.vue", "Vue", 0, 0, 0, 56, 0, 0, 0, 0, 4, 14, 74
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/TransferDialog.vue", "Vue", 0, 0, 0, 114, 0, 0, 0, 0, 0, 9, 123
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/transaction-detail/SupplierPaymentContextWidget.vue", "Vue", 0, 0, 0, 210, 0, 0, 0, 0, 6, 37, 253
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/transaction-detail/TransactionDetailContent.vue", "Vue", 0, 0, 0, 142, 0, 0, 0, 0, 7, 26, 175
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/list/AccountList.vue", "Vue", 0, 0, 0, 172, 0, 0, 0, 0, 1, 20, 193
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/list/AccountListToolbar.vue", "Vue", 0, 0, 0, 46, 0, 0, 0, 0, 0, 8, 54
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/auth/LoginView.vue", "Vue", 0, 0, 0, 485, 0, 0, 0, 0, 10, 76, 571
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/auth/UnauthorizedView.vue", "Vue", 0, 0, 0, 39, 0, 0, 0, 0, 1, 10, 50
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/PaymentsView.vue", "Vue", 0, 0, 0, 314, 0, 0, 0, 0, 10, 54, 378
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/PaymentHistoryList.vue", "Vue", 0, 0, 0, 204, 0, 0, 0, 0, 13, 35, 252
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/PendingPaymentsList.vue", "Vue", 0, 0, 0, 210, 0, 0, 0, 0, 13, 35, 258
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/UnlinkedExpensesList.vue", "Vue", 0, 0, 0, 126, 0, 0, 0, 0, 10, 26, 162
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/ConfirmPaymentDialog.vue", "Vue", 0, 0, 0, 263, 0, 0, 0, 0, 8, 40, 311
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/LinkExpenseDialog.vue", "Vue", 0, 0, 0, 275, 0, 0, 0, 0, 8, 46, 329
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/UnlinkExpenseDialog.vue", "Vue", 0, 0, 0, 164, 0, 0, 0, 0, 4, 35, 203
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/CancelledItemsReport.vue", "Vue", 0, 0, 0, 516, 0, 0, 0, 0, 20, 50, 586
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/DiscountAnalyticsView.vue", "Vue", 0, 0, 0, 604, 0, 0, 0, 0, 19, 62, 685
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/FoodCostDashboardView.vue", "Vue", 0, 0, 0, 368, 0, 0, 0, 0, 11, 23, 402
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/NegativeInventoryReport.vue", "Vue", 0, 0, 0, 451, 0, 0, 0, 0, 18, 41, 510
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/PLReportView.vue", "Vue", 0, 0, 0, 520, 0, 0, 0, 0, 20, 48, 588
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/RevenueDashboardView.vue", "Vue", 0, 0, 0, 381, 0, 0, 0, 0, 13, 45, 439
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/inventory/InventoryValuationView.vue", "Vue", 0, 0, 0, 343, 0, 0, 0, 0, 16, 28, 387
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/inventory/WriteOffHistoryView.vue", "Vue", 0, 0, 0, 548, 0, 0, 0, 0, 8, 71, 627
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/inventory/components/inventory/InventoryTopItemsTable.vue", "Vue", 0, 0, 0, 347, 0, 0, 0, 0, 17, 42, 406
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/PrintDocsView.vue", "Vue", 0, 0, 0, 203, 0, 0, 0, 0, 6, 23, 232
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/composables/useInventorySheet.ts", "TypeScript", 497, 0, 0, 0, 0, 0, 0, 0, 92, 79, 668
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/dialogs/InventorySheetOptionsDialog.vue", "Vue", 0, 0, 0, 129, 0, 0, 0, 0, 4, 17, 150
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/dialogs/MenuCostOptionsDialog.vue", "Vue", 0, 0, 0, 116, 0, 0, 0, 0, 4, 16, 136
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/dialogs/ProductYieldOptionsDialog.vue", "Vue", 0, 0, 0, 96, 0, 0, 0, 0, 2, 14, 112
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/salary/SalaryIndexView.vue", "Vue", 0, 0, 0, 107, 0, 0, 0, 0, 4, 21, 132
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/salary/kpi/FoodCostKpiView.vue", "Vue", 0, 0, 0, 123, 0, 0, 0, 0, 6, 21, 150
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/salary/kpi/KitchenTimeKpiView.vue", "Vue", 0, 0, 0, 594, 0, 0, 0, 0, 9, 65, 668
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/SalesAnalyticsView.vue", "Vue", 0, 0, 0, 273, 0, 0, 0, 0, 7, 33, 313
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/SalesTransactionsView.vue", "Vue", 0, 0, 0, 424, 0, 0, 0, 0, 7, 49, 480
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/ShiftHistoryView.vue", "Vue", 0, 0, 0, 324, 0, 0, 0, 0, 13, 42, 379
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/components/ShiftSyncRetryButton.vue", "Vue", 0, 0, 0, 70, 0, 0, 0, 0, 1, 11, 82
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/settings/KpiSettingsView.vue", "Vue", 0, 0, 0, 369, 0, 0, 0, 0, 11, 47, 427
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/settings/components/WriteOffReasonsSettings.vue", "Vue", 0, 0, 0, 181, 0, 0, 0, 0, 8, 18, 207
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/PaymentSettingsView.vue", "Vue", 0, 0, 0, 218, 0, 0, 0, 0, 8, 32, 258
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/categories/TransactionCategoryDialog.vue", "Vue", 0, 0, 0, 158, 0, 0, 0, 0, 1, 15, 174
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/categories/TransactionCategoryList.vue", "Vue", 0, 0, 0, 87, 0, 0, 0, 0, 1, 12, 100
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/payment-methods/PaymentMethodDialog.vue", "Vue", 0, 0, 0, 186, 0, 0, 0, 0, 0, 18, 204
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/payment-methods/PaymentMethodList.vue", "Vue", 0, 0, 0, 94, 0, 0, 0, 0, 0, 15, 109
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/CounteragentsView.vue", "Vue", 0, 0, 0, 293, 0, 0, 0, 0, 13, 48, 354
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentCard.vue", "Vue", 0, 0, 0, 188, 0, 0, 0, 0, 10, 31, 229
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentCardContent.vue", "Vue", 0, 0, 0, 554, 0, 0, 0, 0, 15, 73, 642
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentDialog.vue", "Vue", 0, 0, 0, 636, 0, 0, 0, 0, 12, 70, 718
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentFilters.vue", "Vue", 0, 0, 0, 417, 0, 0, 0, 0, 11, 50, 478
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentPaymentsSimple.vue", "Vue", 0, 0, 0, 731, 0, 0, 0, 0, 10, 128, 869
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentsTable.vue", "Vue", 0, 0, 0, 368, 0, 0, 0, 0, 15, 55, 438
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/dialogs/BalanceCorrectionDialog.vue", "Vue", 0, 0, 0, 335, 0, 0, 0, 0, 8, 49, 392
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/shared/ContactInfo.vue", "Vue", 0, 0, 0, 165, 0, 0, 0, 0, 6, 26, 197
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/debug/DebugView.vue", "Vue", 0, 0, 0, 488, 0, 0, 0, 0, 27, 62, 577
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/debug/HMRTestView.vue", "Vue", 0, 0, 0, 94, 0, 0, 0, 0, 0, 17, 111
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/debug/SupabaseTestView.vue", "Vue", 0, 0, 0, 294, 0, 0, 0, 0, 6, 36, 336
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/debug/SyncMonitorView.vue", "Vue", 0, 0, 0, 834, 0, 0, 0, 0, 23, 77, 934
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/JsonNavigator.vue", "Vue", 0, 0, 0, 506, 0, 0, 0, 0, 9, 82, 597
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/JsonTreeNode.vue", "Vue", 0, 0, 0, 425, 0, 0, 0, 0, 14, 89, 528
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/KitchenMainView.vue", "Vue", 0, 0, 0, 260, 0, 0, 0, 0, 11, 47, 318
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/components/KitchenNavigationMenu.vue", "Vue", 0, 0, 0, 233, 0, 0, 0, 0, 1, 41, 275
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/components/KitchenSidebar.vue", "Vue", 0, 0, 0, 234, 0, 0, 0, 0, 8, 45, 287
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/KpiScreen.vue", "Vue", 0, 0, 0, 216, 0, 0, 0, 0, 4, 38, 258
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/FoodCostKpiCard.vue", "Vue", 0, 0, 0, 277, 0, 0, 0, 0, 13, 50, 340
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/FoodCostKpiTab.vue", "Vue", 0, 0, 0, 323, 0, 0, 0, 0, 11, 43, 377
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/TimeKpiCard.vue", "Vue", 0, 0, 0, 170, 0, 0, 0, 0, 7, 33, 210
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/TimeKpiTab.vue", "Vue", 0, 0, 0, 329, 0, 0, 0, 0, 10, 44, 383
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/OrdersScreen.vue", "Vue", 0, 0, 0, 360, 0, 0, 0, 0, 7, 62, 429
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/DishCard.vue", "Vue", 0, 0, 0, 517, 0, 0, 0, 0, 11, 87, 615
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/NewOrderNotification.vue", "Vue", 0, 0, 0, 169, 0, 0, 0, 0, 1, 28, 198
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/OrderCard.vue", "Vue", 0, 0, 0, 205, 0, 0, 0, 0, 4, 43, 252
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/StatusButton.vue", "Vue", 0, 0, 0, 92, 0, 0, 0, 0, 1, 21, 114
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/PreparationScreen.vue", "Vue", 0, 0, 0, 739, 0, 0, 0, 0, 15, 103, 857
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/HistoryItemCard.vue", "Vue", 0, 0, 0, 204, 0, 0, 0, 0, 10, 41, 255
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/HistoryTab.vue", "Vue", 0, 0, 0, 229, 0, 0, 0, 0, 11, 34, 274
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/HistoryTaskCard.vue", "Vue", 0, 0, 0, 136, 0, 0, 0, 0, 5, 23, 164
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/ProductionScheduleTab.vue", "Vue", 0, 0, 0, 212, 0, 0, 0, 0, 11, 29, 252
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/RecommendationsList.vue", "Vue", 0, 0, 0, 360, 0, 0, 0, 0, 10, 52, 422
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/ScheduleSection.vue", "Vue", 0, 0, 0, 100, 0, 0, 0, 0, 4, 18, 122
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/ScheduleTaskCard.vue", "Vue", 0, 0, 0, 240, 0, 0, 0, 0, 7, 39, 286
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/StockItemCard.vue", "Vue", 0, 0, 0, 293, 0, 0, 0, 0, 10, 54, 357
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/StockListTab.vue", "Vue", 0, 0, 0, 258, 0, 0, 0, 0, 10, 42, 310
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/SyncStatusIndicator.vue", "Vue", 0, 0, 0, 182, 0, 0, 0, 0, 11, 25, 218
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/PrepWriteOffDialog.vue", "Vue", 0, 0, 0, 450, 0, 0, 0, 0, 12, 59, 521
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/ProductWriteOffDialog.vue", "Vue", 0, 0, 0, 488, 0, 0, 0, 0, 14, 63, 565
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/ScheduleConfirmDialog.vue", "Vue", 0, 0, 0, 441, 0, 0, 0, 0, 11, 58, 510
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/SimpleProductionDialog.vue", "Vue", 0, 0, 0, 482, 0, 0, 0, 0, 14, 60, 556
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/index.ts", "TypeScript", 4, 0, 0, 0, 0, 0, 0, 0, 2, 2, 8
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestDialog.vue", "Vue", 0, 0, 0, 172, 0, 0, 0, 0, 8, 32, 212
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestHistoryScreen.vue", "Vue", 0, 0, 0, 302, 0, 0, 0, 0, 13, 59, 374
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestScreen.vue", "Vue", 0, 0, 0, 153, 0, 0, 0, 0, 8, 31, 192
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestsPage.vue", "Vue", 0, 0, 0, 322, 0, 0, 0, 0, 14, 61, 397
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/ItemSearchWidget.vue", "Vue", 0, 0, 0, 398, 0, 0, 0, 0, 15, 57, 470
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenManualItemForm.vue", "Vue", 0, 0, 0, 115, 0, 0, 0, 0, 2, 23, 140
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenOrderAssistant.vue", "Vue", 0, 0, 0, 366, 0, 0, 0, 0, 15, 57, 438
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenQuickAddDialog.vue", "Vue", 0, 0, 0, 582, 0, 0, 0, 0, 17, 81, 680
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenSuggestionCard.vue", "Vue", 0, 0, 0, 411, 0, 0, 0, 0, 14, 83, 508
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenSummaryPanel.vue", "Vue", 0, 0, 0, 430, 0, 0, 0, 0, 8, 63, 501
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/package/PackageSelector.vue", "Vue", 0, 0, 0, 618, 0, 0, 0, 0, 20, 92, 730
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/composables/useKitchenRequest.ts", "TypeScript", 251, 0, 0, 0, 0, 0, 0, 0, 29, 43, 323
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/MenuView.vue", "Vue", 0, 0, 0, 822, 0, 0, 0, 0, 14, 109, 945
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/DishTypeSelectionDialog.vue", "Vue", 0, 0, 0, 96, 0, 0, 0, 0, 3, 16, 115
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuCategoryDialog.vue", "Vue", 0, 0, 0, 201, 0, 0, 0, 0, 1, 27, 229
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItem.vue", "Vue", 0, 0, 0, 336, 0, 0, 0, 0, 8, 44, 388
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItemDialog.vue", "Vue", 0, 0, 0, 776, 0, 0, 0, 0, 13, 84, 873
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItemVariant.vue", "Vue", 0, 0, 0, 474, 0, 0, 0, 0, 15, 58, 547
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/dialogs/MenuItemViewDialog.vue", "Vue", 0, 0, 0, 1179, 0, 0, 0, 0, 11, 163, 1353
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/widgets/DishSearchWidget.vue", "Vue", 0, 0, 0, 221, 0, 0, 0, 0, 12, 34, 267
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/widgets/ProductSearchWidget.vue", "Vue", 0, 0, 0, 273, 0, 0, 0, 0, 13, 41, 327
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/payments/components/PaymentHistoryWidget.vue", "Vue", 0, 0, 0, 234, 0, 0, 0, 0, 11, 38, 283
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/payments/components/RefundDialog.vue", "Vue", 0, 0, 0, 196, 0, 0, 0, 0, 6, 32, 234
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/PosMainView.vue", "Vue", 0, 0, 0, 560, 0, 0, 0, 0, 10, 84, 654
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/ConfirmDialog.vue", "Vue", 0, 0, 0, 111, 0, 0, 0, 0, 4, 18, 133
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/PaymentDialog.vue", "Vue", 0, 0, 0, 300, 0, 0, 0, 0, 10, 51, 361
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/PaymentSection.vue", "Vue", 0, 0, 0, 289, 0, 0, 0, 0, 10, 50, 349
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/PosNavigationMenu.vue", "Vue", 0, 0, 0, 361, 0, 0, 0, 0, 8, 65, 434
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/MenuSection.vue", "Vue", 0, 0, 0, 531, 0, 0, 0, 0, 14, 71, 616
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/components/CategoryCard.vue", "Vue", 0, 0, 0, 186, 0, 0, 0, 0, 4, 40, 230
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/components/MenuItemCard.vue", "Vue", 0, 0, 0, 314, 0, 0, 0, 0, 8, 61, 383
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/dialogs/CustomizationDialog.vue", "Vue", 0, 0, 0, 623, 0, 0, 0, 0, 14, 88, 725
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/OrderSection.vue", "Vue", 0, 0, 0, 1215, 0, 0, 0, 0, 19, 206, 1440
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/BillItem.vue", "Vue", 0, 0, 0, 905, 0, 0, 0, 0, 19, 141, 1065
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/BillsManager.vue", "Vue", 0, 0, 0, 284, 0, 0, 0, 0, 6, 51, 341
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/BillsTabs.vue", "Vue", 0, 0, 0, 471, 0, 0, 0, 0, 13, 78, 562
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/OrderActions.vue", "Vue", 0, 0, 0, 397, 0, 0, 0, 0, 10, 63, 470
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/OrderInfo.vue", "Vue", 0, 0, 0, 413, 0, 0, 0, 0, 11, 84, 508
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/OrderTotals.vue", "Vue", 0, 0, 0, 322, 0, 0, 0, 0, 18, 60, 400
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/AddNoteDialog.vue", "Vue", 0, 0, 0, 83, 0, 0, 0, 0, 4, 12, 99
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BillDiscountDialog.vue", "Vue", 0, 0, 0, 453, 0, 0, 0, 0, 10, 57, 520
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BillItemCancelDialog.vue", "Vue", 0, 0, 0, 204, 0, 0, 0, 0, 8, 28, 240
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BillItemEditDialog.vue", "Vue", 0, 0, 0, 50, 0, 0, 0, 0, 1, 8, 59
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BulkActionsDialog.vue", "Vue", 0, 0, 0, 141, 0, 0, 0, 0, 6, 17, 164
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/ItemDiscountDialog.vue", "Vue", 0, 0, 0, 281, 0, 0, 0, 0, 7, 37, 325
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/MoveItemsDialog.vue", "Vue", 0, 0, 0, 70, 0, 0, 0, 0, 3, 12, 85
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/OrderTypeDialog.vue", "Vue", 0, 0, 0, 77, 0, 0, 0, 0, 1, 12, 90
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/payment/PaymentDialog.vue", "Vue", 0, 0, 0, 416, 0, 0, 0, 0, 14, 64, 494
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/payment/widgets/PaymentItemsList.vue", "Vue", 0, 0, 0, 208, 0, 0, 0, 0, 5, 38, 251
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/PosReceiptsView.vue", "Vue", 0, 0, 0, 264, 0, 0, 0, 0, 17, 42, 323
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/PaymentInfoWidget.vue", "Vue", 0, 0, 0, 97, 0, 0, 0, 0, 5, 19, 121
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/PendingOrdersList.vue", "Vue", 0, 0, 0, 109, 0, 0, 0, 0, 4, 19, 132
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/ReceiptForm.vue", "Vue", 0, 0, 0, 239, 0, 0, 0, 0, 6, 32, 277
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/ReceiptItemRow.vue", "Vue", 0, 0, 0, 420, 0, 0, 0, 0, 10, 67, 497
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/ConfirmReceiptDialog.vue", "Vue", 0, 0, 0, 199, 0, 0, 0, 0, 6, 33, 238
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/PackageChangeDialog.vue", "Vue", 0, 0, 0, 137, 0, 0, 0, 0, 0, 28, 165
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/ReceiptDialog.vue", "Vue", 0, 0, 0, 396, 0, 0, 0, 0, 11, 69, 476
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/ShiftManagementView.vue", "Vue", 0, 0, 0, 701, 0, 0, 0, 0, 21, 104, 826
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/components/PendingSupplierPaymentsList.vue", "Vue", 0, 0, 0, 144, 0, 0, 0, 0, 5, 17, 166
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/components/ShiftExpensesList.vue", "Vue", 0, 0, 0, 158, 0, 0, 0, 0, 6, 23, 187
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/components/ShiftTransfersList.vue", "Vue", 0, 0, 0, 71, 0, 0, 0, 0, 1, 13, 85
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/EndShiftDialog.vue", "Vue", 0, 0, 0, 642, 0, 0, 0, 0, 15, 99, 756
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/ExpenseOperationDialog.vue", "Vue", 0, 0, 0, 256, 0, 0, 0, 0, 11, 32, 299
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/PaymentDetailsDialog.vue", "Vue", 0, 0, 0, 398, 0, 0, 0, 0, 20, 65, 483
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/RefundDialog.vue", "Vue", 0, 0, 0, 151, 0, 0, 0, 0, 7, 23, 181
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/StartShiftDialog.vue", "Vue", 0, 0, 0, 359, 0, 0, 0, 0, 12, 60, 431
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/SupplierPaymentConfirmDialog.vue", "Vue", 0, 0, 0, 351, 0, 0, 0, 0, 10, 53, 414
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/OrderItem.vue", "Vue", 0, 0, 0, 417, 0, 0, 0, 0, 7, 72, 496
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/TableItem.vue", "Vue", 0, 0, 0, 243, 0, 0, 0, 0, 3, 47, 293
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/TablesSidebar.vue", "Vue", 0, 0, 0, 535, 0, 0, 0, 0, 8, 96, 639
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/components/SidebarItem.vue", "Vue", 0, 0, 0, 419, 0, 0, 0, 0, 5, 83, 507
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/dialogs/OrderTypeDialog.vue", "Vue", 0, 0, 0, 204, 0, 0, 0, 0, 5, 41, 250
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/ProductsView.vue", "Vue", 0, 0, 0, 401, 0, 0, 0, 0, 10, 58, 469
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/PriceHistoryWidget.vue", "Vue", 0, 0, 0, 589, 0, 0, 0, 0, 13, 100, 702
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductCard.vue", "Vue", 0, 0, 0, 406, 0, 0, 0, 0, 13, 51, 470
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductDetailsDialog.vue", "Vue", 0, 0, 0, 610, 0, 0, 0, 0, 20, 80, 710
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductDialog.vue", "Vue", 0, 0, 0, 616, 0, 0, 0, 0, 20, 67, 703
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductUsageWarningDialog.vue", "Vue", 0, 0, 0, 146, 0, 0, 0, 0, 2, 22, 170
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductsFilters.vue", "Vue", 0, 0, 0, 270, 0, 0, 0, 0, 8, 35, 313
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductsList.vue", "Vue", 0, 0, 0, 248, 0, 0, 0, 0, 11, 32, 291
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/UsageTrackingWidget.vue", "Vue", 0, 0, 0, 561, 0, 0, 0, 0, 10, 79, 650
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/package/PackageOptionDialog.vue", "Vue", 0, 0, 0, 292, 0, 0, 0, 0, 1, 33, 326
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/package/PackageOptionsList.vue", "Vue", 0, 0, 0, 112, 0, 0, 0, 0, 0, 14, 126
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/RecipesView.vue", "Vue", 0, 0, 0, 1035, 0, 0, 0, 0, 23, 135, 1193
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/RecipeFilters.vue", "Vue", 0, 0, 0, 371, 0, 0, 0, 0, 8, 62, 441
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedRecipeDialog.vue", "Vue", 0, 0, 0, 356, 0, 0, 0, 0, 6, 44, 406
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedRecipeItem.vue", "Vue", 0, 0, 0, 547, 0, 0, 0, 0, 15, 83, 645
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedViewDialog.vue", "Vue", 0, 0, 0, 356, 0, 0, 0, 0, 9, 59, 424
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UsageWarningDialog.vue", "Vue", 0, 0, 0, 128, 0, 0, 0, 0, 2, 19, 149
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ComponentsListWidget.vue", "Vue", 0, 0, 0, 296, 0, 0, 0, 0, 3, 35, 334
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/CostBreakdownWidget.vue", "Vue", 0, 0, 0, 385, 0, 0, 0, 0, 6, 42, 433
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/CostInfoWidget.vue", "Vue", 0, 0, 0, 159, 0, 0, 0, 0, 2, 26, 187
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/InstructionsWidget.vue", "Vue", 0, 0, 0, 177, 0, 0, 0, 0, 4, 26, 207
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ItemInfoWidget.vue", "Vue", 0, 0, 0, 186, 0, 0, 0, 0, 8, 32, 226
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ModifiersEditorWidget.vue", "Vue", 0, 0, 0, 1051, 0, 0, 0, 0, 23, 93, 1167
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue", "Vue", 0, 0, 0, 485, 0, 0, 0, 0, 20, 44, 549
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue", "Vue", 0, 0, 0, 1118, 0, 0, 0, 0, 21, 132, 1271
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue", "Vue", 0, 0, 0, 363, 0, 0, 0, 0, 5, 54, 422
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeSearchWidget.vue", "Vue", 0, 0, 0, 209, 0, 0, 0, 0, 9, 40, 258
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/UsedInWidget.vue", "Vue", 0, 0, 0, 253, 0, 0, 0, 0, 4, 31, 288
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/StorageView.vue", "Vue", 0, 0, 0, 517, 0, 0, 0, 0, 18, 71, 606
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/AddReceiptItemDialog.vue", "Vue", 0, 0, 0, 47, 0, 0, 0, 0, 2, 8, 57
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryDetailsDialog.vue", "Vue", 0, 0, 0, 385, 0, 0, 0, 0, 14, 48, 447
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryDialog.vue", "Vue", 0, 0, 0, 845, 0, 0, 0, 0, 13, 126, 984
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryItemRow.vue", "Vue", 0, 0, 0, 261, 0, 0, 0, 0, 11, 38, 310
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ItemDetailsDialog.vue", "Vue", 0, 0, 0, 507, 0, 0, 0, 0, 9, 64, 580
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ReceiptDialog.vue", "Vue", 0, 0, 0, 302, 0, 0, 0, 0, 9, 49, 360
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ReceiptItemCard.vue", "Vue", 0, 0, 0, 183, 0, 0, 0, 0, 6, 24, 213
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageAlerts.vue", "Vue", 0, 0, 0, 139, 0, 0, 0, 0, 5, 21, 165
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageInventoriesTable.vue", "Vue", 0, 0, 0, 480, 0, 0, 0, 0, 20, 65, 565
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageOperationsTable.vue", "Vue", 0, 0, 0, 467, 0, 0, 0, 0, 21, 54, 542
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageStockTable.vue", "Vue", 0, 0, 0, 857, 0, 0, 0, 0, 30, 125, 1012
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/index.ts", "TypeScript", 11, 0, 0, 0, 0, 0, 0, 0, 135, 21, 167
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/tabs/StorageAnalyticsTab.vue", "Vue", 0, 0, 0, 432, 0, 0, 0, 0, 13, 52, 497
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/widgets/WriteOffStatsWidget.vue", "Vue", 0, 0, 0, 424, 0, 0, 0, 0, 22, 43, 489
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/ProductCard.vue", "Vue", 0, 0, 0, 266, 0, 0, 0, 0, 9, 49, 324
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/ProductListRow.vue", "Vue", 0, 0, 0, 216, 0, 0, 0, 0, 8, 44, 268
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/ProductSelectorWidget.vue", "Vue", 0, 0, 0, 760, 0, 0, 0, 0, 12, 111, 883
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/WriteOffDialog.vue", "Vue", 0, 0, 0, 547, 0, 0, 0, 0, 23, 71, 641
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/WriteOffQuantityDialog.vue", "Vue", 0, 0, 0, 504, 0, 0, 0, 0, 8, 77, 589
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/WriteOffWidget.vue", "Vue", 0, 0, 0, 81, 0, 0, 0, 0, 5, 16, 102
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/SupplierView.vue", "Vue", 0, 0, 0, 675, 0, 0, 0, 0, 21, 120, 816
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/BaseSupplierBaskets.vue", "Vue", 0, 0, 0, 639, 0, 0, 0, 0, 11, 114, 764
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/BillCard.vue", "Vue", 0, 0, 0, 243, 0, 0, 0, 0, 7, 36, 286
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PrintOrderOptionsDialog.vue", "Vue", 0, 0, 0, 88, 0, 0, 0, 0, 1, 17, 106
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderDetailsDialog.vue", "Vue", 0, 0, 0, 455, 0, 0, 0, 0, 12, 70, 537
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderEditDialog.vue", "Vue", 0, 0, 0, 419, 0, 0, 0, 0, 10, 79, 508
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderTable.vue", "Vue", 0, 0, 0, 528, 0, 0, 0, 0, 15, 79, 622
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/ShortfallAlert.vue", "Vue", 0, 0, 0, 96, 0, 0, 0, 0, 2, 17, 115
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/RecommendationCard.vue", "Vue", 0, 0, 0, 284, 0, 0, 0, 0, 8, 46, 338
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/RecommendationsWidget.vue", "Vue", 0, 0, 0, 338, 0, 0, 0, 0, 8, 46, 392
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/SupplierBasketsWidget.vue", "Vue", 0, 0, 0, 182, 0, 0, 0, 0, 8, 28, 218
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/UnassignedItemsWidget.vue", "Vue", 0, 0, 0, 233, 0, 0, 0, 0, 7, 33, 273
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order-edit/EditableOrderItemsWidget.vue", "Vue", 0, 0, 0, 487, 0, 0, 0, 0, 17, 73, 577
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/AttachBillDialog.vue", "Vue", 0, 0, 0, 324, 0, 0, 0, 0, 11, 55, 390
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/OrderItemsWidget.vue", "Vue", 0, 0, 0, 241, 0, 0, 0, 0, 12, 30, 283
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/OrderReceiptWidget.vue", "Vue", 0, 0, 0, 196, 0, 0, 0, 0, 4, 29, 229
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/PurchaseOrderPayment.vue", "Vue", 0, 0, 0, 399, 0, 0, 0, 0, 14, 62, 475
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/AddItemDialog.vue", "Vue", 0, 0, 0, 533, 0, 0, 0, 0, 9, 81, 623
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/ItemSearchWidget.vue", "Vue", 0, 0, 0, 388, 0, 0, 0, 0, 14, 54, 456
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/ProcurementRequestTable.vue", "Vue", 0, 0, 0, 396, 0, 0, 0, 0, 19, 68, 483
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/RequestDetailsDialog.vue", "Vue", 0, 0, 0, 516, 0, 0, 0, 0, 16, 87, 619
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/RequestEditDialog.vue", "Vue", 0, 0, 0, 434, 0, 0, 0, 0, 19, 71, 524
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/BaseReceiptDialog.vue", "Vue", 0, 0, 0, 663, 0, 0, 0, 0, 11, 116, 790
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptDetailsDialog.vue", "Vue", 0, 0, 0, 435, 0, 0, 0, 0, 14, 79, 528
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptDiscrepanciesDialog.vue", "Vue", 0, 0, 0, 388, 0, 0, 0, 0, 13, 70, 471
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptTable.vue", "Vue", 0, 0, 0, 424, 0, 0, 0, 0, 17, 67, 508
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/receipt-edit/EditableReceiptItemsWidget.vue", "Vue", 0, 0, 0, 857, 0, 0, 0, 0, 18, 149, 1024
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/BaseOrderAssistant.vue", "Vue", 0, 0, 0, 426, 0, 0, 0, 0, 16, 61, 503
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/ManualItemForm.vue", "Vue", 0, 0, 0, 104, 0, 0, 0, 0, 2, 22, 128
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/QuickAddItemDialog.vue", "Vue", 0, 0, 0, 595, 0, 0, 0, 0, 17, 82, 694
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/RequestSummaryPanel.vue", "Vue", 0, 0, 0, 433, 0, 0, 0, 0, 8, 65, 506
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/SuggestionItemCard.vue", "Vue", 0, 0, 0, 409, 0, 0, 0, 0, 14, 82, 505
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/package/PackageSelector.vue", "Vue", 0, 0, 0, 628, 0, 0, 0, 0, 19, 91, 738
+"/Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/package/QuickAddPackageDialog.vue", "Vue", 0, 0, 0, 291, 0, 0, 0, 0, 7, 47, 345
+"Total", "-", 75158, 5892, 1, 107944, 681, 16682, 178, 165, 23597, 33985, 264283

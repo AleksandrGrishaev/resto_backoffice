@@ -1,0 +1,245 @@
+Date : 2025-12-20 10:57:17
+Directory : /Users/peaker/dev/kitchen-app/backoffice/src
+Total : 116 files,  12599 codes, 1307 comments, 2367 blanks, all 16273 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| Vue        |         62 |      7,654 |        282 |      1,266 |      9,202 |
+| TypeScript |         46 |      3,095 |        846 |        580 |      4,521 |
+| Markdown   |          3 |      1,474 |          0 |        442 |      1,916 |
+| MS SQL     |          5 |        376 |        179 |         79 |        634 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++--------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                           | files      | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                              |        116 |     12,599 |      1,307 |      2,367 |     16,273 |
+| About                                                                                                                          |          3 |      1,474 |          0 |        442 |      1,916 |
+| About/docs                                                                                                                     |          3 |      1,474 |          0 |        442 |      1,916 |
+| About/docs/recipe                                                                                                              |          1 |        877 |          0 |        281 |      1,158 |
+| About/docs/sale                                                                                                                |          2 |        597 |          0 |        161 |        758 |
+| About/docs/sale/write-off                                                                                                      |          2 |        597 |          0 |        161 |        758 |
+| components                                                                                                                     |          2 |         17 |          4 |          3 |         24 |
+| components/navigation                                                                                                          |          2 |         17 |          4 |          3 |         24 |
+| core                                                                                                                           |          7 |        166 |         51 |         26 |        243 |
+| core/decomposition                                                                                                             |          4 |         34 |         15 |          6 |         55 |
+| core/decomposition (Files)                                                                                                     |          2 |         19 |          8 |          2 |         29 |
+| core/decomposition/adapters                                                                                                    |          1 |         15 |          3 |          4 |         22 |
+| core/decomposition/utils                                                                                                       |          1 |          0 |          4 |          0 |          4 |
+| core/initialization                                                                                                            |          1 |         27 |          4 |          6 |         37 |
+| core/sync                                                                                                                      |          2 |        105 |         32 |         14 |        151 |
+| core/sync/adapters                                                                                                             |          1 |         72 |          7 |          6 |         85 |
+| core/sync/helpers                                                                                                              |          1 |         33 |         25 |          8 |         66 |
+| router                                                                                                                         |          1 |         19 |          1 |          0 |         20 |
+| stores                                                                                                                         |         37 |      2,659 |        765 |        511 |      3,935 |
+| stores/account                                                                                                                 |          6 |        373 |        108 |         71 |        552 |
+| stores/analytics                                                                                                               |          2 |        -18 |         -1 |          1 |        -18 |
+| stores/auth                                                                                                                    |          1 |          4 |          1 |          2 |          7 |
+| stores/counteragents                                                                                                           |          3 |         26 |         18 |          5 |         49 |
+| stores/counteragents (Files)                                                                                                   |          1 |          9 |          3 |          0 |         12 |
+| stores/counteragents/composables                                                                                               |          1 |          1 |          7 |          1 |          9 |
+| stores/counteragents/integrations                                                                                              |          1 |         16 |          8 |          4 |         28 |
+| stores/pos                                                                                                                     |         11 |      1,592 |        405 |        290 |      2,287 |
+| stores/pos (Files)                                                                                                             |          1 |          3 |          2 |          1 |          6 |
+| stores/pos/core                                                                                                                |          1 |          1 |          0 |          0 |          1 |
+| stores/pos/receipts                                                                                                            |          4 |      1,050 |        283 |        193 |      1,526 |
+| stores/pos/receipts (Files)                                                                                                    |          3 |        380 |        113 |         69 |        562 |
+| stores/pos/receipts/composables                                                                                                |          1 |        670 |        170 |        124 |        964 |
+| stores/pos/shifts                                                                                                              |          5 |        538 |        120 |         96 |        754 |
+| stores/pos/shifts (Files)                                                                                                      |          4 |        274 |         76 |         46 |        396 |
+| stores/pos/shifts/composables                                                                                                  |          1 |        264 |         44 |         50 |        358 |
+| stores/recipes                                                                                                                 |          6 |        505 |        188 |        114 |        807 |
+| stores/recipes (Files)                                                                                                         |          2 |         32 |          8 |          7 |         47 |
+| stores/recipes/composables                                                                                                     |          4 |        473 |        180 |        107 |        760 |
+| stores/sales                                                                                                                   |          1 |         23 |          6 |          7 |         36 |
+| stores/sales/recipeWriteOff                                                                                                    |          1 |         23 |          6 |          7 |         36 |
+| stores/storage                                                                                                                 |          1 |          0 |          2 |          0 |          2 |
+| stores/supplier_2                                                                                                              |          6 |        154 |         38 |         21 |        213 |
+| stores/supplier_2 (Files)                                                                                                      |          2 |         11 |          4 |          2 |         17 |
+| stores/supplier_2/composables                                                                                                  |          3 |        132 |         32 |         18 |        182 |
+| stores/supplier_2/integrations                                                                                                 |          1 |         11 |          2 |          1 |         14 |
+| supabase                                                                                                                       |          5 |        376 |        179 |         79 |        634 |
+| supabase/migrations                                                                                                            |          5 |        376 |        179 |         79 |        634 |
+| views                                                                                                                          |         61 |      7,888 |        307 |      1,306 |      9,501 |
+| views/accounts                                                                                                                 |          8 |       -810 |        -14 |       -115 |       -939 |
+| views/accounts (Files)                                                                                                         |          1 |        -31 |         -1 |         -4 |        -36 |
+| views/accounts/components                                                                                                      |          7 |       -779 |        -13 |       -111 |       -903 |
+| views/accounts/components/detail                                                                                               |          2 |       -169 |         -1 |        -17 |       -187 |
+| views/accounts/components/dialogs                                                                                              |          2 |        -13 |          0 |         -3 |        -16 |
+| views/accounts/components/dialogs (Files)                                                                                      |          1 |        -15 |          0 |         -4 |        -19 |
+| views/accounts/components/dialogs/transaction-detail                                                                           |          1 |          2 |          0 |          1 |          3 |
+| views/accounts/components/list                                                                                                 |          3 |       -597 |        -12 |        -91 |       -700 |
+| views/backoffice                                                                                                               |         10 |      1,519 |         68 |        278 |      1,865 |
+| views/backoffice/accounts                                                                                                      |          7 |      1,556 |         66 |        271 |      1,893 |
+| views/backoffice/accounts/payments                                                                                             |          7 |      1,556 |         66 |        271 |      1,893 |
+| views/backoffice/accounts/payments (Files)                                                                                     |          1 |        314 |         10 |         54 |        378 |
+| views/backoffice/accounts/payments/components                                                                                  |          3 |        540 |         36 |         96 |        672 |
+| views/backoffice/accounts/payments/dialogs                                                                                     |          3 |        702 |         20 |        121 |        843 |
+| views/backoffice/analytics                                                                                                     |          1 |        -69 |          1 |          3 |        -65 |
+| views/backoffice/inventory                                                                                                     |          1 |         10 |          0 |          1 |         11 |
+| views/backoffice/sales                                                                                                         |          1 |         22 |          1 |          3 |         26 |
+| views/catalog                                                                                                                  |          3 |        355 |          6 |         39 |        400 |
+| views/catalog (Files)                                                                                                          |          1 |        110 |          4 |         12 |        126 |
+| views/catalog/categories                                                                                                       |          2 |        245 |          2 |         27 |        274 |
+| views/counteragents                                                                                                            |          1 |          6 |          0 |          1 |          7 |
+| views/counteragents/components                                                                                                 |          1 |          6 |          0 |          1 |          7 |
+| views/counteragents/components/counteragents                                                                                   |          1 |          6 |          0 |          1 |          7 |
+| views/kitchen                                                                                                                  |         14 |      4,146 |        165 |        687 |      4,998 |
+| views/kitchen (Files)                                                                                                          |          1 |         12 |          1 |          3 |         16 |
+| views/kitchen/components                                                                                                       |          1 |         14 |          1 |          2 |         17 |
+| views/kitchen/request                                                                                                          |         12 |      4,120 |        163 |        682 |      4,965 |
+| views/kitchen/request (Files)                                                                                                  |          4 |        949 |         43 |        183 |      1,175 |
+| views/kitchen/request/components                                                                                               |          7 |      2,920 |         91 |        456 |      3,467 |
+| views/kitchen/request/components (Files)                                                                                       |          6 |      2,302 |         71 |        364 |      2,737 |
+| views/kitchen/request/components/package                                                                                       |          1 |        618 |         20 |         92 |        730 |
+| views/kitchen/request/composables                                                                                              |          1 |        251 |         29 |         43 |        323 |
+| views/menu                                                                                                                     |          1 |          3 |          0 |          0 |          3 |
+| views/pos                                                                                                                      |         13 |      1,917 |         59 |        321 |      2,297 |
+| views/pos/components                                                                                                           |          1 |         14 |          0 |          2 |         16 |
+| views/pos/receipts                                                                                                             |          8 |      1,861 |         59 |        309 |      2,229 |
+| views/pos/receipts (Files)                                                                                                     |          1 |        264 |         17 |         42 |        323 |
+| views/pos/receipts/components                                                                                                  |          4 |        865 |         25 |        137 |      1,027 |
+| views/pos/receipts/dialogs                                                                                                     |          3 |        732 |         17 |        130 |        879 |
+| views/pos/shifts                                                                                                               |          4 |         42 |          0 |         10 |         52 |
+| views/pos/shifts (Files)                                                                                                       |          1 |         25 |          0 |          5 |         30 |
+| views/pos/shifts/components                                                                                                    |          1 |         16 |          0 |          5 |         21 |
+| views/pos/shifts/dialogs                                                                                                       |          2 |          1 |          0 |          0 |          1 |
+| views/recipes                                                                                                                  |          7 |        686 |         23 |         89 |        798 |
+| views/recipes (Files)                                                                                                          |          1 |         32 |          4 |          3 |         39 |
+| views/recipes/components                                                                                                       |          6 |        654 |         19 |         86 |        759 |
+| views/recipes/components (Files)                                                                                               |          2 |          8 |          2 |          3 |         13 |
+| views/recipes/components/widgets                                                                                               |          4 |        646 |         17 |         83 |        746 |
+| views/supplier_2                                                                                                               |          4 |         66 |          0 |          6 |         72 |
+| views/supplier_2/components                                                                                                    |          4 |         66 |          0 |          6 |         72 |
+| views/supplier_2/components/orders                                                                                             |          1 |         40 |          1 |          2 |         43 |
+| views/supplier_2/components/receipts                                                                                           |          2 |          6 |         -1 |          1 |          6 |
+| views/supplier_2/components/receipts (Files)                                                                                   |          1 |         19 |          0 |          1 |         20 |
+| views/supplier_2/components/receipts/receipt-edit                                                                              |          1 |        -13 |         -1 |          0 |        -14 |
+| views/supplier_2/components/shared                                                                                             |          1 |         20 |          0 |          3 |         23 |
++--------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++--------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                                                                                       | language   | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/docs/recipe/architecture.md                                                 | Markdown   |        877 |          0 |        281 |      1,158 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/docs/sale/write-off/DECOMPOSITION_ARCHITECTURE.md                           | Markdown   |        320 |          0 |         98 |        418 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/About/docs/sale/write-off/SALE_FLOW.md                                            | Markdown   |        277 |          0 |         63 |        340 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationAccounts.vue                                      | Vue        |          6 |          1 |          2 |          9 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationMenu.vue                                          | Vue        |         11 |          3 |          1 |         15 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/DecompositionEngine.ts                                         | TypeScript |         19 |          3 |          2 |         24 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/CostAdapter.ts                                        | TypeScript |         15 |          3 |          4 |         22 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/types.ts                                                       | TypeScript |          0 |          5 |          0 |          5 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/batchAllocationUtils.ts                                  | TypeScript |          0 |          4 |          0 |          4 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/ProductionInitializationStrategy.ts                           | TypeScript |         27 |          4 |          6 |         37 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/ShiftSyncAdapter.ts                                            | TypeScript |         72 |          7 |          6 |         85 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/core/sync/helpers/taxCalculationHelper.ts                                         | TypeScript |         33 |         25 |          8 |         66 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/router/index.ts                                                                   | TypeScript |         19 |          1 |          0 |         20 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/accountSupabaseService.ts                                          | TypeScript |         13 |          2 |          1 |         16 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/categoryService.ts                                                 | TypeScript |        202 |         50 |         37 |        289 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/constants.ts                                                       | TypeScript |        -25 |          4 |          1 |        -20 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/index.ts                                                           | TypeScript |          3 |          1 |          1 |          5 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/store.ts                                                           | TypeScript |        170 |         41 |         28 |        239 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/account/types.ts                                                           | TypeScript |         10 |         10 |          3 |         23 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/plReportStore.ts                                                 | TypeScript |         -5 |          0 |          2 |         -3 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/types.ts                                                         | TypeScript |        -13 |         -1 |         -1 |        -15 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/authStore.ts                                                          | TypeScript |          4 |          1 |          2 |          7 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/composables/useCounteragentBalance.ts                        | TypeScript |          1 |          7 |          1 |          9 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/integrations/automatedPayments.ts                            | TypeScript |         16 |          8 |          4 |         28 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/types.ts                                                     | TypeScript |          9 |          3 |          0 |         12 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/core/posSystem.ts                                                      | TypeScript |          1 |          0 |          0 |          1 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/index.ts                                                               | TypeScript |          3 |          2 |          1 |          6 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/composables/usePosReceipt.ts                                  | TypeScript |        670 |        170 |        124 |        964 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/index.ts                                                      | TypeScript |          8 |          5 |          4 |         17 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/services.ts                                                   | TypeScript |        210 |         40 |         30 |        280 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/types.ts                                                      | TypeScript |        162 |         68 |         35 |        265 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/composables/useExpenseLinking.ts                                | TypeScript |        264 |         44 |         50 |        358 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/index.ts                                                        | TypeScript |          2 |          1 |          1 |          4 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/services.ts                                                     | TypeScript |          5 |          6 |          1 |         12 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/shiftsStore.ts                                                  | TypeScript |        206 |         44 |         36 |        286 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/types.ts                                                        | TypeScript |         61 |         25 |          8 |         94 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useCostCalculation.ts                                  | TypeScript |         72 |         12 |         12 |         96 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeGraph.ts                                      | TypeScript |        197 |        102 |         50 |        349 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeUsage.ts                                      | TypeScript |        200 |         66 |         45 |        311 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipes.ts                                          | TypeScript |          4 |          0 |          0 |          4 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesStore.ts                                                    | TypeScript |         19 |          3 |          4 |         26 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/types.ts                                                           | TypeScript |         13 |          5 |          3 |         21 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/services.ts                                           | TypeScript |         23 |          6 |          7 |         36 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageService.ts                                                  | TypeScript |          0 |          2 |          0 |          2 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useOrderPayments.ts                                 | TypeScript |        116 |         26 |         15 |        157 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/usePurchaseOrders.ts                                | TypeScript |          2 |          1 |          0 |          3 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useReceipts.ts                                      | TypeScript |         14 |          5 |          3 |         22 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/storageIntegration.ts                              | TypeScript |         11 |          2 |          1 |         14 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supplierService.ts                                              | TypeScript |         10 |          3 |          2 |         15 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/types.ts                                                        | TypeScript |          1 |          1 |          0 |          2 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/067_create_transaction_categories.sql                         | MS SQL     |         36 |         10 |          5 |         51 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/068_add_tax_income_categories.sql                             | MS SQL     |         26 |         15 |          5 |         46 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/069_expense_linking.sql                                       | MS SQL     |        136 |         56 |         28 |        220 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/070_create_products_consumption_stats_function.sql            | MS SQL     |         74 |         20 |         12 |        106 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/071_add_recipe_nesting_support.sql                            | MS SQL     |        104 |         78 |         29 |        211 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/AccountDetailView.vue                                              | Vue        |        -31 |         -1 |         -4 |        -36 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/detail/AccountOperations.vue                            | Vue        |          1 |          0 |          0 |          1 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/detail/PendingPaymentsSection.vue                       | Vue        |       -170 |         -1 |        -17 |       -188 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/OperationDialog.vue                             | Vue        |        -15 |          0 |         -4 |        -19 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/transaction-detail/TransactionDetailContent.vue | Vue        |          2 |          0 |          1 |          3 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/list/AccountList.vue                                    | Vue        |        -23 |         -2 |         -5 |        -30 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/list/PaymentConfirmationDialog.vue                      | Vue        |       -301 |         -4 |        -46 |       -351 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/list/PendingPaymentsWidget.vue                          | Vue        |       -273 |         -6 |        -40 |       -319 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/PaymentsView.vue                               | Vue        |        314 |         10 |         54 |        378 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/PaymentHistoryList.vue              | Vue        |        204 |         13 |         35 |        252 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/PendingPaymentsList.vue             | Vue        |        210 |         13 |         35 |        258 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/UnlinkedExpensesList.vue            | Vue        |        126 |         10 |         26 |        162 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/ConfirmPaymentDialog.vue               | Vue        |        263 |          8 |         40 |        311 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/LinkExpenseDialog.vue                  | Vue        |        275 |          8 |         46 |        329 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/UnlinkExpenseDialog.vue                | Vue        |        164 |          4 |         35 |        203 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/PLReportView.vue                                       | Vue        |        -69 |          1 |          3 |        -65 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/inventory/WriteOffHistoryView.vue                                | Vue        |         10 |          0 |          1 |         11 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/ShiftHistoryView.vue                                       | Vue        |         22 |          1 |          3 |         26 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/PaymentSettingsView.vue                                             | Vue        |        110 |          4 |         12 |        126 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/categories/TransactionCategoryDialog.vue                            | Vue        |        158 |          1 |         15 |        174 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/categories/TransactionCategoryList.vue                              | Vue        |         87 |          1 |         12 |        100 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentPaymentsSimple.vue       | Vue        |          6 |          0 |          1 |          7 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/KitchenMainView.vue                                                 | Vue        |         12 |          1 |          3 |         16 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/components/KitchenSidebar.vue                                       | Vue        |         14 |          1 |          2 |         17 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestDialog.vue                                           | Vue        |        172 |          8 |         32 |        212 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestHistoryScreen.vue                                    | Vue        |        302 |         13 |         59 |        374 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestScreen.vue                                           | Vue        |        153 |          8 |         31 |        192 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestsPage.vue                                            | Vue        |        322 |         14 |         61 |        397 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/ItemSearchWidget.vue                             | Vue        |        398 |         15 |         57 |        470 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenManualItemForm.vue                        | Vue        |        115 |          2 |         23 |        140 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenOrderAssistant.vue                        | Vue        |        366 |         15 |         57 |        438 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenQuickAddDialog.vue                        | Vue        |        582 |         17 |         81 |        680 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenSuggestionCard.vue                        | Vue        |        411 |         14 |         83 |        508 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenSummaryPanel.vue                          | Vue        |        430 |          8 |         63 |        501 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/package/PackageSelector.vue                      | Vue        |        618 |         20 |         92 |        730 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/composables/useKitchenRequest.ts                            | TypeScript |        251 |         29 |         43 |        323 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/menu/MenuView.vue                                                           | Vue        |          3 |          0 |          0 |          3 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/PosNavigationMenu.vue                                        | Vue        |         14 |          0 |          2 |         16 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/PosReceiptsView.vue                                            | Vue        |        264 |         17 |         42 |        323 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/PaymentInfoWidget.vue                               | Vue        |         97 |          5 |         19 |        121 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/PendingOrdersList.vue                               | Vue        |        109 |          4 |         19 |        132 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/ReceiptForm.vue                                     | Vue        |        239 |          6 |         32 |        277 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/ReceiptItemRow.vue                                  | Vue        |        420 |         10 |         67 |        497 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/ConfirmReceiptDialog.vue                               | Vue        |        199 |          6 |         33 |        238 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/PackageChangeDialog.vue                                | Vue        |        137 |          0 |         28 |        165 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/ReceiptDialog.vue                                      | Vue        |        396 |         11 |         69 |        476 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/ShiftManagementView.vue                                          | Vue        |         25 |          0 |          5 |         30 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/components/ShiftExpensesList.vue                                 | Vue        |         16 |          0 |          5 |         21 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/EndShiftDialog.vue                                       | Vue        |          2 |          0 |          0 |          2 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/ExpenseOperationDialog.vue                               | Vue        |         -1 |          0 |          0 |         -1 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/RecipesView.vue                                                     | Vue        |         32 |          4 |          3 |         39 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedRecipeDialog.vue                                  | Vue        |          3 |          1 |          1 |          5 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedViewDialog.vue                                    | Vue        |          5 |          1 |          2 |          8 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue                        | Vue        |         14 |          0 |          1 |         15 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue                 | Vue        |        170 |          4 |         11 |        185 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeSearchWidget.vue                           | Vue        |        209 |          9 |         40 |        258 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/UsedInWidget.vue                                 | Vue        |        253 |          4 |         31 |        288 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderDetailsDialog.vue                 | Vue        |         40 |          1 |          2 |         43 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/BaseReceiptDialog.vue                        | Vue        |         19 |          0 |          1 |         20 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/receipt-edit/EditableReceiptItemsWidget.vue  | Vue        |        -13 |         -1 |          0 |        -14 |
+| /Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/SuggestionItemCard.vue                         | Vue        |         20 |          0 |          3 |         23 |
+| Total                                                                                                                          |            |     12,599 |      1,307 |      2,367 |     16,273 |
++--------------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+

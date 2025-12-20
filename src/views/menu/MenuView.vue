@@ -68,7 +68,8 @@
 
     <!-- Content -->
     <div class="menu-content">
-      <div class="menu-actions">
+      <!-- Show collapse/expand button only when not searching -->
+      <div v-if="!isSearchActive" class="menu-actions">
         <v-btn
           variant="text"
           color="primary"
@@ -82,8 +83,21 @@
       <!-- Loading state -->
       <v-progress-linear v-if="menuStore.isLoading" indeterminate color="primary" />
 
-      <!-- Menu panels - Root categories with nested subcategories -->
-      <v-expansion-panels v-model="expandedPanels" multiple>
+      <!-- Flat list when searching -->
+      <div v-if="isSearchActive" class="menu-items-grid">
+        <menu-item-component
+          v-for="item in allFilteredItems"
+          :key="item.id"
+          :item="item"
+          @edit="editItem"
+          @duplicate="duplicateItem"
+          @view="viewItem"
+          @toggle-status="toggleItemStatus"
+        />
+      </div>
+
+      <!-- Menu panels - Root categories with nested subcategories (when not searching) -->
+      <v-expansion-panels v-else v-model="expandedPanels" multiple>
         <v-expansion-panel
           v-for="category in filteredCategories"
           :key="category.id"
@@ -252,9 +266,15 @@
       </v-expansion-panels>
 
       <!-- Empty state -->
-      <div v-if="filteredCategories.length === 0" class="text-center py-8">
+      <div v-if="!isSearchActive && filteredCategories.length === 0" class="text-center py-8">
         <v-icon icon="mdi-food-off" size="48" color="medium-emphasis" />
         <div class="text-medium-emphasis mt-2">No categories found</div>
+      </div>
+
+      <!-- Empty state when searching -->
+      <div v-if="isSearchActive && allFilteredItems.length === 0" class="text-center py-8">
+        <v-icon icon="mdi-magnify-close" size="48" color="medium-emphasis" />
+        <div class="text-medium-emphasis mt-2">No dishes found matching "{{ search }}"</div>
       </div>
     </div>
 
@@ -381,6 +401,43 @@ const duplicateName = ref('') // ✨ NEW: Новое имя для дублик�
 const confirmDialog = ref({
   show: false,
   category: null as Category | null
+})
+
+// Check if search is active (determines flat list vs categorized view)
+const isSearchActive = computed(() => {
+  return search.value.trim() !== ''
+})
+
+// Get all filtered items for flat list view (when searching)
+const allFilteredItems = computed(() => {
+  if (!isSearchActive.value) return []
+
+  // Get all items from all categories (both root and subcategories)
+  const allItems: MenuItem[] = []
+
+  // Get all root categories
+  const rootCategories = menuStore.rootCategories.filter(category => {
+    if (!filterTypes.value.includes('archive') && !category.isActive) {
+      return false
+    }
+    return true
+  })
+
+  // Collect items from root categories and their subcategories
+  for (const category of rootCategories) {
+    // Add items from root category
+    const categoryItems = getCategoryItems(category.id)
+    allItems.push(...categoryItems)
+
+    // Add items from subcategories
+    const subcategories = getFilteredSubcategories(category.id)
+    for (const subcategory of subcategories) {
+      const subItems = getCategoryItems(subcategory.id)
+      allItems.push(...subItems)
+    }
+  }
+
+  return allItems
 })
 
 // Computed - Only root categories (no parent)
