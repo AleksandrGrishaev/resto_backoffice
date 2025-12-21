@@ -70,9 +70,9 @@ export function useCategoryManagement() {
         key: data.key,
         name: data.name,
         description: data.description || null,
-        icon: data.icon || null,
-        emoji: data.emoji || null,
-        color: data.color || null,
+        icon: data.icon || 'mdi-chef-hat',
+        emoji: data.emoji || '👨‍🍳',
+        color: data.color || 'grey-darken-2',
         sort_order: data.sortOrder ?? maxSortOrder + 1,
         is_active: data.isActive ?? true,
         created_at: now,
@@ -133,9 +133,9 @@ export function useCategoryManagement() {
       if (data.key !== undefined) updateData.key = data.key
       if (data.name !== undefined) updateData.name = data.name
       if (data.description !== undefined) updateData.description = data.description
-      if (data.icon !== undefined) updateData.icon = data.icon
-      if (data.emoji !== undefined) updateData.emoji = data.emoji
-      if (data.color !== undefined) updateData.color = data.color
+      if (data.icon !== undefined) updateData.icon = data.icon || 'mdi-chef-hat'
+      if (data.emoji !== undefined) updateData.emoji = data.emoji || '👨‍🍳'
+      if (data.color !== undefined) updateData.color = data.color || 'grey-darken-2'
       if (data.sortOrder !== undefined) updateData.sort_order = data.sortOrder
       if (data.isActive !== undefined) updateData.is_active = data.isActive
 

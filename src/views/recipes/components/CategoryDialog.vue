@@ -300,13 +300,13 @@ watch(
           isActive: category.isActive ?? true
         }
       } else {
-        // Create mode - reset form
+        // Create mode - reset form with default values based on type
         formData.value = {
           name: '',
           key: '',
           description: '',
-          icon: '',
-          emoji: '',
+          icon: props.type === 'preparation' ? 'mdi-chef-hat' : 'mdi-silverware-fork-knife',
+          emoji: props.type === 'preparation' ? '👨‍🍳' : '',
           color: 'primary',
           sortOrder: 0,
           isActive: true
