@@ -298,6 +298,14 @@ const routes: RouteRecordRaw[] = [
             }
           },
           {
+            path: 'food-cost-menu',
+            name: 'food-cost-menu',
+            component: () => import('@/views/backoffice/analytics/FoodCostMenuView.vue'),
+            meta: {
+              title: 'Food Cost Menu Report'
+            }
+          },
+          {
             path: 'negative-inventory',
             name: 'negative-inventory-report',
             component: () => import('@/views/backoffice/analytics/NegativeInventoryReport.vue'),

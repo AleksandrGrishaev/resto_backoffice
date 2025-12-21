@@ -161,6 +161,18 @@
           </template>
         </v-list-item>
 
+        <!-- Food Cost Menu -->
+        <v-list-item
+          to="/analytics/food-cost-menu"
+          prepend-icon="mdi-silverware-variant"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Food Cost Menu</span>
+          </template>
+        </v-list-item>
+
         <!-- Inventory Valuation -->
         <v-list-item
           to="/inventory/valuation"
