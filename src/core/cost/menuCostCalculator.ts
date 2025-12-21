@@ -361,7 +361,8 @@ function calculateTargetComponentsCost(
   targetComponents: any[] | undefined,
   variant: MenuItemVariant,
   context: CostCalculationContext,
-  portionMultiplier: number
+  portionMultiplier: number,
+  recipesStore: ReturnType<typeof useRecipesStore>
 ): { cost: number; names: string[] } {
   if (!targetComponents || targetComponents.length === 0) {
     return { cost: 0, names: [] }
@@ -372,45 +373,82 @@ function calculateTargetComponentsCost(
   const names: string[] = []
 
   for (const target of targetComponents) {
-    let comp: MenuComposition | undefined
+    let componentCost = 0
+    let componentName = target.componentName || 'Unknown'
 
     if (target.sourceType === 'variant') {
       // For variant: componentId is index in composition array
       const index = parseInt(target.componentId, 10)
-      comp = variantComposition[index]
+      const comp = variantComposition[index]
+
+      if (comp) {
+        const quantity = comp.quantity || 1
+
+        if (comp.type === 'product') {
+          const product = context.products.get(comp.id)
+          if (product) {
+            componentCost = product.baseCostPerUnit * quantity
+            componentName = product.name
+          }
+        } else if (comp.type === 'recipe') {
+          const recipe = context.recipes.get(comp.id)
+          if (recipe) {
+            componentCost = recipe.costPerPortion * quantity
+            componentName = recipe.name
+          }
+        } else if (comp.type === 'preparation') {
+          const prep = context.preparations.get(comp.id)
+          if (prep) {
+            componentCost = prep.costPerOutputUnit * quantity
+            componentName = prep.name
+          }
+        }
+      }
     } else if (target.sourceType === 'recipe') {
-      // For recipe: componentId is RecipeComponent.id
-      // We need to find it in the recipe's components
-      // For now, skip recipe-based targets (TODO: implement if needed)
-      continue
+      // For recipe: need to find component inside recipe
+      // Find the recipe in variant composition
+      const recipeInVariant = variantComposition.find(
+        c => c.type === 'recipe' && c.id === target.recipeId
+      )
+
+      if (recipeInVariant) {
+        // Get recipe from store
+        const recipe = recipesStore.recipes.find(r => r.id === target.recipeId)
+        if (recipe && recipe.components) {
+          // Find component by componentId
+          const component = recipe.components.find(c => c.id === target.componentId)
+
+          if (component) {
+            const variantQuantity = recipeInVariant.quantity || 1
+            const componentQuantity = component.quantity || 1
+            const totalQuantity = variantQuantity * componentQuantity
+
+            if (component.componentType === 'product') {
+              const product = context.products.get(component.componentId)
+              if (product) {
+                componentCost = product.baseCostPerUnit * totalQuantity
+                componentName = product.name
+              }
+            } else if (component.componentType === 'preparation') {
+              const prep = context.preparations.get(component.componentId)
+              if (prep) {
+                componentCost = prep.costPerOutputUnit * totalQuantity
+                componentName = prep.name
+              }
+            } else if (component.componentType === 'recipe') {
+              const subRecipe = context.recipes.get(component.componentId)
+              if (subRecipe) {
+                componentCost = subRecipe.costPerPortion * totalQuantity
+                componentName = subRecipe.name
+              }
+            }
+          }
+        }
+      }
     }
 
-    if (!comp) continue
-
-    // 🔧 FIX: Do NOT apply portionMultiplier to base composition!
-    // Variant composition already has correct quantities.
-    // We only scale when calculating the cost (no multiplier needed here).
-    const quantity = comp.quantity || 1
-
-    if (comp.type === 'product') {
-      const product = context.products.get(comp.id)
-      if (product) {
-        totalCost += product.baseCostPerUnit * quantity
-        names.push(product.name)
-      }
-    } else if (comp.type === 'recipe') {
-      const recipe = context.recipes.get(comp.id)
-      if (recipe) {
-        totalCost += recipe.costPerPortion * quantity
-        names.push(recipe.name)
-      }
-    } else if (comp.type === 'preparation') {
-      const prep = context.preparations.get(comp.id)
-      if (prep) {
-        totalCost += prep.costPerOutputUnit * quantity
-        names.push(prep.name)
-      }
-    }
+    totalCost += componentCost
+    names.push(componentName)
   }
 
   return { cost: totalCost, names }
@@ -425,7 +463,8 @@ export function calculateReplacementModifiersBreakdown(
   variant: MenuItemVariant,
   context: CostCalculationContext,
   baseCost: number,
-  basePrice: number
+  basePrice: number,
+  recipesStore: ReturnType<typeof useRecipesStore>
 ): ModifierCostItem[] {
   const replacementGroups = (item.modifierGroups || []).filter(g => g.type === 'replacement')
   const portionMultiplier = variant.portionMultiplier || 1
@@ -440,7 +479,8 @@ export function calculateReplacementModifiersBreakdown(
       group.targetComponents,
       variant,
       context,
-      portionMultiplier
+      portionMultiplier,
+      recipesStore
     )
 
     let minCostImpact = Infinity
@@ -657,7 +697,8 @@ export function analyzeMenuItemCost(
     variant,
     context,
     base.cost,
-    base.price
+    base.price,
+    recipesStore
   )
   const modifiersCostBreakdown = [...addonBreakdown, ...replacementBreakdown]
 
