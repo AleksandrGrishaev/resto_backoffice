@@ -16,29 +16,41 @@
           </div>
         </v-col>
         <v-col cols="auto">
-          <v-btn
-            variant="outlined"
-            class="mr-2"
-            prepend-icon="mdi-calculator-variant"
-            size="large"
-            :loading="isRecalculating"
-            @click="dialogs.recalculate = true"
-          >
-            Recalculate All Costs
-          </v-btn>
-          <v-btn
-            variant="outlined"
-            class="mr-2"
-            prepend-icon="mdi-file-pdf-box"
-            size="large"
-            :loading="isExporting"
-            @click="dialogs.export = true"
-          >
-            Export PDF
-          </v-btn>
-          <v-btn color="primary" prepend-icon="mdi-plus" size="large" @click="showCreateDialog">
-            New {{ activeTab === 'recipes' ? 'Recipe' : 'Preparation' }}
-          </v-btn>
+          <div class="d-flex align-center ga-2">
+            <!-- Actions Menu -->
+            <v-menu location="bottom end">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" variant="outlined" prepend-icon="mdi-menu" size="large">
+                  Actions
+                  <v-icon end>mdi-chevron-down</v-icon>
+                </v-btn>
+              </template>
+              <v-list density="comfortable">
+                <v-list-item
+                  prepend-icon="mdi-shape-plus"
+                  title="New Category"
+                  @click="showCreateCategoryDialog"
+                />
+                <v-list-item
+                  prepend-icon="mdi-calculator-variant"
+                  title="Recalculate All Costs"
+                  :disabled="isRecalculating"
+                  @click="dialogs.recalculate = true"
+                />
+                <v-list-item
+                  prepend-icon="mdi-file-pdf-box"
+                  title="Export PDF"
+                  :disabled="isExporting"
+                  @click="dialogs.export = true"
+                />
+              </v-list>
+            </v-menu>
+
+            <!-- New Recipe/Preparation Button -->
+            <v-btn color="primary" prepend-icon="mdi-plus" size="large" @click="showCreateDialog">
+              New {{ activeTab === 'recipes' ? 'Recipe' : 'Preparation' }}
+            </v-btn>
+          </div>
         </v-col>
       </v-row>
     </div>
@@ -162,13 +174,45 @@
                     <v-icon :icon="category.icon" size="20" class="mr-2" />
                     {{ category.text }}
                   </span>
-                  <v-chip
-                    size="small"
-                    variant="tonal"
-                    :color="getCategoryRecipes(category.value).length > 0 ? 'primary' : 'grey'"
-                  >
-                    {{ getCategoryRecipes(category.value).length }}
-                  </v-chip>
+                  <div class="d-flex align-center ga-2">
+                    <v-chip
+                      size="small"
+                      variant="tonal"
+                      :color="getCategoryRecipes(category.value).length > 0 ? 'primary' : 'grey'"
+                    >
+                      {{ getCategoryRecipes(category.value).length }}
+                    </v-chip>
+                    <!-- Category Actions Menu -->
+                    <v-menu>
+                      <template #activator="{ props: menuProps }">
+                        <v-btn
+                          icon="mdi-dots-vertical"
+                          variant="text"
+                          size="small"
+                          v-bind="menuProps"
+                          @click.stop
+                        />
+                      </template>
+                      <v-list>
+                        <v-list-item @click="editRecipeCategory(category.value)">
+                          <template #prepend>
+                            <v-icon icon="mdi-pencil" />
+                          </template>
+                          <v-list-item-title>Edit Category</v-list-item-title>
+                        </v-list-item>
+                        <v-divider />
+                        <v-list-item
+                          class="text-error"
+                          @click="deleteRecipeCategoryConfirm(category.value)"
+                        >
+                          <template #prepend>
+                            <v-icon icon="mdi-delete" />
+                          </template>
+                          <v-list-item-title>Delete Category</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
+                  </div>
                 </div>
               </v-expansion-panel-title>
 
@@ -243,13 +287,45 @@
                     <v-icon :icon="type.icon" size="20" class="mr-2" />
                     {{ type.text }}
                   </span>
-                  <v-chip
-                    size="small"
-                    variant="tonal"
-                    :color="getTypePreparations(type.value).length > 0 ? 'primary' : 'grey'"
-                  >
-                    {{ getTypePreparations(type.value).length }}
-                  </v-chip>
+                  <div class="d-flex align-center ga-2">
+                    <v-chip
+                      size="small"
+                      variant="tonal"
+                      :color="getTypePreparations(type.value).length > 0 ? 'primary' : 'grey'"
+                    >
+                      {{ getTypePreparations(type.value).length }}
+                    </v-chip>
+                    <!-- Category Actions Menu -->
+                    <v-menu>
+                      <template #activator="{ props: menuProps }">
+                        <v-btn
+                          icon="mdi-dots-vertical"
+                          variant="text"
+                          size="small"
+                          v-bind="menuProps"
+                          @click.stop
+                        />
+                      </template>
+                      <v-list>
+                        <v-list-item @click="editPreparationCategory(type.value)">
+                          <template #prepend>
+                            <v-icon icon="mdi-pencil" />
+                          </template>
+                          <v-list-item-title>Edit Category</v-list-item-title>
+                        </v-list-item>
+                        <v-divider />
+                        <v-list-item
+                          class="text-error"
+                          @click="deletePreparationCategoryConfirm(type.value)"
+                        >
+                          <template #prepend>
+                            <v-icon icon="mdi-delete" />
+                          </template>
+                          <v-list-item-title>Delete Category</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
+                  </div>
                 </div>
               </v-expansion-panel-title>
 
@@ -407,6 +483,42 @@
       :export-type="activeTab === 'recipes' ? 'recipes' : 'preparations'"
       @export="handleExportPdf"
     />
+
+    <!-- Category Dialog -->
+    <CategoryDialog
+      v-model="dialogs.category"
+      :type="activeTab === 'recipes' ? 'recipe' : 'preparation'"
+      :category="editingCategory"
+      @save="handleCategorySaved"
+    />
+
+    <!-- Delete Category Confirmation Dialog -->
+    <v-dialog v-model="dialogs.deleteCategory" max-width="500">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2 bg-error-darken-1">
+          <v-icon color="white">mdi-alert</v-icon>
+          <span class="text-white">Delete Category</span>
+        </v-card-title>
+        <v-card-text class="pt-4">
+          <p class="text-body-1">Are you sure you want to delete this category?</p>
+          <v-alert type="info" variant="tonal" class="mt-4">
+            <div class="text-body-2">
+              <strong>Category is not in use</strong>
+              <br />
+              This category can be safely deleted as it's not currently used by any {{ activeTab }}.
+            </div>
+          </v-alert>
+          <v-alert type="warning" variant="tonal" class="mt-2">
+            This action cannot be undone.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="dialogs.deleteCategory = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" @click="confirmDeleteCategory">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -415,6 +527,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
 import { useUsageCheck } from '@/stores/recipes/composables/useUsageCheck'
+import { useCategoryUsageCheck } from '@/stores/recipes/composables/useCategoryUsageCheck'
 import { useExport, ExportOptionsDialog } from '@/core/export'
 import type {
   RecipeExportData,
@@ -430,8 +543,14 @@ import type {
   Preparation,
   PreparationType,
   RecipeComponent,
-  PreparationIngredient
+  PreparationIngredient,
+  PreparationCategory,
+  RecipeCategory
 } from '@/stores/recipes/types'
+import type {
+  CreatePreparationCategoryData,
+  CreateRecipeCategoryData
+} from '@/stores/recipes/composables/useCategoryManagement'
 import type { UsageLocation } from '@/stores/recipes/composables/useUsageCheck'
 import { DebugUtils } from '@/utils'
 import UnifiedRecipeItem from './components/UnifiedRecipeItem.vue'
@@ -439,11 +558,13 @@ import UnifiedRecipeDialog from './components/UnifiedRecipeDialog.vue'
 import UnifiedViewDialog from './components/UnifiedViewDialog.vue'
 import RecipeFilters from './components/RecipeFilters.vue'
 import UsageWarningDialog from './components/UsageWarningDialog.vue'
+import CategoryDialog from './components/CategoryDialog.vue'
 
 const MODULE_NAME = 'RecipesView'
 const store = useRecipesStore()
 const productsStore = useProductsStore()
 const { checkRecipeUsage, checkPreparationUsage } = useUsageCheck()
+const { checkPreparationCategoryUsage, checkRecipeCategoryUsage } = useCategoryUsageCheck()
 const { isExporting, exportRecipes, exportPreparations } = useExport()
 
 // =============================================
@@ -467,7 +588,9 @@ const dialogs = ref({
   duplicate: false,
   usageWarning: false,
   export: false,
-  recalculate: false
+  recalculate: false,
+  category: false,
+  deleteCategory: false
 })
 
 // Usage warning state
@@ -483,6 +606,15 @@ const viewingItemType = ref<'recipe' | 'preparation'>('recipe')
 const duplicateItemRef = ref<Recipe | Preparation | null>(null)
 const duplicateItemType = ref<'recipe' | 'preparation'>('recipe')
 const duplicateName = ref('')
+
+// Category management state
+const editingCategory = ref<PreparationCategory | RecipeCategory | null>(null)
+const deletingCategoryId = ref<string | null>(null)
+const categoryUsageInfo = ref<{ categoryId: string; count: number } | null>(null)
+// Cache для проверок использования категорий (чтобы не делать лишние запросы)
+const categoryUsageCache = ref<
+  Map<string, { canDelete: boolean; count: number; timestamp: number }>
+>(new Map())
 
 // Snackbar
 const snackbar = ref({
@@ -854,6 +986,9 @@ async function handleItemSaved(item: Recipe | Preparation) {
 
   showSnackbar(`${item.name} ${action} successfully`, 'success')
 
+  // Очищаем кэш использования категорий
+  invalidateCategoryUsageCache()
+
   DebugUtils.info(MODULE_NAME, `${itemType} ${action}`, { id: item.id, name: item.name })
 }
 
@@ -1144,6 +1279,167 @@ async function handleRecalculateCosts() {
 }
 
 // =============================================
+// CATEGORY MANAGEMENT
+// =============================================
+
+function showCreateCategoryDialog() {
+  editingCategory.value = null
+  dialogs.value.category = true
+}
+
+function editPreparationCategory(categoryId: string) {
+  const category = store.getPreparationCategoryById(categoryId)
+  if (category) {
+    editingCategory.value = category
+    dialogs.value.category = true
+  }
+}
+
+function editRecipeCategory(categoryId: string) {
+  const category = store.getRecipeCategoryById(categoryId)
+  if (category) {
+    editingCategory.value = category
+    dialogs.value.category = true
+  }
+}
+
+// Вспомогательная функция для проверки с кэшированием
+async function getCategoryUsage(categoryId: string, type: 'preparation' | 'recipe') {
+  const cacheKey = `${type}:${categoryId}`
+  const cached = categoryUsageCache.value.get(cacheKey)
+  const CACHE_TTL = 60000 // 1 минута
+
+  // Проверяем кэш
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached
+  }
+
+  // Выполняем проверку
+  const usageResult =
+    type === 'preparation'
+      ? await checkPreparationCategoryUsage(categoryId)
+      : await checkRecipeCategoryUsage(categoryId)
+
+  // Сохраняем в кэш
+  const cacheData = {
+    canDelete: usageResult.canDelete,
+    count: usageResult.count,
+    timestamp: Date.now()
+  }
+  categoryUsageCache.value.set(cacheKey, cacheData)
+
+  return cacheData
+}
+
+// Очистка кэша (вызывается после создания/удаления элементов)
+function invalidateCategoryUsageCache() {
+  categoryUsageCache.value.clear()
+}
+
+async function deletePreparationCategoryConfirm(categoryId: string) {
+  // Проверяем использование категории перед показом диалога
+  const usageResult = await getCategoryUsage(categoryId, 'preparation')
+
+  if (!usageResult.canDelete) {
+    // Категория используется - показываем предупреждение
+    const categoryName = store.getPreparationCategoryById(categoryId)?.name || 'Unknown'
+    showSnackbar(
+      `Cannot delete category "${categoryName}": it is used by ${usageResult.count} preparation${usageResult.count > 1 ? 's' : ''}. Please reassign or delete those preparations first.`,
+      'error'
+    )
+    return
+  }
+
+  // Категория не используется - показываем диалог подтверждения
+  deletingCategoryId.value = categoryId
+  categoryUsageInfo.value = null // Категория не используется
+  dialogs.value.deleteCategory = true
+}
+
+async function deleteRecipeCategoryConfirm(categoryId: string) {
+  // Проверяем использование категории перед показом диалога
+  const usageResult = await getCategoryUsage(categoryId, 'recipe')
+
+  if (!usageResult.canDelete) {
+    // Категория используется - показываем предупреждение
+    const categoryName = store.getRecipeCategoryById(categoryId)?.name || 'Unknown'
+    showSnackbar(
+      `Cannot delete category "${categoryName}": it is used by ${usageResult.count} recipe${usageResult.count > 1 ? 's' : ''}. Please reassign or delete those recipes first.`,
+      'error'
+    )
+    return
+  }
+
+  // Категория не используется - показываем диалог подтверждения
+  deletingCategoryId.value = categoryId
+  categoryUsageInfo.value = null // Категория не используется
+  dialogs.value.deleteCategory = true
+}
+
+async function handleCategorySaved(data: CreatePreparationCategoryData | CreateRecipeCategoryData) {
+  try {
+    if (activeTab.value === 'preparations') {
+      if (editingCategory.value) {
+        // Update existing category
+        await store.updatePreparationCategory(
+          editingCategory.value.id,
+          data as CreatePreparationCategoryData
+        )
+        showSnackbar('Category updated successfully', 'success')
+      } else {
+        // Create new category
+        await store.createPreparationCategory(data as CreatePreparationCategoryData)
+        showSnackbar('Category created successfully', 'success')
+      }
+    } else {
+      // Recipes
+      if (editingCategory.value) {
+        // Update existing category
+        await store.updateRecipeCategory(editingCategory.value.id, data as CreateRecipeCategoryData)
+        showSnackbar('Category updated successfully', 'success')
+      } else {
+        // Create new category
+        await store.createRecipeCategory(data as CreateRecipeCategoryData)
+        showSnackbar('Category created successfully', 'success')
+      }
+    }
+
+    // Close dialog and reset state
+    dialogs.value.category = false
+    editingCategory.value = null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to save category'
+    showSnackbar(message, 'error')
+    DebugUtils.error(MODULE_NAME, 'Failed to save category', error)
+  }
+}
+
+async function confirmDeleteCategory() {
+  if (!deletingCategoryId.value) return
+
+  try {
+    if (activeTab.value === 'preparations') {
+      await store.deletePreparationCategory(deletingCategoryId.value)
+      showSnackbar('Category deleted successfully', 'success')
+    } else {
+      await store.deleteRecipeCategory(deletingCategoryId.value)
+      showSnackbar('Category deleted successfully', 'success')
+    }
+
+    // Очищаем кэш использования категорий
+    invalidateCategoryUsageCache()
+
+    // Close dialog and reset state
+    dialogs.value.deleteCategory = false
+    deletingCategoryId.value = null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete category'
+    showSnackbar(message, 'error')
+    DebugUtils.error(MODULE_NAME, 'Failed to delete category', error)
+  }
+}
+
+// =============================================
 // LIFECYCLE
 // =============================================
 
@@ -1158,8 +1454,8 @@ onMounted(async () => {
 
     // Expand all categories by default
     expandedPanels.value = [
-      ...recipeCategories.value.map(c => c.value),
-      ...preparationTypes.value.map(c => c.value)
+      ...recipeCategories.value.map((c: { value: string }) => c.value),
+      ...preparationTypes.value.map((c: { value: string }) => c.value)
     ]
 
     DebugUtils.info(MODULE_NAME, 'Initialization complete', {

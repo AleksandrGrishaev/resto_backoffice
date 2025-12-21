@@ -12,6 +12,11 @@ import { useRecipeIntegration } from './composables/useRecipeIntegration'
 import { useMenuRecipeLinks } from './composables/useMenuRecipeLinks'
 import { useUnits } from './composables/useUnits'
 import { useAutoCostRecalculation } from './composables/useAutoCostRecalculation'
+import { useCategoryManagement } from './composables/useCategoryManagement'
+import type {
+  CreatePreparationCategoryData,
+  CreateRecipeCategoryData
+} from './composables/useCategoryManagement'
 
 // Note: Mock imports removed - recipes now use Supabase via composables
 // Legacy services kept for backward compatibility if needed
@@ -54,6 +59,7 @@ export const useRecipesStore = defineStore('recipes', () => {
   const menuLinksComposable = useMenuRecipeLinks()
   const unitsComposable = useUnits()
   const autoCostRecalculation = useAutoCostRecalculation()
+  const categoryManagement = useCategoryManagement()
 
   // =============================================
   // LEGACY SERVICES (for backward compatibility)
@@ -767,6 +773,150 @@ export const useRecipesStore = defineStore('recipes', () => {
     }
   }
 
+  /**
+   * ✅ NEW: Create preparation category
+   */
+  async function createPreparationCategory(
+    data: CreatePreparationCategoryData
+  ): Promise<PreparationCategory> {
+    try {
+      loading.value = true
+      const category = await categoryManagement.createPreparationCategory(data)
+
+      // Reload categories to reflect the new one
+      await loadPreparationCategories()
+
+      DebugUtils.info(MODULE_NAME, 'Preparation category created', { id: category.id })
+      return category
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create category'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * ✅ NEW: Update preparation category
+   */
+  async function updatePreparationCategory(
+    id: string,
+    data: Partial<CreatePreparationCategoryData>
+  ): Promise<PreparationCategory> {
+    try {
+      loading.value = true
+      const category = await categoryManagement.updatePreparationCategory(id, data)
+
+      // Reload categories to reflect changes
+      await loadPreparationCategories()
+
+      DebugUtils.info(MODULE_NAME, 'Preparation category updated', { id })
+      return category
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update category'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * ✅ NEW: Delete preparation category
+   */
+  async function deletePreparationCategory(id: string): Promise<void> {
+    try {
+      loading.value = true
+      await categoryManagement.deletePreparationCategory(id)
+
+      // Reload categories to reflect deletion
+      await loadPreparationCategories()
+
+      DebugUtils.info(MODULE_NAME, 'Preparation category deleted', { id })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete category'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * ✅ NEW: Create recipe category
+   */
+  async function createRecipeCategory(data: CreateRecipeCategoryData): Promise<RecipeCategory> {
+    try {
+      loading.value = true
+      const category = await categoryManagement.createRecipeCategory(data)
+
+      // Reload categories to reflect the new one
+      await loadRecipeCategories()
+
+      DebugUtils.info(MODULE_NAME, 'Recipe category created', { id: category.id })
+      return category
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create category'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * ✅ NEW: Update recipe category
+   */
+  async function updateRecipeCategory(
+    id: string,
+    data: Partial<CreateRecipeCategoryData>
+  ): Promise<RecipeCategory> {
+    try {
+      loading.value = true
+      const category = await categoryManagement.updateRecipeCategory(id, data)
+
+      // Reload categories to reflect changes
+      await loadRecipeCategories()
+
+      DebugUtils.info(MODULE_NAME, 'Recipe category updated', { id })
+      return category
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update category'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * ✅ NEW: Delete recipe category
+   */
+  async function deleteRecipeCategory(id: string): Promise<void> {
+    try {
+      loading.value = true
+      await categoryManagement.deleteRecipeCategory(id)
+
+      // Reload categories to reflect deletion
+      await loadRecipeCategories()
+
+      DebugUtils.info(MODULE_NAME, 'Recipe category deleted', { id })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete category'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   // =============================================
   // INTEGRATION METHODS
   // =============================================
@@ -868,6 +1018,12 @@ export const useRecipesStore = defineStore('recipes', () => {
     // ✅ NEW: Category actions
     loadPreparationCategories,
     loadRecipeCategories, // Phase 2
+    createPreparationCategory,
+    updatePreparationCategory,
+    deletePreparationCategory,
+    createRecipeCategory,
+    updateRecipeCategory,
+    deleteRecipeCategory,
 
     // Preparation actions
     fetchPreparations,
