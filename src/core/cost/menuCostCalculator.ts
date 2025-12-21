@@ -349,8 +349,56 @@ export function calculateFullFoodCostRange(
 // =============================================
 
 /**
+ * Calculate cost of target components that will be replaced
+ */
+function calculateTargetComponentsCost(
+  targetComponents: any[] | undefined,
+  variant: MenuItemVariant,
+  context: CostCalculationContext,
+  portionMultiplier: number
+): { cost: number; names: string[] } {
+  if (!targetComponents || targetComponents.length === 0) {
+    return { cost: 0, names: [] }
+  }
+
+  const variantComposition = variant.composition || []
+  let totalCost = 0
+  const names: string[] = []
+
+  for (const target of targetComponents) {
+    // Find component in variant composition by componentId
+    const comp = variantComposition.find(c => c.id === target.componentId)
+    if (!comp) continue
+
+    const quantity = (comp.quantity || 1) * portionMultiplier
+
+    if (comp.type === 'product') {
+      const product = context.products.get(comp.id)
+      if (product) {
+        totalCost += product.baseCostPerUnit * quantity
+        names.push(product.name)
+      }
+    } else if (comp.type === 'recipe') {
+      const recipe = context.recipes.get(comp.id)
+      if (recipe) {
+        totalCost += recipe.costPerPortion * quantity
+        names.push(recipe.name)
+      }
+    } else if (comp.type === 'preparation') {
+      const prep = context.preparations.get(comp.id)
+      if (prep) {
+        totalCost += prep.costPerOutputUnit * quantity
+        names.push(prep.name)
+      }
+    }
+  }
+
+  return { cost: totalCost, names }
+}
+
+/**
  * Calculate detailed breakdown for REPLACEMENT modifiers
- * Replacement modifiers replace base composition instead of adding to it
+ * Replacement modifiers replace specific components (targetComponents) with new composition
  */
 export function calculateReplacementModifiersBreakdown(
   item: MenuItem,
@@ -366,6 +414,14 @@ export function calculateReplacementModifiersBreakdown(
   for (const group of replacementGroups) {
     const activeOptions = group.options.filter(opt => opt.isActive !== false)
     const optionsCostData: ModifierOptionCostData[] = []
+
+    // Calculate cost of components being replaced
+    const targetCostData = calculateTargetComponentsCost(
+      group.targetComponents,
+      variant,
+      context,
+      portionMultiplier
+    )
 
     let minCostImpact = Infinity
     let maxCostImpact = -Infinity
@@ -383,11 +439,14 @@ export function calculateReplacementModifiersBreakdown(
       const optionCost = optionBreakdown.reduce((sum, item) => sum + item.totalCost, 0)
       const priceAdjustment = option.priceAdjustment || 0
 
-      // For replacement: new cost = (baseCost - baseCost) + optionCost = optionCost
-      // Final cost = optionCost, Final price = basePrice + priceAdjustment
-      const finalCost = optionCost
+      // 🆕 Replacement logic:
+      // Final cost = baseCost - replacedCost + newCost
+      const finalCost = baseCost - targetCostData.cost + optionCost
       const finalPrice = basePrice + priceAdjustment
       const finalFoodCostPercent = finalPrice > 0 ? (finalCost / finalPrice) * 100 : 0
+
+      // Net cost delta = newCost - replacedCost
+      const netCostDelta = optionCost - targetCostData.cost
 
       optionsCostData.push({
         optionId: option.id,
@@ -399,13 +458,19 @@ export function calculateReplacementModifiersBreakdown(
         finalFoodCostPercent,
         displayMode: 'replacement',
         isDefault: option.isDefault || false,
-        isActive: option.isActive !== false
+        isActive: option.isActive !== false,
+        replacementInfo: {
+          replaces: targetCostData.names,
+          replacedCost: targetCostData.cost,
+          netCostDelta,
+          netPriceDelta: priceAdjustment,
+          netFoodCostPercent: finalFoodCostPercent
+        }
       })
 
-      // Track min/max impact (cost difference from base)
-      const costDiff = optionCost - baseCost
-      minCostImpact = Math.min(minCostImpact, costDiff)
-      maxCostImpact = Math.max(maxCostImpact, costDiff)
+      // Track min/max impact (net cost delta)
+      minCostImpact = Math.min(minCostImpact, netCostDelta)
+      maxCostImpact = Math.max(maxCostImpact, netCostDelta)
       minPriceImpact = Math.min(minPriceImpact, priceAdjustment)
       maxPriceImpact = Math.max(maxPriceImpact, priceAdjustment)
     }

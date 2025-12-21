@@ -251,7 +251,8 @@
                             {{ modGroup.groupType }}
                           </v-chip>
                         </div>
-                        <table class="modifiers-table">
+                        <!-- Table for ADDON modifiers -->
+                        <table v-if="modGroup.groupType === 'addon'" class="modifiers-table">
                           <thead>
                             <tr>
                               <th class="text-caption">Option</th>
@@ -279,7 +280,6 @@
                                 {{ formatIDR(option.priceAdjustment) }}
                               </td>
                               <td class="text-caption text-right">
-                                <!-- Display based on displayMode -->
                                 <v-chip
                                   v-if="
                                     option.displayMode === 'addon-fc' &&
@@ -306,15 +306,67 @@
                                 >
                                   Free addon (+{{ formatIDR(option.cost) }})
                                 </v-chip>
+                                <span v-else class="text-caption text-medium-emphasis">n/a</span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        <!-- Table for REPLACEMENT modifiers -->
+                        <table
+                          v-else-if="modGroup.groupType === 'replacement'"
+                          class="modifiers-table"
+                        >
+                          <thead>
+                            <tr>
+                              <th class="text-caption">Option</th>
+                              <th class="text-caption text-right">Replaces</th>
+                              <th class="text-caption text-right">New Cost</th>
+                              <th class="text-caption text-right">Delta (Δ)</th>
+                              <th class="text-caption text-right">Price +</th>
+                              <th class="text-caption text-right">Final FC%</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="option in modGroup.options" :key="option.optionId">
+                              <td class="text-caption">
+                                {{ option.optionName }}
                                 <v-chip
-                                  v-else-if="option.displayMode === 'replacement'"
+                                  v-if="option.isDefault"
+                                  size="x-small"
+                                  color="info"
+                                  variant="outlined"
+                                  class="ml-1"
+                                >
+                                  default
+                                </v-chip>
+                              </td>
+                              <td class="text-caption text-right text-medium-emphasis">
+                                {{ formatIDR(option.replacementInfo?.replacedCost || 0) }}
+                              </td>
+                              <td class="text-caption text-right">{{ formatIDR(option.cost) }}</td>
+                              <td class="text-caption text-right">
+                                <span
+                                  :class="{
+                                    'text-success': (option.replacementInfo?.netCostDelta || 0) < 0,
+                                    'text-error': (option.replacementInfo?.netCostDelta || 0) > 0
+                                  }"
+                                >
+                                  {{ (option.replacementInfo?.netCostDelta || 0) >= 0 ? '+' : ''
+                                  }}{{ formatIDR(option.replacementInfo?.netCostDelta || 0) }}
+                                </span>
+                              </td>
+                              <td class="text-caption text-right">
+                                {{ formatIDR(option.priceAdjustment) }}
+                              </td>
+                              <td class="text-caption text-right">
+                                <v-chip
                                   size="x-small"
                                   :color="getFoodCostColor(option.finalFoodCostPercent || 0)"
                                   variant="flat"
                                 >
                                   {{ (option.finalFoodCostPercent || 0).toFixed(1) }}%
                                 </v-chip>
-                                <span v-else class="text-caption text-medium-emphasis">n/a</span>
                               </td>
                             </tr>
                           </tbody>
