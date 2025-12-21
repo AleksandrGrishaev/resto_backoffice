@@ -345,8 +345,86 @@ export function calculateFullFoodCostRange(
 }
 
 // =============================================
-// Addon Modifiers Breakdown
+// Modifiers Breakdown (Addon + Replacement)
 // =============================================
+
+/**
+ * Calculate detailed breakdown for REPLACEMENT modifiers
+ * Replacement modifiers replace base composition instead of adding to it
+ */
+export function calculateReplacementModifiersBreakdown(
+  item: MenuItem,
+  variant: MenuItemVariant,
+  context: CostCalculationContext,
+  baseCost: number,
+  basePrice: number
+): ModifierCostItem[] {
+  const replacementGroups = (item.modifierGroups || []).filter(g => g.type === 'replacement')
+  const portionMultiplier = variant.portionMultiplier || 1
+  const breakdown: ModifierCostItem[] = []
+
+  for (const group of replacementGroups) {
+    const activeOptions = group.options.filter(opt => opt.isActive !== false)
+    const optionsCostData: ModifierOptionCostData[] = []
+
+    let minCostImpact = Infinity
+    let maxCostImpact = -Infinity
+    let minPriceImpact = Infinity
+    let maxPriceImpact = -Infinity
+
+    for (const option of activeOptions) {
+      const optionComposition = option.composition || []
+      const optionBreakdown = calculateCompositionBreakdown(
+        optionComposition,
+        portionMultiplier,
+        context
+      )
+
+      const optionCost = optionBreakdown.reduce((sum, item) => sum + item.totalCost, 0)
+      const priceAdjustment = option.priceAdjustment || 0
+
+      // For replacement: new cost = (baseCost - baseCost) + optionCost = optionCost
+      // Final cost = optionCost, Final price = basePrice + priceAdjustment
+      const finalCost = optionCost
+      const finalPrice = basePrice + priceAdjustment
+      const finalFoodCostPercent = finalPrice > 0 ? (finalCost / finalPrice) * 100 : 0
+
+      optionsCostData.push({
+        optionId: option.id,
+        optionName: option.name,
+        cost: optionCost,
+        costBreakdown: optionBreakdown,
+        priceAdjustment,
+        foodCostPercent: finalFoodCostPercent,
+        finalFoodCostPercent,
+        displayMode: 'replacement',
+        isDefault: option.isDefault || false,
+        isActive: option.isActive !== false
+      })
+
+      // Track min/max impact (cost difference from base)
+      const costDiff = optionCost - baseCost
+      minCostImpact = Math.min(minCostImpact, costDiff)
+      maxCostImpact = Math.max(maxCostImpact, costDiff)
+      minPriceImpact = Math.min(minPriceImpact, priceAdjustment)
+      maxPriceImpact = Math.max(maxPriceImpact, priceAdjustment)
+    }
+
+    breakdown.push({
+      groupId: group.id,
+      groupName: group.name,
+      groupType: 'replacement',
+      isRequired: group.isRequired || false,
+      options: optionsCostData,
+      minCostImpact: minCostImpact === Infinity ? 0 : minCostImpact,
+      maxCostImpact: maxCostImpact === -Infinity ? 0 : maxCostImpact,
+      minPriceImpact: minPriceImpact === Infinity ? 0 : minPriceImpact,
+      maxPriceImpact: maxPriceImpact === -Infinity ? 0 : maxPriceImpact
+    })
+  }
+
+  return breakdown
+}
 
 /**
  * Calculate detailed breakdown for ADDON modifiers
@@ -481,20 +559,29 @@ export function analyzeMenuItemCost(
   // Full range
   const full = calculateFullFoodCostRange(variant, item, productsStore, recipesStore)
 
-  // Addon breakdown (🆕 now passing baseCost and basePrice)
-  const modifiersCostBreakdown = calculateAddonModifiersBreakdown(
+  // 🆕 Combined modifiers breakdown (addon + replacement)
+  const addonBreakdown = calculateAddonModifiersBreakdown(
     item,
     variant,
     context,
-    base.cost, // Pass base cost for final FC% calculation
-    base.price // Pass base price for final FC% calculation
+    base.cost,
+    base.price
   )
+  const replacementBreakdown = calculateReplacementModifiersBreakdown(
+    item,
+    variant,
+    context,
+    base.cost,
+    base.price
+  )
+  const modifiersCostBreakdown = [...addonBreakdown, ...replacementBreakdown]
 
   // Flags
   const hasModifiers = modifierGroups.length > 0
   const hasRequiredModifiers = modifierGroups.some(g => g.isRequired)
   const hasOptionalModifiers = modifierGroups.some(g => !g.isRequired)
   const hasAddonModifiers = modifierGroups.some(g => g.type === 'addon')
+  const hasReplacementModifiers = modifierGroups.some(g => g.type === 'replacement')
 
   return {
     menuItemId: item.id,
@@ -513,6 +600,28 @@ export function analyzeMenuItemCost(
     hasModifiers,
     hasRequiredModifiers,
     hasOptionalModifiers,
-    hasAddonModifiers
+    hasAddonModifiers,
+    hasReplacementModifiers
   }
+}
+
+/**
+ * 🆕 Analyze ALL variants of a menu item
+ * @returns Array of cost analyses for all variants
+ */
+export function analyzeAllMenuItemVariants(
+  item: MenuItem,
+  productsStore: ReturnType<typeof useProductsStore>,
+  recipesStore: ReturnType<typeof useRecipesStore>
+): MenuItemCostAnalysis[] {
+  const analyses: MenuItemCostAnalysis[] = []
+
+  for (const variant of item.variants) {
+    const analysis = analyzeMenuItemCost(item, variant.id, productsStore, recipesStore)
+    if (analysis) {
+      analyses.push(analysis)
+    }
+  }
+
+  return analyses
 }

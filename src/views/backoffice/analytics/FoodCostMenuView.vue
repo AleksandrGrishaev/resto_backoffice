@@ -130,6 +130,7 @@
             <v-divider />
             <v-card-text class="pa-0">
               <v-data-table
+                v-model:expanded="expanded"
                 :headers="tableHeaders"
                 :items="filteredReportData"
                 :items-per-page="20"
@@ -227,9 +228,11 @@
                       </table>
                     </div>
 
-                    <!-- Addon Modifiers Breakdown -->
-                    <div v-if="item.hasAddonModifiers">
-                      <div class="text-subtitle-2 mb-2">🆕 Addon Modifiers Breakdown:</div>
+                    <!-- Modifiers Breakdown (Addon + Replacement) -->
+                    <div v-if="item.hasAddonModifiers || item.hasReplacementModifiers">
+                      <div class="text-subtitle-2 mb-2">
+                        {{ item.hasReplacementModifiers ? '🔄' : '🆕' }} Modifiers Breakdown:
+                      </div>
                       <div
                         v-for="modGroup in item.modifiersCostBreakdown"
                         :key="modGroup.groupId"
@@ -239,6 +242,13 @@
                           {{ modGroup.groupName }}
                           <v-chip size="x-small" class="ml-2">
                             {{ modGroup.isRequired ? 'Required' : 'Optional' }}
+                          </v-chip>
+                          <v-chip
+                            size="x-small"
+                            class="ml-2"
+                            :color="modGroup.groupType === 'replacement' ? 'orange' : 'blue'"
+                          >
+                            {{ modGroup.groupType }}
                           </v-chip>
                         </div>
                         <table class="modifiers-table">
@@ -269,7 +279,7 @@
                                 {{ formatIDR(option.priceAdjustment) }}
                               </td>
                               <td class="text-caption text-right">
-                                <!-- 🆕 Display based on displayMode -->
+                                <!-- Display based on displayMode -->
                                 <v-chip
                                   v-if="
                                     option.displayMode === 'addon-fc' &&
@@ -295,6 +305,14 @@
                                   variant="outlined"
                                 >
                                   Free addon (+{{ formatIDR(option.cost) }})
+                                </v-chip>
+                                <v-chip
+                                  v-else-if="option.displayMode === 'replacement'"
+                                  size="x-small"
+                                  :color="getFoodCostColor(option.finalFoodCostPercent || 0)"
+                                  variant="flat"
+                                >
+                                  {{ (option.finalFoodCostPercent || 0).toFixed(1) }}%
                                 </v-chip>
                                 <span v-else class="text-caption text-medium-emphasis">n/a</span>
                               </td>
@@ -346,7 +364,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
-import { analyzeMenuItemCost } from '@/core/cost/menuCostCalculator'
+import { analyzeAllMenuItemVariants } from '@/core/cost/menuCostCalculator'
 import type { MenuItemCostAnalysis } from '@/core/cost/types'
 import { formatIDR } from '@/utils/currency'
 
@@ -358,6 +376,7 @@ const recipesStore = useRecipesStore()
 // State
 const reportData = ref<MenuItemCostAnalysis[]>([])
 const loading = ref(false)
+const expanded = ref<MenuItemCostAnalysis[]>([]) // 🆕 Expanded rows state
 
 // Filters
 const selectedDepartment = ref<string>('all')
@@ -415,12 +434,9 @@ function handleGenerate() {
   const activeItems = menuStore.menuItems.filter(item => item.isActive !== false)
 
   for (const item of activeItems) {
-    for (const variant of item.variants) {
-      const analysis = analyzeMenuItemCost(item, variant.id, productsStore, recipesStore)
-      if (analysis) {
-        reportData.value.push(analysis)
-      }
-    }
+    // 🆕 Analyze ALL variants at once
+    const analyses = analyzeAllMenuItemVariants(item, productsStore, recipesStore)
+    reportData.value.push(...analyses)
   }
 
   console.log('📊 Food Cost Menu Report generated:', reportData.value.length, 'items')
@@ -471,13 +487,17 @@ const filteredReportData = computed(() => {
 
 const averageBaseFoodCost = computed(() => {
   if (filteredReportData.value.length === 0) return 0
-  const sum = filteredReportData.value.reduce((acc, item) => acc + item.base.foodCostPercent, 0)
-  return sum / filteredReportData.value.length
+  // Filter out items with null foodCostPercent
+  const validItems = filteredReportData.value.filter(item => item.base.foodCostPercent !== null)
+  if (validItems.length === 0) return 0
+  const sum = validItems.reduce((acc, item) => acc + (item.base.foodCostPercent || 0), 0)
+  return sum / validItems.length
 })
 
 const highFoodCostCount = computed(() => {
-  return filteredReportData.value.filter(item => item.base.foodCostPercent > fcThreshold.value)
-    .length
+  return filteredReportData.value.filter(
+    item => item.base.foodCostPercent !== null && item.base.foodCostPercent > fcThreshold.value
+  ).length
 })
 
 const totalAddonModifiers = computed(() => {

@@ -127,6 +127,7 @@ export interface MenuItemCostAnalysis {
   hasRequiredModifiers: boolean
   hasOptionalModifiers: boolean
   hasAddonModifiers: boolean
+  hasReplacementModifiers: boolean // 🆕
 }
 
 /**
