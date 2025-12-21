@@ -144,6 +144,10 @@ export function calculateCompositionBreakdown(
 /**
  * Calculate base cost data (no modifiers)
  * Updated to handle required modifiers without defaults
+ *
+ * NOTE: portionMultiplier should NOT be applied to base composition!
+ * Base composition already has correct quantities per variant.
+ * portionMultiplier is ONLY for modifiers!
  */
 export function calculateBaseVariantCost(
   variant: MenuItemVariant,
@@ -152,13 +156,15 @@ export function calculateBaseVariantCost(
   context: CostCalculationContext,
   item?: MenuItem // 🆕 Optional item to check for required modifiers
 ): BaseCostData {
-  const portionMultiplier = variant.portionMultiplier || 1
   const composition = variant.composition || []
+  const portionMultiplier = variant.portionMultiplier || 1 // Keep for modifiers only
 
-  // Calculate composition breakdown
+  // 🔧 FIX: Do NOT apply portionMultiplier to base composition!
+  // Each variant has its own quantities already set correctly.
+  // portionMultiplier is ONLY for scaling modifier compositions.
   const compositionBreakdown = calculateCompositionBreakdown(
     composition,
-    portionMultiplier,
+    1, // Always use 1 for base composition
     context
   )
 
@@ -182,14 +188,14 @@ export function calculateBaseVariantCost(
       foodCostPercent = null
       note = 'n/a - required modifiers'
     } else if (requiredGroups.length > 0) {
-      // Calculate with defaults
+      // Calculate with defaults - apply portionMultiplier to modifiers
       const defaultsCost = requiredGroups.reduce((sum, group) => {
         const defaultOption = group.options.find(opt => opt.isDefault)
         if (defaultOption) {
           const optionComposition = defaultOption.composition || []
           const optionBreakdown = calculateCompositionBreakdown(
             optionComposition,
-            portionMultiplier,
+            portionMultiplier, // Apply multiplier to modifier compositions
             context
           )
           return sum + optionBreakdown.reduce((s, item) => s + item.totalCost, 0)
@@ -366,11 +372,25 @@ function calculateTargetComponentsCost(
   const names: string[] = []
 
   for (const target of targetComponents) {
-    // Find component in variant composition by componentId
-    const comp = variantComposition.find(c => c.id === target.componentId)
+    let comp: MenuComposition | undefined
+
+    if (target.sourceType === 'variant') {
+      // For variant: componentId is index in composition array
+      const index = parseInt(target.componentId, 10)
+      comp = variantComposition[index]
+    } else if (target.sourceType === 'recipe') {
+      // For recipe: componentId is RecipeComponent.id
+      // We need to find it in the recipe's components
+      // For now, skip recipe-based targets (TODO: implement if needed)
+      continue
+    }
+
     if (!comp) continue
 
-    const quantity = (comp.quantity || 1) * portionMultiplier
+    // 🔧 FIX: Do NOT apply portionMultiplier to base composition!
+    // Variant composition already has correct quantities.
+    // We only scale when calculating the cost (no multiplier needed here).
+    const quantity = comp.quantity || 1
 
     if (comp.type === 'product') {
       const product = context.products.get(comp.id)
