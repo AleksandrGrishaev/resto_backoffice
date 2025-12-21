@@ -160,33 +160,54 @@
         <!-- Вкладка "Варианты" -->
         <v-window-item value="variants">
           <div class="tab-content">
-            <div class="variants-header d-flex align-center mb-4">
-              <div class="text-subtitle-1">Dish Variants</div>
-              <v-spacer />
-              <v-btn color="primary" variant="text" @click="addVariant">
-                <v-icon icon="mdi-plus" size="20" class="mr-2" />
-                Add Variant
-              </v-btn>
-            </div>
+            <!-- Variantless mode message -->
+            <v-alert
+              v-if="isVariantlessMode"
+              type="info"
+              variant="tonal"
+              density="comfortable"
+              class="mb-4"
+            >
+              <div class="text-body-2">
+                <strong>Build from modifiers only mode enabled</strong>
+                <div class="mt-2">
+                  Variants are disabled. The dish price will be calculated entirely from selected
+                  modifiers. This is perfect for dishes like Custom Breakfast where customers choose
+                  all components.
+                </div>
+              </div>
+            </v-alert>
 
-            <div class="variants-list">
-              <menu-item-variant-component
-                v-for="(variant, index) in formData.variants"
-                :key="variant.id"
-                :variant="variant"
-                :index="index"
-                :can-delete="formData.variants.length > 1"
-                :item-name="formData.name"
-                :dish-type="formData.dishType"
-                :dish-options="dishOptions"
-                :product-options="productOptions"
-                :unit-options="unitOptions"
-                :role-options="roleOptions"
-                class="mb-3"
-                @update:variant="updateVariant(index, $event)"
-                @delete="removeVariant(index)"
-              />
-            </div>
+            <!-- Normal variants mode -->
+            <template v-else>
+              <div class="variants-header d-flex align-center mb-4">
+                <div class="text-subtitle-1">Dish Variants</div>
+                <v-spacer />
+                <v-btn color="primary" variant="text" @click="addVariant">
+                  <v-icon icon="mdi-plus" size="20" class="mr-2" />
+                  Add Variant
+                </v-btn>
+              </div>
+
+              <div class="variants-list">
+                <menu-item-variant-component
+                  v-for="(variant, index) in formData.variants"
+                  :key="variant.id"
+                  :variant="variant"
+                  :index="index"
+                  :can-delete="formData.variants.length > 1"
+                  :item-name="formData.name"
+                  :dish-type="formData.dishType"
+                  :dish-options="dishOptions"
+                  :product-options="productOptions"
+                  :unit-options="unitOptions"
+                  :role-options="roleOptions"
+                  class="mb-3"
+                  @update:variant="updateVariant(index, $event)"
+                  @delete="removeVariant(index)"
+                />
+              </div>
+            </template>
           </div>
         </v-window-item>
 
