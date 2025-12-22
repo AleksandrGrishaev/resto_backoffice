@@ -45,29 +45,35 @@ pnpm restore:dev prod_2025-12-09T15-53-46
 ```
 backups/
 └── prod_YYYY-MM-DDTHH-MM-SS/
-    ├── backup.sql      # Full backup (schema + data)
-    ├── schema.sql      # Schema only
-    └── metadata.json   # Backup metadata
+    ├── backup.sql       # Full backup (schema + data)
+    ├── schema.sql       # Schema only
+    ├── grants.sql       # GRANT permissions for Supabase roles
+    ├── realtime.sql     # Real-time publication table memberships
+    ├── extensions.sql   # Enabled PostgreSQL extensions
+    ├── auth_users.sql   # Auth users metadata (SECURITY SENSITIVE!)
+    └── metadata.json    # Backup metadata
 ```
 
 ### What's Included
 
-| Component    | Included |
-| ------------ | -------- |
-| Tables       | Yes      |
-| Data (COPY)  | Yes      |
-| Functions    | Yes      |
-| RLS Policies | Yes      |
-| Triggers     | Yes      |
-| Indexes      | Yes      |
+| Component                 | Included | File               |
+| ------------------------- | -------- | ------------------ |
+| Tables                    | Yes      | backup.sql         |
+| Data (COPY)               | Yes      | backup.sql         |
+| Functions                 | Yes      | backup.sql         |
+| RLS Policies              | Yes      | backup.sql         |
+| Triggers                  | Yes      | backup.sql         |
+| Indexes                   | Yes      | backup.sql         |
+| **GRANT permissions**     | **Yes**  | **grants.sql**     |
+| **Real-time publication** | **Yes**  | **realtime.sql**   |
+| **PostgreSQL extensions** | **Yes**  | **extensions.sql** |
+| **Auth users metadata**   | **Yes**  | **auth_users.sql** |
 
 ### What's NOT Included
 
-- Supabase system schemas (`auth`, `storage`, `realtime`)
-- Extensions (`pgcrypto`, `uuid-ossp`) - must be enabled separately
-- Supabase Auth users (`auth.users`)
-- **GRANT permissions for Supabase roles** (`anon`, `authenticated`, `service_role`)
-- **Real-time publication table memberships** (`supabase_realtime` publication)
+- Supabase system schemas (`auth`, `storage`, `realtime`) - except auth.users metadata
+- Auth users **passwords** (only email, metadata, and role are exported)
+- Storage buckets and files (S3 data)
 
 ### Configuration
 
@@ -125,20 +131,64 @@ Get password from: https://supabase.com/dashboard/project/fjkfckjpnbcyuknsnchy/s
 ### Sync DEV with PROD data
 
 ```bash
-# 1. Create fresh backup of prod
+# 1. Create fresh backup of prod (includes all components now!)
 pnpm backup:prod
 
 # 2. Restore to dev
 pnpm restore:dev
 
-# 3. IMPORTANT: Restore GRANT permissions (see Troubleshooting section)
-# Run the SQL from "permission denied for table X" section
+# 3. Apply additional SQL files (grants, realtime, extensions, auth users)
+# See "Post-Restore Steps" section below
 
-# 4. IMPORTANT: Restore real-time publication (see Troubleshooting section)
-# Run: ALTER PUBLICATION supabase_realtime ADD TABLE orders;
-
-# 5. Verify in app or via MCP
+# 4. Verify in app or via MCP
 mcp__supabase__list_tables({ schemas: ['public'] })
+```
+
+### Post-Restore Steps
+
+After running `pnpm restore:dev`, apply the additional SQL files from the backup:
+
+**1. Extensions (do this first!):**
+
+```bash
+# Apply via MCP or Supabase SQL Editor
+cat backups/prod_YYYY-MM-DDTHH-MM-SS/extensions.sql
+# Copy and paste to SQL Editor or use psql
+```
+
+**2. GRANT permissions:**
+
+```bash
+# Apply via MCP or Supabase SQL Editor
+cat backups/prod_YYYY-MM-DDTHH-MM-SS/grants.sql
+# This fixes "permission denied" errors
+```
+
+**3. Real-time publication:**
+
+```bash
+# Apply via MCP or Supabase SQL Editor
+cat backups/prod_YYYY-MM-DDTHH-MM-SS/realtime.sql
+# This restores Kitchen/POS real-time sync
+```
+
+**4. Auth users (optional, if needed):**
+
+```bash
+# ⚠️ SECURITY SENSITIVE! Only if you need to restore test users
+cat backups/prod_YYYY-MM-DDTHH-MM-SS/auth_users.sql
+# NOTE: Passwords are NOT included, users will need to reset passwords
+```
+
+**Quick restore script (recommended):**
+
+```bash
+# After pnpm restore:dev, run this to apply all SQL files
+BACKUP_DIR="backups/prod_YYYY-MM-DDTHH-MM-SS"
+psql $DEV_CONNECTION_STRING < $BACKUP_DIR/extensions.sql
+psql $DEV_CONNECTION_STRING < $BACKUP_DIR/grants.sql
+psql $DEV_CONNECTION_STRING < $BACKUP_DIR/realtime.sql
+# Optional: psql $DEV_CONNECTION_STRING < $BACKUP_DIR/auth_users.sql
 ```
 
 ### Before major changes

@@ -317,7 +317,6 @@
 import { ref, computed, watch } from 'vue'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
-import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useProductsStore } from '@/stores/productsStore'
 import { useCounteragentsStore } from '@/stores/counteragents'
 import { TimeUtils } from '@/utils/time'
@@ -349,7 +348,6 @@ const emits = defineEmits<Emits>()
 
 const supplierStore = useSupplierStore()
 const { startReceipt } = useReceipts()
-const { sendOrder } = usePurchaseOrders()
 const productsStore = useProductsStore()
 const counteragentsStore = useCounteragentsStore()
 
@@ -725,7 +723,7 @@ async function saveReceipt() {
       supplierId: form.value.supplierId,
       requestIds: [], // Quick receipts don't have associated requests
       items: orderItemsData,
-      notes: 'Quick Receipt Entry',
+      notes: 'Quick Receipt Entry (Archive)',
       expectedDeliveryDate: form.value.deliveryDate
     })
 
@@ -734,12 +732,15 @@ async function saveReceipt() {
       orderNumber: createdOrder.orderNumber
     })
 
-    // 2. Send order to make it ready for receipt
-    await sendOrder(createdOrder.id)
+    // 2. Update order status to 'delivered' (skip 'sent' to avoid creating transit batches)
+    // QuickReceipt is for archive data - goods already received, no need for transit flow
+    await supplierStore.updateOrder(createdOrder.id, {
+      status: 'delivered'
+    })
 
-    DebugUtils.info(MODULE_NAME, 'Order sent, ready for receipt', {
+    DebugUtils.info(MODULE_NAME, 'Order marked as delivered (archive mode)', {
       orderId: createdOrder.id,
-      status: 'sent'
+      status: 'delivered'
     })
 
     // 3. Create receipt through startReceipt

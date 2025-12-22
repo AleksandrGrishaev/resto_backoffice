@@ -923,7 +923,8 @@ class SupplierService {
     receipt.updatedAt = timestamp
 
     // Update order status
-    if (order.status === 'confirmed') {
+    // ✅ FIX: Handle 'sent' status (orders are sent, not confirmed)
+    if (order.status === 'sent') {
       order.status = 'delivered'
       order.receiptId = receipt.id
       order.updatedAt = timestamp

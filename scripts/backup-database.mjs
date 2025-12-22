@@ -180,14 +180,193 @@ function createBackup() {
     console.log('  Schema backup created: schema.sql')
   }
 
-  // 3. Save backup metadata
+  // 3. Export GRANT permissions
+  console.log('Exporting GRANT permissions...')
+  const grantsFile = join(backupPath, 'grants.sql')
+  const grantsHeader = `-- Export all GRANT permissions for Supabase roles
+-- Run this after restore to fix "permission denied" errors
+
+-- 1. Tables\n`
+
+  const psqlPath = pgDumpPath.replace('pg_dump', 'psql')
+
+  // Query 1: Tables
+  const tablesQuery = `SELECT 'GRANT ' || privilege_type || ' ON ' || table_schema || '.' || table_name || ' TO ' || grantee || ';'
+FROM information_schema.table_privileges
+WHERE table_schema = 'public' AND grantee IN ('anon', 'authenticated', 'service_role')
+ORDER BY table_name, grantee, privilege_type;`
+
+  const tablesResult = spawnSync(
+    psqlPath,
+    [connectionString, '--tuples-only', '--no-align', '--command', tablesQuery],
+    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
+  )
+
+  let grantsContent = grantsHeader
+  if (tablesResult.status === 0 && tablesResult.stdout.trim()) {
+    grantsContent += tablesResult.stdout + '\n-- 2. Sequences\n'
+  }
+
+  // Query 2: Sequences
+  const seqQuery = `SELECT 'GRANT ' || privilege_type || ' ON SEQUENCE ' || sequence_schema || '.' || sequence_name || ' TO ' || grantee || ';'
+FROM information_schema.usage_privileges
+WHERE object_schema = 'public' AND grantee IN ('anon', 'authenticated', 'service_role')
+ORDER BY object_name, grantee, privilege_type;`
+
+  const seqResult = spawnSync(
+    psqlPath,
+    [connectionString, '--tuples-only', '--no-align', '--command', seqQuery],
+    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
+  )
+
+  if (seqResult.status === 0 && seqResult.stdout.trim()) {
+    grantsContent += seqResult.stdout + '\n-- 3. Functions\n'
+  }
+
+  // Query 3: Functions
+  const funcQuery = `SELECT 'GRANT EXECUTE ON FUNCTION ' || n.nspname || '.' || p.proname ||
+    '(' || pg_get_function_identity_arguments(p.oid) || ') TO anon;'
+FROM pg_proc p
+JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = 'public'
+UNION ALL
+SELECT 'GRANT EXECUTE ON FUNCTION ' || n.nspname || '.' || p.proname ||
+    '(' || pg_get_function_identity_arguments(p.oid) || ') TO authenticated;'
+FROM pg_proc p
+JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = 'public'
+UNION ALL
+SELECT 'GRANT EXECUTE ON FUNCTION ' || n.nspname || '.' || p.proname ||
+    '(' || pg_get_function_identity_arguments(p.oid) || ') TO service_role;'
+FROM pg_proc p
+JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = 'public'
+ORDER BY 1;`
+
+  const funcResult = spawnSync(
+    psqlPath,
+    [connectionString, '--tuples-only', '--no-align', '--command', funcQuery],
+    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
+  )
+
+  if (funcResult.status === 0 && funcResult.stdout.trim()) {
+    grantsContent += funcResult.stdout + '\n'
+  }
+
+  // Write grants file
+  if (grantsContent !== grantsHeader) {
+    writeFileSync(grantsFile, grantsContent)
+    console.log('  Grants exported: grants.sql')
+  } else {
+    console.log('  WARNING: Could not export grants')
+  }
+
+  // 4. Export real-time publication tables
+  console.log('Exporting real-time publication...')
+  const realtimeFile = join(backupPath, 'realtime.sql')
+  const realtimeQuery = `
+-- Export real-time publication table memberships
+SELECT 'ALTER PUBLICATION supabase_realtime ADD TABLE ' || schemaname || '.' || tablename || ';' as stmt
+FROM pg_publication_tables
+WHERE pubname = 'supabase_realtime'
+ORDER BY tablename;
+`
+  const realtimeResult = spawnSync(
+    psqlPath,
+    [connectionString, '--tuples-only', '--no-align', '--command', realtimeQuery],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8'
+    }
+  )
+
+  if (realtimeResult.status === 0 && realtimeResult.stdout) {
+    writeFileSync(realtimeFile, realtimeResult.stdout)
+    console.log('  Real-time publication exported: realtime.sql')
+  } else {
+    console.log('  WARNING: Could not export real-time publication')
+  }
+
+  // 5. Export enabled extensions
+  console.log('Exporting enabled extensions...')
+  const extensionsFile = join(backupPath, 'extensions.sql')
+  const extensionsQuery = `
+-- Export enabled extensions
+SELECT 'CREATE EXTENSION IF NOT EXISTS "' || extname || '" WITH SCHEMA ' ||
+  COALESCE(n.nspname, 'public') || ';' as stmt
+FROM pg_extension e
+LEFT JOIN pg_namespace n ON e.extnamespace = n.oid
+WHERE extname NOT IN ('plpgsql')  -- Skip built-in extensions
+ORDER BY extname;
+`
+  const extensionsResult = spawnSync(
+    psqlPath,
+    [connectionString, '--tuples-only', '--no-align', '--command', extensionsQuery],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8'
+    }
+  )
+
+  if (extensionsResult.status === 0 && extensionsResult.stdout) {
+    writeFileSync(extensionsFile, extensionsResult.stdout)
+    console.log('  Extensions exported: extensions.sql')
+  } else {
+    console.log('  WARNING: Could not export extensions')
+  }
+
+  // 6. Export Auth users (optional, security sensitive)
+  console.log('Exporting Auth users metadata...')
+  const authFile = join(backupPath, 'auth_users.sql')
+  const authQuery = `
+-- Export Auth users (metadata only, no passwords)
+-- WARNING: This is security-sensitive data!
+SELECT 'INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, updated_at, email_confirmed_at, role) VALUES (' ||
+  quote_literal(id::text) || ', ' ||
+  quote_literal(email) || ', ' ||
+  quote_literal(raw_user_meta_data::text) || '::jsonb, ' ||
+  quote_literal(created_at::text) || '::timestamptz, ' ||
+  quote_literal(updated_at::text) || '::timestamptz, ' ||
+  COALESCE(quote_literal(email_confirmed_at::text) || '::timestamptz', 'NULL') || ', ' ||
+  quote_literal(role) ||
+  ');' as stmt
+FROM auth.users
+ORDER BY created_at;
+`
+  const authResult = spawnSync(
+    psqlPath,
+    [connectionString, '--tuples-only', '--no-align', '--command', authQuery],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8'
+    }
+  )
+
+  if (authResult.status === 0 && authResult.stdout) {
+    writeFileSync(
+      authFile,
+      '-- WARNING: Security-sensitive data! Do not commit to git.\n' + authResult.stdout
+    )
+    console.log('  Auth users exported: auth_users.sql (SECURITY SENSITIVE!)')
+  } else {
+    console.log('  WARNING: Could not export auth users')
+  }
+
+  // 7. Save backup metadata
   const metadata = {
     timestamp: new Date().toISOString(),
     projectRef: CONFIG.projectRef,
     host: CONFIG.host,
     database: CONFIG.database,
     type: 'full',
-    files: ['backup.sql', 'schema.sql']
+    files: [
+      'backup.sql',
+      'schema.sql',
+      'grants.sql',
+      'realtime.sql',
+      'extensions.sql',
+      'auth_users.sql'
+    ]
   }
   writeFileSync(join(backupPath, 'metadata.json'), JSON.stringify(metadata, null, 2))
 
@@ -197,9 +376,13 @@ function createBackup() {
   console.log('========================================')
   console.log(`\nLocation: backups/${backupName}/`)
   console.log('Files:')
-  console.log('  - backup.sql    (full backup with data)')
-  console.log('  - schema.sql    (schema only)')
-  console.log('  - metadata.json (backup info)')
+  console.log('  - backup.sql      (full backup with data)')
+  console.log('  - schema.sql      (schema only)')
+  console.log('  - grants.sql      (GRANT permissions for Supabase roles)')
+  console.log('  - realtime.sql    (real-time publication tables)')
+  console.log('  - extensions.sql  (enabled PostgreSQL extensions)')
+  console.log('  - auth_users.sql  (Auth users metadata - SECURITY SENSITIVE!)')
+  console.log('  - metadata.json   (backup info)')
   console.log('')
 
   // Show file sizes
