@@ -1003,12 +1003,13 @@ class SupplierService {
     }, `${MODULE_NAME}.completeReceipt.updateReceipt`)
 
     // ✅ UPDATE ORDER IN SUPABASE (already implemented in Phase 2)
+    // Note: Do NOT update items here - they already exist and receipt_items reference them
     await this.updateOrder(order.id, {
       status: order.status,
       receiptId: order.receiptId,
       totalAmount: order.totalAmount,
-      isEstimatedTotal: order.isEstimatedTotal,
-      items: order.items
+      isEstimatedTotal: order.isEstimatedTotal
+      // items: order.items - REMOVED to avoid deleting items that receipt_items reference
     })
 
     DebugUtils.info(MODULE_NAME, '✅ Receipt completed successfully with full integration', {

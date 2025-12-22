@@ -19,6 +19,11 @@
           AI Order Assistant
         </v-btn>
 
+        <!-- Quick Receipt Entry - для исторических данных -->
+        <v-btn color="warning" prepend-icon="mdi-flash" @click="showQuickReceiptDialog = true">
+          Quick Receipt
+        </v-btn>
+
         <!-- Create Orders кнопка появляется когда есть submitted заявки -->
         <v-btn
           v-if="availableItemsCount > 0"
@@ -183,6 +188,13 @@
       @error="handleError"
     />
 
+    <!-- Quick Receipt Dialog -->
+    <quick-receipt-dialog
+      v-model="showQuickReceiptDialog"
+      @success="handleQuickReceiptSuccess"
+      @error="handleError"
+    />
+
     <!-- Success Snackbar -->
     <v-snackbar v-model="showSuccessSnackbar" color="success" timeout="3000" location="top">
       <v-icon icon="mdi-check-circle" class="mr-2" />
@@ -303,6 +315,7 @@ import PurchaseOrderTable from './components/orders/PurchaseOrderTable.vue'
 import ReceiptTable from './components/receipts/ReceiptTable.vue'
 import RequestEditDialog from './components/procurement/RequestEditDialog.vue'
 import PurchaseOrderEditDialog from './components/orders/PurchaseOrderEditDialog.vue'
+import QuickReceiptDialog from './components/receipts/QuickReceiptDialog.vue'
 
 const MODULE_NAME = 'SupplierView'
 
@@ -328,6 +341,7 @@ const showReceiptDialog = ref(false)
 const showReceiptDetailsDialog = ref(false)
 const showInfoDialog = ref(false)
 const showRequestEditDialog = ref(false)
+const showQuickReceiptDialog = ref(false)
 const showSuccessSnackbar = ref(false)
 const showErrorSnackbar = ref(false)
 const successMessage = ref('')
@@ -387,7 +401,10 @@ const availableItemsCount = computed(() => {
 // ✅ HELPER: Функция проверки, заказан ли товар полностью
 function isItemFullyOrdered(requestId: string, itemId: string, requestedQuantity: number): boolean {
   // Находим все заказы, связанные с этим запросом
-  const relatedOrders = ordersArray.value.filter(order => order.requestIds.includes(requestId))
+  // ✅ FIX: Add null-safety check for requestIds
+  const relatedOrders = ordersArray.value.filter(
+    order => Array.isArray(order.requestIds) && order.requestIds.includes(requestId)
+  )
 
   // Считаем общее заказанное количество этого товара
   let totalOrdered = 0
@@ -471,6 +488,14 @@ function handleReceiptSuccess(message: string) {
   showReceiptDialog.value = false
   selectedOrder.value = null
   selectedReceipt.value = null
+  selectedTab.value = 'receipts'
+}
+
+function handleQuickReceiptSuccess(message: string) {
+  console.log(`${MODULE_NAME}: Quick receipt success`, message)
+  showSuccess(message)
+  showQuickReceiptDialog.value = false
+  selectedTab.value = 'receipts'
 }
 
 // =============================================
