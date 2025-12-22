@@ -1,10 +1,10 @@
-<!-- src/views/supplier_2/components/orders/PrintOrderOptionsDialog.vue -->
+<!-- src/views/supplier_2/components/orders/OrderExportOptionsDialog.vue -->
 <template>
   <v-dialog v-model="isOpen" max-width="400px">
     <v-card>
       <v-card-title class="d-flex align-center pa-4 bg-primary text-white">
-        <v-icon icon="mdi-printer" class="mr-2" />
-        Print Purchase Order
+        <v-icon icon="mdi-file-eye-outline" class="mr-2" />
+        Preview Purchase Order
       </v-card-title>
 
       <v-card-text class="pa-4">
@@ -49,10 +49,10 @@
         <v-btn
           color="primary"
           :loading="loading"
-          prepend-icon="mdi-file-pdf-box"
+          prepend-icon="mdi-eye-outline"
           @click="handlePrint"
         >
-          Generate PDF
+          Preview Order
         </v-btn>
       </v-card-actions>
     </v-card>

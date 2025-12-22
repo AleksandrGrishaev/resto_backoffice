@@ -30,6 +30,79 @@ export function useExport() {
   const exportError = ref<string | null>(null)
 
   /**
+   * Render Vue component to DOM and return as Blob
+   * Used for preview/sharing without immediate download
+   */
+  async function renderAndExportAsBlob<T>(
+    component: unknown,
+    data: T,
+    options: ExportOptions
+  ): Promise<Blob> {
+    // A4 dimensions at 96dpi with margins accounted for
+    const isLandscape = options.orientation === 'landscape'
+    const containerWidth = isLandscape ? '1085px' : '720px'
+
+    // Create wrapper that will be temporarily visible
+    const wrapper = document.createElement('div')
+    wrapper.style.position = 'absolute'
+    wrapper.style.left = '0'
+    wrapper.style.top = '0'
+    wrapper.style.width = '100%'
+    wrapper.style.minHeight = '100vh'
+    wrapper.style.overflow = 'visible'
+    wrapper.style.background = 'white'
+    wrapper.style.zIndex = '99999'
+    document.body.appendChild(wrapper)
+    window.scrollTo(0, 0)
+
+    // Create actual content container
+    const container = document.createElement('div')
+    container.style.width = containerWidth
+    container.style.margin = '0 auto'
+    container.style.padding = '20px'
+    container.style.background = 'white'
+    wrapper.appendChild(container)
+
+    let app: ReturnType<typeof createApp> | null = null
+
+    try {
+      // Mount Vue component
+      app = createApp({
+        render: () => h(component as object, { data, options })
+      })
+      app.mount(container)
+
+      // Wait for render
+      await nextTick()
+      await nextTick()
+      await nextTick()
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Force a reflow
+      void container.offsetHeight
+
+      // Debug dimensions
+      const contentHeight = container.scrollHeight
+      const contentWidth = container.scrollWidth
+      console.log(`[Export] Container dimensions: ${contentWidth}x${contentHeight}`)
+
+      if (contentHeight === 0 || contentWidth === 0) {
+        console.error('[Export] Container has zero dimensions - content may not have rendered')
+      }
+
+      // Generate PDF Blob from the container
+      const blob = await exportService.generatePdfBlob(container, options)
+      return blob
+    } finally {
+      // Cleanup
+      if (app) {
+        app.unmount()
+      }
+      document.body.removeChild(wrapper)
+    }
+  }
+
+  /**
    * Render Vue component to DOM and export as PDF
    */
   async function renderAndExport<T>(
@@ -301,6 +374,35 @@ export function useExport() {
     }
   }
 
+  /**
+   * Export purchase order as Blob
+   * Used for preview and sharing functionality
+   */
+  async function exportPurchaseOrderAsBlob(
+    data: PurchaseOrderExportData,
+    options: PurchaseOrderExportOptions = {}
+  ): Promise<{ blob: Blob; filename: string }> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      // Generate filename from order number (sanitized)
+      const sanitizedNumber = data.orderNumber.replace(/[^a-zA-Z0-9-]/g, '_')
+      const filename = options.filename || exportService.generateFilename(`PO_${sanitizedNumber}`)
+      const blob = await renderAndExportAsBlob(PurchaseOrderTemplate, data, {
+        ...options,
+        filename,
+        orientation: options.orientation || 'portrait'
+      })
+      return { blob, filename }
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
   return {
     isExporting,
     exportError,
@@ -311,6 +413,7 @@ export function useExport() {
     exportMenuItemCombinations,
     exportMenuDetailed,
     exportPurchaseOrder,
+    exportPurchaseOrderAsBlob,
     generatePDF
   }
 }

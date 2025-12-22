@@ -99,15 +99,15 @@
 
       <!-- Dialog Actions -->
       <v-card-actions class="pa-4 border-t">
-        <!-- Print Button -->
+        <!-- Preview Button -->
         <v-btn
           variant="tonal"
           color="primary"
-          prepend-icon="mdi-printer"
+          prepend-icon="mdi-eye-outline"
           :loading="isPrinting"
           @click="handlePrintOrder"
         >
-          Print PDF
+          Preview Order
         </v-btn>
 
         <v-spacer />
@@ -285,13 +285,16 @@
       </v-card>
     </v-dialog>
 
-    <!-- Print Options Dialog -->
-    <PrintOrderOptionsDialog
+    <!-- Export Options Dialog -->
+    <OrderExportOptionsDialog
       v-model="showPrintOptionsDialog"
       :order="order"
       :loading="isPrinting"
       @print="handlePrintWithOptions"
     />
+
+    <!-- Order Preview Dialog -->
+    <OrderPreviewDialog v-model="showPreviewDialog" :order-data="previewData" />
   </v-dialog>
 </template>
 
@@ -305,7 +308,8 @@ import OrderItemsWidget from './order/OrderItemsWidget.vue'
 import OrderReceiptWidget from './order/OrderReceiptWidget.vue'
 import AttachBillDialog from './order/AttachBillDialog.vue'
 import PurchaseOrderPayment from './order/PurchaseOrderPayment.vue'
-import PrintOrderOptionsDialog from './PrintOrderOptionsDialog.vue'
+import OrderExportOptionsDialog from './OrderExportOptionsDialog.vue'
+import OrderPreviewDialog from './OrderPreviewDialog.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -341,10 +345,12 @@ const {
   getPaymentStatusColor
 } = useOrderPayments()
 
-const { isPrinting, printOrder } = usePurchaseOrderExport()
+const { isPrinting, buildExportData } = usePurchaseOrderExport()
 
-// Print options dialog
+// Preview dialogs
 const showPrintOptionsDialog = ref(false)
+const showPreviewDialog = ref(false)
+const previewData = ref<any>(null)
 
 // =============================================
 // LOCAL STATE
@@ -469,11 +475,15 @@ function handlePrintOrder() {
 async function handlePrintWithOptions(options: { includePrices: boolean }) {
   if (!props.order) return
   showPrintOptionsDialog.value = false
-  await printOrder(props.order, {
+
+  // Build export data and show preview dialog
+  previewData.value = await buildExportData(props.order, {
     companyName: 'Kitchen Restaurant',
     companyAddress: 'Bali, Indonesia',
     includePrices: options.includePrices
   })
+
+  showPreviewDialog.value = true
 }
 
 function startReceipt(order: PurchaseOrder) {

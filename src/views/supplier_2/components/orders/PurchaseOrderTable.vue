@@ -229,8 +229,8 @@
               />
 
               <v-list-item
-                prepend-icon="mdi-printer"
-                title="Print PDF"
+                prepend-icon="mdi-eye-outline"
+                title="Preview Order"
                 :disabled="isPrinting"
                 @click="handlePrintOrder(item)"
               />
@@ -273,13 +273,16 @@
       @start-receipt="startReceipt"
     />
 
-    <!-- Print Options Dialog -->
-    <PrintOrderOptionsDialog
+    <!-- Export Options Dialog -->
+    <OrderExportOptionsDialog
       v-model="showPrintOptionsDialog"
       :order="printingOrder"
       :loading="isPrinting"
       @print="handlePrintWithOptions"
     />
+
+    <!-- Order Preview Dialog -->
+    <OrderPreviewDialog v-model="showPreviewDialog" :order-data="previewData" />
   </div>
 </template>
 
@@ -289,7 +292,8 @@ import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOr
 import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurchaseOrderExport'
 import type { PurchaseOrder, BillStatus } from '@/stores/supplier_2/types'
 import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
-import PrintOrderOptionsDialog from './PrintOrderOptionsDialog.vue'
+import OrderExportOptionsDialog from './OrderExportOptionsDialog.vue'
+import OrderPreviewDialog from './OrderPreviewDialog.vue'
 
 // =============================================
 // PROPS & EMITS
@@ -334,7 +338,7 @@ const {
   getOrderPaymentDetails
 } = usePurchaseOrders()
 
-const { isPrinting, printOrder } = usePurchaseOrderExport()
+const { isPrinting, buildExportData } = usePurchaseOrderExport()
 
 // =============================================
 // LOCAL STATE (упрощенный - убраны orderBills)
@@ -343,7 +347,9 @@ const showDetailsDialog = ref(false)
 const selectedOrder = ref<PurchaseOrder | null>(null)
 const searchQuery = ref('')
 const showPrintOptionsDialog = ref(false)
+const showPreviewDialog = ref(false)
 const printingOrder = ref<PurchaseOrder | null>(null)
+const previewData = ref<any>(null)
 
 // =============================================
 // TABLE CONFIGURATION
@@ -490,11 +496,15 @@ function handlePrintOrder(order: PurchaseOrder) {
 async function handlePrintWithOptions(options: { includePrices: boolean }) {
   if (!printingOrder.value) return
   showPrintOptionsDialog.value = false
-  await printOrder(printingOrder.value, {
+
+  // Build export data and show preview dialog
+  previewData.value = await buildExportData(printingOrder.value, {
     companyName: 'Kitchen Restaurant',
     companyAddress: 'Bali, Indonesia',
     includePrices: options.includePrices
   })
+
+  showPreviewDialog.value = true
   printingOrder.value = null
 }
 

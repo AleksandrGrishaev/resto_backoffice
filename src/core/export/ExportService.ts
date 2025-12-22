@@ -50,6 +50,101 @@ export class ExportService {
   }
 
   /**
+   * Generate PDF from HTML element and return as Blob
+   * Used for sharing/preview without immediate download
+   */
+  async generatePdfBlob(element: HTMLElement, options: ExportOptions = {}): Promise<Blob> {
+    const html2pdf = await getHtml2Pdf()
+
+    // Margins: [top, left, bottom, right]
+    const isLandscape = options.orientation === 'landscape'
+    const top = isLandscape ? 10 : 15
+    // Add extra bottom margin for page numbers
+    const showPageNumbers = options.showPageNumbers !== false // Default to true
+    const bottom = showPageNumbers ? (isLandscape ? 18 : 22) : isLandscape ? 15 : 20
+    const leftRight = isLandscape ? 8 : 12
+
+    // Calculate appropriate scale based on content height
+    const contentHeight = element.scrollHeight
+    const contentWidth = element.scrollWidth
+    const estimatedCanvasHeight = contentHeight * 2 // Default scale is 2
+    const MAX_CANVAS_PIXELS = 200_000_000 // Conservative limit (200M pixels)
+    const MAX_CANVAS_DIMENSION = 16384
+
+    let scale = 2 // Default high quality
+    if (
+      estimatedCanvasHeight > MAX_CANVAS_DIMENSION ||
+      contentWidth * 2 * estimatedCanvasHeight > MAX_CANVAS_PIXELS
+    ) {
+      // Calculate safe scale
+      const maxScaleByDimension = MAX_CANVAS_DIMENSION / contentHeight
+      const maxScaleByArea = Math.sqrt(MAX_CANVAS_PIXELS / (contentWidth * contentHeight))
+      scale = Math.min(maxScaleByDimension, maxScaleByArea, 2)
+      scale = Math.max(scale, 1) // Don't go below 1
+      console.log(
+        `[ExportService] Large document detected (${contentWidth}x${contentHeight}), reducing scale from 2 to ${scale.toFixed(2)}`
+      )
+    }
+
+    const pdfOptions: Html2PdfOptions = {
+      margin: [top, leftRight, bottom, leftRight],
+      filename: options.filename || 'export.pdf',
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: {
+        scale,
+        useCORS: true,
+        logging: false,
+        allowTaint: true,
+        scrollX: 0,
+        scrollY: 0
+      },
+      jsPDF: {
+        unit: 'mm',
+        format: options.pageSize || 'a4',
+        orientation: options.orientation || 'portrait'
+      },
+      pagebreak: {
+        mode: ['css', 'legacy'],
+        before: '.page-break-before',
+        after: '.page-break-after',
+        avoid: options.avoidPageBreaks
+          ? '.avoid-break, .menu-item-block, .recipe-card'
+          : '.avoid-break'
+      }
+    }
+
+    try {
+      console.log('[ExportService] Starting PDF blob generation...')
+      const worker = html2pdf().from(element).set(pdfOptions).toPdf()
+      const pdf = await worker.get('pdf')
+
+      // Add page numbers if enabled
+      if (showPageNumbers) {
+        const totalPages = pdf.internal.getNumberOfPages()
+        console.log(`[ExportService] PDF generated with ${totalPages} pages`)
+
+        const pageWidth = pdf.internal.pageSize.getWidth()
+        const pageHeight = pdf.internal.pageSize.getHeight()
+
+        for (let i = 1; i <= totalPages; i++) {
+          pdf.setPage(i)
+          pdf.setFontSize(9)
+          pdf.setTextColor(128, 128, 128) // Gray color
+          pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' })
+        }
+      }
+
+      // Get PDF as Blob
+      const blob = await worker.get('blob')
+      console.log('[ExportService] PDF blob generated successfully')
+      return blob
+    } catch (error) {
+      console.error('[ExportService] PDF blob generation failed:', error)
+      throw error
+    }
+  }
+
+  /**
    * Generate PDF from HTML element
    */
   async generatePdf(element: HTMLElement, options: ExportOptions = {}): Promise<void> {
