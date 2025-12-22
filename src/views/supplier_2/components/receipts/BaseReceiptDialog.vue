@@ -57,6 +57,55 @@
             </v-col>
           </v-row>
 
+          <!-- Tax Fields -->
+          <v-row>
+            <v-col cols="12">
+              <v-checkbox
+                v-model="receiptForm.includeTax"
+                label="Include Tax in Receipt"
+                color="primary"
+                density="compact"
+                :disabled="isCompleted"
+                hide-details
+              />
+            </v-col>
+          </v-row>
+
+          <v-row v-if="receiptForm.includeTax">
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 font-weight-bold mb-2">Tax Information</div>
+              <v-text-field
+                v-model.number="receiptForm.taxAmount"
+                label="Tax Amount (IDR)"
+                type="number"
+                prepend-inner-icon="mdi-receipt-text"
+                variant="outlined"
+                density="compact"
+                :disabled="isCompleted"
+                hint="Total tax amount (included in item prices)"
+                persistent-hint
+                @update:model-value="onTaxAmountChange"
+              />
+            </v-col>
+
+            <v-col cols="12" md="6">
+              <div class="text-subtitle-2 font-weight-bold mb-2">&nbsp;</div>
+              <v-text-field
+                v-model.number="receiptForm.taxPercentage"
+                label="Tax Percentage"
+                type="number"
+                prepend-inner-icon="mdi-percent"
+                variant="outlined"
+                density="compact"
+                :disabled="isCompleted"
+                suffix="%"
+                hint="Tax % (for reference only)"
+                persistent-hint
+                @update:model-value="onTaxPercentageChange"
+              />
+            </v-col>
+          </v-row>
+
           <!-- Order Summary -->
           <div class="d-flex align-center gap-4 mt-2">
             <v-chip color="info" size="small">
@@ -102,6 +151,8 @@
           <EditableReceiptItemsWidget
             :items="receiptForm.items"
             :is-completed="isCompleted"
+            :tax-amount="receiptForm.taxAmount"
+            :tax-percentage="receiptForm.taxPercentage"
             @item-changed="handleItemChanged"
             @auto-fill="autoFillFromOrder"
           />
@@ -284,6 +335,9 @@ const receiptForm = ref({
   receivedBy: 'Warehouse Manager',
   deliveryDate: TimeUtils.formatForHTMLInput(),
   notes: '',
+  includeTax: false,
+  taxAmount: undefined as number | undefined,
+  taxPercentage: undefined as number | undefined,
   items: [] as ReceiptFormItem[]
 })
 
@@ -429,6 +483,11 @@ function setupReceiptForm() {
   receiptForm.value.receivedBy = currentReceipt.value.receivedBy || 'Warehouse Manager'
   receiptForm.value.deliveryDate = TimeUtils.formatForHTMLInput(currentReceipt.value.deliveryDate)
   receiptForm.value.notes = currentReceipt.value.notes || ''
+  receiptForm.value.includeTax = !!(
+    currentReceipt.value.taxAmount || currentReceipt.value.taxPercentage
+  )
+  receiptForm.value.taxAmount = currentReceipt.value.taxAmount
+  receiptForm.value.taxPercentage = currentReceipt.value.taxPercentage
 
   // ✅ ИСПРАВЛЕНО: Заполняем все поля упаковок из OrderItem и ReceiptItem
   receiptForm.value.items = currentReceipt.value.items.map(receiptItem => {
@@ -501,6 +560,50 @@ function handleItemChanged(item: ReceiptFormItem, index: number) {
   })
 }
 
+// =============================================
+// METHODS - Tax Calculations
+// =============================================
+
+let taxSyncInProgress = false
+
+/**
+ * When tax amount changes, calculate and update percentage
+ */
+function onTaxAmountChange(value: number | undefined) {
+  if (taxSyncInProgress) return
+  if (!value || value <= 0) {
+    receiptForm.value.taxPercentage = undefined
+    return
+  }
+
+  taxSyncInProgress = true
+  const subtotal = calculatedActualTotal.value
+  if (subtotal > 0) {
+    // Calculate percentage from amount (tax is separate from subtotal)
+    receiptForm.value.taxPercentage = Number(((value / subtotal) * 100).toFixed(2))
+  }
+  taxSyncInProgress = false
+}
+
+/**
+ * When tax percentage changes, calculate and update amount
+ */
+function onTaxPercentageChange(value: number | undefined) {
+  if (taxSyncInProgress) return
+  if (!value || value <= 0) {
+    receiptForm.value.taxAmount = undefined
+    return
+  }
+
+  taxSyncInProgress = true
+  const subtotal = calculatedActualTotal.value
+  if (subtotal > 0) {
+    // Calculate amount from percentage (tax is separate from subtotal)
+    receiptForm.value.taxAmount = Math.round((subtotal * value) / 100)
+  }
+  taxSyncInProgress = false
+}
+
 async function saveReceipt() {
   if (!currentReceipt.value || !canSave.value) return
 
@@ -509,7 +612,9 @@ async function saveReceipt() {
   isSaving.value = true
   try {
     const updateData = {
-      notes: receiptForm.value.notes
+      notes: receiptForm.value.notes,
+      taxAmount: receiptForm.value.includeTax ? receiptForm.value.taxAmount : undefined,
+      taxPercentage: receiptForm.value.includeTax ? receiptForm.value.taxPercentage : undefined
     }
 
     await updateReceipt(currentReceipt.value.id, updateData)
@@ -536,6 +641,12 @@ async function confirmComplete() {
     currentReceipt.value.receivedBy = receiptForm.value.receivedBy
     currentReceipt.value.deliveryDate = receiptForm.value.deliveryDate
     currentReceipt.value.notes = receiptForm.value.notes
+    currentReceipt.value.taxAmount = receiptForm.value.includeTax
+      ? receiptForm.value.taxAmount
+      : undefined
+    currentReceipt.value.taxPercentage = receiptForm.value.includeTax
+      ? receiptForm.value.taxPercentage
+      : undefined
 
     // ✅ ИСПРАВЛЕНО: Копируем ВСЕ поля включая упаковки
     receiptForm.value.items.forEach(formItem => {
@@ -561,6 +672,30 @@ async function confirmComplete() {
       }
     })
 
+    // ✅ TAX DISTRIBUTION: Add proportional tax to actualBaseCost
+    if (
+      receiptForm.value.includeTax &&
+      receiptForm.value.taxAmount &&
+      receiptForm.value.taxAmount > 0
+    ) {
+      const subtotal = calculatedActualTotal.value
+      if (subtotal > 0) {
+        currentReceipt.value.items.forEach(item => {
+          const lineTotal = item.receivedQuantity * (item.actualBaseCost || item.orderedBaseCost)
+          const proportion = lineTotal / subtotal
+          const itemTax = receiptForm.value.taxAmount! * proportion
+          const taxPerUnit = item.receivedQuantity > 0 ? itemTax / item.receivedQuantity : 0
+
+          // Add tax to actualBaseCost
+          if (item.actualBaseCost !== undefined) {
+            item.actualBaseCost = item.actualBaseCost + taxPerUnit
+          } else {
+            item.actualBaseCost = item.orderedBaseCost + taxPerUnit
+          }
+        })
+      }
+    }
+
     // ✅ КРИТИЧНО: Сохраняем items В БАЗУ перед завершением приемки
     // Иначе completeReceipt возьмёт старые данные из store
     DebugUtils.info(MODULE_NAME, 'Saving receipt items before completion', {
@@ -584,7 +719,9 @@ async function confirmComplete() {
       items: currentReceipt.value.items,
       receivedBy: receiptForm.value.receivedBy,
       deliveryDate: receiptForm.value.deliveryDate,
-      notes: receiptForm.value.notes
+      notes: receiptForm.value.notes,
+      taxAmount: receiptForm.value.includeTax ? receiptForm.value.taxAmount : undefined,
+      taxPercentage: receiptForm.value.includeTax ? receiptForm.value.taxPercentage : undefined
     })
 
     const completedReceipt = await completeReceiptAction(currentReceipt.value.id)

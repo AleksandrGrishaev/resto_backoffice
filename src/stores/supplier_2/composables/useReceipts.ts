@@ -286,7 +286,12 @@ export function useReceipts() {
           actualPrice: item.actualBaseCost // costPerUnit должен быть за единицу
         }))
 
-        await storageStore.convertTransitBatchesToActive(receipt.purchaseOrderId, receiptItems)
+        // ✅ FIX: Pass actual receipt delivery date to update batch receipt date
+        await storageStore.convertTransitBatchesToActive(
+          receipt.purchaseOrderId,
+          receiptItems,
+          receipt.deliveryDate
+        )
 
         DebugUtils.info(MODULE_NAME, '📊 Storage state AFTER transit conversion', {
           activeBatches: storageStore.state.activeBatches.length,

@@ -176,12 +176,14 @@ export class TransitBatchService {
    */
   async convertToActive(
     orderId: string,
-    receivedItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
+    receivedItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>,
+    actualDeliveryDate?: string
   ): Promise<StorageBatch[]> {
     try {
       DebugUtils.info(MODULE_NAME, 'Converting transit batches to active', {
         orderId,
         itemsCount: receivedItems.length,
+        actualDeliveryDate,
         receivedItems: receivedItems.map(i => ({
           itemId: i.itemId,
           qty: i.receivedQuantity,
@@ -199,6 +201,9 @@ export class TransitBatchService {
 
       const activeBatches: StorageBatch[] = []
 
+      // ✅ FIX: Use actual delivery date from receipt or current date
+      const deliveryDate = actualDeliveryDate || new Date().toISOString()
+
       // 2. For each batch, find the corresponding receivedItem and update
       for (const batch of transitBatches) {
         const receivedItem = receivedItems.find(r => r.itemId === batch.itemId)
@@ -207,7 +212,8 @@ export class TransitBatchService {
         const updateData: Record<string, unknown> = {
           status: 'active',
           is_active: true,
-          actual_delivery_date: new Date().toISOString(),
+          actual_delivery_date: deliveryDate,
+          receipt_date: deliveryDate, // ✅ FIX: Update receipt date to actual delivery date
           updated_at: new Date().toISOString()
         }
 

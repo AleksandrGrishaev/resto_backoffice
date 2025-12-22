@@ -418,15 +418,47 @@ function handleAssignToSupplier(supplierId: string, supplierName: string, itemId
     if (itemIndex > -1) {
       const item = unassignedBasket.value!.items.splice(itemIndex, 1)[0]
 
-      // ✅ Если есть рекомендованная упаковка - инициализируем полностью
-      if (item.recommendedPackageId && !item.packageId) {
+      console.log('📦 Item before processing:', {
+        itemName: item.itemName,
+        packageId: item.packageId,
+        packageName: item.packageName,
+        packageQuantity: item.packageQuantity,
+        recommendedPackageId: item.recommendedPackageId
+      })
+
+      // ✅ FIX: Если есть packageId из request - используем его
+      if (item.packageId) {
+        const pkg = productsStore.getPackageById(item.packageId)
+        if (pkg) {
+          // Пересчитываем количество упаковок если нужно
+          if (!item.packageQuantity) {
+            const rawQty = item.totalQuantity / pkg.packageSize
+            item.packageQuantity = isUnitDivisible(item.unit)
+              ? Math.round(rawQty * 100) / 100
+              : Math.ceil(rawQty)
+          }
+
+          // Обновляем цену если нужно
+          if (!item.estimatedPackagePrice) {
+            const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
+            item.estimatedPackagePrice = packagePrice
+          }
+
+          console.log('✅ Package from request preserved:', {
+            item: item.itemName,
+            package: pkg.packageName,
+            quantity: item.packageQuantity,
+            price: item.estimatedPackagePrice
+          })
+        }
+      }
+      // Fallback: если нет packageId, но есть recommendedPackageId
+      else if (item.recommendedPackageId) {
         const pkg = productsStore.getPackageById(item.recommendedPackageId)
         if (pkg) {
           item.packageId = item.recommendedPackageId
           item.packageName = item.recommendedPackageName
 
-          // Для делимых единиц (gram, kg, ml, liter) - разрешаем дробные упаковки
-          // Для неделимых (piece, pack) - округляем вверх
           const rawQty = item.totalQuantity / pkg.packageSize
           item.packageQuantity = isUnitDivisible(item.unit)
             ? Math.round(rawQty * 100) / 100
@@ -435,7 +467,7 @@ function handleAssignToSupplier(supplierId: string, supplierName: string, itemId
           const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
           item.estimatedPackagePrice = packagePrice
 
-          console.log('Auto-initialized package:', {
+          console.log('Auto-initialized from recommendedPackage:', {
             item: item.itemName,
             package: pkg.packageName,
             quantity: item.packageQuantity,
@@ -444,21 +476,15 @@ function handleAssignToSupplier(supplierId: string, supplierName: string, itemId
         }
       }
 
-      // ✅ Если уже есть packageId но нет данных - заполняем
-      if (item.packageId && !item.packageQuantity) {
-        const pkg = productsStore.getPackageById(item.packageId)
-        if (pkg) {
-          const rawQty = item.totalQuantity / pkg.packageSize
-          item.packageQuantity = isUnitDivisible(item.unit)
-            ? Math.round(rawQty * 100) / 100
-            : Math.ceil(rawQty)
-          const packagePrice = pkg.packagePrice || pkg.baseCostPerUnit * pkg.packageSize
-          item.estimatedPackagePrice = packagePrice
-        }
-      }
-
       supplierBasket!.items.push(item)
-      console.log('Moved item:', item.itemName, 'to', supplierName)
+      console.log(
+        'Moved item:',
+        item.itemName,
+        'to',
+        supplierName,
+        'with packageId:',
+        item.packageId
+      )
     }
   })
 

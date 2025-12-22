@@ -240,8 +240,22 @@
 
       <div class="text-right">
         <div class="text-caption text-medium-emphasis mb-1">Actual Total:</div>
-        <div class="text-h6 font-weight-bold text-primary">
+        <div class="text-body-1">
           {{ formatCurrency(actualTotal) }}
+        </div>
+      </div>
+
+      <div v-if="taxAmount && taxAmount > 0" class="text-right">
+        <div class="text-caption text-medium-emphasis mb-1">Tax (included):</div>
+        <div class="text-body-1 text-info">
+          {{ formatCurrency(taxAmount) }}
+        </div>
+      </div>
+
+      <div v-if="taxAmount && taxAmount > 0" class="text-right">
+        <div class="text-caption text-medium-emphasis mb-1">Total with Tax:</div>
+        <div class="text-h6 font-weight-bold text-primary">
+          {{ formatCurrency(totalWithTax) }}
         </div>
       </div>
 
@@ -277,7 +291,6 @@
             :required-base-quantity="selectedItemForPackageChange.receivedQuantity"
             :selected-package-id="selectedItemForPackageChange.packageId"
             mode="change"
-            allow-quantity-edit
             @package-selected="handlePackageChange"
           />
         </v-card-text>
@@ -304,6 +317,8 @@ const MODULE_NAME = 'EditableReceiptItemsWidget'
 interface Props {
   items: ReceiptItem[]
   isCompleted: boolean
+  taxAmount?: number
+  taxPercentage?: number
 }
 
 interface Emits {
@@ -461,6 +476,50 @@ const financialImpact = computed(() => {
 const hasFinancialImpact = computed(() => {
   // Show adjustment even for small amounts (market rounding)
   return Math.abs(financialImpact.value) > 100
+})
+
+/**
+ * Tax per item (proportional distribution)
+ * Tax is INCLUDED in prices, distributed proportionally to item totals
+ */
+const taxPerItem = computed(() => {
+  const taxMap = new Map<string, number>()
+
+  if (!props.taxAmount || props.taxAmount <= 0) {
+    return taxMap
+  }
+
+  const total = actualTotal.value
+  if (total <= 0) {
+    return taxMap
+  }
+
+  props.items.forEach(item => {
+    const lineTotal = calculateActualLineTotal(item)
+    const proportion = lineTotal / total
+    const itemTax = Math.round(props.taxAmount! * proportion)
+    taxMap.set(item.id, itemTax)
+  })
+
+  return taxMap
+})
+
+/**
+ * Get tax amount for a specific item
+ */
+function getItemTax(item: ReceiptItem): number {
+  return taxPerItem.value.get(item.id) || 0
+}
+
+/**
+ * Total with tax (for display in summary)
+ * This is the full amount to pay including VAT
+ */
+const totalWithTax = computed(() => {
+  if (props.taxAmount && props.taxAmount > 0) {
+    return actualTotal.value + props.taxAmount
+  }
+  return actualTotal.value
 })
 
 // =============================================

@@ -350,6 +350,10 @@ export function mapReceiptFromDB(dbReceipt: DBReceipt, dbItems: DBReceiptItem[] 
     // Relations
     storageOperationId: dbReceipt.storage_operation_id ?? undefined,
 
+    // Tax fields
+    taxAmount: dbReceipt.tax_amount ?? undefined,
+    taxPercentage: dbReceipt.tax_percentage ?? undefined,
+
     // Optional fields
     notes: dbReceipt.notes ?? undefined
   }
@@ -376,6 +380,9 @@ export function mapReceiptToDB(receipt: Receipt): DBReceiptInsert {
     status: receipt.status,
 
     storage_operation_id: receipt.storageOperationId ?? null,
+
+    tax_amount: receipt.taxAmount ?? null,
+    tax_percentage: receipt.taxPercentage ?? null,
 
     notes: receipt.notes ?? null
   }

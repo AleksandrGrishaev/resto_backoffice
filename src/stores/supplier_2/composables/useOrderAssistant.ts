@@ -232,7 +232,11 @@ export function useOrderAssistant() {
           requestedQuantity: quantityToAdd,
           unit: baseUnit,
           estimatedPrice: estimatedPrice,
-          priority: suggestion.urgency === 'high' ? 'urgent' : 'normal'
+          priority: suggestion.urgency === 'high' ? 'urgent' : 'normal',
+          // ✅ FIX: Preserve recommended package from suggestion
+          packageId: suggestion.recommendedPackageId,
+          packageName: suggestion.recommendedPackageName,
+          packageQuantity: suggestion.recommendedPackageQuantity
         }
 
         state.selectedItems.push(newItem)
@@ -282,7 +286,11 @@ export function useOrderAssistant() {
           // ✅ Приоритет: user-entered → lastKnownCost → baseCostPerUnit
           estimatedPrice: item.estimatedPrice ?? getProductPrice(item.itemId),
           priority: item.priority,
-          notes: item.notes
+          notes: item.notes,
+          // ✅ FIX: Preserve package info from selectedItem
+          packageId: item.packageId,
+          packageName: item.packageName,
+          packageQuantity: item.packageQuantity
         })),
         priority: overallPriority,
         notes: [

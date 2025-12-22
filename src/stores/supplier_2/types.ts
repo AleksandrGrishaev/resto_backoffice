@@ -143,6 +143,10 @@ export interface Receipt extends BaseEntity {
   // Receipt result - creates operation in Storage Store
   storageOperationId?: string // StorageOperation.id (type: 'receipt')
 
+  // ✅ TAX FIELDS
+  taxAmount?: number // Абсолютная сумма налога в IDR
+  taxPercentage?: number // Процент налога (для справки)
+
   notes?: string
 }
 
@@ -311,6 +315,8 @@ export interface CreateReceiptData {
   purchaseOrderId: string
   receivedBy: string
   items: CreateReceiptItemData[]
+  taxAmount?: number
+  taxPercentage?: number
   notes?: string
 }
 
@@ -343,6 +349,8 @@ export interface UpdateReceiptData {
   receivedBy?: string
   deliveryDate?: string
   hasDiscrepancies?: boolean
+  taxAmount?: number
+  taxPercentage?: number
 }
 
 // =============================================

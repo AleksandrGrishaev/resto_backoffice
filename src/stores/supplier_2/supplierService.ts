@@ -839,6 +839,8 @@ class SupplierService {
       items: receiptItems,
       hasDiscrepancies: this.calculateDiscrepancies(data, order),
       status: 'draft',
+      taxAmount: data.taxAmount,
+      taxPercentage: data.taxPercentage,
       notes: data.notes,
       createdAt: timestamp,
       updatedAt: timestamp
@@ -1055,6 +1057,8 @@ class SupplierService {
     if (data.deliveryDate !== undefined) updateData.delivery_date = data.deliveryDate
     if (data.status !== undefined) updateData.status = data.status
     if (data.hasDiscrepancies !== undefined) updateData.has_discrepancies = data.hasDiscrepancies
+    if (data.taxAmount !== undefined) updateData.tax_amount = data.taxAmount ?? null
+    if (data.taxPercentage !== undefined) updateData.tax_percentage = data.taxPercentage ?? null
 
     await executeSupabaseMutation(async () => {
       const { error } = await supabase
@@ -1409,6 +1413,13 @@ class SupplierService {
         console.log(`Processing request ${request.requestNumber} (${request.status})`)
 
         for (const item of request.items) {
+          // ✅ DEBUG: Log package info from request item
+          console.log(`📦 Request item package info:`, item.itemName, {
+            packageId: item.packageId,
+            packageName: item.packageName,
+            packageQuantity: item.packageQuantity
+          })
+
           // ✅ ПОЛУЧАЕМ ПРОДУКТ ДЛЯ БАЗОВЫХ ДАННЫХ
           const product = productsStore.getProductById(item.itemId)
 
@@ -1448,6 +1459,15 @@ class SupplierService {
               existingItem.estimatedBaseCost = weightedAvg
               existingItem.totalQuantity = newTotalQuantity
 
+              // ✅ FIX: Preserve packageId from request if existing item doesn't have one
+              if (item.packageId && !existingItem.packageId) {
+                existingItem.packageId = item.packageId
+                existingItem.packageName = item.packageName
+                existingItem.packageQuantity = item.packageQuantity
+                existingItem.recommendedPackageId = item.packageId
+                existingItem.recommendedPackageName = item.packageName
+              }
+
               existingItem.sources.push({
                 requestId: request.id,
                 requestNumber: request.requestNumber,
@@ -1458,7 +1478,20 @@ class SupplierService {
                 estimatedPrice: itemPrice // ✅ Сохраняем цену источника
               })
             } else {
-              unassignedItems.push({
+              // ✅ FIX: Calculate package quantity based on remaining quantity if packageId exists
+              let calculatedPackageQuantity = item.packageQuantity
+              if (item.packageId && item.requestedQuantity !== remainingQuantity) {
+                // If remaining quantity differs from requested, recalculate package quantity
+                const pkg = productsStore.getPackageById(item.packageId)
+                if (pkg && pkg.packageSize > 0) {
+                  calculatedPackageQuantity = remainingQuantity / pkg.packageSize
+                  console.log(
+                    `📦 Recalculated package quantity for ${item.itemName}: ${remainingQuantity} / ${pkg.packageSize} = ${calculatedPackageQuantity}`
+                  )
+                }
+              }
+
+              const newItem = {
                 itemId: item.itemId,
                 itemName: item.itemName,
                 category: product.category, // ✅ Из продукта
@@ -1467,6 +1500,11 @@ class SupplierService {
                 // ✅ Используем цену из request если есть
                 unit: product.baseUnit,
                 estimatedBaseCost: itemPrice,
+
+                // ✅ FIX: Preserve packageId from request directly
+                packageId: item.packageId,
+                packageName: item.packageName,
+                packageQuantity: calculatedPackageQuantity,
 
                 // Рекомендованная упаковка из request
                 recommendedPackageId: item.packageId,
@@ -1483,7 +1521,16 @@ class SupplierService {
                     estimatedPrice: itemPrice // ✅ Сохраняем цену источника
                   }
                 ]
+              }
+
+              console.log(`✅ Created unassigned item with package:`, newItem.itemName, {
+                packageId: newItem.packageId,
+                packageName: newItem.packageName,
+                packageQuantity: newItem.packageQuantity,
+                recommendedPackageId: newItem.recommendedPackageId
               })
+
+              unassignedItems.push(newItem)
             }
           } else {
             console.log(`Item ${item.itemName} is fully ordered, skipping`)

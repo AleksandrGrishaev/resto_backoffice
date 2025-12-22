@@ -689,16 +689,22 @@ export const useStorageStore = defineStore('storage', () => {
    */
   async function convertTransitBatchesToActive(
     orderId: string,
-    receivedItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>
+    receivedItems: Array<{ itemId: string; receivedQuantity: number; actualPrice?: number }>,
+    actualDeliveryDate?: string
   ): Promise<void> {
     try {
       DebugUtils.info(MODULE_NAME, 'Converting transit batches to active', {
         orderId,
-        itemsCount: receivedItems.length
+        itemsCount: receivedItems.length,
+        actualDeliveryDate
       })
 
       // Delegate to service
-      const activeBatches = await transitBatchService.convertToActive(orderId, receivedItems)
+      const activeBatches = await transitBatchService.convertToActive(
+        orderId,
+        receivedItems,
+        actualDeliveryDate
+      )
 
       // Remove from transit state
       state.value.transitBatches = state.value.transitBatches.filter(
