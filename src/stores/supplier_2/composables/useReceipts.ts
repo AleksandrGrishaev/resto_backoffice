@@ -855,7 +855,10 @@ export function useReceipts() {
    * Check if order can start receipt
    */
   function canStartReceipt(order: PurchaseOrder): boolean {
-    const isValidStatus = order.status === 'sent'
+    // ✅ Allow both 'sent' and 'delivered' statuses:
+    // - 'sent': Normal flow (Request → Order → Receipt)
+    // - 'delivered': QuickReceipt flow (Order created directly as delivered for archive data)
+    const isValidStatus = order.status === 'sent' || order.status === 'delivered'
 
     // Проверяем наличие активных receipts
     const existingReceipts = receipts.value.filter(r => r.purchaseOrderId === order.id)
