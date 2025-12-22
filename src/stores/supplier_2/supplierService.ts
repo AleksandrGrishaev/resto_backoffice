@@ -923,9 +923,14 @@ class SupplierService {
     receipt.updatedAt = timestamp
 
     // Update order status
-    // ✅ FIX: Handle 'sent' status (orders are sent, not confirmed)
-    if (order.status === 'sent') {
-      order.status = 'delivered'
+    // ✅ FIX: Handle 'sent' and 'delivered' status
+    // - 'sent': Normal flow (Request → Order → Receipt)
+    // - 'delivered': QuickReceipt flow (Order created directly as delivered)
+    if (order.status === 'sent' || order.status === 'delivered') {
+      // Only update status if not already delivered
+      if (order.status === 'sent') {
+        order.status = 'delivered'
+      }
       order.receiptId = receipt.id
       order.updatedAt = timestamp
 
