@@ -146,7 +146,7 @@ export class ShiftsService {
         startingCashVerified: true,
         totalSales: 0,
         totalTransactions: 0,
-        paymentMethods: this.getDefaultPaymentMethods(),
+        paymentMethods: await this.getDefaultPaymentMethods(),
         corrections: [],
         accountBalances: [],
         expenseOperations: [], // ✅ Sprint 3: Initialize expense operations
@@ -455,44 +455,43 @@ export class ShiftsService {
   }
 
   /**
-   * Получить способы оплаты по умолчанию
+   * Получить способы оплаты по умолчанию (динамически из настроек)
    */
-  private getDefaultPaymentMethods(): PaymentMethodSummary[] {
-    return [
-      {
-        methodId: 'cash',
-        methodName: 'Наличные',
-        methodType: 'cash',
+  private async getDefaultPaymentMethods(): Promise<PaymentMethodSummary[]> {
+    try {
+      const { paymentMethodService } = await import('@/stores/catalog/payment-methods.service')
+      const activeMethods = await paymentMethodService.getActive()
+
+      return activeMethods.map(method => ({
+        methodId: method.id,
+        methodName: method.name,
+        methodType: method.type,
         count: 0,
         amount: 0,
         percentage: 0
-      },
-      {
-        methodId: 'card',
-        methodName: 'Карта',
-        methodType: 'card',
-        count: 0,
-        amount: 0,
-        percentage: 0
-      },
-      {
-        methodId: 'gojek',
-        methodName: 'Gojek',
-        methodType: 'gojek',
-        count: 0,
-        amount: 0,
-        percentage: 0
-      },
-      {
-        methodId: 'grab',
-        methodName: 'Grab',
-        methodType: 'grab',
-        count: 0,
-        amount: 0,
-        percentage: 0
-      },
-      { methodId: 'qr', methodName: 'QR код', methodType: 'qr', count: 0, amount: 0, percentage: 0 }
-    ]
+      }))
+    } catch (error) {
+      console.error('Failed to load payment methods, using fallback:', error)
+      // Fallback to basic cash/card if service fails
+      return [
+        {
+          methodId: 'cash',
+          methodName: 'Cash',
+          methodType: 'cash',
+          count: 0,
+          amount: 0,
+          percentage: 0
+        },
+        {
+          methodId: 'card',
+          methodName: 'Card',
+          methodType: 'card',
+          count: 0,
+          amount: 0,
+          percentage: 0
+        }
+      ]
+    }
   }
 
   /**

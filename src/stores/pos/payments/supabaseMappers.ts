@@ -84,7 +84,7 @@ export function fromSupabase(supabasePayment: SupabasePayment): PosPayment {
     paymentNumber: supabasePayment.payment_number || '',
 
     // Financial data
-    method: supabasePayment.payment_method as 'cash' | 'card' | 'qr',
+    method: supabasePayment.payment_method,
     status: supabasePayment.status as 'pending' | 'completed' | 'failed' | 'refunded',
     amount: supabasePayment.amount,
 

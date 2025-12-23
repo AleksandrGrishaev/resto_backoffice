@@ -55,22 +55,19 @@
             variant="outlined"
             class="payment-toggle mb-3"
           >
-            <v-btn value="cash" size="large">
-              <v-icon start>mdi-cash</v-icon>
-              Наличные
-            </v-btn>
-            <v-btn value="card" size="large">
-              <v-icon start>mdi-credit-card</v-icon>
-              Карта
-            </v-btn>
-            <v-btn value="qr" size="large">
-              <v-icon start>mdi-qrcode</v-icon>
-              QR-код
+            <v-btn
+              v-for="method in availablePaymentMethods"
+              :key="method.code"
+              :value="method.code"
+              size="large"
+            >
+              <v-icon start>{{ method.icon }}</v-icon>
+              {{ method.name }}
             </v-btn>
           </v-btn-toggle>
 
           <!-- Cash Payment -->
-          <div v-if="selectedPaymentMethod === 'cash'" class="cash-payment">
+          <div v-if="selectedMethodType === 'cash'" class="cash-payment">
             <v-text-field
               v-model.number="receivedAmount"
               label="Получено наличными"
@@ -92,24 +89,18 @@
             </div>
           </div>
 
-          <!-- Card Payment -->
-          <div v-if="selectedPaymentMethod === 'card'" class="card-payment">
+          <!-- Bank/Electronic Payment -->
+          <div v-if="selectedMethodType === 'bank'" class="card-payment">
             <v-alert color="info" variant="tonal">
               <div class="text-center">
-                <v-icon size="48" class="mb-2">mdi-credit-card</v-icon>
-                <div>Вставьте или приложите карту к терминалу</div>
-                <div class="text-caption">Сумма: ₽{{ totalAmount.toFixed(2) }}</div>
-              </div>
-            </v-alert>
-          </div>
-
-          <!-- QR Payment -->
-          <div v-if="selectedPaymentMethod === 'qr'" class="qr-payment">
-            <v-alert color="info" variant="tonal">
-              <div class="text-center">
-                <v-icon size="48" class="mb-2">mdi-qrcode</v-icon>
-                <div>Покажите QR-код клиенту для оплаты</div>
-                <div class="text-caption">Сумма: ₽{{ totalAmount.toFixed(2) }}</div>
+                <v-icon size="48" class="mb-2">
+                  {{
+                    availablePaymentMethods.find(m => m.code === selectedPaymentMethod)?.icon ||
+                    'mdi-credit-card'
+                  }}
+                </v-icon>
+                <div>Waiting for payment confirmation</div>
+                <div class="text-caption">Amount: ₽{{ totalAmount.toFixed(2) }}</div>
               </div>
             </v-alert>
           </div>
@@ -143,6 +134,7 @@
 import { ref, computed, watch } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type { PosOrder, PaymentMethod, OrderStatus } from '@/stores/pos/types'
 
 // Props
@@ -164,12 +156,48 @@ const emit = defineEmits<{
 // Stores
 const ordersStore = usePosOrdersStore()
 const paymentsStore = usePosPaymentsStore()
+const paymentSettingsStore = usePaymentSettingsStore()
 
 // State
 const dialog = ref(props.modelValue)
 const selectedPaymentMethod = ref<PaymentMethod>('cash')
 const receivedAmount = ref(0)
 const processing = ref(false)
+
+// Payment methods from settings
+const availablePaymentMethods = computed(() => {
+  // ✅ Force reactive dependency on activePaymentMethods.length
+  const methodsCount = paymentSettingsStore.activePaymentMethods.length
+
+  if (methodsCount === 0) {
+    // Return empty array if no methods loaded yet (will trigger re-computation when data loads)
+    return []
+  }
+
+  return paymentSettingsStore.activePaymentMethods.map(method => ({
+    code: method.code,
+    name: method.name,
+    icon: method.icon || getDefaultIcon(method.type),
+    type: method.type
+  }))
+})
+
+// Get the type of currently selected payment method
+const selectedMethodType = computed(() => {
+  const method = availablePaymentMethods.value.find(m => m.code === selectedPaymentMethod.value)
+  return method?.type || 'cash'
+})
+
+function getDefaultIcon(type: string): string {
+  switch (type) {
+    case 'cash':
+      return 'mdi-cash'
+    case 'bank':
+      return 'mdi-credit-card'
+    default:
+      return 'mdi-wallet'
+  }
+}
 
 // Computed
 const order = computed(() => {
@@ -187,18 +215,18 @@ const totalAmount = computed(() => {
 })
 
 const changeAmount = computed(() => {
-  if (selectedPaymentMethod.value !== 'cash') return 0
+  if (selectedMethodType.value !== 'cash') return 0
   return Math.max(0, receivedAmount.value - totalAmount.value)
 })
 
 const canProcessPayment = computed(() => {
   if (!order.value || billsToPay.value.length === 0) return false
 
-  if (selectedPaymentMethod.value === 'cash') {
+  if (selectedMethodType.value === 'cash') {
     return receivedAmount.value >= totalAmount.value
   }
 
-  return true // For card and QR payments
+  return true // For bank/electronic payments
 })
 
 // Watchers
@@ -217,10 +245,22 @@ watch(dialog, newVal => {
 })
 
 watch(totalAmount, newAmount => {
-  if (selectedPaymentMethod.value === 'cash') {
+  if (selectedMethodType.value === 'cash') {
     receivedAmount.value = newAmount
   }
 })
+
+// ✅ Re-initialize when payment methods load
+watch(
+  () => paymentSettingsStore.activePaymentMethods.length,
+  (count, oldCount) => {
+    if (count > 0 && oldCount === 0 && dialog.value) {
+      // Payment methods just loaded and dialog is open - re-initialize
+      console.log('💳 Payment methods loaded, re-initializing payment dialog')
+      initializePayment()
+    }
+  }
+)
 
 // Methods
 function handleDialogUpdate(value: boolean) {
@@ -230,8 +270,8 @@ function handleDialogUpdate(value: boolean) {
 function initializePayment() {
   if (!order.value) return
 
-  // Reset form
-  selectedPaymentMethod.value = 'cash'
+  // Reset form - select first available payment method or fallback to 'cash'
+  selectedPaymentMethod.value = availablePaymentMethods.value[0]?.code || 'cash'
   receivedAmount.value = totalAmount.value
   processing.value = false
 }
@@ -260,12 +300,12 @@ async function processPayment() {
     }
 
     let result
-    if (selectedPaymentMethod.value === 'cash') {
+    if (selectedMethodType.value === 'cash') {
       result = await paymentsStore.processSimplePayment(
         order.value.id,
         billIds,
-        itemIds, // 🆕 Add itemIds parameter
-        'cash',
+        itemIds,
+        selectedPaymentMethod.value,
         totalAmount.value,
         receivedAmount.value
       )
@@ -273,7 +313,7 @@ async function processPayment() {
       result = await paymentsStore.processSimplePayment(
         order.value.id,
         billIds,
-        itemIds, // 🆕 Add itemIds parameter
+        itemIds,
         selectedPaymentMethod.value,
         totalAmount.value
       )
@@ -338,8 +378,7 @@ function getOrderStatusColor(status: OrderStatus): string {
 }
 
 .cash-payment,
-.card-payment,
-.qr-payment {
+.card-payment {
   min-height: 120px;
 }
 

@@ -313,6 +313,7 @@ import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { useShiftsComposables } from '@/stores/pos/shifts/composables'
 import { useAccountStore } from '@/stores/account'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type {
   EndShiftDto,
   ShiftCorrection,
@@ -341,6 +342,7 @@ const shiftsStore = useShiftsStore()
 const paymentsStore = usePosPaymentsStore()
 const accountStore = useAccountStore()
 const ordersStore = usePosOrdersStore()
+const paymentSettingsStore = usePaymentSettingsStore()
 const {
   formatShiftDuration,
   formatCurrency,
@@ -441,14 +443,17 @@ const shiftPayments = computed(() => {
   return paymentsStore.getShiftPayments(currentShift.value.id)
 })
 
-// ✅ FIX: Calculate cash sales from real payments (not shift.paymentMethods)
+// ✅ FIX: Calculate cash sales from real payments (using payment method types)
 const cashSales = computed(() => {
   let cashReceived = 0
   let cashRefunded = 0
 
   shiftPayments.value.forEach((p: PosPayment) => {
     if (p.status === 'completed' || p.status === 'refunded') {
-      if (p.method === 'cash') {
+      // Get payment method to check its type
+      const paymentMethod = paymentSettingsStore.paymentMethods.find(pm => pm.code === p.method)
+
+      if (paymentMethod && paymentMethod.type === 'cash') {
         if (p.amount > 0) {
           cashReceived += p.amount
         } else {
@@ -485,8 +490,16 @@ const discrepancyHint = computed(() => {
   return `${formatCurrency(Math.abs(cashDiscrepancy.value))} ${type}`
 })
 
-// ✅ FIX: Calculate payment methods summary from real payments
+// ✅ FIX: Calculate payment methods summary from real payments (dynamic)
 const topPaymentMethods = computed(() => {
+  // ✅ Force reactive dependency on activePaymentMethods.length
+  const activeMethodsCount = paymentSettingsStore.activePaymentMethods.length
+
+  if (activeMethodsCount === 0) {
+    // Return empty array if no methods loaded yet (will trigger re-computation when data loads)
+    return []
+  }
+
   const methodsMap = new Map<
     string,
     {
@@ -499,15 +512,16 @@ const topPaymentMethods = computed(() => {
     }
   >()
 
-  // Initialize payment methods
-  const methods = [
-    { methodId: 'cash', methodName: 'Cash', methodType: 'cash' },
-    { methodId: 'card', methodName: 'Card', methodType: 'card' },
-    { methodId: 'qr', methodName: 'QR Code', methodType: 'qr' }
-  ]
-
-  methods.forEach(m => {
-    methodsMap.set(m.methodType, { ...m, count: 0, amount: 0, percentage: 0 })
+  // Initialize payment methods from settings store (dynamic)
+  paymentSettingsStore.activePaymentMethods.forEach(pm => {
+    methodsMap.set(pm.code, {
+      methodId: pm.id,
+      methodName: pm.name,
+      methodType: pm.type,
+      count: 0,
+      amount: 0,
+      percentage: 0
+    })
   })
 
   // Calculate totals from real payments

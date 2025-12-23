@@ -50,7 +50,7 @@ export function toSupabaseInsert(shift: PosShift): SupabaseShiftInsert {
 
     // Complex data (JSONB)
     payment_methods: shift.paymentMethods.map(p => ({
-      type: p.methodType as 'cash' | 'card' | 'qr',
+      type: p.methodType,
       amount: p.amount,
       label: p.methodName
     })),

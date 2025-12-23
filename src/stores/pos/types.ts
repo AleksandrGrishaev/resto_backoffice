@@ -230,7 +230,12 @@ export interface PosItemModification {
 }
 
 // ===== PAYMENT TYPES =====
-export type PaymentMethod = 'cash' | 'card' | 'qr'
+/**
+ * Payment Method Code - dynamic string from payment_methods table
+ * Examples: 'cash', 'card', 'qr', 'bni', 'gojek', 'grab', etc.
+ * Previously hardcoded as 'cash' | 'card' | 'qr' - now supports any payment code
+ */
+export type PaymentMethod = string
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded'
 
 export interface PosPayment extends BaseEntity {

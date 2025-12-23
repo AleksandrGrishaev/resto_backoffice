@@ -2,148 +2,121 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="600"
+    max-width="900"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card>
       <v-card-title class="text-h6">Apply Bill Discount</v-card-title>
 
-      <v-card-text>
-        <div v-if="bill">
-          <!-- Bill Info (Read-only) -->
-          <div class="bill-info-card pa-3 mb-4 rounded">
-            <div class="d-flex justify-space-between align-center">
-              <div>
-                <div class="text-subtitle-1 font-weight-medium">{{ bill.name }}</div>
-                <div class="text-caption text-medium-emphasis">
-                  {{ bill.items.filter(i => i.status !== 'cancelled').length }} items
+      <v-card-text class="pa-4">
+        <v-row v-if="bill">
+          <!-- LEFT COLUMN: Bill Info + Preview + Allocation -->
+          <v-col cols="12" md="6" class="preview-column pr-md-4">
+            <!-- Bill Info (Compact) -->
+            <div class="bill-info-card pa-2 mb-3 rounded">
+              <div class="d-flex justify-space-between align-center">
+                <div>
+                  <div class="text-body-2 font-weight-medium">{{ bill.name }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ bill.items.filter(i => i.status !== 'cancelled').length }} items
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div class="text-h6 font-weight-bold text-right">{{ formatIDR(billSubtotal) }}</div>
-                <div class="text-caption text-medium-emphasis text-right">
-                  (after product discounts)
+                <div>
+                  <div class="text-subtitle-1 font-weight-bold text-right">
+                    {{ formatIDR(billSubtotal) }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis text-right">
+                    (after product discounts)
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Discount Type Toggle -->
-          <div class="mb-4">
-            <label class="text-subtitle-2 mb-2 d-block">Discount Type</label>
-            <v-btn-toggle v-model="discountType" mandatory color="primary" class="w-100">
-              <v-btn value="percentage" class="flex-grow-1">
-                <v-icon start>mdi-percent</v-icon>
-                Percentage (%)
-              </v-btn>
-              <v-btn value="fixed" class="flex-grow-1">
-                <v-icon start>mdi-currency-usd</v-icon>
-                Fixed Amount
-              </v-btn>
-            </v-btn-toggle>
-          </div>
+            <!-- Preview Summary (Compact) -->
+            <v-card variant="tonal" color="primary" class="mb-3">
+              <v-card-text class="pa-2">
+                <div class="text-caption text-medium-emphasis mb-1">Preview</div>
+                <div class="d-flex justify-space-between align-center">
+                  <span class="text-caption">Bill Subtotal:</span>
+                  <span class="text-caption">{{ formatIDR(billSubtotal) }}</span>
+                </div>
+                <div class="d-flex justify-space-between align-center">
+                  <span class="text-caption text-error">Discount:</span>
+                  <span class="text-caption text-error font-weight-medium">
+                    -{{ formatIDR(discountAmount) }}
+                  </span>
+                </div>
+                <v-divider class="my-1" />
+                <div class="d-flex justify-space-between align-center">
+                  <span class="text-body-2 font-weight-bold">After Discount:</span>
+                  <span class="text-subtitle-1 font-weight-bold">
+                    {{ formatIDR(afterDiscount) }}
+                  </span>
+                </div>
 
-          <!-- Value Input -->
-          <v-text-field
-            v-model.number="discountValue"
-            :label="discountType === 'percentage' ? 'Discount Percentage' : 'Discount Amount'"
-            :suffix="discountType === 'percentage' ? '%' : 'IDR'"
-            :hint="maxDiscountHint"
-            persistent-hint
-            type="number"
-            min="0"
-            :max="maxDiscountValue"
-            :error-messages="valueErrorMessage"
-            variant="outlined"
-            density="comfortable"
-            class="mb-4"
-            @input="updatePreview"
-          />
+                <!-- Tax breakdown -->
+                <div
+                  v-if="taxBreakdown.length > 0"
+                  class="mt-1 pt-1"
+                  style="border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12)"
+                >
+                  <div
+                    v-for="tax in taxBreakdown"
+                    :key="tax.taxId"
+                    class="d-flex justify-space-between align-center text-caption"
+                  >
+                    <span>{{ tax.name }} ({{ tax.percentage }}%)</span>
+                    <span>+{{ formatIDR(tax.amount) }}</span>
+                  </div>
+                  <div class="d-flex justify-space-between align-center mt-1">
+                    <span class="text-caption font-weight-medium">Total with Taxes:</span>
+                    <span class="text-caption font-weight-bold">
+                      {{ formatIDR(totalWithTaxes) }}
+                    </span>
+                  </div>
+                </div>
+              </v-card-text>
+            </v-card>
 
-          <!-- Preview Summary -->
-          <v-card variant="tonal" color="primary" class="mb-4">
-            <v-card-text>
-              <div class="text-caption text-medium-emphasis mb-2">Preview</div>
-              <div class="d-flex justify-space-between align-center mb-1">
-                <span class="text-body-2">Bill Subtotal:</span>
-                <span class="text-body-2">{{ formatIDR(billSubtotal) }}</span>
-              </div>
-              <div class="d-flex justify-space-between align-center mb-1">
-                <span class="text-body-2 text-error">Discount:</span>
-                <span class="text-body-2 text-error font-weight-medium">
-                  -{{ formatIDR(discountAmount) }}
+            <!-- Allocation Preview (Always visible, scrollable) -->
+            <div class="allocation-section">
+              <div class="d-flex align-center mb-2">
+                <v-icon size="small" class="mr-1">mdi-chart-pie</v-icon>
+                <span class="text-caption font-weight-medium">
+                  Per-item Allocation ({{ activeItems.length }} items)
                 </span>
               </div>
-              <v-divider class="my-2" />
-              <div class="d-flex justify-space-between align-center mb-1">
-                <span class="text-subtitle-1 font-weight-bold">After Discount:</span>
-                <span class="text-h6 font-weight-bold">{{ formatIDR(afterDiscount) }}</span>
-              </div>
-
-              <!-- Tax breakdown -->
-              <div
-                v-if="taxBreakdown.length > 0"
-                class="mt-2 pt-2"
-                style="border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12)"
-              >
+              <div class="allocation-list">
                 <div
-                  v-for="tax in taxBreakdown"
-                  :key="tax.taxId"
-                  class="d-flex justify-space-between align-center text-caption"
+                  v-for="item in allocationPreview"
+                  :key="item.itemId"
+                  class="allocation-row d-flex justify-space-between align-center py-1"
                 >
-                  <span>{{ tax.name }} ({{ tax.percentage }}%)</span>
-                  <span>+{{ formatIDR(tax.amount) }}</span>
-                </div>
-                <div class="d-flex justify-space-between align-center mt-1">
-                  <span class="text-body-2 font-weight-medium">Total with Taxes:</span>
-                  <span class="text-body-2 font-weight-bold">{{ formatIDR(totalWithTaxes) }}</span>
-                </div>
-              </div>
-            </v-card-text>
-          </v-card>
-
-          <!-- Allocation Preview (Expandable) -->
-          <v-expansion-panels class="mb-4">
-            <v-expansion-panel>
-              <v-expansion-panel-title>
-                <div class="d-flex align-center">
-                  <v-icon start size="small">mdi-chart-pie</v-icon>
-                  <span>Per-item Allocation ({{ activeItems.length }} items)</span>
-                </div>
-              </v-expansion-panel-title>
-              <v-expansion-panel-text>
-                <div class="allocation-list">
-                  <div
-                    v-for="item in allocationPreview"
-                    :key="item.itemId"
-                    class="allocation-row d-flex justify-space-between align-center py-2"
-                  >
-                    <div class="flex-grow-1">
-                      <div class="text-body-2">{{ item.name }}</div>
-                      <div class="text-caption text-medium-emphasis">
-                        {{ formatIDR(item.itemAmount) }}
-                      </div>
+                  <div class="flex-grow-1">
+                    <div class="text-caption">{{ item.name }}</div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ formatIDR(item.itemAmount) }}
                     </div>
-                    <div class="text-center mx-3" style="min-width: 60px">
-                      <span class="text-caption font-weight-medium">
-                        {{ (item.proportion * 100).toFixed(1) }}%
-                      </span>
-                    </div>
-                    <div class="text-right" style="min-width: 100px">
-                      <span class="text-body-2 text-error font-weight-medium">
-                        -{{ formatIDR(item.allocatedDiscount) }}
-                      </span>
-                    </div>
+                  </div>
+                  <div class="text-center mx-2" style="min-width: 50px">
+                    <span class="text-caption font-weight-medium">
+                      {{ (item.proportion * 100).toFixed(1) }}%
+                    </span>
+                  </div>
+                  <div class="text-right" style="min-width: 80px">
+                    <span class="text-caption text-error font-weight-medium">
+                      -{{ formatIDR(item.allocatedDiscount) }}
+                    </span>
                   </div>
                 </div>
 
                 <!-- Verification sum -->
-                <v-divider class="my-2" />
+                <v-divider class="my-1" />
                 <div class="d-flex justify-space-between align-center">
-                  <span class="text-body-2 font-weight-bold">Total Allocated:</span>
-                  <div class="d-flex align-center gap-2">
-                    <span class="text-body-2 font-weight-bold text-error">
+                  <span class="text-caption font-weight-bold">Total:</span>
+                  <div class="d-flex align-center gap-1">
+                    <span class="text-caption font-weight-bold text-error">
                       -{{ formatIDR(totalAllocated) }}
                     </span>
                     <v-icon
@@ -155,44 +128,85 @@
                     </v-icon>
                   </div>
                 </div>
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
+              </div>
+            </div>
+          </v-col>
 
-          <!-- Reason Selection (Required) -->
-          <v-select
-            v-model="selectedReason"
-            :items="discountReasonOptions"
-            item-title="label"
-            item-value="value"
-            label="Reason *"
-            :error-messages="reasonErrorMessage"
-            variant="outlined"
-            density="comfortable"
-            class="mb-4"
-          >
-            <template #item="{ props: itemProps, item: reasonItem }">
-              <v-list-item v-bind="itemProps">
-                <template #title>{{ reasonItem.raw.label }}</template>
-                <template v-if="reasonItem.raw.description" #subtitle>
-                  <span class="text-caption">{{ reasonItem.raw.description }}</span>
-                </template>
-              </v-list-item>
-            </template>
-          </v-select>
+          <!-- RIGHT COLUMN: Discount Controls -->
+          <v-col cols="12" md="6" class="controls-column pl-md-4">
+            <!-- Discount Type Toggle (Compact) -->
+            <div class="mb-3">
+              <label class="text-caption font-weight-medium mb-1 d-block">Discount Type</label>
+              <v-btn-toggle
+                v-model="discountType"
+                mandatory
+                color="primary"
+                density="compact"
+                class="w-100"
+              >
+                <v-btn value="percentage" class="flex-grow-1" size="small">
+                  <v-icon start size="small">mdi-percent</v-icon>
+                  <span class="text-caption">%</span>
+                </v-btn>
+                <v-btn value="fixed" class="flex-grow-1" size="small">
+                  <v-icon start size="small">mdi-currency-usd</v-icon>
+                  <span class="text-caption">Fixed</span>
+                </v-btn>
+              </v-btn-toggle>
+            </div>
 
-          <!-- Optional Notes -->
-          <v-textarea
-            v-model="notes"
-            label="Notes (Optional)"
-            :counter="MAX_NOTES_LENGTH"
-            :maxlength="MAX_NOTES_LENGTH"
-            variant="outlined"
-            density="comfortable"
-            rows="3"
-            auto-grow
-          />
-        </div>
+            <!-- Value Input (Compact) -->
+            <v-text-field
+              v-model.number="discountValue"
+              :label="discountType === 'percentage' ? 'Discount Percentage' : 'Discount Amount'"
+              :suffix="discountType === 'percentage' ? '%' : 'IDR'"
+              :hint="maxDiscountHint"
+              persistent-hint
+              type="number"
+              min="0"
+              :max="maxDiscountValue"
+              :error-messages="valueErrorMessage"
+              variant="outlined"
+              density="compact"
+              class="mb-3"
+              @input="updatePreview"
+            />
+
+            <!-- Reason Selection (Compact) -->
+            <v-select
+              v-model="selectedReason"
+              :items="discountReasonOptions"
+              item-title="label"
+              item-value="value"
+              label="Reason *"
+              :error-messages="reasonErrorMessage"
+              variant="outlined"
+              density="compact"
+              class="mb-3"
+            >
+              <template #item="{ props: itemProps, item: reasonItem }">
+                <v-list-item v-bind="itemProps" density="compact">
+                  <template #title>{{ reasonItem.raw.label }}</template>
+                  <template v-if="reasonItem.raw.description" #subtitle>
+                    <span class="text-caption">{{ reasonItem.raw.description }}</span>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
+
+            <!-- Optional Notes (Compact) -->
+            <v-textarea
+              v-model="notes"
+              label="Notes (Optional)"
+              :counter="MAX_NOTES_LENGTH"
+              :maxlength="MAX_NOTES_LENGTH"
+              variant="outlined"
+              density="compact"
+              rows="2"
+              auto-grow
+            />
+          </v-col>
+        </v-row>
       </v-card-text>
 
       <v-card-actions>
@@ -632,11 +646,51 @@ watch(
   flex: 1;
 }
 
+/* Allocation section styling */
+.allocation-section {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.allocation-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Scrollbar styling for allocation list */
+.allocation-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.allocation-list::-webkit-scrollbar-track {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 3px;
+}
+
+.allocation-list::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 3px;
+}
+
+.allocation-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--v-theme-on-surface), 0.3);
+}
+
 .allocation-row {
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .allocation-row:last-child {
   border-bottom: none;
+}
+
+/* Responsive: single column on mobile */
+@media (max-width: 960px) {
+  .allocation-list {
+    max-height: 150px;
+  }
 }
 </style>

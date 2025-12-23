@@ -415,11 +415,21 @@ export const useShiftsStore = defineStore('posShifts', () => {
         totalTransactions: shift.totalTransactions,
         averageTransactionValue:
           shift.totalTransactions > 0 ? shift.totalSales / shift.totalTransactions : 0,
-        cashSales: shift.paymentMethods.find(p => p.methodType === 'cash')?.amount || 0,
-        cardSales: shift.paymentMethods.find(p => p.methodType === 'card')?.amount || 0,
-        digitalSales: shift.paymentMethods
-          .filter(p => ['gojek', 'grab', 'qr'].includes(p.methodType))
+        // ✅ Dynamic sales by payment type (not hardcoded methods)
+        cashSales: shift.paymentMethods
+          .filter(p => p.methodType === 'cash')
           .reduce((sum, p) => sum + p.amount, 0),
+        electronicSales: shift.paymentMethods
+          .filter(p => p.methodType === 'bank')
+          .reduce((sum, p) => sum + p.amount, 0),
+        // Full breakdown by payment method (for detailed reports)
+        paymentMethodBreakdown: shift.paymentMethods.map(p => ({
+          name: p.methodName,
+          type: p.methodType,
+          amount: p.amount,
+          count: p.count,
+          percentage: p.percentage
+        })),
         refunds: shift.corrections
           .filter(c => c.type === 'refund')
           .reduce((sum, c) => sum + c.amount, 0),

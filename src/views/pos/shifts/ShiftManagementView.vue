@@ -119,30 +119,16 @@
               </tr>
             </thead>
             <tbody>
-              <tr>
+              <!-- Dynamic payment methods rows -->
+              <tr v-for="(method, code) in shiftStats.methods" :key="code">
                 <td>
-                  <v-icon size="20" class="mr-2">mdi-cash</v-icon>
-                  Cash
+                  <v-icon size="20" class="mr-2">{{ method.icon }}</v-icon>
+                  {{ method.name }}
                 </td>
-                <td>{{ shiftStats.cash.count }}</td>
-                <td>{{ formatPrice(shiftStats.cash.amount) }}</td>
+                <td>{{ method.count }}</td>
+                <td>{{ formatPrice(method.amount) }}</td>
               </tr>
-              <tr>
-                <td>
-                  <v-icon size="20" class="mr-2">mdi-credit-card</v-icon>
-                  Card
-                </td>
-                <td>{{ shiftStats.card.count }}</td>
-                <td>{{ formatPrice(shiftStats.card.amount) }}</td>
-              </tr>
-              <tr>
-                <td>
-                  <v-icon size="20" class="mr-2">mdi-qrcode</v-icon>
-                  QR Code
-                </td>
-                <td>{{ shiftStats.qr.count }}</td>
-                <td>{{ formatPrice(shiftStats.qr.amount) }}</td>
-              </tr>
+              <!-- Total row -->
               <tr class="total-row">
                 <td><strong>Total</strong></td>
                 <td>
@@ -403,12 +389,10 @@ const shiftPayments = computed(() => {
   return paymentsStore.getShiftPayments(currentShift.value.id)
 })
 
-// Calculate shift statistics
+// Calculate shift statistics (dynamic payment methods)
 const shiftStats = computed(() => {
   const stats = {
-    cash: { count: 0, amount: 0 },
-    card: { count: 0, amount: 0 },
-    qr: { count: 0, amount: 0 },
+    methods: {} as Record<string, { count: number; amount: number; name: string; icon: string }>,
     totalCount: 0,
     totalAmount: 0,
     cashReceived: 0,
@@ -424,16 +408,17 @@ const shiftStats = computed(() => {
       stats.totalCount += pm.count
       stats.totalAmount += pm.amount
 
+      // Store method-specific stats dynamically
+      stats.methods[pm.methodType] = {
+        count: pm.count,
+        amount: pm.amount,
+        name: pm.methodName,
+        icon: getPaymentMethodIcon(pm.methodType)
+      }
+
+      // Track cash received for expected cash calculation
       if (pm.methodType === 'cash') {
-        stats.cash.count = pm.count
-        stats.cash.amount = pm.amount
-        stats.cashReceived = pm.amount // All cash is considered received for historical shifts
-      } else if (pm.methodType === 'card') {
-        stats.card.count = pm.count
-        stats.card.amount = pm.amount
-      } else if (pm.methodType === 'qr') {
-        stats.qr.count = pm.count
-        stats.qr.amount = pm.amount
+        stats.cashReceived = pm.amount
       }
     }
 
@@ -451,23 +436,28 @@ const shiftStats = computed(() => {
       stats.totalCount++
       stats.totalAmount += p.amount
 
-      // Update method-specific stats
-      if (p.method === 'cash') {
-        stats.cash.count++
-        stats.cash.amount += p.amount
+      // Initialize method stats if not exists
+      if (!stats.methods[p.method]) {
+        const methodInfo = paymentSettingsStore.activePaymentMethods.find(m => m.code === p.method)
+        stats.methods[p.method] = {
+          count: 0,
+          amount: 0,
+          name: methodInfo?.name || p.method,
+          icon: methodInfo?.icon || getPaymentMethodIcon(p.method)
+        }
+      }
 
-        // Cash tracking
+      // Update method-specific stats
+      stats.methods[p.method].count++
+      stats.methods[p.method].amount += p.amount
+
+      // Cash tracking (for expected cash calculation)
+      if (p.method === 'cash') {
         if (p.amount > 0) {
           stats.cashReceived += p.amount
         } else {
           stats.cashRefunded += Math.abs(p.amount)
         }
-      } else if (p.method === 'card') {
-        stats.card.count++
-        stats.card.amount += p.amount
-      } else if (p.method === 'qr') {
-        stats.qr.count++
-        stats.qr.amount += p.amount
       }
     }
   })
@@ -636,6 +626,23 @@ const calculateDuration = (startTime: string): string => {
   const hours = Math.floor(diff / (1000 * 60 * 60))
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
   return `${hours}h ${minutes}m`
+}
+
+const getPaymentMethodIcon = (methodCode: string): string => {
+  // Try to get icon from payment settings first
+  const method = paymentSettingsStore.activePaymentMethods.find(m => m.code === methodCode)
+  if (method?.icon) return method.icon
+
+  // Fallback to default icons
+  const iconMap: Record<string, string> = {
+    cash: 'mdi-cash',
+    card: 'mdi-credit-card',
+    qr: 'mdi-qrcode',
+    bni: 'mdi-bank',
+    gojek: 'mdi-motorbike',
+    grab: 'mdi-car'
+  }
+  return iconMap[methodCode] || 'mdi-wallet'
 }
 
 const getPaymentStatusColor = (status: string): string => {

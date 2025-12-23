@@ -1,6 +1,6 @@
 <!-- src/views/pos/payment/PaymentDialog.vue -->
 <template>
-  <v-dialog :model-value="modelValue" max-width="600" persistent @update:model-value="handleClose">
+  <v-dialog :model-value="modelValue" max-width="1000" persistent @update:model-value="handleClose">
     <v-card>
       <!-- Header -->
       <v-card-title class="d-flex align-center justify-space-between bg-primary">
@@ -13,168 +13,154 @@
         </v-btn>
       </v-card-title>
 
-      <v-card-text class="pt-4">
-        <!-- Order Summary -->
-        <div class="order-summary mb-6">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Order Summary</h3>
+      <v-card-text class="pt-4 pb-2">
+        <v-row>
+          <!-- LEFT COLUMN: Items List -->
+          <v-col cols="12" md="5" class="items-column pr-md-4">
+            <h3 class="text-subtitle-1 font-weight-bold mb-3">Items to Pay ({{ items.length }})</h3>
+            <PaymentItemsList v-if="items.length > 0" :items="items" />
+          </v-col>
 
-          <div class="summary-row">
-            <span class="text-medium-emphasis">Subtotal:</span>
-            <span>{{ formatPrice(amount) }}</span>
-          </div>
+          <!-- RIGHT COLUMN: Order Summary + Payment -->
+          <v-col cols="12" md="7" class="payment-column pl-md-4">
+            <!-- Order Summary (Compact) -->
+            <div class="order-summary-compact mb-4">
+              <h3 class="text-subtitle-1 font-weight-bold mb-2">Order Summary</h3>
 
-          <!-- Item Discounts (already applied to items) -->
-          <div v-if="itemDiscounts > 0" class="summary-row">
-            <span class="text-medium-emphasis">
-              <v-icon size="14" class="mr-1">mdi-tag</v-icon>
-              Product Discount:
-            </span>
-            <span class="text-success">-{{ formatPrice(itemDiscounts) }}</span>
-          </div>
+              <div class="summary-row-compact">
+                <span class="text-body-2">Subtotal:</span>
+                <span class="text-body-2">{{ formatPrice(amount) }}</span>
+              </div>
 
-          <!-- Bill Discount (applied to whole bill) -->
-          <div v-if="localDiscount > 0" class="summary-row">
-            <div class="d-flex flex-column">
-              <span class="text-medium-emphasis">
-                <v-icon size="14" class="mr-1">mdi-tag-multiple</v-icon>
-                Bill Discount:
-              </span>
-              <span v-if="localDiscountReason" class="text-caption text-medium-emphasis ml-5">
-                {{ getDiscountReasonLabel(localDiscountReason) }}
-              </span>
+              <!-- Item Discounts (already applied to items) -->
+              <div v-if="itemDiscounts > 0" class="summary-row-compact">
+                <span class="text-body-2 text-medium-emphasis">
+                  <v-icon size="12" class="mr-1">mdi-tag</v-icon>
+                  Product Discount:
+                </span>
+                <span class="text-body-2 text-success">-{{ formatPrice(itemDiscounts) }}</span>
+              </div>
+
+              <!-- Bill Discount (applied to whole bill) -->
+              <div v-if="localDiscount > 0" class="summary-row-compact">
+                <span class="text-body-2 text-medium-emphasis">
+                  <v-icon size="12" class="mr-1">mdi-tag-multiple</v-icon>
+                  Bill Discount:
+                </span>
+                <span class="text-body-2 text-success">-{{ formatPrice(localDiscount) }}</span>
+              </div>
+
+              <div v-if="recalculatedServiceTax > 0" class="summary-row-compact">
+                <span class="text-body-2">Service Tax (5%):</span>
+                <span class="text-body-2">{{ formatPrice(recalculatedServiceTax) }}</span>
+              </div>
+
+              <div v-if="recalculatedGovernmentTax > 0" class="summary-row-compact">
+                <span class="text-body-2">Government Tax (10%):</span>
+                <span class="text-body-2">{{ formatPrice(recalculatedGovernmentTax) }}</span>
+              </div>
+
+              <v-divider class="my-2" />
+
+              <div class="summary-row-compact">
+                <span class="text-h6 font-weight-bold">Total:</span>
+                <span class="text-h6 font-weight-bold text-primary">
+                  {{ formatPrice(totalAmount) }}
+                </span>
+              </div>
             </div>
-            <span class="text-success">-{{ formatPrice(localDiscount) }}</span>
-          </div>
 
-          <div v-if="recalculatedServiceTax > 0" class="summary-row">
-            <span class="text-medium-emphasis">Service Tax (5%):</span>
-            <span>{{ formatPrice(recalculatedServiceTax) }}</span>
-          </div>
+            <!-- Payment Method Selection (Horizontal Slider) -->
+            <div class="payment-method mb-4">
+              <h3 class="text-subtitle-1 font-weight-bold mb-2">Payment Method</h3>
 
-          <div v-if="recalculatedGovernmentTax > 0" class="summary-row">
-            <span class="text-medium-emphasis">Government Tax (10%):</span>
-            <span>{{ formatPrice(recalculatedGovernmentTax) }}</span>
-          </div>
+              <v-slide-group v-model="selectedMethod" mandatory show-arrows class="payment-slider">
+                <v-slide-group-item
+                  v-for="method in availablePaymentMethods"
+                  :key="method.code"
+                  v-slot="{ isSelected, toggle }"
+                  :value="method.code"
+                >
+                  <v-card
+                    :color="isSelected ? 'primary' : 'surface'"
+                    :variant="isSelected ? 'flat' : 'outlined'"
+                    class="ma-1 payment-method-card"
+                    height="80"
+                    min-width="90"
+                    @click="toggle"
+                  >
+                    <v-card-text
+                      class="pa-2 text-center d-flex flex-column align-center justify-center"
+                      style="height: 100%"
+                    >
+                      <v-icon
+                        :icon="method.icon || getDefaultIcon(method.type)"
+                        :color="isSelected ? 'white' : 'primary'"
+                        size="28"
+                      />
+                      <div class="text-caption mt-1" :class="isSelected ? 'text-white' : ''">
+                        {{ method.name }}
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                </v-slide-group-item>
+              </v-slide-group>
+            </div>
 
-          <v-divider class="my-3" />
-
-          <div class="summary-row text-h6 font-weight-bold">
-            <span>Total:</span>
-            <span class="text-primary">{{ formatPrice(totalAmount) }}</span>
-          </div>
-        </div>
-
-        <!-- Items List (if provided) -->
-        <PaymentItemsList v-if="items.length > 0" :items="items" class="mb-4" />
-
-        <!-- Payment Method Selection -->
-        <div class="payment-method mb-4">
-          <h3 class="text-subtitle-1 font-weight-bold mb-3">Payment Method</h3>
-
-          <v-radio-group v-model="selectedMethod" inline hide-details>
-            <v-radio value="cash" color="success">
-              <template #label>
-                <div class="d-flex align-center">
-                  <v-icon icon="mdi-cash" class="mr-2" size="20" />
-                  <span>Cash</span>
-                </div>
-              </template>
-            </v-radio>
-
-            <v-radio value="card" color="primary">
-              <template #label>
-                <div class="d-flex align-center">
-                  <v-icon icon="mdi-credit-card" class="mr-2" size="20" />
-                  <span>Card</span>
-                </div>
-              </template>
-            </v-radio>
-
-            <v-radio value="qr" color="info">
-              <template #label>
-                <div class="d-flex align-center">
-                  <v-icon icon="mdi-qrcode" class="mr-2" size="20" />
-                  <span>QR Code</span>
-                </div>
-              </template>
-            </v-radio>
-          </v-radio-group>
-        </div>
-
-        <!-- Cash Payment Details -->
-        <div v-if="selectedMethod === 'cash'" class="cash-payment">
-          <v-text-field
-            v-model.number="cashReceived"
-            label="Cash Received"
-            prefix="Rp"
-            type="number"
-            variant="outlined"
-            :min="totalAmount"
-            :rules="[cashValidationRule]"
-            :error="cashReceived > 0 && cashReceived < totalAmount"
-            :hint="
-              cashReceived > 0 && cashReceived < totalAmount
-                ? 'Amount must be at least the total'
-                : ''
-            "
-            persistent-hint
-          >
-            <template #append-inner>
-              <v-btn
-                size="small"
-                variant="text"
-                color="primary"
-                @click="cashReceived = totalAmount"
+            <!-- Cash Payment Details -->
+            <div v-if="selectedMethod === 'cash'" class="cash-payment mb-4">
+              <v-text-field
+                v-model.number="cashReceived"
+                label="Cash Received"
+                prefix="Rp"
+                type="number"
+                variant="outlined"
+                density="compact"
+                :min="totalAmount"
+                :rules="[cashValidationRule]"
+                :error="cashReceived > 0 && cashReceived < totalAmount"
+                hide-details
               >
-                Exact
-              </v-btn>
-            </template>
-          </v-text-field>
+                <template #append-inner>
+                  <v-btn
+                    size="small"
+                    variant="text"
+                    color="primary"
+                    @click="cashReceived = totalAmount"
+                  >
+                    EXACT
+                  </v-btn>
+                </template>
+              </v-text-field>
 
-          <!-- Change Display -->
-          <v-alert
-            v-if="change > 0"
-            type="success"
-            variant="tonal"
-            class="mt-4"
-            border="start"
-            prominent
-          >
-            <div class="d-flex justify-space-between align-center">
-              <div>
-                <div class="text-subtitle-2">Change to Return:</div>
-                <div class="text-h5 font-weight-bold">{{ formatPrice(change) }}</div>
-              </div>
-              <v-icon size="48">mdi-cash-multiple</v-icon>
+              <!-- Change Display -->
+              <v-alert
+                v-if="change > 0"
+                type="success"
+                variant="tonal"
+                class="mt-2"
+                density="compact"
+              >
+                <div class="d-flex justify-space-between align-center">
+                  <span class="text-body-2">Change:</span>
+                  <span class="text-h6 font-weight-bold">{{ formatPrice(change) }}</span>
+                </div>
+              </v-alert>
             </div>
-          </v-alert>
-        </div>
 
-        <!-- Card Payment Info -->
-        <div v-if="selectedMethod === 'card'" class="card-payment">
-          <v-alert type="info" variant="tonal" border="start">
-            <div class="d-flex align-center">
-              <v-icon icon="mdi-credit-card-outline" class="mr-3" size="32" />
-              <div>
-                <div class="text-subtitle-2 font-weight-bold">Card Payment</div>
-                <div class="text-caption">Please process the card payment on the terminal</div>
-              </div>
+            <!-- Bank Payment Info (Card, QR, BNI, etc.) -->
+            <div v-if="selectedMethodType === 'bank'" class="bank-payment mb-4">
+              <v-alert type="info" variant="tonal" density="compact">
+                <div class="d-flex align-center">
+                  <v-icon :icon="selectedMethodIcon" class="mr-2" size="24" />
+                  <div class="text-body-2">
+                    Waiting for {{ selectedMethodName }} payment confirmation
+                  </div>
+                </div>
+              </v-alert>
             </div>
-          </v-alert>
-        </div>
-
-        <!-- QR Payment Info -->
-        <div v-if="selectedMethod === 'qr'" class="qr-payment">
-          <v-alert type="info" variant="tonal" border="start">
-            <div class="d-flex align-center">
-              <v-icon icon="mdi-qrcode-scan" class="mr-3" size="32" />
-              <div>
-                <div class="text-subtitle-2 font-weight-bold">QR Code Payment</div>
-                <div class="text-caption">Customer will scan QR code to complete payment</div>
-              </div>
-            </div>
-          </v-alert>
-        </div>
+          </v-col>
+        </v-row>
       </v-card-text>
 
       <!-- Actions -->
@@ -221,6 +207,7 @@
 import { ref, computed, watch } from 'vue'
 import type { PosBillItem, PosBill } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
 import BillDiscountDialog from '../order/dialogs/BillDiscountDialog.vue'
@@ -245,11 +232,12 @@ const props = withDefaults(defineProps<Props>(), {
   items: () => []
 })
 
-// Store
+// Stores
 const ordersStore = usePosOrdersStore()
+const paymentSettingsStore = usePaymentSettingsStore()
 
 interface PaymentData {
-  method: 'cash' | 'card' | 'qr'
+  method: string
   amount: number
   receivedAmount?: number
   change?: number
@@ -268,12 +256,43 @@ const emit = defineEmits<{
 }>()
 
 // State
-const selectedMethod = ref<'cash' | 'card' | 'qr'>('cash')
+const selectedMethod = ref<string>('cash')
 const cashReceived = ref<number>(0)
 const processing = ref(false)
 const localDiscount = ref<number>(0) // Temporary bill discount (not saved to order)
 const localDiscountReason = ref<string>('') // Reason for bill discount
 const showBillDiscountDialog = ref(false)
+
+// Payment Methods
+const availablePaymentMethods = computed(() => {
+  const methods = paymentSettingsStore.activePaymentMethods
+  if (methods.length === 0) {
+    // Fallback to cash if no methods loaded yet
+    return [{ code: 'cash', name: 'Cash', icon: 'mdi-cash', type: 'cash' }]
+  }
+  return methods.map(method => ({
+    code: method.code,
+    name: method.name,
+    icon: method.icon,
+    type: method.type
+  }))
+})
+
+// Selected payment method info (for bank payment alert)
+const selectedMethodType = computed(() => {
+  const method = availablePaymentMethods.value.find(m => m.code === selectedMethod.value)
+  return method?.type || 'cash'
+})
+
+const selectedMethodIcon = computed(() => {
+  const method = availablePaymentMethods.value.find(m => m.code === selectedMethod.value)
+  return method?.icon || getDefaultIcon(selectedMethodType.value)
+})
+
+const selectedMethodName = computed(() => {
+  const method = availablePaymentMethods.value.find(m => m.code === selectedMethod.value)
+  return method?.name || selectedMethod.value
+})
 
 // Computed
 const currentBill = computed((): PosBill | null => {
@@ -434,6 +453,29 @@ const handleDiscountCancel = () => {
   showBillDiscountDialog.value = false
 }
 
+const getMethodColor = (code: string): string => {
+  const colorMap: Record<string, string> = {
+    cash: 'success',
+    card: 'primary',
+    qr: 'info',
+    bni: 'warning',
+    gojek: 'success',
+    grab: 'success'
+  }
+  return colorMap[code] || 'primary'
+}
+
+const getDefaultIcon = (type: string): string => {
+  switch (type) {
+    case 'cash':
+      return 'mdi-cash'
+    case 'bank':
+      return 'mdi-credit-card'
+    default:
+      return 'mdi-wallet'
+  }
+}
+
 const getDiscountReasonLabel = (reason: string): string => {
   return DISCOUNT_REASON_LABELS[reason as keyof typeof DISCOUNT_REASON_LABELS] || reason
 }
@@ -455,39 +497,56 @@ watch(
 </script>
 
 <style scoped>
-.summary-row {
+/* Two-column layout */
+.items-column {
+  max-height: 450px;
+  overflow-y: auto;
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+@media (max-width: 960px) {
+  .items-column {
+    border-right: none;
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+    max-height: 300px;
+  }
+}
+
+.payment-column {
+  min-height: 400px;
+}
+
+/* Compact summary rows */
+.summary-row-compact {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
-  font-size: 0.95rem;
+  padding: 4px 0;
 }
 
-.summary-row:not(:last-child) {
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+.summary-row-compact:not(:last-child) {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
 }
 
-.payment-method :deep(.v-radio) {
-  padding: 12px 16px;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 8px;
-  margin-right: 12px;
+/* Payment method slider */
+.payment-slider {
+  margin: 0 -8px;
+}
+
+.payment-method-card {
+  cursor: pointer;
   transition: all 0.2s ease;
+  user-select: none;
 }
 
-.payment-method :deep(.v-radio:hover) {
-  border-color: rgba(var(--v-theme-primary), 0.3);
-  background: rgba(var(--v-theme-primary), 0.04);
+.payment-method-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-.payment-method :deep(.v-selection-control--dirty) {
-  border-color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.08);
-}
-
+/* Payment input sections */
 .cash-payment,
-.card-payment,
-.qr-payment {
-  margin-top: 16px;
+.bank-payment {
+  min-height: 60px;
 }
 </style>

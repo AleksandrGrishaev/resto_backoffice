@@ -75,6 +75,20 @@
         </template>
       </v-select>
 
+      <v-text-field
+        v-model="formData.icon"
+        label="Icon (optional)"
+        placeholder="mdi-cash, mdi-credit-card, mdi-qrcode, mdi-bank"
+        hint="Material Design Icon name (e.g., mdi-bank)"
+        persistent-hint
+        class="mb-4"
+      >
+        <template #prepend-inner>
+          <v-icon v-if="formData.icon" color="primary">{{ formData.icon }}</v-icon>
+          <v-icon v-else color="grey-lighten-1">mdi-image-outline</v-icon>
+        </template>
+      </v-text-field>
+
       <v-checkbox
         v-model="formData.isPosСashRegister"
         label="Use as main POS cash register"
@@ -164,6 +178,7 @@ function getDefaultData() {
     code: '',
     type: 'cash' as PaymentType,
     accountId: '',
+    icon: '',
     requiresDetails: false,
     isActive: true,
     isPosСashRegister: false
@@ -217,6 +232,7 @@ watch(
           code: props.method.code,
           type: props.method.type,
           accountId: props.method.accountId || '',
+          icon: props.method.icon || '',
           requiresDetails: props.method.requiresDetails,
           isActive: props.method.isActive,
           isPosСashRegister: props.method.isPosСashRegister

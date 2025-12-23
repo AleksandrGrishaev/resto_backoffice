@@ -2,44 +2,50 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="500"
+    max-width="700"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card>
       <v-card-title class="text-h6">Apply Item Discount</v-card-title>
 
-      <v-card-text>
+      <v-card-text class="pa-4">
         <div v-if="item">
-          <!-- Item Info (Read-only) -->
-          <div class="item-info-card pa-3 mb-4 rounded">
+          <!-- Item Info (Compact) -->
+          <div class="item-info-card pa-2 mb-3 rounded">
             <div class="d-flex justify-space-between align-center">
               <div>
-                <div class="text-subtitle-1 font-weight-medium">{{ item.menuItemName }}</div>
+                <div class="text-body-2 font-weight-medium">{{ item.menuItemName }}</div>
                 <div v-if="item.variantName" class="text-caption text-medium-emphasis">
                   {{ item.variantName }}
                 </div>
               </div>
-              <div class="text-h6 font-weight-bold">{{ formatIDR(item.totalPrice) }}</div>
+              <div class="text-subtitle-1 font-weight-bold">{{ formatIDR(item.totalPrice) }}</div>
             </div>
           </div>
 
-          <!-- Discount Type Toggle -->
-          <div class="mb-4">
-            <label class="text-subtitle-2 mb-2 d-block">Discount Type</label>
-            <v-btn-toggle v-model="discountType" mandatory color="primary" class="w-100">
-              <v-btn value="percentage" class="flex-grow-1">
-                <v-icon start>mdi-percent</v-icon>
-                Percentage (%)
+          <!-- Discount Type Toggle (Compact) -->
+          <div class="mb-3">
+            <label class="text-caption font-weight-medium mb-1 d-block">Discount Type</label>
+            <v-btn-toggle
+              v-model="discountType"
+              mandatory
+              color="primary"
+              density="compact"
+              class="w-100"
+            >
+              <v-btn value="percentage" class="flex-grow-1" size="small">
+                <v-icon start size="small">mdi-percent</v-icon>
+                <span class="text-caption">%</span>
               </v-btn>
-              <v-btn value="fixed" class="flex-grow-1">
-                <v-icon start>mdi-currency-usd</v-icon>
-                Fixed Amount
+              <v-btn value="fixed" class="flex-grow-1" size="small">
+                <v-icon start size="small">mdi-currency-usd</v-icon>
+                <span class="text-caption">Fixed</span>
               </v-btn>
             </v-btn-toggle>
           </div>
 
-          <!-- Value Input -->
+          <!-- Value Input (Compact) -->
           <v-text-field
             v-model.number="discountValue"
             :label="discountType === 'percentage' ? 'Discount Percentage' : 'Discount Amount'"
@@ -49,34 +55,34 @@
             :max="maxDiscountValue"
             :error-messages="valueErrorMessage"
             variant="outlined"
-            density="comfortable"
-            class="mb-4"
+            density="compact"
+            class="mb-3"
             @input="updatePreview"
           />
 
-          <!-- Live Preview -->
-          <v-card variant="tonal" color="primary" class="mb-4">
-            <v-card-text>
-              <div class="text-caption text-medium-emphasis mb-2">Preview</div>
-              <div class="d-flex justify-space-between align-center mb-1">
-                <span class="text-body-2">Original Price:</span>
-                <span class="text-body-2">{{ formatIDR(item.totalPrice) }}</span>
+          <!-- Live Preview (Compact) -->
+          <v-card variant="tonal" color="primary" class="mb-3">
+            <v-card-text class="pa-2">
+              <div class="text-caption text-medium-emphasis mb-1">Preview</div>
+              <div class="d-flex justify-space-between align-center">
+                <span class="text-caption">Original Price:</span>
+                <span class="text-caption">{{ formatIDR(item.totalPrice) }}</span>
               </div>
-              <div class="d-flex justify-space-between align-center mb-1">
-                <span class="text-body-2 text-error">Discount:</span>
-                <span class="text-body-2 text-error font-weight-medium">
+              <div class="d-flex justify-space-between align-center">
+                <span class="text-caption text-error">Discount:</span>
+                <span class="text-caption text-error font-weight-medium">
                   -{{ formatIDR(calculatedDiscount) }}
                 </span>
               </div>
-              <v-divider class="my-2" />
+              <v-divider class="my-1" />
               <div class="d-flex justify-space-between align-center">
-                <span class="text-subtitle-1 font-weight-bold">Final Price:</span>
-                <span class="text-h6 font-weight-bold">{{ formatIDR(finalPrice) }}</span>
+                <span class="text-body-2 font-weight-bold">Final Price:</span>
+                <span class="text-subtitle-1 font-weight-bold">{{ formatIDR(finalPrice) }}</span>
               </div>
             </v-card-text>
           </v-card>
 
-          <!-- Reason Selection (Required) -->
+          <!-- Reason Selection (Compact) -->
           <v-select
             v-model="selectedReason"
             :items="discountReasonOptions"
@@ -85,11 +91,11 @@
             label="Reason *"
             :error-messages="reasonErrorMessage"
             variant="outlined"
-            density="comfortable"
-            class="mb-4"
+            density="compact"
+            class="mb-3"
           >
             <template #item="{ props: itemProps, item: reasonItem }">
-              <v-list-item v-bind="itemProps">
+              <v-list-item v-bind="itemProps" density="compact">
                 <template #title>{{ reasonItem.raw.label }}</template>
                 <template v-if="reasonItem.raw.description" #subtitle>
                   <span class="text-caption">{{ reasonItem.raw.description }}</span>
@@ -98,15 +104,15 @@
             </template>
           </v-select>
 
-          <!-- Optional Notes -->
+          <!-- Optional Notes (Compact) -->
           <v-textarea
             v-model="notes"
             label="Notes (Optional)"
             :counter="MAX_NOTES_LENGTH"
             :maxlength="MAX_NOTES_LENGTH"
             variant="outlined"
-            density="comfortable"
-            rows="3"
+            density="compact"
+            rows="2"
             auto-grow
           />
         </div>

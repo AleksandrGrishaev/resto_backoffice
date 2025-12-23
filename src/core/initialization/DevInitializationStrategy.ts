@@ -30,6 +30,7 @@ import { useKitchenStore } from '@/stores/kitchen'
 import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { useDebugStore } from '@/stores/debug'
 import { useDiscountsStore } from '@/stores/discounts'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 
 const MODULE_NAME = 'DevInitStrategy'
 
@@ -290,6 +291,9 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
     const results: StoreInitResult[] = []
 
+    // ✅ Load payment settings FIRST (before POS, so dialogs have data available)
+    results.push(await this.loadPaymentSettings())
+
     // POS system
     results.push(await this.loadPOS())
 
@@ -298,6 +302,35 @@ export class DevInitializationStrategy implements InitializationStrategy {
     results.push(salesResult, writeOffResult)
 
     return results
+  }
+
+  private async loadPaymentSettings(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = usePaymentSettingsStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading payment settings...')
+
+      await store.fetchPaymentMethods()
+
+      return {
+        name: 'paymentSettings',
+        success: true,
+        count: store.paymentMethods.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load payment settings'
+      DebugUtils.error(MODULE_NAME, `❌ [DEV] ${message}`, { error })
+
+      return {
+        name: 'paymentSettings',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
   }
 
   private async loadPOS(): Promise<StoreInitResult> {

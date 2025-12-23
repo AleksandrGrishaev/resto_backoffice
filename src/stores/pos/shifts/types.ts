@@ -18,7 +18,7 @@ export type SyncStatus = 'synced' | 'pending' | 'failed' | 'offline'
 export interface PaymentMethod {
   id: string
   name: string
-  type: 'cash' | 'card' | 'bank' | 'gojek' | 'grab' | 'qr'
+  type: string // Supports any payment type: 'cash', 'bank', 'gojek', 'grab', 'bni', etc.
   isActive: boolean
   accountId?: string // Link to Account Store
   icon?: string
