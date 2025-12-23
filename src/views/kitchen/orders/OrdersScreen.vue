@@ -136,6 +136,10 @@ const notificationComponent = ref<InstanceType<typeof NewOrderNotification>>()
 // Track previous order numbers to detect new orders
 const previousOrderNumbers = ref<Set<string>>(new Set())
 
+// Track recently shown notifications with cooldown (prevent duplicates)
+const recentNotifications = ref<Map<string, number>>(new Map())
+const NOTIFICATION_COOLDOWN_MS = 5000 // 5 seconds cooldown
+
 // =============================================
 // COMPOSABLES
 // =============================================
@@ -172,6 +176,43 @@ const showCookingColumn = computed(() => {
   return true
 })
 
+/**
+ * Create a stable snapshot of order numbers for change detection
+ * This prevents false positives when Map references change
+ */
+const orderNumbersSnapshot = computed(() => {
+  return Array.from(dishesByOrder.value.keys()).sort().join(',')
+})
+
+/**
+ * Check if notification was recently shown (within cooldown period)
+ */
+const wasRecentlyNotified = (orderNumber: string): boolean => {
+  const now = Date.now()
+  const lastShown = recentNotifications.value.get(orderNumber)
+
+  if (lastShown && now - lastShown < NOTIFICATION_COOLDOWN_MS) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Mark order as notified and cleanup old entries
+ */
+const markAsNotified = (orderNumber: string): void => {
+  const now = Date.now()
+  recentNotifications.value.set(orderNumber, now)
+
+  // Cleanup old entries (older than cooldown period)
+  for (const [key, timestamp] of recentNotifications.value.entries()) {
+    if (now - timestamp > NOTIFICATION_COOLDOWN_MS) {
+      recentNotifications.value.delete(key)
+    }
+  }
+}
+
 // Debug: Log dishes data
 onMounted(() => {
   const roles = authStore.userRoles
@@ -193,45 +234,55 @@ onMounted(() => {
   previousOrderNumbers.value = currentOrders
 })
 
-// Watch for new orders
-watch(
-  () => dishesByOrder.value,
-  newDishesByOrder => {
-    const currentOrderNumbers = new Set<string>(Array.from(newDishesByOrder.keys()))
+// Watch for new orders using stable snapshot (prevents duplicate triggers)
+watch(orderNumbersSnapshot, (newSnapshot, oldSnapshot) => {
+  // Skip if no change
+  if (newSnapshot === oldSnapshot) return
 
-    // Find new orders
-    const newOrders = Array.from(currentOrderNumbers).filter(
-      (orderNumber: string) => !previousOrderNumbers.value.has(orderNumber)
-    )
+  const currentOrderNumbers = new Set<string>(Array.from(dishesByOrder.value.keys()))
 
-    // Show notification for each new order
-    newOrders.forEach((orderNumber: string) => {
-      const orderDishes = newDishesByOrder.get(orderNumber)
-      if (!orderDishes || orderDishes.length === 0) return
+  // Find new orders
+  const newOrders = Array.from(currentOrderNumbers).filter(
+    (orderNumber: string) => !previousOrderNumbers.value.has(orderNumber)
+  )
 
-      const firstDish = orderDishes[0]
-      const itemsCount = orderDishes.length
-
-      DebugUtils.info(MODULE_NAME, 'New order detected', {
-        orderNumber,
-        itemsCount,
-        tableNumber: firstDish.tableNumber
+  // Show notification for each new order (with cooldown)
+  newOrders.forEach((orderNumber: string) => {
+    // Check cooldown to prevent duplicate notifications
+    if (wasRecentlyNotified(orderNumber)) {
+      DebugUtils.debug(MODULE_NAME, 'Skipping duplicate notification (cooldown active)', {
+        orderNumber
       })
+      return
+    }
 
-      // Show notification
-      notificationComponent.value?.showNotification({
-        orderNumber,
-        itemsCount,
-        tableNumber: firstDish.tableNumber,
-        color: getOrderColor(orderNumber)
-      })
+    const orderDishes = dishesByOrder.value.get(orderNumber)
+    if (!orderDishes || orderDishes.length === 0) return
+
+    const firstDish = orderDishes[0]
+    const itemsCount = orderDishes.length
+
+    DebugUtils.info(MODULE_NAME, 'New order detected', {
+      orderNumber,
+      itemsCount,
+      tableNumber: firstDish.tableNumber
     })
 
-    // Update tracked order numbers
-    previousOrderNumbers.value = currentOrderNumbers
-  },
-  { deep: true }
-)
+    // Show notification
+    notificationComponent.value?.showNotification({
+      orderNumber,
+      itemsCount,
+      tableNumber: firstDish.tableNumber,
+      color: getOrderColor(orderNumber)
+    })
+
+    // Mark as notified
+    markAsNotified(orderNumber)
+  })
+
+  // Update tracked order numbers
+  previousOrderNumbers.value = currentOrderNumbers
+})
 
 // =============================================
 // METHODS

@@ -22,6 +22,17 @@ export const useKitchenStore = defineStore('kitchen', () => {
   const posOrdersStore = usePosOrdersStore()
   const { subscribe, unsubscribe, isConnected } = useKitchenRealtime()
 
+  // Event deduplication: Track recently processed item updates
+  // Prevents duplicate Supabase events from causing UI duplicates
+  const recentItemUpdates = new Map<string, number>()
+  const ITEM_UPDATE_DEBOUNCE_MS = 100 // 100ms window for deduplication
+
+  // Track orders currently being fetched to prevent duplicate fetches
+  const fetchingOrders = new Set<string>()
+
+  // Track items from fetched orders to prevent re-processing
+  const fetchedOrderItems = new Set<string>()
+
   /**
    * Initialize Kitchen System with Supabase
    * Загружает активные заказы из Supabase и подписывается на обновления
@@ -84,6 +95,31 @@ export const useKitchenStore = defineStore('kitchen', () => {
   }
 
   /**
+   * Check if item update was recently processed (deduplication)
+   */
+  function wasRecentlyProcessed(itemId: string, eventType: string): boolean {
+    const key = `${itemId}_${eventType}`
+    const now = Date.now()
+    const lastProcessed = recentItemUpdates.get(key)
+
+    if (lastProcessed && now - lastProcessed < ITEM_UPDATE_DEBOUNCE_MS) {
+      return true
+    }
+
+    // Mark as processed and cleanup old entries
+    recentItemUpdates.set(key, now)
+
+    // Cleanup entries older than debounce window
+    for (const [mapKey, timestamp] of recentItemUpdates.entries()) {
+      if (now - timestamp > ITEM_UPDATE_DEBOUNCE_MS * 2) {
+        recentItemUpdates.delete(mapKey)
+      }
+    }
+
+    return false
+  }
+
+  /**
    * Handle realtime ITEM updates (NEW: Migration 053-054)
    * Items are now tracked in separate order_items table
    */
@@ -94,8 +130,20 @@ export const useKitchenStore = defineStore('kitchen', () => {
   ) {
     try {
       const orderId = item?.order_id || oldItem?.order_id
-      if (!orderId) {
-        DebugUtils.warn(MODULE_NAME, 'Item update without order_id', { item, oldItem })
+      const itemId = item?.id || oldItem?.id
+
+      if (!orderId || !itemId) {
+        DebugUtils.warn(MODULE_NAME, 'Item update without order_id or itemId', { item, oldItem })
+        return
+      }
+
+      // Deduplication: Check if we recently processed this exact event
+      if (wasRecentlyProcessed(itemId, eventType)) {
+        DebugUtils.debug(MODULE_NAME, 'Skipping duplicate item update (debounced)', {
+          itemId,
+          eventType,
+          itemName: item?.menu_item_name || oldItem?.menu_item_name
+        })
         return
       }
 
@@ -104,16 +152,62 @@ export const useKitchenStore = defineStore('kitchen', () => {
       let order = orderIndex !== -1 ? posOrdersStore.orders[orderIndex] : null
 
       if (eventType === 'INSERT') {
+        // Check if item is from a recently fetched order
+        if (fetchedOrderItems.has(itemId)) {
+          DebugUtils.debug(MODULE_NAME, 'Skipping INSERT for item from fetched order', {
+            itemId,
+            itemName: item.menu_item_name,
+            orderId
+          })
+          return
+        }
+
         // New item arrived (status changed to waiting, cooking, or ready)
         if (!order) {
-          // Order not in local state - fetch it
-          order = await kitchenService.getOrderById(orderId)
-          if (order) {
-            posOrdersStore.orders.push(order)
-            DebugUtils.info(MODULE_NAME, '📥 New order fetched for item', {
-              orderNumber: order.orderNumber,
+          // Check if order is already being fetched
+          if (fetchingOrders.has(orderId)) {
+            DebugUtils.debug(MODULE_NAME, 'Order fetch already in progress, skipping', {
+              orderId,
+              itemId,
               itemName: item.menu_item_name
             })
+            return
+          }
+
+          // Mark order as being fetched
+          fetchingOrders.add(orderId)
+
+          try {
+            // Order not in local state - fetch it
+            order = await kitchenService.getOrderById(orderId)
+            if (order) {
+              posOrdersStore.orders.push(order)
+
+              // Mark all items from fetched order as processed
+              for (const bill of order.bills) {
+                for (const billItem of bill.items) {
+                  fetchedOrderItems.add(billItem.id)
+                }
+              }
+
+              DebugUtils.info(MODULE_NAME, '📥 New order fetched for item', {
+                orderNumber: order.orderNumber,
+                itemName: item.menu_item_name,
+                totalItems: order.bills.reduce((sum, b) => sum + b.items.length, 0)
+              })
+
+              // Clean up fetched items tracking after 5 seconds
+              setTimeout(() => {
+                for (const bill of order!.bills) {
+                  for (const billItem of bill.items) {
+                    fetchedOrderItems.delete(billItem.id)
+                  }
+                }
+              }, 5000)
+            }
+          } finally {
+            // Always remove from fetching set
+            fetchingOrders.delete(orderId)
           }
         } else {
           // Order exists - add item to correct bill
@@ -128,6 +222,11 @@ export const useKitchenStore = defineStore('kitchen', () => {
                 itemName: item.menu_item_name,
                 status: item.status
               })
+            } else {
+              DebugUtils.debug(MODULE_NAME, 'Item already exists in bill (skipping INSERT)', {
+                itemId: item.id,
+                itemName: item.menu_item_name
+              })
             }
           }
         }
@@ -141,23 +240,31 @@ export const useKitchenStore = defineStore('kitchen', () => {
             const itemIndex = bill.items.findIndex(i => i.id === item.id)
             if (itemIndex !== -1) {
               const existingItem = bill.items[itemIndex]
-              // Only update if status actually changed (prevent duplicate updates)
-              if (
-                existingItem.status !== appItem.status ||
-                existingItem.quantity !== appItem.quantity ||
+
+              // Detailed change detection (prevent unnecessary updates)
+              const statusChanged = existingItem.status !== appItem.status
+              const quantityChanged = existingItem.quantity !== appItem.quantity
+              const modifiersChanged =
                 JSON.stringify(existingItem.selectedModifiers) !==
-                  JSON.stringify(appItem.selectedModifiers)
-              ) {
+                JSON.stringify(appItem.selectedModifiers)
+              const hasActualChanges = statusChanged || quantityChanged || modifiersChanged
+
+              if (hasActualChanges) {
                 // Use splice to trigger Vue reactivity in nested array
                 bill.items.splice(itemIndex, 1, appItem)
                 DebugUtils.info(MODULE_NAME, '🔄 Item updated', {
                   orderNumber: order.orderNumber,
                   itemName: item.menu_item_name,
                   oldStatus: existingItem.status,
-                  newStatus: appItem.status
+                  newStatus: appItem.status,
+                  changes: {
+                    status: statusChanged,
+                    quantity: quantityChanged,
+                    modifiers: modifiersChanged
+                  }
                 })
               } else {
-                DebugUtils.debug(MODULE_NAME, 'Ignoring duplicate item update (no changes)', {
+                DebugUtils.debug(MODULE_NAME, 'Ignoring item update (no actual changes)', {
                   itemId: item.id,
                   status: item.status
                 })
