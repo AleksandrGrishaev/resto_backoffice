@@ -12,11 +12,11 @@ import type {
   OrderStatus,
   BillStatus // ДОБАВИТЬ
 } from '../types'
-import type { Department } from '@/stores/productsStore/types'
 import { BILL_STATUSES, getBillStatusColor } from '../types'
 import { DebugUtils } from '@/utils'
 import { useStorageStore } from '@/stores/storage/storageStore'
 import { StorageDepartment } from '@/stores/storage'
+import { useCounteragentsStore } from '@/stores/counteragents'
 const MODULE_NAME = 'usePurchaseOrders'
 
 // =============================================
@@ -477,6 +477,23 @@ export function usePurchaseOrders() {
       }
       const requestIds = getUniqueRequestIds(basket)
 
+      // ✅ NEW: Calculate expectedDeliveryDate based on supplier's leadTimeDays
+      const { useCounteragentsStore } = await import('@/stores/counteragents')
+      const counteragentsStore = useCounteragentsStore()
+      const supplier = counteragentsStore.getCounteragentById(basket.supplierId)
+      const leadTimeDays = supplier?.leadTimeDays || 3 // Default 3 days if not set
+      const orderDate = new Date()
+      const expectedDeliveryDate = new Date(orderDate)
+      expectedDeliveryDate.setDate(expectedDeliveryDate.getDate() + leadTimeDays)
+
+      console.log(`PurchaseOrders: Creating order with lead time`, {
+        supplierId: basket.supplierId,
+        supplierName: basket.supplierName,
+        leadTimeDays,
+        orderDate: orderDate.toISOString(),
+        expectedDeliveryDate: expectedDeliveryDate.toISOString()
+      })
+
       const orderData: CreateOrderData = {
         supplierId: basket.supplierId,
         requestIds,
@@ -487,6 +504,7 @@ export function usePurchaseOrders() {
           // ❌ УДАЛИТЬ: department
           pricePerUnit: item.estimatedBaseCost
         })),
+        expectedDeliveryDate: expectedDeliveryDate.toISOString(), // ✅ NEW: Set based on leadTimeDays
         notes: `Order created from ${requestIds.length} procurement request(s)`
       }
 
@@ -723,18 +741,31 @@ export function usePurchaseOrders() {
   /**
    * Определяет департамент из заказа
    */
-  function getDepartmentFromOrder(order: PurchaseOrder): StorageDepartment {
+  function getDepartmentFromOrder(_order: PurchaseOrder): StorageDepartment {
     // TODO: Можно улучшить логику определения департамента
     return 'kitchen'
   }
 
   /**
-   * Вычисляет дату поставки по умолчанию (через 5 дней)
+   * Вычисляет дату поставки на основе leadTimeDays из supplier
    */
   function calculateDefaultDeliveryDate(order: PurchaseOrder): string {
+    // ✅ FIX: Use supplier's leadTimeDays instead of fixed 5 days
+    const counteragentsStore = useCounteragentsStore()
+    const supplier = counteragentsStore.getCounteragentById(order.supplierId)
+    const leadTimeDays = supplier?.leadTimeDays || 3 // Default 3 days if not set
+
     const orderDate = new Date(order.orderDate)
     const deliveryDate = new Date(orderDate)
-    deliveryDate.setDate(deliveryDate.getDate() + 5)
+    deliveryDate.setDate(deliveryDate.getDate() + leadTimeDays)
+
+    console.log(`PurchaseOrders: Calculated delivery date for ${order.orderNumber}`, {
+      orderDate: order.orderDate,
+      supplierId: order.supplierId,
+      leadTimeDays,
+      deliveryDate: deliveryDate.toISOString()
+    })
+
     return deliveryDate.toISOString()
   }
 
@@ -1029,7 +1060,7 @@ export function usePurchaseOrders() {
   /**
    * Get payment status color for UI
    */
-  function getBillStatusColorWrapper(status: string): string {
+  function _getBillStatusColorWrapper(status: string): string {
     // Для обратной совместимости
     if (status === 'pending') return 'warning'
     if (status === 'paid') return 'success'

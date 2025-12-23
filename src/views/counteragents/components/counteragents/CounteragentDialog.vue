@@ -104,7 +104,6 @@
               <v-text-field
                 v-model="formData.phone"
                 label="Phone Number"
-                :rules="[rules.phone]"
                 variant="outlined"
                 prepend-inner-icon="mdi-phone"
                 type="tel"

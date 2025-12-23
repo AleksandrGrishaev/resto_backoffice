@@ -114,29 +114,11 @@ export class ExportService {
     }
 
     try {
-      console.log('[ExportService] Starting PDF blob generation...')
-      const worker = html2pdf().from(element).set(pdfOptions).toPdf()
-      const pdf = await worker.get('pdf')
+      const worker = html2pdf().from(element).set(pdfOptions)
 
-      // Add page numbers if enabled
-      if (showPageNumbers) {
-        const totalPages = pdf.internal.getNumberOfPages()
-        console.log(`[ExportService] PDF generated with ${totalPages} pages`)
+      // Generate blob directly using output method
+      const blob = await worker.output('blob')
 
-        const pageWidth = pdf.internal.pageSize.getWidth()
-        const pageHeight = pdf.internal.pageSize.getHeight()
-
-        for (let i = 1; i <= totalPages; i++) {
-          pdf.setPage(i)
-          pdf.setFontSize(9)
-          pdf.setTextColor(128, 128, 128) // Gray color
-          pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' })
-        }
-      }
-
-      // Get PDF as Blob
-      const blob = await worker.get('blob')
-      console.log('[ExportService] PDF blob generated successfully')
       return blob
     } catch (error) {
       console.error('[ExportService] PDF blob generation failed:', error)

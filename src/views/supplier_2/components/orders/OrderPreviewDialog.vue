@@ -1,13 +1,11 @@
 <script setup lang="ts">
 /**
  * OrderPreviewDialog.vue
- * Mobile-optimized order preview with share functionality
- * Shows HTML preview of purchase order with download/share actions
+ * Simple order preview with HTML display and PDF download
  */
 import { ref, computed } from 'vue'
 import type { PurchaseOrderExportData } from '@/core/export/types'
 import { useExport } from '@/core/export/composables/useExport'
-import { useWebShare } from '@/composables/useWebShare'
 import PurchaseOrderTemplate from '@/core/export/templates/PurchaseOrderTemplate.vue'
 
 interface Props {
@@ -23,10 +21,9 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const { exportPurchaseOrderAsBlob, isExporting } = useExport()
-const { sharePdfBlob, downloadFile, isSupported: isWebShareSupported } = useWebShare()
 
 const isGeneratingPdf = ref(false)
-const shareError = ref<string | null>(null)
+const downloadError = ref<string | null>(null)
 const pdfCache = ref<{ blob: Blob; filename: string } | null>(null)
 
 const dialog = computed({
@@ -50,7 +47,7 @@ async function generatePdf(): Promise<{ blob: Blob; filename: string } | null> {
 
   try {
     isGeneratingPdf.value = true
-    shareError.value = null
+    downloadError.value = null
 
     const result = await exportPurchaseOrderAsBlob(props.orderData, {
       orientation: 'portrait'
@@ -61,7 +58,7 @@ async function generatePdf(): Promise<{ blob: Blob; filename: string } | null> {
     return result
   } catch (error) {
     console.error('[OrderPreviewDialog] PDF generation failed:', error)
-    shareError.value = error instanceof Error ? error.message : 'Failed to generate PDF'
+    downloadError.value = error instanceof Error ? error.message : 'Failed to generate PDF'
     return null
   } finally {
     isGeneratingPdf.value = false
@@ -75,38 +72,24 @@ async function handleDownload() {
   const result = await generatePdf()
   if (!result) return
 
-  downloadFile(result.blob, result.filename)
-}
-
-/**
- * Share via WhatsApp (Web Share API)
- */
-async function handleShareWhatsApp() {
-  const result = await generatePdf()
-  if (!result) return
-
   try {
-    shareError.value = null
-
-    const shareResult = await sharePdfBlob(
-      result.blob,
-      result.filename,
-      `Purchase Order ${props.orderData?.orderNumber}`,
-      `Order details for ${props.orderData?.supplier.name}`
-    )
-
-    if (!shareResult.success) {
-      if (shareResult.fallbackUsed) {
-        // Fallback: download + show message
-        downloadFile(result.blob, result.filename)
-        shareError.value = 'Web Share not supported. PDF downloaded instead.'
-      } else if (shareResult.error !== 'Share cancelled by user') {
-        shareError.value = shareResult.error || 'Failed to share'
-      }
+    // Ensure we have a valid Blob
+    if (!(result.blob instanceof Blob)) {
+      throw new Error('Invalid blob type: ' + typeof result.blob)
     }
+
+    // Create download link
+    const url = URL.createObjectURL(result.blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = result.filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   } catch (error) {
-    console.error('[OrderPreviewDialog] Share failed:', error)
-    shareError.value = error instanceof Error ? error.message : 'Failed to share'
+    console.error('[OrderPreviewDialog] Download failed:', error)
+    downloadError.value = error instanceof Error ? error.message : 'Failed to download PDF'
   }
 }
 
@@ -118,19 +101,13 @@ function handleClose() {
   // Clear cache after a short delay to allow smooth transition
   setTimeout(() => {
     pdfCache.value = null
-    shareError.value = null
+    downloadError.value = null
   }, 300)
 }
 </script>
 
 <template>
-  <v-dialog
-    v-model="dialog"
-    fullscreen
-    persistent
-    :scrim="false"
-    transition="dialog-bottom-transition"
-  >
+  <v-dialog v-model="dialog" fullscreen :scrim="false" transition="dialog-bottom-transition">
     <v-card>
       <!-- Toolbar -->
       <v-toolbar color="primary" dark>
@@ -140,30 +117,24 @@ function handleClose() {
         </v-toolbar-title>
         <v-spacer />
 
-        <!-- Action Buttons -->
+        <!-- Download Button -->
         <v-btn
           icon="mdi-download"
           :loading="isGeneratingPdf"
           :disabled="!hasOrderData || isExporting"
           @click="handleDownload"
         />
-        <v-btn
-          icon="mdi-whatsapp"
-          :loading="isGeneratingPdf"
-          :disabled="!hasOrderData || isExporting"
-          @click="handleShareWhatsApp"
-        />
       </v-toolbar>
 
       <!-- Error Alert -->
       <v-alert
-        v-if="shareError"
+        v-if="downloadError"
         type="error"
         closable
         class="ma-4"
-        @click:close="shareError = null"
+        @click:close="downloadError = null"
       >
-        {{ shareError }}
+        {{ downloadError }}
       </v-alert>
 
       <!-- Preview Content -->
@@ -179,30 +150,18 @@ function handleClose() {
         <p class="text-h6 mt-4">No order data available</p>
       </v-card-text>
 
-      <!-- Bottom Action Bar (Mobile-optimized) -->
+      <!-- Bottom Action Bar -->
       <v-card-actions class="action-bar pa-4">
+        <v-spacer />
+        <v-btn variant="outlined" @click="handleClose">Close</v-btn>
         <v-btn
-          variant="outlined"
-          size="large"
-          block
+          color="primary"
           :loading="isGeneratingPdf"
           :disabled="!hasOrderData || isExporting"
           prepend-icon="mdi-download"
           @click="handleDownload"
         >
           Download PDF
-        </v-btn>
-        <v-btn
-          color="success"
-          size="large"
-          block
-          :loading="isGeneratingPdf"
-          :disabled="!hasOrderData || isExporting"
-          prepend-icon="mdi-whatsapp"
-          class="ml-2"
-          @click="handleShareWhatsApp"
-        >
-          Share via WhatsApp
         </v-btn>
       </v-card-actions>
     </v-card>

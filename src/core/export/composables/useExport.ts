@@ -81,10 +81,9 @@ export function useExport() {
       // Force a reflow
       void container.offsetHeight
 
-      // Debug dimensions
+      // Check dimensions
       const contentHeight = container.scrollHeight
       const contentWidth = container.scrollWidth
-      console.log(`[Export] Container dimensions: ${contentWidth}x${contentHeight}`)
 
       if (contentHeight === 0 || contentWidth === 0) {
         console.error('[Export] Container has zero dimensions - content may not have rendered')
