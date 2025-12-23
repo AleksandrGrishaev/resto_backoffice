@@ -17,6 +17,19 @@
         class="mb-4"
       />
 
+      <v-text-field
+        v-model="formData.code"
+        label="Code"
+        :rules="[
+          v => !!v || 'Required field',
+          v => /^[a-z0-9_]+$/.test(v) || 'Only lowercase letters, numbers, and underscores allowed'
+        ]"
+        hint="Unique identifier (e.g., 'cash', 'card', 'grab')"
+        persistent-hint
+        required
+        class="mb-4"
+      />
+
       <v-select
         v-model="formData.type"
         label="Type"
@@ -148,6 +161,7 @@ function getAccountColor(type: string): string {
 function getDefaultData() {
   return {
     name: '',
+    code: '',
     type: 'cash' as PaymentType,
     accountId: '',
     requiresDetails: false,
@@ -176,6 +190,20 @@ const { form, loading, formState, formData, isFormValid, handleSubmit, handleCan
     }
   })
 
+// Auto-generate code from name (only for new methods)
+watch(
+  () => formData.value.name,
+  newName => {
+    if (!props.method && newName) {
+      // Generate code from name: lowercase, replace spaces with underscores, remove special chars
+      formData.value.code = newName
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '')
+    }
+  }
+)
+
 // Watch for dialog open with method data - populate form
 watch(
   () => props.modelValue,
@@ -186,6 +214,7 @@ watch(
         formData.value = {
           ...getDefaultData(),
           name: props.method.name,
+          code: props.method.code,
           type: props.method.type,
           accountId: props.method.accountId || '',
           requiresDetails: props.method.requiresDetails,

@@ -82,8 +82,8 @@ const props = withDefaults(
     disabled: false,
     maxWidth: 700,
     persistent: true,
-    cancelText: 'Отмена',
-    confirmText: 'Сохранить'
+    cancelText: 'Cancel',
+    confirmText: 'Save'
   }
 )
 
@@ -104,7 +104,7 @@ async function handleConfirm() {
     if (err instanceof Error) {
       error.value = err.message
     } else {
-      error.value = 'Произошла ошибка. Попробуйте снова.'
+      error.value = 'An error occurred. Please try again.'
     }
     DebugUtils.error(MODULE_NAME, 'Error during confirmation', { error: err })
   }
