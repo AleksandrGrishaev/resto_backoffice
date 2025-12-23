@@ -305,8 +305,8 @@ function getPackageInfo(item: RequestItem): { display: string } | null {
     }
   }
 
-  // ✅ ИСПРАВЛЕНИЕ: Проверяем, есть ли базовая упаковка в packageOptions
-  const basePackage = product.packageOptions.find(pkg => pkg.packageSize === 1)
+  // ✅ ИСПРАВЛЕНИЕ: Проверяем, есть ли базовая активная упаковка в packageOptions
+  const basePackage = product.packageOptions.find(pkg => pkg.isActive && pkg.packageSize === 1)
   if (basePackage) {
     return {
       display: `${item.requestedQuantity} × ${basePackage.packageName}`

@@ -473,14 +473,15 @@ export class ProductsService {
   }
 
   /**
-   * Delete package option
+   * Deactivate package option (soft delete)
+   * Sets is_active = false instead of deleting to preserve historical data references
    */
-  async deletePackageOption(packageId: string): Promise<void> {
+  async deactivatePackageOption(packageId: string): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Deleting package option', { packageId })
+      DebugUtils.info(MODULE_NAME, 'Deactivating package option', { packageId })
 
       if (!isSupabaseAvailable()) {
-        throw new Error('Supabase is not available. Cannot delete package option.')
+        throw new Error('Supabase is not available. Cannot deactivate package option.')
       }
 
       // Find product with this package option
@@ -491,25 +492,32 @@ export class ProductsService {
         throw new Error(`Package option not found: ${packageId}`)
       }
 
-      if (product.packageOptions.length <= 1) {
-        throw new Error('Cannot delete the last package option')
+      // Check if this is the last active package
+      const activePackages = product.packageOptions.filter(pkg => pkg.isActive)
+      if (activePackages.length <= 1 && activePackages.some(pkg => pkg.id === packageId)) {
+        throw new Error('Cannot deactivate the last active package option')
       }
 
-      // Delete from Supabase
-      const { error } = await supabase.from('package_options').delete().eq('id', packageId)
+      // Soft delete: update is_active = false
+      const { error } = await supabase
+        .from('package_options')
+        .update({ is_active: false })
+        .eq('id', packageId)
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, '❌ Failed to delete package option from Supabase:', error)
-        throw new Error(`Failed to delete package option: ${error.message}`)
+        DebugUtils.error(MODULE_NAME, '❌ Failed to deactivate package option in Supabase:', error)
+        throw new Error(`Failed to deactivate package option: ${error.message}`)
       }
 
-      // If this was the recommended package, update product's recommendedPackageId
+      // If this was the recommended package, update to first remaining active package
       if (product.recommendedPackageId === packageId) {
-        const remainingPackages = product.packageOptions.filter(pkg => pkg.id !== packageId)
-        await this.setRecommendedPackage(product.id, remainingPackages[0]?.id || '')
+        const remainingActivePackages = product.packageOptions.filter(
+          pkg => pkg.id !== packageId && pkg.isActive
+        )
+        await this.setRecommendedPackage(product.id, remainingActivePackages[0]?.id || '')
       }
 
-      DebugUtils.info(MODULE_NAME, '✅ Package option deleted from Supabase', {
+      DebugUtils.info(MODULE_NAME, '✅ Package option deactivated in Supabase', {
         packageId,
         productId: product.id
       })
@@ -517,7 +525,7 @@ export class ProductsService {
       // Invalidate cache
       localStorage.removeItem('products_cache')
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Error deleting package option', { error, packageId })
+      DebugUtils.error(MODULE_NAME, 'Error deactivating package option', { error, packageId })
       throw error
     }
   }

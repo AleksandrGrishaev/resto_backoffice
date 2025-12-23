@@ -103,6 +103,14 @@
             <v-list-item prepend-icon="mdi-pencil" @click="handleEdit">
               <v-list-item-title>Edit Customer Info</v-list-item-title>
             </v-list-item>
+
+            <!-- Delete Order (takeaway/delivery only when empty) -->
+            <template v-if="canDeleteCurrentOrder">
+              <v-divider />
+              <v-list-item prepend-icon="mdi-delete" class="text-error" @click="handleDeleteOrder">
+                <v-list-item-title>Delete Order</v-list-item-title>
+              </v-list-item>
+            </template>
           </v-list>
         </v-menu>
       </div>
@@ -188,6 +196,7 @@ const emit = defineEmits<{
   updateCustomer: [customerInfo: any]
   moveSelectedBill: []
   moveSelectedItems: []
+  deleteOrder: []
 }>()
 
 // Computed - Selection State
@@ -217,6 +226,12 @@ const selectedBillName = computed((): string => {
 const hasItemsInOrder = computed((): boolean => {
   if (!props.order) return false
   return ordersStore.hasItemsInOrder(props.order)
+})
+
+// Check if current order can be deleted (takeaway/delivery only when empty)
+const canDeleteCurrentOrder = computed((): boolean => {
+  if (!props.order) return false
+  return ordersStore.canDeleteOrder(props.order)
 })
 
 const orderTypeIcon = computed((): string => {
@@ -418,6 +433,17 @@ const handleMoveSelectedItems = (): void => {
   })
 
   emit('moveSelectedItems')
+}
+
+const handleDeleteOrder = (): void => {
+  if (!props.order || !props.canEdit || !canDeleteCurrentOrder.value) return
+
+  console.log('Delete order clicked:', {
+    orderId: props.order.id,
+    orderType: props.order.type
+  })
+
+  emit('deleteOrder')
 }
 </script>
 

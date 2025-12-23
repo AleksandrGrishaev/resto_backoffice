@@ -606,18 +606,21 @@ function updateQuantityFromPackages(index: number) {
 function getProductPackages(productId: string) {
   const product = productsStore.products.find(p => p.id === productId)
 
+  // Filter only active packages
+  const activePackages = product?.packageOptions?.filter(pkg => pkg.isActive) || []
+
   DebugUtils.info(MODULE_NAME, 'Getting packages for product', {
     productId,
     productName: product?.name,
-    hasPackages: !!product?.packageOptions,
-    packagesCount: product?.packageOptions?.length || 0
+    hasPackages: activePackages.length > 0,
+    packagesCount: activePackages.length
   })
 
-  if (!product || !product.packageOptions || product.packageOptions.length === 0) {
+  if (activePackages.length === 0) {
     return []
   }
 
-  const result = product.packageOptions.map(pkg => ({
+  const result = activePackages.map(pkg => ({
     value: pkg.id,
     title: `${pkg.packageName} (${pkg.packageSize} ${pkg.packageUnit})`
   }))
@@ -720,8 +723,9 @@ function duplicateLastReceipt() {
   form.value.items = lastReceipt.value.items.map((receiptItem: any) => {
     const product = productsStore.products.find(p => p.id === receiptItem.itemId)
 
-    // Try to get package info from receipt item or fallback to product's first package
-    const packageId = receiptItem.packageId || product?.packageOptions?.[0]?.id || 'default'
+    // Try to get package info from receipt item or fallback to product's first active package
+    const firstActivePackage = product?.packageOptions?.find(pkg => pkg.isActive)
+    const packageId = receiptItem.packageId || firstActivePackage?.id || 'default'
     const packageInfo = product?.packageOptions?.find(p => p.id === packageId) || {
       id: 'default',
       name: 'Unit',

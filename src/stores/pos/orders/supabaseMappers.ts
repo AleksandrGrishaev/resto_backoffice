@@ -297,6 +297,9 @@ export function toOrderItemInsert(
  */
 export function toOrderItemUpdate(item: PosBillItem): SupabaseOrderItemUpdate {
   return {
+    // Bill assignment (can change when items are moved between bills)
+    bill_id: item.billId,
+
     // Pricing (can change)
     quantity: item.quantity,
     modifiers_total: item.modifiersTotal || 0,

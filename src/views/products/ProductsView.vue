@@ -110,7 +110,7 @@
       @save="handleProductSave"
       @add-package="handleAddPackage"
       @update-package="handleUpdatePackage"
-      @delete-package="handleDeletePackage"
+      @delete-package="handleDeactivatePackage"
       @set-recommended="handleSetRecommended"
     />
 
@@ -292,19 +292,42 @@ const handleProductSave = async (
       // Edit mode - update product
       await store.updateProduct(data)
 
-      // Update packages for existing product
+      // Get original product to find packages to deactivate
+      const originalProduct = store.products.find(p => p.id === data.id)
+      const originalActivePackageIds =
+        originalProduct?.packageOptions.filter(pkg => pkg.isActive).map(pkg => pkg.id) || []
+      const currentPackageIds = packages.filter(pkg => pkg.id && !pkg.tempId).map(pkg => pkg.id)
+
+      // IMPORTANT: First create new packages and update existing ones
+      // This ensures there's always at least one active package before deactivating others
       for (const pkg of packages) {
         if (pkg.id && !pkg.tempId) {
           // Existing package - update
           await store.updatePackageOption(pkg)
         } else if (pkg.tempId) {
-          // New package for existing product
+          // New package for existing product - create first!
           const { tempId, ...packageData } = pkg
           await store.addPackageOption({
             ...packageData,
             productId: data.id
           })
+          DebugUtils.info(MODULE_NAME, 'New package created during save', {
+            productId: data.id,
+            packageName: packageData.packageName
+          })
         }
+      }
+
+      // THEN deactivate packages that were removed (soft delete)
+      const removedPackageIds = originalActivePackageIds.filter(
+        id => !currentPackageIds.includes(id)
+      )
+      for (const packageId of removedPackageIds) {
+        await store.deactivatePackageOption(data.id, packageId)
+        DebugUtils.info(MODULE_NAME, 'Package deactivated during save', {
+          productId: data.id,
+          packageId
+        })
       }
 
       showNotification('Product updated successfully', 'success')
@@ -377,16 +400,16 @@ const handleUpdatePackage = async (data: UpdatePackageOptionDto): Promise<void> 
   }
 }
 
-const handleDeletePackage = async (productId: string, packageId: string): Promise<void> => {
+const handleDeactivatePackage = async (productId: string, packageId: string): Promise<void> => {
   try {
     operationLoading.value = true
-    await store.deletePackageOption(productId, packageId)
-    showNotification('Package deleted successfully', 'success')
-    DebugUtils.info(MODULE_NAME, 'Package deleted', { productId, packageId })
+    await store.deactivatePackageOption(productId, packageId)
+    showNotification('Package removed successfully', 'success')
+    DebugUtils.info(MODULE_NAME, 'Package deactivated', { productId, packageId })
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Error deleting package'
+    const errorMessage = err instanceof Error ? err.message : 'Error removing package'
     showNotification(errorMessage, 'error')
-    DebugUtils.error(MODULE_NAME, 'Error deleting package', { error: err })
+    DebugUtils.error(MODULE_NAME, 'Error deactivating package', { error: err })
   } finally {
     operationLoading.value = false
   }

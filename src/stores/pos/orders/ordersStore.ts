@@ -303,20 +303,44 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   /**
    * Rename a bill
    */
-  function renameBill(orderId: string, billId: string, newName: string): ServiceResponse<PosBill> {
+  async function renameBill(
+    orderId: string,
+    billId: string,
+    newName: string
+  ): Promise<ServiceResponse<PosBill>> {
     try {
       const orderIndex = orders.value.findIndex(o => o.id === orderId)
       if (orderIndex === -1) {
         return { success: false, error: 'Order not found' }
       }
 
-      const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
+      const order = orders.value[orderIndex]
+      const billIndex = order.bills.findIndex(b => b.id === billId)
       if (billIndex === -1) {
         return { success: false, error: 'Bill not found' }
       }
 
-      orders.value[orderIndex].bills[billIndex].name = newName
-      return { success: true, data: orders.value[orderIndex].bills[billIndex] }
+      // Update locally
+      order.bills[billIndex].name = newName
+
+      // Save to database
+      const saveResponse = await ordersService.updateOrder(order)
+      if (!saveResponse.success) {
+        console.error(
+          '❌ [ordersStore] Failed to save order after bill rename:',
+          saveResponse.error
+        )
+        // Note: local state is already updated, but DB save failed
+      } else {
+        console.log('✏️ [ordersStore] Bill renamed:', {
+          orderId,
+          billId,
+          newName,
+          savedToDb: true
+        })
+      }
+
+      return { success: true, data: order.bills[billIndex] }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to rename bill'
       error.value = errorMsg
@@ -853,6 +877,77 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Delete an empty order (for takeaway/delivery only)
+   *
+   * Conditions:
+   * 1. Order must be takeaway or delivery (not dine_in)
+   * 2. Order must have no items or only draft/cancelled items
+   * 3. Order must not have any paid items
+   */
+  async function deleteOrder(orderId: string): Promise<ServiceResponse<void>> {
+    try {
+      const order = orders.value.find(o => o.id === orderId)
+
+      if (!order) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      // Only allow deleting takeaway/delivery orders
+      if (order.type === 'dine_in') {
+        return {
+          success: false,
+          error: 'Cannot delete dine-in orders. Use table management instead.'
+        }
+      }
+
+      // Check if order has any non-deletable items
+      const allItems = order.bills.flatMap(bill => bill.items)
+      const hasActiveItems = allItems.some(
+        item => !['draft', 'cancelled'].includes(item.status) || item.paymentStatus === 'paid'
+      )
+
+      if (hasActiveItems) {
+        return {
+          success: false,
+          error: 'Cannot delete order with active or paid items'
+        }
+      }
+
+      console.log('🗑️ [ordersStore] Deleting order:', {
+        orderId,
+        orderType: order.type,
+        itemsCount: allItems.length
+      })
+
+      // Delete from service (Supabase + localStorage)
+      const deleteResponse = await ordersService.deleteOrder(orderId)
+      if (!deleteResponse.success) {
+        return deleteResponse
+      }
+
+      // Remove from local state
+      const orderIndex = orders.value.findIndex(o => o.id === orderId)
+      if (orderIndex !== -1) {
+        orders.value.splice(orderIndex, 1)
+      }
+
+      // Clear current order if it was deleted
+      if (currentOrderId.value === orderId) {
+        currentOrderId.value = null
+        activeBillId.value = null
+      }
+
+      console.log('✅ [ordersStore] Order deleted successfully:', orderId)
+
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to delete order'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Release table after order is paid (manual table release)
    *
    * Workflow:
@@ -981,6 +1076,23 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   function hasItemsInBill(bill: PosBill): boolean {
     return bill.items.some(item => !['cancelled'].includes(item.status))
+  }
+
+  /**
+   * Check if order can be deleted
+   * Only takeaway/delivery orders with no active/paid items can be deleted
+   */
+  function canDeleteOrder(order: PosOrder): boolean {
+    // Only takeaway/delivery can be deleted
+    if (order.type === 'dine_in') return false
+
+    // Check if order has any non-deletable items
+    const allItems = order.bills.flatMap(bill => bill.items)
+    const hasActiveItems = allItems.some(
+      item => !['draft', 'cancelled'].includes(item.status) || item.paymentStatus === 'paid'
+    )
+
+    return !hasActiveItems
   }
 
   /**
@@ -2094,6 +2206,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     closeOrder,
     releaseTable,
     completeOrder,
+    deleteOrder,
     updateOrder,
     recalculateOrderTotals,
     setFilters,
@@ -2115,6 +2228,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     // Utility Functions
     hasItemsInOrder,
     hasItemsInBill,
+    canDeleteOrder,
     updateTableStatusForOrder,
 
     // Order Movement Methods

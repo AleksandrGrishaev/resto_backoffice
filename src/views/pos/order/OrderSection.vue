@@ -22,6 +22,7 @@
             @update-customer="handleCustomerUpdate"
             @move-selected-bill="handleMoveSelectedBill"
             @move-selected-items="handleMoveSelectedItems"
+            @delete-order="handleDeleteOrder"
           />
         </div>
 
@@ -646,10 +647,9 @@ const handleRenameBill = async (billId: string, newName: string): Promise<void> 
   if (!currentOrder.value) return
 
   try {
-    const result = ordersStore.renameBill(currentOrder.value.id, billId, newName)
+    const result = await ordersStore.renameBill(currentOrder.value.id, billId, newName)
     if (result.success) {
       showSuccess('Bill renamed successfully')
-      hasUnsavedChanges.value = true
     } else {
       showError(result.error || 'Failed to rename bill')
     }
@@ -1025,19 +1025,21 @@ const handleMoveConfirm = async (targetBillId: string): Promise<void> => {
         const [item] = sourceBill.items.splice(itemIndex, 1)
         const targetBill = currentOrder.value.bills.find(b => b.id === targetBillId)
         if (targetBill && item) {
+          // Update item's billId to new bill
+          item.billId = targetBillId
           targetBill.items.push(item)
         }
       }
     }
 
-    // Recalculate totals
-    ordersStore.recalculateOrderTotals(currentOrder.value.id)
+    // Recalculate totals and save to database (with await!)
+    await ordersStore.recalculateOrderTotals(currentOrder.value.id)
 
     // Clear selection
     ordersStore.clearSelection()
 
     showSuccess(`Moved ${moveItemIds.value.length} item(s) successfully`)
-    hasUnsavedChanges.value = true
+    hasUnsavedChanges.value = false // Changes are now saved
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to move items'
     showError(message)
@@ -1355,6 +1357,44 @@ const handleCompleteOrder = async (): Promise<void> => {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to complete order'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+    loadingMessage.value = ''
+  }
+}
+
+const handleDeleteOrder = async (): Promise<void> => {
+  if (!currentOrder.value) {
+    showError('No active order')
+    return
+  }
+
+  // Verify order can be deleted
+  if (!ordersStore.canDeleteOrder(currentOrder.value)) {
+    showError('Cannot delete this order. It may have active or paid items.')
+    return
+  }
+
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Deleting order...'
+
+    console.log('🗑️ [OrderSection] Deleting order:', {
+      orderId: currentOrder.value.id,
+      orderType: currentOrder.value.type
+    })
+
+    const result = await ordersStore.deleteOrder(currentOrder.value.id)
+
+    if (result.success) {
+      showSuccess('Order deleted successfully')
+      // Order is already cleared from store, UI will update automatically
+    } else {
+      showError(result.error || 'Failed to delete order')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to delete order'
     showError(message)
   } finally {
     loading.value.actions = false

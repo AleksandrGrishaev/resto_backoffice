@@ -34,9 +34,6 @@
                 >
                   Recommended
                 </v-chip>
-                <v-chip v-if="!pkg.isActive" size="x-small" color="error" variant="tonal">
-                  Inactive
-                </v-chip>
               </div>
 
               <div class="text-body-2 text-grey-darken-1 mt-1">

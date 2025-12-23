@@ -16,13 +16,12 @@
 
     <div class="separator" />
 
-    <!-- Scrollable Content -->
+    <!-- Scrollable Content - Single scroll for orders and tables -->
     <div class="scrollable-content">
-      <!-- Active Delivery/Takeaway Orders Section -->
-      <div v-if="deliveryOrders.length > 0" class="orders-section">
+      <!-- Active Delivery/Takeaway Orders -->
+      <template v-if="deliveryOrders.length > 0">
         <div class="section-title">Orders</div>
-
-        <div class="orders-list" :style="ordersListStyles">
+        <div class="items-list">
           <SidebarItem
             v-for="order in deliveryOrders"
             :key="order.id"
@@ -32,24 +31,20 @@
             @select="handleOrderSelect"
           />
         </div>
-      </div>
+        <div class="separator" />
+      </template>
 
-      <div v-if="deliveryOrders.length > 0" class="separator" />
-
-      <!-- Tables Section -->
-      <div class="tables-section">
-        <div class="section-title">Tables</div>
-
-        <div class="tables-list">
-          <SidebarItem
-            v-for="table in tables"
-            :key="table.id"
-            type="table"
-            :table="table"
-            :is-selected="isTableSelected(table.id)"
-            @select="handleTableSelect"
-          />
-        </div>
+      <!-- Tables -->
+      <div class="section-title">Tables</div>
+      <div class="items-list">
+        <SidebarItem
+          v-for="table in tables"
+          :key="table.id"
+          type="table"
+          :table="table"
+          :is-selected="isTableSelected(table.id)"
+          @select="handleTableSelect"
+        />
       </div>
     </div>
 
@@ -188,23 +183,6 @@ const isOrderSelected = computed(() => (orderId: string): boolean => {
 const isTableSelected = computed(() => (tableId: string): boolean => {
   const currentOrder = ordersStore.currentOrder
   return currentOrder?.tableId === tableId
-})
-
-/**
- * Стили для списка заказов
- * Максимум 3 элемента с возможностью скролла
- */
-const ordersListStyles = computed(() => {
-  const MAX_VISIBLE_ORDERS = 3
-  const ITEM_HEIGHT = 60 // Уменьшенная высота элемента (было 72)
-  const PADDING = 8 // Padding сверху и снизу
-
-  // Вычисляем максимальную высоту для 3 элементов
-  const maxHeight = MAX_VISIBLE_ORDERS * ITEM_HEIGHT + PADDING
-
-  return {
-    maxHeight: `${maxHeight}px`
-  }
 })
 
 // =============================================
@@ -525,9 +503,30 @@ onMounted(async () => {
 .scrollable-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar styling */
+.scrollable-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .navigation-section {
@@ -539,19 +538,6 @@ onMounted(async () => {
    SECTIONS
    ============================================= */
 
-.orders-section {
-  flex-shrink: 0;
-  /* Динамически подстраивается под количество заказов (макс 3) */
-}
-
-.tables-section {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  /* Занимает всё оставшееся место после секции заказов */
-}
-
 .section-title {
   font-size: 0.7rem;
   font-weight: 600;
@@ -561,50 +547,18 @@ onMounted(async () => {
   padding: 8px 8px 6px 8px;
   background-color: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  text-align: center;
 }
 
 /* =============================================
    LISTS
    ============================================= */
 
-.orders-list {
+.items-list {
   padding: 4px 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-}
-
-/* Стилизация скроллбара для списка заказов */
-.orders-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.orders-list::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
-}
-
-.orders-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-}
-
-.orders-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.tables-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 4px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 0;
 }
 
 /* =============================================
@@ -640,8 +594,7 @@ onMounted(async () => {
     padding: 8px 6px 5px 6px;
   }
 
-  .orders-list,
-  .tables-list {
+  .items-list {
     padding: 4px 6px;
     gap: 3px;
   }
@@ -657,8 +610,7 @@ onMounted(async () => {
     padding: 6px 6px 4px 6px;
   }
 
-  .orders-list,
-  .tables-list {
+  .items-list {
     padding: 4px 6px;
     gap: 2px;
   }

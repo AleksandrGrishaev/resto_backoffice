@@ -345,12 +345,17 @@
           </v-row>
         </div>
 
-        <!-- Packages продукта -->
-        <div v-if="product.packageOptions?.length" class="pa-6">
+        <!-- Packages продукта (только активные) -->
+        <div v-if="product.packageOptions?.filter(p => p.isActive).length" class="pa-6">
           <h3 class="text-h6 mb-4">Packages</h3>
 
           <v-row>
-            <v-col v-for="pkg in product.packageOptions" :key="pkg.id" cols="12" md="6">
+            <v-col
+              v-for="pkg in product.packageOptions.filter(p => p.isActive)"
+              :key="pkg.id"
+              cols="12"
+              md="6"
+            >
               <v-card
                 variant="outlined"
                 :color="pkg.id === product.recommendedPackageId ? 'primary' : undefined"

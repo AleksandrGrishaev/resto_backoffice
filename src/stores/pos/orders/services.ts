@@ -1079,6 +1079,56 @@ export class OrdersService {
     }
   }
 
+  /**
+   * Delete an order completely (for empty takeaway/delivery orders)
+   * Only allowed if order has no paid items
+   */
+  async deleteOrder(orderId: string): Promise<ServiceResponse<void>> {
+    try {
+      // Delete from Supabase first
+      if (this.isSupabaseAvailable()) {
+        try {
+          await executeSupabaseMutation(async () => {
+            // Delete all order items first (foreign key constraint)
+            const { error: itemsError } = await supabase
+              .from('order_items')
+              .delete()
+              .eq('order_id', orderId)
+            if (itemsError) throw itemsError
+
+            // Then delete the order itself
+            const { error: orderError } = await supabase.from('orders').delete().eq('id', orderId)
+            if (orderError) throw orderError
+          }, 'OrdersService.deleteOrder')
+
+          console.log('✅ Order deleted from Supabase:', orderId)
+        } catch (error) {
+          console.error('❌ Supabase delete failed:', extractErrorDetails(error))
+          throw error // Re-throw to prevent inconsistent state
+        }
+      }
+
+      // Update localStorage
+      const storedOrders = localStorage.getItem(this.ORDERS_KEY)
+      if (storedOrders) {
+        const orders = JSON.parse(storedOrders)
+        const filteredOrders = orders.filter((o: PosOrder) => o.id !== orderId)
+        localStorage.setItem(this.ORDERS_KEY, JSON.stringify(filteredOrders))
+      }
+
+      // Note: items in localStorage will be cleaned up on next sync
+      // They don't have orderId field, but are linked via billId
+
+      console.log('🗑️ Order deleted:', orderId)
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete order'
+      }
+    }
+  }
+
   async addBillToOrder(orderId: string, billName: string): Promise<ServiceResponse<PosBill>> {
     try {
       return await this.createBillForOrder(orderId, billName)

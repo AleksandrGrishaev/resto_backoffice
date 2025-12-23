@@ -733,34 +733,41 @@ export const useProductsStore = defineStore('products', {
     },
 
     /**
-     * Удалить упаковку
+     * Деактивировать упаковку (soft delete)
+     * Устанавливает isActive = false для сохранения связей с историческими данными
      */
-    async deletePackageOption(productId: string, packageId: string): Promise<void> {
+    async deactivatePackageOption(productId: string, packageId: string): Promise<void> {
       try {
         this.loading = true
         this.error = null
 
         // Always use productsService (Supabase-only)
         const { productsService } = await import('./productsService')
-        await productsService.deletePackageOption(packageId)
+        await productsService.deactivatePackageOption(packageId)
 
-        // Удаляем упаковку из продукта
+        // Деактивируем упаковку в локальном состоянии
         const product = this.products.find(p => p.id === productId)
         if (product) {
-          product.packageOptions = product.packageOptions.filter(pkg => pkg.id !== packageId)
+          const packageToDeactivate = product.packageOptions.find(pkg => pkg.id === packageId)
+          if (packageToDeactivate) {
+            packageToDeactivate.isActive = false
+          }
 
-          // Если удаляемая упаковка была рекомендуемой, сбрасываем рекомендацию
+          // Если деактивируемая упаковка была рекомендуемой, выбираем первую активную
           if (product.recommendedPackageId === packageId) {
-            product.recommendedPackageId = product.packageOptions[0]?.id
+            const firstActivePackage = product.packageOptions.find(
+              pkg => pkg.id !== packageId && pkg.isActive
+            )
+            product.recommendedPackageId = firstActivePackage?.id
           }
 
           product.updatedAt = new Date().toISOString()
         }
 
-        DebugUtils.info(MODULE_NAME, 'Package option deleted', { packageId, productId })
+        DebugUtils.info(MODULE_NAME, 'Package option deactivated', { packageId, productId })
       } catch (error) {
-        DebugUtils.error(MODULE_NAME, 'Error deleting package option', { error, packageId })
-        this.error = 'Failed to delete package option'
+        DebugUtils.error(MODULE_NAME, 'Error deactivating package option', { error, packageId })
+        this.error = 'Failed to deactivate package option'
         throw error
       } finally {
         this.loading = false

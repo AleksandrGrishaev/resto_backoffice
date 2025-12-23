@@ -335,6 +335,7 @@
                           </v-btn>
 
                           <v-btn
+                            v-if="localPackageOptions.length > 1"
                             size="x-small"
                             variant="text"
                             color="error"
@@ -572,7 +573,10 @@ watch(
         shelfLife: newProduct.shelfLife,
         minStock: newProduct.minStock
       }
-      localPackageOptions.value = (newProduct.packageOptions || []).map(pkg => ({ ...pkg }))
+      // Filter only active packages (soft deleted packages are hidden)
+      localPackageOptions.value = (newProduct.packageOptions || [])
+        .filter(pkg => pkg.isActive)
+        .map(pkg => ({ ...pkg }))
     } else {
       resetForm()
     }
@@ -662,6 +666,11 @@ const handleSaveLocalPackage = (data: CreatePackageOptionDto | UpdatePackageOpti
 }
 
 const deleteLocalPackage = (index: number): void => {
+  // Prevent deleting the last package
+  if (localPackageOptions.value.length <= 1) {
+    DebugUtils.warn(MODULE_NAME, 'Cannot delete the last package')
+    return
+  }
   localPackageOptions.value.splice(index, 1)
 }
 
