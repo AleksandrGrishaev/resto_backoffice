@@ -49,6 +49,8 @@
             v-model.number="discountValue"
             :label="discountType === 'percentage' ? 'Discount Percentage' : 'Discount Amount'"
             :suffix="discountType === 'percentage' ? '%' : 'IDR'"
+            :hint="maxDiscountHint"
+            persistent-hint
             type="number"
             min="0"
             :max="maxDiscountValue"
@@ -194,6 +196,18 @@
       </v-card-text>
 
       <v-card-actions>
+        <!-- Remove Discount Button (shown only if bill has existing discount) -->
+        <v-btn
+          v-if="hasExistingDiscount"
+          color="error"
+          variant="text"
+          :disabled="isRemoving"
+          :loading="isRemoving"
+          @click="handleRemoveDiscount"
+        >
+          <v-icon start>mdi-delete</v-icon>
+          Remove Discount
+        </v-btn>
         <v-spacer />
         <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
         <v-btn
@@ -250,6 +264,7 @@ const discountValue = ref<number>(0)
 const selectedReason = ref<DiscountReason | ''>('')
 const notes = ref<string>('')
 const isApplying = ref<boolean>(false)
+const isRemoving = ref<boolean>(false)
 
 // Computed - Bill data
 const activeItems = computed(() => {
@@ -279,10 +294,22 @@ const billSubtotal = computed(() => {
   }, 0)
 })
 
+const hasExistingDiscount = computed(() => {
+  return props.bill && (props.bill.discountAmount ?? 0) > 0
+})
+
 const maxDiscountValue = computed(() => {
   return discountType.value === 'percentage'
     ? DISCOUNT_VALIDATION.MAX_PERCENTAGE
     : billSubtotal.value
+})
+
+const maxDiscountHint = computed(() => {
+  if (discountType.value === 'percentage') {
+    return 'Maximum: 100%'
+  } else {
+    return `Maximum: ${formatIDR(billSubtotal.value)}`
+  }
 })
 
 const discountAmount = computed(() => {
@@ -319,37 +346,93 @@ const totalWithTaxes = computed(() => {
   return afterDiscount.value + totalTaxes
 })
 
-// Allocation preview
+// Allocation preview with per-item caps
 const allocationPreview = computed(() => {
   if (!discountAmount.value || billSubtotal.value === 0) return []
 
+  // Step 1: Initial proportional allocation
   const allocations = activeItems.value.map(item => {
     // Use price AFTER item discounts for allocation
     const itemDiscountAmount = calculateItemDiscountAmount(item)
     const itemFinalPrice = item.totalPrice - itemDiscountAmount
     const proportion = itemFinalPrice / billSubtotal.value
-    const allocatedDiscount = discountAmount.value * proportion
+    const rawAllocatedDiscount = discountAmount.value * proportion
 
     return {
       itemId: item.id,
       name: item.menuItemName + (item.variantName ? ` (${item.variantName})` : ''),
       itemAmount: itemFinalPrice, // Show final price after item discounts
+      maxAllowed: itemFinalPrice, // Maximum discount is item's final price
       proportion,
-      allocatedDiscount
+      allocatedDiscount: rawAllocatedDiscount,
+      isCapped: false
     }
   })
 
-  // Handle rounding - adjust largest item
+  // Step 2: Cap allocations at item price and redistribute remainder
+  let remainderToDistribute = 0
+  allocations.forEach(alloc => {
+    if (alloc.allocatedDiscount > alloc.maxAllowed) {
+      remainderToDistribute += alloc.allocatedDiscount - alloc.maxAllowed
+      alloc.allocatedDiscount = alloc.maxAllowed
+      alloc.isCapped = true
+    }
+  })
+
+  // Step 3: Redistribute remainder to uncapped items (iterative)
+  let iterations = 0
+  const MAX_ITERATIONS = 10 // Prevent infinite loops
+  while (remainderToDistribute > 0.01 && iterations < MAX_ITERATIONS) {
+    const uncappedItems = allocations.filter(a => !a.isCapped)
+    if (uncappedItems.length === 0) break // All items capped, can't distribute further
+
+    const uncappedTotal = uncappedItems.reduce((sum, a) => sum + a.itemAmount, 0)
+    if (uncappedTotal === 0) break
+
+    let redistributed = 0
+    uncappedItems.forEach(alloc => {
+      const proportion = alloc.itemAmount / uncappedTotal
+      const additionalDiscount = remainderToDistribute * proportion
+      const newTotal = alloc.allocatedDiscount + additionalDiscount
+
+      if (newTotal > alloc.maxAllowed) {
+        redistributed += newTotal - alloc.maxAllowed
+        alloc.allocatedDiscount = alloc.maxAllowed
+        alloc.isCapped = true
+      } else {
+        alloc.allocatedDiscount = newTotal
+        redistributed += additionalDiscount
+      }
+    })
+
+    remainderToDistribute -= redistributed
+    iterations++
+  }
+
+  // Step 4: Handle final rounding adjustment on largest uncapped item
   const sumAllocated = allocations.reduce((sum, a) => sum + a.allocatedDiscount, 0)
   const diff = discountAmount.value - sumAllocated
 
   if (Math.abs(diff) > 0.01 && allocations.length > 0) {
-    // Find largest item
-    const largestIndex = allocations.reduce(
-      (maxIdx, curr, idx, arr) => (curr.itemAmount > arr[maxIdx].itemAmount ? idx : maxIdx),
-      0
+    // Find largest uncapped item, or fallback to largest item
+    const uncappedItems = allocations.filter(a => !a.isCapped)
+    const targetArray = uncappedItems.length > 0 ? uncappedItems : allocations
+
+    const largestIndex = allocations.findIndex(
+      a =>
+        a ===
+        targetArray.reduce(
+          (max, curr) => (curr.itemAmount > max.itemAmount ? curr : max),
+          targetArray[0]
+        )
     )
-    allocations[largestIndex].allocatedDiscount += diff
+
+    if (largestIndex >= 0) {
+      const newAmount = allocations[largestIndex].allocatedDiscount + diff
+      if (newAmount <= allocations[largestIndex].maxAllowed) {
+        allocations[largestIndex].allocatedDiscount = newAmount
+      }
+    }
   }
 
   return allocations
@@ -365,16 +448,20 @@ const discountReasonOptions = computed(() => DISCOUNT_REASON_OPTIONS)
 // Validation
 const valueErrorMessage = computed(() => {
   if (!discountValue.value || discountValue.value === 0) {
-    return 'Discount value is required'
+    return 'Discount value is required and must be greater than 0'
   }
   if (discountValue.value < 0) {
     return 'Discount must be positive'
   }
-  if (discountType.value === 'percentage' && discountValue.value > 100) {
-    return 'Percentage cannot exceed 100%'
-  }
-  if (discountType.value === 'fixed' && discountValue.value > billSubtotal.value) {
-    return 'Discount cannot exceed bill subtotal'
+  if (discountType.value === 'percentage') {
+    if (discountValue.value > 100) {
+      return `Percentage cannot exceed 100% (current: ${discountValue.value}%)`
+    }
+  } else {
+    // Fixed amount validation
+    if (discountValue.value > billSubtotal.value) {
+      return `Discount cannot exceed bill subtotal (max: ${formatIDR(billSubtotal.value)})`
+    }
   }
   return ''
 })
@@ -468,6 +555,42 @@ const handleApply = async () => {
     // TODO: Show error notification to user
   } finally {
     isApplying.value = false
+  }
+}
+
+const handleRemoveDiscount = async () => {
+  if (!props.bill) {
+    DebugUtils.error(MODULE_NAME, 'Cannot remove discount - missing bill')
+    return
+  }
+
+  try {
+    isRemoving.value = true
+
+    DebugUtils.info(MODULE_NAME, 'Removing bill discount', {
+      billId: props.bill.id,
+      existingDiscount: props.bill.discountAmount
+    })
+
+    // Call ordersStore to remove bill discount
+    await ordersStore.removeBillDiscount(props.bill.id)
+
+    DebugUtils.info(MODULE_NAME, 'Bill discount removed successfully')
+
+    // Reset form and close dialog
+    resetForm()
+    emit('success', {
+      amount: 0,
+      reason: '',
+      type: 'percentage',
+      value: 0
+    })
+    emit('update:modelValue', false)
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to remove bill discount', { error })
+    // TODO: Show error notification to user
+  } finally {
+    isRemoving.value = false
   }
 }
 

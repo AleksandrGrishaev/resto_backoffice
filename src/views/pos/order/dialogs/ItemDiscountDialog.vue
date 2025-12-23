@@ -113,6 +113,18 @@
       </v-card-text>
 
       <v-card-actions>
+        <!-- Remove Discount Button (shown only if item has existing discounts) -->
+        <v-btn
+          v-if="hasExistingDiscount"
+          color="error"
+          variant="text"
+          :disabled="isRemoving"
+          :loading="isRemoving"
+          @click="handleRemoveDiscount"
+        >
+          <v-icon start>mdi-delete</v-icon>
+          Remove Discount
+        </v-btn>
         <v-spacer />
         <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
         <v-btn
@@ -165,9 +177,14 @@ const discountValue = ref<number>(0)
 const selectedReason = ref<DiscountReason | ''>('')
 const notes = ref<string>('')
 const isApplying = ref<boolean>(false)
+const isRemoving = ref<boolean>(false)
 
 // Computed
 const discountReasonOptions = computed(() => DISCOUNT_REASON_OPTIONS)
+
+const hasExistingDiscount = computed(() => {
+  return props.item && props.item.discounts && props.item.discounts.length > 0
+})
 
 const maxDiscountValue = computed(() => {
   if (!props.item) return 0
@@ -193,17 +210,22 @@ const finalPrice = computed(() => {
 
 // Validation
 const valueErrorMessage = computed(() => {
+  // Allow empty/zero during input, but show error for validation
   if (!discountValue.value || discountValue.value === 0) {
-    return 'Discount value is required'
+    return 'Discount value is required and must be greater than 0'
   }
   if (discountValue.value < 0) {
     return 'Discount must be positive'
   }
-  if (discountType.value === 'percentage' && discountValue.value > 100) {
-    return 'Percentage cannot exceed 100%'
-  }
-  if (discountType.value === 'fixed' && props.item && discountValue.value > props.item.totalPrice) {
-    return 'Discount cannot exceed item price'
+  if (discountType.value === 'percentage') {
+    if (discountValue.value > 100) {
+      return `Percentage cannot exceed 100% (current: ${discountValue.value}%)`
+    }
+  } else {
+    // Fixed amount validation
+    if (props.item && discountValue.value > props.item.totalPrice) {
+      return `Discount cannot exceed item price (max: ${formatIDR(props.item.totalPrice)})`
+    }
   }
   return ''
 })
@@ -282,6 +304,38 @@ const handleApply = async () => {
     // TODO: Show error notification to user
   } finally {
     isApplying.value = false
+  }
+}
+
+const handleRemoveDiscount = async () => {
+  if (!props.item) {
+    DebugUtils.error(MODULE_NAME, 'Cannot remove discount - missing item')
+    return
+  }
+
+  try {
+    isRemoving.value = true
+
+    DebugUtils.info(MODULE_NAME, 'Removing item discount', {
+      itemId: props.item.id,
+      billId: props.billId,
+      existingDiscounts: props.item.discounts?.length || 0
+    })
+
+    // Call ordersStore to remove discount
+    await ordersStore.removeItemDiscount(props.billId, props.item.id)
+
+    DebugUtils.info(MODULE_NAME, 'Item discount removed successfully')
+
+    // Reset form and close dialog
+    resetForm()
+    emit('success')
+    emit('update:modelValue', false)
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to remove item discount', { error })
+    // TODO: Show error notification to user
+  } finally {
+    isRemoving.value = false
   }
 }
 

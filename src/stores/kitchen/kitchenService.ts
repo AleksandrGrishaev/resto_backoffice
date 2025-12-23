@@ -19,53 +19,70 @@ const MODULE_NAME = 'KitchenService'
  * Kitchen only sees orders that need preparation
  *
  * NEW (Migration 053-054): Loads from 2 tables - orders + order_items
+ *
+ * IMPORTANT: Filters by ITEM status, not ORDER status!
+ * This ensures all ready items are shown, even if order status is 'served' or 'collected'
+ * Items are filtered by today's date only (disappear at end of day)
  */
 export async function getActiveKitchenOrders(): Promise<PosOrder[]> {
   try {
-    // Step 1: Get orders with kitchen statuses
-    const { data: ordersData, error: ordersError } = await supabase
-      .from('orders')
-      .select('*')
-      .in('status', ['waiting', 'cooking', 'ready'])
-      .order('created_at', { ascending: true })
+    // Calculate start of today (00:00:00 local time in ISO format)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const startOfDay = today.toISOString()
 
-    if (ordersError) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load kitchen orders', { error: ordersError })
-      return []
-    }
-
-    if (!ordersData || ordersData.length === 0) {
-      DebugUtils.debug(MODULE_NAME, 'No active kitchen orders')
-      return []
-    }
-
-    // Step 2: Get items for these orders
-    const orderIds = ordersData.map(o => o.id)
+    // Step 1: Get all kitchen items (waiting, cooking, ready) created today
+    // FILTER BY ITEMS, NOT ORDERS!
     const { data: itemsData, error: itemsError } = await supabase
       .from('order_items')
       .select('*')
-      .in('order_id', orderIds)
-      .in('status', ['waiting', 'cooking', 'ready']) // Only kitchen items
+      .in('status', ['waiting', 'cooking', 'ready']) // Filter by item status
+      .gte('created_at', startOfDay) // Only today's items
 
     if (itemsError) {
       DebugUtils.error(MODULE_NAME, 'Failed to load kitchen items', { error: itemsError })
       return []
     }
 
-    // Step 3: Assemble orders with items (filter by order_id directly)
+    if (!itemsData || itemsData.length === 0) {
+      DebugUtils.debug(MODULE_NAME, 'No active kitchen items today')
+      return []
+    }
+
+    // Step 2: Get orders for these items (any order status - served, ready, collected, etc.)
+    const orderIds = [...new Set(itemsData.map(item => item.order_id))]
+    const { data: ordersData, error: ordersError } = await supabase
+      .from('orders')
+      .select('*')
+      .in('id', orderIds)
+      .order('created_at', { ascending: true })
+
+    if (ordersError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load orders for kitchen items', {
+        error: ordersError
+      })
+      return []
+    }
+
+    if (!ordersData || ordersData.length === 0) {
+      DebugUtils.debug(MODULE_NAME, 'No orders found for kitchen items')
+      return []
+    }
+
+    // Step 3: Assemble orders with kitchen items only (filter items by order_id)
     const orders = ordersData.map(order => {
-      const orderItems = (itemsData || [])
-        .filter(row => row.order_id === order.id)
-        .map(fromOrderItemRow)
+      const orderItems = itemsData.filter(row => row.order_id === order.id).map(fromOrderItemRow)
       return orderFromSupabase(order, orderItems)
     })
 
-    DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded from Supabase', {
+    DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded (filtered by items, today only)', {
       count: orders.length,
-      waiting: orders.filter(o => o.status === 'waiting').length,
-      cooking: orders.filter(o => o.status === 'cooking').length,
-      ready: orders.filter(o => o.status === 'ready').length,
-      totalItems: (itemsData || []).length
+      totalItems: itemsData.length,
+      waitingItems: itemsData.filter(i => i.status === 'waiting').length,
+      cookingItems: itemsData.filter(i => i.status === 'cooking').length,
+      readyItems: itemsData.filter(i => i.status === 'ready').length,
+      uniqueOrderStatuses: [...new Set(ordersData.map(o => o.status))].join(', '),
+      dateFilter: startOfDay
     })
 
     return orders
@@ -93,7 +110,7 @@ export async function getOrderById(orderId: string): Promise<PosOrder | null> {
       return null
     }
 
-    // Get items for this order (kitchen items only)
+    // Get items for this order (only kitchen statuses - waiting, cooking, ready)
     const { data: itemsData, error: itemsError } = await supabase
       .from('order_items')
       .select('*')

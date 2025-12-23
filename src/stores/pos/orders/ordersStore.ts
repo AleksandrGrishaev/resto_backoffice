@@ -1445,6 +1445,126 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     }
   }
 
+  /**
+   * Remove all discounts from a single item
+   *
+   * @param billId - Bill ID containing the item
+   * @param itemId - Item ID to remove discounts from
+   * @returns Service response with success status
+   */
+  async function removeItemDiscount(
+    billId: string,
+    itemId: string
+  ): Promise<ServiceResponse<void>> {
+    try {
+      // Find the item and its order
+      let foundItem: PosBillItem | null = null
+      let foundOrder: PosOrder | null = null
+
+      for (const order of orders.value) {
+        for (const bill of order.bills) {
+          const item = bill.items.find(i => i.id === itemId)
+          if (item && bill.id === billId) {
+            foundItem = item
+            foundOrder = order
+            break
+          }
+        }
+        if (foundItem) break
+      }
+
+      if (!foundItem || !foundOrder) {
+        return {
+          success: false,
+          error: 'Item not found'
+        }
+      }
+
+      console.log('✅ [ordersStore] Removing item discount:', {
+        billId,
+        itemId,
+        previousDiscounts: foundItem.discounts?.length || 0
+      })
+
+      // Clear all discounts from the item
+      foundItem.discounts = []
+
+      // Recalculate order totals
+      await recalculateOrderTotals(foundOrder.id)
+
+      // Save order to persistence
+      await updateOrder(foundOrder)
+
+      console.log('✅ [ordersStore] Item discount removed successfully')
+
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove item discount'
+      console.error('❌ [ordersStore] Failed to remove item discount:', message)
+      return {
+        success: false,
+        error: message
+      }
+    }
+  }
+
+  /**
+   * Remove bill discount
+   *
+   * @param billId - Bill ID to remove discount from
+   * @returns Service response with success status
+   */
+  async function removeBillDiscount(billId: string): Promise<ServiceResponse<void>> {
+    try {
+      // Find the bill and its order
+      let foundBill: PosBill | null = null
+      let foundOrder: PosOrder | null = null
+
+      for (const order of orders.value) {
+        const bill = order.bills.find(b => b.id === billId)
+        if (bill) {
+          foundBill = bill
+          foundOrder = order
+          break
+        }
+      }
+
+      if (!foundBill || !foundOrder) {
+        return {
+          success: false,
+          error: 'Bill not found'
+        }
+      }
+
+      console.log('✅ [ordersStore] Removing bill discount:', {
+        billId,
+        previousDiscount: foundBill.discountAmount || 0
+      })
+
+      // Clear bill discount fields
+      foundBill.discountAmount = 0
+      foundBill.discountReason = undefined
+      foundBill.discountType = undefined
+
+      // Recalculate order totals
+      await recalculateOrderTotals(foundOrder.id)
+
+      // Save order to persistence
+      await updateOrder(foundOrder)
+
+      console.log('✅ [ordersStore] Bill discount removed successfully')
+
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove bill discount'
+      console.error('❌ [ordersStore] Failed to remove bill discount:', message)
+      return {
+        success: false,
+        error: message
+      }
+    }
+  }
+
   // ===== COMPOSABLES =====
   const {
     canAddItemToOrder,
@@ -1526,6 +1646,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     applyItemDiscount,
     applyBillDiscount,
     saveBillDiscount,
+    removeItemDiscount,
+    removeBillDiscount,
 
     // Composables (существующие)
     canAddItemToOrder,

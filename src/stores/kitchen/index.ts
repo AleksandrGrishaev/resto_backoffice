@@ -136,21 +136,47 @@ export const useKitchenStore = defineStore('kitchen', () => {
         if (order) {
           const appItem = fromOrderItemRow(item)
           // Find item in any bill
+          let itemFound = false
           for (const bill of order.bills) {
             const itemIndex = bill.items.findIndex(i => i.id === item.id)
             if (itemIndex !== -1) {
-              bill.items[itemIndex] = appItem
-              DebugUtils.info(MODULE_NAME, '🔄 Item updated', {
-                orderNumber: order.orderNumber,
-                itemName: item.menu_item_name,
-                oldStatus: oldItem?.status,
-                newStatus: item.status
-              })
+              const existingItem = bill.items[itemIndex]
+              // Only update if status actually changed (prevent duplicate updates)
+              if (
+                existingItem.status !== appItem.status ||
+                existingItem.quantity !== appItem.quantity ||
+                JSON.stringify(existingItem.selectedModifiers) !==
+                  JSON.stringify(appItem.selectedModifiers)
+              ) {
+                // Use splice to trigger Vue reactivity in nested array
+                bill.items.splice(itemIndex, 1, appItem)
+                DebugUtils.info(MODULE_NAME, '🔄 Item updated', {
+                  orderNumber: order.orderNumber,
+                  itemName: item.menu_item_name,
+                  oldStatus: existingItem.status,
+                  newStatus: appItem.status
+                })
+              } else {
+                DebugUtils.debug(MODULE_NAME, 'Ignoring duplicate item update (no changes)', {
+                  itemId: item.id,
+                  status: item.status
+                })
+              }
+              itemFound = true
               break
             }
           }
-          // Recalculate order status based on items
-          recalculateOrderStatus(order)
+
+          if (itemFound) {
+            // Recalculate order status based on items
+            recalculateOrderStatus(order)
+          } else {
+            DebugUtils.warn(MODULE_NAME, 'Item not found in order for update', {
+              orderId,
+              itemId: item.id,
+              itemName: item.menu_item_name
+            })
+          }
         } else {
           // Order not found - might need to fetch it
           DebugUtils.debug(MODULE_NAME, 'Item update for unknown order', { orderId, item })
