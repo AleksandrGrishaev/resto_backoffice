@@ -20,7 +20,7 @@
     <div class="scrollable-content">
       <!-- Active Delivery/Takeaway Orders Section -->
       <div v-if="deliveryOrders.length > 0" class="orders-section">
-        <div class="section-title">Active Orders ({{ deliveryOrders.length }})</div>
+        <div class="section-title">Orders</div>
 
         <div class="orders-list" :style="ordersListStyles">
           <SidebarItem
@@ -38,7 +38,7 @@
 
       <!-- Tables Section -->
       <div class="tables-section">
-        <div class="section-title">Tables ({{ tables.length }})</div>
+        <div class="section-title">Tables</div>
 
         <div class="tables-list">
           <SidebarItem
@@ -196,7 +196,7 @@ const isTableSelected = computed(() => (tableId: string): boolean => {
  */
 const ordersListStyles = computed(() => {
   const MAX_VISIBLE_ORDERS = 3
-  const ITEM_HEIGHT = 72 // Высота одного элемента в пикселях
+  const ITEM_HEIGHT = 60 // Уменьшенная высота элемента (было 72)
   const PADDING = 8 // Padding сверху и снизу
 
   // Вычисляем максимальную высоту для 3 элементов
@@ -541,6 +541,7 @@ onMounted(async () => {
 
 .orders-section {
   flex-shrink: 0;
+  /* Динамически подстраивается под количество заказов (макс 3) */
 }
 
 .tables-section {
@@ -548,15 +549,16 @@ onMounted(async () => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Занимает всё оставшееся место после секции заказов */
 }
 
 .section-title {
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.0625em;
-  color: rgba(255, 255, 255, 0.7);
-  padding: 12px 8px 8px 8px;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 8px 8px 6px 8px;
   background-color: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -634,8 +636,8 @@ onMounted(async () => {
 
 @media (max-width: 1200px) {
   .section-title {
-    font-size: 0.7rem;
-    padding: 10px 6px 6px 6px;
+    font-size: 0.65rem;
+    padding: 8px 6px 5px 6px;
   }
 
   .orders-list,
@@ -651,8 +653,8 @@ onMounted(async () => {
   }
 
   .section-title {
-    font-size: 0.65rem;
-    padding: 8px 6px 6px 6px;
+    font-size: 0.6rem;
+    padding: 6px 6px 4px 6px;
   }
 
   .orders-list,

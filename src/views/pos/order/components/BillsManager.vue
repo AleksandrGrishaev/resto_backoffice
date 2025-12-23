@@ -215,6 +215,7 @@ const handleApplyDiscount = (itemId: string): void => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0; /* Важно для flexbox - позволяет shrink меньше content size */
 }
 
 /* =============================================
@@ -225,9 +226,9 @@ const handleApplyDiscount = (itemId: string): void => {
   padding: var(--spacing-md);
   padding-bottom: 80px; /* Extra space for last item visibility when scrolling */
   flex: 1;
-  overflow-y: auto;
-  max-height: calc(100vh - 400px); /* Ограничиваем высоту для scroll */
-  min-height: 200px;
+  overflow-y: auto; /* Internal scroll для списка элементов */
+  overflow-x: hidden;
+  min-height: 0; /* Важно для flexbox */
 }
 
 /* =============================================
@@ -258,20 +259,17 @@ const handleApplyDiscount = (itemId: string): void => {
 @media (max-width: 959px) {
   .items-list {
     padding: var(--spacing-sm);
-    /* На мобильных убираем внутренний scroll - скроллится родитель .order-content */
-    overflow-y: visible;
-    max-height: none;
     padding-bottom: var(--spacing-md);
+    /* На мобильных scroll обрабатывается родителем .order-content */
+    overflow-y: visible;
   }
 
-  /* Обеспечиваем правильную работу scroll на мобильных */
   .bills-manager {
-    height: auto; /* Не фиксированная высота */
+    height: auto;
     overflow: visible;
   }
 
   .bill-content {
-    min-height: 0;
     overflow: visible;
   }
 }
@@ -310,22 +308,23 @@ const handleApplyDiscount = (itemId: string): void => {
    SCROLLBAR STYLING
    ============================================= */
 
+/* Стилизация скроллбара для items-list */
 .items-list::-webkit-scrollbar {
   width: 8px;
 }
 
 .items-list::-webkit-scrollbar-track {
-  background: rgba(var(--v-theme-on-surface), 0.05);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
 }
 
 .items-list::-webkit-scrollbar-thumb {
-  background: rgba(var(--v-theme-on-surface), 0.2);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
 }
 
 .items-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--v-theme-on-surface), 0.3);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* =============================================

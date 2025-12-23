@@ -48,25 +48,12 @@
             @move-items="handleMoveItems"
             @checkout="handleCheckout"
           />
-
-          <!-- Order Totals (mobile - inline with scroll) -->
-          <OrderTotals
-            v-if="isSmallScreen"
-            :totals="orderTotals"
-            :has-selection="calculations.hasSelection.value"
-            :selected-items-count="calculations.selectedItemsCount.value"
-            :show-taxes="true"
-            :service-tax-rate="5"
-            :government-tax-rate="10"
-            class="mobile-totals"
-          />
         </div>
 
         <!-- Fixed Footer Section -->
         <div class="order-footer">
-          <!-- Order Totals (desktop only) -->
+          <!-- Order Totals (always in footer for visibility) -->
           <OrderTotals
-            v-if="!isSmallScreen"
             :totals="orderTotals"
             :has-selection="calculations.hasSelection.value"
             :selected-items-count="calculations.selectedItemsCount.value"
@@ -1455,14 +1442,19 @@ onMounted(() => {
   flex: 1; /* Занимает все доступное пространство */
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* Контролируем overflow на уровне content */
+  overflow: hidden; /* На десктопе - scroll внутри BillsManager */
+  min-height: 0; /* Важно для flexbox */
 }
 
 .order-footer {
-  flex-shrink: 0; /* Фиксированная высота */
+  flex-shrink: 0; /* Фиксированная высота - никогда не сжимается */
   background: rgb(var(--v-theme-surface));
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   z-index: 10;
+  padding: 8px; /* Padding для всего footer */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* =============================================
@@ -1497,16 +1489,6 @@ onMounted(() => {
 }
 
 /* =============================================
-   MOBILE TOTALS (inline with scroll)
-   ============================================= */
-
-.mobile-totals {
-  flex-shrink: 0;
-  background: rgb(var(--v-theme-surface));
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-}
-
-/* =============================================
    RESPONSIVE DESIGN
    ============================================= */
 
@@ -1515,9 +1497,35 @@ onMounted(() => {
     padding: 0;
   }
 
-  /* На мобильных .order-content становится скроллируемым */
+  /* На мобильных scroll переходит на уровень order-content */
   .order-content {
     overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+  }
+
+  /* Стилизация скроллбара для order-content (мобильные) */
+  .order-content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .order-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+  }
+
+  .order-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+  }
+
+  .order-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Footer остается фиксированным - не скроллится */
+  .order-footer {
+    padding: 4px; /* Меньше padding на мобильных */
   }
 
   .empty-state {

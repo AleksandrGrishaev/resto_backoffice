@@ -89,36 +89,9 @@
       </v-expansion-panels>
 
       <!-- Simple View (when no revenue breakdown) -->
+      <!-- Детали убраны - только Total отображается ниже -->
       <template v-else>
-        <!-- Subtotal -->
-        <div class="total-line">
-          <span class="total-label">Subtotal</span>
-          <span class="total-value">{{ formatPrice(totals.subtotal) }}</span>
-        </div>
-
-        <!-- Discounts (if any) -->
-        <div v-if="totals.totalDiscounts > 0" class="total-line discount-line">
-          <span class="total-label">
-            <v-icon size="14" class="mr-1">mdi-tag</v-icon>
-            Discount
-          </span>
-          <span class="total-value discount-value">-{{ formatPrice(totals.totalDiscounts) }}</span>
-        </div>
-
-        <!-- Service Tax -->
-        <div v-if="showTaxes" class="total-line">
-          <span class="total-label">Service Tax ({{ serviceTaxRate }}%)</span>
-          <span class="total-value">{{ formatPrice(totals.serviceTax) }}</span>
-        </div>
-
-        <!-- Government Tax -->
-        <div v-if="showTaxes" class="total-line">
-          <span class="total-label">Government Tax ({{ governmentTaxRate }}%)</span>
-          <span class="total-value">{{ formatPrice(totals.governmentTax) }}</span>
-        </div>
-
-        <!-- Divider -->
-        <div class="divider"></div>
+        <!-- Пустая секция - все детали скрыты -->
       </template>
 
       <!-- Final Total (Always visible) -->
@@ -203,8 +176,8 @@ const billDiscountCount = computed(() => {
 
 .order-totals {
   background: transparent;
-  padding: 12px 16px;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  padding: 8px 12px;
+  /* border-top убран - footer уже имеет border-top */
 }
 
 .loading-state {
@@ -350,11 +323,11 @@ const billDiscountCount = computed(() => {
 
 @media (max-width: 768px) {
   .order-totals {
-    padding: 8px 12px;
+    padding: 6px 8px; /* Еще более компактный для мобильных */
   }
 
   .totals-content {
-    gap: 4px;
+    gap: 3px;
   }
 
   .total-line {
@@ -364,6 +337,7 @@ const billDiscountCount = computed(() => {
 
   .final-total {
     font-size: 0.9375rem;
+    padding-top: 2px;
   }
 }
 
@@ -388,10 +362,6 @@ const billDiscountCount = computed(() => {
    ============================================= */
 
 @media (prefers-color-scheme: dark) {
-  .order-totals {
-    border-top-color: rgba(255, 255, 255, 0.1);
-  }
-
   .divider {
     background: rgba(255, 255, 255, 0.1);
   }

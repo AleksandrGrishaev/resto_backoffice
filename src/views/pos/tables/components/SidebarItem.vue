@@ -3,7 +3,7 @@
   <div class="sidebar-item" :class="itemClasses" @click="handleClick">
     <!-- Icon Section -->
     <div class="item-icon">
-      <v-icon :icon="displayIcon" :color="iconColor" size="24" />
+      <v-icon :icon="displayIcon" :color="iconColor" size="20" />
     </div>
 
     <!-- Main Content -->
@@ -321,17 +321,17 @@ const handleClick = (): void => {
    ============================================= */
 
 .sidebar-item {
-  /* Touch-friendly размеры */
-  min-height: var(--touch-card, 64px);
+  /* Compact touch-friendly размеры */
+  min-height: 52px;
   min-width: var(--touch-min, 44px);
   width: 100%;
 
-  /* Отступы */
-  padding: var(--spacing-sm, 8px);
+  /* Отступы - уменьшены для компактности */
+  padding: 6px;
   margin-bottom: var(--spacing-xs, 4px);
 
   /* Внешний вид */
-  border-radius: var(--radius-lg, 12px);
+  border-radius: var(--radius-md, 8px);
   border: 2px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
 
@@ -438,7 +438,7 @@ const handleClick = (): void => {
 }
 
 .item-number {
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 600;
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.9);
@@ -481,26 +481,26 @@ const handleClick = (): void => {
 
 @media (max-width: 1200px) {
   .item-number {
-    font-size: 0.8rem;
-  }
-
-  .item-subtitle {
-    font-size: 0.65rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .sidebar-item {
-    min-height: var(--touch-button, 48px);
-    padding: 6px;
-  }
-
-  .item-number {
     font-size: 0.75rem;
   }
 
   .item-subtitle {
     font-size: 0.6rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar-item {
+    min-height: 48px;
+    padding: 5px;
+  }
+
+  .item-number {
+    font-size: 0.7rem;
+  }
+
+  .item-subtitle {
+    font-size: 0.55rem;
   }
 }
 </style>
