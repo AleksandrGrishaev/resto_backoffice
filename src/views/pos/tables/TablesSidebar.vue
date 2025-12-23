@@ -136,15 +136,13 @@ const loading = ref({
 // =============================================
 
 /**
- * Список столов из POS Tables Store с естественной сортировкой
- * T1, T2, ... T9, T10 (не T1, T10, T2)
+ * Список столов из POS Tables Store
+ * Сортировка по sortOrder из базы данных (TB 1-5, TI 1-5, Alex)
  */
 const tables = computed((): PosTable[] => {
   return [...tablesStore.tables].sort((a, b) => {
-    // Extract numbers from table numbers (e.g., "T1" -> 1, "T10" -> 10)
-    const numA = parseInt(a.number.replace(/\D/g, '')) || 0
-    const numB = parseInt(b.number.replace(/\D/g, '')) || 0
-    return numA - numB
+    // Sort by sortOrder from database (set in migration 075)
+    return (a.sortOrder || 0) - (b.sortOrder || 0)
   })
 })
 
