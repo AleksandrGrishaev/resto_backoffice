@@ -24,14 +24,12 @@ CREATE TABLE IF NOT EXISTS discount_events (
   discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'fixed')),
   value NUMERIC(10, 2) NOT NULL CHECK (value >= 0),
   reason TEXT NOT NULL CHECK (reason IN (
-    'customer_complaint',
-    'service_issue',
-    'food_quality',
-    'promotion',
-    'loyalty',
-    'staff_error',
-    'compensation',
-    'manager_decision',
+    'loyalty_card',
+    'promo_review',
+    'compliment',
+    'senior_agreement',
+    'kitchen_mistake',
+    'owner_family',
     'other'
   )),
 

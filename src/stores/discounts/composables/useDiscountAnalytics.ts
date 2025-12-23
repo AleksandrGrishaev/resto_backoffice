@@ -33,7 +33,7 @@ const MODULE_NAME = 'DiscountAnalytics'
  * const report = await getDailyRevenueReport('2025-01-01', '2025-01-31')
  *
  * // Get discount summary by reason
- * const summary = await getDiscountSummary({ reason: 'customer_complaint' })
+ * const summary = await getDiscountSummary({ reason: 'loyalty_card' })
  * ```
  */
 export function useDiscountAnalytics() {

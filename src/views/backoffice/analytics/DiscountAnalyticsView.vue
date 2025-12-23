@@ -647,14 +647,12 @@ function formatDateTime(isoString: string): string {
 
 function getReasonColor(reason: DiscountReason): string {
   const colorMap: Record<DiscountReason, string> = {
-    customer_complaint: 'error',
-    service_issue: 'warning',
-    food_quality: 'orange',
-    promotion: 'success',
-    loyalty: 'primary',
-    staff_error: 'error',
-    compensation: 'warning',
-    manager_decision: 'info',
+    loyalty_card: 'primary',
+    promo_review: 'success',
+    compliment: 'info',
+    senior_agreement: 'purple',
+    kitchen_mistake: 'error',
+    owner_family: 'orange',
     other: 'grey'
   }
   return colorMap[reason] || 'grey'

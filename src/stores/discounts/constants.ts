@@ -21,44 +21,34 @@ export const DISCOUNT_REASON_OPTIONS: Array<{
   description?: string
 }> = [
   {
-    value: 'customer_complaint',
-    label: DISCOUNT_REASON_LABELS.customer_complaint,
-    description: 'Customer complained about service or product'
+    value: 'loyalty_card',
+    label: DISCOUNT_REASON_LABELS.loyalty_card,
+    description: 'Discount for loyalty card holders'
   },
   {
-    value: 'service_issue',
-    label: DISCOUNT_REASON_LABELS.service_issue,
-    description: 'Problem with service delivery'
+    value: 'promo_review',
+    label: DISCOUNT_REASON_LABELS.promo_review,
+    description: 'Promotional discount for customer review or feedback'
   },
   {
-    value: 'food_quality',
-    label: DISCOUNT_REASON_LABELS.food_quality,
-    description: 'Issue with food quality or preparation'
+    value: 'compliment',
+    label: DISCOUNT_REASON_LABELS.compliment,
+    description: 'Complimentary discount (house treat)'
   },
   {
-    value: 'promotion',
-    label: DISCOUNT_REASON_LABELS.promotion,
-    description: 'Promotional discount or special offer'
+    value: 'senior_agreement',
+    label: DISCOUNT_REASON_LABELS.senior_agreement,
+    description: 'Senior citizen or special agreement discount'
   },
   {
-    value: 'loyalty',
-    label: DISCOUNT_REASON_LABELS.loyalty,
-    description: 'Loyalty program or repeat customer discount'
+    value: 'kitchen_mistake',
+    label: DISCOUNT_REASON_LABELS.kitchen_mistake,
+    description: 'Compensation for kitchen error or mistake'
   },
   {
-    value: 'staff_error',
-    label: DISCOUNT_REASON_LABELS.staff_error,
-    description: 'Error made by staff member'
-  },
-  {
-    value: 'compensation',
-    label: DISCOUNT_REASON_LABELS.compensation,
-    description: 'Compensation for inconvenience'
-  },
-  {
-    value: 'manager_decision',
-    label: DISCOUNT_REASON_LABELS.manager_decision,
-    description: 'Manager discretionary discount'
+    value: 'owner_family',
+    label: DISCOUNT_REASON_LABELS.owner_family,
+    description: 'Discount for owner, family, or staff'
   },
   {
     value: 'other',

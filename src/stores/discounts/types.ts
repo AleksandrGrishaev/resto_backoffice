@@ -6,28 +6,24 @@ import type { BaseEntity } from '@/types/common'
  * Used to categorize why a discount was applied
  */
 export type DiscountReason =
-  | 'customer_complaint' // Жалоба клиента
-  | 'service_issue' // Проблема с обслуживанием
-  | 'food_quality' // Качество еды
-  | 'promotion' // Промо-акция
-  | 'loyalty' // Лояльность клиента
-  | 'staff_error' // Ошибка персонала
-  | 'compensation' // Компенсация
-  | 'manager_decision' // Решение менеджера
-  | 'other' // Другое
+  | 'loyalty_card' // Loyalty card discount
+  | 'promo_review' // Promo review/feedback discount
+  | 'compliment' // Complimentary discount
+  | 'senior_agreement' // Senior/special agreement discount
+  | 'kitchen_mistake' // Kitchen mistake compensation
+  | 'owner_family' // Owner family discount
+  | 'other' // Other reason
 
 /**
  * Human-readable labels for discount reasons
  */
 export const DISCOUNT_REASON_LABELS: Record<DiscountReason, string> = {
-  customer_complaint: 'Customer Complaint',
-  service_issue: 'Service Issue',
-  food_quality: 'Food Quality',
-  promotion: 'Promotion',
-  loyalty: 'Customer Loyalty',
-  staff_error: 'Staff Error',
-  compensation: 'Compensation',
-  manager_decision: 'Manager Decision',
+  loyalty_card: 'Loyalty Card',
+  promo_review: 'Promo Review',
+  compliment: 'Compliment',
+  senior_agreement: 'Senior Agreement',
+  kitchen_mistake: 'Kitchen Mistake',
+  owner_family: 'Owner Family',
   other: 'Other'
 }
 
