@@ -96,8 +96,8 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
       for (const pmSummary of shift.paymentMethods) {
         if (pmSummary.amount <= 0) continue // Skip empty payment methods
 
-        // Find payment method configuration by CODE (methodId contains code like 'cash', 'card', 'qr')
-        const paymentMethod = allPaymentMethods.find(pm => pm.code === pmSummary.methodId)
+        // Find payment method configuration by ID (methodId contains UUID like 'pm_xxx')
+        const paymentMethod = allPaymentMethods.find(pm => pm.id === pmSummary.methodId)
         if (!paymentMethod || !paymentMethod.accountId) {
           console.warn(
             `⚠️ Payment method ${pmSummary.methodName} (${pmSummary.methodId}) has no account mapping, skipping`

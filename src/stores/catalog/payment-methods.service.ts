@@ -133,6 +133,7 @@ class PaymentMethodService {
           requires_details: dto.requiresDetails || false,
           display_order: dto.displayOrder || 0,
           icon: dto.icon || null,
+          icon_color: dto.iconColor || null,
           description: dto.description || null
         })
         .select()
@@ -167,6 +168,7 @@ class PaymentMethodService {
       if (dto.requiresDetails !== undefined) updateData.requires_details = dto.requiresDetails
       if (dto.displayOrder !== undefined) updateData.display_order = dto.displayOrder
       if (dto.icon !== undefined) updateData.icon = dto.icon
+      if (dto.iconColor !== undefined) updateData.icon_color = dto.iconColor
       if (dto.description !== undefined) updateData.description = dto.description
 
       const { error } = await supabase.from('payment_methods').update(updateData).eq('id', id)
@@ -233,6 +235,7 @@ class PaymentMethodService {
       requiresDetails: row.requires_details,
       displayOrder: row.display_order,
       icon: row.icon,
+      iconColor: row.icon_color,
       description: row.description
     }
   }

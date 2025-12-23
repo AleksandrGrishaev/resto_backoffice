@@ -84,10 +84,46 @@
         class="mb-4"
       >
         <template #prepend-inner>
-          <v-icon v-if="formData.icon" color="primary">{{ formData.icon }}</v-icon>
+          <v-icon v-if="formData.icon" :color="formData.iconColor || 'primary'">
+            {{ formData.icon }}
+          </v-icon>
           <v-icon v-else color="grey-lighten-1">mdi-image-outline</v-icon>
         </template>
       </v-text-field>
+
+      <v-select
+        v-model="formData.iconColor"
+        label="Icon Color (optional)"
+        :items="colorOptions"
+        clearable
+        hint="Color for the icon in POS payment dialog"
+        persistent-hint
+        class="mb-4"
+      >
+        <template #selection="{ item }">
+          <div class="d-flex align-center">
+            <v-icon :color="item.value" size="small" class="mr-2">mdi-circle</v-icon>
+            <span>{{ item.title }}</span>
+          </div>
+        </template>
+        <template #item="{ item, props: itemProps }">
+          <v-list-item v-bind="itemProps">
+            <template #prepend>
+              <v-icon :color="item.value">mdi-circle</v-icon>
+            </template>
+          </v-list-item>
+        </template>
+      </v-select>
+
+      <v-text-field
+        v-model.number="formData.displayOrder"
+        label="Display Order"
+        type="number"
+        min="0"
+        hint="Lower numbers appear first in payment dialog (0 = first)"
+        persistent-hint
+        class="mb-4"
+      />
 
       <v-checkbox
         v-model="formData.isPosСashRegister"
@@ -126,6 +162,23 @@ const paymentTypes = [
   { title: 'Cash (Physical)', value: 'cash' },
   { title: 'Bank (Electronic)', value: 'bank' }
 ] as const
+
+const colorOptions = [
+  { title: 'Primary (Blue)', value: 'primary' },
+  { title: 'Success (Green)', value: 'success' },
+  { title: 'Warning (Orange)', value: 'warning' },
+  { title: 'Error (Red)', value: 'error' },
+  { title: 'Info (Light Blue)', value: 'info' },
+  { title: 'Purple', value: 'purple' },
+  { title: 'Pink', value: 'pink' },
+  { title: 'Teal', value: 'teal' },
+  { title: 'Cyan', value: 'cyan' },
+  { title: 'Orange', value: 'orange' },
+  { title: 'Deep Orange', value: 'deep-orange' },
+  { title: 'Brown', value: 'brown' },
+  { title: 'Blue Grey', value: 'blue-grey' },
+  { title: 'Grey', value: 'grey' }
+]
 
 const props = defineProps<{
   modelValue: boolean
@@ -179,6 +232,8 @@ function getDefaultData() {
     type: 'cash' as PaymentType,
     accountId: '',
     icon: '',
+    iconColor: '',
+    displayOrder: 0,
     requiresDetails: false,
     isActive: true,
     isPosСashRegister: false
@@ -233,6 +288,8 @@ watch(
           type: props.method.type,
           accountId: props.method.accountId || '',
           icon: props.method.icon || '',
+          iconColor: props.method.iconColor || '',
+          displayOrder: props.method.displayOrder || 0,
           requiresDetails: props.method.requiresDetails,
           isActive: props.method.isActive,
           isPosСashRegister: props.method.isPosСashRegister

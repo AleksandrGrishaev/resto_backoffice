@@ -251,7 +251,29 @@ export async function allocateFromPreparationBatches(
 
   // Handle deficit with fallback to lastKnownCost
   if (deficit > 0) {
-    const fallbackCost = preparation?.lastKnownCost || 0
+    let fallbackCost = preparation?.lastKnownCost || 0
+
+    // ✅ FIX: Normalize per-portion cost to per-gram for portion-type preparations
+    // lastKnownCost SHOULD be per-gram, but might be per-portion from old buggy data
+    if (
+      fallbackCost > 0 &&
+      preparation?.portionType === 'portion' &&
+      preparation?.portionSize &&
+      preparation.portionSize > 1
+    ) {
+      // Sanity check: if cost > 100 IDR and portionSize > 1, likely stored per-portion
+      if (fallbackCost > 100) {
+        const normalizedCost = fallbackCost / preparation.portionSize
+        DebugUtils.warn(MODULE_NAME, 'Converting suspected per-portion lastKnownCost to per-gram', {
+          preparationId,
+          preparationName: preparation.name,
+          originalCost: fallbackCost,
+          portionSize: preparation.portionSize,
+          normalizedCost
+        })
+        fallbackCost = normalizedCost
+      }
+    }
 
     if (fallbackCost > 0) {
       allocations.push({

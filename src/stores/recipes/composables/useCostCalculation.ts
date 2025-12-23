@@ -294,6 +294,24 @@ export function useCostCalculation() {
             continue
           }
 
+          // ✅ FIX: Normalize per-portion cost to per-gram for portion-type preparations
+          // unitCost might be per-portion from lastKnownCost or costPerPortion
+          // ingredient.quantity is always in grams, so we need per-gram cost
+          if (prep.portionType === 'portion' && prep.portionSize && prep.portionSize > 1) {
+            // Sanity check: if cost > 100 IDR and portionSize > 1, likely per-portion
+            if (unitCost > 100) {
+              const normalizedCost = unitCost / prep.portionSize
+              DebugUtils.warn(MODULE_NAME, 'Normalizing suspected per-portion cost to per-gram', {
+                preparationName: prep.name,
+                originalCost: unitCost,
+                portionSize: prep.portionSize,
+                normalizedCost,
+                costSource
+              })
+              unitCost = normalizedCost
+            }
+          }
+
           const ingredientTotalCost = unitCost * ingredient.quantity
           totalCost += ingredientTotalCost
 

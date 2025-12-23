@@ -95,7 +95,7 @@
                     >
                       <v-icon
                         :icon="method.icon || getDefaultIcon(method.type)"
-                        :color="isSelected ? 'white' : 'primary'"
+                        :color="isSelected ? 'white' : method.iconColor || 'primary'"
                         size="28"
                       />
                       <div class="text-caption mt-1" :class="isSelected ? 'text-white' : ''">
@@ -152,7 +152,12 @@
             <div v-if="selectedMethodType === 'bank'" class="bank-payment mb-4">
               <v-alert type="info" variant="tonal" density="compact">
                 <div class="d-flex align-center">
-                  <v-icon :icon="selectedMethodIcon" class="mr-2" size="24" />
+                  <v-icon
+                    :icon="selectedMethodIcon"
+                    :color="selectedMethodColor"
+                    class="mr-2"
+                    size="24"
+                  />
                   <div class="text-body-2">
                     Waiting for {{ selectedMethodName }} payment confirmation
                   </div>
@@ -263,17 +268,18 @@ const localDiscount = ref<number>(0) // Temporary bill discount (not saved to or
 const localDiscountReason = ref<string>('') // Reason for bill discount
 const showBillDiscountDialog = ref(false)
 
-// Payment Methods
+// Payment Methods (already sorted by displayOrder from the store)
 const availablePaymentMethods = computed(() => {
   const methods = paymentSettingsStore.activePaymentMethods
   if (methods.length === 0) {
     // Fallback to cash if no methods loaded yet
-    return [{ code: 'cash', name: 'Cash', icon: 'mdi-cash', type: 'cash' }]
+    return [{ code: 'cash', name: 'Cash', icon: 'mdi-cash', iconColor: 'success', type: 'cash' }]
   }
   return methods.map(method => ({
     code: method.code,
     name: method.name,
     icon: method.icon,
+    iconColor: method.iconColor,
     type: method.type
   }))
 })
@@ -287,6 +293,11 @@ const selectedMethodType = computed(() => {
 const selectedMethodIcon = computed(() => {
   const method = availablePaymentMethods.value.find(m => m.code === selectedMethod.value)
   return method?.icon || getDefaultIcon(selectedMethodType.value)
+})
+
+const selectedMethodColor = computed(() => {
+  const method = availablePaymentMethods.value.find(m => m.code === selectedMethod.value)
+  return method?.iconColor || 'primary'
 })
 
 const selectedMethodName = computed(() => {

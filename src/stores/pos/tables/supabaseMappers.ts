@@ -45,6 +45,7 @@ export function fromSupabase(row: SupabaseTable): PosTable {
     floor: 1, // Default floor (not in Supabase schema)
     capacity: row.capacity,
     status: mapStatusFromSupabase(row.status),
+    sortOrder: (row as any).sort_order || 0, // Sort order for display
     currentOrderId: row.current_order_id || undefined,
     notes: undefined, // Not in Supabase schema
     reservedUntil: undefined, // Not in Supabase schema

@@ -22,6 +22,7 @@ export interface PaymentMethod extends BaseEntity {
   requiresDetails: boolean // Whether additional details are required (e.g., card number)
   displayOrder: number // Sort order in UI (lower numbers appear first)
   icon?: string // Material Design icon name (e.g., 'mdi-cash')
+  iconColor?: string // Icon color for POS UI (Vuetify color name or hex: 'primary', '#FF5733')
   description?: string // Optional description for internal use
 }
 
@@ -37,6 +38,7 @@ export interface CreatePaymentMethodDto {
   requiresDetails?: boolean
   displayOrder?: number
   icon?: string
+  iconColor?: string // Icon color (Vuetify color name or hex)
   description?: string
 }
 
@@ -52,6 +54,7 @@ export interface UpdatePaymentMethodDto {
   requiresDetails?: boolean
   displayOrder?: number
   icon?: string
+  iconColor?: string // Icon color (Vuetify color name or hex)
   description?: string
 }
 

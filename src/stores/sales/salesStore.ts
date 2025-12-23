@@ -449,6 +449,17 @@ export const useSalesStore = defineStore('sales', () => {
 
             await SalesService.saveSalesTransaction(transaction)
             console.log(`✅ [${MODULE_NAME}] Transaction updated with write-off ID`)
+          } else {
+            // ✅ FIX: Log error when write-off creation fails
+            console.error(`❌ [${MODULE_NAME}] Write-off creation failed for transaction`, {
+              transactionId: saveResult.data.id,
+              menuItemId: billItem.menuItemId,
+              menuItemName: billItem.menuItemName,
+              quantity: billItem.quantity
+            })
+            // Transaction is saved but without write-off
+            // This can happen when: menu item not found, empty decomposition, or other errors
+            // TODO: Queue for retry or mark transaction as needing manual review
           }
         } else {
           throw new Error(saveResult.error || 'Failed to save transaction')

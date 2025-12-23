@@ -25,7 +25,7 @@ export class TablesService {
         const { data, error } = await supabase!
           .from('tables')
           .select('*')
-          .order('table_number', { ascending: true })
+          .order('sort_order', { ascending: true })
 
         if (!error && data) {
           console.log(`✅ Loaded ${data.length} tables from Supabase`)

@@ -18,6 +18,7 @@ export interface PosTable extends BaseEntity {
   section: TableSection
   floor: number
   status: TableStatus
+  sortOrder?: number
   currentOrderId?: string
   reservedUntil?: string
   notes?: string

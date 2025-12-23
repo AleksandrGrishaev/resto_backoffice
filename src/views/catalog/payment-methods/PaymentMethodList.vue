@@ -12,7 +12,11 @@
         }"
       >
         <template #prepend>
-          <v-icon :icon="getMethodIcon(method.type)" size="24" />
+          <v-icon
+            :icon="method.icon || getMethodIcon(method.type)"
+            :color="method.iconColor || getMethodColor(method.type)"
+            size="24"
+          />
         </template>
 
         <v-list-item-title>
@@ -85,6 +89,14 @@ function getMethodIcon(type: PaymentMethod['type']): string {
     bank: 'mdi-bank'
   }
   return icons[type] || 'mdi-wallet'
+}
+
+function getMethodColor(type: PaymentMethod['type']): string {
+  const colors: Record<PaymentMethod['type'], string> = {
+    cash: 'success',
+    bank: 'primary'
+  }
+  return colors[type] || 'grey'
 }
 
 function getAccountName(accountId: string | null): string {
