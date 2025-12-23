@@ -1203,6 +1203,481 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     selectedBills.value = new Set(selectedBills.value)
   }
 
+  // ===== ORDER MOVEMENT METHODS =====
+
+  /**
+   * Move a dine-in order to a different table
+   * If target table is occupied, merges the moving order's bills into the existing order
+   * If target table is free, assigns the order to the table
+   *
+   * @param orderId - Order ID to move
+   * @param targetTableId - Target table ID
+   * @returns Service response with success status
+   */
+  async function moveOrderToTable(
+    orderId: string,
+    targetTableId: string
+  ): Promise<ServiceResponse<PosOrder>> {
+    try {
+      // Find the order to move
+      const orderIndex = orders.value.findIndex(o => o.id === orderId)
+      if (orderIndex === -1) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      const orderToMove = orders.value[orderIndex]
+
+      // Validate it's a dine-in order
+      if (orderToMove.type !== 'dine_in') {
+        return {
+          success: false,
+          error: 'Only dine-in orders can be moved between tables'
+        }
+      }
+
+      // Validate the order isn't already on this table
+      if (orderToMove.tableId === targetTableId) {
+        return {
+          success: false,
+          error: 'Order is already on this table'
+        }
+      }
+
+      // Get target table to check its status
+      const targetTable = await tablesStore.getTableById(targetTableId)
+      if (!targetTable) {
+        return { success: false, error: 'Target table not found' }
+      }
+
+      console.log('🔄 [ordersStore] Moving order to table:', {
+        orderId,
+        fromTableId: orderToMove.tableId,
+        targetTableId,
+        targetTableStatus: targetTable.status,
+        currentOrderOnTarget: targetTable.currentOrderId
+      })
+
+      // Case 1: Target table is occupied → Merge orders
+      if (targetTable.status === 'occupied' && targetTable.currentOrderId) {
+        const targetOrderIndex = orders.value.findIndex(o => o.id === targetTable.currentOrderId)
+        if (targetOrderIndex === -1) {
+          return {
+            success: false,
+            error: 'Target table has an order reference but order not found'
+          }
+        }
+
+        const targetOrder = orders.value[targetOrderIndex]
+
+        console.log('🔀 [ordersStore] Target table occupied, merging orders:', {
+          sourceOrderId: orderId,
+          targetOrderId: targetOrder.id,
+          billsToMerge: orderToMove.bills.length
+        })
+
+        // Merge all bills from moving order into target order
+        const mergeResult = await mergeBillsIntoOrder(orderToMove.bills, targetOrder.id)
+        if (!mergeResult.success) {
+          return mergeResult
+        }
+
+        // Release the source table (if any)
+        if (orderToMove.tableId) {
+          await tablesStore.freeTable(orderToMove.tableId)
+        }
+
+        // Remove the source order (all bills moved to target)
+        orders.value.splice(orderIndex, 1)
+
+        // If current order was removed, select the target order
+        if (currentOrderId.value === orderId) {
+          selectOrder(targetOrder.id)
+        }
+
+        console.log('✅ [ordersStore] Orders merged successfully')
+
+        return {
+          success: true,
+          data: targetOrder
+        }
+      }
+
+      // Case 2: Target table is free → Assign order to table
+      console.log('📍 [ordersStore] Target table is free, assigning order')
+
+      // Release the current table (if any)
+      if (orderToMove.tableId) {
+        await tablesStore.freeTable(orderToMove.tableId)
+      }
+
+      // Update order with new table
+      orderToMove.tableId = targetTableId
+      orderToMove.updatedAt = new Date().toISOString()
+
+      // Occupy the target table
+      await tablesStore.occupyTable(targetTableId, orderId)
+
+      // Save the order
+      const updateResponse = await updateOrder(orderToMove)
+      if (!updateResponse.success) {
+        return updateResponse
+      }
+
+      console.log('✅ [ordersStore] Order moved to table successfully:', {
+        orderId,
+        newTableId: targetTableId
+      })
+
+      return {
+        success: true,
+        data: orderToMove
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to move order to table'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * Convert takeaway/delivery order to dine-in by assigning a table
+   * If target table is occupied, merges the order's bills into the existing order
+   * If target table is free, assigns the order to the table
+   *
+   * @param orderId - Order ID to convert
+   * @param tableId - Table ID to assign
+   * @returns Service response with success status
+   */
+  async function convertOrderToDineIn(
+    orderId: string,
+    tableId: string
+  ): Promise<ServiceResponse<PosOrder>> {
+    try {
+      // Find the order to convert
+      const orderIndex = orders.value.findIndex(o => o.id === orderId)
+      if (orderIndex === -1) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      const orderToConvert = orders.value[orderIndex]
+
+      // Validate it's a takeaway/delivery order
+      if (orderToConvert.type === 'dine_in') {
+        return {
+          success: false,
+          error: 'Order is already dine-in. Use moveOrderToTable instead.'
+        }
+      }
+
+      // Get target table to check its status
+      const targetTable = await tablesStore.getTableById(tableId)
+      if (!targetTable) {
+        return { success: false, error: 'Target table not found' }
+      }
+
+      console.log('🔄 [ordersStore] Converting order to dine-in:', {
+        orderId,
+        currentType: orderToConvert.type,
+        targetTableId: tableId,
+        targetTableStatus: targetTable.status,
+        currentOrderOnTarget: targetTable.currentOrderId
+      })
+
+      // Case 1: Target table is occupied → Merge orders
+      if (targetTable.status === 'occupied' && targetTable.currentOrderId) {
+        const targetOrderIndex = orders.value.findIndex(o => o.id === targetTable.currentOrderId)
+        if (targetOrderIndex === -1) {
+          return {
+            success: false,
+            error: 'Target table has an order reference but order not found'
+          }
+        }
+
+        const targetOrder = orders.value[targetOrderIndex]
+
+        console.log('🔀 [ordersStore] Target table occupied, merging orders:', {
+          sourceOrderId: orderId,
+          sourceOrderType: orderToConvert.type,
+          targetOrderId: targetOrder.id,
+          billsToMerge: orderToConvert.bills.length
+        })
+
+        // Merge all bills from converting order into target order
+        const mergeResult = await mergeBillsIntoOrder(orderToConvert.bills, targetOrder.id)
+        if (!mergeResult.success) {
+          return mergeResult
+        }
+
+        // Remove the source order (all bills moved to target)
+        orders.value.splice(orderIndex, 1)
+
+        // If current order was removed, select the target order
+        if (currentOrderId.value === orderId) {
+          selectOrder(targetOrder.id)
+        }
+
+        console.log('✅ [ordersStore] Order converted and merged successfully')
+
+        return {
+          success: true,
+          data: targetOrder
+        }
+      }
+
+      // Case 2: Target table is free → Convert order type and assign table
+      console.log('📍 [ordersStore] Target table is free, converting order type')
+
+      // Convert order type to dine_in
+      orderToConvert.type = 'dine_in'
+      orderToConvert.tableId = tableId
+
+      // Update order status if needed (ensure it's valid for dine_in)
+      if (orderToConvert.status === 'collected' || orderToConvert.status === 'delivered') {
+        orderToConvert.status = 'ready' // Reset to appropriate status for dine-in
+      }
+
+      orderToConvert.updatedAt = new Date().toISOString()
+
+      // Occupy the target table
+      await tablesStore.occupyTable(tableId, orderId)
+
+      // Save the order
+      const updateResponse = await updateOrder(orderToConvert)
+      if (!updateResponse.success) {
+        return updateResponse
+      }
+
+      console.log('✅ [ordersStore] Order converted to dine-in successfully:', {
+        orderId,
+        newType: 'dine_in',
+        tableId
+      })
+
+      return {
+        success: true,
+        data: orderToConvert
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to convert order to dine-in'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * Move a single bill to a different table
+   * Creates new order on target table or merges into existing order
+   *
+   * @param billId - Bill ID to move
+   * @param targetTableId - Target table ID
+   * @returns Service response with success status
+   */
+  async function moveBillToTable(
+    billId: string,
+    targetTableId: string
+  ): Promise<ServiceResponse<PosOrder>> {
+    try {
+      // Find the bill and its order
+      let sourceBill: PosBill | null = null
+      let sourceOrder: PosOrder | null = null
+
+      for (const order of orders.value) {
+        const bill = order.bills.find(b => b.id === billId)
+        if (bill) {
+          sourceBill = bill
+          sourceOrder = order
+          break
+        }
+      }
+
+      if (!sourceBill || !sourceOrder) {
+        return { success: false, error: 'Bill not found' }
+      }
+
+      // Cannot move the last bill from an order
+      if (sourceOrder.bills.length === 1) {
+        return {
+          success: false,
+          error: 'Cannot move the last bill. Use "Change Table" to move the entire order instead.'
+        }
+      }
+
+      console.log('🔄 [ordersStore] Moving bill to table:', {
+        billId,
+        billName: sourceBill.name,
+        sourceOrderId: sourceOrder.id,
+        targetTableId
+      })
+
+      // Get target table to check its status
+      const targetTable = await tablesStore.getTableById(targetTableId)
+      if (!targetTable) {
+        return { success: false, error: 'Target table not found' }
+      }
+
+      // Case 1: Target table is occupied → Merge bill into existing order
+      if (targetTable.status === 'occupied' && targetTable.currentOrderId) {
+        const targetOrderIndex = orders.value.findIndex(o => o.id === targetTable.currentOrderId)
+        if (targetOrderIndex === -1) {
+          return {
+            success: false,
+            error: 'Target table has an order reference but order not found'
+          }
+        }
+
+        const targetOrder = orders.value[targetOrderIndex]
+
+        console.log('🔀 [ordersStore] Target table occupied, merging bill into existing order')
+
+        // Remove bill from source order
+        const billIndex = sourceOrder.bills.findIndex(b => b.id === billId)
+        if (billIndex !== -1) {
+          sourceOrder.bills.splice(billIndex, 1)
+        }
+
+        // Merge bill into target order
+        const mergeResult = await mergeBillsIntoOrder([sourceBill], targetOrder.id)
+        if (!mergeResult.success) {
+          return mergeResult
+        }
+
+        // Recalculate source order totals
+        await recalculateOrderTotals(sourceOrder.id)
+
+        console.log('✅ [ordersStore] Bill merged successfully')
+
+        return {
+          success: true,
+          data: targetOrder
+        }
+      }
+
+      // Case 2: Target table is free → Create new order with this bill
+      console.log('📍 [ordersStore] Target table is free, creating new order')
+
+      // Remove bill from source order
+      const billIndex = sourceOrder.bills.findIndex(b => b.id === billId)
+      if (billIndex !== -1) {
+        sourceOrder.bills.splice(billIndex, 1)
+      }
+
+      // Create new dine-in order on target table
+      const newOrderResponse = await ordersService.createOrder('dine_in', targetTableId)
+      if (!newOrderResponse.success || !newOrderResponse.data) {
+        return {
+          success: false,
+          error: newOrderResponse.error || 'Failed to create new order'
+        }
+      }
+
+      const newOrder = newOrderResponse.data
+
+      // Remove default bill created by createOrder
+      if (newOrder.bills.length > 0) {
+        newOrder.bills = []
+      }
+
+      // Add the moved bill to new order
+      sourceBill.orderId = newOrder.id
+      sourceBill.updatedAt = new Date().toISOString()
+      newOrder.bills.push(sourceBill)
+
+      // Add new order to store
+      orders.value.unshift(newOrder)
+
+      // Recalculate both orders
+      await recalculateOrderTotals(sourceOrder.id)
+      await recalculateOrderTotals(newOrder.id)
+
+      // Occupy the target table
+      await tablesStore.occupyTable(targetTableId, newOrder.id)
+
+      console.log('✅ [ordersStore] Bill moved to new table successfully:', {
+        newOrderId: newOrder.id,
+        billId,
+        tableId: targetTableId
+      })
+
+      return {
+        success: true,
+        data: newOrder
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to move bill to table'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * Merge bills from one order into another order
+   * All bills are transferred to the target order and renamed to avoid conflicts
+   *
+   * @param billsToMerge - Array of bills to merge
+   * @param targetOrderId - Target order ID
+   * @returns Service response with success status
+   */
+  async function mergeBillsIntoOrder(
+    billsToMerge: PosBill[],
+    targetOrderId: string
+  ): Promise<ServiceResponse<PosOrder>> {
+    try {
+      // Find target order
+      const targetOrderIndex = orders.value.findIndex(o => o.id === targetOrderId)
+      if (targetOrderIndex === -1) {
+        return { success: false, error: 'Target order not found' }
+      }
+
+      const targetOrder = orders.value[targetOrderIndex]
+
+      console.log('🔀 [ordersStore] Merging bills into order:', {
+        targetOrderId,
+        billsToMerge: billsToMerge.length,
+        existingBills: targetOrder.bills.length
+      })
+
+      // Rename and transfer bills to avoid naming conflicts
+      for (let i = 0; i < billsToMerge.length; i++) {
+        const billToMerge = { ...billsToMerge[i] }
+
+        // Generate new bill name (e.g., "Bill 5", "Bill 6", etc.)
+        const newBillNumber = targetOrder.bills.length + i + 1
+        billToMerge.name = `Bill ${newBillNumber}`
+
+        // Update bill's orderId to target order
+        billToMerge.orderId = targetOrderId
+        billToMerge.updatedAt = new Date().toISOString()
+
+        // Add to target order's bills
+        targetOrder.bills.push(billToMerge)
+
+        console.log('  ✅ Merged bill:', {
+          originalName: billsToMerge[i].name,
+          newName: billToMerge.name,
+          itemsCount: billToMerge.items.length
+        })
+      }
+
+      // Recalculate target order totals
+      await recalculateOrderTotals(targetOrderId)
+
+      console.log('✅ [ordersStore] Bills merged successfully:', {
+        targetOrderId,
+        totalBillsNow: targetOrder.bills.length,
+        totalItemsNow: targetOrder.bills.reduce((sum, b) => sum + b.items.length, 0)
+      })
+
+      return {
+        success: true,
+        data: targetOrder
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to merge bills into order'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
   // ===== DISCOUNT METHODS (Sprint 7) =====
 
   /**
@@ -1641,6 +2116,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     hasItemsInOrder,
     hasItemsInBill,
     updateTableStatusForOrder,
+
+    // Order Movement Methods
+    moveOrderToTable,
+    convertOrderToDineIn,
+    moveBillToTable,
+    mergeBillsIntoOrder,
 
     // Discount Methods (Sprint 7)
     applyItemDiscount,

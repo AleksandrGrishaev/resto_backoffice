@@ -20,6 +20,8 @@
             @change-type="handleOrderTypeChange"
             @change-table="handleTableChange"
             @update-customer="handleCustomerUpdate"
+            @move-selected-bill="handleMoveSelectedBill"
+            @move-selected-items="handleMoveSelectedItems"
           />
         </div>
 
@@ -175,6 +177,25 @@
       @confirm="handleMoveConfirm"
       @cancel="handleMoveCancel"
     />
+
+    <!-- Order Type Change Dialog -->
+    <OrderTypeDialog
+      v-model="showOrderTypeDialog"
+      :current-order="currentOrder"
+      :available-tables="tablesStore.tables"
+      @confirm="handleOrderTypeConfirm"
+    />
+
+    <!-- Table Selection Dialog (for dine-in orders) -->
+    <TableSelectionDialog
+      v-model="showTableSelectionDialog"
+      :tables="tablesStore.tables"
+      :current-table-id="currentOrder?.tableId"
+      title="Move Order to Table"
+      subtitle="Select a table to move this order to:"
+      @confirm="handleTableSelectionConfirm"
+      @cancel="handleTableSelectionCancel"
+    />
   </div>
 </template>
 
@@ -200,6 +221,8 @@ import AddNoteDialog from './dialogs/AddNoteDialog.vue'
 import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
 import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
 import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
+import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
+import TableSelectionDialog from './dialogs/TableSelectionDialog.vue'
 
 const MODULE_NAME = 'OrderSection'
 
@@ -315,6 +338,12 @@ const moveDialogData = computed(() => {
 
   return { sourceBill, targetBills, selectedItems }
 })
+
+// Order Type Dialog State
+const showOrderTypeDialog = ref(false)
+
+// Table Selection Dialog State
+const showTableSelectionDialog = ref(false)
 
 // Computed - Main Data
 const currentOrder = computed((): PosOrder | null => {
@@ -433,38 +462,157 @@ const handleCreateOrder = async (): Promise<void> => {
   }
 }
 
-const handleOrderTypeChange = async (newType: OrderType): Promise<void> => {
+const handleOrderTypeChange = (): void => {
+  if (!currentOrder.value) return
+  // Open order type dialog
+  showOrderTypeDialog.value = true
+}
+
+const handleTableChange = (): void => {
+  if (!currentOrder.value) return
+
+  // Validate it's a dine-in order
+  if (currentOrder.value.type !== 'dine_in') {
+    showError('Only dine-in orders can be moved to a different table', 'warning')
+    return
+  }
+
+  // Open table selection dialog
+  showTableSelectionDialog.value = true
+}
+
+// Handler for OrderTypeDialog confirmation
+const handleOrderTypeConfirm = async (data: {
+  orderType: OrderType
+  tableId?: string
+}): Promise<void> => {
   if (!currentOrder.value) return
 
   try {
-    loading.value.actions = true
-    loadingMessage.value = 'Changing order type...'
+    loading.value.global = true
+    showOrderTypeDialog.value = false
 
-    // TODO: Implement order type change logic
-    showSuccess(`Order type changed to ${newType}`)
+    // Case 1: Converting takeaway/delivery to dine-in (with table selection)
+    if (data.orderType === 'dine_in' && currentOrder.value.type !== 'dine_in' && data.tableId) {
+      loadingMessage.value = 'Converting order to dine-in...'
+
+      const result = await ordersStore.convertOrderToDineIn(currentOrder.value.id, data.tableId)
+
+      if (result.success) {
+        showSuccess('Order converted to dine-in successfully')
+      } else {
+        throw new Error(result.error || 'Failed to convert order to dine-in')
+      }
+    }
+    // Case 2: Other order type changes (dine-in to takeaway/delivery, etc.)
+    else {
+      loadingMessage.value = `Changing order type to ${data.orderType}...`
+
+      // Update order type directly
+      currentOrder.value.type = data.orderType
+
+      // If converting from dine-in to takeaway/delivery, clear table assignment
+      if (data.orderType !== 'dine_in' && currentOrder.value.tableId) {
+        const tableId = currentOrder.value.tableId
+        currentOrder.value.tableId = undefined
+
+        // Free the table
+        await tablesStore.freeTable(tableId)
+      }
+
+      // Save updated order
+      const result = await ordersStore.updateOrder(currentOrder.value)
+
+      if (result.success) {
+        showSuccess(`Order type changed to ${data.orderType}`)
+      } else {
+        throw new Error(result.error || 'Failed to change order type')
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to change order type'
     showError(message)
   } finally {
-    loading.value.actions = false
+    loading.value.global = false
+    loadingMessage.value = ''
   }
 }
 
-const handleTableChange = async (newTableId: string): Promise<void> => {
+// Handler for TableSelectionDialog confirmation
+const handleTableSelectionConfirm = async (tableId: string): Promise<void> => {
   if (!currentOrder.value) return
 
   try {
-    loading.value.actions = true
-    loadingMessage.value = 'Moving order to new table...'
+    loading.value.global = true
+    showTableSelectionDialog.value = false
 
-    // TODO: Implement table change logic
-    showSuccess('Order moved to new table')
+    // Case 1: Moving a selected bill to table
+    if (ordersStore.selectedBillsCount === 1) {
+      loadingMessage.value = 'Moving bill to table...'
+
+      const selectedBillId = Array.from(ordersStore.selectedBills)[0]
+      const result = await ordersStore.moveBillToTable(selectedBillId, tableId)
+
+      if (result.success) {
+        showSuccess('Bill moved to table successfully')
+        // Deselect the bill after moving
+        ordersStore.deselectBill(selectedBillId)
+      } else {
+        throw new Error(result.error || 'Failed to move bill to table')
+      }
+    }
+    // Case 2: Moving entire order to table
+    else {
+      loadingMessage.value = 'Moving order to new table...'
+
+      const result = await ordersStore.moveOrderToTable(currentOrder.value.id, tableId)
+
+      if (result.success) {
+        showSuccess('Order moved to new table successfully')
+      } else {
+        throw new Error(result.error || 'Failed to move order to table')
+      }
+    }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to move order'
+    const message = err instanceof Error ? err.message : 'Failed to move to table'
     showError(message)
   } finally {
-    loading.value.actions = false
+    loading.value.global = false
+    loadingMessage.value = ''
   }
+}
+
+// Handler for TableSelectionDialog cancel
+const handleTableSelectionCancel = (): void => {
+  showTableSelectionDialog.value = false
+}
+
+// Handler for moving selected bill to table
+const handleMoveSelectedBill = (): void => {
+  if (!currentOrder.value) return
+
+  // Check if exactly one bill is selected
+  if (ordersStore.selectedBillsCount !== 1) {
+    showError('Please select exactly one bill to move', 'warning')
+    return
+  }
+
+  // Open table selection dialog
+  showTableSelectionDialog.value = true
+}
+
+// Handler for moving selected items to table
+const handleMoveSelectedItems = (): void => {
+  if (!currentOrder.value) return
+
+  // Check if items are selected
+  if (ordersStore.selectedItemsCount === 0) {
+    showError('Please select items to move', 'warning')
+    return
+  }
+
+  showError('Moving individual items to another table is not yet implemented', 'warning')
+  // TODO: Implement this feature - create new order with selected items on target table
 }
 
 const handleCustomerUpdate = async (customerInfo: any): Promise<void> => {

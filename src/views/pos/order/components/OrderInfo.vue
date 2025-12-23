@@ -53,11 +53,58 @@
           </v-tooltip>
         </v-chip>
 
-        <!-- Edit Button -->
-        <v-btn icon variant="text" size="small" :disabled="!canEdit" @click="handleEdit">
-          <v-icon>mdi-pencil</v-icon>
-          <v-tooltip activator="parent" location="bottom">Edit Order Type</v-tooltip>
-        </v-btn>
+        <!-- Order Actions Menu -->
+        <v-menu location="bottom end">
+          <template #activator="{ props: menuProps }">
+            <v-btn icon variant="text" size="small" :disabled="!canEdit" v-bind="menuProps">
+              <v-icon>mdi-dots-vertical</v-icon>
+              <v-tooltip activator="parent" location="bottom">Order Actions</v-tooltip>
+            </v-btn>
+          </template>
+
+          <v-list density="compact">
+            <!-- Change Table (dine-in only) -->
+            <v-list-item
+              v-if="props.order?.type === 'dine_in'"
+              prepend-icon="mdi-table-arrow-right"
+              @click="handleChangeTable"
+            >
+              <v-list-item-title>Change Table</v-list-item-title>
+            </v-list-item>
+
+            <!-- Move Selected Bill to Table -->
+            <v-list-item
+              v-if="hasSelectedBill"
+              prepend-icon="mdi-table-chair"
+              @click="handleMoveSelectedBill"
+            >
+              <v-list-item-title>Move Selected Bill to Table</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedBillName }}</v-list-item-subtitle>
+            </v-list-item>
+
+            <!-- Move Selected Items to Table -->
+            <v-list-item
+              v-if="hasSelectedItems && !hasSelectedBill"
+              prepend-icon="mdi-table-furniture"
+              @click="handleMoveSelectedItems"
+            >
+              <v-list-item-title>Move Selected Items to Table</v-list-item-title>
+              <v-list-item-subtitle>{{ selectedItemsCount }} item(s)</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-divider v-if="hasSelectedBill || hasSelectedItems" />
+
+            <!-- Change Order Type -->
+            <v-list-item prepend-icon="mdi-swap-horizontal" @click="handleChangeType">
+              <v-list-item-title>Change Order Type</v-list-item-title>
+            </v-list-item>
+
+            <!-- Edit Customer Info -->
+            <v-list-item prepend-icon="mdi-pencil" @click="handleEdit">
+              <v-list-item-title>Edit Customer Info</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </div>
     </div>
 
@@ -136,7 +183,34 @@ const props = withDefaults(defineProps<Props>(), {
 // Emits
 const emit = defineEmits<{
   edit: [order: PosOrder]
+  changeType: []
+  changeTable: []
+  updateCustomer: [customerInfo: any]
+  moveSelectedBill: []
+  moveSelectedItems: []
 }>()
+
+// Computed - Selection State
+const hasSelectedItems = computed((): boolean => {
+  return ordersStore.selectedItemsCount > 0
+})
+
+const selectedItemsCount = computed((): number => {
+  return ordersStore.selectedItemsCount
+})
+
+const hasSelectedBill = computed((): boolean => {
+  return ordersStore.selectedBillsCount === 1
+})
+
+const selectedBillName = computed((): string => {
+  if (!hasSelectedBill.value || !props.order) return ''
+
+  const selectedBillId = Array.from(ordersStore.selectedBills)[0]
+  const bill = props.order.bills.find(b => b.id === selectedBillId)
+
+  return bill?.name || ''
+})
 
 // Computed - Order Type
 
@@ -294,16 +368,56 @@ const totalDiscountAmount = computed((): number => {
 const handleEdit = (): void => {
   if (!props.order || !props.canEdit) return
 
-  console.log('Edit order clicked:', {
+  console.log('Edit customer info clicked:', {
     orderId: props.order.id,
-    orderNumber: props.order.orderNumber,
-    type: props.order.type,
-    status: props.order.status,
-    paymentStatus: props.order.paymentStatus,
-    hasItems: hasItemsInOrder.value
+    orderNumber: props.order.orderNumber
   })
 
   emit('edit', props.order)
+}
+
+const handleChangeType = (): void => {
+  if (!props.order || !props.canEdit) return
+
+  console.log('Change order type clicked:', {
+    orderId: props.order.id,
+    currentType: props.order.type
+  })
+
+  emit('changeType')
+}
+
+const handleChangeTable = (): void => {
+  if (!props.order || !props.canEdit) return
+
+  console.log('Change table clicked:', {
+    orderId: props.order.id,
+    currentTableId: props.order.tableId
+  })
+
+  emit('changeTable')
+}
+
+const handleMoveSelectedBill = (): void => {
+  if (!props.order || !props.canEdit || !hasSelectedBill.value) return
+
+  console.log('Move selected bill clicked:', {
+    orderId: props.order.id,
+    selectedBillId: Array.from(ordersStore.selectedBills)[0]
+  })
+
+  emit('moveSelectedBill')
+}
+
+const handleMoveSelectedItems = (): void => {
+  if (!props.order || !props.canEdit || !hasSelectedItems.value) return
+
+  console.log('Move selected items clicked:', {
+    orderId: props.order.id,
+    selectedItemsCount: ordersStore.selectedItemsCount
+  })
+
+  emit('moveSelectedItems')
 }
 </script>
 

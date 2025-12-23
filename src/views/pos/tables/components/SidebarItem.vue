@@ -18,6 +18,35 @@
         {{ statusBadgeText }}
       </v-chip>
     </div>
+
+    <!-- Action Menu (for orders only) -->
+    <div v-if="isOrder && order" class="item-actions" @click.stop>
+      <v-menu location="right">
+        <template #activator="{ props: menuProps }">
+          <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="menuProps" />
+        </template>
+
+        <v-list density="compact">
+          <!-- Move to Table (for takeaway/delivery orders) -->
+          <v-list-item
+            v-if="order.type !== 'dine_in'"
+            prepend-icon="mdi-table-chair"
+            @click="handleMoveToTable"
+          >
+            <v-list-item-title>Move to Table</v-list-item-title>
+          </v-list-item>
+
+          <!-- Change Table (for dine-in orders) -->
+          <v-list-item
+            v-if="order.type === 'dine_in'"
+            prepend-icon="mdi-table-arrow-right"
+            @click="handleChangeTable"
+          >
+            <v-list-item-title>Change Table</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
+    </div>
   </div>
 </template>
 
@@ -47,6 +76,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   click: [item: PosTable | PosOrder]
   select: [item: PosTable | PosOrder]
+  moveToTable: [order: PosOrder]
+  changeTable: [order: PosOrder]
 }>()
 
 // =============================================
@@ -313,6 +344,24 @@ const handleClick = (): void => {
   emit('click', item)
   emit('select', item)
 }
+
+/**
+ * Handle "Move to Table" action for takeaway/delivery orders
+ */
+const handleMoveToTable = (): void => {
+  if (!props.order) return
+  console.log('🔄 Move to table clicked:', props.order.id)
+  emit('moveToTable', props.order)
+}
+
+/**
+ * Handle "Change Table" action for dine-in orders
+ */
+const handleChangeTable = (): void => {
+  if (!props.order) return
+  console.log('🔄 Change table clicked:', props.order.id)
+  emit('changeTable', props.order)
+}
 </script>
 
 <style scoped>
@@ -502,5 +551,30 @@ const handleClick = (): void => {
   .item-subtitle {
     font-size: 0.6rem;
   }
+}
+
+/* =============================================
+   ACTION MENU
+   ============================================= */
+
+.item-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar-item:hover .item-actions {
+  opacity: 1;
+}
+
+.item-actions .v-btn {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.item-actions .v-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
 }
 </style>

@@ -30,6 +30,8 @@
             :order="order"
             :is-selected="isOrderSelected(order.id)"
             @select="handleOrderSelect"
+            @move-to-table="handleMoveOrderToTable"
+            @change-table="handleChangeOrderTable"
           />
         </div>
       </div>
@@ -61,6 +63,16 @@
     <!-- Order Type Dialog -->
     <OrderTypeDialog v-model="showNewOrderDialog" @create="handleCreateOrder" />
 
+    <!-- Table Selection Dialog -->
+    <TableSelectionDialog
+      v-model="showTableSelectionDialog"
+      :tables="tables"
+      :title="tableSelectionDialogTitle"
+      :subtitle="tableSelectionDialogSubtitle"
+      @confirm="handleTableSelectionConfirm"
+      @cancel="handleTableSelectionCancel"
+    />
+
     <!-- Unsaved Changes Dialog -->
     <v-dialog v-model="showUnsavedDialog" max-width="400">
       <v-card>
@@ -91,6 +103,7 @@ import type { PosTable, PosOrder, OrderType } from '@/stores/pos/types'
 // Components
 import SidebarItem from './components/SidebarItem.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
+import TableSelectionDialog from '../order/dialogs/TableSelectionDialog.vue'
 import PosNavigationMenu from '../components/PosNavigationMenu.vue'
 
 const MODULE_NAME = 'TablesSidebar'
@@ -129,7 +142,11 @@ const emit = defineEmits<{
 
 const showNewOrderDialog = ref(false)
 const showUnsavedDialog = ref(false)
+const showTableSelectionDialog = ref(false)
 const pendingAction = ref<(() => void) | null>(null)
+const selectedOrderForMove = ref<PosOrder | null>(null)
+const tableSelectionDialogTitle = ref('Select Table')
+const tableSelectionDialogSubtitle = ref('Select a table for this order:')
 const loading = ref({
   create: false,
   tables: false,
@@ -448,6 +465,104 @@ const performOrderSelect = async (order: PosOrder): Promise<void> => {
     })
     console.error('Failed to select order:', message)
   }
+}
+
+// =============================================
+// METHODS - ORDER MOVEMENT
+// =============================================
+
+/**
+ * Handle "Move to Table" action from SidebarItem
+ * Opens table selection dialog for takeaway/delivery orders
+ */
+const handleMoveOrderToTable = (order: PosOrder): void => {
+  DebugUtils.debug(MODULE_NAME, 'Move order to table requested', {
+    orderId: order.id,
+    orderType: order.type
+  })
+
+  selectedOrderForMove.value = order
+  tableSelectionDialogTitle.value = 'Move Order to Table'
+  tableSelectionDialogSubtitle.value = `Convert ${order.type} order to dine-in:`
+  showTableSelectionDialog.value = true
+}
+
+/**
+ * Handle "Change Table" action from SidebarItem
+ * Opens table selection dialog for dine-in orders
+ */
+const handleChangeOrderTable = (order: PosOrder): void => {
+  DebugUtils.debug(MODULE_NAME, 'Change order table requested', {
+    orderId: order.id,
+    currentTableId: order.tableId
+  })
+
+  selectedOrderForMove.value = order
+  tableSelectionDialogTitle.value = 'Change Table'
+  tableSelectionDialogSubtitle.value = 'Select a new table for this order:'
+  showTableSelectionDialog.value = true
+}
+
+/**
+ * Handle table selection confirmation
+ */
+const handleTableSelectionConfirm = async (tableId: string): Promise<void> => {
+  if (!selectedOrderForMove.value) return
+
+  try {
+    const order = selectedOrderForMove.value
+
+    DebugUtils.debug(MODULE_NAME, 'Table selection confirmed', {
+      orderId: order.id,
+      orderType: order.type,
+      targetTableId: tableId
+    })
+
+    // Case 1: Converting takeaway/delivery to dine-in
+    if (order.type !== 'dine_in') {
+      const result = await ordersStore.convertOrderToDineIn(order.id, tableId)
+
+      if (result.success) {
+        DebugUtils.debug(MODULE_NAME, 'Order converted to dine-in successfully')
+        emit('select', order.id) // Select the order (or merged order) after conversion
+      } else {
+        DebugUtils.error(MODULE_NAME, 'Failed to convert order to dine-in', {
+          error: result.error
+        })
+        emit('error', result.error || 'Failed to convert order', 'error')
+      }
+    }
+    // Case 2: Moving dine-in order to different table
+    else {
+      const result = await ordersStore.moveOrderToTable(order.id, tableId)
+
+      if (result.success) {
+        DebugUtils.debug(MODULE_NAME, 'Order moved to new table successfully')
+        emit('select', order.id) // Select the order (or merged order) after move
+      } else {
+        DebugUtils.error(MODULE_NAME, 'Failed to move order to table', {
+          error: result.error
+        })
+        emit('error', result.error || 'Failed to move order', 'error')
+      }
+    }
+
+    // Close dialog and reset state
+    showTableSelectionDialog.value = false
+    selectedOrderForMove.value = null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to process order movement'
+    DebugUtils.error(MODULE_NAME, 'Error in table selection', { error })
+    emit('error', message, 'error')
+  }
+}
+
+/**
+ * Handle table selection cancellation
+ */
+const handleTableSelectionCancel = (): void => {
+  showTableSelectionDialog.value = false
+  selectedOrderForMove.value = null
 }
 
 // =============================================
