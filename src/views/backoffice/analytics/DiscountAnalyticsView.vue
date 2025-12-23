@@ -547,20 +547,20 @@ async function handleApplyFilters() {
   }
 }
 
-function handlePresetChange() {
+async function handlePresetChange() {
   if (selectedPreset.value !== 'custom') {
     const { startDate, endDate } = getDateRangeFromPreset(selectedPreset.value)
     filters.value.startDate = startDate
     filters.value.endDate = endDate
-    handleApplyFilters()
+    await handleApplyFilters()
   }
 }
 
-function handleClearFilters() {
+async function handleClearFilters() {
   selectedPreset.value = '30days'
   filters.value = {}
   searchQuery.value = ''
-  handlePresetChange()
+  await handlePresetChange()
 }
 
 function showAllocationDialog(transaction: DiscountTransactionView) {
@@ -659,8 +659,14 @@ function getReasonColor(reason: DiscountReason): string {
 }
 
 // Lifecycle
-onMounted(() => {
-  handlePresetChange()
+onMounted(async () => {
+  // Show loading state while stores initialize
+  loading.value = true
+  try {
+    await handlePresetChange()
+  } finally {
+    loading.value = false
+  }
 })
 </script>
 

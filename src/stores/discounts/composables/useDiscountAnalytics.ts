@@ -41,6 +41,23 @@ export function useDiscountAnalytics() {
   const salesStore = useSalesStore()
 
   /**
+   * Ensure stores are initialized before using them
+   */
+  async function ensureStoresInitialized(): Promise<void> {
+    // Ensure discounts store is initialized
+    if (!discountsStore.initialized) {
+      DebugUtils.info(MODULE_NAME, '🔄 Initializing discounts store on demand')
+      await discountsStore.initialize()
+    }
+
+    // Ensure sales store is initialized
+    if (!salesStore.initialized) {
+      DebugUtils.info(MODULE_NAME, '🔄 Initializing sales store on demand')
+      await salesStore.initialize()
+    }
+  }
+
+  /**
    * Generate daily revenue report for a date range
    *
    * Aggregates all completed orders in the date range and calculates:
@@ -60,6 +77,9 @@ export function useDiscountAnalytics() {
     endDate: string
   ): Promise<DailyRevenueReport> {
     DebugUtils.info(MODULE_NAME, '📊 Generating daily revenue report', { startDate, endDate })
+
+    // Ensure stores are initialized before accessing data
+    await ensureStoresInitialized()
 
     // 1. Filter sales_transactions by date range
     const transactions = salesStore.transactions.filter(tx => {
@@ -198,6 +218,9 @@ export function useDiscountAnalytics() {
   ): Promise<DiscountSummary[]> {
     DebugUtils.info(MODULE_NAME, 'Getting discount summary', { filterOptions })
 
+    // Ensure stores are initialized before accessing data
+    await ensureStoresInitialized()
+
     const summary = discountsStore.getDiscountSummaryByReason(filterOptions)
 
     DebugUtils.store(MODULE_NAME, 'Discount summary retrieved', {
@@ -227,6 +250,9 @@ export function useDiscountAnalytics() {
     filterOptions?: DiscountFilterOptions
   ): Promise<DiscountTransactionView[]> {
     DebugUtils.info(MODULE_NAME, 'Getting discount transactions', { filterOptions })
+
+    // Ensure stores are initialized before accessing data
+    await ensureStoresInitialized()
 
     const events = discountsStore.getFilteredDiscounts(filterOptions)
 
