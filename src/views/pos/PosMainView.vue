@@ -442,6 +442,21 @@ const handleAddItemToOrder = async (
       return
     }
 
+    // 🆕 Валидация консистентности между столом и заказом
+    if (currentOrder.value.type === 'dine_in' && currentOrder.value.tableId) {
+      const table = tablesStore.getTableById(currentOrder.value.tableId)
+      if (table && table.currentOrderId && table.currentOrderId !== currentOrder.value.id) {
+        // Рассинхронизация! Стол указывает на другой заказ
+        console.warn('⚠️ Table/Order sync mismatch detected, switching to table order', {
+          tableOrderId: table.currentOrderId,
+          storeOrderId: currentOrder.value.id
+        })
+        ordersStore.selectOrder(table.currentOrderId)
+        showNotification('Order switched to match table state', 'info')
+        return // Пользователь должен повторить добавление
+      }
+    }
+
     console.log('🔍 Current order found:', {
       id: currentOrder.value.id,
       type: currentOrder.value.type,

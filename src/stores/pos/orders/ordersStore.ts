@@ -1118,6 +1118,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     // Автоматическое освобождение стола
     if (!hasItems || (isServed && isPaid)) {
       await tablesStore.freeTable(order.tableId)
+
+      // 🆕 Синхронизировать currentOrderId если это текущий заказ
+      if (currentOrderId.value === orderId) {
+        currentOrderId.value = null
+        console.log('🔄 Cleared currentOrderId after table freed:', { orderId })
+      }
+
       console.log('✅ Table auto-freed:', {
         tableId: order.tableId,
         orderId,

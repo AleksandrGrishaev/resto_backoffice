@@ -402,7 +402,7 @@ const isAccountStoreReady = computed(() => {
   return accountStore.accounts && accountStore.accounts.length > 0
 })
 
-// ✅ Check for orders with refunded items
+// ✅ Check for orders with refunded items (excluding cancelled items - those are resolved)
 const ordersWithRefundedItems = computed(() => {
   if (!currentShift.value) return []
   const shiftStartTime = new Date(currentShift.value.startTime).getTime()
@@ -412,19 +412,24 @@ const ordersWithRefundedItems = computed(() => {
       const orderTime = new Date(order.createdAt).getTime()
       if (orderTime < shiftStartTime) return false
 
-      // Check if order has refunded status OR any items with refunded status
-      if (order.paymentStatus === 'refunded') return true
+      // Check if order has refunded status (but not if fully resolved)
+      // Skip orders where all refunded items are also cancelled (resolved refunds)
 
-      // Check items in all bills
-      return order.bills.some(bill => bill.items.some(item => item.paymentStatus === 'refunded'))
+      // Check items in all bills - only flag items that are refunded BUT NOT cancelled
+      // Cancelled + refunded = resolved refund (ok to close shift)
+      // Refunded but not cancelled = unresolved (block shift close)
+      return order.bills.some(bill =>
+        bill.items.some(item => item.paymentStatus === 'refunded' && item.status !== 'cancelled')
+      )
     })
     .map(order => {
-      // Get refunded items for display
+      // Get unresolved refunded items for display (refunded but not cancelled)
       const refundedItems = order.bills.flatMap(bill =>
-        bill.items.filter(item => item.paymentStatus === 'refunded')
+        bill.items.filter(item => item.paymentStatus === 'refunded' && item.status !== 'cancelled')
       )
       return { order, refundedItems }
     })
+    .filter(({ refundedItems }) => refundedItems.length > 0) // Only show orders with unresolved items
 })
 
 const hasRefundedOrders = computed(() => ordersWithRefundedItems.value.length > 0)

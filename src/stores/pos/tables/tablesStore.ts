@@ -306,6 +306,47 @@ export const usePosTablesStore = defineStore('posTables', () => {
     error.value = null
   }
 
+  /**
+   * Обновить стол из Realtime (без API вызова)
+   * Используется для синхронизации между вкладками/устройствами
+   */
+  function updateTableFromRealtime(update: {
+    id: string
+    number?: string
+    status?: TableStatus
+    currentOrderId?: string
+    updatedAt?: string
+  }): void {
+    const index = tables.value.findIndex(t => t.id === update.id)
+    if (index === -1) {
+      console.log('📡 Table not found for realtime update:', update.id)
+      return
+    }
+
+    const table = tables.value[index]
+    const oldStatus = table.status
+    const oldOrderId = table.currentOrderId
+
+    // Обновляем только изменившиеся поля
+    if (update.status !== undefined) {
+      table.status = update.status
+    }
+    if (update.currentOrderId !== undefined) {
+      table.currentOrderId = update.currentOrderId
+    }
+    if (update.updatedAt !== undefined) {
+      table.updatedAt = update.updatedAt
+    }
+
+    console.log('📡 Table updated from realtime:', {
+      tableNumber: table.number,
+      oldStatus,
+      newStatus: table.status,
+      oldOrderId,
+      newOrderId: table.currentOrderId
+    })
+  }
+
   // ===== COMPOSABLES =====
   const tablesComposables = useTables()
 
@@ -339,6 +380,7 @@ export const usePosTablesStore = defineStore('posTables', () => {
     setFilters,
     clearFilters,
     clearError,
+    updateTableFromRealtime,
 
     // Composables (destructured)
     ...tablesComposables

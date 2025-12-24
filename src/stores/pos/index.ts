@@ -20,6 +20,7 @@ import { migrateLegacyShiftQueue } from '@/core/sync/migrations/migrateLegacyShi
 
 // ✅ Sprint 7: Realtime integration for Kitchen updates
 import { useOrdersRealtime } from './orders/useOrdersRealtime'
+import { useTablesRealtime } from './tables/useTablesRealtime'
 import { ENV } from '@/config/environment'
 
 // Types (упрощенные)
@@ -79,8 +80,9 @@ export const usePosStore = defineStore('pos', () => {
     startingCash: number
   } | null>(null)
 
-  // ✅ FIX: Store reference to Realtime subscription for cleanup
+  // ✅ FIX: Store reference to Realtime subscriptions for cleanup
   let ordersRealtime: ReturnType<typeof useOrdersRealtime> | null = null
+  let tablesRealtime: ReturnType<typeof useTablesRealtime> | null = null
 
   // ===== STORES =====
   const tablesStore = usePosTablesStore()
@@ -225,7 +227,12 @@ export const usePosStore = defineStore('pos', () => {
         platform.debugLog('POS', '📡 Initializing Realtime for Kitchen updates...')
         ordersRealtime = useOrdersRealtime()
         ordersRealtime.subscribe()
-        platform.debugLog('POS', '✅ POS Realtime subscription active')
+
+        // 🆕 Tables Realtime for sync between tabs/devices
+        tablesRealtime = useTablesRealtime()
+        tablesRealtime.subscribe()
+
+        platform.debugLog('POS', '✅ POS Realtime subscriptions active (orders + tables)')
       }
 
       // Пока просто помечаем как инициализированную
@@ -384,11 +391,16 @@ export const usePosStore = defineStore('pos', () => {
 
     // Unsubscribe from Realtime channels
     if (ordersRealtime) {
-      platform.debugLog('POS', '📡 Unsubscribing from POS Realtime...')
+      platform.debugLog('POS', '📡 Unsubscribing from POS orders Realtime...')
       ordersRealtime.unsubscribe()
       ordersRealtime = null
-      platform.debugLog('POS', '✅ POS Realtime cleanup complete')
     }
+    if (tablesRealtime) {
+      platform.debugLog('POS', '📡 Unsubscribing from POS tables Realtime...')
+      tablesRealtime.unsubscribe()
+      tablesRealtime = null
+    }
+    platform.debugLog('POS', '✅ POS Realtime cleanup complete')
 
     // Stop SyncService auto-processing
     const syncService = useSyncService()

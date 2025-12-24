@@ -622,6 +622,12 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
 
       if (paidItems.length === 0) {
         bill.paymentStatus = 'unpaid'
+
+        // 🆕 Переоткрыть bill после refund для добавления новых позиций
+        if (bill.status === 'closed') {
+          bill.status = 'open'
+          console.log('📋 Bill reopened after refund:', { billId: bill.id })
+        }
       } else if (paidItems.length === activeItems.length) {
         bill.paymentStatus = 'paid'
 
