@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { PaymentsService } from './services'
 import type { PosPayment, ServiceResponse, PaymentMethod } from '../types'
 import { usePosOrdersStore } from '../orders/ordersStore'
+import { usePosTablesStore } from '../tables/tablesStore'
 
 export const usePosPaymentsStore = defineStore('posPayments', () => {
   // ===== STATE =====
@@ -640,8 +641,67 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       }
     }
 
-    // 🆕 Recalculate order totals and statuses (includes order.paymentStatus)
+    // CRITICAL: Save order status BEFORE recalculation
+    // Refund is a FINANCIAL operation - order status should NOT change
+    const statusBeforeRefund = order.status
+    const finalStatuses = ['served', 'collected', 'delivered']
+    const wasCompleted = finalStatuses.includes(statusBeforeRefund)
+
+    console.log('🔍 REFUND: Order state before recalculate:', {
+      orderId,
+      statusBeforeRefund,
+      wasCompleted,
+      tableId: order.tableId
+    })
+
+    // 🆕 Recalculate order totals (but we'll restore status if it was completed)
     await ordersStore.recalculateOrderTotals(orderId)
+
+    // FIX: If order was completed, RESTORE its status and clear table link
+    // Refund should not reopen a closed order onto a table
+    if (wasCompleted && order.status !== statusBeforeRefund) {
+      console.log('🔒 REFUND: Restoring completed order status (refund is financial only):', {
+        from: order.status,
+        to: statusBeforeRefund
+      })
+      order.status = statusBeforeRefund
+
+      // Clear table association for refunded completed orders
+      // The order stays in history but doesn't occupy the table
+      if (order.tableId) {
+        const tableIdToFree = order.tableId
+        console.log('🪑 REFUND: Clearing table association for completed order')
+
+        // Free the table ONLY if it's still occupied by this refunded order
+        // If table has a new order, don't touch it
+        const tablesStore = usePosTablesStore()
+        const table = tablesStore.tables.find(t => t.id === tableIdToFree)
+        if (table && table.currentOrderId === orderId) {
+          await tablesStore.freeTable(tableIdToFree)
+          console.log('✅ REFUND: Table freed (was occupied by refunded order):', {
+            tableId: tableIdToFree
+          })
+        } else if (table && table.currentOrderId && table.currentOrderId !== orderId) {
+          console.log('ℹ️ REFUND: Table has new order, not freeing:', {
+            tableId: tableIdToFree,
+            currentOrderId: table.currentOrderId,
+            refundedOrderId: orderId
+          })
+        }
+
+        order.tableId = undefined
+      }
+
+      // Save the corrected order state
+      await ordersStore.updateOrder(order)
+    }
+
+    console.log('🔍 REFUND: Order state after fix:', {
+      orderId,
+      statusBefore: statusBeforeRefund,
+      statusAfter: order.status,
+      tableId: order.tableId
+    })
 
     console.log('💳 Order payment status updated after refund:', {
       orderId,

@@ -1099,15 +1099,35 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * Автоматическое управление статусом стола на основе состояния заказа
    *
    * Логика:
-   * 1. Если есть активные items → стол 'occupied'
-   * 2. Если нет items → стол 'free'
-   * 3. Если заказ 'served' И 'paid' → стол 'free' (гости ушли)
+   * 1. Если заказ в финальном статусе (served/collected/delivered) → не трогать стол
+   * 2. Если есть активные items → стол 'occupied'
+   * 3. Если нет items → стол 'free'
+   * 4. Если заказ 'served' И 'paid' → стол 'free' (гости ушли)
    */
   async function updateTableStatusForOrder(orderId: string): Promise<void> {
     const order = orders.value.find(o => o.id === orderId)
 
     // Обрабатываем только dine-in заказы со столами
     if (!order || order.type !== 'dine_in' || !order.tableId) {
+      return
+    }
+
+    // FIX: Завершенный заказ не должен привязываться обратно к столу после refund
+    // Refund меняет paymentStatus, но order.status остается финальным
+    const finalStatuses = ['served', 'collected', 'delivered']
+    console.log('🔍 TABLE UPDATE DEBUG:', {
+      orderId,
+      orderStatus: order.status,
+      isFinalStatus: finalStatuses.includes(order.status),
+      tableId: order.tableId,
+      paymentStatus: order.paymentStatus
+    })
+    if (finalStatuses.includes(order.status)) {
+      console.log('⏭️ Skipping table update for completed order:', {
+        orderId,
+        status: order.status,
+        paymentStatus: order.paymentStatus
+      })
       return
     }
 
