@@ -5,7 +5,8 @@ import type {
   InitializationConfig,
   StoreInitResult,
   UserRole,
-  StoreName
+  StoreName,
+  AppContext
 } from './types'
 import {
   getRequiredStoresForRoles,
@@ -13,6 +14,7 @@ import {
   shouldLoadPOSStores,
   shouldLoadKitchenStores,
   getLoadOrderForStores,
+  getStoresForContext,
   CRITICAL_STORES
 } from './dependencies'
 import { DebugUtils } from '@/utils'
@@ -38,8 +40,8 @@ const MODULE_NAME = 'ProductionInitStrategy'
  *
  * Характеристики:
  * - Использует API для загрузки данных
- * - Загружает критические stores для всех, остальные по ролям (оптимизация)
- * - Параллельная загрузка где возможно
+ * - Context-based loading: грузит только stores для текущего контекста (backoffice/pos/kitchen)
+ * - Parallel loading: независимые stores грузятся параллельно
  * - Кеширование и оптимизация
  *
  * ВАЖНО: Это placeholder для будущей реализации!
@@ -55,6 +57,8 @@ const MODULE_NAME = 'ProductionInitStrategy'
  */
 export class ProductionInitializationStrategy implements InitializationStrategy {
   private config: InitializationConfig
+  private currentContext: AppContext = 'backoffice'
+  private loadedStores = new Set<StoreName>()
 
   constructor(config: InitializationConfig) {
     this.config = config
@@ -65,34 +69,80 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
   }
 
   /**
+   * Установить контекст приложения (backoffice/pos/kitchen)
+   */
+  setContext(context: AppContext): void {
+    this.currentContext = context
+    DebugUtils.info(MODULE_NAME, `📍 Context set to: ${context}`)
+  }
+
+  /**
+   * Получить текущий контекст
+   */
+  getContext(): AppContext {
+    return this.currentContext
+  }
+
+  /**
+   * Получить список загруженных stores
+   */
+  getLoadedStores(): Set<StoreName> {
+    return new Set(this.loadedStores)
+  }
+
+  /**
    * Инициализировать критические stores
    *
-   * В PRODUCTION режиме: загружаем для всех ролей, т.к. нужны для базовых операций
-   * (decomposition при продажах требует recipes даже для кассиров)
-   * Kitchen Preparation feature requires full critical stores for kitchen/bar roles
+   * ОПТИМИЗАЦИЯ: Параллельная загрузка независимых stores
+   * - products и counteragents грузятся параллельно (нет зависимостей)
+   * - recipes и storage грузятся параллельно (оба зависят только от products)
+   * - menu грузится последней (зависит от recipes)
    */
   async initializeCriticalStores(userRoles?: UserRole[]): Promise<StoreInitResult[]> {
     const results: StoreInitResult[] = []
+    const requiredStores = getStoresForContext(this.currentContext, userRoles || [])
 
     try {
-      // Стандартная загрузка для всех ролей (включая kitchen/bar для Kitchen Preparation)
-      DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...')
+      DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...', {
+        context: this.currentContext,
+        requiredStores
+      })
 
-      // TODO: В production можно грузить параллельно через API
-      // Сейчас используем ту же логику что в Dev
+      // === ГРУППА 1: Независимые stores (параллельно) ===
+      const group1Promises: Promise<StoreInitResult>[] = [this.loadProductsFromAPI()]
 
-      // ВАЖНО: Критические stores нужны ВСЕМ для decomposition
-      results.push(await this.loadProductsFromAPI())
-      results.push(await this.loadCounteragentsFromAPI())
-      results.push(await this.loadRecipesFromAPI())
-      results.push(await this.loadMenuFromAPI())
+      if (requiredStores.includes('counteragents')) {
+        group1Promises.push(this.loadCounteragentsFromAPI())
+      }
 
-      // Storage нужен для write-off операций при продажах (критичен!)
-      results.push(await this.loadStorageFromAPI())
+      const group1Results = await Promise.all(group1Promises)
+      results.push(...group1Results)
+      group1Results.forEach(r => {
+        if (r.success) this.loadedStores.add(r.name)
+      })
+
+      // === ГРУППА 2: Зависят от products (параллельно) ===
+      const group2Promises: Promise<StoreInitResult>[] = [this.loadRecipesFromAPI()]
+
+      if (requiredStores.includes('storage')) {
+        group2Promises.push(this.loadStorageFromAPI())
+      }
+
+      const group2Results = await Promise.all(group2Promises)
+      results.push(...group2Results)
+      group2Results.forEach(r => {
+        if (r.success) this.loadedStores.add(r.name)
+      })
+
+      // === ГРУППА 3: Зависит от recipes ===
+      const menuResult = await this.loadMenuFromAPI()
+      results.push(menuResult)
+      if (menuResult.success) this.loadedStores.add(menuResult.name)
 
       DebugUtils.info(MODULE_NAME, '✅ [PROD] Critical stores initialized', {
         count: results.length,
-        success: results.filter(r => r.success).length
+        success: results.filter(r => r.success).length,
+        context: this.currentContext
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ [PROD] Critical stores initialization failed', { error })
@@ -103,53 +153,143 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
   }
 
   /**
-   * Инициализировать stores на основе ролей
+   * Инициализировать stores на основе контекста и ролей
    *
-   * В PRODUCTION режиме: загружаем только необходимые stores для оптимизации
+   * ОПТИМИЗАЦИЯ: Грузим только stores для текущего контекста
    */
   async initializeRoleBasedStores(userRoles: UserRole[]): Promise<StoreInitResult[]> {
-    DebugUtils.info(MODULE_NAME, '🏢 [PROD] Initializing role-based stores...', { userRoles })
+    const requiredStores = getStoresForContext(this.currentContext, userRoles)
+
+    DebugUtils.info(MODULE_NAME, '🏢 [PROD] Initializing context-based stores...', {
+      context: this.currentContext,
+      userRoles,
+      requiredStores: requiredStores.filter(s => !this.loadedStores.has(s))
+    })
 
     const results: StoreInitResult[] = []
 
     try {
-      // Определяем какие stores нужны для данных ролей
-      const requiredStores = this.getAdditionalStoresForRoles(userRoles)
+      switch (this.currentContext) {
+        case 'pos':
+          if (requiredStores.includes('pos')) {
+            results.push(...(await this.initializePOSStores()))
+          }
+          break
 
-      // TODO: В production можно загружать все stores параллельно через API
-      // Сейчас используем простую логику
+        case 'kitchen':
+          if (requiredStores.includes('kitchen')) {
+            const kitchenResult = await this.loadKitchenFromAPI()
+            results.push(kitchenResult)
+            if (kitchenResult.success) this.loadedStores.add('kitchen')
+          }
+          if (requiredStores.includes('preparations') && !this.loadedStores.has('preparations')) {
+            const prepResult = await this.loadPreparationsFromAPI()
+            results.push(prepResult)
+            if (prepResult.success) this.loadedStores.add('preparations')
+          }
+          if (requiredStores.includes('kitchenKpi')) {
+            const kpiResult = await this.loadKitchenKpiFromAPI()
+            results.push(kpiResult)
+            if (kpiResult.success) this.loadedStores.add('kitchenKpi')
+          }
+          break
 
-      if (shouldLoadPOSStores(userRoles)) {
-        results.push(...(await this.initializePOSStores()))
+        case 'backoffice':
+          results.push(...(await this.initializeBackofficeStores()))
+          break
       }
 
-      // Kitchen stores (depends on POS)
-      if (shouldLoadKitchenStores(userRoles)) {
-        results.push(await this.loadKitchenFromAPI())
-        // 🆕 Kitchen Preparation: Load preparations and KPI stores for kitchen/bar roles
-        if (!shouldLoadBackofficeStores(userRoles)) {
-          // Only load preparations here if NOT loading backoffice stores (to avoid duplication)
-          results.push(await this.loadPreparationsFromAPI())
-        }
-        results.push(await this.loadKitchenKpiFromAPI())
-      }
-
-      if (shouldLoadBackofficeStores(userRoles)) {
-        results.push(...(await this.initializeBackofficeStores()))
-      }
-
-      DebugUtils.info(MODULE_NAME, '✅ [PROD] Role-based stores initialized', {
+      DebugUtils.info(MODULE_NAME, '✅ [PROD] Context-based stores initialized', {
+        context: this.currentContext,
         count: results.length,
-        success: results.filter(r => r.success).length
+        success: results.filter(r => r.success).length,
+        totalLoaded: this.loadedStores.size
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, '⚠️ [PROD] Role-based stores initialization failed', {
+      DebugUtils.error(MODULE_NAME, '⚠️ [PROD] Context-based stores initialization failed', {
         error
       })
       // Не прерываем - некритичные stores
     }
 
     return results
+  }
+
+  /**
+   * Инициализировать stores для нового контекста (при навигации)
+   */
+  async initializeForContext(
+    newContext: AppContext,
+    userRoles: UserRole[]
+  ): Promise<StoreInitResult[]> {
+    const previousContext = this.currentContext
+    this.setContext(newContext)
+
+    DebugUtils.info(MODULE_NAME, '🔄 [PROD] Initializing for new context...', {
+      previousContext,
+      newContext,
+      alreadyLoaded: Array.from(this.loadedStores)
+    })
+
+    const results: StoreInitResult[] = []
+    const requiredStores = getStoresForContext(newContext, userRoles)
+    const missingStores = requiredStores.filter(s => !this.loadedStores.has(s))
+
+    if (missingStores.length === 0) {
+      DebugUtils.info(MODULE_NAME, '✅ [PROD] All stores already loaded for context', {
+        newContext
+      })
+      return results
+    }
+
+    DebugUtils.info(MODULE_NAME, '📦 [PROD] Loading missing stores...', { missingStores })
+
+    for (const storeName of missingStores) {
+      const result = await this.loadStoreByName(storeName)
+      if (result) {
+        results.push(result)
+        if (result.success) {
+          this.loadedStores.add(storeName)
+        }
+      }
+    }
+
+    return results
+  }
+
+  /**
+   * Загрузить store по имени
+   */
+  private async loadStoreByName(storeName: StoreName): Promise<StoreInitResult | null> {
+    switch (storeName) {
+      case 'products':
+        return this.loadProductsFromAPI()
+      case 'counteragents':
+        return this.loadCounteragentsFromAPI()
+      case 'recipes':
+        return this.loadRecipesFromAPI()
+      case 'menu':
+        return this.loadMenuFromAPI()
+      case 'storage':
+        return this.loadStorageFromAPI()
+      case 'preparations':
+        return this.loadPreparationsFromAPI()
+      case 'accounts':
+        return this.loadAccountsFromAPI()
+      case 'pos':
+        return this.loadPOSFromAPI()
+      case 'sales':
+        return this.loadSalesFromAPI()
+      case 'writeOff':
+        return this.loadWriteOffFromAPI()
+      case 'kitchen':
+        return this.loadKitchenFromAPI()
+      case 'kitchenKpi':
+        return this.loadKitchenKpiFromAPI()
+      default:
+        DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
+        return null
+    }
   }
 
   /**

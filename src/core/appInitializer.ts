@@ -5,9 +5,15 @@ import type {
   InitializationSummary,
   InitializationStrategy,
   UserRole,
-  StoreInitResult
+  StoreInitResult,
+  InitializeOptions,
+  AppContext
 } from './initialization/types'
-import { DevInitializationStrategy, ProductionInitializationStrategy } from './initialization'
+import {
+  DevInitializationStrategy,
+  ProductionInitializationStrategy,
+  getContextFromPath
+} from './initialization'
 
 import { AppInitializerTests } from './appInitializerTests'
 import { DebugUtils } from '@/utils'
@@ -62,12 +68,25 @@ export class AppInitializer {
 
   /**
    * Главный метод инициализации приложения
+   * @param userRoles - роли пользователя
+   * @param options - опции инициализации (initialPath для определения контекста)
    */
-  async initialize(userRoles?: UserRole[]): Promise<InitializationSummary> {
+  async initialize(
+    userRoles?: UserRole[],
+    options?: InitializeOptions
+  ): Promise<InitializationSummary> {
     this.startTime = Date.now()
 
     try {
       const finalUserRoles = (userRoles || this.config.userRoles || []) as UserRole[]
+
+      // Определить контекст по URL или принудительно
+      const context = options?.forceContext || getContextFromPath(options?.initialPath || '/')
+
+      // Установить контекст в стратегии
+      if ('setContext' in this.strategy) {
+        ;(this.strategy as any).setContext(context)
+      }
 
       // 🔥 HMR Optimization: Skip initialization if stores are already loaded
       const isHMR = isHotReload()
@@ -85,7 +104,8 @@ export class AppInitializer {
           userRoles: finalUserRoles,
           cachedRoles: hmrState.userRoles,
           timestamp: new Date(hmrState.timestamp).toISOString(),
-          criticalStoresReady
+          criticalStoresReady,
+          context
         })
 
         // Return cached summary
@@ -110,6 +130,7 @@ export class AppInitializer {
 
       DebugUtils.info(MODULE_NAME, '🚀 Starting app initialization', {
         strategy: this.strategy.getName(),
+        context,
         userRoles: finalUserRoles,
         platform: this.platform.platform.value,
         enableDebug: this.config.enableDebug,
@@ -286,6 +307,32 @@ export class AppInitializer {
   }
 
   // ===== PUBLIC UTILITIES =====
+
+  /**
+   * Инициализировать stores для нового контекста (при навигации)
+   * Грузит только те stores, которые ещё не загружены
+   */
+  async initializeForContext(
+    context: AppContext,
+    userRoles: UserRole[]
+  ): Promise<StoreInitResult[]> {
+    if ('initializeForContext' in this.strategy) {
+      return (this.strategy as any).initializeForContext(context, userRoles)
+    }
+
+    DebugUtils.warn(MODULE_NAME, 'Strategy does not support initializeForContext')
+    return []
+  }
+
+  /**
+   * Получить текущий контекст
+   */
+  getContext(): AppContext {
+    if ('getContext' in this.strategy) {
+      return (this.strategy as any).getContext()
+    }
+    return 'backoffice'
+  }
 
   async reinitialize(newConfig?: Partial<InitializationConfig>): Promise<void> {
     if (newConfig) {

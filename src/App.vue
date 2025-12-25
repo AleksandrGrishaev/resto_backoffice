@@ -112,14 +112,18 @@ async function loadStoresAfterAuth() {
       throw new Error('No authenticated user found after waiting')
     }
 
+    // Определяем начальный путь для context-based loading
+    const initialPath = router.currentRoute.value.path
+
     DebugUtils.info(MODULE_NAME, 'Loading stores for user', {
       userId: user.id,
       roles: user.roles,
-      attempts: attempts
+      attempts: attempts,
+      initialPath
     })
 
-    // Initialize stores based on user roles
-    await appInitializer.initialize(user.roles || [])
+    // Initialize stores based on user roles AND initial path (context-based loading)
+    await appInitializer.initialize(user.roles || [], { initialPath })
 
     storesLoaded.value = true
     DebugUtils.info(MODULE_NAME, '✅ Stores loaded successfully')

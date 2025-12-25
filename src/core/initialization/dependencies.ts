@@ -1,6 +1,6 @@
 // src/core/initialization/dependencies.ts - Граф зависимостей и критические stores
 
-import type { StoreName, UserRole, StoreCategory } from './types'
+import type { StoreName, UserRole, StoreCategory, AppContext } from './types'
 
 /**
  * Граф зависимостей между stores
@@ -166,6 +166,76 @@ export function shouldLoadBackofficeStores(userRoles: UserRole[]): boolean {
  */
 export function shouldLoadKitchenStores(userRoles: UserRole[]): boolean {
   return userRoles.some(role => ['admin', 'kitchen', 'bar'].includes(role))
+}
+
+// ===== ROUTE-BASED INITIALIZATION =====
+
+/**
+ * Определить контекст приложения по начальному URL
+ * Это позволяет грузить только необходимые stores
+ */
+export function getContextFromPath(path: string): AppContext {
+  if (path.startsWith('/pos')) return 'pos'
+  if (path.startsWith('/kitchen')) return 'kitchen'
+  return 'backoffice'
+}
+
+/**
+ * Получить список stores для конкретного контекста
+ * Это основная функция оптимизации - грузим только нужные stores
+ */
+export function getStoresForContext(context: AppContext, userRoles: UserRole[]): StoreName[] {
+  const stores = new Set<StoreName>()
+
+  // Базовые каталоги нужны всегда (products, recipes, menu)
+  stores.add('products')
+  stores.add('recipes')
+  stores.add('menu')
+
+  switch (context) {
+    case 'pos':
+      // POS: products, recipes, menu + pos-специфичные
+      stores.add('counteragents') // нужен для некоторых операций
+      stores.add('storage') // для write-off при продажах
+      stores.add('pos')
+      stores.add('sales')
+      stores.add('writeOff')
+      // paymentSettings загружается внутри POS stores
+      break
+
+    case 'kitchen':
+      // Kitchen: products, recipes, menu + kitchen-специфичные
+      stores.add('kitchen')
+      stores.add('kitchenKpi')
+      stores.add('preparations') // для Kitchen Preparation feature
+      break
+
+    case 'backoffice':
+      // Backoffice: products, recipes, menu + backoffice-специфичные
+      stores.add('counteragents')
+      stores.add('suppliers')
+      stores.add('storage')
+      stores.add('preparations')
+      stores.add('accounts')
+      // discounts грузится как часть backoffice для аналитики
+      stores.add('discounts')
+      break
+  }
+
+  return Array.from(stores)
+}
+
+/**
+ * Получить stores, которые нужно догрузить при переходе на новый контекст
+ * Возвращает только те stores, которые ещё не загружены
+ */
+export function getAdditionalStoresForContext(
+  newContext: AppContext,
+  loadedStores: Set<StoreName>,
+  userRoles: UserRole[]
+): StoreName[] {
+  const requiredStores = getStoresForContext(newContext, userRoles)
+  return requiredStores.filter(store => !loadedStores.has(store))
 }
 
 /**

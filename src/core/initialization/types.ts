@@ -11,6 +11,22 @@ export type UserRole = 'admin' | 'manager' | 'kitchen' | 'bar' | 'cashier' | 'wa
 export type StoreCategory = 'critical' | 'pos' | 'backoffice' | 'optional'
 
 /**
+ * Контекст приложения - определяется по начальному URL
+ * Влияет на то, какие stores загружаются при старте
+ */
+export type AppContext = 'backoffice' | 'pos' | 'kitchen'
+
+/**
+ * Опции инициализации
+ */
+export interface InitializeOptions {
+  /** Начальный путь URL для определения контекста */
+  initialPath?: string
+  /** Принудительно указать контекст (переопределяет initialPath) */
+  forceContext?: AppContext
+}
+
+/**
  * Названия stores в системе
  */
 export type StoreName =
@@ -28,6 +44,7 @@ export type StoreName =
   | 'kitchen'
   | 'kitchenKpi'
   | 'discounts'
+  | 'paymentSettings'
   | 'debug'
 
 /**

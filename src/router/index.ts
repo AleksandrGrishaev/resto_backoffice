@@ -567,6 +567,31 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
+    // ✅ LAZY INITIALIZATION: Load stores for new context when navigating
+    // This handles the case when user navigates from backoffice to POS/Kitchen
+    const { useAppInitializer } = await import('@/core/appInitializer')
+    const appInitializer = useAppInitializer()
+    const currentContext = appInitializer.getContext()
+
+    // Check if we're entering a new context
+    if (to.path.startsWith('/pos') && currentContext !== 'pos') {
+      console.log('🔄 [Router] Entering POS context - loading POS stores...')
+      const userRoles = authStore.currentUser?.roles || []
+      await appInitializer.initializeForContext('pos', userRoles)
+    } else if (to.path.startsWith('/kitchen') && currentContext !== 'kitchen') {
+      console.log('🔄 [Router] Entering Kitchen context - loading Kitchen stores...')
+      const userRoles = authStore.currentUser?.roles || []
+      await appInitializer.initializeForContext('kitchen', userRoles)
+    } else if (
+      !to.path.startsWith('/pos') &&
+      !to.path.startsWith('/kitchen') &&
+      currentContext !== 'backoffice'
+    ) {
+      console.log('🔄 [Router] Entering Backoffice context - loading Backoffice stores...')
+      const userRoles = authStore.currentUser?.roles || []
+      await appInitializer.initializeForContext('backoffice', userRoles)
+    }
+
     next()
   } catch (error) {
     console.error('[Router Guard] Navigation guard error:', error)
