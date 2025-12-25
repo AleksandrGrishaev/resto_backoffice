@@ -885,6 +885,18 @@ export class StorageService {
       const operationItems: any[] = []
       let totalValue = 0
 
+      // ⚡ PERFORMANCE: Collect batch operations for batching
+      const storageBatchUpdates: Array<{ batchId: string; quantityToSubtract: number }> = []
+      const productShortages: Array<{
+        itemIndex: number
+        productId: string
+        warehouseId: string
+        shortageQuantity: number
+        unit: string
+        reason: string
+        sourceOperationType: string
+      }> = []
+
       for (const item of data.items) {
         let allocations: BatchAllocation[] = []
         let allocationResult: ServiceResponse<BatchAllocation[]>
@@ -1050,7 +1062,7 @@ export class StorageService {
             })
           }
         } else {
-          // Allocate from storage_batches (original logic for products)
+          // ⚡ PERFORMANCE OPTIMIZED: Allocate from storage_batches (products)
           const productInfo = await this.getProductInfo(item.itemId)
 
           allocationResult = await this.allocateFIFO(item.itemId, warehouseId, item.quantity)
@@ -1061,132 +1073,38 @@ export class StorageService {
 
           allocations = allocationResult.data
 
-          // ✅ NEW: Calculate allocated quantity vs requested
+          // Calculate allocated quantity vs requested
           const allocatedQuantity = allocations.reduce((sum, a) => sum + a.quantity, 0)
           const shortage = item.quantity - allocatedQuantity
 
-          // Update storage batch quantities
+          // ⚡ COLLECT batch updates instead of executing immediately
           for (const allocation of allocations) {
-            const batchData = await executeSupabaseSingle(
-              supabase.from('storage_batches').select('*').eq('id', allocation.batchId),
-              `${MODULE_NAME}.createWriteOff.fetchBatch`
-            )
-
-            if (!batchData) throw new Error(`Batch ${allocation.batchId} not found`)
-
-            const newQuantity = Number(batchData.current_quantity) - allocation.quantity
-            const newStatus = newQuantity <= 0 ? 'consumed' : 'active'
-            const newTotalValue = newQuantity * Number(batchData.cost_per_unit)
-
-            await executeSupabaseMutation(async () => {
-              const { error: updateError } = await supabase
-                .from('storage_batches')
-                .update({
-                  current_quantity: newQuantity,
-                  total_value: newTotalValue,
-                  status: newStatus,
-                  is_active: newQuantity > 0,
-                  updated_at: operationDate
-                })
-                .eq('id', allocation.batchId)
-
-              if (updateError) throw updateError
-            }, `${MODULE_NAME}.createWriteOff.updateBatch`)
+            storageBatchUpdates.push({
+              batchId: allocation.batchId,
+              quantityToSubtract: allocation.quantity
+            })
           }
 
-          // ✅ NEW: Create or update negative batch if there's a shortage
+          // ⚡ COLLECT shortages for batch processing
           if (shortage > 0) {
-            DebugUtils.warn(
+            DebugUtils.debug(
               MODULE_NAME,
-              '⚠️ Shortage detected - checking for existing negative batch',
+              '⚠️ Shortage detected - collecting for batch processing',
               {
                 itemId: item.itemId,
                 itemName: item.itemName,
-                shortage,
-                allocated: allocatedQuantity,
-                requested: item.quantity
+                shortage
               }
             )
 
-            // Import services
-            const { negativeBatchService } = await import('./negativeBatchService')
-
-            // Calculate cost for negative batch (use last known cost)
-            const cost = await negativeBatchService.calculateNegativeBatchCost(
-              item.itemId,
-              shortage
-            )
-
-            // Check if there's already an unreconciled negative batch
-            const existingNegative = await negativeBatchService.getActiveNegativeBatch(
-              item.itemId,
-              warehouseId
-            )
-
-            let negativeBatchForAllocation: any
-
-            if (existingNegative) {
-              // Update existing negative batch
-              const updatedBatch = await negativeBatchService.updateNegativeBatch(
-                existingNegative.id,
-                shortage,
-                cost
-              )
-
-              negativeBatchForAllocation = updatedBatch
-
-              // NOTE: No account transaction created - negative batches are technical records only
-
-              DebugUtils.info(MODULE_NAME, '✅ Updated existing negative batch', {
-                batchNumber: updatedBatch.batchNumber,
-                additionalShortage: shortage,
-                totalNegativeQty: updatedBatch.currentQuantity,
-                cost
-              })
-            } else {
-              // Create new negative batch
-              const negativeBatch = await negativeBatchService.createNegativeBatch({
-                productId: item.itemId,
-                warehouseId: warehouseId,
-                quantity: -shortage,
-                unit: item.unit || productInfo.unit,
-                cost: cost,
-                reason: item.notes || data.notes || 'Automatic negative batch creation',
-                sourceOperationType: 'manual_writeoff',
-                affectedRecipeIds: [],
-                userId: undefined,
-                shiftId: undefined
-              })
-
-              negativeBatchForAllocation = negativeBatch
-
-              // NOTE: No account transaction created - negative batches are technical records only
-
-              DebugUtils.info(MODULE_NAME, '✅ Created new negative batch', {
-                batchNumber: negativeBatch.batchNumber,
-                quantity: -shortage,
-                cost,
-                totalCost: shortage * cost
-              })
-            }
-
-            // ✅ FIX: Add negative batch to allocations array for traceability
-            // This ensures batchAllocations includes negative batches
-            allocations.push({
-              batchId: negativeBatchForAllocation.id,
-              batchNumber: negativeBatchForAllocation.batchNumber,
-              quantity: shortage, // Positive quantity for allocation (consumed amount)
-              costPerUnit: cost,
-              isNegative: true, // Flag to indicate this is from negative batch
-              batchCreatedAt:
-                negativeBatchForAllocation.negativeCreatedAt ||
-                negativeBatchForAllocation.receiptDate
-            })
-
-            DebugUtils.info(MODULE_NAME, '✅ Added negative batch to allocations', {
-              batchId: negativeBatchForAllocation.id,
-              shortage,
-              cost
+            productShortages.push({
+              itemIndex: operationItems.length, // Track which item this belongs to
+              productId: item.itemId,
+              warehouseId: warehouseId,
+              shortageQuantity: shortage,
+              unit: item.unit || productInfo.unit,
+              reason: item.notes || data.notes || 'Automatic negative batch creation',
+              sourceOperationType: 'manual_writeoff'
             })
           }
         }
@@ -1211,6 +1129,74 @@ export class StorageService {
         })
 
         totalValue += itemTotalCost
+      }
+
+      // ⚡ PERFORMANCE: Batch process all storage batch updates in a single RPC call
+      if (storageBatchUpdates.length > 0) {
+        DebugUtils.debug(MODULE_NAME, '⚡ Batch updating storage batches', {
+          count: storageBatchUpdates.length
+        })
+
+        const { batchUpdateStorageBatches } = await import('./negativeBatchService')
+        const updateResults = await batchUpdateStorageBatches(storageBatchUpdates)
+
+        // Log any errors
+        const errors = updateResults.filter(r => r.error)
+        if (errors.length > 0) {
+          DebugUtils.warn(MODULE_NAME, '⚠️ Some batch updates had errors', {
+            errors: errors.map(e => ({ batchId: e.batchId, error: e.error }))
+          })
+        }
+      }
+
+      // ⚡ PERFORMANCE: Batch process all product shortages in a single RPC call
+      if (productShortages.length > 0) {
+        DebugUtils.debug(MODULE_NAME, '⚡ Batch processing product shortages', {
+          count: productShortages.length
+        })
+
+        const { negativeBatchService } = await import('./negativeBatchService')
+        const shortageResults = await negativeBatchService.batchProcessShortages(productShortages)
+
+        // Add negative batch allocations to the correct items and update costs
+        for (let i = 0; i < shortageResults.length; i++) {
+          const result = shortageResults[i]
+          const shortage = productShortages[i]
+
+          if (result.error) {
+            DebugUtils.error(MODULE_NAME, '❌ Shortage processing failed', {
+              productId: shortage.productId,
+              error: result.error
+            })
+            continue
+          }
+
+          const operationItem = operationItems[shortage.itemIndex]
+          if (operationItem) {
+            // Add negative batch allocation
+            const negativeAllocation = {
+              batchId: result.batchId,
+              batchNumber: result.batchNumber,
+              quantity: result.quantity,
+              costPerUnit: result.costPerUnit,
+              isNegative: true,
+              batchCreatedAt: new Date().toISOString()
+            }
+            operationItem.batchAllocations.push(negativeAllocation)
+
+            // Update costs
+            const additionalCost = result.totalCost
+            operationItem.totalCost += additionalCost
+            totalValue += additionalCost
+
+            DebugUtils.debug(MODULE_NAME, '✅ Added negative batch allocation', {
+              itemName: operationItem.itemName,
+              shortage: result.quantity,
+              cost: result.costPerUnit,
+              batchNumber: result.batchNumber
+            })
+          }
+        }
       }
 
       // Create operation record

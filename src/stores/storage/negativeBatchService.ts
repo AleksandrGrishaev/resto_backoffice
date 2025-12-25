@@ -459,6 +459,152 @@ class NegativeBatchService {
     // ✅ FIX: Use mapper function for snake_case to camelCase conversion
     return mapBatchFromDB(updatedBatchData)
   }
+
+  // =====================================================================
+  // ⚡ BATCH OPERATIONS (Performance optimization)
+  // =====================================================================
+
+  /**
+   * Batch process multiple shortages in a single RPC call
+   * ⚡ PERFORMANCE: Reduces 3 DB calls per item to 1 RPC call for all items
+   *
+   * @param shortages - Array of shortage items to process
+   * @returns Array of results with batch info
+   */
+  async batchProcessShortages(
+    shortages: Array<{
+      productId: string
+      warehouseId: string
+      shortageQuantity: number
+      unit: string
+      reason?: string
+      sourceOperationType?: string
+    }>
+  ): Promise<ShortageProcessResult[]> {
+    if (shortages.length === 0) {
+      return []
+    }
+
+    console.log(`⚡ [NegativeBatchService] Batch processing ${shortages.length} shortages via RPC`)
+    const startTime = performance.now()
+
+    const { data, error } = await supabase.rpc('batch_process_negative_batches', {
+      p_shortages: shortages.map(s => ({
+        product_id: s.productId,
+        warehouse_id: s.warehouseId,
+        shortage_quantity: s.shortageQuantity,
+        unit: s.unit,
+        reason: s.reason || 'Automatic shortage tracking',
+        source_operation_type: s.sourceOperationType || 'manual_writeoff'
+      }))
+    })
+
+    const duration = performance.now() - startTime
+
+    if (error) {
+      console.error('❌ Batch process negative batches RPC error:', error)
+      throw new Error(`Batch negative batch processing failed: ${error.message}`)
+    }
+
+    // Map results from snake_case
+    const results: ShortageProcessResult[] = (data || []).map((r: any) => ({
+      productId: r.product_id,
+      batchId: r.batch_id,
+      batchNumber: r.batch_number,
+      quantity: r.quantity,
+      costPerUnit: r.cost_per_unit,
+      totalCost: r.total_cost,
+      isNew: r.is_new,
+      error: r.error
+    }))
+
+    console.log(
+      `✅ [NegativeBatchService] Batch processed ${results.length} shortages in ${Math.round(duration)}ms`
+    )
+
+    return results
+  }
+}
+
+// =====================================================================
+// Types for batch operations (outside class)
+// =====================================================================
+
+/**
+ * Result from batch negative batch processing
+ */
+export interface ShortageProcessResult {
+  productId: string
+  batchId: string
+  batchNumber: string
+  quantity: number
+  costPerUnit: number
+  totalCost: number
+  isNew: boolean
+  error?: string
 }
 
 export const negativeBatchService = new NegativeBatchService()
+
+// =====================================================================
+// Batch storage batch update function (separate from class)
+// =====================================================================
+
+/**
+ * Batch update storage batches in a single RPC call
+ * ⚡ PERFORMANCE: Reduces N sequential updates to 1 RPC call
+ *
+ * @param updates - Array of batch updates
+ * @returns Array of update results
+ */
+export async function batchUpdateStorageBatches(
+  updates: Array<{
+    batchId: string
+    quantityToSubtract: number
+  }>
+): Promise<
+  Array<{
+    batchId: string
+    newQuantity: number
+    newStatus: string
+    success: boolean
+    error?: string
+  }>
+> {
+  if (updates.length === 0) {
+    return []
+  }
+
+  console.log(`⚡ [StorageService] Batch updating ${updates.length} storage batches via RPC`, {
+    updates: updates.map(u => ({ batchId: u.batchId, qty: u.quantityToSubtract }))
+  })
+  const startTime = performance.now()
+
+  const { data, error } = await supabase.rpc('batch_update_storage_batches', {
+    p_updates: updates.map(u => ({
+      batch_id: u.batchId,
+      quantity_to_subtract: u.quantityToSubtract
+    }))
+  })
+
+  const duration = performance.now() - startTime
+
+  if (error) {
+    console.error('❌ Batch update storage batches RPC error:', error)
+    throw new Error(`Batch storage batch update failed: ${error.message}`)
+  }
+
+  const results = (data || []).map((r: any) => ({
+    batchId: r.batch_id,
+    newQuantity: r.new_quantity,
+    newStatus: r.new_status,
+    success: r.success,
+    error: r.error
+  }))
+
+  console.log(
+    `✅ [StorageService] Batch updated ${results.length} storage batches in ${Math.round(duration)}ms`
+  )
+
+  return results
+}

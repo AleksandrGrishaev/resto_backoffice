@@ -1,6 +1,6 @@
 // src/core/decomposition/adapters/CostAdapter.ts
 // Adapter for FIFO cost calculation
-// Uses batchAllocationUtils for core FIFO logic
+// Supports both client-side and Supabase RPC allocation
 
 import type { IDecompositionAdapter, CostAdapterConfig } from './IDecompositionAdapter'
 import type {
@@ -14,11 +14,18 @@ import type {
 import { DEFAULT_COST_OPTIONS } from '../types'
 import { DebugUtils, TimeUtils } from '@/utils'
 
-// Import shared batch allocation utilities
+// Import shared batch allocation utilities (client-side fallback)
 import {
   allocateFromPreparationBatches as allocatePreparation,
   allocateFromStorageBatches as allocateStorage
 } from '../utils/batchAllocationUtils'
+
+// Import RPC allocation service
+import {
+  allocateBatchFifo,
+  type FifoAllocationRequest,
+  type FifoAllocationResult
+} from '../services/FifoAllocationService'
 
 // Import types from existing modules (avoid duplication)
 import type {
@@ -32,6 +39,9 @@ import type {
 export type { BatchAllocation, ProductCostItem, PreparationCostItem, ActualCostBreakdown }
 
 const MODULE_NAME = 'CostAdapter'
+
+// Feature flag for RPC allocation (can be toggled for testing/rollback)
+const USE_RPC_ALLOCATION = true
 
 // =============================================
 // CostAdapter
@@ -67,7 +77,7 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
    * Initialize adapter (no-op - stores are lazily loaded by utils)
    */
   async initialize(): Promise<void> {
-    DebugUtils.info(MODULE_NAME, 'CostAdapter initialized', {
+    DebugUtils.debug(MODULE_NAME, 'CostAdapter initialized', {
       department: this.config.department,
       warehouseId: this.config.warehouseId
     })
@@ -84,11 +94,139 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
    * Transform traversal result to ActualCostBreakdown
    */
   async transform(result: TraversalResult, _input: MenuItemInput): Promise<ActualCostBreakdown> {
-    DebugUtils.info(MODULE_NAME, 'Calculating actual cost from FIFO batches', {
+    DebugUtils.debug(MODULE_NAME, 'Calculating actual cost from FIFO batches', {
       nodesCount: result.nodes.length,
-      menuItem: result.metadata.menuItemName
+      menuItem: result.metadata.menuItemName,
+      useRpc: USE_RPC_ALLOCATION
     })
 
+    // Use RPC allocation if enabled (single round-trip)
+    if (USE_RPC_ALLOCATION) {
+      return this.transformWithRpc(result)
+    }
+
+    // Fallback to client-side allocation
+    return this.transformClientSide(result)
+  }
+
+  /**
+   * RPC-based FIFO allocation (single round-trip to Supabase)
+   */
+  private async transformWithRpc(result: TraversalResult): Promise<ActualCostBreakdown> {
+    const startTime = performance.now()
+
+    // Collect all items for batch allocation
+    const requests: FifoAllocationRequest[] = []
+    const nodeMap = new Map<string, DecomposedNode>()
+
+    for (const node of result.nodes) {
+      if (node.type === 'preparation') {
+        const prepNode = node as DecomposedPreparationNode
+        requests.push({
+          type: 'preparation',
+          id: prepNode.preparationId,
+          quantity: prepNode.quantity,
+          fallbackCost: prepNode.baseCostPerUnit || 0
+        })
+        nodeMap.set(prepNode.preparationId, node)
+      } else if (node.type === 'product') {
+        const prodNode = node as DecomposedProductNode
+        requests.push({
+          type: 'product',
+          id: prodNode.productId,
+          quantity: prodNode.quantity,
+          fallbackCost: prodNode.baseCostPerUnit || 0
+        })
+        nodeMap.set(prodNode.productId, node)
+      }
+    }
+
+    if (requests.length === 0) {
+      return {
+        totalCost: 0,
+        preparationCosts: [],
+        productCosts: [],
+        method: 'FIFO_RPC',
+        calculatedAt: TimeUtils.getCurrentLocalISO()
+      }
+    }
+
+    // Single RPC call for all items
+    const rpcResult = await allocateBatchFifo(requests)
+    const duration = performance.now() - startTime
+
+    if (!rpcResult.success) {
+      DebugUtils.error(MODULE_NAME, 'RPC allocation failed, falling back to client-side', {
+        error: rpcResult.error
+      })
+      return this.transformClientSide(result)
+    }
+
+    // Convert RPC results to CostAdapter format
+    const preparationCosts: PreparationCostItem[] = []
+    const productCosts: ProductCostItem[] = []
+
+    for (const fifoResult of rpcResult.results) {
+      if (!fifoResult.success) continue
+
+      const allocations: BatchAllocation[] = fifoResult.allocations.map(alloc => ({
+        batchId: alloc.batchId,
+        batchNumber: alloc.batchNumber,
+        quantity: alloc.allocatedQuantity,
+        costPerUnit: alloc.costPerUnit,
+        totalCost: alloc.totalCost
+      }))
+
+      if (fifoResult.preparationId) {
+        const node = nodeMap.get(fifoResult.preparationId) as DecomposedPreparationNode | undefined
+        preparationCosts.push({
+          preparationId: fifoResult.preparationId,
+          preparationName: fifoResult.preparationName || node?.preparationName || 'Unknown',
+          quantity: fifoResult.allocatedQuantity,
+          unit: node?.unit || 'gram',
+          avgCostPerUnit: fifoResult.averageCostPerUnit,
+          totalCost: fifoResult.totalCost,
+          allocations,
+          usedNegativeBatch: fifoResult.deficit > 0,
+          source: fifoResult.usedFallback ? 'fallback' : 'fifo'
+        })
+      } else if (fifoResult.productId) {
+        const node = nodeMap.get(fifoResult.productId) as DecomposedProductNode | undefined
+        productCosts.push({
+          productId: fifoResult.productId,
+          productName: fifoResult.productName || node?.productName || 'Unknown',
+          quantity: fifoResult.allocatedQuantity,
+          unit: node?.unit || 'gram',
+          avgCostPerUnit: fifoResult.averageCostPerUnit,
+          totalCost: fifoResult.totalCost,
+          allocations,
+          source: fifoResult.usedFallback ? 'fallback' : 'fifo'
+        })
+      }
+    }
+
+    const totalCost = rpcResult.summary?.totalCost ?? 0
+
+    DebugUtils.info(MODULE_NAME, '⚡ RPC FIFO allocation completed', {
+      totalCost,
+      preparationItems: preparationCosts.length,
+      productItems: productCosts.length,
+      durationMs: Math.round(duration)
+    })
+
+    return {
+      totalCost,
+      preparationCosts,
+      productCosts,
+      method: 'FIFO_RPC',
+      calculatedAt: TimeUtils.getCurrentLocalISO()
+    }
+  }
+
+  /**
+   * Client-side FIFO allocation (fallback, multiple round-trips)
+   */
+  private async transformClientSide(result: TraversalResult): Promise<ActualCostBreakdown> {
     const preparationCosts: PreparationCostItem[] = []
     const productCosts: ProductCostItem[] = []
 
@@ -98,8 +236,7 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
         if (node.type === 'preparation') {
           const prepNode = node as DecomposedPreparationNode
 
-          // 🐛 DEBUG: Log before allocation
-          DebugUtils.debug(MODULE_NAME, '🔵 Allocating preparation from batches', {
+          DebugUtils.debug(MODULE_NAME, '🔵 Allocating preparation from batches (client)', {
             preparationId: prepNode.preparationId,
             preparationName: prepNode.preparationName,
             quantity: prepNode.quantity,
@@ -107,15 +244,13 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
             department: this.config.department || 'kitchen'
           })
 
-          // ✅ FIXED: No portionSize needed - all costs are per-gram (base unit)
           const prepCost = await allocatePreparation(
             prepNode.preparationId,
             prepNode.quantity,
             this.config.department || 'kitchen'
           )
 
-          // 🐛 DEBUG: Log after allocation
-          DebugUtils.debug(MODULE_NAME, '✅ Preparation cost allocated', {
+          DebugUtils.debug(MODULE_NAME, '✅ Preparation cost allocated (client)', {
             preparationId: prepCost.preparationId,
             preparationName: prepCost.preparationName,
             requestedQuantity: prepNode.quantity,
@@ -152,7 +287,7 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
       preparationCosts.reduce((sum, c) => sum + c.totalCost, 0) +
       productCosts.reduce((sum, c) => sum + c.totalCost, 0)
 
-    DebugUtils.info(MODULE_NAME, 'Actual cost calculated', {
+    DebugUtils.info(MODULE_NAME, 'Actual cost calculated (client-side)', {
       totalCost,
       preparationItems: preparationCosts.length,
       productItems: productCosts.length

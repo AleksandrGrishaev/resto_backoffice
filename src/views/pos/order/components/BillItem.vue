@@ -322,6 +322,16 @@
           </template>
 
           <v-list density="compact">
+            <!-- Add One More -->
+            <v-list-item @click="handleAddOneMore(group)">
+              <template #prepend>
+                <v-icon size="small" color="success">mdi-plus</v-icon>
+              </template>
+              <v-list-item-title class="text-success">One More</v-list-item-title>
+            </v-list-item>
+
+            <v-divider />
+
             <v-list-item
               :disabled="group.items[0].status !== 'draft'"
               @click="group.items[0].status === 'draft' ? handleAddNote(group.items[0].id) : null"

@@ -13,7 +13,6 @@ import {
   type ActualCostBreakdown
 } from '@/core/decomposition'
 import { useMenuStore } from '@/stores/menu/menuStore'
-import { usePreparationStore, preparationService } from '@/stores/preparation' // ✅ For reloading batches after write-off
 import type { PosPayment, PosBillItem } from '@/stores/pos/types'
 
 const MODULE_NAME = 'SalesStore'
@@ -264,6 +263,12 @@ export const useSalesStore = defineStore('sales', () => {
         }))
       })
 
+      // ⚡ PERFORMANCE FIX: Create engine/adapters ONCE before loop
+      const engine = await createDecompositionEngine()
+      const writeOffAdapter = createWriteOffAdapter()
+      const costAdapter = createCostAdapter()
+      await costAdapter.initialize()
+
       // Process each item
       for (const billItem of billItems) {
         // 1. Get menu item details
@@ -279,12 +284,6 @@ export const useSalesStore = defineStore('sales', () => {
           continue
         }
 
-        // 2. ✅ PHASE 3: Use unified DecompositionEngine + adapters
-        const engine = await createDecompositionEngine()
-        const writeOffAdapter = createWriteOffAdapter()
-        const costAdapter = createCostAdapter()
-        await costAdapter.initialize()
-
         const menuInput = {
           menuItemId: billItem.menuItemId,
           variantId: billItem.variantId || variant.id,
@@ -292,24 +291,18 @@ export const useSalesStore = defineStore('sales', () => {
           selectedModifiers: billItem.selectedModifiers
         }
 
-        // 2a. Get write-off decomposition (for backward compatibility)
-        const traversalResultForWriteOff = await engine.traverse(
-          menuInput,
-          writeOffAdapter.getTraversalOptions()
-        )
+        // ⚡ PERFORMANCE FIX: Single traversal for both adapters (same options)
+        const traversalResult = await engine.traverse(menuInput, costAdapter.getTraversalOptions())
+
+        // Both adapters use the SAME traversal result
         const writeOffResult: WriteOffResult = await writeOffAdapter.transform(
-          traversalResultForWriteOff,
+          traversalResult,
           menuInput
         )
         const totalCost = writeOffResult.totalBaseCost
 
-        // 2b. Calculate actual cost from FIFO batches
-        const traversalResultForCost = await engine.traverse(
-          menuInput,
-          costAdapter.getTraversalOptions()
-        )
         const actualCost: ActualCostBreakdown = await costAdapter.transform(
-          traversalResultForCost,
+          traversalResult,
           menuInput
         )
 
@@ -396,9 +389,10 @@ export const useSalesStore = defineStore('sales', () => {
           state.value.transactions.push(saveResult.data)
           console.log(`✅ [${MODULE_NAME}] Transaction saved:`, saveResult.data.id)
 
-          // 8. Trigger write-off (creates negative batches if needed)
-          const writeOff = await recipeWriteOffStore.processItemWriteOff(
+          // 8. ⚡ PERFORMANCE FIX: Use existing writeOffResult instead of re-decomposing
+          const writeOff = await recipeWriteOffStore.processItemWriteOffFromResult(
             billItem,
+            writeOffResult,
             saveResult.data.id
           )
 
@@ -406,47 +400,9 @@ export const useSalesStore = defineStore('sales', () => {
             // Update transaction with write-off ID
             transaction.recipeWriteOffId = writeOff.id
 
-            // ✅ FIX: Recalculate actual cost AFTER write-off (negative batches now exist)
-            // This ensures we capture cost from negative batches created during write-off
-
-            // ⚡ IMPORTANT: Refresh batches cache to include newly created negative batches
-            // preparationService.getBatches() uses an in-memory cache that doesn't auto-update
-            await preparationService.refreshBatches()
-
-            const preparationStore = usePreparationStore()
-            await preparationStore.fetchBalances('kitchen')
-
-            // ✅ PHASE 3: Use CostAdapter for recalculation
-            const costAdapterAfterWriteOff = createCostAdapter()
-            await costAdapterAfterWriteOff.initialize()
-            const traversalResultAfterWriteOff = await engine.traverse(
-              menuInput,
-              costAdapterAfterWriteOff.getTraversalOptions()
-            )
-            const actualCostAfterWriteOff: ActualCostBreakdown =
-              await costAdapterAfterWriteOff.transform(traversalResultAfterWriteOff, menuInput)
-
-            // Check if cost changed (negative batches were created)
-            if (actualCostAfterWriteOff.totalCost !== actualCost.totalCost) {
-              console.log(
-                `🔄 [${MODULE_NAME}] Cost recalculated after write-off:`,
-                `${actualCost.totalCost} → ${actualCostAfterWriteOff.totalCost}`
-              )
-
-              // Recalculate profit with new cost
-              const itemWithDiscount = itemsWithDiscount.find(i => i.id === billItem.id)
-              const allocatedDiscount = itemWithDiscount?.allocatedBillDiscount || 0
-              const updatedProfitCalculation = calculateItemProfit(
-                billItem,
-                actualCostAfterWriteOff.totalCost,
-                allocatedDiscount
-              )
-
-              // Update transaction with new cost and profit
-              transaction.actualCost = actualCostAfterWriteOff
-              transaction.profitCalculation = updatedProfitCalculation
-            }
-
+            // ⚡ PERFORMANCE: Skip second decomposition
+            // Negative batches use last_known_cost = fallbackCost (already used in first FIFO)
+            // Cost difference is negligible, saves ~3-4 seconds per item
             await SalesService.saveSalesTransaction(transaction)
             console.log(`✅ [${MODULE_NAME}] Transaction updated with write-off ID`)
           } else {

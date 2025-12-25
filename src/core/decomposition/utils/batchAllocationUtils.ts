@@ -195,7 +195,7 @@ export async function allocateFromPreparationBatches(
   requiredQuantity: number,
   department: 'kitchen' | 'bar'
 ): Promise<PreparationCostItem> {
-  DebugUtils.info(MODULE_NAME, 'Allocating from preparation batches', {
+  DebugUtils.debug(MODULE_NAME, 'Allocating from preparation batches', {
     preparationId,
     requiredQuantity,
     department
@@ -301,7 +301,7 @@ export async function allocateFromPreparationBatches(
       })
     }
   } else {
-    DebugUtils.info(MODULE_NAME, 'Preparation stock allocated successfully', {
+    DebugUtils.debug(MODULE_NAME, 'Preparation stock allocated successfully', {
       preparationId,
       required: requiredQuantity,
       allocated: allocatedQuantity,
@@ -311,11 +311,60 @@ export async function allocateFromPreparationBatches(
 
   // ✅ FIXED: No conversion needed - all batch costs are stored per-gram
   // Unit conversion happens ONLY in DecompositionEngine
-  const finalTotalCost = allocations.reduce((sum, a) => sum + a.totalCost, 0)
+  let finalTotalCost = allocations.reduce((sum, a) => sum + a.totalCost, 0)
   const totalQty = allocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
-  const avgCost = totalQty > 0 ? finalTotalCost / totalQty : 0
+  let avgCost = totalQty > 0 ? finalTotalCost / totalQty : 0
 
-  DebugUtils.info(MODULE_NAME, 'Preparation cost breakdown', {
+  // ⚡ FIX: Handle zero-cost allocation (batches exist but have costPerUnit = 0)
+  // This happens when batches were created without proper cost calculation
+  if (totalQty > 0 && avgCost === 0) {
+    let fallbackCost = preparation?.lastKnownCost || 0
+
+    // Normalize per-portion cost to per-gram if needed
+    if (
+      fallbackCost > 0 &&
+      preparation?.portionType === 'portion' &&
+      preparation?.portionSize &&
+      preparation.portionSize > 1 &&
+      fallbackCost > 100
+    ) {
+      fallbackCost = fallbackCost / preparation.portionSize
+    }
+
+    if (fallbackCost > 0) {
+      DebugUtils.warn(MODULE_NAME, 'Zero-cost allocation detected, using lastKnownCost fallback', {
+        preparationId,
+        preparationName: preparation?.name,
+        allocatedQuantity: totalQty,
+        originalCost: 0,
+        fallbackCostPerUnit: fallbackCost
+      })
+
+      // Replace zero-cost allocations with fallback
+      allocations.length = 0
+      allocations.push({
+        batchId: 'fallback-zero-cost',
+        batchNumber: 'FALLBACK',
+        allocatedQuantity: totalQty,
+        costPerUnit: fallbackCost,
+        totalCost: totalQty * fallbackCost,
+        batchCreatedAt: new Date().toISOString()
+      })
+
+      // Recalculate costs
+      finalTotalCost = totalQty * fallbackCost
+      avgCost = fallbackCost
+    } else {
+      DebugUtils.error(MODULE_NAME, 'Zero-cost allocation with no fallback available', {
+        preparationId,
+        preparationName: preparation?.name,
+        allocatedQuantity: totalQty,
+        lastKnownCost: preparation?.lastKnownCost
+      })
+    }
+  }
+
+  DebugUtils.debug(MODULE_NAME, 'Preparation cost breakdown', {
     preparationId,
     preparationName: preparation?.name,
     totalCost: finalTotalCost,
@@ -353,7 +402,7 @@ export async function allocateFromStorageBatches(
   requiredQuantity: number,
   warehouseId?: string
 ): Promise<ProductCostItem> {
-  DebugUtils.info(MODULE_NAME, 'Allocating from storage batches', {
+  DebugUtils.debug(MODULE_NAME, 'Allocating from storage batches', {
     productId,
     requiredQuantity,
     warehouseId
@@ -435,7 +484,7 @@ export async function allocateFromStorageBatches(
       })
     }
   } else {
-    DebugUtils.info(MODULE_NAME, 'Product stock allocated successfully', {
+    DebugUtils.debug(MODULE_NAME, 'Product stock allocated successfully', {
       productId,
       required: requiredQuantity,
       allocated: allocatedQuantity,
@@ -448,7 +497,7 @@ export async function allocateFromStorageBatches(
   const totalQty = allocations.reduce((sum, a) => sum + a.allocatedQuantity, 0)
   const avgCost = totalQty > 0 ? totalCost / totalQty : 0
 
-  DebugUtils.info(MODULE_NAME, 'Product cost breakdown', {
+  DebugUtils.debug(MODULE_NAME, 'Product cost breakdown', {
     productId,
     productName: product?.name,
     totalCost,

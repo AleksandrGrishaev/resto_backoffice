@@ -149,10 +149,15 @@ const handleSelectAll = (selected: boolean): void => {
 }
 const handleAddOneMore = (group: any): void => {
   // Добавляем еще одну позицию того же типа
+  // Передаем полные данные первого item из группы
+  const sourceItem = group.items[0]
   emit('add-item', {
     menuItemId: group.menuItemId,
     variantId: group.variantId,
-    unitPrice: group.items[0].unitPrice
+    variantName: group.variantName,
+    unitPrice: sourceItem.unitPrice,
+    selectedModifiers: sourceItem.selectedModifiers || [],
+    department: sourceItem.department
   })
 }
 

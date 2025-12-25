@@ -105,3 +105,22 @@ export type {
   PreparationCostItem,
   ActualCostBreakdown
 } from './adapters'
+
+// =============================================
+// FIFO Allocation Service (Supabase RPC)
+// =============================================
+
+export {
+  allocatePreparationFifo,
+  allocateProductFifo,
+  allocateBatchFifo,
+  writeOffItemsToAllocationRequests,
+  applyFifoResultsToWriteOffItems
+} from './services/FifoAllocationService'
+
+export type {
+  FifoAllocationRequest,
+  FifoAllocationResult,
+  BatchFifoResult,
+  BatchFifoSummary
+} from './services/FifoAllocationService'

@@ -50,3 +50,6 @@ PRODUCTION_CREDENTIALS.md
 
 # Playwright MCP temporary files
 .playwright-mcp/
+
+# Temporary data files
+Temp/

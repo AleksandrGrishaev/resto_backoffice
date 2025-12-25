@@ -48,6 +48,7 @@
             @send-to-kitchen="handleSendToKitchen"
             @move-items="handleMoveItems"
             @checkout="handleCheckout"
+            @add-item="handleAddOneMore"
           />
         </div>
 
@@ -905,6 +906,81 @@ const handleDiscountSuccess = async (): Promise<void> => {
 const handleDiscountCancel = (): void => {
   discountingItemId.value = null
   discountingBillId.value = ''
+}
+
+// Methods - Add One More Item
+const handleAddOneMore = async (itemData: {
+  menuItemId: string
+  variantId?: string
+  variantName?: string
+  unitPrice: number
+  selectedModifiers?: any[]
+  department?: string
+}): Promise<void> => {
+  if (!currentOrder.value || !activeBillId.value) {
+    showError('No active order or bill')
+    return
+  }
+
+  try {
+    // Find the menu item from the menu store
+    const menuItem = menuStore.menuItems.find(item => item.id === itemData.menuItemId)
+    if (!menuItem) {
+      showError('Menu item not found')
+      return
+    }
+
+    // Find the variant
+    const variant = menuItem.variants?.find(v => v.id === itemData.variantId) || {
+      id: itemData.variantId || 'default',
+      name: itemData.variantName || 'Standard',
+      price: itemData.unitPrice,
+      isActive: true
+    }
+
+    // Create PosMenuItem from MenuItem
+    const posMenuItem = {
+      id: menuItem.id,
+      name: menuItem.name,
+      categoryId: menuItem.categoryId,
+      categoryName: menuItem.categoryName || '',
+      price: variant.price,
+      isAvailable: menuItem.isActive,
+      stockQuantity: undefined,
+      preparationTime: undefined,
+      description: menuItem.description,
+      imageUrl: menuItem.imageUrl,
+      department: itemData.department || menuItem.department || 'kitchen',
+      variants: menuItem.variants?.map(v => ({
+        id: v.id,
+        name: v.name,
+        price: v.price,
+        isAvailable: v.isActive
+      })),
+      modifications: []
+    }
+
+    // Add item to bill
+    const result = await ordersStore.addItemToBill(
+      currentOrder.value.id,
+      activeBillId.value,
+      posMenuItem,
+      variant as any,
+      1,
+      [],
+      itemData.selectedModifiers
+    )
+
+    if (result.success) {
+      showSuccess(`Added one more ${menuItem.name}`)
+      hasUnsavedChanges.value = true
+    } else {
+      throw new Error(result.error || 'Failed to add item')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to add item'
+    showError(message)
+  }
 }
 
 // Methods - Actions

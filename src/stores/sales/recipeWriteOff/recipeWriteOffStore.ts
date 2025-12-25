@@ -241,6 +241,165 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
   }
 
   /**
+   * ⚡ PERFORMANCE FIX: Process write-off from existing WriteOffResult
+   * Avoids redundant decomposition when result is already available
+   */
+  async function processItemWriteOffFromResult(
+    billItem: PosBillItem,
+    writeOffResult: WriteOffResult,
+    salesTransactionId: string
+  ) {
+    console.log(`🔄 [${MODULE_NAME}] Processing write-off from result for item:`, {
+      menuItemName: billItem.menuItemName,
+      quantity: billItem.quantity,
+      itemsCount: writeOffResult.items.length,
+      salesTransactionId
+    })
+
+    try {
+      // 1. Get menu item details
+      const menuItem = menuStore.menuItems.find(item => item.id === billItem.menuItemId)
+      if (!menuItem) {
+        console.error(`❌ [${MODULE_NAME}] Menu item not found:`, billItem.menuItemId)
+        return null
+      }
+
+      const variant = menuItem.variants.find(v => v.id === billItem.variantId)
+      if (!variant) {
+        console.error(`❌ [${MODULE_NAME}] Variant not found:`, billItem.variantId)
+        return null
+      }
+
+      // 2. Skip decomposition - use provided writeOffResult directly
+      if (writeOffResult.items.length === 0) {
+        console.warn(`⚠️ [${MODULE_NAME}] No ingredients to write off`)
+        return null
+      }
+
+      console.log(
+        `📋 [${MODULE_NAME}] Using ${writeOffResult.items.length} items from provided result`
+      )
+
+      // 3. Prepare write-off items from WriteOffResult
+      const writeOffItems: RecipeWriteOffItem[] = writeOffResult.items.map(item => ({
+        type: item.type,
+        itemId: item.type === 'product' ? item.productId! : item.preparationId!,
+        itemName: item.type === 'product' ? item.productName! : item.preparationName!,
+        quantityPerPortion: item.quantity / billItem.quantity,
+        totalQuantity: item.quantity,
+        unit: item.unit,
+        costPerUnit: item.costPerUnit || 0,
+        totalCost: item.totalCost,
+        batchIds: []
+      }))
+
+      // 4. Create storage write-off operation
+      const writeOffData: CreateWriteOffData = {
+        department: menuItem.department,
+        responsiblePerson: 'system',
+        reason: 'sales_consumption',
+        items: writeOffItems.map(item => ({
+          itemId: item.itemId,
+          itemName: item.itemName,
+          itemType: item.type,
+          quantity: item.totalQuantity,
+          unit: item.unit,
+          notes: undefined
+        })),
+        notes: `Auto sales write-off: ${menuItem.name} - ${variant.name} (${billItem.quantity} portion${billItem.quantity > 1 ? 's' : ''})`
+      }
+
+      const storageOperation = await storageStore.createWriteOff(writeOffData)
+
+      console.log(`✅ [${MODULE_NAME}] Storage operation created:`, storageOperation.id)
+
+      // 5. Extract batch IDs and actual costs from storage operation
+      const batchMap = new Map<string, string[]>()
+      const costMap = new Map<string, { costPerUnit: number; totalCost: number }>()
+
+      storageOperation.items.forEach(opItem => {
+        if (opItem.batchAllocations) {
+          batchMap.set(
+            opItem.itemId,
+            opItem.batchAllocations.map(b => b.batchId)
+          )
+
+          const totalCost = opItem.batchAllocations.reduce(
+            (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
+            0
+          )
+          const totalQty = opItem.batchAllocations.reduce((sum, alloc) => sum + alloc.quantity, 0)
+          const avgCost = totalQty > 0 ? totalCost / totalQty : 0
+
+          costMap.set(opItem.itemId, {
+            costPerUnit: avgCost,
+            totalCost: totalCost
+          })
+        }
+      })
+
+      // Update write-off items with actual batch IDs and costs
+      writeOffItems.forEach(item => {
+        item.batchIds = batchMap.get(item.itemId) || []
+        const actualCost = costMap.get(item.itemId)
+        if (actualCost) {
+          item.costPerUnit = actualCost.costPerUnit
+          item.totalCost = actualCost.totalCost
+        }
+      })
+
+      // 6. Create recipe write-off record
+      const decomposedItemsForRecord = writeOffResult.items.map(item => ({
+        type: item.type,
+        productId: item.productId,
+        productName: item.productName,
+        preparationId: item.preparationId,
+        preparationName: item.preparationName,
+        quantity: item.quantity,
+        unit: item.unit,
+        costPerUnit: item.costPerUnit,
+        totalCost: item.totalCost,
+        path: item.path
+      }))
+
+      const recipeWriteOff: RecipeWriteOff = {
+        id: `rwo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        salesTransactionId,
+        menuItemId: billItem.menuItemId,
+        variantId: billItem.variantId || variant.id,
+        recipeId: undefined,
+        portionSize: 1,
+        soldQuantity: billItem.quantity,
+        writeOffItems,
+        decomposedItems: decomposedItemsForRecord,
+        originalComposition: variant.composition,
+        department: menuItem.department,
+        operationType: 'auto_sales_writeoff',
+        performedAt: new Date().toISOString(),
+        performedBy: 'system',
+        storageOperationId: storageOperation.id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // 7. Save recipe write-off
+      const saveResult = await RecipeWriteOffService.saveWriteOff(recipeWriteOff)
+      if (saveResult.success && saveResult.data) {
+        state.value.writeOffs.push(saveResult.data)
+        console.log(`✅ [${MODULE_NAME}] Write-off record saved:`, saveResult.data.id)
+        return saveResult.data
+      } else {
+        throw new Error(saveResult.error || 'Failed to save write-off')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`❌ [${MODULE_NAME}] Write-off failed:`, message)
+      state.value.error = message
+      return null
+    }
+  }
+
+  /**
    * Get write-offs by sales transaction
    */
   async function getWriteOffsBySalesTransaction(salesTransactionId: string) {
@@ -290,6 +449,7 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
     // Actions
     initialize,
     processItemWriteOff,
+    processItemWriteOffFromResult,
     getWriteOffsBySalesTransaction,
     getWriteOffsByMenuItem,
     getWriteOffById,

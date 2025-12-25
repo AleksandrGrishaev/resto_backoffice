@@ -115,14 +115,6 @@ export class PreparationService {
         }
       }
 
-      // ✅ DEBUG: Log recipesStore state
-      console.log('🔍 [PrepService] getPreparationInfo called:', {
-        preparationId,
-        recipesStoreInitialized: recipesStore.initialized,
-        preparationsCount: recipesStore.preparations?.length || 0,
-        allPreparationIds: recipesStore.preparations?.map(p => p.id).slice(0, 5) || []
-      })
-
       const preparation = recipesStore.preparations?.find(p => p.id === preparationId)
 
       if (!preparation) {
@@ -225,9 +217,11 @@ export class PreparationService {
   // SUPABASE DATA LOADING
   // ===========================
 
-  private async loadBatchesFromSupabase(): Promise<void> {
+  private async loadBatchesFromSupabase(silent: boolean = false): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Loading batches from Supabase')
+      if (!silent) {
+        DebugUtils.info(MODULE_NAME, 'Loading batches from Supabase')
+      }
 
       const { data, error } = await supabase
         .from('preparation_batches')
@@ -241,9 +235,11 @@ export class PreparationService {
 
       this.batches = (data || []).map(batchFromSupabase)
 
-      DebugUtils.info(MODULE_NAME, 'Batches loaded from Supabase', {
-        count: this.batches.length
-      })
+      if (!silent) {
+        DebugUtils.info(MODULE_NAME, 'Batches loaded from Supabase', {
+          count: this.batches.length
+        })
+      }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error loading batches', { error })
       // Initialize with empty array on error
@@ -404,9 +400,9 @@ export class PreparationService {
    */
   async refreshBatches(): Promise<void> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Refreshing batches cache from database')
-      await this.loadBatchesFromSupabase()
-      DebugUtils.info(MODULE_NAME, 'Batches cache refreshed', {
+      DebugUtils.debug(MODULE_NAME, 'Refreshing batches cache from database')
+      await this.loadBatchesFromSupabase(true) // silent mode
+      DebugUtils.debug(MODULE_NAME, 'Batches cache refreshed', {
         count: this.batches.length
       })
     } catch (error) {
@@ -952,8 +948,33 @@ export class PreparationService {
         // Fallback to catalog cost only if write-off was skipped (inventory correction)
         const catalogTotalCost = item.quantity * item.costPerUnit
         const actualTotalCost = actualCostsMap.get(item.preparationId) ?? catalogTotalCost
-        const actualCostPerUnit =
+        let actualCostPerUnit =
           item.quantity > 0 ? actualTotalCost / item.quantity : item.costPerUnit
+
+        // ⚡ FIX: Prevent zero-cost batches - use fallback if cost is 0
+        if (actualCostPerUnit <= 0) {
+          const fallback =
+            preparationInfo.lastKnownCost || preparationInfo.estimatedCost || item.costPerUnit
+          if (fallback > 0) {
+            DebugUtils.warn(MODULE_NAME, '⚠️ Zero cost detected, using fallback', {
+              preparationId: item.preparationId,
+              preparationName: preparationInfo.name,
+              originalCost: actualCostPerUnit,
+              fallbackCost: fallback,
+              source: preparationInfo.lastKnownCost
+                ? 'lastKnownCost'
+                : preparationInfo.estimatedCost
+                  ? 'estimatedCost'
+                  : 'catalogCost'
+            })
+            actualCostPerUnit = fallback
+          } else {
+            DebugUtils.error(MODULE_NAME, '❌ Zero cost with no fallback available', {
+              preparationId: item.preparationId,
+              preparationName: preparationInfo.name
+            })
+          }
+        }
 
         if (actualCostsMap.has(item.preparationId)) {
           DebugUtils.info(MODULE_NAME, '✅ Using actual FIFO cost for batch', {
@@ -1647,19 +1668,13 @@ export class PreparationService {
 
       // ✅ NEW: Add ALL active preparations from catalog (even without batches)
       // This ensures new preparations are visible immediately after creation
-      DebugUtils.info(MODULE_NAME, `Adding all catalog preparations for ${department}`)
-
       const recipesStore = useRecipesStore()
       const allDepartmentPreparations = recipesStore.activePreparations.filter(
         (p: any) => p.isActive && p.department === department
       )
 
-      DebugUtils.info(
-        MODULE_NAME,
-        `Found ${allDepartmentPreparations.length} catalog preparations for ${department}`
-      )
-
       // Add preparations that don't have batches yet
+      let addedWithoutBatches = 0
       for (const prep of allDepartmentPreparations) {
         const alreadyExists = this.balances.some(
           b => b.preparationId === prep.id && b.department === department
@@ -1690,12 +1705,16 @@ export class PreparationService {
           }
 
           this.balances.push(balance)
-
-          DebugUtils.info(
-            MODULE_NAME,
-            `Added catalog preparation without batches: ${prep.name} (${prep.code})`
-          )
+          addedWithoutBatches++
         }
+      }
+
+      // Single summary log instead of per-item logging
+      if (addedWithoutBatches > 0) {
+        DebugUtils.debug(
+          MODULE_NAME,
+          `Added ${addedWithoutBatches} catalog preparations without batches for ${department}`
+        )
       }
 
       const departmentBalances = this.balances.filter(b => b.department === department)

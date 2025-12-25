@@ -338,8 +338,30 @@ export class DecompositionEngine {
           convertedQuantity: totalQuantity,
           portionSize: preparation.portionSize
         })
+      } else if (comp.unit === 'portion') {
+        // ⚠️ DIAGNOSTIC: Conversion SHOULD have happened but didn't
+        DebugUtils.error(MODULE_NAME, '❌ Portion conversion FAILED', {
+          preparationId: comp.id,
+          preparationName: preparation.name,
+          compUnit: comp.unit,
+          prepPortionType: preparation.portionType,
+          prepPortionSize: preparation.portionSize,
+          reason:
+            preparation.portionType !== 'portion'
+              ? `portionType is '${preparation.portionType}' (expected 'portion')`
+              : !preparation.portionSize
+                ? 'portionSize is missing or 0'
+                : 'unknown reason',
+          // Original quantity that will be used (incorrect!)
+          resultQuantity: totalQuantity,
+          resultUnit: outputUnit
+        })
       }
     }
+
+    // ⚡ FIX: Round to 2 decimal places to avoid floating point issues
+    // e.g., 11.1111111111111 → 11.11
+    totalQuantity = Math.round(totalQuantity * 100) / 100
 
     // Strategy: keep preparation as final element (for write-off from prep batches)
     if (options.preparationStrategy === 'keep') {
