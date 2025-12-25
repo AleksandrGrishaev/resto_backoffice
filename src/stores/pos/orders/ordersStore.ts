@@ -1425,7 +1425,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           await tablesStore.freeTable(orderToMove.tableId)
         }
 
-        // Remove the source order (all bills moved to target)
+        // Delete source order from database (all bills moved to target)
+        const deleteResult = await ordersService.deleteOrder(orderId)
+        if (!deleteResult.success) {
+          console.warn(
+            '⚠️ [ordersStore] Failed to delete source order from DB:',
+            deleteResult.error
+          )
+          // Continue anyway - merge already saved, local state will be correct
+        }
+
+        // Remove the source order from local state
         orders.value.splice(orderIndex, 1)
 
         // If current order was removed, select the target order
@@ -1547,7 +1557,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           return mergeResult
         }
 
-        // Remove the source order (all bills moved to target)
+        // Delete source order from database (all bills moved to target)
+        const deleteResult = await ordersService.deleteOrder(orderId)
+        if (!deleteResult.success) {
+          console.warn(
+            '⚠️ [ordersStore] Failed to delete source order from DB:',
+            deleteResult.error
+          )
+          // Continue anyway - merge already saved, local state will be correct
+        }
+
+        // Remove the source order from local state
         orders.value.splice(orderIndex, 1)
 
         // If current order was removed, select the target order

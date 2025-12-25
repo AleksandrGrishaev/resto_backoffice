@@ -42,10 +42,12 @@ export function useWriteOff() {
           // Only with stock
           if (balance.totalQuantity <= 0) return false
 
+          // Only active products
+          const product = productsStore.products.find(p => p.id === balance.itemId)
+          if (!product || product.isActive === false) return false
+
           // Filter by department through Product
           if (dept !== 'all') {
-            const product = productsStore.products.find(p => p.id === balance.itemId)
-            if (!product) return false
             return product.usedInDepartments.includes(dept as Department)
           }
 
@@ -78,9 +80,12 @@ export function useWriteOff() {
         .filter(balance => {
           if (!balance.hasExpired) return false
 
+          // Only active products
+          const product = productsStore.products.find(p => p.id === balance.itemId)
+          if (!product || product.isActive === false) return false
+
+          // Filter by department through Product
           if (dept !== 'all') {
-            const product = productsStore.products.find(p => p.id === balance.itemId)
-            if (!product) return false
             return product.usedInDepartments.includes(dept as Department)
           }
 
@@ -114,9 +119,12 @@ export function useWriteOff() {
         .filter(balance => {
           if (!balance.hasExpired && !balance.hasNearExpiry) return false
 
+          // Only active products
+          const product = productsStore.products.find(p => p.id === balance.itemId)
+          if (!product || product.isActive === false) return false
+
+          // Filter by department through Product
           if (dept !== 'all') {
-            const product = productsStore.products.find(p => p.id === balance.itemId)
-            if (!product) return false
             return product.usedInDepartments.includes(dept as Department)
           }
 
@@ -300,12 +308,12 @@ export function useWriteOff() {
 
       DebugUtils.info(MODULE_NAME, 'Writing off expired products', { department })
 
-      // Filter by Product.usedInDepartments
+      // Filter by Product.usedInDepartments and isActive
       const expiredBalances = storageStore.state.balances.filter(balance => {
         if (!balance.hasExpired) return false
 
         const product = productsStore.products.find(p => p.id === balance.itemId)
-        if (!product) return false
+        if (!product || product.isActive === false) return false
 
         return product.usedInDepartments.includes(department)
       })
@@ -391,7 +399,7 @@ export function useWriteOff() {
     try {
       const balances = storageStore.state.balances.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
-        if (!product) return false
+        if (!product || product.isActive === false) return false
         return product.usedInDepartments.includes(department)
       })
 
@@ -420,7 +428,7 @@ export function useWriteOff() {
     try {
       const balances = storageStore.state.balances.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
-        if (!product) return false
+        if (!product || product.isActive === false) return false
         return product.usedInDepartments.includes(department)
       })
 

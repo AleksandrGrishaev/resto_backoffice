@@ -7,8 +7,8 @@
         <v-row justify="center" align="center">
           <v-col cols="12" class="text-center">
             <v-progress-circular indeterminate size="64" color="primary" />
-            <h3 class="mt-4">Инициализация POS системы...</h3>
-            <p class="text-medium-emphasis">Подготовка рабочего места кассира</p>
+            <h3 class="mt-4">Initializing POS System...</h3>
+            <p class="text-medium-emphasis">Preparing cashier workstation</p>
           </v-col>
         </v-row>
       </v-container>
@@ -20,7 +20,7 @@
         <v-row justify="center" align="center">
           <v-col cols="12" sm="6" class="text-center">
             <v-icon size="64" color="error" class="mb-4">mdi-cash-register</v-icon>
-            <h3 class="mb-4">Проблема с POS системой</h3>
+            <h3 class="mb-4">POS System Error</h3>
             <p class="text-medium-emphasis mb-6">
               {{ initError }}
             </p>
@@ -32,11 +32,11 @@
                 :loading="isLoading"
                 @click="retryInitialization"
               >
-                Попробовать снова
+                Try Again
               </v-btn>
 
               <v-btn v-if="authStore.isAdmin" color="secondary" variant="text" to="/menu">
-                Перейти в админ панель
+                Go to Admin Panel
               </v-btn>
             </div>
           </v-col>
@@ -76,7 +76,7 @@
         <v-row justify="center" align="center">
           <v-col cols="12" class="text-center">
             <v-progress-circular indeterminate size="32" />
-            <p class="mt-2">Подготовка POS системы...</p>
+            <p class="mt-2">Preparing POS System...</p>
           </v-col>
         </v-row>
       </v-container>
@@ -279,7 +279,7 @@ const currentOrderSubtitle = computed(() => {
  */
 const initializePOS = async (): Promise<void> => {
   if (!canUsePOS.value) {
-    initError.value = 'У вас нет прав доступа к POS системе'
+    initError.value = 'You do not have access to the POS system'
     return
   }
 
@@ -292,13 +292,13 @@ const initializePOS = async (): Promise<void> => {
     const result = await posStore.initializePOS()
 
     if (!result.success) {
-      throw new Error(result.error || 'Не удалось инициализировать POS систему')
+      throw new Error(result.error || 'Failed to initialize POS system')
     }
 
     isInitialized.value = true
     DebugUtils.debug(MODULE_NAME, 'POS system initialized successfully')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка'
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     initError.value = errorMessage
     DebugUtils.error(MODULE_NAME, 'POS initialization failed', { error: errorMessage })
   } finally {

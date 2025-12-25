@@ -379,8 +379,11 @@ import { useSupplierStore } from '@/stores/supplier_2'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProductsStore } from '@/stores/productsStore'
 import { useCounteragentsStore } from '@/stores/counteragents'
+import { useSupplierStorageIntegration } from '@/stores/supplier_2/integrations'
+import { supabase } from '@/supabase/client'
 import { TimeUtils } from '@/utils/time'
 import { DebugUtils } from '@/utils'
+import type { Receipt, PurchaseOrder, ReceiptItem, OrderItem } from '@/stores/supplier_2/types'
 import QuickAddPackageDialog from '../shared/package/QuickAddPackageDialog.vue'
 
 const MODULE_NAME = 'QuickReceiptDialog'
@@ -410,6 +413,7 @@ const supplierStore = useSupplierStore()
 const { startReceipt } = useReceipts()
 const productsStore = useProductsStore()
 const counteragentsStore = useCounteragentsStore()
+const storageIntegration = useSupplierStorageIntegration()
 
 // =============================================
 // LOCAL STATE
@@ -473,12 +477,14 @@ const selectedSupplier = computed(() => {
 })
 
 const products = computed(() => {
-  return productsStore.products.map(p => ({
-    id: p.id,
-    name: p.name,
-    category: p.category || 'Uncategorized',
-    baseUnit: p.baseUnit || 'kg'
-  }))
+  return productsStore.products
+    .filter(p => p.isActive !== false)
+    .map(p => ({
+      id: p.id,
+      name: p.name,
+      category: p.category || 'Uncategorized',
+      baseUnit: p.baseUnit || 'kg'
+    }))
 })
 
 const subtotal = computed(() => {
@@ -815,134 +821,190 @@ async function saveReceipt() {
   const { valid } = await formRef.value?.validate()
   if (!valid) return
 
-  DebugUtils.info(MODULE_NAME, 'Creating quick receipt', {
+  const supplier = selectedSupplier.value
+  if (!supplier) {
+    emits('error', 'Supplier not found')
+    return
+  }
+
+  DebugUtils.info(MODULE_NAME, '🚀 Creating quick receipt via RPC', {
     supplierId: form.value.supplierId,
+    supplierName: supplier.name,
     itemsCount: form.value.items.length,
     totalAmount: totalAmount.value
   })
 
   isSaving.value = true
-  try {
-    // 1. Создаем dummy order через supplierStore.createOrder
-    const supplier = selectedSupplier.value
-    if (!supplier) {
-      throw new Error('Supplier not found')
-    }
+  const startTime = performance.now()
 
-    // Prepare order items in CreateOrderData format
-    const orderItemsData = form.value.items.map(item => ({
-      itemId: item.productId,
-      quantity: item.quantity, // Base quantity (grams, ml, pieces)
-      packageId: item.packageId,
-      pricePerUnit: item.baseCost // Price per base unit
+  try {
+    // 1. Prepare items for RPC (ensure all required fields have values)
+    const rpcItems = form.value.items.map(item => ({
+      item_id: item.productId,
+      item_name: item.productName || 'Unknown Product',
+      quantity: item.quantity || 0,
+      unit: item.unit || 'kg',
+      package_id: item.packageId || 'default',
+      package_name: item.packageName || 'Unit',
+      package_quantity: item.packageQuantity || 1,
+      package_unit: item.packageUnit || item.unit || 'kg',
+      price_per_unit: item.baseCost || 0,
+      package_price: item.unitPrice || 0
     }))
 
-    // Create order via store (this saves to Supabase)
-    const createdOrder = await supplierStore.createOrder({
-      supplierId: form.value.supplierId,
-      requestIds: [], // Quick receipts don't have associated requests
-      items: orderItemsData,
-      notes: 'Quick Receipt Entry (Archive)',
-      expectedDeliveryDate: form.value.deliveryDate
+    // 2. Call RPC function (single atomic transaction)
+    const { data, error } = await supabase.rpc('create_quick_receipt_complete', {
+      p_supplier_id: form.value.supplierId,
+      p_supplier_name: supplier.name,
+      p_items: rpcItems,
+      p_delivery_date: form.value.deliveryDate,
+      p_notes: form.value.notes || 'Quick Receipt Entry',
+      p_tax_amount: form.value.includeTax ? form.value.taxAmount : null,
+      p_tax_percentage: form.value.includeTax ? form.value.taxPercentage : null
     })
 
-    DebugUtils.info(MODULE_NAME, 'Order created in Supabase', {
-      orderId: createdOrder.id,
-      orderNumber: createdOrder.orderNumber
-    })
-
-    // 2. Update order status to 'delivered' (skip 'sent' to avoid creating transit batches)
-    // QuickReceipt is for archive data - goods already received, no need for transit flow
-    await supplierStore.updateOrder(createdOrder.id, {
-      status: 'delivered'
-    })
-
-    DebugUtils.info(MODULE_NAME, 'Order marked as delivered (archive mode)', {
-      orderId: createdOrder.id,
-      status: 'delivered'
-    })
-
-    // 3. Create receipt through startReceipt
-    const receiptData = {
-      purchaseOrderId: createdOrder.id,
-      receivedBy: 'Quick Entry',
-      items: createdOrder.items.map(item => ({
-        orderItemId: item.id,
-        receivedQuantity: item.orderedQuantity,
-        actualPrice: item.pricePerUnit,
-        notes: ''
-      }))
+    if (error) {
+      throw new Error(`RPC error: ${error.message}`)
     }
 
-    const receipt = await startReceipt(createdOrder.id, receiptData)
+    const rpcTime = performance.now() - startTime
 
-    DebugUtils.info(MODULE_NAME, 'Receipt created', {
-      receiptId: receipt.id,
-      receiptNumber: receipt.receiptNumber
+    DebugUtils.info(MODULE_NAME, '✅ RPC completed', {
+      orderId: data.order_id,
+      orderNumber: data.order_number,
+      receiptId: data.receipt_id,
+      receiptNumber: data.receipt_number,
+      totalAmount: data.total_amount,
+      rpcTimeMs: Math.round(rpcTime)
     })
 
-    // 4. Update delivery date, notes, and tax
-    await supplierStore.updateReceipt(receipt.id, {
-      deliveryDate: form.value.deliveryDate,
-      notes: form.value.notes || 'Quick Receipt Entry',
-      taxAmount: form.value.includeTax ? form.value.taxAmount : undefined,
-      taxPercentage: form.value.includeTax ? form.value.taxPercentage : undefined
-    })
+    // 3. Map RPC result to Receipt and Order types for storage integration
+    const receipt = mapRPCResultToReceipt(data)
+    const order = mapRPCResultToOrder(data)
 
-    // 4.5. ✅ TAX DISTRIBUTION: Add proportional tax to actualBaseCost
-    if (form.value.includeTax && form.value.taxAmount && form.value.taxAmount > 0) {
-      const updatedReceipt = await supplierStore.getReceiptById(receipt.id)
-      if (updatedReceipt) {
-        const receiptSubtotal = subtotal.value
-        if (receiptSubtotal > 0) {
-          updatedReceipt.items.forEach(item => {
-            const lineTotal = item.receivedQuantity * (item.actualBaseCost || item.orderedBaseCost)
-            const proportion = lineTotal / receiptSubtotal
-            const itemTax = form.value.taxAmount! * proportion
-            const taxPerUnit = item.receivedQuantity > 0 ? itemTax / item.receivedQuantity : 0
+    // 4. Storage integration (create batches + update prices)
+    const storageStartTime = performance.now()
 
-            // Add tax to actualBaseCost
-            if (item.actualBaseCost !== undefined) {
-              item.actualBaseCost = item.actualBaseCost + taxPerUnit
-            } else {
-              item.actualBaseCost = item.orderedBaseCost + taxPerUnit
-            }
-          })
+    try {
+      await storageIntegration.createReceiptOperation(receipt, order)
+      DebugUtils.info(MODULE_NAME, '✅ Storage batches created')
+    } catch (storageError) {
+      DebugUtils.warn(MODULE_NAME, '⚠️ Storage operation failed (non-critical)', { storageError })
+    }
 
-          // Save updated items with tax-inclusive prices
-          await supplierStore.updateReceipt(receipt.id, {
-            items: updatedReceipt.items
-          })
+    try {
+      await storageIntegration.updateProductPrices(receipt)
+      DebugUtils.info(MODULE_NAME, '✅ Product prices updated')
+    } catch (priceError) {
+      DebugUtils.warn(MODULE_NAME, '⚠️ Price update failed (non-critical)', { priceError })
+    }
 
-          DebugUtils.info(MODULE_NAME, 'Tax distributed to item prices', {
-            taxAmount: form.value.taxAmount,
-            subtotal: receiptSubtotal,
-            itemsUpdated: updatedReceipt.items.length
-          })
-        }
+    const storageTime = performance.now() - storageStartTime
+
+    // 5. Refresh local stores
+    await Promise.all([supplierStore.getOrders(), supplierStore.getReceipts()])
+
+    const totalTime = performance.now() - startTime
+
+    DebugUtils.info(MODULE_NAME, '🎉 Quick receipt completed successfully', {
+      receiptNumber: data.receipt_number,
+      orderNumber: data.order_number,
+      timing: {
+        rpcMs: Math.round(rpcTime),
+        storageMs: Math.round(storageTime),
+        totalMs: Math.round(totalTime)
       }
-    }
-
-    // 5. Complete receipt (auto-complete for quick entry)
-    const completedReceipt = await supplierStore.completeReceipt(receipt.id)
-
-    DebugUtils.info(MODULE_NAME, 'Quick receipt completed successfully', {
-      receiptId: completedReceipt.id,
-      receiptNumber: completedReceipt.receiptNumber,
-      orderNumber: createdOrder.orderNumber,
-      status: completedReceipt.status
     })
 
     emits(
       'success',
-      `Receipt ${completedReceipt.receiptNumber} completed successfully from order ${createdOrder.orderNumber}`
+      `Receipt ${data.receipt_number} completed successfully from order ${data.order_number}`
     )
     closeDialog()
   } catch (error) {
-    DebugUtils.error(MODULE_NAME, 'Failed to create quick receipt', { error })
+    DebugUtils.error(MODULE_NAME, '❌ Failed to create quick receipt', { error })
     emits('error', `Failed to create receipt: ${error}`)
   } finally {
     isSaving.value = false
+  }
+}
+
+/**
+ * Map RPC result to Receipt type for storage integration
+ */
+function mapRPCResultToReceipt(data: any): Receipt {
+  return {
+    id: data.receipt_id,
+    receiptNumber: data.receipt_number,
+    purchaseOrderId: data.order_id,
+    deliveryDate: data.delivery_date,
+    receivedBy: 'Quick Entry',
+    items: (data.items || []).map((item: any) => ({
+      id: item.id,
+      orderItemId: item.orderItemId,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      orderedQuantity: item.orderedQuantity,
+      receivedQuantity: item.receivedQuantity,
+      unit: item.unit,
+      packageId: item.packageId,
+      packageName: item.packageName,
+      orderedPackageQuantity: item.orderedPackageQuantity,
+      receivedPackageQuantity: item.receivedPackageQuantity,
+      packageUnit: item.packageUnit,
+      orderedPrice: item.orderedPrice,
+      actualPrice: item.actualPrice,
+      orderedBaseCost: item.orderedBaseCost,
+      actualBaseCost: item.actualBaseCost,
+      notes: ''
+    })) as ReceiptItem[],
+    hasDiscrepancies: false,
+    status: 'completed',
+    taxAmount: data.tax_amount,
+    taxPercentage: data.tax_percentage,
+    notes: data.notes,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+}
+
+/**
+ * Map RPC result to PurchaseOrder type for storage integration
+ */
+function mapRPCResultToOrder(data: any): PurchaseOrder {
+  return {
+    id: data.order_id,
+    orderNumber: data.order_number,
+    supplierId: data.supplier_id,
+    supplierName: data.supplier_name,
+    orderDate: new Date().toISOString(),
+    expectedDeliveryDate: data.delivery_date,
+    items: (data.items || []).map((item: any) => ({
+      id: item.orderItemId,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      orderedQuantity: item.receivedQuantity,
+      receivedQuantity: item.receivedQuantity,
+      unit: item.unit,
+      packageId: item.packageId,
+      packageName: item.packageName,
+      packageQuantity: item.receivedPackageQuantity,
+      packageUnit: item.packageUnit,
+      pricePerUnit: item.orderedBaseCost,
+      packagePrice: item.orderedPrice,
+      totalPrice: item.receivedQuantity * item.orderedBaseCost,
+      isEstimatedPrice: false,
+      status: 'received'
+    })) as OrderItem[],
+    totalAmount: data.total_amount,
+    isEstimatedTotal: false,
+    status: 'delivered',
+    billStatus: 'not_billed',
+    requestIds: [],
+    receiptId: data.receipt_id,
+    notes: 'Quick Receipt Entry (Archive)',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 }
 

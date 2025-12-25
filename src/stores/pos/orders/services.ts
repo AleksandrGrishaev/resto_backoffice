@@ -1005,19 +1005,20 @@ export class OrdersService {
           const existingItemIds = new Set((existingItems || []).map(i => i.id))
           const currentItemIds = new Set<string>()
 
-          // Upsert all items
+          // Upsert all items (use actual upsert to handle merged items from other orders)
           for (const bill of order.bills) {
             for (const item of bill.items) {
               currentItemIds.add(item.id)
 
-              if (existingItemIds.has(item.id)) {
-                // Update existing item
-                const updatePayload = toOrderItemUpdate(item)
-                await supabase.from('order_items').update(updatePayload).eq('id', item.id)
-              } else {
-                // Insert new item
-                const insertPayload = toOrderItemInsert(item, order.id, bill.billNumber)
-                await supabase.from('order_items').insert(insertPayload)
+              // Use upsert to handle both existing items and merged items from other orders
+              // Merged items have different order_id in DB but same item.id
+              const insertPayload = toOrderItemInsert(item, order.id, bill.billNumber)
+              const { error: upsertError } = await supabase
+                .from('order_items')
+                .upsert(insertPayload, { onConflict: 'id' })
+
+              if (upsertError) {
+                console.error('❌ Item upsert failed:', item.id, upsertError.message)
               }
             }
           }
