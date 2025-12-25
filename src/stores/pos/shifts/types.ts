@@ -94,6 +94,7 @@ export interface PosShift extends BaseEntity {
 
 export interface PaymentMethodSummary {
   methodId: string // Payment method ID
+  methodCode: string // Payment method code (cash, alex, bca, etc.) - used for matching
   methodName: string // Name (Cash, Card, etc.)
   methodType: PaymentMethod['type']
   count: number // Number of operations

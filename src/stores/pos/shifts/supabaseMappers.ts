@@ -51,6 +51,7 @@ export function toSupabaseInsert(shift: PosShift): SupabaseShiftInsert {
     // Complex data (JSONB)
     payment_methods: shift.paymentMethods.map(p => ({
       type: p.methodType,
+      code: p.methodCode, // Payment method code for matching (e.g., 'alex', 'cash')
       amount: p.amount,
       label: p.methodName
     })),
@@ -135,6 +136,7 @@ export function fromSupabase(supabaseShift: SupabaseShift): PosShift {
   // Convert payment methods back to app format
   const paymentMethods = supabaseShift.payment_methods.map((p, index) => ({
     methodId: p.type,
+    methodCode: p.code || p.type, // Fallback to type for old data without code
     methodName: p.label || p.type.toUpperCase(),
     methodType: p.type,
     count: 0, // Not stored in Supabase, would need to calculate

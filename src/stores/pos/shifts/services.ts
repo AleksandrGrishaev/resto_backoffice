@@ -464,6 +464,7 @@ export class ShiftsService {
 
       return activeMethods.map(method => ({
         methodId: method.id,
+        methodCode: method.code, // Used for matching with payment.method
         methodName: method.name,
         methodType: method.type,
         count: 0,
@@ -476,6 +477,7 @@ export class ShiftsService {
       return [
         {
           methodId: 'cash',
+          methodCode: 'cash',
           methodName: 'Cash',
           methodType: 'cash',
           count: 0,
@@ -484,6 +486,7 @@ export class ShiftsService {
         },
         {
           methodId: 'card',
+          methodCode: 'card',
           methodName: 'Card',
           methodType: 'card',
           count: 0,
@@ -563,13 +566,21 @@ export class ShiftsService {
 
       const oldTotalSales = shift.totalSales
 
-      // Find matching payment method summary by methodType
-      const methodSummary = shift.paymentMethods.find(pm => pm.methodType === paymentMethodType)
+      // Find matching payment method summary by methodCode (e.g., 'alex', 'cash', 'gojek')
+      // Fallback to methodType for backward compatibility with old shifts
+      let methodSummary = shift.paymentMethods.find(pm => pm.methodCode === paymentMethodType)
 
       if (!methodSummary) {
-        // ✅ NEW: Better error with available methods
-        const availableMethods = shift.paymentMethods.map(pm => pm.methodType).join(', ')
-        const error = `Payment method '${paymentMethodType}' not found. Available: ${availableMethods}`
+        // Fallback: try finding by methodType (for old data without methodCode)
+        methodSummary = shift.paymentMethods.find(pm => pm.methodType === paymentMethodType)
+      }
+
+      if (!methodSummary) {
+        // ✅ NEW: Better error with available methods (show codes)
+        const availableCodes = shift.paymentMethods
+          .map(pm => pm.methodCode || pm.methodType)
+          .join(', ')
+        const error = `Payment method '${paymentMethodType}' not found. Available: ${availableCodes}`
         console.error(`❌ ${error}`)
         return { success: false, error }
       }

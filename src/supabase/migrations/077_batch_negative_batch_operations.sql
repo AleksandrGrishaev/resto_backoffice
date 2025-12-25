@@ -11,7 +11,7 @@
 DROP TYPE IF EXISTS shortage_item CASCADE;
 CREATE TYPE shortage_item AS (
   product_id uuid,
-  warehouse_id uuid,
+  warehouse_id text,  -- TEXT not UUID (warehouses use string IDs like 'warehouse-winter')
   shortage_quantity numeric,
   unit text,
   reason text,
@@ -24,7 +24,7 @@ CREATE TYPE shortage_item AS (
 DROP TYPE IF EXISTS shortage_result CASCADE;
 CREATE TYPE shortage_result AS (
   product_id uuid,
-  batch_id uuid,
+  batch_id text,  -- TEXT not UUID (storage_batches.id is text)
   batch_number text,
   quantity numeric,
   cost_per_unit numeric,
@@ -52,7 +52,7 @@ DECLARE
   v_existing_batch RECORD;
   v_new_batch RECORD;
   v_batch_number text;
-  v_batch_id uuid;
+  v_batch_id text;  -- TEXT not UUID (storage_batches.id is text)
   v_now timestamptz := now();
 BEGIN
   -- Process each shortage
@@ -60,7 +60,7 @@ BEGIN
   LOOP
     v_result := ROW(
       v_shortage.product_id,
-      NULL::uuid,
+      NULL::text,  -- batch_id is text
       NULL::text,
       v_shortage.shortage_quantity,
       0::numeric,
@@ -74,7 +74,7 @@ BEGIN
       -- First: last active batch
       SELECT cost_per_unit INTO v_cost
       FROM storage_batches
-      WHERE item_id = v_shortage.product_id
+      WHERE item_id = v_shortage.product_id::text
         AND item_type = 'product'
         AND (is_negative = false OR is_negative IS NULL)
         AND current_quantity > 0
@@ -85,7 +85,7 @@ BEGIN
       IF v_cost IS NULL OR v_cost <= 0 THEN
         SELECT AVG(cost_per_unit) INTO v_cost
         FROM storage_batches
-        WHERE item_id = v_shortage.product_id
+        WHERE item_id = v_shortage.product_id::text
           AND item_type = 'product'
           AND (is_negative = false OR is_negative IS NULL)
           AND status IN ('consumed', 'depleted')
@@ -105,7 +105,7 @@ BEGIN
       -- 2. Check for existing negative batch
       SELECT * INTO v_existing_batch
       FROM storage_batches
-      WHERE item_id = v_shortage.product_id
+      WHERE item_id = v_shortage.product_id::text
         AND item_type = 'product'
         AND warehouse_id = v_shortage.warehouse_id
         AND is_negative = true
@@ -133,7 +133,7 @@ BEGIN
         v_result.is_new := false;
       ELSE
         -- 3b. Create new negative batch
-        v_batch_id := gen_random_uuid();
+        v_batch_id := gen_random_uuid()::text;
         v_batch_number := 'NEG-' || extract(epoch from v_now)::bigint::text;
 
         INSERT INTO storage_batches (
@@ -143,7 +143,7 @@ BEGIN
           negative_created_at, negative_reason, source_operation_type,
           created_at, updated_at
         ) VALUES (
-          v_batch_id, v_batch_number, v_shortage.product_id, 'product', v_shortage.warehouse_id,
+          v_batch_id, v_batch_number, v_shortage.product_id::text, 'product', v_shortage.warehouse_id,
           -v_shortage.shortage_quantity, -v_shortage.shortage_quantity, v_shortage.unit, v_cost, -v_shortage.shortage_quantity * v_cost,
           v_now, 'correction', 'active', true, true,
           v_now, v_shortage.reason, v_shortage.source_operation_type,
