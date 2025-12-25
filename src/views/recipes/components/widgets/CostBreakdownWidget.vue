@@ -216,6 +216,16 @@ function getActualBaseUnit(component: ComponentPlanCost): string {
       return getUnitShortName((product as any).unit as any)
     }
   }
+
+  // Handle preparations
+  if (component.componentType === 'preparation') {
+    const prep = recipesStore.preparations.find(p => p.id === component.componentId)
+    if (prep?.portionType === 'portion') {
+      return 'portion'
+    }
+    return prep?.outputUnit || 'unit'
+  }
+
   return 'unit'
 }
 

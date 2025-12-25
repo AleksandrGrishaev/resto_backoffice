@@ -877,12 +877,37 @@ export class PreparationService {
               })
             }
 
+            // ⭐ FIX: Convert portions to grams for portion-type preparation ingredients
+            // Batches store quantities in grams, so we must convert before write-off
+            let finalQuantity = adjustedQuantity
+            let finalUnit = ingredient.unit
+
+            if (ingredient.type === 'preparation' && ingredient.unit === 'portion') {
+              const ingredientPrep = recipesStore.getPreparationById(ingredient.id)
+              if (ingredientPrep?.portionType === 'portion' && ingredientPrep?.portionSize) {
+                // Convert portions to grams: 4 portions × 16.67g = 66.68g
+                finalQuantity = adjustedQuantity * ingredientPrep.portionSize
+                finalUnit = 'gram'
+
+                DebugUtils.info(
+                  MODULE_NAME,
+                  'Converted portions to grams for preparation ingredient',
+                  {
+                    preparationName: ingredientPrep.name,
+                    originalQuantity: adjustedQuantity,
+                    portionSize: ingredientPrep.portionSize,
+                    convertedQuantity: finalQuantity
+                  }
+                )
+              }
+            }
+
             return {
               itemId: ingredient.id,
               itemName: ingredientName,
               itemType: ingredient.type, // ⭐ CHANGED: Use actual type ('product' | 'preparation')
-              quantity: adjustedQuantity,
-              unit: ingredient.unit,
+              quantity: finalQuantity, // Now in grams for portion-type preparations
+              unit: finalUnit, // Now 'gram' for portion-type preparations
               notes: `Production: ${preparation.name} (${item.quantity}${preparation.outputUnit})`
             }
           })
