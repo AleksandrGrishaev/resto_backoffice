@@ -28,11 +28,18 @@ export function useInventory() {
   /**
    * Balances отфильтрованные по департаменту
    * Фильтрация через Product.usedInDepartments
+   * Показываем только активные продукты (isActive = true)
    */
   const filteredBalances = computed(() => {
     if (!storageStore.state?.balances) return []
 
     let balances = [...storageStore.state.balances]
+
+    // ✅ Фильтр: только активные продукты
+    balances = balances.filter(balance => {
+      const product = productsStore.products.find(p => p.id === balance.itemId)
+      return product?.isActive !== false
+    })
 
     // ✅ Фильтр по Department через Product.usedInDepartments
     if (selectedDepartment.value !== 'all') {
@@ -67,22 +74,27 @@ export function useInventory() {
   })
 
   /**
-   * Счётчики для вкладок
+   * Счётчики для вкладок (только активные продукты)
    */
   const balancesCounts = computed(() => {
-    const all = storageStore.state?.balances?.length || 0
-
-    const kitchen =
+    // Фильтруем только активные продукты
+    const activeBalances =
       storageStore.state?.balances?.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
-        return product?.usedInDepartments.includes('kitchen')
-      }).length || 0
+        return product?.isActive !== false
+      }) || []
 
-    const bar =
-      storageStore.state?.balances?.filter(balance => {
-        const product = productsStore.products.find(p => p.id === balance.itemId)
-        return product?.usedInDepartments.includes('bar')
-      }).length || 0
+    const all = activeBalances.length
+
+    const kitchen = activeBalances.filter(balance => {
+      const product = productsStore.products.find(p => p.id === balance.itemId)
+      return product?.usedInDepartments.includes('kitchen')
+    }).length
+
+    const bar = activeBalances.filter(balance => {
+      const product = productsStore.products.find(p => p.id === balance.itemId)
+      return product?.usedInDepartments.includes('bar')
+    }).length
 
     return { all, kitchen, bar }
   })
