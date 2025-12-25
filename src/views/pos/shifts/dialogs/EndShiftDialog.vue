@@ -471,11 +471,11 @@ const cashSales = computed(() => {
   return cashReceived - cashRefunded
 })
 
-// ✅ FIX: Calculate total expenses
+// ✅ FIX: Calculate total expenses (including confirmed supplier payments)
 const totalExpenses = computed(() => {
   if (!currentShift.value) return 0
   return currentShift.value.expenseOperations
-    .filter(exp => exp.status === 'completed')
+    .filter(exp => exp.status === 'completed' || exp.status === 'confirmed')
     .reduce((sum, exp) => sum + exp.amount, 0)
 })
 
