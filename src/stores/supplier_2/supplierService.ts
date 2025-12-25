@@ -1407,43 +1407,33 @@ class SupplierService {
       const { useProductsStore } = await import('@/stores/productsStore')
       const productsStore = useProductsStore()
 
+      // ✅ OPTIMIZATION: Fetch all orders ONCE before processing (fixes N+1 query)
+      const allOrders = await this.getOrders()
+
       const unassignedItems: UnassignedItem[] = []
 
       for (const request of requests) {
-        console.log(`Processing request ${request.requestNumber} (${request.status})`)
-
         for (const item of request.items) {
-          // ✅ DEBUG: Log package info from request item
-          console.log(`📦 Request item package info:`, item.itemName, {
-            packageId: item.packageId,
-            packageName: item.packageName,
-            packageQuantity: item.packageQuantity
-          })
-
           // ✅ ПОЛУЧАЕМ ПРОДУКТ ДЛЯ БАЗОВЫХ ДАННЫХ
           const product = productsStore.getProductById(item.itemId)
 
           if (!product) {
-            console.warn(`Product not found: ${item.itemId}, skipping item`)
             continue
           }
 
-          // ✅ FIX: Add await (method is async since Phase 2)
-          const orderedQuantity = await this.getOrderedQuantityForItem(request.id, item.itemId)
-          const remainingQuantity = item.requestedQuantity - orderedQuantity
-
-          console.log(
-            `Item ${item.itemName}: requested=${item.requestedQuantity}, ordered=${orderedQuantity}, remaining=${remainingQuantity}`
+          // ✅ OPTIMIZED: Use pre-fetched orders (no N+1 queries)
+          const orderedQuantity = this.calculateOrderedQuantityForItem(
+            request.id,
+            item.itemId,
+            allOrders
           )
+          const remainingQuantity = item.requestedQuantity - orderedQuantity
 
           if (remainingQuantity > 0) {
             const existingItem = unassignedItems.find(ui => ui.itemId === item.itemId)
 
             // ✅ Используем цену из request если есть, иначе из продукта
             const itemPrice = item.estimatedPrice ?? product.baseCostPerUnit
-            console.log(
-              `  Price for ${item.itemName}: request=${item.estimatedPrice}, product=${product.baseCostPerUnit}, using=${itemPrice}`
-            )
 
             if (existingItem) {
               // ✅ Weighted average: (oldQty * oldPrice + newQty * newPrice) / totalQty
@@ -1451,10 +1441,6 @@ class SupplierService {
               const newTotal = remainingQuantity * itemPrice
               const newTotalQuantity = existingItem.totalQuantity + remainingQuantity
               const weightedAvg = (oldTotal + newTotal) / newTotalQuantity
-
-              console.log(
-                `  Weighted average: (${existingItem.totalQuantity}×${existingItem.estimatedBaseCost} + ${remainingQuantity}×${itemPrice}) / ${newTotalQuantity} = ${weightedAvg}`
-              )
 
               existingItem.estimatedBaseCost = weightedAvg
               existingItem.totalQuantity = newTotalQuantity
@@ -1485,9 +1471,6 @@ class SupplierService {
                 const pkg = productsStore.getPackageById(item.packageId)
                 if (pkg && pkg.packageSize > 0) {
                   calculatedPackageQuantity = remainingQuantity / pkg.packageSize
-                  console.log(
-                    `📦 Recalculated package quantity for ${item.itemName}: ${remainingQuantity} / ${pkg.packageSize} = ${calculatedPackageQuantity}`
-                  )
                 }
               }
 
@@ -1523,17 +1506,8 @@ class SupplierService {
                 ]
               }
 
-              console.log(`✅ Created unassigned item with package:`, newItem.itemName, {
-                packageId: newItem.packageId,
-                packageName: newItem.packageName,
-                packageQuantity: newItem.packageQuantity,
-                recommendedPackageId: newItem.recommendedPackageId
-              })
-
               unassignedItems.push(newItem)
             }
-          } else {
-            console.log(`Item ${item.itemName} is fully ordered, skipping`)
           }
         }
       }
@@ -1552,9 +1526,11 @@ class SupplierService {
         }
       ]
 
-      console.log(
-        `Created baskets: ${unassignedItems.length} unassigned items from ${requests.length} requests`
-      )
+      DebugUtils.info(MODULE_NAME, 'Created supplier baskets', {
+        unassignedItems: unassignedItems.length,
+        requests: requests.length,
+        orders: allOrders.length
+      })
 
       return baskets
     } catch (error) {
@@ -1563,11 +1539,13 @@ class SupplierService {
     }
   }
 
-  private async getOrderedQuantityForItem(requestId: string, itemId: string): Promise<number> {
+  // ✅ OPTIMIZED: Sync method uses pre-fetched orders (no N+1 queries)
+  private calculateOrderedQuantityForItem(
+    requestId: string,
+    itemId: string,
+    allOrders: PurchaseOrder[]
+  ): number {
     let totalOrdered = 0
-
-    // ✅ FETCH ORDERS FROM SUPABASE (Phase 2)
-    const allOrders = await this.getOrders()
     const relatedOrders = allOrders.filter(order => order.requestIds.includes(requestId))
 
     for (const order of relatedOrders) {

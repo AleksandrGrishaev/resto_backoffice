@@ -9,19 +9,19 @@
           Complete procurement workflow from requests to storage
         </div>
       </div>
-      <div class="d-flex gap-2">
+      <div class="d-flex" style="gap: 8px">
         <v-btn
           color="success"
           prepend-icon="mdi-robot"
           :loading="isLoadingValue"
           @click="showOrderAssistant = true"
         >
-          AI Order Assistant
+          AI Assistant
         </v-btn>
 
         <!-- Quick Receipt Entry - для исторических данных -->
         <v-btn color="warning" prepend-icon="mdi-flash" @click="showQuickReceiptDialog = true">
-          Quick Receipt
+          Quick
         </v-btn>
 
         <!-- Create Orders кнопка появляется когда есть submitted заявки -->
@@ -31,7 +31,7 @@
           prepend-icon="mdi-cart-plus"
           @click="handleCreateOrdersFromSubmitted"
         >
-          Create Orders ({{ availableItemsCount }})
+          Create ({{ availableItemsCount }})
         </v-btn>
       </div>
     </div>

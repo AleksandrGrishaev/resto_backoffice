@@ -472,9 +472,9 @@ const displayItems = computed(() => {
         quantityPerPortion: prep.quantity / (selectedWriteOff.value?.soldQuantity || 1),
         totalQuantity: prep.quantity,
         unit: prep.unit,
-        costPerUnit: prep.averageCostPerUnit,
+        costPerUnit: prep.avgCostPerUnit ?? prep.averageCostPerUnit ?? 0,
         totalCost: prep.totalCost,
-        batchIds: prep.batchAllocations?.map((a: any) => a.batchId) || [],
+        batchIds: prep.allocations?.map((a: any) => a.batchId) || [],
         itemType: 'preparation'
       })
     }
@@ -488,9 +488,9 @@ const displayItems = computed(() => {
         quantityPerPortion: prod.quantity / (selectedWriteOff.value?.soldQuantity || 1),
         totalQuantity: prod.quantity,
         unit: prod.unit,
-        costPerUnit: prod.averageCostPerUnit,
+        costPerUnit: prod.avgCostPerUnit ?? prod.averageCostPerUnit ?? 0,
         totalCost: prod.totalCost,
-        batchIds: prod.batchAllocations?.map((a: any) => a.batchId) || [],
+        batchIds: prod.allocations?.map((a: any) => a.batchId) || [],
         itemType: 'product'
       })
     }
