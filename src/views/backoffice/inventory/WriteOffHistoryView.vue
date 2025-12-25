@@ -437,12 +437,20 @@ function getVariantName(menuItemId: string, variantId: string): string {
 
 // Computed property for displaying items with actual FIFO costs
 const displayItems = computed(() => {
-  if (!selectedWriteOff.value || !actualCostData.value) {
-    // Fallback to old decomposed data if actual_cost is not available
+  if (!selectedWriteOff.value) {
+    return []
+  }
+
+  // Check if actualCostData has any items
+  const actualCost = actualCostData.value
+  const hasActualCostItems =
+    actualCost && (actualCost.preparationCosts?.length > 0 || actualCost.productCosts?.length > 0)
+
+  // Fallback to writeOffItems if actual_cost is empty or has no items
+  if (!hasActualCostItems) {
     return selectedWriteOff.value?.writeOffItems || []
   }
 
-  const actualCost = actualCostData.value
   const items: any[] = []
 
   // Map preparation costs
@@ -492,18 +500,25 @@ const displayItems = computed(() => {
 })
 
 function getTotalCost(writeOff: RecipeWriteOff): number {
-  // If this is the selected write-off and we have actual cost data, use it
-  if (selectedWriteOff.value?.id === writeOff.id && actualCostData.value) {
-    return actualCostData.value.totalCost || 0
+  // Calculate from writeOffItems (most reliable source)
+  const writeOffItemsCost = writeOff.writeOffItems.reduce(
+    (sum: number, item: any) => sum + (item.totalCost || 0),
+    0
+  )
+
+  // If this is the selected write-off and we have actual cost data with value > 0, use it
+  if (selectedWriteOff.value?.id === writeOff.id && actualCostData.value?.totalCost > 0) {
+    return actualCostData.value.totalCost
   }
 
-  // Check cache for actual cost
-  if (actualCostCache.value.has(writeOff.id)) {
-    return actualCostCache.value.get(writeOff.id) || 0
+  // Check cache for actual cost (only if > 0)
+  const cachedCost = actualCostCache.value.get(writeOff.id)
+  if (cachedCost && cachedCost > 0) {
+    return cachedCost
   }
 
-  // Otherwise fallback to decomposed data
-  return writeOff.writeOffItems.reduce((sum: number, item: any) => sum + item.totalCost, 0)
+  // Fallback to writeOffItems cost
+  return writeOffItemsCost
 }
 
 async function loadActualCost(salesTransactionId: string) {
