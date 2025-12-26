@@ -209,11 +209,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import type { PosBillItem, PosBill } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
+import { DebugUtils } from '@/utils'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
 import BillDiscountDialog from '../order/dialogs/BillDiscountDialog.vue'
 
@@ -491,11 +492,38 @@ const getDiscountReasonLabel = (reason: string): string => {
   return DISCOUNT_REASON_LABELS[reason as keyof typeof DISCOUNT_REASON_LABELS] || reason
 }
 
+// Ensure payment methods are loaded
+const ensurePaymentMethodsLoaded = async () => {
+  console.log('🔍 PaymentDialog: Checking payment methods...', {
+    currentCount: paymentSettingsStore.paymentMethods.length,
+    activeCount: paymentSettingsStore.activePaymentMethods.length
+  })
+
+  if (paymentSettingsStore.paymentMethods.length === 0) {
+    console.warn('⚠️ PaymentDialog: Payment methods EMPTY, fetching from Supabase...')
+    try {
+      await paymentSettingsStore.fetchPaymentMethods()
+      console.log('✅ PaymentDialog: Payment methods loaded', {
+        count: paymentSettingsStore.paymentMethods.length,
+        methods: paymentSettingsStore.paymentMethods.map(m => m.name)
+      })
+    } catch (error) {
+      console.error('❌ PaymentDialog: Failed to load payment methods', error)
+    }
+  } else {
+    console.log('✅ PaymentDialog: Payment methods already loaded', {
+      count: paymentSettingsStore.paymentMethods.length
+    })
+  }
+}
+
 // Watchers
 watch(
   () => props.modelValue,
-  newValue => {
+  async newValue => {
     if (newValue) {
+      // Ensure payment methods are loaded when dialog opens
+      await ensurePaymentMethodsLoaded()
       // Reset form when dialog opens
       resetForm()
       // Auto-fill exact amount for convenience
