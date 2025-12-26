@@ -92,6 +92,25 @@
           <span class="screen-btn-label">Requests</span>
         </div>
       </v-btn>
+
+      <!-- Calculator Screen Button - Kitchen only -->
+      <template v-if="showCalculatorTab">
+        <div class="separator" />
+
+        <v-btn
+          :class="['screen-btn', { active: currentScreen === 'calculator' }]"
+          :color="currentScreen === 'calculator' ? 'primary' : undefined"
+          :variant="currentScreen === 'calculator' ? 'flat' : 'text'"
+          block
+          height="56"
+          @click="handleScreenSelect('calculator')"
+        >
+          <div class="screen-btn-content">
+            <v-icon size="24">mdi-calculator-variant</v-icon>
+            <span class="screen-btn-label">Calc</span>
+          </div>
+        </v-btn>
+      </template>
     </div>
 
     <div class="spacer" />
@@ -117,7 +136,7 @@ const MODULE_NAME = 'KitchenSidebar'
 // =============================================
 
 interface Props {
-  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'requests'
+  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -129,7 +148,7 @@ const props = withDefaults(defineProps<Props>(), {
 // =============================================
 
 const emit = defineEmits<{
-  'screen-select': [screen: 'orders' | 'preparation' | 'kpi' | 'requests']
+  'screen-select': [screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator']
   'department-change': [department: 'all' | 'kitchen' | 'bar']
 }>()
 
@@ -157,6 +176,14 @@ const showDepartmentTabs = computed(() => {
   return authStore.userRoles.includes('admin')
 })
 
+/**
+ * Show calculator (Prod) tab only for kitchen department
+ * Hide when bar-only is selected
+ */
+const showCalculatorTab = computed(() => {
+  return selectedDepartment.value !== 'bar'
+})
+
 // =============================================
 // WATCHERS
 // =============================================
@@ -173,7 +200,9 @@ watch(selectedDepartment, value => {
 // METHODS
 // =============================================
 
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'requests') => {
+const handleScreenSelect = (
+  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator'
+) => {
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
   emit('screen-select', screen)
 }

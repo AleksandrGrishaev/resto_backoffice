@@ -81,6 +81,9 @@
             v-else-if="currentScreen === 'requests'"
             :selected-department="selectedDepartment"
           />
+
+          <!-- Recipe Calculator Screen (Kitchen only) -->
+          <RecipeCalculatorScreen v-else-if="currentScreen === 'calculator'" />
         </div>
       </template>
     </KitchenLayout>
@@ -112,6 +115,7 @@ import OrdersScreen from './orders/OrdersScreen.vue'
 import PreparationScreen from './preparation/PreparationScreen.vue'
 import KpiScreen from './kpi/KpiScreen.vue'
 import RequestsPage from './request/RequestsPage.vue'
+import RecipeCalculatorScreen from './calculator/RecipeCalculatorScreen.vue'
 
 const MODULE_NAME = 'KitchenMainView'
 
@@ -136,7 +140,7 @@ const orderAlerts = useOrderAlertService()
 const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
-const currentScreen = ref<'orders' | 'preparation' | 'kpi' | 'requests'>('orders')
+const currentScreen = ref<'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator'>('orders')
 
 // Initialize selectedDepartment based on user role
 const getInitialDepartment = (): 'all' | 'kitchen' | 'bar' => {
@@ -227,7 +231,9 @@ const retryInitialization = async (): Promise<void> => {
 /**
  * Handle screen selection from sidebar
  */
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'requests'): void => {
+const handleScreenSelect = (
+  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator'
+): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
 }
