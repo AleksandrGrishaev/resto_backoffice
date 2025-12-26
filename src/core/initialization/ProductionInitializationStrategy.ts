@@ -32,6 +32,8 @@ import { usePosStore } from '@/stores/pos'
 import { useKitchenStore } from '@/stores/kitchen'
 import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { useDiscountsStore } from '@/stores/discounts'
+import { useSupplierStore } from '@/stores/supplier_2'
 
 const MODULE_NAME = 'ProductionInitStrategy'
 
@@ -274,10 +276,14 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadStorageFromAPI()
       case 'preparations':
         return this.loadPreparationsFromAPI()
+      case 'suppliers':
+        return this.loadSuppliersFromAPI()
       case 'accounts':
         return this.loadAccountsFromAPI()
       case 'pos':
         return this.loadPOSFromAPI()
+      case 'paymentSettings':
+        return this.loadPaymentSettingsFromAPI()
       case 'sales':
         return this.loadSalesFromAPI()
       case 'writeOff':
@@ -286,6 +292,8 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadKitchenFromAPI()
       case 'kitchenKpi':
         return this.loadKitchenKpiFromAPI()
+      case 'discounts':
+        return this.loadDiscountsFromAPI()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -806,6 +814,68 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'accounts',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadDiscountsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useDiscountsStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading discounts from API...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'discounts',
+        success: true,
+        count: store.discountEvents.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load discounts'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'discounts',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadSuppliersFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useSupplierStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading suppliers from API...')
+
+      if (store.initialize) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'suppliers',
+        success: true,
+        count: store.state?.requests?.length || 0,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load suppliers'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'suppliers',
         success: false,
         error: message,
         duration: Date.now() - start

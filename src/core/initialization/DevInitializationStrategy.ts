@@ -278,6 +278,8 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadDiscounts()
       case 'pos':
         return this.loadPOS()
+      case 'paymentSettings':
+        return this.loadPaymentSettings()
       case 'sales':
         return this.loadSales()
       case 'writeOff':

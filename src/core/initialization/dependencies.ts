@@ -37,8 +37,17 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   // POS system
   pos: ['menu'],
 
+  // Payment settings (needed for POS checkout dialog)
+  paymentSettings: [],
+
   // Kitchen system (reads orders from Supabase, only needs menu for item details)
   kitchen: ['menu'],
+
+  // Kitchen KPI system
+  kitchenKpi: ['kitchen'],
+
+  // Discounts analytics
+  discounts: [],
 
   // Debug system
   debug: []
@@ -109,9 +118,11 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
 
   // POS специфичные
   pos: 'pos',
+  paymentSettings: 'pos',
   sales: 'pos',
   writeOff: 'pos',
   kitchen: 'pos',
+  kitchenKpi: 'pos',
 
   // Backoffice специфичные
   counteragents: 'backoffice',
@@ -119,6 +130,7 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   storage: 'backoffice',
   preparations: 'backoffice',
   accounts: 'backoffice',
+  discounts: 'backoffice',
 
   // Опциональные
   debug: 'optional'

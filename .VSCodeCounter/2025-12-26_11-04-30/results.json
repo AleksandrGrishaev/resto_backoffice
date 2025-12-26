@@ -1,0 +1,4784 @@
+{
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/router/guards/auth.guard.ts": {
+    "language": "TypeScript",
+    "code": 118,
+    "comment": 14,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/services/session.service.ts": {
+    "language": "TypeScript",
+    "code": 96,
+    "comment": 2,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/services/tax.service.ts": {
+    "language": "TypeScript",
+    "code": 46,
+    "comment": 5,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoriesTable.vue": {
+    "language": "Vue",
+    "code": 478,
+    "comment": 19,
+    "blank": 61
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/router/index.ts": {
+    "language": "TypeScript",
+    "code": 532,
+    "comment": 52,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/router/types.ts": {
+    "language": "TypeScript",
+    "code": 15,
+    "comment": 1,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/index.ts": {
+    "language": "TypeScript",
+    "code": 9,
+    "comment": 122,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/PreparationView.vue": {
+    "language": "Vue",
+    "code": 525,
+    "comment": 16,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/debug/SyncMonitorView.vue": {
+    "language": "Vue",
+    "code": 834,
+    "comment": 23,
+    "blank": 77
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationItemDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 516,
+    "comment": 11,
+    "blank": 57
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoryItemRow.vue": {
+    "language": "Vue",
+    "code": 325,
+    "comment": 10,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/debug/HMRTestView.vue": {
+    "language": "Vue",
+    "code": 94,
+    "comment": 0,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/debug/SupabaseTestView.vue": {
+    "language": "Vue",
+    "code": 294,
+    "comment": 6,
+    "blank": 36
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/debug/DebugView.vue": {
+    "language": "Vue",
+    "code": 488,
+    "comment": 27,
+    "blank": 62
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/JsonTreeNode.vue": {
+    "language": "Vue",
+    "code": 425,
+    "comment": 14,
+    "blank": 89
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/debug/components/JsonNavigator.vue": {
+    "language": "Vue",
+    "code": 506,
+    "comment": 9,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationInventoryDialog.vue": {
+    "language": "Vue",
+    "code": 496,
+    "comment": 9,
+    "blank": 76
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/DirectPreparationProductionDialog.vue": {
+    "language": "Vue",
+    "code": 1046,
+    "comment": 27,
+    "blank": 135
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationOperationsTable.vue": {
+    "language": "Vue",
+    "code": 729,
+    "comment": 29,
+    "blank": 71
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationAlerts.vue": {
+    "language": "Vue",
+    "code": 92,
+    "comment": 2,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/InventoryDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 633,
+    "comment": 18,
+    "blank": 66
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/PreparationStockTable.vue": {
+    "language": "Vue",
+    "code": 743,
+    "comment": 27,
+    "blank": 93
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/assets/vue.svg": {
+    "language": "XML",
+    "code": 1,
+    "comment": 0,
+    "blank": 0
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/NotFoundView.vue": {
+    "language": "Vue",
+    "code": 120,
+    "comment": 5,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/PreparationScreen.vue": {
+    "language": "Vue",
+    "code": 739,
+    "comment": 15,
+    "blank": 103
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/CounteragentsView.vue": {
+    "language": "Vue",
+    "code": 293,
+    "comment": 13,
+    "blank": 48
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationWriteOffWidget.vue": {
+    "language": "Vue",
+    "code": 81,
+    "comment": 5,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationSelectorWidget.vue": {
+    "language": "Vue",
+    "code": 324,
+    "comment": 7,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationQuantityDialog.vue": {
+    "language": "Vue",
+    "code": 500,
+    "comment": 8,
+    "blank": 79
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/dialogs/BalanceCorrectionDialog.vue": {
+    "language": "Vue",
+    "code": 335,
+    "comment": 8,
+    "blank": 49
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentCardContent.vue": {
+    "language": "Vue",
+    "code": 554,
+    "comment": 15,
+    "blank": 73
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/Preparation/components/writeoff/PreparationWriteOffDialog.vue": {
+    "language": "Vue",
+    "code": 541,
+    "comment": 20,
+    "blank": 69
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentPaymentsSimple.vue": {
+    "language": "Vue",
+    "code": 731,
+    "comment": 10,
+    "blank": 128
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentDialog.vue": {
+    "language": "Vue",
+    "code": 635,
+    "comment": 12,
+    "blank": 70
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentFilters.vue": {
+    "language": "Vue",
+    "code": 417,
+    "comment": 11,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/shared/ContactInfo.vue": {
+    "language": "Vue",
+    "code": 165,
+    "comment": 6,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentsTable.vue": {
+    "language": "Vue",
+    "code": 368,
+    "comment": 15,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/OrderCard.vue": {
+    "language": "Vue",
+    "code": 205,
+    "comment": 4,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/counteragents/components/counteragents/CounteragentCard.vue": {
+    "language": "Vue",
+    "code": 188,
+    "comment": 10,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/DishCard.vue": {
+    "language": "Vue",
+    "code": 517,
+    "comment": 11,
+    "blank": 87
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/StatusButton.vue": {
+    "language": "Vue",
+    "code": 92,
+    "comment": 1,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/KitchenMainView.vue": {
+    "language": "Vue",
+    "code": 264,
+    "comment": 12,
+    "blank": 48
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/components/NewOrderNotification.vue": {
+    "language": "Vue",
+    "code": 169,
+    "comment": 1,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useUIScale.ts": {
+    "language": "TypeScript",
+    "code": 83,
+    "comment": 30,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/usePersistence.ts": {
+    "language": "TypeScript",
+    "code": 205,
+    "comment": 50,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useBackgroundTasks.ts": {
+    "language": "TypeScript",
+    "code": 114,
+    "comment": 31,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/usePlatform.ts": {
+    "language": "TypeScript",
+    "code": 106,
+    "comment": 42,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useDialogForm.ts": {
+    "language": "TypeScript",
+    "code": 59,
+    "comment": 6,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useViewRefresh.ts": {
+    "language": "TypeScript",
+    "code": 138,
+    "comment": 35,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useLazyLoading.ts": {
+    "language": "TypeScript",
+    "code": 249,
+    "comment": 15,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useVuetifyBreakpoints.ts": {
+    "language": "TypeScript",
+    "code": 31,
+    "comment": 6,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/orders/OrdersScreen.vue": {
+    "language": "Vue",
+    "code": 401,
+    "comment": 7,
+    "blank": 72
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useMeasurementUnits.ts": {
+    "language": "TypeScript",
+    "code": 214,
+    "comment": 82,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/composables/useWebShare.ts": {
+    "language": "TypeScript",
+    "code": 121,
+    "comment": 35,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/SyncStatusIndicator.vue": {
+    "language": "Vue",
+    "code": 182,
+    "comment": 11,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/ScheduleTaskCard.vue": {
+    "language": "Vue",
+    "code": 240,
+    "comment": 7,
+    "blank": 39
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/HistoryTaskCard.vue": {
+    "language": "Vue",
+    "code": 136,
+    "comment": 5,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/StockListTab.vue": {
+    "language": "Vue",
+    "code": 258,
+    "comment": 10,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/ProductionScheduleTab.vue": {
+    "language": "Vue",
+    "code": 212,
+    "comment": 11,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/RecommendationsList.vue": {
+    "language": "Vue",
+    "code": 360,
+    "comment": 10,
+    "blank": 52
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/StockItemCard.vue": {
+    "language": "Vue",
+    "code": 293,
+    "comment": 10,
+    "blank": 54
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 2,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/HistoryItemCard.vue": {
+    "language": "Vue",
+    "code": 204,
+    "comment": 10,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/HistoryTab.vue": {
+    "language": "Vue",
+    "code": 229,
+    "comment": 11,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/components/ScheduleSection.vue": {
+    "language": "Vue",
+    "code": 100,
+    "comment": 4,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/ScheduleConfirmDialog.vue": {
+    "language": "Vue",
+    "code": 441,
+    "comment": 11,
+    "blank": 58
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/PrepWriteOffDialog.vue": {
+    "language": "Vue",
+    "code": 450,
+    "comment": 12,
+    "blank": 59
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/ProductWriteOffDialog.vue": {
+    "language": "Vue",
+    "code": 488,
+    "comment": 14,
+    "blank": 63
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestScreen.vue": {
+    "language": "Vue",
+    "code": 153,
+    "comment": 8,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/composables/useKitchenRequest.ts": {
+    "language": "TypeScript",
+    "code": 251,
+    "comment": 29,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestHistoryScreen.vue": {
+    "language": "Vue",
+    "code": 302,
+    "comment": 13,
+    "blank": 59
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestDialog.vue": {
+    "language": "Vue",
+    "code": 172,
+    "comment": 8,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/ItemSearchWidget.vue": {
+    "language": "Vue",
+    "code": 398,
+    "comment": 15,
+    "blank": 57
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenSuggestionCard.vue": {
+    "language": "Vue",
+    "code": 411,
+    "comment": 14,
+    "blank": 83
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenManualItemForm.vue": {
+    "language": "Vue",
+    "code": 115,
+    "comment": 2,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenQuickAddDialog.vue": {
+    "language": "Vue",
+    "code": 582,
+    "comment": 17,
+    "blank": 81
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/preparation/dialogs/SimpleProductionDialog.vue": {
+    "language": "Vue",
+    "code": 482,
+    "comment": 14,
+    "blank": 60
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/HelpHomeView.vue": {
+    "language": "Vue",
+    "code": 96,
+    "comment": 3,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenOrderAssistant.vue": {
+    "language": "Vue",
+    "code": 366,
+    "comment": 15,
+    "blank": 57
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/RequestsPage.vue": {
+    "language": "Vue",
+    "code": 322,
+    "comment": 14,
+    "blank": 61
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/KitchenSummaryPanel.vue": {
+    "language": "Vue",
+    "code": 430,
+    "comment": 8,
+    "blank": 63
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/router.ts": {
+    "language": "TypeScript",
+    "code": 192,
+    "comment": 9,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/components/KitchenNavigationMenu.vue": {
+    "language": "Vue",
+    "code": 233,
+    "comment": 1,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/request/components/package/PackageSelector.vue": {
+    "language": "Vue",
+    "code": 618,
+    "comment": 20,
+    "blank": 92
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/BackofficeHelpView.vue": {
+    "language": "Vue",
+    "code": 185,
+    "comment": 5,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/HelpLayout.vue": {
+    "language": "Vue",
+    "code": 197,
+    "comment": 8,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/RecipesGuide.vue": {
+    "language": "Vue",
+    "code": 671,
+    "comment": 16,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/components/KitchenSidebar.vue": {
+    "language": "Vue",
+    "code": 259,
+    "comment": 9,
+    "blank": 48
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/ProductsGuide.vue": {
+    "language": "Vue",
+    "code": 541,
+    "comment": 14,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/KitchenHelpView.vue": {
+    "language": "Vue",
+    "code": 167,
+    "comment": 5,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/AccountsGuide.vue": {
+    "language": "Vue",
+    "code": 708,
+    "comment": 19,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/backoffice/guides/SupplierGuide.vue": {
+    "language": "Vue",
+    "code": 1263,
+    "comment": 30,
+    "blank": 109
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/OrdersGuide.vue": {
+    "language": "Vue",
+    "code": 397,
+    "comment": 8,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/PreparationGuide.vue": {
+    "language": "Vue",
+    "code": 499,
+    "comment": 9,
+    "blank": 48
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/MenuView.vue": {
+    "language": "Vue",
+    "code": 934,
+    "comment": 18,
+    "blank": 130
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/KpiGuide.vue": {
+    "language": "Vue",
+    "code": 468,
+    "comment": 7,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/kitchen/guides/MonitorGuide.vue": {
+    "language": "Vue",
+    "code": 353,
+    "comment": 7,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/RecipesView.vue": {
+    "language": "Vue",
+    "code": 1373,
+    "comment": 30,
+    "blank": 170
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosPaymentGuide.vue": {
+    "language": "Vue",
+    "code": 167,
+    "comment": 4,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosGuide.vue": {
+    "language": "Vue",
+    "code": 163,
+    "comment": 4,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosOverviewGuide.vue": {
+    "language": "Vue",
+    "code": 133,
+    "comment": 3,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosShiftGuide.vue": {
+    "language": "Vue",
+    "code": 333,
+    "comment": 5,
+    "blank": 30
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/SupplierView.vue": {
+    "language": "Vue",
+    "code": 695,
+    "comment": 23,
+    "blank": 123
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosOrdersGuide.vue": {
+    "language": "Vue",
+    "code": 224,
+    "comment": 7,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/PosHelpView.vue": {
+    "language": "Vue",
+    "code": 142,
+    "comment": 5,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuCategoryDialog.vue": {
+    "language": "Vue",
+    "code": 201,
+    "comment": 1,
+    "blank": 27
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosCancelMoveGuide.vue": {
+    "language": "Vue",
+    "code": 161,
+    "comment": 5,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItemDialog.vue": {
+    "language": "Vue",
+    "code": 794,
+    "comment": 15,
+    "blank": 85
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/OrderExportOptionsDialog.vue": {
+    "language": "Vue",
+    "code": 182,
+    "comment": 6,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItemVariant.vue": {
+    "language": "Vue",
+    "code": 474,
+    "comment": 15,
+    "blank": 58
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/help/pos/guides/PosDiscountsGuide.vue": {
+    "language": "Vue",
+    "code": 239,
+    "comment": 5,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/calculator/RecipeCalculatorScreen.vue": {
+    "language": "Vue",
+    "code": 188,
+    "comment": 5,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderEditDialog.vue": {
+    "language": "Vue",
+    "code": 419,
+    "comment": 10,
+    "blank": 79
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/calculator/components/QuantityInput.vue": {
+    "language": "Vue",
+    "code": 403,
+    "comment": 12,
+    "blank": 72
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/calculator/components/ScaledIngredientsDisplay.vue": {
+    "language": "Vue",
+    "code": 204,
+    "comment": 7,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/OrderPreviewDialog.vue": {
+    "language": "Vue",
+    "code": 246,
+    "comment": 6,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/ShortfallAlert.vue": {
+    "language": "Vue",
+    "code": 96,
+    "comment": 2,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/BaseSupplierBaskets.vue": {
+    "language": "Vue",
+    "code": 663,
+    "comment": 11,
+    "blank": 116
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 461,
+    "comment": 13,
+    "blank": 73
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/BillCard.vue": {
+    "language": "Vue",
+    "code": 243,
+    "comment": 7,
+    "blank": 36
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/AccountListView.vue": {
+    "language": "Vue",
+    "code": 143,
+    "comment": 3,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/PurchaseOrderTable.vue": {
+    "language": "Vue",
+    "code": 534,
+    "comment": 16,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/calculator/components/PreparationSelector.vue": {
+    "language": "Vue",
+    "code": 254,
+    "comment": 7,
+    "blank": 52
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/RecommendationsWidget.vue": {
+    "language": "Vue",
+    "code": 338,
+    "comment": 8,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/RecommendationCard.vue": {
+    "language": "Vue",
+    "code": 284,
+    "comment": 8,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/SupplierBasketsWidget.vue": {
+    "language": "Vue",
+    "code": 182,
+    "comment": 8,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/basket/UnassignedItemsWidget.vue": {
+    "language": "Vue",
+    "code": 233,
+    "comment": 7,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/AccountDetailView.vue": {
+    "language": "Vue",
+    "code": 605,
+    "comment": 16,
+    "blank": 86
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/RecipeFilters.vue": {
+    "language": "Vue",
+    "code": 371,
+    "comment": 8,
+    "blank": 62
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedViewDialog.vue": {
+    "language": "Vue",
+    "code": 356,
+    "comment": 9,
+    "blank": 59
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedRecipeDialog.vue": {
+    "language": "Vue",
+    "code": 356,
+    "comment": 6,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/CategoryDialog.vue": {
+    "language": "Vue",
+    "code": 307,
+    "comment": 9,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UnifiedRecipeItem.vue": {
+    "language": "Vue",
+    "code": 547,
+    "comment": 15,
+    "blank": 83
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/CostBreakdownWidget.vue": {
+    "language": "Vue",
+    "code": 404,
+    "comment": 6,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeSearchWidget.vue": {
+    "language": "Vue",
+    "code": 209,
+    "comment": 9,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/InstructionsWidget.vue": {
+    "language": "Vue",
+    "code": 177,
+    "comment": 4,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeCostPreviewWidget.vue": {
+    "language": "Vue",
+    "code": 363,
+    "comment": 5,
+    "blank": 54
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/OrderItemsWidget.vue": {
+    "language": "Vue",
+    "code": 241,
+    "comment": 12,
+    "blank": 30
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/AttachBillDialog.vue": {
+    "language": "Vue",
+    "code": 324,
+    "comment": 11,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/OrderReceiptWidget.vue": {
+    "language": "Vue",
+    "code": 196,
+    "comment": 4,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeBasicInfoWidget.vue": {
+    "language": "Vue",
+    "code": 485,
+    "comment": 20,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/UsageWarningDialog.vue": {
+    "language": "Vue",
+    "code": 128,
+    "comment": 2,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/CostInfoWidget.vue": {
+    "language": "Vue",
+    "code": 159,
+    "comment": 2,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ModifiersEditorWidget.vue": {
+    "language": "Vue",
+    "code": 1051,
+    "comment": 23,
+    "blank": 93
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ItemInfoWidget.vue": {
+    "language": "Vue",
+    "code": 186,
+    "comment": 8,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order/PurchaseOrderPayment.vue": {
+    "language": "Vue",
+    "code": 399,
+    "comment": 14,
+    "blank": 62
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/orders/order-edit/EditableOrderItemsWidget.vue": {
+    "language": "Vue",
+    "code": 487,
+    "comment": 17,
+    "blank": 73
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/KpiScreen.vue": {
+    "language": "Vue",
+    "code": 216,
+    "comment": 4,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/detail/AccountOperationsFilter.vue": {
+    "language": "Vue",
+    "code": 121,
+    "comment": 0,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/ComponentsListWidget.vue": {
+    "language": "Vue",
+    "code": 305,
+    "comment": 3,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/RecipeComponentsEditorWidget.vue": {
+    "language": "Vue",
+    "code": 1118,
+    "comment": 21,
+    "blank": 132
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/list/AccountListToolbar.vue": {
+    "language": "Vue",
+    "code": 46,
+    "comment": 0,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/calculator/composables/useRecipeScaling.ts": {
+    "language": "TypeScript",
+    "code": 171,
+    "comment": 58,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/recipes/components/widgets/UsedInWidget.vue": {
+    "language": "Vue",
+    "code": 253,
+    "comment": 4,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/AccountDialog.vue": {
+    "language": "Vue",
+    "code": 173,
+    "comment": 0,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/TransactionDetailDialog.vue": {
+    "language": "Vue",
+    "code": 56,
+    "comment": 4,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/detail/AccountOperations.vue": {
+    "language": "Vue",
+    "code": 174,
+    "comment": 0,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/CorrectionDialog.vue": {
+    "language": "Vue",
+    "code": 153,
+    "comment": 4,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/PaymentDialog.vue": {
+    "language": "Vue",
+    "code": 650,
+    "comment": 20,
+    "blank": 86
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/OperationDialog.vue": {
+    "language": "Vue",
+    "code": 164,
+    "comment": 2,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/TransferDialog.vue": {
+    "language": "Vue",
+    "code": 114,
+    "comment": 0,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/RequestEditDialog.vue": {
+    "language": "Vue",
+    "code": 434,
+    "comment": 19,
+    "blank": 71
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/transaction-detail/SupplierPaymentContextWidget.vue": {
+    "language": "Vue",
+    "code": 210,
+    "comment": 6,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/dialogs/transaction-detail/TransactionDetailContent.vue": {
+    "language": "Vue",
+    "code": 142,
+    "comment": 7,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/ProcurementRequestTable.vue": {
+    "language": "Vue",
+    "code": 396,
+    "comment": 19,
+    "blank": 68
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/AddItemDialog.vue": {
+    "language": "Vue",
+    "code": 533,
+    "comment": 9,
+    "blank": 81
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/DishTypeSelectionDialog.vue": {
+    "language": "Vue",
+    "code": 96,
+    "comment": 3,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/RequestDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 516,
+    "comment": 16,
+    "blank": 87
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/procurement/ItemSearchWidget.vue": {
+    "language": "Vue",
+    "code": 388,
+    "comment": 14,
+    "blank": 54
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/TimeKpiTab.vue": {
+    "language": "Vue",
+    "code": 329,
+    "comment": 10,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/MenuItem.vue": {
+    "language": "Vue",
+    "code": 351,
+    "comment": 8,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/accounts/components/list/AccountList.vue": {
+    "language": "Vue",
+    "code": 172,
+    "comment": 1,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/TimeKpiCard.vue": {
+    "language": "Vue",
+    "code": 170,
+    "comment": 7,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/StorageView.vue": {
+    "language": "Vue",
+    "code": 517,
+    "comment": 18,
+    "blank": 71
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/FoodCostKpiCard.vue": {
+    "language": "Vue",
+    "code": 277,
+    "comment": 13,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 435,
+    "comment": 14,
+    "blank": 79
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/SuggestionItemCard.vue": {
+    "language": "Vue",
+    "code": 409,
+    "comment": 14,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/BaseOrderAssistant.vue": {
+    "language": "Vue",
+    "code": 426,
+    "comment": 16,
+    "blank": 61
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/QuickAddItemDialog.vue": {
+    "language": "Vue",
+    "code": 595,
+    "comment": 17,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/kitchen/kpi/components/FoodCostKpiTab.vue": {
+    "language": "Vue",
+    "code": 323,
+    "comment": 11,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptTable.vue": {
+    "language": "Vue",
+    "code": 424,
+    "comment": 17,
+    "blank": 67
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/ReceiptDiscrepanciesDialog.vue": {
+    "language": "Vue",
+    "code": 388,
+    "comment": 13,
+    "blank": 70
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/ManualItemForm.vue": {
+    "language": "Vue",
+    "code": 104,
+    "comment": 2,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/BaseReceiptDialog.vue": {
+    "language": "Vue",
+    "code": 788,
+    "comment": 12,
+    "blank": 127
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageAlerts.vue": {
+    "language": "Vue",
+    "code": 139,
+    "comment": 5,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageInventoriesTable.vue": {
+    "language": "Vue",
+    "code": 480,
+    "comment": 20,
+    "blank": 65
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/RequestSummaryPanel.vue": {
+    "language": "Vue",
+    "code": 433,
+    "comment": 8,
+    "blank": 65
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/receipt-edit/EditableReceiptItemsWidget.vue": {
+    "language": "Vue",
+    "code": 907,
+    "comment": 18,
+    "blank": 158
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryItemRow.vue": {
+    "language": "Vue",
+    "code": 261,
+    "comment": 11,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/index.ts": {
+    "language": "TypeScript",
+    "code": 11,
+    "comment": 135,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/AddReceiptItemDialog.vue": {
+    "language": "Vue",
+    "code": 47,
+    "comment": 2,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/widgets/DishSearchWidget.vue": {
+    "language": "Vue",
+    "code": 221,
+    "comment": 12,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryDialog.vue": {
+    "language": "Vue",
+    "code": 845,
+    "comment": 13,
+    "blank": 126
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/dialogs/MenuItemViewDialog.vue": {
+    "language": "Vue",
+    "code": 1179,
+    "comment": 11,
+    "blank": 163
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/receipts/QuickReceiptDialog.vue": {
+    "language": "Vue",
+    "code": 944,
+    "comment": 19,
+    "blank": 134
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ReceiptDialog.vue": {
+    "language": "Vue",
+    "code": 302,
+    "comment": 9,
+    "blank": 49
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/widgets/ProductSearchWidget.vue": {
+    "language": "Vue",
+    "code": 273,
+    "comment": 13,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageOperationsTable.vue": {
+    "language": "Vue",
+    "code": 467,
+    "comment": 21,
+    "blank": 54
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ItemDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 507,
+    "comment": 9,
+    "blank": 64
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/InventoryDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 385,
+    "comment": 14,
+    "blank": 48
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/ReceiptItemCard.vue": {
+    "language": "Vue",
+    "code": 183,
+    "comment": 6,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/menu/components/dialogs/ConvertDishTypeDialog.vue": {
+    "language": "Vue",
+    "code": 189,
+    "comment": 3,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/StorageStockTable.vue": {
+    "language": "Vue",
+    "code": 857,
+    "comment": 30,
+    "blank": 125
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/tabs/StorageAnalyticsTab.vue": {
+    "language": "Vue",
+    "code": 432,
+    "comment": 13,
+    "blank": 52
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/WriteOffDialog.vue": {
+    "language": "Vue",
+    "code": 547,
+    "comment": 23,
+    "blank": 71
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/widgets/WriteOffStatsWidget.vue": {
+    "language": "Vue",
+    "code": 424,
+    "comment": 22,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/WriteOffQuantityDialog.vue": {
+    "language": "Vue",
+    "code": 504,
+    "comment": 8,
+    "blank": 77
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/WriteOffWidget.vue": {
+    "language": "Vue",
+    "code": 81,
+    "comment": 5,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/ProductListRow.vue": {
+    "language": "Vue",
+    "code": 216,
+    "comment": 8,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/ProductSelectorWidget.vue": {
+    "language": "Vue",
+    "code": 760,
+    "comment": 12,
+    "blank": 111
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/storage/components/writeoff/ProductCard.vue": {
+    "language": "Vue",
+    "code": 266,
+    "comment": 9,
+    "blank": 49
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/PaymentDialog.vue": {
+    "language": "Vue",
+    "code": 335,
+    "comment": 9,
+    "blank": 56
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/ConfirmDialog.vue": {
+    "language": "Vue",
+    "code": 111,
+    "comment": 4,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/PaymentSection.vue": {
+    "language": "Vue",
+    "code": 289,
+    "comment": 10,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/components/ShiftTransfersList.vue": {
+    "language": "Vue",
+    "code": 71,
+    "comment": 1,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/dialogs/InventorySheetOptionsDialog.vue": {
+    "language": "Vue",
+    "code": 129,
+    "comment": 4,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/components/PosNavigationMenu.vue": {
+    "language": "Vue",
+    "code": 361,
+    "comment": 8,
+    "blank": 65
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/components/ShiftExpensesList.vue": {
+    "language": "Vue",
+    "code": 158,
+    "comment": 6,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/dialogs/CustomizationDialog.vue": {
+    "language": "Vue",
+    "code": 623,
+    "comment": 14,
+    "blank": 88
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/components/PendingSupplierPaymentsList.vue": {
+    "language": "Vue",
+    "code": 144,
+    "comment": 5,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/dialogs/MenuCostOptionsDialog.vue": {
+    "language": "Vue",
+    "code": 116,
+    "comment": 4,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/PrintDocsView.vue": {
+    "language": "Vue",
+    "code": 203,
+    "comment": 6,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/dialogs/ProductYieldOptionsDialog.vue": {
+    "language": "Vue",
+    "code": 96,
+    "comment": 2,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/RefundDialog.vue": {
+    "language": "Vue",
+    "code": 151,
+    "comment": 7,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/PaymentDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 398,
+    "comment": 20,
+    "blank": 65
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/reports/composables/useInventorySheet.ts": {
+    "language": "TypeScript",
+    "code": 497,
+    "comment": 92,
+    "blank": 79
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/payment/PaymentDialog.vue": {
+    "language": "Vue",
+    "code": 479,
+    "comment": 14,
+    "blank": 71
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/MenuSection.vue": {
+    "language": "Vue",
+    "code": 531,
+    "comment": 14,
+    "blank": 71
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/ExpenseOperationDialog.vue": {
+    "language": "Vue",
+    "code": 256,
+    "comment": 11,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/ShiftManagementView.vue": {
+    "language": "Vue",
+    "code": 702,
+    "comment": 23,
+    "blank": 108
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/payment/widgets/PaymentItemsList.vue": {
+    "language": "Vue",
+    "code": 208,
+    "comment": 5,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/StartShiftDialog.vue": {
+    "language": "Vue",
+    "code": 359,
+    "comment": 12,
+    "blank": 60
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/components/CategoryCard.vue": {
+    "language": "Vue",
+    "code": 186,
+    "comment": 4,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/menu/components/MenuItemCard.vue": {
+    "language": "Vue",
+    "code": 314,
+    "comment": 8,
+    "blank": 61
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/dialogs/OrderTypeDialog.vue": {
+    "language": "Vue",
+    "code": 204,
+    "comment": 5,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/PosMainView.vue": {
+    "language": "Vue",
+    "code": 574,
+    "comment": 10,
+    "blank": 85
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/SupplierPaymentConfirmDialog.vue": {
+    "language": "Vue",
+    "code": 351,
+    "comment": 10,
+    "blank": 53
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/PaymentSettingsView.vue": {
+    "language": "Vue",
+    "code": 218,
+    "comment": 8,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/package/QuickAddPackageDialog.vue": {
+    "language": "Vue",
+    "code": 291,
+    "comment": 7,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/inventory/InventoryValuationView.vue": {
+    "language": "Vue",
+    "code": 343,
+    "comment": 16,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/inventory/WriteOffHistoryView.vue": {
+    "language": "Vue",
+    "code": 560,
+    "comment": 8,
+    "blank": 74
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/supplier_2/components/shared/package/PackageSelector.vue": {
+    "language": "Vue",
+    "code": 628,
+    "comment": 19,
+    "blank": 91
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/components/SidebarItem.vue": {
+    "language": "Vue",
+    "code": 419,
+    "comment": 5,
+    "blank": 83
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/OrderItem.vue": {
+    "language": "Vue",
+    "code": 417,
+    "comment": 7,
+    "blank": 72
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/TableItem.vue": {
+    "language": "Vue",
+    "code": 243,
+    "comment": 3,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/shifts/dialogs/EndShiftDialog.vue": {
+    "language": "Vue",
+    "code": 659,
+    "comment": 15,
+    "blank": 101
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/inventory/components/inventory/InventoryTopItemsTable.vue": {
+    "language": "Vue",
+    "code": 347,
+    "comment": 17,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/payment-methods/PaymentMethodDialog.vue": {
+    "language": "Vue",
+    "code": 282,
+    "comment": 0,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/DiscountAnalyticsView.vue": {
+    "language": "Vue",
+    "code": 608,
+    "comment": 19,
+    "blank": 62
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/FoodCostDashboardView.vue": {
+    "language": "Vue",
+    "code": 368,
+    "comment": 11,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/CancelledItemsReport.vue": {
+    "language": "Vue",
+    "code": 516,
+    "comment": 20,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/NegativeInventoryReport.vue": {
+    "language": "Vue",
+    "code": 451,
+    "comment": 18,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/payment-methods/PaymentMethodList.vue": {
+    "language": "Vue",
+    "code": 105,
+    "comment": 0,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/RevenueDashboardView.vue": {
+    "language": "Vue",
+    "code": 381,
+    "comment": 13,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BillItemEditDialog.vue": {
+    "language": "Vue",
+    "code": 50,
+    "comment": 1,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BulkActionsDialog.vue": {
+    "language": "Vue",
+    "code": 141,
+    "comment": 6,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/PLReportView.vue": {
+    "language": "Vue",
+    "code": 520,
+    "comment": 20,
+    "blank": 48
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/tables/TablesSidebar.vue": {
+    "language": "Vue",
+    "code": 516,
+    "comment": 8,
+    "blank": 93
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/ItemDiscountDialog.vue": {
+    "language": "Vue",
+    "code": 333,
+    "comment": 8,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/TableSelectionDialog.vue": {
+    "language": "Vue",
+    "code": 188,
+    "comment": 5,
+    "blank": 27
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/OrderSection.vue": {
+    "language": "Vue",
+    "code": 1446,
+    "comment": 20,
+    "blank": 246
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/MoveItemsDialog.vue": {
+    "language": "Vue",
+    "code": 70,
+    "comment": 3,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/OrderTypeDialog.vue": {
+    "language": "Vue",
+    "code": 278,
+    "comment": 7,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/AddNoteDialog.vue": {
+    "language": "Vue",
+    "code": 83,
+    "comment": 4,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/analytics/FoodCostMenuView.vue": {
+    "language": "Vue",
+    "code": 541,
+    "comment": 21,
+    "blank": 49
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/SalesTransactionsView.vue": {
+    "language": "Vue",
+    "code": 424,
+    "comment": 7,
+    "blank": 49
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BillDiscountDialog.vue": {
+    "language": "Vue",
+    "code": 604,
+    "comment": 13,
+    "blank": 80
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/salary/SalaryIndexView.vue": {
+    "language": "Vue",
+    "code": 107,
+    "comment": 4,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/OrderActions.vue": {
+    "language": "Vue",
+    "code": 397,
+    "comment": 10,
+    "blank": 63
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/dialogs/BillItemCancelDialog.vue": {
+    "language": "Vue",
+    "code": 204,
+    "comment": 8,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/BillsTabs.vue": {
+    "language": "Vue",
+    "code": 471,
+    "comment": 13,
+    "blank": 78
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/BillsManager.vue": {
+    "language": "Vue",
+    "code": 288,
+    "comment": 6,
+    "blank": 51
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/OrderTotals.vue": {
+    "language": "Vue",
+    "code": 300,
+    "comment": 15,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/OrderInfo.vue": {
+    "language": "Vue",
+    "code": 518,
+    "comment": 17,
+    "blank": 113
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/SalesAnalyticsView.vue": {
+    "language": "Vue",
+    "code": 273,
+    "comment": 7,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/auth/LoginView.vue": {
+    "language": "Vue",
+    "code": 485,
+    "comment": 10,
+    "blank": 76
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/order/components/BillItem.vue": {
+    "language": "Vue",
+    "code": 912,
+    "comment": 20,
+    "blank": 143
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/auth/UnauthorizedView.vue": {
+    "language": "Vue",
+    "code": 39,
+    "comment": 1,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/ShiftHistoryView.vue": {
+    "language": "Vue",
+    "code": 324,
+    "comment": 13,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/salary/kpi/KitchenTimeKpiView.vue": {
+    "language": "Vue",
+    "code": 594,
+    "comment": 9,
+    "blank": 65
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/payments/components/PaymentHistoryWidget.vue": {
+    "language": "Vue",
+    "code": 234,
+    "comment": 11,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/sales/components/ShiftSyncRetryButton.vue": {
+    "language": "Vue",
+    "code": 70,
+    "comment": 1,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/salary/kpi/FoodCostKpiView.vue": {
+    "language": "Vue",
+    "code": 123,
+    "comment": 6,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/payments/components/RefundDialog.vue": {
+    "language": "Vue",
+    "code": 196,
+    "comment": 6,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductCard.vue": {
+    "language": "Vue",
+    "code": 406,
+    "comment": 13,
+    "blank": 51
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductsFilters.vue": {
+    "language": "Vue",
+    "code": 270,
+    "comment": 8,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/PriceHistoryWidget.vue": {
+    "language": "Vue",
+    "code": 589,
+    "comment": 13,
+    "blank": 100
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/EmptyLayout.vue": {
+    "language": "Vue",
+    "code": 12,
+    "comment": 1,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/ProductsView.vue": {
+    "language": "Vue",
+    "code": 422,
+    "comment": 10,
+    "blank": 60
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/KitchenLayout.vue": {
+    "language": "Vue",
+    "code": 91,
+    "comment": 3,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/settings/KpiSettingsView.vue": {
+    "language": "Vue",
+    "code": 369,
+    "comment": 11,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/MainLayout.vue": {
+    "language": "Vue",
+    "code": 32,
+    "comment": 1,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/PaymentsView.vue": {
+    "language": "Vue",
+    "code": 314,
+    "comment": 10,
+    "blank": 54
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/migrateMenuToSupabase.ts": {
+    "language": "TypeScript",
+    "code": 89,
+    "comment": 17,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/package/PackageOptionDialog.vue": {
+    "language": "Vue",
+    "code": 292,
+    "comment": 1,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/checkProductionDb.ts": {
+    "language": "TypeScript",
+    "code": 35,
+    "comment": 4,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/HMRTestComponent.vue": {
+    "language": "Vue",
+    "code": 25,
+    "comment": 0,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/package/PackageOptionsList.vue": {
+    "language": "Vue",
+    "code": 109,
+    "comment": 0,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seedProductionUsers.ts": {
+    "language": "TypeScript",
+    "code": 146,
+    "comment": 8,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/supabaseClient.ts": {
+    "language": "TypeScript",
+    "code": 34,
+    "comment": 7,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/categories/TransactionCategoryList.vue": {
+    "language": "Vue",
+    "code": 87,
+    "comment": 1,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/checkBothDatabases.ts": {
+    "language": "TypeScript",
+    "code": 51,
+    "comment": 5,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/catalog/categories/TransactionCategoryDialog.vue": {
+    "language": "Vue",
+    "code": 158,
+    "comment": 1,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/index.ts": {
+    "language": "TypeScript",
+    "code": 1,
+    "comment": 0,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/checkProductionTables.ts": {
+    "language": "TypeScript",
+    "code": 55,
+    "comment": 4,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/TaxDialog.vue": {
+    "language": "Vue",
+    "code": 84,
+    "comment": 0,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/payment-settings/TaxList.vue": {
+    "language": "Vue",
+    "code": 59,
+    "comment": 0,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/UnlinkExpenseDialog.vue": {
+    "language": "Vue",
+    "code": 164,
+    "comment": 4,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/posTypes.ts": {
+    "language": "TypeScript",
+    "code": 57,
+    "comment": 1,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/index.ts": {
+    "language": "TypeScript",
+    "code": 9,
+    "comment": 4,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductsList.vue": {
+    "language": "Vue",
+    "code": 248,
+    "comment": 11,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/base/BaseDialog.vue": {
+    "language": "Vue",
+    "code": 124,
+    "comment": 0,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/AlertsBadge.vue": {
+    "language": "Vue",
+    "code": 132,
+    "comment": 4,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/PosReceiptsView.vue": {
+    "language": "Vue",
+    "code": 264,
+    "comment": 17,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/posConstants.ts": {
+    "language": "TypeScript",
+    "code": 80,
+    "comment": 4,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/pos/usePosLayout.ts": {
+    "language": "TypeScript",
+    "code": 84,
+    "comment": 17,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/DebugStoresBadge.vue": {
+    "language": "Vue",
+    "code": 54,
+    "comment": 1,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/StorageAlertsBadge.vue": {
+    "language": "Vue",
+    "code": 46,
+    "comment": 3,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/organisms/LazyList.vue": {
+    "language": "Vue",
+    "code": 247,
+    "comment": 13,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/AuthLayout.vue": {
+    "language": "Vue",
+    "code": 23,
+    "comment": 1,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationAccounts.vue": {
+    "language": "Vue",
+    "code": 75,
+    "comment": 2,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/LinkExpenseDialog.vue": {
+    "language": "Vue",
+    "code": 275,
+    "comment": 8,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/layouts/PosLayout.vue": {
+    "language": "Vue",
+    "code": 107,
+    "comment": 5,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/UsageTrackingWidget.vue": {
+    "language": "Vue",
+    "code": 561,
+    "comment": 10,
+    "blank": 79
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/dialogs/ConfirmPaymentDialog.vue": {
+    "language": "Vue",
+    "code": 263,
+    "comment": 8,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/PendingPaymentsList.vue": {
+    "language": "Vue",
+    "code": 210,
+    "comment": 13,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/PaymentHistoryList.vue": {
+    "language": "Vue",
+    "code": 204,
+    "comment": 13,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductDialog.vue": {
+    "language": "Vue",
+    "code": 625,
+    "comment": 20,
+    "blank": 67
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/molecules/DateRangePicker.vue": {
+    "language": "Vue",
+    "code": 284,
+    "comment": 3,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/accounts/payments/components/UnlinkedExpensesList.vue": {
+    "language": "Vue",
+    "code": 126,
+    "comment": 10,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductUsageWarningDialog.vue": {
+    "language": "Vue",
+    "code": 146,
+    "comment": 2,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/navigation/NavigationMenu.vue": {
+    "language": "Vue",
+    "code": 434,
+    "comment": 68,
+    "blank": 61
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/products/components/ProductDetailsDialog.vue": {
+    "language": "Vue",
+    "code": 615,
+    "comment": 20,
+    "blank": 80
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/PendingOrdersList.vue": {
+    "language": "Vue",
+    "code": 109,
+    "comment": 4,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/ReceiptForm.vue": {
+    "language": "Vue",
+    "code": 239,
+    "comment": 6,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/molecules/navigation/StatusBar.vue": {
+    "language": "Vue",
+    "code": 72,
+    "comment": 10,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/styles/main.scss": {
+    "language": "SCSS",
+    "code": 387,
+    "comment": 56,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/ReceiptItemRow.vue": {
+    "language": "Vue",
+    "code": 420,
+    "comment": 10,
+    "blank": 67
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/molecules/navigation/ActionMenu.vue": {
+    "language": "Vue",
+    "code": 134,
+    "comment": 7,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/components/PaymentInfoWidget.vue": {
+    "language": "Vue",
+    "code": 97,
+    "comment": 5,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/dropdowns/BaseDropdown.vue": {
+    "language": "Vue",
+    "code": 41,
+    "comment": 7,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/inputs/PinInput.vue": {
+    "language": "Vue",
+    "code": 197,
+    "comment": 1,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/feedback/AppNotification.vue": {
+    "language": "Vue",
+    "code": 200,
+    "comment": 1,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/seedUsersProduction.sql": {
+    "language": "MS SQL",
+    "code": 80,
+    "comment": 5,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/DatePicker.vue": {
+    "language": "Vue",
+    "code": 157,
+    "comment": 1,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/styles/variables.scss": {
+    "language": "SCSS",
+    "code": 180,
+    "comment": 57,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/applyPinAuthFunctions.ts": {
+    "language": "TypeScript",
+    "code": 72,
+    "comment": 13,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/seedWarehouseProduction.sql": {
+    "language": "MS SQL",
+    "code": 16,
+    "comment": 4,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/users.ts": {
+    "language": "TypeScript",
+    "code": 171,
+    "comment": 27,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/createPinAuthFunctions.sql": {
+    "language": "MS SQL",
+    "code": 102,
+    "comment": 15,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/syncUsersFromDev.sql": {
+    "language": "MS SQL",
+    "code": 106,
+    "comment": 6,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/BaseButton.vue": {
+    "language": "Vue",
+    "code": 128,
+    "comment": 45,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/createAuthUsersProduction.sql": {
+    "language": "MS SQL",
+    "code": 142,
+    "comment": 11,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/scripts/seed/addWarehouseRLS.sql": {
+    "language": "MS SQL",
+    "code": 18,
+    "comment": 6,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/IRepository.ts": {
+    "language": "TypeScript",
+    "code": 81,
+    "comment": 113,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/indicators/NotificationBadge.vue": {
+    "language": "Vue",
+    "code": 110,
+    "comment": 7,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/index.ts": {
+    "language": "TypeScript",
+    "code": 90,
+    "comment": 25,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/LocalStorageRepository.ts": {
+    "language": "TypeScript",
+    "code": 272,
+    "comment": 19,
+    "blank": 57
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/LogoutButton.vue": {
+    "language": "Vue",
+    "code": 121,
+    "comment": 3,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/repositories/base/ServiceResponse.ts": {
+    "language": "TypeScript",
+    "code": 134,
+    "comment": 69,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/indicators/StatusChip.vue": {
+    "language": "Vue",
+    "code": 82,
+    "comment": 7,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/MenuButton.vue": {
+    "language": "Vue",
+    "code": 41,
+    "comment": 7,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/components/atoms/buttons/ActionButton.vue": {
+    "language": "Vue",
+    "code": 58,
+    "comment": 7,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/config/users.ts": {
+    "language": "TypeScript",
+    "code": 66,
+    "comment": 4,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/config/validateEnv.ts": {
+    "language": "TypeScript",
+    "code": 132,
+    "comment": 43,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/ReceiptDialog.vue": {
+    "language": "Vue",
+    "code": 396,
+    "comment": 11,
+    "blank": 69
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/PackageChangeDialog.vue": {
+    "language": "Vue",
+    "code": 137,
+    "comment": 0,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/pos/receipts/dialogs/ConfirmReceiptDialog.vue": {
+    "language": "Vue",
+    "code": 199,
+    "comment": 6,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/index.ts": {
+    "language": "TypeScript",
+    "code": 18,
+    "comment": 1,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/config.ts": {
+    "language": "TypeScript",
+    "code": 44,
+    "comment": 22,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/client.ts": {
+    "language": "TypeScript",
+    "code": 81,
+    "comment": 49,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/config/environment.ts": {
+    "language": "TypeScript",
+    "code": 181,
+    "comment": 71,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/README.md": {
+    "language": "Markdown",
+    "code": 198,
+    "comment": 0,
+    "blank": 94
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/types.ts": {
+    "language": "TypeScript",
+    "code": 792,
+    "comment": 13,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/plugins/vuetify.ts": {
+    "language": "TypeScript",
+    "code": 109,
+    "comment": 2,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/views/backoffice/settings/components/WriteOffReasonsSettings.vue": {
+    "language": "Vue",
+    "code": 181,
+    "comment": 8,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/types.gen.ts": {
+    "language": "TypeScript",
+    "code": 2708,
+    "comment": 2,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/index.ts": {
+    "language": "TypeScript",
+    "code": 29,
+    "comment": 12,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/preparationStore.ts": {
+    "language": "TypeScript",
+    "code": 623,
+    "comment": 86,
+    "blank": 126
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/time.ts": {
+    "language": "TypeScript",
+    "code": 347,
+    "comment": 126,
+    "blank": 60
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/formatter.ts": {
+    "language": "TypeScript",
+    "code": 96,
+    "comment": 40,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/id.ts": {
+    "language": "TypeScript",
+    "code": 16,
+    "comment": 12,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/types.ts": {
+    "language": "TypeScript",
+    "code": 393,
+    "comment": 69,
+    "blank": 53
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/preparationService.ts": {
+    "language": "TypeScript",
+    "code": 1365,
+    "comment": 160,
+    "blank": 247
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/supabase.ts": {
+    "language": "TypeScript",
+    "code": 46,
+    "comment": 56,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/whatsapp.ts": {
+    "language": "TypeScript",
+    "code": 118,
+    "comment": 90,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/index.ts": {
+    "language": "TypeScript",
+    "code": 8,
+    "comment": 1,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/README.md": {
+    "language": "Markdown",
+    "code": 111,
+    "comment": 0,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/079_create_quick_receipt_rpc.sql": {
+    "language": "MS SQL",
+    "code": 139,
+    "comment": 18,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/073_update_discount_reasons.sql": {
+    "language": "MS SQL",
+    "code": 55,
+    "comment": 33,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/078_fix_fifo_rpc_table_name.sql": {
+    "language": "MS SQL",
+    "code": 135,
+    "comment": 12,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/quantityFormatter.ts": {
+    "language": "TypeScript",
+    "code": 181,
+    "comment": 53,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/PRODUCTION_kitchen_prep_sprint7.sql": {
+    "language": "MS SQL",
+    "code": 305,
+    "comment": 40,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/077_batch_negative_batch_operations.sql": {
+    "language": "MS SQL",
+    "code": 221,
+    "comment": 34,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/index.ts": {
+    "language": "TypeScript",
+    "code": 23,
+    "comment": 6,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/074_add_icon_color_to_payment_methods.sql": {
+    "language": "MS SQL",
+    "code": 3,
+    "comment": 5,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/negativeInventoryReportStore.ts": {
+    "language": "TypeScript",
+    "code": 250,
+    "comment": 33,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 2,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/index.ts": {
+    "language": "TypeScript",
+    "code": 310,
+    "comment": 61,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/foodCostStore.ts": {
+    "language": "TypeScript",
+    "code": 206,
+    "comment": 38,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/inventoryValuationStore.ts": {
+    "language": "TypeScript",
+    "code": 323,
+    "comment": 37,
+    "blank": 48
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/types.ts": {
+    "language": "TypeScript",
+    "code": 247,
+    "comment": 75,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/debugService.ts": {
+    "language": "TypeScript",
+    "code": 1398,
+    "comment": 123,
+    "blank": 203
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/types.ts": {
+    "language": "TypeScript",
+    "code": 233,
+    "comment": 38,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/debugStore.ts": {
+    "language": "TypeScript",
+    "code": 358,
+    "comment": 88,
+    "blank": 80
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/useKitchenStatus.ts": {
+    "language": "TypeScript",
+    "code": 105,
+    "comment": 31,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/kitchenService.ts": {
+    "language": "TypeScript",
+    "code": 208,
+    "comment": 56,
+    "blank": 39
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/useKitchenRealtime.ts": {
+    "language": "TypeScript",
+    "code": 161,
+    "comment": 46,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 1,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/useKitchenOrders.ts": {
+    "language": "TypeScript",
+    "code": 70,
+    "comment": 35,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/reconciliationService.ts": {
+    "language": "TypeScript",
+    "code": 77,
+    "comment": 49,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchen/composables/useKitchenDishes.ts": {
+    "language": "TypeScript",
+    "code": 213,
+    "comment": 90,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/075_add_sort_order_to_tables.sql": {
+    "language": "MS SQL",
+    "code": 17,
+    "comment": 9,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/negativeBatchService.ts": {
+    "language": "TypeScript",
+    "code": 258,
+    "comment": 106,
+    "blank": 51
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/debugger.ts": {
+    "language": "TypeScript",
+    "code": 370,
+    "comment": 53,
+    "blank": 77
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/errors.ts": {
+    "language": "TypeScript",
+    "code": 83,
+    "comment": 34,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/utils/currency.ts": {
+    "language": "TypeScript",
+    "code": 180,
+    "comment": 125,
+    "blank": 54
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/plReportStore.ts": {
+    "language": "TypeScript",
+    "code": 379,
+    "comment": 99,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useDebugStores.ts": {
+    "language": "TypeScript",
+    "code": 164,
+    "comment": 93,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/debug/composables/useDebugFormatting.ts": {
+    "language": "TypeScript",
+    "code": 282,
+    "comment": 75,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/076_fifo_allocation_rpc.sql": {
+    "language": "MS SQL",
+    "code": 340,
+    "comment": 32,
+    "blank": 39
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/types.ts": {
+    "language": "TypeScript",
+    "code": 266,
+    "comment": 32,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/constants.ts": {
+    "language": "TypeScript",
+    "code": 50,
+    "comment": 37,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/index.ts": {
+    "language": "TypeScript",
+    "code": 50,
+    "comment": 14,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/accountSupabaseService.ts": {
+    "language": "TypeScript",
+    "code": 708,
+    "comment": 103,
+    "blank": 126
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/categoryService.ts": {
+    "language": "TypeScript",
+    "code": 202,
+    "comment": 50,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/store.ts": {
+    "language": "TypeScript",
+    "code": 1120,
+    "comment": 189,
+    "blank": 242
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/service.ts": {
+    "language": "TypeScript",
+    "code": 424,
+    "comment": 45,
+    "blank": 75
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/accountConfig.ts": {
+    "language": "TypeScript",
+    "code": 126,
+    "comment": 91,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/README.md": {
+    "language": "Markdown",
+    "code": 254,
+    "comment": 0,
+    "blank": 89
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 178,
+    "comment": 65,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/Base/About.md": {
+    "language": "Markdown",
+    "code": 23,
+    "comment": 0,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/Base/Style.md": {
+    "language": "Markdown",
+    "code": 96,
+    "comment": 0,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/supabase/mappers.ts": {
+    "language": "TypeScript",
+    "code": 187,
+    "comment": 48,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/Base/ArchitecturApp.md": {
+    "language": "Markdown",
+    "code": 384,
+    "comment": 0,
+    "blank": 102
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/102_enable_rls_with_uid_check.sql": {
+    "language": "MS SQL",
+    "code": 7,
+    "comment": 21,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/Base/MeasurementUnits.md": {
+    "language": "Markdown",
+    "code": 724,
+    "comment": 0,
+    "blank": 228
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/preparation/composables/usePreparationWriteOff.ts": {
+    "language": "TypeScript",
+    "code": 380,
+    "comment": 82,
+    "blank": 63
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/account/composables/useAccountTransactions.ts": {
+    "language": "TypeScript",
+    "code": 251,
+    "comment": 41,
+    "blank": 63
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/098_make_discount_events_applied_by_nullable.sql": {
+    "language": "MS SQL",
+    "code": 4,
+    "comment": 25,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/100_fix_discount_events_policy_match_orders.sql": {
+    "language": "MS SQL",
+    "code": 6,
+    "comment": 21,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/README.md": {
+    "language": "Markdown",
+    "code": 66,
+    "comment": 0,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/101_temp_disable_rls_discount_events.sql": {
+    "language": "MS SQL",
+    "code": 1,
+    "comment": 17,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/deprecated/099_fix_discount_events_insert_policy.sql": {
+    "language": "MS SQL",
+    "code": 7,
+    "comment": 30,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/index.ts": {
+    "language": "TypeScript",
+    "code": 157,
+    "comment": 19,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/counteragentsStore.ts": {
+    "language": "TypeScript",
+    "code": 523,
+    "comment": 87,
+    "blank": 127
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/types.ts": {
+    "language": "TypeScript",
+    "code": 212,
+    "comment": 59,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/services/balanceCorrectionService.ts": {
+    "language": "TypeScript",
+    "code": 219,
+    "comment": 33,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 140,
+    "comment": 50,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 100,
+    "comment": 11,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/counteragentsService.ts": {
+    "language": "TypeScript",
+    "code": 466,
+    "comment": 49,
+    "blank": 109
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/index.ts": {
+    "language": "TypeScript",
+    "code": 11,
+    "comment": 6,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/types.ts": {
+    "language": "TypeScript",
+    "code": 299,
+    "comment": 36,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/productsService.ts": {
+    "language": "TypeScript",
+    "code": 398,
+    "comment": 89,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useStockRecommendations.ts": {
+    "language": "TypeScript",
+    "code": 231,
+    "comment": 25,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/composables/useCounteragentBalance.ts": {
+    "language": "TypeScript",
+    "code": 122,
+    "comment": 52,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/productsStore.ts": {
+    "language": "TypeScript",
+    "code": 754,
+    "comment": 126,
+    "blank": 155
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductPriceHistory.ts": {
+    "language": "TypeScript",
+    "code": 295,
+    "comment": 45,
+    "blank": 59
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductConsumption.ts": {
+    "language": "TypeScript",
+    "code": 256,
+    "comment": 32,
+    "blank": 53
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/useProductUsage.ts": {
+    "language": "TypeScript",
+    "code": 429,
+    "comment": 45,
+    "blank": 73
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/analytics/services/cogsService.ts": {
+    "language": "TypeScript",
+    "code": 60,
+    "comment": 38,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/productsStore/composables/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 3,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/index.ts": {
+    "language": "TypeScript",
+    "code": 133,
+    "comment": 51,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/counteragents/integrations/automatedPayments.ts": {
+    "language": "TypeScript",
+    "code": 251,
+    "comment": 50,
+    "blank": 57
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 2,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesStore.ts": {
+    "language": "TypeScript",
+    "code": 762,
+    "comment": 153,
+    "blank": 170
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 156,
+    "comment": 23,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/types/supplierIntegrationTypes.ts": {
+    "language": "TypeScript",
+    "code": 163,
+    "comment": 82,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/core/posSystem.ts": {
+    "language": "TypeScript",
+    "code": 80,
+    "comment": 37,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/index.ts": {
+    "language": "TypeScript",
+    "code": 6,
+    "comment": 240,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/composables.ts": {
+    "language": "TypeScript",
+    "code": 273,
+    "comment": 91,
+    "blank": 58
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/negativeBatchService.ts": {
+    "language": "TypeScript",
+    "code": 402,
+    "comment": 136,
+    "blank": 73
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageService.ts": {
+    "language": "TypeScript",
+    "code": 1520,
+    "comment": 189,
+    "blank": 275
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/index.ts": {
+    "language": "TypeScript",
+    "code": 36,
+    "comment": 6,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/recipesService.ts": {
+    "language": "TypeScript",
+    "code": 922,
+    "comment": 156,
+    "blank": 182
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/storageStore.ts": {
+    "language": "TypeScript",
+    "code": 749,
+    "comment": 139,
+    "blank": 186
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/types.ts": {
+    "language": "TypeScript",
+    "code": 376,
+    "comment": 22,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/types.ts": {
+    "language": "TypeScript",
+    "code": 369,
+    "comment": 122,
+    "blank": 80
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/services.ts": {
+    "language": "TypeScript",
+    "code": 519,
+    "comment": 139,
+    "blank": 101
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/types.ts": {
+    "language": "TypeScript",
+    "code": 325,
+    "comment": 170,
+    "blank": 91
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/transitBatchService.ts": {
+    "language": "TypeScript",
+    "code": 370,
+    "comment": 104,
+    "blank": 86
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/reconciliationService.ts": {
+    "language": "TypeScript",
+    "code": 61,
+    "comment": 47,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/shiftsStore.ts": {
+    "language": "TypeScript",
+    "code": 1089,
+    "comment": 219,
+    "blank": 204
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/types.ts": {
+    "language": "TypeScript",
+    "code": 405,
+    "comment": 67,
+    "blank": 90
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/__tests__/supplierIntegration.test.ts": {
+    "language": "TypeScript",
+    "code": 363,
+    "comment": 22,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 202,
+    "comment": 28,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/composables/useWriteOff-copy.ts": {
+    "language": "TypeScript",
+    "code": 479,
+    "comment": 100,
+    "blank": 84
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/composables/useInventory.ts": {
+    "language": "TypeScript",
+    "code": 170,
+    "comment": 66,
+    "blank": 51
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/storage/composables/useWriteOff.ts": {
+    "language": "TypeScript",
+    "code": 560,
+    "comment": 116,
+    "blank": 102
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/offlineCache.ts": {
+    "language": "TypeScript",
+    "code": 242,
+    "comment": 25,
+    "blank": 58
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/index.ts": {
+    "language": "TypeScript",
+    "code": 38,
+    "comment": 16,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/kitchenKpiStore.ts": {
+    "language": "TypeScript",
+    "code": 567,
+    "comment": 97,
+    "blank": 134
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/types.ts": {
+    "language": "TypeScript",
+    "code": 297,
+    "comment": 114,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/help-system.md": {
+    "language": "Markdown",
+    "code": 293,
+    "comment": 4,
+    "blank": 80
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/kitchenKpiService.ts": {
+    "language": "TypeScript",
+    "code": 459,
+    "comment": 73,
+    "blank": 99
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/accountIntegration.ts": {
+    "language": "TypeScript",
+    "code": 357,
+    "comment": 40,
+    "blank": 67
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supplierStore.ts": {
+    "language": "TypeScript",
+    "code": 1285,
+    "comment": 98,
+    "blank": 259
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 1,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supplierService.ts": {
+    "language": "TypeScript",
+    "code": 1329,
+    "comment": 183,
+    "blank": 266
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 287,
+    "comment": 90,
+    "blank": 76
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/plannedDeliveryIntegration-copy.ts": {
+    "language": "TypeScript",
+    "code": 167,
+    "comment": 84,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/index.ts": {
+    "language": "TypeScript",
+    "code": 5,
+    "comment": 2,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useHistoryTab.ts": {
+    "language": "TypeScript",
+    "code": 82,
+    "comment": 52,
+    "blank": 27
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useFoodCostKpi.ts": {
+    "language": "TypeScript",
+    "code": 81,
+    "comment": 50,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/integrations/storageIntegration.ts": {
+    "language": "TypeScript",
+    "code": 575,
+    "comment": 43,
+    "blank": 120
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useKitchenKpi.ts": {
+    "language": "TypeScript",
+    "code": 164,
+    "comment": 76,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useSyncStatus.ts": {
+    "language": "TypeScript",
+    "code": 174,
+    "comment": 67,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useTimeKpi.ts": {
+    "language": "TypeScript",
+    "code": 196,
+    "comment": 77,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/README.md": {
+    "language": "Markdown",
+    "code": 56,
+    "comment": 0,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useRecommendations.ts": {
+    "language": "TypeScript",
+    "code": 142,
+    "comment": 54,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/composables/useProductionSchedule.ts": {
+    "language": "TypeScript",
+    "code": 240,
+    "comment": 116,
+    "blank": 58
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/shifts/composables/useExpenseLinking.ts": {
+    "language": "TypeScript",
+    "code": 264,
+    "comment": 44,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useOrderPayments.ts": {
+    "language": "TypeScript",
+    "code": 677,
+    "comment": 150,
+    "blank": 153
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/usePurchaseOrderExport.ts": {
+    "language": "TypeScript",
+    "code": 120,
+    "comment": 30,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/013_add_prep_categories_winter_menu.sql": {
+    "language": "MS SQL",
+    "code": 10,
+    "comment": 11,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useReceipts.ts": {
+    "language": "TypeScript",
+    "code": 758,
+    "comment": 189,
+    "blank": 161
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useOrderAssistant.ts": {
+    "language": "TypeScript",
+    "code": 539,
+    "comment": 146,
+    "blank": 110
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/039_add_use_yield_percentage.sql": {
+    "language": "MS SQL",
+    "code": 36,
+    "comment": 33,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/062_add_cogs_indexes.sql": {
+    "language": "MS SQL",
+    "code": 9,
+    "comment": 10,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/usePurchaseOrders.ts": {
+    "language": "TypeScript",
+    "code": 809,
+    "comment": 253,
+    "blank": 183
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/035_add_revenue_breakdown_to_orders.sql": {
+    "language": "MS SQL",
+    "code": 66,
+    "comment": 75,
+    "blank": 27
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/063_create_cogs_date_range_function.sql": {
+    "language": "MS SQL",
+    "code": 128,
+    "comment": 23,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/072_add_tax_fields_to_receipts.sql": {
+    "language": "MS SQL",
+    "code": 46,
+    "comment": 19,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/020_add_pos_cash_register_flag.sql": {
+    "language": "MS SQL",
+    "code": 25,
+    "comment": 9,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/031_migrate_supplier_ids_to_uuid.sql": {
+    "language": "MS SQL",
+    "code": 96,
+    "comment": 59,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/030_cleanup_unused_negative_batch_field.sql": {
+    "language": "MS SQL",
+    "code": 55,
+    "comment": 18,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useProcurementRequests.ts": {
+    "language": "TypeScript",
+    "code": 317,
+    "comment": 115,
+    "blank": 65
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/037_add_department_to_recipes.sql": {
+    "language": "MS SQL",
+    "code": 39,
+    "comment": 19,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/timezone.md": {
+    "language": "Markdown",
+    "code": 70,
+    "comment": 0,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/055_order_items_realtime_publication.sql": {
+    "language": "MS SQL",
+    "code": 32,
+    "comment": 30,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/071_add_recipe_nesting_support.sql": {
+    "language": "MS SQL",
+    "code": 104,
+    "comment": 78,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/024_backfill_last_known_costs.sql": {
+    "language": "MS SQL",
+    "code": 23,
+    "comment": 21,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/064_create_kpi_settings_table.sql": {
+    "language": "MS SQL",
+    "code": 34,
+    "comment": 11,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/023_negative_inventory_support.sql": {
+    "language": "MS SQL",
+    "code": 40,
+    "comment": 18,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/supplier_2/composables/useWhatsAppExport.ts": {
+    "language": "TypeScript",
+    "code": 163,
+    "comment": 46,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/046_add_related_storage_operation_ids.sql": {
+    "language": "MS SQL",
+    "code": 4,
+    "comment": 9,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/043_convert_target_component_to_array.sql": {
+    "language": "MS SQL",
+    "code": 16,
+    "comment": 18,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/014_add_preparation_shelf_life.sql": {
+    "language": "MS SQL",
+    "code": 25,
+    "comment": 80,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/005_update_products_schema.sql": {
+    "language": "MS SQL",
+    "code": 74,
+    "comment": 44,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/051_create_complete_schedule_task_rpc.sql": {
+    "language": "MS SQL",
+    "code": 35,
+    "comment": 13,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/015_add_recipe_categories_winter_menu.sql": {
+    "language": "MS SQL",
+    "code": 18,
+    "comment": 9,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/003_update_orders_payments_schema.sql": {
+    "language": "MS SQL",
+    "code": 88,
+    "comment": 32,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/027_backfill_writeoff_expenses.sql": {
+    "language": "MS SQL",
+    "code": 130,
+    "comment": 18,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/036_add_tax_storage_fields.sql": {
+    "language": "MS SQL",
+    "code": 32,
+    "comment": 18,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/010_cleanup_preparations_category_id.sql": {
+    "language": "MS SQL",
+    "code": 2,
+    "comment": 28,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/067_create_transaction_categories.sql": {
+    "language": "MS SQL",
+    "code": 36,
+    "comment": 10,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/017_create_sales_transactions.sql": {
+    "language": "MS SQL",
+    "code": 106,
+    "comment": 107,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/index.ts": {
+    "language": "TypeScript",
+    "code": 54,
+    "comment": 9,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 103,
+    "comment": 78,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/hmr-optimization.md": {
+    "language": "Markdown",
+    "code": 195,
+    "comment": 0,
+    "blank": 89
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/059_create_food_cost_kpi_function.sql": {
+    "language": "MS SQL",
+    "code": 93,
+    "comment": 19,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/README.md": {
+    "language": "Markdown",
+    "code": 42,
+    "comment": 0,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/recommendationsService.ts": {
+    "language": "TypeScript",
+    "code": 339,
+    "comment": 81,
+    "blank": 74
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/050_add_batch_decrement_functions.sql": {
+    "language": "MS SQL",
+    "code": 45,
+    "comment": 10,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/types.ts": {
+    "language": "TypeScript",
+    "code": 335,
+    "comment": 82,
+    "blank": 76
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/menuService.ts": {
+    "language": "TypeScript",
+    "code": 439,
+    "comment": 59,
+    "blank": 75
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/kpiSettingsService.ts": {
+    "language": "TypeScript",
+    "code": 65,
+    "comment": 20,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/timeKpiService.ts": {
+    "language": "TypeScript",
+    "code": 200,
+    "comment": 30,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/supabase-auth.md": {
+    "language": "Markdown",
+    "code": 201,
+    "comment": 0,
+    "blank": 89
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/foodCostKpiService.ts": {
+    "language": "TypeScript",
+    "code": 115,
+    "comment": 32,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/kitchenKpi/services/historyService.ts": {
+    "language": "TypeScript",
+    "code": 264,
+    "comment": 31,
+    "blank": 52
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/060_update_food_cost_kpi_inventory_dept.sql": {
+    "language": "MS SQL",
+    "code": 135,
+    "comment": 34,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/009_migrate_products_category.sql": {
+    "language": "MS SQL",
+    "code": 30,
+    "comment": 14,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/021_simplify_payment_type.sql": {
+    "language": "MS SQL",
+    "code": 7,
+    "comment": 6,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/038_make_instructions_optional.sql": {
+    "language": "MS SQL",
+    "code": 39,
+    "comment": 17,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/006_enable_rls_policies.sql": {
+    "language": "MS SQL",
+    "code": 334,
+    "comment": 85,
+    "blank": 62
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/database-backup-restore.md": {
+    "language": "Markdown",
+    "code": 269,
+    "comment": 0,
+    "blank": 103
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/044_add_custom_breakfast_category.sql": {
+    "language": "MS SQL",
+    "code": 23,
+    "comment": 5,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/041_add_portion_type.sql": {
+    "language": "MS SQL",
+    "code": 27,
+    "comment": 20,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/057_add_draft_seconds_to_kpi.sql": {
+    "language": "MS SQL",
+    "code": 49,
+    "comment": 10,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/019_create_payment_methods_table.sql": {
+    "language": "MS SQL",
+    "code": 79,
+    "comment": 58,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/008_create_product_categories.sql": {
+    "language": "MS SQL",
+    "code": 45,
+    "comment": 10,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/002_add_missing_shift_fields.sql": {
+    "language": "MS SQL",
+    "code": 29,
+    "comment": 7,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/053_create_order_items_table.sql": {
+    "language": "MS SQL",
+    "code": 36,
+    "comment": 37,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/016_add_code_fields_nullable.sql": {
+    "language": "MS SQL",
+    "code": 33,
+    "comment": 39,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/core/background-tasks.md": {
+    "language": "Markdown",
+    "code": 204,
+    "comment": 0,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/018_add_actual_cost_to_sales_transactions.sql": {
+    "language": "MS SQL",
+    "code": 34,
+    "comment": 18,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/012_migrate_recipes_category_to_uuid.sql": {
+    "language": "MS SQL",
+    "code": 28,
+    "comment": 13,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/recipe/architecture.md": {
+    "language": "Markdown",
+    "code": 877,
+    "comment": 0,
+    "blank": 281
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/022_cleanup_empty_expense_account_ids.sql": {
+    "language": "MS SQL",
+    "code": 48,
+    "comment": 13,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/015_add_operation_links_for_auto_writeoff.sql": {
+    "language": "MS SQL",
+    "code": 42,
+    "comment": 54,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/016_add_code_field_to_products.sql": {
+    "language": "MS SQL",
+    "code": 82,
+    "comment": 64,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/028_backfill_opex_writeoffs.sql": {
+    "language": "MS SQL",
+    "code": 159,
+    "comment": 16,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/025_negative_inventory_indexes.sql": {
+    "language": "MS SQL",
+    "code": 36,
+    "comment": 33,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/045_add_templates_to_menu_items.sql": {
+    "language": "MS SQL",
+    "code": 13,
+    "comment": 8,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/048_create_kitchen_kpi_table.sql": {
+    "language": "MS SQL",
+    "code": 142,
+    "comment": 30,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/058_fix_bar_waiting_seconds.sql": {
+    "language": "MS SQL",
+    "code": 57,
+    "comment": 18,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/menu/menuStore.ts": {
+    "language": "TypeScript",
+    "code": 473,
+    "comment": 47,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/014_dev_migrate_prep_ingredients_to_uuid.sql": {
+    "language": "MS SQL",
+    "code": 57,
+    "comment": 32,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/047_add_preparation_schedule_fields.sql": {
+    "language": "MS SQL",
+    "code": 53,
+    "comment": 19,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/011_create_recipe_categories.sql": {
+    "language": "MS SQL",
+    "code": 43,
+    "comment": 10,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/014_fix_preparation_ingredients_id_type.sql": {
+    "language": "MS SQL",
+    "code": 14,
+    "comment": 9,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/011_make_recipe_preparation_codes_required.sql": {
+    "language": "MS SQL",
+    "code": 74,
+    "comment": 33,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/service/DepartmentNotificationService.ts": {
+    "language": "TypeScript",
+    "code": 264,
+    "comment": 62,
+    "blank": 58
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/042_add_nested_categories.sql": {
+    "language": "MS SQL",
+    "code": 52,
+    "comment": 27,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/068_add_tax_income_categories.sql": {
+    "language": "MS SQL",
+    "code": 26,
+    "comment": 15,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/056_create_time_kpi_functions.sql": {
+    "language": "MS SQL",
+    "code": 121,
+    "comment": 16,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/types.ts": {
+    "language": "TypeScript",
+    "code": 351,
+    "comment": 40,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/index.ts": {
+    "language": "TypeScript",
+    "code": 335,
+    "comment": 72,
+    "blank": 79
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/061_add_item_cancellation_fields.sql": {
+    "language": "MS SQL",
+    "code": 14,
+    "comment": 6,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/service/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 106,
+    "comment": 22,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/001_initial_schema.sql": {
+    "language": "MS SQL",
+    "code": 195,
+    "comment": 67,
+    "blank": 63
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/054_update_orders_structure.sql": {
+    "language": "MS SQL",
+    "code": 2,
+    "comment": 42,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/007_create_users_table.sql": {
+    "language": "MS SQL",
+    "code": 133,
+    "comment": 82,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/029_production_writeoff_expenses.sql": {
+    "language": "MS SQL",
+    "code": 282,
+    "comment": 37,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/032_simplify_menu_dish_types.sql": {
+    "language": "MS SQL",
+    "code": 67,
+    "comment": 40,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/065_drop_old_kpi_function.sql": {
+    "language": "MS SQL",
+    "code": 1,
+    "comment": 10,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/049_create_production_schedule_table.sql": {
+    "language": "MS SQL",
+    "code": 152,
+    "comment": 29,
+    "blank": 36
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/services.ts": {
+    "language": "TypeScript",
+    "code": 258,
+    "comment": 58,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/069_expense_linking.sql": {
+    "language": "MS SQL",
+    "code": 136,
+    "comment": 56,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 48,
+    "comment": 18,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/paymentsStore.ts": {
+    "language": "TypeScript",
+    "code": 493,
+    "comment": 134,
+    "blank": 115
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/070_create_products_consumption_stats_function.sql": {
+    "language": "MS SQL",
+    "code": 74,
+    "comment": 20,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/services.ts": {
+    "language": "TypeScript",
+    "code": 219,
+    "comment": 35,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/tablesStore.ts": {
+    "language": "TypeScript",
+    "code": 277,
+    "comment": 57,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/types.ts": {
+    "language": "TypeScript",
+    "code": 47,
+    "comment": 5,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/composables.ts": {
+    "language": "TypeScript",
+    "code": 144,
+    "comment": 46,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/composables/useTables.ts": {
+    "language": "TypeScript",
+    "code": 95,
+    "comment": 56,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/013_fix_preparation_batches_department_consistency.sql": {
+    "language": "MS SQL",
+    "code": 53,
+    "comment": 32,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/tables/useTablesRealtime.ts": {
+    "language": "TypeScript",
+    "code": 68,
+    "comment": 25,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/payments/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 72,
+    "comment": 31,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/useOrdersRealtime.ts": {
+    "language": "TypeScript",
+    "code": 178,
+    "comment": 52,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 268,
+    "comment": 106,
+    "blank": 68
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 4,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/supabaseMappers.ts": {
+    "language": "TypeScript",
+    "code": 264,
+    "comment": 108,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/useOrders.ts": {
+    "language": "TypeScript",
+    "code": 172,
+    "comment": 69,
+    "blank": 39
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/ordersStore.ts": {
+    "language": "TypeScript",
+    "code": 1586,
+    "comment": 390,
+    "blank": 328
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/services.ts": {
+    "language": "TypeScript",
+    "code": 1074,
+    "comment": 137,
+    "blank": 181
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/useCancellation.ts": {
+    "language": "TypeScript",
+    "code": 236,
+    "comment": 38,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/026_fix_reconciled_negative_batches.sql": {
+    "language": "MS SQL",
+    "code": 53,
+    "comment": 20,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/009_migrate_preparations_type_to_uuid.sql": {
+    "language": "MS SQL",
+    "code": 58,
+    "comment": 58,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/034_create_discount_events_table.sql": {
+    "language": "MS SQL",
+    "code": 123,
+    "comment": 66,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables/useOrderCalculations.ts": {
+    "language": "TypeScript",
+    "code": 546,
+    "comment": 242,
+    "blank": 120
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useUsageCheck.ts": {
+    "language": "TypeScript",
+    "code": 147,
+    "comment": 26,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/004_create_menu_tables.sql": {
+    "language": "MS SQL",
+    "code": 52,
+    "comment": 37,
+    "blank": 27
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/kpi/COGS_Department_Assignment.md": {
+    "language": "Markdown",
+    "code": 67,
+    "comment": 0,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/016_fix_is_admin_infinite_loop.sql": {
+    "language": "MS SQL",
+    "code": 38,
+    "comment": 19,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/066_create_complete_production_schedule_task.sql": {
+    "language": "MS SQL",
+    "code": 35,
+    "comment": 13,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/012_fix_product_units.sql": {
+    "language": "MS SQL",
+    "code": 32,
+    "comment": 10,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useCostCalculation.ts": {
+    "language": "TypeScript",
+    "code": 906,
+    "comment": 144,
+    "blank": 165
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useUnits.ts": {
+    "language": "TypeScript",
+    "code": 83,
+    "comment": 53,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/orders/composables.ts": {
+    "language": "TypeScript",
+    "code": 275,
+    "comment": 94,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeGraph.ts": {
+    "language": "TypeScript",
+    "code": 197,
+    "comment": 102,
+    "blank": 50
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/052_orders_replica_identity_full.sql": {
+    "language": "MS SQL",
+    "code": 1,
+    "comment": 11,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useCategoryManagement.ts": {
+    "language": "TypeScript",
+    "code": 294,
+    "comment": 37,
+    "blank": 58
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/usePreparationGraph.ts": {
+    "language": "TypeScript",
+    "code": 140,
+    "comment": 79,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/033_add_base_composition_to_modifiable_dishes.sql": {
+    "language": "MS SQL",
+    "code": 156,
+    "comment": 39,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useMenuRecipeLinks.ts": {
+    "language": "TypeScript",
+    "code": 145,
+    "comment": 51,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/usePreparations.ts": {
+    "language": "TypeScript",
+    "code": 373,
+    "comment": 115,
+    "blank": 84
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useAutoCostRecalculation.ts": {
+    "language": "TypeScript",
+    "code": 142,
+    "comment": 42,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeUsage.ts": {
+    "language": "TypeScript",
+    "code": 200,
+    "comment": 66,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipes.ts": {
+    "language": "TypeScript",
+    "code": 520,
+    "comment": 140,
+    "blank": 114
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/services/index.ts": {
+    "language": "TypeScript",
+    "code": 0,
+    "comment": 7,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useRecipeIntegration.ts": {
+    "language": "TypeScript",
+    "code": 186,
+    "comment": 65,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/supabase/migrations/archive_migration/040_add_nested_preparations.sql": {
+    "language": "MS SQL",
+    "code": 34,
+    "comment": 17,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/composables/usePermissions.ts": {
+    "language": "TypeScript",
+    "code": 39,
+    "comment": 19,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/services/session.service.ts": {
+    "language": "TypeScript",
+    "code": 181,
+    "comment": 51,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/services.ts": {
+    "language": "TypeScript",
+    "code": 374,
+    "comment": 36,
+    "blank": 44
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/composables/index.ts": {
+    "language": "TypeScript",
+    "code": 2,
+    "comment": 4,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/supplier/pricing-system.md": {
+    "language": "Markdown",
+    "code": 233,
+    "comment": 0,
+    "blank": 89
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/composables/useAuth.ts": {
+    "language": "TypeScript",
+    "code": 59,
+    "comment": 21,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/types.ts": {
+    "language": "TypeScript",
+    "code": 135,
+    "comment": 75,
+    "blank": 36
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/index.ts": {
+    "language": "TypeScript",
+    "code": 14,
+    "comment": 5,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/supabase/mappers.ts": {
+    "language": "TypeScript",
+    "code": 75,
+    "comment": 30,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/sale/write-off/SALE_FLOW.md": {
+    "language": "Markdown",
+    "code": 875,
+    "comment": 0,
+    "blank": 232
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/About/docs/sale/write-off/DECOMPOSITION_ARCHITECTURE.md": {
+    "language": "Markdown",
+    "code": 526,
+    "comment": 0,
+    "blank": 160
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/index.ts": {
+    "language": "TypeScript",
+    "code": 39,
+    "comment": 23,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/constants.ts": {
+    "language": "TypeScript",
+    "code": 130,
+    "comment": 57,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/salesStore.ts": {
+    "language": "TypeScript",
+    "code": 381,
+    "comment": 76,
+    "blank": 53
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/index.ts": {
+    "language": "TypeScript",
+    "code": 3,
+    "comment": 5,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/composables/useProfitCalculation.ts": {
+    "language": "TypeScript",
+    "code": 204,
+    "comment": 48,
+    "blank": 34
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/index.ts": {
+    "language": "TypeScript",
+    "code": 3,
+    "comment": 0,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/types.ts": {
+    "language": "TypeScript",
+    "code": 112,
+    "comment": 70,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/recipes/composables/useCategoryUsageCheck.ts": {
+    "language": "TypeScript",
+    "code": 79,
+    "comment": 13,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/discountsStore.ts": {
+    "language": "TypeScript",
+    "code": 242,
+    "comment": 70,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/types.ts": {
+    "language": "TypeScript",
+    "code": 62,
+    "comment": 28,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/services.ts": {
+    "language": "TypeScript",
+    "code": 429,
+    "comment": 47,
+    "blank": 55
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/main.ts": {
+    "language": "TypeScript",
+    "code": 48,
+    "comment": 14,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/recipeWriteOffStore.ts": {
+    "language": "TypeScript",
+    "code": 356,
+    "comment": 51,
+    "blank": 53
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/authStore.ts": {
+    "language": "TypeScript",
+    "code": 412,
+    "comment": 85,
+    "blank": 93
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/services/supabaseService.ts": {
+    "language": "TypeScript",
+    "code": 338,
+    "comment": 118,
+    "blank": 63
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/auth/types.ts": {
+    "language": "TypeScript",
+    "code": 211,
+    "comment": 48,
+    "blank": 54
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/services/index.ts": {
+    "language": "TypeScript",
+    "code": 9,
+    "comment": 8,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/catalog/payment-settings.store.ts": {
+    "language": "TypeScript",
+    "code": 153,
+    "comment": 17,
+    "blank": 29
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/catalog/payment-methods.service.ts": {
+    "language": "TypeScript",
+    "code": 170,
+    "comment": 42,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/services/discountService.ts": {
+    "language": "TypeScript",
+    "code": 319,
+    "comment": 159,
+    "blank": 57
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/appInitializer.ts": {
+    "language": "TypeScript",
+    "code": 303,
+    "comment": 63,
+    "blank": 62
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/composables/index.ts": {
+    "language": "TypeScript",
+    "code": 1,
+    "comment": 1,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/sales/recipeWriteOff/supabase/mappers.ts": {
+    "language": "TypeScript",
+    "code": 45,
+    "comment": 20,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/users.ts": {
+    "language": "TypeScript",
+    "code": 75,
+    "comment": 33,
+    "blank": 15
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/hmrState.ts": {
+    "language": "TypeScript",
+    "code": 87,
+    "comment": 35,
+    "blank": 21
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/discounts/composables/useDiscountAnalytics.ts": {
+    "language": "TypeScript",
+    "code": 194,
+    "comment": 105,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/request/SupabaseRetryHandler.ts": {
+    "language": "TypeScript",
+    "code": 80,
+    "comment": 38,
+    "blank": 17
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/CostAdapter.ts": {
+    "language": "TypeScript",
+    "code": 245,
+    "comment": 57,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/services.ts": {
+    "language": "TypeScript",
+    "code": 210,
+    "comment": 40,
+    "blank": 30
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/types.ts": {
+    "language": "TypeScript",
+    "code": 162,
+    "comment": 68,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/scripts/parsePreparations.ts": {
+    "language": "TypeScript",
+    "code": 243,
+    "comment": 60,
+    "blank": 64
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/index.ts": {
+    "language": "TypeScript",
+    "code": 8,
+    "comment": 5,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/DecompositionEngine.ts": {
+    "language": "TypeScript",
+    "code": 497,
+    "comment": 111,
+    "blank": 88
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/scripts/parseProducts.ts": {
+    "language": "TypeScript",
+    "code": 230,
+    "comment": 56,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/index.ts": {
+    "language": "TypeScript",
+    "code": 83,
+    "comment": 24,
+    "blank": 20
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/IDecompositionAdapter.ts": {
+    "language": "TypeScript",
+    "code": 14,
+    "comment": 32,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/types.ts": {
+    "language": "TypeScript",
+    "code": 132,
+    "comment": 92,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/scripts/parseRecipes.ts": {
+    "language": "TypeScript",
+    "code": 303,
+    "comment": 49,
+    "blank": 46
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_recipes.sql": {
+    "language": "MS SQL",
+    "code": 3683,
+    "comment": 401,
+    "blank": 432
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_products.sql": {
+    "language": "MS SQL",
+    "code": 5179,
+    "comment": 5,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_preparations.sql": {
+    "language": "MS SQL",
+    "code": 459,
+    "comment": 5,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/WriteOffAdapter.ts": {
+    "language": "TypeScript",
+    "code": 151,
+    "comment": 53,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/verify_recipe_components.sql": {
+    "language": "MS SQL",
+    "code": 159,
+    "comment": 1,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/add_codes_to_migration.py": {
+    "language": "Python",
+    "code": 40,
+    "comment": 24,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/test_3_recipes_simple.sql": {
+    "language": "MS SQL",
+    "code": 88,
+    "comment": 60,
+    "blank": 49
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/add_on_conflict_ingredients.py": {
+    "language": "Python",
+    "code": 19,
+    "comment": 10,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/import_winter_menu_preparations.sql": {
+    "language": "MS SQL",
+    "code": 948,
+    "comment": 79,
+    "blank": 94
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/adapters/index.ts": {
+    "language": "TypeScript",
+    "code": 14,
+    "comment": 5,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/RECIPES.md": {
+    "language": "Markdown",
+    "code": 167,
+    "comment": 0,
+    "blank": 49
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/add_on_conflict.py": {
+    "language": "Python",
+    "code": 25,
+    "comment": 12,
+    "blank": 9
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/sql/test_3_recipes_full_chain.sql": {
+    "language": "MS SQL",
+    "code": 331,
+    "comment": 160,
+    "blank": 121
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/fix_code_references.py": {
+    "language": "Python",
+    "code": 94,
+    "comment": 21,
+    "blank": 16
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/product-rules.ts": {
+    "language": "TypeScript",
+    "code": 132,
+    "comment": 26,
+    "blank": 22
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/recipe-categories.json": {
+    "language": "JSON",
+    "code": 16,
+    "comment": 0,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/preparation-categories.json": {
+    "language": "JSON",
+    "code": 13,
+    "comment": 0,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/product-to-prep-replacements.json": {
+    "language": "JSON",
+    "code": 92,
+    "comment": 0,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/preparation-rules.ts": {
+    "language": "TypeScript",
+    "code": 49,
+    "comment": 16,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/suppliers.json": {
+    "language": "JSON",
+    "code": 28,
+    "comment": 0,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/recipe-rules.ts": {
+    "language": "TypeScript",
+    "code": 89,
+    "comment": 41,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/data-migration/mappings/categories.json": {
+    "language": "JSON",
+    "code": 16,
+    "comment": 0,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/portionUtils.ts": {
+    "language": "TypeScript",
+    "code": 66,
+    "comment": 48,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/yieldUtils.ts": {
+    "language": "TypeScript",
+    "code": 56,
+    "comment": 53,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/types.ts": {
+    "language": "TypeScript",
+    "code": 125,
+    "comment": 72,
+    "blank": 41
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/SyncService.ts": {
+    "language": "TypeScript",
+    "code": 365,
+    "comment": 42,
+    "blank": 82
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/PreparationWriteOffSyncAdapter.ts": {
+    "language": "TypeScript",
+    "code": 148,
+    "comment": 26,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/ProductWriteOffSyncAdapter.ts": {
+    "language": "TypeScript",
+    "code": 152,
+    "comment": 34,
+    "blank": 32
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/PreparationBatchSyncAdapter.ts": {
+    "language": "TypeScript",
+    "code": 121,
+    "comment": 24,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/ShiftSyncAdapter.ts": {
+    "language": "TypeScript",
+    "code": 361,
+    "comment": 62,
+    "blank": 74
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/index.ts": {
+    "language": "TypeScript",
+    "code": 9,
+    "comment": 4,
+    "blank": 6
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/adapters/ScheduleCompletionSyncAdapter.ts": {
+    "language": "TypeScript",
+    "code": 144,
+    "comment": 30,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/storage/index.ts": {
+    "language": "TypeScript",
+    "code": 2,
+    "comment": 3,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/storage/LocalStorageSyncStorage.ts": {
+    "language": "TypeScript",
+    "code": 73,
+    "comment": 10,
+    "blank": 14
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/storage/ApiSyncStorage.ts": {
+    "language": "TypeScript",
+    "code": 89,
+    "comment": 8,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/replacementUtils.ts": {
+    "language": "TypeScript",
+    "code": 58,
+    "comment": 50,
+    "blank": 12
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/index.ts": {
+    "language": "TypeScript",
+    "code": 4,
+    "comment": 1,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/stores/pos/receipts/composables/usePosReceipt.ts": {
+    "language": "TypeScript",
+    "code": 670,
+    "comment": 170,
+    "blank": 124
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/storeResetService.ts": {
+    "language": "TypeScript",
+    "code": 81,
+    "comment": 26,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/ProductionInitializationStrategy.ts": {
+    "language": "TypeScript",
+    "code": 556,
+    "comment": 120,
+    "blank": 140
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/DevInitializationStrategy.ts": {
+    "language": "TypeScript",
+    "code": 656,
+    "comment": 67,
+    "blank": 158
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/migrations/migrateLegacyShiftQueue.ts": {
+    "language": "TypeScript",
+    "code": 61,
+    "comment": 18,
+    "blank": 18
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/types.ts": {
+    "language": "TypeScript",
+    "code": 50,
+    "comment": 44,
+    "blank": 13
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/appInitializerTests.ts": {
+    "language": "TypeScript",
+    "code": 443,
+    "comment": 84,
+    "blank": 93
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/initialization/dependencies.ts": {
+    "language": "TypeScript",
+    "code": 143,
+    "comment": 117,
+    "blank": 53
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/ExportService.ts": {
+    "language": "TypeScript",
+    "code": 200,
+    "comment": 37,
+    "blank": 31
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/sync/helpers/taxCalculationHelper.ts": {
+    "language": "TypeScript",
+    "code": 33,
+    "comment": 25,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/types.ts": {
+    "language": "TypeScript",
+    "code": 473,
+    "comment": 46,
+    "blank": 61
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/html2pdf.d.ts": {
+    "language": "TypeScript",
+    "code": 22,
+    "comment": 3,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/index.ts": {
+    "language": "TypeScript",
+    "code": 93,
+    "comment": 19,
+    "blank": 8
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/services/FifoAllocationService.ts": {
+    "language": "TypeScript",
+    "code": 196,
+    "comment": 36,
+    "blank": 36
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/cost/types.ts": {
+    "language": "TypeScript",
+    "code": 81,
+    "comment": 40,
+    "blank": 23
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/connection/ConnectionHealthMonitor.ts": {
+    "language": "TypeScript",
+    "code": 175,
+    "comment": 45,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/cost/menuCostCalculator.ts": {
+    "language": "TypeScript",
+    "code": 564,
+    "comment": 103,
+    "blank": 87
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/combinationGenerator.ts": {
+    "language": "TypeScript",
+    "code": 214,
+    "comment": 70,
+    "blank": 60
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/cost/modifierCostCalculator.ts": {
+    "language": "TypeScript",
+    "code": 400,
+    "comment": 104,
+    "blank": 73
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/menuItemExportBuilder.ts": {
+    "language": "TypeScript",
+    "code": 266,
+    "comment": 40,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/combinationCostCalculator.ts": {
+    "language": "TypeScript",
+    "code": 760,
+    "comment": 123,
+    "blank": 119
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/styles/export.scss": {
+    "language": "SCSS",
+    "code": 114,
+    "comment": 12,
+    "blank": 26
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/utils/index.ts": {
+    "language": "TypeScript",
+    "code": 27,
+    "comment": 4,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/composables/usePwaInstall.ts": {
+    "language": "TypeScript",
+    "code": 103,
+    "comment": 55,
+    "blank": 37
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/index.ts": {
+    "language": "TypeScript",
+    "code": 14,
+    "comment": 33,
+    "blank": 5
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/composables/useWakeLock.ts": {
+    "language": "TypeScript",
+    "code": 87,
+    "comment": 38,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/composables/useExport.ts": {
+    "language": "TypeScript",
+    "code": 304,
+    "comment": 72,
+    "blank": 43
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/types.ts": {
+    "language": "TypeScript",
+    "code": 58,
+    "comment": 26,
+    "blank": 10
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/services/OrderAlertService.ts": {
+    "language": "TypeScript",
+    "code": 280,
+    "comment": 81,
+    "blank": 52
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/App.vue": {
+    "language": "Vue",
+    "code": 247,
+    "comment": 2,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/bill.ts": {
+    "language": "TypeScript",
+    "code": 29,
+    "comment": 1,
+    "blank": 4
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/index.ts": {
+    "language": "TypeScript",
+    "code": 7,
+    "comment": 1,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/pwa/composables/useNotifications.ts": {
+    "language": "TypeScript",
+    "code": 189,
+    "comment": 73,
+    "blank": 45
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/tax.ts": {
+    "language": "TypeScript",
+    "code": 6,
+    "comment": 1,
+    "blank": 2
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/common.ts": {
+    "language": "TypeScript",
+    "code": 8,
+    "comment": 1,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/settings.ts": {
+    "language": "TypeScript",
+    "code": 23,
+    "comment": 1,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/customer.ts": {
+    "language": "TypeScript",
+    "code": 7,
+    "comment": 1,
+    "blank": 1
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/payment.ts": {
+    "language": "TypeScript",
+    "code": 52,
+    "comment": 16,
+    "blank": 7
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/PurchaseOrderTemplate.vue": {
+    "language": "Vue",
+    "code": 169,
+    "comment": 3,
+    "blank": 28
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/CombinationsExportTemplate.vue": {
+    "language": "Vue",
+    "code": 1241,
+    "comment": 24,
+    "blank": 176
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuCostTemplate.vue": {
+    "language": "Vue",
+    "code": 388,
+    "comment": 6,
+    "blank": 56
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuDetailedExportTemplate.vue": {
+    "language": "Vue",
+    "code": 126,
+    "comment": 4,
+    "blank": 25
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/PreparationExportTemplate.vue": {
+    "language": "Vue",
+    "code": 375,
+    "comment": 4,
+    "blank": 47
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/ProductYieldTemplate.vue": {
+    "language": "Vue",
+    "code": 219,
+    "comment": 4,
+    "blank": 35
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/decomposition/utils/batchAllocationUtils.ts": {
+    "language": "TypeScript",
+    "code": 388,
+    "comment": 79,
+    "blank": 68
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/RecipeExportTemplate.vue": {
+    "language": "Vue",
+    "code": 324,
+    "comment": 3,
+    "blank": 42
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/ExportLayout.vue": {
+    "language": "Vue",
+    "code": 61,
+    "comment": 0,
+    "blank": 11
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/InventorySheetTemplate.vue": {
+    "language": "Vue",
+    "code": 260,
+    "comment": 5,
+    "blank": 40
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuExportTemplate.vue": {
+    "language": "Vue",
+    "code": 215,
+    "comment": 7,
+    "blank": 33
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/templates/MenuItemExportTemplate.vue": {
+    "language": "Vue",
+    "code": 471,
+    "comment": 8,
+    "blank": 74
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/components/ExportOptionsDialog.vue": {
+    "language": "Vue",
+    "code": 119,
+    "comment": 2,
+    "blank": 19
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/export/components/MenuItemExportOptionsDialog.vue": {
+    "language": "Vue",
+    "code": 139,
+    "comment": 3,
+    "blank": 24
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/background/index.ts": {
+    "language": "TypeScript",
+    "code": 14,
+    "comment": 8,
+    "blank": 3
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/types/measurementUnits.ts": {
+    "language": "TypeScript",
+    "code": 226,
+    "comment": 70,
+    "blank": 38
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/background/useBackgroundTasks.ts": {
+    "language": "TypeScript",
+    "code": 457,
+    "comment": 72,
+    "blank": 85
+  },
+  "file:///Users/peaker/dev/kitchen-app/backoffice/src/core/background/types.ts": {
+    "language": "TypeScript",
+    "code": 115,
+    "comment": 36,
+    "blank": 32
+  }
+}
