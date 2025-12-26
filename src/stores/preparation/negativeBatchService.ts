@@ -86,7 +86,7 @@ class NegativeBatchService {
     // Fallback to cached last_known_cost from preparation
     const { data: preparation, error } = await supabase
       .from('preparations')
-      .select('last_known_cost, name')
+      .select('last_known_cost, name, portion_type, portion_size')
       .eq('id', preparationId)
       .single()
 
@@ -96,10 +96,25 @@ class NegativeBatchService {
     }
 
     if (preparation?.last_known_cost && preparation.last_known_cost > 0) {
-      console.info(
-        `✅ Using cached last_known_cost: ${preparation.last_known_cost} for ${preparation.name}`
-      )
-      return preparation.last_known_cost
+      // ✅ FIX: Normalize last_known_cost for portion-type preparations
+      // last_known_cost is stored as cost PER PORTION, but we need cost PER GRAM (base unit)
+      let normalizedCost = preparation.last_known_cost
+      if (
+        preparation.portion_type === 'portion' &&
+        preparation.portion_size &&
+        preparation.portion_size > 0
+      ) {
+        normalizedCost = preparation.last_known_cost / preparation.portion_size
+        console.info(
+          `✅ Using normalized last_known_cost: ${normalizedCost.toFixed(2)}/g ` +
+            `(from ${preparation.last_known_cost}/${preparation.portion_size}g portion) for ${preparation.name}`
+        )
+      } else {
+        console.info(
+          `✅ Using cached last_known_cost: ${preparation.last_known_cost} for ${preparation.name}`
+        )
+      }
+      return normalizedCost
     }
 
     // FINAL FALLBACK: Return 0 with CRITICAL ERROR
@@ -378,17 +393,20 @@ class NegativeBatchService {
 
     // 2. Calculate new quantities with NEW cost
     const previousQty = batch.currentQuantity // e.g., -100
+    const previousInitial = batch.initialQuantity // e.g., -100
     const previousCost = batch.costPerUnit
     const newQty = previousQty - additionalShortage // e.g., -100 - 100 = -200 (more negative)
+    const newInitial = previousInitial - additionalShortage // ✅ Also update initial to track total shortage
     const newTotalValue = newQty * costPerUnit // ✅ Use NEW cost from parameter!
 
     const now = new Date().toISOString()
 
-    // 3. Update batch in database (including cost!)
+    // 3. Update batch in database (including cost and initial_quantity!)
     const { data: updatedData, error: updateError } = await supabase
       .from('preparation_batches')
       .update({
         current_quantity: newQty,
+        initial_quantity: newInitial, // ✅ Keep initial in sync with current for negative batches
         cost_per_unit: costPerUnit, // ✅ Update cost too!
         total_value: newTotalValue,
         updated_at: now

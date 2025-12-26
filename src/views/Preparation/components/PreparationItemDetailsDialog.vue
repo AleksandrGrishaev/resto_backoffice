@@ -439,11 +439,20 @@ function formatSource(sourceType: string): string {
 
 // ⭐ PHASE 2: Format batch quantity with portions
 function formatBatchQuantity(current: number, initial: number, unit: string): string {
+  // For negative batches, don't show /initial (it's cumulative, not a starting point)
+  const isNegative = current < 0
+
   if (portionInfo.value.isPortionType && portionInfo.value.portionSize) {
     const currentPortions = Math.floor(current / portionInfo.value.portionSize)
+    if (isNegative) {
+      return `${currentPortions} portions`
+    }
     const initialPortions = Math.floor(initial / portionInfo.value.portionSize)
-    // Show only portions (no grams)
     return `${currentPortions}/${initialPortions} portions`
+  }
+
+  if (isNegative) {
+    return `${current} ${unit}`
   }
   return `${current}/${initial} ${unit}`
 }
