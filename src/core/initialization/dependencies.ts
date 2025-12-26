@@ -209,10 +209,10 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       // POS: products, recipes, menu + pos-специфичные
       stores.add('counteragents') // нужен для некоторых операций
       stores.add('storage') // для write-off при продажах
+      stores.add('paymentSettings') // методы оплаты для PaymentDialog
       stores.add('pos')
       stores.add('sales')
       stores.add('writeOff')
-      // paymentSettings загружается внутри POS stores
       break
 
     case 'kitchen':
