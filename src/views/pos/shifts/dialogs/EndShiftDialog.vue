@@ -34,32 +34,9 @@
           </v-alert>
         </div>
 
-        <!-- ✅ Refunded Orders Warning -->
-        <div v-if="hasRefundedOrders" class="mb-4">
-          <v-alert color="error" variant="tonal">
-            <div class="font-weight-bold mb-2">Cannot Close Shift: Refunded Items</div>
-            <div>
-              There {{ ordersWithRefundedItems.length === 1 ? 'is' : 'are' }}
-              <strong>{{ ordersWithRefundedItems.length }}</strong>
-              order{{ ordersWithRefundedItems.length === 1 ? '' : 's' }}
-              with refunded items. Please resolve these before closing the shift.
-            </div>
-            <div class="mt-2">
-              <div
-                v-for="{ order, refundedItems } in ordersWithRefundedItems"
-                :key="order.id"
-                class="text-caption"
-              >
-                • Order #{{ order.orderNumber }}:
-                <span v-for="(item, idx) in refundedItems" :key="item.id">
-                  {{ item.menuItemName }} ({{ formatCurrency(item.totalPrice) }}){{
-                    idx < refundedItems.length - 1 ? ', ' : ''
-                  }}
-                </span>
-              </div>
-            </div>
-          </v-alert>
-        </div>
+        <!-- Refunded Orders Warning - REMOVED
+             Refunds are already resolved: money returned, recorded in shift totals.
+             No additional action needed before closing shift. -->
 
         <!-- Validation Warnings -->
         <div v-if="validationWarnings.length > 0" class="mb-4">
@@ -310,7 +287,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
-import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+// usePosOrdersStore removed - no longer needed after removing refunded items check
 import { useShiftsComposables } from '@/stores/pos/shifts/composables'
 import { useAccountStore } from '@/stores/account'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
@@ -341,7 +318,7 @@ const emit = defineEmits<{
 const shiftsStore = useShiftsStore()
 const paymentsStore = usePosPaymentsStore()
 const accountStore = useAccountStore()
-const ordersStore = usePosOrdersStore()
+// ordersStore removed - no longer needed after removing refunded items check
 const paymentSettingsStore = usePaymentSettingsStore()
 const {
   formatShiftDuration,
@@ -402,37 +379,14 @@ const isAccountStoreReady = computed(() => {
   return accountStore.accounts && accountStore.accounts.length > 0
 })
 
-// ✅ Check for orders with refunded items (excluding cancelled items - those are resolved)
-const ordersWithRefundedItems = computed(() => {
-  if (!currentShift.value) return []
-  const shiftStartTime = new Date(currentShift.value.startTime).getTime()
+// ✅ Refunded items check - REMOVED
+// Refunded items are already "resolved" - money has been returned to customer.
+// paymentStatus: 'refunded' means the refund payment was processed and recorded.
+// There's no additional action required from cashier before closing shift.
+// The refund is already accounted for in shift totals (negative payment amount).
+const ordersWithRefundedItems = computed(() => [] as { order: any; refundedItems: any[] }[])
 
-  return ordersStore.orders
-    .filter(order => {
-      const orderTime = new Date(order.createdAt).getTime()
-      if (orderTime < shiftStartTime) return false
-
-      // Check if order has refunded status (but not if fully resolved)
-      // Skip orders where all refunded items are also cancelled (resolved refunds)
-
-      // Check items in all bills - only flag items that are refunded BUT NOT cancelled
-      // Cancelled + refunded = resolved refund (ok to close shift)
-      // Refunded but not cancelled = unresolved (block shift close)
-      return order.bills.some(bill =>
-        bill.items.some(item => item.paymentStatus === 'refunded' && item.status !== 'cancelled')
-      )
-    })
-    .map(order => {
-      // Get unresolved refunded items for display (refunded but not cancelled)
-      const refundedItems = order.bills.flatMap(bill =>
-        bill.items.filter(item => item.paymentStatus === 'refunded' && item.status !== 'cancelled')
-      )
-      return { order, refundedItems }
-    })
-    .filter(({ refundedItems }) => refundedItems.length > 0) // Only show orders with unresolved items
-})
-
-const hasRefundedOrders = computed(() => ordersWithRefundedItems.value.length > 0)
+const hasRefundedOrders = computed(() => false)
 
 const canEndShift = computed(
   () =>
