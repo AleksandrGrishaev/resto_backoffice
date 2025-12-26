@@ -4,14 +4,15 @@
 
 import { ref, onMounted, computed } from 'vue'
 import { useExpenseLinking } from '@/stores/pos/shifts/composables/useExpenseLinking'
+import { useShiftsStore } from '@/stores/pos/shifts'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth'
 import PendingPaymentsList from './components/PendingPaymentsList.vue'
 import UnlinkedExpensesList from './components/UnlinkedExpensesList.vue'
 import PaymentHistoryList from './components/PaymentHistoryList.vue'
 import LinkExpenseDialog from './dialogs/LinkExpenseDialog.vue'
-import UnlinkExpenseDialog from './dialogs/UnlinkExpenseDialog.vue'
 import ConfirmPaymentDialog from './dialogs/ConfirmPaymentDialog.vue'
+import ExpenseDetailsDialog from './dialogs/ExpenseDetailsDialog.vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import type { PendingPayment } from '@/stores/account/types'
 import type { InvoiceSuggestion } from '@/stores/pos/shifts/composables/useExpenseLinking'
@@ -30,7 +31,6 @@ const {
   error,
   getInvoiceSuggestions,
   linkExpenseToInvoice,
-  unlinkExpenseFromInvoice,
   clearError
 } = useExpenseLinking()
 
@@ -42,9 +42,11 @@ const activeTab = ref('pending')
 const selectedExpense = ref<ShiftExpenseOperation | null>(null)
 const selectedPayment = ref<PendingPayment | null>(null)
 const showLinkDialog = ref(false)
-const showUnlinkDialog = ref(false)
 const showConfirmPaymentDialog = ref(false)
+const showExpenseDetailsDialog = ref(false)
 const invoiceSuggestions = ref<InvoiceSuggestion[]>([])
+const expenseAvailableAmount = ref(0) // Amount available for linking (expense.amount - alreadyLinkedAmount)
+const selectedExpensePayment = ref<PendingPayment | null>(null) // Payment for expense details dialog
 
 // =============================================
 // COMPUTED
@@ -55,9 +57,14 @@ const currentUser = computed(() => ({
   name: authStore.user?.name || authStore.user?.email || 'Manager'
 }))
 
+// Pending payments (status === 'pending') - for Pending tab
 const pendingPayments = computed(() => {
-  // Get pending payments from account store
   return accountStore.pendingPayments || []
+})
+
+// All payments (for looking up usedAmount) - for calculating available amounts
+const allPaymentsForLookup = computed(() => {
+  return accountStore.allPayments || []
 })
 
 const paymentHistory = computed(() => {
@@ -71,11 +78,30 @@ const tabStats = computed(() => ({
   history: paymentHistory.value.length
 }))
 
+// Calculate actual available amount for unlinked expenses (considering partial links)
+const actualUnlinkedAmount = computed(() => {
+  return unlinkedExpenses.value.reduce((sum, exp) => {
+    if (!exp.relatedPaymentId) {
+      return sum + exp.amount
+    }
+    // Use allPaymentsForLookup (not pendingPayments) because expense payments are 'completed'
+    const payment = allPaymentsForLookup.value.find(p => p.id === exp.relatedPaymentId)
+    if (!payment) {
+      return sum + exp.amount
+    }
+    return sum + (payment.amount - (payment.usedAmount || 0))
+  }, 0)
+})
+
 // =============================================
 // LIFECYCLE
 // =============================================
 
 onMounted(async () => {
+  // Load shifts for expense linking (needed in backoffice to show unlinked expenses)
+  const shiftsStore = useShiftsStore()
+  await shiftsStore.loadShifts()
+
   // Load pending payments if needed
   if (accountStore.pendingPayments.length === 0) {
     await accountStore.fetchPayments()
@@ -88,6 +114,21 @@ onMounted(async () => {
 
 async function handleLinkExpense(expense: ShiftExpenseOperation) {
   selectedExpense.value = expense
+
+  // Calculate available amount for linking
+  // If expense has relatedPaymentId, check the payment's usedAmount
+  if (expense.relatedPaymentId) {
+    // Use allPayments (not pendingPayments) because expense payments are 'completed'
+    const payment = allPaymentsForLookup.value.find(p => p.id === expense.relatedPaymentId)
+    if (payment) {
+      expenseAvailableAmount.value = payment.amount - (payment.usedAmount || 0)
+    } else {
+      expenseAvailableAmount.value = expense.amount
+    }
+  } else {
+    // Old expenses without relatedPaymentId - use full amount
+    expenseAvailableAmount.value = expense.amount
+  }
 
   // Get invoice suggestions for this expense
   invoiceSuggestions.value = await getInvoiceSuggestions(expense)
@@ -119,28 +160,21 @@ function handleCancelLink() {
 }
 
 // =============================================
-// UNLINK EXPENSE METHODS
+// VIEW EXPENSE DETAILS
 // =============================================
 
-function handleUnlinkExpense(expense: ShiftExpenseOperation) {
+function handleViewExpenseDetails(expense: ShiftExpenseOperation) {
   selectedExpense.value = expense
-  showUnlinkDialog.value = true
-}
 
-async function handleConfirmUnlink(reason: string) {
-  if (!selectedExpense.value) return
-
-  const result = await unlinkExpenseFromInvoice(selectedExpense.value, reason, currentUser.value)
-
-  if (result.success) {
-    showUnlinkDialog.value = false
-    selectedExpense.value = null
+  // Find the related payment to show linked orders
+  if (expense.relatedPaymentId) {
+    selectedExpensePayment.value =
+      allPaymentsForLookup.value.find(p => p.id === expense.relatedPaymentId) || null
+  } else {
+    selectedExpensePayment.value = null
   }
-}
 
-function handleCancelUnlink() {
-  showUnlinkDialog.value = false
-  selectedExpense.value = null
+  showExpenseDetailsDialog.value = true
 }
 
 // =============================================
@@ -253,10 +287,10 @@ function handleDismissError() {
       <v-spacer />
 
       <!-- Unlinked Amount Badge -->
-      <v-chip v-if="totalUnlinkedAmount > 0" color="warning" variant="flat" class="mr-2">
+      <v-chip v-if="actualUnlinkedAmount > 0" color="warning" variant="flat" class="mr-2">
         <v-icon start size="small">mdi-alert</v-icon>
         Unlinked:
-        {{ totalUnlinkedAmount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' }) }}
+        {{ actualUnlinkedAmount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' }) }}
       </v-chip>
     </div>
 
@@ -323,6 +357,7 @@ function handleDismissError() {
         <v-window-item value="unlinked">
           <UnlinkedExpensesList
             :expenses="unlinkedExpenses"
+            :payments="allPaymentsForLookup"
             :loading="isLoading"
             @link="handleLinkExpense"
           />
@@ -333,7 +368,7 @@ function handleDismissError() {
           <PaymentHistoryList
             :expenses="paymentHistory"
             :loading="isLoading"
-            @unlink="handleUnlinkExpense"
+            @view="handleViewExpenseDetails"
           />
         </v-window-item>
       </v-window>
@@ -344,18 +379,10 @@ function handleDismissError() {
       v-model="showLinkDialog"
       :expense="selectedExpense"
       :suggestions="invoiceSuggestions"
+      :available-amount="expenseAvailableAmount"
       :loading="isLoading"
       @confirm="handleConfirmLink"
       @cancel="handleCancelLink"
-    />
-
-    <!-- Unlink Expense Dialog -->
-    <UnlinkExpenseDialog
-      v-model="showUnlinkDialog"
-      :expense="selectedExpense"
-      :loading="isLoading"
-      @confirm="handleConfirmUnlink"
-      @cancel="handleCancelUnlink"
     />
 
     <!-- Confirm Payment Dialog -->
@@ -365,6 +392,13 @@ function handleDismissError() {
       :loading="isLoading"
       @confirm="handleConfirmPaymentSubmit"
       @cancel="handleCancelConfirmPayment"
+    />
+
+    <!-- Expense Details Dialog -->
+    <ExpenseDetailsDialog
+      v-model="showExpenseDetailsDialog"
+      :expense="selectedExpense"
+      :payment="selectedExpensePayment"
     />
   </v-container>
 </template>

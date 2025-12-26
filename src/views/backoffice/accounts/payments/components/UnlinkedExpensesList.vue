@@ -4,11 +4,13 @@
 
 import { computed } from 'vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
+import type { PendingPayment } from '@/stores/account/types'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
 
 interface Props {
   expenses: ShiftExpenseOperation[]
+  payments: PendingPayment[] // For showing available amounts
   loading?: boolean
 }
 
@@ -17,13 +19,45 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  loading: false,
+  payments: () => []
 })
 
 const emit = defineEmits<Emits>()
 
 // =============================================
-// COMPUTED
+// METHODS
+// =============================================
+
+function handleLink(expense: ShiftExpenseOperation) {
+  emit('link', expense)
+}
+
+/**
+ * Get available amount for an expense
+ * If expense has relatedPaymentId, check the payment's usedAmount
+ */
+function getAvailableAmount(expense: ShiftExpenseOperation): number {
+  if (!expense.relatedPaymentId) {
+    return expense.amount
+  }
+  const payment = props.payments.find(p => p.id === expense.relatedPaymentId)
+  if (!payment) {
+    return expense.amount
+  }
+  return payment.amount - (payment.usedAmount || 0)
+}
+
+/**
+ * Check if expense is partially linked
+ */
+function isPartiallyLinked(expense: ShiftExpenseOperation): boolean {
+  const available = getAvailableAmount(expense)
+  return available > 0 && available < expense.amount
+}
+
+// =============================================
+// COMPUTED (after methods so they can use getAvailableAmount)
 // =============================================
 
 const sortedExpenses = computed(() => {
@@ -33,17 +67,10 @@ const sortedExpenses = computed(() => {
   })
 })
 
-const totalAmount = computed(() => {
-  return props.expenses.reduce((sum, exp) => sum + exp.amount, 0)
+// Total available amount (not total expense amount)
+const totalAvailableAmount = computed(() => {
+  return props.expenses.reduce((sum, exp) => sum + getAvailableAmount(exp), 0)
 })
-
-// =============================================
-// METHODS
-// =============================================
-
-function handleLink(expense: ShiftExpenseOperation) {
-  emit('link', expense)
-}
 
 function getExpenseIcon(type: ShiftExpenseOperation['type']): string {
   switch (type) {
@@ -85,7 +112,7 @@ function formatDate(dateStr: string): string {
             <v-icon start size="small">mdi-alert</v-icon>
             {{ expenses.length }} expense(s) need to be linked
           </span>
-          <span class="font-weight-bold">Total: {{ formatIDR(totalAmount) }}</span>
+          <span class="font-weight-bold">Total: {{ formatIDR(totalAvailableAmount) }}</span>
         </div>
       </v-alert>
 
@@ -108,8 +135,17 @@ function formatDate(dateStr: string): string {
 
           <v-list-item-subtitle>
             <div class="d-flex flex-wrap gap-2 mt-1">
-              <!-- Amount -->
-              <v-chip size="small" color="error" variant="tonal">
+              <!-- Amount - show both total and available if partially linked -->
+              <v-chip
+                v-if="isPartiallyLinked(expense)"
+                size="small"
+                color="warning"
+                variant="tonal"
+              >
+                Available: {{ formatIDR(getAvailableAmount(expense)) }}
+                <span class="text-caption ml-1">(of {{ formatIDR(expense.amount) }})</span>
+              </v-chip>
+              <v-chip v-else size="small" color="error" variant="tonal">
                 {{ formatIDR(expense.amount) }}
               </v-chip>
 

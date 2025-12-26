@@ -17,6 +17,8 @@ export interface InvoiceSuggestion {
   totalAmount: number
   createdAt: string
   status: string
+  billStatus: string // 'not_billed' | 'partially_paid' | 'fully_paid'
+  unpaidAmount: number // totalAmount - paidAmount (available for linking)
   matchScore: number // 0-100, how well it matches the expense
   matchReason: string
 }
@@ -56,8 +58,12 @@ export function useExpenseLinking() {
   // COMPUTED
   // =============================================
 
+  // Unlinked expenses includes both 'unlinked' AND 'partially_linked'
+  // (partially_linked still have available amount that needs to be linked)
   const unlinkedExpenses = computed(() => {
-    return shiftsStore.getExpensesByLinkingStatus('unlinked')
+    const unlinked = shiftsStore.getExpensesByLinkingStatus('unlinked')
+    const partiallyLinked = shiftsStore.getExpensesByLinkingStatus('partially_linked')
+    return [...unlinked, ...partiallyLinked]
   })
 
   const linkedExpenses = computed(() => {
@@ -68,8 +74,14 @@ export function useExpenseLinking() {
     return shiftsStore.getExpensesByLinkingStatus('partially_linked')
   })
 
+  // Total unlinked amount - considers partially linked expenses
+  // For expenses with relatedPaymentId, uses available amount (amount - usedAmount)
   const totalUnlinkedAmount = computed(() => {
-    return unlinkedExpenses.value.reduce((sum, exp) => sum + exp.amount, 0)
+    return unlinkedExpenses.value.reduce((sum, exp) => {
+      // For now, just use full expense amount
+      // The accurate available amount is calculated in the component where payments are available
+      return sum + exp.amount
+    }, 0)
   })
 
   // =============================================
@@ -79,6 +91,7 @@ export function useExpenseLinking() {
   /**
    * Get available invoices for linking
    * Filters by supplier if counteragentId is provided
+   * Excludes fully paid invoices
    */
   async function getAvailableInvoices(counteragentId?: string): Promise<InvoiceSuggestion[]> {
     try {
@@ -95,10 +108,15 @@ export function useExpenseLinking() {
           supplier_name,
           total_amount,
           created_at,
-          status
+          status,
+          bill_status
         `
         )
-        .in('status', ['sent', 'received', 'completed'])
+        // Include all active order statuses (sent, received, delivered, completed)
+        // Only exclude draft/cancelled orders
+        .not('status', 'in', '("draft","cancelled")')
+        // Exclude fully paid invoices - they don't need more payments
+        .neq('bill_status', 'fully_paid')
         .order('created_at', { ascending: false })
         .limit(50)
 
@@ -112,20 +130,35 @@ export function useExpenseLinking() {
         throw new Error(queryError.message)
       }
 
-      const suggestions: InvoiceSuggestion[] = (data || []).map(order => ({
-        id: order.id,
-        orderNumber: order.order_number,
-        supplierId: order.supplier_id,
-        supplierName: order.supplier_name,
-        totalAmount: Number(order.total_amount),
-        createdAt: order.created_at,
-        status: order.status,
-        matchScore: 0,
-        matchReason: ''
-      }))
+      // Get paid amounts for each order to calculate unpaid amount
+      const orderIds = (data || []).map(o => o.id)
+      const paidAmounts = await getPaidAmountsForOrders(orderIds)
 
-      invoiceSuggestions.value = suggestions
-      return suggestions
+      const suggestions: InvoiceSuggestion[] = (data || []).map(order => {
+        const totalAmount = Number(order.total_amount)
+        const paidAmount = paidAmounts[order.id] || 0
+        const unpaidAmount = Math.max(0, totalAmount - paidAmount)
+
+        return {
+          id: order.id,
+          orderNumber: order.order_number,
+          supplierId: order.supplier_id,
+          supplierName: order.supplier_name,
+          totalAmount,
+          createdAt: order.created_at,
+          status: order.status,
+          billStatus: order.bill_status || 'not_billed',
+          unpaidAmount,
+          matchScore: 0,
+          matchReason: ''
+        }
+      })
+
+      // Filter out orders with no unpaid amount
+      const availableSuggestions = suggestions.filter(s => s.unpaidAmount > 0)
+
+      invoiceSuggestions.value = availableSuggestions
+      return availableSuggestions
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load invoices'
       error.value = errorMsg
@@ -133,6 +166,52 @@ export function useExpenseLinking() {
       return []
     } finally {
       isLoading.value = false
+    }
+  }
+
+  /**
+   * Get paid amounts for orders from linked payments
+   */
+  async function getPaidAmountsForOrders(orderIds: string[]): Promise<Record<string, number>> {
+    if (orderIds.length === 0) return {}
+
+    try {
+      // Get all completed payments that are linked to these orders
+      const { data: payments } = await supabase
+        .from('pending_payments')
+        .select('id, linked_orders, status')
+        .eq('status', 'completed')
+
+      const paidAmounts: Record<string, number> = {}
+
+      // Initialize all orders with 0
+      orderIds.forEach(id => {
+        paidAmounts[id] = 0
+      })
+
+      // Sum up linked amounts from payments
+      if (payments) {
+        for (const payment of payments) {
+          const linkedOrders = payment.linked_orders as Array<{
+            orderId: string
+            linkedAmount: number
+            isActive: boolean
+          }> | null
+
+          if (linkedOrders) {
+            for (const link of linkedOrders) {
+              if (link.isActive && orderIds.includes(link.orderId)) {
+                paidAmounts[link.orderId] = (paidAmounts[link.orderId] || 0) + link.linkedAmount
+              }
+            }
+          }
+        }
+      }
+
+      return paidAmounts
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get paid amounts for orders', { error: err })
+      return {}
     }
   }
 
@@ -206,6 +285,8 @@ export function useExpenseLinking() {
 
   /**
    * Link expense to invoice
+   * If expense has relatedPaymentId, delegates to accountStore.linkPaymentToOrder()
+   * This ensures PendingPayment and expense stay in sync
    */
   async function linkExpenseToInvoice(
     expense: ShiftExpenseOperation,
@@ -217,7 +298,31 @@ export function useExpenseLinking() {
       isLoading.value = true
       error.value = null
 
-      // Update expense in shift
+      // ✅ If expense has relatedPaymentId, use accountStore.linkPaymentToOrder
+      // This ensures both PendingPayment and expense are updated atomically
+      if (expense.relatedPaymentId) {
+        const { useAccountStore } = await import('@/stores/account')
+        const accountStore = useAccountStore()
+
+        await accountStore.linkPaymentToOrder({
+          paymentId: expense.relatedPaymentId,
+          orderId: invoice.id,
+          orderNumber: invoice.orderNumber,
+          linkAmount: linkAmount
+        })
+
+        DebugUtils.info(MODULE_NAME, 'Expense linked via PendingPayment', {
+          expenseId: expense.id,
+          paymentId: expense.relatedPaymentId,
+          invoiceId: invoice.id,
+          amount: linkAmount
+        })
+
+        // linkPaymentToOrder already updates expense via updateExpenseLinkingStatusByPaymentId
+        return { success: true }
+      }
+
+      // Fallback for old expenses without relatedPaymentId - update expense directly
       const shift = shiftsStore.shifts.find(s => s.id === expense.shiftId)
       if (!shift) {
         throw new Error('Shift not found')
@@ -250,7 +355,7 @@ export function useExpenseLinking() {
         localStorage.setItem('pos_shifts', JSON.stringify(allShifts))
       }
 
-      DebugUtils.info(MODULE_NAME, 'Expense linked to invoice', {
+      DebugUtils.info(MODULE_NAME, 'Expense linked to invoice (legacy mode)', {
         expenseId: expense.id,
         invoiceId: invoice.id,
         amount: linkAmount
@@ -269,6 +374,8 @@ export function useExpenseLinking() {
 
   /**
    * Unlink expense from invoice
+   * If expense has relatedPaymentId, delegates to accountStore.unlinkPaymentFromOrder()
+   * This ensures PendingPayment and expense stay in sync
    */
   async function unlinkExpenseFromInvoice(
     expense: ShiftExpenseOperation,
@@ -279,7 +386,26 @@ export function useExpenseLinking() {
       isLoading.value = true
       error.value = null
 
-      // Find shift
+      // ✅ If expense has relatedPaymentId and linkedOrderId, use accountStore.unlinkPaymentFromOrder
+      // This ensures both PendingPayment and expense are updated atomically
+      if (expense.relatedPaymentId && expense.linkedOrderId) {
+        const { useAccountStore } = await import('@/stores/account')
+        const accountStore = useAccountStore()
+
+        await accountStore.unlinkPaymentFromOrder(expense.relatedPaymentId, expense.linkedOrderId)
+
+        DebugUtils.info(MODULE_NAME, 'Expense unlinked via PendingPayment', {
+          expenseId: expense.id,
+          paymentId: expense.relatedPaymentId,
+          orderId: expense.linkedOrderId,
+          reason
+        })
+
+        // unlinkPaymentFromOrder already updates expense via updateExpenseLinkingStatusByPaymentId
+        return { success: true }
+      }
+
+      // Fallback for old expenses without relatedPaymentId - update expense directly
       const shift = shiftsStore.shifts.find(s => s.id === expense.shiftId)
       if (!shift) {
         throw new Error('Shift not found')
@@ -313,7 +439,7 @@ export function useExpenseLinking() {
         localStorage.setItem('pos_shifts', JSON.stringify(allShifts))
       }
 
-      DebugUtils.info(MODULE_NAME, 'Expense unlinked from invoice', {
+      DebugUtils.info(MODULE_NAME, 'Expense unlinked from invoice (legacy mode)', {
         expenseId: expense.id,
         reason
       })

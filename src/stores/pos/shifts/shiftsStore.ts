@@ -25,7 +25,7 @@ import type {
 } from './types'
 import { ShiftsService } from './services'
 import { useShiftsComposables } from './composables'
-import { useAccountStore } from '@/stores/account'
+import { useAccountStore, paymentService } from '@/stores/account'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'ShiftsStore'
@@ -586,6 +586,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
       error.value = null
 
       // Создать расходную операцию
+      // ✅ Fix: Set linkingStatus for supplier expenses (need to be linked to PO later)
+      const isSupplierExpense = data.category === 'supplier'
+
       const expenseOperation: ShiftExpenseOperation = {
         id: `exp-${Date.now()}`,
         shiftId: data.shiftId,
@@ -601,6 +604,8 @@ export const useShiftsStore = defineStore('posShifts', () => {
         relatedAccountId: data.accountId,
         syncStatus: 'pending',
         notes: data.notes,
+        // Only supplier expenses need linking to PO invoices
+        linkingStatus: isSupplierExpense ? 'unlinked' : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -608,9 +613,70 @@ export const useShiftsStore = defineStore('posShifts', () => {
       // Добавить в смену
       currentShift.value.expenseOperations.push(expenseOperation)
 
-      // ✅ Sprint 8: DO NOT create transaction here!
-      // Transactions will be created during shift sync (ShiftSyncAdapter)
-      // This prevents expense duplication
+      // ✅ Supplier expenses: Create transaction IMMEDIATELY (not at shift close)
+      // Other expenses: Will be created during shift sync (ShiftSyncAdapter)
+      if (isSupplierExpense) {
+        try {
+          const transaction = await accountStore.createOperation({
+            accountId: data.accountId,
+            type: 'expense',
+            amount: data.amount,
+            description: data.description,
+            expenseCategory: { type: 'expense', category: 'supplier' },
+            performedBy: data.performedBy,
+            counteragentId: data.counteragentId,
+            counteragentName: data.counteragentName
+          })
+
+          // Update expense with transaction reference
+          expenseOperation.relatedTransactionId = transaction.id
+          expenseOperation.syncStatus = 'synced'
+          expenseOperation.lastSyncAt = new Date().toISOString()
+
+          console.log('✅ Supplier expense transaction created:', transaction.id)
+
+          // ✅ STEP 2: Create PendingPayment for "Attach Existing Bill" in PO
+          if (data.counteragentId) {
+            try {
+              // 1. Create payment (will be 'pending' by default)
+              const pendingPayment = await accountStore.createPayment({
+                counteragentId: data.counteragentId,
+                counteragentName: data.counteragentName || '',
+                amount: data.amount,
+                description: data.description,
+                priority: 'medium',
+                category: 'supplier',
+                invoiceNumber: data.invoiceNumber,
+                notes: data.notes,
+                usedAmount: 0, // Not yet linked to PO
+                linkedOrders: [], // Will be filled when attached to PO
+                createdBy: data.performedBy
+              })
+
+              // 2. Update status to 'completed' (already paid from cash register)
+              await paymentService.update(pendingPayment.id, {
+                status: 'completed',
+                paidAmount: data.amount,
+                paidDate: new Date().toISOString()
+              })
+
+              // 3. Link expense to PendingPayment
+              expenseOperation.relatedPaymentId = pendingPayment.id
+
+              console.log('✅ Supplier expense PendingPayment created:', pendingPayment.id)
+            } catch (paymentError) {
+              console.error(
+                '❌ Failed to create PendingPayment for supplier expense:',
+                paymentError
+              )
+              // Continue - expense and transaction are created, only PendingPayment failed
+            }
+          }
+        } catch (txError) {
+          console.error('❌ Failed to create supplier expense transaction:', txError)
+          // Continue - expense is saved, transaction will be created at shift close
+        }
+      }
 
       // Обновить баланс в смене
       const accountBalance = currentShift.value.accountBalances.find(
@@ -1027,7 +1093,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
         relatedTransactionId: data.transactionId, // Already created transaction
         relatedPaymentId: data.paymentId,
         linkedOrderId: data.linkedOrderId,
-        linkingStatus: 'fully_linked',
+        linkingStatus: 'linked',
         syncStatus: 'synced', // Already synced via account store
         lastSyncAt: new Date().toISOString(),
         notes: data.notes,
@@ -1080,6 +1146,60 @@ export const useShiftsStore = defineStore('posShifts', () => {
     }
 
     return allExpenses
+  }
+
+  /**
+   * Update expense linkingStatus by relatedPaymentId
+   * Called when PendingPayment is attached/detached from PO
+   */
+  async function updateExpenseLinkingStatusByPaymentId(
+    paymentId: string,
+    status: 'linked' | 'unlinked' | 'partially_linked',
+    linkedOrderId?: string
+  ): Promise<void> {
+    // Find expense with this relatedPaymentId across all shifts
+    for (const shift of shifts.value) {
+      const expense = shift.expenseOperations.find(exp => exp.relatedPaymentId === paymentId)
+      if (expense) {
+        expense.linkingStatus = status
+        expense.linkedOrderId = linkedOrderId
+        expense.updatedAt = new Date().toISOString()
+
+        // Save shift to persist changes
+        await shiftsService.updateShift(shift.id, shift)
+
+        DebugUtils.info(MODULE_NAME, 'Updated expense linkingStatus', {
+          expenseId: expense.id,
+          paymentId,
+          newStatus: status,
+          linkedOrderId
+        })
+        return
+      }
+    }
+
+    // Also check current shift if not in shifts array yet
+    if (currentShift.value) {
+      const expense = currentShift.value.expenseOperations.find(
+        exp => exp.relatedPaymentId === paymentId
+      )
+      if (expense) {
+        expense.linkingStatus = status
+        expense.linkedOrderId = linkedOrderId
+        expense.updatedAt = new Date().toISOString()
+
+        await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+        DebugUtils.info(MODULE_NAME, 'Updated expense linkingStatus in current shift', {
+          expenseId: expense.id,
+          paymentId,
+          newStatus: status
+        })
+        return
+      }
+    }
+
+    DebugUtils.warn(MODULE_NAME, 'Expense not found for paymentId', { paymentId })
   }
 
   /**
@@ -1490,6 +1610,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
     createUnlinkedExpense,
     createAccountPaymentExpense,
     getExpensesByLinkingStatus,
+    updateExpenseLinkingStatusByPaymentId,
 
     // Sprint 7: Payment Methods Update
     updatePaymentMethods,

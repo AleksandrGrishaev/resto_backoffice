@@ -142,7 +142,7 @@ export type ExpenseOperationType =
 export type ExpenseLinkingStatus =
   | 'unlinked' // Не привязан к накладной
   | 'partially_linked' // Частично привязан (сумма меньше расхода)
-  | 'fully_linked' // Полностью привязан
+  | 'linked' // Полностью привязан
 
 /**
  * Статус расходной операции

@@ -83,6 +83,13 @@
         </div>
       </template>
 
+      <!-- Supplier -->
+      <template #[`item.supplier`]="{ item }">
+        <div class="text-body-2">
+          {{ getSupplierName(item.purchaseOrderId) }}
+        </div>
+      </template>
+
       <!-- Status -->
       <template #[`item.status`]="{ item }">
         <v-chip size="small" :color="getStatusColor(item.status)" variant="flat">
@@ -224,7 +231,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { Receipt } from '@/stores/supplier_2/types'
+import type { Receipt, PurchaseOrder } from '@/stores/supplier_2/types'
 
 // =============================================
 // PROPS & EMITS
@@ -232,6 +239,7 @@ import type { Receipt } from '@/stores/supplier_2/types'
 
 interface Props {
   receipts: Receipt[]
+  orders: PurchaseOrder[]
   loading: boolean
 }
 
@@ -257,21 +265,22 @@ const searchQuery = ref('')
 // =============================================
 
 const headers = [
-  { title: 'Receipt #', key: 'receiptNumber', sortable: true, width: '140px' },
-  { title: 'Purchase Order', key: 'purchaseOrder', sortable: false, width: '150px' },
-  { title: 'Status', key: 'status', sortable: true, width: '120px' },
-  { title: 'Discrepancies', key: 'hasDiscrepancies', sortable: true, width: '120px' },
-  { title: 'Items', key: 'itemsCount', sortable: false, width: '80px', align: 'center' },
+  { title: 'Receipt #', key: 'receiptNumber', sortable: true, width: '110px' },
+  { title: 'PO', key: 'purchaseOrder', sortable: false, width: '100px' },
+  { title: 'Supplier', key: 'supplier', sortable: true, width: '140px' },
+  { title: 'Status', key: 'status', sortable: true, width: '110px' },
   {
-    title: 'Financial Impact',
-    key: 'financialImpact',
-    sortable: false,
-    width: '140px',
-    align: 'end'
+    title: 'Discrepancies',
+    key: 'hasDiscrepancies',
+    sortable: true,
+    width: '100px',
+    align: 'center'
   },
-  { title: 'Delivery Date', key: 'deliveryDate', sortable: true, width: '140px' },
-  { title: 'Storage', key: 'storageStatus', sortable: false, width: '100px' },
-  { title: 'Actions', key: 'actions', sortable: false, width: '180px', align: 'center' }
+  { title: 'Items', key: 'itemsCount', sortable: false, width: '70px', align: 'center' },
+  { title: 'Impact', key: 'financialImpact', sortable: false, width: '110px', align: 'end' },
+  { title: 'Delivery', key: 'deliveryDate', sortable: true, width: '100px' },
+  { title: 'Storage', key: 'storageStatus', sortable: false, width: '90px', align: 'center' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '80px', align: 'center' }
 ]
 
 // =============================================
@@ -375,8 +384,27 @@ function getStatusIcon(status: string): string {
   return iconMap[status] || 'mdi-help-circle'
 }
 
+// Map orders by ID for quick lookup
+const ordersById = computed(() => {
+  const map = new Map<string, PurchaseOrder>()
+  if (Array.isArray(props.orders)) {
+    for (const order of props.orders) {
+      if (order?.id) {
+        map.set(order.id, order)
+      }
+    }
+  }
+  return map
+})
+
 function getPurchaseOrderNumber(orderId: string): string {
-  return `PO-${orderId.slice(-3)}`
+  const order = ordersById.value.get(orderId)
+  return order?.orderNumber || `PO-${orderId.slice(-3)}`
+}
+
+function getSupplierName(purchaseOrderId: string): string {
+  const order = ordersById.value.get(purchaseOrderId)
+  return order?.supplierName || '-'
 }
 
 function formatFinancialImpact(receipt: Receipt): string {

@@ -87,6 +87,11 @@ async function handleSelectOrder(order: PendingOrderForReceipt) {
   showReceiptDialog.value = true
 }
 
+// Handle row click from data table
+function handleRowClick(_event: Event, { item }: { item: PendingOrderForReceipt }) {
+  handleSelectOrder(item)
+}
+
 // Close dialog
 function handleCloseDialog() {
   showReceiptDialog.value = false
@@ -211,9 +216,7 @@ function goBack() {
         :items-per-page-options="[10, 25, 50]"
         hover
         class="orders-table"
-        @click:row="
-          (_event: Event, { item }: { item: PendingOrderForReceipt }) => handleSelectOrder(item)
-        "
+        @click:row="handleRowClick"
       >
         <!-- Order Number Column -->
         <template #[`item.orderNumber`]="{ item }">

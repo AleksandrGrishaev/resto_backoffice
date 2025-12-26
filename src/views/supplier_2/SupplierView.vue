@@ -118,6 +118,7 @@
         <v-tabs-window-item value="receipts">
           <receipt-table
             :receipts="receiptsArray"
+            :orders="ordersArray"
             :loading="supplierStore.state.loading?.requests || false"
             @view-details="handleViewReceiptDetails"
             @edit-receipt="handleEditReceipt"

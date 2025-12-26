@@ -13,7 +13,6 @@ interface Props {
 }
 
 interface Emits {
-  (e: 'unlink', expense: ShiftExpenseOperation): void
   (e: 'view', expense: ShiftExpenseOperation): void
 }
 
@@ -91,10 +90,6 @@ function getStatusColor(status: ShiftExpenseOperation['status']): string {
     default:
       return 'grey'
   }
-}
-
-function handleUnlink(expense: ShiftExpenseOperation) {
-  emit('unlink', expense)
 }
 
 function handleView(expense: ShiftExpenseOperation) {
@@ -216,22 +211,9 @@ function handleView(expense: ShiftExpenseOperation) {
           </div>
 
           <template #append>
-            <v-btn icon variant="text" size="small" color="grey">
-              <v-icon>mdi-dots-vertical</v-icon>
-              <v-menu activator="parent">
-                <v-list density="compact">
-                  <v-list-item prepend-icon="mdi-eye" @click="handleView(expense)">
-                    <v-list-item-title>View Details</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item
-                    prepend-icon="mdi-link-variant-off"
-                    class="text-error"
-                    @click="handleUnlink(expense)"
-                  >
-                    <v-list-item-title>Unlink</v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-menu>
+            <v-btn icon variant="text" size="small" color="grey" @click="handleView(expense)">
+              <v-icon>mdi-eye</v-icon>
+              <v-tooltip activator="parent" location="top">View Details</v-tooltip>
             </v-btn>
           </template>
         </v-list-item>

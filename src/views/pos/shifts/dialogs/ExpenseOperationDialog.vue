@@ -49,21 +49,60 @@
               prepend-inner-icon="mdi-tag"
               hint="Select expense category"
               persistent-hint
-            />
+            >
+              <template #item="{ item, props: itemProps }">
+                <v-list-item v-bind="itemProps">
+                  <template #prepend>
+                    <v-icon
+                      :icon="item.value === 'supplier' ? 'mdi-truck-delivery' : 'mdi-tag'"
+                      :color="item.value === 'supplier' ? 'purple' : undefined"
+                    />
+                  </template>
+                  <template v-if="item.value === 'supplier'" #append>
+                    <v-chip size="x-small" color="warning" variant="flat">Requires Linking</v-chip>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
           </div>
 
-          <!-- Counteragent -->
+          <!-- Supplier Payment Warning -->
+          <v-alert
+            v-if="isSupplierCategory"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-4"
+          >
+            <div class="d-flex align-center">
+              <v-icon icon="mdi-link-variant" class="me-2" />
+              <div>
+                <div class="text-subtitle-2">Supplier Payment - Linking Required</div>
+                <div class="text-caption">
+                  This expense will need to be linked to a Purchase Order in Backoffice before shift
+                  reconciliation.
+                </div>
+              </div>
+            </div>
+          </v-alert>
+
+          <!-- Counteragent (Required for Supplier category) -->
           <div class="mb-4">
             <v-autocomplete
               v-model="form.counteragentId"
-              label="Counteragent (Optional)"
+              :label="isSupplierCategory ? 'Supplier *' : 'Counteragent (Optional)'"
               :items="counteragents"
               item-title="name"
               item-value="id"
               variant="outlined"
               prepend-inner-icon="mdi-account-tie"
-              clearable
-              hint="Select service provider or supplier"
+              :clearable="!isSupplierCategory"
+              :rules="isSupplierCategory ? [rules.required] : []"
+              :hint="
+                isSupplierCategory
+                  ? 'Select supplier for this payment'
+                  : 'Select service provider or supplier'
+              "
               persistent-hint
               @update:model-value="onCounteragentChange"
             />
@@ -193,8 +232,9 @@ const form = ref({
 })
 
 // Expense categories for dropdown (from DB via store)
+// Use posExpenseCategories which includes 'supplier' category for POS
 const expenseCategories = computed(() => {
-  return accountStore.expenseCategories.map(cat => ({
+  return accountStore.posExpenseCategories.map(cat => ({
     value: cat.code,
     label: cat.name
   }))
@@ -204,6 +244,9 @@ const expenseCategories = computed(() => {
 const counteragents = computed(() => {
   return counteragentsStore.activeCounterAgents || []
 })
+
+// Check if supplier category is selected
+const isSupplierCategory = computed(() => form.value.category === 'supplier')
 
 // Validation rules
 const rules = {

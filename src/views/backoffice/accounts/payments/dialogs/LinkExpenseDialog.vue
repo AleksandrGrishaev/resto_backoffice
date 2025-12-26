@@ -12,6 +12,7 @@ interface Props {
   modelValue: boolean
   expense: ShiftExpenseOperation | null
   suggestions: InvoiceSuggestion[]
+  availableAmount: number // Amount available for linking from this expense (expense.amount - usedAmount)
   loading?: boolean
 }
 
@@ -22,7 +23,8 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  loading: false,
+  availableAmount: 0
 })
 
 const emit = defineEmits<Emits>()
@@ -55,13 +57,36 @@ const filteredSuggestions = computed(() => {
   )
 })
 
+// Maximum amount that can be linked - minimum of:
+// 1. Available from expense (expense.amount - alreadyUsedAmount)
+// 2. Unpaid amount on the selected invoice
+const maxLinkAmount = computed(() => {
+  if (!selectedInvoice.value) return props.availableAmount
+  return Math.min(props.availableAmount, selectedInvoice.value.unpaidAmount)
+})
+
 const amountDifference = computed(() => {
   if (!selectedInvoice.value || !props.expense) return 0
-  return linkAmount.value - props.expense.amount
+  return linkAmount.value - props.availableAmount
 })
 
 const canConfirm = computed(() => {
-  return selectedInvoice.value !== null && linkAmount.value > 0
+  return (
+    selectedInvoice.value !== null &&
+    linkAmount.value > 0 &&
+    linkAmount.value <= maxLinkAmount.value
+  )
+})
+
+const amountError = computed(() => {
+  if (!selectedInvoice.value) return ''
+  if (linkAmount.value > props.availableAmount) {
+    return `Exceeds available amount (${formatIDR(props.availableAmount)})`
+  }
+  if (linkAmount.value > selectedInvoice.value.unpaidAmount) {
+    return `Exceeds invoice unpaid amount (${formatIDR(selectedInvoice.value.unpaidAmount)})`
+  }
+  return ''
 })
 
 // =============================================
@@ -73,9 +98,20 @@ watch(
   () => props.expense,
   newExpense => {
     if (newExpense) {
-      linkAmount.value = newExpense.amount
+      // Default to available amount (not full expense amount)
+      linkAmount.value = props.availableAmount
       selectedInvoice.value = null
       searchQuery.value = ''
+    }
+  }
+)
+
+// Update linkAmount when availableAmount changes
+watch(
+  () => props.availableAmount,
+  newAmount => {
+    if (newAmount > 0) {
+      linkAmount.value = newAmount
     }
   }
 )
@@ -96,10 +132,8 @@ watch(
 
 function selectInvoice(invoice: InvoiceSuggestion) {
   selectedInvoice.value = invoice
-  // Suggest the expense amount by default
-  if (props.expense) {
-    linkAmount.value = props.expense.amount
-  }
+  // Suggest the minimum of available amount and invoice unpaid amount
+  linkAmount.value = Math.min(props.availableAmount, invoice.unpaidAmount)
 }
 
 function handleConfirm() {
@@ -143,8 +177,13 @@ function getMatchScoreColor(score: number): string {
                 {{ expense.description || 'No description' }}
               </div>
             </div>
-            <div class="text-h6 font-weight-bold text-primary">
-              {{ formatIDR(expense.amount) }}
+            <div class="text-right">
+              <div class="text-h6 font-weight-bold text-primary">
+                {{ formatIDR(expense.amount) }}
+              </div>
+              <div v-if="availableAmount < expense.amount" class="text-caption text-success">
+                Available to link: {{ formatIDR(availableAmount) }}
+              </div>
             </div>
           </div>
         </v-alert>
@@ -212,8 +251,11 @@ function getMatchScoreColor(score: number): string {
               <v-list-item-subtitle>
                 <div class="d-flex flex-wrap gap-2 mt-1">
                   <span>{{ invoice.supplierName }}</span>
+                  <v-chip size="x-small" color="success" variant="tonal">
+                    Unpaid: {{ formatIDR(invoice.unpaidAmount) }}
+                  </v-chip>
                   <v-chip size="x-small" variant="outlined">
-                    {{ formatIDR(invoice.totalAmount) }}
+                    Total: {{ formatIDR(invoice.totalAmount) }}
                   </v-chip>
                   <v-chip size="x-small" variant="outlined">
                     {{ formatDate(invoice.createdAt) }}
@@ -248,40 +290,37 @@ function getMatchScoreColor(score: number): string {
             variant="outlined"
             density="compact"
             prefix="Rp"
-            :rules="[v => v > 0 || 'Amount must be positive']"
+            :error-messages="amountError"
+            :hint="`Max: ${formatIDR(maxLinkAmount)}`"
+            persistent-hint
           />
 
-          <!-- Amount Comparison -->
-          <div class="d-flex justify-space-between text-body-2 mt-2">
-            <span>Expense amount:</span>
-            <span>{{ formatIDR(expense.amount) }}</span>
+          <!-- Amount Breakdown -->
+          <div class="d-flex justify-space-between text-body-2 mt-3">
+            <span>Available from expense:</span>
+            <span class="text-success">{{ formatIDR(availableAmount) }}</span>
           </div>
           <div class="d-flex justify-space-between text-body-2">
-            <span>Invoice amount:</span>
-            <span>{{ formatIDR(selectedInvoice.totalAmount) }}</span>
+            <span>Invoice unpaid:</span>
+            <span class="text-warning">{{ formatIDR(selectedInvoice.unpaidAmount) }}</span>
           </div>
           <v-divider class="my-2" />
           <div class="d-flex justify-space-between font-weight-medium">
-            <span>Difference:</span>
-            <span
-              :class="
-                amountDifference > 0 ? 'text-error' : amountDifference < 0 ? 'text-success' : ''
-              "
-            >
-              {{ amountDifference > 0 ? '+' : '' }}{{ formatIDR(amountDifference) }}
-            </span>
+            <span>Maximum linkable:</span>
+            <span class="text-primary">{{ formatIDR(maxLinkAmount) }}</span>
           </div>
 
-          <!-- Warning for mismatch -->
+          <!-- Info about remaining -->
           <v-alert
-            v-if="Math.abs(amountDifference) > expense.amount * 0.1"
-            type="warning"
+            v-if="linkAmount < availableAmount"
+            type="info"
             variant="tonal"
             density="compact"
             class="mt-3"
           >
-            <v-icon start size="small">mdi-alert</v-icon>
-            Amount differs significantly from expense. Please verify.
+            <v-icon start size="small">mdi-information</v-icon>
+            Remaining {{ formatIDR(availableAmount - linkAmount) }} can be linked to another
+            invoice.
           </v-alert>
         </div>
       </v-card-text>

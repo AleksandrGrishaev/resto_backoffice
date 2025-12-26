@@ -132,6 +132,16 @@ export const useAccountStore = defineStore('account', () => {
   )
 
   /**
+   * POS expense categories (for cash register expenses)
+   * Includes supplier category for supplier payments from cash register
+   */
+  const posExpenseCategories = computed(() =>
+    state.value.transactionCategories
+      .filter(c => c.type === 'expense' && c.isActive && (!c.isSystem || c.code === 'supplier'))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  )
+
+  /**
    * All income categories
    * Excludes system categories (sales) - they are used automatically by the system
    */
@@ -171,6 +181,10 @@ export const useAccountStore = defineStore('account', () => {
   })
 
   // ============ NEW PAYMENT GETTERS ============
+  // All payments (for looking up usedAmount etc)
+  const allPayments = computed(() => state.value.pendingPayments)
+
+  // Only pending payments (status === 'pending')
   const pendingPayments = computed(() =>
     state.value.pendingPayments.filter(payment => payment.status === 'pending')
   )
@@ -1113,6 +1127,39 @@ export const useAccountStore = defineStore('account', () => {
         })
       }
 
+      // ✅ Update expense linkingStatus if this payment came from POS
+      // Calculate correct status based on linked amount vs payment amount
+      try {
+        const { useShiftsStore } = await import('@/stores/pos/shifts')
+        const shiftsStore = useShiftsStore()
+
+        // Calculate total linked amount after this link
+        const totalLinkedAmount = payment.linkedOrders
+          .filter(o => o.isActive)
+          .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+        // Determine correct linking status
+        const newLinkingStatus = totalLinkedAmount >= payment.amount ? 'linked' : 'partially_linked'
+
+        await shiftsStore.updateExpenseLinkingStatusByPaymentId(
+          data.paymentId,
+          newLinkingStatus,
+          data.orderId
+        )
+        DebugUtils.info(MODULE_NAME, 'Updated expense linkingStatus', {
+          paymentId: data.paymentId,
+          newStatus: newLinkingStatus,
+          totalLinkedAmount,
+          paymentAmount: payment.amount
+        })
+      } catch (expenseUpdateError) {
+        // Non-critical - expense linking status update failed but payment is linked
+        DebugUtils.warn(MODULE_NAME, 'Failed to update expense linkingStatus', {
+          paymentId: data.paymentId,
+          error: expenseUpdateError
+        })
+      }
+
       DebugUtils.info(MODULE_NAME, 'Payment linked to order successfully', {
         paymentId: data.paymentId,
         orderId: data.orderId,
@@ -1187,6 +1234,47 @@ export const useAccountStore = defineStore('account', () => {
           oldUsedAmount: payment.usedAmount,
           newUsedAmount: remainingLinkedAmount,
           availableAmount: payment.amount - remainingLinkedAmount
+        })
+      }
+
+      // ✅ Update expense linkingStatus after unlink
+      try {
+        const { useShiftsStore } = await import('@/stores/pos/shifts')
+        const shiftsStore = useShiftsStore()
+
+        // Calculate remaining linked amount
+        const remainingLinkedAmount = payment.linkedOrders
+          .filter(o => o.isActive)
+          .reduce((sum, o) => sum + o.linkedAmount, 0)
+
+        // Determine new status based on remaining links
+        let newLinkingStatus: 'unlinked' | 'partially_linked' | 'linked'
+        if (remainingLinkedAmount === 0) {
+          newLinkingStatus = 'unlinked'
+        } else if (remainingLinkedAmount < payment.amount) {
+          newLinkingStatus = 'partially_linked'
+        } else {
+          newLinkingStatus = 'linked'
+        }
+
+        // Find first active order for linkedOrderId (or undefined if none)
+        const firstActiveOrder = payment.linkedOrders.find(o => o.isActive)
+
+        await shiftsStore.updateExpenseLinkingStatusByPaymentId(
+          paymentId,
+          newLinkingStatus,
+          firstActiveOrder?.orderId
+        )
+
+        DebugUtils.info(MODULE_NAME, 'Updated expense linkingStatus after unlink', {
+          paymentId,
+          newStatus: newLinkingStatus,
+          remainingLinkedAmount
+        })
+      } catch (expenseUpdateError) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to update expense linkingStatus after unlink', {
+          paymentId,
+          error: expenseUpdateError
         })
       }
 
@@ -1477,12 +1565,14 @@ export const useAccountStore = defineStore('account', () => {
     // Category getters
     transactionCategories: computed(() => state.value.transactionCategories),
     expenseCategories,
+    posExpenseCategories,
     incomeCategories,
     opexCategories,
     getCategoryByCode,
     getCategoryLabel,
 
     // Payment getters
+    allPayments,
     pendingPayments,
     filteredPayments,
     urgentPayments,
