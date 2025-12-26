@@ -611,7 +611,9 @@ export class PreparationService {
               batch.portionQuantity = Math.floor(batch.currentQuantity / batch.portionSize)
             }
 
-            if (batch.currentQuantity <= 0.0001) {
+            // ⚠️ IMPORTANT: Only mark as depleted if NOT a negative batch
+            // Negative batches should remain active until reconciled (reconciled_at is set)
+            if (batch.currentQuantity <= 0.0001 && !batch.isNegative) {
               batch.currentQuantity = 0
               batch.totalValue = 0
               batch.portionQuantity = 0 // ⭐ PHASE 2: Reset portion quantity
