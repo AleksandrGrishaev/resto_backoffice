@@ -337,7 +337,7 @@ const actualCostItems = computed(() => {
         productName: prep.preparationName,
         quantity: prep.quantity,
         unit: prep.unit,
-        costPerUnit: prep.averageCostPerUnit,
+        costPerUnit: prep.avgCostPerUnit ?? prep.averageCostPerUnit ?? 0,
         totalCost: prep.totalCost,
         type: 'preparation'
       })
@@ -351,7 +351,7 @@ const actualCostItems = computed(() => {
         productName: product.productName,
         quantity: product.quantity,
         unit: product.unit,
-        costPerUnit: product.averageCostPerUnit,
+        costPerUnit: product.avgCostPerUnit ?? product.averageCostPerUnit ?? 0,
         totalCost: product.totalCost,
         type: 'product'
       })

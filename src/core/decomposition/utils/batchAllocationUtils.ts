@@ -254,25 +254,22 @@ export async function allocateFromPreparationBatches(
     let fallbackCost = preparation?.lastKnownCost || 0
 
     // ✅ FIX: Normalize per-portion cost to per-gram for portion-type preparations
-    // lastKnownCost SHOULD be per-gram, but might be per-portion from old buggy data
+    // lastKnownCost is stored as cost PER PORTION, we need cost PER GRAM (base unit)
     if (
       fallbackCost > 0 &&
       preparation?.portionType === 'portion' &&
       preparation?.portionSize &&
-      preparation.portionSize > 1
+      preparation.portionSize > 0
     ) {
-      // Sanity check: if cost > 100 IDR and portionSize > 1, likely stored per-portion
-      if (fallbackCost > 100) {
-        const normalizedCost = fallbackCost / preparation.portionSize
-        DebugUtils.warn(MODULE_NAME, 'Converting suspected per-portion lastKnownCost to per-gram', {
-          preparationId,
-          preparationName: preparation.name,
-          originalCost: fallbackCost,
-          portionSize: preparation.portionSize,
-          normalizedCost
-        })
-        fallbackCost = normalizedCost
-      }
+      const normalizedCost = fallbackCost / preparation.portionSize
+      DebugUtils.info(MODULE_NAME, 'Normalizing portion-type lastKnownCost to per-gram', {
+        preparationId,
+        preparationName: preparation.name,
+        originalCostPerPortion: fallbackCost,
+        portionSize: preparation.portionSize,
+        normalizedCostPerGram: normalizedCost
+      })
+      fallbackCost = normalizedCost
     }
 
     if (fallbackCost > 0) {
@@ -320,13 +317,12 @@ export async function allocateFromPreparationBatches(
   if (totalQty > 0 && avgCost === 0) {
     let fallbackCost = preparation?.lastKnownCost || 0
 
-    // Normalize per-portion cost to per-gram if needed
+    // Normalize per-portion cost to per-gram for portion-type preparations
     if (
       fallbackCost > 0 &&
       preparation?.portionType === 'portion' &&
       preparation?.portionSize &&
-      preparation.portionSize > 1 &&
-      fallbackCost > 100
+      preparation.portionSize > 0
     ) {
       fallbackCost = fallbackCost / preparation.portionSize
     }

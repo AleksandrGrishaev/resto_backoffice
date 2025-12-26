@@ -467,12 +467,18 @@ const displayItems = computed(() => {
         calculated_totalQuantity: prep.quantity
       })
 
+      // Calculate costPerUnit - prefer avgCostPerUnit, fallback to averageCostPerUnit or calculate from totalCost
+      const prepCostPerUnit =
+        prep.avgCostPerUnit ??
+        prep.averageCostPerUnit ??
+        (prep.quantity > 0 ? prep.totalCost / prep.quantity : 0)
+
       items.push({
         itemName: prep.preparationName,
         quantityPerPortion: prep.quantity / (selectedWriteOff.value?.soldQuantity || 1),
         totalQuantity: prep.quantity,
         unit: prep.unit,
-        costPerUnit: prep.avgCostPerUnit ?? prep.averageCostPerUnit ?? 0,
+        costPerUnit: Number.isFinite(prepCostPerUnit) ? prepCostPerUnit : 0,
         totalCost: prep.totalCost,
         batchIds: prep.allocations?.map((a: any) => a.batchId) || [],
         itemType: 'preparation'
@@ -483,12 +489,18 @@ const displayItems = computed(() => {
   // Map product costs
   if (actualCost.productCosts) {
     for (const prod of actualCost.productCosts) {
+      // Calculate costPerUnit - prefer avgCostPerUnit, fallback to averageCostPerUnit or calculate from totalCost
+      const prodCostPerUnit =
+        prod.avgCostPerUnit ??
+        prod.averageCostPerUnit ??
+        (prod.quantity > 0 ? prod.totalCost / prod.quantity : 0)
+
       items.push({
         itemName: prod.productName,
         quantityPerPortion: prod.quantity / (selectedWriteOff.value?.soldQuantity || 1),
         totalQuantity: prod.quantity,
         unit: prod.unit,
-        costPerUnit: prod.avgCostPerUnit ?? prod.averageCostPerUnit ?? 0,
+        costPerUnit: Number.isFinite(prodCostPerUnit) ? prodCostPerUnit : 0,
         totalCost: prod.totalCost,
         batchIds: prod.allocations?.map((a: any) => a.batchId) || [],
         itemType: 'product'
